@@ -1,0 +1,377 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paramètres — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+  .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
+  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(20,184,166,.15); }
+  .section-title { font-weight: 700; font-size: 1.05rem; color: var(--fp-primary); margin-bottom: 1rem; display: flex; align-items: center; gap: .55rem; }
+  .color-input { width: 48px; height: 38px; border: 1px solid var(--fp-border); border-radius: .55rem; cursor: pointer; padding: 0; }
+  .color-input::-webkit-color-swatch-wrapper { padding: 0; }
+  .color-input::-webkit-color-swatch { border: none; border-radius: .45rem; }
+  .groupe-row { display: grid; grid-template-columns: 36px 1fr 110px 60px; gap: .65rem; align-items: center; padding: .55rem 0; border-bottom: 1px solid var(--fp-border); }
+  .groupe-row:last-child { border-bottom: none; }
+  .groupe-key { font-family: monospace; font-size: .72rem; color: var(--fp-muted); }
+  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: .75rem 1.2rem; border-radius: .55rem; font-weight: 600; background: var(--fp-ok); color: white; box-shadow: 0 12px 30px -10px rgba(15,30,61,.3); transform: translateY(150%); transition: transform .25s; z-index: 100; }
+  .toast.show { transform: translateY(0); }
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10 max-w-4xl">
+
+    <div class="flex justify-between items-start mb-8">
+      <div>
+        <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)" data-edit-key="parametres.title">Paramètres</h1>
+        <p class="text-slate-500 text-sm mt-1" data-edit-key="parametres.subtitle">Personnalise les labels, couleurs et infos société. Les changements sont stockés dans ton navigateur (localStorage).</p>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="btn btn-outline text-sm !px-2.5" data-history-undo title="Annuler (Ctrl+Z)" disabled><i data-lucide="undo-2" class="w-4 h-4"></i></button>
+        <button class="btn btn-outline text-sm !px-2.5" data-history-redo title="Refaire (Ctrl+Y)" disabled><i data-lucide="redo-2" class="w-4 h-4"></i></button>
+      </div>
+    </div>
+
+    <!-- Section Groupes -->
+    <div class="card p-6 mb-6">
+      <div class="section-title">
+        <i data-lucide="users" class="w-5 h-5"></i> Groupes de véhicules
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Renomme et recolore les groupes utilisés pour classer les véhicules.</p>
+
+      <div id="groupes-form"></div>
+
+      <div class="flex gap-2 mt-5">
+        <button class="btn btn-dark text-sm" id="btn-save-groupes"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer les groupes</button>
+        <button class="btn btn-outline text-sm" id="btn-reset-groupes"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Réinitialiser</button>
+      </div>
+    </div>
+
+    <!-- Section Onglets sidebar -->
+    <div class="card p-6 mb-6">
+      <div class="section-title">
+        <i data-lucide="layout-list" class="w-5 h-5"></i> Noms des onglets
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Personnalise les noms affichés dans le menu de navigation à gauche.</p>
+
+      <div class="space-y-3" id="nav-labels-form"></div>
+
+      <div class="flex gap-2 mt-5">
+        <button class="btn btn-dark text-sm" id="btn-save-nav"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+        <button class="btn btn-outline text-sm" id="btn-reset-nav"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Réinitialiser</button>
+      </div>
+    </div>
+
+    <!-- Section Société -->
+    <div class="card p-6 mb-6">
+      <div class="section-title">
+        <i data-lucide="building-2" class="w-5 h-5"></i> Informations société
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Utilisé dans les en-têtes d'export et les futures factures générées.</p>
+
+      <div class="space-y-4">
+        <div>
+          <div class="field-label">Nom de la société</div>
+          <input class="field-input" id="f-societe-nom" placeholder="TJMAX" />
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <div class="field-label">SIRET</div>
+            <input class="field-input" id="f-societe-siret" placeholder="14 chiffres" />
+          </div>
+          <div>
+            <div class="field-label">Adresse</div>
+            <input class="field-input" id="f-societe-adresse" placeholder="290 rue de la Belle Étoile, 95700 Roissy-en-France" />
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-5">
+        <button class="btn btn-dark text-sm" id="btn-save-societe"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+      </div>
+    </div>
+
+    <!-- Section Données -->
+    <div class="card p-6 mb-6">
+      <div class="section-title">
+        <i data-lucide="database" class="w-5 h-5"></i> Données
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Tous les véhicules, amendes et factures sont stockés dans <code class="bg-slate-100 px-1 rounded text-xs">assets/js/data.js</code>. Pour réimporter ou remplacer, édite ce fichier directement.</p>
+
+      <div class="flex gap-2">
+        <button class="btn btn-outline text-sm" id="btn-export-all"><i data-lucide="download" class="w-4 h-4"></i> Exporter tous les paramètres (JSON)</button>
+        <button class="btn btn-outline text-sm" id="btn-import-all"><i data-lucide="upload" class="w-4 h-4"></i> Importer des paramètres</button>
+        <button class="btn text-sm text-red-600 hover:bg-red-50" id="btn-reset-all"><i data-lucide="trash-2" class="w-4 h-4"></i> Tout réinitialiser</button>
+        <input type="file" id="import-file" accept=".json" class="hidden" />
+      </div>
+    </div>
+
+    <!-- Section Aperçu -->
+    <div class="card p-6">
+      <div class="section-title">
+        <i data-lucide="eye" class="w-5 h-5"></i> Aperçu en direct
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Les modifications sont appliquées instantanément dans cet aperçu.</p>
+      <div class="flex flex-wrap gap-2" id="preview-pills"></div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast">Enregistré ✓</div>
+
+<script src="../assets/js/app.js"></script>
+<script>
+  lucide.createIcons();
+  const $ = (id) => document.getElementById(id);
+
+  function showToast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  // ---------- Groupes ----------
+  function renderGroupesForm() {
+    const settings = FP.settings.get();
+    const form = $('groupes-form');
+    form.innerHTML = FP.groupeKeys().map(k => {
+      const g = settings.groupes[k];
+      return `
+        <div class="groupe-row">
+          <span class="dot dot-${k}" style="width: 22px; height: 22px; border-radius: 50%; display: inline-block"></span>
+          <input class="field-input" type="text" data-grp-label="${k}" value="${g.label.replace(/"/g, '&quot;')}" />
+          <input class="color-input" type="color" data-grp-color="${k}" value="${g.color}" />
+          <span class="groupe-key">${k}</span>
+        </div>
+      `;
+    }).join('');
+
+    // Listeners pour l'aperçu en temps réel
+    form.querySelectorAll('input[data-grp-color]').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const k = e.target.dataset.grpColor;
+        document.documentElement.style.setProperty(`--grp-${k}`, e.target.value);
+        renderPreview();
+      });
+    });
+    form.querySelectorAll('input[data-grp-label]').forEach(input => {
+      input.addEventListener('input', renderPreview);
+    });
+  }
+
+  function renderPreview() {
+    const labels = {};
+    document.querySelectorAll('#groupes-form input[data-grp-label]').forEach(input => {
+      labels[input.dataset.grpLabel] = input.value;
+    });
+    $('preview-pills').innerHTML = FP.groupeKeys().map(k => `
+      <span class="groupe-pill gp-${k}"><span class="dot"></span>${(labels[k] || FP.groupeLabel(k))}</span>
+    `).join('');
+  }
+
+  function saveGroupes() {
+    FP.history.commit();
+    const current = FP.settings.get();
+    const newGroupes = { ...current.groupes };
+    document.querySelectorAll('#groupes-form input[data-grp-label]').forEach(input => {
+      const k = input.dataset.grpLabel;
+      newGroupes[k] = { ...newGroupes[k], label: input.value.trim() || newGroupes[k].label };
+    });
+    document.querySelectorAll('#groupes-form input[data-grp-color]').forEach(input => {
+      const k = input.dataset.grpColor;
+      newGroupes[k] = { ...newGroupes[k], color: input.value };
+    });
+    FP.settings.save({ ...current, groupes: newGroupes });
+    showToast('Groupes enregistrés ✓');
+  }
+
+  function resetGroupes() {
+    if (!confirm('Réinitialiser les noms et couleurs des groupes aux valeurs par défaut ?')) return;
+    FP.history.commit();
+    const current = FP.settings.get();
+    FP.settings.save({ ...current, groupes: JSON.parse(JSON.stringify(FP.settings.defaults.groupes)) });
+    renderGroupesForm();
+    renderPreview();
+    showToast('Groupes réinitialisés');
+  }
+
+  // ---------- Onglets sidebar ----------
+  function renderNavLabelsForm() {
+    const labels = FP.settings.get().sidebarLabels || {};
+    const form = $('nav-labels-form');
+    form.innerHTML = Object.entries(FP.DEFAULT_NAV_LABELS).map(([key, def]) => `
+      <div class="grid gap-2 sm:grid-cols-[160px_1fr] sm:items-center">
+        <span class="text-sm text-slate-500">${def}</span>
+        <input class="field-input" type="text" data-nav-key="${key}" value="${(labels[key] || '').replace(/"/g, '&quot;')}" placeholder="${def}" />
+      </div>
+    `).join('');
+  }
+
+  function saveNavLabels() {
+    FP.history.commit();
+    const current = FP.settings.get();
+    const newLabels = {};
+    document.querySelectorAll('#nav-labels-form input[data-nav-key]').forEach(input => {
+      const key = input.dataset.navKey;
+      const val = input.value.trim();
+      if (val && val !== FP.DEFAULT_NAV_LABELS[key]) newLabels[key] = val;
+    });
+    current.sidebarLabels = newLabels;
+    FP.settings.save(current);
+    FP.applyCustomNavLabels();
+    showToast('Onglets renommés ✓');
+  }
+
+  function resetNavLabels() {
+    if (!confirm('Réinitialiser les noms des onglets aux valeurs par défaut ?')) return;
+    FP.history.commit();
+    const current = FP.settings.get();
+    current.sidebarLabels = {};
+    FP.settings.save(current);
+    renderNavLabelsForm();
+    FP.applyCustomNavLabels();
+    showToast('Onglets réinitialisés');
+  }
+
+  // ---------- Société ----------
+  function loadSociete() {
+    const s = FP.settings.get().societe;
+    $('f-societe-nom').value = s.nom || '';
+    $('f-societe-siret').value = s.siret || '';
+    $('f-societe-adresse').value = s.adresse || '';
+  }
+
+  function saveSociete() {
+    FP.history.commit();
+    const current = FP.settings.get();
+    current.societe = {
+      nom: $('f-societe-nom').value.trim(),
+      siret: $('f-societe-siret').value.trim(),
+      adresse: $('f-societe-adresse').value.trim(),
+    };
+    FP.settings.save(current);
+    showToast('Société enregistrée ✓');
+  }
+
+  // ---------- Export / Import / Reset ----------
+  function exportAll() {
+    const s = FP.settings.get();
+    const blob = new Blob([JSON.stringify(s, null, 2)], { type: 'application/json;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `auto-flotte-settings-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+  }
+  function importAll() {
+    $('import-file').click();
+  }
+  $('import-file').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const obj = JSON.parse(ev.target.result);
+        FP.history.commit();
+        FP.settings.save(obj);
+        renderGroupesForm();
+        loadSociete();
+        renderPreview();
+        showToast('Paramètres importés ✓');
+      } catch {
+        alert('Fichier invalide.');
+      }
+    };
+    reader.readAsText(file);
+  });
+  function resetAll() {
+    if (!confirm('Tout réinitialiser ? (groupes, couleurs, société)')) return;
+    FP.history.commit();
+    FP.settings.reset();
+    renderGroupesForm();
+    loadSociete();
+    renderPreview();
+    showToast('Paramètres réinitialisés');
+  }
+
+  // ---------- Wiring ----------
+  $('btn-save-groupes').addEventListener('click', saveGroupes);
+  $('btn-reset-groupes').addEventListener('click', resetGroupes);
+  $('btn-save-nav').addEventListener('click', saveNavLabels);
+  $('btn-reset-nav').addEventListener('click', resetNavLabels);
+  $('btn-save-societe').addEventListener('click', saveSociete);
+  $('btn-export-all').addEventListener('click', exportAll);
+  $('btn-import-all').addEventListener('click', importAll);
+  $('btn-reset-all').addEventListener('click', resetAll);
+
+  // === Historique : branchement boutons + raccourcis ===
+  FP.history.renderAll = () => {
+    renderGroupesForm();
+    renderNavLabelsForm();
+    loadSociete();
+    renderPreview();
+    FP.applyCustomNavLabels();
+  };
+  document.querySelectorAll('[data-history-undo]').forEach(b => b.addEventListener('click', () => FP.history.undo()));
+  document.querySelectorAll('[data-history-redo]').forEach(b => b.addEventListener('click', () => FP.history.redo()));
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, textarea, [contenteditable]')) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
+    if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); FP.history.undo(); }
+    else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); FP.history.redo(); }
+  });
+  FP.history.updateUI();
+
+  // Init
+  renderGroupesForm();
+  renderNavLabelsForm();
+  loadSociete();
+  renderPreview();
+  lucide.createIcons();
+</script>
+</body>
+</html>

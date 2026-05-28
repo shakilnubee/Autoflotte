@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connexion — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="assets/css/styles.css">
+<style>
+  body { background: linear-gradient(135deg, #0F1E3D 0%, #1E3A8A 60%, #14B8A6 130%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+  .login-card { background: white; border-radius: 1rem; box-shadow: 0 30px 80px -20px rgba(15,30,61,.5); padding: 2.5rem; max-width: 420px; width: 100%; }
+  .field { margin-bottom: 1.2rem; }
+  .field label { display: block; font-size: .85rem; font-weight: 600; color: var(--fp-text); margin-bottom: .4rem; }
+  .field input { width: 100%; padding: .7rem .9rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .95rem; }
+  .field input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(20,184,166,.15); }
+  .error-box { background: #FEF2F2; border: 1px solid #FECACA; color: #7F1D1D; padding: .65rem .85rem; border-radius: .55rem; font-size: .85rem; margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="text-center mb-7">
+      <div class="fp-logo text-2xl justify-center mb-4" style="color: var(--fp-primary)">
+        <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+      </div>
+      <h1 class="text-2xl font-extrabold text-slate-900">Connexion</h1>
+      <p class="text-sm text-slate-500 mt-1">Accède à ta flotte</p>
+    </div>
+
+    <div id="login-error" class="error-box hidden"></div>
+
+    <form id="login-form">
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" autocomplete="email" required placeholder="ton@email.com" />
+      </div>
+      <div class="field">
+        <label for="password">Mot de passe</label>
+        <input type="password" id="password" autocomplete="current-password" required placeholder="••••••••" />
+      </div>
+      <label class="flex items-center gap-2 mb-5 cursor-pointer text-sm text-slate-600">
+        <input type="checkbox" id="remember-me" checked class="w-4 h-4 accent-teal-600" />
+        <span>Se souvenir de moi</span>
+      </label>
+      <button type="submit" class="btn btn-dark w-full justify-center" id="btn-login">
+        <i data-lucide="log-in" class="w-4 h-4"></i> Se connecter
+      </button>
+    </form>
+
+    <p class="text-xs text-slate-500 mt-5 text-center">
+      Pas encore de compte ? Contacte l'admin pour qu'il t'en crée un.
+    </p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://tzjuptlzoywjeigmyfuj.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq';
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // Pré-remplir l'email si "Se souvenir de moi" était activé la dernière fois
+    const savedEmail = localStorage.getItem('fp_remember_email');
+    const savedRemember = localStorage.getItem('fp_remember_me') === '1';
+    if (savedEmail && savedRemember) {
+      document.getElementById('email').value = savedEmail;
+      document.getElementById('remember-me').checked = true;
+    }
+
+    // Si déjà connecté, redirige automatiquement vers le dashboard
+    client.auth.getSession().then(({ data: { session } }) => {
+      if (session) window.location.href = 'dashboard.html';
+    });
+
+    const form = document.getElementById('login-form');
+    const errorEl = document.getElementById('login-error');
+    const btn = document.getElementById('btn-login');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const rememberMe = document.getElementById('remember-me').checked;
+      errorEl.classList.add('hidden');
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Connexion...';
+      lucide.createIcons();
+
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if (error) {
+        errorEl.textContent = error.message === 'Invalid login credentials'
+          ? 'Email ou mot de passe incorrect'
+          : (error.message || 'Erreur de connexion');
+        errorEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="log-in" class="w-4 h-4"></i> Se connecter';
+        lucide.createIcons();
+        return;
+      }
+
+      // Enregistre les préférences de mémorisation
+      if (rememberMe) {
+        localStorage.setItem('fp_remember_me', '1');
+        localStorage.setItem('fp_remember_email', email);
+      } else {
+        localStorage.setItem('fp_remember_me', '0');
+        localStorage.removeItem('fp_remember_email');
+      }
+      // Marqueur de session active (sera vidé à la fermeture du browser)
+      sessionStorage.setItem('fp_session_alive', '1');
+
+      window.location.href = 'dashboard.html';
+    });
+
+    lucide.createIcons();
+  </script>
+</body>
+</html>

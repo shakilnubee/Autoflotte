@@ -1,0 +1,447 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factures — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .filter-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: white; }
+  .type-pill { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 600; background: #F1F5F9; color: var(--fp-text); }
+  .type-entretien { background: #DBEAFE; color: #1E3A8A; }
+  .type-reparation { background: #FEE2E2; color: #7F1D1D; }
+  .type-achat { background: #DCFCE7; color: #14532D; }
+  .type-leasing { background: #EDE9FE; color: #4C1D95; }
+  .type-cession { background: #FEF3C7; color: #78350F; }
+  .type-sinistre { background: #FECACA; color: #7F1D1D; }
+  .type-autre { background: #F1F5F9; color: #475569; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 100%; max-width: 520px; background: white; box-shadow: -20px 0 60px -20px rgba(15,30,61,.25); transform: translateX(100%); transition: transform .25s ease; z-index: 60; overflow-y: auto; }
+  .drawer.open { transform: translateX(0); }
+  .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
+  .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+  .chart-wrap-sm { position: relative; height: 240px; }
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+    <div class="mt-10 pt-6 border-t border-white/10 text-xs text-slate-300 px-2">
+      <div class="font-semibold text-white mb-1">Données réelles</div>
+      <p>Import depuis Google Drive (factures PDF 2025+).</p>
+    </div>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-8">
+      <div>
+        <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)" data-edit-key="factures.title">Factures</h1>
+        <p class="text-slate-500 text-sm mt-1" data-edit-key="factures.subtitle">Toutes les factures de la flotte — entretien, leasing, achats, sinistres</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="btn btn-outline text-sm" id="btn-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter CSV</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="kpi">
+        <div class="kpi-label">Total dépensé</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-delta" id="kpi-total-sub">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Nb factures</div>
+        <div class="kpi-value" id="kpi-count">—</div>
+        <div class="kpi-delta">filtre actif</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Montant moyen</div>
+        <div class="kpi-value" id="kpi-moyen">—</div>
+        <div class="kpi-delta">TTC par facture</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Top fournisseur</div>
+        <div class="kpi-value" id="kpi-topfourn" style="font-size: 1.1rem">—</div>
+        <div class="kpi-delta" id="kpi-topfourn-sub">—</div>
+      </div>
+    </div>
+
+    <!-- Graphes -->
+    <div class="grid lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Dépenses mensuelles (€ TTC)</h3>
+        <div class="chart-wrap-sm"><canvas id="monthlyChart"></canvas></div>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Répartition par type</h3>
+        <div class="chart-wrap-sm"><canvas id="typesChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="relative flex-1 min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search" type="text" placeholder="Fournisseur, description, n° facture…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+
+        <div class="flex flex-wrap gap-2" id="filters-type">
+          <button class="filter-chip active" data-value="all">Tous</button>
+          <button class="filter-chip" data-value="entretien">Entretien</button>
+          <button class="filter-chip" data-value="réparation">Réparation</button>
+          <button class="filter-chip" data-value="achat">Achat</button>
+          <button class="filter-chip" data-value="sinistre">Sinistre</button>
+          <button class="filter-chip" data-value="autre">Autre</button>
+        </div>
+
+        <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Toutes années</option>
+          <option value="2026">2026</option>
+          <option value="2025">2025</option>
+        </select>
+
+        <select id="filter-vehicule" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Tous véhicules</option>
+        </select>
+
+        <select id="filter-fournisseur" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Tous fournisseurs</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card overflow-hidden">
+      <div class="scrollable">
+        <table class="fp-table" id="factures-table">
+          <thead></thead>
+          <tbody id="factures-tbody"></tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="hidden p-12 text-center">
+        <i data-lucide="file-x" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+        <p class="text-slate-500 text-sm">Aucune facture ne correspond aux filtres.</p>
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-500 mt-4" id="result-count"></p>
+  </main>
+</div>
+
+<!-- Drawer fiche facture -->
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<aside class="drawer" id="drawer">
+  <div class="p-6 border-b border-slate-200 flex justify-between items-start">
+    <div>
+      <div class="text-xs font-semibold uppercase tracking-wider" style="color: var(--fp-accent)" id="drawer-num">—</div>
+      <h2 class="text-xl font-extrabold mt-1" id="drawer-title">—</h2>
+      <p class="text-sm text-slate-500" id="drawer-subtitle">—</p>
+    </div>
+    <button class="p-2 hover:bg-slate-100 rounded-lg" id="drawer-close">
+      <i data-lucide="x" class="w-5 h-5"></i>
+    </button>
+  </div>
+  <div class="p-6 space-y-5" id="drawer-body"></div>
+  <div class="p-6 border-t border-slate-200 flex gap-2">
+    <a class="btn btn-primary text-sm flex-1 justify-center" id="drawer-open-drive" target="_blank" rel="noopener"><i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir le PDF</a>
+  </div>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/supabase-client.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  lucide.createIcons();
+  const data = window.FP_DATA;
+  // Les factures de leasing sont gérées sur la page Contrats (section Leasing BPCE),
+  // pas dans cette vue qui se concentre sur les vraies factures (entretien, réparation, achat, sinistre, etc.)
+  const factures = (data.factures || []).filter(f => f.type !== 'leasing');
+  const state = { search: '', type: 'all', annee: 'all', vehicule: 'all', fournisseur: 'all', currentId: null };
+  const $ = (id) => document.getElementById(id);
+
+  function typePill(t) {
+    const key = (t || 'autre').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const cls = ['entretien','reparation','achat','leasing','cession','sinistre','autre'].includes(key) ? key : 'autre';
+    const label = t ? (t.charAt(0).toUpperCase() + t.slice(1)) : '—';
+    return `<span class="type-pill type-${cls}">${label}</span>`;
+  }
+
+  function getYear(date) { return (date || '').slice(0,4); }
+
+  // Populate dynamic filters
+  const vehicules = [...new Set(factures.map(f => f.vehiculeImmat).filter(Boolean))].sort();
+  vehicules.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    $('filter-vehicule').appendChild(opt);
+  });
+  const fournisseurs = [...new Set(factures.map(f => f.fournisseur).filter(Boolean))].sort();
+  fournisseurs.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f; opt.textContent = f;
+    $('filter-fournisseur').appendChild(opt);
+  });
+
+  function filtered() {
+    const q = state.search.toLowerCase().trim();
+    return factures.filter(f => {
+      if (state.type !== 'all' && (f.type || 'autre') !== state.type) return false;
+      if (state.annee !== 'all' && getYear(f.date) !== state.annee) return false;
+      if (state.vehicule !== 'all' && f.vehiculeImmat !== state.vehicule) return false;
+      if (state.fournisseur !== 'all' && f.fournisseur !== state.fournisseur) return false;
+      if (q && !(`${f.fournisseur} ${f.description} ${f.numeroFacture} ${f.vehiculeImmat}`.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }
+
+  function renderKPIs() {
+    const rows = filtered();
+    const totalTTC = rows.reduce((s,f) => s + (f.montantTTC || 0), 0);
+    $('kpi-total').textContent = FP.euro(totalTTC);
+    $('kpi-total-sub').textContent = `sur ${rows.length} facture${rows.length > 1 ? 's' : ''}`;
+    $('kpi-count').textContent = rows.length;
+    $('kpi-moyen').textContent = rows.length > 0 ? FP.euro(totalTTC / rows.length) : '—';
+
+    const fournCount = {};
+    rows.forEach(f => {
+      if (!f.fournisseur) return;
+      fournCount[f.fournisseur] = (fournCount[f.fournisseur] || 0) + (f.montantTTC || 0);
+    });
+    const top = Object.entries(fournCount).sort((a,b) => b[1] - a[1])[0];
+    if (top) {
+      $('kpi-topfourn').textContent = top[0].length > 22 ? top[0].slice(0,20) + '…' : top[0];
+      $('kpi-topfourn-sub').textContent = FP.euro(top[1]);
+    } else {
+      $('kpi-topfourn').textContent = '—';
+      $('kpi-topfourn-sub').textContent = '—';
+    }
+  }
+
+  // === Config colonnes éditables ===
+  const FACTURES_COLUMNS = [
+    { key: 'date',          label: 'Date',         defaultWidth: 110, render: f => FP.date(f.date) },
+    { key: 'vehiculeImmat', label: 'Véhicule',     defaultWidth: 110, cellCls: 'font-mono text-sm', render: f => f.vehiculeImmat || '—' },
+    { key: 'fournisseur',   label: 'Fournisseur',  defaultWidth: 220, render: f => f.fournisseur || '—' },
+    { key: 'description',   label: 'Description',  defaultWidth: 300, render: f => `<span title="${(f.description || '').replace(/"/g,'&quot;')}">${f.description ? f.description.slice(0,60) + (f.description.length > 60 ? '…' : '') : '—'}</span>` },
+    { key: 'type',          label: 'Type',         defaultWidth: 100, render: f => typePill(f.type) },
+    { key: 'montantHT',     label: 'HT',           defaultWidth: 100, render: f => f.montantHT != null ? FP.euroPrecis(f.montantHT) : '<span class="text-slate-400">—</span>' },
+    { key: 'montantTVA',    label: 'TVA',          defaultWidth: 90,  render: f => f.montantTVA != null ? FP.euroPrecis(f.montantTVA) : '<span class="text-slate-400">—</span>' },
+    { key: 'montantTTC',    label: 'Montant TTC',  defaultWidth: 130, cellCls: 'font-semibold', render: f => f.montantTTC ? FP.euroPrecis(f.montantTTC) : '<span class="text-slate-400">—</span>' },
+    { key: 'numeroFacture', label: 'N° facture',   defaultWidth: 130, cellCls: 'font-mono text-xs text-slate-500', render: f => f.numeroFacture || '—' },
+    { key: 'km',            label: 'Km',           defaultWidth: 90,  render: f => f.km ? FP.num(f.km) + ' km' : '—' },
+  ];
+
+  let facturesEditor = null;
+
+  function renderTable() {
+    const rows = filtered().slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+    const tbody = $('factures-tbody');
+    const empty = $('empty-state');
+    if (rows.length === 0) {
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+    } else {
+      empty.classList.add('hidden');
+      const visible = facturesEditor ? facturesEditor.getVisibleColumns() : FACTURES_COLUMNS.map(c => c.key);
+      tbody.innerHTML = rows.map(f => {
+        const cells = visible.map(k => {
+          const def = FACTURES_COLUMNS.find(c => c.key === k);
+          if (!def) return '<td></td>';
+          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''}>${def.render(f)}</td>`;
+        }).join('');
+        return `<tr class="cursor-pointer" data-id="${f.fileId}">${cells}</tr>`;
+      }).join('');
+    }
+    $('result-count').textContent = `${rows.length} facture${rows.length > 1 ? 's' : ''} affichée${rows.length > 1 ? 's' : ''} sur ${factures.length}`;
+  }
+
+  // Charts
+  let monthlyChart, typesChart;
+  function renderCharts() {
+    const rows = filtered();
+
+    // Monthly spend
+    const monthly = {};
+    rows.forEach(f => {
+      const m = (f.date || '').slice(0,7);
+      if (!m) return;
+      monthly[m] = (monthly[m] || 0) + (f.montantTTC || 0);
+    });
+    const months = Object.keys(monthly).sort();
+    if (monthlyChart) monthlyChart.destroy();
+    monthlyChart = new Chart($('monthlyChart'), {
+      type: 'bar',
+      data: {
+        labels: months,
+        datasets: [{
+          data: months.map(m => monthly[m]),
+          backgroundColor: '#14B8A6',
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: { grid: { color: '#F1F5F9' }, ticks: { callback: v => v + ' €' } }
+        },
+        maintainAspectRatio: false, responsive: true,
+      }
+    });
+
+    // Types
+    const typesCount = {};
+    rows.forEach(f => {
+      const t = f.type || 'autre';
+      typesCount[t] = (typesCount[t] || 0) + (f.montantTTC || 0);
+    });
+    if (typesChart) typesChart.destroy();
+    typesChart = new Chart($('typesChart'), {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(typesCount),
+        datasets: [{
+          data: Object.values(typesCount),
+          backgroundColor: ['#1E3A8A', '#DC2626', '#16A34A', '#7C3AED', '#F59E0B', '#7F1D1D', '#94A3B8'],
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        cutout: '60%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } } },
+        maintainAspectRatio: false, responsive: true,
+      }
+    });
+  }
+
+  // Drawer
+  function openDrawer(fileId) {
+    const f = factures.find(x => x.fileId === fileId);
+    if (!f) return;
+    state.currentId = fileId;
+    $('drawer-num').textContent = f.numeroFacture || '—';
+    $('drawer-title').textContent = f.description || 'Facture';
+    $('drawer-subtitle').textContent = `${f.fournisseur || '—'} · ${FP.date(f.date)}`;
+
+    $('drawer-body').innerHTML = `
+      <div class="flex justify-between items-center">
+        ${typePill(f.type)}
+        <span class="text-xs text-slate-500 font-mono">${f.vehiculeImmat || '—'}</span>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3">
+        <div class="kpi p-3"><div class="kpi-label">HT</div><div class="kpi-value" style="font-size:1rem">${f.montantHT != null ? FP.euroPrecis(f.montantHT) : '—'}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">TVA</div><div class="kpi-value" style="font-size:1rem">${f.montantTVA != null ? FP.euroPrecis(f.montantTVA) : '—'}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">TTC</div><div class="kpi-value" style="font-size:1rem; color: var(--fp-primary)">${f.montantTTC != null ? FP.euroPrecis(f.montantTTC) : '—'}</div></div>
+      </div>
+
+      ${f.km ? `<div><div class="field-label">Kilométrage à la facture</div><div class="text-lg font-semibold">${FP.num(f.km)} km</div></div>` : ''}
+
+      <div>
+        <div class="field-label">Fichier source</div>
+        <div class="text-sm bg-slate-50 p-3 rounded-lg break-all">${f.fileName || '—'}</div>
+      </div>
+    `;
+
+    $('drawer-open-drive').href = `https://drive.google.com/file/d/${f.fileId}/view`;
+    $('drawer').classList.add('open');
+    $('drawer-backdrop').classList.add('open');
+    lucide.createIcons();
+  }
+  function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
+
+  // Export
+  function exportCSV() {
+    const headers = ['Date','Véhicule','Fournisseur','N° facture','Description','Type','HT','TVA','TTC','Km','Fichier'];
+    const rows = filtered().map(f => [f.date, f.vehiculeImmat, f.fournisseur, f.numeroFacture, f.description, f.type, f.montantHT, f.montantTVA, f.montantTTC, f.km, f.fileName]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `auto-flotte-factures-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+  // Wiring
+  $('search').addEventListener('input', e => { state.search = e.target.value; renderKPIs(); renderTable(); renderCharts(); });
+  document.querySelectorAll('#filters-type .filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.type = chip.dataset.value;
+      renderKPIs(); renderTable(); renderCharts();
+    });
+  });
+  ['filter-annee','filter-vehicule','filter-fournisseur'].forEach(id => {
+    $(id).addEventListener('change', e => {
+      const key = id.replace('filter-','');
+      state[key] = e.target.value;
+      renderKPIs(); renderTable(); renderCharts();
+    });
+  });
+
+  $('factures-tbody').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-id]');
+    if (tr) openDrawer(tr.dataset.id);
+  });
+  $('drawer-close').addEventListener('click', closeDrawer);
+  $('drawer-backdrop').addEventListener('click', closeDrawer);
+  $('btn-export').addEventListener('click', exportCSV);
+
+  // Init éditeur de colonnes
+  facturesEditor = FP.makeColumnEditor({
+    pageKey: 'factures',
+    columns: FACTURES_COLUMNS,
+    tableEl: $('factures-table'),
+    hiddenBtnContainer: document.querySelector('main > div.flex.flex-wrap.justify-between > div.flex.items-center'),
+    onChange: () => renderTable(),
+  });
+
+  // Init
+  renderKPIs();
+  renderTable();
+  renderCharts();
+</script>
+</body>
+</html>

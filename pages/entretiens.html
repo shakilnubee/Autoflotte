@@ -1,0 +1,354 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entretiens — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .filter-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: white; }
+  .ct-card { border-left: 4px solid; padding: .85rem 1rem; border-radius: .65rem; background: white; border: 1px solid var(--fp-border); }
+  .ct-card.danger { border-left-color: var(--fp-danger); background: #FEF2F2; }
+  .ct-card.warn   { border-left-color: var(--fp-warn);   background: #FFFBEB; }
+  .ct-card.ok     { border-left-color: var(--fp-ok);     background: #F0FDF4; }
+  .chart-wrap-sm { position: relative; height: 240px; }
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-8">
+      <div>
+        <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)" data-edit-key="entretiens.title">Entretiens & maintenance</h1>
+        <p class="text-slate-500 text-sm mt-1" data-edit-key="entretiens.subtitle">Échéances CT, historique d'entretien et coûts par véhicule</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="btn btn-outline text-sm" id="btn-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter CSV</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="kpi">
+        <div class="kpi-label">Total interventions</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-delta">depuis 2025</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Coût total</div>
+        <div class="kpi-value" id="kpi-cout">—</div>
+        <div class="kpi-delta">entretien + réparation</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">CT à renouveler &lt; 90j</div>
+        <div class="kpi-value" id="kpi-ct" style="color: var(--fp-warn)">—</div>
+        <div class="kpi-delta">véhicules</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">CT en retard</div>
+        <div class="kpi-value" id="kpi-ct-retard" style="color: var(--fp-danger)">—</div>
+        <div class="kpi-delta down">à traiter d'urgence</div>
+      </div>
+    </div>
+
+    <!-- Échéances CT critiques -->
+    <div class="card p-6 mb-6">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="font-bold text-slate-900">Échéances de contrôle technique</h3>
+        <span class="text-xs text-slate-500" id="ct-summary"></span>
+      </div>
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-3" id="ct-list"></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="grid lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Coût mensuel maintenance (€)</h3>
+        <div class="chart-wrap-sm"><canvas id="monthChart"></canvas></div>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Top 10 véhicules par coût</h3>
+        <div class="chart-wrap-sm"><canvas id="vehChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="relative flex-1 min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search" type="text" placeholder="Description, véhicule, garage…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+
+        <div class="flex flex-wrap gap-2" id="filters-type">
+          <button class="filter-chip active" data-value="all">Tous</button>
+          <button class="filter-chip" data-value="entretien">Entretien</button>
+          <button class="filter-chip" data-value="réparation">Réparation</button>
+        </div>
+
+        <select id="filter-vehicule" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Tous véhicules</option>
+        </select>
+
+        <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Toutes années</option>
+          <option value="2026">2026</option>
+          <option value="2025">2025</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card overflow-hidden">
+      <div class="scrollable">
+        <table class="fp-table" id="entretiens-table">
+          <thead></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="hidden p-12 text-center">
+        <i data-lucide="wrench" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+        <p class="text-slate-500 text-sm">Aucun entretien ne correspond aux filtres.</p>
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-500 mt-4" id="result-count"></p>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/supabase-client.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  lucide.createIcons();
+  const data = window.FP_DATA;
+  const $ = (id) => document.getElementById(id);
+
+  // Sourcés depuis factures avec type entretien ou réparation
+  const interventions = (data.factures || []).filter(f => f.type === 'entretien' || f.type === 'réparation');
+  const state = { search: '', type: 'all', vehicule: 'all', annee: 'all' };
+
+  // Populate vehicule filter
+  const vehImmats = [...new Set(interventions.map(i => i.vehiculeImmat).filter(Boolean))].sort();
+  vehImmats.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    $('filter-vehicule').appendChild(opt);
+  });
+
+  function filtered() {
+    const q = state.search.toLowerCase().trim();
+    return interventions.filter(i => {
+      if (state.type !== 'all' && i.type !== state.type) return false;
+      if (state.vehicule !== 'all' && i.vehiculeImmat !== state.vehicule) return false;
+      if (state.annee !== 'all' && (i.date || '').slice(0,4) !== state.annee) return false;
+      if (q && !(`${i.vehiculeImmat} ${i.description} ${i.fournisseur}`.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }
+
+  function renderKPIs() {
+    const rows = filtered();
+    const total = rows.reduce((s,i) => s + (i.montantTTC || 0), 0);
+    $('kpi-total').textContent = rows.length;
+    $('kpi-cout').textContent = FP.euro(total);
+
+    // CT échéances depuis vehicules
+    const today = new Date();
+    let ctSoon = 0, ctLate = 0;
+    (data.vehicules || []).forEach(v => {
+      if (!v.prochainCT || v.prochainCT === '—') return;
+      const d = new Date(v.prochainCT);
+      const diff = Math.ceil((d - today) / (1000*60*60*24));
+      if (diff < 0) ctLate++;
+      else if (diff < 90) ctSoon++;
+    });
+    $('kpi-ct').textContent = ctSoon;
+    $('kpi-ct-retard').textContent = ctLate;
+  }
+
+  function renderCTList() {
+    const today = new Date();
+    const items = (data.vehicules || [])
+      .filter(v => v.prochainCT && v.prochainCT !== '—')
+      .map(v => {
+        const d = new Date(v.prochainCT);
+        const diff = Math.ceil((d - today) / (1000*60*60*24));
+        return { v, d, diff };
+      })
+      .sort((a,b) => a.diff - b.diff)
+      .slice(0, 9); // top 9 most urgent (retard ou proche)
+
+    $('ct-list').innerHTML = items.map(({ v, diff }) => {
+      let cls = 'ok', icon = 'check-circle-2', txt;
+      if (diff < 0)        { cls = 'danger'; icon = 'alert-triangle'; txt = `Dépassé de ${-diff}j`; }
+      else if (diff < 30)  { cls = 'danger'; icon = 'alert-triangle'; txt = `Dans ${diff}j`; }
+      else if (diff < 90)  { cls = 'warn';   icon = 'bell';           txt = `Dans ${diff}j`; }
+      else                 { cls = 'ok';     icon = 'check-circle-2'; txt = `Dans ${diff}j`; }
+      return `
+        <div class="ct-card ${cls}">
+          <div class="flex items-center justify-between">
+            <div class="font-mono font-semibold text-sm">${v.immat}</div>
+            <i data-lucide="${icon}" class="w-4 h-4"></i>
+          </div>
+          <div class="text-xs text-slate-600 mt-1">${v.marque} ${v.modele} · ${v.chauffeur}</div>
+          <div class="text-xs font-semibold mt-2">${FP.date(v.prochainCT)} · ${txt}</div>
+        </div>
+      `;
+    }).join('');
+
+    $('ct-summary').textContent = `${items.length} véhicule${items.length > 1 ? 's' : ''} le${items.length > 1 ? 's' : ''} plus urgent${items.length > 1 ? 's' : ''} / ${(data.vehicules || []).filter(v => v.prochainCT && v.prochainCT !== '—').length} avec CT planifié`;
+    lucide.createIcons();
+  }
+
+  // === Config colonnes éditables ===
+  const ENTRETIENS_COLUMNS = [
+    { key: 'date',          label: 'Date',         defaultWidth: 110, render: i => FP.date(i.date) },
+    { key: 'vehiculeImmat', label: 'Véhicule',     defaultWidth: 110, cellCls: 'font-mono text-sm', render: i => i.vehiculeImmat || '—' },
+    { key: 'description',   label: 'Description',  defaultWidth: 320, render: i => `<span title="${(i.description || '').replace(/"/g,'&quot;')}">${i.description ? i.description.slice(0,70) + (i.description.length > 70 ? '…' : '') : '—'}</span>` },
+    { key: 'fournisseur',   label: 'Garage',       defaultWidth: 200, render: i => i.fournisseur || '—' },
+    { key: 'type',          label: 'Type',         defaultWidth: 110, render: i => i.type === 'réparation' ? '<span class="badge badge-danger">Réparation</span>' : '<span class="badge badge-info">Entretien</span>' },
+    { key: 'km',            label: 'Km',           defaultWidth: 100, render: i => i.km ? FP.num(i.km) + ' km' : '—' },
+    { key: 'montantTTC',    label: 'Montant TTC',  defaultWidth: 120, cellCls: 'font-semibold', render: i => i.montantTTC ? FP.euroPrecis(i.montantTTC) : '—' },
+    { key: 'numeroFacture', label: 'N° facture',   defaultWidth: 130, cellCls: 'font-mono text-xs text-slate-500', render: i => i.numeroFacture || '—' },
+  ];
+  let entretiensEditor = null;
+
+  function renderTable() {
+    const rows = filtered().slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+    const tbody = $('tbody');
+    const empty = $('empty-state');
+    if (rows.length === 0) {
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+    } else {
+      empty.classList.add('hidden');
+      const visible = entretiensEditor ? entretiensEditor.getVisibleColumns() : ENTRETIENS_COLUMNS.map(c => c.key);
+      tbody.innerHTML = rows.map(i => {
+        const cells = visible.map(k => {
+          const def = ENTRETIENS_COLUMNS.find(c => c.key === k);
+          if (!def) return '<td></td>';
+          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''}>${def.render(i)}</td>`;
+        }).join('');
+        const driveLink = i.fileId ? `<a href="https://drive.google.com/file/d/${i.fileId}/view" target="_blank" rel="noopener" class="ml-2 text-slate-400 hover:text-slate-700"><i data-lucide="external-link" class="w-3.5 h-3.5 inline"></i></a>` : '';
+        return `<tr>${cells}</tr>`;
+      }).join('');
+    }
+    $('result-count').textContent = `${rows.length} intervention${rows.length > 1 ? 's' : ''} sur ${interventions.length}`;
+    lucide.createIcons();
+  }
+
+  // Charts
+  let monthChart, vehChart;
+  function renderCharts() {
+    const rows = filtered();
+
+    // Monthly maintenance
+    const monthly = {};
+    rows.forEach(i => {
+      const m = (i.date || '').slice(0,7);
+      if (!m) return;
+      monthly[m] = (monthly[m] || 0) + (i.montantTTC || 0);
+    });
+    const months = Object.keys(monthly).sort();
+    if (monthChart) monthChart.destroy();
+    monthChart = new Chart($('monthChart'), {
+      type: 'bar',
+      data: { labels: months, datasets: [{ data: months.map(m => monthly[m]), backgroundColor: '#0F1E3D', borderRadius: 4 }] },
+      options: { plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 } } }, y: { grid: { color: '#F1F5F9' }, ticks: { callback: v => v + ' €' } } }, maintainAspectRatio: false, responsive: true }
+    });
+
+    // Top vehicles
+    const perVeh = {};
+    rows.forEach(i => {
+      const k = i.vehiculeImmat || '—';
+      perVeh[k] = (perVeh[k] || 0) + (i.montantTTC || 0);
+    });
+    const top = Object.entries(perVeh).sort((a,b) => b[1] - a[1]).slice(0,10);
+    if (vehChart) vehChart.destroy();
+    vehChart = new Chart($('vehChart'), {
+      type: 'bar',
+      data: { labels: top.map(([k]) => k), datasets: [{ data: top.map(([,v]) => v), backgroundColor: '#14B8A6', borderRadius: 4 }] },
+      options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { callback: v => v + ' €' } }, y: { grid: { display: false } } }, maintainAspectRatio: false, responsive: true }
+    });
+  }
+
+  function exportCSV() {
+    const headers = ['Date','Véhicule','Description','Garage','Type','Km','TTC','N° facture','Fichier'];
+    const rows = filtered().map(i => [i.date, i.vehiculeImmat, i.description, i.fournisseur, i.type, i.km, i.montantTTC, i.numeroFacture, i.fileName]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `auto-flotte-entretiens-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+  // Wiring
+  $('search').addEventListener('input', e => { state.search = e.target.value; renderKPIs(); renderTable(); renderCharts(); });
+  document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.addEventListener('click', () => {
+    document.querySelectorAll('#filters-type .filter-chip').forEach(x => x.classList.remove('active'));
+    c.classList.add('active'); state.type = c.dataset.value;
+    renderKPIs(); renderTable(); renderCharts();
+  }));
+  ['filter-vehicule','filter-annee'].forEach(id => $(id).addEventListener('change', e => {
+    state[id.replace('filter-','')] = e.target.value;
+    renderKPIs(); renderTable(); renderCharts();
+  }));
+  $('btn-export').addEventListener('click', exportCSV);
+
+  // Init éditeur de colonnes
+  entretiensEditor = FP.makeColumnEditor({
+    pageKey: 'entretiens',
+    columns: ENTRETIENS_COLUMNS,
+    tableEl: $('entretiens-table'),
+    hiddenBtnContainer: document.querySelector('main > div.flex.flex-wrap.justify-between > div.flex.items-center'),
+    onChange: () => renderTable(),
+  });
+
+  renderKPIs(); renderCTList(); renderTable(); renderCharts();
+</script>
+</body>
+</html>

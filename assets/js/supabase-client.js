@@ -1,0 +1,175 @@
+// Auto-flotte — client Supabase (backend)
+// Le SDK officiel doit être chargé AVANT ce fichier via :
+//   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+(function () {
+  const SUPABASE_URL = 'https://tzjuptlzoywjeigmyfuj.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq';
+
+  if (typeof window === 'undefined' || !window.supabase || !window.supabase.createClient) {
+    console.error('[supabase-client] Le SDK @supabase/supabase-js n\'est pas chargé. Ajoute <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> avant ce fichier.');
+    return;
+  }
+
+  const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  window.FP = window.FP || {};
+  FP.supabase = client;
+
+  // ===== Authentification =====
+  // Détermine le chemin vers login.html selon le contexte (racine vs sous-dossier pages/)
+  const loginPath = window.location.pathname.includes('/pages/') ? '../login.html' : 'login.html';
+
+  FP.auth = {
+    async getUser() {
+      const { data: { session } } = await client.auth.getSession();
+      return session ? session.user : null;
+    },
+    async getSession() {
+      const { data: { session } } = await client.auth.getSession();
+      return session;
+    },
+    async signOut() {
+      await client.auth.signOut();
+      window.location.href = loginPath;
+    },
+    /** Force la présence d'une session, sinon redirige vers /login.html */
+    async requireAuth() {
+      const user = await this.getUser();
+      if (!user) {
+        window.location.href = loginPath;
+        return null;
+      }
+      return user;
+    },
+  };
+
+  // Si "Se souvenir de moi" n'était pas coché ET que le navigateur a été fermé entre-temps,
+  // on nettoie la session pour forcer une reconnexion (sessionStorage est vidé à la fermeture).
+  const rememberMe = localStorage.getItem('fp_remember_me') === '1';
+  const sessionAlive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!rememberMe && !sessionAlive) {
+    // L'utilisateur ne voulait pas être mémorisé, et c'est une nouvelle session navigateur
+    localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token');
+  }
+  // Marqueur pour cette session navigateur (sera vidé à la fermeture)
+  sessionStorage.setItem('fp_session_alive', '1');
+
+  // Auto-redirect vers login.html si pas connecté (sauf sur login.html ou index.html)
+  const path = window.location.pathname;
+  const isLoginPage = path.endsWith('login.html');
+  const isLandingPage = path.endsWith('index.html') || path === '/' || path.endsWith('/fleet-app/');
+  if (!isLoginPage && !isLandingPage) {
+    FP.auth.requireAuth();
+  }
+
+  // ===== Mappings snake_case ↔ camelCase =====
+  // Le cas général : snake_case → camelCase par split-_ + capitalize.
+  // Quelques colonnes ont des sigles (HT, TVA, TTC, CG) où la convention historique
+  // utilisée par le frontend est `montantTTC`, `montantHT`, etc. — il faut un override.
+  const SNAKE_TO_CAMEL_OVERRIDES = {
+    'montant_ht':           'montantHT',
+    'montant_tva':          'montantTVA',
+    'montant_ttc':          'montantTTC',
+    'changer_cg':           'changerCG',
+  };
+  const CAMEL_TO_SNAKE_OVERRIDES = {};
+  Object.entries(SNAKE_TO_CAMEL_OVERRIDES).forEach(([s, c]) => { CAMEL_TO_SNAKE_OVERRIDES[c] = s; });
+
+  function snakeToCamel(key) {
+    if (SNAKE_TO_CAMEL_OVERRIDES[key]) return SNAKE_TO_CAMEL_OVERRIDES[key];
+    return key.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
+  }
+  function camelToSnake(key) {
+    if (CAMEL_TO_SNAKE_OVERRIDES[key]) return CAMEL_TO_SNAKE_OVERRIDES[key];
+    return key.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase());
+  }
+
+  function remapKeys(obj, fn) {
+    if (!obj || typeof obj !== 'object') return obj;
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) out[fn(k)] = v;
+    return out;
+  }
+  const toClient = (row) => remapKeys(row, snakeToCamel);
+  const toDb     = (row) => remapKeys(row, camelToSnake);
+
+  // ===== API publique =====
+  FP.db = {
+    /** Charge les 3 tables et retourne { vehicules, amendes, factures } en camelCase */
+    async loadAll() {
+      const [v, a, f] = await Promise.all([
+        client.from('vehicules').select('*'),
+        client.from('amendes').select('*'),
+        client.from('factures').select('*'),
+      ]);
+      const errors = [v.error, a.error, f.error].filter(Boolean);
+      if (errors.length) {
+        console.error('[FP.db.loadAll] erreurs :', errors);
+        throw new Error(errors.map(e => e.message).join(' | '));
+      }
+      return {
+        vehicules: (v.data || []).map(toClient),
+        amendes:   (a.data || []).map(toClient),
+        factures:  (f.data || []).map(toClient),
+      };
+    },
+
+    /** Met à jour partiellement une ligne. Renvoie { error } si échec. */
+    async update(table, id, fields) {
+      const snake = toDb(fields);
+      const res = await client.from(table).update(snake).eq('id', id);
+      if (res.error) console.error(`[FP.db.update ${table}#${id}]`, res.error);
+      return res;
+    },
+
+    /** Insère une nouvelle ligne. */
+    async insert(table, row) {
+      const snake = toDb(row);
+      const res = await client.from(table).insert(snake);
+      if (res.error) console.error(`[FP.db.insert ${table}]`, res.error);
+      return res;
+    },
+
+    /** Supprime une ligne par id. */
+    async delete(table, id) {
+      const res = await client.from(table).delete().eq('id', id);
+      if (res.error) console.error(`[FP.db.delete ${table}#${id}]`, res.error);
+      return res;
+    },
+  };
+
+  // Remplace le CONTENU d'un array sans changer sa référence
+  // (important pour que les `const data = window.FP_DATA` capturés par les pages
+  // voient toujours les bons éléments)
+  function replaceArrayInPlace(target, source) {
+    if (!Array.isArray(target)) return;
+    target.length = 0;
+    for (const item of source) target.push(item);
+  }
+
+  // ===== Loader async qui remplace les données dans window.FP_DATA =====
+  FP.dbReady = (async function loadDataFromSupabase() {
+    // S'assurer que window.FP_DATA existe avec les bonnes propriétés (sinon créer)
+    window.FP_DATA = window.FP_DATA || { vehicules: [], amendes: [], factures: [] };
+    if (!Array.isArray(window.FP_DATA.vehicules)) window.FP_DATA.vehicules = [];
+    if (!Array.isArray(window.FP_DATA.amendes))   window.FP_DATA.amendes   = [];
+    if (!Array.isArray(window.FP_DATA.factures))  window.FP_DATA.factures  = [];
+
+    try {
+      const data = await FP.db.loadAll();
+      // Remplace les contenus in-place
+      replaceArrayInPlace(window.FP_DATA.vehicules, data.vehicules);
+      replaceArrayInPlace(window.FP_DATA.amendes,   data.amendes);
+      replaceArrayInPlace(window.FP_DATA.factures,  data.factures);
+      console.log(`[FP.db] Chargé depuis Supabase : ${data.vehicules.length} véhicules, ${data.amendes.length} amendes, ${data.factures.length} factures`);
+      // Re-appliquer les overrides locaux (cases cochées par l'utilisateur, etc.)
+      if (FP.loadVehicleOverrides) FP.loadVehicleOverrides();
+      document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'supabase', counts: { vehicules: data.vehicules.length, amendes: data.amendes.length, factures: data.factures.length } } }));
+      return data;
+    } catch (e) {
+      console.warn('[FP.db] Supabase indisponible, fallback sur data.js local :', e);
+      document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'local', error: e.message } }));
+      return null;
+    }
+  })();
+})();

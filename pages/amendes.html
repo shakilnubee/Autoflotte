@@ -1,0 +1,510 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amendes — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .filter-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: white; }
+  .motif-pill { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 600; background: #F1F5F9; color: var(--fp-text); }
+  .motif-vitesse { background: #FEE2E2; color: #7F1D1D; }
+  .motif-stationnement { background: #FEF3C7; color: #78350F; }
+  .motif-telephone { background: #EDE9FE; color: #4C1D95; }
+  .motif-feu { background: #FECACA; color: #7F1D1D; }
+  .motif-voie { background: #DBEAFE; color: #1E3A8A; }
+  .motif-autre { background: #F1F5F9; color: #475569; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 100%; max-width: 480px; background: white; box-shadow: -20px 0 60px -20px rgba(15,30,61,.25); transform: translateX(100%); transition: transform .25s ease; z-index: 60; overflow-y: auto; }
+  .drawer.open { transform: translateX(0); }
+  .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
+  .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+  .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
+  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(20,184,166,.15); }
+  .chart-wrap-sm { position: relative; height: 220px; }
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+    <div class="mt-10 pt-6 border-t border-white/10 text-xs text-slate-300 px-2">
+      <div class="font-semibold text-white mb-1">Données réelles</div>
+      <p>Import depuis l'Excel TJMAX / BPCE.</p>
+    </div>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <!-- Header -->
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-8">
+      <div>
+        <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)" data-edit-key="amendes.title">Amendes & contraventions</h1>
+        <p class="text-slate-500 text-sm mt-1" data-edit-key="amendes.subtitle">Suivi des contraventions de la flotte — paiement et points</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1 mr-1">
+          <button class="btn btn-outline text-sm !px-2.5" data-history-undo title="Annuler (Ctrl+Z)" disabled><i data-lucide="undo-2" class="w-4 h-4"></i></button>
+          <button class="btn btn-outline text-sm !px-2.5" data-history-redo title="Refaire (Ctrl+Y)" disabled><i data-lucide="redo-2" class="w-4 h-4"></i></button>
+        </div>
+        <button class="btn btn-outline text-sm" id="btn-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter CSV</button>
+        <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle amende</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="kpi">
+        <div class="kpi-label">Total amendes</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-delta" id="kpi-total-sub">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">À payer</div>
+        <div class="kpi-value" id="kpi-apayer" style="color: var(--fp-danger)">—</div>
+        <div class="kpi-delta" id="kpi-apayer-montant" style="color: var(--fp-danger)">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Payées</div>
+        <div class="kpi-value" id="kpi-payees" style="color: var(--fp-ok)">—</div>
+        <div class="kpi-delta up" id="kpi-payees-montant">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Points retirés</div>
+        <div class="kpi-value" id="kpi-points" style="color: var(--fp-warn)">—</div>
+        <div class="kpi-delta">cumul</div>
+      </div>
+    </div>
+
+    <!-- Graphes -->
+    <div class="grid lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Répartition par motif</h3>
+        <div class="chart-wrap-sm"><canvas id="motifsChart"></canvas></div>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Top 8 conducteurs (par nombre)</h3>
+        <div class="chart-wrap-sm"><canvas id="conducteursChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="relative flex-1 min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search" type="text" placeholder="Prénom, motif, n° avis…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+
+        <div class="flex flex-wrap gap-2" id="filters-statut">
+          <button class="filter-chip active" data-value="all">Toutes</button>
+          <button class="filter-chip" data-value="à payer">À payer</button>
+          <button class="filter-chip" data-value="payée">Payées</button>
+        </div>
+
+        <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Toutes années</option>
+          <option value="2026">2026</option>
+        </select>
+
+        <select id="filter-motif" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Tous motifs</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tableau amendes -->
+    <div class="card overflow-hidden">
+      <div class="scrollable">
+        <table class="fp-table" id="amendes-table">
+          <thead></thead>
+          <tbody id="amendes-tbody"></tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="hidden p-12 text-center">
+        <i data-lucide="ticket-x" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+        <p class="text-slate-500 text-sm">Aucune amende ne correspond aux filtres.</p>
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-500 mt-4" id="result-count"></p>
+  </main>
+</div>
+
+<!-- Drawer fiche amende -->
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<aside class="drawer" id="drawer">
+  <div class="p-6 border-b border-slate-200 flex justify-between items-start">
+    <div>
+      <div class="text-xs font-semibold uppercase tracking-wider" style="color: var(--fp-accent)" id="drawer-id">—</div>
+      <h2 class="text-xl font-extrabold mt-1" id="drawer-title">—</h2>
+      <p class="text-sm text-slate-500" id="drawer-subtitle">—</p>
+    </div>
+    <button class="p-2 hover:bg-slate-100 rounded-lg" id="drawer-close">
+      <i data-lucide="x" class="w-5 h-5"></i>
+    </button>
+  </div>
+  <div class="p-6 space-y-5" id="drawer-body"></div>
+  <div class="p-6 border-t border-slate-200 flex gap-2">
+    <button class="btn btn-primary text-sm flex-1 justify-center" id="drawer-pay"><i data-lucide="check" class="w-4 h-4"></i> Marquer payée</button>
+    <button class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+  </div>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/supabase-client.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  lucide.createIcons();
+  const data = window.FP_DATA;
+  // Cette page n'affiche que les amendes de 2026 (les 2025 sont historiques)
+  // Le filtre est appliqué dans filtered() pour résister au rechargement depuis Supabase
+  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', currentId: null };
+  const $ = (id) => document.getElementById(id);
+
+  function motifPill(motif) {
+    const m = (motif || '').toLowerCase();
+    let cls = 'motif-autre';
+    if (m.includes('vitesse')) cls = 'motif-vitesse';
+    else if (m.includes('stationnement') || m.includes('arret') || m.includes('genant')) cls = 'motif-stationnement';
+    else if (m.includes('téléphone') || m.includes('telephone')) cls = 'motif-telephone';
+    else if (m.includes('feu')) cls = 'motif-feu';
+    else if (m.includes('voie') || m.includes('circulation') || m.includes('bus')) cls = 'motif-voie';
+    return `<span class="motif-pill ${cls}">${motif || '—'}</span>`;
+  }
+
+  function statutBadge(s) {
+    if (s === 'payée')     return '<span class="badge badge-ok">Payée</span>';
+    if (s === 'contestée') return '<span class="badge badge-info">Contestée</span>';
+    return '<span class="badge badge-danger">À payer</span>';
+  }
+
+  // Populate motif filter dynamically (uniquement motifs de 2026)
+  const motifs = [...new Set(data.amendes.filter(a => a.annee === '2026').map(a => a.motif).filter(Boolean))].sort();
+  motifs.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    $('filter-motif').appendChild(opt);
+  });
+
+  function filtered() {
+    const q = state.search.toLowerCase().trim();
+    return data.amendes.filter(a => {
+      // Page Amendes = uniquement 2026
+      if (a.annee !== '2026') return false;
+      if (state.statut !== 'all' && a.statut !== state.statut) return false;
+      if (state.motif !== 'all' && a.motif !== state.motif) return false;
+      if (q && !(`${a.prenom} ${a.motif} ${a.numeroAvis} ${a.commentaire}`.toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }
+
+  function renderKPIs() {
+    // Uniquement les amendes 2026
+    const all = data.amendes.filter(a => a.annee === '2026');
+    const apayer = all.filter(a => a.statut === 'à payer');
+    const payees = all.filter(a => a.statut === 'payée');
+    const points = all.filter(a => a.retraitPoints).length;
+    const montantApayer = apayer.reduce((s,a) => s + (a.montant || 0), 0);
+    const montantPayees = payees.reduce((s,a) => s + (a.montant || 0), 0);
+
+    $('kpi-total').textContent = all.length;
+    $('kpi-total-sub').textContent = FP.euro(all.reduce((s,a) => s + (a.montant || 0), 0)) + ' au total';
+    $('kpi-apayer').textContent = apayer.length;
+    $('kpi-apayer-montant').textContent = FP.euro(montantApayer) + ' dus';
+    $('kpi-payees').textContent = payees.length;
+    $('kpi-payees-montant').textContent = FP.euro(montantPayees) + ' réglés';
+    $('kpi-points').textContent = points;
+  }
+
+  // === Configuration colonnes (éditables via drag / ✕ / dblclick) ===
+  const AMENDES_COLUMNS = [
+    { key: 'date',         label: 'Date',        defaultWidth: 110, render: a => FP.date(a.date) },
+    { key: 'prenom',       label: 'Conducteur',  defaultWidth: 140, cellCls: 'font-semibold', render: a => a.prenom || '—' },
+    { key: 'motif',        label: 'Motif',       defaultWidth: 200, render: a => motifPill(a.motif) },
+    { key: 'montant',      label: 'Montant',     defaultWidth: 110, render: a => a.montant ? FP.euroPrecis(a.montant) : '<span class="text-slate-400">—</span>' },
+    { key: 'points',       label: 'Points',      defaultWidth: 80,  render: a => a.retraitPoints ? '<span class="text-amber-500">●</span>' : '<span class="text-slate-300">—</span>' },
+    { key: 'numeroAvis',   label: 'N° avis',     defaultWidth: 150, cellCls: 'font-mono text-xs text-slate-500', render: a => a.numeroAvis || '—' },
+    { key: 'annee',        label: 'Année',       defaultWidth: 80,  render: a => a.annee || '—' },
+    { key: 'commentaire',  label: 'Commentaire', defaultWidth: 200, render: a => a.commentaire ? `<span title="${a.commentaire.replace(/"/g,'&quot;')}">${a.commentaire.slice(0,30)}${a.commentaire.length > 30 ? '…' : ''}</span>` : '—' },
+    { key: 'statut',       label: 'Statut',      defaultWidth: 110, render: a => statutBadge(a.statut) },
+  ];
+
+  let amendesEditor = null; // initialisé après le DOM ready
+
+  function renderTable() {
+    const rows = filtered().slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+    const tbody = $('amendes-tbody');
+    const empty = $('empty-state');
+    if (rows.length === 0) {
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+    } else {
+      empty.classList.add('hidden');
+      const visible = amendesEditor ? amendesEditor.getVisibleColumns() : AMENDES_COLUMNS.map(c => c.key);
+      tbody.innerHTML = rows.map(a => {
+        const cells = visible.map(k => {
+          const def = AMENDES_COLUMNS.find(c => c.key === k);
+          if (!def) return '<td></td>';
+          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''}>${def.render(a)}</td>`;
+        }).join('');
+        return `<tr class="cursor-pointer" data-id="${a.id}">${cells}</tr>`;
+      }).join('');
+    }
+    const total2026 = data.amendes.filter(a => a.annee === '2026').length;
+    $('result-count').textContent = `${rows.length} amende${rows.length > 1 ? 's' : ''} affichée${rows.length > 1 ? 's' : ''} sur ${total2026}`;
+  }
+
+  // ---------- Charts ----------
+  let motifsChart, conducteursChart;
+  function renderCharts() {
+    // Uniquement amendes 2026
+    const amendes2026 = data.amendes.filter(a => a.annee === '2026');
+    // Motifs
+    const motifsCount = {};
+    amendes2026.forEach(a => {
+      const m = a.motif || 'Autre';
+      motifsCount[m] = (motifsCount[m] || 0) + 1;
+    });
+    const sortedMotifs = Object.entries(motifsCount).sort((a,b) => b[1] - a[1]).slice(0, 8);
+    if (motifsChart) motifsChart.destroy();
+    motifsChart = new Chart($('motifsChart'), {
+      type: 'doughnut',
+      data: {
+        labels: sortedMotifs.map(([k]) => k),
+        datasets: [{
+          data: sortedMotifs.map(([,v]) => v),
+          backgroundColor: ['#DC2626', '#F59E0B', '#7C3AED', '#14B8A6', '#0F1E3D', '#1E3A8A', '#5EEAD4', '#94A3B8'],
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        cutout: '60%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } } },
+        maintainAspectRatio: false, responsive: true,
+      }
+    });
+
+    // Top conducteurs
+    const condCount = {};
+    amendes2026.forEach(a => {
+      const c = (a.prenom || '—').trim();
+      condCount[c] = (condCount[c] || 0) + 1;
+    });
+    const topCond = Object.entries(condCount).sort((a,b) => b[1] - a[1]).slice(0, 8);
+    if (conducteursChart) conducteursChart.destroy();
+    conducteursChart = new Chart($('conducteursChart'), {
+      type: 'bar',
+      data: {
+        labels: topCond.map(([k]) => k),
+        datasets: [{
+          data: topCond.map(([,v]) => v),
+          backgroundColor: '#0F1E3D',
+          borderRadius: 6,
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, ticks: { precision: 0 } },
+          y: { grid: { display: false } }
+        },
+        maintainAspectRatio: false, responsive: true,
+      }
+    });
+  }
+
+  // ---------- Drawer ----------
+  function openDrawer(id) {
+    const a = data.amendes.find(x => x.id === id);
+    if (!a) return;
+    state.currentId = id;
+    $('drawer-id').textContent = a.id;
+    $('drawer-title').textContent = a.motif || 'Amende';
+    $('drawer-subtitle').textContent = `${a.prenom || '—'} · ${FP.date(a.date)}`;
+
+    $('drawer-body').innerHTML = `
+      <div class="flex justify-between items-center">
+        ${statutBadge(a.statut)}
+        ${motifPill(a.motif)}
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="kpi p-3"><div class="kpi-label">Montant</div><div class="kpi-value" style="font-size:1.4rem">${a.montant ? FP.euroPrecis(a.montant) : '—'}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">Retrait de points</div><div class="kpi-value" style="font-size:1.4rem">${a.retraitPoints ? 'Oui' : 'Non'}</div></div>
+      </div>
+
+      <div>
+        <div class="field-label">Numéro d'avis</div>
+        <div class="font-mono text-sm bg-slate-50 p-3 rounded-lg">${a.numeroAvis || '—'}</div>
+      </div>
+
+      <div>
+        <div class="field-label">Année</div>
+        <div>${a.annee}</div>
+      </div>
+
+      ${a.commentaire ? `
+        <div>
+          <div class="field-label">Commentaire</div>
+          <div class="text-sm bg-slate-50 p-3 rounded-lg">${a.commentaire}</div>
+        </div>` : ''}
+    `;
+
+    $('drawer').classList.add('open');
+    $('drawer-backdrop').classList.add('open');
+    $('drawer-pay').style.display = a.statut === 'payée' ? 'none' : '';
+    lucide.createIcons();
+  }
+  function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
+
+  function markPaid() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    FP.history.commit();
+    a.statut = 'payée';
+    closeDrawer();
+    renderKPIs(); renderTable(); renderCharts();
+  }
+  function deleteAmende() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    if (!confirm(`Supprimer cette amende (${a.id}) ?`)) return;
+    FP.history.commit();
+    data.amendes = data.amendes.filter(x => x.id !== state.currentId);
+    state.currentId = null;
+    closeDrawer();
+    renderKPIs(); renderTable(); renderCharts();
+  }
+
+  // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
+  function newAmende() {
+    const prenom = prompt('Conducteur ?'); if (prenom === null) return;
+    const motif = prompt('Motif ?'); if (motif === null) return;
+    const montantStr = prompt('Montant (€) ?', '0'); if (montantStr === null) return;
+    const date = prompt('Date (YYYY-MM-DD) ?', new Date().toISOString().slice(0,10)); if (date === null) return;
+    FP.history.commit();
+    const id = 'AM-' + String(data.amendes.length + 1).padStart(4, '0');
+    data.amendes.push({
+      id, date, annee: date.slice(0,4),
+      prenom: prenom.trim(), numeroAvis: '', motif: motif.trim(),
+      montant: parseFloat(montantStr) || 0, retraitPoints: false,
+      statut: 'à payer', commentaire: ''
+    });
+    renderKPIs(); renderTable(); renderCharts();
+  }
+
+  // ---------- Export CSV ----------
+  function exportCSV() {
+    const headers = ['ID','Date','Année','Conducteur','Motif','Montant','Retrait points','N° avis','Statut','Commentaire'];
+    const rows = filtered().map(a => [a.id, a.date, a.annee, a.prenom, a.motif, a.montant, a.retraitPoints ? 'Oui' : 'Non', a.numeroAvis, a.statut, a.commentaire]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `auto-flotte-amendes-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+  // ---------- Wiring ----------
+  $('search').addEventListener('input', e => { state.search = e.target.value; renderTable(); });
+  document.querySelectorAll('#filters-statut .filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.statut = chip.dataset.value;
+      renderTable();
+    });
+  });
+  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderTable(); });
+  $('filter-motif').addEventListener('change', e => { state.motif = e.target.value; renderTable(); });
+
+  $('amendes-tbody').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-id]');
+    if (tr) openDrawer(tr.dataset.id);
+  });
+  $('drawer-close').addEventListener('click', closeDrawer);
+  $('drawer-backdrop').addEventListener('click', closeDrawer);
+  $('drawer-pay').addEventListener('click', markPaid);
+  $('drawer-delete').addEventListener('click', deleteAmende);
+  $('btn-new').addEventListener('click', newAmende);
+  $('btn-export').addEventListener('click', exportCSV);
+
+  // === Historique : branchement boutons + raccourcis ===
+  FP.history.renderAll = () => {
+    // Re-construire le filtre motif au cas où des amendes auraient changé
+    const newMotifs = [...new Set(data.amendes.map(a => a.motif).filter(Boolean))].sort();
+    const sel = $('filter-motif');
+    const current = sel.value;
+    sel.innerHTML = '<option value="all">Tous motifs</option>' +
+      newMotifs.map(m => `<option value="${m}">${m}</option>`).join('');
+    sel.value = newMotifs.includes(current) || current === 'all' ? current : 'all';
+    renderKPIs(); renderTable(); renderCharts();
+  };
+  document.querySelectorAll('[data-history-undo]').forEach(b => b.addEventListener('click', () => FP.history.undo()));
+  document.querySelectorAll('[data-history-redo]').forEach(b => b.addEventListener('click', () => FP.history.redo()));
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, textarea, [contenteditable]')) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
+    if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); FP.history.undo(); }
+    else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); FP.history.redo(); }
+  });
+  FP.history.updateUI();
+
+  // Init éditeur de colonnes (drag/✕/dblclick) après le DOM
+  amendesEditor = FP.makeColumnEditor({
+    pageKey: 'amendes',
+    columns: AMENDES_COLUMNS,
+    tableEl: $('amendes-table'),
+    hiddenBtnContainer: document.querySelector('main > div.flex.flex-wrap.justify-between > div.flex.items-center'),
+    onChange: () => renderTable(),
+  });
+
+  // Init
+  renderKPIs();
+  renderTable();
+  renderCharts();
+</script>
+</body>
+</html>

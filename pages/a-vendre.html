@@ -1,0 +1,190 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>À vendre — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  .pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+  .pipeline-col { background: #F8FAFC; border-radius: .85rem; padding: 1rem; min-height: 200px; }
+  .pipeline-col h3 { font-weight: 700; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; color: var(--fp-muted); margin-bottom: .85rem; display: flex; align-items: center; justify-content: space-between; }
+  .pipeline-col .count { background: white; padding: .1rem .55rem; border-radius: 9999px; font-size: .7rem; font-weight: 700; color: var(--fp-text); }
+  .veh-card { background: white; border: 1px solid var(--fp-border); border-radius: .65rem; padding: .85rem; margin-bottom: .65rem; cursor: pointer; transition: all .12s; }
+  .veh-card:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -16px rgba(15,30,61,.2); border-color: var(--fp-accent); }
+  .veh-card .immat { font-family: monospace; font-weight: 700; font-size: .85rem; }
+  .veh-card .price { font-weight: 800; color: var(--fp-primary); }
+  .status-select { width: 100%; padding: .35rem .55rem; border: 1px solid var(--fp-border); border-radius: .4rem; font-size: .78rem; background: white; margin-top: .5rem; }
+  .price-input { width: 100%; padding: .35rem .55rem; border: 1px solid var(--fp-border); border-radius: .4rem; font-size: .85rem; margin-top: .5rem; }
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="mb-8">
+      <h1 class="text-2xl font-extrabold" data-edit-key="a-vendre.title" style="color: var(--fp-primary)">Véhicules à vendre</h1>
+      <p class="text-slate-500 text-sm mt-1" data-edit-key="a-vendre.subtitle">Pipeline de vente — du véhicule à publier au véhicule vendu</p>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="kpi">
+        <div class="kpi-label">À vendre / Vendus</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Valeur totale visée</div>
+        <div class="kpi-value" id="kpi-valeur" style="color: var(--fp-accent)">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Vendus</div>
+        <div class="kpi-value" id="kpi-vendus" style="color: var(--fp-ok)">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Encaissé</div>
+        <div class="kpi-value" id="kpi-encaisse" style="color: var(--fp-ok)">—</div>
+      </div>
+    </div>
+
+    <!-- Pipeline -->
+    <div class="pipeline" id="pipeline"></div>
+
+    <p class="text-xs text-slate-500 mt-6">💡 Astuce : édite le prix visé et le statut directement sur chaque carte. Les modifs sont sauvegardées automatiquement.</p>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/supabase-client.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  lucide.createIcons();
+  FP.loadVehicleOverrides();
+
+  const data = window.FP_DATA;
+  const $ = (id) => document.getElementById(id);
+
+  // Statuts du pipeline (séparés du statut véhicule global)
+  const PIPELINE = [
+    { key: 'a-publier',  label: 'À publier' },
+    { key: 'publie',     label: 'Publié' },
+    { key: 'contacte',   label: 'Contacté' },
+    { key: 'negociation',label: 'Négociation' },
+    { key: 'vendu',      label: 'Vendu' },
+  ];
+
+  // Tous les véhicules avec statut "à vendre" ou "vendu"
+  function getVendreVehs() {
+    return data.vehicules.filter(v => v.statut === 'à vendre' || v.statut === 'vendu');
+  }
+
+  function pipelineOf(v) {
+    if (v.statut === 'vendu') return 'vendu';
+    return v.pipelineStatut || 'a-publier';
+  }
+
+  function renderKPIs() {
+    const all = getVendreVehs();
+    const vendus = all.filter(v => v.statut === 'vendu');
+    $('kpi-total').textContent = all.length;
+    $('kpi-valeur').textContent = FP.euro(all.filter(v => v.statut !== 'vendu').reduce((s, v) => s + (v.prixVente || v.valeurAchat * 0.7 || 0), 0));
+    $('kpi-vendus').textContent = vendus.length;
+    $('kpi-encaisse').textContent = FP.euro(vendus.reduce((s, v) => s + (v.prixVenduFinal || v.prixVente || 0), 0));
+  }
+
+  function renderPipeline() {
+    const all = getVendreVehs();
+    const byCol = {};
+    PIPELINE.forEach(p => byCol[p.key] = []);
+    all.forEach(v => {
+      const k = pipelineOf(v);
+      if (byCol[k]) byCol[k].push(v);
+      else byCol['a-publier'].push(v);
+    });
+
+    $('pipeline').innerHTML = PIPELINE.map(col => `
+      <div class="pipeline-col">
+        <h3>${col.label} <span class="count">${byCol[col.key].length}</span></h3>
+        ${byCol[col.key].map(v => {
+          const prixSugg = v.prixVente || Math.round((v.valeurAchat || 0) * 0.7);
+          return `
+            <div class="veh-card" data-id="${v.id}">
+              <div class="flex justify-between items-start mb-1">
+                <span class="immat">${v.immat}</span>
+                <span class="price">${prixSugg ? FP.euro(prixSugg) : '—'}</span>
+              </div>
+              <div class="text-xs text-slate-600 mb-1">${v.marque} ${v.modele}</div>
+              <div class="text-xs text-slate-400">${FP.num(v.km)} km · ${v.chauffeur || '—'}</div>
+              <input type="number" class="price-input" data-field="prixVente" data-id="${v.id}" placeholder="Prix visé (€)" value="${v.prixVente || ''}" />
+              <select class="status-select" data-field="pipelineStatut" data-id="${v.id}">
+                ${PIPELINE.map(p => `<option value="${p.key}" ${pipelineOf(v) === p.key ? 'selected' : ''}>${p.label}</option>`).join('')}
+              </select>
+            </div>
+          `;
+        }).join('')}
+        ${byCol[col.key].length === 0 ? '<p class="text-xs text-slate-400 text-center py-4">Vide</p>' : ''}
+      </div>
+    `).join('');
+  }
+
+  // Sauvegarde directe au changement
+  document.addEventListener('change', e => {
+    const el = e.target.closest('[data-id][data-field]');
+    if (!el || !el.closest('.veh-card')) return;
+    const id = el.dataset.id;
+    const field = el.dataset.field;
+    const value = field === 'prixVente' ? (parseInt(el.value, 10) || null) : el.value;
+    const v = data.vehicules.find(x => x.id === id);
+    if (!v) return;
+    if (field === 'pipelineStatut' && value === 'vendu') {
+      v.statut = 'vendu';
+    }
+    v[field] = value;
+    FP.saveVehicleOverride(id, { [field]: value, ...(field === 'pipelineStatut' && value === 'vendu' ? { statut: 'vendu' } : {}) });
+    renderKPIs();
+    renderPipeline();
+  });
+
+  renderKPIs();
+  renderPipeline();
+</script>
+</body>
+</html>

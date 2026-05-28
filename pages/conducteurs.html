@@ -1,0 +1,276 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conducteurs — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  .driver-card { background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
+  .driver-card:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -16px rgba(15,30,61,.2); border-color: var(--fp-accent); }
+  .driver-avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--fp-accent) 0%, var(--fp-primary-2) 100%); color: white; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+  .stat-pill { padding: .15rem .5rem; border-radius: 9999px; font-size: .7rem; font-weight: 600; background: #F1F5F9; color: var(--fp-text); }
+  .stat-pill.danger { background: #FEE2E2; color: #7F1D1D; }
+  .stat-pill.warn { background: #FEF3C7; color: #78350F; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 100%; max-width: 560px; background: white; box-shadow: -20px 0 60px -20px rgba(15,30,61,.25); transform: translateX(100%); transition: transform .25s ease; z-index: 60; overflow-y: auto; }
+  .drawer.open { transform: translateX(0); }
+  .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
+  .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="mb-8">
+      <h1 class="text-2xl font-extrabold" data-edit-key="conducteurs.title" style="color: var(--fp-primary)">Conducteurs</h1>
+      <p class="text-slate-500 text-sm mt-1" data-edit-key="conducteurs.subtitle">Vue par personne — véhicule, amendes, points perdus</p>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="kpi">
+        <div class="kpi-label">Conducteurs</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Avec ≥ 1 amende</div>
+        <div class="kpi-value" id="kpi-avec-amende" style="color: var(--fp-warn)">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Total amendes payé</div>
+        <div class="kpi-value" id="kpi-total-paye">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Points perdus cumulés</div>
+        <div class="kpi-value" id="kpi-points" style="color: var(--fp-danger)">—</div>
+      </div>
+    </div>
+
+    <!-- Recherche -->
+    <div class="card p-4 mb-6">
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input id="search" type="text" placeholder="Rechercher un conducteur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+      </div>
+    </div>
+
+    <!-- Grille conducteurs -->
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" id="drivers-grid"></div>
+    <p class="text-xs text-slate-500 mt-4" id="result-count"></p>
+  </main>
+</div>
+
+<!-- Drawer fiche conducteur -->
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<aside class="drawer" id="drawer">
+  <div class="p-6 border-b border-slate-200 flex justify-between items-start">
+    <div class="flex items-center gap-3">
+      <div class="driver-avatar" id="drawer-avatar">?</div>
+      <div>
+        <h2 class="text-xl font-extrabold" id="drawer-name">—</h2>
+        <p class="text-sm text-slate-500" id="drawer-sub">—</p>
+      </div>
+    </div>
+    <button class="p-2 hover:bg-slate-100 rounded-lg" id="drawer-close">
+      <i data-lucide="x" class="w-5 h-5"></i>
+    </button>
+  </div>
+  <div class="p-6 space-y-5" id="drawer-body"></div>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/supabase-client.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  lucide.createIcons();
+  const data = window.FP_DATA;
+  const $ = (id) => document.getElementById(id);
+  const state = { search: '' };
+
+  // Normalisation des prénoms : "Maxime ", "Maxime T", "Maxime THOMPSON" → "Maxime"
+  function normPrenom(s) {
+    if (!s) return '';
+    return s.toString().trim().split(/\s+/)[0].toLowerCase();
+  }
+
+  // Construit la liste des conducteurs depuis vehicules + amendes
+  function buildDrivers() {
+    const map = new Map();
+    // Depuis vehicules
+    (data.vehicules || []).forEach(v => {
+      const cleanName = (v.chauffeur || '').trim();
+      if (!cleanName || cleanName === '—' || ['Siège','Dépôt','Navette','VENDU','x','X','Fenwick'].includes(cleanName)) return;
+      const key = normPrenom(cleanName);
+      if (!key) return;
+      if (!map.has(key)) map.set(key, { name: cleanName, key, vehicules: [], amendes: [] });
+      map.get(key).vehicules.push(v);
+    });
+    // Depuis amendes : match par prénom (case-insensitive, premier mot)
+    (data.amendes || []).forEach(a => {
+      const key = normPrenom(a.prenom);
+      if (!key) return;
+      if (!map.has(key)) map.set(key, { name: a.prenom.trim(), key, vehicules: [], amendes: [] });
+      map.get(key).amendes.push(a);
+    });
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const drivers = buildDrivers();
+
+  function initials(name) {
+    return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+  }
+
+  function renderKPIs() {
+    $('kpi-total').textContent = drivers.length;
+    const avec = drivers.filter(d => d.amendes.length > 0).length;
+    $('kpi-avec-amende').textContent = avec;
+    const totalPaye = drivers.reduce((s, d) =>
+      s + d.amendes.filter(a => a.statut === 'payée').reduce((s2, a) => s2 + (a.montant || 0), 0), 0);
+    $('kpi-total-paye').textContent = FP.euro(totalPaye);
+    const points = drivers.reduce((s, d) => s + d.amendes.filter(a => a.retraitPoints).length, 0);
+    $('kpi-points').textContent = points;
+  }
+
+  function renderGrid() {
+    const q = state.search.toLowerCase().trim();
+    const filtered = drivers.filter(d => !q || d.name.toLowerCase().includes(q));
+    $('drivers-grid').innerHTML = filtered.map(d => {
+      const nbAmendes = d.amendes.length;
+      const points = d.amendes.filter(a => a.retraitPoints).length;
+      const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
+      return `
+        <div class="driver-card" data-key="${d.key}">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="driver-avatar">${initials(d.name)}</div>
+            <div class="min-w-0 flex-1">
+              <div class="font-bold text-slate-900 truncate">${d.name}</div>
+              <div class="text-xs text-slate-500">${d.vehicules.length} véhicule${d.vehicules.length > 1 ? 's' : ''}</div>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-1">
+            ${nbAmendes > 0 ? `<span class="stat-pill ${nbAmendes >= 5 ? 'danger' : 'warn'}">${nbAmendes} amende${nbAmendes > 1 ? 's' : ''}</span>` : '<span class="stat-pill" style="background:#DCFCE7;color:#14532D">0 amende</span>'}
+            ${points > 0 ? `<span class="stat-pill danger">${points} pt${points > 1 ? 's' : ''}</span>` : ''}
+            ${dus > 0 ? `<span class="stat-pill danger">${FP.euro(dus)} dus</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+    $('result-count').textContent = `${filtered.length} conducteur${filtered.length > 1 ? 's' : ''} sur ${drivers.length}`;
+  }
+
+  function openDrawer(key) {
+    const d = drivers.find(x => x.key === key);
+    if (!d) return;
+    $('drawer-avatar').textContent = initials(d.name);
+    $('drawer-name').textContent = d.name;
+    $('drawer-sub').textContent = `${d.vehicules.length} véhicule${d.vehicules.length > 1 ? 's' : ''} · ${d.amendes.length} amende${d.amendes.length > 1 ? 's' : ''}`;
+
+    const nbPoints = d.amendes.filter(a => a.retraitPoints).length;
+    const totalPaye = d.amendes.filter(a => a.statut === 'payée').reduce((s, a) => s + (a.montant || 0), 0);
+    const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
+
+    $('drawer-body').innerHTML = `
+      <div class="grid grid-cols-3 gap-3">
+        <div class="kpi p-3"><div class="kpi-label">Points perdus</div><div class="kpi-value" style="font-size:1.3rem; color: var(--fp-danger)">${nbPoints}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">Payé</div><div class="kpi-value" style="font-size:1.1rem">${FP.euro(totalPaye)}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">À payer</div><div class="kpi-value" style="font-size:1.1rem; color: var(--fp-danger)">${FP.euro(dus)}</div></div>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-2 border-b border-slate-200 pb-1">Véhicules (${d.vehicules.length})</div>
+        ${d.vehicules.length === 0 ? '<p class="text-sm text-slate-500">Aucun véhicule assigné.</p>' :
+          d.vehicules.map(v => `
+            <div class="flex justify-between items-center py-2 border-b border-slate-100 text-sm">
+              <div>
+                <div class="font-mono font-semibold">${v.immat}</div>
+                <div class="text-xs text-slate-500">${v.marque} ${v.modele}</div>
+              </div>
+              <div class="text-right">
+                <div>${FP.statutBadge(v.statut)}</div>
+                <div class="text-xs text-slate-500 mt-1">${FP.num(v.km)} km</div>
+              </div>
+            </div>
+          `).join('')
+        }
+      </div>
+
+      <div>
+        <div class="font-semibold mb-2 border-b border-slate-200 pb-1">Amendes (${d.amendes.length})</div>
+        ${d.amendes.length === 0 ? '<p class="text-sm text-slate-500">Aucune amende.</p>' :
+          d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 20).map(a => `
+            <div class="flex justify-between items-center py-2 border-b border-slate-100 text-sm">
+              <div>
+                <div class="font-medium">${a.motif || '—'}</div>
+                <div class="text-xs text-slate-500">${FP.date(a.date)}${a.retraitPoints ? ' · retrait pt' : ''}</div>
+              </div>
+              <div class="text-right">
+                <div class="font-semibold">${a.montant ? FP.euroPrecis(a.montant) : '—'}</div>
+                <div class="text-xs">${a.statut === 'payée' ? '<span class="text-emerald-600">Payée</span>' : '<span class="text-red-600">À payer</span>'}</div>
+              </div>
+            </div>
+          `).join('')
+        }
+        ${d.amendes.length > 20 ? `<p class="text-xs text-slate-500 mt-2">… et ${d.amendes.length - 20} de plus</p>` : ''}
+      </div>
+    `;
+
+    $('drawer').classList.add('open');
+    $('drawer-backdrop').classList.add('open');
+  }
+
+  function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
+
+  $('search').addEventListener('input', e => { state.search = e.target.value; renderGrid(); });
+  $('drivers-grid').addEventListener('click', e => {
+    const card = e.target.closest('.driver-card');
+    if (card) openDrawer(card.dataset.key);
+  });
+  $('drawer-close').addEventListener('click', closeDrawer);
+  $('drawer-backdrop').addEventListener('click', closeDrawer);
+
+  renderKPIs();
+  renderGrid();
+  lucide.createIcons();
+</script>
+</body>
+</html>

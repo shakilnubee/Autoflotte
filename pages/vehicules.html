@@ -1,0 +1,1471 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Véhicules — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  /* Petites additions locales pour cette page */
+  .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .filter-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: white; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 100%; max-width: 480px; background: white; box-shadow: -20px 0 60px -20px rgba(15,30,61,.25); transform: translateX(100%); transition: transform .25s ease; z-index: 60; overflow-y: auto; }
+  .drawer.open { transform: translateX(0); }
+  .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
+  .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+  .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
+  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(20,184,166,.15); }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.5); display: none; align-items: center; justify-content: center; z-index: 70; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: white; border-radius: 1rem; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
+  .ct-warn { color: var(--fp-warn); font-weight: 600; }
+  .ct-danger { color: var(--fp-danger); font-weight: 700; }
+
+  /* === Barre d'actions groupées === */
+  .bulk-bar { display: none; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem .9rem; border-radius: .65rem; background: var(--fp-primary); color: white; margin-bottom: 1rem; flex-wrap: wrap; }
+  .bulk-bar.active { display: flex; }
+  .bulk-bar select, .bulk-bar button { font-size: .82rem; }
+  .bulk-bar select { background: rgba(255,255,255,.1); color: white; border: 1px solid rgba(255,255,255,.2); border-radius: .45rem; padding: .35rem .6rem; }
+  .bulk-bar select option { background: var(--fp-primary); color: white; }
+  .bulk-btn { padding: .35rem .7rem; border-radius: .45rem; font-weight: 600; transition: background .12s; display: inline-flex; align-items: center; gap: .3rem; }
+  .bulk-btn:hover { background: rgba(255,255,255,.1); }
+  .bulk-btn.danger { color: #FCA5A5; }
+  .bulk-btn.danger:hover { background: rgba(220,38,38,.2); color: #FEE2E2; }
+  /* Checkbox custom */
+  .fp-table th.cb-col, .fp-table td.cb-col { width: 36px; padding-left: 1rem; padding-right: 0; }
+  .row-cb, .all-cb { width: 16px; height: 16px; cursor: pointer; accent-color: var(--fp-accent); }
+
+  /* === Drag-and-drop des LIGNES === */
+  .fp-table tbody tr.row-dragging { opacity: .35; }
+  .fp-table tbody tr.row-drop-above td { box-shadow: inset 0 2px 0 0 var(--fp-accent); }
+  .fp-table tbody tr.row-drop-below td { box-shadow: inset 0 -2px 0 0 var(--fp-accent); }
+  /* Petite poignée ⋮⋮ visible au survol de la ligne, dans la 1ère cellule (checkbox) */
+  .row-drag-handle {
+    display: inline-block;
+    color: var(--fp-muted);
+    cursor: grab;
+    margin-right: .35rem;
+    opacity: 0;
+    transition: opacity .12s;
+    font-size: .85rem;
+    line-height: 1;
+    user-select: none;
+  }
+  .fp-table tbody tr:hover .row-drag-handle { opacity: .6; }
+  .row-drag-handle:hover { opacity: 1 !important; color: var(--fp-primary); }
+  .row-drag-handle:active { cursor: grabbing; }
+
+  /* === Drag-and-drop + resize sur les colonnes === */
+  /* Table à largeurs fixes pour permettre le resize précis */
+  .fp-table-resizable { table-layout: fixed; }
+  .fp-table-resizable th, .fp-table-resizable td { overflow: hidden; text-overflow: ellipsis; }
+
+
+  .fp-table thead th[data-col-key] {
+    cursor: grab;
+    user-select: none;
+    position: relative;
+    padding-right: 1.6rem; /* place pour ✕ + handle */
+  }
+  .fp-table thead th[data-col-key]:active { cursor: grabbing; }
+  .fp-table thead th[data-col-key].dragging { opacity: .4; }
+  .fp-table thead th.drag-over-left  { box-shadow: inset 3px 0 0 0 var(--fp-accent); }
+  .fp-table thead th.drag-over-right { box-shadow: inset -3px 0 0 0 var(--fp-accent); }
+
+  /* Input d'édition inline du nom de colonne (double-clic) */
+  .col-label-edit {
+    background: white;
+    border: 1px solid var(--fp-accent);
+    border-radius: .3rem;
+    padding: .15rem .35rem;
+    font-size: inherit;
+    font-family: inherit;
+    font-weight: inherit;
+    color: var(--fp-text);
+    width: calc(100% - 1.3rem);
+    outline: none;
+    text-transform: none; /* annuler le uppercase du th */
+    letter-spacing: 0;
+  }
+  .col-label-edit:focus { box-shadow: 0 0 0 3px rgba(20,184,166,.2); }
+
+  /* Poignée de redimensionnement (bord droit du th) */
+  .col-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    user-select: none;
+    z-index: 6;
+    background: transparent;
+  }
+  .col-resize-handle:hover,
+  .col-resize-handle.resizing { background: var(--fp-accent); }
+  body.col-resizing { cursor: col-resize !important; user-select: none; }
+  body.col-resizing * { user-select: none; }
+  .col-hide-btn {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    opacity: 0;
+    transition: opacity .12s, background .12s;
+    background: white;
+    border: 1px solid var(--fp-border);
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--fp-muted);
+    cursor: pointer;
+    line-height: 1;
+  }
+  .fp-table thead th:hover .col-hide-btn { opacity: 1; }
+  .col-hide-btn:hover { background: #FEE2E2; color: #DC2626; border-color: #FCA5A5; }
+
+  /* Petit bouton "colonnes masquées" qui apparaît à droite quand des colonnes sont masquées */
+  .hidden-cols-btn {
+    position: relative;
+    padding: .25rem .6rem;
+    background: #F1F5F9;
+    border: 1px solid var(--fp-border);
+    border-radius: 9999px;
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--fp-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    transition: all .12s;
+  }
+  .hidden-cols-btn:hover { background: var(--fp-primary); color: white; border-color: var(--fp-primary); }
+  .hidden-cols-popover {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: .4rem;
+    background: white;
+    border: 1px solid var(--fp-border);
+    border-radius: .55rem;
+    box-shadow: 0 12px 30px -10px rgba(15,30,61,.2);
+    padding: .35rem;
+    z-index: 20;
+    min-width: 200px;
+    display: none;
+  }
+  .hidden-cols-popover.open { display: block; }
+  .hidden-cols-popover button {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: .45rem .7rem;
+    border-radius: .35rem;
+    font-size: .85rem;
+    text-align: left;
+    color: var(--fp-text);
+    transition: background .1s;
+  }
+  .hidden-cols-popover button:hover { background: #F1F5F9; }
+
+  /* === Onglets par groupe === */
+  .group-tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 2px solid var(--fp-border); margin-bottom: 1.5rem; }
+  .group-tab { padding: .65rem 1.1rem; font-size: .88rem; font-weight: 600; color: var(--fp-muted); border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all .12s; display: inline-flex; align-items: center; gap: .5rem; }
+  .group-tab:hover { color: var(--fp-primary); background: #F8FAFC; }
+  .group-tab.active { color: var(--fp-primary); border-bottom-color: var(--fp-accent); }
+  .group-tab .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .group-tab .count { font-size: .7rem; padding: .1rem .45rem; border-radius: 9999px; background: #F1F5F9; color: var(--fp-muted); font-weight: 700; }
+  .group-tab.active .count { background: var(--fp-primary); color: white; }
+
+  /* Les dots et pills par groupe sont définis dans styles.css avec des variables CSS configurables */
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <!-- =============== SIDEBAR =============== -->
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+
+    <div class="mt-10 pt-6 border-t border-white/10 text-xs text-slate-300 px-2">
+      <div class="font-semibold text-white mb-1">Démo</div>
+      <p>Données fictives — basculez sur votre Excel via <code class="bg-white/10 px-1 rounded">data.js</code>.</p>
+    </div>
+  </aside>
+
+  <!-- =============== MAIN =============== -->
+  <main class="flex-1 p-6 md:p-10">
+
+    <!-- Header -->
+    <div class="mb-8">
+      <h1 class="text-2xl font-extrabold mb-3" style="color: var(--fp-primary)" data-edit-key="vehicules.title">Véhicules</h1>
+      <div class="flex items-center gap-3 flex-wrap relative">
+        <!-- Annuler / Refaire -->
+        <div class="flex items-center gap-1 mr-1">
+          <button class="btn btn-outline text-sm !px-2.5" data-history-undo title="Annuler (Ctrl+Z)" disabled><i data-lucide="undo-2" class="w-4 h-4"></i></button>
+          <button class="btn btn-outline text-sm !px-2.5" data-history-redo title="Refaire (Ctrl+Y)" disabled><i data-lucide="redo-2" class="w-4 h-4"></i></button>
+        </div>
+        <!-- Bouton "colonnes masquées" : visible uniquement quand au moins une colonne est masquée -->
+        <div class="relative" id="hidden-cols-wrap" style="display: none">
+          <button class="hidden-cols-btn" id="hidden-cols-btn">
+            <i data-lucide="eye-off" class="w-3.5 h-3.5"></i>
+            <span id="hidden-cols-count">0</span> masquée(s)
+          </button>
+          <div class="hidden-cols-popover" id="hidden-cols-popover"></div>
+        </div>
+        <button class="btn btn-outline text-sm" id="btn-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter CSV</button>
+        <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
+      </div>
+    </div>
+
+    <!-- Onglets par groupe (rendus dynamiquement depuis FP.settings) -->
+    <div class="group-tabs" id="group-tabs"></div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+      <div class="kpi">
+        <div class="kpi-label">Total flotte</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-delta">véhicules</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Actifs</div>
+        <div class="kpi-value" id="kpi-actifs" style="color: var(--fp-ok)">—</div>
+        <div class="kpi-delta up">en circulation</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">En entretien</div>
+        <div class="kpi-value" id="kpi-entretien" style="color: var(--fp-warn)">—</div>
+        <div class="kpi-delta">au garage</div>
+      </div>
+    </div>
+
+    <!-- Filtres + recherche -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="relative flex-1 min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search" type="text" placeholder="Immat., modèle, chauffeur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+
+        <div class="flex flex-wrap gap-2" id="filters-statut">
+          <button class="filter-chip active" data-filter="statut" data-value="all">Tous</button>
+          <button class="filter-chip" data-filter="statut" data-value="actif">Actifs</button>
+          <button class="filter-chip" data-filter="statut" data-value="entretien">Entretien</button>
+          <button class="filter-chip" data-filter="statut" data-value="à vendre">À vendre</button>
+          <button class="filter-chip" data-filter="statut" data-value="vendu">Vendus</button>
+        </div>
+
+        <select id="filter-categorie" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Toutes catégories</option>
+          <option>Citadine</option>
+          <option>Berline</option>
+          <option>SUV</option>
+          <option>Utilitaire</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Barre d'actions groupées (apparaît quand ≥1 véhicule sélectionné) -->
+    <div class="bulk-bar" id="bulk-bar">
+      <div class="flex items-center gap-3">
+        <i data-lucide="check-square" class="w-4 h-4"></i>
+        <span class="font-semibold text-sm"><span id="bulk-count">0</span> véhicule(s) sélectionné(s)</span>
+      </div>
+      <div class="flex flex-wrap gap-2 items-center">
+        <select id="bulk-add-groupe"><option value="">+ Ajouter au groupe…</option></select>
+        <select id="bulk-remove-groupe"><option value="">− Retirer du groupe…</option></select>
+        <select id="bulk-statut">
+          <option value="">Changer le statut…</option>
+          <option value="actif">Actif</option>
+          <option value="entretien">En entretien</option>
+          <option value="à vendre">À vendre</option>
+          <option value="vendu">Vendu</option>
+        </select>
+        <button class="bulk-btn" id="bulk-export"><i data-lucide="download" class="w-3.5 h-3.5"></i> Exporter</button>
+        <button class="bulk-btn danger" id="bulk-delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>
+        <button class="bulk-btn" id="bulk-clear"><i data-lucide="x" class="w-3.5 h-3.5"></i> Désélectionner</button>
+      </div>
+    </div>
+
+    <!-- Tableau véhicules -->
+    <div class="card overflow-hidden">
+      <div class="scrollable">
+        <table class="fp-table fp-table-resizable" id="vehicules-table">
+          <colgroup id="vehicules-colgroup"></colgroup>
+          <thead id="vehicules-thead"></thead>
+          <tbody id="vehicules-tbody"></tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="hidden p-12 text-center">
+        <i data-lucide="car-off" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+        <p class="text-slate-500 text-sm">Aucun véhicule ne correspond à votre recherche.</p>
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-500 mt-4" id="result-count"></p>
+  </main>
+</div>
+
+<!-- =============== DRAWER FICHE VÉHICULE =============== -->
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<aside class="drawer" id="drawer">
+  <div class="p-6 border-b border-slate-200 flex justify-between items-start">
+    <div>
+      <div class="text-xs font-semibold uppercase tracking-wider" style="color: var(--fp-accent)" id="drawer-immat">—</div>
+      <h2 class="text-xl font-extrabold mt-1" id="drawer-title">—</h2>
+      <p class="text-sm text-slate-500" id="drawer-subtitle">—</p>
+    </div>
+    <button class="p-2 hover:bg-slate-100 rounded-lg" id="drawer-close">
+      <i data-lucide="x" class="w-5 h-5"></i>
+    </button>
+  </div>
+
+  <div class="p-6 space-y-5" id="drawer-body"></div>
+
+  <div class="p-6 border-t border-slate-200 flex gap-2">
+    <button class="btn btn-outline text-sm flex-1 justify-center" id="drawer-edit"><i data-lucide="pencil" class="w-4 h-4"></i> Modifier</button>
+    <button class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+  </div>
+</aside>
+
+<!-- =============== MODAL NOUVEAU / MODIFIER =============== -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold" id="modal-title">Nouveau véhicule</h2>
+      <button class="p-2 hover:bg-slate-100 rounded-lg" id="modal-close">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <form id="vehicule-form" class="space-y-4">
+      <input type="hidden" id="f-id" />
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Immatriculation *</div>
+          <input class="field-input" id="f-immat" placeholder="AB-123-CD" required />
+        </div>
+        <div>
+          <div class="field-label">Date de mise en circulation</div>
+          <input class="field-input" type="date" id="f-dmc" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Marque *</div>
+          <input class="field-input" id="f-marque" placeholder="Renault" required />
+        </div>
+        <div>
+          <div class="field-label">Modèle *</div>
+          <input class="field-input" id="f-modele" placeholder="Clio V" required />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Catégorie</div>
+          <select class="field-input" id="f-categorie">
+            <option>Citadine</option>
+            <option>Berline</option>
+            <option>SUV</option>
+            <option>Utilitaire</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Kilométrage</div>
+          <input class="field-input" type="number" min="0" id="f-km" placeholder="0" />
+        </div>
+        <div>
+          <div class="field-label">Statut</div>
+          <select class="field-input" id="f-statut">
+            <option value="actif">Actif</option>
+            <option value="entretien">En entretien</option>
+            <option value="à vendre">À vendre</option>
+            <option value="vendu">Vendu</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Chauffeur assigné</div>
+          <input class="field-input" id="f-chauffeur" placeholder="Prénom Nom" />
+        </div>
+        <div>
+          <div class="field-label">Prochain contrôle technique</div>
+          <input class="field-input" type="date" id="f-ct" />
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">Groupes <span class="text-slate-400 normal-case font-normal">(plusieurs autorisés)</span></div>
+        <div id="f-groupes-list" class="grid grid-cols-2 gap-2 p-3 border border-slate-200 rounded-lg bg-slate-50"></div>
+      </div>
+
+      <div class="flex gap-2 pt-3">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="modal-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/supabase-client.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  lucide.createIcons();
+
+  // Charge les overrides utilisateur (cases cochées/décochées, etc.) AVANT le 1er rendu
+  FP.loadVehicleOverrides();
+
+  const data = window.FP_DATA;
+  const state = {
+    search: '',
+    statut: 'all',
+    categorie: 'all',
+    groupe: 'all',
+    editingId: null,
+    selectedIds: new Set(),
+  };
+
+  // Labels et couleurs sont fournis par FP.groupeLabel() (configurables via /pages/parametres.html)
+  function groupePill(g) {
+    const key = g || 'non-classe';
+    return `<span class="groupe-pill gp-${key}"><span class="dot"></span>${FP.groupeLabel(key)}</span>`;
+  }
+
+  function multiGroupePills(v) {
+    const keys = FP.vehGroupes(v);
+    return keys.map(k => groupePill(k)).join(' ');
+  }
+
+  // Rendu dynamique de la tab bar
+  function renderTabBar() {
+    const tabsEl = document.getElementById('group-tabs');
+    const keys = FP.groupeKeys();
+    tabsEl.innerHTML = `
+      <button class="group-tab ${state.groupe === 'all' ? 'active' : ''}" data-groupe="all">Tous <span class="count" id="cnt-all">—</span></button>
+      ${keys.map(k => `
+        <button class="group-tab ${state.groupe === k ? 'active' : ''}" data-groupe="${k}">
+          <span class="dot dot-${k}"></span>${FP.groupeLabel(k)}
+          <span class="count" id="cnt-${k}">—</span>
+        </button>
+      `).join('')}
+    `;
+    // Ré-attache les listeners
+    tabsEl.querySelectorAll('.group-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabsEl.querySelectorAll('.group-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        state.groupe = tab.dataset.groupe;
+        renderKPIs(); renderTable();
+      });
+    });
+  }
+
+  // ---------- Helpers locaux ----------
+  const $ = (id) => document.getElementById(id);
+
+  function ctCell(iso) {
+    if (!iso || iso === '—') return '<span class="text-slate-400">—</span>';
+    const jours = FP.joursRestants(iso);
+    const label = FP.date(iso);
+    if (jours === null) return label;
+    if (jours < 0)   return `<span class="ct-danger">${label} · dépassé</span>`;
+    if (jours < 30)  return `<span class="ct-danger">${label} · ${jours}j</span>`;
+    if (jours < 90)  return `<span class="ct-warn">${label} · ${jours}j</span>`;
+    return `<span class="text-slate-600">${label}</span>`;
+  }
+
+  const checkCell = (b) => b
+    ? '<span class="text-emerald-600 font-bold">✓</span>'
+    : '<span class="text-slate-300">—</span>';
+
+  // === Définition des colonnes du tableau ===
+  // key (id stable), label (titre), defaultWidth (px), render(v), cellCls (classes optionnelles)
+  const DATA_COLUMNS = [
+    { key: 'immat',                 label: 'Immat.',            defaultWidth: 110, cellCls: 'font-mono font-semibold', render: v => v.immat },
+    { key: 'modele',                label: 'Modèle',            defaultWidth: 200, render: v => `<div class="font-semibold">${v.marque || ''} ${v.modele || ''}</div>` },
+    { key: 'groupes',               label: 'Groupe',            defaultWidth: 150, render: v => `<div class="inline-flex gap-1">${multiGroupePills(v)}</div>` },
+    { key: 'categorie',             label: 'Catégorie',         defaultWidth: 110, render: v => `<span class="text-slate-600">${v.categorie || '—'}</span>` },
+    { key: 'km',                    label: 'Km',                defaultWidth: 100, render: v => `${FP.num(v.km)} km` },
+    { key: 'chauffeur',             label: 'Chauffeur',         defaultWidth: 140, render: v => v.chauffeur || '—' },
+    { key: 'prochainCT',            label: 'Prochain CT',       defaultWidth: 170, render: v => ctCell(v.prochainCT) },
+    { key: 'statut',                label: 'Statut',            defaultWidth: 110, render: v => FP.statutBadge(v.statut) },
+    { key: 'dateMiseEnCirculation', label: '1ère immat.',       defaultWidth: 120, render: v => v.dateMiseEnCirculation ? FP.date(v.dateMiseEnCirculation) : '—' },
+    { key: 'assurance',             label: 'Assurance',         defaultWidth: 220, render: v => v.assurance || '—' },
+    { key: 'proprietaire',          label: 'Propriétaire',      defaultWidth: 170, render: v => v.proprietaire || '—' },
+    { key: 'valeurAchat',           label: 'Valeur achat',      defaultWidth: 120, cellCls: 'text-right', render: v => v.valeurAchat ? FP.euro(v.valeurAchat) : '—' },
+    { key: 'vin',                   label: 'VIN',               defaultWidth: 180, cellCls: 'font-mono text-xs', render: v => v.vin || '—' },
+    { key: 'critAir',               label: "Crit'Air",          defaultWidth: 90,  render: v => (!v.critAir || v.critAir === '-' || v.critAir === '0') ? '<span class="text-slate-300">—</span>' : v.critAir },
+    { key: 'sanef',                 label: 'Sanef',             defaultWidth: 80,  render: v => checkCell(v.sanef) },
+    { key: 'cleSiege',              label: 'Clé siège',         defaultWidth: 100, render: v => checkCell(v.cleSiege) },
+    { key: 'cleSalarie',            label: 'Clé salarié',       defaultWidth: 100, render: v => checkCell(v.cleSalarie) },
+    { key: 'cgOrigSiege',           label: 'CG siège',          defaultWidth: 100, render: v => checkCell(v.cgOrigSiege) },
+    { key: 'cgOrigSalarie',         label: 'CG salarié',        defaultWidth: 100, render: v => checkCell(v.cgOrigSalarie) },
+    { key: 'dateDernierCT',         label: 'Dernier CT',        defaultWidth: 130, render: v => v.dateDernierCT ? FP.date(v.dateDernierCT) : '—' },
+    { key: 'derniereRevision',      label: 'Dernière révision', defaultWidth: 140, render: v => v.derniereRevision ? FP.date(v.derniereRevision) : '—' },
+    { key: 'etatDesLieux',          label: 'État des lieux',    defaultWidth: 130, render: v => checkCell(v.etatDesLieux) },
+  ];
+
+  function getColWidth(key) {
+    const cfg = getColConfig();
+    if (cfg.widths && cfg.widths[key]) return cfg.widths[key];
+    const def = DATA_COLUMNS.find(c => c.key === key);
+    return def ? def.defaultWidth : 120;
+  }
+
+  function getColConfig() {
+    const stored = FP.settings.get().vehiculesColumns || {};
+    const allKeys = DATA_COLUMNS.map(c => c.key);
+    const validOrder = Array.isArray(stored.order) ? stored.order.filter(k => allKeys.includes(k)) : null;
+    return {
+      order: (validOrder && validOrder.length) ? validOrder : FP.settings.defaults.vehiculesColumns.order,
+      hidden: Array.isArray(stored.hidden) ? stored.hidden : [],
+      widths: (stored.widths && typeof stored.widths === 'object') ? stored.widths : {},
+      labels: (stored.labels && typeof stored.labels === 'object') ? stored.labels : {},
+    };
+  }
+
+  function getColLabel(key) {
+    const cfg = getColConfig();
+    if (cfg.labels && cfg.labels[key]) return cfg.labels[key];
+    const def = DATA_COLUMNS.find(c => c.key === key);
+    return def ? def.label : key;
+  }
+
+  function getVisibleColumns() {
+    const cfg = getColConfig();
+    return cfg.order.filter(k => !cfg.hidden.includes(k));
+  }
+
+  function renderTableHeaders() {
+    const visible = getVisibleColumns();
+
+    // Rendu du colgroup pour des largeurs fixes prévisibles
+    const cols = `<col style="width: 40px">` + // checkbox
+      visible.map(k => `<col data-col-key="${k}" style="width: ${getColWidth(k)}px">`).join('') +
+      `<col style="width: 40px">`; // actions chevron
+    $('vehicules-colgroup').innerHTML = cols;
+
+    const ths = visible.map(k => {
+      const def = DATA_COLUMNS.find(c => c.key === k);
+      if (!def) return '';
+      const label = getColLabel(k);
+      return `<th draggable="true" data-col-key="${k}" title="Glisser pour déplacer • Double-clic pour renommer"><span class="col-label">${label}</span><button class="col-hide-btn" data-hide-key="${k}" title="Masquer cette colonne">✕</button><div class="col-resize-handle" data-resize-key="${k}" title="Redimensionner"></div></th>`;
+    }).join('');
+    $('vehicules-thead').innerHTML = `
+      <tr>
+        <th class="cb-col"><input type="checkbox" class="all-cb" id="all-cb" title="Tout sélectionner" /></th>
+        ${ths}
+        <th></th>
+      </tr>
+    `;
+    renderHiddenColsBtn();
+  }
+
+  // Affiche/cache la pastille "N colonne(s) masquée(s)" + son popover
+  function renderHiddenColsBtn() {
+    const cfg = getColConfig();
+    const wrap = $('hidden-cols-wrap');
+    const allKeys = DATA_COLUMNS.map(c => c.key);
+    // Colonnes masquées = celles explicitement dans cfg.hidden, plus celles absentes de l'ordre (= jamais affichées)
+    const hidden = allKeys.filter(k => cfg.hidden.includes(k) || !cfg.order.includes(k));
+    if (hidden.length === 0) {
+      wrap.style.display = 'none';
+      return;
+    }
+    wrap.style.display = '';
+    $('hidden-cols-count').textContent = hidden.length;
+    $('hidden-cols-popover').innerHTML = hidden.map(k => {
+      const def = DATA_COLUMNS.find(c => c.key === k);
+      return def ? `<button data-show-key="${k}"><i data-lucide="plus" class="w-3.5 h-3.5 mr-2 inline"></i>${getColLabel(k)}</button>` : '';
+    }).join('');
+    lucide.createIcons();
+  }
+
+  // === Resize des colonnes (poignée à droite de chaque th) ===
+  let resizingKey = null;
+  let resizingStartX = 0;
+  let resizingStartWidth = 0;
+  let resizingCol = null; // le <col> correspondant dans le colgroup
+  let resizingHandle = null;
+
+  $('vehicules-thead').addEventListener('mousedown', (e) => {
+    const handle = e.target.closest('.col-resize-handle');
+    if (!handle) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resizingKey = handle.dataset.resizeKey;
+    resizingHandle = handle;
+    resizingCol = $('vehicules-colgroup').querySelector(`col[data-col-key="${resizingKey}"]`);
+    resizingStartX = e.clientX;
+    resizingStartWidth = resizingCol ? parseInt(resizingCol.style.width, 10) : getColWidth(resizingKey);
+    handle.classList.add('resizing');
+    document.body.classList.add('col-resizing');
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!resizingKey || !resizingCol) return;
+    const delta = e.clientX - resizingStartX;
+    const newWidth = Math.max(50, resizingStartWidth + delta);
+    resizingCol.style.width = newWidth + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!resizingKey || !resizingCol) return;
+    const newWidth = parseInt(resizingCol.style.width, 10);
+    const cfg = getColConfig();
+    const widths = { ...cfg.widths, [resizingKey]: newWidth };
+    FP.history.commit();
+    const current = FP.settings.get();
+    current.vehiculesColumns = { ...current.vehiculesColumns, widths };
+    FP.settings.save(current);
+    if (resizingHandle) resizingHandle.classList.remove('resizing');
+    document.body.classList.remove('col-resizing');
+    resizingKey = null;
+    resizingCol = null;
+    resizingHandle = null;
+  });
+
+  // === Drag-and-drop des colonnes (déplacement) ===
+  let draggedKey = null;
+  function clearDragIndicators() {
+    $('vehicules-thead').querySelectorAll('.drag-over-left, .drag-over-right, .dragging').forEach(el => {
+      el.classList.remove('drag-over-left', 'drag-over-right', 'dragging');
+    });
+  }
+
+  $('vehicules-thead').addEventListener('dragstart', (e) => {
+    // Si on est en train de resize, ne pas démarrer un drag
+    if (resizingKey) { e.preventDefault(); return; }
+    const th = e.target.closest('th[data-col-key]');
+    if (!th) return;
+    draggedKey = th.dataset.colKey;
+    th.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', draggedKey); } catch {}
+  });
+
+  $('vehicules-thead').addEventListener('dragover', (e) => {
+    const th = e.target.closest('th[data-col-key]');
+    if (!th || !draggedKey || th.dataset.colKey === draggedKey) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = th.getBoundingClientRect();
+    const isLeft = e.clientX < rect.left + rect.width / 2;
+    $('vehicules-thead').querySelectorAll('.drag-over-left, .drag-over-right').forEach(el => {
+      el.classList.remove('drag-over-left', 'drag-over-right');
+    });
+    th.classList.add(isLeft ? 'drag-over-left' : 'drag-over-right');
+  });
+
+  $('vehicules-thead').addEventListener('drop', (e) => {
+    const th = e.target.closest('th[data-col-key]');
+    if (!th || !draggedKey || th.dataset.colKey === draggedKey) { clearDragIndicators(); draggedKey = null; return; }
+    e.preventDefault();
+    const targetKey = th.dataset.colKey;
+    const rect = th.getBoundingClientRect();
+    const isLeft = e.clientX < rect.left + rect.width / 2;
+
+    const cfg = getColConfig();
+    let newOrder = cfg.order.filter(k => k !== draggedKey);
+    const targetIdx = newOrder.indexOf(targetKey);
+    const insertIdx = isLeft ? targetIdx : targetIdx + 1;
+    newOrder.splice(insertIdx, 0, draggedKey);
+
+    FP.history.commit();
+    const current = FP.settings.get();
+    current.vehiculesColumns = { ...current.vehiculesColumns, order: newOrder };
+    FP.settings.save(current);
+
+    clearDragIndicators();
+    draggedKey = null;
+    renderTableHeaders();
+    renderTable();
+  });
+
+  $('vehicules-thead').addEventListener('dragend', () => { clearDragIndicators(); draggedKey = null; });
+
+  // Masquer une colonne en cliquant sur le ✕
+  $('vehicules-thead').addEventListener('click', (e) => {
+    const btn = e.target.closest('.col-hide-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    const key = btn.dataset.hideKey;
+    const cfg = getColConfig();
+    if (cfg.hidden.includes(key)) return;
+    FP.history.commit();
+    const current = FP.settings.get();
+    current.vehiculesColumns = { ...current.vehiculesColumns, hidden: [...cfg.hidden, key] };
+    FP.settings.save(current);
+    renderTableHeaders();
+    renderTable();
+  });
+
+  // === Renommer une colonne (double-clic sur le titre) ===
+  $('vehicules-thead').addEventListener('dblclick', (e) => {
+    const th = e.target.closest('th[data-col-key]');
+    if (!th) return;
+    // Ignorer les double-clics sur ✕ ou la poignée de resize
+    if (e.target.closest('.col-hide-btn, .col-resize-handle')) return;
+    const key = th.dataset.colKey;
+    const currentLabel = getColLabel(key);
+    th.draggable = false; // désactive le drag pendant l'édition
+    th.innerHTML = `
+      <input type="text" class="col-label-edit" value="${currentLabel.replace(/"/g, '&quot;')}" data-edit-key="${key}" />
+      <button class="col-hide-btn" data-hide-key="${key}">✕</button>
+      <div class="col-resize-handle" data-resize-key="${key}"></div>
+    `;
+    const input = th.querySelector('.col-label-edit');
+    input.focus();
+    input.select();
+  });
+
+  function saveColLabel(key, newLabel) {
+    const current = FP.settings.get();
+    const labels = { ...(current.vehiculesColumns.labels || {}) };
+    const def = DATA_COLUMNS.find(c => c.key === key);
+    const cleaned = (newLabel || '').trim();
+    const existingLabel = labels[key] || (def ? def.label : '');
+    if (cleaned === existingLabel) {
+      // Pas de changement réel : juste re-render pour sortir du mode édition
+      renderTableHeaders();
+      renderTable();
+      return;
+    }
+    FP.history.commit();
+    if (cleaned && cleaned !== (def ? def.label : '')) {
+      labels[key] = cleaned;
+    } else {
+      delete labels[key]; // efface l'override = retour au défaut
+    }
+    current.vehiculesColumns = { ...current.vehiculesColumns, labels };
+    FP.settings.save(current);
+    renderTableHeaders();
+    renderTable();
+  }
+
+  // Validation (blur) ou annulation (Échap)
+  $('vehicules-thead').addEventListener('keydown', (e) => {
+    const input = e.target.closest('.col-label-edit');
+    if (!input) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveColLabel(input.dataset.editKey, input.value);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      // Annuler : re-render sans sauvegarder
+      renderTableHeaders();
+      renderTable();
+    }
+  });
+  $('vehicules-thead').addEventListener('focusout', (e) => {
+    const input = e.target.closest('.col-label-edit');
+    if (!input) return;
+    saveColLabel(input.dataset.editKey, input.value);
+  });
+
+  // Popover de réaffichage : ouverture / clic sur une colonne pour la remettre
+  $('hidden-cols-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('hidden-cols-popover').classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#hidden-cols-wrap')) $('hidden-cols-popover').classList.remove('open');
+  });
+  $('hidden-cols-popover').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-show-key]');
+    if (!btn) return;
+    const key = btn.dataset.showKey;
+    const cfg = getColConfig();
+    const newHidden = cfg.hidden.filter(k => k !== key);
+    const newOrder = cfg.order.includes(key) ? cfg.order : [...cfg.order, key];
+    FP.history.commit();
+    const current = FP.settings.get();
+    current.vehiculesColumns = { ...current.vehiculesColumns, order: newOrder, hidden: newHidden };
+    FP.settings.save(current);
+    $('hidden-cols-popover').classList.remove('open');
+    renderTableHeaders();
+    renderTable();
+  });
+
+  // ---------- KPIs + compteurs onglets ----------
+  function renderKPIs() {
+    // KPIs : sur le scope filtré (onglet groupe actif)
+    const scope = state.groupe === 'all'
+      ? data.vehicules
+      : data.vehicules.filter(v => FP.vehGroupes(v).includes(state.groupe));
+
+    $('kpi-total').textContent       = scope.length;
+    $('kpi-actifs').textContent      = scope.filter(v => v.statut === 'actif').length;
+    $('kpi-entretien').textContent   = scope.filter(v => v.statut === 'entretien').length;
+
+    // Compteurs des onglets (toujours sur le total — un véhicule dans 2 groupes compte dans les 2)
+    const cntAll = document.getElementById('cnt-all');
+    if (cntAll) cntAll.textContent = data.vehicules.length;
+    FP.groupeKeys().forEach(k => {
+      const el = document.getElementById('cnt-' + k);
+      if (el) el.textContent = data.vehicules.filter(v => FP.vehGroupes(v).includes(k)).length;
+    });
+  }
+
+  // ---------- Filtrage ----------
+  function filtered() {
+    const q = state.search.toLowerCase().trim();
+    const filteredList = data.vehicules.filter(v => {
+      if (state.groupe !== 'all' && !FP.vehGroupes(v).includes(state.groupe)) return false;
+      if (state.statut !== 'all' && v.statut !== state.statut) return false;
+      if (state.categorie !== 'all' && v.categorie !== state.categorie) return false;
+      if (q && !(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`.toLowerCase().includes(q))) return false;
+      return true;
+    });
+    // Application de l'ordre custom utilisateur si défini (drag-and-drop des lignes)
+    const customOrder = FP.settings.get().vehiculesRowOrder || [];
+    if (customOrder.length > 0) {
+      const idx = {};
+      customOrder.forEach((id, i) => { idx[id] = i; });
+      filteredList.sort((a, b) => {
+        const ai = idx[a.id] ?? 1e9; // les véhicules pas dans l'ordre custom vont à la fin
+        const bi = idx[b.id] ?? 1e9;
+        return ai - bi;
+      });
+    }
+    return filteredList;
+  }
+
+  // ---------- Rendu tableau ----------
+  function renderTable() {
+    const rows = filtered();
+    const tbody = $('vehicules-tbody');
+    const empty = $('empty-state');
+
+    if (rows.length === 0) {
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+    } else {
+      empty.classList.add('hidden');
+      const visible = getVisibleColumns();
+      tbody.innerHTML = rows.map(v => {
+        const cells = visible.map(k => {
+          const def = DATA_COLUMNS.find(c => c.key === k);
+          if (!def) return '';
+          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''}>${def.render(v)}</td>`;
+        }).join('');
+        return `<tr class="cursor-pointer" draggable="true" data-id="${v.id}">
+          <td class="cb-col"><span class="row-drag-handle" title="Glisser pour réorganiser">⋮⋮</span><input type="checkbox" class="row-cb" data-id="${v.id}" ${state.selectedIds.has(v.id) ? 'checked' : ''} /></td>
+          ${cells}
+          <td class="text-right">
+            <button class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700" data-action="open" data-id="${v.id}">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    $('result-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} affiché${rows.length > 1 ? 's' : ''} sur ${data.vehicules.length}`;
+
+    // Synchroniser l'état du "tout sélectionner" pour la vue actuelle
+    const visibleIds = rows.map(r => r.id);
+    const allChecked = visibleIds.length > 0 && visibleIds.every(id => state.selectedIds.has(id));
+    const allCb = $('all-cb');
+    if (allCb) allCb.checked = allChecked;
+
+    lucide.createIcons();
+  }
+
+  // ---------- Selection groupée ----------
+  function renderBulkBar() {
+    const bar = $('bulk-bar');
+    const n = state.selectedIds.size;
+    $('bulk-count').textContent = n;
+    if (n > 0) bar.classList.add('active');
+    else bar.classList.remove('active');
+  }
+
+  function toggleSelect(id, checked) {
+    if (checked) state.selectedIds.add(id);
+    else state.selectedIds.delete(id);
+    renderBulkBar();
+  }
+
+  function selectAllVisible(checked) {
+    const visibleIds = filtered().map(v => v.id);
+    if (checked) visibleIds.forEach(id => state.selectedIds.add(id));
+    else visibleIds.forEach(id => state.selectedIds.delete(id));
+    renderTable();
+    renderBulkBar();
+  }
+
+  function clearSelection() {
+    state.selectedIds.clear();
+    renderTable();
+    renderBulkBar();
+  }
+
+  function bulkAddGroupe(groupe) {
+    if (!groupe) return;
+    FP.history.commit();
+    state.selectedIds.forEach(id => {
+      const v = data.vehicules.find(x => x.id === id);
+      if (!v) return;
+      const cur = FP.vehGroupes(v).filter(g => g !== 'non-classe'); // retire "non-classé" s'il y était seul
+      if (!cur.includes(groupe)) cur.push(groupe);
+      v.groupes = cur;
+      delete v.groupe; // nettoyage de l'ancien format
+    });
+    renderTable(); renderKPIs();
+  }
+
+  function bulkRemoveGroupe(groupe) {
+    if (!groupe) return;
+    FP.history.commit();
+    state.selectedIds.forEach(id => {
+      const v = data.vehicules.find(x => x.id === id);
+      if (!v) return;
+      const cur = FP.vehGroupes(v).filter(g => g !== groupe);
+      v.groupes = cur.length > 0 ? cur : ['non-classe'];
+      delete v.groupe;
+    });
+    renderTable(); renderKPIs();
+  }
+
+  function bulkSetStatut(statut) {
+    if (!statut) return;
+    FP.history.commit();
+    state.selectedIds.forEach(id => {
+      const v = data.vehicules.find(x => x.id === id);
+      if (v) v.statut = statut;
+    });
+    renderTable(); renderKPIs();
+  }
+
+  function bulkDelete() {
+    const n = state.selectedIds.size;
+    if (n === 0) return;
+    if (!confirm(`Supprimer ${n} véhicule${n > 1 ? 's' : ''} ?`)) return;
+    FP.history.commit();
+    data.vehicules = data.vehicules.filter(v => !state.selectedIds.has(v.id));
+    state.selectedIds.clear();
+    renderTable(); renderKPIs(); renderBulkBar();
+  }
+
+  function bulkExport() {
+    const selected = data.vehicules.filter(v => state.selectedIds.has(v.id));
+    if (selected.length === 0) return;
+    const headers = ['Immat','Marque','Modèle','Groupes','Catégorie','Km','Chauffeur','Statut','Prochain CT','Mise en circulation'];
+    const rows = selected.map(v => [
+      v.immat, v.marque, v.modele, FP.vehGroupes(v).map(FP.groupeLabel).join(' | '),
+      v.categorie, v.km, v.chauffeur, v.statut, v.prochainCT, v.dateMiseEnCirculation
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `auto-flotte-selection-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+  // ---------- Drawer fiche ----------
+  function openDrawer(id) {
+    const v = data.vehicules.find(x => x.id === id);
+    if (!v) return;
+
+    $('drawer-immat').textContent = v.immat;
+    $('drawer-title').textContent = `${v.marque} ${v.modele}`;
+    $('drawer-subtitle').textContent = v.categorie;
+
+    // Calculs liés
+    const entretiens = data.entretiens.filter(e => e.vehiculeId === v.id);
+    const carburants = data.carburant.filter(c => c.vehiculeId === v.id);
+    const contrats   = data.contrats.filter(c => c.vehiculeId === v.id);
+    const coutTotal  = entretiens.filter(e => e.statut !== 'planifié').reduce((s,e) => s + e.cout, 0)
+                     + carburants.reduce((s,c) => s + c.cout, 0)
+                     + contrats.reduce((s,c) => s + c.coutMensuel * 12, 0);
+    const tvs = FP.tvsAnnuelle(v);
+
+    // Helpers pour le drawer
+    // Case à cocher éditable : changement sauvegardé immédiatement en localStorage
+    const editableCheckbox = (field, value) => `
+      <label class="inline-flex items-center cursor-pointer">
+        <input type="checkbox" class="veh-toggle accent-teal-600 w-4 h-4" data-field="${field}" ${value ? 'checked' : ''} />
+      </label>`;
+    const yesNoUnknown = (val) => {
+      if (!val || val === '-' || val === '0') return '<span class="text-slate-400">—</span>';
+      if (val.toString().toLowerCase() === 'oui') return '<span class="text-emerald-600 font-bold">Oui ✓</span>';
+      if (val.toString().toLowerCase() === 'non') return '<span class="text-slate-400">Non</span>';
+      return val;
+    };
+
+    $('drawer-body').innerHTML = `
+      <div class="flex justify-between items-start">
+        <div class="flex flex-wrap gap-1">${FP.statutBadge(v.statut)} ${multiGroupePills(v)}</div>
+        <div class="text-xs text-slate-500 text-right">Mise en circulation<br><span class="font-semibold text-slate-700">${FP.date(v.dateMiseEnCirculation)}</span></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="kpi p-3"><div class="kpi-label">Kilométrage</div><div class="kpi-value" style="font-size:1.3rem">${FP.num(v.km)} km</div></div>
+        <div class="kpi p-3"><div class="kpi-label">Chauffeur</div><div class="kpi-value" style="font-size:1rem">${v.chauffeur}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">Prochain CT</div><div class="kpi-value" style="font-size:1rem">${ctCell(v.prochainCT)}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">TVS estimée</div><div class="kpi-value" style="font-size:1.3rem">${FP.euro(tvs)}</div></div>
+      </div>
+
+      <div>
+        <div class="field-label">Coût total annuel (estimé)</div>
+        <div class="text-2xl font-extrabold" style="color: var(--fp-primary)">${FP.euro(coutTotal)}</div>
+        <div class="text-xs text-slate-500 mt-1">Entretiens + contrats sur 12 mois</div>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Administratif & documents</div>
+        <div class="text-sm space-y-2 mt-3">
+          <div class="flex justify-between items-center"><span class="text-slate-600">Assurance</span><span class="font-medium text-right">${v.assurance || '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between items-center"><span class="text-slate-600">Propriétaire</span><span class="font-medium">${v.proprietaire || '—'}</span></div>
+          <div class="flex justify-between items-center"><span class="text-slate-600">Crit'Air</span><span>${yesNoUnknown(v.critAir)}</span></div>
+          <div class="flex justify-between items-center"><span class="text-slate-600">Sanef (télépéage)</span>${editableCheckbox('sanef', v.sanef)}</div>
+          <div class="flex justify-between items-center"><span class="text-slate-600">État des lieux fait</span>${editableCheckbox('etatDesLieux', v.etatDesLieux)}</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Clés & carte grise</div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mt-3">
+          <div class="flex justify-between items-center"><span class="text-slate-600">Double clé siège</span>${editableCheckbox('cleSiege', v.cleSiege)}</div>
+          <div class="flex justify-between items-center"><span class="text-slate-600">Double clé salarié</span>${editableCheckbox('cleSalarie', v.cleSalarie)}</div>
+          <div class="flex justify-between items-center"><span class="text-slate-600">CG orig. siège</span>${editableCheckbox('cgOrigSiege', v.cgOrigSiege)}</div>
+          <div class="flex justify-between items-center"><span class="text-slate-600">CG orig. salarié</span>${editableCheckbox('cgOrigSalarie', v.cgOrigSalarie)}</div>
+        </div>
+        ${v.cgFileId ? `<a href="https://drive.google.com/file/d/${v.cgFileId}/view" target="_blank" rel="noopener" class="inline-flex items-center gap-1 mt-3 text-sm hover:underline" style="color: var(--fp-accent)"><i data-lucide="external-link" class="w-3.5 h-3.5"></i> Voir la carte grise sur Drive</a>` : ''}
+      </div>
+
+      <div>
+        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Technique</div>
+        <div class="text-sm space-y-1.5 mt-3">
+          <div class="flex justify-between"><span class="text-slate-600">VIN</span><span class="font-mono text-xs">${v.vin || '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between"><span class="text-slate-600">Dernier CT</span><span class="font-medium">${v.dateDernierCT ? FP.date(v.dateDernierCT) : '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between"><span class="text-slate-600">Dernière révision</span><span class="font-medium">${v.derniereRevision ? FP.date(v.derniereRevision) : '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between"><span class="text-slate-600">Valeur d'achat</span><span class="font-medium">${v.valeurAchat ? FP.euro(v.valeurAchat) : '<span class="text-slate-400">—</span>'}</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-2 flex justify-between"><span>Entretiens (${entretiens.length})</span></div>
+        ${entretiens.length === 0
+          ? '<p class="text-sm text-slate-500">Aucun entretien enregistré.</p>'
+          : entretiens.slice(0,4).map(e => `
+              <div class="flex justify-between items-center py-2 border-b border-slate-100 text-sm">
+                <div>
+                  <div class="font-medium">${e.type}</div>
+                  <div class="text-xs text-slate-500">${FP.date(e.date)} · ${e.garage}</div>
+                </div>
+                <div class="text-right">
+                  <div class="font-semibold">${FP.euroPrecis(e.cout)}</div>
+                  <div class="text-xs">${FP.statutBadge(e.statut)}</div>
+                </div>
+              </div>
+            `).join('')
+        }
+      </div>
+
+      <div>
+        <div class="font-semibold mb-2">Contrats (${contrats.length})</div>
+        ${contrats.length === 0
+          ? '<p class="text-sm text-slate-500">Aucun contrat associé.</p>'
+          : contrats.map(c => `
+              <div class="flex justify-between items-center py-2 border-b border-slate-100 text-sm">
+                <div>
+                  <div class="font-medium">${c.type} · ${c.fournisseur}</div>
+                  <div class="text-xs text-slate-500">${c.numero} · jusqu'au ${FP.date(c.fin)}</div>
+                </div>
+                <div class="font-semibold">${c.coutMensuel ? FP.euro(c.coutMensuel) + '/mois' : '—'}</div>
+              </div>
+            `).join('')
+        }
+      </div>
+    `;
+
+    $('drawer').classList.add('open');
+    $('drawer-backdrop').classList.add('open');
+    state.editingId = id;
+    lucide.createIcons();
+  }
+
+  function closeDrawer() {
+    $('drawer').classList.remove('open');
+    $('drawer-backdrop').classList.remove('open');
+  }
+
+  // ---------- Modal ----------
+  function openModal(vehicule) {
+    state.editingId = vehicule?.id || null;
+    $('modal-title').textContent = vehicule ? `Modifier ${vehicule.immat}` : 'Nouveau véhicule';
+    $('f-id').value         = vehicule?.id || '';
+    $('f-immat').value      = vehicule?.immat || '';
+    $('f-dmc').value        = vehicule?.dateMiseEnCirculation || '';
+    $('f-marque').value     = vehicule?.marque || '';
+    $('f-modele').value     = vehicule?.modele || '';
+    $('f-categorie').value  = vehicule?.categorie || 'Citadine';
+    $('f-km').value         = vehicule?.km ?? 0;
+    $('f-statut').value     = vehicule?.statut || 'actif';
+    $('f-chauffeur').value  = vehicule?.chauffeur || '';
+    $('f-ct').value         = vehicule?.prochainCT || '';
+    // Remplir les checkboxes groupes
+    const currentGroupes = vehicule ? FP.vehGroupes(vehicule) : ['non-classe'];
+    $('f-groupes-list').innerHTML = FP.groupeKeys().map(k => `
+      <label class="flex items-center gap-2 text-sm cursor-pointer hover:bg-white p-1.5 rounded">
+        <input type="checkbox" class="f-groupe-cb accent-teal-600" value="${k}" ${currentGroupes.includes(k) ? 'checked' : ''} />
+        <span class="dot dot-${k}" style="width: 10px; height: 10px; border-radius: 50%; display: inline-block"></span>
+        <span>${FP.groupeLabel(k)}</span>
+      </label>
+    `).join('');
+    $('modal-backdrop').classList.add('open');
+  }
+
+  function closeModal() {
+    $('modal-backdrop').classList.remove('open');
+  }
+
+  function saveVehicule(e) {
+    e.preventDefault();
+    // === Validation ===
+    const immat = $('f-immat').value.trim().toUpperCase();
+    const marque = $('f-marque').value.trim();
+    const modele = $('f-modele').value.trim();
+    const km = parseInt($('f-km').value, 10);
+    const dmc = $('f-dmc').value;
+    const ct = $('f-ct').value;
+    const errors = [];
+    if (!immat)                            errors.push('Immatriculation obligatoire');
+    if (!marque)                           errors.push('Marque obligatoire');
+    if (!modele)                           errors.push('Modèle obligatoire');
+    if (isNaN(km) || km < 0)               errors.push('Kilométrage doit être un nombre ≥ 0');
+    if (km > 2000000)                      errors.push('Kilométrage paraît trop élevé (> 2 000 000)');
+    if (dmc && (dmc < '1990-01-01' || dmc > '2100-01-01')) errors.push('Date 1ère immat. hors plage 1990–2100');
+    if (ct && (ct < '1990-01-01' || ct > '2100-01-01'))    errors.push('Date prochain CT hors plage 1990–2100');
+    if (errors.length > 0) { alert('Erreurs à corriger :\n• ' + errors.join('\n• ')); return; }
+
+    FP.history.commit();
+    const payload = {
+      immat,
+      dateMiseEnCirculation: dmc || '',
+      marque, modele,
+      categorie: $('f-categorie').value,
+      km: km || 0,
+      statut: $('f-statut').value,
+      chauffeur: $('f-chauffeur').value.trim() || '—',
+      prochainCT: ct || '—',
+      groupes: Array.from(document.querySelectorAll('#f-groupes-list input.f-groupe-cb:checked')).map(cb => cb.value),
+    };
+    if (payload.groupes.length === 0) payload.groupes = ['non-classe'];
+
+    const id = $('f-id').value;
+    if (id) {
+      const idx = data.vehicules.findIndex(v => v.id === id);
+      if (idx >= 0) data.vehicules[idx] = { ...data.vehicules[idx], ...payload };
+    } else {
+      const nextNum = data.vehicules.length + 1;
+      data.vehicules.push({ id: 'V-' + String(nextNum).padStart(3, '0'), ...payload });
+    }
+
+    closeModal();
+    renderKPIs();
+    renderTable();
+  }
+
+  function deleteVehicule() {
+    if (!state.editingId) return;
+    const v = data.vehicules.find(x => x.id === state.editingId);
+    if (!v) return;
+    if (!confirm(`Supprimer le véhicule ${v.immat} (${v.marque} ${v.modele}) ?`)) return;
+    FP.history.commit();
+    data.vehicules = data.vehicules.filter(x => x.id !== state.editingId);
+    state.editingId = null;
+    closeDrawer();
+    renderKPIs();
+    renderTable();
+  }
+
+  // ---------- Export CSV ----------
+  function exportCSV() {
+    // L'en-tête CSV utilise les labels custom si définis
+    const headers = [getColLabel('immat'), 'Marque', getColLabel('modele'), getColLabel('groupes'), getColLabel('categorie'), getColLabel('km'), getColLabel('chauffeur'), getColLabel('statut'), getColLabel('prochainCT'), getColLabel('dateMiseEnCirculation')];
+    const rows = filtered().map(v => [
+      v.immat, v.marque, v.modele, FP.vehGroupes(v).map(FP.groupeLabel).join(' | '),
+      v.categorie, v.km,
+      v.chauffeur, v.statut, v.prochainCT, v.dateMiseEnCirculation
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `auto-flotte-vehicules-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+  // ---------- Wiring ----------
+  $('search').addEventListener('input', (e) => { state.search = e.target.value; renderTable(); });
+
+  document.querySelectorAll('#filters-statut .filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.statut = chip.dataset.value;
+      renderTable();
+    });
+  });
+
+  $('filter-categorie').addEventListener('change', (e) => { state.categorie = e.target.value; renderTable(); });
+
+  // === Historique : branchement boutons + raccourcis ===
+  FP.history.renderAll = () => {
+    renderKPIs();
+    renderTabBar();
+    renderTableHeaders();
+    renderTable();
+  };
+  document.querySelectorAll('[data-history-undo]').forEach(b => {
+    b.addEventListener('click', () => FP.history.undo());
+  });
+  document.querySelectorAll('[data-history-redo]').forEach(b => {
+    b.addEventListener('click', () => FP.history.redo());
+  });
+  // Raccourcis clavier (Ctrl/Cmd + Z = undo, Ctrl+Y ou Ctrl+Shift+Z = redo)
+  document.addEventListener('keydown', (e) => {
+    // Ignorer si l'utilisateur tape dans un champ
+    if (e.target.matches('input, textarea, [contenteditable]')) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
+    if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); FP.history.undo(); }
+    else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); FP.history.redo(); }
+  });
+  FP.history.updateUI();
+
+  // Tab bar est rendue dynamiquement au init (les listeners y sont attachés)
+  renderTabBar();
+  // Headers du tableau (rendus dynamiquement aussi)
+  renderTableHeaders();
+
+  // Remplir le select Groupe de la modal dynamiquement
+  (function fillGroupeSelect() {
+    const sel = $('f-groupe');
+    if (!sel) return;
+    sel.innerHTML = FP.groupeKeys().map(k => `<option value="${k}">${FP.groupeLabel(k)}</option>`).join('');
+  })();
+
+  $('vehicules-tbody').addEventListener('click', (e) => {
+    // Ne pas ouvrir le drawer si on clique sur une checkbox ou la poignée de drag
+    if (e.target.closest('input[type="checkbox"], .row-drag-handle')) return;
+    const tr = e.target.closest('tr[data-id]');
+    if (tr) openDrawer(tr.dataset.id);
+  });
+
+  // === Drag-and-drop des lignes (réorganisation) ===
+  let draggedRowId = null;
+  function clearRowDragIndicators() {
+    $('vehicules-tbody').querySelectorAll('.row-dragging, .row-drop-above, .row-drop-below').forEach(el => {
+      el.classList.remove('row-dragging', 'row-drop-above', 'row-drop-below');
+    });
+  }
+
+  $('vehicules-tbody').addEventListener('dragstart', (e) => {
+    // Ne pas drag si on a cliqué sur un élément interactif (checkbox, bouton)
+    if (e.target.closest('input, button')) { e.preventDefault(); return; }
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    draggedRowId = tr.dataset.id;
+    tr.classList.add('row-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', draggedRowId); } catch {}
+  });
+
+  $('vehicules-tbody').addEventListener('dragover', (e) => {
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr || !draggedRowId || tr.dataset.id === draggedRowId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = tr.getBoundingClientRect();
+    const isAbove = e.clientY < rect.top + rect.height / 2;
+    $('vehicules-tbody').querySelectorAll('.row-drop-above, .row-drop-below').forEach(el => {
+      el.classList.remove('row-drop-above', 'row-drop-below');
+    });
+    tr.classList.add(isAbove ? 'row-drop-above' : 'row-drop-below');
+  });
+
+  $('vehicules-tbody').addEventListener('drop', (e) => {
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr || !draggedRowId || tr.dataset.id === draggedRowId) {
+      clearRowDragIndicators();
+      draggedRowId = null;
+      return;
+    }
+    e.preventDefault();
+    const targetId = tr.dataset.id;
+    const rect = tr.getBoundingClientRect();
+    const isAbove = e.clientY < rect.top + rect.height / 2;
+
+    // Calculer le nouvel ordre des véhicules visibles
+    const currentRows = filtered().map(v => v.id);
+    let newVisibleOrder = currentRows.filter(id => id !== draggedRowId);
+    const targetIdx = newVisibleOrder.indexOf(targetId);
+    const insertIdx = isAbove ? targetIdx : targetIdx + 1;
+    newVisibleOrder.splice(insertIdx, 0, draggedRowId);
+
+    // Ordre global existant (ou init depuis data.vehicules si jamais réordonné)
+    let existing = FP.settings.get().vehiculesRowOrder;
+    if (!existing || existing.length === 0) existing = data.vehicules.map(v => v.id);
+
+    // Repère les positions des véhicules visibles dans l'ordre global existant
+    const visibleSet = new Set(currentRows);
+    const visiblePositions = [];
+    existing.forEach((id, i) => { if (visibleSet.has(id)) visiblePositions.push(i); });
+
+    // Remplace ces positions par les véhicules visibles dans leur nouvel ordre relatif
+    const globalNewOrder = existing.slice();
+    newVisibleOrder.forEach((id, i) => {
+      if (i < visiblePositions.length) globalNewOrder[visiblePositions[i]] = id;
+    });
+    // Ajout des véhicules visibles qui n'étaient pas dans l'ordre existant (cas nouveau véhicule)
+    newVisibleOrder.forEach(id => { if (!globalNewOrder.includes(id)) globalNewOrder.push(id); });
+
+    FP.history.commit();
+    const current = FP.settings.get();
+    current.vehiculesRowOrder = globalNewOrder;
+    FP.settings.save(current);
+
+    clearRowDragIndicators();
+    draggedRowId = null;
+    renderTable();
+  });
+
+  $('vehicules-tbody').addEventListener('dragend', () => {
+    clearRowDragIndicators();
+    draggedRowId = null;
+  });
+
+  $('vehicules-tbody').addEventListener('change', (e) => {
+    const cb = e.target.closest('input.row-cb');
+    if (cb) toggleSelect(cb.dataset.id, cb.checked);
+  });
+
+  // Délégation : all-cb est rendu dynamiquement dans le thead
+  $('vehicules-thead').addEventListener('change', (e) => {
+    if (e.target.id === 'all-cb') selectAllVisible(e.target.checked);
+  });
+
+  // Bulk actions wiring
+  $('bulk-clear').addEventListener('click', clearSelection);
+  $('bulk-delete').addEventListener('click', bulkDelete);
+  $('bulk-export').addEventListener('click', bulkExport);
+  $('bulk-add-groupe').addEventListener('change', (e) => {
+    bulkAddGroupe(e.target.value);
+    e.target.value = '';
+  });
+  $('bulk-remove-groupe').addEventListener('change', (e) => {
+    bulkRemoveGroupe(e.target.value);
+    e.target.value = '';
+  });
+  $('bulk-statut').addEventListener('change', (e) => {
+    bulkSetStatut(e.target.value);
+    e.target.value = '';
+  });
+
+  // Remplir les selects bulk-add/remove-groupe dynamiquement
+  (function fillBulkGroupes() {
+    ['bulk-add-groupe','bulk-remove-groupe'].forEach(selId => {
+      const sel = $(selId);
+      FP.groupeKeys().forEach(k => {
+        const opt = document.createElement('option');
+        opt.value = k; opt.textContent = FP.groupeLabel(k);
+        sel.appendChild(opt);
+      });
+    });
+  })();
+
+  $('drawer-close').addEventListener('click', closeDrawer);
+  $('drawer-backdrop').addEventListener('click', closeDrawer);
+
+  // Cases à cocher éditables dans le drawer : sauvegarde immédiate en localStorage
+  $('drawer-body').addEventListener('change', (e) => {
+    const cb = e.target.closest('input.veh-toggle');
+    if (!cb || !state.editingId) return;
+    const field = cb.dataset.field;
+    const value = cb.checked;
+    const v = data.vehicules.find(x => x.id === state.editingId);
+    if (v) {
+      FP.history.commit();
+      v[field] = value;
+      FP.saveVehicleOverride(v.id, { [field]: value });
+      if (getVisibleColumns().includes(field)) renderTable();
+    }
+  });
+  $('drawer-edit').addEventListener('click', () => {
+    if (!state.editingId) return;
+    const v = data.vehicules.find(x => x.id === state.editingId);
+    closeDrawer();
+    openModal(v);
+  });
+  $('drawer-delete').addEventListener('click', deleteVehicule);
+
+  $('btn-new').addEventListener('click', () => openModal(null));
+  $('modal-close').addEventListener('click', closeModal);
+  $('modal-cancel').addEventListener('click', closeModal);
+  $('modal-backdrop').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
+  $('vehicule-form').addEventListener('submit', saveVehicule);
+
+  $('btn-export').addEventListener('click', exportCSV);
+
+  // ---------- Init ----------
+  renderKPIs();
+  renderTable();
+</script>
+</body>
+</html>

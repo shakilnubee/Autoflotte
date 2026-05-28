@@ -1,0 +1,274 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contrats — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .filter-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: white; }
+  .section-title { font-weight: 700; font-size: 1.05rem; color: var(--fp-primary); margin-bottom: .85rem; display: flex; align-items: center; gap: .55rem; }
+  .contrat-type { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 600; }
+  .ct-assurance { background: #DBEAFE; color: #1E3A8A; }
+  .ct-leasing   { background: #EDE9FE; color: #4C1D95; }
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-8">
+      <div>
+        <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)" data-edit-key="contrats.title">Contrats</h1>
+        <p class="text-slate-500 text-sm mt-1" data-edit-key="contrats.subtitle">Assurance + leasing — engagements et coûts mensuels</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="btn btn-outline text-sm" id="btn-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter CSV</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="kpi">
+        <div class="kpi-label">Véhicules assurés</div>
+        <div class="kpi-value" id="kpi-assur">—</div>
+        <div class="kpi-delta" id="kpi-assur-sub">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Véhicules en leasing</div>
+        <div class="kpi-value" id="kpi-leasing">—</div>
+        <div class="kpi-delta">propriétaire BPCE</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Coût mensuel leasing</div>
+        <div class="kpi-value" id="kpi-mens-leasing" style="color: var(--fp-primary)">—</div>
+        <div class="kpi-delta">moyenne mensualités</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Coût annuel total</div>
+        <div class="kpi-value" id="kpi-annuel" style="color: var(--fp-primary)">—</div>
+        <div class="kpi-delta">leasing 12 mois</div>
+      </div>
+    </div>
+
+    <!-- Section Assurance -->
+    <div class="card p-6 mb-6">
+      <div class="section-title">
+        <i data-lucide="shield-check" class="w-5 h-5"></i> Assurance — SWISSLIFE (011165247/0599)
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Police unique couvrant tous les véhicules de la flotte.</p>
+      <div class="scrollable">
+        <table class="fp-table">
+          <thead>
+            <tr>
+              <th>Immat.</th>
+              <th>Véhicule</th>
+              <th>Chauffeur</th>
+              <th>Groupe</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-assurance"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Section Leasing -->
+    <div class="card p-6">
+      <div class="section-title">
+        <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — BPCE Car Lease
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Véhicules sous contrat de leasing BPCE. Mensualités calculées depuis les factures.</p>
+
+      <div class="flex flex-wrap items-center gap-3 mb-4">
+        <div class="relative flex-1 min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search-leasing" type="text" placeholder="Immat., chauffeur, modèle…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+      </div>
+
+      <div class="scrollable">
+        <table class="fp-table">
+          <thead>
+            <tr>
+              <th>Immat.</th>
+              <th>Véhicule</th>
+              <th>Chauffeur</th>
+              <th>Mensualités payées</th>
+              <th>Total versé</th>
+              <th>Moy. mensuelle</th>
+              <th>Dernière facture</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-leasing"></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-slate-500 mt-3" id="leasing-count"></p>
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/supabase-client.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  lucide.createIcons();
+  const data = window.FP_DATA;
+  const $ = (id) => document.getElementById(id);
+
+  // Labels des groupes fournis par FP.groupeLabel (configurables via /pages/parametres.html)
+  const vehicules = data.vehicules || [];
+  const leasingFactures = (data.factures || []).filter(f => f.type === 'leasing');
+
+  // Agréger leasing par véhicule
+  const leasingByVeh = {};
+  leasingFactures.forEach(f => {
+    const k = f.vehiculeImmat;
+    if (!k) return;
+    if (!leasingByVeh[k]) leasingByVeh[k] = { count: 0, total: 0, lastDate: '', lastFile: null };
+    leasingByVeh[k].count++;
+    leasingByVeh[k].total += (f.montantTTC || 0);
+    if ((f.date || '') > leasingByVeh[k].lastDate) {
+      leasingByVeh[k].lastDate = f.date || '';
+      leasingByVeh[k].lastFile = f;
+    }
+  });
+
+  // Liste des véhicules en leasing : ceux avec proprietaire BPCE OU avec >= 1 facture leasing
+  const leasingImmats = new Set([
+    ...vehicules.filter(v => v.proprietaire === 'BPCE').map(v => v.immat),
+    ...Object.keys(leasingByVeh)
+  ]);
+
+  let leasingSearch = '';
+
+  function renderKPIs() {
+    $('kpi-assur').textContent = vehicules.length;
+    $('kpi-assur-sub').textContent = 'sur SWISSLIFE';
+
+    const nbLeasing = leasingImmats.size;
+    $('kpi-leasing').textContent = nbLeasing;
+
+    // Coût mensuel total estimé : somme des dernières factures mensuelles connues
+    let mensTotal = 0;
+    let countWithCost = 0;
+    leasingImmats.forEach(immat => {
+      const agg = leasingByVeh[immat];
+      if (agg && agg.count > 0) {
+        const moy = agg.total / agg.count;
+        if (moy > 0) { mensTotal += moy; countWithCost++; }
+      }
+    });
+    $('kpi-mens-leasing').textContent = FP.euro(mensTotal);
+    $('kpi-annuel').textContent = FP.euro(mensTotal * 12);
+  }
+
+  function renderAssurance() {
+    const tbody = $('tbody-assurance');
+    tbody.innerHTML = vehicules.map(v => `
+      <tr>
+        <td class="font-mono font-semibold">${v.immat}</td>
+        <td>${v.marque} ${v.modele}</td>
+        <td>${v.chauffeur}</td>
+        <td><div class="flex flex-wrap gap-1">${FP.vehGroupes(v).map(k => `<span class="groupe-pill gp-${k}"><span class="dot"></span>${FP.groupeLabel(k)}</span>`).join('')}</div></td>
+        <td><span class="badge badge-ok">Couvert</span></td>
+      </tr>
+    `).join('');
+  }
+
+  function renderLeasing() {
+    const q = leasingSearch.toLowerCase().trim();
+    const rows = [...leasingImmats]
+      .map(immat => {
+        const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
+        return { v, agg: leasingByVeh[immat] || { count: 0, total: 0, lastDate: '', lastFile: null } };
+      })
+      .filter(({ v }) => !q || `${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`.toLowerCase().includes(q))
+      .sort((a,b) => b.agg.total - a.agg.total);
+
+    const tbody = $('tbody-leasing');
+    tbody.innerHTML = rows.map(({ v, agg }) => `
+      <tr>
+        <td class="font-mono font-semibold">${v.immat}</td>
+        <td>${v.marque} ${v.modele}</td>
+        <td>${v.chauffeur}</td>
+        <td>${agg.count}</td>
+        <td class="font-semibold">${agg.total > 0 ? FP.euroPrecis(agg.total) : '<span class="text-slate-400">—</span>'}</td>
+        <td>${agg.count > 0 ? FP.euroPrecis(agg.total / agg.count) : '<span class="text-slate-400">—</span>'}</td>
+        <td>${agg.lastFile ? `<a href="https://drive.google.com/file/d/${agg.lastFile.fileId}/view" target="_blank" rel="noopener" class="text-xs hover:underline" style="color: var(--fp-accent)">${FP.date(agg.lastDate)} <i data-lucide="external-link" class="w-3 h-3 inline"></i></a>` : '<span class="text-slate-400">—</span>'}</td>
+      </tr>
+    `).join('');
+
+    $('leasing-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} sous leasing BPCE`;
+    lucide.createIcons();
+  }
+
+  function exportCSV() {
+    const rows = [];
+    rows.push(['Section','Immat','Véhicule','Chauffeur','Contrat','Détail','Coût']);
+    vehicules.forEach(v => {
+      rows.push(['Assurance', v.immat, `${v.marque} ${v.modele}`, v.chauffeur, 'SWISSLIFE 011165247/0599', 'Police flotte', '']);
+    });
+    leasingImmats.forEach(immat => {
+      const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
+      const agg = leasingByVeh[immat] || { count: 0, total: 0 };
+      rows.push(['Leasing', v.immat, `${v.marque} ${v.modele}`, v.chauffeur, 'BPCE Car Lease', `${agg.count} mensualités payées`, agg.total]);
+    });
+    const csv = rows.map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `auto-flotte-contrats-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+  $('search-leasing').addEventListener('input', e => { leasingSearch = e.target.value; renderLeasing(); });
+  $('btn-export').addEventListener('click', exportCSV);
+
+  renderKPIs();
+  renderAssurance();
+  renderLeasing();
+</script>
+</body>
+</html>

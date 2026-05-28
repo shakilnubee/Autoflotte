@@ -1,0 +1,344 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="assets/css/styles.css">
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <!-- =============== SIDEBAR =============== -->
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+
+    <nav class="space-y-1">
+      <a href="dashboard.html"           data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="pages/statistiques.html"  data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="pages/vehicules.html"     data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="pages/conducteurs.html"   data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="pages/amendes.html"       data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="pages/sinistres.html"     data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="pages/a-vendre.html"      data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="pages/factures.html"      data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="pages/entretiens.html"    data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="pages/contrats.html"      data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="pages/parametres.html"    data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+
+    <div class="mt-10 pt-6 border-t border-white/10 text-xs text-slate-300 px-2">
+      <div class="font-semibold text-white mb-1">Démo</div>
+      <p>Données fictives — basculez sur votre Excel via <code class="bg-white/10 px-1 rounded">data.js</code>.</p>
+    </div>
+  </aside>
+
+  <!-- =============== MAIN =============== -->
+  <main class="flex-1 p-6 md:p-10">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+      <div>
+        <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)" data-edit-key="dashboard.title">Tableau de bord</h1>
+        <p class="text-slate-500 text-sm mt-1" data-edit-key="dashboard.subtitle">Vue d'ensemble de votre flotte — mai 2026</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button class="btn btn-outline text-sm"><i data-lucide="download" class="w-4 h-4"></i> Exporter</button>
+        <button class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="kpi">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="kpi-label">Véhicules</div>
+            <div class="kpi-value" id="kpi-vehicules">—</div>
+            <div class="kpi-delta up">↑ 2 ce trimestre</div>
+          </div>
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#ECFEFF; color: var(--fp-accent)">
+            <i data-lucide="car"></i>
+          </div>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="kpi-label">Km cumulés</div>
+            <div class="kpi-value" id="kpi-km">—</div>
+            <div class="kpi-delta">cette flotte</div>
+          </div>
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#ECFEFF; color: var(--fp-accent)">
+            <i data-lucide="gauge"></i>
+          </div>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="kpi-label">Coûts du mois</div>
+            <div class="kpi-value" id="kpi-couts">—</div>
+            <div class="kpi-delta down">↓ 22% vs jan.</div>
+          </div>
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#ECFEFF; color: var(--fp-accent)">
+            <i data-lucide="euro"></i>
+          </div>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="kpi-label">Alertes</div>
+            <div class="kpi-value" id="kpi-alertes" style="color: var(--fp-danger)">—</div>
+            <div class="kpi-delta" style="color: var(--fp-danger)">à traiter</div>
+          </div>
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#FEF2F2; color: var(--fp-danger)">
+            <i data-lucide="alert-triangle"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="grid gap-6 mt-8">
+
+      <div class="card p-6">
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <h3 class="font-bold text-slate-900">Coûts mensuels (€)</h3>
+            <p class="text-xs text-slate-500">Entretien + contrats + amendes</p>
+          </div>
+          <select class="text-sm border border-slate-200 rounded-lg px-3 py-1.5">
+            <option>6 derniers mois</option>
+            <option>12 derniers mois</option>
+          </select>
+        </div>
+        <div class="chart-wrap"><canvas id="costsChart"></canvas></div>
+      </div>
+
+    </div>
+
+    <!-- Alertes + Véhicules récents -->
+    <div class="grid lg:grid-cols-3 gap-6 mt-6">
+
+      <div class="card p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="font-bold text-slate-900">Alertes</h3>
+          <span class="badge badge-danger" id="alertes-count">—</span>
+        </div>
+        <div class="space-y-2" id="alertes-list"></div>
+      </div>
+
+      <div class="card p-0 lg:col-span-2 overflow-hidden">
+        <div class="flex justify-between items-center p-6 pb-4">
+          <h3 class="font-bold text-slate-900">Véhicules récents</h3>
+          <a href="pages/vehicules.html" class="text-sm font-semibold" style="color: var(--fp-accent)">Voir tout →</a>
+        </div>
+        <div class="scrollable">
+          <table class="fp-table">
+            <thead>
+              <tr>
+                <th>Immat.</th>
+                <th>Modèle</th>
+                <th>Chauffeur</th>
+                <th>Km</th>
+                <th>Statut</th>
+              </tr>
+            </thead>
+            <tbody id="vehicules-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/supabase-client.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  lucide.createIcons();
+
+  const data = window.FP_DATA;
+
+  // === KPIs ===
+  document.getElementById('kpi-vehicules').textContent = data.vehicules.length;
+  const kmTotal = data.vehicules.reduce((s,v) => s + v.km, 0);
+  document.getElementById('kpi-km').textContent = FP.num(kmTotal) + ' km';
+
+  // Coût du mois courant : somme des factures TTC dont la date commence par YYYY-MM courant
+  const today = new Date();
+  const currentMonth = today.toISOString().slice(0, 7);
+  const coutsMois = (data.factures || [])
+    .filter(f => (f.date || '').startsWith(currentMonth))
+    .reduce((s, f) => s + (f.montantTTC || 0), 0);
+  document.getElementById('kpi-couts').textContent = FP.euro(coutsMois);
+
+  // === Alertes générées dynamiquement ===
+  function buildAlertes() {
+    const out = [];
+    const today = new Date();
+    const days = (d) => Math.ceil((new Date(d) - today) / (1000*60*60*24));
+
+    // --- CT ---
+    data.vehicules.forEach(v => {
+      if (!v.prochainCT || v.prochainCT === '—') return;
+      const d = new Date(v.prochainCT);
+      if (isNaN(d)) return;
+      const diff = days(v.prochainCT);
+      const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
+      if (diff < 0)        out.push({ niveau: 'danger', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff });
+      else if (diff < 30)  out.push({ niveau: 'danger', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff });
+      else if (diff < 60)  out.push({ niveau: 'warn',   message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff });
+      else if (diff < 90)  out.push({ niveau: 'info',   message: `CT dans ~2 mois (${diff}j)`, detail: veh, sort: diff });
+    });
+
+    // --- Amendes à payer ---
+    const amAPayer = (data.amendes || []).filter(a => a.statut === 'à payer');
+    if (amAPayer.length > 0) {
+      const totalDu = amAPayer.reduce((s,a) => s + (a.montant || 0), 0);
+      out.push({
+        niveau: totalDu > 500 ? 'warn' : 'info',
+        message: `${amAPayer.length} amende${amAPayer.length > 1 ? 's' : ''} à payer`,
+        detail: `${FP.euro(totalDu)} dus au total`,
+        sort: 1000,
+      });
+    }
+
+    // --- Véhicules sans dernière révision enregistrée (info) ---
+    const sansRev = data.vehicules.filter(v => v.statut === 'actif' && (!v.derniereRevision || v.derniereRevision === '—') && (!v.chauffeur || v.chauffeur !== 'VENDU')).length;
+    if (sansRev > 5) {
+      out.push({
+        niveau: 'info',
+        message: `${sansRev} véhicules sans dernière révision enregistrée`,
+        detail: 'À compléter pour le suivi maintenance',
+        sort: 2000,
+      });
+    }
+
+    // Tri : danger → warn → info, puis par urgence interne
+    const order = { 'danger': 0, 'warn': 1, 'info': 2 };
+    out.sort((a,b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
+    return out;
+  }
+
+  const alerts = buildAlertes();
+  const critiques = alerts.filter(a => a.niveau === 'danger' || a.niveau === 'warn').length;
+
+  // KPI : on affiche le nombre critique (rouges + oranges) car les info sont des "à savoir" pas des "à traiter"
+  document.getElementById('kpi-alertes').textContent = critiques;
+  document.getElementById('alertes-count').textContent = alerts.length;
+
+  // Rendu
+  const alertesHtml = alerts.map(a => {
+    const cls = a.niveau === 'danger' ? 'alert-danger' : a.niveau === 'warn' ? 'alert-warn' : 'alert-info';
+    const icon = a.niveau === 'danger' ? 'alert-triangle' : a.niveau === 'warn' ? 'bell' : 'info';
+    const color = a.niveau === 'danger' ? 'text-red-600' : a.niveau === 'warn' ? 'text-amber-600' : 'text-blue-600';
+    return `<div class="alert ${cls} text-sm">
+      <i data-lucide="${icon}" class="w-4 h-4 ${color} flex-shrink-0 mt-0.5"></i>
+      <div>
+        <div class="font-semibold">${a.message}</div>
+        ${a.detail ? `<div class="text-xs text-slate-500 mt-0.5">${a.detail}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('alertes-list').innerHTML = alertesHtml || '<p class="text-sm text-slate-500 text-center py-6">Aucune alerte ✓</p>';
+
+  // === Véhicules table ===
+  document.getElementById('vehicules-tbody').innerHTML = data.vehicules.slice(0,6).map(v => `
+    <tr>
+      <td class="font-mono font-semibold">${v.immat}</td>
+      <td>${v.marque} ${v.modele}</td>
+      <td>${v.chauffeur}</td>
+      <td>${FP.num(v.km)} km</td>
+      <td>${FP.statutBadge(v.statut)}</td>
+    </tr>
+  `).join('');
+
+  // === Charts ===
+  // Coûts mensuels — 6 derniers mois calculés dynamiquement depuis les factures
+  function buildLast6Months() {
+    const out = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = d.toISOString().slice(0, 7);
+      const label = d.toLocaleDateString('fr-FR', { month: 'short' });
+      out.push({ ym, label });
+    }
+    return out;
+  }
+  const months = buildLast6Months();
+  const monthlyTotals = months.map(m =>
+    (data.factures || [])
+      .filter(f => (f.date || '').startsWith(m.ym))
+      .reduce((s, f) => s + (f.montantTTC || 0), 0)
+  );
+
+  // Sous-titre tendance : variation entre 1er et dernier mois
+  const first = monthlyTotals[0], last = monthlyTotals[monthlyTotals.length - 1];
+  const deltaPct = first > 0 ? Math.round(((last - first) / first) * 100) : 0;
+  const deltaEl = document.querySelector('.kpi-delta.down');
+  if (deltaEl) {
+    const arrow = deltaPct < 0 ? '↓' : '↑';
+    const cls = deltaPct < 0 ? 'kpi-delta down' : 'kpi-delta up';
+    deltaEl.className = cls;
+    deltaEl.textContent = `${arrow} ${Math.abs(deltaPct)}% vs ${months[0].label}`;
+  }
+
+  const ctx1 = document.getElementById('costsChart').getContext('2d');
+  const g1 = ctx1.createLinearGradient(0, 0, 0, 280);
+  g1.addColorStop(0, 'rgba(20,184,166,0.35)');
+  g1.addColorStop(1, 'rgba(20,184,166,0)');
+  new Chart(ctx1, {
+    type: 'line',
+    data: {
+      labels: months.map(m => m.label),
+      datasets: [{
+        label: 'Coûts (€)',
+        data: monthlyTotals,
+        borderColor: '#14B8A6', borderWidth: 3, tension: .35,
+        backgroundColor: g1, fill: true,
+        pointBackgroundColor: '#14B8A6', pointRadius: 4,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => FP.euro(ctx.parsed.y) } } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { grid: { color: '#F1F5F9' }, ticks: { callback: v => FP.euro(v) } }
+      },
+      maintainAspectRatio: false, responsive: true,
+    }
+  });
+
+  // Re-init icons
+  lucide.createIcons();
+</script>
+</body>
+</html>
