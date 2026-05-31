@@ -9,7 +9,15 @@
 <script src="https://unpkg.com/lucide@latest"></script>
 <link rel="stylesheet" href="../assets/css/styles.css">
 <style>
-  .driver-card { background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
+  .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
+  .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
+  .driver-cb { position: absolute; top: .7rem; right: .7rem; width: 18px; height: 18px; accent-color: var(--fp-accent); cursor: pointer; z-index: 2; }
+  .bulk-bar { position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); display: none; align-items: center; gap: 1rem; background: var(--fp-primary); color: white; padding: .7rem 1.1rem; border-radius: 9999px; box-shadow: 0 18px 40px -12px rgba(15,30,61,.5); z-index: 50; flex-wrap: wrap; justify-content: center; }
+  .bulk-bar.active { display: flex; }
+  .bulk-bar button { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; font-weight: 600; padding: .4rem .85rem; border-radius: 9999px; transition: background .12s; }
+  .bulk-bar .del { background: #DC2626; }
+  .bulk-bar .del:hover { background: #B91C1C; }
+  .bulk-bar .clear:hover { background: rgba(255,255,255,.14); }
   .driver-card:hover { transform: translateY(-2px); box-shadow: 0 14px 30px -16px rgba(15,30,61,.2); border-color: var(--fp-accent); }
   .driver-avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--fp-accent) 0%, var(--fp-primary-2) 100%); color: white; font-weight: 800; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
   .stat-pill { padding: .15rem .5rem; border-radius: 9999px; font-size: .7rem; font-weight: 600; background: #F1F5F9; color: var(--fp-text); }
@@ -107,6 +115,13 @@
   </main>
 </div>
 
+<!-- Barre de sélection multiple (apparaît quand ≥1 conducteur coché) -->
+<div class="bulk-bar" id="bulk-bar">
+  <span class="font-semibold text-sm"><span id="bulk-count">0</span> conducteur(s) sélectionné(s)</span>
+  <button type="button" class="del" id="bulk-delete"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer la sélection</button>
+  <button type="button" class="clear" id="bulk-clear"><i data-lucide="x" class="w-4 h-4"></i> Annuler</button>
+</div>
+
 <!-- Drawer fiche conducteur -->
 <div class="drawer-backdrop" id="drawer-backdrop"></div>
 <aside class="drawer" id="drawer">
@@ -171,7 +186,7 @@
   lucide.createIcons();
   const data = window.FP_DATA;
   const $ = (id) => document.getElementById(id);
-  const state = { search: '' };
+  const state = { search: '', selected: new Set() };
 
   function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -257,8 +272,9 @@
       const points = d.amendes.filter(a => a.retraitPoints).length;
       const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
       return `
-        <div class="driver-card" data-key="${d.key}">
-          <div class="flex items-center gap-3 mb-3">
+        <div class="driver-card ${state.selected.has(d.key) ? 'selected' : ''}" data-key="${d.key}">
+          <input type="checkbox" class="driver-cb" data-key="${d.key}" ${state.selected.has(d.key) ? 'checked' : ''} title="Sélectionner pour suppression" />
+          <div class="flex items-center gap-3 mb-3 pr-6">
             <div class="driver-avatar">${initials(d.name)}</div>
             <div class="min-w-0 flex-1">
               <div class="font-bold text-slate-900 truncate">${d.name}</div>
@@ -274,6 +290,45 @@
       `;
     }).join('');
     $('result-count').textContent = `${filtered.length} conducteur${filtered.length > 1 ? 's' : ''} sur ${drivers.length}`;
+    renderBulkBar();
+  }
+
+  // ---------- Sélection multiple ----------
+  function renderBulkBar() {
+    const n = state.selected.size;
+    $('bulk-count').textContent = n;
+    $('bulk-bar').classList.toggle('active', n > 0);
+  }
+
+  function toggleSelect(key, checked) {
+    if (checked) state.selected.add(key); else state.selected.delete(key);
+    const card = $('drivers-grid').querySelector(`.driver-card[data-key="${CSS.escape(key)}"]`);
+    if (card) card.classList.toggle('selected', checked);
+    renderBulkBar();
+  }
+
+  function clearSelection() {
+    state.selected.clear();
+    renderGrid();
+  }
+
+  function bulkDelete() {
+    const items = [...state.selected].map(k => drivers.find(d => d.key === k)).filter(Boolean);
+    if (items.length === 0) return;
+    const linked = items.filter(d => d.vehicules.length + d.amendes.length > 0);
+    let msg = `Supprimer ${items.length} conducteur${items.length > 1 ? 's' : ''} ?`;
+    if (linked.length) msg += `\n\n${linked.length} d'entre eux ${linked.length > 1 ? 'sont liés' : 'est lié'} à des véhicules/amendes : ils seront retirés de la liste (les véhicules et amendes ne sont PAS supprimés).`;
+    if (!confirm(msg)) return;
+    const store = getCondStore();
+    items.forEach(d => {
+      if (d.vehicules.length + d.amendes.length > 0 && !store.masques.includes(d.key)) store.masques.push(d.key);
+      store.manuels = store.manuels.filter(m => normPrenom(m.name) !== d.key);
+    });
+    saveCondStore(store);
+    state.selected.clear();
+    drivers = buildDrivers();
+    renderKPIs();
+    renderGrid();
   }
 
   function openDrawer(key) {
@@ -403,9 +458,13 @@
 
   $('search').addEventListener('input', e => { state.search = e.target.value; renderGrid(); });
   $('drivers-grid').addEventListener('click', e => {
+    const cb = e.target.closest('.driver-cb');
+    if (cb) { toggleSelect(cb.dataset.key, cb.checked); return; } // case cochée → on ne ouvre pas la fiche
     const card = e.target.closest('.driver-card');
     if (card) openDrawer(card.dataset.key);
   });
+  $('bulk-delete').addEventListener('click', bulkDelete);
+  $('bulk-clear').addEventListener('click', clearSelection);
   $('drawer-close').addEventListener('click', closeDrawer);
   $('drawer-backdrop').addEventListener('click', closeDrawer);
 
