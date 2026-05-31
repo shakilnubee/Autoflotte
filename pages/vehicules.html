@@ -201,6 +201,12 @@
   .group-tab .dot { width: 9px; height: 9px; border-radius: 50%; }
   .group-tab .count { font-size: .7rem; padding: .1rem .45rem; border-radius: 9999px; background: #F1F5F9; color: var(--fp-muted); font-weight: 700; }
   .group-tab.active .count { background: var(--fp-primary); color: white; }
+  /* Réorganisation des onglets de groupes par glisser-déposer */
+  .group-tab[draggable="true"] { cursor: grab; }
+  .group-tab[draggable="true"]:active { cursor: grabbing; }
+  .group-tab.tab-dragging { opacity: .4; }
+  .group-tab.tab-drop-left { box-shadow: inset 3px 0 0 0 var(--fp-accent); }
+  .group-tab.tab-drop-right { box-shadow: inset -3px 0 0 0 var(--fp-accent); }
 
   /* Les dots et pills par groupe sont définis dans styles.css avec des variables CSS configurables */
 </style>
@@ -543,7 +549,7 @@
     tabsEl.innerHTML = `
       <button class="group-tab ${state.groupe === 'all' ? 'active' : ''}" data-groupe="all">Tous <span class="count" id="cnt-all">—</span></button>
       ${keys.map(k => `
-        <button class="group-tab ${state.groupe === k ? 'active' : ''}" data-groupe="${k}">
+        <button class="group-tab ${state.groupe === k ? 'active' : ''}" data-groupe="${k}" draggable="true" title="Glisser pour réorganiser">
           <span class="dot dot-${k}"></span>${FP.groupeLabel(k)}
           <span class="count" id="cnt-${k}">—</span>
         </button>
@@ -1432,6 +1438,51 @@
     else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); FP.history.redo(); }
   });
   FP.history.updateUI();
+
+  // === Réorganisation des onglets de groupes par glisser-déposer ===
+  (function setupGroupTabsDnD() {
+    const tabsEl = $('group-tabs');
+    let draggedKey = null;
+    const clearInd = () => tabsEl.querySelectorAll('.tab-drop-left, .tab-drop-right, .tab-dragging')
+      .forEach(el => el.classList.remove('tab-drop-left', 'tab-drop-right', 'tab-dragging'));
+
+    tabsEl.addEventListener('dragstart', (e) => {
+      const tab = e.target.closest('.group-tab[draggable="true"]');
+      if (!tab) { e.preventDefault(); return; }
+      draggedKey = tab.dataset.groupe;
+      tab.classList.add('tab-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', draggedKey); } catch {}
+    });
+    tabsEl.addEventListener('dragover', (e) => {
+      const tab = e.target.closest('.group-tab[draggable="true"]');
+      if (!tab || !draggedKey || tab.dataset.groupe === draggedKey) return;
+      e.preventDefault();
+      const rect = tab.getBoundingClientRect();
+      const after = e.clientX > rect.left + rect.width / 2;
+      tabsEl.querySelectorAll('.tab-drop-left, .tab-drop-right').forEach(el => el.classList.remove('tab-drop-left', 'tab-drop-right'));
+      tab.classList.add(after ? 'tab-drop-right' : 'tab-drop-left');
+    });
+    tabsEl.addEventListener('drop', (e) => {
+      const tab = e.target.closest('.group-tab[draggable="true"]');
+      if (!tab || !draggedKey || tab.dataset.groupe === draggedKey) { clearInd(); draggedKey = null; return; }
+      e.preventDefault();
+      const rect = tab.getBoundingClientRect();
+      const after = e.clientX > rect.left + rect.width / 2;
+      let order = FP.groupeKeys().filter(k => k !== draggedKey);
+      const idx = order.indexOf(tab.dataset.groupe);
+      order.splice(after ? idx + 1 : idx, 0, draggedKey);
+      FP.history.commit();
+      const cur = FP.settings.get();
+      cur.groupeOrder = order;
+      FP.settings.save(cur);
+      clearInd();
+      draggedKey = null;
+      renderTabBar();
+      renderKPIs();
+    });
+    tabsEl.addEventListener('dragend', () => { clearInd(); draggedKey = null; });
+  })();
 
   // Tab bar est rendue dynamiquement au init (les listeners y sont attachés)
   renderTabBar();
