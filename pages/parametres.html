@@ -31,6 +31,11 @@
   .set-tab.active { color: var(--fp-primary); border-bottom-color: var(--fp-accent); }
   .set-tab i { width: 16px; height: 16px; }
   .settings-section.hidden-sec { display: none; }
+  .nav-row { display: grid; grid-template-columns: 20px 150px 1fr; gap: .65rem; align-items: center; padding: .45rem 0; border-bottom: 1px solid var(--fp-border); }
+  .nav-row:last-child { border-bottom: none; }
+  .nav-row.row-dragging { opacity: .4; }
+  .nav-row.drop-above { box-shadow: inset 0 2px 0 0 var(--fp-accent); }
+  .nav-row.drop-below { box-shadow: inset 0 -2px 0 0 var(--fp-accent); }
   .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: .75rem 1.2rem; border-radius: .55rem; font-weight: 600; background: var(--fp-ok); color: white; box-shadow: 0 12px 30px -10px rgba(15,30,61,.3); transform: translateY(150%); transition: transform .25s; z-index: 100; }
   .toast.show { transform: translateY(0); }
 </style>
@@ -110,11 +115,11 @@
     <!-- Section Onglets sidebar -->
     <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="affichage">
       <div class="section-title">
-        <i data-lucide="layout-list" class="w-5 h-5"></i> Noms des onglets
+        <i data-lucide="layout-list" class="w-5 h-5"></i> Onglets du menu
       </div>
-      <p class="text-sm text-slate-600 mb-4">Personnalise les noms affichés dans le menu de navigation à gauche.</p>
+      <p class="text-sm text-slate-600 mb-4">Renomme les onglets et change leur ordre (glisser ⋮⋮). Clique « Enregistrer » pour appliquer au menu de gauche sur toutes les pages.</p>
 
-      <div class="space-y-3" id="nav-labels-form"></div>
+      <div id="nav-labels-form"></div>
 
       <div class="flex gap-2 mt-5">
         <button class="btn btn-dark text-sm" id="btn-save-nav"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
@@ -314,43 +319,87 @@
     });
   }
 
-  // ---------- Onglets sidebar ----------
+  // ---------- Onglets sidebar (renommer + réordonner) ----------
   function renderNavLabelsForm() {
     const labels = FP.settings.get().sidebarLabels || {};
     const form = $('nav-labels-form');
-    form.innerHTML = Object.entries(FP.DEFAULT_NAV_LABELS).map(([key, def]) => `
-      <div class="grid gap-2 sm:grid-cols-[160px_1fr] sm:items-center">
-        <span class="text-sm text-slate-500">${def}</span>
-        <input class="field-input" type="text" data-nav-key="${key}" value="${(labels[key] || '').replace(/"/g, '&quot;')}" placeholder="${def}" />
-      </div>
-    `).join('');
+    form.innerHTML = FP.navKeysOrdered().map(key => {
+      const def = FP.DEFAULT_NAV_LABELS[key];
+      return `
+        <div class="nav-row" draggable="true" data-nav-key="${key}">
+          <span class="grp-drag" title="Glisser pour réordonner">⋮⋮</span>
+          <span class="text-sm text-slate-500">${def}</span>
+          <input class="field-input" type="text" data-nav-key="${key}" value="${(labels[key] || '').replace(/"/g, '&quot;')}" placeholder="${def}" />
+        </div>
+      `;
+    }).join('');
   }
 
   function saveNavLabels() {
     FP.history.commit();
     const current = FP.settings.get();
     const newLabels = {};
-    document.querySelectorAll('#nav-labels-form input[data-nav-key]').forEach(input => {
-      const key = input.dataset.navKey;
-      const val = input.value.trim();
+    const order = [];
+    // On lit les lignes dans leur ordre actuel (drag & drop) → ordre + labels
+    document.querySelectorAll('#nav-labels-form .nav-row').forEach(row => {
+      const key = row.dataset.navKey;
+      order.push(key);
+      const val = row.querySelector('input[data-nav-key]').value.trim();
       if (val && val !== FP.DEFAULT_NAV_LABELS[key]) newLabels[key] = val;
     });
     current.sidebarLabels = newLabels;
+    current.navOrder = order;
     FP.settings.save(current);
     FP.applyCustomNavLabels();
-    showToast('Onglets renommés ✓');
+    FP.applyNavOrder();
+    showToast('Onglets enregistrés ✓');
   }
 
   function resetNavLabels() {
-    if (!confirm('Réinitialiser les noms des onglets aux valeurs par défaut ?')) return;
+    if (!confirm('Réinitialiser les noms ET l\'ordre des onglets aux valeurs par défaut ?')) return;
     FP.history.commit();
     const current = FP.settings.get();
     current.sidebarLabels = {};
+    current.navOrder = [];
     FP.settings.save(current);
     renderNavLabelsForm();
     FP.applyCustomNavLabels();
-    showToast('Onglets réinitialisés');
+    location.reload(); // recharge pour remettre le menu dans l'ordre par défaut
   }
+
+  // Réordonnancement des onglets du menu par glisser-déposer (DOM ; persisté au clic « Enregistrer »)
+  (function setupNavDnD() {
+    const form = $('nav-labels-form');
+    let dragRow = null;
+    const clearInd = () => form.querySelectorAll('.row-dragging, .drop-above, .drop-below').forEach(el => el.classList.remove('row-dragging', 'drop-above', 'drop-below'));
+    form.addEventListener('dragstart', (e) => {
+      const row = e.target.closest('.nav-row');
+      if (!row || !e.target.closest('.grp-drag')) { e.preventDefault(); return; }
+      dragRow = row;
+      row.classList.add('row-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    form.addEventListener('dragover', (e) => {
+      const row = e.target.closest('.nav-row');
+      if (!row || !dragRow || row === dragRow) return;
+      e.preventDefault();
+      const rect = row.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height / 2;
+      form.querySelectorAll('.drop-above, .drop-below').forEach(el => el.classList.remove('drop-above', 'drop-below'));
+      row.classList.add(above ? 'drop-above' : 'drop-below');
+    });
+    form.addEventListener('drop', (e) => {
+      const row = e.target.closest('.nav-row');
+      if (!row || !dragRow || row === dragRow) { clearInd(); dragRow = null; return; }
+      e.preventDefault();
+      const rect = row.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height / 2;
+      form.insertBefore(dragRow, above ? row : row.nextSibling);
+      clearInd();
+      dragRow = null;
+    });
+    form.addEventListener('dragend', () => { clearInd(); dragRow = null; });
+  })();
 
   // ---------- Société ----------
   function loadSociete() {
@@ -430,6 +479,7 @@
     loadSociete();
     renderPreview();
     FP.applyCustomNavLabels();
+    FP.applyNavOrder();
   };
   document.querySelectorAll('[data-history-undo]').forEach(b => b.addEventListener('click', () => FP.history.undo()));
   document.querySelectorAll('[data-history-redo]').forEach(b => b.addEventListener('click', () => FP.history.redo()));

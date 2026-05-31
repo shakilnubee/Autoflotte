@@ -77,6 +77,7 @@ FP.settings = {
     vehiculesRowOrder: [], // tableau d'IDs véhicules dans l'ordre souhaité par l'utilisateur
     groupeOrder: [], // ordre d'affichage des onglets de groupes (clés) — vide = ordre par défaut
     groupesHidden: [], // clés de groupes dont l'onglet est masqué sur la page Véhicules
+    navOrder: [], // ordre d'affichage des onglets du menu de gauche (clés data-nav)
   },
   get() {
     try {
@@ -90,6 +91,7 @@ FP.settings = {
         vehiculesRowOrder: Array.isArray(stored.vehiculesRowOrder) ? stored.vehiculesRowOrder : [],
         groupeOrder: Array.isArray(stored.groupeOrder) ? stored.groupeOrder : [],
         groupesHidden: Array.isArray(stored.groupesHidden) ? stored.groupesHidden : [],
+        navOrder: Array.isArray(stored.navOrder) ? stored.navOrder : [],
         sidebarLabels: (stored.sidebarLabels && typeof stored.sidebarLabels === 'object') ? stored.sidebarLabels : {},
         customTexts: (stored.customTexts && typeof stored.customTexts === 'object') ? stored.customTexts : {},
       };
@@ -143,13 +145,41 @@ FP.groupeKeysVisible = () => {
 
 // === Labels des onglets sidebar (personnalisables via Paramètres) ===
 FP.DEFAULT_NAV_LABELS = {
-  'dashboard.html':  'Tableau de bord',
-  'vehicules.html':  'Véhicules',
-  'amendes.html':    'Amendes',
-  'factures.html':   'Factures',
-  'entretiens.html': 'Entretiens',
-  'contrats.html':   'Contrats',
-  'parametres.html': 'Paramètres',
+  'dashboard.html':    'Tableau de bord',
+  'statistiques.html': 'Statistiques',
+  'vehicules.html':    'Véhicules',
+  'conducteurs.html':  'Conducteurs',
+  'amendes.html':      'Amendes',
+  'sinistres.html':    'Sinistres',
+  'a-vendre.html':     'À vendre',
+  'factures.html':     'Factures',
+  'entretiens.html':   'Entretiens',
+  'contrats.html':     'Contrats',
+  'parametres.html':   'Paramètres',
+};
+// Ordre d'affichage des onglets du menu (clés data-nav), navOrder en tête puis le reste
+FP.navKeysOrdered = () => {
+  const allKeys = Object.keys(FP.DEFAULT_NAV_LABELS);
+  const order = FP.settings.get().navOrder;
+  if (!Array.isArray(order) || !order.length) return allKeys;
+  const valid = order.filter(k => allKeys.includes(k));
+  const missing = allKeys.filter(k => !valid.includes(k));
+  return [...valid, ...missing];
+};
+// Réorganise les liens du menu (sidebar) selon l'ordre choisi par l'utilisateur
+FP.applyNavOrder = () => {
+  const order = FP.settings.get().navOrder;
+  if (!Array.isArray(order) || !order.length) return;
+  document.querySelectorAll('aside nav').forEach(nav => {
+    const links = Array.from(nav.querySelectorAll('a[data-nav]'));
+    if (!links.length) return;
+    const byKey = {};
+    links.forEach(a => { byKey[a.dataset.nav] = a; });
+    const ordered = [];
+    order.forEach(k => { if (byKey[k]) { ordered.push(byKey[k]); delete byKey[k]; } });
+    links.forEach(a => { if (byKey[a.dataset.nav]) ordered.push(a); }); // onglets non listés à la fin
+    ordered.forEach(a => nav.appendChild(a)); // ré-insère dans le nouvel ordre
+  });
 };
 FP.navLabel = (navKey) => {
   const custom = FP.settings.get().sidebarLabels || {};
@@ -705,8 +735,9 @@ FP.searchAll = (q) => {
 document.addEventListener('DOMContentLoaded', () => {
   // Appliquer le thème (couleurs des groupes) dès le chargement
   FP.settings.applyTheme();
-  // Appliquer les labels personnalisés des onglets
+  // Appliquer les labels personnalisés des onglets puis l'ordre choisi
   FP.applyCustomNavLabels();
+  FP.applyNavOrder();
   // Appliquer les textes éditables custom (titres, sous-titres)
   FP.applyCustomTexts();
   // Injecter la barre de recherche globale dans toutes les sidebars
