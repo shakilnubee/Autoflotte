@@ -134,6 +134,21 @@
       return res;
     },
 
+    /** Lit toutes les lignes d'une table (converties en camelCase). */
+    async select(table) {
+      const res = await client.from(table).select('*');
+      if (res.error) { console.error(`[FP.db.select ${table}]`, res.error); return { data: [], error: res.error }; }
+      return { data: (res.data || []).map(toClient), error: null };
+    },
+
+    /** Insère ou met à jour (upsert) une ligne par sa clé primaire. */
+    async upsert(table, row) {
+      const snake = toDb(row);
+      const res = await client.from(table).upsert(snake);
+      if (res.error) console.error(`[FP.db.upsert ${table}]`, res.error);
+      return res;
+    },
+
     /** Supprime une ligne par id. */
     async delete(table, id) {
       const res = await client.from(table).delete().eq('id', id);

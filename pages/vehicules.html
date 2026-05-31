@@ -618,8 +618,8 @@
   // ---------- Helpers locaux ----------
   const $ = (id) => document.getElementById(id);
 
-  // ====== Documents véhicule (liens externes, persistés en localStorage) ======
-  const DOCS_KEY = 'fp_veh_documents';
+  // ====== Documents véhicule (liens, persistés dans Supabase ; cache mémoire) ======
+  const DOCS_KEY = 'fp_veh_documents'; // fallback local si Supabase indisponible
   const DOC_TYPES = [
     { key: 'carte-grise',         label: 'Carte grise',              icon: 'file-badge' },
     { key: 'assurance',           label: 'Assurance (carte verte)',  icon: 'shield' },
@@ -629,9 +629,38 @@
     { key: 'etat-des-lieux',      label: 'État des lieux',           icon: 'clipboard-list' },
     { key: 'autre',               label: 'Autre',                    icon: 'paperclip' },
   ];
-  function getAllDocs(){ try { return JSON.parse(localStorage.getItem(DOCS_KEY) || '{}'); } catch { return {}; } }
-  function getVehDocs(id){ return getAllDocs()[id] || []; }
-  function saveVehDocs(id, docs){ const all = getAllDocs(); all[id] = docs; localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
+  let docsCache = null; // array de docs {id, vehiculeId, type, label, url, driveId} une fois chargé
+  function driveIdFromUrl(url){
+    const m = String(url || '').match(/\/d\/([A-Za-z0-9_-]{20,})/) || String(url || '').match(/[?&]id=([A-Za-z0-9_-]{20,})/);
+    return m ? m[1] : null;
+  }
+  // Fallback localStorage (si Supabase indisponible)
+  function lsGetAllDocs(){ try { return JSON.parse(localStorage.getItem(DOCS_KEY) || '{}'); } catch { return {}; } }
+  function getVehDocs(id){
+    if (docsCache) return docsCache.filter(d => d.vehiculeId === id);
+    return lsGetAllDocs()[id] || [];
+  }
+  async function addVehDoc(vehId, type, label, url) {
+    const doc = { id: 'D' + Date.now().toString(36), vehiculeId: vehId, type, label, url, driveId: driveIdFromUrl(url) };
+    if (docsCache) docsCache.push(doc);
+    else { const all = lsGetAllDocs(); (all[vehId] = all[vehId] || []).push(doc); localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
+    openDrawer(vehId);
+    if (FP.persist.available()) FP.persist.insert('documents', doc);
+  }
+  async function delVehDoc(vehId, docId) {
+    if (docsCache) docsCache = docsCache.filter(d => d.id !== docId);
+    else { const all = lsGetAllDocs(); all[vehId] = (all[vehId] || []).filter(d => d.id !== docId); localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
+    openDrawer(vehId);
+    if (FP.persist.available()) FP.persist.delete('documents', docId);
+  }
+  function loadVehDocs() {
+    if (!(window.FP && FP.db && FP.supabase)) return;
+    FP.db.select('documents').then(r => {
+      if (r.error) return; // garde le fallback localStorage
+      docsCache = r.data || [];
+      if ($('drawer').classList.contains('open') && state.editingId) openDrawer(state.editingId);
+    });
+  }
 
   // Immatriculation normalisée (clé des mémos assurance dans FP_DOCS)
   function normImmat(s){ return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
@@ -676,7 +705,7 @@
       <i data-lucide="${t.icon}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
       <div class="flex-1 min-w-0">
         <a href="${href}" target="_blank" rel="noopener" class="font-medium hover:underline truncate block" style="color: var(--fp-accent)">${escapeHtml(doc.label || t.label)}</a>
-        <div class="text-xs text-slate-500">${t.label}${doc.date ? ' · ajouté le ' + FP.date(doc.date) : ''}</div>
+        <div class="text-xs text-slate-500">${t.label}${(doc.date || doc.createdAt) ? ' · ajouté le ' + FP.date((doc.date || doc.createdAt).slice(0, 10)) : ''}</div>
       </div>
       <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-doc-del="${escapeHtml(doc.id)}" title="Supprimer ce document"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
     </div>`;
@@ -1816,9 +1845,7 @@
     if (!state.editingId) return;
     const del = e.target.closest('[data-doc-del]');
     if (del) {
-      const docs = getVehDocs(state.editingId).filter(d => d.id !== del.dataset.docDel);
-      saveVehDocs(state.editingId, docs);
-      openDrawer(state.editingId);
+      delVehDoc(state.editingId, del.dataset.docDel);
       return;
     }
     if (e.target.closest('#doc-add')) {
@@ -1827,10 +1854,7 @@
       const label = body.querySelector('#doc-label').value.trim();
       const url = sanitizeUrl(body.querySelector('#doc-url').value);
       if (!url) { alert('Merci de coller un lien valide (commençant par http:// ou https://).'); return; }
-      const docs = getVehDocs(state.editingId);
-      docs.push({ id: 'D' + Date.now().toString(36), type, label, url, date: new Date().toISOString().slice(0, 10) });
-      saveVehDocs(state.editingId, docs);
-      openDrawer(state.editingId);
+      addVehDoc(state.editingId, type, label, url);
     }
   });
 
@@ -2012,6 +2036,7 @@
   // ---------- Init ----------
   renderKPIs();
   renderTable();
+  loadVehDocs(); // charge les documents depuis Supabase
 
   // Quand les données Supabase sont chargées/rechargées, on rafraîchit l'affichage
   // (reflète les ajouts/suppressions faits ici ou sur un autre appareil).
