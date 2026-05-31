@@ -181,6 +181,52 @@ FP.applyNavOrder = () => {
     ordered.forEach(a => nav.appendChild(a)); // ré-insère dans le nouvel ordre
   });
 };
+// Active le glisser-déposer des onglets directement dans le menu de gauche (toutes pages)
+FP.enableNavReorder = () => {
+  document.querySelectorAll('aside nav').forEach(nav => {
+    if (nav.dataset.reorderable === '1') return; // évite double init
+    nav.dataset.reorderable = '1';
+    let dragKey = null;
+    const clear = () => nav.querySelectorAll('.nav-dragging, .nav-drop-above, .nav-drop-below').forEach(el => el.classList.remove('nav-dragging', 'nav-drop-above', 'nav-drop-below'));
+    nav.querySelectorAll('a[data-nav]').forEach(a => a.setAttribute('draggable', 'true'));
+
+    nav.addEventListener('dragstart', (e) => {
+      const a = e.target.closest('a[data-nav]');
+      if (!a) return;
+      dragKey = a.dataset.nav;
+      a.classList.add('nav-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', dragKey); } catch {}
+    });
+    nav.addEventListener('dragover', (e) => {
+      const a = e.target.closest('a[data-nav]');
+      if (!a || !dragKey || a.dataset.nav === dragKey) return;
+      e.preventDefault();
+      const rect = a.getBoundingClientRect();
+      const below = e.clientY > rect.top + rect.height / 2;
+      nav.querySelectorAll('.nav-drop-above, .nav-drop-below').forEach(el => el.classList.remove('nav-drop-above', 'nav-drop-below'));
+      a.classList.add(below ? 'nav-drop-below' : 'nav-drop-above');
+    });
+    nav.addEventListener('drop', (e) => {
+      const a = e.target.closest('a[data-nav]');
+      if (!a || !dragKey || a.dataset.nav === dragKey) { clear(); dragKey = null; return; }
+      e.preventDefault();
+      const rect = a.getBoundingClientRect();
+      const below = e.clientY > rect.top + rect.height / 2;
+      const links = Array.from(nav.querySelectorAll('a[data-nav]'));
+      const order = links.map(x => x.dataset.nav).filter(k => k !== dragKey);
+      const idx = order.indexOf(a.dataset.nav);
+      order.splice(below ? idx + 1 : idx, 0, dragKey);
+      const cur = FP.settings.get();
+      cur.navOrder = order;
+      FP.settings.save(cur);
+      clear();
+      dragKey = null;
+      FP.applyNavOrder();
+    });
+    nav.addEventListener('dragend', () => { clear(); dragKey = null; });
+  });
+};
 
 // === Persistance Supabase générique (utilisée par les pages pour enregistrer les mutations) ===
 FP.persist = {
@@ -751,6 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Appliquer les labels personnalisés des onglets puis l'ordre choisi
   FP.applyCustomNavLabels();
   FP.applyNavOrder();
+  FP.enableNavReorder(); // glisser-déposer des onglets directement dans le menu
   // Appliquer les textes éditables custom (titres, sous-titres)
   FP.applyCustomTexts();
   // Injecter la barre de recherche globale dans toutes les sidebars
