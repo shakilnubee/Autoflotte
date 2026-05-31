@@ -49,6 +49,9 @@
   /* Checkbox custom */
   .fp-table th.cb-col, .fp-table td.cb-col { width: 36px; padding-left: 1rem; padding-right: 0; }
   .row-cb, .all-cb { width: 16px; height: 16px; cursor: pointer; accent-color: var(--fp-accent); }
+  /* Surlignage des lignes sélectionnées */
+  .fp-table tbody tr.row-selected { background: rgba(20,184,166,.10); }
+  .fp-table tbody tr.row-selected:hover { background: rgba(20,184,166,.16); }
 
   /* === Drag-and-drop des LIGNES === */
   .fp-table tbody tr.row-dragging { opacity: .35; }
@@ -1032,7 +1035,7 @@
           if (!def) return '';
           return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''}>${def.render(v)}</td>`;
         }).join('');
-        return `<tr class="cursor-pointer" draggable="true" data-id="${v.id}">
+        return `<tr class="cursor-pointer${state.selectedIds.has(v.id) ? ' row-selected' : ''}" draggable="true" data-id="${v.id}">
           <td class="cb-col"><span class="row-drag-handle" title="Glisser pour réorganiser">⋮⋮</span><input type="checkbox" class="row-cb" data-id="${v.id}" ${state.selectedIds.has(v.id) ? 'checked' : ''} /></td>
           ${cells}
           <td class="text-right">
@@ -1067,6 +1070,8 @@
   function toggleSelect(id, checked) {
     if (checked) state.selectedIds.add(id);
     else state.selectedIds.delete(id);
+    const tr = $('vehicules-tbody').querySelector(`tr[data-id="${CSS.escape(id)}"]`);
+    if (tr) tr.classList.toggle('row-selected', checked);
     renderBulkBar();
   }
 
@@ -1453,9 +1458,15 @@
     });
   }
 
+  // Le drag de ligne ne démarre QUE depuis la poignée ⋮⋮ : ainsi les cases à cocher
+  // (et les clics sur la ligne) ne sont jamais capturés par le drag.
+  let dragAllowed = false;
+  $('vehicules-tbody').addEventListener('mousedown', (e) => {
+    dragAllowed = !!e.target.closest('.row-drag-handle');
+  });
+
   $('vehicules-tbody').addEventListener('dragstart', (e) => {
-    // Ne pas drag si on a cliqué sur un élément interactif (checkbox, bouton)
-    if (e.target.closest('input, button')) { e.preventDefault(); return; }
+    if (!dragAllowed) { e.preventDefault(); return; }
     const tr = e.target.closest('tr[data-id]');
     if (!tr) return;
     draggedRowId = tr.dataset.id;
