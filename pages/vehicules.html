@@ -26,6 +26,10 @@
   .ct-warn { color: var(--fp-warn); font-weight: 600; }
   .ct-danger { color: var(--fp-danger); font-weight: 700; }
 
+  /* Petit spinner pour la lecture de la carte grise */
+  .cg-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: cg-spin .7s linear infinite; }
+  @keyframes cg-spin { to { transform: rotate(360deg); } }
+
   /* === Barre d'actions groupées === */
   .bulk-bar { display: none; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem .9rem; border-radius: .65rem; background: var(--fp-primary); color: white; margin-bottom: 1rem; flex-wrap: wrap; }
   .bulk-bar.active { display: flex; }
@@ -382,6 +386,21 @@
     <form id="vehicule-form" class="space-y-4">
       <input type="hidden" id="f-id" />
 
+      <!-- Import carte grise : pré-remplissage automatique des champs -->
+      <div id="cg-import">
+        <input type="file" id="f-cg-file" accept="image/*,application/pdf" class="hidden" />
+        <button type="button" id="cg-trigger" class="w-full flex items-center gap-3 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
+          <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
+            <i data-lucide="scan-line" class="w-5 h-5"></i>
+          </span>
+          <span class="flex-1">
+            <span class="block text-sm font-semibold text-slate-800">Importer la carte grise</span>
+            <span class="block text-xs text-slate-500">Photo ou PDF — les champs lisibles se remplissent tout seuls</span>
+          </span>
+        </button>
+        <div id="cg-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
+      </div>
+
       <div class="grid grid-cols-2 gap-4">
         <div>
           <div class="field-label">Immatriculation *</div>
@@ -413,6 +432,10 @@
             <option>SUV</option>
             <option>Utilitaire</option>
           </select>
+        </div>
+        <div>
+          <div class="field-label">VIN <span class="text-slate-400 normal-case font-normal">(n° de châssis)</span></div>
+          <input class="field-input font-mono text-xs" id="f-vin" placeholder="VF1…" />
         </div>
       </div>
 
@@ -1158,6 +1181,9 @@
     $('f-statut').value     = vehicule?.statut || 'actif';
     $('f-chauffeur').value  = vehicule?.chauffeur || '';
     $('f-ct').value         = vehicule?.prochainCT || '';
+    $('f-vin').value        = vehicule?.vin || '';
+    // Réinitialise la zone d'import carte grise
+    const cgSt = $('cg-status'); cgSt.classList.add('hidden'); cgSt.innerHTML = '';
     // Remplir les checkboxes groupes
     const currentGroupes = vehicule ? FP.vehGroupes(vehicule) : ['non-classe'];
     $('f-groupes-list').innerHTML = FP.groupeKeys().map(k => `
@@ -1203,6 +1229,7 @@
       statut: $('f-statut').value,
       chauffeur: $('f-chauffeur').value.trim() || '—',
       prochainCT: ct || '—',
+      vin: $('f-vin').value.trim().toUpperCase() || '',
       groupes: Array.from(document.querySelectorAll('#f-groupes-list input.f-groupe-cb:checked')).map(cb => cb.value),
     };
     if (payload.groupes.length === 0) payload.groupes = ['non-classe'];
@@ -1462,6 +1489,159 @@
   $('vehicule-form').addEventListener('submit', saveVehicule);
 
   $('btn-export').addEventListener('click', exportCSV);
+
+  // ============================================================
+  //  Import carte grise → pré-remplissage automatique (OCR)
+  //  100% navigateur : rien n'est envoyé sur un serveur.
+  // ============================================================
+  const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  const PDFJS_CDN     = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+  const PDFJS_WORKER  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  // Charge un script externe une seule fois (lazy : seulement au 1er import)
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[data-lazy="${src}"]`);
+      if (existing) {
+        if (existing.dataset.loaded === '1') return resolve();
+        existing.addEventListener('load', resolve);
+        existing.addEventListener('error', () => reject(new Error('Échec du chargement de ' + src)));
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = src; s.dataset.lazy = src;
+      s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+      s.onerror = () => reject(new Error('Échec du chargement de ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  function cgStatus(msg, type){
+    const el = $('cg-status');
+    el.classList.remove('hidden');
+    const colors = {
+      working: 'background:#F1F5F9;color:#475569;',
+      ok:      'background:#ECFDF5;color:#047857;',
+      error:   'background:#FEF2F2;color:#B91C1C;',
+    };
+    el.setAttribute('style', colors[type] || colors.working);
+    el.innerHTML = msg;
+  }
+  const cgWorking = (txt) => cgStatus(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> ${txt}</span>`, 'working');
+
+  // Convertit la 1ère page d'un PDF en canvas pour l'OCR
+  async function pdfToCanvas(file){
+    await loadScript(PDFJS_CDN);
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas;
+  }
+
+  const toIsoDate = (d, m, y) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+  // Récupère la valeur qui suit un code (ex: "D.1") sur la même ligne ou la suivante
+  function afterCode(lines, codeRegex){
+    for (let i = 0; i < lines.length; i++){
+      const m = lines[i].match(codeRegex);
+      if (m){
+        const rest = lines[i].slice(m.index + m[0].length).replace(/^[\s:)\.,-]+/, '').trim();
+        if (rest && rest.length >= 2) return rest;
+        if (lines[i+1]) return lines[i+1].trim();
+      }
+    }
+    return '';
+  }
+
+  // Analyse le texte OCR d'une carte grise française (codes A, B, D.1, D.3, E)
+  function parseCarteGrise(raw){
+    const upper = (raw || '').replace(/ /g, ' ').toUpperCase();
+    const lines = upper.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const out = {};
+
+    // Immatriculation — format SIV (AA-123-AA)
+    let m = upper.match(/\b([A-Z]{2})\s*[-\s]\s*([0-9]{3})\s*[-\s]\s*([A-Z]{2})\b/);
+    if (m) out.immat = `${m[1]}-${m[2]}-${m[3]}`;
+    // sinon ancien format FNI (1234 AB 56)
+    if (!out.immat) {
+      m = upper.match(/\b([0-9]{1,4})\s+([A-Z]{2,3})\s+([0-9]{2,3})\b/);
+      if (m) out.immat = `${m[1]} ${m[2]} ${m[3]}`;
+    }
+
+    // VIN — 17 caractères (les lettres I, O, Q n'existent pas dans un VIN)
+    m = upper.match(/\b([A-HJ-NPR-Z0-9]{17})\b/);
+    if (m) out.vin = m[1];
+
+    // Marque (code D.1) et dénomination commerciale / modèle (code D.3)
+    const clean = (s) => (s || '').replace(/[^A-Z0-9 \-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+    out.marque = clean(afterCode(lines, /\bD\s*[.,]?\s*1\b/));
+    out.modele = clean(afterCode(lines, /\bD\s*[.,]?\s*3\b/));
+
+    // Date de 1ère immatriculation (code B) — sinon 1ère date trouvée
+    let bDate = null;
+    for (const line of lines) {
+      if (/^B[\s).,]/.test(line) || /\bB\b/.test(line.slice(0, 3))) {
+        const dm = line.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/);
+        if (dm) { bDate = dm; break; }
+      }
+    }
+    if (!bDate) {
+      const dm = upper.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/);
+      if (dm) bDate = dm;
+    }
+    if (bDate) out.dateMiseEnCirculation = toIsoDate(bDate[1], bDate[2], bDate[3]);
+
+    return out;
+  }
+
+  async function handleCarteGrise(file){
+    if (!file) return;
+    try {
+      cgWorking('Lecture de la carte grise… (quelques secondes au 1er usage)');
+      await loadScript(TESSERACT_CDN);
+
+      let image = file;
+      if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+        cgWorking('Conversion du PDF…');
+        image = await pdfToCanvas(file);
+      }
+
+      const worker = await Tesseract.createWorker('fra');
+      cgWorking('Analyse du texte…');
+      const { data } = await worker.recognize(image);
+      await worker.terminate();
+
+      const parsed = parseCarteGrise(data.text);
+      const filled = [];
+      // On ne remplit que les champs vides : on n'écrase pas une saisie manuelle
+      if (parsed.immat  && !$('f-immat').value)  { $('f-immat').value  = parsed.immat;  filled.push('immatriculation'); }
+      if (parsed.marque && !$('f-marque').value) { $('f-marque').value = parsed.marque; filled.push('marque'); }
+      if (parsed.modele && !$('f-modele').value) { $('f-modele').value = parsed.modele; filled.push('modèle'); }
+      if (parsed.dateMiseEnCirculation && !$('f-dmc').value) { $('f-dmc').value = parsed.dateMiseEnCirculation; filled.push('1ère immat.'); }
+      if (parsed.vin    && !$('f-vin').value)    { $('f-vin').value    = parsed.vin;    filled.push('VIN'); }
+
+      if (filled.length) {
+        cgStatus(`<b>✓ ${filled.length} champ(s) pré-rempli(s)</b> : ${filled.join(', ')}.<br>Vérifiez les valeurs puis complétez le reste (km, chauffeur, groupes…).`, 'ok');
+      } else {
+        cgStatus("Lecture terminée, mais aucun champ n'a pu être détecté automatiquement. Saisissez les infos à la main — astuce : une photo nette, bien cadrée et droite donne de meilleurs résultats.", 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      cgStatus("Impossible de lire le document. Vérifiez votre connexion internet et réessayez, ou saisissez les informations manuellement.", 'error');
+    }
+  }
+
+  $('cg-trigger').addEventListener('click', () => $('f-cg-file').click());
+  $('f-cg-file').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    handleCarteGrise(file);
+    e.target.value = ''; // permet de re-sélectionner le même fichier
+  });
 
   // ---------- Init ----------
   renderKPIs();
