@@ -76,6 +76,7 @@ FP.settings = {
     },
     vehiculesRowOrder: [], // tableau d'IDs véhicules dans l'ordre souhaité par l'utilisateur
     groupeOrder: [], // ordre d'affichage des onglets de groupes (clés) — vide = ordre par défaut
+    groupesHidden: [], // clés de groupes dont l'onglet est masqué sur la page Véhicules
   },
   get() {
     try {
@@ -88,6 +89,7 @@ FP.settings = {
           : { ...this.defaults.vehiculesColumns },
         vehiculesRowOrder: Array.isArray(stored.vehiculesRowOrder) ? stored.vehiculesRowOrder : [],
         groupeOrder: Array.isArray(stored.groupeOrder) ? stored.groupeOrder : [],
+        groupesHidden: Array.isArray(stored.groupesHidden) ? stored.groupesHidden : [],
         sidebarLabels: (stored.sidebarLabels && typeof stored.sidebarLabels === 'object') ? stored.sidebarLabels : {},
         customTexts: (stored.customTexts && typeof stored.customTexts === 'object') ? stored.customTexts : {},
       };
@@ -132,6 +134,11 @@ FP.groupeKeys = () => {
   const valid = order.filter(k => allKeys.includes(k));         // garde uniquement les clés connues
   const missing = allKeys.filter(k => !valid.includes(k));      // n'oublie aucun groupe
   return [...valid, ...missing];
+};
+// Clés de groupes visibles (onglets non masqués), dans l'ordre
+FP.groupeKeysVisible = () => {
+  const hidden = FP.settings.get().groupesHidden || [];
+  return FP.groupeKeys().filter(k => !hidden.includes(k));
 };
 
 // === Labels des onglets sidebar (personnalisables via Paramètres) ===

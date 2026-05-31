@@ -207,6 +207,16 @@
   .group-tab.tab-dragging { opacity: .4; }
   .group-tab.tab-drop-left { box-shadow: inset 3px 0 0 0 var(--fp-accent); }
   .group-tab.tab-drop-right { box-shadow: inset -3px 0 0 0 var(--fp-accent); }
+  /* Icône d'édition d'un groupe (⋯) + gestion des groupes masqués */
+  .group-tab .grp-gear { opacity: 0; cursor: pointer; margin-left: .15rem; padding: 0 .25rem; border-radius: .25rem; font-weight: 800; color: var(--fp-muted); transition: opacity .12s, background .12s; }
+  .group-tab:hover .grp-gear { opacity: .55; }
+  .group-tab .grp-gear:hover { opacity: 1; background: rgba(15,30,61,.08); color: var(--fp-primary); }
+  .grp-hidden-chip { display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .7rem; border-radius: 9999px; font-size: .76rem; font-weight: 600; color: var(--fp-muted); background: #F1F5F9; border: 1px dashed var(--fp-border); cursor: pointer; }
+  .grp-hidden-chip:hover { color: var(--fp-primary); border-color: var(--fp-accent); }
+  .grp-hidden-pop { position: absolute; top: 100%; left: 0; margin-top: .4rem; background: white; border: 1px solid var(--fp-border); border-radius: .55rem; box-shadow: 0 12px 30px -10px rgba(15,30,61,.2); padding: .35rem; z-index: 30; min-width: 210px; display: none; }
+  .grp-hidden-pop.open { display: block; }
+  .grp-hidden-pop button { display: flex; align-items: center; gap: .5rem; width: 100%; padding: .45rem .6rem; border-radius: .35rem; font-size: .85rem; text-align: left; color: var(--fp-text); }
+  .grp-hidden-pop button:hover { background: #F1F5F9; }
 
   /* Les dots et pills par groupe sont définis dans styles.css avec des variables CSS configurables */
 </style>
@@ -496,6 +506,36 @@
   </div>
 </div>
 
+<!-- =============== MODAL ÉDITION GROUPE =============== -->
+<div class="modal-backdrop" id="grp-modal-backdrop">
+  <div class="modal p-6" style="max-width: 420px">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-lg font-extrabold" id="grp-edit-title">Groupe</h2>
+      <button class="p-2 hover:bg-slate-100 rounded-lg" id="grp-modal-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <div class="field-label">Nom du groupe</div>
+        <input class="field-input" id="grp-label" placeholder="Nom affiché" />
+      </div>
+      <div class="flex items-end gap-4">
+        <div>
+          <div class="field-label">Couleur</div>
+          <input type="color" id="grp-color" class="field-input" style="width: 64px; height: 42px; padding: 2px" />
+        </div>
+        <label class="flex items-center gap-2 mb-2 text-sm cursor-pointer">
+          <input type="checkbox" id="grp-hidden" class="accent-teal-600 w-4 h-4" /> Masquer cet onglet
+        </label>
+      </div>
+      <p class="text-xs text-slate-400">Masquer cache l'onglet sans supprimer les véhicules. Tu pourras le réafficher via la puce « masqués ».</p>
+    </div>
+    <div class="flex gap-2 pt-5">
+      <button class="btn btn-outline flex-1 justify-center" id="grp-cancel">Annuler</button>
+      <button class="btn btn-dark flex-1 justify-center" id="grp-save"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <!-- =============== VISIONNEUSE DOCUMENT (aperçu Drive) =============== -->
 <div class="modal-backdrop" id="viewer-backdrop">
   <div class="viewer">
@@ -545,25 +585,34 @@
   // Rendu dynamique de la tab bar
   function renderTabBar() {
     const tabsEl = document.getElementById('group-tabs');
-    const keys = FP.groupeKeys();
+    const keys = FP.groupeKeysVisible();
+    const hidden = FP.settings.get().groupesHidden || [];
     tabsEl.innerHTML = `
       <button class="group-tab ${state.groupe === 'all' ? 'active' : ''}" data-groupe="all">Tous <span class="count" id="cnt-all">—</span></button>
       ${keys.map(k => `
-        <button class="group-tab ${state.groupe === k ? 'active' : ''}" data-groupe="${k}" draggable="true" title="Glisser pour réorganiser">
+        <button class="group-tab ${state.groupe === k ? 'active' : ''}" data-groupe="${k}" draggable="true" title="Glisser pour réorganiser · ⋯ pour modifier">
           <span class="dot dot-${k}"></span>${FP.groupeLabel(k)}
           <span class="count" id="cnt-${k}">—</span>
+          <span class="grp-gear" data-grp-gear="${k}" title="Renommer / couleur / masquer">⋯</span>
         </button>
       `).join('')}
+      ${hidden.length ? `<span class="grp-hidden-wrap" style="position: relative; display: inline-flex; align-items: center;">
+          <button class="grp-hidden-chip" id="grp-hidden-chip"><i data-lucide="eye-off" class="w-3.5 h-3.5"></i> ${hidden.length} masqué${hidden.length > 1 ? 's' : ''}</button>
+          <div class="grp-hidden-pop" id="grp-hidden-pop">${hidden.map(k => `<button data-grp-show="${k}"><span class="dot dot-${k}" style="width: 10px; height: 10px; border-radius: 50%; display: inline-block"></span>${FP.groupeLabel(k)}<span style="margin-left: auto; color: var(--fp-accent); font-weight: 600">Réafficher</span></button>`).join('')}</div>
+        </span>` : ''}
     `;
-    // Ré-attache les listeners
+    // Ré-attache les listeners de clic (filtre / édition)
     tabsEl.querySelectorAll('.group-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
+      tab.addEventListener('click', (e) => {
+        const gear = e.target.closest('[data-grp-gear]');
+        if (gear) { openGroupEdit(gear.dataset.grpGear); return; }
         tabsEl.querySelectorAll('.group-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         state.groupe = tab.dataset.groupe;
         renderKPIs(); renderTable();
       });
     });
+    lucide.createIcons();
   }
 
   // ---------- Helpers locaux ----------
@@ -1323,6 +1372,39 @@
     $('modal-backdrop').classList.remove('open');
   }
 
+  // ---------- Édition d'un groupe (renommer / couleur / masquer) ----------
+  let editingGroupKey = null;
+  function openGroupEdit(k) {
+    editingGroupKey = k;
+    $('grp-edit-title').textContent = `Groupe : ${FP.groupeLabel(k)}`;
+    $('grp-label').value = FP.groupeLabel(k);
+    $('grp-color').value = FP.groupeColor(k);
+    $('grp-hidden').checked = (FP.settings.get().groupesHidden || []).includes(k);
+    $('grp-modal-backdrop').classList.add('open');
+  }
+  function closeGroupEdit() { $('grp-modal-backdrop').classList.remove('open'); editingGroupKey = null; }
+  function saveGroupEdit() {
+    if (!editingGroupKey) return;
+    const k = editingGroupKey;
+    FP.history.commit();
+    const cur = FP.settings.get();
+    cur.groupes = { ...cur.groupes, [k]: { ...cur.groupes[k], label: ($('grp-label').value.trim() || FP.groupeLabel(k)), color: $('grp-color').value } };
+    const hidden = new Set(cur.groupesHidden || []);
+    if ($('grp-hidden').checked) { hidden.add(k); if (state.groupe === k) state.groupe = 'all'; }
+    else hidden.delete(k);
+    cur.groupesHidden = [...hidden];
+    FP.settings.save(cur); // applique aussi la couleur (--grp-k)
+    closeGroupEdit();
+    renderTabBar(); renderKPIs(); renderTable();
+  }
+  function unhideGroup(k) {
+    FP.history.commit();
+    const cur = FP.settings.get();
+    cur.groupesHidden = (cur.groupesHidden || []).filter(x => x !== k);
+    FP.settings.save(cur);
+    renderTabBar(); renderKPIs(); renderTable();
+  }
+
   function saveVehicule(e) {
     e.preventDefault();
     // === Validation ===
@@ -1482,6 +1564,20 @@
       renderKPIs();
     });
     tabsEl.addEventListener('dragend', () => { clearInd(); draggedKey = null; });
+
+    // Puce "N masqué(s)" : ouvre/ferme le popover, et réaffiche un groupe
+    tabsEl.addEventListener('click', (e) => {
+      const chip = e.target.closest('#grp-hidden-chip');
+      if (chip) { e.stopPropagation(); const p = document.getElementById('grp-hidden-pop'); if (p) p.classList.toggle('open'); return; }
+      const show = e.target.closest('[data-grp-show]');
+      if (show) { unhideGroup(show.dataset.grpShow); }
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.grp-hidden-wrap')) {
+        const p = document.getElementById('grp-hidden-pop');
+        if (p) p.classList.remove('open');
+      }
+    });
   })();
 
   // Tab bar est rendue dynamiquement au init (les listeners y sont attachés)
@@ -1689,6 +1785,12 @@
     openModal(v);
   });
   $('drawer-delete').addEventListener('click', deleteVehicule);
+
+  // Wiring modal édition groupe
+  $('grp-save').addEventListener('click', saveGroupEdit);
+  $('grp-cancel').addEventListener('click', closeGroupEdit);
+  $('grp-modal-close').addEventListener('click', closeGroupEdit);
+  $('grp-modal-backdrop').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeGroupEdit(); });
 
   $('btn-new').addEventListener('click', () => openModal(null));
   $('modal-close').addEventListener('click', closeModal);

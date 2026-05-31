@@ -16,9 +16,21 @@
   .color-input { width: 48px; height: 38px; border: 1px solid var(--fp-border); border-radius: .55rem; cursor: pointer; padding: 0; }
   .color-input::-webkit-color-swatch-wrapper { padding: 0; }
   .color-input::-webkit-color-swatch { border: none; border-radius: .45rem; }
-  .groupe-row { display: grid; grid-template-columns: 36px 1fr 110px 60px; gap: .65rem; align-items: center; padding: .55rem 0; border-bottom: 1px solid var(--fp-border); }
+  .groupe-row { display: grid; grid-template-columns: 20px 26px 1fr 76px 96px; gap: .65rem; align-items: center; padding: .55rem 0; border-bottom: 1px solid var(--fp-border); }
   .groupe-row:last-child { border-bottom: none; }
   .groupe-key { font-family: monospace; font-size: .72rem; color: var(--fp-muted); }
+  .grp-drag { cursor: grab; color: var(--fp-muted); user-select: none; font-size: .9rem; text-align: center; }
+  .grp-drag:active { cursor: grabbing; }
+  .groupe-row.row-dragging { opacity: .4; }
+  .groupe-row.drop-above { box-shadow: inset 0 2px 0 0 var(--fp-accent); }
+  .groupe-row.drop-below { box-shadow: inset 0 -2px 0 0 var(--fp-accent); }
+  /* Onglets de la page Paramètres */
+  .settings-tabs { display: flex; flex-wrap: wrap; gap: .25rem; border-bottom: 2px solid var(--fp-border); margin-bottom: 1.5rem; }
+  .set-tab { padding: .6rem 1rem; font-size: .88rem; font-weight: 600; color: var(--fp-muted); border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; display: inline-flex; align-items: center; gap: .45rem; }
+  .set-tab:hover { color: var(--fp-primary); }
+  .set-tab.active { color: var(--fp-primary); border-bottom-color: var(--fp-accent); }
+  .set-tab i { width: 16px; height: 16px; }
+  .settings-section.hidden-sec { display: none; }
   .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: .75rem 1.2rem; border-radius: .55rem; font-weight: 600; background: var(--fp-ok); color: white; box-shadow: 0 12px 30px -10px rgba(15,30,61,.3); transform: translateY(150%); transition: transform .25s; z-index: 100; }
   .toast.show { transform: translateY(0); }
 </style>
@@ -72,12 +84,20 @@
       </div>
     </div>
 
+    <!-- Onglets de la page Paramètres -->
+    <div class="settings-tabs" id="settings-tabs">
+      <button class="set-tab active" data-sec="groupes"><i data-lucide="users"></i> Groupes</button>
+      <button class="set-tab" data-sec="affichage"><i data-lucide="layout-list"></i> Affichage</button>
+      <button class="set-tab" data-sec="societe"><i data-lucide="building-2"></i> Société</button>
+      <button class="set-tab" data-sec="donnees"><i data-lucide="database"></i> Données</button>
+    </div>
+
     <!-- Section Groupes -->
-    <div class="card p-6 mb-6">
+    <div class="card p-6 mb-6 settings-section" data-sec="groupes">
       <div class="section-title">
         <i data-lucide="users" class="w-5 h-5"></i> Groupes de véhicules
       </div>
-      <p class="text-sm text-slate-600 mb-4">Renomme et recolore les groupes utilisés pour classer les véhicules.</p>
+      <p class="text-sm text-slate-600 mb-4">Renomme, recolore, réordonne (glisser ⋮⋮) et masque les groupes. Clique « Enregistrer » pour appliquer.</p>
 
       <div id="groupes-form"></div>
 
@@ -88,7 +108,7 @@
     </div>
 
     <!-- Section Onglets sidebar -->
-    <div class="card p-6 mb-6">
+    <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="affichage">
       <div class="section-title">
         <i data-lucide="layout-list" class="w-5 h-5"></i> Noms des onglets
       </div>
@@ -103,7 +123,7 @@
     </div>
 
     <!-- Section Société -->
-    <div class="card p-6 mb-6">
+    <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="societe">
       <div class="section-title">
         <i data-lucide="building-2" class="w-5 h-5"></i> Informations société
       </div>
@@ -132,7 +152,7 @@
     </div>
 
     <!-- Section Données -->
-    <div class="card p-6 mb-6">
+    <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="donnees">
       <div class="section-title">
         <i data-lucide="database" class="w-5 h-5"></i> Données
       </div>
@@ -146,8 +166,8 @@
       </div>
     </div>
 
-    <!-- Section Aperçu -->
-    <div class="card p-6">
+    <!-- Section Aperçu (rattachée à l'onglet Groupes) -->
+    <div class="card p-6 settings-section" data-sec="groupes">
       <div class="section-title">
         <i data-lucide="eye" class="w-5 h-5"></i> Aperçu en direct
       </div>
@@ -176,15 +196,17 @@
   // ---------- Groupes ----------
   function renderGroupesForm() {
     const settings = FP.settings.get();
+    const hidden = settings.groupesHidden || [];
     const form = $('groupes-form');
     form.innerHTML = FP.groupeKeys().map(k => {
       const g = settings.groupes[k];
       return `
-        <div class="groupe-row">
+        <div class="groupe-row" draggable="true" data-key="${k}">
+          <span class="grp-drag" title="Glisser pour réordonner">⋮⋮</span>
           <span class="dot dot-${k}" style="width: 22px; height: 22px; border-radius: 50%; display: inline-block"></span>
           <input class="field-input" type="text" data-grp-label="${k}" value="${g.label.replace(/"/g, '&quot;')}" />
           <input class="color-input" type="color" data-grp-color="${k}" value="${g.color}" />
-          <span class="groupe-key">${k}</span>
+          <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer"><input type="checkbox" class="accent-teal-600 w-4 h-4" data-grp-hide="${k}" ${hidden.includes(k) ? 'checked' : ''} /> Masquer</label>
         </div>
       `;
     }).join('');
@@ -216,26 +238,80 @@
     FP.history.commit();
     const current = FP.settings.get();
     const newGroupes = { ...current.groupes };
-    document.querySelectorAll('#groupes-form input[data-grp-label]').forEach(input => {
-      const k = input.dataset.grpLabel;
-      newGroupes[k] = { ...newGroupes[k], label: input.value.trim() || newGroupes[k].label };
+    const order = [];
+    const hidden = [];
+    // On lit les lignes dans leur ordre actuel (drag & drop) → ordre + labels + couleurs + masquage
+    document.querySelectorAll('#groupes-form .groupe-row').forEach(row => {
+      const k = row.dataset.key;
+      order.push(k);
+      const label = row.querySelector('[data-grp-label]').value.trim();
+      const color = row.querySelector('[data-grp-color]').value;
+      newGroupes[k] = { ...newGroupes[k], label: label || newGroupes[k].label, color };
+      if (row.querySelector('[data-grp-hide]').checked) hidden.push(k);
     });
-    document.querySelectorAll('#groupes-form input[data-grp-color]').forEach(input => {
-      const k = input.dataset.grpColor;
-      newGroupes[k] = { ...newGroupes[k], color: input.value };
-    });
-    FP.settings.save({ ...current, groupes: newGroupes });
+    FP.settings.save({ ...current, groupes: newGroupes, groupeOrder: order, groupesHidden: hidden });
+    renderGroupesForm();
+    renderPreview();
     showToast('Groupes enregistrés ✓');
   }
 
   function resetGroupes() {
-    if (!confirm('Réinitialiser les noms et couleurs des groupes aux valeurs par défaut ?')) return;
+    if (!confirm('Réinitialiser les groupes (noms, couleurs, ordre, masquage) aux valeurs par défaut ?')) return;
     FP.history.commit();
     const current = FP.settings.get();
-    FP.settings.save({ ...current, groupes: JSON.parse(JSON.stringify(FP.settings.defaults.groupes)) });
+    FP.settings.save({ ...current, groupes: JSON.parse(JSON.stringify(FP.settings.defaults.groupes)), groupeOrder: [], groupesHidden: [] });
     renderGroupesForm();
     renderPreview();
     showToast('Groupes réinitialisés');
+  }
+
+  // Réordonnancement des lignes de groupes par glisser-déposer (DOM uniquement ; persisté au clic « Enregistrer »)
+  (function setupGroupesDnD() {
+    const form = $('groupes-form');
+    let dragRow = null;
+    const clearInd = () => form.querySelectorAll('.row-dragging, .drop-above, .drop-below').forEach(el => el.classList.remove('row-dragging', 'drop-above', 'drop-below'));
+    form.addEventListener('dragstart', (e) => {
+      const row = e.target.closest('.groupe-row');
+      if (!row || !e.target.closest('.grp-drag')) { e.preventDefault(); return; }
+      dragRow = row;
+      row.classList.add('row-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    form.addEventListener('dragover', (e) => {
+      const row = e.target.closest('.groupe-row');
+      if (!row || !dragRow || row === dragRow) return;
+      e.preventDefault();
+      const rect = row.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height / 2;
+      form.querySelectorAll('.drop-above, .drop-below').forEach(el => el.classList.remove('drop-above', 'drop-below'));
+      row.classList.add(above ? 'drop-above' : 'drop-below');
+    });
+    form.addEventListener('drop', (e) => {
+      const row = e.target.closest('.groupe-row');
+      if (!row || !dragRow || row === dragRow) { clearInd(); dragRow = null; return; }
+      e.preventDefault();
+      const rect = row.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height / 2;
+      form.insertBefore(dragRow, above ? row : row.nextSibling);
+      clearInd();
+      dragRow = null;
+    });
+    form.addEventListener('dragend', () => { clearInd(); dragRow = null; });
+  })();
+
+  // Onglets de la page Paramètres
+  function setupSettingsTabs() {
+    const tabs = $('settings-tabs');
+    tabs.querySelectorAll('.set-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.querySelectorAll('.set-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const sec = tab.dataset.sec;
+        document.querySelectorAll('.settings-section').forEach(s => {
+          s.classList.toggle('hidden-sec', s.dataset.sec !== sec);
+        });
+      });
+    });
   }
 
   // ---------- Onglets sidebar ----------
@@ -367,6 +443,7 @@
   FP.history.updateUI();
 
   // Init
+  setupSettingsTabs();
   renderGroupesForm();
   renderNavLabelsForm();
   loadSociete();
