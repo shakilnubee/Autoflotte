@@ -30,6 +30,12 @@
   .cg-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: cg-spin .7s linear infinite; }
   @keyframes cg-spin { to { transform: rotate(360deg); } }
 
+  /* Visionneuse de documents (aperçu Drive intégré) */
+  .viewer { background: white; border-radius: 1rem; width: 95vw; max-width: 1100px; height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+  .viewer-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .75rem 1rem; border-bottom: 1px solid var(--fp-border); font-weight: 700; }
+  .viewer-head .v-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .viewer iframe { flex: 1; width: 100%; border: 0; }
+
   /* === Barre d'actions groupées === */
   .bulk-bar { display: none; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem .9rem; border-radius: .65rem; background: var(--fp-primary); color: white; margin-bottom: 1rem; flex-wrap: wrap; }
   .bulk-bar.active { display: flex; }
@@ -479,9 +485,24 @@
   </div>
 </div>
 
+<!-- =============== VISIONNEUSE DOCUMENT (aperçu Drive) =============== -->
+<div class="modal-backdrop" id="viewer-backdrop">
+  <div class="viewer">
+    <div class="viewer-head">
+      <span class="v-title" id="viewer-title">Document</span>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <a class="btn btn-outline text-xs" id="viewer-open" href="#" target="_blank" rel="noopener"><i data-lucide="external-link" class="w-3.5 h-3.5"></i> Ouvrir dans Drive</a>
+        <button class="p-2 hover:bg-slate-100 rounded-lg" id="viewer-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+    </div>
+    <iframe id="viewer-frame" src="" allow="autoplay"></iframe>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../assets/js/supabase-client.js"></script>
 <script src="../assets/js/data.js"></script>
+<script src="../assets/js/fleet-docs.js"></script>
 <script src="../assets/js/app.js"></script>
 <script>
   lucide.createIcons();
@@ -552,6 +573,31 @@
   function getVehDocs(id){ return getAllDocs()[id] || []; }
   function saveVehDocs(id, docs){ const all = getAllDocs(); all[id] = docs; localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
 
+  // Immatriculation normalisée (clé des mémos assurance dans FP_DOCS)
+  function normImmat(s){ return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+
+  // Documents Drive intégrés (carte grise + mémo assurance), consultables sur le site
+  function builtinDocs(v){
+    const list = [];
+    if (v.cgFileId) list.push({ type: 'carte-grise', label: 'Carte grise', drive: v.cgFileId });
+    const docs = (typeof window !== 'undefined' && window.FP_DOCS) ? window.FP_DOCS : { assurance: {} };
+    const aId = docs.assurance && docs.assurance[normImmat(v.immat)];
+    if (aId) list.push({ type: 'assurance', label: 'Mémo assurance', drive: aId });
+    return list;
+  }
+
+  function builtinDocRowHTML(doc){
+    const t = DOC_TYPES.find(x => x.key === doc.type) || DOC_TYPES[DOC_TYPES.length - 1];
+    return `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm">
+      <i data-lucide="${t.icon}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+      <div class="flex-1 min-w-0">
+        <div class="font-medium truncate">${escapeHtml(doc.label)}</div>
+        <div class="text-xs text-slate-500">${t.label} · Google Drive</div>
+      </div>
+      <button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-view="${escapeHtml(doc.drive)}" data-doc-title="${escapeHtml(doc.label)}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>
+    </div>`;
+  }
+
   function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function sanitizeUrl(u){
     let url = (u || '').trim();
@@ -576,15 +622,17 @@
     </div>`;
   }
 
-  function docsSectionHTML(vehId){
-    const docs = getVehDocs(vehId);
+  function docsSectionHTML(v){
+    const builtin = builtinDocs(v);
+    const docs = getVehDocs(v.id);
     const typeOptions = DOC_TYPES.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
-    const rows = docs.length
-      ? docs.map(docRowHTML).join('')
-      : '<p class="text-sm text-slate-500">Aucun document pour le moment.</p>';
+    const builtinRows = builtin.map(builtinDocRowHTML).join('');
+    const linkRows = docs.length ? docs.map(docRowHTML).join('') : '';
+    const rows = (builtinRows + linkRows) || '<p class="text-sm text-slate-500">Aucun document pour le moment.</p>';
+    const count = builtin.length + docs.length;
     return `
       <div>
-        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Documents (${docs.length})</div>
+        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Documents (${count})</div>
         <div class="mt-3">${rows}</div>
         <div class="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
           <div class="field-label !mb-0">Ajouter un document</div>
@@ -1168,10 +1216,9 @@
           <div class="flex justify-between items-center"><span class="text-slate-600">CG orig. siège</span>${editableCheckbox('cgOrigSiege', v.cgOrigSiege)}</div>
           <div class="flex justify-between items-center"><span class="text-slate-600">CG orig. salarié</span>${editableCheckbox('cgOrigSalarie', v.cgOrigSalarie)}</div>
         </div>
-        ${v.cgFileId ? `<a href="https://drive.google.com/file/d/${v.cgFileId}/view" target="_blank" rel="noopener" class="inline-flex items-center gap-1 mt-3 text-sm hover:underline" style="color: var(--fp-accent)"><i data-lucide="external-link" class="w-3.5 h-3.5"></i> Voir la carte grise sur Drive</a>` : ''}
       </div>
 
-      ${docsSectionHTML(v.id)}
+      ${docsSectionHTML(v)}
 
       <div>
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Technique</div>
@@ -1537,8 +1584,24 @@
       if (getVisibleColumns().includes(field)) renderTable();
     }
   });
-  // Ajout / suppression de documents (liens) dans la fiche véhicule
+  // Visionneuse intégrée (aperçu Google Drive)
+  function openViewer(driveId, title){
+    $('viewer-frame').src = `https://drive.google.com/file/d/${driveId}/preview`;
+    $('viewer-open').href = `https://drive.google.com/file/d/${driveId}/view`;
+    $('viewer-title').textContent = title || 'Document';
+    $('viewer-backdrop').classList.add('open');
+  }
+  function closeViewer(){
+    $('viewer-backdrop').classList.remove('open');
+    $('viewer-frame').src = ''; // stoppe le chargement
+  }
+  $('viewer-close').addEventListener('click', closeViewer);
+  $('viewer-backdrop').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeViewer(); });
+
+  // Ajout / suppression / consultation de documents dans la fiche véhicule
   $('drawer-body').addEventListener('click', (e) => {
+    const view = e.target.closest('[data-doc-view]');
+    if (view) { openViewer(view.dataset.docView, view.dataset.docTitle); return; }
     if (!state.editingId) return;
     const del = e.target.closest('[data-doc-del]');
     if (del) {
