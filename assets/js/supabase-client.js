@@ -71,6 +71,10 @@
     'montant_tva':          'montantTVA',
     'montant_ttc':          'montantTTC',
     'changer_cg':           'changerCG',
+    // CT = Contrôle Technique : sans override, on obtiendrait "prochainCt" / "dateDernierCt"
+    // (petit t) alors que le frontend lit "prochainCT" / "dateDernierCT".
+    'prochain_ct':          'prochainCT',
+    'date_dernier_ct':      'dateDernierCT',
   };
   const CAMEL_TO_SNAKE_OVERRIDES = {};
   Object.entries(SNAKE_TO_CAMEL_OVERRIDES).forEach(([s, c]) => { CAMEL_TO_SNAKE_OVERRIDES[c] = s; });
