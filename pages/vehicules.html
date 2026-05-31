@@ -1188,9 +1188,11 @@
     if (n === 0) return;
     if (!confirm(`Supprimer ${n} véhicule${n > 1 ? 's' : ''} ?`)) return;
     FP.history.commit();
+    const removedIds = [...state.selectedIds];
     data.vehicules = data.vehicules.filter(v => !state.selectedIds.has(v.id));
     state.selectedIds.clear();
     renderTable(); renderKPIs(); renderBulkBar();
+    removedIds.forEach(id => persistVehicleDelete(id));
   }
 
   function bulkExport() {
@@ -1405,6 +1407,53 @@
     renderTabBar(); renderKPIs(); renderTable();
   }
 
+  // === Persistance Supabase (les ajouts/suppressions sont enregistrés partout) ===
+  function dbAvailable() { return !!(window.FP && FP.db && FP.supabase); }
+  function nextVehId() {
+    let max = 0;
+    data.vehicules.forEach(v => { const m = /^V-(\d+)$/.exec(v.id || ''); if (m) max = Math.max(max, +m[1]); });
+    return 'V-' + String(max + 1).padStart(3, '0');
+  }
+  function vehToDb(v) {
+    const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
+    return {
+      id: v.id,
+      immat: v.immat,
+      marque: v.marque,
+      modele: v.modele,
+      categorie: v.categorie || null,
+      km: Number.isFinite(v.km) ? v.km : 0,
+      statut: v.statut || 'actif',
+      chauffeur: (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : null,
+      prochainCT: dateOrNull(v.prochainCT),
+      dateMiseEnCirculation: dateOrNull(v.dateMiseEnCirculation),
+      vin: v.vin || null,
+      groupes: Array.isArray(v.groupes) ? v.groupes : [],
+    };
+  }
+  async function persistVehicleUpsert(v, isNew) {
+    if (!dbAvailable()) return;
+    try {
+      let res;
+      if (isNew) { res = await FP.db.insert('vehicules', vehToDb(v)); }
+      else { const { id, ...fields } = vehToDb(v); res = await FP.db.update('vehicules', v.id, fields); }
+      if (res && res.error) throw res.error;
+    } catch (err) {
+      console.error('[persistVehicle]', err);
+      alert("⚠️ Modifié à l'écran, mais l'enregistrement dans la base a échoué :\n" + (err.message || err) + "\n\nLa modification risque de ne pas être conservée après rechargement.");
+    }
+  }
+  async function persistVehicleDelete(id) {
+    if (!dbAvailable()) return;
+    try {
+      const res = await FP.db.delete('vehicules', id);
+      if (res && res.error) throw res.error;
+    } catch (err) {
+      console.error('[deleteVehicle]', err);
+      alert("⚠️ Supprimé à l'écran, mais la suppression dans la base a échoué :\n" + (err.message || err));
+    }
+  }
+
   function saveVehicule(e) {
     e.preventDefault();
     // === Validation ===
@@ -1442,15 +1491,20 @@
     const id = $('f-id').value;
     if (id) {
       const idx = data.vehicules.findIndex(v => v.id === id);
-      if (idx >= 0) data.vehicules[idx] = { ...data.vehicules[idx], ...payload };
+      let updated = null;
+      if (idx >= 0) { data.vehicules[idx] = { ...data.vehicules[idx], ...payload }; updated = data.vehicules[idx]; }
+      closeModal();
+      renderKPIs();
+      renderTable();
+      if (updated) persistVehicleUpsert(updated, false);
     } else {
-      const nextNum = data.vehicules.length + 1;
-      data.vehicules.push({ id: 'V-' + String(nextNum).padStart(3, '0'), ...payload });
+      const newV = { id: nextVehId(), ...payload };
+      data.vehicules.push(newV);
+      closeModal();
+      renderKPIs();
+      renderTable();
+      persistVehicleUpsert(newV, true);
     }
-
-    closeModal();
-    renderKPIs();
-    renderTable();
   }
 
   function deleteVehicule() {
@@ -1459,11 +1513,13 @@
     if (!v) return;
     if (!confirm(`Supprimer le véhicule ${v.immat} (${v.marque} ${v.modele}) ?`)) return;
     FP.history.commit();
-    data.vehicules = data.vehicules.filter(x => x.id !== state.editingId);
+    const removedId = state.editingId;
+    data.vehicules = data.vehicules.filter(x => x.id !== removedId);
     state.editingId = null;
     closeDrawer();
     renderKPIs();
     renderTable();
+    persistVehicleDelete(removedId);
   }
 
   // ---------- Export CSV ----------
@@ -1956,6 +2012,14 @@
   // ---------- Init ----------
   renderKPIs();
   renderTable();
+
+  // Quand les données Supabase sont chargées/rechargées, on rafraîchit l'affichage
+  // (reflète les ajouts/suppressions faits ici ou sur un autre appareil).
+  document.addEventListener('fp:data-ready', () => {
+    renderKPIs();
+    renderTabBar();
+    renderTable();
+  });
 </script>
 </body>
 </html>
