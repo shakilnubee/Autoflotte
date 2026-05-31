@@ -156,15 +156,9 @@
         <div class="field-label">Nom complet *</div>
         <input class="field-input" id="f-name" placeholder="Prénom Nom" required />
       </div>
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <div class="field-label">Téléphone</div>
-          <input class="field-input" id="f-tel" type="tel" placeholder="06 12 34 56 78" />
-        </div>
-        <div>
-          <div class="field-label">N° de permis</div>
-          <input class="field-input" id="f-permis" placeholder="—" />
-        </div>
+      <div>
+        <div class="field-label">Téléphone</div>
+        <input class="field-input" id="f-tel" type="tel" placeholder="06 12 34 56 78" />
       </div>
       <div>
         <div class="field-label">Email</div>
@@ -215,20 +209,74 @@
     return s.toString().trim().split(/\s+/)[0].toLowerCase();
   }
 
-  // ====== Conducteurs ajoutés / masqués manuellement (localStorage) ======
-  const COND_KEY = 'fp_conducteurs';
-  function getCondStore(){
-    try {
-      const s = JSON.parse(localStorage.getItem(COND_KEY) || '{}');
-      return { manuels: Array.isArray(s.manuels) ? s.manuels : [], masques: Array.isArray(s.masques) ? s.masques : [] };
-    } catch { return { manuels: [], masques: [] }; }
-  }
-  function saveCondStore(s){ localStorage.setItem(COND_KEY, JSON.stringify(s)); }
+  // ====== Conducteurs / permis : table Supabase 'conducteurs' (cache mémoire) ======
+  // Chaque ligne : { key, name, tel, email, note, permisUrl, permisFileId, masque, manuel }
+  const COND_KEY = 'fp_conducteurs';   // fallback local
+  const PERMIS_KEY = 'fp_permis';      // fallback local
+  let condCache = [];
 
-  // ====== Permis ajoutés manuellement (liens Drive, localStorage) ======
-  const PERMIS_KEY = 'fp_permis';
-  function getManualPermis(){ try { return JSON.parse(localStorage.getItem(PERMIS_KEY) || '{}'); } catch { return {}; } }
-  function saveManualPermis(all){ localStorage.setItem(PERMIS_KEY, JSON.stringify(all)); }
+  function condRow(key) { return condCache.find(r => r.key === key) || null; }
+  function toCondDb(r) {
+    return { key: r.key, name: r.name || null, tel: r.tel || null, email: r.email || null, note: r.note || null,
+             permisUrl: r.permisUrl || null, permisFileId: r.permisFileId || null, masque: !!r.masque, manuel: !!r.manuel };
+  }
+  // Crée/fusionne une ligne et persiste (Supabase si dispo, sinon localStorage)
+  function upsertCond(key, changes) {
+    let row = condRow(key);
+    if (!row) { row = { key }; condCache.push(row); }
+    Object.assign(row, changes);
+    if (FP.persist.available()) FP.persist.upsert('conducteurs', toCondDb(row));
+    else persistCondToLS();
+  }
+  function deleteCondRow(key) {
+    condCache = condCache.filter(r => r.key !== key);
+    if (FP.persist.available()) FP.persist.delete('conducteurs', key);
+    else persistCondToLS();
+  }
+  // Dérive les anciennes structures depuis le cache (utilisé par buildDrivers / permis)
+  function getCondStore() {
+    return {
+      manuels: condCache.filter(r => r.manuel).map(r => ({ name: r.name, tel: r.tel, email: r.email, note: r.note })),
+      masques: condCache.filter(r => r.masque).map(r => r.key),
+    };
+  }
+  function getManualPermis() {
+    const out = {};
+    condCache.forEach(r => { if (r.permisUrl) out[r.key] = { url: r.permisUrl, fileId: r.permisFileId, name: 'Permis (ajouté manuellement)' }; });
+    return out;
+  }
+
+  // --- Fallback localStorage (si Supabase indisponible) ---
+  function persistCondToLS() {
+    const store = { manuels: condCache.filter(r => r.manuel).map(r => ({ name: r.name, tel: r.tel, email: r.email, note: r.note })), masques: condCache.filter(r => r.masque).map(r => r.key) };
+    const permis = {}; condCache.forEach(r => { if (r.permisUrl) permis[r.key] = { url: r.permisUrl, fileId: r.permisFileId }; });
+    localStorage.setItem(COND_KEY, JSON.stringify(store));
+    localStorage.setItem(PERMIS_KEY, JSON.stringify(permis));
+  }
+  function seedCondCacheFromLS() {
+    const store = (() => { try { return JSON.parse(localStorage.getItem(COND_KEY) || '{}'); } catch { return {}; } })();
+    const permis = (() => { try { return JSON.parse(localStorage.getItem(PERMIS_KEY) || '{}'); } catch { return {}; } })();
+    const map = {};
+    (store.manuels || []).forEach(m => { const k = normPrenom(m.name); if (!k) return; map[k] = { key: k, name: m.name, tel: m.tel, email: m.email, note: m.note, manuel: true }; });
+    (store.masques || []).forEach(k => { map[k] = map[k] || { key: k }; map[k].masque = true; });
+    Object.entries(permis).forEach(([k, p]) => { map[k] = map[k] || { key: k }; map[k].permisUrl = p.url; map[k].permisFileId = p.fileId; });
+    condCache = Object.values(map);
+  }
+  // Charge depuis Supabase ; migre le localStorage existant si la table est vide
+  function loadConducteurs() {
+    const done = () => { drivers = buildDrivers(); renderKPIs(); renderGrid(); if (currentDriverKey && $('drawer').classList.contains('open')) openDrawer(currentDriverKey); };
+    if (!(window.FP && FP.db && FP.supabase)) { seedCondCacheFromLS(); done(); return; }
+    FP.db.select('conducteurs').then(r => {
+      if (r.error) { seedCondCacheFromLS(); done(); return; }
+      if ((r.data || []).length === 0) {
+        seedCondCacheFromLS();
+        condCache.forEach(row => FP.persist.upsert('conducteurs', toCondDb(row))); // migration unique
+      } else {
+        condCache = r.data;
+      }
+      done();
+    });
+  }
   // Clé permis = prénom normalisé sans accents (cohérent avec FP_DOCS)
   function permisKeyOf(d){ return d.key.normalize('NFD').replace(/[̀-ͯ]/g, ''); }
   function sanitizeUrl(u){
@@ -314,6 +362,7 @@
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  seedCondCacheFromLS(); // affichage immédiat depuis le cache local (remplacé par Supabase au chargement)
   let drivers = buildDrivers();
 
   function initials(name) {
@@ -386,12 +435,10 @@
     let msg = `Supprimer ${items.length} conducteur${items.length > 1 ? 's' : ''} ?`;
     if (linked.length) msg += `\n\n${linked.length} d'entre eux ${linked.length > 1 ? 'sont liés' : 'est lié'} à des véhicules/amendes : ils seront retirés de la liste (les véhicules et amendes ne sont PAS supprimés).`;
     if (!confirm(msg)) return;
-    const store = getCondStore();
     items.forEach(d => {
-      if (d.vehicules.length + d.amendes.length > 0 && !store.masques.includes(d.key)) store.masques.push(d.key);
-      store.manuels = store.manuels.filter(m => normPrenom(m.name) !== d.key);
+      if (d.vehicules.length + d.amendes.length > 0) upsertCond(d.key, { masque: true, manuel: false, name: condRow(d.key) ? condRow(d.key).name : d.name });
+      else deleteCondRow(d.key);
     });
-    saveCondStore(store);
     state.selected.clear();
     drivers = buildDrivers();
     renderKPIs();
@@ -481,16 +528,14 @@
   function deleteDriver(key) {
     const d = drivers.find(x => x.key === key);
     if (!d) return;
-    const store = getCondStore();
     const linked = d.vehicules.length + d.amendes.length;
     if (linked === 0) {
       if (!confirm(`Supprimer le conducteur « ${d.name} » ?`)) return;
+      deleteCondRow(key);
     } else {
       if (!confirm(`« ${d.name} » est lié à ${d.vehicules.length} véhicule(s) et ${d.amendes.length} amende(s).\n\nLe retirer de la liste des conducteurs ?\n(Les véhicules et amendes ne sont PAS supprimés.)`)) return;
-      if (!store.masques.includes(key)) store.masques.push(key);
+      upsertCond(key, { masque: true, manuel: false, name: (condRow(key) && condRow(key).name) || d.name });
     }
-    store.manuels = store.manuels.filter(m => normPrenom(m.name) !== key);
-    saveCondStore(store);
     drivers = buildDrivers();
     closeDrawer();
     renderKPIs();
@@ -509,22 +554,21 @@
     e.preventDefault();
     const name = $('f-name').value.trim();
     if (!name) { alert('Le nom est obligatoire.'); return; }
-    const store = getCondStore();
-    store.manuels.push({
+    const key = normPrenom(name);
+    // Ajoute (ou réaffiche) le conducteur, masque levé
+    upsertCond(key, {
       name,
       tel: $('f-tel').value.trim(),
       email: $('f-email').value.trim(),
-      permis: $('f-permis').value.trim(),
       note: $('f-note').value.trim(),
+      manuel: true,
+      masque: false,
     });
-    // Si ce nom avait été masqué, on le ré-affiche
-    store.masques = store.masques.filter(k => k !== normPrenom(name));
-    saveCondStore(store);
     drivers = buildDrivers();
     closeModal();
     renderKPIs();
     renderGrid();
-    openDrawer(normPrenom(name));
+    openDrawer(key);
   }
 
   $('search').addEventListener('input', e => { state.search = e.target.value; renderGrid(); });
@@ -559,18 +603,17 @@
     if (addBtn) {
       const url = sanitizeUrl($('permis-url').value);
       if (!url) { alert('Merci de coller un lien valide (Google Drive de préférence).'); return; }
-      const all = getManualPermis();
-      all[addBtn.dataset.key] = { url, fileId: driveIdFromUrl(url), name: 'Permis (ajouté manuellement)' };
-      saveManualPermis(all);
+      const k = addBtn.dataset.key;
+      // si le conducteur n'existe pas encore dans la table, on garde son nom
+      const d = drivers.find(x => x.key === k);
+      upsertCond(k, { permisUrl: url, permisFileId: driveIdFromUrl(url), name: (condRow(k) && condRow(k).name) || (d && d.name) || k });
       openDrawer(currentDriverKey);
       return;
     }
 
     const delPermis = e.target.closest('[data-permis-del]');
     if (delPermis) {
-      const all = getManualPermis();
-      delete all[delPermis.dataset.permisDel];
-      saveManualPermis(all);
+      upsertCond(delPermis.dataset.permisDel, { permisUrl: null, permisFileId: null });
       openDrawer(currentDriverKey);
       return;
     }
@@ -589,6 +632,10 @@
   renderKPIs();
   renderGrid();
   lucide.createIcons();
+  loadConducteurs(); // charge conducteurs + permis depuis Supabase (et migre le local si besoin)
+
+  // Rafraîchit quand les véhicules/amendes Supabase arrivent (les conducteurs en dérivent)
+  document.addEventListener('fp:data-ready', () => { drivers = buildDrivers(); renderKPIs(); renderGrid(); });
 </script>
 </body>
 </html>

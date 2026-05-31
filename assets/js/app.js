@@ -190,6 +190,7 @@ FP.persist = {
     alert("⚠️ Action appliquée à l'écran, mais l'enregistrement dans la base a échoué :\n" + (e.message || e) + "\n\nÇa risque de ne pas être conservé après rechargement.");
   },
   async insert(table, row) { if (!this.available()) return; try { const r = await FP.db.insert(table, row); if (r && r.error) throw r.error; } catch (e) { this._err(e); } },
+  async upsert(table, row) { if (!this.available()) return; try { const r = await FP.db.upsert(table, row); if (r && r.error) throw r.error; } catch (e) { this._err(e); } },
   async update(table, id, fields) { if (!this.available()) return; try { const r = await FP.db.update(table, id, fields); if (r && r.error) throw r.error; } catch (e) { this._err(e); } },
   async delete(table, id) { if (!this.available()) return; try { const r = await FP.db.delete(table, id); if (r && r.error) throw r.error; } catch (e) { this._err(e); } },
 };
