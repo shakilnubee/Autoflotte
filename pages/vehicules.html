@@ -537,6 +537,67 @@
   // ---------- Helpers locaux ----------
   const $ = (id) => document.getElementById(id);
 
+  // ====== Documents véhicule (liens externes, persistés en localStorage) ======
+  const DOCS_KEY = 'fp_veh_documents';
+  const DOC_TYPES = [
+    { key: 'carte-grise',         label: 'Carte grise',              icon: 'file-badge' },
+    { key: 'assurance',           label: 'Assurance (carte verte)',  icon: 'shield' },
+    { key: 'controle-technique',  label: 'Contrôle technique',       icon: 'wrench' },
+    { key: 'contrat',             label: 'Contrat leasing/location', icon: 'file-text' },
+    { key: 'facture-achat',       label: "Facture d'achat",          icon: 'receipt' },
+    { key: 'etat-des-lieux',      label: 'État des lieux',           icon: 'clipboard-list' },
+    { key: 'autre',               label: 'Autre',                    icon: 'paperclip' },
+  ];
+  function getAllDocs(){ try { return JSON.parse(localStorage.getItem(DOCS_KEY) || '{}'); } catch { return {}; } }
+  function getVehDocs(id){ return getAllDocs()[id] || []; }
+  function saveVehDocs(id, docs){ const all = getAllDocs(); all[id] = docs; localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
+
+  function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function sanitizeUrl(u){
+    let url = (u || '').trim();
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url)) {
+      if (/^[\w.-]+\.[a-z]{2,}/i.test(url)) url = 'https://' + url; // ressemble à un domaine → on préfixe
+      else return '';
+    }
+    return url;
+  }
+
+  function docRowHTML(doc){
+    const t = DOC_TYPES.find(x => x.key === doc.type) || DOC_TYPES[DOC_TYPES.length - 1];
+    const href = escapeHtml(sanitizeUrl(doc.url));
+    return `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm" data-doc-id="${escapeHtml(doc.id)}">
+      <i data-lucide="${t.icon}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+      <div class="flex-1 min-w-0">
+        <a href="${href}" target="_blank" rel="noopener" class="font-medium hover:underline truncate block" style="color: var(--fp-accent)">${escapeHtml(doc.label || t.label)}</a>
+        <div class="text-xs text-slate-500">${t.label}${doc.date ? ' · ajouté le ' + FP.date(doc.date) : ''}</div>
+      </div>
+      <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-doc-del="${escapeHtml(doc.id)}" title="Supprimer ce document"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+    </div>`;
+  }
+
+  function docsSectionHTML(vehId){
+    const docs = getVehDocs(vehId);
+    const typeOptions = DOC_TYPES.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+    const rows = docs.length
+      ? docs.map(docRowHTML).join('')
+      : '<p class="text-sm text-slate-500">Aucun document pour le moment.</p>';
+    return `
+      <div>
+        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Documents (${docs.length})</div>
+        <div class="mt-3">${rows}</div>
+        <div class="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+          <div class="field-label !mb-0">Ajouter un document</div>
+          <select id="doc-type" class="field-input">${typeOptions}</select>
+          <input id="doc-label" class="field-input" placeholder="Nom (ex : Carte grise recto)" />
+          <input id="doc-url" class="field-input" placeholder="Coller le lien (Google Drive, Dropbox…)" />
+          <button type="button" id="doc-add" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter le document</button>
+          <p class="text-xs text-slate-400">Astuce : sur Google Drive, clic droit sur le fichier → « Obtenir le lien » → autoriser « tous ceux qui ont le lien ».</p>
+        </div>
+      </div>`;
+  }
+
+
   function ctCell(iso) {
     if (!iso || iso === '—') return '<span class="text-slate-400">—</span>';
     const jours = FP.joursRestants(iso);
@@ -1110,6 +1171,8 @@
         ${v.cgFileId ? `<a href="https://drive.google.com/file/d/${v.cgFileId}/view" target="_blank" rel="noopener" class="inline-flex items-center gap-1 mt-3 text-sm hover:underline" style="color: var(--fp-accent)"><i data-lucide="external-link" class="w-3.5 h-3.5"></i> Voir la carte grise sur Drive</a>` : ''}
       </div>
 
+      ${docsSectionHTML(v.id)}
+
       <div>
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Technique</div>
         <div class="text-sm space-y-1.5 mt-3">
@@ -1474,6 +1537,29 @@
       if (getVisibleColumns().includes(field)) renderTable();
     }
   });
+  // Ajout / suppression de documents (liens) dans la fiche véhicule
+  $('drawer-body').addEventListener('click', (e) => {
+    if (!state.editingId) return;
+    const del = e.target.closest('[data-doc-del]');
+    if (del) {
+      const docs = getVehDocs(state.editingId).filter(d => d.id !== del.dataset.docDel);
+      saveVehDocs(state.editingId, docs);
+      openDrawer(state.editingId);
+      return;
+    }
+    if (e.target.closest('#doc-add')) {
+      const body = $('drawer-body');
+      const type = body.querySelector('#doc-type').value;
+      const label = body.querySelector('#doc-label').value.trim();
+      const url = sanitizeUrl(body.querySelector('#doc-url').value);
+      if (!url) { alert('Merci de coller un lien valide (commençant par http:// ou https://).'); return; }
+      const docs = getVehDocs(state.editingId);
+      docs.push({ id: 'D' + Date.now().toString(36), type, label, url, date: new Date().toISOString().slice(0, 10) });
+      saveVehDocs(state.editingId, docs);
+      openDrawer(state.editingId);
+    }
+  });
+
   $('drawer-edit').addEventListener('click', () => {
     if (!state.editingId) return;
     const v = data.vehicules.find(x => x.id === state.editingId);

@@ -19,6 +19,12 @@
   .drawer.open { transform: translateX(0); }
   .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
   .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+  .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
+  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(20,184,166,.15); }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.5); display: none; align-items: center; justify-content: center; z-index: 70; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: white; border-radius: 1rem; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
 </style>
 <script>
 (function(){
@@ -59,9 +65,12 @@
 
   <main class="flex-1 p-6 md:p-10">
 
-    <div class="mb-8">
-      <h1 class="text-2xl font-extrabold" data-edit-key="conducteurs.title" style="color: var(--fp-primary)">Conducteurs</h1>
-      <p class="text-slate-500 text-sm mt-1" data-edit-key="conducteurs.subtitle">Vue par personne — véhicule, amendes, points perdus</p>
+    <div class="mb-8 flex justify-between items-start gap-3 flex-wrap">
+      <div>
+        <h1 class="text-2xl font-extrabold" data-edit-key="conducteurs.title" style="color: var(--fp-primary)">Conducteurs</h1>
+        <p class="text-slate-500 text-sm mt-1" data-edit-key="conducteurs.subtitle">Vue par personne — véhicule, amendes, points perdus</p>
+      </div>
+      <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="user-plus" class="w-4 h-4"></i> Nouveau conducteur</button>
     </div>
 
     <!-- KPIs -->
@@ -116,6 +125,44 @@
   <div class="p-6 space-y-5" id="drawer-body"></div>
 </aside>
 
+<!-- Modal nouveau conducteur -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold">Nouveau conducteur</h2>
+      <button class="p-2 hover:bg-slate-100 rounded-lg" id="modal-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="driver-form" class="space-y-4">
+      <div>
+        <div class="field-label">Nom complet *</div>
+        <input class="field-input" id="f-name" placeholder="Prénom Nom" required />
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Téléphone</div>
+          <input class="field-input" id="f-tel" type="tel" placeholder="06 12 34 56 78" />
+        </div>
+        <div>
+          <div class="field-label">N° de permis</div>
+          <input class="field-input" id="f-permis" placeholder="—" />
+        </div>
+      </div>
+      <div>
+        <div class="field-label">Email</div>
+        <input class="field-input" id="f-email" type="email" placeholder="prenom.nom@exemple.fr" />
+      </div>
+      <div>
+        <div class="field-label">Note <span class="text-slate-400 normal-case font-normal">(optionnel)</span></div>
+        <textarea class="field-input" id="f-note" rows="2" placeholder="Remarque libre…"></textarea>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="modal-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../assets/js/supabase-client.js"></script>
 <script src="../assets/js/data.js"></script>
@@ -126,11 +173,23 @@
   const $ = (id) => document.getElementById(id);
   const state = { search: '' };
 
+  function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
   // Normalisation des prénoms : "Maxime ", "Maxime T", "Maxime THOMPSON" → "Maxime"
   function normPrenom(s) {
     if (!s) return '';
     return s.toString().trim().split(/\s+/)[0].toLowerCase();
   }
+
+  // ====== Conducteurs ajoutés / masqués manuellement (localStorage) ======
+  const COND_KEY = 'fp_conducteurs';
+  function getCondStore(){
+    try {
+      const s = JSON.parse(localStorage.getItem(COND_KEY) || '{}');
+      return { manuels: Array.isArray(s.manuels) ? s.manuels : [], masques: Array.isArray(s.masques) ? s.masques : [] };
+    } catch { return { manuels: [], masques: [] }; }
+  }
+  function saveCondStore(s){ localStorage.setItem(COND_KEY, JSON.stringify(s)); }
 
   // Construit la liste des conducteurs depuis vehicules + amendes
   function buildDrivers() {
@@ -151,10 +210,29 @@
       if (!map.has(key)) map.set(key, { name: a.prenom.trim(), key, vehicules: [], amendes: [] });
       map.get(key).amendes.push(a);
     });
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+    // Conducteurs ajoutés manuellement (+ infos de contact, même pour ceux déjà connus)
+    const store = getCondStore();
+    store.manuels.forEach(m => {
+      const name = (m.name || '').trim();
+      if (!name) return;
+      const key = normPrenom(name);
+      if (!map.has(key)) map.set(key, { name, key, vehicules: [], amendes: [] });
+      const d = map.get(key);
+      d.manual = true;
+      if (m.tel)    d.tel    = m.tel;
+      if (m.email)  d.email  = m.email;
+      if (m.permis) d.permis = m.permis;
+      if (m.note)   d.note   = m.note;
+    });
+
+    // Masqués : retirés de la liste (sans supprimer véhicules/amendes)
+    return Array.from(map.values())
+      .filter(d => !store.masques.includes(d.key))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  const drivers = buildDrivers();
+  let drivers = buildDrivers();
 
   function initials(name) {
     return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
@@ -209,12 +287,21 @@
     const totalPaye = d.amendes.filter(a => a.statut === 'payée').reduce((s, a) => s + (a.montant || 0), 0);
     const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
 
+    const hasContact = d.tel || d.email || d.permis || d.note;
     $('drawer-body').innerHTML = `
       <div class="grid grid-cols-3 gap-3">
         <div class="kpi p-3"><div class="kpi-label">Points perdus</div><div class="kpi-value" style="font-size:1.3rem; color: var(--fp-danger)">${nbPoints}</div></div>
         <div class="kpi p-3"><div class="kpi-label">Payé</div><div class="kpi-value" style="font-size:1.1rem">${FP.euro(totalPaye)}</div></div>
         <div class="kpi p-3"><div class="kpi-label">À payer</div><div class="kpi-value" style="font-size:1.1rem; color: var(--fp-danger)">${FP.euro(dus)}</div></div>
       </div>
+
+      ${hasContact ? `
+      <div class="space-y-1.5 text-sm">
+        ${d.tel ? `<div class="flex justify-between"><span class="text-slate-600">Téléphone</span><a href="tel:${escapeHtml(d.tel)}" class="font-medium" style="color: var(--fp-accent)">${escapeHtml(d.tel)}</a></div>` : ''}
+        ${d.email ? `<div class="flex justify-between"><span class="text-slate-600">Email</span><a href="mailto:${escapeHtml(d.email)}" class="font-medium" style="color: var(--fp-accent)">${escapeHtml(d.email)}</a></div>` : ''}
+        ${d.permis ? `<div class="flex justify-between"><span class="text-slate-600">N° de permis</span><span class="font-medium">${escapeHtml(d.permis)}</span></div>` : ''}
+        ${d.note ? `<div class="pt-1 text-slate-600 italic">${escapeHtml(d.note)}</div>` : ''}
+      </div>` : ''}
 
       <div>
         <div class="font-semibold mb-2 border-b border-slate-200 pb-1">Véhicules (${d.vehicules.length})</div>
@@ -252,13 +339,67 @@
         }
         ${d.amendes.length > 20 ? `<p class="text-xs text-slate-500 mt-2">… et ${d.amendes.length - 20} de plus</p>` : ''}
       </div>
+
+      <div class="pt-2 border-t border-slate-100">
+        <button type="button" id="drawer-delete" data-key="${escapeHtml(d.key)}" class="btn text-sm text-red-600 hover:bg-red-50 w-full justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer ce conducteur</button>
+      </div>
     `;
 
     $('drawer').classList.add('open');
     $('drawer-backdrop').classList.add('open');
+    lucide.createIcons();
   }
 
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
+
+  function deleteDriver(key) {
+    const d = drivers.find(x => x.key === key);
+    if (!d) return;
+    const store = getCondStore();
+    const linked = d.vehicules.length + d.amendes.length;
+    if (linked === 0) {
+      if (!confirm(`Supprimer le conducteur « ${d.name} » ?`)) return;
+    } else {
+      if (!confirm(`« ${d.name} » est lié à ${d.vehicules.length} véhicule(s) et ${d.amendes.length} amende(s).\n\nLe retirer de la liste des conducteurs ?\n(Les véhicules et amendes ne sont PAS supprimés.)`)) return;
+      if (!store.masques.includes(key)) store.masques.push(key);
+    }
+    store.manuels = store.manuels.filter(m => normPrenom(m.name) !== key);
+    saveCondStore(store);
+    drivers = buildDrivers();
+    closeDrawer();
+    renderKPIs();
+    renderGrid();
+  }
+
+  // ---------- Modal nouveau conducteur ----------
+  function openModal() {
+    $('driver-form').reset();
+    $('modal-backdrop').classList.add('open');
+    $('f-name').focus();
+  }
+  function closeModal() { $('modal-backdrop').classList.remove('open'); }
+
+  function addDriver(e) {
+    e.preventDefault();
+    const name = $('f-name').value.trim();
+    if (!name) { alert('Le nom est obligatoire.'); return; }
+    const store = getCondStore();
+    store.manuels.push({
+      name,
+      tel: $('f-tel').value.trim(),
+      email: $('f-email').value.trim(),
+      permis: $('f-permis').value.trim(),
+      note: $('f-note').value.trim(),
+    });
+    // Si ce nom avait été masqué, on le ré-affiche
+    store.masques = store.masques.filter(k => k !== normPrenom(name));
+    saveCondStore(store);
+    drivers = buildDrivers();
+    closeModal();
+    renderKPIs();
+    renderGrid();
+    openDrawer(normPrenom(name));
+  }
 
   $('search').addEventListener('input', e => { state.search = e.target.value; renderGrid(); });
   $('drivers-grid').addEventListener('click', e => {
@@ -267,6 +408,19 @@
   });
   $('drawer-close').addEventListener('click', closeDrawer);
   $('drawer-backdrop').addEventListener('click', closeDrawer);
+
+  // Suppression depuis le drawer (bouton rendu dynamiquement)
+  $('drawer-body').addEventListener('click', e => {
+    const btn = e.target.closest('#drawer-delete');
+    if (btn) deleteDriver(btn.dataset.key);
+  });
+
+  // Modal nouveau conducteur
+  $('btn-new').addEventListener('click', openModal);
+  $('modal-close').addEventListener('click', closeModal);
+  $('modal-cancel').addEventListener('click', closeModal);
+  $('modal-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+  $('driver-form').addEventListener('submit', addDriver);
 
   renderKPIs();
   renderGrid();
