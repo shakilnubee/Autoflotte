@@ -75,6 +75,7 @@ FP.settings = {
       labels: {}, // { immat: 'Plaque', modele: 'Voiture', ... } — labels personnalisés
     },
     vehiculesRowOrder: [], // tableau d'IDs véhicules dans l'ordre souhaité par l'utilisateur
+    groupeOrder: [], // ordre d'affichage des onglets de groupes (clés) — vide = ordre par défaut
   },
   get() {
     try {
@@ -86,6 +87,7 @@ FP.settings = {
           ? stored.vehiculesColumns
           : { ...this.defaults.vehiculesColumns },
         vehiculesRowOrder: Array.isArray(stored.vehiculesRowOrder) ? stored.vehiculesRowOrder : [],
+        groupeOrder: Array.isArray(stored.groupeOrder) ? stored.groupeOrder : [],
         sidebarLabels: (stored.sidebarLabels && typeof stored.sidebarLabels === 'object') ? stored.sidebarLabels : {},
         customTexts: (stored.customTexts && typeof stored.customTexts === 'object') ? stored.customTexts : {},
       };
@@ -123,7 +125,14 @@ FP.groupeColor = (key) => {
   const k = key || 'non-classe';
   return (FP.settings.get().groupes[k] || FP.settings.defaults.groupes['non-classe']).color;
 };
-FP.groupeKeys = () => Object.keys(FP.settings.defaults.groupes);
+FP.groupeKeys = () => {
+  const allKeys = Object.keys(FP.settings.defaults.groupes);
+  const order = FP.settings.get().groupeOrder;
+  if (!Array.isArray(order) || !order.length) return allKeys;
+  const valid = order.filter(k => allKeys.includes(k));         // garde uniquement les clés connues
+  const missing = allKeys.filter(k => !valid.includes(k));      // n'oublie aucun groupe
+  return [...valid, ...missing];
+};
 
 // === Labels des onglets sidebar (personnalisables via Paramètres) ===
 FP.DEFAULT_NAV_LABELS = {
