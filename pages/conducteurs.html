@@ -225,6 +225,54 @@
   }
   function saveCondStore(s){ localStorage.setItem(COND_KEY, JSON.stringify(s)); }
 
+  // ====== Permis ajoutés manuellement (liens Drive, localStorage) ======
+  const PERMIS_KEY = 'fp_permis';
+  function getManualPermis(){ try { return JSON.parse(localStorage.getItem(PERMIS_KEY) || '{}'); } catch { return {}; } }
+  function saveManualPermis(all){ localStorage.setItem(PERMIS_KEY, JSON.stringify(all)); }
+  // Clé permis = prénom normalisé sans accents (cohérent avec FP_DOCS)
+  function permisKeyOf(d){ return d.key.normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+  function sanitizeUrl(u){
+    let url = (u || '').trim();
+    if (!url) return '';
+    if (!/^https?:\/\//i.test(url)) {
+      if (/^[\w.-]+\.[a-z]{2,}/i.test(url)) url = 'https://' + url; else return '';
+    }
+    return url;
+  }
+  function driveIdFromUrl(url){
+    const m = String(url || '').match(/\/d\/([A-Za-z0-9_-]{20,})/) || String(url || '').match(/[?&]id=([A-Za-z0-9_-]{20,})/);
+    return m ? m[1] : null;
+  }
+
+  function permisSectionHTML(d){
+    const key = permisKeyOf(d);
+    const manual = getManualPermis()[key];
+    const builtin = (window.FP_DOCS && FP_DOCS.permis) ? FP_DOCS.permis[key] : null;
+    const eff = manual || builtin;
+    let body;
+    if (eff) {
+      const driveId = eff.fileId || eff.id || null;
+      const name = eff.name || 'Permis';
+      const action = driveId
+        ? `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-permis-view="${escapeHtml(driveId)}" data-permis-title="Permis — ${escapeHtml(d.name)}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`
+        : `<a class="btn btn-outline !py-1 !px-2.5 text-xs" href="${escapeHtml(sanitizeUrl(eff.url))}" target="_blank" rel="noopener"><i data-lucide="external-link" class="w-3.5 h-3.5"></i> Ouvrir</a>`;
+      body = `<div class="flex items-center gap-2 py-1 text-sm">
+        <i data-lucide="id-card" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+        <div class="flex-1 min-w-0"><div class="font-medium truncate">${escapeHtml(name)}</div><div class="text-xs text-slate-500">${manual ? 'Ajouté manuellement' : 'Google Drive'}</div></div>
+        ${action}
+        ${manual ? `<button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-permis-del="${escapeHtml(key)}" title="Supprimer ce permis"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+      </div>`;
+    } else {
+      body = '<p class="text-sm text-slate-500">Aucun permis pour ce conducteur.</p>';
+    }
+    const form = `<div class="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+        <div class="field-label !mb-0">${eff ? 'Remplacer le permis' : 'Ajouter un permis'}</div>
+        <input id="permis-url" class="field-input" placeholder="Coller le lien Drive du permis" />
+        <button type="button" id="permis-add" class="btn btn-dark text-sm w-full justify-center" data-key="${escapeHtml(key)}"><i data-lucide="plus" class="w-4 h-4"></i> Enregistrer le permis</button>
+      </div>`;
+    return `<div><div class="font-semibold mb-2 border-b border-slate-200 pb-1">Permis de conduire</div>${body}${form}</div>`;
+  }
+
   // Construit la liste des conducteurs depuis vehicules + amendes
   function buildDrivers() {
     const map = new Map();
@@ -350,9 +398,11 @@
     renderGrid();
   }
 
+  let currentDriverKey = null;
   function openDrawer(key) {
     const d = drivers.find(x => x.key === key);
     if (!d) return;
+    currentDriverKey = key;
     $('drawer-avatar').textContent = initials(d.name);
     $('drawer-name').textContent = d.name;
     $('drawer-sub').textContent = `${d.vehicules.length} véhicule${d.vehicules.length > 1 ? 's' : ''} · ${d.amendes.length} amende${d.amendes.length > 1 ? 's' : ''}`;
@@ -362,8 +412,6 @@
     const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
 
     const hasContact = d.tel || d.email || d.permis || d.note;
-    const permisLookupKey = d.key.normalize('NFD').replace(/[̀-ͯ]/g, ''); // clés FP_DOCS sans accents
-    const permisDoc = (window.FP_DOCS && FP_DOCS.permis) ? FP_DOCS.permis[permisLookupKey] : null;
     $('drawer-body').innerHTML = `
       <div class="grid grid-cols-3 gap-3">
         <div class="kpi p-3"><div class="kpi-label">Points perdus</div><div class="kpi-value" style="font-size:1.3rem; color: var(--fp-danger)">${nbPoints}</div></div>
@@ -379,16 +427,7 @@
         ${d.note ? `<div class="pt-1 text-slate-600 italic">${escapeHtml(d.note)}</div>` : ''}
       </div>` : ''}
 
-      <div>
-        <div class="font-semibold mb-2 border-b border-slate-200 pb-1">Permis de conduire</div>
-        ${permisDoc
-          ? `<div class="flex items-center gap-2 py-1 text-sm">
-               <i data-lucide="id-card" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
-               <div class="flex-1 min-w-0"><div class="font-medium truncate">${escapeHtml(permisDoc.name)}</div><div class="text-xs text-slate-500">Google Drive</div></div>
-               <button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-permis-view="${escapeHtml(permisDoc.id)}" data-permis-title="Permis — ${escapeHtml(d.name)}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>
-             </div>`
-          : '<p class="text-sm text-slate-500">Aucun permis trouvé pour ce conducteur.</p>'}
-      </div>
+      ${permisSectionHTML(d)}
 
       <div>
         <div class="font-semibold mb-2 border-b border-slate-200 pb-1">Véhicules (${d.vehicules.length})</div>
@@ -511,10 +550,31 @@
   $('viewer-close').addEventListener('click', closeViewer);
   $('viewer-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeViewer(); });
 
-  // Clics dans le drawer : voir le permis ou supprimer le conducteur
+  // Clics dans le drawer : voir / ajouter / supprimer un permis, ou supprimer le conducteur
   $('drawer-body').addEventListener('click', e => {
     const view = e.target.closest('[data-permis-view]');
     if (view) { openViewer(view.dataset.permisView, view.dataset.permisTitle); return; }
+
+    const addBtn = e.target.closest('#permis-add');
+    if (addBtn) {
+      const url = sanitizeUrl($('permis-url').value);
+      if (!url) { alert('Merci de coller un lien valide (Google Drive de préférence).'); return; }
+      const all = getManualPermis();
+      all[addBtn.dataset.key] = { url, fileId: driveIdFromUrl(url), name: 'Permis (ajouté manuellement)' };
+      saveManualPermis(all);
+      openDrawer(currentDriverKey);
+      return;
+    }
+
+    const delPermis = e.target.closest('[data-permis-del]');
+    if (delPermis) {
+      const all = getManualPermis();
+      delete all[delPermis.dataset.permisDel];
+      saveManualPermis(all);
+      openDrawer(currentDriverKey);
+      return;
+    }
+
     const btn = e.target.closest('#drawer-delete');
     if (btn) deleteDriver(btn.dataset.key);
   });
