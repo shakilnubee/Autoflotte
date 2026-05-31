@@ -38,10 +38,17 @@
       <div class="field">
         <label for="password">Mot de passe</label>
         <input type="password" id="password" autocomplete="current-password" required placeholder="••••••••" />
+        <div class="text-right mt-1">
+          <a href="#" id="forgot" class="text-xs font-semibold" style="color: var(--fp-accent)">Mot de passe oublié ?</a>
+        </div>
       </div>
-      <label class="flex items-center gap-2 mb-5 cursor-pointer text-sm text-slate-600">
+      <label class="flex items-center gap-2 mb-2 cursor-pointer text-sm text-slate-600">
         <input type="checkbox" id="remember-me" checked class="w-4 h-4 accent-teal-600" />
-        <span>Se souvenir de moi</span>
+        <span>Se souvenir de moi (rester connecté)</span>
+      </label>
+      <label class="flex items-center gap-2 mb-5 cursor-pointer text-sm text-slate-600">
+        <input type="checkbox" id="remember-pwd" class="w-4 h-4 accent-teal-600" />
+        <span>Retenir mon mot de passe sur cet appareil</span>
       </label>
       <button type="submit" class="btn btn-dark w-full justify-center" id="btn-login">
         <i data-lucide="log-in" class="w-4 h-4"></i> Se connecter
@@ -59,6 +66,10 @@
     const SUPABASE_KEY = 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq';
     const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    // Petit (dé)brouillage pour ne pas stocker le mot de passe en clair évident
+    const enc = (s) => { try { return btoa(unescape(encodeURIComponent(s))); } catch { return ''; } };
+    const dec = (s) => { try { return decodeURIComponent(escape(atob(s))); } catch { return ''; } };
+
     // Pré-remplir l'email si "Se souvenir de moi" était activé la dernière fois
     const savedEmail = localStorage.getItem('fp_remember_email');
     const savedRemember = localStorage.getItem('fp_remember_me') === '1';
@@ -66,6 +77,31 @@
       document.getElementById('email').value = savedEmail;
       document.getElementById('remember-me').checked = true;
     }
+    // Pré-remplir le mot de passe s'il a été retenu sur cet appareil
+    const savedPwd = localStorage.getItem('fp_remember_pwd');
+    if (savedPwd) {
+      document.getElementById('password').value = dec(savedPwd);
+      document.getElementById('remember-pwd').checked = true;
+    }
+
+    // Lien "Mot de passe oublié ?" → envoie un email de réinitialisation
+    document.getElementById('forgot').addEventListener('click', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value.trim();
+      if (!email) { alert('Saisis d\'abord ton email ci-dessus, puis reclique sur « Mot de passe oublié ? ».'); return; }
+      const { error } = await client.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split('#')[0].split('?')[0] });
+      alert(error ? ('Erreur : ' + error.message) : ('Email de réinitialisation envoyé à ' + email + '.\nOuvre le lien dans le mail pour choisir un nouveau mot de passe.'));
+    });
+
+    // Retour depuis le lien de réinitialisation : on demande le nouveau mot de passe
+    client.auth.onAuthStateChange(async (event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        const newPwd = prompt('Choisis ton nouveau mot de passe (6 caractères minimum) :');
+        if (!newPwd) return;
+        const { error } = await client.auth.updateUser({ password: newPwd });
+        alert(error ? ('Erreur : ' + error.message) : 'Mot de passe mis à jour ✓ Tu peux maintenant te connecter.');
+      }
+    });
 
     // Si déjà connecté, redirige automatiquement vers le dashboard
     client.auth.getSession().then(({ data: { session } }) => {
@@ -105,6 +141,12 @@
       } else {
         localStorage.setItem('fp_remember_me', '0');
         localStorage.removeItem('fp_remember_email');
+      }
+      // Retenir (ou oublier) le mot de passe sur cet appareil
+      if (document.getElementById('remember-pwd').checked) {
+        localStorage.setItem('fp_remember_pwd', enc(password));
+      } else {
+        localStorage.removeItem('fp_remember_pwd');
       }
       // Marqueur de session active (sera vidé à la fermeture du browser)
       sessionStorage.setItem('fp_session_alive', '1');
