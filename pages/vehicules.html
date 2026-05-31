@@ -1035,8 +1035,8 @@
           if (!def) return '';
           return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''}>${def.render(v)}</td>`;
         }).join('');
-        return `<tr class="cursor-pointer${state.selectedIds.has(v.id) ? ' row-selected' : ''}" draggable="true" data-id="${v.id}">
-          <td class="cb-col"><span class="row-drag-handle" title="Glisser pour réorganiser">⋮⋮</span><input type="checkbox" class="row-cb" data-id="${v.id}" ${state.selectedIds.has(v.id) ? 'checked' : ''} /></td>
+        return `<tr class="cursor-pointer${state.selectedIds.has(v.id) ? ' row-selected' : ''}" data-id="${v.id}">
+          <td class="cb-col"><span class="row-drag-handle" draggable="true" title="Glisser pour réorganiser">⋮⋮</span><input type="checkbox" class="row-cb" data-id="${v.id}" ${state.selectedIds.has(v.id) ? 'checked' : ''} /></td>
           ${cells}
           <td class="text-right">
             <button class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700" data-action="open" data-id="${v.id}">
@@ -1458,17 +1458,12 @@
     });
   }
 
-  // Le drag de ligne ne démarre QUE depuis la poignée ⋮⋮ : ainsi les cases à cocher
-  // (et les clics sur la ligne) ne sont jamais capturés par le drag.
-  let dragAllowed = false;
-  $('vehicules-tbody').addEventListener('mousedown', (e) => {
-    dragAllowed = !!e.target.closest('.row-drag-handle');
-  });
-
+  // Seule la poignée ⋮⋮ est draggable (la ligne ne l'est PAS) : ainsi les cases à
+  // cocher et les clics sur la ligne ne sont jamais interceptés par le drag.
   $('vehicules-tbody').addEventListener('dragstart', (e) => {
-    if (!dragAllowed) { e.preventDefault(); return; }
-    const tr = e.target.closest('tr[data-id]');
-    if (!tr) return;
+    const handle = e.target.closest('.row-drag-handle');
+    const tr = handle ? handle.closest('tr[data-id]') : null;
+    if (!tr) { e.preventDefault(); return; }
     draggedRowId = tr.dataset.id;
     tr.classList.add('row-dragging');
     e.dataTransfer.effectAllowed = 'move';
