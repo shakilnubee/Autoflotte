@@ -396,14 +396,22 @@
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
 
+  function nextAmendeId() {
+    let max = 0;
+    data.amendes.forEach(a => { const m = /^AM-(\d+)$/.exec(a.id || ''); if (m) max = Math.max(max, +m[1]); });
+    return 'AM-' + String(max + 1).padStart(4, '0');
+  }
+
   function markPaid() {
     if (!state.currentId) return;
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a) return;
     FP.history.commit();
     a.statut = 'payée';
+    const id = a.id;
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { statut: 'payée' });
   }
   function deleteAmende() {
     if (!state.currentId) return;
@@ -411,10 +419,12 @@
     if (!a) return;
     if (!confirm(`Supprimer cette amende (${a.id}) ?`)) return;
     FP.history.commit();
-    data.amendes = data.amendes.filter(x => x.id !== state.currentId);
+    const id = a.id;
+    data.amendes = data.amendes.filter(x => x.id !== id);
     state.currentId = null;
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
+    FP.persist.delete('amendes', id);
   }
 
   // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
@@ -424,14 +434,16 @@
     const montantStr = prompt('Montant (€) ?', '0'); if (montantStr === null) return;
     const date = prompt('Date (YYYY-MM-DD) ?', new Date().toISOString().slice(0,10)); if (date === null) return;
     FP.history.commit();
-    const id = 'AM-' + String(data.amendes.length + 1).padStart(4, '0');
-    data.amendes.push({
-      id, date, annee: date.slice(0,4),
+    const newA = {
+      id: nextAmendeId(), date, annee: (date || '').slice(0, 4),
       prenom: prenom.trim(), numeroAvis: '', motif: motif.trim(),
       montant: parseFloat(montantStr) || 0, retraitPoints: false,
       statut: 'à payer', commentaire: ''
-    });
+    };
+    data.amendes.push(newA);
     renderKPIs(); renderTable(); renderCharts();
+    const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
+    FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: null, commentaire: null });
   }
 
   // ---------- Export CSV ----------
@@ -505,6 +517,9 @@
   renderKPIs();
   renderTable();
   renderCharts();
+
+  // Rafraîchit quand les données Supabase arrivent (ajouts/suppressions d'autres appareils)
+  document.addEventListener('fp:data-ready', () => { renderKPIs(); renderTable(); renderCharts(); });
 </script>
 </body>
 </html>
