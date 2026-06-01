@@ -149,6 +149,7 @@ FP.DEFAULT_NAV_LABELS = {
   'notifications.html': 'Notifications',
   'statistiques.html': 'Statistiques',
   'vehicules.html':    'Véhicules',
+  'emprunts.html':     'Emprunt véhicule',
   'conducteurs.html':  'Conducteurs',
   'amendes.html':      'Amendes',
   'sinistres.html':    'Sinistres',
