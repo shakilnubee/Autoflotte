@@ -167,6 +167,18 @@
 
     </div>
 
+    <!-- Graphiques répartition / conducteurs -->
+    <div class="grid lg:grid-cols-2 gap-6 mt-6">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Véhicules par groupe</h3>
+        <div style="position: relative; height: 260px"><canvas id="groupesChart"></canvas></div>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Top conducteurs — amendes 2026</h3>
+        <div style="position: relative; height: 260px"><canvas id="topConducteursChart"></canvas></div>
+      </div>
+    </div>
+
     <!-- Alertes + Véhicules récents -->
     <div class="grid lg:grid-cols-3 gap-6 mt-6">
 
@@ -387,6 +399,52 @@
       maintainAspectRatio: false, responsive: true,
     }
   });
+
+  // === Camembert : véhicules par groupe ===
+  (function () {
+    const keys = FP.groupeKeys();
+    const counts = keys.map(k => data.vehicules.filter(v => FP.vehGroupes(v).includes(k)).length);
+    // on n'affiche que les groupes non vides
+    const labels = [], values = [], colors = [];
+    keys.forEach((k, i) => { if (counts[i] > 0) { labels.push(FP.groupeLabel(k)); values.push(counts[i]); colors.push(FP.groupeColor(k)); } });
+    const el = document.getElementById('groupesChart');
+    if (el && values.length) {
+      new Chart(el.getContext('2d'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+        options: {
+          plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 12 } } } },
+          maintainAspectRatio: false, responsive: true, cutout: '58%',
+        }
+      });
+    }
+  })();
+
+  // === Top conducteurs — amendes 2026 ===
+  (function () {
+    const NP = new Set(['siege', 'depot', 'navette', 'vendu', 'x', 'fenwick', '']);
+    const key = s => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
+    const byDriver = {};
+    (data.amendes || []).filter(a => a.annee === '2026').forEach(a => {
+      const k = key(a.prenom); if (!k || NP.has(k)) return;
+      byDriver[k] = byDriver[k] || { nom: a.prenom.trim(), n: 0 };
+      byDriver[k].n++;
+    });
+    const top = Object.values(byDriver).sort((a, b) => b.n - a.n).slice(0, 8);
+    const el = document.getElementById('topConducteursChart');
+    if (el && top.length) {
+      new Chart(el.getContext('2d'), {
+        type: 'bar',
+        data: { labels: top.map(d => d.nom), datasets: [{ label: 'Amendes', data: top.map(d => d.n), backgroundColor: '#F59E0B', borderRadius: 5 }] },
+        options: {
+          indexAxis: 'y',
+          plugins: { legend: { display: false } },
+          scales: { x: { grid: { color: '#F1F5F9' }, ticks: { precision: 0 } }, y: { grid: { display: false } } },
+          maintainAspectRatio: false, responsive: true,
+        }
+      });
+    }
+  })();
 
   // Re-init icons
   lucide.createIcons();
