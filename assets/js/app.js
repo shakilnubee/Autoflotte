@@ -242,10 +242,10 @@ FP.buildAlertes = (data) => {
     if (isNaN(d)) return;
     const diff = days(v.prochainCT);
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
-    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff });
-    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff });
-    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff });
-    else if (diff < 90)  out.push({ niveau: 'info',   categorie: 'Contrôle technique', message: `CT dans ~2 mois (${diff}j)`, detail: veh, sort: diff });
+    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff, target: 'vehicules.html' });
+    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: 'vehicules.html' });
+    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: 'vehicules.html' });
+    else if (diff < 90)  out.push({ niveau: 'info',   categorie: 'Contrôle technique', message: `CT dans ~2 mois (${diff}j)`, detail: veh, sort: diff, target: 'vehicules.html' });
   });
 
   // --- Amendes à payer ---
@@ -258,13 +258,14 @@ FP.buildAlertes = (data) => {
       message: `${amAPayer.length} amende${amAPayer.length > 1 ? 's' : ''} à payer`,
       detail: `${FP.euro(totalDu)} dus au total`,
       sort: 1000,
+      target: 'amendes.html?filtre=apayer',
     });
   }
 
   // --- Véhicules sans dernière révision enregistrée (info) ---
   const sansRev = (data.vehicules || []).filter(v => v.statut === 'actif' && (!v.derniereRevision || v.derniereRevision === '—') && (!v.chauffeur || v.chauffeur !== 'VENDU')).length;
   if (sansRev > 5) {
-    out.push({ niveau: 'info', categorie: 'Maintenance', message: `${sansRev} véhicules sans dernière révision enregistrée`, detail: 'À compléter pour le suivi maintenance', sort: 2000 });
+    out.push({ niveau: 'info', categorie: 'Maintenance', message: `${sansRev} véhicules sans dernière révision enregistrée`, detail: 'À compléter pour le suivi maintenance', sort: 2000, target: 'vehicules.html' });
   }
 
   const order = { danger: 0, warn: 1, info: 2 };
