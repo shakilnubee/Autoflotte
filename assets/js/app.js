@@ -145,7 +145,8 @@ FP.groupeKeysVisible = () => {
 
 // === Labels des onglets sidebar (personnalisables via Paramètres) ===
 FP.DEFAULT_NAV_LABELS = {
-  'dashboard.html':    'Tableau de bord',
+  'dashboard.html':     'Tableau de bord',
+  'notifications.html': 'Notifications',
   'statistiques.html': 'Statistiques',
   'vehicules.html':    'Véhicules',
   'conducteurs.html':  'Conducteurs',
