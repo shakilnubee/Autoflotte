@@ -228,7 +228,48 @@ FP.enableNavReorder = () => {
   });
 };
 
-// === Persistance Supabase générique (utilisée par les pages pour enregistrer les mutations) ===
+// === Construction des alertes (partagé dashboard + page Notifications) ===
+FP.buildAlertes = (data) => {
+  const out = [];
+  const today = new Date();
+  const days = (d) => Math.ceil((new Date(d) - today) / (1000 * 60 * 60 * 24));
+
+  // --- Contrôles techniques ---
+  (data.vehicules || []).forEach(v => {
+    if (!v.prochainCT || v.prochainCT === '—') return;
+    const d = new Date(v.prochainCT);
+    if (isNaN(d)) return;
+    const diff = days(v.prochainCT);
+    const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
+    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff });
+    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff });
+    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff });
+    else if (diff < 90)  out.push({ niveau: 'info',   categorie: 'Contrôle technique', message: `CT dans ~2 mois (${diff}j)`, detail: veh, sort: diff });
+  });
+
+  // --- Amendes à payer ---
+  const amAPayer = (data.amendes || []).filter(a => a.statut === 'à payer');
+  if (amAPayer.length > 0) {
+    const totalDu = amAPayer.reduce((s, a) => s + (a.montant || 0), 0);
+    out.push({
+      niveau: totalDu > 500 ? 'warn' : 'info',
+      categorie: 'Amendes',
+      message: `${amAPayer.length} amende${amAPayer.length > 1 ? 's' : ''} à payer`,
+      detail: `${FP.euro(totalDu)} dus au total`,
+      sort: 1000,
+    });
+  }
+
+  // --- Véhicules sans dernière révision enregistrée (info) ---
+  const sansRev = (data.vehicules || []).filter(v => v.statut === 'actif' && (!v.derniereRevision || v.derniereRevision === '—') && (!v.chauffeur || v.chauffeur !== 'VENDU')).length;
+  if (sansRev > 5) {
+    out.push({ niveau: 'info', categorie: 'Maintenance', message: `${sansRev} véhicules sans dernière révision enregistrée`, detail: 'À compléter pour le suivi maintenance', sort: 2000 });
+  }
+
+  const order = { danger: 0, warn: 1, info: 2 };
+  out.sort((a, b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
+  return out;
+};
 FP.persist = {
   available() { return !!(FP.db && FP.supabase); },
   _err(e) {

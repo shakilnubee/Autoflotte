@@ -105,18 +105,18 @@
           </div>
         </div>
       </div>
-      <div class="kpi">
+      <a href="pages/notifications.html" class="kpi" style="cursor:pointer" title="Voir le détail des alertes">
         <div class="flex justify-between items-start">
           <div>
             <div class="kpi-label">Alertes</div>
             <div class="kpi-value" id="kpi-alertes" style="color: var(--fp-danger)">—</div>
-            <div class="kpi-delta" style="color: var(--fp-danger)">à traiter</div>
+            <div class="kpi-delta" style="color: var(--fp-danger)">à traiter · voir le détail →</div>
           </div>
           <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#FEF2F2; color: var(--fp-danger)">
             <i data-lucide="alert-triangle"></i>
           </div>
         </div>
-      </div>
+      </a>
     </div>
 
     <!-- Indicateurs détaillés (repliés par défaut) -->
@@ -185,7 +185,7 @@
       <div class="card p-6">
         <div class="flex justify-between items-center mb-4">
           <h3 class="font-bold text-slate-900">Alertes</h3>
-          <span class="badge badge-danger" id="alertes-count">—</span>
+          <a href="pages/notifications.html" class="text-sm font-semibold" style="color: var(--fp-accent)">Tout voir →</a>
         </div>
         <div class="space-y-2" id="alertes-list"></div>
       </div>
@@ -262,59 +262,11 @@
   document.getElementById('kpi-couts').textContent = FP.euro(coutsMois);
 
   // === Alertes générées dynamiquement ===
-  function buildAlertes() {
-    const out = [];
-    const today = new Date();
-    const days = (d) => Math.ceil((new Date(d) - today) / (1000*60*60*24));
-
-    // --- CT ---
-    data.vehicules.forEach(v => {
-      if (!v.prochainCT || v.prochainCT === '—') return;
-      const d = new Date(v.prochainCT);
-      if (isNaN(d)) return;
-      const diff = days(v.prochainCT);
-      const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
-      if (diff < 0)        out.push({ niveau: 'danger', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff });
-      else if (diff < 30)  out.push({ niveau: 'danger', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff });
-      else if (diff < 60)  out.push({ niveau: 'warn',   message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff });
-      else if (diff < 90)  out.push({ niveau: 'info',   message: `CT dans ~2 mois (${diff}j)`, detail: veh, sort: diff });
-    });
-
-    // --- Amendes à payer ---
-    const amAPayer = (data.amendes || []).filter(a => a.statut === 'à payer');
-    if (amAPayer.length > 0) {
-      const totalDu = amAPayer.reduce((s,a) => s + (a.montant || 0), 0);
-      out.push({
-        niveau: totalDu > 500 ? 'warn' : 'info',
-        message: `${amAPayer.length} amende${amAPayer.length > 1 ? 's' : ''} à payer`,
-        detail: `${FP.euro(totalDu)} dus au total`,
-        sort: 1000,
-      });
-    }
-
-    // --- Véhicules sans dernière révision enregistrée (info) ---
-    const sansRev = data.vehicules.filter(v => v.statut === 'actif' && (!v.derniereRevision || v.derniereRevision === '—') && (!v.chauffeur || v.chauffeur !== 'VENDU')).length;
-    if (sansRev > 5) {
-      out.push({
-        niveau: 'info',
-        message: `${sansRev} véhicules sans dernière révision enregistrée`,
-        detail: 'À compléter pour le suivi maintenance',
-        sort: 2000,
-      });
-    }
-
-    // Tri : danger → warn → info, puis par urgence interne
-    const order = { 'danger': 0, 'warn': 1, 'info': 2 };
-    out.sort((a,b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
-    return out;
-  }
-
-  const alerts = buildAlertes();
+  const alerts = FP.buildAlertes(data);
   const critiques = alerts.filter(a => a.niveau === 'danger' || a.niveau === 'warn').length;
 
   // KPI : on affiche le nombre critique (rouges + oranges) car les info sont des "à savoir" pas des "à traiter"
   document.getElementById('kpi-alertes').textContent = critiques;
-  document.getElementById('alertes-count').textContent = alerts.length;
 
   // Rendu
   const alertesHtml = alerts.map(a => {

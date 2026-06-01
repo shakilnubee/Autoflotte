@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notifications — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; }
+  .notif + .notif { margin-top: .6rem; }
+  .notif.lvl-danger { border-left: 4px solid var(--fp-danger); }
+  .notif.lvl-warn { border-left: 4px solid var(--fp-warn); }
+  .notif.lvl-info { border-left: 4px solid #3B82F6; }
+  .notif-cat { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--fp-muted); }
+</style>
+<script>
+(function(){
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10 max-w-3xl">
+
+    <div class="mb-8">
+      <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)">Notifications</h1>
+      <p class="text-slate-500 text-sm mt-1">Le détail des alertes de ta flotte — ce qui demande ton attention.</p>
+    </div>
+
+    <!-- À traiter -->
+    <div class="mb-8">
+      <h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600"></i> À traiter
+        <span class="badge badge-danger" id="cnt-traiter">0</span>
+      </h2>
+      <div id="list-traiter"></div>
+    </div>
+
+    <!-- Pour information -->
+    <div>
+      <h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
+        <i data-lucide="info" class="w-5 h-5 text-blue-600"></i> Pour information
+        <span class="badge" style="background:#DBEAFE;color:#1E3A8A" id="cnt-info">0</span>
+      </h2>
+      <div id="list-info"></div>
+    </div>
+
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/supabase-client.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  lucide.createIcons();
+  const data = window.FP_DATA;
+
+  function notifHTML(a) {
+    const icon = a.niveau === 'danger' ? 'alert-triangle' : a.niveau === 'warn' ? 'bell' : 'info';
+    const color = a.niveau === 'danger' ? 'text-red-600' : a.niveau === 'warn' ? 'text-amber-600' : 'text-blue-600';
+    return `<div class="notif lvl-${a.niveau}">
+      <i data-lucide="${icon}" class="w-5 h-5 ${color} flex-shrink-0 mt-0.5"></i>
+      <div class="flex-1 min-w-0">
+        ${a.categorie ? `<div class="notif-cat">${a.categorie}</div>` : ''}
+        <div class="font-semibold text-slate-900">${a.message}</div>
+        ${a.detail ? `<div class="text-sm text-slate-500 mt-0.5">${a.detail}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  function render() {
+    const alerts = FP.buildAlertes(data);
+    const traiter = alerts.filter(a => a.niveau === 'danger' || a.niveau === 'warn');
+    const info = alerts.filter(a => a.niveau === 'info');
+    document.getElementById('cnt-traiter').textContent = traiter.length;
+    document.getElementById('cnt-info').textContent = info.length;
+    document.getElementById('list-traiter').innerHTML = traiter.map(notifHTML).join('') || '<p class="text-sm text-slate-500">Rien à traiter pour le moment ✓</p>';
+    document.getElementById('list-info').innerHTML = info.map(notifHTML).join('') || '<p class="text-sm text-slate-500">Aucune information.</p>';
+    lucide.createIcons();
+  }
+
+  render();
+  document.addEventListener('fp:data-ready', render);
+</script>
+</body>
+</html>
