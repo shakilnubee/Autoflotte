@@ -84,12 +84,12 @@
       <div class="kpi">
         <div class="flex justify-between items-start">
           <div>
-            <div class="kpi-label">Km cumulés</div>
-            <div class="kpi-value" id="kpi-km">—</div>
-            <div class="kpi-delta">cette flotte</div>
+            <div class="kpi-label">Conducteurs</div>
+            <div class="kpi-value" id="kpi-conducteurs">—</div>
+            <div class="kpi-delta">avec véhicule ou amende</div>
           </div>
           <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#ECFEFF; color: var(--fp-accent)">
-            <i data-lucide="gauge"></i>
+            <i data-lucide="users"></i>
           </div>
         </div>
       </div>
@@ -115,6 +115,35 @@
           <div class="w-10 h-10 rounded-lg flex items-center justify-center" style="background:#FEF2F2; color: var(--fp-danger)">
             <i data-lucide="alert-triangle"></i>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Indicateurs détaillés (repliés par défaut) -->
+    <div class="mt-4">
+      <button id="toggle-details" class="text-sm font-semibold inline-flex items-center gap-1.5" style="color: var(--fp-accent)">
+        <i data-lucide="chevron-right" id="details-chevron" class="w-4 h-4"></i> <span id="details-label">Voir les indicateurs détaillés</span>
+      </button>
+      <div id="details-panel" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+        <div class="kpi">
+          <div class="kpi-label">Km cumulés</div>
+          <div class="kpi-value" id="kpi-km" style="font-size:1.5rem">—</div>
+          <div class="kpi-delta">toute la flotte</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Km moyen / véhicule</div>
+          <div class="kpi-value" id="kpi-km-moyen" style="font-size:1.5rem">—</div>
+          <div class="kpi-delta">moyenne</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Valeur du parc</div>
+          <div class="kpi-value" id="kpi-valeur" style="font-size:1.5rem">—</div>
+          <div class="kpi-delta">somme valeurs d'achat</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">En entretien</div>
+          <div class="kpi-value" id="kpi-entretien" style="font-size:1.5rem; color: var(--fp-warn)">—</div>
+          <div class="kpi-delta">au garage</div>
         </div>
       </div>
     </div>
@@ -187,8 +216,30 @@
 
   // === KPIs ===
   document.getElementById('kpi-vehicules').textContent = data.vehicules.length;
-  const kmTotal = data.vehicules.reduce((s,v) => s + v.km, 0);
+
+  // Nombre de conducteurs (prénoms distincts, hors étiquettes non-personnes)
+  const NON_PERSONS = new Set(['siege', 'depot', 'navette', 'vendu', 'x', 'fenwick', '']);
+  const firstKey = (s) => (s || '').toString().trim().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/\s+/)[0].toLowerCase();
+  const driverKeys = new Set();
+  (data.vehicules || []).forEach(v => { const k = firstKey(v.chauffeur); if (!NON_PERSONS.has(k)) driverKeys.add(k); });
+  (data.amendes || []).forEach(a => { const k = firstKey(a.prenom); if (k && !NON_PERSONS.has(k)) driverKeys.add(k); });
+  document.getElementById('kpi-conducteurs').textContent = driverKeys.size;
+
+  // Indicateurs détaillés (section repliable)
+  const kmTotal = data.vehicules.reduce((s, v) => s + (v.km || 0), 0);
   document.getElementById('kpi-km').textContent = FP.num(kmTotal) + ' km';
+  document.getElementById('kpi-km-moyen').textContent = FP.num(data.vehicules.length ? Math.round(kmTotal / data.vehicules.length) : 0) + ' km';
+  document.getElementById('kpi-valeur').textContent = FP.euro(data.vehicules.reduce((s, v) => s + (v.valeurAchat || 0), 0));
+  document.getElementById('kpi-entretien').textContent = data.vehicules.filter(v => v.statut === 'entretien').length;
+
+  // Repli / dépli de la section détaillée
+  document.getElementById('toggle-details').addEventListener('click', () => {
+    const panel = document.getElementById('details-panel');
+    const chevron = document.getElementById('details-chevron');
+    const open = panel.classList.toggle('hidden') === false;
+    chevron.style.transform = open ? 'rotate(90deg)' : '';
+    document.getElementById('details-label').textContent = open ? 'Masquer les indicateurs détaillés' : 'Voir les indicateurs détaillés';
+  });
 
   // Coût du mois courant : somme des factures TTC dont la date commence par YYYY-MM courant
   const today = new Date();
