@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emprunt véhicule — Auto-flotte</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css">
+<style>
+  .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+  .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
+  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(20,184,166,.15); }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.5); display: none; align-items: center; justify-content: center; z-index: 70; padding: 1rem; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: white; border-radius: 1rem; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
+  .pill-encours { background: #FEF3C7; color: #78350F; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
+  .pill-rendu { background: #DCFCE7; color: #14532D; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
+</style>
+<script>
+(function(){
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="notifications.html" data-nav="notifications.html"><i data-lucide="bell"></i> Notifications</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="emprunts.html"     data-nav="emprunts.html"><i data-lucide="key-round"></i> Emprunt véhicule</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="mb-8 flex justify-between items-start gap-3 flex-wrap">
+      <div>
+        <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)">Emprunt véhicule</h1>
+        <p class="text-slate-500 text-sm mt-1">Qui a pris quel véhicule, quand, et quand il l'a rendu.</p>
+      </div>
+      <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouvel emprunt</button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+      <div class="kpi"><div class="kpi-label">Emprunts en cours</div><div class="kpi-value" id="kpi-encours" style="color: var(--fp-warn)">—</div></div>
+      <div class="kpi"><div class="kpi-label">Total enregistrés</div><div class="kpi-value" id="kpi-total">—</div></div>
+    </div>
+
+    <!-- Recherche -->
+    <div class="card p-4 mb-6">
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input id="search" type="text" placeholder="Rechercher (nom, véhicule…)" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+      </div>
+    </div>
+
+    <!-- Tableau -->
+    <div class="card overflow-hidden">
+      <div class="scrollable">
+        <table class="fp-table">
+          <thead>
+            <tr>
+              <th>Véhicule</th>
+              <th>Emprunteur</th>
+              <th>Emprunt</th>
+              <th>Retour</th>
+              <th>Rendu par</th>
+              <th>Statut</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div id="empty" class="hidden p-12 text-center text-slate-500 text-sm">Aucun emprunt enregistré.</div>
+    </div>
+  </main>
+</div>
+
+<!-- Modal nouvel emprunt -->
+<div class="modal-backdrop" id="modal-new">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold">Nouvel emprunt</h2>
+      <button class="p-2 hover:bg-slate-100 rounded-lg" id="new-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="form-new" class="space-y-4">
+      <div>
+        <div class="field-label">Véhicule *</div>
+        <select class="field-input" id="f-vehicule" required></select>
+      </div>
+      <div>
+        <div class="field-label">Emprunteur (prénom + nom) *</div>
+        <input class="field-input" id="f-emprunteur" placeholder="Jean Dupont" required />
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Date d'emprunt *</div>
+          <input class="field-input" type="date" id="f-date" required />
+        </div>
+        <div>
+          <div class="field-label">Heure</div>
+          <input class="field-input" type="time" id="f-heure" />
+        </div>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="new-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal retour -->
+<div class="modal-backdrop" id="modal-ret">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold">Retour du véhicule</h2>
+      <button class="p-2 hover:bg-slate-100 rounded-lg" id="ret-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="form-ret" class="space-y-4">
+      <input type="hidden" id="ret-id" />
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Date de remise *</div>
+          <input class="field-input" type="date" id="ret-date" required />
+        </div>
+        <div>
+          <div class="field-label">Heure</div>
+          <input class="field-input" type="time" id="ret-heure" />
+        </div>
+      </div>
+      <div>
+        <div class="field-label">Rendu par <span class="text-slate-400 normal-case font-normal">(si différent de l'emprunteur)</span></div>
+        <input class="field-input" id="ret-par" placeholder="Prénom Nom" />
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="ret-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Valider le retour</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/supabase-client.js"></script>
+<script src="../assets/js/data.js"></script>
+<script src="../assets/js/app.js"></script>
+<script>
+  lucide.createIcons();
+  const $ = (id) => document.getElementById(id);
+  const data = window.FP_DATA;
+  const state = { search: '' };
+
+  // ---- Stockage : Supabase si dispo, sinon localStorage ----
+  const LS = 'fp_emprunts';
+  let cache = [];
+  const dbOn = () => !!(window.FP && FP.db && FP.supabase);
+  const lsGet = () => { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } };
+  const lsSet = () => localStorage.setItem(LS, JSON.stringify(cache));
+  function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function sortCache() {
+    cache.sort((a, b) => `${b.dateEmprunt||''} ${b.heureEmprunt||''}`.localeCompare(`${a.dateEmprunt||''} ${a.heureEmprunt||''}`));
+  }
+  function load() {
+    if (dbOn()) {
+      FP.db.select('emprunts').then(r => {
+        if (r.error) { cache = lsGet(); } else { cache = r.data || []; }
+        sortCache(); render();
+      });
+    } else { cache = lsGet(); sortCache(); render(); }
+  }
+
+  function vehLabel(immat) {
+    const v = (data.vehicules || []).find(x => x.immat === immat);
+    return v ? `${v.immat} · ${v.marque} ${v.modele}` : (immat || '—');
+  }
+
+  function fillVehSelect() {
+    const sel = $('f-vehicule');
+    const opts = (data.vehicules || []).slice().sort((a,b)=> (a.immat||'').localeCompare(b.immat||''))
+      .map(v => `<option value="${escapeHtml(v.immat)}">${escapeHtml(v.immat)} · ${escapeHtml(v.marque)} ${escapeHtml(v.modele)}</option>`).join('');
+    sel.innerHTML = '<option value="">— choisir —</option>' + opts;
+  }
+
+  function dt(d, h) { return d ? (FP.date(d) + (h ? ' à ' + h : '')) : '<span class="text-slate-400">—</span>'; }
+
+  function render() {
+    const q = state.search.toLowerCase().trim();
+    const rows = cache.filter(e => !q || `${e.vehicule} ${e.emprunteur} ${e.renduPar||''}`.toLowerCase().includes(q));
+    $('kpi-encours').textContent = cache.filter(e => !e.dateRetour).length;
+    $('kpi-total').textContent = cache.length;
+    const tbody = $('tbody'), empty = $('empty');
+    if (!rows.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); lucide.createIcons(); return; }
+    empty.classList.add('hidden');
+    tbody.innerHTML = rows.map(e => {
+      const rendu = !!e.dateRetour;
+      return `<tr>
+        <td class="font-mono font-semibold">${escapeHtml(vehLabel(e.vehicule))}</td>
+        <td class="font-medium">${escapeHtml(e.emprunteur || '—')}</td>
+        <td>${dt(e.dateEmprunt, e.heureEmprunt)}</td>
+        <td>${dt(e.dateRetour, e.heureRetour)}</td>
+        <td>${rendu ? escapeHtml(e.renduPar || e.emprunteur) : '<span class="text-slate-400">—</span>'}</td>
+        <td>${rendu ? '<span class="pill-rendu">Rendu</span>' : '<span class="pill-encours">En cours</span>'}</td>
+        <td class="text-right whitespace-nowrap">
+          ${rendu ? '' : `<button class="btn btn-outline !py-1 !px-2.5 text-xs" data-ret="${escapeHtml(e.id)}"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Retour</button>`}
+          <button class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-del="${escapeHtml(e.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+    lucide.createIcons();
+  }
+
+  // ---- Ajout ----
+  function openNew() {
+    $('form-new').reset();
+    fillVehSelect();
+    $('f-date').value = new Date().toISOString().slice(0, 10);
+    $('f-heure').value = new Date().toTimeString().slice(0, 5);
+    $('modal-new').classList.add('open');
+  }
+  function addEmprunt(e) {
+    e.preventDefault();
+    const obj = {
+      id: 'E' + Date.now().toString(36),
+      vehicule: $('f-vehicule').value,
+      emprunteur: $('f-emprunteur').value.trim(),
+      dateEmprunt: $('f-date').value || null,
+      heureEmprunt: $('f-heure').value || '',
+      dateRetour: null, heureRetour: '', renduPar: '',
+    };
+    if (!obj.vehicule || !obj.emprunteur || !obj.dateEmprunt) { alert('Véhicule, emprunteur et date sont obligatoires.'); return; }
+    cache.unshift(obj);
+    $('modal-new').classList.remove('open');
+    render();
+    if (dbOn()) FP.persist.insert('emprunts', obj); else lsSet();
+  }
+
+  // ---- Retour ----
+  function openRet(id) {
+    const e = cache.find(x => x.id === id); if (!e) return;
+    $('ret-id').value = id;
+    $('ret-date').value = new Date().toISOString().slice(0, 10);
+    $('ret-heure').value = new Date().toTimeString().slice(0, 5);
+    $('ret-par').value = e.emprunteur || '';
+    $('modal-ret').classList.add('open');
+  }
+  function saveRet(ev) {
+    ev.preventDefault();
+    const e = cache.find(x => x.id === $('ret-id').value); if (!e) return;
+    e.dateRetour = $('ret-date').value || null;
+    e.heureRetour = $('ret-heure').value || '';
+    e.renduPar = $('ret-par').value.trim() || e.emprunteur;
+    $('modal-ret').classList.remove('open');
+    render();
+    if (dbOn()) FP.persist.upsert('emprunts', e); else lsSet();
+  }
+
+  function delEmprunt(id) {
+    if (!confirm('Supprimer cet emprunt ?')) return;
+    cache = cache.filter(x => x.id !== id);
+    render();
+    if (dbOn()) FP.persist.delete('emprunts', id); else lsSet();
+  }
+
+  // ---- Wiring ----
+  $('search').addEventListener('input', e => { state.search = e.target.value; render(); });
+  $('btn-new').addEventListener('click', openNew);
+  $('new-close').addEventListener('click', () => $('modal-new').classList.remove('open'));
+  $('new-cancel').addEventListener('click', () => $('modal-new').classList.remove('open'));
+  $('modal-new').addEventListener('click', e => { if (e.target === e.currentTarget) $('modal-new').classList.remove('open'); });
+  $('form-new').addEventListener('submit', addEmprunt);
+  $('ret-close').addEventListener('click', () => $('modal-ret').classList.remove('open'));
+  $('ret-cancel').addEventListener('click', () => $('modal-ret').classList.remove('open'));
+  $('modal-ret').addEventListener('click', e => { if (e.target === e.currentTarget) $('modal-ret').classList.remove('open'); });
+  $('form-ret').addEventListener('submit', saveRet);
+  $('tbody').addEventListener('click', e => {
+    const ret = e.target.closest('[data-ret]'); if (ret) { openRet(ret.dataset.ret); return; }
+    const del = e.target.closest('[data-del]'); if (del) { delEmprunt(del.dataset.del); }
+  });
+
+  load();
+  document.addEventListener('fp:data-ready', () => { fillVehSelect(); render(); });
+</script>
+</body>
+</html>
