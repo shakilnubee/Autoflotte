@@ -84,7 +84,7 @@
           <button class="btn btn-outline text-sm !px-2.5" data-history-undo title="Annuler (Ctrl+Z)" disabled><i data-lucide="undo-2" class="w-4 h-4"></i></button>
           <button class="btn btn-outline text-sm !px-2.5" data-history-redo title="Refaire (Ctrl+Y)" disabled><i data-lucide="redo-2" class="w-4 h-4"></i></button>
         </div>
-        <button class="btn btn-outline text-sm" id="btn-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter CSV</button>
+        <span data-data-io></span>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle amende</button>
       </div>
     </div>
@@ -448,17 +448,26 @@
     FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: null, commentaire: null });
   }
 
-  // ---------- Export CSV ----------
-  function exportCSV() {
-    const headers = ['ID','Date','Année','Conducteur','Motif','Montant','Retrait points','N° avis','Statut','Commentaire'];
-    const rows = filtered().map(a => [a.id, a.date, a.annee, a.prenom, a.motif, a.montant, a.retraitPoints ? 'Oui' : 'Non', a.numeroAvis, a.statut, a.commentaire]);
-    const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `auto-flotte-amendes-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-  }
+  // ---------- Import / Export CSV ----------
+  FP.injectDataIO({
+    filename: `auto-flotte-amendes-${new Date().toISOString().slice(0,10)}.csv`,
+    table: 'amendes', collection: 'amendes', idPrefix: 'AM-IMP-',
+    columns: [
+      { key: 'id',          label: 'ID' },
+      { key: 'date',        label: 'Date' },
+      { key: 'annee',       label: 'Année' },
+      { key: 'prenom',      label: 'Conducteur' },
+      { key: 'motif',       label: 'Motif' },
+      { key: 'montant',     label: 'Montant (€)', format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'points',      label: 'Points retirés', format: v => (v ?? 0), parse: v => parseInt(FP.csv.numParse(v) || 0, 10) },
+      { key: 'retraitPoints', label: 'Retrait (O/N)', format: (v, r) => (Number(r.points) > 0 ? 'Oui' : 'Non'), parse: (v, row) => (parseInt(FP.csv.numParse(row['Points retirés']) || 0, 10) > 0) },
+      { key: 'numeroAvis',  label: 'N° avis' },
+      { key: 'statut',      label: 'Statut' },
+      { key: 'commentaire', label: 'Commentaire' },
+    ],
+    getRows: () => filtered(),
+    onChange: () => { renderKPIs(); renderTable(); },
+  });
 
   // ---------- Wiring ----------
   $('search').addEventListener('input', e => { state.search = e.target.value; renderTable(); });
@@ -482,7 +491,6 @@
   $('drawer-pay').addEventListener('click', markPaid);
   $('drawer-delete').addEventListener('click', deleteAmende);
   $('btn-new').addEventListener('click', newAmende);
-  $('btn-export').addEventListener('click', exportCSV);
 
   // === Historique : branchement boutons + raccourcis ===
   FP.history.renderAll = () => {

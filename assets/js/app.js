@@ -860,6 +860,155 @@ FP.searchAll = (q) => {
   return out;
 };
 
+// =====================================================================
+// === Import / Export CSV (moteur partagé, compatible Excel FR) ========
+// =====================================================================
+// CSV produit avec : BOM UTF-8 (accents OK), séparateur ';' (colonnes
+// séparées dans Excel FR), champs entre guillemets si nécessaire.
+FP.csv = {
+  BOM: '﻿',
+  _esc(v) {
+    if (v === null || v === undefined) v = '';
+    v = String(v);
+    if (/[";\n\r]/.test(v)) v = '"' + v.replace(/"/g, '""') + '"';
+    return v;
+  },
+  // columns = [{ key, label, format?(value,row) }]
+  build(columns, rows) {
+    const head = columns.map(c => this._esc(c.label)).join(';');
+    const body = (rows || []).map(r => columns.map(c => {
+      let val = r[c.key];
+      if (c.format) val = c.format(val, r);
+      return this._esc(val);
+    }).join(';'));
+    return this.BOM + [head, ...body].join('\r\n');
+  },
+  download(filename, columns, rows) {
+    const blob = new Blob([this.build(columns, rows)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  },
+  // Parse un texte CSV (auto-détection ; ou ,) → tableau d'objets {entête: valeur}
+  parse(text) {
+    if (!text) return [];
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+    const nl = text.indexOf('\n');
+    const firstLine = nl < 0 ? text : text.slice(0, nl);
+    const delim = (firstLine.split(';').length >= firstLine.split(',').length) ? ';' : ',';
+    const rows = [];
+    let field = '', row = [], inQ = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQ) {
+        if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+        else field += ch;
+      } else {
+        if (ch === '"') inQ = true;
+        else if (ch === delim) { row.push(field); field = ''; }
+        else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+        else if (ch === '\r') { /* ignore */ }
+        else field += ch;
+      }
+    }
+    if (field !== '' || row.length) { row.push(field); rows.push(row); }
+    if (!rows.length) return [];
+    const headers = rows.shift().map(h => (h || '').trim());
+    return rows.filter(r => r.some(c => (c || '').trim() !== '')).map(r => {
+      const o = {};
+      headers.forEach((h, idx) => { o[h] = r[idx] !== undefined ? r[idx].trim() : ''; });
+      return o;
+    });
+  },
+  // Helpers de conversion pour les colonnes numériques
+  numFormat: (v) => (v === null || v === undefined || v === '') ? '' : String(v).replace('.', ','),
+  numParse: (v) => {
+    const s = (v || '').toString().replace(/[^\d,.\-]/g, '').replace(',', '.');
+    return s === '' ? null : parseFloat(s);
+  },
+};
+
+// Toolbar Import/Export réutilisable.
+// config = {
+//   filename, columns, getRows(),                 // export
+//   table?, collection?,                          // import par défaut (Supabase + FP_DATA)
+//   idPrefix?, onChange?,                          // re-render après import
+//   makeRecord?(csvRow)  -> record (camelCase),   // mapping ligne CSV → enregistrement
+//   onImport?(records)                            // sinon : upsert générique
+//   container? (élément hôte ; défaut [data-data-io])
+// }
+FP.injectDataIO = (config) => {
+  const host = config.container || document.querySelector('[data-data-io]');
+  if (!host || host.querySelector('.fp-io-wrap')) return;
+
+  const wrap = document.createElement('span');
+  wrap.className = 'fp-io-wrap';
+  wrap.style.cssText = 'display:inline-flex; gap:.5rem; align-items:center';
+  wrap.innerHTML = `
+    <button type="button" class="btn btn-outline text-sm fp-io-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter</button>
+    ${config.exportOnly ? '' : `<button type="button" class="btn btn-outline text-sm fp-io-import"><i data-lucide="upload" class="w-4 h-4"></i> Importer</button>
+    <input type="file" accept=".csv,text/csv" class="fp-io-file" style="display:none" />`}`;
+  host.appendChild(wrap);
+  if (window.lucide) lucide.createIcons();
+
+  wrap.querySelector('.fp-io-export').addEventListener('click', () => {
+    FP.csv.download(config.filename, config.columns, config.getRows() || []);
+  });
+  if (config.exportOnly) return;
+
+  const fileInput = wrap.querySelector('.fp-io-file');
+  wrap.querySelector('.fp-io-import').addEventListener('click', () => fileInput.click());
+
+  const makeRecord = config.makeRecord || function (csvRow) {
+    const rec = {};
+    config.columns.forEach(c => {
+      let v = csvRow[c.label];
+      if (v === undefined) return;
+      if (c.parse) v = c.parse(v, csvRow);
+      rec[c.key] = v;
+    });
+    return rec;
+  };
+
+  const defaultImport = function (records) {
+    const coll = (window.FP_DATA && config.collection) ? (window.FP_DATA[config.collection] || (window.FP_DATA[config.collection] = [])) : null;
+    let added = 0, updated = 0;
+    records.forEach(rec => {
+      if (!rec.id) rec.id = (config.idPrefix || 'IMP-') + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      if (coll) {
+        const i = coll.findIndex(x => x.id === rec.id);
+        if (i >= 0) { coll[i] = { ...coll[i], ...rec }; updated++; } else { coll.push(rec); added++; }
+      }
+      if (config.table && FP.persist && FP.persist.available && FP.persist.available()) FP.persist.upsert(config.table, rec);
+    });
+    if (config.onChange) config.onChange();
+    alert(`Import terminé ✓\n${added} ajout(s), ${updated} mise(s) à jour.`);
+  };
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = FP.csv.parse(reader.result);
+        if (!parsed.length) { alert('Fichier vide ou illisible.'); return; }
+        const records = parsed.map(makeRecord).filter(Boolean);
+        if (!records.length) { alert('Aucune ligne exploitable dans le fichier.'); return; }
+        if (!confirm(`Importer ${records.length} ligne(s) ?\n\n• Les lignes existantes (même ID) sont mises à jour\n• Les nouvelles sont ajoutées\n• Rien n'est supprimé`)) return;
+        (config.onImport || defaultImport)(records);
+      } catch (e) {
+        alert('Erreur de lecture du fichier : ' + (e.message || e));
+      } finally {
+        fileInput.value = '';
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+};
+
 // Navigation active state (sidebar)
 document.addEventListener('DOMContentLoaded', () => {
   // Appliquer le thème (couleurs des groupes) dès le chargement

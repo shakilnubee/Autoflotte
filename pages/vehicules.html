@@ -286,7 +286,7 @@
           </button>
           <div class="hidden-cols-popover" id="hidden-cols-popover"></div>
         </div>
-        <button class="btn btn-outline text-sm" id="btn-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter CSV</button>
+        <span data-data-io></span>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
       </div>
     </div>
@@ -1563,21 +1563,49 @@
   }
 
   // ---------- Export CSV ----------
-  function exportCSV() {
-    // L'en-tête CSV utilise les labels custom si définis
-    const headers = [getColLabel('immat'), 'Marque', getColLabel('modele'), getColLabel('groupes'), getColLabel('categorie'), getColLabel('km'), getColLabel('chauffeur'), getColLabel('statut'), getColLabel('prochainCT'), getColLabel('dateMiseEnCirculation')];
-    const rows = filtered().map(v => [
-      v.immat, v.marque, v.modele, FP.vehGroupes(v).map(FP.groupeLabel).join(' | '),
-      v.categorie, v.km,
-      v.chauffeur, v.statut, v.prochainCT, v.dateMiseEnCirculation
-    ]);
-    const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `auto-flotte-vehicules-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-  }
+  // ---------- Import / Export CSV ----------
+  const _grpLabelToKey = (label) => {
+    const map = {};
+    FP.groupeKeys().forEach(k => { map[FP.groupeLabel(k).toLowerCase()] = k; });
+    return map[(label || '').trim().toLowerCase()] || 'non-classe';
+  };
+  FP.injectDataIO({
+    filename: `auto-flotte-vehicules-${new Date().toISOString().slice(0,10)}.csv`,
+    columns: [
+      { key: 'id',       label: 'ID' },
+      { key: 'immat',    label: 'Immat.' },
+      { key: 'marque',   label: 'Marque' },
+      { key: 'modele',   label: 'Modèle' },
+      { key: 'groupes',  label: 'Groupes',
+        format: (v, r) => FP.vehGroupes(r).map(FP.groupeLabel).join(' | '),
+        parse: (v) => (v || '').split('|').map(s => s.trim()).filter(Boolean).map(_grpLabelToKey) },
+      { key: 'categorie', label: 'Catégorie' },
+      { key: 'km',        label: 'Km', format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'chauffeur', label: 'Chauffeur' },
+      { key: 'statut',    label: 'Statut' },
+      { key: 'prochainCT', label: 'Prochain CT' },
+      { key: 'dateMiseEnCirculation', label: 'Mise en circulation' },
+      { key: 'vin',       label: 'VIN' },
+    ],
+    getRows: () => filtered(),
+    onImport: (records) => {
+      let added = 0, updated = 0;
+      records.forEach(rec => {
+        if (rec.groupes && (!Array.isArray(rec.groupes) || !rec.groupes.length)) delete rec.groupes;
+        let v = rec.id ? data.vehicules.find(x => x.id === rec.id) : null;
+        let isNew = false;
+        if (v) { Object.assign(v, rec); updated++; }
+        else {
+          isNew = true;
+          v = Object.assign({ id: rec.id || ('V-IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)), groupes: ['non-classe'], statut: 'actif' }, rec);
+          data.vehicules.push(v); added++;
+        }
+        persistVehicleUpsert(v, isNew);
+      });
+      renderTabBar(); renderKPIs(); renderTable();
+      alert(`Import terminé ✓\n${added} ajout(s), ${updated} mise(s) à jour.`);
+    },
+  });
 
   // ---------- Wiring ----------
   $('search').addEventListener('input', (e) => { state.search = e.target.value; renderTable(); });
@@ -1889,7 +1917,6 @@
   $('modal-backdrop').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
   $('vehicule-form').addEventListener('submit', saveVehicule);
 
-  $('btn-export').addEventListener('click', exportCSV);
 
   // ============================================================
   //  Import carte grise → pré-remplissage automatique (OCR)
