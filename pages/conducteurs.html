@@ -39,6 +39,9 @@
   .viewer iframe { flex: 1; width: 100%; border: 0; }
   .cond-tab { padding: .5rem .9rem; font-size: .85rem; font-weight: 600; color: var(--fp-muted); border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
   .cond-tab.active { color: var(--fp-primary); border-bottom-color: var(--fp-accent); }
+  .cf-row { cursor: pointer; }
+  .cf-row:hover .cf-val { box-shadow: inset 0 -2px 0 var(--fp-accent); border-radius: 2px; }
+  #drawer-name:hover { box-shadow: inset 0 -2px 0 var(--fp-accent); }
 </style>
 <script>
 (function(){
@@ -481,7 +484,7 @@
     const totalPaye = d.amendes.filter(a => a.statut === 'payée').reduce((s, a) => s + (a.montant || 0), 0);
     const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
 
-    const fRow = (label, field, type, val) => `<div class="flex justify-between gap-3"><span class="text-slate-600">${label}</span><span class="font-medium text-right" data-cf="${field}" data-ct="${type}">${val ? escapeHtml(val) : '<span class="text-slate-300">—</span>'}</span></div>`;
+    const fRow = (label, field, type, val) => `<div class="flex justify-between gap-3 cf-row" data-cf="${field}" data-ct="${type}"><span class="text-slate-600">${label}</span><span class="font-medium text-right cf-val">${val ? escapeHtml(val) : '<span class="text-slate-300">—</span>'}</span></div>`;
     $('drawer-body').innerHTML = `
       <div class="grid grid-cols-3 gap-3">
         <div class="kpi p-3"><div class="kpi-label">Points perdus</div><div class="kpi-value" style="font-size:1.3rem; color: var(--fp-danger)">${nbPoints}</div></div>
@@ -629,26 +632,33 @@
     document.querySelectorAll('[data-pane-content]').forEach(p => p.classList.toggle('hidden', p.dataset.paneContent !== pane));
   });
 
-  // Édition par double-clic (nom, téléphone, email, note)
-  $('drawer').addEventListener('dblclick', e => {
-    const el = e.target.closest('[data-cf]');
-    if (!el) return;
+  // Édition par double-clic (nom, prénom, date de naissance, adresse, téléphone, email, note)
+  function editCondField(row) {
     const key = currentDriverKey; if (!key) return;
     const d = drivers.find(x => x.key === key);
-    const field = el.dataset.cf;
+    const field = row.dataset.cf;
+    const type = row.dataset.ct || 'text';
     const r = condRow(key) || {};
-    const cur = field === 'name' ? (r.name || (d && d.name) || '') : (r[field] || (d && d[field]) || '');
-    FP.cellEditor(el, cur, el.dataset.ct || 'text', {
-      onSave: (nv) => {
-        if (FP.history && FP.history.commit) FP.history.commit();
-        const changes = { [field]: nv, manuel: true };
-        if (field !== 'name') changes.name = r.name || (d && d.name) || key;
-        upsertCond(key, changes);
-        drivers = buildDrivers(); renderKPIs(); renderGrid();
-        openDrawer(currentDriverKey);
-      },
-      onCancel: () => openDrawer(currentDriverKey),
-    });
+    const cur = (r[field] != null ? r[field] : (d && d[field] != null ? d[field] : '')) || '';
+    const apply = (nv) => {
+      if (FP.history && FP.history.commit) FP.history.commit();
+      const changes = { [field]: nv, manuel: true };
+      if (field !== 'name') changes.name = r.name || (d && d.name) || key;
+      upsertCond(key, changes);
+      drivers = buildDrivers(); renderKPIs(); renderGrid();
+      openDrawer(currentDriverKey);
+    };
+    const valEl = row.querySelector('.cf-val') || row;
+    if (FP.cellEditor) {
+      FP.cellEditor(valEl, cur, type, { onSave: apply, onCancel: () => openDrawer(currentDriverKey) });
+    } else { // repli si l'ancien code est encore en cache
+      const nv = prompt('Modifier :', typeof cur === 'string' ? cur : '');
+      if (nv !== null) apply(nv.trim());
+    }
+  }
+  $('drawer').addEventListener('dblclick', e => {
+    const row = e.target.closest('[data-cf]');
+    if (row) editCondField(row);
   });
 
   // Clics dans le drawer : voir / ajouter / supprimer un permis, ou supprimer le conducteur
