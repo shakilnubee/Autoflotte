@@ -16,6 +16,10 @@
   .contrat-type { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 600; }
   .ct-assurance { background: #DBEAFE; color: #1E3A8A; }
   .ct-leasing   { background: #EDE9FE; color: #4C1D95; }
+  .drag-handle { cursor: grab; color: var(--fp-muted); display: inline-flex; align-items: center; }
+  .drag-handle:active { cursor: grabbing; }
+  .contrat-section.dragging { opacity: .45; }
+  #contrat-sections.is-dragging .contrat-section { transition: transform .08s; }
 </style>
 <script>
 (function(){
@@ -92,31 +96,13 @@
       </div>
     </div>
 
-    <!-- Section Assurance -->
-    <div class="card p-6 mb-6">
-      <div class="section-title">
-        <i data-lucide="shield-check" class="w-5 h-5"></i> Assurance — SWISSLIFE (011165247/0599)
-      </div>
-      <p class="text-sm text-slate-600 mb-4">Police unique couvrant tous les véhicules de la flotte.</p>
-      <div class="scrollable">
-        <table class="fp-table">
-          <thead>
-            <tr>
-              <th>Immat.</th>
-              <th>Véhicule</th>
-              <th>Chauffeur</th>
-              <th>Groupe</th>
-              <th>Statut</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-assurance"></tbody>
-        </table>
-      </div>
-    </div>
+    <p class="text-xs text-slate-500 mb-3 flex items-center gap-1.5"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Glisse une section par sa poignée pour changer l'ordre — l'ordre est mémorisé.</p>
+    <div id="contrat-sections">
 
     <!-- Section Leasing -->
-    <div class="card p-6">
+    <div class="card p-6 mb-6 contrat-section" data-section="leasing">
       <div class="section-title">
+        <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
         <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — BPCE Car Lease
       </div>
       <p class="text-sm text-slate-600 mb-4">Véhicules sous contrat de leasing BPCE. Mensualités calculées depuis les factures.</p>
@@ -150,6 +136,31 @@
         </table>
       </div>
       <p class="text-xs text-slate-500 mt-3" id="leasing-count"></p>
+    </div>
+
+    <!-- Section Assurance -->
+    <div class="card p-6 mb-6 contrat-section" data-section="assurance">
+      <div class="section-title">
+        <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
+        <i data-lucide="shield-check" class="w-5 h-5"></i> Assurance — SWISSLIFE (011165247/0599)
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Police unique couvrant tous les véhicules de la flotte.</p>
+      <div class="scrollable">
+        <table class="fp-table">
+          <thead>
+            <tr>
+              <th>Immat.</th>
+              <th>Véhicule</th>
+              <th>Chauffeur</th>
+              <th>Groupe</th>
+              <th>Statut</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-assurance"></tbody>
+        </table>
+      </div>
+    </div>
+
     </div>
 
   </main>
@@ -358,6 +369,47 @@
   });
 
   $('search-leasing').addEventListener('input', e => { leasingSearch = e.target.value; renderLeasing(); });
+
+  // ---------- Réordonnancement des sections (glisser-déposer + mémorisation) ----------
+  const SECTIONS_KEY = 'auto_flotte_contrat_sections_order';
+  const sectionsEl = $('contrat-sections');
+  function applySectionOrder() {
+    let order; try { order = JSON.parse(localStorage.getItem(SECTIONS_KEY) || 'null'); } catch (e) {}
+    if (!Array.isArray(order)) return;
+    order.forEach(key => { const el = sectionsEl.querySelector(`.contrat-section[data-section="${key}"]`); if (el) sectionsEl.appendChild(el); });
+  }
+  function saveSectionOrder() {
+    const order = [...sectionsEl.querySelectorAll('.contrat-section')].map(el => el.dataset.section);
+    localStorage.setItem(SECTIONS_KEY, JSON.stringify(order));
+  }
+  function sectionAfter(y) {
+    const els = [...sectionsEl.querySelectorAll('.contrat-section:not(.dragging)')];
+    return els.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      return (offset < 0 && offset > closest.offset) ? { offset, element: child } : closest;
+    }, { offset: -Infinity }).element;
+  }
+  let dragSection = null;
+  sectionsEl.addEventListener('dragstart', e => {
+    const handle = e.target.closest('.drag-handle'); if (!handle) return;
+    dragSection = handle.closest('.contrat-section');
+    dragSection.classList.add('dragging'); sectionsEl.classList.add('is-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  sectionsEl.addEventListener('dragover', e => {
+    if (!dragSection) return;
+    e.preventDefault();
+    const after = sectionAfter(e.clientY);
+    if (after == null) sectionsEl.appendChild(dragSection);
+    else if (after !== dragSection) sectionsEl.insertBefore(dragSection, after);
+  });
+  sectionsEl.addEventListener('dragend', () => {
+    if (!dragSection) return;
+    dragSection.classList.remove('dragging'); sectionsEl.classList.remove('is-dragging');
+    dragSection = null; saveSectionOrder();
+  });
+  applySectionOrder();
 
   renderKPIs();
   renderAssurance();
