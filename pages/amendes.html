@@ -121,24 +121,21 @@
         <div class="chart-wrap-sm"><canvas id="motifsChart"></canvas></div>
       </div>
       <div class="card p-6">
-        <h3 class="font-bold text-slate-900 mb-4">Top 8 conducteurs (par nombre)</h3>
-        <div class="chart-wrap-sm"><canvas id="conducteursChart"></canvas></div>
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold text-slate-900">🏆 Podium des conducteurs <span class="text-xs font-normal text-slate-400">— clique pour filtrer</span></h3>
+          <button id="podium-toggle" class="btn btn-outline text-xs">Voir tout</button>
+        </div>
+        <div id="podium" class="space-y-1" style="max-height:240px;overflow-y:auto"></div>
       </div>
     </div>
 
     <!-- Délai de paiement -->
     <div id="delai-banner" class="hidden items-center gap-3 px-4 py-3 mb-6 rounded-xl" style="background:#FEF2F2;border:1px solid #FECACA"></div>
 
-    <!-- Mini-stats par type + Podium -->
-    <div class="grid lg:grid-cols-3 gap-6 mb-6">
-      <div class="card p-6 lg:col-span-2">
-        <h3 class="font-bold text-slate-900 mb-4">Répartition par type <span class="text-xs font-normal text-slate-400">— clique pour filtrer</span></h3>
-        <div id="type-stats" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
-      </div>
-      <div class="card p-6">
-        <h3 class="font-bold text-slate-900 mb-4">🏆 Podium des conducteurs</h3>
-        <div id="podium" class="space-y-2"></div>
-      </div>
+    <!-- Mini-stats par type -->
+    <div class="card p-6 mb-6">
+      <h3 class="font-bold text-slate-900 mb-4">Répartition par type <span class="text-xs font-normal text-slate-400">— clique pour filtrer</span></h3>
+      <div id="type-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
     </div>
 
     <!-- Évolution mensuelle + Heatmap calendrier -->
@@ -488,7 +485,7 @@
   }
 
   // ---------- Charts ----------
-  let motifsChart, conducteursChart, motifLabels = [], condLabels = [];
+  let motifsChart, motifLabels = [];
   function renderCharts() {
     // Uniquement amendes 2026
     const amendes2026 = data.amendes.filter(a => a.annee === '2026');
@@ -523,42 +520,32 @@
       }
     });
 
-    // Top conducteurs
-    const condCount = {};
-    amendes2026.forEach(a => {
-      const c = (a.prenom || '—').trim();
-      condCount[c] = (condCount[c] || 0) + 1;
-    });
-    const topCond = Object.entries(condCount).sort((a,b) => b[1] - a[1]).slice(0, 8);
-    condLabels = topCond.map(([k]) => k);
-    if (conducteursChart) conducteursChart.destroy();
-    conducteursChart = new Chart($('conducteursChart'), {
-      type: 'bar',
-      data: {
-        labels: topCond.map(([k]) => k),
-        datasets: [{
-          data: topCond.map(([,v]) => v),
-          backgroundColor: '#0F1E3D',
-          borderRadius: 6,
-        }]
-      },
-      options: {
-        indexAxis: 'y',
-        plugins: { legend: { display: false }, tooltip: { callbacks: { footer: () => 'Cliquer pour filtrer' } } },
-        onClick: (evt, els) => { if (els.length) setConducteurFilter(condLabels[els[0].index]); },
-        onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
-        scales: {
-          x: { beginAtZero: true, ticks: { precision: 0 } },
-          y: { grid: { display: false } }
-        },
-        maintainAspectRatio: false, responsive: true,
-      }
-    });
-
     renderExtras(amendes2026);
   }
 
-  // ---------- Sections "fun" : podium, types, évolution, heatmap, délai ----------
+  // ---------- Podium des conducteurs (extensible) ----------
+  let podiumExpanded = false;
+  function renderPodium() {
+    const amendes2026 = data.amendes.filter(a => a.annee === '2026');
+    const agg = {};
+    amendes2026.forEach(a => { const c = (a.prenom || '—').trim() || '—'; if (!agg[c]) agg[c] = { n: 0, montant: 0, points: 0 }; agg[c].n++; agg[c].montant += (a.montant || 0); agg[c].points += (Number(a.points) || 0); });
+    const all = Object.entries(agg).sort((a, b) => b[1].n - a[1].n || b[1].montant - a[1].montant);
+    const shown = podiumExpanded ? all : all.slice(0, 5);
+    const medals = ['🥇', '🥈', '🥉'];
+    $('podium').innerHTML = shown.map(([c, v], i) => `
+      <button type="button" data-cond="${c.replace(/"/g, '&quot;')}" class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left">
+        <span class="text-lg w-7 text-center flex-shrink-0">${medals[i] || `<span class="text-sm font-bold text-slate-400">${i + 1}</span>`}</span>
+        <span class="flex-1 font-semibold text-slate-800 truncate">${c}</span>
+        <span class="text-sm text-slate-500 flex-shrink-0">${v.n} · ${FP.euro(v.montant)}${v.points ? ' · −' + v.points + 'pts' : ''}</span>
+      </button>`).join('') || '<p class="text-sm text-slate-400">Aucune donnée.</p>';
+    const btn = $('podium-toggle');
+    if (btn) {
+      if (all.length <= 5) { btn.style.display = 'none'; }
+      else { btn.style.display = ''; btn.textContent = podiumExpanded ? 'Voir moins' : `Voir tout (${all.length})`; }
+    }
+  }
+
+  // ---------- Sections "fun" : types, évolution, heatmap, délai ----------
   let moisChart;
   function renderExtras(amendes2026) {
     // --- Délai de paiement (amendes à payer depuis +30 j) ---
@@ -589,17 +576,7 @@
       </button>`;
     }).join('') || '<p class="text-sm text-slate-400">Aucune donnée.</p>';
 
-    // --- Podium des conducteurs (par nombre, puis montant) ---
-    const condAgg = {};
-    amendes2026.forEach(a => { const c = (a.prenom || '—').trim() || '—'; if (!condAgg[c]) condAgg[c] = { n: 0, montant: 0, points: 0 }; condAgg[c].n++; condAgg[c].montant += (a.montant || 0); condAgg[c].points += (Number(a.points) || 0); });
-    const podium = Object.entries(condAgg).sort((a, b) => b[1].n - a[1].n || b[1].montant - a[1].montant).slice(0, 5);
-    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-    $('podium').innerHTML = podium.map(([c, v], i) => `
-      <button type="button" data-cond="${c.replace(/"/g, '&quot;')}" class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left">
-        <span class="text-xl">${medals[i]}</span>
-        <span class="flex-1 font-semibold text-slate-800">${c}</span>
-        <span class="text-sm text-slate-500">${v.n} · ${FP.euro(v.montant)}${v.points ? ' · −' + v.points + 'pts' : ''}</span>
-      </button>`).join('') || '<p class="text-sm text-slate-400">Aucune donnée.</p>';
+    renderPodium();
 
     // --- Évolution mensuelle ---
     const mois = Array(12).fill(0); const moisMontant = Array(12).fill(0);
@@ -796,6 +773,7 @@
   // Clics sur les sections "fun"
   $('type-stats').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (b) setMotifCategory(b.dataset.cat); });
   $('podium').addEventListener('click', e => { const b = e.target.closest('[data-cond]'); if (b) setConducteurFilter(b.dataset.cond); });
+  $('podium-toggle').addEventListener('click', () => { podiumExpanded = !podiumExpanded; renderPodium(); });
   $('heatmap').addEventListener('click', e => { const b = e.target.closest('[data-day]'); if (b) setDay(b.dataset.day); });
   $('delai-banner').addEventListener('click', e => {
     if (!e.target.closest('#delai-voir')) return;
