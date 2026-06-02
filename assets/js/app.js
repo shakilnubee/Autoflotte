@@ -307,27 +307,46 @@ FP.revisionInfo = (v) => {
   const intervalle = FP.revisionIntervalle(v);
   const km = Number(v.km) || 0;
   const today = new Date();
-  let prochaineKm = null, kmRestant = null;
-  if (km > 0) {
+
+  // Rythme estimé (km/jour) à partir de la mise en circulation — sert à relier km et dates
+  let pace = null;
+  const mec = v.dateMiseEnCirculation ? new Date(v.dateMiseEnCirculation) : null;
+  if (mec && !isNaN(mec) && km > 0) {
+    const joursMec = (today - mec) / 86400000;
+    if (joursMec > 30) pace = km / joursMec;
+  }
+
+  const dRev = (v.derniereRevision && v.derniereRevision !== '—') ? new Date(v.derniereRevision) : null;
+  const hasRev = dRev && !isNaN(dRev);
+
+  let prochaineKm = null, kmRestant = null, prochaineDate = null, joursRestant = null;
+
+  if (hasRev) {
+    // Échéance temporelle : dernière révision + intervalle en mois
+    prochaineDate = new Date(dRev);
+    prochaineDate.setMonth(prochaineDate.getMonth() + intervalle.mois);
+    joursRestant = Math.ceil((prochaineDate - today) / 86400000);
+    // Échéance km ANCRÉE sur la dernière révision : on estime les km parcourus depuis
+    // (rythme × jours écoulés) plutôt que de viser le prochain palier d'odomètre.
+    if (pace !== null) {
+      const joursDepuisRev = Math.max(0, (today - dRev) / 86400000);
+      const kmDepuisRev = pace * joursDepuisRev;
+      kmRestant = Math.round(intervalle.km - kmDepuisRev);
+      prochaineKm = Math.round(km + kmRestant);
+    }
+  } else if (km > 0) {
+    // Pas de date de révision connue → estimation par paliers d'odomètre
     prochaineKm = Math.ceil(km / intervalle.km) * intervalle.km;
     if (prochaineKm <= km) prochaineKm = km + intervalle.km;
     kmRestant = prochaineKm - km;
   }
-  let prochaineDate = null, joursRestant = null;
-  if (v.derniereRevision && v.derniereRevision !== '—') {
-    const d = new Date(v.derniereRevision);
-    if (!isNaN(d)) {
-      prochaineDate = new Date(d);
-      prochaineDate.setMonth(prochaineDate.getMonth() + intervalle.mois);
-      joursRestant = Math.ceil((prochaineDate - today) / 86400000);
-    }
-  }
+
   const lvlKm = kmRestant === null ? null : (kmRestant <= 1000 ? 'danger' : kmRestant <= 3000 ? 'warn' : kmRestant <= 6000 ? 'info' : null);
   const lvlDt = joursRestant === null ? null : (joursRestant <= 30 ? 'danger' : joursRestant <= 60 ? 'warn' : joursRestant <= 90 ? 'info' : null);
   const rank = { danger: 0, warn: 1, info: 2 };
   let niveau = null;
   [lvlKm, lvlDt].forEach(l => { if (l && (niveau === null || rank[l] < rank[niveau])) niveau = l; });
-  return { intervalle, prochaineKm, kmRestant, prochaineDate, joursRestant, niveau };
+  return { intervalle, prochaineKm, kmRestant, prochaineDate, joursRestant, niveau, hasRev: !!hasRev, pace };
 };
 
 // =====================================================================
