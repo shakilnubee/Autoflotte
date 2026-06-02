@@ -83,7 +83,7 @@ FP.settings = {
       'non-classe':  { label: 'Non classé',  color: '#94A3B8' },
     },
     societe: { nom: 'Auto-flotte', siret: '', adresse: '' },
-    platformColor: '#8B6B4F', // couleur de base de l'interface (sidebar/titres/boutons foncés) — marron clair
+    platformColor: '#7D5E43', // couleur de base de l'interface (sidebar/titres/boutons foncés) — marron
     sidebarLabels: {}, // ex: { 'vehicules.html': 'Mes voitures', 'amendes.html': 'PV' }
     customTexts: {}, // textes éditables sur les pages (titres, sous-titres) — ex: { 'amendes.subtitle': 'Mes PV' }
     vehiculesColumns: {
