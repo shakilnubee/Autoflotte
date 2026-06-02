@@ -417,7 +417,7 @@
         const cells = visible.map(k => {
           const def = AMENDES_COLUMNS.find(c => c.key === k);
           if (!def) return '<td></td>';
-          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''}>${def.render(a)}</td>`;
+          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''} data-col="${k}">${def.render(a)}</td>`;
         }).join('');
         return `<tr class="cursor-pointer" data-id="${a.id}">${cells}</tr>`;
       }).join('');
@@ -783,9 +783,40 @@
   });
   $('drawer-relance').addEventListener('click', relanceEmail);
 
+  // Édition par double-clic des cellules
+  const AM_EDITABLE = { date: 'date', annee: 'text', prenom: 'text', motif: 'text', montant: 'number', points: 'number', numeroAvis: 'text', statut: 'select', commentaire: 'text' };
+  const AM_STATUTS = ['à payer', 'payée', 'contestée'];
+  let _amClickTimer = null;
   $('amendes-tbody').addEventListener('click', e => {
+    if (e.target.closest('.cell-edit, select')) return;
     const tr = e.target.closest('tr[data-id]');
-    if (tr) openDrawer(tr.dataset.id);
+    if (!tr) return;
+    const td = e.target.closest('td[data-col]');
+    if (td && AM_EDITABLE[td.dataset.col]) {
+      clearTimeout(_amClickTimer);
+      _amClickTimer = setTimeout(() => openDrawer(tr.dataset.id), 220);
+    } else openDrawer(tr.dataset.id);
+  });
+  $('amendes-tbody').addEventListener('dblclick', e => {
+    clearTimeout(_amClickTimer);
+    const td = e.target.closest('td[data-col]');
+    const tr = e.target.closest('tr[data-id]');
+    if (!td || !tr) return;
+    const field = td.dataset.col, type = AM_EDITABLE[field];
+    if (!type) return;
+    const a = data.amendes.find(x => x.id === tr.dataset.id);
+    if (!a) return;
+    FP.cellEditor(td, a[field], type, {
+      options: type === 'select' ? AM_STATUTS : null,
+      onSave: (nv) => {
+        FP.history.commit();
+        a[field] = nv;
+        if (field === 'points') a.retraitPoints = (Number(nv) || 0) > 0;
+        renderKPIs(); renderTable(); renderCharts();
+        FP.persist.update('amendes', a.id, { [field]: nv });
+      },
+      onCancel: () => renderTable(),
+    });
   });
   $('drawer-close').addEventListener('click', closeDrawer);
   $('drawer-backdrop').addEventListener('click', closeDrawer);

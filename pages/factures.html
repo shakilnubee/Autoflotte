@@ -289,7 +289,7 @@
         const cells = visible.map(k => {
           const def = FACTURES_COLUMNS.find(c => c.key === k);
           if (!def) return '<td></td>';
-          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''}>${def.render(f)}</td>`;
+          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''} data-col="${k}">${def.render(f)}</td>`;
         }).join('');
         return `<tr class="cursor-pointer" data-id="${f.fileId}">${cells}</tr>`;
       }).join('');
@@ -432,9 +432,38 @@
     });
   });
 
+  // Édition par double-clic des cellules
+  const FA_EDITABLE = { date: 'date', vehiculeImmat: 'text', fournisseur: 'text', description: 'text', type: 'select', montantHT: 'number', montantTVA: 'number', montantTTC: 'number', numeroFacture: 'text', km: 'number' };
+  const FA_TYPES = ['entretien', 'réparation', 'achat', 'leasing', 'cession', 'sinistre', 'autre'];
+  let _faClickTimer = null;
   $('factures-tbody').addEventListener('click', e => {
+    if (e.target.closest('.cell-edit, select')) return;
     const tr = e.target.closest('tr[data-id]');
-    if (tr) openDrawer(tr.dataset.id);
+    if (!tr) return;
+    const td = e.target.closest('td[data-col]');
+    if (td && FA_EDITABLE[td.dataset.col]) {
+      clearTimeout(_faClickTimer);
+      _faClickTimer = setTimeout(() => openDrawer(tr.dataset.id), 220);
+    } else openDrawer(tr.dataset.id);
+  });
+  $('factures-tbody').addEventListener('dblclick', e => {
+    clearTimeout(_faClickTimer);
+    const td = e.target.closest('td[data-col]');
+    const tr = e.target.closest('tr[data-id]');
+    if (!td || !tr) return;
+    const field = td.dataset.col, type = FA_EDITABLE[field];
+    if (!type) return;
+    const f = data.factures.find(x => x.id === tr.dataset.id);
+    if (!f) return;
+    FP.cellEditor(td, f[field], type, {
+      options: type === 'select' ? FA_TYPES : null,
+      onSave: (nv) => {
+        f[field] = nv;
+        renderKPIs(); renderTable(); renderCharts();
+        FP.persist.update('factures', f.id, { [field]: nv });
+      },
+      onCancel: () => renderTable(),
+    });
   });
   $('drawer-close').addEventListener('click', closeDrawer);
   $('drawer-backdrop').addEventListener('click', closeDrawer);
