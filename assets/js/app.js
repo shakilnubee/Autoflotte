@@ -142,6 +142,14 @@ FP.settings = {
     const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
     return '#' + [cl(r * (1 + amt)), cl(g * (1 + amt)), cl(b * (1 + amt))].map(x => x.toString(16).padStart(2, '0')).join('');
   },
+  // Luminance relative (0 = noir, 1 = blanc) d'une couleur hex
+  _luminance(hex) {
+    hex = String(hex || '').replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    if (hex.length !== 6) return 0;
+    const f = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(parseInt(hex.slice(0, 2), 16)) + 0.7152 * f(parseInt(hex.slice(2, 4), 16)) + 0.0722 * f(parseInt(hex.slice(4, 6), 16));
+  },
   applyTheme() {
     const s = this.get();
     Object.entries(s.groupes).forEach(([k, v]) => {
@@ -151,6 +159,14 @@ FP.settings = {
     const pc = (s.platformColor && s.platformColor[0] === '#') ? s.platformColor : '#' + (s.platformColor || this.defaults.platformColor);
     document.documentElement.style.setProperty('--fp-primary', pc);
     document.documentElement.style.setProperty('--fp-primary-2', this._shade(pc, -0.22));
+    // Logo : badge noir par défaut, mais blanc si l'interface est trop sombre (contraste)
+    const lumBg = this._luminance(pc);
+    const lumBlack = 0.0074; // ~ #111
+    const contrastBlack = (Math.max(lumBg, lumBlack) + 0.05) / (Math.min(lumBg, lumBlack) + 0.05);
+    const useWhite = contrastBlack < 1.8; // interface trop foncée pour un badge noir lisible
+    document.documentElement.style.setProperty('--fp-logo-bg', useWhite ? '#FFFFFF' : '#111111');
+    document.documentElement.style.setProperty('--fp-logo-fg', useWhite ? pc : '#FFFFFF');
+    document.documentElement.style.setProperty('--fp-logo-border', useWhite ? 'rgba(0,0,0,.18)' : '#000000');
   },
 };
 FP.groupeLabel = (key) => {
