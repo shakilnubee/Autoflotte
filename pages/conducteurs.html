@@ -138,7 +138,7 @@
     <div class="flex items-center gap-3">
       <div class="driver-avatar" id="drawer-avatar">?</div>
       <div>
-        <h2 class="text-xl font-extrabold" id="drawer-name">—</h2>
+        <h2 class="text-xl font-extrabold" id="drawer-name" data-cf="name" data-ct="text" style="cursor:pointer">—</h2>
         <p class="text-sm text-slate-500" id="drawer-sub">—</p>
       </div>
     </div>
@@ -481,13 +481,12 @@
         <div class="kpi p-3"><div class="kpi-label">À payer</div><div class="kpi-value" style="font-size:1.1rem; color: var(--fp-danger)">${FP.euro(dus)}</div></div>
       </div>
 
-      ${hasContact ? `
       <div class="space-y-1.5 text-sm">
-        ${d.tel ? `<div class="flex justify-between"><span class="text-slate-600">Téléphone</span><a href="tel:${escapeHtml(d.tel)}" class="font-medium" style="color: var(--fp-accent)">${escapeHtml(d.tel)}</a></div>` : ''}
-        ${d.email ? `<div class="flex justify-between"><span class="text-slate-600">Email</span><a href="mailto:${escapeHtml(d.email)}" class="font-medium" style="color: var(--fp-accent)">${escapeHtml(d.email)}</a></div>` : ''}
+        <div class="flex justify-between"><span class="text-slate-600">Téléphone</span><span class="font-medium text-right" data-cf="tel" data-ct="text">${d.tel ? escapeHtml(d.tel) : '<span class="text-slate-300">—</span>'}</span></div>
+        <div class="flex justify-between"><span class="text-slate-600">Email</span><span class="font-medium text-right" data-cf="email" data-ct="text">${d.email ? escapeHtml(d.email) : '<span class="text-slate-300">—</span>'}</span></div>
         ${d.permis ? `<div class="flex justify-between"><span class="text-slate-600">N° de permis</span><span class="font-medium">${escapeHtml(d.permis)}</span></div>` : ''}
-        ${d.note ? `<div class="pt-1 text-slate-600 italic">${escapeHtml(d.note)}</div>` : ''}
-      </div>` : ''}
+        <div class="flex justify-between"><span class="text-slate-600">Note</span><span class="font-medium text-right" data-cf="note" data-ct="text">${d.note ? escapeHtml(d.note) : '<span class="text-slate-300">—</span>'}</span></div>
+      </div>
 
       ${permisSectionHTML(d)}
 
@@ -608,6 +607,28 @@
   function closeViewer(){ $('viewer-backdrop').classList.remove('open'); $('viewer-frame').src = ''; }
   $('viewer-close').addEventListener('click', closeViewer);
   $('viewer-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeViewer(); });
+
+  // Édition par double-clic (nom, téléphone, email, note)
+  $('drawer').addEventListener('dblclick', e => {
+    const el = e.target.closest('[data-cf]');
+    if (!el) return;
+    const key = currentDriverKey; if (!key) return;
+    const d = drivers.find(x => x.key === key);
+    const field = el.dataset.cf;
+    const r = condRow(key) || {};
+    const cur = field === 'name' ? (r.name || (d && d.name) || '') : (r[field] || (d && d[field]) || '');
+    FP.cellEditor(el, cur, el.dataset.ct || 'text', {
+      onSave: (nv) => {
+        if (FP.history && FP.history.commit) FP.history.commit();
+        const changes = { [field]: nv, manuel: true };
+        if (field !== 'name') changes.name = r.name || (d && d.name) || key;
+        upsertCond(key, changes);
+        drivers = buildDrivers(); renderKPIs(); renderGrid();
+        openDrawer(currentDriverKey);
+      },
+      onCancel: () => openDrawer(currentDriverKey),
+    });
+  });
 
   // Clics dans le drawer : voir / ajouter / supprimer un permis, ou supprimer le conducteur
   $('drawer-body').addEventListener('click', e => {

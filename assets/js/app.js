@@ -187,6 +187,41 @@ FP.normalizeVehicleNames = () => {
 FP.normalizeVehicleNames(); // données locales (data.js déjà chargé)
 document.addEventListener('fp:data-ready', FP.normalizeVehicleNames); // après chargement Supabase
 
+// Éditeur de cellule inline réutilisable (double-clic → champ éditable)
+// FP.cellEditor(el, value, type, { options, onSave(newVal), onCancel })
+FP.cellEditor = (el, value, type, opts) => {
+  opts = opts || {};
+  if (!el || el.querySelector('.cell-edit')) return;
+  let html;
+  if (type === 'select') {
+    const options = opts.options || [];
+    html = `<select class="cell-edit">${options.map(o => `<option value="${String(o).replace(/"/g, '&quot;')}" ${o === value ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+  } else {
+    const t = type === 'number' ? 'number' : type === 'date' ? 'date' : 'text';
+    const val = type === 'date' ? (typeof value === 'string' ? value.slice(0, 10) : '') : (value == null ? '' : value);
+    html = `<input class="cell-edit" type="${t}" value="${String(val).replace(/"/g, '&quot;')}">`;
+  }
+  el.innerHTML = html;
+  const inp = el.querySelector('.cell-edit');
+  inp.focus(); if (inp.select) inp.select();
+  let done = false;
+  const finish = (save) => {
+    if (done) return; done = true;
+    if (save) {
+      let nv = inp.value;
+      if (type === 'number') nv = (nv === '' ? null : parseFloat(nv));
+      else if (typeof nv === 'string') nv = nv.trim();
+      if (opts.onSave) opts.onSave(nv);
+    } else if (opts.onCancel) opts.onCancel();
+  };
+  inp.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+  });
+  inp.addEventListener('blur', () => finish(true));
+  if (type === 'select') inp.addEventListener('change', () => finish(true));
+};
+
 FP.groupeLabel = (key) => {
   const k = key || 'non-classe';
   return (FP.settings.get().groupes[k] || FP.settings.defaults.groupes['non-classe']).label;
