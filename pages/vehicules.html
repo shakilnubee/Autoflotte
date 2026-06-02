@@ -1611,7 +1611,19 @@
   async function persistVehFields(v, fields) {
     fields = Array.isArray(fields) ? fields : [fields];
     if (dbAvailable()) {
-      const ok = await persistVehicleUpsert(v, false);
+      // N'envoyer QUE les champs modifiés (jamais toute la ligne) pour ne pas
+      // écraser des modifs faites entre-temps (autre poste / autre champ).
+      const full = vehToDb(v);
+      const patch = {};
+      fields.forEach(f => { if (f in full) patch[f] = full[f]; });
+      let ok = false;
+      try {
+        const res = await FP.db.update('vehicules', v.id, patch);
+        if (res && res.error) throw res.error;
+        ok = true;
+      } catch (err) {
+        console.error('[persistVehFields]', err);
+      }
       fields.forEach(f => {
         if (ok) { if (FP.removeVehicleOverride) FP.removeVehicleOverride(v.id, f); }
         else if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { [f]: v[f] });
