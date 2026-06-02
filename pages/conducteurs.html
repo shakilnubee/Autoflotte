@@ -323,6 +323,11 @@
     return `<div><div class="font-semibold mb-2 border-b border-slate-200 pb-1">Permis de conduire</div>${body}${form}</div>`;
   }
 
+  // Conducteurs de référence = ceux présents dans le fichier Drive (véhicules + contraventions).
+  // Une amende d'une personne hors de cette liste (ex : emprunteur ponctuel) reste visible
+  // dans la page Amendes mais ne crée PAS de fiche conducteur ici.
+  const DRIVE_CONDUCTEURS = new Set(["ahmed","akram","ambre","andrea","anna","bram","byd","charles","conu","daniel","david","diana","enguerrand","eugénie","farah","frédéric","fx","gionata","guerric","halim","ilhem","jérémie","jimmy","jocelyn","johanna","léo","lucie","martin","maxime","mégane","mickaël","mona","monsieur","mr","nacim","nawelle","nicolas","pauline","raphaël","romuald","samira","sergio","shakil","shaohui","sofiane","thomas","xavi","yannis","youssouf"]);
+
   // Construit la liste des conducteurs depuis vehicules + amendes
   function buildDrivers() {
     const map = new Map();
@@ -335,11 +340,16 @@
       if (!map.has(key)) map.set(key, { name: cleanName, key, vehicules: [], amendes: [] });
       map.get(key).vehicules.push(v);
     });
-    // Depuis amendes : match par prénom (case-insensitive, premier mot)
+    // Depuis amendes : match par prénom (case-insensitive, premier mot).
+    // On n'ATTACHE l'amende qu'aux conducteurs déjà connus (véhicule) ou présents dans
+    // le fichier Drive. Une nouvelle personne (emprunteur) ne crée pas de fiche.
     (data.amendes || []).forEach(a => {
       const key = normPrenom(a.prenom);
       if (!key) return;
-      if (!map.has(key)) map.set(key, { name: a.prenom.trim(), key, vehicules: [], amendes: [] });
+      if (!map.has(key)) {
+        if (!DRIVE_CONDUCTEURS.has(key)) return; // hors fichier Drive → pas de fiche conducteur
+        map.set(key, { name: a.prenom.trim(), key, vehicules: [], amendes: [] });
+      }
       map.get(key).amendes.push(a);
     });
 
