@@ -174,6 +174,7 @@ FP.DEFAULT_NAV_LABELS = {
   'factures.html':     'Factures',
   'entretiens.html':   'Entretiens',
   'contrats.html':     'Contrats',
+  'guide.html':        'Guide',
   'parametres.html':   'Paramètres',
 };
 // Ordre d'affichage des onglets du menu (clés data-nav), navOrder en tête puis le reste
