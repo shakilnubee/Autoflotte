@@ -585,7 +585,8 @@
     groupe: 'all',
     editingId: null,
     selectedIds: new Set(),
-    sortCT: null, // null | 'asc' (échéance la plus proche d'abord) | 'desc'
+    sortKey: null,   // null | 'prochainCT' | 'km'
+    sortDir: 'asc',  // 'asc' | 'desc'
   };
 
   // Labels et couleurs sont fournis par FP.groupeLabel() (configurables via /pages/parametres.html)
@@ -838,8 +839,10 @@
       const def = DATA_COLUMNS.find(c => c.key === k);
       if (!def) return '';
       const label = getColLabel(k);
-      const sortBtn = (k === 'prochainCT')
-        ? `<button class="ct-sort-btn" data-ct-sort title="Trier par échéance">${state.sortCT === 'asc' ? '▲' : state.sortCT === 'desc' ? '▼' : '⇅'}</button>${state.sortCT ? `<button class="ct-sort-btn ct-sort-reset" data-ct-sort-reset title="Revenir à l'ordre normal">↺</button>` : ''}`
+      const SORTABLE = { prochainCT: 1, km: 1 };
+      const arrow = state.sortKey === k ? (state.sortDir === 'asc' ? '▲' : '▼') : '⇅';
+      const sortBtn = SORTABLE[k]
+        ? `<button class="ct-sort-btn" data-sort-key="${k}" title="Trier">${arrow}</button>${state.sortKey === k ? `<button class="ct-sort-btn ct-sort-reset" data-sort-reset title="Revenir à l'ordre normal">↺</button>` : ''}`
         : '';
       return `<th draggable="true" data-col-key="${k}" title="Glisser pour déplacer • Double-clic pour renommer"><span class="col-label">${label}</span>${sortBtn}<button class="col-hide-btn" data-hide-key="${k}" title="Masquer cette colonne">✕</button><div class="col-resize-handle" data-resize-key="${k}" title="Redimensionner"></div></th>`;
     }).join('');
@@ -979,17 +982,19 @@
   // Masquer une colonne en cliquant sur le ✕
   $('vehicules-thead').addEventListener('click', (e) => {
     // Revenir à l'ordre normal
-    if (e.target.closest('[data-ct-sort-reset]')) {
+    if (e.target.closest('[data-sort-reset]')) {
       e.stopPropagation();
-      state.sortCT = null;
+      state.sortKey = null;
       renderTableHeaders(); renderTable();
       return;
     }
-    // Tri par échéance CT (alterne croissant / décroissant)
-    const sortBtn = e.target.closest('.ct-sort-btn');
+    // Tri par colonne (alterne croissant / décroissant)
+    const sortBtn = e.target.closest('[data-sort-key]');
     if (sortBtn) {
       e.stopPropagation();
-      state.sortCT = state.sortCT === 'asc' ? 'desc' : 'asc';
+      const k = sortBtn.dataset.sortKey;
+      if (state.sortKey === k) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      else { state.sortKey = k; state.sortDir = 'asc'; }
       renderTableHeaders();
       renderTable();
       return;
@@ -1125,17 +1130,15 @@
       if (q && !(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`.toLowerCase().includes(q))) return false;
       return true;
     });
-    // Tri par échéance de CT (prioritaire s'il est activé)
-    if (state.sortCT) {
-      const dir = state.sortCT === 'desc' ? -1 : 1;
-      filteredList.sort((a, b) => {
-        const ja = FP.joursRestants(a.prochainCT);
-        const jb = FP.joursRestants(b.prochainCT);
-        const va = (ja === null || ja === undefined) ? Infinity : ja; // sans CT → à la fin
-        const vb = (jb === null || jb === undefined) ? Infinity : jb;
-        if (va === vb) return 0;
-        return (va - vb) * dir;
-      });
+    // Tri par colonne (prioritaire s'il est activé) : échéance CT ou kilométrage
+    if (state.sortKey) {
+      const dir = state.sortDir === 'desc' ? -1 : 1;
+      const key = state.sortKey;
+      const valOf = (v) => {
+        if (key === 'prochainCT') { const j = FP.joursRestants(v.prochainCT); return (j === null || j === undefined) ? Infinity : j; }
+        const n = Number(v[key]); return isFinite(n) ? n : Infinity; // sans valeur → à la fin
+      };
+      filteredList.sort((a, b) => { const va = valOf(a), vb = valOf(b); return va === vb ? 0 : (va - vb) * dir; });
       return filteredList;
     }
     // Application de l'ordre custom utilisateur si défini (drag-and-drop des lignes)
