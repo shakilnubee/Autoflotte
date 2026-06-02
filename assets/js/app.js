@@ -187,6 +187,28 @@ FP.normalizeVehicleNames = () => {
 FP.normalizeVehicleNames(); // données locales (data.js déjà chargé)
 document.addEventListener('fp:data-ready', FP.normalizeVehicleNames); // après chargement Supabase
 
+// Normalisation d'un prénom (1er mot, minuscules, accents conservés) — partagé
+FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
+// Conducteurs connus (fichier Drive de référence) — partagé entre pages pour un comptage cohérent
+FP.DRIVE_CONDUCTEURS = new Set(["ahmed","akram","ambre","andrea","anna","bram","byd","charles","conu","daniel","david","diana","enguerrand","eugénie","farah","frédéric","fx","gionata","guerric","halim","ilhem","jérémie","jérémy","jimmy","jocelyn","johanna","léo","lucie","martin","maxime","mégane","mickaël","mona","monsieur","mr","nacim","nawelle","nicolas","pauline","raphaël","romuald","samira","sergio","shakil","shaohui","sofiane","thomas","xavi","yannis","youssouf"]);
+// Étiquettes de chauffeur qui ne sont PAS des personnes
+FP.NON_CHAUFFEURS = ['Siège', 'Dépôt', 'Navette', 'VENDU', 'x', 'X', 'Fenwick'];
+// Comptage des conducteurs (mêmes règles que la page Conducteurs, hors manuels/masqués)
+// → garantit le même nombre sur le tableau de bord et la page Conducteurs.
+FP.driverKeysFromData = (data) => {
+  const keys = new Set();
+  (data.vehicules || []).forEach(v => {
+    const name = (v.chauffeur || '').trim();
+    if (!name || name === '—' || FP.NON_CHAUFFEURS.includes(name)) return;
+    const k = FP.normPrenom(name); if (k) keys.add(k);
+  });
+  (data.amendes || []).forEach(a => {
+    const k = FP.normPrenom(a.prenom); if (!k) return;
+    if (keys.has(k) || FP.DRIVE_CONDUCTEURS.has(k)) keys.add(k);
+  });
+  return keys;
+};
+
 // Éditeur de cellule inline réutilisable (double-clic → champ éditable)
 // FP.cellEditor(el, value, type, { options, onSave(newVal), onCancel })
 FP.cellEditor = (el, value, type, opts) => {

@@ -37,6 +37,8 @@
   .viewer-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .75rem 1rem; border-bottom: 1px solid var(--fp-border); font-weight: 700; }
   .viewer-head .v-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .viewer iframe { flex: 1; width: 100%; border: 0; }
+  .cond-tab { padding: .5rem .9rem; font-size: .85rem; font-weight: 600; color: var(--fp-muted); border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+  .cond-tab.active { color: var(--fp-primary); border-bottom-color: var(--fp-accent); }
 </style>
 <script>
 (function(){
@@ -209,10 +211,7 @@
   function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   // Normalisation des prénoms : "Maxime ", "Maxime T", "Maxime THOMPSON" → "Maxime"
-  function normPrenom(s) {
-    if (!s) return '';
-    return s.toString().trim().split(/\s+/)[0].toLowerCase();
-  }
+  const normPrenom = (s) => FP.normPrenom(s);
 
   // ====== Conducteurs / permis : table Supabase 'conducteurs' (cache mémoire) ======
   // Chaque ligne : { key, name, tel, email, note, permisUrl, permisFileId, masque, manuel }
@@ -222,9 +221,14 @@
 
   function condRow(key) { return condCache.find(r => r.key === key) || null; }
   function toCondDb(r) {
-    return { key: r.key, name: r.name || null, tel: r.tel || null, email: r.email || null, note: r.note || null,
+    return { key: r.key, name: r.name || null, nom: r.nom || null, prenom: r.prenom || null,
+             adresse: r.adresse || null, dateNaissance: r.dateNaissance || null,
+             tel: r.tel || null, email: r.email || null, note: r.note || null,
              permisUrl: r.permisUrl || null, permisFileId: r.permisFileId || null, masque: !!r.masque, manuel: !!r.manuel };
   }
+  // Champs "fiche collaborateur" conservés dans le store local
+  const COND_FICHE_FIELDS = ['name', 'nom', 'prenom', 'adresse', 'dateNaissance', 'tel', 'email', 'note'];
+  const pickFiche = (r) => { const o = {}; COND_FICHE_FIELDS.forEach(f => { if (r[f] != null) o[f] = r[f]; }); return o; };
   // Crée/fusionne une ligne et persiste (Supabase si dispo, sinon localStorage)
   function upsertCond(key, changes) {
     let row = condRow(key);
@@ -241,7 +245,7 @@
   // Dérive les anciennes structures depuis le cache (utilisé par buildDrivers / permis)
   function getCondStore() {
     return {
-      manuels: condCache.filter(r => r.manuel).map(r => ({ name: r.name, tel: r.tel, email: r.email, note: r.note })),
+      manuels: condCache.filter(r => r.manuel).map(pickFiche),
       masques: condCache.filter(r => r.masque).map(r => r.key),
     };
   }
@@ -253,7 +257,7 @@
 
   // --- Fallback localStorage (si Supabase indisponible) ---
   function persistCondToLS() {
-    const store = { manuels: condCache.filter(r => r.manuel).map(r => ({ name: r.name, tel: r.tel, email: r.email, note: r.note })), masques: condCache.filter(r => r.masque).map(r => r.key) };
+    const store = { manuels: condCache.filter(r => r.manuel).map(pickFiche), masques: condCache.filter(r => r.masque).map(r => r.key) };
     const permis = {}; condCache.forEach(r => { if (r.permisUrl) permis[r.key] = { url: r.permisUrl, fileId: r.permisFileId }; });
     localStorage.setItem(COND_KEY, JSON.stringify(store));
     localStorage.setItem(PERMIS_KEY, JSON.stringify(permis));
@@ -262,7 +266,7 @@
     const store = (() => { try { return JSON.parse(localStorage.getItem(COND_KEY) || '{}'); } catch { return {}; } })();
     const permis = (() => { try { return JSON.parse(localStorage.getItem(PERMIS_KEY) || '{}'); } catch { return {}; } })();
     const map = {};
-    (store.manuels || []).forEach(m => { const k = normPrenom(m.name); if (!k) return; map[k] = { key: k, name: m.name, tel: m.tel, email: m.email, note: m.note, manuel: true }; });
+    (store.manuels || []).forEach(m => { const k = normPrenom(m.name); if (!k) return; map[k] = { key: k, ...m, manuel: true }; });
     (store.masques || []).forEach(k => { map[k] = map[k] || { key: k }; map[k].masque = true; });
     Object.entries(permis).forEach(([k, p]) => { map[k] = map[k] || { key: k }; map[k].permisUrl = p.url; map[k].permisFileId = p.fileId; });
     condCache = Object.values(map);
@@ -329,7 +333,7 @@
   // Conducteurs de référence = ceux présents dans le fichier Drive (véhicules + contraventions).
   // Une amende d'une personne hors de cette liste (ex : emprunteur ponctuel) reste visible
   // dans la page Amendes mais ne crée PAS de fiche conducteur ici.
-  const DRIVE_CONDUCTEURS = new Set(["ahmed","akram","ambre","andrea","anna","bram","byd","charles","conu","daniel","david","diana","enguerrand","eugénie","farah","frédéric","fx","gionata","guerric","halim","ilhem","jérémie","jérémy","jimmy","jocelyn","johanna","léo","lucie","martin","maxime","mégane","mickaël","mona","monsieur","mr","nacim","nawelle","nicolas","pauline","raphaël","romuald","samira","sergio","shakil","shaohui","sofiane","thomas","xavi","yannis","youssouf"]);
+  const DRIVE_CONDUCTEURS = FP.DRIVE_CONDUCTEURS;
 
   // Construit la liste des conducteurs depuis vehicules + amendes
   function buildDrivers() {
@@ -369,6 +373,10 @@
       if (m.email)  d.email  = m.email;
       if (m.permis) d.permis = m.permis;
       if (m.note)   d.note   = m.note;
+      if (m.nom)          d.nom = m.nom;
+      if (m.prenom)       d.prenom = m.prenom;
+      if (m.adresse)      d.adresse = m.adresse;
+      if (m.dateNaissance) d.dateNaissance = m.dateNaissance;
     });
 
     // Masqués : retirés de la liste (sans supprimer véhicules/amendes)
@@ -473,8 +481,25 @@
     const totalPaye = d.amendes.filter(a => a.statut === 'payée').reduce((s, a) => s + (a.montant || 0), 0);
     const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
 
-    const hasContact = d.tel || d.email || d.permis || d.note;
+    const fRow = (label, field, type, val) => `<div class="flex justify-between gap-3"><span class="text-slate-600">${label}</span><span class="font-medium text-right" data-cf="${field}" data-ct="${type}">${val ? escapeHtml(val) : '<span class="text-slate-300">—</span>'}</span></div>`;
     $('drawer-body').innerHTML = `
+      <div class="flex gap-1 border-b border-slate-200" id="cond-tabs">
+        <button type="button" class="cond-tab active" data-pane="apercu">Aperçu</button>
+        <button type="button" class="cond-tab" data-pane="fiche">Fiche collaborateur</button>
+      </div>
+
+      <div data-pane-content="fiche" class="space-y-1.5 text-sm pt-1 hidden">
+        ${fRow('Nom', 'nom', 'text', d.nom)}
+        ${fRow('Prénom', 'prenom', 'text', d.prenom)}
+        ${fRow('Date de naissance', 'dateNaissance', 'date', d.dateNaissance ? FP.date(d.dateNaissance) : '')}
+        ${fRow('Adresse', 'adresse', 'text', d.adresse)}
+        ${fRow('Téléphone', 'tel', 'text', d.tel)}
+        ${fRow('Email', 'email', 'text', d.email)}
+        ${fRow('Note', 'note', 'text', d.note)}
+        ${d.permis ? `<div class="flex justify-between"><span class="text-slate-600">N° de permis</span><span class="font-medium">${escapeHtml(d.permis)}</span></div>` : ''}
+      </div>
+
+      <div data-pane-content="apercu" class="space-y-5 pt-1">
       <div class="grid grid-cols-3 gap-3">
         <div class="kpi p-3"><div class="kpi-label">Points perdus</div><div class="kpi-value" style="font-size:1.3rem; color: var(--fp-danger)">${nbPoints}</div></div>
         <div class="kpi p-3"><div class="kpi-label">Payé</div><div class="kpi-value" style="font-size:1.1rem">${FP.euro(totalPaye)}</div></div>
@@ -529,6 +554,7 @@
 
       <div class="pt-2 border-t border-slate-100">
         <button type="button" id="drawer-delete" data-key="${escapeHtml(d.key)}" class="btn text-sm text-red-600 hover:bg-red-50 w-full justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer ce conducteur</button>
+      </div>
       </div>
     `;
 
@@ -607,6 +633,15 @@
   function closeViewer(){ $('viewer-backdrop').classList.remove('open'); $('viewer-frame').src = ''; }
   $('viewer-close').addEventListener('click', closeViewer);
   $('viewer-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeViewer(); });
+
+  // Bascule des onglets de la fiche (Aperçu / Fiche collaborateur)
+  $('drawer').addEventListener('click', e => {
+    const tab = e.target.closest('.cond-tab');
+    if (!tab) return;
+    const pane = tab.dataset.pane;
+    document.querySelectorAll('#cond-tabs .cond-tab').forEach(t => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('[data-pane-content]').forEach(p => p.classList.toggle('hidden', p.dataset.paneContent !== pane));
+  });
 
   // Édition par double-clic (nom, téléphone, email, note)
   $('drawer').addEventListener('dblclick', e => {
