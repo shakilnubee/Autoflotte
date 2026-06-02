@@ -773,7 +773,11 @@ FP.loadVehicleOverrides = () => {
   window.FP_DATA.vehicules.forEach(v => {
     if (overrides[v.id]) Object.assign(v, overrides[v.id]);
   });
+  if (FP.normalizeVehicleNames) FP.normalizeVehicleNames();
 };
+// Applique les modifs locales dès le 1er affichage (avant le chargement Supabase),
+// pour que toute modif se voie immédiatement sur toutes les pages.
+try { FP.loadVehicleOverrides(); } catch (e) {}
 
 // === Historique Undo/Redo ===
 // Snapshote l'état complet (settings + overrides + vehicules in-memory) avant chaque mutation.
