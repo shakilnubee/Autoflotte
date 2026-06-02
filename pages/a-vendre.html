@@ -172,7 +172,7 @@
   }
 
   // Sauvegarde directe au changement
-  document.addEventListener('change', e => {
+  document.addEventListener('change', async e => {
     const el = e.target.closest('[data-id][data-field]');
     if (!el || !el.closest('.veh-card')) return;
     const id = el.dataset.id;
@@ -180,11 +180,16 @@
     const value = field === 'prixVente' ? (parseInt(el.value, 10) || null) : el.value;
     const v = data.vehicules.find(x => x.id === id);
     if (!v) return;
-    if (field === 'pipelineStatut' && value === 'vendu') {
-      v.statut = 'vendu';
-    }
+    const patch = { [field]: value };
+    if (field === 'pipelineStatut' && value === 'vendu') { v.statut = 'vendu'; patch.statut = 'vendu'; }
     v[field] = value;
-    FP.saveVehicleOverride(id, { [field]: value, ...(field === 'pipelineStatut' && value === 'vendu' ? { statut: 'vendu' } : {}) });
+    // Sauvegarde locale (toujours) + Supabase champ par champ (si dispo), sans écraser le reste
+    FP.saveVehicleOverride(id, patch);
+    if (window.FP && FP.db && FP.supabase) {
+      for (const [k, val] of Object.entries(patch)) {
+        try { const res = await FP.db.update('vehicules', id, { [k]: val }); if (res && res.error) throw res.error; } catch (err) { console.warn('[a-vendre persist]', k, err); }
+      }
+    }
     renderKPIs();
     renderPipeline();
   });
