@@ -177,8 +177,11 @@
         <div style="position: relative; height: 260px"><canvas id="groupesChart"></canvas></div>
       </div>
       <div class="card p-6">
-        <h3 class="font-bold text-slate-900 mb-4">Top conducteurs — amendes 2026</h3>
-        <div style="position: relative; height: 260px"><canvas id="topConducteursChart"></canvas></div>
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold text-slate-900">🏆 Podium conducteurs — amendes 2026</h3>
+          <button id="dash-podium-toggle" class="btn btn-outline text-xs">Voir tout</button>
+        </div>
+        <div id="dash-podium" class="space-y-1" style="max-height:260px;overflow-y:auto"></div>
       </div>
     </div>
 
@@ -382,30 +385,35 @@
     }
   })();
 
-  // === Top conducteurs — amendes 2026 ===
+  // === Podium conducteurs — amendes 2026 ===
   (function () {
     const NP = new Set(['siege', 'depot', 'navette', 'vendu', 'x', 'fenwick', '']);
     const key = s => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
     const byDriver = {};
     (data.amendes || []).filter(a => a.annee === '2026').forEach(a => {
       const k = key(a.prenom); if (!k || NP.has(k)) return;
-      byDriver[k] = byDriver[k] || { nom: a.prenom.trim(), n: 0 };
-      byDriver[k].n++;
+      byDriver[k] = byDriver[k] || { nom: (a.prenom || '').trim(), n: 0, montant: 0, points: 0 };
+      byDriver[k].n++; byDriver[k].montant += (a.montant || 0); byDriver[k].points += (Number(a.points) || 0);
     });
-    const top = Object.values(byDriver).sort((a, b) => b.n - a.n).slice(0, 8);
-    const el = document.getElementById('topConducteursChart');
-    if (el && top.length) {
-      new Chart(el.getContext('2d'), {
-        type: 'bar',
-        data: { labels: top.map(d => d.nom), datasets: [{ label: 'Amendes', data: top.map(d => d.n), backgroundColor: '#F59E0B', borderRadius: 5 }] },
-        options: {
-          indexAxis: 'y',
-          plugins: { legend: { display: false } },
-          scales: { x: { grid: { color: '#F1F5F9' }, ticks: { precision: 0 } }, y: { grid: { display: false } } },
-          maintainAspectRatio: false, responsive: true,
-        }
-      });
+    const all = Object.values(byDriver).sort((a, b) => b.n - a.n || b.montant - a.montant);
+    const medals = ['🥇', '🥈', '🥉'];
+    let expanded = false;
+    const box = document.getElementById('dash-podium');
+    const btn = document.getElementById('dash-podium-toggle');
+    const euro = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+    function render() {
+      const shown = expanded ? all : all.slice(0, 5);
+      box.innerHTML = shown.map((d, i) => `
+        <a href="pages/amendes.html" class="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50">
+          <span class="text-lg w-7 text-center flex-shrink-0">${medals[i] || `<span class="text-sm font-bold text-slate-400">${i + 1}</span>`}</span>
+          <span class="flex-1 font-semibold text-slate-800 truncate">${d.nom}</span>
+          <span class="text-sm text-slate-500 flex-shrink-0">${d.n} · ${euro(d.montant)}${d.points ? ' · −' + d.points + 'pts' : ''}</span>
+        </a>`).join('') || '<p class="text-sm text-slate-400">Aucune amende 2026.</p>';
+      if (all.length <= 5) { btn.style.display = 'none'; }
+      else { btn.textContent = expanded ? 'Voir moins' : `Voir tout (${all.length})`; }
     }
+    if (btn) btn.addEventListener('click', () => { expanded = !expanded; render(); });
+    render();
   })();
 
   // Re-init icons
