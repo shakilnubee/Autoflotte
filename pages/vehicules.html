@@ -401,7 +401,7 @@
         <span id="drawer-chauffeur" class="text-sm font-semibold text-slate-700 inline-flex items-center gap-1"></span>
         <button id="drawer-photo-edit" class="text-xs text-slate-400 hover:text-slate-700 inline-flex items-center gap-1 ml-auto" title="Ajouter / modifier la photo"><i data-lucide="image" class="w-3.5 h-3.5"></i> photo</button>
       </div>
-      <h2 class="text-lg font-bold text-slate-800 mt-2" id="drawer-title">—</h2>
+      <h2 class="text-lg font-bold text-slate-800 mt-2" id="drawer-title" style="cursor:pointer" title="Cliquer pour renommer (marque + modèle)">—</h2>
       <p class="text-sm text-slate-500" id="drawer-subtitle">—</p>
     </div>
   </div>
@@ -1357,7 +1357,7 @@
 
       <div class="grid grid-cols-2 gap-3">
         <div class="kpi p-3"><div class="kpi-label">Kilométrage</div><div class="kpi-value" style="font-size:1.3rem">${FP.num(v.km)} km</div></div>
-        <div class="kpi p-3"><div class="kpi-label">Chauffeur</div><div class="kpi-value" style="font-size:1rem">${chauffeurLink(v.chauffeur)}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">Carburant</div><div class="kpi-value" style="font-size:1rem">${v.carburant || '<span class="text-slate-400">—</span>'}</div></div>
         <div class="kpi p-3"><div class="kpi-label">Prochain CT</div><div class="kpi-value" style="font-size:1rem">${ctCell(v.prochainCT)}</div></div>
         <div class="kpi p-3"><div class="kpi-label">TVS estimée</div><div class="kpi-value" style="font-size:1.3rem">${FP.euro(tvs)}</div></div>
       </div>
@@ -1924,6 +1924,24 @@
     v.photoUrl = url.trim() || undefined;
     if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { photoUrl: v.photoUrl || '' });
     renderDrawerPhoto(v);
+  });
+  // Renommer la voiture (marque + modèle) en cliquant sur le titre
+  $('drawer-title').addEventListener('click', () => {
+    const v = data.vehicules.find(x => x.id === drawerVehId);
+    if (!v) return;
+    const marque = prompt('Marque :', v.marque || '');
+    if (marque === null) return;
+    const modele = prompt('Modèle :', v.modele || '');
+    if (modele === null) return;
+    FP.history.commit();
+    v.marque = marque.trim();
+    v.modele = modele.trim();
+    $('drawer-title').textContent = `${v.marque} ${v.modele}`;
+    renderDrawerLogo(v);
+    renderDrawerPhoto(v);
+    renderTable();
+    if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { marque: v.marque, modele: v.modele });
+    persistVehicleUpsert(v, false);
   });
   $('drawer-backdrop').addEventListener('click', closeDrawer);
 
