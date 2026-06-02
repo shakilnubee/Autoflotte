@@ -204,7 +204,7 @@
       <!-- Widget : Alertes & véhicules récents -->
       <div class="dash-widget" data-widget="alertes">
         <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Alertes & véhicules</span></div>
-        <div class="grid lg:grid-cols-3 gap-6">
+        <div class="grid lg:grid-cols-3 gap-6 items-start">
           <div class="card p-6">
             <div class="flex justify-between items-center mb-4">
               <h3 class="font-bold text-slate-900">Alertes</h3>
@@ -232,6 +232,7 @@
                 <tbody id="vehicules-tbody"></tbody>
               </table>
             </div>
+            <div id="veh-more"></div>
           </div>
         </div>
       </div>
@@ -329,17 +330,32 @@
   renderAlertes();
 
   // === Véhicules table ===
-  document.getElementById('vehicules-tbody').innerHTML = data.vehicules.slice(0,6).map(v => `
+  const vehTbody = document.getElementById('vehicules-tbody');
+  let vehExpanded = false;
+  function rowHtml(v) {
+    return `
     <tr class="cursor-pointer hover:bg-slate-50 transition-colors" data-veh="${v.id}" title="Voir la fiche de ${v.immat}">
       <td class="font-mono font-semibold">${v.immat}</td>
       <td>${v.marque} ${v.modele}</td>
       <td>${v.chauffeur}</td>
       <td>${FP.num(v.km)} km</td>
       <td>${FP.statutBadge(v.statut)}</td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }
+  function renderVehicules() {
+    const list = data.vehicules || [];
+    const shown = vehExpanded ? list : list.slice(0, 5);
+    vehTbody.innerHTML = shown.map(rowHtml).join('');
+    const more = document.getElementById('veh-more');
+    if (list.length > 5) {
+      more.innerHTML = `<button id="veh-toggle" class="w-full text-center text-sm font-semibold py-2.5 border-t border-slate-100 hover:bg-slate-50" style="color: var(--fp-accent)">${vehExpanded ? 'Voir moins' : 'Voir tout (' + list.length + ')'}</button>`;
+      document.getElementById('veh-toggle').addEventListener('click', () => { vehExpanded = !vehExpanded; renderVehicules(); });
+    } else { more.innerHTML = ''; }
+    lucide.createIcons();
+  }
+  renderVehicules();
   // Clic sur une ligne → ouvre la fiche véhicule sur la page Véhicules
-  document.getElementById('vehicules-tbody').addEventListener('click', (e) => {
+  vehTbody.addEventListener('click', (e) => {
     const tr = e.target.closest('tr[data-veh]');
     if (tr) window.location.href = `pages/vehicules.html?veh=${encodeURIComponent(tr.dataset.veh)}`;
   });
