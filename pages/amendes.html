@@ -147,8 +147,36 @@
         <select id="filter-motif" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
           <option value="all">Tous motifs</option>
         </select>
+
+        <div class="flex items-center gap-1.5">
+          <input id="filter-date-from" type="date" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="À partir du">
+          <span class="text-slate-400 text-sm">→</span>
+          <input id="filter-date-to" type="date" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Jusqu'au">
+        </div>
+
+        <select id="sort-key" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="date">Tri : Date</option>
+          <option value="prenom">Tri : Conducteur</option>
+          <option value="montant">Tri : Montant</option>
+          <option value="points">Tri : Points</option>
+        </select>
+        <button id="sort-dir" class="btn btn-outline text-sm !px-2.5" title="Inverser le sens du tri"><i data-lucide="arrow-down-wide-narrow" class="w-4 h-4"></i></button>
+
+        <button id="reset-filters" class="btn btn-outline text-sm" title="Réinitialiser tous les filtres"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Réinitialiser</button>
       </div>
     </div>
+
+    <!-- Résumé dynamique des amendes filtrées -->
+    <div id="filtered-summary" class="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 mb-4 rounded-xl text-white" style="background:var(--fp-primary)">
+      <span class="text-sm"><span id="sum-count" class="font-extrabold text-lg">0</span> amende(s)</span>
+      <span class="text-sm">Total <span id="sum-montant" class="font-extrabold text-lg">0 €</span></span>
+      <span class="text-sm opacity-90">dont à payer <span id="sum-apayer" class="font-bold">0 €</span></span>
+      <span class="text-sm opacity-90"><span id="sum-points" class="font-bold">0</span> points retirés</span>
+      <span id="sum-context" class="text-sm font-medium ml-auto"></span>
+    </div>
+
+    <!-- Drill-down : collaborateurs par légende (motif) -->
+    <div id="drill-info" class="card p-4 mb-4 hidden"></div>
 
     <!-- Tableau amendes -->
     <div class="card overflow-hidden">
@@ -198,7 +226,7 @@
   const data = window.FP_DATA;
   // Cette page n'affiche que les amendes de 2026 (les 2025 sont historiques)
   // Le filtre est appliqué dans filtered() pour résister au rechargement depuis Supabase
-  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', currentId: null };
+  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null };
   const $ = (id) => document.getElementById(id);
 
   function motifPill(motif) {
@@ -233,6 +261,8 @@
       if (a.annee !== '2026') return false;
       if (state.statut !== 'all' && a.statut !== state.statut) return false;
       if (state.motif !== 'all' && a.motif !== state.motif) return false;
+      if (state.dateFrom && (a.date || '') < state.dateFrom) return false;
+      if (state.dateTo && (a.date || '') > state.dateTo) return false;
       if (q && !(`${a.prenom} ${a.motif} ${a.numeroAvis} ${a.commentaire}`.toLowerCase().includes(q))) return false;
       return true;
     });
@@ -271,8 +301,62 @@
 
   let amendesEditor = null; // initialisé après le DOM ready
 
+  function sortRows(arr) {
+    const dir = state.sortDir === 'asc' ? 1 : -1;
+    return arr.slice().sort((a, b) => {
+      let r;
+      if (state.sortKey === 'prenom')       r = (a.prenom || '').localeCompare(b.prenom || '', 'fr', { sensitivity: 'base' });
+      else if (state.sortKey === 'montant') r = (a.montant || 0) - (b.montant || 0);
+      else if (state.sortKey === 'points')  r = (Number(a.points) || 0) - (Number(b.points) || 0);
+      else                                  r = (a.date || '').localeCompare(b.date || '');
+      if (r === 0) r = (a.date || '').localeCompare(b.date || ''); // tie-break par date
+      return r * dir;
+    });
+  }
+
+  function renderSummary(rows) {
+    const sumMontant = rows.reduce((s, a) => s + (a.montant || 0), 0);
+    const sumApayer = rows.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
+    const sumPoints = rows.reduce((s, a) => s + (Number(a.points) || 0), 0);
+    $('sum-count').textContent = rows.length;
+    $('sum-montant').textContent = FP.euro(sumMontant);
+    $('sum-apayer').textContent = FP.euro(sumApayer);
+    $('sum-points').textContent = sumPoints;
+
+    const actifs = [];
+    if (state.search.trim()) actifs.push(`« ${state.search.trim()} »`);
+    if (state.motif !== 'all') actifs.push(state.motif);
+    if (state.statut !== 'all') actifs.push(state.statut);
+    if (state.dateFrom || state.dateTo) actifs.push(`${state.dateFrom ? FP.date(state.dateFrom) : '…'} → ${state.dateTo ? FP.date(state.dateTo) : '…'}`);
+    $('sum-context').textContent = actifs.length ? '🔎 ' + actifs.join(' · ') : '';
+
+    // Drill-down : qui sont les collaborateurs (par légende) ?
+    const drill = $('drill-info');
+    const groupByConducteur = state.motif !== 'all' || state.search.trim() || state.dateFrom || state.dateTo;
+    if (groupByConducteur && rows.length) {
+      const par = {};
+      rows.forEach(a => {
+        const c = (a.prenom || '—').trim() || '—';
+        if (!par[c]) par[c] = { n: 0, montant: 0, points: 0 };
+        par[c].n++; par[c].montant += (a.montant || 0); par[c].points += (Number(a.points) || 0);
+      });
+      const entries = Object.entries(par).sort((a, b) => b[1].montant - a[1].montant);
+      const titre = state.motif !== 'all' ? `Collaborateurs concernés par « ${state.motif} »` : 'Collaborateurs concernés';
+      drill.innerHTML = `<div class="text-sm font-bold text-slate-900 mb-2">${titre} — ${entries.length} conducteur(s)</div>
+        <div class="flex flex-wrap gap-2">` + entries.map(([c, v]) => `
+          <button type="button" class="drill-chip" data-cond="${c.replace(/"/g, '&quot;')}" style="display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .7rem;border-radius:9999px;border:1px solid var(--fp-border);background:white;font-size:.8rem;cursor:pointer">
+            <span class="font-semibold">${c}</span>
+            <span class="text-slate-500">${v.n} · ${FP.euro(v.montant)}${v.points ? ' · −' + v.points + 'pts' : ''}</span>
+          </button>`).join('') + `</div>`;
+      drill.classList.remove('hidden');
+    } else {
+      drill.classList.add('hidden');
+    }
+  }
+
   function renderTable() {
-    const rows = filtered().slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
+    const rows = sortRows(filtered());
+    renderSummary(rows);
     const tbody = $('amendes-tbody');
     const empty = $('empty-state');
     if (rows.length === 0) {
@@ -294,8 +378,24 @@
     $('result-count').textContent = `${rows.length} amende${rows.length > 1 ? 's' : ''} affichée${rows.length > 1 ? 's' : ''} sur ${total2026}`;
   }
 
+  // ---------- Filtres pilotés par les graphes ----------
+  function scrollToTable() {
+    const el = document.getElementById('filtered-summary');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function setMotifFilter(motif) {
+    state.motif = (state.motif === motif) ? 'all' : motif; // re-clic = on enlève
+    $('filter-motif').value = state.motif;
+    renderTable(); scrollToTable();
+  }
+  function setConducteurFilter(name) {
+    const v = (state.search.trim().toLowerCase() === (name || '').toLowerCase()) ? '' : (name || '');
+    state.search = v; $('search').value = v;
+    renderTable(); scrollToTable();
+  }
+
   // ---------- Charts ----------
-  let motifsChart, conducteursChart;
+  let motifsChart, conducteursChart, motifLabels = [], condLabels = [];
   function renderCharts() {
     // Uniquement amendes 2026
     const amendes2026 = data.amendes.filter(a => a.annee === '2026');
@@ -306,6 +406,7 @@
       motifsCount[m] = (motifsCount[m] || 0) + 1;
     });
     const sortedMotifs = Object.entries(motifsCount).sort((a,b) => b[1] - a[1]).slice(0, 8);
+    motifLabels = sortedMotifs.map(([k]) => k);
     if (motifsChart) motifsChart.destroy();
     motifsChart = new Chart($('motifsChart'), {
       type: 'doughnut',
@@ -319,7 +420,12 @@
       },
       options: {
         cutout: '60%',
-        plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } } },
+        plugins: {
+          legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } }, onClick: (e, item) => setMotifFilter(item.text) },
+          tooltip: { callbacks: { footer: () => 'Cliquer pour filtrer' } }
+        },
+        onClick: (evt, els) => { if (els.length) setMotifFilter(motifLabels[els[0].index]); },
+        onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
         maintainAspectRatio: false, responsive: true,
       }
     });
@@ -331,6 +437,7 @@
       condCount[c] = (condCount[c] || 0) + 1;
     });
     const topCond = Object.entries(condCount).sort((a,b) => b[1] - a[1]).slice(0, 8);
+    condLabels = topCond.map(([k]) => k);
     if (conducteursChart) conducteursChart.destroy();
     conducteursChart = new Chart($('conducteursChart'), {
       type: 'bar',
@@ -344,7 +451,9 @@
       },
       options: {
         indexAxis: 'y',
-        plugins: { legend: { display: false } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { footer: () => 'Cliquer pour filtrer' } } },
+        onClick: (evt, els) => { if (els.length) setConducteurFilter(condLabels[els[0].index]); },
+        onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
         scales: {
           x: { beginAtZero: true, ticks: { precision: 0 } },
           y: { grid: { display: false } }
@@ -481,6 +590,25 @@
   });
   $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderTable(); });
   $('filter-motif').addEventListener('change', e => { state.motif = e.target.value; renderTable(); });
+  $('filter-date-from').addEventListener('change', e => { state.dateFrom = e.target.value; renderTable(); });
+  $('filter-date-to').addEventListener('change', e => { state.dateTo = e.target.value; renderTable(); });
+  $('sort-key').addEventListener('change', e => { state.sortKey = e.target.value; renderTable(); });
+  $('sort-dir').addEventListener('click', () => {
+    state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+    const i = $('sort-dir').querySelector('i');
+    if (i) { i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); lucide.createIcons(); }
+    renderTable();
+  });
+  $('reset-filters').addEventListener('click', () => {
+    Object.assign(state, { search: '', statut: 'all', motif: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc' });
+    $('search').value = ''; $('filter-motif').value = 'all'; $('filter-date-from').value = ''; $('filter-date-to').value = ''; $('sort-key').value = 'date';
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
+    renderTable();
+  });
+  $('drill-info').addEventListener('click', e => {
+    const chip = e.target.closest('[data-cond]');
+    if (chip) setConducteurFilter(chip.dataset.cond);
+  });
 
   $('amendes-tbody').addEventListener('click', e => {
     const tr = e.target.closest('tr[data-id]');
