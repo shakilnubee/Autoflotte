@@ -203,7 +203,7 @@
 
       <!-- Widget : Alertes & véhicules récents -->
       <div class="dash-widget" data-widget="alertes">
-        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Alertes & véhicules récents</span></div>
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Alertes & véhicules</span></div>
         <div class="grid lg:grid-cols-3 gap-6">
           <div class="card p-6">
             <div class="flex justify-between items-center mb-4">
@@ -215,7 +215,7 @@
 
           <div class="card p-0 lg:col-span-2 overflow-hidden">
             <div class="flex justify-between items-center p-6 pb-4">
-              <h3 class="font-bold text-slate-900">Véhicules récents</h3>
+              <h3 class="font-bold text-slate-900">Véhicules</h3>
               <a href="pages/vehicules.html" class="text-sm font-semibold" style="color: var(--fp-accent)">Voir tout →</a>
             </div>
             <div class="scrollable">
@@ -293,8 +293,8 @@
   // KPI : on affiche le nombre critique (rouges + oranges) car les info sont des "à savoir" pas des "à traiter"
   document.getElementById('kpi-alertes').textContent = critiques;
 
-  // Rendu
-  const alertesHtml = alerts.map(a => {
+  // Rendu (5 alertes max, puis bouton "Voir tout")
+  const alertItems = alerts.map(a => {
     const cls = a.niveau === 'danger' ? 'alert-danger' : a.niveau === 'warn' ? 'alert-warn' : 'alert-info';
     const icon = a.niveau === 'danger' ? 'alert-triangle' : a.niveau === 'warn' ? 'bell' : 'info';
     const color = a.niveau === 'danger' ? 'text-red-600' : a.niveau === 'warn' ? 'text-amber-600' : 'text-blue-600';
@@ -307,9 +307,26 @@
         ${a.detail ? `<div class="text-xs text-slate-500 mt-0.5">${a.detail}</div>` : ''}
       </div>
     </${tag}>`;
-  }).join('');
+  });
 
-  document.getElementById('alertes-list').innerHTML = alertesHtml || '<p class="text-sm text-slate-500 text-center py-6">Aucune alerte ✓</p>';
+  const alertesBox = document.getElementById('alertes-list');
+  let alertesExpanded = false;
+  function renderAlertes() {
+    if (!alertItems.length) {
+      alertesBox.innerHTML = '<p class="text-sm text-slate-500 text-center py-6">Aucune alerte ✓</p>';
+      return;
+    }
+    const shown = alertesExpanded ? alertItems : alertItems.slice(0, 5);
+    let html = shown.join('');
+    if (alertItems.length > 5) {
+      html += `<button id="alertes-toggle" class="w-full text-center text-sm font-semibold mt-2 py-1.5 rounded-lg hover:bg-slate-50" style="color: var(--fp-accent)">${alertesExpanded ? 'Voir moins' : 'Voir tout (' + alertItems.length + ')'}</button>`;
+    }
+    alertesBox.innerHTML = html;
+    const tg = document.getElementById('alertes-toggle');
+    if (tg) tg.addEventListener('click', () => { alertesExpanded = !alertesExpanded; renderAlertes(); lucide.createIcons(); });
+    lucide.createIcons();
+  }
+  renderAlertes();
 
   // === Véhicules table ===
   document.getElementById('vehicules-tbody').innerHTML = data.vehicules.slice(0,6).map(v => `
