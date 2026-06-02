@@ -83,6 +83,7 @@ FP.settings = {
       'non-classe':  { label: 'Non classé',  color: '#94A3B8' },
     },
     societe: { nom: 'Auto-flotte', siret: '', adresse: '' },
+    platformColor: '#8B6B4F', // couleur de base de l'interface (sidebar/titres/boutons foncés) — marron clair
     sidebarLabels: {}, // ex: { 'vehicules.html': 'Mes voitures', 'amendes.html': 'PV' }
     customTexts: {}, // textes éditables sur les pages (titres, sous-titres) — ex: { 'amendes.subtitle': 'Mes PV' }
     vehiculesColumns: {
@@ -111,6 +112,7 @@ FP.settings = {
         navOrder: Array.isArray(stored.navOrder) ? stored.navOrder : [],
         sidebarLabels: (stored.sidebarLabels && typeof stored.sidebarLabels === 'object') ? stored.sidebarLabels : {},
         customTexts: (stored.customTexts && typeof stored.customTexts === 'object') ? stored.customTexts : {},
+        platformColor: (typeof stored.platformColor === 'string' && /^#?[0-9a-fA-F]{3,6}$/.test(stored.platformColor)) ? stored.platformColor : this.defaults.platformColor,
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
@@ -131,11 +133,24 @@ FP.settings = {
     localStorage.removeItem(this.STORAGE_KEY);
     this.applyTheme();
   },
+  // Éclaircit / assombrit une couleur hex (amt négatif = plus foncé)
+  _shade(hex, amt) {
+    hex = String(hex || '').replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+    if (hex.length !== 6) return '#' + hex;
+    const cl = x => Math.max(0, Math.min(255, Math.round(x)));
+    const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+    return '#' + [cl(r * (1 + amt)), cl(g * (1 + amt)), cl(b * (1 + amt))].map(x => x.toString(16).padStart(2, '0')).join('');
+  },
   applyTheme() {
     const s = this.get();
     Object.entries(s.groupes).forEach(([k, v]) => {
       document.documentElement.style.setProperty(`--grp-${k}`, v.color);
     });
+    // Couleur de base de la plateforme (sidebar, titres, boutons foncés)
+    const pc = (s.platformColor && s.platformColor[0] === '#') ? s.platformColor : '#' + (s.platformColor || this.defaults.platformColor);
+    document.documentElement.style.setProperty('--fp-primary', pc);
+    document.documentElement.style.setProperty('--fp-primary-2', this._shade(pc, -0.22));
   },
 };
 FP.groupeLabel = (key) => {
