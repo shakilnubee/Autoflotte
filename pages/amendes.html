@@ -125,6 +125,33 @@
       </div>
     </div>
 
+    <!-- Délai de paiement -->
+    <div id="delai-banner" class="hidden items-center gap-3 px-4 py-3 mb-6 rounded-xl" style="background:#FEF2F2;border:1px solid #FECACA"></div>
+
+    <!-- Mini-stats par type + Podium -->
+    <div class="grid lg:grid-cols-3 gap-6 mb-6">
+      <div class="card p-6 lg:col-span-2">
+        <h3 class="font-bold text-slate-900 mb-4">Répartition par type <span class="text-xs font-normal text-slate-400">— clique pour filtrer</span></h3>
+        <div id="type-stats" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">🏆 Podium des conducteurs</h3>
+        <div id="podium" class="space-y-2"></div>
+      </div>
+    </div>
+
+    <!-- Évolution mensuelle + Heatmap calendrier -->
+    <div class="grid lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Évolution mensuelle 2026</h3>
+        <div class="chart-wrap-sm"><canvas id="moisChart"></canvas></div>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Calendrier des amendes <span class="text-xs font-normal text-slate-400">— clique un jour</span></h3>
+        <div id="heatmap" class="overflow-x-auto"></div>
+      </div>
+    </div>
+
     <!-- Filtres -->
     <div class="card p-4 mb-6">
       <div class="flex flex-wrap items-center gap-3">
@@ -212,6 +239,7 @@
   <div class="p-6 space-y-5" id="drawer-body"></div>
   <div class="p-6 border-t border-slate-200 flex gap-2">
     <button class="btn btn-primary text-sm flex-1 justify-center" id="drawer-pay"><i data-lucide="check" class="w-4 h-4"></i> Marquer payée</button>
+    <button class="btn btn-outline text-sm" id="drawer-relance" title="Envoyer un email de relance au conducteur"><i data-lucide="mail" class="w-4 h-4"></i> Relancer</button>
     <button class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
@@ -226,8 +254,27 @@
   const data = window.FP_DATA;
   // Cette page n'affiche que les amendes de 2026 (les 2025 sont historiques)
   // Le filtre est appliqué dans filtered() pour résister au rechargement depuis Supabase
-  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null };
+  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null };
   const $ = (id) => document.getElementById(id);
+
+  // Catégorise un motif en grande famille (pour les mini-stats et le filtre par type)
+  function categorize(motif) {
+    const m = (motif || '').toLowerCase();
+    if (m.includes('vitesse')) return 'vitesse';
+    if (m.includes('stationnement') || m.includes('arret') || m.includes('arrêt') || m.includes('genant') || m.includes('gênant')) return 'stationnement';
+    if (m.includes('téléphone') || m.includes('telephone')) return 'telephone';
+    if (m.includes('feu')) return 'feu';
+    if (m.includes('voie') || m.includes('circulation') || m.includes('bus')) return 'voie';
+    return 'autre';
+  }
+  const CAT_META = {
+    vitesse:        { label: 'Vitesse',       icon: 'gauge',         color: '#DC2626' },
+    stationnement:  { label: 'Stationnement', icon: 'parking-circle', color: '#F59E0B' },
+    telephone:      { label: 'Téléphone',     icon: 'smartphone',    color: '#7C3AED' },
+    feu:            { label: 'Feu rouge',     icon: 'traffic-cone',  color: '#EF4444' },
+    voie:           { label: 'Voie / bus',    icon: 'route',         color: '#1E3A8A' },
+    autre:          { label: 'Autre',         icon: 'circle-dot',    color: '#64748B' },
+  };
 
   function motifPill(motif) {
     const m = (motif || '').toLowerCase();
@@ -261,6 +308,7 @@
       if (a.annee !== '2026') return false;
       if (state.statut !== 'all' && a.statut !== state.statut) return false;
       if (state.motif !== 'all' && a.motif !== state.motif) return false;
+      if (state.motifCat !== 'all' && categorize(a.motif) !== state.motifCat) return false;
       if (state.dateFrom && (a.date || '') < state.dateFrom) return false;
       if (state.dateTo && (a.date || '') > state.dateTo) return false;
       if (q && !(`${a.prenom} ${a.motif} ${a.numeroAvis} ${a.commentaire}`.toLowerCase().includes(q))) return false;
@@ -326,13 +374,14 @@
     const actifs = [];
     if (state.search.trim()) actifs.push(`« ${state.search.trim()} »`);
     if (state.motif !== 'all') actifs.push(state.motif);
+    if (state.motifCat !== 'all') actifs.push((CAT_META[state.motifCat] || {}).label || state.motifCat);
     if (state.statut !== 'all') actifs.push(state.statut);
     if (state.dateFrom || state.dateTo) actifs.push(`${state.dateFrom ? FP.date(state.dateFrom) : '…'} → ${state.dateTo ? FP.date(state.dateTo) : '…'}`);
     $('sum-context').textContent = actifs.length ? '🔎 ' + actifs.join(' · ') : '';
 
     // Drill-down : qui sont les collaborateurs (par légende) ?
     const drill = $('drill-info');
-    const groupByConducteur = state.motif !== 'all' || state.search.trim() || state.dateFrom || state.dateTo;
+    const groupByConducteur = state.motif !== 'all' || state.motifCat !== 'all' || state.search.trim() || state.dateFrom || state.dateTo;
     if (groupByConducteur && rows.length) {
       const par = {};
       rows.forEach(a => {
@@ -341,7 +390,8 @@
         par[c].n++; par[c].montant += (a.montant || 0); par[c].points += (Number(a.points) || 0);
       });
       const entries = Object.entries(par).sort((a, b) => b[1].montant - a[1].montant);
-      const titre = state.motif !== 'all' ? `Collaborateurs concernés par « ${state.motif} »` : 'Collaborateurs concernés';
+      const legende = state.motif !== 'all' ? state.motif : (state.motifCat !== 'all' ? ((CAT_META[state.motifCat] || {}).label || state.motifCat) : null);
+      const titre = legende ? `Collaborateurs concernés par « ${legende} »` : 'Collaborateurs concernés';
       drill.innerHTML = `<div class="text-sm font-bold text-slate-900 mb-2">${titre} — ${entries.length} conducteur(s)</div>
         <div class="flex flex-wrap gap-2">` + entries.map(([c, v]) => `
           <button type="button" class="drill-chip" data-cond="${c.replace(/"/g, '&quot;')}" style="display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .7rem;border-radius:9999px;border:1px solid var(--fp-border);background:white;font-size:.8rem;cursor:pointer">
@@ -392,6 +442,48 @@
     const v = (state.search.trim().toLowerCase() === (name || '').toLowerCase()) ? '' : (name || '');
     state.search = v; $('search').value = v;
     renderTable(); scrollToTable();
+  }
+  function setMotifCategory(cat) {
+    state.motifCat = (state.motifCat === cat) ? 'all' : cat; // re-clic = on enlève
+    renderTable(); renderCharts(); scrollToTable();
+  }
+  function setDay(iso) {
+    const on = (state.dateFrom === iso && state.dateTo === iso);
+    state.dateFrom = on ? '' : iso; state.dateTo = on ? '' : iso;
+    $('filter-date-from').value = state.dateFrom; $('filter-date-to').value = state.dateTo;
+    renderTable(); renderCharts(); scrollToTable();
+  }
+
+  // Emails conducteurs (pour la relance) — chargés depuis Supabase si dispo
+  const condEmails = {};
+  function lookupEmail(prenom) {
+    const p = (prenom || '').toLowerCase().trim();
+    return condEmails[p] || condEmails[p.split(' ')[0]] || '';
+  }
+  if (FP.persist && FP.persist.available && FP.persist.available()) {
+    FP.db.select('conducteurs').then(r => {
+      (r.data || []).forEach(c => {
+        if (!c.email) return;
+        [c.key, c.name].filter(Boolean).forEach(n => {
+          const k = String(n).toLowerCase().trim();
+          condEmails[k] = c.email; condEmails[k.split(' ')[0]] = c.email;
+        });
+      });
+    }).catch(() => {});
+  }
+  function relanceEmail() {
+    const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
+    const to = lookupEmail(a.prenom);
+    const subject = `Amende à régulariser — ${a.motif || 'contravention'} du ${FP.date(a.date)}`;
+    const body = `Bonjour ${a.prenom || ''},\n\n`
+      + `Une contravention est enregistrée à votre nom :\n`
+      + `• Date : ${FP.date(a.date)}\n`
+      + `• Motif : ${a.motif || '—'}\n`
+      + `• Montant : ${a.montant ? FP.euroPrecis(a.montant) : '—'}\n`
+      + (a.numeroAvis ? `• N° d'avis : ${a.numeroAvis}\n` : '')
+      + ((Number(a.points) || 0) > 0 ? `• Points retirés : −${a.points}\n` : '')
+      + `\nMerci de régulariser / transmettre les informations nécessaires dès que possible.\n\nCordialement,\nGestion de flotte`;
+    window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
   // ---------- Charts ----------
@@ -461,6 +553,97 @@
         maintainAspectRatio: false, responsive: true,
       }
     });
+
+    renderExtras(amendes2026);
+  }
+
+  // ---------- Sections "fun" : podium, types, évolution, heatmap, délai ----------
+  let moisChart;
+  function renderExtras(amendes2026) {
+    // --- Délai de paiement (amendes à payer depuis +30 j) ---
+    const today = new Date();
+    const overdue = amendes2026.filter(a => a.statut === 'à payer' && a.date && ((today - new Date(a.date)) / 86400000) > 30);
+    const banner = $('delai-banner');
+    if (overdue.length) {
+      const tot = overdue.reduce((s, a) => s + (a.montant || 0), 0);
+      banner.innerHTML = `<i data-lucide="alarm-clock" class="w-5 h-5" style="color:#DC2626"></i>
+        <div class="text-sm" style="color:#7F1D1D"><span class="font-bold">${overdue.length} amende(s)</span> à payer depuis plus de 30 jours (${FP.euro(tot)}) — risque de majoration.</div>
+        <button id="delai-voir" class="btn btn-outline text-xs ml-auto" style="border-color:#FCA5A5;color:#991B1B">Voir</button>`;
+      banner.classList.remove('hidden'); banner.classList.add('flex');
+    } else {
+      banner.classList.add('hidden'); banner.classList.remove('flex');
+    }
+
+    // --- Mini-stats par type ---
+    const catCount = {};
+    amendes2026.forEach(a => { const c = categorize(a.motif); if (!catCount[c]) catCount[c] = { n: 0, montant: 0 }; catCount[c].n++; catCount[c].montant += (a.montant || 0); });
+    const total = amendes2026.length || 1;
+    $('type-stats').innerHTML = Object.keys(CAT_META).filter(c => catCount[c]).sort((a, b) => catCount[b].n - catCount[a].n).map(c => {
+      const meta = CAT_META[c]; const v = catCount[c]; const pct = Math.round(v.n / total * 100);
+      const on = state.motifCat === c;
+      return `<button type="button" data-cat="${c}" class="text-left rounded-xl p-3 transition" style="border:2px solid ${on ? meta.color : 'var(--fp-border)'};background:${on ? meta.color + '14' : 'white'}">
+        <div class="flex items-center gap-2 mb-1"><i data-lucide="${meta.icon}" class="w-4 h-4" style="color:${meta.color}"></i><span class="text-xs font-semibold text-slate-600">${meta.label}</span></div>
+        <div class="text-2xl font-extrabold" style="color:${meta.color}">${pct}%</div>
+        <div class="text-xs text-slate-500">${v.n} amende(s) · ${FP.euro(v.montant)}</div>
+      </button>`;
+    }).join('') || '<p class="text-sm text-slate-400">Aucune donnée.</p>';
+
+    // --- Podium des conducteurs (par nombre, puis montant) ---
+    const condAgg = {};
+    amendes2026.forEach(a => { const c = (a.prenom || '—').trim() || '—'; if (!condAgg[c]) condAgg[c] = { n: 0, montant: 0, points: 0 }; condAgg[c].n++; condAgg[c].montant += (a.montant || 0); condAgg[c].points += (Number(a.points) || 0); });
+    const podium = Object.entries(condAgg).sort((a, b) => b[1].n - a[1].n || b[1].montant - a[1].montant).slice(0, 5);
+    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+    $('podium').innerHTML = podium.map(([c, v], i) => `
+      <button type="button" data-cond="${c.replace(/"/g, '&quot;')}" class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left">
+        <span class="text-xl">${medals[i]}</span>
+        <span class="flex-1 font-semibold text-slate-800">${c}</span>
+        <span class="text-sm text-slate-500">${v.n} · ${FP.euro(v.montant)}${v.points ? ' · −' + v.points + 'pts' : ''}</span>
+      </button>`).join('') || '<p class="text-sm text-slate-400">Aucune donnée.</p>';
+
+    // --- Évolution mensuelle ---
+    const mois = Array(12).fill(0); const moisMontant = Array(12).fill(0);
+    amendes2026.forEach(a => { const m = parseInt((a.date || '').slice(5, 7), 10) - 1; if (m >= 0 && m < 12) { mois[m]++; moisMontant[m] += (a.montant || 0); } });
+    const moisLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+    if (moisChart) moisChart.destroy();
+    moisChart = new Chart($('moisChart'), {
+      type: 'line',
+      data: { labels: moisLabels, datasets: [{ label: 'Nb amendes', data: mois, borderColor: '#DC2626', backgroundColor: 'rgba(220,38,38,.12)', fill: true, tension: .35, pointRadius: 3, pointBackgroundColor: '#DC2626' }] },
+      options: {
+        plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: (ctx) => 'Montant : ' + FP.euro(moisMontant[ctx.dataIndex]) } } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
+        maintainAspectRatio: false, responsive: true,
+      }
+    });
+
+    renderHeatmap(amendes2026);
+  }
+
+  // --- Heatmap calendrier (style GitHub) ---
+  function renderHeatmap(amendes2026) {
+    const counts = {};
+    amendes2026.forEach(a => { if (a.date) counts[a.date] = (counts[a.date] || 0) + 1; });
+    const color = (c) => !c ? '#EEF2F7' : c === 1 ? '#FECACA' : c === 2 ? '#F87171' : c === 3 ? '#EF4444' : '#B91C1C';
+    const pad = (n) => String(n).padStart(2, '0');
+    const start = new Date('2026-01-01');
+    const lead = (start.getDay() + 6) % 7; // Lundi = 0
+    let cellsHtml = '';
+    for (let i = 0; i < lead; i++) cellsHtml += `<div style="width:12px;height:12px"></div>`;
+    const monthSpans = []; // pour repères de mois
+    for (let d = new Date(start); d.getFullYear() === 2026; d.setDate(d.getDate() + 1)) {
+      const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const c = counts[iso] || 0;
+      const sel = (state.dateFrom === iso && state.dateTo === iso) ? 'outline:2px solid var(--fp-primary);outline-offset:1px;' : '';
+      cellsHtml += `<div data-day="${iso}" title="${FP.date(iso)} — ${c} amende(s)" style="width:12px;height:12px;border-radius:3px;background:${color(c)};cursor:pointer;${sel}"></div>`;
+    }
+    $('heatmap').innerHTML = `
+      <div style="display:grid;grid-template-rows:repeat(7,12px);grid-auto-flow:column;gap:3px;width:max-content">${cellsHtml}</div>
+      <div class="flex items-center gap-1.5 mt-3 text-xs text-slate-400">Moins
+        <span style="width:12px;height:12px;border-radius:3px;background:#EEF2F7;display:inline-block"></span>
+        <span style="width:12px;height:12px;border-radius:3px;background:#FECACA;display:inline-block"></span>
+        <span style="width:12px;height:12px;border-radius:3px;background:#F87171;display:inline-block"></span>
+        <span style="width:12px;height:12px;border-radius:3px;background:#EF4444;display:inline-block"></span>
+        <span style="width:12px;height:12px;border-radius:3px;background:#B91C1C;display:inline-block"></span>Plus</div>`;
+    lucide.createIcons();
   }
 
   // ---------- Drawer ----------
@@ -600,15 +783,26 @@
     renderTable();
   });
   $('reset-filters').addEventListener('click', () => {
-    Object.assign(state, { search: '', statut: 'all', motif: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc' });
+    Object.assign(state, { search: '', statut: 'all', motif: 'all', motifCat: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc' });
     $('search').value = ''; $('filter-motif').value = 'all'; $('filter-date-from').value = ''; $('filter-date-to').value = ''; $('sort-key').value = 'date';
     document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
-    renderTable();
+    renderTable(); renderCharts();
   });
   $('drill-info').addEventListener('click', e => {
     const chip = e.target.closest('[data-cond]');
     if (chip) setConducteurFilter(chip.dataset.cond);
   });
+  // Clics sur les sections "fun"
+  $('type-stats').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (b) setMotifCategory(b.dataset.cat); });
+  $('podium').addEventListener('click', e => { const b = e.target.closest('[data-cond]'); if (b) setConducteurFilter(b.dataset.cond); });
+  $('heatmap').addEventListener('click', e => { const b = e.target.closest('[data-day]'); if (b) setDay(b.dataset.day); });
+  $('delai-banner').addEventListener('click', e => {
+    if (!e.target.closest('#delai-voir')) return;
+    state.statut = 'à payer'; state.sortKey = 'date'; state.sortDir = 'asc'; $('sort-key').value = 'date';
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'à payer'));
+    renderTable(); scrollToTable();
+  });
+  $('drawer-relance').addEventListener('click', relanceEmail);
 
   $('amendes-tbody').addEventListener('click', e => {
     const tr = e.target.closest('tr[data-id]');
