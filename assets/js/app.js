@@ -334,10 +334,41 @@ FP.LEASING_CONTRATS = {
   'HJ-804-VM': { kmContrat: 21000,  dureeMois: 36, debut: '2026-03-23', kmSupp: null   }, // Renault Trafic
 };
 
+// Overrides éditables (localStorage) : l'utilisateur peut corriger/ajouter un
+// contrat sans toucher au code. Ils prennent le pas sur FP.LEASING_CONTRATS.
+FP.LEASING_OVERRIDES_KEY = 'auto_flotte_leasing_contrats';
+FP.getLeasingOverrides = () => {
+  try { return JSON.parse(localStorage.getItem(FP.LEASING_OVERRIDES_KEY) || '{}'); }
+  catch (e) { return {}; }
+};
+FP.saveLeasingOverride = (immat, fields) => {
+  const key = (immat || '').trim().toUpperCase(); if (!key) return;
+  const all = FP.getLeasingOverrides();
+  all[key] = { ...(all[key] || {}), ...fields };
+  localStorage.setItem(FP.LEASING_OVERRIDES_KEY, JSON.stringify(all));
+};
+FP.resetLeasingOverride = (immat) => {
+  const key = (immat || '').trim().toUpperCase();
+  const all = FP.getLeasingOverrides();
+  delete all[key];
+  localStorage.setItem(FP.LEASING_OVERRIDES_KEY, JSON.stringify(all));
+};
+// Contrat effectif d'un véhicule = défaut (Drive) fusionné avec l'override.
+// Renvoie null si on n'a pas au moins un forfait km et une date de début.
+FP.leasingContrat = (immat) => {
+  const key = (immat || '').trim().toUpperCase(); if (!key) return null;
+  const base = FP.LEASING_CONTRATS[key] || null;
+  const ov = FP.getLeasingOverrides()[key] || null;
+  if (!base && !ov) return null;
+  const merged = { dureeMois: 36, kmSupp: null, ...(base || {}), ...(ov || {}) };
+  if (!merged.kmContrat || !merged.debut) return null;
+  return merged;
+};
+
 // Suivi du forfait : rythme autorisé vs réel, projection en fin de contrat,
 // risque de dépassement. Renvoie null si le véhicule n'a pas de contrat connu.
 FP.leasingInfo = (v) => {
-  const c = FP.LEASING_CONTRATS[(v.immat || '').trim().toUpperCase()];
+  const c = FP.leasingContrat(v.immat);
   if (!c) return null;
   const today = new Date();
   const debut = new Date(c.debut);
