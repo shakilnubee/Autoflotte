@@ -1534,18 +1534,51 @@
       dateMiseEnCirculation: dateOrNull(v.dateMiseEnCirculation),
       vin: v.vin || null,
       groupes: Array.isArray(v.groupes) ? v.groupes : [],
+      // Champs éditables supplémentaires (synchronisés sur tous les postes)
+      carburant: v.carburant || null,
+      assurance: v.assurance || null,
+      proprietaire: v.proprietaire || null,
+      critAir: v.critAir || null,
+      dateDernierCT: dateOrNull(v.dateDernierCT),
+      derniereRevision: dateOrNull(v.derniereRevision),
+      valeurAchat: Number.isFinite(v.valeurAchat) ? v.valeurAchat : null,
+      commentaire: v.commentaire || null,
+      photoUrl: v.photoUrl || null,
+      sanef: !!v.sanef,
+      etatDesLieux: !!v.etatDesLieux,
+      cleSiege: !!v.cleSiege,
+      cleSalarie: !!v.cleSalarie,
+      cgOrigSiege: !!v.cgOrigSiege,
+      cgOrigSalarie: !!v.cgOrigSalarie,
     };
   }
+  // Renvoie true si l'enregistrement en base a réussi, false sinon
   async function persistVehicleUpsert(v, isNew) {
-    if (!dbAvailable()) return;
+    if (!dbAvailable()) return false;
     try {
       let res;
       if (isNew) { res = await FP.db.insert('vehicules', vehToDb(v)); }
       else { const { id, ...fields } = vehToDb(v); res = await FP.db.update('vehicules', v.id, fields); }
       if (res && res.error) throw res.error;
+      return true;
     } catch (err) {
       console.error('[persistVehicle]', err);
-      alert("⚠️ Modifié à l'écran, mais l'enregistrement dans la base a échoué :\n" + (err.message || err) + "\n\nLa modification risque de ne pas être conservée après rechargement.");
+      alert("⚠️ Modifié à l'écran, mais l'enregistrement dans la base a échoué :\n" + (err.message || err) + "\n\nVérifie que les colonnes existent dans Supabase (voir le script fourni). La modification reste enregistrée localement.");
+      return false;
+    }
+  }
+  // Persiste un (ou plusieurs) champ(s) : base Supabase si dispo (source de vérité,
+  // partagée entre tous les postes) sinon override local ; garde le local si la base échoue.
+  async function persistVehFields(v, fields) {
+    fields = Array.isArray(fields) ? fields : [fields];
+    if (dbAvailable()) {
+      const ok = await persistVehicleUpsert(v, false);
+      fields.forEach(f => {
+        if (ok) { if (FP.removeVehicleOverride) FP.removeVehicleOverride(v.id, f); }
+        else if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { [f]: v[f] });
+      });
+    } else {
+      fields.forEach(f => FP.saveVehicleOverride && FP.saveVehicleOverride(v.id, { [f]: v[f] }));
     }
   }
   async function persistVehicleDelete(id) {
@@ -1795,8 +1828,7 @@
     renderTable();
     renderKPIs();
     if (drawerVehId === v.id && $('drawer').classList.contains('open')) openDrawer(v.id);
-    if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { [field]: v[field] });
-    persistVehicleUpsert(v, false);
+    persistVehFields(v, field);
   }
 
   function startCellEdit(td, v, field, type) {
@@ -2008,8 +2040,7 @@
     renderDrawerLogo(v);
     renderDrawerPhoto(v);
     renderTable();
-    if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { marque: v.marque, modele: v.modele });
-    persistVehicleUpsert(v, false);
+    persistVehFields(v, ['marque', 'modele']);
   });
   $('drawer-backdrop').addEventListener('click', closeDrawer);
 
@@ -2023,7 +2054,7 @@
     if (v) {
       FP.history.commit();
       v[field] = value;
-      FP.saveVehicleOverride(v.id, { [field]: value });
+      persistVehFields(v, field);
       if (getVisibleColumns().includes(field)) renderTable();
     }
   });

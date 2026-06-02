@@ -766,6 +766,17 @@ FP.saveVehicleOverride = (vehId, updates) => {
 FP.clearVehicleOverrides = () => {
   localStorage.removeItem(FP.VEH_OVERRIDES_KEY);
 };
+// Retire un champ (ou tout le véhicule) de l'override local — utilisé quand la base
+// Supabase a bien enregistré la valeur (la base devient la source de vérité, partagée).
+FP.removeVehicleOverride = (vehId, field) => {
+  try {
+    const all = FP.getVehicleOverrides();
+    if (!all[vehId]) return;
+    if (field == null) { delete all[vehId]; }
+    else { delete all[vehId][field]; if (!Object.keys(all[vehId]).length) delete all[vehId]; }
+    localStorage.setItem(FP.VEH_OVERRIDES_KEY, JSON.stringify(all));
+  } catch (e) {}
+};
 // Applique les overrides sauvegardés sur FP_DATA.vehicules (à appeler au chargement de la page)
 FP.loadVehicleOverrides = () => {
   if (!window.FP_DATA || !window.FP_DATA.vehicules) return;
