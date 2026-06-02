@@ -169,6 +169,24 @@ FP.settings = {
     document.documentElement.style.setProperty('--fp-logo-border', useWhite ? 'rgba(0,0,0,.18)' : '#000000');
   },
 };
+// Nettoie le modèle en retirant la marque répétée au début (ex. BYD "BYD SEAL U" → "SEAL U")
+FP.cleanModele = (marque, modele) => {
+  let m = (modele || '').trim();
+  const mk = (marque || '').trim();
+  if (mk) {
+    const re = new RegExp('^' + mk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+', 'i');
+    while (re.test(m)) m = m.replace(re, '').trim(); // retire les répétitions successives
+  }
+  return m;
+};
+// Normalise en mémoire les noms de véhicules (idempotent) : enlève les doublons de marque
+FP.normalizeVehicleNames = () => {
+  const vs = (window.FP_DATA && window.FP_DATA.vehicules) || [];
+  vs.forEach(v => { if (v && v.modele) v.modele = FP.cleanModele(v.marque, v.modele); });
+};
+FP.normalizeVehicleNames(); // données locales (data.js déjà chargé)
+document.addEventListener('fp:data-ready', FP.normalizeVehicleNames); // après chargement Supabase
+
 FP.groupeLabel = (key) => {
   const k = key || 'non-classe';
   return (FP.settings.get().groupes[k] || FP.settings.defaults.groupes['non-classe']).label;
