@@ -187,6 +187,8 @@
       return data;
     } catch (e) {
       console.warn('[FP.db] Supabase indisponible, fallback sur data.js local :', e);
+      // Appliquer quand même les modifs locales (overrides) pour qu'elles s'affichent partout
+      if (FP.loadVehicleOverrides) FP.loadVehicleOverrides();
       document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'local', error: e.message } }));
       return null;
     }
