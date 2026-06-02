@@ -65,7 +65,7 @@
         <p class="text-slate-500 text-sm mt-1" data-edit-key="entretiens.subtitle">Échéances CT, historique d'entretien et coûts par véhicule</p>
       </div>
       <div class="flex items-center gap-3">
-        <button class="btn btn-outline text-sm" id="btn-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter CSV</button>
+        <span data-data-io></span>
       </div>
     </div>
 
@@ -317,16 +317,22 @@
     });
   }
 
-  function exportCSV() {
-    const headers = ['Date','Véhicule','Description','Garage','Type','Km','TTC','N° facture','Fichier'];
-    const rows = filtered().map(i => [i.date, i.vehiculeImmat, i.description, i.fournisseur, i.type, i.km, i.montantTTC, i.numeroFacture, i.fileName]);
-    const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `auto-flotte-entretiens-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-  }
+  FP.injectDataIO({
+    exportOnly: true,
+    filename: `auto-flotte-entretiens-${new Date().toISOString().slice(0,10)}.csv`,
+    columns: [
+      { key: 'date',          label: 'Date' },
+      { key: 'vehiculeImmat', label: 'Véhicule' },
+      { key: 'description',   label: 'Description' },
+      { key: 'fournisseur',   label: 'Garage' },
+      { key: 'type',          label: 'Type' },
+      { key: 'km',            label: 'Km', format: FP.csv.numFormat },
+      { key: 'montantTTC',    label: 'TTC (€)', format: FP.csv.numFormat },
+      { key: 'numeroFacture', label: 'N° facture' },
+      { key: 'fileName',      label: 'Fichier' },
+    ],
+    getRows: () => filtered(),
+  });
 
   // Wiring
   $('search').addEventListener('input', e => { state.search = e.target.value; renderKPIs(); renderTable(); renderCharts(); });
@@ -339,7 +345,6 @@
     state[id.replace('filter-','')] = e.target.value;
     renderKPIs(); renderTable(); renderCharts();
   }));
-  $('btn-export').addEventListener('click', exportCSV);
 
   // Init éditeur de colonnes
   entretiensEditor = FP.makeColumnEditor({

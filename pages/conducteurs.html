@@ -84,7 +84,9 @@
         <h1 class="text-2xl font-extrabold" data-edit-key="conducteurs.title" style="color: var(--fp-primary)">Conducteurs</h1>
         <p class="text-slate-500 text-sm mt-1" data-edit-key="conducteurs.subtitle">Vue par personne — véhicule, amendes, points perdus</p>
       </div>
-      <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="user-plus" class="w-4 h-4"></i> Nouveau conducteur</button>
+      <div class="flex items-center gap-3 flex-wrap"><span data-data-io></span>
+        <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="user-plus" class="w-4 h-4"></i> Nouveau conducteur</button>
+      </div>
     </div>
 
     <!-- KPIs -->
@@ -645,6 +647,47 @@
   renderGrid();
   lucide.createIcons();
   loadConducteurs(); // charge conducteurs + permis depuis Supabase (et migre le local si besoin)
+
+  // ---------- Import / Export CSV ----------
+  FP.injectDataIO({
+    filename: `auto-flotte-conducteurs-${new Date().toISOString().slice(0,10)}.csv`,
+    columns: [
+      { key: 'name',  label: 'Conducteur' },
+      { key: 'key',   label: 'Clé' },
+      { key: 'tel',   label: 'Téléphone' },
+      { key: 'email', label: 'Email' },
+      { key: 'note',  label: 'Note' },
+      { key: 'vehicules',  label: 'Véhicules' },   // lecture seule (dérivé)
+      { key: 'nbAmendes',  label: 'Nb amendes' },  // lecture seule
+      { key: 'points',     label: 'Points retirés' }, // lecture seule
+    ],
+    getRows: () => drivers.map(d => {
+      const r = condRow(d.key) || {};
+      return {
+        name: d.name, key: d.key, tel: r.tel || '', email: r.email || '', note: r.note || '',
+        vehicules: d.vehicules.map(v => v.immat).join(' | '),
+        nbAmendes: d.amendes.length,
+        points: d.amendes.reduce((s, a) => s + (Number(a.points) || 0), 0),
+      };
+    }),
+    onImport: (records) => {
+      let added = 0, updated = 0;
+      records.forEach(rec => {
+        const key = (rec.key && rec.key.trim()) ? rec.key.trim().toLowerCase() : normPrenom(rec.name);
+        if (!key) return;
+        const known = drivers.find(d => d.key === key);
+        const changes = {};
+        if (rec.name)  changes.name  = rec.name;
+        if (rec.tel)   changes.tel   = rec.tel;
+        if (rec.email) changes.email = rec.email;
+        if (rec.note)  changes.note  = rec.note;
+        if (!known) { changes.manuel = true; added++; } else { updated++; }
+        upsertCond(key, changes);
+      });
+      drivers = buildDrivers(); renderKPIs(); renderGrid();
+      alert(`Import terminé ✓\n${added} ajout(s), ${updated} mise(s) à jour.\n(Seuls nom, téléphone, email et note sont importés.)`);
+    },
+  });
 
   // Ouverture directe d'une fiche conducteur via l'URL (?cond=clé), ex : depuis une fiche véhicule
   let _condParamDone = false;

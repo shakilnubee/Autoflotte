@@ -77,9 +77,7 @@
         <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)" data-edit-key="factures.title">Factures</h1>
         <p class="text-slate-500 text-sm mt-1" data-edit-key="factures.subtitle">Toutes les factures de la flotte — entretien, leasing, achats, sinistres</p>
       </div>
-      <div class="flex items-center gap-3">
-        <button class="btn btn-outline text-sm" id="btn-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter CSV</button>
-      </div>
+      <div class="flex items-center gap-3" data-data-io></div>
     </div>
 
     <!-- KPIs -->
@@ -393,17 +391,27 @@
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
 
-  // Export
-  function exportCSV() {
-    const headers = ['Date','Véhicule','Fournisseur','N° facture','Description','Type','HT','TVA','TTC','Km','Fichier'];
-    const rows = filtered().map(f => [f.date, f.vehiculeImmat, f.fournisseur, f.numeroFacture, f.description, f.type, f.montantHT, f.montantTVA, f.montantTTC, f.km, f.fileName]);
-    const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `auto-flotte-factures-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-  }
+  // Import / Export CSV
+  FP.injectDataIO({
+    filename: `auto-flotte-factures-${new Date().toISOString().slice(0,10)}.csv`,
+    table: 'factures', collection: 'factures', idPrefix: 'FA-IMP-',
+    columns: [
+      { key: 'id',            label: 'ID' },
+      { key: 'date',          label: 'Date' },
+      { key: 'vehiculeImmat', label: 'Véhicule' },
+      { key: 'fournisseur',   label: 'Fournisseur' },
+      { key: 'numeroFacture', label: 'N° facture' },
+      { key: 'description',   label: 'Description' },
+      { key: 'type',          label: 'Type' },
+      { key: 'montantHT',     label: 'HT (€)',  format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'montantTVA',    label: 'TVA (€)', format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'montantTTC',    label: 'TTC (€)', format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'km',            label: 'Km',      format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'fileName',      label: 'Fichier' },
+    ],
+    getRows: () => filtered(),
+    onChange: () => { renderKPIs(); renderTable(); renderCharts(); },
+  });
 
   // Wiring
   $('search').addEventListener('input', e => { state.search = e.target.value; renderKPIs(); renderTable(); renderCharts(); });
@@ -429,7 +437,6 @@
   });
   $('drawer-close').addEventListener('click', closeDrawer);
   $('drawer-backdrop').addEventListener('click', closeDrawer);
-  $('btn-export').addEventListener('click', exportCSV);
 
   // Init éditeur de colonnes
   facturesEditor = FP.makeColumnEditor({

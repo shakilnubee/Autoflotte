@@ -64,7 +64,7 @@
         <p class="text-slate-500 text-sm mt-1" data-edit-key="contrats.subtitle">Assurance + leasing — engagements et coûts mensuels</p>
       </div>
       <div class="flex items-center gap-3">
-        <button class="btn btn-outline text-sm" id="btn-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter CSV</button>
+        <span data-data-io></span>
       </div>
     </div>
 
@@ -246,27 +246,31 @@
     lucide.createIcons();
   }
 
-  function exportCSV() {
-    const rows = [];
-    rows.push(['Section','Immat','Véhicule','Chauffeur','Contrat','Détail','Coût']);
-    vehicules.forEach(v => {
-      rows.push(['Assurance', v.immat, `${v.marque} ${v.modele}`, v.chauffeur, 'SWISSLIFE 011165247/0599', 'Police flotte', '']);
-    });
-    leasingImmats.forEach(immat => {
-      const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
-      const agg = leasingByVeh[immat] || { count: 0, total: 0 };
-      rows.push(['Leasing', v.immat, `${v.marque} ${v.modele}`, v.chauffeur, 'BPCE Car Lease', `${agg.count} mensualités payées`, agg.total]);
-    });
-    const csv = rows.map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `auto-flotte-contrats-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-  }
+  FP.injectDataIO({
+    exportOnly: true,
+    filename: `auto-flotte-contrats-${new Date().toISOString().slice(0,10)}.csv`,
+    columns: [
+      { key: 'section',   label: 'Section' },
+      { key: 'immat',     label: 'Immat' },
+      { key: 'vehicule',  label: 'Véhicule' },
+      { key: 'chauffeur', label: 'Chauffeur' },
+      { key: 'contrat',   label: 'Contrat' },
+      { key: 'detail',    label: 'Détail' },
+      { key: 'cout',      label: 'Coût (€)', format: FP.csv.numFormat },
+    ],
+    getRows: () => {
+      const out = [];
+      vehicules.forEach(v => out.push({ section: 'Assurance', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: 'SWISSLIFE 011165247/0599', detail: 'Police flotte', cout: '' }));
+      leasingImmats.forEach(immat => {
+        const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
+        const agg = leasingByVeh[immat] || { count: 0, total: 0 };
+        out.push({ section: 'Leasing', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: 'BPCE Car Lease', detail: `${agg.count} mensualités payées`, cout: agg.total });
+      });
+      return out;
+    },
+  });
 
   $('search-leasing').addEventListener('input', e => { leasingSearch = e.target.value; renderLeasing(); });
-  $('btn-export').addEventListener('click', exportCSV);
 
   renderKPIs();
   renderAssurance();
