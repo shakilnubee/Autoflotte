@@ -384,15 +384,19 @@
 <!-- =============== DRAWER FICHE VÉHICULE =============== -->
 <div class="drawer-backdrop" id="drawer-backdrop"></div>
 <aside class="drawer" id="drawer">
-  <div class="p-6 border-b border-slate-200 flex justify-between items-start">
-    <div>
-      <div class="text-xs font-semibold uppercase tracking-wider" style="color: var(--fp-accent)" id="drawer-immat">—</div>
-      <h2 class="text-xl font-extrabold mt-1" id="drawer-title">—</h2>
-      <p class="text-sm text-slate-500" id="drawer-subtitle">—</p>
-    </div>
-    <button class="p-2 hover:bg-slate-100 rounded-lg" id="drawer-close">
+  <div class="relative border-b border-slate-200">
+    <button class="absolute top-3 right-3 z-10 p-2 bg-white/85 hover:bg-white rounded-lg shadow-sm" id="drawer-close">
       <i data-lucide="x" class="w-5 h-5"></i>
     </button>
+    <div id="drawer-photo" class="w-full bg-slate-100 flex items-center justify-center overflow-hidden" style="height:176px"></div>
+    <div class="p-6 pt-4">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span id="drawer-immat" class="text-3xl font-black tracking-wide" style="color: var(--fp-primary)">—</span>
+        <button id="drawer-photo-edit" class="text-xs text-slate-400 hover:text-slate-700 inline-flex items-center gap-1" title="Ajouter / modifier la photo"><i data-lucide="image" class="w-3.5 h-3.5"></i> photo</button>
+      </div>
+      <h2 class="text-lg font-bold text-slate-800 mt-1" id="drawer-title">—</h2>
+      <p class="text-sm text-slate-500" id="drawer-subtitle">—</p>
+    </div>
   </div>
 
   <div class="p-6 space-y-5" id="drawer-body"></div>
@@ -1253,13 +1257,34 @@
     return `<a href="conducteurs.html?cond=${encodeURIComponent(key)}" style="color: var(--fp-accent); text-decoration: none" title="Voir la fiche conducteur">${raw}</a>`;
   }
 
+  let drawerVehId = null;
+  function renderDrawerPhoto(v) {
+    const box = $('drawer-photo');
+    const ph = `<div class="text-center px-4">
+        <i data-lucide="car-front" class="w-12 h-12 mx-auto" style="color: var(--fp-primary); opacity:.45"></i>
+        <div class="text-sm font-bold mt-1" style="color: var(--fp-primary)">${v.marque || ''}</div>
+        <div class="text-xs text-slate-400">${v.modele || ''}</div>
+      </div>`;
+    if (v.photoUrl) {
+      box.innerHTML = '<img alt="" style="width:100%;height:100%;object-fit:cover">';
+      const img = box.querySelector('img');
+      img.onerror = () => { box.innerHTML = ph; if (window.lucide) lucide.createIcons(); };
+      img.src = v.photoUrl;
+    } else {
+      box.innerHTML = ph;
+      if (window.lucide) lucide.createIcons();
+    }
+  }
+
   function openDrawer(id) {
     const v = data.vehicules.find(x => x.id === id);
     if (!v) return;
+    drawerVehId = id;
 
     $('drawer-immat').textContent = v.immat;
     $('drawer-title').textContent = `${v.marque} ${v.modele}`;
     $('drawer-subtitle').textContent = v.categorie;
+    renderDrawerPhoto(v);
 
     // Calculs liés
     const entretiens = data.entretiens.filter(e => e.vehiculeId === v.id);
@@ -1860,6 +1885,15 @@
   })();
 
   $('drawer-close').addEventListener('click', closeDrawer);
+  $('drawer-photo-edit').addEventListener('click', () => {
+    const v = data.vehicules.find(x => x.id === drawerVehId);
+    if (!v) return;
+    const url = prompt("Lien (URL) d'une photo du véhicule :\n(colle l'adresse d'une image — clic droit sur une photo → « Copier l'adresse de l'image »)", v.photoUrl || '');
+    if (url === null) return;
+    v.photoUrl = url.trim() || undefined;
+    if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { photoUrl: v.photoUrl || '' });
+    renderDrawerPhoto(v);
+  });
   $('drawer-backdrop').addEventListener('click', closeDrawer);
 
   // Cases à cocher éditables dans le drawer : sauvegarde immédiate en localStorage
