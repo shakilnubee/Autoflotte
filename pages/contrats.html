@@ -135,6 +135,10 @@
               <th>Immat.</th>
               <th>Véhicule</th>
               <th>Chauffeur</th>
+              <th>Forfait km</th>
+              <th>Km actuel</th>
+              <th>Projection fin</th>
+              <th>Statut km</th>
               <th>Mensualités payées</th>
               <th>Total versé</th>
               <th>Moy. mensuelle</th>
@@ -229,18 +233,33 @@
       .filter(({ v }) => !q || `${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`.toLowerCase().includes(q))
       .sort((a,b) => b.agg.total - a.agg.total);
 
+    const statutKm = (l) => {
+      if (!l) return '<span class="text-slate-400 text-xs">contrat non renseigné</span>';
+      if (l.projectionFin === null) return '<span class="badge" style="background:#E0E7FF;color:#3730A3">contrat récent</span>';
+      const pct = Math.round(l.ratio * 100);
+      if (l.niveau === 'danger') return `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>`;
+      if (l.niveau === 'warn')   return `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>`;
+      return `<span class="badge badge-ok">OK (${pct}%)</span>`;
+    };
     const tbody = $('tbody-leasing');
-    tbody.innerHTML = rows.map(({ v, agg }) => `
+    tbody.innerHTML = rows.map(({ v, agg }) => {
+      const l = FP.leasingInfo(v);
+      const projColor = l && l.niveau === 'danger' ? 'color:var(--fp-danger);font-weight:700' : l && l.niveau === 'warn' ? 'color:var(--fp-warn);font-weight:600' : '';
+      return `
       <tr>
         <td class="font-mono font-semibold">${v.immat}</td>
         <td>${v.marque} ${v.modele}</td>
         <td>${v.chauffeur}</td>
+        <td>${l ? FP.num(l.kmContrat) + ' km' : '<span class="text-slate-400">—</span>'}</td>
+        <td>${l ? FP.num(l.km) + ' km' : (v.km != null ? FP.num(v.km) + ' km' : '<span class="text-slate-400">—</span>')}</td>
+        <td style="${projColor}">${l && l.projectionFin !== null ? '~' + FP.num(l.projectionFin) + ' km' : '<span class="text-slate-400">—</span>'}</td>
+        <td>${statutKm(l)}</td>
         <td>${agg.count}</td>
         <td class="font-semibold">${agg.total > 0 ? FP.euroPrecis(agg.total) : '<span class="text-slate-400">—</span>'}</td>
         <td>${agg.count > 0 ? FP.euroPrecis(agg.total / agg.count) : '<span class="text-slate-400">—</span>'}</td>
         <td>${agg.lastFile ? `<a href="https://drive.google.com/file/d/${agg.lastFile.fileId}/view" target="_blank" rel="noopener" class="text-xs hover:underline" style="color: var(--fp-accent)">${FP.date(agg.lastDate)} <i data-lucide="external-link" class="w-3 h-3 inline"></i></a>` : '<span class="text-slate-400">—</span>'}</td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
 
     $('leasing-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} sous leasing BPCE`;
     lucide.createIcons();

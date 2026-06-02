@@ -314,6 +314,54 @@ FP.revisionInfo = (v) => {
   return { intervalle, prochaineKm, kmRestant, prochaineDate, joursRestant, niveau };
 };
 
+// =====================================================================
+// === Leasing BPCE : forfait km contractuel + suivi de dépassement =====
+// =====================================================================
+// Termes issus des contrats signés BPCE Car Lease (dossier Drive flotte).
+// Statique en code = partagé via git, durable, survit au chargement Supabase.
+// Pour un nouveau véhicule en leasing : ajouter une ligne (immat → forfait).
+FP.LEASING_CONTRATS = {
+  'HG-763-VP': { kmContrat: 75000,  dureeMois: 36, debut: '2025-11-25', kmSupp: 0.0707 }, // BYD Atto 3
+  'HE-739-WP': { kmContrat: 150000, dureeMois: 36, debut: '2025-07-25', kmSupp: 0.0888 }, // Toyota C-HR
+  'HJ-285-FL': { kmContrat: 60000,  dureeMois: 36, debut: '2026-02-18', kmSupp: 0.0990 }, // BMW X1
+  'HJ-181-RN': { kmContrat: 60000,  dureeMois: 36, debut: '2026-03-16', kmSupp: null   }, // Nissan X-Trail
+  'HG-709-CH': { kmContrat: 60000,  dureeMois: 36, debut: '2025-10-15', kmSupp: null   }, // BYD Seal U
+  'HF-749-VD': { kmContrat: 75000,  dureeMois: 36, debut: '2025-09-26', kmSupp: null   }, // Toyota Yaris Cross
+  'HH-613-KE': { kmContrat: 60000,  dureeMois: 36, debut: '2025-12-24', kmSupp: null   }, // BYD Seal U
+  'HH-464-LQ': { kmContrat: 60000,  dureeMois: 36, debut: '2025-12-29', kmSupp: null   }, // BYD Seal U
+  'HH-458-LQ': { kmContrat: 120000, dureeMois: 36, debut: '2025-12-29', kmSupp: null   }, // BYD Seal U (avenant)
+  'HF-477-XW': { kmContrat: 165000, dureeMois: 36, debut: '2025-10-01', kmSupp: 0.1157 }, // Hyundai Tucson
+  'HJ-804-VM': { kmContrat: 21000,  dureeMois: 36, debut: '2026-03-23', kmSupp: null   }, // Renault Trafic
+};
+
+// Suivi du forfait : rythme autorisé vs réel, projection en fin de contrat,
+// risque de dépassement. Renvoie null si le véhicule n'a pas de contrat connu.
+FP.leasingInfo = (v) => {
+  const c = FP.LEASING_CONTRATS[(v.immat || '').trim().toUpperCase()];
+  if (!c) return null;
+  const today = new Date();
+  const debut = new Date(c.debut);
+  const finContrat = new Date(debut); finContrat.setMonth(finContrat.getMonth() + c.dureeMois);
+  const moisEcoules = Math.max(0, (today - debut) / (1000 * 60 * 60 * 24 * 30.44));
+  const km = Number(v.km) || 0;
+  const kmParMoisAutorise = c.kmContrat / c.dureeMois;
+  const kmAutoriseAJour = Math.min(c.kmContrat, Math.round(kmParMoisAutorise * moisEcoules));
+  const kmParMoisReel = moisEcoules >= 0.3 ? km / moisEcoules : null;
+  const projectionFin = kmParMoisReel !== null ? Math.round(kmParMoisReel * c.dureeMois) : null;
+  const ratio = projectionFin !== null ? projectionFin / c.kmContrat : null;
+  const ecartAJour = Math.round(km - kmAutoriseAJour);                 // > 0 = en avance (à risque)
+  const depassementProjete = projectionFin !== null ? projectionFin - c.kmContrat : null;
+  let niveau = null;
+  if (ratio !== null && moisEcoules >= 1) {
+    if (ratio >= 1.05) niveau = 'danger';
+    else if (ratio >= 0.98) niveau = 'warn';
+    else if (ratio >= 0.90) niveau = 'info';
+  }
+  return { kmContrat: c.kmContrat, dureeMois: c.dureeMois, kmSupp: c.kmSupp, debut, finContrat,
+           moisEcoules, km, kmParMoisAutorise, kmAutoriseAJour, kmParMoisReel,
+           projectionFin, ratio, ecartAJour, depassementProjete, niveau };
+};
+
 FP.buildAlertes = (data) => {
   const out = [];
   const today = new Date();
@@ -367,6 +415,21 @@ FP.buildAlertes = (data) => {
     const detail = `${veh} — préconisé tous les ${FP.num(r.intervalle.km)} km / ${r.intervalle.mois} mois`;
     const sort = r.kmRestant !== null ? r.kmRestant : r.joursRestant * 100;
     out.push({ niveau: r.niveau, categorie: 'Révision', message: msg, detail, sort, target: tgt });
+  });
+
+  // --- Dépassement kilométrique leasing BPCE ---
+  (data.vehicules || []).forEach(v => {
+    if (v.statut && v.statut !== 'actif') return;
+    const l = FP.leasingInfo(v);
+    if (!l || !l.niveau) return;
+    const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
+    let msg;
+    if (l.niveau === 'danger') msg = `Dépassement leasing projeté : ~${FP.num(l.projectionFin)} km (forfait ${FP.num(l.kmContrat)} km, +${FP.num(l.depassementProjete)} km)`;
+    else if (l.niveau === 'warn') msg = `Leasing à surveiller : projection ~${FP.num(l.projectionFin)} km / ${FP.num(l.kmContrat)} km`;
+    else msg = `Leasing : rythme soutenu, projection ~${FP.num(l.projectionFin)} km / ${FP.num(l.kmContrat)} km`;
+    let detail = `${veh} — ${FP.num(Math.round(l.kmParMoisReel))} km/mois vs ${FP.num(Math.round(l.kmParMoisAutorise))} autorisés`;
+    if (l.kmSupp && l.depassementProjete > 0) detail += ` · pénalité estimée ~${FP.euro(Math.round(l.depassementProjete * l.kmSupp))}`;
+    out.push({ niveau: l.niveau, categorie: 'Leasing', message: msg, detail, sort: 3000 - Math.round((l.ratio || 0) * 100), target: 'contrats.html' });
   });
 
   // --- Véhicules sans dernière révision enregistrée (info) ---
