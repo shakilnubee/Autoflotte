@@ -51,6 +51,23 @@ const FP = {
   },
 };
 
+// === Rôle utilisateur (gating visuel) ===
+// Lu de façon synchrone depuis les métadonnées Supabase stockées dans le token.
+// Rôles : 'admin' (par défaut, ex : le propriétaire) et 'gestionnaire'.
+// Pour créer un gestionnaire : Supabase → Auth → Add user → User Metadata { "role": "gestionnaire" }
+FP.SUPA_TOKEN_KEY = 'sb-tzjuptlzoywjeigmyfuj-auth-token';
+FP.role = () => {
+  try {
+    const t = JSON.parse(localStorage.getItem(FP.SUPA_TOKEN_KEY) || 'null');
+    const r = t && t.user && t.user.user_metadata && t.user.user_metadata.role;
+    return r === 'gestionnaire' ? 'gestionnaire' : 'admin';
+  } catch { return 'admin'; }
+};
+FP.isAdmin = () => FP.role() === 'admin';
+FP.roleLabel = () => FP.isAdmin() ? 'Admin' : 'Gestionnaire';
+// Onglets réservés à l'admin (retirés du menu pour les autres rôles)
+FP.ADMIN_ONLY_NAV = ['parametres.html'];
+
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
   STORAGE_KEY: 'auto_flotte_settings',
@@ -301,13 +318,15 @@ FP.applyCustomNavLabels = () => {
       span = document.createElement('span');
       span.className = 'nav-label';
       a.appendChild(span);
-      const editBtn = document.createElement('button');
-      editBtn.type = 'button';
-      editBtn.className = 'nav-edit-btn';
-      editBtn.title = 'Renommer cet onglet';
-      editBtn.textContent = '✎';
-      editBtn.dataset.navEdit = navKey;
-      a.appendChild(editBtn);
+      if (FP.isAdmin()) { // renommage d'onglet réservé à l'admin
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'nav-edit-btn';
+        editBtn.title = 'Renommer cet onglet';
+        editBtn.textContent = '✎';
+        editBtn.dataset.navEdit = navKey;
+        a.appendChild(editBtn);
+      }
     }
     span.textContent = label;
   });
@@ -541,6 +560,7 @@ FP.vehGroupes = (v) => {
 //   editor.getVisibleColumns().map(k => `<td>${editor.getColumn(k).render(row)}</td>`)
 FP.makeColumnEditor = (config) => {
   const { pageKey, columns, tableEl, hiddenBtnContainer, onChange } = config;
+  const editable = (window.FP && FP.isAdmin) ? FP.isAdmin() : true; // perso. colonnes = admin only
   const storageKey = `fp_table_${pageKey}`;
   const allKeys = columns.map(c => c.key);
   const defaultOrder = config.defaultOrder || allKeys.slice();
@@ -587,11 +607,11 @@ FP.makeColumnEditor = (config) => {
     thead.innerHTML = `<tr>${visible.map(k => {
       const def = getColumn(k);
       if (!def) return '';
-      return `<th draggable="true" data-col-key="${k}" title="Glisser pour déplacer • Double-clic pour renommer">${getLabel(k)}<button class="col-hide-btn" data-hide-key="${k}" title="Masquer">✕</button></th>`;
+      return `<th ${editable ? 'draggable="true"' : ''} data-col-key="${k}"${editable ? ' title="Glisser pour déplacer • Double-clic pour renommer"' : ''}>${getLabel(k)}${editable ? `<button class="col-hide-btn" data-hide-key="${k}" title="Masquer">✕</button>` : ''}</th>`;
     }).join('')}</tr>`;
 
     // Mise à jour pastille colonnes masquées
-    if (hiddenBtnContainer) renderHiddenColsButton();
+    if (hiddenBtnContainer && editable) renderHiddenColsButton();
 
     // Ajouter la classe pour table-layout: fixed
     tableEl.classList.add('fp-table-resizable');
@@ -657,6 +677,7 @@ FP.makeColumnEditor = (config) => {
   }
   const thead = tableEl.querySelector('thead');
 
+  if (editable) {
   thead.addEventListener('dragstart', (e) => {
     const th = e.target.closest('th[data-col-key]');
     if (!th) return;
@@ -732,6 +753,7 @@ FP.makeColumnEditor = (config) => {
       else if (ev.key === 'Escape'){ ev.preventDefault(); commit(false); }
     });
   });
+  } // fin if(editable) — wiring perso. colonnes
 
   // Initial render
   renderHeaders();
@@ -767,8 +789,11 @@ FP.injectLogoutButton = () => {
         <span class="fp-logout-label">Déconnexion</span>
         <span class="fp-user-email" style="margin-left: auto; font-size: .65rem; opacity: .5; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
       </button>
+      <div class="fp-user-role" style="margin-top:.4rem; font-size:.62rem; letter-spacing:.04em; text-transform:uppercase; color:rgba(255,255,255,.4); padding-left:.85rem;"></div>
     `;
     sb.appendChild(div);
+    const roleEl = div.querySelector('.fp-user-role');
+    if (roleEl) roleEl.textContent = 'Rôle : ' + FP.roleLabel();
 
     const btn = div.querySelector('.fp-logout-btn');
     btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(255,255,255,.12)'; btn.style.color = 'white'; });
@@ -838,10 +863,18 @@ FP.searchAll = (q) => {
 document.addEventListener('DOMContentLoaded', () => {
   // Appliquer le thème (couleurs des groupes) dès le chargement
   FP.settings.applyTheme();
+  // Rôle courant : marque le body + retire les onglets réservés à l'admin
+  const _isAdmin = FP.isAdmin();
+  document.body.setAttribute('data-role', FP.role());
+  if (!_isAdmin) {
+    (FP.ADMIN_ONLY_NAV || []).forEach(key => {
+      document.querySelectorAll(`a[data-nav="${key}"]`).forEach(a => a.remove());
+    });
+  }
   // Appliquer les labels personnalisés des onglets puis l'ordre choisi
   FP.applyCustomNavLabels();
   FP.applyNavOrder();
-  FP.enableNavReorder(); // glisser-déposer des onglets directement dans le menu
+  if (_isAdmin) FP.enableNavReorder(); // glisser-déposer des onglets (admin only)
   // Appliquer les textes éditables custom (titres, sous-titres)
   FP.applyCustomTexts();
   // Injecter la barre de recherche globale dans toutes les sidebars
@@ -889,6 +922,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('click', (e) => {
     const editBtn = e.target.closest('.nav-edit-btn');
     if (!editBtn) return;
+    if (!FP.isAdmin()) return;
     e.preventDefault();
     e.stopPropagation();
     const a = editBtn.closest('a[data-nav]');
@@ -899,6 +933,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-edit-key]');
     if (!el || el.classList.contains('editing-text')) return;
+    if (!FP.isAdmin()) return; // édition des titres réservée à l'admin
     // Ignorer si on est en train de cliquer sur un autre bouton/lien
     if (e.target.closest('button, a, input, select')) return;
     FP.startTextEdit(el);
