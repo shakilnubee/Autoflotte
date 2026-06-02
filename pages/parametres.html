@@ -134,6 +134,28 @@
       </div>
     </div>
 
+    <!-- Section Couleur de l'interface (onglet Affichage) -->
+    <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="affichage">
+      <div class="section-title">
+        <i data-lucide="palette" class="w-5 h-5"></i> Couleur de l'interface
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Change la couleur de base de la plateforme (menu de gauche, titres, boutons foncés). Les couleurs des groupes de véhicules ne sont pas modifiées.</p>
+
+      <div class="flex items-center gap-3 flex-wrap">
+        <input type="color" id="f-platform-color" class="color-input" />
+        <code id="platform-color-hex" class="bg-slate-100 px-2 py-1 rounded text-xs">—</code>
+        <div class="flex gap-2 ml-auto">
+          <button class="btn btn-outline text-sm" id="btn-reset-color"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Couleur par défaut</button>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <div class="field-label">Suggestions</div>
+        <div class="flex flex-wrap gap-2 mt-1" id="color-presets"></div>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">L'aperçu est appliqué en direct (menu de gauche). La couleur est mémorisée dans ce navigateur.</p>
+    </div>
+
     <!-- Section Société -->
     <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="societe">
       <div class="section-title">
@@ -586,8 +608,56 @@
   });
   document.addEventListener('fp:audit', renderJournal);
 
+  // ---------- Couleur de l'interface ----------
+  const COLOR_PRESETS = [
+    { c: '#8B6B4F', n: 'Marron clair' },
+    { c: '#6F4E37', n: 'Café' },
+    { c: '#0F1E3D', n: 'Bleu nuit (origine)' },
+    { c: '#1E3A8A', n: 'Bleu' },
+    { c: '#14532D', n: 'Vert forêt' },
+    { c: '#4C1D95', n: 'Violet' },
+    { c: '#7F1D1D', n: 'Bordeaux' },
+    { c: '#334155', n: 'Ardoise' },
+  ];
+  function previewColor(hex) {
+    document.documentElement.style.setProperty('--fp-primary', hex);
+    document.documentElement.style.setProperty('--fp-primary-2', FP.settings._shade(hex, -0.22));
+    $('platform-color-hex').textContent = hex.toUpperCase();
+  }
+  function saveColor(hex) {
+    const current = FP.settings.get();
+    FP.settings.save({ ...current, platformColor: hex }); // applyTheme() est appelé par save()
+    $('platform-color-hex').textContent = hex.toUpperCase();
+    showToast('Couleur appliquée ✓');
+  }
+  function renderColorPresets() {
+    $('color-presets').innerHTML = COLOR_PRESETS.map(p =>
+      `<button type="button" class="preset-swatch" data-color="${p.c}" title="${p.n}" style="width:30px;height:30px;border-radius:8px;background:${p.c};border:2px solid white;box-shadow:0 0 0 1px var(--fp-border);cursor:pointer"></button>`
+    ).join('');
+  }
+  function initColorPicker() {
+    const cur = FP.settings.get().platformColor || FP.settings.defaults.platformColor;
+    $('f-platform-color').value = cur;
+    $('platform-color-hex').textContent = cur.toUpperCase();
+    renderColorPresets();
+  }
+  $('f-platform-color').addEventListener('input', e => previewColor(e.target.value));
+  $('f-platform-color').addEventListener('change', e => saveColor(e.target.value));
+  $('color-presets').addEventListener('click', e => {
+    const sw = e.target.closest('[data-color]'); if (!sw) return;
+    const hex = sw.dataset.color;
+    $('f-platform-color').value = hex;
+    previewColor(hex); saveColor(hex);
+  });
+  $('btn-reset-color').addEventListener('click', () => {
+    const def = FP.settings.defaults.platformColor;
+    $('f-platform-color').value = def;
+    previewColor(def); saveColor(def);
+  });
+
   // Init
   setupSettingsTabs();
+  initColorPicker();
   renderGroupesForm();
   renderNavLabelsForm();
   loadSociete();
