@@ -248,6 +248,72 @@ FP.enableNavReorder = () => {
 };
 
 // === Construction des alertes (partagé dashboard + page Notifications) ===
+// =====================================================================
+// === Révisions constructeur (intervalles + calcul d'échéance) =========
+// =====================================================================
+// Intervalle « préconisé » par marque : km OU mois, au premier atteint.
+// Valeurs indicatives basées sur les préconisations constructeur usuelles
+// (entretien périodique). Les électriques ont un intervalle allongé.
+FP.REVISION_INTERVALS = {
+  'PORSCHE':       { km: 30000, mois: 24 },
+  'MG':            { km: 15000, mois: 12 },
+  'MERCEDES BENZ': { km: 25000, mois: 12 },
+  'BYD':           { km: 20000, mois: 12 },
+  'DACIA':         { km: 20000, mois: 12 },
+  'VOLVO':         { km: 30000, mois: 12 },
+  'TOYOTA':        { km: 15000, mois: 12 },
+  'PEUGEOT':       { km: 20000, mois: 12 },
+  'BMW':           { km: 30000, mois: 24 },
+  'NISSAN':        { km: 20000, mois: 12 },
+  'AUDI':          { km: 30000, mois: 24 },
+  'IVECO':         { km: 40000, mois: 24 },
+  'OPEL':          { km: 30000, mois: 12 },
+  'RENAULT':       { km: 20000, mois: 12 },
+  'HYUNDAI':       { km: 20000, mois: 12 },
+  'CITROEN':       { km: 20000, mois: 12 },
+  'DUCATI':        { km: 12000, mois: 12 },
+};
+FP.REVISION_DEFAUT = { km: 20000, mois: 12 };
+
+// Intervalle applicable à un véhicule (avec nuance carburant)
+FP.revisionIntervalle = (v) => {
+  const base = FP.REVISION_INTERVALS[(v.marque || '').toUpperCase().trim()] || FP.REVISION_DEFAUT;
+  let km = base.km, mois = base.mois;
+  const carb = (v.carburant || '').toLowerCase();
+  if (carb.indexOf('lec') !== -1) { km = Math.max(km, 30000); mois = Math.max(mois, 24); } // électrique
+  return { km, mois };
+};
+
+// Échéance de révision : estimation par paliers de km (multiples de l'intervalle)
+// + échéance temporelle si la dernière révision est connue. Renvoie le niveau
+// d'alerte (danger / warn / info) ou null si rien à signaler.
+FP.revisionInfo = (v) => {
+  const intervalle = FP.revisionIntervalle(v);
+  const km = Number(v.km) || 0;
+  const today = new Date();
+  let prochaineKm = null, kmRestant = null;
+  if (km > 0) {
+    prochaineKm = Math.ceil(km / intervalle.km) * intervalle.km;
+    if (prochaineKm <= km) prochaineKm = km + intervalle.km;
+    kmRestant = prochaineKm - km;
+  }
+  let prochaineDate = null, joursRestant = null;
+  if (v.derniereRevision && v.derniereRevision !== '—') {
+    const d = new Date(v.derniereRevision);
+    if (!isNaN(d)) {
+      prochaineDate = new Date(d);
+      prochaineDate.setMonth(prochaineDate.getMonth() + intervalle.mois);
+      joursRestant = Math.ceil((prochaineDate - today) / 86400000);
+    }
+  }
+  const lvlKm = kmRestant === null ? null : (kmRestant <= 1000 ? 'danger' : kmRestant <= 3000 ? 'warn' : kmRestant <= 6000 ? 'info' : null);
+  const lvlDt = joursRestant === null ? null : (joursRestant <= 30 ? 'danger' : joursRestant <= 60 ? 'warn' : joursRestant <= 90 ? 'info' : null);
+  const rank = { danger: 0, warn: 1, info: 2 };
+  let niveau = null;
+  [lvlKm, lvlDt].forEach(l => { if (l && (niveau === null || rank[l] < rank[niveau])) niveau = l; });
+  return { intervalle, prochaineKm, kmRestant, prochaineDate, joursRestant, niveau };
+};
+
 FP.buildAlertes = (data) => {
   const out = [];
   const today = new Date();
@@ -280,6 +346,28 @@ FP.buildAlertes = (data) => {
       target: 'amendes.html?filtre=apayer',
     });
   }
+
+  // --- Révisions constructeur ---
+  (data.vehicules || []).forEach(v => {
+    if (v.statut && v.statut !== 'actif') return; // on ignore vendus / à vendre / hors service
+    const r = FP.revisionInfo(v);
+    if (!r.niveau) return;
+    const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
+    const tgt = 'vehicules.html?veh=' + v.id;
+    const kmOverdue = r.kmRestant !== null && r.kmRestant <= 0;
+    const dtOverdue = r.joursRestant !== null && r.joursRestant <= 0;
+    let msg;
+    if (kmOverdue || dtOverdue) {
+      msg = kmOverdue ? `Révision dépassée (+${FP.num(-r.kmRestant)} km)` : `Révision dépassée depuis ${-r.joursRestant}j`;
+    } else if (r.kmRestant !== null && (r.joursRestant === null || r.kmRestant <= r.joursRestant * 100)) {
+      msg = `Révision dans ~${FP.num(r.kmRestant)} km`;
+    } else {
+      msg = `Révision à prévoir dans ${r.joursRestant}j`;
+    }
+    const detail = `${veh} — préconisé tous les ${FP.num(r.intervalle.km)} km / ${r.intervalle.mois} mois`;
+    const sort = r.kmRestant !== null ? r.kmRestant : r.joursRestant * 100;
+    out.push({ niveau: r.niveau, categorie: 'Révision', message: msg, detail, sort, target: tgt });
+  });
 
   // --- Véhicules sans dernière révision enregistrée (info) ---
   const sansRev = (data.vehicules || []).filter(v => v.statut === 'actif' && (!v.derniereRevision || v.derniereRevision === '—') && (!v.chauffeur || v.chauffeur !== 'VENDU')).length;
