@@ -21,6 +21,15 @@
   if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
 })();
 </script>
+<style>
+  .dash-widget { position: relative; margin-bottom: 1.5rem; }
+  .dash-widget.dragging { opacity: .5; }
+  .widget-bar { display: flex; align-items: center; margin-bottom: .45rem; }
+  .widget-grip { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; color: var(--fp-muted); background: #fff; border: 1px solid var(--fp-border); border-radius: 9999px; padding: .2rem .65rem; cursor: grab; }
+  .widget-grip:hover { color: var(--fp-primary); border-color: var(--fp-accent); }
+  .widget-grip:active { cursor: grabbing; }
+  #dash-widgets.is-dragging .dash-widget { transition: transform .08s; }
+</style>
 </head>
 <body class="bg-slate-50">
 
@@ -151,69 +160,79 @@
       </div>
     </div>
 
-    <!-- Charts row -->
-    <div class="grid gap-6 mt-8">
+    <p class="text-xs text-slate-500 mt-8 mb-2 flex items-center gap-1.5"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Glisse une section par sa poignée pour réorganiser ton tableau de bord — l'ordre est mémorisé.</p>
+    <div id="dash-widgets">
 
-      <div class="card p-6">
-        <div class="flex justify-between items-center mb-4">
-          <div>
-            <h3 class="font-bold text-slate-900">Coûts mensuels (€)</h3>
-            <p class="text-xs text-slate-500">Entretien + contrats + amendes</p>
+      <!-- Widget : Coûts mensuels -->
+      <div class="dash-widget" data-widget="couts">
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Coûts mensuels</span></div>
+        <div class="grid gap-6">
+          <div class="card p-6">
+            <div class="flex justify-between items-center mb-4">
+              <div>
+                <h3 class="font-bold text-slate-900">Coûts mensuels (€)</h3>
+                <p class="text-xs text-slate-500">Entretien + contrats + amendes</p>
+              </div>
+              <select class="text-sm border border-slate-200 rounded-lg px-3 py-1.5">
+                <option>6 derniers mois</option>
+                <option>12 derniers mois</option>
+              </select>
+            </div>
+            <div class="chart-wrap"><canvas id="costsChart"></canvas></div>
           </div>
-          <select class="text-sm border border-slate-200 rounded-lg px-3 py-1.5">
-            <option>6 derniers mois</option>
-            <option>12 derniers mois</option>
-          </select>
         </div>
-        <div class="chart-wrap"><canvas id="costsChart"></canvas></div>
       </div>
 
-    </div>
-
-    <!-- Graphiques répartition / conducteurs -->
-    <div class="grid lg:grid-cols-2 gap-6 mt-6">
-      <div class="card p-6">
-        <h3 class="font-bold text-slate-900 mb-4">Véhicules par groupe</h3>
-        <div style="position: relative; height: 260px"><canvas id="groupesChart"></canvas></div>
-      </div>
-      <div class="card p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-bold text-slate-900">🏆 Podium conducteurs — amendes 2026</h3>
-          <button id="dash-podium-toggle" class="btn btn-outline text-xs">Voir tout</button>
+      <!-- Widget : Groupes & podium -->
+      <div class="dash-widget" data-widget="repartition">
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Groupes & podium</span></div>
+        <div class="grid lg:grid-cols-2 gap-6">
+          <div class="card p-6">
+            <h3 class="font-bold text-slate-900 mb-4">Véhicules par groupe</h3>
+            <div style="position: relative; height: 260px"><canvas id="groupesChart"></canvas></div>
+          </div>
+          <div class="card p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-bold text-slate-900">🏆 Podium conducteurs — amendes 2026</h3>
+              <button id="dash-podium-toggle" class="btn btn-outline text-xs">Voir tout</button>
+            </div>
+            <div id="dash-podium" class="space-y-1" style="max-height:260px;overflow-y:auto"></div>
+          </div>
         </div>
-        <div id="dash-podium" class="space-y-1" style="max-height:260px;overflow-y:auto"></div>
-      </div>
-    </div>
-
-    <!-- Alertes + Véhicules récents -->
-    <div class="grid lg:grid-cols-3 gap-6 mt-6">
-
-      <div class="card p-6">
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="font-bold text-slate-900">Alertes</h3>
-          <a href="pages/notifications.html" class="text-sm font-semibold" style="color: var(--fp-accent)">Tout voir →</a>
-        </div>
-        <div class="space-y-2" id="alertes-list"></div>
       </div>
 
-      <div class="card p-0 lg:col-span-2 overflow-hidden">
-        <div class="flex justify-between items-center p-6 pb-4">
-          <h3 class="font-bold text-slate-900">Véhicules récents</h3>
-          <a href="pages/vehicules.html" class="text-sm font-semibold" style="color: var(--fp-accent)">Voir tout →</a>
-        </div>
-        <div class="scrollable">
-          <table class="fp-table">
-            <thead>
-              <tr>
-                <th>Immat.</th>
-                <th>Modèle</th>
-                <th>Chauffeur</th>
-                <th>Km</th>
-                <th>Statut</th>
-              </tr>
-            </thead>
-            <tbody id="vehicules-tbody"></tbody>
-          </table>
+      <!-- Widget : Alertes & véhicules récents -->
+      <div class="dash-widget" data-widget="alertes">
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Alertes & véhicules récents</span></div>
+        <div class="grid lg:grid-cols-3 gap-6">
+          <div class="card p-6">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold text-slate-900">Alertes</h3>
+              <a href="pages/notifications.html" class="text-sm font-semibold" style="color: var(--fp-accent)">Tout voir →</a>
+            </div>
+            <div class="space-y-2" id="alertes-list"></div>
+          </div>
+
+          <div class="card p-0 lg:col-span-2 overflow-hidden">
+            <div class="flex justify-between items-center p-6 pb-4">
+              <h3 class="font-bold text-slate-900">Véhicules récents</h3>
+              <a href="pages/vehicules.html" class="text-sm font-semibold" style="color: var(--fp-accent)">Voir tout →</a>
+            </div>
+            <div class="scrollable">
+              <table class="fp-table">
+                <thead>
+                  <tr>
+                    <th>Immat.</th>
+                    <th>Modèle</th>
+                    <th>Chauffeur</th>
+                    <th>Km</th>
+                    <th>Statut</th>
+                  </tr>
+                </thead>
+                <tbody id="vehicules-tbody"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -414,6 +433,44 @@
     }
     if (btn) btn.addEventListener('click', () => { expanded = !expanded; render(); });
     render();
+  })();
+
+  // === Widgets déplaçables (glisser-déposer + mémorisation) ===
+  (function () {
+    const KEY = 'auto_flotte_dash_widgets_order';
+    const cont = document.getElementById('dash-widgets');
+    if (!cont) return;
+    function apply() {
+      let o; try { o = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+      if (!Array.isArray(o)) return;
+      o.forEach(k => { const el = cont.querySelector(`.dash-widget[data-widget="${k}"]`); if (el) cont.appendChild(el); });
+    }
+    function save() {
+      const o = [...cont.querySelectorAll('.dash-widget')].map(el => el.dataset.widget);
+      localStorage.setItem(KEY, JSON.stringify(o));
+    }
+    function after(y) {
+      const els = [...cont.querySelectorAll('.dash-widget:not(.dragging)')];
+      return els.reduce((c, ch) => {
+        const b = ch.getBoundingClientRect(); const off = y - b.top - b.height / 2;
+        return (off < 0 && off > c.off) ? { off, el: ch } : c;
+      }, { off: -Infinity }).el;
+    }
+    let drag = null;
+    cont.addEventListener('dragstart', e => {
+      const h = e.target.closest('.widget-grip'); if (!h) return;
+      drag = h.closest('.dash-widget'); drag.classList.add('dragging'); cont.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    cont.addEventListener('dragover', e => {
+      if (!drag) return; e.preventDefault();
+      const a = after(e.clientY);
+      if (a == null) cont.appendChild(drag); else if (a !== drag) cont.insertBefore(drag, a);
+    });
+    cont.addEventListener('dragend', () => {
+      if (!drag) return; drag.classList.remove('dragging'); cont.classList.remove('is-dragging'); drag = null; save();
+    });
+    apply();
   })();
 
   // Re-init icons
