@@ -11,6 +11,14 @@
 - **Repo** : https://github.com/shakilnubee/-auto-flotte
 - **Langue UI** : Français
 
+## Fichier source Drive (référence unique)
+
+⚠️ Pour toute synchro flotte/conducteurs/amendes, utiliser **TOUJOURS et UNIQUEMENT** ce
+fichier Google Sheets (demande explicite de l'utilisateur) :
+- **ID** : `1OytuLYw0T8-0Hebsu0L6N8sgk1pC6SfKp3n7l1i0fkU`
+- Onglet véhicules en haut (col `CONDUCTEUR | N° de plaque | Type`), puis sections amendes.
+- Ne jamais utiliser les anciennes copies (« pour Claude », « Copie de Voiture + Contravention », etc.).
+
 ## Structure du projet
 
 ```
