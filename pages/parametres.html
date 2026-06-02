@@ -100,6 +100,7 @@
       <button class="set-tab" data-sec="affichage"><i data-lucide="layout-list"></i> Affichage</button>
       <button class="set-tab" data-sec="societe"><i data-lucide="building-2"></i> Société</button>
       <button class="set-tab" data-sec="donnees"><i data-lucide="database"></i> Données</button>
+      <button class="set-tab" data-sec="journal"><i data-lucide="history"></i> Journal</button>
     </div>
 
     <!-- Section Groupes -->
@@ -174,6 +175,42 @@
         <button class="btn text-sm text-red-600 hover:bg-red-50" id="btn-reset-all"><i data-lucide="trash-2" class="w-4 h-4"></i> Tout réinitialiser</button>
         <input type="file" id="import-file" accept=".json" class="hidden" />
       </div>
+    </div>
+
+    <!-- Section Journal des modifications -->
+    <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="journal">
+      <div class="section-title">
+        <i data-lucide="history" class="w-5 h-5"></i> Journal des modifications
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Historique des ajouts, modifications et suppressions enregistrés en base — utile pour vérifier qui a changé quoi et quand (par ex. en cas de modif par erreur).</p>
+
+      <div class="flex flex-wrap items-center gap-3 mb-4">
+        <div class="relative flex-1 min-w-[200px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="journal-search" type="text" placeholder="Rechercher (utilisateur, élément, type…)" class="field-input" style="padding-left:2.3rem" />
+        </div>
+        <select id="journal-type" class="field-input" style="width:auto">
+          <option value="all">Tous types</option>
+          <option value="vehicules">Véhicules</option>
+          <option value="amendes">Amendes</option>
+          <option value="factures">Factures</option>
+          <option value="conducteurs">Conducteurs</option>
+          <option value="emprunts">Emprunts</option>
+        </select>
+        <button class="btn btn-outline text-sm" id="btn-journal-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter</button>
+        <button class="btn text-sm text-red-600 hover:bg-red-50" id="btn-journal-clear"><i data-lucide="trash-2" class="w-4 h-4"></i> Vider</button>
+      </div>
+
+      <div class="scrollable" style="max-height:520px">
+        <table class="fp-table">
+          <thead>
+            <tr><th style="width:160px">Quand</th><th>Qui</th><th>Action</th><th>Élément</th><th>Détails</th></tr>
+          </thead>
+          <tbody id="journal-tbody"></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-slate-400 mt-3" id="journal-count"></p>
+      <p class="text-xs text-slate-400 mt-1">⚠️ Le journal est enregistré dans ce navigateur : il reflète les actions faites depuis ce poste. Pour un historique partagé entre tous les PC, il faudrait l'enregistrer dans Supabase (je peux le mettre en place).</p>
     </div>
 
     <!-- Section Aperçu (rattachée à l'onglet Groupes) -->
@@ -497,12 +534,64 @@
   });
   FP.history.updateUI();
 
+  // ---------- Journal des modifications ----------
+  const ACTION_BADGE = {
+    'ajout': 'background:#DCFCE7;color:#166534',
+    'modification': 'background:#FEF3C7;color:#92400E',
+    'suppression': 'background:#FEE2E2;color:#991B1B',
+    'ajout / mise à jour': 'background:#DBEAFE;color:#1E3A8A',
+  };
+  function fmtWhen(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return iso || '—';
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: '2-digit' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+  function renderJournal() {
+    const q = ($('journal-search').value || '').toLowerCase().trim();
+    const type = $('journal-type').value;
+    const all = (FP.audit ? FP.audit.get() : []);
+    const rows = all.filter(e => {
+      if (type !== 'all' && e.table !== type) return false;
+      if (q && !(`${e.user} ${e.action} ${FP.audit.TABLE_LABEL[e.table] || e.table} ${e.label} ${e.champs || ''}`.toLowerCase().includes(q))) return false;
+      return true;
+    });
+    const tbody = $('journal-tbody');
+    tbody.innerHTML = rows.map(e => `
+      <tr>
+        <td class="text-xs text-slate-500 whitespace-nowrap">${fmtWhen(e.ts)}</td>
+        <td class="text-sm">${e.user || 'inconnu'}</td>
+        <td><span class="badge" style="${ACTION_BADGE[e.action] || 'background:#F1F5F9;color:#475569'}">${e.action}</span></td>
+        <td class="text-sm"><span class="text-slate-400">${FP.audit.TABLE_LABEL[e.table] || e.table}</span> ${e.label ? '· <span class="font-medium">' + e.label.replace(/</g, '&lt;') + '</span>' : ''}</td>
+        <td class="text-xs text-slate-500">${e.champs ? 'champs : ' + e.champs.replace(/</g, '&lt;') : ''}</td>
+      </tr>`).join('') || `<tr><td colspan="5" class="text-center text-slate-400 py-8">Aucune modification enregistrée pour l'instant.</td></tr>`;
+    $('journal-count').textContent = `${rows.length} entrée(s)${all.length !== rows.length ? ' sur ' + all.length : ''}`;
+  }
+  $('journal-search').addEventListener('input', renderJournal);
+  $('journal-type').addEventListener('change', renderJournal);
+  $('btn-journal-clear').addEventListener('click', () => {
+    if (!confirm('Vider tout le journal des modifications ? Cette action est irréversible.')) return;
+    FP.audit.clear(); renderJournal();
+  });
+  $('btn-journal-export').addEventListener('click', () => {
+    const cols = [
+      { key: 'ts', label: 'Date/heure', format: fmtWhen },
+      { key: 'user', label: 'Utilisateur' },
+      { key: 'action', label: 'Action' },
+      { key: 'table', label: 'Type', format: v => FP.audit.TABLE_LABEL[v] || v },
+      { key: 'label', label: 'Élément' },
+      { key: 'champs', label: 'Champs modifiés' },
+    ];
+    FP.csv.download(`auto-flotte-journal-${new Date().toISOString().slice(0,10)}.csv`, cols, FP.audit.get());
+  });
+  document.addEventListener('fp:audit', renderJournal);
+
   // Init
   setupSettingsTabs();
   renderGroupesForm();
   renderNavLabelsForm();
   loadSociete();
   renderPreview();
+  renderJournal();
   lucide.createIcons();
 </script>
 </body>

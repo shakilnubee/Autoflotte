@@ -484,6 +484,62 @@ FP.persist = {
   async update(table, id, fields) { if (!this.available()) return; try { const r = await FP.db.update(table, id, fields); if (r && r.error) throw r.error; } catch (e) { this._err(e); } },
   async delete(table, id) { if (!this.available()) return; try { const r = await FP.db.delete(table, id); if (r && r.error) throw r.error; } catch (e) { this._err(e); } },
 };
+
+// =====================================================================
+// === Journal des modifications (qui / quoi / quand) ===================
+// =====================================================================
+// Enregistre chaque écriture en base (ajout / modification / suppression)
+// avec l'utilisateur connecté et l'horodatage. Stocké en localStorage.
+FP.audit = {
+  KEY: 'auto_flotte_audit_log',
+  MAX: 800,
+  TABLE_LABEL: { vehicules: 'Véhicule', amendes: 'Amende', factures: 'Facture', conducteurs: 'Conducteur', emprunts: 'Emprunt', documents: 'Document' },
+  get() { try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); } catch (e) { return []; } },
+  _save(arr) { try { localStorage.setItem(this.KEY, JSON.stringify(arr.slice(0, this.MAX))); } catch (e) {} },
+  log(entry) {
+    const arr = this.get();
+    arr.unshift({ ts: new Date().toISOString(), user: FP._userEmail || (function () { try { return localStorage.getItem('auto_flotte_last_user'); } catch (e) { return null; } })() || 'inconnu', ...entry });
+    this._save(arr);
+    try { document.dispatchEvent(new CustomEvent('fp:audit')); } catch (e) {}
+  },
+  clear() { try { localStorage.removeItem(this.KEY); } catch (e) {} try { document.dispatchEvent(new CustomEvent('fp:audit')); } catch (e) {} },
+  _describeRow(table, row) {
+    if (!row) return '';
+    if (table === 'vehicules') return `${row.immat || ''} ${row.marque || ''} ${row.modele || ''}`.trim();
+    if (table === 'amendes')   return `${row.prenom || ''}${row.motif ? ' · ' + row.motif : ''}`.trim();
+    if (table === 'factures')  return `${row.vehiculeImmat || ''}${row.fournisseur ? ' · ' + row.fournisseur : (row.numeroFacture ? ' · ' + row.numeroFacture : '')}`.trim();
+    if (table === 'conducteurs') return row.name || row.key || '';
+    return row.immat || row.nom || row.id || '';
+  },
+  _describeId(table, id) {
+    const d = window.FP_DATA || {};
+    const coll = d[table];
+    const rec = Array.isArray(coll) ? coll.find(x => x.id === id) : null;
+    return rec ? this._describeRow(table, rec) : (id || '');
+  },
+};
+
+// Instrumente FP.db pour journaliser chaque écriture réussie (une seule couche,
+// donc pas de double comptage même via FP.persist qui appelle FP.db).
+(function instrumentDbForAudit() {
+  if (!FP.db || FP.db.__audited) return;
+  FP.db.__audited = true;
+  const ACTIONS = { insert: 'ajout', update: 'modification', delete: 'suppression', upsert: 'ajout / mise à jour' };
+  ['insert', 'update', 'delete', 'upsert'].forEach(m => {
+    const orig = FP.db[m].bind(FP.db);
+    FP.db[m] = async function (table, a, b) {
+      const id = (m === 'update' || m === 'delete') ? a : (a && a.id) || '';
+      const label = (m === 'insert' || m === 'upsert') ? FP.audit._describeRow(table, a) : FP.audit._describeId(table, id);
+      const champs = (m === 'update' && b) ? Object.keys(b).join(', ') : '';
+      const res = await orig(table, a, b);
+      if (!(res && res.error)) {
+        FP.audit.log({ action: ACTIONS[m], table, id, label, champs });
+      }
+      return res;
+    };
+  });
+})();
+
 FP.navLabel = (navKey) => {
   const custom = FP.settings.get().sidebarLabels || {};
   return custom[navKey] || FP.DEFAULT_NAV_LABELS[navKey] || navKey;
@@ -989,6 +1045,8 @@ FP.injectLogoutButton = () => {
     if (FP.auth) {
       FP.auth.getUser().then(user => {
         if (user && user.email) {
+          FP._userEmail = user.email;
+          try { localStorage.setItem('auto_flotte_last_user', user.email); } catch (e) {}
           const emailEl = div.querySelector('.fp-user-email');
           if (emailEl) emailEl.textContent = user.email;
         }
