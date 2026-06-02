@@ -25,6 +25,7 @@
   .modal { background: white; border-radius: 1rem; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
   .ct-warn { color: var(--fp-warn); font-weight: 600; }
   .ct-danger { color: var(--fp-danger); font-weight: 700; }
+  .ct-ok { color: var(--fp-ok); font-weight: 600; }
 
   /* Petit spinner pour la lecture de la carte grise */
   .cg-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: cg-spin .7s linear infinite; }
@@ -125,6 +126,8 @@
   .col-resize-handle.resizing { background: var(--fp-accent); }
   body.col-resizing { cursor: col-resize !important; user-select: none; }
   body.col-resizing * { user-select: none; }
+  .ct-sort-btn { border: none; background: none; cursor: pointer; font-size: .8rem; color: var(--fp-muted); padding: 0 .25rem; margin-left: .15rem; }
+  .ct-sort-btn:hover { color: var(--fp-primary); }
   .col-hide-btn {
     position: absolute;
     top: 50%;
@@ -582,6 +585,7 @@
     groupe: 'all',
     editingId: null,
     selectedIds: new Set(),
+    sortCT: null, // null | 'asc' (échéance la plus proche d'abord) | 'desc'
   };
 
   // Labels et couleurs sont fournis par FP.groupeLabel() (configurables via /pages/parametres.html)
@@ -754,9 +758,9 @@
     const label = FP.date(iso);
     if (jours === null) return label;
     if (jours < 0)   return `<span class="ct-danger">${label} · dépassé</span>`;
-    if (jours < 30)  return `<span class="ct-danger">${label} · ${jours}j</span>`;
-    if (jours < 90)  return `<span class="ct-warn">${label} · ${jours}j</span>`;
-    return `<span class="text-slate-600">${label}</span>`;
+    if (jours <= 30) return `<span class="ct-danger">${label} · ${jours}j</span>`;
+    if (jours <= 45) return `<span class="ct-warn">${label} · ${jours}j</span>`;
+    return `<span class="ct-ok">${label} · ${jours}j</span>`;
   }
 
   const checkCell = (b) => b
@@ -834,7 +838,10 @@
       const def = DATA_COLUMNS.find(c => c.key === k);
       if (!def) return '';
       const label = getColLabel(k);
-      return `<th draggable="true" data-col-key="${k}" title="Glisser pour déplacer • Double-clic pour renommer"><span class="col-label">${label}</span><button class="col-hide-btn" data-hide-key="${k}" title="Masquer cette colonne">✕</button><div class="col-resize-handle" data-resize-key="${k}" title="Redimensionner"></div></th>`;
+      const sortBtn = (k === 'prochainCT')
+        ? `<button class="ct-sort-btn" data-ct-sort title="Trier par échéance">${state.sortCT === 'asc' ? '▲' : state.sortCT === 'desc' ? '▼' : '⇅'}</button>`
+        : '';
+      return `<th draggable="true" data-col-key="${k}" title="Glisser pour déplacer • Double-clic pour renommer"><span class="col-label">${label}</span>${sortBtn}<button class="col-hide-btn" data-hide-key="${k}" title="Masquer cette colonne">✕</button><div class="col-resize-handle" data-resize-key="${k}" title="Redimensionner"></div></th>`;
     }).join('');
     $('vehicules-thead').innerHTML = `
       <tr>
@@ -919,8 +926,8 @@
   }
 
   $('vehicules-thead').addEventListener('dragstart', (e) => {
-    // Si on est en train de resize, ne pas démarrer un drag
-    if (resizingKey) { e.preventDefault(); return; }
+    // Si on est en train de resize ou de cliquer un bouton (tri/masquer), ne pas démarrer un drag
+    if (resizingKey || e.target.closest('.ct-sort-btn, .col-hide-btn')) { e.preventDefault(); return; }
     const th = e.target.closest('th[data-col-key]');
     if (!th) return;
     draggedKey = th.dataset.colKey;
@@ -971,6 +978,15 @@
 
   // Masquer une colonne en cliquant sur le ✕
   $('vehicules-thead').addEventListener('click', (e) => {
+    // Tri par échéance CT
+    const sortBtn = e.target.closest('.ct-sort-btn');
+    if (sortBtn) {
+      e.stopPropagation();
+      state.sortCT = state.sortCT === 'asc' ? 'desc' : state.sortCT === 'desc' ? null : 'asc';
+      renderTableHeaders();
+      renderTable();
+      return;
+    }
     const btn = e.target.closest('.col-hide-btn');
     if (!btn) return;
     e.stopPropagation();
@@ -1102,6 +1118,19 @@
       if (q && !(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`.toLowerCase().includes(q))) return false;
       return true;
     });
+    // Tri par échéance de CT (prioritaire s'il est activé)
+    if (state.sortCT) {
+      const dir = state.sortCT === 'desc' ? -1 : 1;
+      filteredList.sort((a, b) => {
+        const ja = FP.joursRestants(a.prochainCT);
+        const jb = FP.joursRestants(b.prochainCT);
+        const va = (ja === null || ja === undefined) ? Infinity : ja; // sans CT → à la fin
+        const vb = (jb === null || jb === undefined) ? Infinity : jb;
+        if (va === vb) return 0;
+        return (va - vb) * dir;
+      });
+      return filteredList;
+    }
     // Application de l'ordre custom utilisateur si défini (drag-and-drop des lignes)
     const customOrder = FP.settings.get().vehiculesRowOrder || [];
     if (customOrder.length > 0) {
