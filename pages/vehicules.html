@@ -1132,7 +1132,7 @@
         const cells = visible.map(k => {
           const def = DATA_COLUMNS.find(c => c.key === k);
           if (!def) return '';
-          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''}>${def.render(v)}</td>`;
+          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''} data-col="${k}">${def.render(v)}</td>`;
         }).join('');
         return `<tr class="cursor-pointer${state.selectedIds.has(v.id) ? ' row-selected' : ''}" data-id="${v.id}">
           <td class="cb-col"><span class="row-drag-handle" draggable="true" title="Glisser pour réorganiser">⋮⋮</span><input type="checkbox" class="row-cb" data-id="${v.id}" ${state.selectedIds.has(v.id) ? 'checked' : ''} /></td>
@@ -1781,11 +1781,85 @@
     sel.innerHTML = FP.groupeKeys().map(k => `<option value="${k}">${FP.groupeLabel(k)}</option>`).join('');
   })();
 
+  // === Édition par double-clic des cellules du tableau ===
+  const EDITABLE = {
+    immat: 'text', modele: 'text', categorie: 'text', km: 'number', chauffeur: 'text',
+    prochainCT: 'date', statut: 'select', dateMiseEnCirculation: 'date', assurance: 'text',
+    proprietaire: 'text', valeurAchat: 'number', vin: 'text', critAir: 'text',
+    dateDernierCT: 'date', derniereRevision: 'date',
+    sanef: 'bool', cleSiege: 'bool', cleSalarie: 'bool', cgOrigSiege: 'bool', cgOrigSalarie: 'bool', etatDesLieux: 'bool',
+  };
+  const STATUT_OPTIONS = ['actif', 'entretien', 'à vendre', 'vendu', 'hors service', 'sinistre'];
+
+  function commitVehField(v, field) {
+    renderTable();
+    renderKPIs();
+    if (drawerVehId === v.id && $('drawer').classList.contains('open')) openDrawer(v.id);
+    if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { [field]: v[field] });
+    persistVehicleUpsert(v, false);
+  }
+
+  function startCellEdit(td, v, field, type) {
+    if (td.querySelector('.cell-edit')) return;
+    if (type === 'bool') { FP.history.commit(); v[field] = !v[field]; commitVehField(v, field); return; }
+    const cur = v[field] != null ? v[field] : '';
+    let html;
+    if (type === 'select') {
+      html = `<select class="cell-edit" style="width:100%;border:1px solid var(--fp-accent);border-radius:6px;padding:.25rem">${STATUT_OPTIONS.map(o => `<option value="${o}" ${o === cur ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+    } else {
+      const t = type === 'number' ? 'number' : type === 'date' ? 'date' : 'text';
+      const val = type === 'date' ? (typeof cur === 'string' ? cur.slice(0, 10) : '') : cur;
+      html = `<input class="cell-edit" type="${t}" value="${String(val).replace(/"/g, '&quot;')}" style="width:100%;min-width:80px;border:1px solid var(--fp-accent);border-radius:6px;padding:.25rem .4rem">`;
+    }
+    td.innerHTML = html;
+    const el = td.querySelector('.cell-edit');
+    el.focus(); if (el.select) el.select();
+    let done = false;
+    const commit = (save) => {
+      if (done) return; done = true;
+      if (save) {
+        let nv = el.value;
+        if (type === 'number') nv = (nv === '' ? null : parseFloat(nv));
+        else nv = nv.trim();
+        FP.history.commit();
+        v[field] = nv;
+        commitVehField(v, field);
+      } else { renderTable(); }
+    };
+    el.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { ev.preventDefault(); commit(true); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
+    });
+    el.addEventListener('blur', () => commit(true));
+    if (type === 'select') el.addEventListener('change', () => commit(true));
+  }
+
+  let _rowClickTimer = null;
   $('vehicules-tbody').addEventListener('click', (e) => {
-    // Ne pas ouvrir le drawer si on clique sur une checkbox ou la poignée de drag
-    if (e.target.closest('input[type="checkbox"], .row-drag-handle')) return;
+    // Ne pas ouvrir le drawer si on clique sur une checkbox, la poignée ou un champ en édition
+    if (e.target.closest('input[type="checkbox"], .row-drag-handle, .cell-edit, select')) return;
     const tr = e.target.closest('tr[data-id]');
-    if (tr) openDrawer(tr.dataset.id);
+    if (!tr) return;
+    const id = tr.dataset.id;
+    const td = e.target.closest('td[data-col]');
+    const isEditable = td && EDITABLE[td.dataset.col];
+    if (isEditable) {
+      // petit délai : si un double-clic suit, on édite au lieu d'ouvrir la fiche
+      clearTimeout(_rowClickTimer);
+      _rowClickTimer = setTimeout(() => openDrawer(id), 220);
+    } else {
+      openDrawer(id);
+    }
+  });
+  $('vehicules-tbody').addEventListener('dblclick', (e) => {
+    clearTimeout(_rowClickTimer);
+    const td = e.target.closest('td[data-col]');
+    const tr = e.target.closest('tr[data-id]');
+    if (!td || !tr) return;
+    const field = td.dataset.col;
+    if (!EDITABLE[field]) return;
+    const v = data.vehicules.find(x => x.id === tr.dataset.id);
+    if (v) startCellEdit(td, v, field, EDITABLE[field]);
   });
 
   // === Drag-and-drop des lignes (réorganisation) ===
