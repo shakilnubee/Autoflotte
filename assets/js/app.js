@@ -1345,6 +1345,7 @@ FP.csv = {
 //   container? (élément hôte ; défaut [data-data-io])
 // }
 FP.injectDataIO = (config) => {
+  return; // Boutons Importer/Exporter CSV retirés (remplacés par l'import de document sur Véhicules/Amendes)
   const host = config.container || document.querySelector('[data-data-io]');
   if (!host || host.querySelector('.fp-io-wrap')) return;
 
