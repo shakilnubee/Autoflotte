@@ -198,6 +198,16 @@
         <button class="btn text-sm text-red-600 hover:bg-red-50" id="btn-reset-all"><i data-lucide="trash-2" class="w-4 h-4"></i> Tout réinitialiser</button>
         <input type="file" id="import-file" accept=".json" class="hidden" />
       </div>
+
+      <div class="mt-5 pt-4 border-t border-slate-100">
+        <div class="field-label">Synchronisation entre postes (cloud)</div>
+        <p class="text-sm text-slate-600 mb-3">Partage les réglages (noms/couleurs des groupes, libellés, titres, couleur) entre tous les PC via Supabase.</p>
+        <div class="flex gap-2 flex-wrap">
+          <button class="btn btn-dark text-sm" id="btn-sync-push"><i data-lucide="cloud-upload" class="w-4 h-4"></i> Envoyer mes réglages au serveur</button>
+          <button class="btn btn-outline text-sm" id="btn-sync-pull"><i data-lucide="cloud-download" class="w-4 h-4"></i> Récupérer les réglages du serveur</button>
+        </div>
+        <p class="text-xs mt-2" id="sync-status"></p>
+      </div>
     </div>
 
     <!-- Section Journal des modifications -->
@@ -656,6 +666,31 @@
     const def = FP.settings.defaults.platformColor;
     $('f-platform-color').value = def;
     previewColor(def); saveColor(def);
+  });
+
+  // ---------- Synchronisation cloud des réglages ----------
+  $('btn-sync-push').addEventListener('click', async () => {
+    const st = $('sync-status');
+    if (!(window.FP && FP.db && FP.supabase)) { st.style.color = '#DC2626'; st.textContent = 'Supabase non connecté — recharge la page (Ctrl+Shift+R).'; return; }
+    st.style.color = 'var(--fp-muted)'; st.textContent = 'Envoi en cours…';
+    try {
+      const res = await FP.db.upsert('app_settings', { id: 'global', data: FP.settings.get() });
+      if (res && res.error) throw res.error;
+      st.style.color = '#16A34A'; st.textContent = '✓ Réglages envoyés au serveur. Sur les autres PC : Ctrl + Shift + R.';
+    } catch (e) { st.style.color = '#DC2626'; st.textContent = 'Échec : ' + (e.message || e); }
+  });
+  $('btn-sync-pull').addEventListener('click', async () => {
+    const st = $('sync-status');
+    if (!(window.FP && FP.db && FP.supabase)) { st.style.color = '#DC2626'; st.textContent = 'Supabase non connecté.'; return; }
+    st.style.color = 'var(--fp-muted)'; st.textContent = 'Récupération…';
+    try {
+      const res = await FP.supabase.from('app_settings').select('data').eq('id', 'global').maybeSingle();
+      if (res.error) throw res.error;
+      if (!res.data || !res.data.data) { st.style.color = '#DC2626'; st.textContent = 'Aucun réglage enregistré sur le serveur pour l\'instant.'; return; }
+      localStorage.setItem(FP.settings.STORAGE_KEY, JSON.stringify(res.data.data));
+      st.style.color = '#16A34A'; st.textContent = '✓ Réglages récupérés. Rechargement…';
+      setTimeout(() => location.reload(), 600);
+    } catch (e) { st.style.color = '#DC2626'; st.textContent = 'Échec : ' + (e.message || e); }
   });
 
   // Init
