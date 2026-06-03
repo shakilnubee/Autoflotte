@@ -615,6 +615,29 @@ FP.persist = {
 };
 
 // =====================================================================
+// === Stockage des scans (avis, cartes grises) — Supabase Storage =====
+// =====================================================================
+// Envoie un fichier dans le bucket "scans" et renvoie son URL public,
+// pour pouvoir le revoir à tout moment depuis n'importe quel PC.
+// Le bucket "scans" doit exister et être public (voir supabase-storage.sql).
+FP.SCAN_BUCKET = 'scans';
+FP.uploadScan = async function (file, folder) {
+  if (!FP.supabase || !FP.supabase.storage) throw new Error('Stockage indisponible (Supabase non chargé).');
+  if (!file) return null;
+  const extMatch = (file.name || '').match(/\.[a-z0-9]+$/i);
+  const ext = extMatch ? extMatch[0].toLowerCase() : (file.type === 'application/pdf' ? '.pdf' : '.jpg');
+  const rand = Math.random().toString(36).slice(2, 8);
+  const path = `${folder || 'divers'}/${Date.now()}-${rand}${ext}`;
+  const { error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).upload(path, file, {
+    upsert: false,
+    contentType: file.type || 'application/octet-stream',
+  });
+  if (error) throw error;
+  const { data } = FP.supabase.storage.from(FP.SCAN_BUCKET).getPublicUrl(path);
+  return (data && data.publicUrl) || null;
+};
+
+// =====================================================================
 // === Journal des modifications (qui / quoi / quand) ===================
 // =====================================================================
 // Enregistre chaque écriture en base (ajout / modification / suppression)

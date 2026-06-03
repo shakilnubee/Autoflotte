@@ -686,7 +686,8 @@
   // Documents Drive intégrés (carte grise + mémo assurance), consultables sur le site
   function builtinDocs(v){
     const list = [];
-    if (v.cgFileId) list.push({ type: 'carte-grise', label: 'Carte grise', drive: v.cgFileId });
+    if (v.cgUrl) list.push({ type: 'carte-grise', label: 'Carte grise', url: v.cgUrl });
+    else if (v.cgFileId) list.push({ type: 'carte-grise', label: 'Carte grise', drive: v.cgFileId });
     const docs = (typeof window !== 'undefined' && window.FP_DOCS) ? window.FP_DOCS : { assurance: {} };
     const aId = docs.assurance && docs.assurance[normImmat(v.immat)];
     if (aId) list.push({ type: 'assurance', label: 'Mémo assurance', drive: aId });
@@ -695,13 +696,17 @@
 
   function builtinDocRowHTML(doc){
     const t = DOC_TYPES.find(x => x.key === doc.type) || DOC_TYPES[DOC_TYPES.length - 1];
+    // Document stocké dans Supabase (lien direct) ou ancien lien Google Drive
+    const viewBtn = doc.url
+      ? `<a href="${escapeHtml(sanitizeUrl(doc.url))}" target="_blank" rel="noopener" class="btn btn-outline !py-1 !px-2.5 text-xs"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</a>`
+      : `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-view="${escapeHtml(doc.drive)}" data-doc-title="${escapeHtml(doc.label)}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`;
     return `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm">
       <i data-lucide="${t.icon}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
       <div class="flex-1 min-w-0">
         <div class="font-medium truncate">${escapeHtml(doc.label)}</div>
-        <div class="text-xs text-slate-500">${t.label} · Google Drive</div>
+        <div class="text-xs text-slate-500">${t.label}${doc.url ? '' : ' · Google Drive'}</div>
       </div>
-      <button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-view="${escapeHtml(doc.drive)}" data-doc-title="${escapeHtml(doc.label)}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>
+      ${viewBtn}
     </div>`;
   }
 
@@ -1503,6 +1508,7 @@
     $('f-ct').value         = vehicule?.prochainCT || '';
     $('f-vin').value        = vehicule?.vin || '';
     // Réinitialise la zone d'import carte grise
+    _cgFile = null;
     const cgSt = $('cg-status'); cgSt.classList.add('hidden'); cgSt.innerHTML = '';
     // Remplir les checkboxes groupes
     const currentGroupes = vehicule ? FP.vehGroupes(vehicule) : ['non-classe'];
@@ -1574,6 +1580,7 @@
       prochainCT: dateOrNull(v.prochainCT),
       dateMiseEnCirculation: dateOrNull(v.dateMiseEnCirculation),
       vin: v.vin || null,
+      cgUrl: v.cgUrl || null,
       groupes: Array.isArray(v.groupes) ? v.groupes : [],
       // Champs éditables supplémentaires (synchronisés sur tous les postes)
       carburant: v.carburant || null,
@@ -1663,7 +1670,7 @@
     }
   }
 
-  function saveVehicule(e) {
+  async function saveVehicule(e) {
     e.preventDefault();
     // === Validation ===
     const immat = $('f-immat').value.trim().toUpperCase();
@@ -1682,6 +1689,19 @@
     if (ct && (ct < '1990-01-01' || ct > '2100-01-01'))    errors.push('Date prochain CT hors plage 1990–2100');
     if (errors.length > 0) { alert('Erreurs à corriger :\n• ' + errors.join('\n• ')); return; }
 
+    // Envoi de la carte grise dans le stockage (pour la revoir plus tard)
+    let cgUrl = '';
+    if (_cgFile) {
+      try {
+        cgWorking('Sauvegarde de la carte grise…');
+        cgUrl = await FP.uploadScan(_cgFile, 'cartes-grises') || '';
+        cgStatus('<b>✓ Carte grise enregistrée.</b>', 'ok');
+      } catch (err) {
+        console.error(err);
+        cgStatus("Le scan n'a pas pu être sauvegardé (le véhicule sera quand même enregistré). Réessayez plus tard.", 'error');
+      }
+    }
+
     FP.history.commit();
     const payload = {
       immat,
@@ -1695,8 +1715,10 @@
       vin: $('f-vin').value.trim().toUpperCase() || '',
       groupes: Array.from(document.querySelectorAll('#f-groupes-list input.f-groupe-cb:checked')).map(cb => cb.value),
     };
+    if (cgUrl) payload.cgUrl = cgUrl;
     if (payload.groupes.length === 0) payload.groupes = ['non-classe'];
 
+    _cgFile = null;
     const id = $('f-id').value;
     if (id) {
       const idx = data.vehicules.findIndex(v => v.id === id);
@@ -2188,6 +2210,7 @@
   //  Import carte grise → pré-remplissage automatique (OCR)
   //  100% navigateur : rien n'est envoyé sur un serveur.
   // ============================================================
+  let _cgFile = null; // scan de la carte grise sélectionné, envoyé au stockage à l'enregistrement
   const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
   const PDFJS_CDN     = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
   const PDFJS_WORKER  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -2333,6 +2356,7 @@
   $('cg-trigger').addEventListener('click', () => $('f-cg-file').click());
   $('f-cg-file').addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
+    _cgFile = file || null; // conservé pour l'envoi dans le stockage à l'enregistrement
     handleCarteGrise(file);
     e.target.value = ''; // permet de re-sélectionner le même fichier
   });
