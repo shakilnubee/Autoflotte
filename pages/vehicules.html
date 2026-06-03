@@ -296,6 +296,7 @@
           <div class="hidden-cols-popover" id="hidden-cols-popover"></div>
         </div>
         <span data-data-io></span>
+        <button class="btn btn-outline text-sm" id="btn-sync" title="Envoyer vers le serveur les modifications encore stockées sur ce PC"><i data-lucide="cloud-upload" class="w-4 h-4"></i> Synchroniser</button>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
       </div>
     </div>
@@ -1634,6 +1635,24 @@
       fields.forEach(f => FP.saveVehicleOverride && FP.saveVehicleOverride(v.id, { [f]: v[f] }));
     }
   }
+  // Pousse vers Supabase toutes les modifs encore stockées localement (récupération
+  // de changements faits hors-ligne / avant l'ajout des colonnes). Idempotent.
+  async function syncLocalOverrides() {
+    if (!dbAvailable()) { alert('Base de données indisponible — réessaie quand tu es en ligne.'); return; }
+    const overrides = FP.getVehicleOverrides ? FP.getVehicleOverrides() : {};
+    const ids = Object.keys(overrides);
+    if (!ids.length) { alert('Aucune modification locale en attente : tout est déjà synchronisé. ✓'); return; }
+    if (!confirm(`Envoyer vers le serveur les modifications locales de ${ids.length} véhicule(s) ?`)) return;
+    let done = 0;
+    for (const id of ids) {
+      const v = data.vehicules.find(x => x.id === id);
+      if (!v) continue;
+      const fields = Object.keys(overrides[id] || {});
+      if (fields.length) { await persistVehFields(v, fields); done++; }
+    }
+    renderTabBar(); renderKPIs(); renderTable();
+    alert(`Synchronisation terminée ✓\n${done} véhicule(s) envoyé(s) au serveur. Ils sont maintenant visibles sur tous les postes.`);
+  }
   async function persistVehicleDelete(id) {
     if (!dbAvailable()) return;
     try {
@@ -2160,6 +2179,7 @@
   $('grp-modal-backdrop').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeGroupEdit(); });
 
   $('btn-new').addEventListener('click', () => openModal(null));
+  $('btn-sync').addEventListener('click', syncLocalOverrides);
   $('modal-close').addEventListener('click', closeModal);
   $('modal-cancel').addEventListener('click', closeModal);
   $('modal-backdrop').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeModal(); });
