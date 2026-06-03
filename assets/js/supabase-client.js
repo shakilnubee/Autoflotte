@@ -192,6 +192,8 @@
           localStorage.setItem(key, JSON.stringify(shared));
           if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme();
           if (FP.applyCustomNavLabels) FP.applyCustomNavLabels();
+          if (FP.applyNavOrder) FP.applyNavOrder();
+          if (FP.applyNavVisibility) FP.applyNavVisibility();
           if (FP.applyCustomTexts) FP.applyCustomTexts();
         }
       } catch (e) { /* table absente ou hors-ligne : on garde les réglages locaux */ }

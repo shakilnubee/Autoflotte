@@ -310,6 +310,17 @@ FP.applyNavOrder = () => {
     ordered.forEach(a => nav.appendChild(a)); // ré-insère dans le nouvel ordre
   });
 };
+// Onglets toujours visibles (on ne peut pas masquer Paramètres, sinon plus moyen de revenir)
+FP.NAV_ALWAYS_VISIBLE = ['parametres.html'];
+// Masque les onglets choisis par l'utilisateur (sans les supprimer)
+FP.applyNavVisibility = () => {
+  const hidden = FP.settings.get().navHidden;
+  const set = new Set(Array.isArray(hidden) ? hidden : []);
+  document.querySelectorAll('a[data-nav]').forEach(a => {
+    const k = a.dataset.nav;
+    a.style.display = (set.has(k) && !FP.NAV_ALWAYS_VISIBLE.includes(k)) ? 'none' : '';
+  });
+};
 // Active le glisser-déposer des onglets directement dans le menu de gauche (toutes pages)
 FP.enableNavReorder = () => {
   document.querySelectorAll('aside nav').forEach(nav => {
@@ -1563,6 +1574,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Appliquer les labels personnalisés des onglets puis l'ordre choisi
   FP.applyCustomNavLabels();
   FP.applyNavOrder();
+  FP.applyNavVisibility();
   if (_isAdmin) FP.enableNavReorder(); // glisser-déposer des onglets (admin only)
   // Appliquer les textes éditables custom (titres, sous-titres)
   FP.applyCustomTexts();
