@@ -847,6 +847,27 @@ FP.loadVehicleOverrides = () => {
 // pour que toute modif se voie immédiatement sur toutes les pages.
 try { FP.loadVehicleOverrides(); } catch (e) {}
 
+// Synchro automatique : pousse vers Supabase les modifs restées en local (hors-ligne
+// ou faites avant l'ajout d'une colonne), champ par champ, puis nettoie l'override.
+// Aucune action de l'utilisateur requise — fonctionne sur 2 PC sans bouton.
+FP.autoSyncOverrides = async () => {
+  if (!(FP.db && FP.supabase)) return;
+  let all = {};
+  try { all = FP.getVehicleOverrides() || {}; } catch (e) { return; }
+  for (const id of Object.keys(all)) {
+    const fields = all[id] || {};
+    for (const [k, val] of Object.entries(fields)) {
+      try {
+        const res = await FP.db.update('vehicules', id, { [k]: val });
+        if (!(res && res.error)) FP.removeVehicleOverride(id, k); // synchronisé → la base fait foi
+      } catch (e) { /* colonne absente ou hors-ligne : on garde en local */ }
+    }
+  }
+};
+document.addEventListener('fp:data-ready', (e) => {
+  if (e.detail && e.detail.source === 'supabase') FP.autoSyncOverrides();
+});
+
 // === Historique Undo/Redo ===
 // Snapshote l'état complet (settings + overrides + vehicules in-memory) avant chaque mutation.
 FP.history = {
