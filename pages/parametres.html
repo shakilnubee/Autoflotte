@@ -31,7 +31,11 @@
   .set-tab.active { color: var(--fp-primary); border-bottom-color: var(--fp-accent); }
   .set-tab i { width: 16px; height: 16px; }
   .settings-section.hidden-sec { display: none; }
-  .nav-row { display: grid; grid-template-columns: 20px 150px 1fr; gap: .65rem; align-items: center; padding: .45rem 0; border-bottom: 1px solid var(--fp-border); }
+  .nav-row { display: grid; grid-template-columns: 18px 56px 140px 1fr; gap: .65rem; align-items: center; padding: .45rem 0; border-bottom: 1px solid var(--fp-border); }
+  .nav-move { display: inline-flex; gap: 3px; }
+  .nav-move button { width: 24px; height: 24px; border: 1px solid var(--fp-border); background: #fff; border-radius: 6px; color: var(--fp-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; line-height: 1; font-size: 12px; }
+  .nav-move button:hover:not(:disabled) { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .nav-move button:disabled { opacity: .3; cursor: default; }
   .nav-row:last-child { border-bottom: none; }
   .nav-row.row-dragging { opacity: .4; }
   .nav-row.drop-above { box-shadow: inset 0 2px 0 0 var(--fp-accent); }
@@ -124,7 +128,7 @@
       <div class="section-title">
         <i data-lucide="layout-list" class="w-5 h-5"></i> Onglets du menu
       </div>
-      <p class="text-sm text-slate-600 mb-4">Renomme les onglets et change leur ordre (glisser ⋮⋮). Clique « Enregistrer » pour appliquer au menu de gauche sur toutes les pages.</p>
+      <p class="text-sm text-slate-600 mb-4">Change l'ordre des onglets avec les flèches ▲▼ (ou en glissant ⋮⋮), et renomme-les si tu veux. Clique « Enregistrer » pour appliquer au menu de gauche sur toutes les pages.</p>
 
       <div id="nav-labels-form"></div>
 
@@ -405,19 +409,35 @@
       return `
         <div class="nav-row" draggable="true" data-nav-key="${key}">
           <span class="grp-drag" title="Glisser pour réordonner">⋮⋮</span>
+          <span class="nav-move">
+            <button type="button" data-move="up" title="Monter">▲</button>
+            <button type="button" data-move="down" title="Descendre">▼</button>
+          </span>
           <span class="text-sm text-slate-500">${def}</span>
           <input class="field-input" type="text" data-nav-key="${key}" value="${(labels[key] || '').replace(/"/g, '&quot;')}" placeholder="${def}" />
         </div>
       `;
     }).join('');
+    updateNavArrows();
   }
 
-  function saveNavLabels() {
+  // Met à jour l'état des flèches (▲ désactivé en haut, ▼ désactivé en bas)
+  function updateNavArrows() {
+    const rows = Array.from(document.querySelectorAll('#nav-labels-form .nav-row'));
+    rows.forEach((row, i) => {
+      const up = row.querySelector('[data-move="up"]');
+      const down = row.querySelector('[data-move="down"]');
+      if (up) up.disabled = (i === 0);
+      if (down) down.disabled = (i === rows.length - 1);
+    });
+  }
+
+  // Lit l'ordre + les noms saisis dans le formulaire et applique au menu de gauche
+  function applyNavFromForm(withToast) {
     FP.history.commit();
     const current = FP.settings.get();
     const newLabels = {};
     const order = [];
-    // On lit les lignes dans leur ordre actuel (drag & drop) → ordre + labels
     document.querySelectorAll('#nav-labels-form .nav-row').forEach(row => {
       const key = row.dataset.navKey;
       order.push(key);
@@ -429,8 +449,9 @@
     FP.settings.save(current);
     FP.applyCustomNavLabels();
     FP.applyNavOrder();
-    showToast('Onglets enregistrés ✓');
+    if (withToast) showToast('Onglets enregistrés ✓');
   }
+  function saveNavLabels() { applyNavFromForm(true); }
 
   function resetNavLabels() {
     if (!confirm('Réinitialiser les noms ET l\'ordre des onglets aux valeurs par défaut ?')) return;
@@ -544,6 +565,18 @@
   $('btn-reset-groupes').addEventListener('click', resetGroupes);
   $('btn-save-nav').addEventListener('click', saveNavLabels);
   $('btn-reset-nav').addEventListener('click', resetNavLabels);
+  // Flèches ▲▼ : montent/descendent l'onglet et appliquent tout de suite au menu de gauche
+  $('nav-labels-form').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-move]');
+    if (!btn) return;
+    const form = $('nav-labels-form');
+    const row = btn.closest('.nav-row');
+    if (!row) return;
+    if (btn.dataset.move === 'up' && row.previousElementSibling) form.insertBefore(row, row.previousElementSibling);
+    else if (btn.dataset.move === 'down' && row.nextElementSibling) form.insertBefore(row.nextElementSibling, row);
+    updateNavArrows();
+    applyNavFromForm(false);
+  });
   $('btn-save-societe').addEventListener('click', saveSociete);
   $('btn-export-all').addEventListener('click', exportAll);
   $('btn-import-all').addEventListener('click', importAll);
