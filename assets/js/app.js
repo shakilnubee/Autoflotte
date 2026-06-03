@@ -621,9 +621,36 @@ FP.persist = {
 // pour pouvoir le revoir à tout moment depuis n'importe quel PC.
 // Le bucket "scans" doit exister et être public (voir supabase-storage.sql).
 FP.SCAN_BUCKET = 'scans';
+
+// Compresse une photo avant l'envoi (pour économiser l'espace de stockage).
+// - Ne touche PAS aux PDF ni aux fichiers non-image : renvoyés tels quels.
+// - Réduit la photo à 2000 px max (côté le plus long) et la ré-encode en JPEG.
+// - En cas de souci (format exotique type HEIC non décodé), renvoie l'original.
+FP.compressImage = async function (file, { maxSide = 2000, quality = 0.72 } = {}) {
+  if (!file || !/^image\//i.test(file.type || '')) return file; // PDF & autres : inchangés
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    const w = Math.round(bitmap.width * scale);
+    const h = Math.round(bitmap.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+    if (bitmap.close) bitmap.close();
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+    if (!blob || blob.size >= file.size) return file; // si pas plus léger, on garde l'original
+    const base = (file.name || 'photo').replace(/\.[a-z0-9]+$/i, '');
+    return new File([blob], base + '.jpg', { type: 'image/jpeg' });
+  } catch (e) {
+    console.warn('[compressImage] non compressé, envoi de l\'original :', e);
+    return file;
+  }
+};
+
 FP.uploadScan = async function (file, folder) {
   if (!FP.supabase || !FP.supabase.storage) throw new Error('Stockage indisponible (Supabase non chargé).');
   if (!file) return null;
+  file = await FP.compressImage(file); // photos allégées ; PDF intacts
   const extMatch = (file.name || '').match(/\.[a-z0-9]+$/i);
   const ext = extMatch ? extMatch[0].toLowerCase() : (file.type === 'application/pdf' ? '.pdf' : '.jpg');
   const rand = Math.random().toString(36).slice(2, 8);
