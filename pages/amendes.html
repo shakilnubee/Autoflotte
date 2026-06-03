@@ -30,6 +30,8 @@
   .modal-backdrop.open { display: flex; }
   .modal { background: white; border-radius: 1rem; width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto; }
   .chart-wrap-sm { position: relative; height: 220px; }
+  .av-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: av-spin .7s linear infinite; }
+  @keyframes av-spin { to { transform: rotate(360deg); } }
 </style>
 <script>
 (function(){
@@ -253,6 +255,21 @@
       <button class="p-2 hover:bg-slate-100 rounded-lg" id="amende-close"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
     <form id="amende-form" class="space-y-4">
+      <!-- Import de l'avis : pré-remplissage automatique des champs -->
+      <div id="av-import">
+        <input type="file" id="av-file" accept="image/*,application/pdf" class="hidden" />
+        <button type="button" id="av-trigger" class="w-full flex items-center gap-3 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
+          <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
+            <i data-lucide="scan-line" class="w-5 h-5"></i>
+          </span>
+          <span class="flex-1">
+            <span class="block text-sm font-semibold text-slate-800">Importer l'avis</span>
+            <span class="block text-xs text-slate-500">Photo ou PDF — les champs lisibles se remplissent tout seuls</span>
+          </span>
+        </button>
+        <div id="av-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
+      </div>
+
       <div>
         <div class="field-label">Conducteur *</div>
         <input class="field-input" id="am-prenom" list="am-prenoms" placeholder="Prénom" required autocomplete="off" />
@@ -756,6 +773,7 @@
     $('am-prenom').value = ''; $('am-motif').value = ''; $('am-montant').value = '';
     $('am-points').value = '0'; $('am-date').value = new Date().toISOString().slice(0, 10);
     $('am-statut').value = 'à payer'; $('am-avis').value = '';
+    const avSt = $('av-status'); if (avSt) { avSt.classList.add('hidden'); avSt.innerHTML = ''; }
     $('amende-modal').classList.add('open');
     setTimeout(() => $('am-prenom').focus(), 50);
     lucide.createIcons();
@@ -780,6 +798,198 @@
     const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
     FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: newA.numeroAvis || null, commentaire: null });
   }
+
+  // ============================================================
+  //  Import de l'avis → pré-remplissage automatique
+  //  100% navigateur : rien n'est envoyé sur un serveur.
+  //  PDF "natif" : on lit le texte directement (rapide, fiable).
+  //  Photo / PDF scanné : OCR via Tesseract.js (fallback).
+  // ============================================================
+  const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  const PDFJS_CDN     = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+  const PDFJS_WORKER  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[data-lazy="${src}"]`);
+      if (existing) {
+        if (existing.dataset.loaded === '1') return resolve();
+        existing.addEventListener('load', resolve);
+        existing.addEventListener('error', () => reject(new Error('Échec du chargement de ' + src)));
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = src; s.dataset.lazy = src;
+      s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+      s.onerror = () => reject(new Error('Échec du chargement de ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  function avStatus(msg, type){
+    const el = $('av-status');
+    el.classList.remove('hidden');
+    const colors = {
+      working: 'background:#F1F5F9;color:#475569;',
+      ok:      'background:#ECFDF5;color:#047857;',
+      error:   'background:#FEF2F2;color:#B91C1C;',
+    };
+    el.setAttribute('style', colors[type] || colors.working);
+    el.innerHTML = msg;
+  }
+  const avWorking = (txt) => avStatus(`<span class="inline-flex items-center gap-2"><span class="av-spin"></span> ${txt}</span>`, 'working');
+
+  async function loadPdf(file){
+    await loadScript(PDFJS_CDN);
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const buf = await file.arrayBuffer();
+    return window.pdfjsLib.getDocument({ data: buf }).promise;
+  }
+
+  // Lit le texte "natif" d'un PDF (sans OCR) — marche pour les avis téléchargés
+  async function pdfText(pdf){
+    let txt = '';
+    const n = Math.min(pdf.numPages, 3);
+    for (let p = 1; p <= n; p++){
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      txt += content.items.map(it => it.str).join(' ') + '\n';
+    }
+    return txt;
+  }
+
+  // Rend la 1ère page d'un PDF en canvas pour l'OCR
+  async function pdfPageToCanvas(pdf){
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas;
+  }
+
+  const toIsoDate = (d, m, y) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+  // Analyse le texte d'un avis de contravention français
+  function parseAvis(raw){
+    const text = (raw || '').replace(/ /g, ' ');
+    const upper = text.toUpperCase();
+    const out = {};
+
+    // Plaque d'immatriculation — format SIV (AA-123-AA), sinon ancien FNI
+    let m = upper.match(/\b([A-Z]{2})\s*[-\s]\s*([0-9]{3})\s*[-\s]\s*([A-Z]{2})\b/);
+    if (m) out.immat = `${m[1]}-${m[2]}-${m[3]}`;
+    if (!out.immat) {
+      m = upper.match(/\b([0-9]{1,4})\s+([A-Z]{2,3})\s+([0-9]{2,3})\b/);
+      if (m) out.immat = `${m[1]} ${m[2]} ${m[3]}`;
+    }
+
+    // Numéro de l'avis / télépaiement — suite de 9 à 13 chiffres
+    let mn = upper.match(/(?:T[ÉE]L[ÉE]PAIEMENT|AVIS|AMENDE|R[ÉE]F[ÉE]RENCE)[^0-9]{0,30}([0-9][0-9 ]{8,16}[0-9])/);
+    if (mn) out.numeroAvis = mn[1].replace(/\s+/g, '');
+    if (!out.numeroAvis) {
+      const mg = upper.match(/\b([0-9]{10,13})\b/);
+      if (mg) out.numeroAvis = mg[1];
+    }
+
+    // Montant — on prend le plus grand montant en euros trouvé (souvent le montant majoré/forfaitaire)
+    const amounts = [];
+    const re = /([0-9]{1,4}(?:[ .][0-9]{3})*)(?:[.,]([0-9]{2}))?\s*(?:€|EUR(?:OS?)?)/gi;
+    let am;
+    while ((am = re.exec(text)) !== null) {
+      const intPart = am[1].replace(/[ .]/g, '');
+      const val = parseFloat(intPart + '.' + (am[2] || '00'));
+      if (!isNaN(val) && val > 0 && val < 10000) amounts.push(val);
+    }
+    if (amounts.length) out.montant = Math.max(...amounts);
+
+    // Date de l'infraction — près de "commise le" / "infraction" / "le", sinon 1ère date
+    const lines = text.split(/\r?\n/);
+    let dm = null;
+    for (const line of lines) {
+      if (/commise|infraction|constat|relev[ée]/i.test(line)) {
+        const d = line.match(/(\d{1,2})[\/.\- ](\d{1,2})[\/.\- ](\d{4})/);
+        if (d) { dm = d; break; }
+      }
+    }
+    if (!dm) dm = text.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/);
+    if (dm) out.date = toIsoDate(dm[1], dm[2], dm[3]);
+
+    // Motif / nature de l'infraction
+    const motifMap = [
+      [/VITESSE|EXC[ÉE]S|KM\/?H/i, 'Excès de vitesse'],
+      [/STATIONNEMENT|STATIONN/i, 'Stationnement'],
+      [/T[ÉE]L[ÉE]PHONE|PORTABLE/i, 'Téléphone au volant'],
+      [/FEU\s+ROUGE|FEU/i, 'Feu rouge'],
+      [/VOIE\s+(?:DE\s+)?BUS|VOIE\s+R[ÉE]SERV/i, 'Voie réservée'],
+      [/CEINTURE/i, 'Ceinture'],
+      [/STOP/i, 'Non-respect du stop'],
+    ];
+    for (const [rx, label] of motifMap) { if (rx.test(text)) { out.motif = label; break; } }
+
+    return out;
+  }
+
+  async function handleAvis(file){
+    if (!file) return;
+    try {
+      let parsed = {};
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+
+      if (isPdf) {
+        avWorking('Lecture du PDF…');
+        const pdf = await loadPdf(file);
+        const native = await pdfText(pdf);
+        // Si le PDF contient assez de texte natif, pas besoin d'OCR
+        if ((native || '').replace(/\s/g, '').length > 40) {
+          parsed = parseAvis(native);
+        } else {
+          avWorking('PDF scanné — analyse de l\'image… (quelques secondes)');
+          await loadScript(TESSERACT_CDN);
+          const canvas = await pdfPageToCanvas(pdf);
+          const worker = await Tesseract.createWorker('fra');
+          const { data } = await worker.recognize(canvas);
+          await worker.terminate();
+          parsed = parseAvis(data.text);
+        }
+      } else {
+        avWorking('Lecture de l\'avis… (quelques secondes au 1er usage)');
+        await loadScript(TESSERACT_CDN);
+        const worker = await Tesseract.createWorker('fra');
+        const { data } = await worker.recognize(file);
+        await worker.terminate();
+        parsed = parseAvis(data.text);
+      }
+
+      const filled = [];
+      // Conducteur : on déduit le chauffeur via la plaque ↔ véhicule
+      if (parsed.immat) {
+        const norm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const veh = data.vehicules && data.vehicules.find(v => norm(v.immat) === norm(parsed.immat));
+        if (veh && veh.chauffeur && !$('am-prenom').value) { $('am-prenom').value = veh.chauffeur; filled.push('conducteur (via la plaque)'); }
+      }
+      if (parsed.motif      && !$('am-motif').value)   { $('am-motif').value   = parsed.motif;      filled.push('motif'); }
+      if (parsed.montant    && !$('am-montant').value) { $('am-montant').value = parsed.montant;    filled.push('montant'); }
+      if (parsed.date       && !$('am-date').value)    { $('am-date').value    = parsed.date;       filled.push('date'); }
+      if (parsed.numeroAvis && !$('am-avis').value)    { $('am-avis').value    = parsed.numeroAvis; filled.push('n° d\'avis'); }
+
+      if (filled.length) {
+        avStatus(`<b>✓ ${filled.length} champ(s) pré-rempli(s)</b> : ${filled.join(', ')}.<br>Vérifiez les valeurs puis complétez le reste (points retirés, statut…).`, 'ok');
+      } else {
+        avStatus("Lecture terminée, mais aucun champ n'a pu être détecté automatiquement. Saisissez les infos à la main — astuce : une photo nette, bien cadrée et droite donne de meilleurs résultats.", 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      avStatus("Impossible de lire le document. Vérifiez votre connexion internet et réessayez, ou saisissez les informations manuellement.", 'error');
+    }
+  }
+
+  $('av-trigger').addEventListener('click', () => $('av-file').click());
+  $('av-file').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    handleAvis(file);
+    e.target.value = ''; // permet de re-sélectionner le même fichier
+  });
 
   // ---------- Import / Export CSV ----------
   FP.injectDataIO({
