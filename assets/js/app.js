@@ -128,6 +128,9 @@ FP.settings = {
   save(obj) {
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(obj));
     this.applyTheme();
+    // Partage les réglages (noms/couleurs des groupes, libellés, titres, couleur d'interface…)
+    // sur tous les postes via Supabase. Silencieux si la base est indisponible.
+    try { if (FP.db && FP.supabase) FP.db.upsert('app_settings', { id: 'global', data: obj }); } catch (e) {}
   },
   reset() {
     localStorage.removeItem(this.STORAGE_KEY);

@@ -183,6 +183,18 @@
       console.log(`[FP.db] Chargé depuis Supabase : ${data.vehicules.length} véhicules, ${data.amendes.length} amendes, ${data.factures.length} factures`);
       // Re-appliquer les overrides locaux (cases cochées par l'utilisateur, etc.)
       if (FP.loadVehicleOverrides) FP.loadVehicleOverrides();
+      // Charger les réglages partagés (noms/couleurs de groupes, libellés, titres, couleur…)
+      try {
+        const sres = await client.from('app_settings').select('data').eq('id', 'global').maybeSingle();
+        const shared = sres && sres.data && sres.data.data;
+        if (shared && typeof shared === 'object') {
+          const key = (FP.settings && FP.settings.STORAGE_KEY) || 'auto_flotte_settings';
+          localStorage.setItem(key, JSON.stringify(shared));
+          if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme();
+          if (FP.applyCustomNavLabels) FP.applyCustomNavLabels();
+          if (FP.applyCustomTexts) FP.applyCustomTexts();
+        }
+      } catch (e) { /* table absente ou hors-ligne : on garde les réglages locaux */ }
       document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'supabase', counts: { vehicules: data.vehicules.length, amendes: data.amendes.length, factures: data.factures.length } } }));
       return data;
     } catch (e) {
