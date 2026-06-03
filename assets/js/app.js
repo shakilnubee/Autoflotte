@@ -1468,9 +1468,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  const path = window.location.pathname.split('/').pop() || 'index.html';
+  const path = (window.location.pathname.split('/').pop() || 'index').replace(/\.html$/, '');
   document.querySelectorAll('[data-nav]').forEach(el => {
-    if (el.dataset.nav === path) el.classList.add('active');
+    if ((el.dataset.nav || '').replace(/\.html$/, '') === path) el.classList.add('active');
   });
 
   // Délégation : clic sur ✎ → édition inline du nom de l'onglet
