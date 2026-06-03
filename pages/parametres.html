@@ -214,8 +214,10 @@
         <div class="flex gap-2 flex-wrap">
           <button class="btn btn-dark text-sm" id="btn-sync-push"><i data-lucide="cloud-upload" class="w-4 h-4"></i> Envoyer mes réglages au serveur</button>
           <button class="btn btn-outline text-sm" id="btn-sync-pull"><i data-lucide="cloud-download" class="w-4 h-4"></i> Récupérer les réglages du serveur</button>
+          <button class="btn btn-outline text-sm" id="btn-sync-test"><i data-lucide="activity" class="w-4 h-4"></i> Tester la connexion</button>
         </div>
         <p class="text-xs mt-2" id="sync-status"></p>
+        <div id="sync-diag" class="hidden mt-3 text-xs leading-relaxed rounded-lg p-3 border"></div>
       </div>
     </div>
 
@@ -744,6 +746,33 @@
       if (res && res.error) throw res.error;
       st.style.color = '#16A34A'; st.textContent = '✓ Réglages envoyés au serveur. Sur les autres PC : Ctrl + Shift + R.';
     } catch (e) { st.style.color = '#DC2626'; st.textContent = 'Échec : ' + (e.message || e); }
+  });
+  // Diagnostic en clair (sans console) : librairie ? client ? accès réel à la base ?
+  $('btn-sync-test').addEventListener('click', async () => {
+    const d = $('sync-diag');
+    d.classList.remove('hidden');
+    d.style.borderColor = '#E2E8F0'; d.style.background = '#F8FAFC';
+    const rows = [];
+    const ok = (t) => `<div style="color:#047857">✅ ${t}</div>`;
+    const ko = (t) => `<div style="color:#B91C1C">❌ ${t}</div>`;
+    const libOk = (typeof window.supabase !== 'undefined') && !!(window.supabase && window.supabase.createClient);
+    rows.push(libOk ? ok('Librairie Supabase chargée') : ko('Librairie Supabase NON chargée (bloquée par le réseau ou un antivirus)'));
+    const clientOk = !!(window.FP && FP.supabase && FP.db);
+    rows.push(clientOk ? ok("Client connecté à l'application") : ko('Client non initialisé'));
+    d.innerHTML = rows.join('') + '<div style="color:#64748B">⏳ Test d\'accès à la base…</div>';
+    if (clientOk) {
+      try {
+        const res = await FP.supabase.from('app_settings').select('id').limit(1);
+        if (res.error) throw res.error;
+        rows.push(ok('Accès à la base OK — la synchronisation fonctionne sur ce PC.'));
+      } catch (e) {
+        rows.push(ko('Impossible de joindre la base : ' + (e.message || e)));
+        rows.push('<div style="color:#92400E;margin-top:4px">→ Le réseau de ce PC bloque probablement <b>supabase.co</b>. Teste sur un autre réseau (ex. partage de connexion du téléphone) ou demande à l\'informatique d\'autoriser <b>*.supabase.co</b>.</div>');
+      }
+    } else if (!libOk) {
+      rows.push('<div style="color:#92400E;margin-top:4px">→ La librairie ne s\'exécute pas sur ce PC. Essaie un autre navigateur (Chrome/Edge) ou un autre réseau.</div>');
+    }
+    d.innerHTML = rows.join('');
   });
   $('btn-sync-pull').addEventListener('click', async () => {
     const st = $('sync-status');
