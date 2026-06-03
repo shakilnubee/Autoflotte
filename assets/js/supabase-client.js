@@ -156,6 +156,7 @@
       return res;
     },
   };
+  FP._clientLoaded = true; // marqueur : supabase-client.js a bien fini de s'initialiser
 
   // Remplace le CONTENU d'un array sans changer sa référence
   // (important pour que les `const data = window.FP_DATA` capturés par les pages
