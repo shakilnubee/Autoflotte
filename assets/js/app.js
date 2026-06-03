@@ -603,16 +603,99 @@ FP.buildAlertes = (data) => {
   return out;
 };
 FP.persist = {
+  _QKEY: 'fp_pending_writes',
   available() { return !!(FP.db && FP.supabase); },
-  _err(e) {
-    console.error('[FP.persist]', e);
-    alert("⚠️ Action appliquée à l'écran, mais l'enregistrement dans la base a échoué :\n" + (e.message || e) + "\n\nÇa risque de ne pas être conservé après rechargement.");
+  _loadQ() { try { return JSON.parse(localStorage.getItem(this._QKEY)) || []; } catch (e) { return []; } },
+  _saveQ(q) { try { localStorage.setItem(this._QKEY, JSON.stringify(q)); } catch (e) {} if (FP._syncBadge) FP._syncBadge(); },
+  pendingCount() { return this._loadQ().length; },
+  _enqueue(item) { const q = this._loadQ(); item.ts = Date.now(); q.push(item); this._saveQ(q); },
+  _err(e) { console.error('[FP.persist] enregistrement différé :', e && (e.message || e)); },
+  // Chaque écriture : on tente la base ; si ça échoue, on garde en file locale
+  // (filet de sécurité) et on renverra automatiquement plus tard.
+  async insert(table, row) {
+    if (!this.available()) { this._enqueue({ op: 'insert', table, row }); return; }
+    try { const r = await FP.db.insert(table, row); if (r && r.error) throw r.error; this.flush(); }
+    catch (e) { this._err(e); this._enqueue({ op: 'insert', table, row }); }
   },
-  async insert(table, row) { if (!this.available()) return; try { const r = await FP.db.insert(table, row); if (r && r.error) throw r.error; } catch (e) { this._err(e); } },
-  async upsert(table, row) { if (!this.available()) return; try { const r = await FP.db.upsert(table, row); if (r && r.error) throw r.error; } catch (e) { this._err(e); } },
-  async update(table, id, fields) { if (!this.available()) return; try { const r = await FP.db.update(table, id, fields); if (r && r.error) throw r.error; } catch (e) { this._err(e); } },
-  async delete(table, id) { if (!this.available()) return; try { const r = await FP.db.delete(table, id); if (r && r.error) throw r.error; } catch (e) { this._err(e); } },
+  async upsert(table, row) {
+    if (!this.available()) { this._enqueue({ op: 'upsert', table, row }); return; }
+    try { const r = await FP.db.upsert(table, row); if (r && r.error) throw r.error; this.flush(); }
+    catch (e) { this._err(e); this._enqueue({ op: 'upsert', table, row }); }
+  },
+  async update(table, id, fields) {
+    if (!this.available()) { this._enqueue({ op: 'update', table, id, fields }); return; }
+    try { const r = await FP.db.update(table, id, fields); if (r && r.error) throw r.error; this.flush(); }
+    catch (e) { this._err(e); this._enqueue({ op: 'update', table, id, fields }); }
+  },
+  async delete(table, id) {
+    if (!this.available()) { this._enqueue({ op: 'delete', table, id }); return; }
+    try { const r = await FP.db.delete(table, id); if (r && r.error) throw r.error; this.flush(); }
+    catch (e) { this._err(e); this._enqueue({ op: 'delete', table, id }); }
+  },
+  _flushing: false,
+  // Renvoie tout ce qui est en attente. Les insert sont rejoués en upsert
+  // (clé = id) pour éviter les doublons si une partie était déjà passée.
+  async flush() {
+    if (this._flushing || !this.available()) return;
+    const q = this._loadQ();
+    if (!q.length) { if (FP._syncBadge) FP._syncBadge(); return; }
+    this._flushing = true;
+    const remaining = [];
+    for (const it of q) {
+      try {
+        let r;
+        if (it.op === 'insert' || it.op === 'upsert') r = await FP.db.upsert(it.table, it.row);
+        else if (it.op === 'update') r = await FP.db.update(it.table, it.id, it.fields);
+        else if (it.op === 'delete') r = await FP.db.delete(it.table, it.id);
+        if (r && r.error) throw r.error;
+      } catch (e) { remaining.push(it); }
+    }
+    this._saveQ(remaining);
+    this._flushing = false;
+    if (FP._syncBadge) FP._syncBadge(remaining.length === 0 && q.length > 0);
+  },
 };
+
+// --- Indicateur de synchro (pastille en bas à droite) ---
+// Jaune = des modifs ne sont pas encore enregistrées dans la base (cliquer = réessayer).
+// Vert bref = tout vient d'être renvoyé. Rien = tout est à jour.
+FP._ensureSyncBadge = function () {
+  if (typeof document === 'undefined' || !document.body) return null;
+  let b = document.getElementById('fp-sync-badge');
+  if (b) return b;
+  b = document.createElement('div');
+  b.id = 'fp-sync-badge';
+  b.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:9999;font-size:12px;font-weight:700;padding:7px 13px;border-radius:9999px;box-shadow:0 6px 18px rgba(0,0,0,.18);cursor:pointer;display:none;align-items:center;gap:6px;';
+  b.title = 'Cliquer pour renvoyer les modifications en attente';
+  b.addEventListener('click', () => { FP.persist.flush(); });
+  document.body.appendChild(b);
+  return b;
+};
+FP._syncBadge = function (justSynced) {
+  const b = FP._ensureSyncBadge();
+  if (!b) return;
+  const n = FP.persist.pendingCount();
+  clearTimeout(FP._syncBadgeT);
+  if (n > 0) {
+    b.style.display = 'inline-flex';
+    b.style.background = '#FEF3C7'; b.style.color = '#92400E';
+    b.textContent = `⏳ ${n} modif${n > 1 ? 's' : ''} non enregistrée${n > 1 ? 's' : ''} — cliquer pour réessayer`;
+  } else if (justSynced) {
+    b.style.display = 'inline-flex';
+    b.style.background = '#ECFDF5'; b.style.color = '#047857';
+    b.textContent = '✓ Modifications enregistrées';
+    FP._syncBadgeT = setTimeout(() => { b.style.display = 'none'; }, 3000);
+  } else {
+    b.style.display = 'none';
+  }
+};
+// Renvoi automatique : au chargement des données, au retour en ligne, et régulièrement.
+document.addEventListener('fp:data-ready', () => { FP.persist.flush(); });
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => { FP.persist.flush(); });
+  window.addEventListener('DOMContentLoaded', () => { if (FP._syncBadge) FP._syncBadge(); });
+  setInterval(() => { if (FP.persist.pendingCount() > 0) FP.persist.flush(); }, 30000);
+}
 
 // =====================================================================
 // === Stockage des scans (avis, cartes grises) — Supabase Storage =====
