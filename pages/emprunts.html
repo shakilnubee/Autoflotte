@@ -17,6 +17,12 @@
   .modal { background: white; border-radius: 1rem; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
   .pill-encours { background: #FEF3C7; color: #78350F; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
   .pill-rendu { background: #DCFCE7; color: #14532D; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
+  /* Menu déroulant personnalisé (aux couleurs de la plateforme) */
+  .ac-wrap { position: relative; }
+  .ac-panel { position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; background: #fff; border: 1px solid var(--fp-border); border-radius: .6rem; box-shadow: 0 14px 34px -12px rgba(15,30,61,.28); max-height: 240px; overflow-y: auto; z-index: 90; }
+  .ac-item { padding: .55rem .8rem; font-size: .88rem; cursor: pointer; }
+  .ac-item:hover, .ac-item.active { background: rgba(125,94,67,.10); color: var(--fp-primary); }
+  .ac-empty { padding: .55rem .8rem; font-size: .82rem; color: var(--fp-muted); }
 </style>
 <script>
 (function(){
@@ -115,13 +121,11 @@
     <form id="form-new" class="space-y-4">
       <div>
         <div class="field-label">Véhicule *</div>
-        <input class="field-input" id="f-vehicule" list="emp-vehicules" required autocomplete="off" placeholder="Tape une plaque ou un modèle…" />
-        <datalist id="emp-vehicules"></datalist>
+        <input class="field-input" id="f-vehicule" required autocomplete="off" placeholder="Tape une plaque ou un modèle…" />
       </div>
       <div>
         <div class="field-label">Emprunteur (prénom + nom) *</div>
-        <input class="field-input" id="f-emprunteur" list="emp-emprunteurs" placeholder="Tape un nom (ou choisis un existant)" required autocomplete="off" />
-        <datalist id="emp-emprunteurs"></datalist>
+        <input class="field-input" id="f-emprunteur" placeholder="Tape un nom (ou choisis un existant)" required autocomplete="off" />
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div>
@@ -207,17 +211,50 @@
     return v ? `${v.immat} · ${v.marque} ${v.modele}` : (immat || '—');
   }
 
+  let _vehOpts = [], _empOpts = [];
   function fillVehSelect() {
-    // Véhicules : recherche par plaque ou modèle
-    $('emp-vehicules').innerHTML = (data.vehicules || []).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
-      .map(v => `<option value="${escapeHtml(v.immat)} · ${escapeHtml(v.marque)} ${escapeHtml(v.modele)}"></option>`).join('');
-    // Emprunteurs : noms déjà utilisés + chauffeurs + conducteurs connus (et saisie libre possible)
+    _vehOpts = (data.vehicules || []).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
+      .map(v => `${v.immat} · ${v.marque} ${v.modele}`);
     const names = new Set();
     cache.forEach(e => { if (e.emprunteur) names.add(e.emprunteur.trim()); });
     (data.vehicules || []).forEach(v => { if (v.chauffeur && v.chauffeur !== '—') names.add(v.chauffeur.trim()); });
     if (window.FP && FP.DRIVE_CONDUCTEURS) FP.DRIVE_CONDUCTEURS.forEach(n => names.add(n.charAt(0).toUpperCase() + n.slice(1)));
-    $('emp-emprunteurs').innerHTML = [...names].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr'))
-      .map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+    _empOpts = [...names].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr'));
+  }
+  // Menu déroulant personnalisé (aux couleurs de la plateforme) sur un input
+  function setupAutocomplete(input, getOptions) {
+    const wrap = document.createElement('div'); wrap.className = 'ac-wrap';
+    input.parentNode.insertBefore(wrap, input); wrap.appendChild(input);
+    const panel = document.createElement('div'); panel.className = 'ac-panel'; panel.style.display = 'none';
+    wrap.appendChild(panel);
+    let items = [], active = -1;
+    const hl = () => [...panel.querySelectorAll('.ac-item')].forEach((c, i) => c.classList.toggle('active', i === active));
+    function renderList() {
+      const q = (input.value || '').toLowerCase().trim();
+      items = (getOptions() || []).filter(o => o.toLowerCase().includes(q)).slice(0, 60);
+      active = -1;
+      panel.innerHTML = items.length
+        ? items.map((o, i) => `<div class="ac-item" data-i="${i}">${o.replace(/</g, '&lt;')}</div>`).join('')
+        : '<div class="ac-empty">Aucun résultat — tu peux saisir librement</div>';
+      panel.style.display = 'block';
+    }
+    input.addEventListener('focus', renderList);
+    input.addEventListener('input', renderList);
+    input.addEventListener('blur', () => setTimeout(() => { panel.style.display = 'none'; }, 150));
+    panel.addEventListener('mousedown', (e) => {
+      const it = e.target.closest('.ac-item'); if (!it) return;
+      e.preventDefault();
+      input.value = items[+it.dataset.i];
+      panel.style.display = 'none';
+      input.dispatchEvent(new Event('change'));
+    });
+    input.addEventListener('keydown', (e) => {
+      if (panel.style.display === 'none') return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active + 1, items.length - 1); hl(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active - 1, 0); hl(); }
+      else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); input.value = items[active]; panel.style.display = 'none'; }
+      else if (e.key === 'Escape') { panel.style.display = 'none'; }
+    });
   }
   // Retrouve la plaque depuis la saisie ("AB-123-CD · Marque" ou texte libre)
   function resolveImmat(val) {
@@ -325,6 +362,8 @@
   // ---- Wiring ----
   $('search').addEventListener('input', e => { state.search = e.target.value; render(); });
   $('btn-new').addEventListener('click', openNew);
+  setupAutocomplete($('f-vehicule'), () => _vehOpts);
+  setupAutocomplete($('f-emprunteur'), () => _empOpts);
   $('new-close').addEventListener('click', () => $('modal-new').classList.remove('open'));
   $('new-cancel').addEventListener('click', () => $('modal-new').classList.remove('open'));
   $('modal-new').addEventListener('click', e => { if (e.target === e.currentTarget) $('modal-new').classList.remove('open'); });
