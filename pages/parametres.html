@@ -762,7 +762,28 @@
     rows.push((window.FP && FP.supabase) ? ok('FP.supabase créé') : ko('FP.supabase manquant'));
     rows.push((window.FP && FP.db) ? ok('FP.db créé') : ko('FP.db manquant'));
     const clientOk = !!(window.FP && FP.supabase && FP.db);
-    d.innerHTML = rows.join('') + '<div style="color:#64748B">⏳ Test d\'accès à la base…</div>';
+    d.innerHTML = rows.join('') + '<div style="color:#64748B">⏳ Tests complémentaires…</div>';
+
+    // (a) Le fichier supabase-client.js se télécharge-t-il bien ?
+    try {
+      const r = await fetch('../assets/js/supabase-client.js', { cache: 'no-store' });
+      rows.push(r.ok ? ok('Fichier supabase-client.js téléchargé (HTTP ' + r.status + ')') : ko('supabase-client.js introuvable (HTTP ' + r.status + ')'));
+    } catch (e) { rows.push(ko('supabase-client.js : téléchargement bloqué (' + (e.message || e) + ')')); }
+
+    // (b) Reproduire la création du client ici pour voir l'erreur exacte
+    if (!clientOk && libOk) {
+      try {
+        const test = window.supabase.createClient('https://tzjuptlzoywjeigmyfuj.supabase.co', 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq');
+        rows.push(ok('createClient fonctionne ici → le souci vient du chargement/cache de supabase-client.js'));
+        // Auto-réparation : on rebranche un client minimal pour cette session
+        window.FP = window.FP || {}; if (!FP.supabase) FP.supabase = test;
+        rows.push('<div style="color:#92400E;margin-top:4px">→ Vide le cache du site : Ctrl+Maj+Suppr → « images et fichiers en cache » → puis recharge. Si ça persiste, essaie un autre navigateur.</div>');
+      } catch (e) {
+        rows.push(ko('createClient ÉCHOUE ici : ' + (e.message || e)));
+      }
+    }
+
+    // (c) Accès réel à la base
     if (clientOk) {
       try {
         const res = await FP.supabase.from('app_settings').select('id').limit(1);
@@ -770,10 +791,8 @@
         rows.push(ok('Accès à la base OK — la synchronisation fonctionne sur ce PC.'));
       } catch (e) {
         rows.push(ko('Impossible de joindre la base : ' + (e.message || e)));
-        rows.push('<div style="color:#92400E;margin-top:4px">→ Le réseau de ce PC bloque probablement <b>supabase.co</b>. Teste sur un autre réseau (ex. partage de connexion du téléphone) ou demande à l\'informatique d\'autoriser <b>*.supabase.co</b>.</div>');
+        rows.push('<div style="color:#92400E;margin-top:4px">→ Le réseau de ce PC bloque probablement <b>supabase.co</b>.</div>');
       }
-    } else if (!libOk) {
-      rows.push('<div style="color:#92400E;margin-top:4px">→ La librairie ne s\'exécute pas sur ce PC. Essaie un autre navigateur (Chrome/Edge) ou un autre réseau.</div>');
     }
     d.innerHTML = rows.join('');
   });
