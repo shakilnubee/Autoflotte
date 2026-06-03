@@ -288,6 +288,20 @@
         condCache.forEach(row => FP.persist.upsert('conducteurs', toCondDb(row))); // migration unique
       } else {
         condCache = r.data;
+        // Fusionne les fiches saisies localement (hors-ligne) SANS écraser les valeurs du serveur,
+        // puis renvoie au serveur ce qui manquait → reprise automatique entre postes.
+        try {
+          const store = JSON.parse(localStorage.getItem(COND_KEY) || '{}');
+          const byKey = {}; condCache.forEach(row => { byKey[row.key] = row; });
+          const fiche = ['name', 'nom', 'prenom', 'dateNaissance', 'adresse', 'tel', 'email', 'note'];
+          (store.manuels || []).forEach(m => {
+            const k = normPrenom(m.name); if (!k) return;
+            let row = byKey[k], changed = false;
+            if (!row) { row = { key: k, manuel: true }; condCache.push(row); byKey[k] = row; changed = true; }
+            fiche.forEach(f => { if (m[f] && !row[f]) { row[f] = m[f]; changed = true; } });
+            if (changed && FP.persist.available()) FP.persist.upsert('conducteurs', toCondDb(row));
+          });
+        } catch (e) { console.warn('[merge conducteurs local]', e); }
       }
       done();
     });
