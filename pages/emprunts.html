@@ -115,16 +115,18 @@
     <form id="form-new" class="space-y-4">
       <div>
         <div class="field-label">Véhicule *</div>
-        <select class="field-input" id="f-vehicule" required></select>
+        <input class="field-input" id="f-vehicule" list="emp-vehicules" required autocomplete="off" placeholder="Tape une plaque ou un modèle…" />
+        <datalist id="emp-vehicules"></datalist>
       </div>
       <div>
         <div class="field-label">Emprunteur (prénom + nom) *</div>
-        <input class="field-input" id="f-emprunteur" placeholder="Jean Dupont" required />
+        <input class="field-input" id="f-emprunteur" list="emp-emprunteurs" placeholder="Tape un nom (ou choisis un existant)" required autocomplete="off" />
+        <datalist id="emp-emprunteurs"></datalist>
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div>
           <div class="field-label">Date d'emprunt *</div>
-          <input class="field-input" type="date" id="f-date" required />
+          <input class="field-input" type="text" id="f-date" required autocomplete="off" placeholder="JJ/MM/AAAA" inputmode="numeric" />
         </div>
         <div>
           <div class="field-label">Heure</div>
@@ -206,10 +208,34 @@
   }
 
   function fillVehSelect() {
-    const sel = $('f-vehicule');
-    const opts = (data.vehicules || []).slice().sort((a,b)=> (a.immat||'').localeCompare(b.immat||''))
-      .map(v => `<option value="${escapeHtml(v.immat)}">${escapeHtml(v.immat)} · ${escapeHtml(v.marque)} ${escapeHtml(v.modele)}</option>`).join('');
-    sel.innerHTML = '<option value="">— choisir —</option>' + opts;
+    // Véhicules : recherche par plaque ou modèle
+    $('emp-vehicules').innerHTML = (data.vehicules || []).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
+      .map(v => `<option value="${escapeHtml(v.immat)} · ${escapeHtml(v.marque)} ${escapeHtml(v.modele)}"></option>`).join('');
+    // Emprunteurs : noms déjà utilisés + chauffeurs + conducteurs connus (et saisie libre possible)
+    const names = new Set();
+    cache.forEach(e => { if (e.emprunteur) names.add(e.emprunteur.trim()); });
+    (data.vehicules || []).forEach(v => { if (v.chauffeur && v.chauffeur !== '—') names.add(v.chauffeur.trim()); });
+    if (window.FP && FP.DRIVE_CONDUCTEURS) FP.DRIVE_CONDUCTEURS.forEach(n => names.add(n.charAt(0).toUpperCase() + n.slice(1)));
+    $('emp-emprunteurs').innerHTML = [...names].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr'))
+      .map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+  }
+  // Retrouve la plaque depuis la saisie ("AB-123-CD · Marque" ou texte libre)
+  function resolveImmat(val) {
+    val = (val || '').trim(); if (!val) return '';
+    if (val.includes(' · ')) return val.split(' · ')[0].trim().toUpperCase();
+    const up = val.toUpperCase();
+    const byImmat = (data.vehicules || []).find(v => (v.immat || '').toUpperCase() === up);
+    if (byImmat) return byImmat.immat;
+    const byText = (data.vehicules || []).find(v => `${v.immat} ${v.marque} ${v.modele}`.toLowerCase().includes(val.toLowerCase()));
+    return byText ? byText.immat : val;
+  }
+  // Convertit une date saisie (JJ/MM/AAAA ou AAAA-MM-JJ) en AAAA-MM-JJ
+  function parseFrDate(s) {
+    s = (s || '').trim(); if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+    if (m) { let [, d, mo, y] = m; if (y.length === 2) y = '20' + y; return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`; }
+    return null;
   }
 
   function dt(d, h) { return d ? (FP.date(d) + (h ? ' à ' + h : '')) : '<span class="text-slate-400">—</span>'; }
@@ -244,21 +270,25 @@
   function openNew() {
     $('form-new').reset();
     fillVehSelect();
-    $('f-date').value = new Date().toISOString().slice(0, 10);
-    $('f-heure').value = new Date().toTimeString().slice(0, 5);
+    const now = new Date();
+    $('f-date').value = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    $('f-heure').value = now.toTimeString().slice(0, 5);
     $('modal-new').classList.add('open');
   }
   function addEmprunt(e) {
     e.preventDefault();
+    const immat = resolveImmat($('f-vehicule').value);
+    const emprunteur = $('f-emprunteur').value.trim();
+    const dateIso = parseFrDate($('f-date').value);
+    if (!immat || !emprunteur || !dateIso) { alert('Véhicule, emprunteur et date (JJ/MM/AAAA) sont obligatoires.'); return; }
     const obj = {
       id: 'E' + Date.now().toString(36),
-      vehicule: $('f-vehicule').value,
-      emprunteur: $('f-emprunteur').value.trim(),
-      dateEmprunt: $('f-date').value || null,
+      vehicule: immat,
+      emprunteur: emprunteur,
+      dateEmprunt: dateIso,
       heureEmprunt: $('f-heure').value || '',
       dateRetour: null, heureRetour: '', renduPar: '',
     };
-    if (!obj.vehicule || !obj.emprunteur || !obj.dateEmprunt) { alert('Véhicule, emprunteur et date sont obligatoires.'); return; }
     cache.unshift(obj);
     $('modal-new').classList.remove('open');
     render();
