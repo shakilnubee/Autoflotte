@@ -26,6 +26,9 @@
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
   .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(20,184,166,.15); }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.5); display: none; align-items: center; justify-content: center; z-index: 70; padding: 1rem; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: white; border-radius: 1rem; width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto; }
   .chart-wrap-sm { position: relative; height: 220px; }
 </style>
 <script>
@@ -241,6 +244,50 @@
     <button class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
+
+<!-- Modal : Nouvelle amende -->
+<div class="modal-backdrop" id="amende-modal">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold">Nouvelle amende</h2>
+      <button class="p-2 hover:bg-slate-100 rounded-lg" id="amende-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="amende-form" class="space-y-4">
+      <div>
+        <div class="field-label">Conducteur *</div>
+        <input class="field-input" id="am-prenom" list="am-prenoms" placeholder="Prénom" required autocomplete="off" />
+        <datalist id="am-prenoms"></datalist>
+      </div>
+      <div>
+        <div class="field-label">Motif</div>
+        <input class="field-input" id="am-motif" list="am-motifs" placeholder="ex. Excès de vitesse, Stationnement…" autocomplete="off" />
+        <datalist id="am-motifs"></datalist>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><div class="field-label">Montant (€)</div><input class="field-input" type="number" id="am-montant" min="0" step="0.01" placeholder="0" /></div>
+        <div><div class="field-label">Points retirés</div><input class="field-input" type="number" id="am-points" min="0" step="1" placeholder="0" /></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><div class="field-label">Date</div><input class="field-input" type="date" id="am-date" /></div>
+        <div><div class="field-label">Statut</div>
+          <select class="field-input" id="am-statut">
+            <option value="à payer">À payer</option>
+            <option value="payée">Payée</option>
+            <option value="contestée">Contestée</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="field-label">N° d'avis</div>
+        <input class="field-input" id="am-avis" placeholder="optionnel" />
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="amende-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../assets/js/supabase-client.js"></script>
@@ -700,22 +747,38 @@
   }
 
   // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
-  function newAmende() {
-    const prenom = prompt('Conducteur ?'); if (prenom === null) return;
-    const motif = prompt('Motif ?'); if (motif === null) return;
-    const montantStr = prompt('Montant (€) ?', '0'); if (montantStr === null) return;
-    const date = prompt('Date (YYYY-MM-DD) ?', new Date().toISOString().slice(0,10)); if (date === null) return;
+  function openAmendeModal() {
+    // Suggestions (listes déroulantes) depuis les données existantes
+    const prenoms = [...new Set(data.amendes.map(a => a.prenom).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    $('am-prenoms').innerHTML = prenoms.map(p => `<option value="${p.replace(/"/g, '&quot;')}"></option>`).join('');
+    const motifsList = [...new Set(data.amendes.map(a => a.motif).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    $('am-motifs').innerHTML = motifsList.map(m => `<option value="${m.replace(/"/g, '&quot;')}"></option>`).join('');
+    $('am-prenom').value = ''; $('am-motif').value = ''; $('am-montant').value = '';
+    $('am-points').value = ''; $('am-date').value = new Date().toISOString().slice(0, 10);
+    $('am-statut').value = 'à payer'; $('am-avis').value = '';
+    $('amende-modal').classList.add('open');
+    setTimeout(() => $('am-prenom').focus(), 50);
+    lucide.createIcons();
+  }
+  function closeAmendeModal() { $('amende-modal').classList.remove('open'); }
+  function saveAmende(ev) {
+    ev.preventDefault();
+    const prenom = $('am-prenom').value.trim();
+    if (!prenom) { $('am-prenom').focus(); return; }
+    const date = $('am-date').value || new Date().toISOString().slice(0, 10);
+    const points = parseInt($('am-points').value, 10) || 0;
     FP.history.commit();
     const newA = {
       id: nextAmendeId(), date, annee: (date || '').slice(0, 4),
-      prenom: prenom.trim(), numeroAvis: '', motif: motif.trim(),
-      montant: parseFloat(montantStr) || 0, retraitPoints: false,
-      statut: 'à payer', commentaire: ''
+      prenom, numeroAvis: $('am-avis').value.trim(), motif: $('am-motif').value.trim(),
+      montant: parseFloat($('am-montant').value) || 0, points, retraitPoints: points > 0,
+      statut: $('am-statut').value || 'à payer', commentaire: ''
     };
     data.amendes.push(newA);
+    closeAmendeModal();
     renderKPIs(); renderTable(); renderCharts();
     const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
-    FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: null, commentaire: null });
+    FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: newA.numeroAvis || null, commentaire: null });
   }
 
   // ---------- Import / Export CSV ----------
@@ -822,7 +885,11 @@
   $('drawer-backdrop').addEventListener('click', closeDrawer);
   $('drawer-pay').addEventListener('click', markPaid);
   $('drawer-delete').addEventListener('click', deleteAmende);
-  $('btn-new').addEventListener('click', newAmende);
+  $('btn-new').addEventListener('click', openAmendeModal);
+  $('amende-close').addEventListener('click', closeAmendeModal);
+  $('amende-cancel').addEventListener('click', closeAmendeModal);
+  $('amende-modal').addEventListener('click', (e) => { if (e.target.id === 'amende-modal') closeAmendeModal(); });
+  $('amende-form').addEventListener('submit', saveAmende);
 
   // === Historique : branchement boutons + raccourcis ===
   FP.history.renderAll = () => {
