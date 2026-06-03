@@ -51,6 +51,16 @@ const FP = {
   },
 };
 
+// IMPORTANT — partage d'un SEUL objet FP.
+// supabase-client.js (chargé AVANT app.js) a déjà posé FP.supabase / FP.db / FP.auth
+// sur window.FP. Sans cette fusion, le `const FP` ci-dessus serait un objet DIFFÉRENT
+// (avec les helpers mais SANS supabase/db) → les écritures en base échoueraient
+// silencieusement alors que les données s'affichent quand même. On fusionne donc les deux.
+if (typeof window !== 'undefined') {
+  if (window.FP) Object.assign(FP, window.FP); // récupère supabase, db, auth, dbReady, _clientLoaded…
+  window.FP = FP;                              // une référence unique, partagée par toutes les pages
+}
+
 // === Rôle utilisateur (gating visuel) ===
 // Lu de façon synchrone depuis les métadonnées Supabase stockées dans le token.
 // Rôles : 'admin' (par défaut, ex : le propriétaire) et 'gestionnaire'.
