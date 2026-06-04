@@ -158,6 +158,8 @@ FP.settings = {
     groupesHidden: [], // clés de groupes dont l'onglet est masqué sur la page Véhicules
     navOrder: [], // ordre d'affichage des onglets du menu de gauche (clés data-nav)
     leasingContrats: {}, // forfaits leasing personnalisés par immat (partagés entre PC)
+    tableConfigs: {}, // ordre/largeurs/colonnes masquées de chaque tableau (partagés entre PC)
+    contratSectionsOrder: [], // ordre des sections de la page Contrats (partagé)
   },
   get() {
     try {
@@ -176,6 +178,8 @@ FP.settings = {
         customTexts: (stored.customTexts && typeof stored.customTexts === 'object') ? stored.customTexts : {},
         platformColor: (typeof stored.platformColor === 'string' && /^#?[0-9a-fA-F]{3,6}$/.test(stored.platformColor)) ? stored.platformColor : this.defaults.platformColor,
         leasingContrats: (stored.leasingContrats && typeof stored.leasingContrats === 'object') ? stored.leasingContrats : {},
+        tableConfigs: (stored.tableConfigs && typeof stored.tableConfigs === 'object') ? stored.tableConfigs : {},
+        contratSectionsOrder: Array.isArray(stored.contratSectionsOrder) ? stored.contratSectionsOrder : [],
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
@@ -1286,9 +1290,19 @@ FP.makeColumnEditor = (config) => {
   const allKeys = columns.map(c => c.key);
   const defaultOrder = config.defaultOrder || allKeys.slice();
 
+  // Config stockée dans les réglages PARTAGÉS (app_settings) -> identique sur tous les PC.
   function getCfg() {
     try {
-      const stored = JSON.parse(localStorage.getItem(storageKey) || '{}');
+      let stored = null;
+      if (window.FP && FP.settings) {
+        const all = FP.settings.get().tableConfigs || {};
+        stored = all[pageKey] || null;
+      }
+      // Migration depuis l'ancien stockage local (une seule fois)
+      if (!stored) {
+        try { const legacy = JSON.parse(localStorage.getItem(storageKey) || 'null'); if (legacy) { stored = legacy; saveCfg(legacy); localStorage.removeItem(storageKey); } } catch (e) {}
+      }
+      stored = stored || {};
       const order = Array.isArray(stored.order) ? stored.order.filter(k => allKeys.includes(k)) : null;
       return {
         order: (order && order.length) ? order : defaultOrder.slice(),
@@ -1297,7 +1311,14 @@ FP.makeColumnEditor = (config) => {
       };
     } catch { return { order: defaultOrder.slice(), hidden: [], labels: {} }; }
   }
-  function saveCfg(cfg) { localStorage.setItem(storageKey, JSON.stringify(cfg)); }
+  function saveCfg(cfg) {
+    if (window.FP && FP.settings) {
+      const s = FP.settings.get();
+      s.tableConfigs = (s.tableConfigs && typeof s.tableConfigs === 'object') ? s.tableConfigs : {};
+      s.tableConfigs[pageKey] = cfg;
+      FP.settings.save(s); // localStorage + app_settings (partagé)
+    } else { try { localStorage.setItem(storageKey, JSON.stringify(cfg)); } catch (e) {} }
+  }
   function getLabel(key) {
     const cfg = getCfg();
     if (cfg.labels[key]) return cfg.labels[key];
