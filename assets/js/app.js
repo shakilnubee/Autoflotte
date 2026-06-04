@@ -547,6 +547,16 @@ FP.leasingInfo = (v) => {
            projectionFin, ratio, ecartAJour, depassementProjete, niveau };
 };
 
+// Véhicule concerné par le contrôle anti-pollution (utilitaires + camions/engins
+// routiers diesel type IVECO), mais PAS les chariots élévateurs (Fenwick).
+FP.concerneAntiPollution = (v) => {
+  if (!v) return false;
+  const cat = (v.categorie || '').toLowerCase();
+  const nom = (v.marque || '') + ' ' + (v.modele || '');
+  const isChariot = /fenwick|chariot|[ée]l[ée]vateur/i.test(nom);
+  return (/utilit/.test(cat) || /engin/.test(cat)) && !isChariot;
+};
+
 FP.buildAlertes = (data) => {
   const out = [];
   const today = new Date();
@@ -564,6 +574,20 @@ FP.buildAlertes = (data) => {
     else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt });
     else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt });
     else if (diff < 90)  out.push({ niveau: 'info',   categorie: 'Contrôle technique', message: `CT dans ~2 mois (${diff}j)`, detail: veh, sort: diff, target: tgt });
+  });
+
+  // --- Contrôle anti-pollution (utilitaires / camions diesel) ---
+  (data.vehicules || []).forEach(v => {
+    if (!FP.concerneAntiPollution(v)) return;
+    if (!v.antiPollution || v.antiPollution === '—') return;
+    const d = new Date(v.antiPollution);
+    if (isNaN(d)) return;
+    const diff = days(v.antiPollution);
+    const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
+    const tgt = 'vehicules.html?veh=' + v.id;
+    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt });
+    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt });
+    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Anti-pollution', message: `Anti-pollution à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt });
   });
 
   // --- Amendes à payer ---
