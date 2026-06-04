@@ -22,3 +22,6 @@ ALTER TABLE vehicules ADD COLUMN IF NOT EXISTS cle_siege         boolean;
 ALTER TABLE vehicules ADD COLUMN IF NOT EXISTS cle_salarie       boolean;
 ALTER TABLE vehicules ADD COLUMN IF NOT EXISTS cg_orig_siege     boolean;
 ALTER TABLE vehicules ADD COLUMN IF NOT EXISTS cg_orig_salarie   boolean;
+-- Émissions de CO2 (g/km, code V.7) et puissance fiscale (CV, code P.6) — pour la TVS
+ALTER TABLE vehicules ADD COLUMN IF NOT EXISTS co2               numeric;
+ALTER TABLE vehicules ADD COLUMN IF NOT EXISTS puissance_fiscale numeric;
