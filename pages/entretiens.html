@@ -103,6 +103,13 @@
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-3" id="ct-list"></div>
     </div>
 
+    <!-- Podium : véhicules les plus coûteux en entretien -->
+    <div class="card p-6 mb-6">
+      <h3 class="font-bold text-slate-900 mb-1">🏆 Podium — véhicules les plus coûteux <span id="podium-annee" class="text-slate-400 font-normal"></span></h3>
+      <p class="text-xs text-slate-500 mb-4">Classement par coût d'entretien + réparation</p>
+      <div id="podium" class="grid grid-cols-3 gap-3 items-end"></div>
+    </div>
+
     <!-- Charts -->
     <div class="grid lg:grid-cols-2 gap-6 mb-6">
       <div class="card p-6">
@@ -356,7 +363,37 @@
     onChange: () => renderTable(),
   });
 
-  renderKPIs(); renderCTList(); renderTable(); renderCharts();
+  function renderPodium() {
+    const annee = '2026';
+    $('podium-annee').textContent = '(' + annee + ')';
+    const perVeh = {};
+    interventions.filter(i => (i.date || '').startsWith(annee)).forEach(i => {
+      const k = i.vehiculeImmat || '?';
+      perVeh[k] = (perVeh[k] || 0) + (i.montantTTC || 0);
+    });
+    const top = Object.entries(perVeh).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const vlabel = (immat) => { const v = data.vehicules.find(x => x.immat === immat); return v ? `${v.marque} ${v.modele}`.trim() : immat; };
+    const el = $('podium');
+    if (!top.length) { el.innerHTML = `<p class="col-span-3 text-sm text-slate-500 text-center py-4">Aucune facture d'entretien ${annee}.</p>`; return; }
+    const medals = ['🥇', '🥈', '🥉'];
+    el.innerHTML = [1, 0, 2].map(rank => {
+      const t = top[rank];
+      if (!t) return '<div></div>';
+      const h = rank === 0 ? 150 : rank === 1 ? 115 : 90;
+      const bg = rank === 0 ? '#FEF3C7' : rank === 1 ? '#F1F5F9' : '#FBEEE6';
+      const bd = rank === 0 ? '#B45309' : rank === 1 ? '#64748B' : '#B45309';
+      return `<div class="text-center">
+        <div class="text-2xl mb-1">${medals[rank]}</div>
+        <div class="font-mono font-bold text-sm">${t[0]}</div>
+        <div class="text-xs text-slate-500 mb-2 truncate" title="${vlabel(t[0])}">${vlabel(t[0])}</div>
+        <div style="height:${h}px;background:${bg};border:1px solid ${bd};border-radius:.6rem;display:flex;align-items:center;justify-content:center">
+          <span class="font-extrabold text-lg" style="color:${bd}">${FP.euro(t[1])}</span>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  renderKPIs(); renderCTList(); renderPodium(); renderTable(); renderCharts();
 </script>
 </body>
 </html>
