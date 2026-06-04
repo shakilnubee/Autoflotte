@@ -101,10 +101,12 @@
   FP.db = {
     /** Charge les 3 tables et retourne { vehicules, amendes, factures } en camelCase */
     async loadAll() {
+      // Tri explicite par id : sans ça, PostgreSQL renvoie les lignes dans l'ordre
+      // du tas (heap), et toute ligne modifiée passe en dernier → ordre instable.
       const [v, a, f] = await Promise.all([
-        client.from('vehicules').select('*'),
-        client.from('amendes').select('*'),
-        client.from('factures').select('*'),
+        client.from('vehicules').select('*').order('id', { ascending: true }),
+        client.from('amendes').select('*').order('id', { ascending: true }),
+        client.from('factures').select('*').order('id', { ascending: true }),
       ]);
       const errors = [v.error, a.error, f.error].filter(Boolean);
       if (errors.length) {
@@ -136,7 +138,7 @@
 
     /** Lit toutes les lignes d'une table (converties en camelCase). */
     async select(table) {
-      const res = await client.from(table).select('*');
+      const res = await client.from(table).select('*').order('id', { ascending: true });
       if (res.error) { console.error(`[FP.db.select ${table}]`, res.error); return { data: [], error: res.error }; }
       return { data: (res.data || []).map(toClient), error: null };
     },
