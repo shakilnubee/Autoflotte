@@ -264,7 +264,7 @@ document.addEventListener('fp:data-ready', FP.normalizeVehicleNames); // après 
 // Normalisation d'un prénom (1er mot, minuscules, accents conservés) — partagé
 FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
 // Conducteurs connus (fichier Drive de référence) — partagé entre pages pour un comptage cohérent
-FP.DRIVE_CONDUCTEURS = new Set(["ahmed","akram","ambre","andrea","anna","bram","byd","charles","conu","daniel","david","diana","enguerrand","eugénie","farah","frédéric","fx","gionata","guerric","halim","ilhem","jérémie","jérémy","jimmy","jocelyn","johanna","léo","lucie","martin","maxime","mégane","mickaël","mona","monsieur","mr","nacim","nawelle","nicolas","pauline","raphaël","romuald","samira","sergio","shakil","shaohui","sofiane","thomas","xavi","yannis","youssouf"]);
+FP.DRIVE_CONDUCTEURS = new Set(["ahmed","akram","ambre","andrea","anna","bram","charles","conu","daniel","david","diana","enguerrand","eugénie","farah","frédéric","fx","gionata","guerric","halim","ilhem","jérémie","jérémy","jimmy","jocelyn","johanna","léo","lucie","martin","maxime","mégane","mickaël","mona","monsieur","mr","nacim","nawelle","nicolas","pauline","raphaël","romuald","samira","sergio","shakil","shaohui","sofiane","thomas","xavi","yannis","youssouf"]);
 // Étiquettes de chauffeur qui ne sont PAS des personnes
 FP.NON_CHAUFFEURS = ['Siège', 'Dépôt', 'Navette', 'VENDU', 'x', 'X', 'Fenwick'];
 // Comptage des conducteurs (mêmes règles que la page Conducteurs, hors manuels/masqués)
