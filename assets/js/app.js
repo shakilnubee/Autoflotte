@@ -44,11 +44,59 @@ const FP = {
   },
   // Calcul TVS approximatif (Taxe sur les Véhicules de Société) — démo
   tvsAnnuelle(v) {
-    if (v.carburant === 'Électrique') return 0;
-    const base = v.carburant === 'Hybride' ? 80 : 180;
-    const surcout = Math.round(v.km / 10000) * 12;
-    return base + surcout;
+    const d = FP.tvsDetail(v);
+    return (d.applicable && d.total != null) ? d.total : 0;
   },
+};
+
+// =====================================================================
+// === TVS — taxes annuelles sur l'affectation des véhicules ===========
+// =====================================================================
+// Remplace l'ancienne "TVS". Deux composantes :
+//   1) taxe annuelle sur les émissions de CO2 (barème WLTP, marginal €/g)
+//   2) taxe annuelle sur les émissions de polluants atmosphériques (selon énergie)
+// ⚠️ Barème 2026 — les montants changent chaque année. Facile à mettre à jour ici.
+// Ne s'applique qu'aux véhicules de tourisme (VP) : ni utilitaires, ni motos.
+// Vérifié : un véhicule à 100 g CO2 (WLTP) = 213 € en 2026.
+FP.TVS_ANNEE = 2026;
+// Barème WLTP 2026 : tarif marginal par g/km (cumulatif par tranches)
+FP.TVS_CO2_BAREME = [
+  { jusqua: 4,        taux: 0 },
+  { jusqua: 45,       taux: 1 },
+  { jusqua: 53,       taux: 2 },
+  { jusqua: 85,       taux: 3 },
+  { jusqua: 105,      taux: 4 },
+  { jusqua: Infinity, taux: 10 },
+];
+FP.tvsCo2 = (co2) => {
+  let total = 0, prev = 0;
+  for (const b of FP.TVS_CO2_BAREME) {
+    if (co2 > prev) { total += (Math.min(co2, b.jusqua) - prev) * b.taux; prev = b.jusqua; }
+    else break;
+  }
+  return Math.round(total);
+};
+// Taxe polluants atmosphériques (barème 2026) selon l'énergie / Crit'Air
+//  - Électrique / hydrogène : 0 €
+//  - Véhicules récents Euro 5/6 (essence, hybride, diesel) : 100 €
+//  - (Véhicules les plus polluants Crit'Air 3+ : 500 € — rares, à ajuster au cas par cas)
+FP.tvsPolluant = (carburant) => {
+  const c = (carburant || '').toLowerCase();
+  if (/lectri|hydrog/.test(c)) return 0;
+  return 100;
+};
+// Détail TVS d'un véhicule : { applicable, raison?, co2, polluant, total, ... }
+FP.tvsDetail = (v) => {
+  const cat = (v.categorie || '').toLowerCase();
+  const carb = v.carburant || '';
+  if (/moto/.test(cat)) return { applicable: false, raison: 'Moto — non soumise' };
+  if (/utilit|engin/.test(cat)) return { applicable: false, raison: 'Utilitaire — non soumis' };
+  const polluant = FP.tvsPolluant(carb);
+  if (/lectri|hydrog/i.test(carb)) return { applicable: true, elec: true, co2: 0, polluant: 0, total: 0 };
+  const co2 = Number(v.co2);
+  if (!Number.isFinite(co2) || co2 <= 0) return { applicable: true, co2Manquant: true, co2: null, polluant, total: null };
+  const co2Tax = FP.tvsCo2(co2);
+  return { applicable: true, co2: co2Tax, polluant, total: co2Tax + polluant };
 };
 
 // IMPORTANT — partage d'un SEUL objet FP.
