@@ -692,6 +692,22 @@ FP.buildAlertes = (data) => {
     out.push({ niveau: l.niveau, categorie: 'Leasing', message: msg, detail, sort: 3000 - Math.round((l.ratio || 0) * 100), target: 'contrats.html' });
   });
 
+  // --- Fin de contrat leasing BPCE approchant (par date de fin) ---
+  (data.vehicules || []).forEach(v => {
+    if (v.statut && v.statut !== 'actif') return;
+    const l = FP.leasingInfo(v);
+    if (!l || !l.finContrat || isNaN(l.finContrat)) return;
+    const diff = days(l.finContrat);
+    const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
+    const finStr = FP.date(l.finContrat.toISOString());
+    let niveau = null, msg = null;
+    if (diff < 0)        { niveau = 'danger'; msg = `Leasing terminé depuis ${-diff}j (${finStr})`; }
+    else if (diff < 90)  { niveau = 'danger'; msg = `Fin de leasing dans ${diff}j (${finStr})`; }
+    else if (diff < 180) { niveau = 'warn';   msg = `Fin de leasing dans ~${Math.round(diff / 30)} mois (${finStr})`; }
+    else return;
+    out.push({ niveau, categorie: 'Leasing', message: msg, detail: veh, sort: diff, target: 'contrats.html' });
+  });
+
   // --- Véhicules sans dernière révision enregistrée (info) ---
   const sansRev = (data.vehicules || []).filter(v => v.statut === 'actif' && (!v.derniereRevision || v.derniereRevision === '—') && (!v.chauffeur || v.chauffeur !== 'VENDU')).length;
   if (sansRev > 5) {
