@@ -126,6 +126,7 @@
               <th>Km actuel</th>
               <th>Projection fin</th>
               <th>Statut km</th>
+              <th>Fin de contrat</th>
               <th>Mensualités payées</th>
               <th>Total versé</th>
               <th>Moy. mensuelle</th>
@@ -271,6 +272,15 @@
       .filter(({ v }) => !q || `${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`.toLowerCase().includes(q))
       .sort((a,b) => b.agg.total - a.agg.total);
 
+    const finContratCell = (l) => {
+      if (!l || !l.finContrat || isNaN(l.finContrat)) return '<span class="text-slate-400">—</span>';
+      const diff = Math.ceil((l.finContrat - new Date()) / 86400000);
+      const ds = FP.date(l.finContrat.toISOString());
+      if (diff < 0)        return `<span style="color:var(--fp-danger);font-weight:700">${ds}</span><br><span class="text-xs" style="color:var(--fp-danger)">terminé (+${-diff}j)</span>`;
+      if (diff < 90)       return `<span style="color:var(--fp-danger);font-weight:600">${ds}</span><br><span class="text-xs" style="color:var(--fp-danger)">dans ${diff}j</span>`;
+      if (diff < 180)      return `<span style="color:var(--fp-warn);font-weight:600">${ds}</span><br><span class="text-xs" style="color:var(--fp-warn)">~${Math.round(diff / 30)} mois</span>`;
+      return `${ds}<br><span class="text-xs text-slate-400">dans ~${Math.round(diff / 30)} mois</span>`;
+    };
     const statutKm = (l) => {
       if (!l) return '<span class="text-slate-400 text-xs">contrat non renseigné</span>';
       if (l.projectionFin === null) return '<span class="badge" style="background:#E0E7FF;color:#3730A3">contrat récent</span>';
@@ -292,6 +302,7 @@
         <td>${l ? FP.num(l.km) + ' km' : (v.km != null ? FP.num(v.km) + ' km' : '<span class="text-slate-400">—</span>')}</td>
         <td style="${projColor}">${l && l.projectionFin !== null ? '~' + FP.num(l.projectionFin) + ' km' : '<span class="text-slate-400">—</span>'}</td>
         <td>${statutKm(l)}</td>
+        <td>${finContratCell(l)}</td>
         <td>${agg.count}</td>
         <td class="font-semibold">${agg.total > 0 ? FP.euroPrecis(agg.total) : '<span class="text-slate-400">—</span>'}</td>
         <td>${agg.count > 0 ? FP.euroPrecis(agg.total / agg.count) : '<span class="text-slate-400">—</span>'}</td>
