@@ -305,17 +305,17 @@
 
     <!-- KPIs -->
     <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-      <div class="kpi">
+      <div class="kpi kpi-filter" data-statut-filter="all" style="cursor:pointer" title="Voir tous les véhicules">
         <div class="kpi-label">Total flotte</div>
         <div class="kpi-value" id="kpi-total">—</div>
         <div class="kpi-delta">véhicules</div>
       </div>
-      <div class="kpi">
+      <div class="kpi kpi-filter" data-statut-filter="actif" style="cursor:pointer" title="Voir les véhicules actifs">
         <div class="kpi-label">Actifs</div>
         <div class="kpi-value" id="kpi-actifs" style="color: var(--fp-ok)">—</div>
         <div class="kpi-delta up">en circulation</div>
       </div>
-      <div class="kpi">
+      <div class="kpi kpi-filter" data-statut-filter="entretien" style="cursor:pointer" title="Voir les véhicules en entretien">
         <div class="kpi-label">En entretien</div>
         <div class="kpi-value" id="kpi-entretien" style="color: var(--fp-warn)">—</div>
         <div class="kpi-delta">au garage</div>
@@ -412,6 +412,7 @@
 
   <div class="p-6 border-t border-slate-200 flex gap-2">
     <button class="btn btn-outline text-sm flex-1 justify-center" id="drawer-edit"><i data-lucide="pencil" class="w-4 h-4"></i> Modifier</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-pdf" title="Exporter la fiche en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> PDF</button>
     <button class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
@@ -1393,6 +1394,24 @@
       && (f.date || '').startsWith('2026')
       && COUT_TYPES.includes((f.type || '').toLowerCase()));
     const coutTotal = factures2026.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    // Carnet d'entretien : toutes les factures entretien/réparation du véhicule (toutes années), récentes en premier
+    const carnet = (data.factures || [])
+      .filter(f => f.vehiculeImmat === v.immat && COUT_TYPES.includes((f.type || '').toLowerCase()))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const carnetHTML = carnet.length ? `
+      <div>
+        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Carnet d'entretien <span class="text-slate-400 font-normal text-sm">(${carnet.length})</span></div>
+        <div class="text-sm mt-3 space-y-1.5" style="max-height:240px;overflow-y:auto">
+          ${carnet.map(f => `
+            <div class="flex justify-between items-start gap-2 border-b border-slate-100 pb-1.5">
+              <div>
+                <div class="text-slate-700">${f.description || f.fournisseur || f.numeroFacture || 'Facture'}</div>
+                <div class="text-xs text-slate-400">${FP.date(f.date)}${f.fournisseur && f.description ? ' · ' + f.fournisseur : ''}${f.km ? ' · ' + FP.num(f.km) + ' km' : ''}</div>
+              </div>
+              <div class="font-semibold whitespace-nowrap">${FP.euro(f.montantTTC)}</div>
+            </div>`).join('')}
+        </div>
+      </div>` : '';
     const tvs = FP.tvsAnnuelle(v);
     const tvsDet = FP.tvsDetail(v);
     const rev = FP.revisionInfo(v);
@@ -1439,6 +1458,8 @@
         <div class="text-2xl font-extrabold" style="color: var(--fp-primary)">${FP.euro(coutTotal)}</div>
         <div class="text-xs text-slate-500 mt-1">${factures2026.length ? `${factures2026.length} facture${factures2026.length > 1 ? 's' : ''} d'entretien 2026` : 'Aucune facture d\'entretien 2026'}</div>
       </div>
+
+      ${carnetHTML}
 
       <div>
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Administratif & documents</div>
@@ -1850,12 +1871,20 @@
   // ---------- Wiring ----------
   $('search').addEventListener('input', (e) => { state.search = e.target.value; renderTable(); });
 
+  function applyStatutFilter(value) {
+    state.statut = value;
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c =>
+      c.classList.toggle('active', c.dataset.value === value));
+    renderTable();
+  }
   document.querySelectorAll('#filters-statut .filter-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      state.statut = chip.dataset.value;
-      renderTable();
+    chip.addEventListener('click', () => applyStatutFilter(chip.dataset.value));
+  });
+  // Cartes KPI cliquables : filtrent la liste par statut
+  document.querySelectorAll('.kpi-filter[data-statut-filter]').forEach(card => {
+    card.addEventListener('click', () => {
+      applyStatutFilter(card.dataset.statutFilter);
+      document.getElementById('filters-statut')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
   });
 
@@ -2242,6 +2271,66 @@
     openModal(v);
   });
   $('drawer-delete').addEventListener('click', deleteVehicule);
+
+  // ---------- Export PDF de la fiche véhicule ----------
+  function exportFichePDF() {
+    const v = data.vehicules.find(x => x.id === state.editingId);
+    if (!v) return;
+    const tvsDet = FP.tvsDetail(v);
+    const rev = FP.revisionInfo(v);
+    const COUT_TYPES = ['entretien', 'réparation', 'reparation'];
+    const fAll = (data.factures || []).filter(f => f.vehiculeImmat === v.immat && COUT_TYPES.includes((f.type || '').toLowerCase()));
+    const cout2026 = fAll.filter(f => (f.date || '').startsWith('2026')).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    const carnet = fAll.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const row = (k, val) => `<tr><td style="color:#555;padding:3px 12px 3px 0">${k}</td><td style="font-weight:600">${val}</td></tr>`;
+    const tvsTxt = tvsDet.applicable ? (tvsDet.total != null ? FP.euro(tvsDet.total) : 'CO₂ manquant') : 'Non soumis';
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche ${esc(v.immat)}</title>
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:32px;font-size:13px}
+        h1{margin:0;font-size:22px} .sub{color:#64748b;margin:2px 0 16px}
+        h2{font-size:14px;border-bottom:1px solid #cbd5e1;padding-bottom:4px;margin:22px 0 8px}
+        table{border-collapse:collapse;width:100%} td{padding:3px 0;vertical-align:top}
+        .grid{display:flex;gap:40px} .grid>div{flex:1}
+        .carnet td{border-bottom:1px solid #eee;padding:5px 8px 5px 0}
+        .tot{font-size:18px;font-weight:800;color:#0f766e}
+        @media print{body{margin:12mm}}
+      </style></head><body onload="window.print()">
+      <h1>${esc(v.marque || '')} ${esc(v.modele || '')}</h1>
+      <div class="sub">${esc(v.immat || '')} — ${esc(v.categorie || '')} · ${esc(v.chauffeur && v.chauffeur !== '—' ? v.chauffeur : 'Sans conducteur')}</div>
+      <div class="grid">
+        <div><h2>Général</h2><table>
+          ${row('Statut', esc(v.statut || '—'))}
+          ${row('Kilométrage', FP.num(v.km) + ' km')}
+          ${row('Carburant', esc(v.carburant || '—'))}
+          ${row('Mise en circulation', v.dateMiseEnCirculation ? FP.date(v.dateMiseEnCirculation) : '—')}
+          ${row('Propriétaire', esc(v.proprietaire || '—'))}
+          ${row('Assurance', esc(v.assurance || '—'))}
+          ${row('Valeur d\'achat', v.valeurAchat ? FP.euro(v.valeurAchat) : '—')}
+        </table></div>
+        <div><h2>Technique & échéances</h2><table>
+          ${row('VIN', esc(v.vin || '—'))}
+          ${row('CO₂', v.co2 != null && v.co2 !== '' ? FP.num(v.co2) + ' g/km' : '—')}
+          ${row('Puissance fiscale', v.puissanceFiscale != null && v.puissanceFiscale !== '' ? FP.num(v.puissanceFiscale) + ' CV' : '—')}
+          ${row('TVS ' + FP.TVS_ANNEE, tvsTxt)}
+          ${row('Prochain CT', v.prochainCT && v.prochainCT !== '—' ? FP.date(v.prochainCT) : '—')}
+          ${row('Dernière révision', v.derniereRevision ? FP.date(v.derniereRevision) : '—')}
+        </table></div>
+      </div>
+      <h2>Coût d'entretien 2026</h2>
+      <div class="tot">${FP.euro(cout2026)}</div>
+      <h2>Carnet d'entretien (${carnet.length})</h2>
+      <table class="carnet">
+        ${carnet.map(f => `<tr><td style="white-space:nowrap">${f.date ? FP.date(f.date) : '—'}</td><td>${esc(f.description || f.fournisseur || f.numeroFacture || 'Facture')}</td><td style="text-align:right;white-space:nowrap;font-weight:600">${FP.euro(f.montantTTC)}</td></tr>`).join('') || '<tr><td>Aucune facture</td></tr>'}
+      </table>
+      <div style="margin-top:24px;color:#94a3b8;font-size:11px">Auto-flotte — fiche générée le ${FP.date(new Date().toISOString())}</div>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { alert('Autorise les fenêtres pop-up pour exporter le PDF.'); return; }
+    w.document.write(html);
+    w.document.close();
+  }
+  $('drawer-pdf').addEventListener('click', exportFichePDF);
 
   // Wiring modal édition groupe
   $('grp-save').addEventListener('click', saveGroupEdit);
