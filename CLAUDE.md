@@ -50,7 +50,7 @@ fleet-app/
 - **52 véhicules** (TJMAX, BPCE leasing, PROJECT X PARIS RETAIL)
 - **60 amendes 2026** (les 2025 ont été supprimées sur demande)
 - **384 factures**
-- Groupes véhicules : Siège, Commerciaux, Gov, Pool, À vendre, Retail, Dépôt, Non classé
+- Groupes véhicules : Siège, Commerciaux, Gov, International (clé interne `pool`), À vendre, Retail, Dépôt, Non classé
 
 ## Supabase
 
