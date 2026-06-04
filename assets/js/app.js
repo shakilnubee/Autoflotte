@@ -137,7 +137,7 @@ FP.settings = {
       'siege':       { label: 'Siège',       color: '#F59E0B' },
       'commerciaux': { label: 'Commerciaux', color: '#CA8A04' },
       'gov':         { label: 'Gov',         color: '#10B981' },
-      'pool':        { label: 'Pool',        color: '#84CC16' },
+      'pool':        { label: 'International', color: '#84CC16' },
       'a-vendre':    { label: 'À vendre',    color: '#DC2626' },
       'retail':      { label: 'Retail',      color: '#8B5CF6' },
       'depot':       { label: 'Dépôt',       color: '#3B82F6' },
