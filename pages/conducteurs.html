@@ -36,6 +36,10 @@
   .dc-stat.danger { color:#DC2626; }
   .dc-stat.warn { color:#B45309; }
   .dc-stat.ok { color:#16A34A; }
+  .view-btn { display:inline-flex; align-items:center; gap:.35rem; font-size:.8rem; font-weight:600; color:var(--fp-muted); padding:.35rem .7rem; border-radius:.5rem; cursor:pointer; }
+  .view-btn.active { background:#fff; color:var(--fp-primary); box-shadow:0 1px 2px rgba(0,0,0,.1); }
+  tr.driver-row { cursor:pointer; }
+  tr.driver-row.selected { background:rgba(20,184,166,.08); }
   .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 100%; max-width: 560px; background: white; box-shadow: -20px 0 60px -20px rgba(15,30,61,.25); transform: translateX(100%); transition: transform .25s ease; z-index: 60; overflow-y: auto; }
   .drawer.open { transform: translateX(0); }
   .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
@@ -131,11 +135,17 @@
       </div>
     </div>
 
-    <!-- Recherche -->
+    <!-- Recherche + sélecteur de vue -->
     <div class="card p-4 mb-6">
-      <div class="relative">
-        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-        <input id="search" type="text" placeholder="Rechercher un conducteur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+      <div class="flex items-center gap-3">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search" type="text" placeholder="Rechercher un conducteur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+        <div class="flex gap-1 bg-slate-100 rounded-lg p-1 flex-shrink-0">
+          <button id="view-cards" class="view-btn"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+          <button id="view-list" class="view-btn"><i data-lucide="list" class="w-4 h-4"></i> Liste</button>
+        </div>
       </div>
     </div>
 
@@ -225,7 +235,7 @@
   lucide.createIcons();
   const data = window.FP_DATA;
   const $ = (id) => document.getElementById(id);
-  const state = { search: '', selected: new Set() };
+  const state = { search: '', selected: new Set(), view: ((window.FP && FP.settings && FP.settings.get().condView) === 'list') ? 'list' : 'cards' };
 
   function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -454,44 +464,86 @@
     for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
     return `linear-gradient(135deg, hsl(${h} 62% 52%) 0%, hsl(${(h + 28) % 360} 60% 42%) 100%)`;
   }
+  // Stats d'un conducteur
+  function driverStats(d) {
+    const nbAmendes = d.amendes.length;
+    const points = d.amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
+    const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
+    const lvl = (dus > 0 || points >= 4) ? 'dc-danger' : (nbAmendes > 0 || points > 0) ? 'dc-warn' : 'dc-ok';
+    return { nbAmendes, points, dus, lvl };
+  }
+  function platesBadges(d, max) {
+    const plates = d.vehicules.map(v => v.immat).filter(Boolean);
+    if (!plates.length) return '<span class="text-xs text-slate-400">Aucun véhicule</span>';
+    return plates.slice(0, max).map(p => `<span class="plate-badge">${p}</span>`).join('')
+      + (plates.length > max ? `<span class="plate-badge" style="background:#fff">+${plates.length - max}</span>` : '');
+  }
+  function cardHtml(d) {
+    const { nbAmendes, points, dus, lvl } = driverStats(d);
+    return `
+      <div class="driver-card ${lvl} ${state.selected.has(d.key) ? 'selected' : ''}" data-key="${d.key}">
+        <input type="checkbox" class="driver-cb" data-key="${d.key}" ${state.selected.has(d.key) ? 'checked' : ''} title="Sélectionner pour suppression" />
+        <div class="flex items-center gap-3 pr-6">
+          <div class="driver-avatar" style="background:${avatarColor(d.name)}">${initials(d.name)}</div>
+          <div class="min-w-0 flex-1">
+            <div class="font-bold text-slate-900 truncate">${d.name}</div>
+            <div class="text-xs text-slate-500">${d.vehicules.length} véhicule${d.vehicules.length > 1 ? 's' : ''}</div>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-1 mt-2.5">${platesBadges(d, 3)}</div>
+        <div class="dc-divider"></div>
+        <div class="flex items-center justify-between">
+          <span class="dc-stat ${nbAmendes > 0 ? (nbAmendes >= 5 ? 'danger' : 'warn') : 'ok'}"><i data-lucide="ticket" class="dc-ico"></i>${nbAmendes}</span>
+          <span class="dc-stat ${points > 0 ? 'danger' : 'muted'}"><i data-lucide="alert-triangle" class="dc-ico"></i>${points} pt${points > 1 ? 's' : ''}</span>
+          <span class="dc-stat ${dus > 0 ? 'danger' : 'muted'}"><i data-lucide="euro" class="dc-ico"></i>${dus > 0 ? FP.euro(dus) : '0'}</span>
+        </div>
+      </div>`;
+  }
+  function listHtml(filtered) {
+    const rows = filtered.map(d => {
+      const { nbAmendes, points, dus, lvl } = driverStats(d);
+      const bar = lvl === 'dc-danger' ? '#DC2626' : lvl === 'dc-warn' ? '#F59E0B' : '#16A34A';
+      return `
+        <tr class="driver-row ${state.selected.has(d.key) ? 'selected' : ''}" data-key="${d.key}">
+          <td style="border-left:4px solid ${bar}"><input type="checkbox" class="driver-cb" data-key="${d.key}" ${state.selected.has(d.key) ? 'checked' : ''} /></td>
+          <td>
+            <div class="flex items-center gap-2.5">
+              <div class="driver-avatar" style="width:34px;height:34px;font-size:.8rem;background:${avatarColor(d.name)}">${initials(d.name)}</div>
+              <span class="font-semibold text-slate-900">${d.name}</span>
+            </div>
+          </td>
+          <td><div class="flex flex-wrap gap-1">${platesBadges(d, 4)}</div></td>
+          <td class="text-center"><span class="${nbAmendes > 0 ? (nbAmendes >= 5 ? 'text-red-600 font-bold' : 'text-amber-600 font-semibold') : 'text-slate-400'}">${nbAmendes}</span></td>
+          <td class="text-center"><span class="${points > 0 ? 'text-red-600 font-bold' : 'text-slate-400'}">${points}</span></td>
+          <td class="text-right font-semibold ${dus > 0 ? 'text-red-600' : 'text-slate-400'}">${dus > 0 ? FP.euro(dus) : '—'}</td>
+        </tr>`;
+    }).join('');
+    return `<div class="card overflow-hidden"><div class="scrollable"><table class="fp-table">
+      <thead><tr><th style="width:34px"></th><th>Conducteur</th><th>Véhicules</th><th class="text-center">Amendes</th><th class="text-center">Points</th><th class="text-right">Dû</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="text-center text-slate-400 py-8">Aucun conducteur</td></tr>'}</tbody>
+    </table></div></div>`;
+  }
   function renderGrid() {
     const q = state.search.toLowerCase().trim();
     const filtered = drivers.filter(d => !q || d.name.toLowerCase().includes(q));
-    $('drivers-grid').innerHTML = filtered.map(d => {
-      const nbAmendes = d.amendes.length;
-      const points = d.amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
-      const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
-      // Niveau (liseré gauche) : rouge si points/dus, orange si amendes, vert sinon
-      const lvl = (dus > 0 || points >= 4) ? 'dc-danger' : (nbAmendes > 0 || points > 0) ? 'dc-warn' : 'dc-ok';
-      // Badges plaques (3 max, puis +N)
-      const plates = d.vehicules.map(v => v.immat).filter(Boolean);
-      const platesHtml = plates.length
-        ? plates.slice(0, 3).map(p => `<span class="plate-badge">${p}</span>`).join('')
-          + (plates.length > 3 ? `<span class="plate-badge" style="background:#fff">+${plates.length - 3}</span>` : '')
-        : '<span class="text-xs text-slate-400">Aucun véhicule</span>';
-      return `
-        <div class="driver-card ${lvl} ${state.selected.has(d.key) ? 'selected' : ''}" data-key="${d.key}">
-          <input type="checkbox" class="driver-cb" data-key="${d.key}" ${state.selected.has(d.key) ? 'checked' : ''} title="Sélectionner pour suppression" />
-          <div class="flex items-center gap-3 pr-6">
-            <div class="driver-avatar" style="background:${avatarColor(d.name)}">${initials(d.name)}</div>
-            <div class="min-w-0 flex-1">
-              <div class="font-bold text-slate-900 truncate">${d.name}</div>
-              <div class="text-xs text-slate-500">${d.vehicules.length} véhicule${d.vehicules.length > 1 ? 's' : ''}</div>
-            </div>
-          </div>
-          <div class="flex flex-wrap gap-1 mt-2.5">${platesHtml}</div>
-          <div class="dc-divider"></div>
-          <div class="flex items-center justify-between">
-            <span class="dc-stat ${nbAmendes > 0 ? (nbAmendes >= 5 ? 'danger' : 'warn') : 'ok'}"><i data-lucide="ticket" class="dc-ico"></i>${nbAmendes}</span>
-            <span class="dc-stat ${points > 0 ? 'danger' : 'muted'}"><i data-lucide="alert-triangle" class="dc-ico"></i>${points} pt${points > 1 ? 's' : ''}</span>
-            <span class="dc-stat ${dus > 0 ? 'danger' : 'muted'}"><i data-lucide="euro" class="dc-ico"></i>${dus > 0 ? FP.euro(dus) : '0'}</span>
-          </div>
-        </div>
-      `;
-    }).join('');
+    const grid = $('drivers-grid');
+    if (state.view === 'list') {
+      grid.className = '';
+      grid.innerHTML = listHtml(filtered);
+    } else {
+      grid.className = 'grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4';
+      grid.innerHTML = filtered.map(cardHtml).join('');
+    }
+    $('view-cards')?.classList.toggle('active', state.view !== 'list');
+    $('view-list')?.classList.toggle('active', state.view === 'list');
     $('result-count').textContent = `${filtered.length} conducteur${filtered.length > 1 ? 's' : ''} sur ${drivers.length}`;
     if (window.lucide) lucide.createIcons();
     renderBulkBar();
+  }
+  function setView(v) {
+    state.view = v;
+    if (window.FP && FP.settings) { const s = FP.settings.get(); s.condView = v; FP.settings.save(s); } // mémorisé + partagé tous PC
+    renderGrid();
   }
 
   // ---------- Sélection multiple ----------
@@ -503,8 +555,8 @@
 
   function toggleSelect(key, checked) {
     if (checked) state.selected.add(key); else state.selected.delete(key);
-    const card = $('drivers-grid').querySelector(`.driver-card[data-key="${CSS.escape(key)}"]`);
-    if (card) card.classList.toggle('selected', checked);
+    const el = $('drivers-grid').querySelector(`.driver-card[data-key="${CSS.escape(key)}"], tr.driver-row[data-key="${CSS.escape(key)}"]`);
+    if (el) el.classList.toggle('selected', checked);
     renderBulkBar();
   }
 
@@ -660,11 +712,13 @@
   }
 
   $('search').addEventListener('input', e => { state.search = e.target.value; renderGrid(); });
+  $('view-cards').addEventListener('click', () => setView('cards'));
+  $('view-list').addEventListener('click', () => setView('list'));
   $('drivers-grid').addEventListener('click', e => {
     const cb = e.target.closest('.driver-cb');
-    if (cb) { toggleSelect(cb.dataset.key, cb.checked); return; } // case cochée → on ne ouvre pas la fiche
-    const card = e.target.closest('.driver-card');
-    if (card) openDrawer(card.dataset.key);
+    if (cb) { toggleSelect(cb.dataset.key, cb.checked); return; } // case cochée → on n'ouvre pas la fiche
+    const item = e.target.closest('.driver-card, tr.driver-row');
+    if (item) openDrawer(item.dataset.key);
   });
   $('bulk-delete').addEventListener('click', bulkDelete);
   $('bulk-clear').addEventListener('click', clearSelection);
