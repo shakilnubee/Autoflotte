@@ -61,11 +61,16 @@
     </div>
 
     <!-- KPIs globaux -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
       <div class="kpi">
         <div class="kpi-label">Coût total flotte</div>
         <div class="kpi-value" id="kpi-total" style="color: var(--fp-primary)">—</div>
         <div class="kpi-delta">depuis 2025</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Total TVS <span id="kpi-tvs-annee">2026</span></div>
+        <div class="kpi-value" id="kpi-tvs" style="color: var(--fp-primary)">—</div>
+        <div class="kpi-delta" id="kpi-tvs-sub">taxe annuelle flotte</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">Coût moyen / véhicule</div>
@@ -140,6 +145,14 @@
 
   const totalKm = data.vehicules.reduce((s, v) => s + (v.km || 0), 0);
   $('kpi-perkm').textContent = totalKm > 0 ? FP.euroPrecis(totalTTC / totalKm) : '—';
+
+  // Total TVS de la flotte (somme des taxes annuelles, véhicules soumis uniquement)
+  if (FP.TVS_ANNEE) $('kpi-tvs-annee').textContent = FP.TVS_ANNEE;
+  const tvsRows = data.vehicules.map(v => ({ v, d: FP.tvsDetail(v) }));
+  const totalTVS = tvsRows.reduce((s, r) => s + (r.d.applicable && r.d.total != null ? r.d.total : 0), 0);
+  const nbSoumis = tvsRows.filter(r => r.d.applicable && r.d.total != null).length;
+  $('kpi-tvs').textContent = FP.euro(totalTVS);
+  $('kpi-tvs-sub').textContent = `${nbSoumis} véhicule${nbSoumis > 1 ? 's' : ''} soumis`;
 
   // Top dépense (la plus grosse facture)
   const topF = factures.slice().sort((a, b) => (b.montantTTC || 0) - (a.montantTTC || 0))[0];
