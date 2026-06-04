@@ -154,10 +154,14 @@
     </div>
     <form id="form-ret" class="space-y-4">
       <input type="hidden" id="ret-id" />
-      <div class="grid grid-cols-2 gap-4">
+      <label class="flex items-center gap-2 cursor-pointer select-none bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+        <input type="checkbox" id="ret-inconnu" class="w-4 h-4 accent-teal-600" />
+        <span class="text-sm font-medium text-slate-700">Je ne connais pas la date de retour</span>
+      </label>
+      <div class="grid grid-cols-2 gap-4" id="ret-date-wrap">
         <div>
           <div class="field-label">Date de remise *</div>
-          <input class="field-input" type="date" id="ret-date" required />
+          <input class="field-input" type="date" id="ret-date" />
         </div>
         <div>
           <div class="field-label">Heure</div>
@@ -291,7 +295,7 @@
         <td class="font-mono font-semibold">${escapeHtml(vehLabel(e.vehicule))}</td>
         <td class="font-medium">${escapeHtml(e.emprunteur || '—')}</td>
         <td>${dt(e.dateEmprunt, e.heureEmprunt)}</td>
-        <td>${dt(e.dateRetour, e.heureRetour)}</td>
+        <td>${e.dateRetour === '1900-01-01' ? '<span class="text-slate-500 italic">date inconnue</span>' : dt(e.dateRetour, e.heureRetour)}</td>
         <td>${rendu ? escapeHtml(e.renduPar || e.emprunteur) : '<span class="text-slate-400">—</span>'}</td>
         <td>${rendu ? '<span class="pill-rendu">Rendu</span>' : '<span class="pill-encours">En cours</span>'}</td>
         <td class="text-right whitespace-nowrap">
@@ -364,20 +368,37 @@
   }
 
   // ---- Retour (saisie ou correction) ----
+  // Marqueur interne : "rendu mais date de retour inconnue" (évite de toucher à la base)
+  const RETOUR_INCONNU = '1900-01-01';
+  function toggleRetInconnu() {
+    const on = $('ret-inconnu').checked;
+    $('ret-date-wrap').style.opacity = on ? '.4' : '';
+    $('ret-date').disabled = on;
+    $('ret-heure').disabled = on;
+  }
   function openRet(id) {
     const e = cache.find(x => x.id === id); if (!e) return;
     $('ret-id').value = id;
-    // Si déjà rendu, on pré-remplit avec les valeurs existantes (pour corriger) ; sinon aujourd'hui
-    $('ret-date').value = e.dateRetour || new Date().toISOString().slice(0, 10);
+    const inconnu = e.dateRetour === RETOUR_INCONNU;
+    $('ret-inconnu').checked = inconnu;
+    // Si déjà rendu (avec date), on pré-remplit pour corriger ; sinon aujourd'hui
+    $('ret-date').value = (e.dateRetour && !inconnu) ? e.dateRetour : new Date().toISOString().slice(0, 10);
     $('ret-heure').value = e.heureRetour || new Date().toTimeString().slice(0, 5);
     $('ret-par').value = e.renduPar || e.emprunteur || '';
+    toggleRetInconnu();
     $('modal-ret').classList.add('open');
   }
   function saveRet(ev) {
     ev.preventDefault();
     const e = cache.find(x => x.id === $('ret-id').value); if (!e) return;
-    e.dateRetour = $('ret-date').value || null;
-    e.heureRetour = $('ret-heure').value || '';
+    if ($('ret-inconnu').checked) {
+      e.dateRetour = RETOUR_INCONNU;   // marqué rendu, date inconnue
+      e.heureRetour = '';
+    } else {
+      if (!$('ret-date').value) { alert('Indique la date de retour, ou coche « Je ne connais pas la date de retour ».'); return; }
+      e.dateRetour = $('ret-date').value;
+      e.heureRetour = $('ret-heure').value || '';
+    }
     e.renduPar = $('ret-par').value.trim() || e.emprunteur;
     $('modal-ret').classList.remove('open');
     render();
@@ -401,6 +422,7 @@
   $('new-cancel').addEventListener('click', closeNew);
   $('modal-new').addEventListener('click', e => { if (e.target === e.currentTarget) closeNew(); });
   $('form-new').addEventListener('submit', addEmprunt);
+  $('ret-inconnu').addEventListener('change', toggleRetInconnu);
   $('ret-close').addEventListener('click', () => $('modal-ret').classList.remove('open'));
   $('ret-cancel').addEventListener('click', () => $('modal-ret').classList.remove('open'));
   $('modal-ret').addEventListener('click', e => { if (e.target === e.currentTarget) $('modal-ret').classList.remove('open'); });
