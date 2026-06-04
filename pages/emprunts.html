@@ -115,7 +115,7 @@
 <div class="modal-backdrop" id="modal-new">
   <div class="modal p-6">
     <div class="flex justify-between items-center mb-5">
-      <h2 class="text-xl font-extrabold">Nouvel emprunt</h2>
+      <h2 class="text-xl font-extrabold" id="new-title">Nouvel emprunt</h2>
       <button class="p-2 hover:bg-slate-100 rounded-lg" id="new-close"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
     <form id="form-new" class="space-y-4">
@@ -295,7 +295,10 @@
         <td>${rendu ? escapeHtml(e.renduPar || e.emprunteur) : '<span class="text-slate-400">—</span>'}</td>
         <td>${rendu ? '<span class="pill-rendu">Rendu</span>' : '<span class="pill-encours">En cours</span>'}</td>
         <td class="text-right whitespace-nowrap">
-          ${rendu ? '' : `<button class="btn btn-outline !py-1 !px-2.5 text-xs" data-ret="${escapeHtml(e.id)}"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Retour</button>`}
+          ${rendu
+            ? `<button class="btn btn-outline !py-1 !px-2.5 text-xs" data-ret="${escapeHtml(e.id)}" title="Corriger le retour"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Retour</button>`
+            : `<button class="btn btn-outline !py-1 !px-2.5 text-xs" data-ret="${escapeHtml(e.id)}"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Retour</button>`}
+          <button class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-teal-600" data-edit="${escapeHtml(e.id)}" title="Modifier"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
           <button class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-del="${escapeHtml(e.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
         </td>
       </tr>`;
@@ -303,13 +306,29 @@
     lucide.createIcons();
   }
 
-  // ---- Ajout ----
+  // ---- Ajout / Édition ----
+  let editingId = null;
+  const frDate = (iso) => { const m = (iso || '').match(/(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
   function openNew() {
+    editingId = null;
+    $('new-title').textContent = 'Nouvel emprunt';
     $('form-new').reset();
     fillVehSelect();
     const now = new Date();
     $('f-date').value = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
     $('f-heure').value = now.toTimeString().slice(0, 5);
+    $('modal-new').classList.add('open');
+  }
+  function openEdit(id) {
+    const e = cache.find(x => x.id === id); if (!e) return;
+    editingId = id;
+    $('new-title').textContent = "Modifier l'emprunt";
+    $('form-new').reset();
+    fillVehSelect();
+    $('f-vehicule').value = vehLabel(e.vehicule);
+    $('f-emprunteur').value = e.emprunteur || '';
+    $('f-date').value = frDate(e.dateEmprunt);
+    $('f-heure').value = e.heureEmprunt || '';
     $('modal-new').classList.add('open');
   }
   function addEmprunt(e) {
@@ -318,6 +337,18 @@
     const emprunteur = $('f-emprunteur').value.trim();
     const dateIso = parseFrDate($('f-date').value);
     if (!immat || !emprunteur || !dateIso) { alert('Véhicule, emprunteur et date (JJ/MM/AAAA) sont obligatoires.'); return; }
+    if (editingId) {
+      const obj = cache.find(x => x.id === editingId); if (!obj) { editingId = null; return; }
+      obj.vehicule = immat;
+      obj.emprunteur = emprunteur;
+      obj.dateEmprunt = dateIso;
+      obj.heureEmprunt = $('f-heure').value || '';
+      editingId = null;
+      $('modal-new').classList.remove('open');
+      sortCache(); render();
+      if (dbOn()) FP.persist.upsert('emprunts', obj); else lsSet();
+      return;
+    }
     const obj = {
       id: 'E' + Date.now().toString(36),
       vehicule: immat,
@@ -332,13 +363,14 @@
     if (dbOn()) FP.persist.insert('emprunts', obj); else lsSet();
   }
 
-  // ---- Retour ----
+  // ---- Retour (saisie ou correction) ----
   function openRet(id) {
     const e = cache.find(x => x.id === id); if (!e) return;
     $('ret-id').value = id;
-    $('ret-date').value = new Date().toISOString().slice(0, 10);
-    $('ret-heure').value = new Date().toTimeString().slice(0, 5);
-    $('ret-par').value = e.emprunteur || '';
+    // Si déjà rendu, on pré-remplit avec les valeurs existantes (pour corriger) ; sinon aujourd'hui
+    $('ret-date').value = e.dateRetour || new Date().toISOString().slice(0, 10);
+    $('ret-heure').value = e.heureRetour || new Date().toTimeString().slice(0, 5);
+    $('ret-par').value = e.renduPar || e.emprunteur || '';
     $('modal-ret').classList.add('open');
   }
   function saveRet(ev) {
@@ -364,9 +396,10 @@
   $('btn-new').addEventListener('click', openNew);
   setupAutocomplete($('f-vehicule'), () => _vehOpts);
   setupAutocomplete($('f-emprunteur'), () => _empOpts);
-  $('new-close').addEventListener('click', () => $('modal-new').classList.remove('open'));
-  $('new-cancel').addEventListener('click', () => $('modal-new').classList.remove('open'));
-  $('modal-new').addEventListener('click', e => { if (e.target === e.currentTarget) $('modal-new').classList.remove('open'); });
+  const closeNew = () => { editingId = null; $('modal-new').classList.remove('open'); };
+  $('new-close').addEventListener('click', closeNew);
+  $('new-cancel').addEventListener('click', closeNew);
+  $('modal-new').addEventListener('click', e => { if (e.target === e.currentTarget) closeNew(); });
   $('form-new').addEventListener('submit', addEmprunt);
   $('ret-close').addEventListener('click', () => $('modal-ret').classList.remove('open'));
   $('ret-cancel').addEventListener('click', () => $('modal-ret').classList.remove('open'));
@@ -374,6 +407,7 @@
   $('form-ret').addEventListener('submit', saveRet);
   $('tbody').addEventListener('click', e => {
     const ret = e.target.closest('[data-ret]'); if (ret) { openRet(ret.dataset.ret); return; }
+    const edit = e.target.closest('[data-edit]'); if (edit) { openEdit(edit.dataset.edit); return; }
     const del = e.target.closest('[data-del]'); if (del) { delEmprunt(del.dataset.del); }
   });
 
