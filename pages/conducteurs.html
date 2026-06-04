@@ -458,12 +458,26 @@
     $('kpi-points').textContent = points;
   }
 
-  // Couleur d'avatar unique et stable par personne (dérivée du nom)
-  function avatarColor(name) {
-    let h = 0; const s = name || '';
-    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
-    return `linear-gradient(135deg, hsl(${h} 62% 52%) 0%, hsl(${(h + 28) % 360} 60% 42%) 100%)`;
+  // Couleur d'un conducteur = couleur du GROUPE de ses véhicules (Siège, Commerciaux…)
+  // Repli sur une couleur dérivée du nom si aucun groupe.
+  function driverGroupKey(d) {
+    const vs = d.vehicules || [];
+    for (const v of vs) { const gs = (FP.vehGroupes(v) || []).filter(g => g !== 'non-classe'); if (gs.length) return gs[0]; }
+    for (const v of vs) { const gs = FP.vehGroupes(v) || []; if (gs.length) return gs[0]; }
+    return null;
   }
+  function driverColor(d) {
+    const k = driverGroupKey(d);
+    if (k) return FP.groupeColor(k);
+    let h = 0; const s = d.name || ''; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+    return `hsl(${h} 55% 50%)`;
+  }
+  function avatarColor(d) {
+    const c = driverColor(d);
+    const c2 = (c[0] === '#' && FP.settings && FP.settings._shade) ? FP.settings._shade(c, -0.22) : c;
+    return `linear-gradient(135deg, ${c} 0%, ${c2} 100%)`;
+  }
+  function driverGroupLabel(d) { const k = driverGroupKey(d); return k ? FP.groupeLabel(k) : ''; }
   // Stats d'un conducteur
   function driverStats(d) {
     const nbAmendes = d.amendes.length;
@@ -479,15 +493,16 @@
       + (plates.length > max ? `<span class="plate-badge" style="background:#fff">+${plates.length - max}</span>` : '');
   }
   function cardHtml(d) {
-    const { nbAmendes, points, dus, lvl } = driverStats(d);
+    const { nbAmendes, points, dus } = driverStats(d);
+    const col = driverColor(d), grp = driverGroupLabel(d);
     return `
-      <div class="driver-card ${lvl} ${state.selected.has(d.key) ? 'selected' : ''}" data-key="${d.key}">
+      <div class="driver-card ${state.selected.has(d.key) ? 'selected' : ''}" data-key="${d.key}" style="border-left-color:${col}">
         <input type="checkbox" class="driver-cb" data-key="${d.key}" ${state.selected.has(d.key) ? 'checked' : ''} title="Sélectionner pour suppression" />
         <div class="flex items-center gap-3 pr-6">
-          <div class="driver-avatar" style="background:${avatarColor(d.name)}">${initials(d.name)}</div>
+          <div class="driver-avatar" style="background:${avatarColor(d)}">${initials(d.name)}</div>
           <div class="min-w-0 flex-1">
             <div class="font-bold text-slate-900 truncate">${d.name}</div>
-            <div class="text-xs text-slate-500">${d.vehicules.length} véhicule${d.vehicules.length > 1 ? 's' : ''}</div>
+            <div class="text-xs text-slate-500 truncate">${grp ? `<span style="color:${col}">●</span> ${grp} · ` : ''}${d.vehicules.length} véhicule${d.vehicules.length > 1 ? 's' : ''}</div>
           </div>
         </div>
         <div class="flex flex-wrap gap-1 mt-2.5">${platesBadges(d, 3)}</div>
@@ -501,15 +516,18 @@
   }
   function listHtml(filtered) {
     const rows = filtered.map(d => {
-      const { nbAmendes, points, dus, lvl } = driverStats(d);
-      const bar = lvl === 'dc-danger' ? '#DC2626' : lvl === 'dc-warn' ? '#F59E0B' : '#16A34A';
+      const { nbAmendes, points, dus } = driverStats(d);
+      const col = driverColor(d), grp = driverGroupLabel(d);
       return `
         <tr class="driver-row ${state.selected.has(d.key) ? 'selected' : ''}" data-key="${d.key}">
-          <td style="border-left:4px solid ${bar}"><input type="checkbox" class="driver-cb" data-key="${d.key}" ${state.selected.has(d.key) ? 'checked' : ''} /></td>
+          <td style="border-left:4px solid ${col}"><input type="checkbox" class="driver-cb" data-key="${d.key}" ${state.selected.has(d.key) ? 'checked' : ''} /></td>
           <td>
             <div class="flex items-center gap-2.5">
-              <div class="driver-avatar" style="width:34px;height:34px;font-size:.8rem;background:${avatarColor(d.name)}">${initials(d.name)}</div>
-              <span class="font-semibold text-slate-900">${d.name}</span>
+              <div class="driver-avatar" style="width:34px;height:34px;font-size:.8rem;background:${avatarColor(d)}">${initials(d.name)}</div>
+              <div class="min-w-0">
+                <div class="font-semibold text-slate-900">${d.name}</div>
+                ${grp ? `<div class="text-xs text-slate-500"><span style="color:${col}">●</span> ${grp}</div>` : ''}
+              </div>
             </div>
           </td>
           <td><div class="flex flex-wrap gap-1">${platesBadges(d, 4)}</div></td>
