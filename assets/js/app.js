@@ -157,6 +157,7 @@ FP.settings = {
     groupeOrder: [], // ordre d'affichage des onglets de groupes (clés) — vide = ordre par défaut
     groupesHidden: [], // clés de groupes dont l'onglet est masqué sur la page Véhicules
     navOrder: [], // ordre d'affichage des onglets du menu de gauche (clés data-nav)
+    leasingContrats: {}, // forfaits leasing personnalisés par immat (partagés entre PC)
   },
   get() {
     try {
@@ -174,6 +175,7 @@ FP.settings = {
         sidebarLabels: (stored.sidebarLabels && typeof stored.sidebarLabels === 'object') ? stored.sidebarLabels : {},
         customTexts: (stored.customTexts && typeof stored.customTexts === 'object') ? stored.customTexts : {},
         platformColor: (typeof stored.platformColor === 'string' && /^#?[0-9a-fA-F]{3,6}$/.test(stored.platformColor)) ? stored.platformColor : this.defaults.platformColor,
+        leasingContrats: (stored.leasingContrats && typeof stored.leasingContrats === 'object') ? stored.leasingContrats : {},
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
@@ -541,22 +543,36 @@ FP.LEASING_CONTRATS = {
 
 // Overrides éditables (localStorage) : l'utilisateur peut corriger/ajouter un
 // contrat sans toucher au code. Ils prennent le pas sur FP.LEASING_CONTRATS.
-FP.LEASING_OVERRIDES_KEY = 'auto_flotte_leasing_contrats';
+// Forfaits leasing personnalisés : stockés dans les réglages PARTAGÉS (app_settings)
+// pour être visibles/identiques sur tous les PC. (Avant : localStorage local seulement.)
+FP.LEASING_OVERRIDES_KEY = 'auto_flotte_leasing_contrats'; // ancien stockage local (migration)
 FP.getLeasingOverrides = () => {
-  try { return JSON.parse(localStorage.getItem(FP.LEASING_OVERRIDES_KEY) || '{}'); }
-  catch (e) { return {}; }
+  const obj = (FP.settings && FP.settings.get()) || {};
+  let shared = (obj.leasingContrats && typeof obj.leasingContrats === 'object') ? obj.leasingContrats : null;
+  // Migration unique : remonte d'éventuels anciens forfaits locaux vers les réglages partagés
+  if ((!shared || !Object.keys(shared).length) && FP.settings) {
+    let local = {};
+    try { local = JSON.parse(localStorage.getItem(FP.LEASING_OVERRIDES_KEY) || '{}'); } catch (e) {}
+    if (Object.keys(local).length) {
+      const o = FP.settings.get(); o.leasingContrats = local; FP.settings.save(o);
+      try { localStorage.removeItem(FP.LEASING_OVERRIDES_KEY); } catch (e) {}
+      return local;
+    }
+  }
+  return shared || {};
 };
 FP.saveLeasingOverride = (immat, fields) => {
-  const key = (immat || '').trim().toUpperCase(); if (!key) return;
-  const all = FP.getLeasingOverrides();
+  const key = (immat || '').trim().toUpperCase(); if (!key || !FP.settings) return;
+  const obj = FP.settings.get();
+  const all = (obj.leasingContrats && typeof obj.leasingContrats === 'object') ? obj.leasingContrats : {};
   all[key] = { ...(all[key] || {}), ...fields };
-  localStorage.setItem(FP.LEASING_OVERRIDES_KEY, JSON.stringify(all));
+  obj.leasingContrats = all;
+  FP.settings.save(obj); // -> localStorage + app_settings (partagé sur tous les PC)
 };
 FP.resetLeasingOverride = (immat) => {
-  const key = (immat || '').trim().toUpperCase();
-  const all = FP.getLeasingOverrides();
-  delete all[key];
-  localStorage.setItem(FP.LEASING_OVERRIDES_KEY, JSON.stringify(all));
+  const key = (immat || '').trim().toUpperCase(); if (!FP.settings) return;
+  const obj = FP.settings.get();
+  if (obj.leasingContrats && obj.leasingContrats[key]) { delete obj.leasingContrats[key]; FP.settings.save(obj); }
 };
 // Contrat effectif d'un véhicule = défaut (Drive) fusionné avec l'override.
 // Renvoie null si on n'a pas au moins un forfait km et une date de début.
