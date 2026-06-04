@@ -509,6 +509,14 @@
         </div>
       </div>
 
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Contrôle anti-pollution <span class="text-slate-400 normal-case font-normal">(utilitaires)</span></div>
+          <input class="field-input" type="date" id="f-antipol" />
+        </div>
+        <div></div>
+      </div>
+
       <div>
         <div class="field-label">Groupes <span class="text-slate-400 normal-case font-normal">(plusieurs autorisés)</span></div>
         <div id="f-groupes-list" class="grid grid-cols-2 gap-2 p-3 border border-slate-200 rounded-lg bg-slate-50"></div>
@@ -1373,6 +1381,7 @@
       ? `~${FP.num(rev.prochaineKm)} km${rev.prochaineDate ? ' ou ' + FP.date(rev.prochaineDate.toISOString()) : ''}`
       : (rev.prochaineDate ? FP.date(rev.prochaineDate.toISOString()) : '—');
     const lease = FP.leasingInfo(v);
+    const isUtilitaire = /utilit/i.test(v.categorie || '');
     const leaseColor = lease && lease.niveau === 'danger' ? 'color:var(--fp-danger);font-weight:700' : lease && lease.niveau === 'warn' ? 'color:var(--fp-warn);font-weight:600' : '';
     const leaseHTML = lease ? `
           <div class="flex justify-between"><span class="text-slate-600">Forfait leasing BPCE</span><span class="font-medium">${FP.num(lease.kmContrat)} km / ${lease.dureeMois} mois</span></div>
@@ -1438,6 +1447,7 @@
         <div class="text-sm space-y-1.5 mt-3">
           <div class="flex justify-between"><span class="text-slate-600">VIN</span><span class="font-mono text-xs" data-df="vin" data-dt="text">${v.vin || '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Dernier CT</span><span class="font-medium" data-df="dateDernierCT" data-dt="date">${v.dateDernierCT ? FP.date(v.dateDernierCT) : '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between"><span class="text-slate-600">Contrôle anti-pollution${isUtilitaire ? ' <span style="color:var(--fp-accent);font-size:.68rem;font-weight:700">• utilitaire</span>' : ''}</span><span class="font-medium" data-df="antiPollution" data-dt="date">${v.antiPollution ? FP.date(v.antiPollution) : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Dernière révision</span><span class="font-medium" data-df="derniereRevision" data-dt="date">${v.derniereRevision ? FP.date(v.derniereRevision) : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Révision préconisée</span><span class="font-medium">tous les ${FP.num(rev.intervalle.km)} km / ${rev.intervalle.mois} mois</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Prochaine révision (est.)</span><span class="font-medium" style="${revColor}">${revProchaine}${rev.niveau ? ' ⚠️' : ''}</span></div>${leaseHTML}
@@ -1506,6 +1516,7 @@
     $('f-statut').value     = vehicule?.statut || 'actif';
     $('f-chauffeur').value  = vehicule?.chauffeur || '';
     $('f-ct').value         = vehicule?.prochainCT || '';
+    $('f-antipol').value    = (vehicule?.antiPollution && vehicule.antiPollution !== '—') ? vehicule.antiPollution : '';
     $('f-vin').value        = vehicule?.vin || '';
     // Réinitialise la zone d'import carte grise
     _cgFile = null;
@@ -1588,6 +1599,7 @@
       proprietaire: v.proprietaire || null,
       critAir: v.critAir || null,
       dateDernierCT: dateOrNull(v.dateDernierCT),
+      antiPollution: dateOrNull(v.antiPollution),
       derniereRevision: dateOrNull(v.derniereRevision),
       valeurAchat: Number.isFinite(v.valeurAchat) ? v.valeurAchat : null,
       commentaire: v.commentaire || null,
@@ -1712,6 +1724,7 @@
       statut: $('f-statut').value,
       chauffeur: $('f-chauffeur').value.trim() || '—',
       prochainCT: ct || '—',
+      antiPollution: $('f-antipol').value || '',
       vin: $('f-vin').value.trim().toUpperCase() || '',
       groupes: Array.from(document.querySelectorAll('#f-groupes-list input.f-groupe-cb:checked')).map(cb => cb.value),
     };
@@ -1912,7 +1925,7 @@
     immat: 'text', modele: 'text', categorie: 'text', km: 'number', chauffeur: 'text',
     prochainCT: 'date', statut: 'select', dateMiseEnCirculation: 'date', assurance: 'text',
     proprietaire: 'text', valeurAchat: 'number', vin: 'text', critAir: 'text',
-    dateDernierCT: 'date', derniereRevision: 'date',
+    dateDernierCT: 'date', derniereRevision: 'date', antiPollution: 'date',
     sanef: 'bool', cleSiege: 'bool', cleSalarie: 'bool', cgOrigSiege: 'bool', cgOrigSalarie: 'bool', etatDesLieux: 'bool',
   };
   const STATUT_OPTIONS = ['actif', 'entretien', 'à vendre', 'vendu', 'hors service', 'sinistre'];
