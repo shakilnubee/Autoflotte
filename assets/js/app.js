@@ -708,8 +708,30 @@ FP.persist = {
   _loadQ() { try { return JSON.parse(localStorage.getItem(this._QKEY)) || []; } catch (e) { return []; } },
   _saveQ(q) { try { localStorage.setItem(this._QKEY, JSON.stringify(q)); } catch (e) {} if (FP._syncBadge) FP._syncBadge(); },
   pendingCount() { return this._loadQ().length; },
-  _enqueue(item) { const q = this._loadQ(); item.ts = Date.now(); q.push(item); this._saveQ(q); },
+  // Nombre de modifs en échec DÉFINITIF (erreur base, pas un simple souci réseau)
+  failedCount() { return this._loadQ().filter(it => it.failed).length; },
+  _enqueue(item) { const q = this._loadQ(); item.ts = Date.now(); item.tries = 0; q.push(item); this._saveQ(q); },
   _err(e) { console.error('[FP.persist] enregistrement différé :', e && (e.message || e)); },
+  // Une erreur RENVOYÉE PAR LA BASE (code défini : colonne absente, contrainte…) est
+  // définitive : inutile de la rejouer en boucle. Un souci réseau (pas de code) est
+  // transitoire : on retentera plus tard.
+  _estPermanente(e) {
+    if (!e) return false;
+    const msg = (e.message || '').toLowerCase();
+    if (/failed to fetch|networkerror|network error|load failed|timeout|fetch/.test(msg)) return false;
+    return !!(e.code || e.status >= 400);
+  },
+  // Résumé lisible des échecs définitifs (pour le message à l'utilisateur)
+  _resumeEchecs() {
+    const noms = { vehicules: 'véhicule', amendes: 'amende', factures: 'facture', conducteurs: 'conducteur' };
+    return this._loadQ().filter(it => it.failed).map(it => {
+      const quoi = noms[it.table] || it.table;
+      const act = it.op === 'delete' ? 'suppression' : (it.op === 'update' ? 'modification' : 'ajout');
+      return `• ${act} ${quoi} : ${it.error || 'erreur inconnue'}`;
+    }).join('\n');
+  },
+  // Oublie les modifs en échec définitif (l'utilisateur a choisi d'abandonner)
+  _abandonnerEchecs() { this._saveQ(this._loadQ().filter(it => !it.failed)); },
   // Chaque écriture : on tente la base ; si ça échoue, on garde en file locale
   // (filet de sécurité) et on renverra automatiquement plus tard.
   async insert(table, row) {
@@ -735,20 +757,30 @@ FP.persist = {
   _flushing: false,
   // Renvoie tout ce qui est en attente. Les insert sont rejoués en upsert
   // (clé = id) pour éviter les doublons si une partie était déjà passée.
-  async flush() {
+  async flush(opts) {
+    const force = !!(opts && opts.force); // clic manuel = retente même les échecs définitifs
     if (this._flushing || !this.available()) return;
     const q = this._loadQ();
     if (!q.length) { if (FP._syncBadge) FP._syncBadge(); return; }
     this._flushing = true;
     const remaining = [];
     for (const it of q) {
+      // Ne pas reboucler automatiquement sur un échec définitif (sauf retente manuelle)
+      if (it.failed && !force) { remaining.push(it); continue; }
+      if (force) { it.failed = false; } // on redonne sa chance (ex. colonne ajoutée entre-temps)
       try {
         let r;
         if (it.op === 'insert' || it.op === 'upsert') r = await FP.db.upsert(it.table, it.row);
         else if (it.op === 'update') r = await FP.db.update(it.table, it.id, it.fields);
         else if (it.op === 'delete') r = await FP.db.delete(it.table, it.id);
         if (r && r.error) throw r.error;
-      } catch (e) { remaining.push(it); }
+      } catch (e) {
+        it.tries = (it.tries || 0) + 1;
+        it.error = (e && (e.message || e.code)) || 'erreur inconnue';
+        // Erreur base (définitive) OU trop d'échecs réseau d'affilée → on arrête de boucler
+        if (this._estPermanente(e) || it.tries >= 5) it.failed = true;
+        remaining.push(it);
+      }
     }
     this._saveQ(remaining);
     this._flushing = false;
@@ -767,7 +799,21 @@ FP._ensureSyncBadge = function () {
   b.id = 'fp-sync-badge';
   b.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:9999;font-size:12px;font-weight:700;padding:7px 13px;border-radius:9999px;box-shadow:0 6px 18px rgba(0,0,0,.18);cursor:pointer;display:none;align-items:center;gap:6px;';
   b.title = 'Cliquer pour renvoyer les modifications en attente';
-  b.addEventListener('click', () => { FP.persist.flush(); });
+  b.addEventListener('click', () => {
+    const echecs = FP.persist.failedCount();
+    if (echecs > 0) {
+      const detail = FP.persist._resumeEchecs();
+      const ok = confirm(
+        `${echecs} modification(s) n'ont PAS pu être enregistrées dans la base :\n\n${detail}\n\n`
+        + `Ce sont souvent des erreurs de structure (colonne manquante) qui ne se résoudront pas toutes seules.\n\n`
+        + `• OK = réessayer maintenant\n• Annuler = abandonner ces modifications`
+      );
+      if (ok) FP.persist.flush({ force: true });
+      else { FP.persist._abandonnerEchecs(); if (FP._syncBadge) FP._syncBadge(); }
+    } else {
+      FP.persist.flush();
+    }
+  });
   document.body.appendChild(b);
   return b;
 };
@@ -775,8 +821,14 @@ FP._syncBadge = function (justSynced) {
   const b = FP._ensureSyncBadge();
   if (!b) return;
   const n = FP.persist.pendingCount();
+  const echecs = FP.persist.failedCount();
   clearTimeout(FP._syncBadgeT);
-  if (n > 0) {
+  if (echecs > 0) {
+    // Rouge : échec DÉFINITIF (erreur base) — ne se résoudra pas tout seul
+    b.style.display = 'inline-flex';
+    b.style.background = '#FEE2E2'; b.style.color = '#991B1B';
+    b.textContent = `⚠️ ${echecs} modif${echecs > 1 ? 's' : ''} en échec — cliquer pour voir`;
+  } else if (n > 0) {
     b.style.display = 'inline-flex';
     b.style.background = '#FEF3C7'; b.style.color = '#92400E';
     b.textContent = `⏳ ${n} modif${n > 1 ? 's' : ''} non enregistrée${n > 1 ? 's' : ''} — cliquer pour réessayer`;
