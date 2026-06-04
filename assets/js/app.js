@@ -1,12 +1,14 @@
 // Auto-flotte — helpers JS partagés
 
 const FP = {
-  // Format euro
+  // Format euro — null/undefined/"" /NaN ⇒ 0 (évite d'afficher "NaN €")
   euro(n) {
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+    const v = Number(n);
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number.isFinite(v) ? v : 0);
   },
   euroPrecis(n) {
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+    const v = Number(n);
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(Number.isFinite(v) ? v : 0);
   },
   // Format date FR
   date(iso) {
@@ -15,9 +17,10 @@ const FP = {
     if (isNaN(d)) return iso;
     return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
   },
-  // Nombre formaté
+  // Nombre formaté — null/undefined/"" /NaN ⇒ 0 (évite d'afficher "NaN")
   num(n) {
-    return new Intl.NumberFormat('fr-FR').format(n);
+    const v = Number(n);
+    return new Intl.NumberFormat('fr-FR').format(Number.isFinite(v) ? v : 0);
   },
   // Cherche un véhicule par id
   vehicule(id) {
