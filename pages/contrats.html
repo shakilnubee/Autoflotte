@@ -386,13 +386,18 @@
   const SECTIONS_KEY = 'auto_flotte_contrat_sections_order';
   const sectionsEl = $('contrat-sections');
   function applySectionOrder() {
-    let order; try { order = JSON.parse(localStorage.getItem(SECTIONS_KEY) || 'null'); } catch (e) {}
+    let order = null;
+    if (window.FP && FP.settings) order = FP.settings.get().contratSectionsOrder;
+    if (!Array.isArray(order) || !order.length) {                 // migration depuis l'ancien stockage local
+      try { order = JSON.parse(localStorage.getItem(SECTIONS_KEY) || 'null'); } catch (e) {}
+    }
     if (!Array.isArray(order)) return;
     order.forEach(key => { const el = sectionsEl.querySelector(`.contrat-section[data-section="${key}"]`); if (el) sectionsEl.appendChild(el); });
   }
   function saveSectionOrder() {
     const order = [...sectionsEl.querySelectorAll('.contrat-section')].map(el => el.dataset.section);
-    localStorage.setItem(SECTIONS_KEY, JSON.stringify(order));
+    if (window.FP && FP.settings) { const s = FP.settings.get(); s.contratSectionsOrder = order; FP.settings.save(s); } // partagé tous PC
+    else localStorage.setItem(SECTIONS_KEY, JSON.stringify(order));
   }
   function sectionAfter(y) {
     const els = [...sectionsEl.querySelectorAll('.contrat-section:not(.dragging)')];
