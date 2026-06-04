@@ -1371,9 +1371,13 @@
     const entretiens = data.entretiens.filter(e => e.vehiculeId === v.id);
     const carburants = data.carburant.filter(c => c.vehiculeId === v.id);
     const contrats   = data.contrats.filter(c => c.vehiculeId === v.id);
-    const coutTotal  = entretiens.filter(e => e.statut !== 'planifié').reduce((s,e) => s + e.cout, 0)
-                     + carburants.reduce((s,c) => s + c.cout, 0)
-                     + contrats.reduce((s,c) => s + c.coutMensuel * 12, 0);
+    // Coût total annuel = somme RÉELLE des factures d'entretien/réparation 2026 du véhicule
+    // (issues du Drive, rattachées par plaque). On exclut achat & cession.
+    const factures2026 = (data.factures || []).filter(f =>
+      f.vehiculeImmat === v.immat
+      && (f.date || '').startsWith('2026')
+      && !['achat', 'cession'].includes((f.type || '').toLowerCase()));
+    const coutTotal = factures2026.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
     const tvs = FP.tvsAnnuelle(v);
     const tvsDet = FP.tvsDetail(v);
     const rev = FP.revisionInfo(v);
@@ -1416,9 +1420,9 @@
       </div>
 
       <div>
-        <div class="field-label">Coût total annuel (estimé)</div>
+        <div class="field-label">Coût total annuel 2026</div>
         <div class="text-2xl font-extrabold" style="color: var(--fp-primary)">${FP.euro(coutTotal)}</div>
-        <div class="text-xs text-slate-500 mt-1">Entretiens + contrats sur 12 mois</div>
+        <div class="text-xs text-slate-500 mt-1">${factures2026.length ? `${factures2026.length} facture${factures2026.length > 1 ? 's' : ''} d'entretien 2026` : 'Aucune facture d\'entretien 2026'}</div>
       </div>
 
       <div>
