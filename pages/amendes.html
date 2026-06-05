@@ -168,6 +168,7 @@
           <button class="filter-chip active" data-value="all">Toutes</button>
           <button class="filter-chip" data-value="à payer">À payer</button>
           <button class="filter-chip" data-value="payée">Payées</button>
+          <button class="filter-chip" data-value="désignée">Désignées</button>
         </div>
 
         <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
@@ -243,6 +244,7 @@
   <div class="p-6 space-y-5" id="drawer-body"></div>
   <div class="p-6 border-t border-slate-200 flex gap-2">
     <button class="btn btn-primary text-sm flex-1 justify-center" id="drawer-pay"><i data-lucide="check" class="w-4 h-4"></i> Marquer payée</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-designer" title="Conducteur désigné — l'amende n'est plus à votre charge"><i data-lucide="user-check" class="w-4 h-4"></i> Désigner</button>
     <button class="btn btn-outline text-sm" id="drawer-relance" title="Envoyer un email de relance au conducteur"><i data-lucide="mail" class="w-4 h-4"></i> Relancer</button>
     <button class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
@@ -291,6 +293,7 @@
           <select class="field-input" id="am-statut" required>
             <option value="à payer">À payer</option>
             <option value="payée">Payée</option>
+            <option value="désignée">Désignée (conducteur désigné)</option>
             <option value="contestée">Contestée</option>
           </select>
         </div>
@@ -352,6 +355,7 @@
 
   function statutBadge(s) {
     if (s === 'payée')     return '<span class="badge badge-ok">Payée</span>';
+    if (s === 'désignée')  return '<span class="badge" style="background:#E0E7FF;color:#3730A3">Désignée</span>';
     if (s === 'contestée') return '<span class="badge badge-info">Contestée</span>';
     return '<span class="badge badge-danger">À payer</span>';
   }
@@ -740,7 +744,8 @@
 
     $('drawer').classList.add('open');
     $('drawer-backdrop').classList.add('open');
-    $('drawer-pay').style.display = a.statut === 'payée' ? 'none' : '';
+    $('drawer-pay').style.display = (a.statut === 'payée' || a.statut === 'désignée') ? 'none' : '';
+    $('drawer-designer').style.display = (a.statut === 'désignée' || a.statut === 'payée') ? 'none' : '';
     lucide.createIcons();
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
@@ -761,6 +766,18 @@
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { statut: 'payée' });
+  }
+  // Désignation du conducteur : l'amende n'est plus à la charge de l'entreprise
+  function markDesigne() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    FP.history.commit();
+    a.statut = 'désignée';
+    const id = a.id;
+    closeDrawer();
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { statut: 'désignée' });
   }
   function deleteAmende() {
     if (!state.currentId) return;
@@ -1127,6 +1144,7 @@
   $('drawer-close').addEventListener('click', closeDrawer);
   $('drawer-backdrop').addEventListener('click', closeDrawer);
   $('drawer-pay').addEventListener('click', markPaid);
+  $('drawer-designer').addEventListener('click', markDesigne);
   $('drawer-delete').addEventListener('click', deleteAmende);
   $('btn-new').addEventListener('click', openAmendeModal);
   $('amende-close').addEventListener('click', closeAmendeModal);
