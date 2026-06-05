@@ -877,8 +877,11 @@
   // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
   let _avisFile = null; // scan de l'avis sélectionné, envoyé au stockage à l'enregistrement
   function openAmendeModal() {
-    // Suggestions (listes déroulantes) depuis les données existantes
-    const prenoms = [...new Set(data.amendes.map(a => a.prenom).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    // Suggestions conducteurs : chauffeurs des véhicules + prénoms d'amendes existantes
+    const nonPersonnes = (window.FP && FP.NON_CHAUFFEURS) || ['Siège', 'Dépôt', 'Navette', 'VENDU', 'x', 'X', 'Fenwick'];
+    const fromVeh = (data.vehicules || []).map(v => (v.chauffeur || '').trim()).filter(n => n && n !== '—' && !nonPersonnes.includes(n));
+    const fromAmendes = data.amendes.map(a => a.prenom).filter(Boolean);
+    const prenoms = [...new Set([...fromVeh, ...fromAmendes])].sort((a, b) => a.localeCompare(b, 'fr'));
     $('am-prenoms').innerHTML = prenoms.map(p => `<option value="${p.replace(/"/g, '&quot;')}"></option>`).join('');
     const motifsList = [...new Set(data.amendes.map(a => a.motif).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
     $('am-motifs').innerHTML = motifsList.map(m => `<option value="${m.replace(/"/g, '&quot;')}"></option>`).join('');
@@ -898,6 +901,22 @@
     if (!prenom) { $('am-prenom').focus(); return; }
     const date = $('am-date').value || new Date().toISOString().slice(0, 10);
     const points = parseInt($('am-points').value, 10) || 0;
+    const montant = parseFloat($('am-montant').value) || 0;
+    const numAvis = $('am-avis').value.trim();
+
+    // --- Détection de doublon ---
+    const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
+    let doublon = null;
+    if (numAvis) doublon = data.amendes.find(a => norm(a.numeroAvis) && norm(a.numeroAvis) === norm(numAvis));
+    if (!doublon) doublon = data.amendes.find(a => norm(a.prenom) === norm(prenom) && a.date === date && Number(a.montant) === montant);
+    if (doublon) {
+      const ok = confirm(`⚠️ Doublon possible : une amende très similaire existe déjà\n\n`
+        + `• ${doublon.prenom || '?'} — ${FP.date(doublon.date)}\n`
+        + `• ${doublon.motif || '—'} — ${doublon.montant ? FP.euroPrecis(doublon.montant) : '—'}\n`
+        + (doublon.numeroAvis ? `• N° d'avis : ${doublon.numeroAvis}\n` : '')
+        + `\nL'ajouter quand même ?`);
+      if (!ok) return;
+    }
 
     // Envoi du scan de l'avis dans le stockage (pour le revoir plus tard)
     let avisUrl = '';
@@ -915,8 +934,8 @@
     FP.history.commit();
     const newA = {
       id: nextAmendeId(), date, annee: (date || '').slice(0, 4),
-      prenom, numeroAvis: $('am-avis').value.trim(), motif: $('am-motif').value.trim(),
-      montant: parseFloat($('am-montant').value) || 0, points, retraitPoints: points > 0,
+      prenom, numeroAvis: numAvis, motif: $('am-motif').value.trim(),
+      montant, points, retraitPoints: points > 0,
       statut: $('am-statut').value || 'à payer', commentaire: '', avisUrl
     };
     data.amendes.push(newA);
