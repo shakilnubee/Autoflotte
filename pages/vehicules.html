@@ -1472,11 +1472,22 @@
 
       <div>
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Clés & carte grise</div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mt-3">
-          <div class="flex justify-between items-center"><span class="text-slate-600">Double clé siège</span>${editableCheckbox('cleSiege', v.cleSiege)}</div>
-          <div class="flex justify-between items-center"><span class="text-slate-600">Double clé salarié</span>${editableCheckbox('cleSalarie', v.cleSalarie)}</div>
-          <div class="flex justify-between items-center"><span class="text-slate-600">CG orig. siège</span>${editableCheckbox('cgOrigSiege', v.cgOrigSiege)}</div>
-          <div class="flex justify-between items-center"><span class="text-slate-600">CG orig. salarié</span>${editableCheckbox('cgOrigSalarie', v.cgOrigSalarie)}</div>
+        <p class="text-xs text-slate-400 mt-2 mb-2">Qui détient le double de la clé / la carte grise ? (reclic = annuler)</p>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between items-center">
+            <span class="text-slate-600">Double de la clé</span>
+            <span class="holder-seg" data-holder="cle">
+              <button type="button" class="hs-btn ${v.cleSiege ? 'active' : ''}" data-who="siege">Siège</button>
+              <button type="button" class="hs-btn ${v.cleSalarie ? 'active' : ''}" data-who="salarie">Salarié</button>
+            </span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-600">Carte grise originale</span>
+            <span class="holder-seg" data-holder="cg">
+              <button type="button" class="hs-btn ${v.cgOrigSiege ? 'active' : ''}" data-who="siege">Siège</button>
+              <button type="button" class="hs-btn ${v.cgOrigSalarie ? 'active' : ''}" data-who="salarie">Salarié</button>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -2245,6 +2256,25 @@
       persistVehFields(v, field);
       if (getVisibleColumns().includes(field)) renderTable();
     }
+  });
+
+  // Sélecteur Siège / Salarié pour clé & carte grise (boutons)
+  $('drawer-body').addEventListener('click', (e) => {
+    const btn = e.target.closest('.hs-btn');
+    if (!btn || !state.editingId) return;
+    const seg = btn.closest('.holder-seg');
+    const map = { cle: ['cleSiege', 'cleSalarie'], cg: ['cgOrigSiege', 'cgOrigSalarie'] };
+    const pair = map[seg.dataset.holder]; if (!pair) return;
+    const [fSiege, fSalarie] = pair;
+    const v = data.vehicules.find(x => x.id === state.editingId); if (!v) return;
+    const clicked = btn.dataset.who === 'siege' ? fSiege : fSalarie;
+    const wasActive = !!v[clicked];
+    FP.history.commit();
+    v[fSiege] = (btn.dataset.who === 'siege') ? !wasActive : false;
+    v[fSalarie] = (btn.dataset.who === 'salarie') ? !wasActive : false;
+    seg.querySelectorAll('.hs-btn').forEach(b => b.classList.toggle('active', b.dataset.who === 'siege' ? v[fSiege] : v[fSalarie]));
+    persistVehFields(v, [fSiege, fSalarie]);
+    if (getVisibleColumns().includes(fSiege) || getVisibleColumns().includes(fSalarie)) renderTable();
   });
   // Visionneuse intégrée (aperçu Google Drive)
   function openViewer(driveId, title){
