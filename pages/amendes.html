@@ -280,13 +280,11 @@
 
       <div>
         <div class="field-label">Conducteur *</div>
-        <input class="field-input" id="am-prenom" list="am-prenoms" placeholder="Prénom" required autocomplete="off" />
-        <datalist id="am-prenoms"></datalist>
+        <div class="ac-wrap"><input class="field-input" id="am-prenom" placeholder="Prénom" required autocomplete="off" /></div>
       </div>
       <div>
         <div class="field-label">Motif *</div>
-        <input class="field-input" id="am-motif" list="am-motifs" placeholder="ex. Excès de vitesse, Stationnement…" autocomplete="off" required />
-        <datalist id="am-motifs"></datalist>
+        <div class="ac-wrap"><input class="field-input" id="am-motif" placeholder="ex. Excès de vitesse, Stationnement…" autocomplete="off" required /></div>
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div><div class="field-label">Montant (€) *</div><input class="field-input" type="number" id="am-montant" min="0" step="0.01" placeholder="0" required /></div>
@@ -943,6 +941,52 @@
     FP.persist.delete('amendes', id);
   }
 
+  // ---------- Autocomplete stylé (remplace le <datalist> natif, moche) ----------
+  function attachAutocomplete(input, options) {
+    if (!input) return;
+    const wrap = input.closest('.ac-wrap') || input.parentElement;
+    let panel = wrap.querySelector('.ac-panel');
+    if (!panel) { panel = document.createElement('div'); panel.className = 'ac-panel'; wrap.appendChild(panel); }
+    input._acOptions = options || [];
+    let activeIdx = -1;
+
+    function render() {
+      const q = input.value.trim().toLowerCase();
+      const list = (input._acOptions || [])
+        .filter(o => !q || o.toLowerCase().includes(q))
+        .slice(0, 50);
+      activeIdx = -1;
+      if (!list.length) { panel.classList.remove('open'); panel.innerHTML = ''; return; }
+      panel.innerHTML = list.map((o, i) =>
+        `<div class="ac-item" data-i="${i}" data-val="${o.replace(/"/g, '&quot;')}">${o.replace(/</g, '&lt;')}</div>`
+      ).join('');
+      panel.classList.add('open');
+    }
+    function choose(val) { input.value = val; panel.classList.remove('open'); input.dispatchEvent(new Event('change', { bubbles: true })); }
+
+    if (input._acBound) { render(); return; }   // déjà branché : on rafraîchit juste les options
+    input._acBound = true;
+
+    input.addEventListener('focus', render);
+    input.addEventListener('input', render);
+    input.addEventListener('blur', () => setTimeout(() => panel.classList.remove('open'), 150));
+    input.addEventListener('keydown', (e) => {
+      const items = [...panel.querySelectorAll('.ac-item')];
+      if (!panel.classList.contains('open') || !items.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); }
+      else if (e.key === 'Enter') { if (activeIdx >= 0) { e.preventDefault(); choose(items[activeIdx].dataset.val); return; } }
+      else if (e.key === 'Escape') { panel.classList.remove('open'); return; }
+      else return;
+      items.forEach((it, i) => it.classList.toggle('ac-active', i === activeIdx));
+      if (items[activeIdx]) items[activeIdx].scrollIntoView({ block: 'nearest' });
+    });
+    panel.addEventListener('mousedown', (e) => {
+      const it = e.target.closest('.ac-item');
+      if (it) { e.preventDefault(); choose(it.dataset.val); }
+    });
+  }
+
   // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
   let _avisFile = null; // scan de l'avis sélectionné, envoyé au stockage à l'enregistrement
   function openAmendeModal() {
@@ -951,9 +995,9 @@
     const fromVeh = (data.vehicules || []).map(v => (v.chauffeur || '').trim()).filter(n => n && n !== '—' && !nonPersonnes.includes(n));
     const fromAmendes = data.amendes.map(a => a.prenom).filter(Boolean);
     const prenoms = [...new Set([...fromVeh, ...fromAmendes])].sort((a, b) => a.localeCompare(b, 'fr'));
-    $('am-prenoms').innerHTML = prenoms.map(p => `<option value="${p.replace(/"/g, '&quot;')}"></option>`).join('');
     const motifsList = [...new Set(data.amendes.map(a => a.motif).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
-    $('am-motifs').innerHTML = motifsList.map(m => `<option value="${m.replace(/"/g, '&quot;')}"></option>`).join('');
+    attachAutocomplete($('am-prenom'), prenoms);
+    attachAutocomplete($('am-motif'), motifsList);
     $('am-prenom').value = ''; $('am-motif').value = ''; $('am-montant').value = '';
     $('am-points').value = '0'; $('am-date').value = new Date().toISOString().slice(0, 10);
     $('am-statut').value = 'à payer'; $('am-avis').value = '';
