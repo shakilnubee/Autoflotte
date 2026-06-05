@@ -758,11 +758,17 @@
         <div class="grid grid-cols-2 gap-3 text-sm">
           <div>
             <div class="text-xs text-slate-400 mb-0.5">N° de télépaiement</div>
-            <div id="am-tel-val" class="font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour saisir / modifier">${a.numeroTelepaiement || '<span class="text-slate-400">— ajouter</span>'}</div>
+            <div class="flex items-center gap-1">
+              <div id="am-tel-val" class="flex-1 min-w-0 font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour saisir / modifier">${a.numeroTelepaiement || '<span class="text-slate-400">— ajouter</span>'}</div>
+              ${a.numeroTelepaiement ? `<button type="button" id="am-tel-copy" class="btn btn-outline !p-2 flex-shrink-0" title="Copier le n° de télépaiement"><i data-lucide="copy" class="w-4 h-4"></i></button>` : ''}
+            </div>
           </div>
           <div>
             <div class="text-xs text-slate-400 mb-0.5">Clé</div>
-            <div id="am-cle-val" class="font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour saisir / modifier">${a.cle || '<span class="text-slate-400">— ajouter</span>'}</div>
+            <div class="flex items-center gap-1">
+              <div id="am-cle-val" class="flex-1 min-w-0 font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour saisir / modifier">${a.cle || '<span class="text-slate-400">— ajouter</span>'}</div>
+              ${a.cle ? `<button type="button" id="am-cle-copy" class="btn btn-outline !p-2 flex-shrink-0" title="Copier la clé"><i data-lucide="copy" class="w-4 h-4"></i></button>` : ''}
+            </div>
           </div>
         </div>
       </div>
@@ -819,6 +825,8 @@
     const md = $('mail-designation'); if (md) md.onclick = mailDesignation;
     const tv = $('am-tel-val'); if (tv) tv.onclick = () => editAmField('numeroTelepaiement', 'N° de télépaiement');
     const cv = $('am-cle-val'); if (cv) cv.onclick = () => editAmField('cle', 'Clé');
+    const tc = $('am-tel-copy'); if (tc) tc.onclick = () => copierTexte(a.numeroTelepaiement, tc);
+    const cc = $('am-cle-copy'); if (cc) cc.onclick = () => copierTexte(a.cle, cc);
     lucide.createIcons();
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
@@ -855,6 +863,13 @@
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', archived: true });
     openDrawer(id); // rouvre la fiche à jour (montre le lien + état archivé)
+  }
+  // Copie un texte dans le presse-papier + petit retour visuel sur le bouton
+  function copierTexte(txt, btn) {
+    if (!txt) return;
+    const done = () => { if (!btn) return; const old = btn.innerHTML; btn.innerHTML = '<span style="font-size:.8rem">✓</span>'; setTimeout(() => { btn.innerHTML = old; if (window.lucide) lucide.createIcons(); }, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(() => { window.prompt('Copier :', txt); });
+    else window.prompt('Copier :', txt);
   }
   // Édition rapide d'un champ texte de l'amende (télépaiement, clé) depuis la fiche
   function editAmField(field, label) {
