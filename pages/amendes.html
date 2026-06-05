@@ -816,7 +816,17 @@
 
     $('drawer').classList.add('open');
     $('drawer-backdrop').classList.add('open');
-    $('drawer-pay').style.display = (a.statut === 'payée' || a.statut === 'désignée') ? 'none' : '';
+    // Bouton paiement : "Marquer payée" ou, si déjà payée, "Marquer non payée" (revenir en arrière)
+    const payBtn = $('drawer-pay');
+    if (a.statut === 'payée') {
+      payBtn.style.display = ''; payBtn.onclick = markUnpaid;
+      payBtn.innerHTML = '<i data-lucide="rotate-ccw" class="w-4 h-4"></i> Marquer non payée';
+    } else if (a.statut === 'désignée') {
+      payBtn.style.display = 'none'; payBtn.onclick = null;
+    } else {
+      payBtn.style.display = ''; payBtn.onclick = markPaid;
+      payBtn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Marquer payée';
+    }
     $('drawer-designer').style.display = (a.statut === 'désignée' || a.statut === 'payée') ? 'none' : '';
     // Boutons dynamiques du justificatif (re-rendus à chaque ouverture)
     const jb = $('justif-btn'); if (jb) jb.onclick = () => $('justif-file').click();
@@ -847,6 +857,18 @@
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { statut: 'payée' });
+  }
+  // Revenir en arrière : repasse une amende payée en "à payer" (et la sort des archives)
+  function markUnpaid() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    FP.history.commit();
+    a.statut = 'à payer'; a.archived = false;
+    const id = a.id;
+    closeDrawer();
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { statut: 'à payer', archived: false });
   }
   // Justificatif de paiement : joindre un fichier => payée + archivée
   async function attachJustif(file) {
@@ -1315,7 +1337,7 @@
   });
   $('drawer-close').addEventListener('click', closeDrawer);
   $('drawer-backdrop').addEventListener('click', closeDrawer);
-  $('drawer-pay').addEventListener('click', markPaid);
+  // (le bouton drawer-pay reçoit son action dans openDrawer : payer / annuler le paiement)
   $('drawer-designer').addEventListener('click', markDesigne);
   // Formate le n° d'avis quand on quitte le champ (FPS espacé / contravention attaché)
   $('am-avis').addEventListener('blur', (e) => { e.target.value = fmtNumeroAvis(e.target.value); });
