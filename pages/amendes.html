@@ -548,19 +548,23 @@
       });
     }).catch(() => {});
   }
-  function relanceEmail() {
+  function ouvrirMail(body) {
     const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
     const to = lookupEmail(a.prenom);
-    const subject = `Amende à régulariser — ${a.motif || 'contravention'} du ${FP.date(a.date)}`;
-    const body = `Bonjour ${a.prenom || ''},\n\n`
-      + `Une contravention est enregistrée à votre nom :\n`
-      + `• Date : ${FP.date(a.date)}\n`
-      + `• Motif : ${a.motif || '—'}\n`
-      + `• Montant : ${a.montant ? FP.euroPrecis(a.montant) : '—'}\n`
-      + (a.numeroAvis ? `• N° d'avis : ${a.numeroAvis}\n` : '')
-      + ((Number(a.points) || 0) > 0 ? `• Points retirés : −${a.points}\n` : '')
-      + `\nMerci de régulariser / transmettre les informations nécessaires dès que possible.\n\nCordialement,\nGestion de flotte`;
+    const subject = `Contravention du ${FP.date(a.date)}${a.numeroAvis ? ' — avis ' + a.numeroAvis : ''}`;
     window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+  // Email 1 — demande de paiement direct (pas de désignation nécessaire)
+  function mailPaiement() {
+    ouvrirMail(`Bonjour\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`);
+  }
+  // Email 2 — demande de confirmation pour effectuer la désignation
+  function mailDesignation() {
+    ouvrirMail(`Bonjour,\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.`);
+  }
+  // Relance courte
+  function relanceEmail() {
+    ouvrirMail(`Bonjour, petite relance, Merci.`);
   }
 
   // ---------- Charts ----------
@@ -754,6 +758,14 @@
       </div>
 
       <div>
+        <div class="field-label">Envoyer un email au conducteur</div>
+        <div class="grid gap-2">
+          <button type="button" id="mail-paiement" class="btn btn-outline text-sm justify-center"><i data-lucide="mail" class="w-4 h-4"></i> Demande de paiement</button>
+          <button type="button" id="mail-designation" class="btn btn-outline text-sm justify-center"><i data-lucide="user-check" class="w-4 h-4"></i> Demande de désignation</button>
+        </div>
+      </div>
+
+      <div>
         <div class="field-label">Année</div>
         <div>${a.annee}</div>
       </div>
@@ -772,6 +784,8 @@
     // Boutons dynamiques du justificatif (re-rendus à chaque ouverture)
     const jb = $('justif-btn'); if (jb) jb.onclick = () => $('justif-file').click();
     const ju = $('justif-unarchive'); if (ju) ju.onclick = unarchiveAmende;
+    const mp = $('mail-paiement'); if (mp) mp.onclick = mailPaiement;
+    const md = $('mail-designation'); if (md) md.onclick = mailDesignation;
     lucide.createIcons();
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
