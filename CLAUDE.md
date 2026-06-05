@@ -7,8 +7,11 @@
 - **Propriétaire** : Shakil Nubeebaccus
 - **Stack** : HTML/CSS/JS statique + Tailwind CDN (pas de build step)
 - **Backend** : Supabase (PostgreSQL + Auth)
-- **Hosting** : Netlify → https://auto-flotte.netlify.app
-- **Repo** : https://github.com/shakilnubee/-auto-flotte
+- **Hosting** : ✅ **GitHub Pages** (auto-déploiement depuis la branche `main`) → **https://shakilnubee.github.io/Autoflotte/**
+  - ⚠️ Netlify (auto-flotte.netlify.app) = EN PAUSE (quota dépassé) — ne plus utiliser. Vercel (autoflotte.vercel.app) = version périmée — ne plus utiliser.
+  - **Règle** : chaque modif de code DOIT être mergée + poussée sur `main` (GitHub Pages publie tout seul en ~1-2 min). Toujours VÉRIFIER après push que le site live reflète bien le changement.
+  - Les **données** (Supabase) sont en temps réel sur tous les postes, sans déploiement.
+- **Repo** : https://github.com/shakilnubee/Autoflotte  (public, branche `main`)
 - **Langue UI** : Français
 
 ## Fichier source Drive (référence unique)
