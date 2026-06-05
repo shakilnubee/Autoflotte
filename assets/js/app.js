@@ -160,6 +160,7 @@ FP.settings = {
     leasingContrats: {}, // forfaits leasing personnalisés par immat (partagés entre PC)
     tableConfigs: {}, // ordre/largeurs/colonnes masquées de chaque tableau (partagés entre PC)
     contratSectionsOrder: [], // ordre des sections de la page Contrats (partagé)
+    darkMode: false, // mode sombre 🌙 (partagé entre PC)
   },
   get() {
     try {
@@ -180,6 +181,7 @@ FP.settings = {
         leasingContrats: (stored.leasingContrats && typeof stored.leasingContrats === 'object') ? stored.leasingContrats : {},
         tableConfigs: (stored.tableConfigs && typeof stored.tableConfigs === 'object') ? stored.tableConfigs : {},
         contratSectionsOrder: Array.isArray(stored.contratSectionsOrder) ? stored.contratSectionsOrder : [],
+        darkMode: stored.darkMode === true,
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
@@ -241,6 +243,8 @@ FP.settings = {
     document.documentElement.style.setProperty('--fp-logo-bg', useWhite ? '#FFFFFF' : '#111111');
     document.documentElement.style.setProperty('--fp-logo-fg', useWhite ? pc : '#FFFFFF');
     document.documentElement.style.setProperty('--fp-logo-border', useWhite ? 'rgba(0,0,0,.18)' : '#000000');
+    // Mode sombre 🌙
+    if (document.body) document.body.classList.toggle('fp-dark', !!s.darkMode);
   },
 };
 // Nettoie le modèle en retirant la marque répétée au début (ex. BYD "BYD SEAL U" → "SEAL U")
