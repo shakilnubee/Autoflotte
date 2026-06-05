@@ -902,7 +902,7 @@
     const date = $('am-date').value || new Date().toISOString().slice(0, 10);
     const points = parseInt($('am-points').value, 10) || 0;
     const montant = parseFloat($('am-montant').value) || 0;
-    const numAvis = $('am-avis').value.trim();
+    const numAvis = fmtNumeroAvis($('am-avis').value);
 
     // --- Détection de doublon ---
     const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
@@ -1018,6 +1018,16 @@
   const toIsoDate = (d, m, y) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
 
   // Analyse le texte d'un avis de contravention français
+  // Formate le numéro d'avis selon le type :
+  //  - FPS / avis de paiement (14 chiffres) -> "26 2 129 090 123 46"
+  //  - Avis de contravention (ex. 6024329152) -> tout attaché
+  function fmtNumeroAvis(raw) {
+    const d = (raw || '').replace(/\D/g, '');
+    if (!d) return (raw || '').trim();
+    if (d.length === 14) return `${d.slice(0,2)} ${d.slice(2,3)} ${d.slice(3,6)} ${d.slice(6,9)} ${d.slice(9,12)} ${d.slice(12,14)}`;
+    return d; // contravention & autres : chiffres collés
+  }
+
   function parseAvis(raw){
     const text = (raw || '').replace(/ /g, ' ');
     const upper = text.toUpperCase();
@@ -1033,10 +1043,10 @@
 
     // Numéro de l'avis / télépaiement — suite de 9 à 13 chiffres
     let mn = upper.match(/(?:T[ÉE]L[ÉE]PAIEMENT|AVIS|AMENDE|R[ÉE]F[ÉE]RENCE)[^0-9]{0,30}([0-9][0-9 ]{8,16}[0-9])/);
-    if (mn) out.numeroAvis = mn[1].replace(/\s+/g, '');
+    if (mn) out.numeroAvis = fmtNumeroAvis(mn[1]);
     if (!out.numeroAvis) {
-      const mg = upper.match(/\b([0-9]{10,13})\b/);
-      if (mg) out.numeroAvis = mg[1];
+      const mg = upper.match(/\b([0-9]{10,14})\b/);
+      if (mg) out.numeroAvis = fmtNumeroAvis(mg[1]);
     }
 
     // Montant — on prend le plus grand montant en euros trouvé (souvent le montant majoré/forfaitaire)
@@ -1250,6 +1260,8 @@
   $('drawer-backdrop').addEventListener('click', closeDrawer);
   $('drawer-pay').addEventListener('click', markPaid);
   $('drawer-designer').addEventListener('click', markDesigne);
+  // Formate le n° d'avis quand on quitte le champ (FPS espacé / contravention attaché)
+  $('am-avis').addEventListener('blur', (e) => { e.target.value = fmtNumeroAvis(e.target.value); });
   $('btn-voir-tout').addEventListener('click', () => {
     state.voirTout = !state.voirTout;
     if (state.voirTout) { // on remet à zéro les autres filtres pour vraiment tout voir
