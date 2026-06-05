@@ -55,17 +55,30 @@
 
   <main class="flex-1 p-6 md:p-10">
 
-    <div class="mb-8">
-      <h1 class="text-2xl font-extrabold" data-edit-key="statistiques.title" style="color: var(--fp-primary)">Statistiques flotte</h1>
-      <p class="text-slate-500 text-sm mt-1" data-edit-key="statistiques.subtitle">Analytics globales — dépenses, fournisseurs, TCO au km, performance</p>
+    <div class="mb-8 flex flex-wrap justify-between items-end gap-4">
+      <div>
+        <h1 class="text-2xl font-extrabold" data-edit-key="statistiques.title" style="color: var(--fp-primary)">Statistiques flotte</h1>
+        <p class="text-slate-500 text-sm mt-1">Dépenses, fournisseurs, TCO — <span id="periode-label" class="font-semibold text-slate-700">toutes années</span></p>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Période</label>
+        <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white">
+          <option value="all">Toutes années</option>
+        </select>
+      </div>
     </div>
 
     <!-- KPIs globaux -->
     <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
       <div class="kpi">
-        <div class="kpi-label">Coût total flotte</div>
-        <div class="kpi-value" id="kpi-total" style="color: var(--fp-primary)">—</div>
-        <div class="kpi-delta">depuis 2025</div>
+        <div class="kpi-label">Coût d'usage</div>
+        <div class="kpi-value" id="kpi-usage" style="color: var(--fp-primary)">—</div>
+        <div class="kpi-delta">entretien, répa., leasing…</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Achat véhicules</div>
+        <div class="kpi-value" id="kpi-achat" style="color: var(--fp-text)">—</div>
+        <div class="kpi-delta">prix d'acquisition</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">Total TVS <span id="kpi-tvs-annee">2026</span></div>
@@ -73,13 +86,9 @@
         <div class="kpi-delta" id="kpi-tvs-sub">taxe annuelle flotte</div>
       </div>
       <div class="kpi">
-        <div class="kpi-label">Coût moyen / véhicule</div>
-        <div class="kpi-value" id="kpi-avg">—</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-label">Coût moyen / km</div>
+        <div class="kpi-label">Coût d'usage / km</div>
         <div class="kpi-value" id="kpi-perkm" style="color: var(--fp-accent)">—</div>
-        <div class="kpi-delta">tous véhicules</div>
+        <div class="kpi-delta">hors achat</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">Top dépense</div>
@@ -138,95 +147,94 @@
   const $ = (id) => document.getElementById(id);
   const factures = data.factures || [];
 
-  // === Calculs globaux ===
-  const totalTTC = factures.reduce((s, f) => s + (f.montantTTC || 0), 0);
-  $('kpi-total').textContent = FP.euro(totalTTC);
-  $('kpi-avg').textContent = FP.euro(totalTTC / (data.vehicules.length || 1));
+  // Types qui comptent comme "coût d'usage" (PAS l'achat ni la cession)
+  const USAGE_TYPES = ['entretien', 'réparation', 'reparation', 'leasing', 'sinistre', 'autre'];
+  const isUsage = (f) => USAGE_TYPES.includes((f.type || '').toLowerCase());
 
-  const totalKm = data.vehicules.reduce((s, v) => s + (v.km || 0), 0);
-  $('kpi-perkm').textContent = totalKm > 0 ? FP.euroPrecis(totalTTC / totalKm) : '—';
+  // Années disponibles (depuis les dates de factures)
+  const annees = [...new Set(factures.map(f => (f.date || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
+  annees.forEach(y => { const o = document.createElement('option'); o.value = y; o.textContent = y; $('filter-annee').appendChild(o); });
 
-  // Total TVS de la flotte (somme des taxes annuelles, véhicules soumis uniquement)
+  // Total TVS — taxe ANNUELLE courante (indépendante de l'année des factures)
   if (FP.TVS_ANNEE) $('kpi-tvs-annee').textContent = FP.TVS_ANNEE;
-  const tvsRows = data.vehicules.map(v => ({ v, d: FP.tvsDetail(v) }));
-  const totalTVS = tvsRows.reduce((s, r) => s + (r.d.applicable && r.d.total != null ? r.d.total : 0), 0);
-  const nbSoumis = tvsRows.filter(r => r.d.applicable && r.d.total != null).length;
+  const totalTVS = data.vehicules.reduce((s, v) => { const d = FP.tvsDetail(v); return s + (d.applicable && d.total != null ? d.total : 0); }, 0);
+  const nbSoumis = data.vehicules.filter(v => { const d = FP.tvsDetail(v); return d.applicable && d.total != null; }).length;
   $('kpi-tvs').textContent = FP.euro(totalTVS);
   $('kpi-tvs-sub').textContent = `${nbSoumis} véhicule${nbSoumis > 1 ? 's' : ''} soumis`;
 
-  // Top dépense (la plus grosse facture)
-  const topF = factures.slice().sort((a, b) => (b.montantTTC || 0) - (a.montantTTC || 0))[0];
-  if (topF) {
-    $('kpi-top').textContent = FP.euro(topF.montantTTC);
-    $('kpi-top-sub').textContent = `${topF.vehiculeImmat} · ${topF.fournisseur || ''}`;
-  }
-
-  // === Chart : Dépenses mensuelles 12 mois ===
   function buildLast12() {
-    const out = [];
-    const now = new Date();
-    for (let i = 11; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      out.push({ ym: d.toISOString().slice(0, 7), label: d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }) });
-    }
+    const out = []; const now = new Date();
+    for (let i = 11; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); out.push({ ym: d.toISOString().slice(0, 7), label: d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }) }); }
     return out;
   }
-  const months = buildLast12();
-  const monthData = months.map(m => factures.filter(f => (f.date || '').startsWith(m.ym)).reduce((s, f) => s + (f.montantTTC || 0), 0));
-  new Chart($('monthChart'), {
-    type: 'line',
-    data: { labels: months.map(m => m.label), datasets: [{ data: monthData, borderColor: '#14B8A6', backgroundColor: 'rgba(20,184,166,.15)', tension: .35, fill: true, pointRadius: 3 }] },
-    options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => FP.euro(ctx.parsed.y) } } }, scales: { y: { ticks: { callback: v => v + ' €' } } }, maintainAspectRatio: false, responsive: true }
-  });
 
-  // === Chart : par type ===
-  const perType = {};
-  factures.forEach(f => { const t = f.type || 'autre'; perType[t] = (perType[t] || 0) + (f.montantTTC || 0); });
-  new Chart($('typeChart'), {
-    type: 'doughnut',
-    data: { labels: Object.keys(perType), datasets: [{ data: Object.values(perType), backgroundColor: ['#1E3A8A', '#DC2626', '#16A34A', '#7C3AED', '#F59E0B', '#7F1D1D', '#94A3B8'], borderWidth: 0 }] },
-    options: { cutout: '60%', plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.label} : ${FP.euro(ctx.parsed)}` } } }, maintainAspectRatio: false, responsive: true }
-  });
+  let tcoData = [];
+  let charts = {};
+  function destroyCharts() { Object.values(charts).forEach(c => { try { c.destroy(); } catch (e) {} }); charts = {}; }
 
-  // === Chart : top fournisseurs ===
-  const perFourn = {};
-  factures.forEach(f => { if (!f.fournisseur) return; perFourn[f.fournisseur] = (perFourn[f.fournisseur] || 0) + (f.montantTTC || 0); });
-  const topFourn = Object.entries(perFourn).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  new Chart($('fournChart'), {
-    type: 'bar',
-    data: { labels: topFourn.map(([k]) => k.length > 28 ? k.slice(0, 26) + '…' : k), datasets: [{ data: topFourn.map(([, v]) => v), backgroundColor: '#0F1E3D', borderRadius: 4 }] },
-    options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => FP.euro(ctx.parsed.x) } } }, scales: { x: { ticks: { callback: v => v + ' €' } } }, maintainAspectRatio: false, responsive: true }
-  });
+  // === Rendu réactif selon l'année choisie ===
+  function render(annee) {
+    const fact = (annee === 'all') ? factures : factures.filter(f => (f.date || '').startsWith(annee));
+    $('periode-label').textContent = (annee === 'all') ? 'toutes années' : annee;
 
-  // === Chart : par société ===
-  const perSociete = {};
-  factures.forEach(f => {
-    const veh = data.vehicules.find(v => v.immat === f.vehiculeImmat);
-    const soc = veh ? (veh.proprietaire || 'Inconnu') : 'Inconnu';
-    perSociete[soc] = (perSociete[soc] || 0) + (f.montantTTC || 0);
-  });
-  new Chart($('societeChart'), {
-    type: 'doughnut',
-    data: { labels: Object.keys(perSociete), datasets: [{ data: Object.values(perSociete), backgroundColor: ['#0F1E3D', '#14B8A6', '#F59E0B', '#94A3B8'], borderWidth: 0 }] },
-    options: { cutout: '60%', plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.label} : ${FP.euro(ctx.parsed)}` } } }, maintainAspectRatio: false, responsive: true }
-  });
+    // KPI : usage vs achat
+    const usage = fact.filter(isUsage).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+    const achat = fact.filter(f => (f.type || '').toLowerCase() === 'achat').reduce((s, f) => s + (+f.montantTTC || 0), 0);
+    $('kpi-usage').textContent = FP.euro(usage);
+    $('kpi-achat').textContent = FP.euro(achat);
+    const totalKm = data.vehicules.reduce((s, v) => s + (v.km || 0), 0);
+    $('kpi-perkm').textContent = totalKm > 0 ? FP.euroPrecis(usage / totalKm) : '—';
+    const topF = fact.slice().sort((a, b) => (b.montantTTC || 0) - (a.montantTTC || 0))[0];
+    if (topF) { $('kpi-top').textContent = FP.euro(topF.montantTTC); $('kpi-top-sub').textContent = `${topF.vehiculeImmat || ''} · ${topF.fournisseur || topF.type || ''}`; }
+    else { $('kpi-top').textContent = '—'; $('kpi-top-sub').textContent = ''; }
 
-  // === TCO par véhicule ===
-  const tcoData = data.vehicules.map(v => {
-    const factsV = factures.filter(f => f.vehiculeImmat === v.immat);
-    const total = factsV.reduce((s, f) => s + (f.montantTTC || 0), 0);
-    const perKm = v.km > 0 ? total / v.km : 0;
-    const achatF = factsV.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-    return {
-      immat: v.immat,
-      modele: `${v.marque} ${v.modele}`.trim(),
-      km: v.km,
-      total,
-      perKm,
-      nb: factsV.length,
-      achatDate: achatF ? achatF.date : '',
-    };
-  }).sort((a, b) => b.total - a.total);
+    destroyCharts();
+
+    // Mensuel : 12 derniers mois (toutes années) ou Jan→Déc de l'année choisie
+    let months;
+    if (annee === 'all') months = buildLast12();
+    else { months = []; for (let m = 0; m < 12; m++) months.push({ ym: `${annee}-${String(m + 1).padStart(2, '0')}`, label: new Date(+annee, m, 1).toLocaleDateString('fr-FR', { month: 'short' }) }); }
+    const monthData = months.map(m => fact.filter(f => (f.date || '').startsWith(m.ym)).reduce((s, f) => s + (+f.montantTTC || 0), 0));
+    charts.month = new Chart($('monthChart'), {
+      type: 'line',
+      data: { labels: months.map(m => m.label), datasets: [{ data: monthData, borderColor: '#14B8A6', backgroundColor: 'rgba(20,184,166,.15)', tension: .35, fill: true, pointRadius: 3 }] },
+      options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => FP.euro(ctx.parsed.y) } } }, scales: { y: { ticks: { callback: v => v + ' €' } } }, maintainAspectRatio: false, responsive: true }
+    });
+
+    // Par type
+    const perType = {}; fact.forEach(f => { const t = f.type || 'autre'; perType[t] = (perType[t] || 0) + (+f.montantTTC || 0); });
+    charts.type = new Chart($('typeChart'), {
+      type: 'doughnut',
+      data: { labels: Object.keys(perType), datasets: [{ data: Object.values(perType), backgroundColor: ['#1E3A8A', '#DC2626', '#16A34A', '#7C3AED', '#F59E0B', '#7F1D1D', '#94A3B8'], borderWidth: 0 }] },
+      options: { cutout: '60%', plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.label} : ${FP.euro(ctx.parsed)}` } } }, maintainAspectRatio: false, responsive: true }
+    });
+
+    // Top fournisseurs
+    const perFourn = {}; fact.forEach(f => { if (!f.fournisseur) return; perFourn[f.fournisseur] = (perFourn[f.fournisseur] || 0) + (+f.montantTTC || 0); });
+    const topFourn = Object.entries(perFourn).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    charts.fourn = new Chart($('fournChart'), {
+      type: 'bar',
+      data: { labels: topFourn.map(([k]) => k.length > 28 ? k.slice(0, 26) + '…' : k), datasets: [{ data: topFourn.map(([, v]) => v), backgroundColor: '#0F1E3D', borderRadius: 4 }] },
+      options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => FP.euro(ctx.parsed.x) } } }, scales: { x: { ticks: { callback: v => v + ' €' } } }, maintainAspectRatio: false, responsive: true }
+    });
+
+    // Par société
+    const perSociete = {}; fact.forEach(f => { const veh = data.vehicules.find(v => v.immat === f.vehiculeImmat); const soc = veh ? (veh.proprietaire || 'Inconnu') : 'Inconnu'; perSociete[soc] = (perSociete[soc] || 0) + (+f.montantTTC || 0); });
+    charts.soc = new Chart($('societeChart'), {
+      type: 'doughnut',
+      data: { labels: Object.keys(perSociete), datasets: [{ data: Object.values(perSociete), backgroundColor: ['#0F1E3D', '#14B8A6', '#F59E0B', '#94A3B8'], borderWidth: 0 }] },
+      options: { cutout: '60%', plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.label} : ${FP.euro(ctx.parsed)}` } } }, maintainAspectRatio: false, responsive: true }
+    });
+
+    // TCO par véhicule (sur la période choisie)
+    tcoData = data.vehicules.map(v => {
+      const fv = fact.filter(f => f.vehiculeImmat === v.immat);
+      const total = fv.reduce((s, f) => s + (+f.montantTTC || 0), 0);
+      const achatF = fv.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+      return { immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, total, perKm: v.km > 0 ? total / v.km : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
+    }).sort((a, b) => b.total - a.total);
+    renderTcoTable();
+  }
 
   // === Config colonnes éditables (TCO) ===
   const TCO_COLUMNS = [
@@ -258,7 +266,10 @@
     tableEl: $('tco-table'),
     onChange: () => renderTcoTable(),
   });
-  renderTcoTable();
+
+  // Filtre par année + premier rendu
+  $('filter-annee').addEventListener('change', (e) => render(e.target.value));
+  render('all');
 
   $('btn-export-tco').addEventListener('click', () => {
     const headers = ['Immat', 'Modèle', 'Km', 'Coût total TTC', 'Coût par km', 'Nb factures', 'Dernier achat'];
