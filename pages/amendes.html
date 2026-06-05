@@ -307,6 +307,10 @@
         <div class="field-label">N° d'avis *</div>
         <input class="field-input" id="am-avis" placeholder="ex. 0012345678" required />
       </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><div class="field-label">N° de télépaiement</div><input class="field-input" id="am-telepaiement" placeholder="ex. 6024329152" autocomplete="off" /></div>
+        <div><div class="field-label">Clé</div><input class="field-input" id="am-cle" placeholder="ex. 46" autocomplete="off" /></div>
+      </div>
       <div class="flex gap-2 pt-2">
         <button type="button" class="btn btn-outline flex-1 justify-center" id="amende-cancel">Annuler</button>
         <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
@@ -749,6 +753,20 @@
         <div class="font-mono text-sm bg-slate-50 p-3 rounded-lg">${a.numeroAvis || '—'}</div>
       </div>
 
+      <div>
+        <div class="field-label">Paiement en ligne</div>
+        <div class="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <div class="text-xs text-slate-400 mb-0.5">N° de télépaiement</div>
+            <div id="am-tel-val" class="font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour saisir / modifier">${a.numeroTelepaiement || '<span class="text-slate-400">— ajouter</span>'}</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-400 mb-0.5">Clé</div>
+            <div id="am-cle-val" class="font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour saisir / modifier">${a.cle || '<span class="text-slate-400">— ajouter</span>'}</div>
+          </div>
+        </div>
+      </div>
+
       ${a.avisUrl ? `
         <div>
           <div class="field-label">Scan de l'avis</div>
@@ -799,6 +817,8 @@
     const ju = $('justif-unarchive'); if (ju) ju.onclick = unarchiveAmende;
     const mp = $('mail-paiement'); if (mp) mp.onclick = mailPaiement;
     const md = $('mail-designation'); if (md) md.onclick = mailDesignation;
+    const tv = $('am-tel-val'); if (tv) tv.onclick = () => editAmField('numeroTelepaiement', 'N° de télépaiement');
+    const cv = $('am-cle-val'); if (cv) cv.onclick = () => editAmField('cle', 'Clé');
     lucide.createIcons();
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
@@ -835,6 +855,18 @@
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', archived: true });
     openDrawer(id); // rouvre la fiche à jour (montre le lien + état archivé)
+  }
+  // Édition rapide d'un champ texte de l'amende (télépaiement, clé) depuis la fiche
+  function editAmField(field, label) {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
+    const v = prompt(label + ' :', a[field] || '');
+    if (v === null) return;
+    FP.history.commit();
+    a[field] = v.trim();
+    renderTable();
+    FP.persist.update('amendes', a.id, { [field]: a[field] });
+    openDrawer(a.id);
   }
   function unarchiveAmende() {
     if (!state.currentId) return;
@@ -888,6 +920,7 @@
     $('am-prenom').value = ''; $('am-motif').value = ''; $('am-montant').value = '';
     $('am-points').value = '0'; $('am-date').value = new Date().toISOString().slice(0, 10);
     $('am-statut').value = 'à payer'; $('am-avis').value = '';
+    $('am-telepaiement').value = ''; $('am-cle').value = '';
     _avisFile = null;
     const avSt = $('av-status'); if (avSt) { avSt.classList.add('hidden'); avSt.innerHTML = ''; }
     $('amende-modal').classList.add('open');
@@ -936,6 +969,7 @@
       id: nextAmendeId(), date, annee: (date || '').slice(0, 4),
       prenom, numeroAvis: numAvis, motif: $('am-motif').value.trim(),
       montant, points, retraitPoints: points > 0,
+      numeroTelepaiement: $('am-telepaiement').value.trim(), cle: $('am-cle').value.trim(),
       statut: $('am-statut').value || 'à payer', commentaire: '', avisUrl
     };
     data.amendes.push(newA);
@@ -1049,6 +1083,12 @@
       if (mg) out.numeroAvis = fmtNumeroAvis(mg[1]);
     }
 
+    // Numéro de télépaiement + clé (pour le paiement en ligne)
+    const mt = upper.match(/T[ÉE]L[ÉE]PAIEMENT[^0-9]{0,25}([0-9][0-9 ]{6,16}[0-9])/);
+    if (mt) out.numeroTelepaiement = mt[1].replace(/\s+/g, '');
+    const mc = upper.match(/CL[ÉE]\s*(?:DE\s*CONTR[ÔO]LE)?\s*[:.\-]?\s*([0-9]{2,3})\b/);
+    if (mc) out.cle = mc[1];
+
     // Montant — on prend le plus grand montant en euros trouvé (souvent le montant majoré/forfaitaire)
     const amounts = [];
     const re = /([0-9]{1,4}(?:[ .][0-9]{3})*)(?:[.,]([0-9]{2}))?\s*(?:€|EUR(?:OS?)?)/gi;
@@ -1129,6 +1169,8 @@
       if (parsed.montant    && !$('am-montant').value) { $('am-montant').value = parsed.montant;    filled.push('montant'); }
       if (parsed.date       && !$('am-date').value)    { $('am-date').value    = parsed.date;       filled.push('date'); }
       if (parsed.numeroAvis && !$('am-avis').value)    { $('am-avis').value    = parsed.numeroAvis; filled.push('n° d\'avis'); }
+      if (parsed.numeroTelepaiement && !$('am-telepaiement').value) { $('am-telepaiement').value = parsed.numeroTelepaiement; filled.push('n° télépaiement'); }
+      if (parsed.cle && !$('am-cle').value) { $('am-cle').value = parsed.cle; filled.push('clé'); }
 
       if (filled.length) {
         avStatus(`<b>✓ ${filled.length} champ(s) pré-rempli(s)</b> : ${filled.join(', ')}.<br>Vérifiez les valeurs puis complétez le reste (points retirés, statut…).`, 'ok');
