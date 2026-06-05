@@ -1589,19 +1589,19 @@ FP.searchAll = (q) => {
   (window.FP_DATA?.vehicules || []).forEach(v => {
     const text = `${v.immat || ''} ${v.marque || ''} ${v.modele || ''} ${v.chauffeur || ''} ${v.vin || ''}`.toLowerCase();
     if (text.includes(q)) {
-      out.push({ type: 'véh.', icon: '🚗', label: `${v.immat} · ${v.marque} ${v.modele}`.trim(), sub: v.chauffeur || '', url: pref + 'vehicules.html' });
+      out.push({ type: 'véh.', icon: '🚗', label: `${v.immat} · ${v.marque} ${v.modele}`.trim(), sub: v.chauffeur || '', url: pref + 'vehicules.html?veh=' + encodeURIComponent(v.id) });
     }
   });
   (window.FP_DATA?.amendes || []).forEach(a => {
     const text = `${a.prenom || ''} ${a.motif || ''} ${a.numeroAvis || ''}`.toLowerCase();
     if (text.includes(q)) {
-      out.push({ type: 'amende', icon: '🎫', label: `${a.prenom} · ${a.motif}`, sub: `${a.montant ? FP.euroPrecis(a.montant) : ''} · ${FP.date(a.date)}`, url: pref + 'amendes.html' });
+      out.push({ type: 'amende', icon: '🎫', label: `${a.prenom} · ${a.motif}`, sub: `${a.montant ? FP.euroPrecis(a.montant) : ''} · ${FP.date(a.date)}`, url: pref + 'amendes.html?amende=' + encodeURIComponent(a.id) });
     }
   });
   (window.FP_DATA?.factures || []).forEach(f => {
     const text = `${f.vehiculeImmat || ''} ${f.fournisseur || ''} ${f.description || ''} ${f.numeroFacture || ''}`.toLowerCase();
     if (text.includes(q)) {
-      out.push({ type: f.type || 'fact.', icon: f.type === 'sinistre' ? '⚠️' : '📄', label: `${f.vehiculeImmat} · ${f.fournisseur || ''}`, sub: `${f.description ? f.description.slice(0,60) : ''}`, url: pref + (f.type === 'sinistre' ? 'sinistres.html' : 'factures.html') });
+      out.push({ type: f.type || 'fact.', icon: f.type === 'sinistre' ? '⚠️' : '📄', label: `${f.vehiculeImmat} · ${f.fournisseur || ''}`, sub: `${f.description ? f.description.slice(0,60) : ''}`, url: pref + (f.type === 'sinistre' ? 'sinistres.html' : 'factures.html?facture=' + encodeURIComponent(f.fileId || '')) });
     }
   });
   return out;
