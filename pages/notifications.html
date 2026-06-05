@@ -55,34 +55,14 @@
     </nav>
   </aside>
 
-  <main class="flex-1 p-6 md:p-10 max-w-3xl">
+  <main class="flex-1 p-6 md:p-10">
 
     <div class="mb-8">
       <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)">Notifications</h1>
       <p class="text-slate-500 text-sm mt-1">Le détail des alertes de ta flotte — ce qui demande ton attention.</p>
     </div>
 
-    <div class="grid lg:grid-cols-2 gap-6">
-      <!-- Contrôles & échéances -->
-      <div>
-        <h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
-          <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600"></i> Contrôles &amp; échéances
-          <span class="badge badge-danger" id="cnt-controles">0</span>
-        </h2>
-        <p class="text-xs text-slate-500 mb-3">Contrôles techniques, anti-pollution, révisions, amendes — ce qui demande une action.</p>
-        <div id="list-controles"></div>
-      </div>
-
-      <!-- Leasing (suivi, moins urgent) -->
-      <div>
-        <h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
-          <i data-lucide="file-text" class="w-5 h-5 text-violet-600"></i> Leasing
-          <span class="badge" style="background:#EDE9FE;color:#4C1D95" id="cnt-leasing">0</span>
-        </h2>
-        <p class="text-xs text-slate-500 mb-3">Suivi kilométrique des contrats — à anticiper, mais moins urgent.</p>
-        <div id="list-leasing"></div>
-      </div>
-    </div>
+    <div id="notif-cols" class="grid gap-6 md:grid-cols-2 xl:grid-cols-4"></div>
 
   </main>
 </div>
@@ -112,14 +92,28 @@
     </${tag}>`;
   }
 
+  // Colonnes : une par catégorie d'alerte
+  const COLS = [
+    { titre: 'Amendes',            icon: 'ticket',       color: 'text-rose-600',   match: a => a.categorie === 'Amendes' },
+    { titre: 'Contrôle technique', icon: 'shield-check', color: 'text-red-600',    match: a => a.categorie === 'Contrôle technique' || a.categorie === 'Anti-pollution' },
+    { titre: 'Révisions',          icon: 'wrench',       color: 'text-amber-600',  match: a => a.categorie === 'Révision' || a.categorie === 'Maintenance' },
+    { titre: 'Leasing',            icon: 'file-text',    color: 'text-violet-600', match: a => a.categorie === 'Leasing' },
+  ];
+
   function render() {
     const alerts = FP.buildAlertes(data);
-    const leasing = alerts.filter(a => a.categorie === 'Leasing');
-    const controles = alerts.filter(a => a.categorie !== 'Leasing');
-    document.getElementById('cnt-controles').textContent = controles.length;
-    document.getElementById('cnt-leasing').textContent = leasing.length;
-    document.getElementById('list-controles').innerHTML = controles.map(notifHTML).join('') || '<p class="text-sm text-slate-500">Rien à signaler pour le moment ✓</p>';
-    document.getElementById('list-leasing').innerHTML = leasing.map(notifHTML).join('') || '<p class="text-sm text-slate-500">Aucune alerte leasing.</p>';
+    const cont = document.getElementById('notif-cols');
+    cont.innerHTML = COLS.map((col, i) => {
+      const list = alerts.filter(col.match);
+      const body = list.map(notifHTML).join('') || '<p class="text-sm text-slate-400">Rien à signaler ✓</p>';
+      return `<div>
+        <h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
+          <i data-lucide="${col.icon}" class="w-5 h-5 ${col.color}"></i> ${col.titre}
+          <span class="badge ${list.length ? 'badge-danger' : ''}" ${list.length ? '' : 'style="background:#E2E8F0;color:#475569"'}>${list.length}</span>
+        </h2>
+        <div class="space-y-2" id="col-${i}">${body}</div>
+      </div>`;
+    }).join('');
     lucide.createIcons();
   }
 
