@@ -169,6 +169,7 @@
           <button class="filter-chip" data-value="à payer">À payer</button>
           <button class="filter-chip" data-value="payée">Payées</button>
           <button class="filter-chip" data-value="désignée">Désignées</button>
+          <button class="filter-chip" data-value="archivée">Archivées</button>
         </div>
 
         <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
@@ -242,6 +243,7 @@
     </button>
   </div>
   <div class="p-6 space-y-5" id="drawer-body"></div>
+  <input type="file" id="justif-file" accept="image/*,application/pdf" class="hidden" />
   <div class="p-6 border-t border-slate-200 flex gap-2">
     <button class="btn btn-primary text-sm flex-1 justify-center" id="drawer-pay"><i data-lucide="check" class="w-4 h-4"></i> Marquer payée</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-designer" title="Conducteur désigné — l'amende n'est plus à votre charge"><i data-lucide="user-check" class="w-4 h-4"></i> Désigner</button>
@@ -373,7 +375,12 @@
     return data.amendes.filter(a => {
       // Page Amendes = uniquement 2026
       if (a.annee !== '2026') return false;
-      if (state.statut !== 'all' && a.statut !== state.statut) return false;
+      // Les amendes archivées sont masquées sauf dans la vue "Archivées"
+      if (state.statut === 'archivée') { if (!a.archived) return false; }
+      else {
+        if (a.archived) return false;
+        if (state.statut !== 'all' && a.statut !== state.statut) return false;
+      }
       if (state.motif !== 'all' && a.motif !== state.motif) return false;
       if (state.motifCat !== 'all' && categorize(a.motif) !== state.motifCat) return false;
       if (state.dateFrom && (a.date || '') < state.dateFrom) return false;
@@ -731,6 +738,19 @@
         </div>` : ''}
 
       <div>
+        <div class="field-label">Justificatif de paiement</div>
+        ${a.justifUrl ? `
+          <a href="${a.justifUrl}" target="_blank" rel="noopener" class="btn btn-outline text-sm w-full justify-center">
+            <i data-lucide="file-check" class="w-4 h-4"></i> Voir le justificatif
+          </a>
+          <p class="text-xs text-emerald-700 mt-1.5 flex items-center gap-1"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Payée &amp; archivée${a.archived ? ' — <button type="button" id="justif-unarchive" class="underline hover:text-red-600">retirer des archives</button>' : ''}</p>
+        ` : `
+          <button type="button" id="justif-btn" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Joindre un justificatif</button>
+          <p class="text-xs text-slate-400 mt-1.5">Joindre la preuve de paiement passe l'amende en <b>payée</b> et l'<b>archive</b> automatiquement.</p>
+        `}
+      </div>
+
+      <div>
         <div class="field-label">Année</div>
         <div>${a.annee}</div>
       </div>
@@ -746,6 +766,9 @@
     $('drawer-backdrop').classList.add('open');
     $('drawer-pay').style.display = (a.statut === 'payée' || a.statut === 'désignée') ? 'none' : '';
     $('drawer-designer').style.display = (a.statut === 'désignée' || a.statut === 'payée') ? 'none' : '';
+    // Boutons dynamiques du justificatif (re-rendus à chaque ouverture)
+    const jb = $('justif-btn'); if (jb) jb.onclick = () => $('justif-file').click();
+    const ju = $('justif-unarchive'); if (ju) ju.onclick = unarchiveAmende;
     lucide.createIcons();
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
@@ -767,6 +790,34 @@
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { statut: 'payée' });
   }
+  // Justificatif de paiement : joindre un fichier => payée + archivée
+  async function attachJustif(file) {
+    if (!file || !state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    let url = '';
+    try { url = await FP.uploadScan(file, 'justificatifs') || ''; }
+    catch (e) { console.error(e); alert("Le justificatif n'a pas pu être envoyé. Réessaie."); return; }
+    if (!url) { alert("Le justificatif n'a pas pu être envoyé. Réessaie."); return; }
+    FP.history.commit();
+    a.justifUrl = url; a.statut = 'payée'; a.archived = true;
+    const id = a.id;
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', archived: true });
+    openDrawer(id); // rouvre la fiche à jour (montre le lien + état archivé)
+  }
+  function unarchiveAmende() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    FP.history.commit();
+    a.archived = false;
+    const id = a.id;
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { archived: false });
+    openDrawer(id);
+  }
+
   // Désignation du conducteur : l'amende n'est plus à la charge de l'entreprise
   function markDesigne() {
     if (!state.currentId) return;
@@ -1031,6 +1082,11 @@
     }
   }
 
+  $('justif-file').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) attachJustif(file);
+    e.target.value = '';
+  });
   $('av-trigger').addEventListener('click', () => $('av-file').click());
   $('av-file').addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
