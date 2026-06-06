@@ -974,6 +974,68 @@
 
   // Réception du fichier permis téléversé → Supabase Storage, puis enregistrement du lien
   let _permisUploadKey = null;
+
+  // ---------- Lecture automatique du permis (OCR navigateur) ----------
+  const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  const PDFJS_CDN     = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+  const PDFJS_WORKER  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const ex = document.querySelector(`script[data-lazy="${src}"]`);
+      if (ex) { if (ex.dataset.loaded === '1') return resolve(); ex.addEventListener('load', resolve); ex.addEventListener('error', () => reject(new Error('load ' + src))); return; }
+      const s = document.createElement('script'); s.src = src; s.dataset.lazy = src;
+      s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+      s.onerror = () => reject(new Error('load ' + src));
+      document.head.appendChild(s);
+    });
+  }
+  async function pdfToCanvas(file) {
+    await loadScript(PDFJS_CDN);
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const cv = document.createElement('canvas'); cv.width = viewport.width; cv.height = viewport.height;
+    await page.render({ canvasContext: cv.getContext('2d'), viewport }).promise;
+    return cv;
+  }
+  // Analyse le texte OCR d'un permis de conduire français
+  function parsePermis(raw) {
+    const up = (raw || '').toUpperCase().replace(/[ \t]+/g, ' ');
+    const out = {};
+    // Numéro (rubrique 5) : format moderne AAll##### (2 chiffres + 2 lettres + 5-6 chiffres) ou ancien 12-15 chiffres
+    let m = up.match(/\b(\d{2}[A-Z]{2}\d{5,6})\b/);
+    if (m) out.numero = m[1];
+    else { m = up.match(/\b(\d{12,15})\b/); if (m) out.numero = m[1]; }
+    // Catégories (rubrique 9)
+    const cats = up.match(/\b(AM|A1|A2|B1|BE|C1E|C1|CE|D1E|D1|DE|A|B|C|D)\b/g) || [];
+    if (cats.length) out.type = [...new Set(cats)].join('/');
+    // Dates jj.mm.aaaa / jj/mm/aaaa → ISO. On filtre les années plausibles (permis : 1960–2050).
+    const dates = [...up.matchAll(/(\d{2})[.\/\-](\d{2})[.\/\-](\d{4})/g)]
+      .map(d => ({ iso: `${d[3]}-${d[2]}-${d[1]}`, y: +d[3] }))
+      .filter(d => d.y >= 1960 && d.y <= 2050)
+      .map(d => d.iso);
+    if (dates.length) {
+      const uniq = [...new Set(dates)].sort();
+      const today = new Date().toISOString().slice(0, 10);
+      const futures = uniq.filter(d => d > today);
+      // Expiration = date future la plus lointaine ; obtention = date passée la plus ancienne
+      if (futures.length) out.expiration = futures[futures.length - 1];
+      const passees = uniq.filter(d => d <= today);
+      if (passees.length) out.obtention = passees[0];
+    }
+    return out;
+  }
+  async function ocrPermis(file) {
+    await loadScript(TESSERACT_CDN);
+    let image = file;
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) image = await pdfToCanvas(file);
+    const worker = await Tesseract.createWorker('fra');
+    const { data } = await worker.recognize(image);
+    await worker.terminate();
+    return parsePermis(data.text || '');
+  }
+
   $('drawer-body').addEventListener('change', async (e) => {
     const inp = e.target.closest('#permis-file');
     if (!inp || !inp.files || !inp.files[0]) return;
@@ -981,17 +1043,33 @@
     inp.value = '';
     const k = _permisUploadKey; if (!k) return;
     const st = $('permis-upload-status');
-    const show = (msg, color) => { if (!st) return; st.classList.remove('hidden'); st.setAttribute('style', color); st.textContent = msg; };
+    const show = (msg, color) => { if (!st) return; st.classList.remove('hidden'); st.setAttribute('style', color); st.innerHTML = msg; };
     if (!(FP.uploadScan && FP.supabase && FP.supabase.storage)) { alert('Stockage Supabase indisponible. Recharge la page et réessaie.'); return; }
     try {
-      show('Envoi du fichier en cours…', 'background:#F1F5F9;color:#475569;');
+      const d = drivers.find(x => x.key === k);
+      // 1) Lecture automatique (OCR) du permis — best effort
+      let parsed = {};
+      try { show('🔍 Lecture du permis… (quelques secondes)', 'background:#F1F5F9;color:#475569;'); parsed = await ocrPermis(file); } catch (e2) { console.warn('[ocrPermis]', e2); }
+      // 2) Envoi du scan vers Supabase
+      show('☁️ Envoi du fichier en cours…', 'background:#F1F5F9;color:#475569;');
       const url = await FP.uploadScan(file, 'permis');
       if (!url) throw new Error('URL vide');
-      const d = drivers.find(x => x.key === k);
-      // permisFileId = null → le bouton "Ouvrir" utilisera directement l'URL Supabase
-      upsertCond(k, { permisUrl: url, permisFileId: null, name: (condRow(k) && condRow(k).name) || (d && d.name) || k });
+      // 3) Enregistrement : URL + champs lus (on ne remplit que les champs encore vides)
+      const changes = { permisUrl: url, permisFileId: null, name: (condRow(k) && condRow(k).name) || (d && d.name) || k };
+      const cur = condRow(k) || {};
+      const lus = [];
+      if (parsed.type && !cur.permisType) { changes.permisType = parsed.type; lus.push('type'); }
+      if (parsed.numero && !cur.permisNumero) { changes.permisNumero = parsed.numero; lus.push('numéro'); }
+      if (parsed.obtention && !cur.permisObtention) { changes.permisObtention = parsed.obtention; lus.push('date d\'obtention'); }
+      if (parsed.expiration && !cur.permisExpiration) { changes.permisExpiration = parsed.expiration; lus.push('date d\'expiration'); }
+      upsertCond(k, changes);
       drivers = buildDrivers();
       openDrawer(currentDriverKey);
+      const st2 = $('permis-upload-status');
+      if (st2) {
+        if (lus.length) { st2.classList.remove('hidden'); st2.setAttribute('style', 'background:#ECFDF5;color:#047857;'); st2.innerHTML = `✓ Scan enregistré · lu automatiquement : <b>${lus.join(', ')}</b>. Vérifie et corrige si besoin (double-clic).`; }
+        else { st2.classList.remove('hidden'); st2.setAttribute('style', 'background:#FEF3C7;color:#92400E;'); st2.innerHTML = '✓ Scan enregistré, mais aucune info lisible automatiquement. Saisis les champs à la main (double-clic).'; }
+      }
     } catch (err) {
       console.error('[permis upload]', err);
       show("Échec de l'envoi : " + (err.message || err), 'background:#FEF2F2;color:#B91C1C;');
