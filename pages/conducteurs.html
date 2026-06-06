@@ -256,10 +256,13 @@
     return { key: r.key, name: r.name || null, nom: r.nom || null, prenom: r.prenom || null,
              adresse: r.adresse || null, dateNaissance: r.dateNaissance || null, poste: r.poste || null,
              tel: r.tel || null, email: r.email || null, note: r.note || null,
+             permisType: r.permisType || null, permisNumero: r.permisNumero || null,
+             permisObtention: r.permisObtention || null, permisExpiration: r.permisExpiration || null,
              permisUrl: r.permisUrl || null, permisFileId: r.permisFileId || null, masque: !!r.masque, manuel: !!r.manuel };
   }
   // Champs "fiche collaborateur" conservés dans le store local
-  const COND_FICHE_FIELDS = ['name', 'nom', 'prenom', 'poste', 'adresse', 'dateNaissance', 'tel', 'email', 'note'];
+  const COND_FICHE_FIELDS = ['name', 'nom', 'prenom', 'poste', 'adresse', 'dateNaissance', 'tel', 'email', 'note',
+                             'permisType', 'permisNumero', 'permisObtention', 'permisExpiration'];
   const pickFiche = (r) => { const o = {}; COND_FICHE_FIELDS.forEach(f => { if (r[f] != null) o[f] = r[f]; }); return o; };
   // Crée/fusionne une ligne et persiste (Supabase si dispo, sinon localStorage)
   function upsertCond(key, changes) {
@@ -319,7 +322,8 @@
         try {
           const store = JSON.parse(localStorage.getItem(COND_KEY) || '{}');
           const byKey = {}; condCache.forEach(row => { byKey[row.key] = row; });
-          const fiche = ['name', 'nom', 'prenom', 'poste', 'dateNaissance', 'adresse', 'tel', 'email', 'note'];
+          const fiche = ['name', 'nom', 'prenom', 'poste', 'dateNaissance', 'adresse', 'tel', 'email', 'note',
+                         'permisType', 'permisNumero', 'permisObtention', 'permisExpiration'];
           (store.manuels || []).forEach(m => {
             const k = normPrenom(m.name); if (!k) return;
             let row = byKey[k], changed = false;
@@ -380,12 +384,24 @@
     } else {
       body = '<p class="text-sm text-slate-500">Aucun permis pour ce conducteur.</p>';
     }
-    const form = `<div class="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-        <div class="field-label !mb-0">${eff ? 'Remplacer le permis' : 'Ajouter un permis'}</div>
-        <input id="permis-url" class="field-input" placeholder="Coller le lien Drive du permis" />
-        <button type="button" id="permis-add" class="btn btn-dark text-sm w-full justify-center" data-key="${escapeHtml(key)}"><i data-lucide="plus" class="w-4 h-4"></i> Enregistrer le permis</button>
+    // Champs d'information du permis (modifiables par clic, comme les autres champs fiche)
+    const pRow = (label, field, type, val) => `<div class="flex justify-between items-center gap-3 cf-row" data-cf="${field}" data-ct="${type}"><span class="text-slate-600">${label}</span><span class="text-right cf-val ${val ? 'font-medium' : 'is-empty'}">${val ? escapeHtml(val) : 'Ajouter'}</span></div>`;
+    const infos = `<div class="space-y-1.5 text-sm mt-2">
+        ${pRow('Type de permis', 'permisType', 'text', d.permisType)}
+        ${pRow('Numéro', 'permisNumero', 'text', d.permisNumero)}
+        ${pRow("Date d'obtention", 'permisObtention', 'date', d.permisObtention ? FP.date(d.permisObtention) : '')}
+        ${pRow("Date d'expiration", 'permisExpiration', 'date', d.permisExpiration ? FP.date(d.permisExpiration) : '')}
       </div>`;
-    return `<div><div class="font-semibold mb-2 border-b border-slate-200 pb-1">Permis de conduire</div>${body}${form}</div>`;
+    const form = `<div class="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+        <div class="field-label !mb-0">${eff ? 'Remplacer le scan / la photo' : 'Ajouter le scan / la photo'}</div>
+        <input type="file" id="permis-file" accept="image/*,application/pdf" class="hidden" />
+        <button type="button" id="permis-upload" class="btn btn-dark text-sm w-full justify-center" data-key="${escapeHtml(key)}"><i data-lucide="upload" class="w-4 h-4"></i> Téléverser un fichier (recommandé)</button>
+        <div id="permis-upload-status" class="hidden text-xs rounded px-2 py-1"></div>
+        <div class="text-[11px] text-slate-400 text-center">— ou —</div>
+        <input id="permis-url" class="field-input !text-xs" placeholder="Coller un lien Drive (optionnel)" />
+        <button type="button" id="permis-add" class="btn btn-outline text-xs w-full justify-center" data-key="${escapeHtml(key)}">Enregistrer le lien</button>
+      </div>`;
+    return `<div><div class="font-semibold mb-2 border-b border-slate-200 pb-1">Permis de conduire</div>${infos}${body}${form}</div>`;
   }
 
   // Conducteurs de référence = ceux présents dans le fichier Drive (véhicules + contraventions).
@@ -436,6 +452,10 @@
       if (m.poste)        d.poste = m.poste;
       if (m.adresse)      d.adresse = m.adresse;
       if (m.dateNaissance) d.dateNaissance = m.dateNaissance;
+      if (m.permisType)       d.permisType = m.permisType;
+      if (m.permisNumero)     d.permisNumero = m.permisNumero;
+      if (m.permisObtention)  d.permisObtention = m.permisObtention;
+      if (m.permisExpiration) d.permisExpiration = m.permisExpiration;
     });
 
     // Masqués : retirés de la liste (sans supprimer véhicules/amendes)
@@ -838,6 +858,10 @@
       return;
     }
 
+    // Téléversement direct du scan/photo du permis vers Supabase (au lieu d'un lien Drive)
+    const upBtn = e.target.closest('#permis-upload');
+    if (upBtn) { _permisUploadKey = upBtn.dataset.key; $('permis-file').click(); return; }
+
     const delPermis = e.target.closest('[data-permis-del]');
     if (delPermis) {
       upsertCond(delPermis.dataset.permisDel, { permisUrl: null, permisFileId: null });
@@ -847,6 +871,32 @@
 
     const btn = e.target.closest('#drawer-delete');
     if (btn) deleteDriver(btn.dataset.key);
+  });
+
+  // Réception du fichier permis téléversé → Supabase Storage, puis enregistrement du lien
+  let _permisUploadKey = null;
+  $('drawer-body').addEventListener('change', async (e) => {
+    const inp = e.target.closest('#permis-file');
+    if (!inp || !inp.files || !inp.files[0]) return;
+    const file = inp.files[0];
+    inp.value = '';
+    const k = _permisUploadKey; if (!k) return;
+    const st = $('permis-upload-status');
+    const show = (msg, color) => { if (!st) return; st.classList.remove('hidden'); st.setAttribute('style', color); st.textContent = msg; };
+    if (!(FP.uploadScan && FP.supabase && FP.supabase.storage)) { alert('Stockage Supabase indisponible. Recharge la page et réessaie.'); return; }
+    try {
+      show('Envoi du fichier en cours…', 'background:#F1F5F9;color:#475569;');
+      const url = await FP.uploadScan(file, 'permis');
+      if (!url) throw new Error('URL vide');
+      const d = drivers.find(x => x.key === k);
+      // permisFileId = null → le bouton "Ouvrir" utilisera directement l'URL Supabase
+      upsertCond(k, { permisUrl: url, permisFileId: null, name: (condRow(k) && condRow(k).name) || (d && d.name) || k });
+      drivers = buildDrivers();
+      openDrawer(currentDriverKey);
+    } catch (err) {
+      console.error('[permis upload]', err);
+      show("Échec de l'envoi : " + (err.message || err), 'background:#FEF2F2;color:#B91C1C;');
+    }
   });
 
   // Modal nouveau conducteur
