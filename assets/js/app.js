@@ -676,6 +676,20 @@ FP.buildAlertes = (data) => {
     });
   }
 
+  // --- Permis de conduire qui expirent (table conducteurs) ---
+  (data.conducteurs || []).forEach(c => {
+    if (!c || !c.permisExpiration) return;
+    const d = new Date(c.permisExpiration);
+    if (isNaN(d)) return;
+    const diff = days(c.permisExpiration);
+    const who = [c.prenom || c.name, c.nom].filter(Boolean).join(' ') || c.name || c.key;
+    const detail = `${who} — expire le ${FP.date(c.permisExpiration)}`;
+    const tgt = 'conducteurs.html?cond=' + encodeURIComponent(c.key);
+    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis EXPIRÉ depuis ${-diff}j`, detail, sort: diff, target: tgt });
+    else if (diff < 60)  out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis expire dans ${diff}j`, detail, sort: diff, target: tgt });
+    else if (diff < 120) out.push({ niveau: 'warn',   categorie: 'Permis', message: `Permis à renouveler (${diff}j)`, detail, sort: diff, target: tgt });
+  });
+
   // --- Révisions constructeur ---
   (data.vehicules || []).forEach(v => {
     if (v.statut && v.statut !== 'actif') return; // on ignore vendus / à vendre / hors service
