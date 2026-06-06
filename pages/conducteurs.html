@@ -102,14 +102,6 @@
   .fiche-ccard .cf-row { padding: .3rem 0; border-bottom: 1px solid rgba(148,163,184,.18); }
   .fiche-ccard .cf-row:last-child { border-bottom: 0; }
   .fiche-ccard .fiche-line { border-bottom-color: rgba(148,163,184,.18); }
-  /* Carte récap "pièce jointe" du permis */
-  .permis-doc { display: flex; align-items: center; gap: .7rem; padding: .65rem .75rem; border: 1px solid var(--fp-border); border-radius: .7rem; background: rgba(139,92,246,.06); }
-  .permis-doc .pd-ico { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #8B5CF6, #6D28D9); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .permis-doc .pd-ico svg { width: 20px; height: 20px; }
-  .permis-doc .pd-main { flex: 1; min-width: 0; }
-  .permis-doc .pd-title { font-weight: 700; font-size: .9rem; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
-  .permis-doc .pd-sub { font-size: .76rem; color: var(--fp-muted); margin-top: .1rem; }
-  .permis-doc .pd-meta { font-size: .7rem; color: var(--fp-muted); margin-top: .05rem; }
 </style>
 <script>
 (function(){
@@ -416,28 +408,22 @@
     const manual = getManualPermis()[key];
     const builtin = (window.FP_DOCS && FP_DOCS.permis) ? FP_DOCS.permis[key] : null;
     const eff = manual || builtin;
-    // Récap "pièce jointe" : infos clés visibles directement + accès au scan
-    const driveId = eff ? (eff.fileId || eff.id || null) : null;
-    const action = !eff ? '' : (driveId
-      ? `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-permis-view="${escapeHtml(driveId)}" data-permis-title="Permis — ${escapeHtml(d.name)}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`
-      : `<a class="btn btn-outline !py-1 !px-2.5 text-xs" href="${escapeHtml(sanitizeUrl(eff.url))}" target="_blank" rel="noopener"><i data-lucide="external-link" class="w-3.5 h-3.5"></i> Ouvrir</a>`);
-    const meta = [];
-    if (d.permisObtention) meta.push('Délivré le ' + FP.date(d.permisObtention));
-    if (d.permisExpiration) meta.push('Expire le ' + FP.date(d.permisExpiration));
-    const scanTxt = eff ? (manual ? '📎 Scan ajouté manuellement' : '📎 Scan Google Drive') : '📎 Aucun scan';
-    const body = `<div class="permis-doc">
-        <div class="pd-ico"><i data-lucide="id-card"></i></div>
-        <div class="pd-main">
-          <div class="pd-title">${d.permisType ? 'Catégorie ' + escapeHtml(d.permisType) : 'Permis de conduire'} ${permisBadge(d)}</div>
-          <div class="pd-sub">${d.permisNumero ? 'N° ' + escapeHtml(d.permisNumero) : 'Numéro non renseigné'}</div>
-          ${meta.length ? `<div class="pd-meta">${meta.join(' · ')}</div>` : ''}
-          <div class="pd-meta">${scanTxt}</div>
-        </div>
-        <div class="flex flex-col gap-1 flex-shrink-0">
-          ${action}
-          ${manual ? `<button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600 self-end" data-permis-del="${escapeHtml(key)}" title="Supprimer le scan"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
-        </div>
+    let body;
+    if (eff) {
+      const driveId = eff.fileId || eff.id || null;
+      const name = eff.name || 'Permis';
+      const action = driveId
+        ? `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-permis-view="${escapeHtml(driveId)}" data-permis-title="Permis — ${escapeHtml(d.name)}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`
+        : `<a class="btn btn-outline !py-1 !px-2.5 text-xs" href="${escapeHtml(sanitizeUrl(eff.url))}" target="_blank" rel="noopener"><i data-lucide="external-link" class="w-3.5 h-3.5"></i> Ouvrir</a>`;
+      body = `<div class="flex items-center gap-2 py-1 text-sm">
+        <i data-lucide="id-card" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+        <div class="flex-1 min-w-0"><div class="font-medium truncate">${escapeHtml(name)}</div><div class="text-xs text-slate-500">${manual ? 'Ajouté manuellement' : 'Google Drive'}</div></div>
+        ${action}
+        ${manual ? `<button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-permis-del="${escapeHtml(key)}" title="Supprimer ce permis"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
       </div>`;
+    } else {
+      body = '<p class="text-sm text-slate-500">Aucun permis pour ce conducteur.</p>';
+    }
     // Champs d'information du permis (modifiables par clic, comme les autres champs fiche)
     const pRow = (label, field, type, val) => `<div class="flex justify-between items-center gap-3 cf-row" data-cf="${field}" data-ct="${type}"><span class="text-slate-600">${label}</span><span class="text-right cf-val ${val ? 'font-medium' : 'is-empty'}">${val ? escapeHtml(val) : 'Ajouter'}</span></div>`;
     const infos = `<div class="space-y-1.5 text-sm mt-3">
@@ -455,8 +441,8 @@
         <input id="permis-url" class="field-input !text-xs" placeholder="Coller un lien Drive (optionnel)" />
         <button type="button" id="permis-add" class="btn btn-outline text-xs w-full justify-center" data-key="${escapeHtml(key)}">Enregistrer le lien</button>
       </div>`;
-    // Récap en haut (infos visibles directement), puis champs éditables, puis ajout de scan
-    return `${body}${infos}${form}`;
+    // Contenu interne uniquement (le titre/carte est ajouté par l'appelant selon le style)
+    return `${infos}<div class="mt-2">${body}</div>${form}`;
   }
   // Badge de validité d'après la date d'expiration du permis
   function permisBadge(d){
@@ -716,8 +702,13 @@
     if (!d) return;
     currentDriverKey = key;
     $('drawer-avatar').textContent = initials(d.name);
-    $('drawer-name').textContent = d.name;
-    $('drawer-sub').textContent = `${d.vehicules.length} véhicule${d.vehicules.length > 1 ? 's' : ''} · ${d.amendes.length} amende${d.amendes.length > 1 ? 's' : ''}`;
+    // Nom complet : prénom (d.name) + nom de famille si renseigné
+    $('drawer-name').textContent = d.nom ? `${d.name} ${d.nom}` : d.name;
+    // Récap véhicule(s) dans l'en-tête : marque modèle + plaque
+    const vehResume = d.vehicules.length
+      ? d.vehicules.map(v => `${v.marque} ${v.modele} <span class="font-mono text-slate-500">${v.immat}</span>`).join(' · ')
+      : 'Aucun véhicule';
+    $('drawer-sub').innerHTML = `<span class="text-slate-700">${vehResume}</span> · ${d.amendes.length} amende${d.amendes.length > 1 ? 's' : ''}`;
 
     const nbPoints = d.amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
     const totalPaye = d.amendes.filter(a => a.statut === 'payée').reduce((s, a) => s + (a.montant || 0), 0);
