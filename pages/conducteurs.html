@@ -94,6 +94,14 @@
   .fiche-cell .fcell-label { font-size: .61rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--fp-muted); margin-bottom: .12rem; }
   .fiche-cell .cf-val.is-empty { border: none; padding: 0; background: none; }
   .fiche-cell.col-span-2 { grid-column: span 2; }
+  /* Style "Coloré" : cartes avec accent de couleur par section */
+  .fiche-ccard { border-radius: .9rem; padding: .9rem 1.05rem; border: 1px solid var(--fp-border); border-left: 4px solid var(--cc, #14b8a6); background: rgba(148,163,184,.05); }
+  .fiche-ccard .cc-title { display: flex; align-items: center; gap: .55rem; font-weight: 700; font-size: .85rem; margin-bottom: .55rem; color: var(--fp-text); }
+  .fiche-ccard .cc-ico { width: 27px; height: 27px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
+  .fiche-ccard .cc-ico svg { width: 15px; height: 15px; }
+  .fiche-ccard .cf-row { padding: .3rem 0; border-bottom: 1px solid rgba(148,163,184,.18); }
+  .fiche-ccard .cf-row:last-child { border-bottom: 0; }
+  .fiche-ccard .fiche-line { border-bottom-color: rgba(148,163,184,.18); }
 </style>
 <script>
 (function(){
@@ -433,20 +441,16 @@
         <input id="permis-url" class="field-input !text-xs" placeholder="Coller un lien Drive (optionnel)" />
         <button type="button" id="permis-add" class="btn btn-outline text-xs w-full justify-center" data-key="${escapeHtml(key)}">Enregistrer le lien</button>
       </div>`;
-    // Badge de validité d'après la date d'expiration
-    let expBadge = '';
-    if (d.permisExpiration) {
-      const days = Math.round((new Date(d.permisExpiration) - new Date()) / 86400000);
-      if (days < 0) expBadge = '<span class="badge-exp danger">Expiré</span>';
-      else if (days < 183) expBadge = '<span class="badge-exp warn">Expire bientôt</span>';
-      else expBadge = '<span class="badge-exp ok">Valide</span>';
-    }
-    return `<div class="fiche-card">
-      <div class="fiche-title"><i data-lucide="id-card"></i> Permis de conduire ${expBadge}</div>
-      ${infos}
-      <div class="mt-2">${body}</div>
-      ${form}
-    </div>`;
+    // Contenu interne uniquement (le titre/carte est ajouté par l'appelant selon le style)
+    return `${infos}<div class="mt-2">${body}</div>${form}`;
+  }
+  // Badge de validité d'après la date d'expiration du permis
+  function permisBadge(d){
+    if (!d.permisExpiration) return '';
+    const days = Math.round((new Date(d.permisExpiration) - new Date()) / 86400000);
+    if (days < 0) return '<span class="badge-exp danger">Expiré</span>';
+    if (days < 183) return '<span class="badge-exp warn">Expire bientôt</span>';
+    return '<span class="badge-exp ok">Valide</span>';
   }
 
   // Conducteurs de référence = ceux présents dans le fichier Drive (véhicules + contraventions).
@@ -713,11 +717,11 @@
     const ageTxt = ageNum ? `<span class="text-xs text-slate-400 font-normal ml-1">(${ageNum} ans)</span>` : '';
     const dnPlain = d.dateNaissance ? FP.date(d.dateNaissance) + (ageNum ? ` (${ageNum} ans)` : '') : '';
 
-    const ficheStyle = localStorage.getItem('fp_cond_fiche_style') === 'profil' ? 'profil' : 'cartes';
-    const toggle = `<div class="flex justify-end"><div class="fiche-switch">
-        <button type="button" class="fsw-btn ${ficheStyle === 'cartes' ? 'active' : ''}" data-fstyle="cartes"><i data-lucide="layout-list"></i> Cartes</button>
-        <button type="button" class="fsw-btn ${ficheStyle === 'profil' ? 'active' : ''}" data-fstyle="profil"><i data-lucide="id-card"></i> Profil</button>
-      </div></div>`;
+    const allowed = ['cartes', 'profil', 'colore'];
+    let ficheStyle = localStorage.getItem('fp_cond_fiche_style');
+    if (!allowed.includes(ficheStyle)) ficheStyle = 'cartes';
+    const swBtn = (s, icon, label) => `<button type="button" class="fsw-btn ${ficheStyle === s ? 'active' : ''}" data-fstyle="${s}"><i data-lucide="${icon}"></i> ${label}</button>`;
+    const toggle = `<div class="flex justify-end"><div class="fiche-switch">${swBtn('cartes', 'layout-list', 'Cartes')}${swBtn('profil', 'id-card', 'Profil')}${swBtn('colore', 'palette', 'Coloré')}</div></div>`;
 
     const stats = `<div class="grid grid-cols-3 gap-2.5">
         <div class="fiche-stat"><div class="kpi-label">Points perdus</div><div class="kpi-value" style="font-size:1.3rem; color: var(--fp-danger)">${nbPoints}</div></div>
@@ -725,25 +729,38 @@
         <div class="fiche-stat"><div class="kpi-label">À payer</div><div class="kpi-value" style="font-size:1.05rem; color:${dus > 0 ? 'var(--fp-danger)' : 'var(--fp-text)'}">${FP.euro(dus)}</div></div>
       </div>`;
 
-    // ---- Style "Cartes" : Identité + Contact en deux cartes ----
-    const blocCartes = `
-      <div class="fiche-card">
-        <div class="fiche-title"><i data-lucide="user"></i> Identité</div>
-        <div class="text-sm">
-          ${fRow('Nom', 'nom', 'text', d.nom)}
-          ${fRow('Prénom', 'prenom', 'text', d.prenom)}
-          <div class="flex justify-between items-center gap-3 cf-row" data-cf="dateNaissance" data-ct="date"><span class="text-slate-600">Date de naissance</span><span class="text-right cf-val ${d.dateNaissance ? 'font-medium' : 'is-empty'}">${d.dateNaissance ? escapeHtml(FP.date(d.dateNaissance)) + ageTxt : 'Ajouter'}</span></div>
-          ${fRow('Poste de travail', 'poste', 'text', d.poste)}
-        </div>
-      </div>
-      <div class="fiche-card">
-        <div class="fiche-title"><i data-lucide="contact"></i> Contact</div>
-        <div class="text-sm">
-          ${fRow('Téléphone', 'tel', 'text', d.tel)}
-          ${fRow('Email', 'email', 'text', d.email)}
-          ${fRow('Adresse', 'adresse', 'text', d.adresse)}
-        </div>
+    // ---- Contenus internes (réutilisés par les 3 styles) ----
+    const identiteInner = `<div class="text-sm">
+        ${fRow('Nom', 'nom', 'text', d.nom)}
+        ${fRow('Prénom', 'prenom', 'text', d.prenom)}
+        <div class="flex justify-between items-center gap-3 cf-row" data-cf="dateNaissance" data-ct="date"><span class="text-slate-600">Date de naissance</span><span class="text-right cf-val ${d.dateNaissance ? 'font-medium' : 'is-empty'}">${d.dateNaissance ? escapeHtml(FP.date(d.dateNaissance)) + ageTxt : 'Ajouter'}</span></div>
+        ${fRow('Poste de travail', 'poste', 'text', d.poste)}
       </div>`;
+    const contactInner = `<div class="text-sm">
+        ${fRow('Téléphone', 'tel', 'text', d.tel)}
+        ${fRow('Email', 'email', 'text', d.email)}
+        ${fRow('Adresse', 'adresse', 'text', d.adresse)}
+      </div>`;
+    const noteInner = `<div class="text-sm">${fRow('Note libre', 'note', 'text', d.note)}</div>`;
+    const vehiculesInner = d.vehicules.length === 0 ? '<p class="text-sm text-slate-500">Aucun véhicule assigné.</p>' :
+      d.vehicules.map(v => `
+        <div class="fiche-line">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <span class="plate-badge">${v.immat}</span>
+            <span class="text-xs text-slate-500 truncate">${v.marque} ${v.modele}</span>
+          </div>
+          <div class="text-right flex-shrink-0">${FP.statutBadge(v.statut)}<span class="text-xs text-slate-500 ml-1">${FP.num(v.km)} km</span></div>
+        </div>`).join('');
+    const amendesInner = (d.amendes.length === 0 ? '<p class="text-sm text-slate-500">Aucune amende ✓</p>' :
+      d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 20).map(a => `
+        <div class="fiche-line">
+          <div class="min-w-0"><div class="font-medium truncate">${a.motif || '—'}</div><div class="text-xs text-slate-500">${FP.date(a.date)}${(Number(a.points) || 0) > 0 ? ' · −' + a.points + ' pt' : ''}</div></div>
+          <div class="text-right flex-shrink-0"><div class="font-semibold">${a.montant ? FP.euroPrecis(a.montant) : '—'}</div><div class="text-xs">${a.statut === 'payée' ? '<span class="text-emerald-600">Payée</span>' : '<span class="text-red-600">À payer</span>'}</div></div>
+        </div>`).join('')) + (d.amendes.length > 20 ? `<p class="text-xs text-slate-500 mt-2">… et ${d.amendes.length - 20} de plus</p>` : '');
+
+    // Helpers de carte (neutre / colorée)
+    const card  = (icon, title, inner) => `<div class="fiche-card"><div class="fiche-title"><i data-lucide="${icon}"></i> ${title}</div>${inner}</div>`;
+    const cCard = (c, icon, title, inner) => `<div class="fiche-ccard" style="--cc:${c}"><div class="cc-title"><span class="cc-ico" style="background:${c}"><i data-lucide="${icon}"></i></span> ${title}</div>${inner}</div>`;
 
     // ---- Style "Profil" : bannière + grille compacte ----
     const grp = driverGroupLabel(d);
@@ -756,72 +773,41 @@
         ${grp ? `<span class="fh-grp">${escapeHtml(grp)}</span>` : ''}
         ${chips.length ? `<div class="fiche-chips">${chips.join('')}</div>` : ''}
       </div>
-      <div class="fiche-card">
-        <div class="fiche-title"><i data-lucide="user"></i> Informations</div>
-        <div class="fiche-grid">
-          ${gCell('Nom', 'nom', 'text', d.nom)}
-          ${gCell('Prénom', 'prenom', 'text', d.prenom)}
-          ${gCell('Naissance', 'dateNaissance', 'date', dnPlain)}
-          ${gCell('Poste', 'poste', 'text', d.poste)}
-          ${gCell('Téléphone', 'tel', 'text', d.tel)}
-          ${gCell('Email', 'email', 'text', d.email)}
+      ${card('user', 'Informations', `<div class="fiche-grid">
+          ${gCell('Nom', 'nom', 'text', d.nom)}${gCell('Prénom', 'prenom', 'text', d.prenom)}
+          ${gCell('Naissance', 'dateNaissance', 'date', dnPlain)}${gCell('Poste', 'poste', 'text', d.poste)}
+          ${gCell('Téléphone', 'tel', 'text', d.tel)}${gCell('Email', 'email', 'text', d.email)}
           ${gCell('Adresse', 'adresse', 'text', d.adresse, true)}
-        </div>
-      </div>`;
-
-    // ---- Sections communes aux deux styles ----
-    const blocVehicules = `
-      <div class="fiche-card">
-        <div class="fiche-title"><i data-lucide="car"></i> Véhicules · ${d.vehicules.length}</div>
-        ${d.vehicules.length === 0 ? '<p class="text-sm text-slate-500">Aucun véhicule assigné.</p>' :
-          d.vehicules.map(v => `
-            <div class="fiche-line">
-              <div class="flex items-center gap-2.5 min-w-0">
-                <span class="plate-badge">${v.immat}</span>
-                <span class="text-xs text-slate-500 truncate">${v.marque} ${v.modele}</span>
-              </div>
-              <div class="text-right flex-shrink-0">
-                ${FP.statutBadge(v.statut)}
-                <span class="text-xs text-slate-500 ml-1">${FP.num(v.km)} km</span>
-              </div>
-            </div>`).join('')
-        }
-      </div>`;
-
-    const blocAmendes = `
-      <div class="fiche-card">
-        <div class="fiche-title"><i data-lucide="ticket"></i> Amendes · ${d.amendes.length}</div>
-        ${d.amendes.length === 0 ? '<p class="text-sm text-slate-500">Aucune amende ✓</p>' :
-          d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 20).map(a => `
-            <div class="fiche-line">
-              <div class="min-w-0">
-                <div class="font-medium truncate">${a.motif || '—'}</div>
-                <div class="text-xs text-slate-500">${FP.date(a.date)}${(Number(a.points) || 0) > 0 ? ' · −' + a.points + ' pt' : ''}</div>
-              </div>
-              <div class="text-right flex-shrink-0">
-                <div class="font-semibold">${a.montant ? FP.euroPrecis(a.montant) : '—'}</div>
-                <div class="text-xs">${a.statut === 'payée' ? '<span class="text-emerald-600">Payée</span>' : '<span class="text-red-600">À payer</span>'}</div>
-              </div>
-            </div>`).join('')
-        }
-        ${d.amendes.length > 20 ? `<p class="text-xs text-slate-500 mt-2">… et ${d.amendes.length - 20} de plus</p>` : ''}
-      </div>`;
-
-    const blocNote = `
-      <div class="fiche-card">
-        <div class="fiche-title"><i data-lucide="sticky-note"></i> Note</div>
-        <div class="text-sm">${fRow('Note libre', 'note', 'text', d.note)}</div>
-      </div>`;
+        </div>`)}`;
 
     const blocDelete = `
       <div class="pt-2 border-t border-slate-100">
         <button type="button" id="drawer-delete" data-key="${escapeHtml(d.key)}" class="btn text-sm text-red-600 hover:bg-red-50 w-full justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer ce conducteur</button>
       </div>`;
 
-    $('drawer-body').innerHTML =
-      toggle + stats +
-      (ficheStyle === 'profil' ? blocProfil : blocCartes) +
-      permisSectionHTML(d) + blocVehicules + blocAmendes + blocNote + blocDelete;
+    let corps;
+    if (ficheStyle === 'profil') {
+      corps = blocProfil + card('id-card', `Permis de conduire ${permisBadge(d)}`, permisSectionHTML(d))
+        + card('car', `Véhicules · ${d.vehicules.length}`, vehiculesInner)
+        + card('ticket', `Amendes · ${d.amendes.length}`, amendesInner)
+        + card('sticky-note', 'Note', noteInner);
+    } else if (ficheStyle === 'colore') {
+      corps = cCard('#6366F1', 'user', 'Identité', identiteInner)
+        + cCard('#14B8A6', 'contact', 'Contact', contactInner)
+        + cCard('#8B5CF6', 'id-card', `Permis de conduire ${permisBadge(d)}`, permisSectionHTML(d))
+        + cCard('#F59E0B', 'car', `Véhicules · ${d.vehicules.length}`, vehiculesInner)
+        + cCard('#EF4444', 'ticket', `Amendes · ${d.amendes.length}`, amendesInner)
+        + cCard('#64748B', 'sticky-note', 'Note', noteInner);
+    } else {
+      corps = card('user', 'Identité', identiteInner)
+        + card('contact', 'Contact', contactInner)
+        + card('id-card', `Permis de conduire ${permisBadge(d)}`, permisSectionHTML(d))
+        + card('car', `Véhicules · ${d.vehicules.length}`, vehiculesInner)
+        + card('ticket', `Amendes · ${d.amendes.length}`, amendesInner)
+        + card('sticky-note', 'Note', noteInner);
+    }
+
+    $('drawer-body').innerHTML = toggle + stats + corps + blocDelete;
 
     $('drawer').classList.add('open');
     $('drawer-backdrop').classList.add('open');
