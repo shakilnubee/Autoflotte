@@ -206,6 +206,8 @@
 
     <div class="mt-4 flex items-center gap-3 flex-wrap">
       <p class="text-xs text-slate-500" id="result-count"></p>
+      <button id="table-more" class="inline-flex items-center gap-1 text-sm font-semibold" style="color: var(--fp-accent); display:none">Cliquez pour tout voir</button>
+      <span class="text-slate-300">·</span>
       <button id="btn-voir-tout" class="text-xs font-semibold underline" style="color: var(--fp-accent)">Tout voir (toutes années + archivées)</button>
     </div>
 
@@ -216,6 +218,18 @@
     <div class="card p-6 mb-6">
       <h3 class="font-bold text-slate-900 mb-4">Répartition par type <span class="text-xs font-normal text-slate-400">— clique pour filtrer</span></h3>
       <div id="type-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+    </div>
+
+    <!-- Évolution mensuelle + Heatmap calendrier (déplacés tout en bas) -->
+    <div class="grid lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Évolution mensuelle 2026</h3>
+        <div class="chart-wrap-sm"><canvas id="moisChart"></canvas></div>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Calendrier des amendes <span class="text-xs font-normal text-slate-400">— clique un jour</span></h3>
+        <div id="heatmap" class="overflow-x-auto"></div>
+      </div>
     </div>
   </main>
 </div>
@@ -315,7 +329,8 @@
   const data = window.FP_DATA;
   // Cette page n'affiche que les amendes de 2026 (les 2025 sont historiques)
   // Le filtre est appliqué dans filtered() pour résister au rechargement depuis Supabase
-  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false };
+  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false };
+  const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
   const $ = (id) => document.getElementById(id);
 
   // Catégorise un motif en grande famille (pour les mini-stats et le filtre par type)
@@ -472,11 +487,13 @@
   }
 
   function renderTable() {
-    const rows = sortRows(filtered());
-    renderSummary(rows);
+    const allRows = sortRows(filtered());
+    renderSummary(allRows);
     const tbody = $('amendes-tbody');
     const empty = $('empty-state');
-    if (rows.length === 0) {
+    // Limite d'affichage : 10 par défaut, sauf si l'utilisateur a déplié
+    const rows = state.tableExpanded ? allRows : allRows.slice(0, TABLE_LIMIT);
+    if (allRows.length === 0) {
       tbody.innerHTML = '';
       empty.classList.remove('hidden');
     } else {
@@ -491,8 +508,18 @@
         return `<tr class="cursor-pointer" data-id="${a.id}">${cells}</tr>`;
       }).join('');
     }
-    const denom = state.voirTout ? data.amendes.length : data.amendes.filter(a => a.annee === '2026').length;
-    $('result-count').textContent = `${rows.length} amende${rows.length > 1 ? 's' : ''} affichée${rows.length > 1 ? 's' : ''} sur ${denom}`;
+    // Bouton déplier / replier
+    const moreBtn = $('table-more');
+    if (moreBtn) {
+      if (allRows.length > TABLE_LIMIT) {
+        moreBtn.style.display = '';
+        moreBtn.innerHTML = state.tableExpanded
+          ? '<i data-lucide="chevron-up" class="w-3.5 h-3.5"></i> Réduire (afficher 10)'
+          : `<i data-lucide="chevron-down" class="w-3.5 h-3.5"></i> Cliquez pour tout voir (${allRows.length})`;
+      } else { moreBtn.style.display = 'none'; }
+    }
+    $('result-count').textContent = `${rows.length} amende${rows.length > 1 ? 's' : ''} affichée${rows.length > 1 ? 's' : ''} sur ${allRows.length}`;
+    if (window.lucide) lucide.createIcons();
   }
 
   // ---------- Filtres pilotés par les graphes ----------
@@ -1376,6 +1403,7 @@
   $('drawer-designer').addEventListener('click', markDesigne);
   // Formate le n° d'avis quand on quitte le champ (FPS espacé / contravention attaché)
   $('am-avis').addEventListener('blur', (e) => { e.target.value = fmtNumeroAvis(e.target.value); });
+  $('table-more').addEventListener('click', () => { state.tableExpanded = !state.tableExpanded; renderTable(); });
   $('btn-voir-tout').addEventListener('click', () => {
     state.voirTout = !state.voirTout;
     if (state.voirTout) { // on remet à zéro les autres filtres pour vraiment tout voir

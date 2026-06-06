@@ -545,6 +545,22 @@
 
   // Re-init icons
   lucide.createIcons();
+
+  // Rafraîchit les KPIs dépendant des données quand Supabase a chargé (live),
+  // sinon le tableau de bord reste sur le cache statique data.js (ex. amendes à payer périmé).
+  document.addEventListener('fp:data-ready', () => {
+    document.getElementById('kpi-vehicules').textContent = data.vehicules.length;
+    const ap = (data.amendes || []).filter(a => { const s = (a.statut || '').trim().toLowerCase(); return s === 'à payer' || s === 'a payer'; }).length;
+    document.getElementById('kpi-amendes').textContent = ap;
+    const km = data.vehicules.reduce((s, v) => s + (v.km || 0), 0);
+    document.getElementById('kpi-km').textContent = FP.num(km) + ' km';
+    document.getElementById('kpi-km-moyen').textContent = FP.num(data.vehicules.length ? Math.round(km / data.vehicules.length) : 0) + ' km';
+    document.getElementById('kpi-valeur').textContent = FP.euro(data.vehicules.reduce((s, v) => s + (v.valeurAchat || 0), 0));
+    document.getElementById('kpi-entretien').textContent = data.vehicules.filter(v => v.statut === 'entretien').length;
+    const cm = new Date().toISOString().slice(0, 7);
+    document.getElementById('kpi-couts').textContent = FP.euro((data.factures || []).filter(f => (f.date || '').startsWith(cm)).reduce((s, f) => s + (f.montantTTC || 0), 0));
+    if (typeof refreshAlertes === 'function') refreshAlertes();
+  });
 </script>
 </body>
 </html>
