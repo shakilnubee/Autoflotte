@@ -422,6 +422,7 @@
         <i data-lucide="id-card" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
         <div class="flex-1 min-w-0"><div class="font-medium truncate">${escapeHtml(name)}</div><div class="text-xs text-slate-500">${manual ? 'Ajouté manuellement' : 'Google Drive'}</div></div>
         ${action}
+        ${eff.url ? `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" id="permis-reread" data-url="${escapeHtml(eff.url)}" data-key="${escapeHtml(key)}" title="Relire le scan en haute qualité"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i> Relire</button>` : ''}
         ${manual ? `<button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-permis-del="${escapeHtml(key)}" title="Supprimer ce permis"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
       </div>`;
     } else {
@@ -961,6 +962,10 @@
     const upBtn = e.target.closest('#permis-upload');
     if (upBtn) { _permisUploadKey = upBtn.dataset.key; $('permis-file').click(); return; }
 
+    // Relire un scan déjà enregistré (haute qualité + binarisation pour effacer la rosette)
+    const rr = e.target.closest('#permis-reread');
+    if (rr) { rereadPermis(rr.dataset.url, rr.dataset.key); return; }
+
     const delPermis = e.target.closest('[data-permis-del]');
     if (delPermis) {
       upsertCond(delPermis.dataset.permisDel, { permisUrl: null, permisFileId: null });
@@ -989,15 +994,44 @@
       document.head.appendChild(s);
     });
   }
-  async function pdfToCanvas(file) {
+  async function pdfToCanvas(src, scale) {
     await loadScript(PDFJS_CDN);
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
-    const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+    const pdf = await window.pdfjsLib.getDocument({ data: await src.arrayBuffer() }).promise;
     const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 2 });
+    const viewport = page.getViewport({ scale: scale || 2 });
     const cv = document.createElement('canvas'); cv.width = viewport.width; cv.height = viewport.height;
     await page.render({ canvasContext: cv.getContext('2d'), viewport }).promise;
     return cv;
+  }
+  function imgToCanvas(blob) {
+    return new Promise((resolve, reject) => {
+      const img = new Image(); const u = URL.createObjectURL(blob);
+      img.onload = () => { const cv = document.createElement('canvas'); cv.width = img.naturalWidth; cv.height = img.naturalHeight; cv.getContext('2d').drawImage(img, 0, 0); URL.revokeObjectURL(u); resolve(cv); };
+      img.onerror = () => { URL.revokeObjectURL(u); reject(new Error('image illisible')); };
+      img.src = u;
+    });
+  }
+  async function srcToCanvas(src, scale) {
+    const isPdf = src.type === 'application/pdf' || /\.pdf($|\?)/i.test(src.name || '');
+    return isPdf ? pdfToCanvas(src, scale) : imgToCanvas(src);
+  }
+  // Binarisation N&B : efface la rosette rose du permis pour faire ressortir le texte
+  function killPink(canvas, seuil) {
+    const ctx = canvas.getContext('2d');
+    const im = ctx.getImageData(0, 0, canvas.width, canvas.height); const d = im.data; const s = seuil || 125;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+      const v = lum < s ? 0 : 255; d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    ctx.putImageData(im, 0, 0); return canvas;
+  }
+  async function ocrCanvas(canvas) {
+    await loadScript(TESSERACT_CDN);
+    const worker = await Tesseract.createWorker('fra');
+    const { data } = await worker.recognize(canvas);
+    await worker.terminate();
+    return parsePermis(data.text || '');
   }
   // Analyse le texte OCR d'un permis de conduire français
   function parsePermis(raw) {
@@ -1019,21 +1053,49 @@
       const uniq = [...new Set(dates)].sort();
       const today = new Date().toISOString().slice(0, 10);
       const futures = uniq.filter(d => d > today);
-      // Expiration = date future la plus lointaine ; obtention = date passée la plus ancienne
       if (futures.length) out.expiration = futures[futures.length - 1];
       const passees = uniq.filter(d => d <= today);
       if (passees.length) out.obtention = passees[0];
     }
     return out;
   }
+  // Lecture à l'upload (fichier local) : prétraitement léger
   async function ocrPermis(file) {
-    await loadScript(TESSERACT_CDN);
-    let image = file;
-    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) image = await pdfToCanvas(file);
-    const worker = await Tesseract.createWorker('fra');
-    const { data } = await worker.recognize(image);
-    await worker.terminate();
-    return parsePermis(data.text || '');
+    const cv = await srcToCanvas(file, 2.5);
+    return ocrCanvas(killPink(cv, 125));
+  }
+  // Relecture d'un scan déjà stocké (URL Supabase) : haute résolution + binarisation
+  async function rereadPermisFromUrl(url) {
+    const resp = await fetch(url, { mode: 'cors' });
+    if (!resp.ok) throw new Error('téléchargement impossible (' + resp.status + ')');
+    const blob = await resp.blob();
+    const cv = await srcToCanvas(blob, 3);
+    return ocrCanvas(killPink(cv, 125));
+  }
+  // Bouton "Relire" : relit le scan stocké et met à jour les champs trouvés
+  async function rereadPermis(url, k) {
+    const lbl = { permisType: 'type', permisNumero: 'numéro', permisObtention: "date d'obtention", permisExpiration: "date d'expiration" };
+    const setStatus = (msg, color) => { const st = $('permis-upload-status'); if (st) { st.classList.remove('hidden'); st.setAttribute('style', color); st.innerHTML = msg; } };
+    try {
+      setStatus('🔍 Relecture du scan en haute qualité… (10–20 s)', 'background:#F1F5F9;color:#475569;');
+      const parsed = await rereadPermisFromUrl(url);
+      const changes = {};
+      ['type', 'numero', 'obtention', 'expiration'].forEach(f => {
+        const map = { type: 'permisType', numero: 'permisNumero', obtention: 'permisObtention', expiration: 'permisExpiration' };
+        if (parsed[f]) changes[map[f]] = parsed[f];
+      });
+      if (Object.keys(changes).length) {
+        upsertCond(k, changes);
+        drivers = buildDrivers();
+        openDrawer(currentDriverKey);
+        setStatus(`✓ Relu : <b>${Object.keys(changes).map(c => lbl[c]).join(', ')}</b>. Vérifie / corrige si besoin (double-clic).`, 'background:#ECFDF5;color:#047857;');
+      } else {
+        setStatus('Relecture terminée, mais rien de lisible automatiquement (rosette / qualité photo). Saisis les champs à la main (double-clic).', 'background:#FEF3C7;color:#92400E;');
+      }
+    } catch (err) {
+      console.error('[rereadPermis]', err);
+      setStatus('Relecture impossible : ' + (err.message || err) + '. (Le scan doit être hébergé sur la plateforme.)', 'background:#FEF2F2;color:#B91C1C;');
+    }
   }
 
   $('drawer-body').addEventListener('change', async (e) => {
