@@ -271,18 +271,15 @@ FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase()
 FP.DRIVE_CONDUCTEURS = new Set(["ahmed","akram","ambre","andrea","anna","bram","charles","conu","daniel","david","diana","enguerrand","eugénie","farah","frédéric","fx","gionata","guerric","halim","ilhem","jérémie","jérémy","jimmy","jocelyn","johanna","léo","lucie","martin","maxime","mégane","mickaël","mona","monsieur","mr","nacim","nawelle","nicolas","pauline","raphaël","romuald","samira","sergio","shakil","shaohui","sofiane","thomas","xavi","yannis","youssouf"]);
 // Étiquettes de chauffeur qui ne sont PAS des personnes
 FP.NON_CHAUFFEURS = ['Siège', 'Dépôt', 'Navette', 'VENDU', 'x', 'X', 'Fenwick'];
-// Comptage des conducteurs (mêmes règles que la page Conducteurs, hors manuels/masqués)
-// → garantit le même nombre sur le tableau de bord et la page Conducteurs.
+// Comptage des conducteurs ENREGISTRÉS : uniquement les personnes ayant un véhicule
+// attribué dans la flotte. On n'inclut PAS les personnes connues seulement via une amende
+// (emprunteur ponctuel, ancien conducteur…), conformément à la demande.
 FP.driverKeysFromData = (data) => {
   const keys = new Set();
   (data.vehicules || []).forEach(v => {
     const name = (v.chauffeur || '').trim();
     if (!name || name === '—' || FP.NON_CHAUFFEURS.includes(name)) return;
     const k = FP.normPrenom(name); if (k) keys.add(k);
-  });
-  (data.amendes || []).forEach(a => {
-    const k = FP.normPrenom(a.prenom); if (!k) return;
-    if (keys.has(k) || FP.DRIVE_CONDUCTEURS.has(k)) keys.add(k);
   });
   return keys;
 };
