@@ -159,18 +159,24 @@
     </div>
 
     <!-- KPIs -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
       <div class="kpi">
         <div class="kpi-label">Conducteurs</div>
         <div class="kpi-value" id="kpi-total">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Moyenne d'âge</div>
+        <div class="kpi-value" id="kpi-age" style="color: var(--fp-accent)">—</div>
+        <div class="kpi-delta" id="kpi-age-sub"></div>
       </div>
       <div class="kpi">
         <div class="kpi-label">Avec ≥ 1 amende</div>
         <div class="kpi-value" id="kpi-avec-amende" style="color: var(--fp-warn)">—</div>
       </div>
       <div class="kpi">
-        <div class="kpi-label">Total amendes payé</div>
-        <div class="kpi-value" id="kpi-total-paye">—</div>
+        <div class="kpi-label">Total accidents</div>
+        <div class="kpi-value" id="kpi-accidents" style="color:#F97316">—</div>
+        <div class="kpi-delta">sinistres flotte</div>
       </div>
       <div class="kpi">
         <div class="kpi-label">Points perdus cumulés</div>
@@ -528,9 +534,17 @@
     $('kpi-total').textContent = drivers.length;
     const avec = drivers.filter(d => d.amendes.length > 0).length;
     $('kpi-avec-amende').textContent = avec;
-    const totalPaye = drivers.reduce((s, d) =>
-      s + d.amendes.filter(a => a.statut === 'payée').reduce((s2, a) => s2 + (a.montant || 0), 0), 0);
-    $('kpi-total-paye').textContent = FP.euro(totalPaye);
+    // Moyenne d'âge (sur les conducteurs dont la date de naissance est renseignée)
+    const ages = drivers.map(d => {
+      if (!d.dateNaissance) return null;
+      const a = Math.floor((Date.now() - new Date(d.dateNaissance)) / 31557600000);
+      return (a > 0 && a < 120) ? a : null;
+    }).filter(a => a != null);
+    $('kpi-age').textContent = ages.length ? Math.round(ages.reduce((s, a) => s + a, 0) / ages.length) + ' ans' : '—';
+    $('kpi-age-sub').textContent = ages.length ? `sur ${ages.length} renseigné${ages.length > 1 ? 's' : ''}` : 'aucune date saisie';
+    // Total accidents (sinistres des véhicules attribués)
+    const totAcc = drivers.reduce((s, d) => s + driverAccidents(d.vehicules.map(v => v.immat)).length, 0);
+    $('kpi-accidents').textContent = totAcc;
     const points = drivers.reduce((s, d) => s + d.amendes.reduce((s2, a) => s2 + (Number(a.points) || 0), 0), 0);
     $('kpi-points').textContent = points;
   }
