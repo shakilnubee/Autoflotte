@@ -135,27 +135,6 @@
       </div>
     </div>
 
-    <!-- Délai de paiement -->
-    <div id="delai-banner" class="hidden items-center gap-3 px-4 py-3 mb-6 rounded-xl" style="background:#FEF2F2;border:1px solid #FECACA"></div>
-
-    <!-- Mini-stats par type -->
-    <div class="card p-6 mb-6">
-      <h3 class="font-bold text-slate-900 mb-4">Répartition par type <span class="text-xs font-normal text-slate-400">— clique pour filtrer</span></h3>
-      <div id="type-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
-    </div>
-
-    <!-- Évolution mensuelle + Heatmap calendrier -->
-    <div class="grid lg:grid-cols-2 gap-6 mb-6">
-      <div class="card p-6">
-        <h3 class="font-bold text-slate-900 mb-4">Évolution mensuelle 2026</h3>
-        <div class="chart-wrap-sm"><canvas id="moisChart"></canvas></div>
-      </div>
-      <div class="card p-6">
-        <h3 class="font-bold text-slate-900 mb-4">Calendrier des amendes <span class="text-xs font-normal text-slate-400">— clique un jour</span></h3>
-        <div id="heatmap" class="overflow-x-auto"></div>
-      </div>
-    </div>
-
     <!-- Filtres -->
     <div class="card p-4 mb-6">
       <div class="flex flex-wrap items-center gap-3">
@@ -228,6 +207,15 @@
     <div class="mt-4 flex items-center gap-3 flex-wrap">
       <p class="text-xs text-slate-500" id="result-count"></p>
       <button id="btn-voir-tout" class="text-xs font-semibold underline" style="color: var(--fp-accent)">Tout voir (toutes années + archivées)</button>
+    </div>
+
+    <!-- Délai de paiement -->
+    <div id="delai-banner" class="hidden items-center gap-3 px-4 py-3 mt-6 mb-6 rounded-xl" style="background:#FEF2F2;border:1px solid #FECACA"></div>
+
+    <!-- Mini-stats par type -->
+    <div class="card p-6 mb-6">
+      <h3 class="font-bold text-slate-900 mb-4">Répartition par type <span class="text-xs font-normal text-slate-400">— clique pour filtrer</span></h3>
+      <div id="type-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
     </div>
   </main>
 </div>
@@ -684,22 +672,25 @@
     const mois = Array(12).fill(0); const moisMontant = Array(12).fill(0);
     amendes2026.forEach(a => { const m = parseInt((a.date || '').slice(5, 7), 10) - 1; if (m >= 0 && m < 12) { mois[m]++; moisMontant[m] += (a.montant || 0); } });
     const moisLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
-    if (moisChart) moisChart.destroy();
-    moisChart = new Chart($('moisChart'), {
-      type: 'line',
-      data: { labels: moisLabels, datasets: [{ label: 'Nb amendes', data: mois, borderColor: '#DC2626', backgroundColor: 'rgba(220,38,38,.12)', fill: true, tension: .35, pointRadius: 3, pointBackgroundColor: '#DC2626' }] },
-      options: {
-        plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: (ctx) => 'Montant : ' + FP.euro(moisMontant[ctx.dataIndex]) } } },
-        scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
-        maintainAspectRatio: false, responsive: true,
-      }
-    });
+    if ($('moisChart')) {
+      if (moisChart) moisChart.destroy();
+      moisChart = new Chart($('moisChart'), {
+        type: 'line',
+        data: { labels: moisLabels, datasets: [{ label: 'Nb amendes', data: mois, borderColor: '#DC2626', backgroundColor: 'rgba(220,38,38,.12)', fill: true, tension: .35, pointRadius: 3, pointBackgroundColor: '#DC2626' }] },
+        options: {
+          plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: (ctx) => 'Montant : ' + FP.euro(moisMontant[ctx.dataIndex]) } } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
+          maintainAspectRatio: false, responsive: true,
+        }
+      });
+    }
 
     renderHeatmap(amendes2026);
   }
 
   // --- Heatmap calendrier (style GitHub) ---
   function renderHeatmap(amendes2026) {
+    if (!$('heatmap')) return;
     const counts = {};
     amendes2026.forEach(a => { if (a.date) counts[a.date] = (counts[a.date] || 0) + 1; });
     const color = (c) => !c ? '#EEF2F7' : c === 1 ? '#FECACA' : c === 2 ? '#F87171' : c === 3 ? '#EF4444' : '#B91C1C';
@@ -1333,7 +1324,7 @@
   $('type-stats').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (b) setMotifCategory(b.dataset.cat); });
   $('podium').addEventListener('click', e => { const b = e.target.closest('[data-cond]'); if (b) setConducteurFilter(b.dataset.cond); });
   $('podium-toggle').addEventListener('click', () => { podiumExpanded = !podiumExpanded; renderPodium(); });
-  $('heatmap').addEventListener('click', e => { const b = e.target.closest('[data-day]'); if (b) setDay(b.dataset.day); });
+  { const hm = $('heatmap'); if (hm) hm.addEventListener('click', e => { const b = e.target.closest('[data-day]'); if (b) setDay(b.dataset.day); }); }
   $('delai-banner').addEventListener('click', e => {
     if (!e.target.closest('#delai-voir')) return;
     state.statut = 'à payer'; state.sortKey = 'date'; state.sortDir = 'asc'; $('sort-key').value = 'date';
