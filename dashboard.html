@@ -268,8 +268,21 @@
   // === KPIs ===
   document.getElementById('kpi-vehicules').textContent = data.vehicules.length;
 
-  // Nombre de conducteurs — uniquement les conducteurs enregistrés (avec véhicule attribué)
-  document.getElementById('kpi-conducteurs').textContent = FP.driverKeysFromData(data).size;
+  // Nombre de conducteurs — conducteurs enregistrés (avec véhicule attribué)
+  // + conducteurs ajoutés manuellement sans véhicule attitré (table conducteurs, manuel=true).
+  const baseDriverKeys = FP.driverKeysFromData(data);
+  document.getElementById('kpi-conducteurs').textContent = baseDriverKeys.size;
+  if (FP.db && FP.db.select) {
+    FP.db.select('conducteurs').then(rows => {
+      const keys = new Set(baseDriverKeys);
+      (rows || []).forEach(r => {
+        if (!r.key) return;
+        if (r.masque) { keys.delete(r.key); return; }   // masqué → retiré du comptage
+        if (r.manuel) keys.add(r.key);                  // manuel (sans véhicule) → compté
+      });
+      document.getElementById('kpi-conducteurs').textContent = keys.size;
+    }).catch(() => {});
+  }
 
   // Amendes restant à payer (statut « à payer »)
   const amendesAPayer = (data.amendes || []).filter(a => {
