@@ -432,14 +432,14 @@
 
       <!-- Import carte grise : pré-remplissage automatique des champs -->
       <div id="cg-import">
-        <input type="file" id="f-cg-file" accept="image/*,application/pdf" class="hidden" />
+        <input type="file" id="f-cg-file" accept="image/*,application/pdf" class="hidden" multiple />
         <button type="button" id="cg-trigger" class="w-full flex items-center gap-3 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
           <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
             <i data-lucide="scan-line" class="w-5 h-5"></i>
           </span>
           <span class="flex-1">
-            <span class="block text-sm font-semibold text-slate-800">Importer la carte grise</span>
-            <span class="block text-xs text-slate-500">Photo ou PDF — les champs lisibles se remplissent tout seuls</span>
+            <span class="block text-sm font-semibold text-slate-800">Importer une ou plusieurs cartes grises</span>
+            <span class="block text-xs text-slate-500">Photo ou PDF — 1 carte = remplit le formulaire · plusieurs = création en lot</span>
           </span>
         </button>
         <div id="cg-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
@@ -557,6 +557,41 @@
     <div class="flex gap-2 pt-5">
       <button class="btn btn-outline flex-1 justify-center" id="grp-cancel">Annuler</button>
       <button class="btn btn-dark flex-1 justify-center" id="grp-save"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- =============== MODAL IMPORT EN LOT (plusieurs cartes grises) =============== -->
+<div class="modal-backdrop" id="cg-batch-backdrop">
+  <div class="modal p-6" style="max-width: 1000px">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-xl font-extrabold" id="cg-batch-title">Import en lot — cartes grises</h2>
+      <button class="p-2 hover:bg-slate-100 rounded-lg" id="cg-batch-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm text-slate-500 mb-3">Chaque carte grise lue devient un véhicule. Vérifie / corrige les champs détectés, décoche ceux que tu ne veux pas créer, puis valide. La lecture se fait dans ton navigateur (rien n'est envoyé sur un serveur).</p>
+    <div id="cg-batch-progress" class="text-xs rounded-lg px-3 py-2 mb-3" style="background:#F1F5F9;color:#475569;"></div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border-collapse" id="cg-batch-table">
+        <thead>
+          <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
+            <th class="py-2 pr-2"><input type="checkbox" id="cg-batch-all" class="accent-teal-600 w-4 h-4" checked title="Tout cocher/décocher"></th>
+            <th class="py-2 pr-2">Fichier</th>
+            <th class="py-2 pr-2">Immat *</th>
+            <th class="py-2 pr-2">Marque *</th>
+            <th class="py-2 pr-2">Modèle *</th>
+            <th class="py-2 pr-2">1ère immat.</th>
+            <th class="py-2 pr-2">VIN</th>
+            <th class="py-2 pr-2">Carburant</th>
+            <th class="py-2 pr-2">CO₂</th>
+            <th class="py-2 pr-2">P.fisc</th>
+          </tr>
+        </thead>
+        <tbody id="cg-batch-tbody"></tbody>
+      </table>
+    </div>
+    <div class="flex gap-2 pt-4">
+      <button type="button" class="btn btn-outline flex-1 justify-center" id="cg-batch-cancel">Annuler</button>
+      <button type="button" class="btn btn-dark flex-1 justify-center" id="cg-batch-create"><i data-lucide="check" class="w-4 h-4"></i> <span id="cg-batch-create-label">Créer les véhicules</span></button>
     </div>
   </div>
 </div>
@@ -2566,12 +2601,163 @@
     }
   }
 
+  // OCR brut d'un fichier (image ou PDF) → texte, en réutilisant un worker Tesseract existant.
+  async function ocrFileToText(file, worker) {
+    let image = file;
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
+      image = await pdfToCanvas(file);
+    }
+    const { data } = await worker.recognize(image);
+    return data.text || '';
+  }
+
+  // ============================================================
+  //  Import EN LOT : plusieurs cartes grises → plusieurs véhicules
+  // ============================================================
+  let _cgBatch = []; // [{ file, parsed:{immat,marque,...}, include:true }]
+
+  function batchProgress(msg, type) {
+    const el = $('cg-batch-progress');
+    const colors = { working: 'background:#F1F5F9;color:#475569;', ok: 'background:#ECFDF5;color:#047857;', error: 'background:#FEF2F2;color:#B91C1C;' };
+    el.setAttribute('style', colors[type] || colors.working);
+    el.innerHTML = msg;
+  }
+
+  function renderBatchRows() {
+    const tbody = $('cg-batch-tbody');
+    const carbs = ['', 'Essence', 'Diesel', 'Hybride', 'Électrique'];
+    tbody.innerHTML = _cgBatch.map((row, i) => {
+      const p = row.parsed || {};
+      const esc = s => (s == null ? '' : String(s)).replace(/"/g, '&quot;');
+      const opts = carbs.map(c => `<option value="${c}" ${(p.carburant || '') === c ? 'selected' : ''}>${c || '—'}</option>`).join('');
+      const incomplete = !p.immat || !p.marque || !p.modele;
+      return `<tr class="border-b border-slate-100 ${incomplete ? 'bg-amber-50/50' : ''}" data-row="${i}">
+        <td class="py-1.5 pr-2 align-middle"><input type="checkbox" class="cgb-inc accent-teal-600 w-4 h-4" data-i="${i}" ${row.include ? 'checked' : ''}></td>
+        <td class="py-1.5 pr-2 align-middle text-xs text-slate-500 max-w-[120px] truncate" title="${esc(row.file.name)}">${esc(row.file.name)}${incomplete ? ' <span class="text-amber-600" title="Champs manquants">⚠</span>' : ''}</td>
+        <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs font-mono" style="min-width:96px" data-i="${i}" data-k="immat" value="${esc(p.immat)}" placeholder="AB-123-CD"></td>
+        <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs" style="min-width:90px" data-i="${i}" data-k="marque" value="${esc(p.marque)}"></td>
+        <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs" style="min-width:90px" data-i="${i}" data-k="modele" value="${esc(p.modele)}"></td>
+        <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs" type="date" data-i="${i}" data-k="dateMiseEnCirculation" value="${esc(p.dateMiseEnCirculation)}"></td>
+        <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs font-mono" style="min-width:110px" data-i="${i}" data-k="vin" value="${esc(p.vin)}"></td>
+        <td class="py-1.5 pr-2"><select class="field-input !py-1 !text-xs" data-i="${i}" data-k="carburant">${opts}</select></td>
+        <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs" type="number" style="width:64px" data-i="${i}" data-k="co2" value="${esc(p.co2)}"></td>
+        <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs" type="number" style="width:60px" data-i="${i}" data-k="puissanceFiscale" value="${esc(p.puissanceFiscale)}"></td>
+      </tr>`;
+    }).join('');
+    updateBatchCreateLabel();
+  }
+
+  function updateBatchCreateLabel() {
+    const n = _cgBatch.filter(r => r.include).length;
+    $('cg-batch-create-label').textContent = n > 0 ? `Créer les ${n} véhicule${n > 1 ? 's' : ''}` : 'Créer les véhicules';
+    $('cg-batch-create').disabled = n === 0;
+    $('cg-batch-create').style.opacity = n === 0 ? '.5' : '';
+  }
+
+  async function handleCarteGriseBatch(files) {
+    _cgBatch = files.map(f => ({ file: f, parsed: {}, include: true }));
+    $('cg-batch-title').textContent = `Import en lot — ${files.length} carte${files.length > 1 ? 's' : ''} grise${files.length > 1 ? 's' : ''}`;
+    renderBatchRows();
+    $('cg-batch-backdrop').classList.add('open');
+    lucide.createIcons();
+    try {
+      batchProgress('<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Préparation de la lecture…</span>', 'working');
+      await loadScript(TESSERACT_CDN);
+      const worker = await Tesseract.createWorker('fra');
+      for (let i = 0; i < _cgBatch.length; i++) {
+        batchProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Lecture ${i + 1}/${_cgBatch.length} — ${_cgBatch[i].file.name}…</span>`, 'working');
+        try {
+          const text = await ocrFileToText(_cgBatch[i].file, worker);
+          _cgBatch[i].parsed = parseCarteGrise(text);
+        } catch (err) {
+          console.error('[batch OCR]', err);
+          _cgBatch[i].parsed = {};
+        }
+        renderBatchRows();
+      }
+      await worker.terminate();
+      const lus = _cgBatch.filter(r => r.parsed && r.parsed.immat).length;
+      batchProgress(`<b>✓ Lecture terminée</b> — ${lus}/${_cgBatch.length} immatriculation(s) détectée(s). Corrige les champs manquants (lignes surlignées) avant de créer.`, lus ? 'ok' : 'error');
+    } catch (err) {
+      console.error(err);
+      batchProgress("Impossible de lancer la lecture (connexion internet ?). Tu peux quand même saisir les champs à la main puis créer.", 'error');
+    }
+  }
+
+  function closeBatchModal() { $('cg-batch-backdrop').classList.remove('open'); _cgBatch = []; }
+
+  async function createBatchVehicles() {
+    const rows = _cgBatch.filter(r => r.include);
+    const invalid = rows.filter(r => !(r.parsed.immat && r.parsed.marque && r.parsed.modele));
+    if (invalid.length) {
+      if (!confirm(`${invalid.length} ligne(s) n'ont pas d'immatriculation/marque/modèle complets et seront ignorées.\n\nCréer quand même les autres ?`)) return;
+    }
+    const valides = rows.filter(r => r.parsed.immat && r.parsed.marque && r.parsed.modele);
+    if (!valides.length) { batchProgress("Aucune ligne complète à créer (il faut au minimum immatriculation, marque et modèle).", 'error'); return; }
+
+    FP.history.commit();
+    $('cg-batch-create').disabled = true;
+    let done = 0, failed = 0;
+    for (let i = 0; i < valides.length; i++) {
+      const p = valides[i].parsed;
+      batchProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Création ${i + 1}/${valides.length} — ${p.immat}…</span>`, 'working');
+      // Upload du scan (facultatif : on continue même en cas d'échec)
+      let cgUrl = '';
+      try { cgUrl = await FP.uploadScan(valides[i].file, 'cartes-grises') || ''; } catch (e) { console.error('[batch upload]', e); }
+      const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+      const newV = {
+        id: nextVehId(),
+        immat: String(p.immat).toUpperCase(),
+        marque: p.marque, modele: p.modele,
+        categorie: 'Berline',
+        km: 0, statut: 'actif', chauffeur: '—', prochainCT: '—',
+        dateMiseEnCirculation: p.dateMiseEnCirculation || '',
+        vin: (p.vin || '').toUpperCase(),
+        carburant: p.carburant || null,
+        co2: num(p.co2),
+        puissanceFiscale: num(p.puissanceFiscale),
+        groupes: ['non-classe'],
+      };
+      if (cgUrl) newV.cgUrl = cgUrl;
+      data.vehicules.push(newV);
+      const ok = await persistVehicleUpsert(newV, true);
+      if (ok) done++; else { failed++; }
+    }
+    renderKPIs(); renderTabBar(); renderTable();
+    if (failed) batchProgress(`<b>${done} véhicule(s) créé(s)</b>, mais ${failed} n'ont pas pu être enregistrés en base (voir console). Ils restent visibles localement.`, 'error');
+    else { batchProgress(`<b>✓ ${done} véhicule(s) créé(s) et enregistré(s).</b>`, 'ok'); setTimeout(closeBatchModal, 1200); }
+  }
+
+  // Délégation : édition des champs + cases à cocher dans le tableau d'import en lot
+  $('cg-batch-tbody').addEventListener('input', (e) => {
+    const el = e.target;
+    if (el.classList.contains('cgb-inc')) { _cgBatch[+el.dataset.i].include = el.checked; updateBatchCreateLabel(); return; }
+    const i = el.dataset.i, k = el.dataset.k;
+    if (i == null || !k) return;
+    let val = el.value;
+    if (k === 'immat') val = val.toUpperCase();
+    _cgBatch[+i].parsed[k] = val;
+  });
+  $('cg-batch-all').addEventListener('change', (e) => {
+    const on = e.target.checked;
+    _cgBatch.forEach(r => r.include = on);
+    renderBatchRows();
+  });
+  $('cg-batch-close').addEventListener('click', closeBatchModal);
+  $('cg-batch-cancel').addEventListener('click', closeBatchModal);
+  $('cg-batch-create').addEventListener('click', createBatchVehicles);
+
   $('cg-trigger').addEventListener('click', () => $('f-cg-file').click());
   $('f-cg-file').addEventListener('change', (e) => {
-    const file = e.target.files && e.target.files[0];
-    _cgFile = file || null; // conservé pour l'envoi dans le stockage à l'enregistrement
-    handleCarteGrise(file);
-    e.target.value = ''; // permet de re-sélectionner le même fichier
+    const files = Array.from(e.target.files || []);
+    e.target.value = ''; // permet de re-sélectionner les mêmes fichiers
+    if (!files.length) return;
+    if (files.length === 1) {
+      _cgFile = files[0]; // conservé pour l'envoi dans le stockage à l'enregistrement
+      handleCarteGrise(files[0]);
+    } else {
+      handleCarteGriseBatch(files); // plusieurs → création en lot
+    }
   });
 
   // ---------- Init ----------
