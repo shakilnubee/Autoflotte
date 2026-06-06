@@ -144,7 +144,12 @@
 
     /** Lit toutes les lignes d'une table (converties en camelCase). */
     async select(table) {
-      const res = await client.from(table).select('*').order('id', { ascending: true });
+      let res = await client.from(table).select('*').order('id', { ascending: true });
+      // Certaines tables (ex. conducteurs, clé primaire = "key") n'ont pas de colonne "id" :
+      // l'ORDER BY id échoue → on réessaie sans tri plutôt que de renvoyer vide.
+      if (res.error && /column .*\bid\b.* does not exist/i.test(res.error.message || '')) {
+        res = await client.from(table).select('*');
+      }
       if (res.error) { console.error(`[FP.db.select ${table}]`, res.error); return { data: [], error: res.error }; }
       return { data: (res.data || []).map(toClient), error: null };
     },
