@@ -75,6 +75,25 @@
   .fiche-stat { border-radius: .8rem; padding: .7rem .5rem; text-align: center; border: 1px solid var(--fp-border); }
   .fiche-line { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: .5rem 0; border-bottom: 1px solid rgba(148,163,184,.18); font-size: .875rem; }
   .fiche-line:last-child { border-bottom: 0; }
+  /* Bascule de style de fiche */
+  .fiche-switch { display: inline-flex; background: rgba(148,163,184,.16); border-radius: .6rem; padding: .2rem; gap: .2rem; }
+  .fsw-btn { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; font-weight: 600; color: var(--fp-muted); padding: .35rem .75rem; border-radius: .45rem; cursor: pointer; border: none; background: none; }
+  .fsw-btn svg { width: 14px; height: 14px; }
+  .fsw-btn.active { background: #fff; color: var(--fp-primary); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  body.fp-dark .fsw-btn.active { background: #0f1a2b; color: #fff; }
+  /* Style "Profil" */
+  .fiche-hero { border-radius: 1rem; padding: 1rem 1.1rem; color: #fff; }
+  .fiche-hero .fh-poste { font-size: 1.15rem; font-weight: 800; line-height: 1.2; }
+  .fiche-hero .fh-grp { display: inline-block; font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; background: rgba(255,255,255,.22); padding: .12rem .55rem; border-radius: 9999px; margin-top: .35rem; }
+  .fiche-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+  .fiche-chip { display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; font-weight: 600; background: rgba(255,255,255,.20); color: #fff; padding: .3rem .65rem; border-radius: 9999px; text-decoration: none; }
+  .fiche-chip svg { width: 14px; height: 14px; }
+  .fiche-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+  .fiche-cell { border: 1px solid var(--fp-border); border-radius: .65rem; padding: .45rem .65rem; cursor: pointer; }
+  .fiche-cell:hover { border-color: var(--fp-accent); }
+  .fiche-cell .fcell-label { font-size: .61rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--fp-muted); margin-bottom: .12rem; }
+  .fiche-cell .cf-val.is-empty { border: none; padding: 0; background: none; }
+  .fiche-cell.col-span-2 { grid-column: span 2; }
 </style>
 <script>
 (function(){
@@ -687,16 +706,27 @@
     const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
 
     const fRow = (label, field, type, val) => `<div class="flex justify-between items-center gap-3 cf-row" data-cf="${field}" data-ct="${type}"><span class="text-slate-600">${label}</span><span class="text-right cf-val ${val ? 'font-medium' : 'is-empty'}">${val ? escapeHtml(val) : 'Ajouter'}</span></div>`;
+    const gCell = (label, field, type, val, span) => `<div class="cf-row fiche-cell ${span ? 'col-span-2' : ''}" data-cf="${field}" data-ct="${type}"><div class="fcell-label">${label}</div><div class="cf-val ${val ? 'font-medium' : 'is-empty'}">${val ? escapeHtml(val) : 'Ajouter'}</div></div>`;
     // Âge (à partir de la date de naissance)
-    let ageTxt = '';
-    if (d.dateNaissance) { const a = Math.floor((Date.now() - new Date(d.dateNaissance)) / 31557600000); if (a > 0 && a < 120) ageTxt = `<span class="text-xs text-slate-400 font-normal ml-1">(${a} ans)</span>`; }
-    $('drawer-body').innerHTML = `
-      <div class="grid grid-cols-3 gap-2.5">
+    let ageNum = null;
+    if (d.dateNaissance) { const a = Math.floor((Date.now() - new Date(d.dateNaissance)) / 31557600000); if (a > 0 && a < 120) ageNum = a; }
+    const ageTxt = ageNum ? `<span class="text-xs text-slate-400 font-normal ml-1">(${ageNum} ans)</span>` : '';
+    const dnPlain = d.dateNaissance ? FP.date(d.dateNaissance) + (ageNum ? ` (${ageNum} ans)` : '') : '';
+
+    const ficheStyle = localStorage.getItem('fp_cond_fiche_style') === 'profil' ? 'profil' : 'cartes';
+    const toggle = `<div class="flex justify-end"><div class="fiche-switch">
+        <button type="button" class="fsw-btn ${ficheStyle === 'cartes' ? 'active' : ''}" data-fstyle="cartes"><i data-lucide="layout-list"></i> Cartes</button>
+        <button type="button" class="fsw-btn ${ficheStyle === 'profil' ? 'active' : ''}" data-fstyle="profil"><i data-lucide="id-card"></i> Profil</button>
+      </div></div>`;
+
+    const stats = `<div class="grid grid-cols-3 gap-2.5">
         <div class="fiche-stat"><div class="kpi-label">Points perdus</div><div class="kpi-value" style="font-size:1.3rem; color: var(--fp-danger)">${nbPoints}</div></div>
         <div class="fiche-stat"><div class="kpi-label">Payé</div><div class="kpi-value" style="font-size:1.05rem">${FP.euro(totalPaye)}</div></div>
         <div class="fiche-stat"><div class="kpi-label">À payer</div><div class="kpi-value" style="font-size:1.05rem; color:${dus > 0 ? 'var(--fp-danger)' : 'var(--fp-text)'}">${FP.euro(dus)}</div></div>
-      </div>
+      </div>`;
 
+    // ---- Style "Cartes" : Identité + Contact en deux cartes ----
+    const blocCartes = `
       <div class="fiche-card">
         <div class="fiche-title"><i data-lucide="user"></i> Identité</div>
         <div class="text-sm">
@@ -706,7 +736,6 @@
           ${fRow('Poste de travail', 'poste', 'text', d.poste)}
         </div>
       </div>
-
       <div class="fiche-card">
         <div class="fiche-title"><i data-lucide="contact"></i> Contact</div>
         <div class="text-sm">
@@ -714,10 +743,34 @@
           ${fRow('Email', 'email', 'text', d.email)}
           ${fRow('Adresse', 'adresse', 'text', d.adresse)}
         </div>
+      </div>`;
+
+    // ---- Style "Profil" : bannière + grille compacte ----
+    const grp = driverGroupLabel(d);
+    const chips = [];
+    if (d.tel)   chips.push(`<a class="fiche-chip" href="tel:${escapeHtml(String(d.tel).replace(/\s+/g, ''))}"><i data-lucide="phone"></i> ${escapeHtml(d.tel)}</a>`);
+    if (d.email) chips.push(`<a class="fiche-chip" href="mailto:${escapeHtml(d.email)}"><i data-lucide="mail"></i> ${escapeHtml(d.email)}</a>`);
+    const blocProfil = `
+      <div class="fiche-hero" style="background:${avatarColor(d)}">
+        <div class="fh-poste">${d.poste ? escapeHtml(d.poste) : 'Poste non renseigné'}</div>
+        ${grp ? `<span class="fh-grp">${escapeHtml(grp)}</span>` : ''}
+        ${chips.length ? `<div class="fiche-chips">${chips.join('')}</div>` : ''}
       </div>
+      <div class="fiche-card">
+        <div class="fiche-title"><i data-lucide="user"></i> Informations</div>
+        <div class="fiche-grid">
+          ${gCell('Nom', 'nom', 'text', d.nom)}
+          ${gCell('Prénom', 'prenom', 'text', d.prenom)}
+          ${gCell('Naissance', 'dateNaissance', 'date', dnPlain)}
+          ${gCell('Poste', 'poste', 'text', d.poste)}
+          ${gCell('Téléphone', 'tel', 'text', d.tel)}
+          ${gCell('Email', 'email', 'text', d.email)}
+          ${gCell('Adresse', 'adresse', 'text', d.adresse, true)}
+        </div>
+      </div>`;
 
-      ${permisSectionHTML(d)}
-
+    // ---- Sections communes aux deux styles ----
+    const blocVehicules = `
       <div class="fiche-card">
         <div class="fiche-title"><i data-lucide="car"></i> Véhicules · ${d.vehicules.length}</div>
         ${d.vehicules.length === 0 ? '<p class="text-sm text-slate-500">Aucun véhicule assigné.</p>' :
@@ -731,11 +784,11 @@
                 ${FP.statutBadge(v.statut)}
                 <span class="text-xs text-slate-500 ml-1">${FP.num(v.km)} km</span>
               </div>
-            </div>
-          `).join('')
+            </div>`).join('')
         }
-      </div>
+      </div>`;
 
+    const blocAmendes = `
       <div class="fiche-card">
         <div class="fiche-title"><i data-lucide="ticket"></i> Amendes · ${d.amendes.length}</div>
         ${d.amendes.length === 0 ? '<p class="text-sm text-slate-500">Aucune amende ✓</p>' :
@@ -749,21 +802,26 @@
                 <div class="font-semibold">${a.montant ? FP.euroPrecis(a.montant) : '—'}</div>
                 <div class="text-xs">${a.statut === 'payée' ? '<span class="text-emerald-600">Payée</span>' : '<span class="text-red-600">À payer</span>'}</div>
               </div>
-            </div>
-          `).join('')
+            </div>`).join('')
         }
         ${d.amendes.length > 20 ? `<p class="text-xs text-slate-500 mt-2">… et ${d.amendes.length - 20} de plus</p>` : ''}
-      </div>
+      </div>`;
 
+    const blocNote = `
       <div class="fiche-card">
         <div class="fiche-title"><i data-lucide="sticky-note"></i> Note</div>
         <div class="text-sm">${fRow('Note libre', 'note', 'text', d.note)}</div>
-      </div>
+      </div>`;
 
+    const blocDelete = `
       <div class="pt-2 border-t border-slate-100">
         <button type="button" id="drawer-delete" data-key="${escapeHtml(d.key)}" class="btn text-sm text-red-600 hover:bg-red-50 w-full justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer ce conducteur</button>
-      </div>
-    `;
+      </div>`;
+
+    $('drawer-body').innerHTML =
+      toggle + stats +
+      (ficheStyle === 'profil' ? blocProfil : blocCartes) +
+      permisSectionHTML(d) + blocVehicules + blocAmendes + blocNote + blocDelete;
 
     $('drawer').classList.add('open');
     $('drawer-backdrop').classList.add('open');
@@ -884,6 +942,10 @@
 
   // Clics dans le drawer : voir / ajouter / supprimer un permis, ou supprimer le conducteur
   $('drawer-body').addEventListener('click', e => {
+    // Bascule de style de fiche (Cartes / Profil)
+    const fsw = e.target.closest('[data-fstyle]');
+    if (fsw) { localStorage.setItem('fp_cond_fiche_style', fsw.dataset.fstyle); if (currentDriverKey) openDrawer(currentDriverKey); return; }
+
     const view = e.target.closest('[data-permis-view]');
     if (view) { openViewer(view.dataset.permisView, view.dataset.permisTitle); return; }
 
