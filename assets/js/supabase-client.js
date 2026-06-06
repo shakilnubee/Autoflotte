@@ -75,6 +75,9 @@
     // (petit t) alors que le frontend lit "prochainCT" / "dateDernierCT".
     'prochain_ct':          'prochainCT',
     'date_dernier_ct':      'dateDernierCT',
+    // La colonne historique "note_pneus" (champ "Note pneus" retiré de la fiche) est
+    // réutilisée pour stocker l'autonomie du véhicule → propriété frontend "autonomie".
+    'note_pneus':           'autonomie',
   };
   const CAMEL_TO_SNAKE_OVERRIDES = {};
   Object.entries(SNAKE_TO_CAMEL_OVERRIDES).forEach(([s, c]) => { CAMEL_TO_SNAKE_OVERRIDES[c] = s; });
