@@ -81,6 +81,8 @@
   .fsw-btn svg { width: 14px; height: 14px; }
   .fsw-btn.active { background: #fff; color: var(--fp-primary); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
   body.fp-dark .fsw-btn.active { background: #0f1a2b; color: #fff; }
+  .fiche-switch-full { display: flex; width: 100%; }
+  .fiche-switch-full .fsw-btn { flex: 1; justify-content: center; }
   /* Style "Profil" */
   .fiche-hero { border-radius: 1rem; padding: 1rem 1.1rem; color: #fff; }
   .fiche-hero .fh-poste { font-size: 1.15rem; font-weight: 800; line-height: 1.2; }
@@ -208,14 +210,15 @@
 <div class="drawer-backdrop" id="drawer-backdrop"></div>
 <aside class="drawer" id="drawer">
   <div class="p-6 border-b border-slate-200 flex justify-between items-start">
-    <div class="flex items-center gap-3">
-      <div class="driver-avatar" id="drawer-avatar">?</div>
-      <div>
-        <h2 class="text-xl font-extrabold" id="drawer-name" data-cf="name" data-ct="text" style="cursor:pointer">—</h2>
-        <p class="text-sm text-slate-500" id="drawer-sub">—</p>
+    <div class="flex items-center gap-3.5 min-w-0">
+      <div class="driver-avatar" id="drawer-avatar" style="width:54px;height:54px;font-size:1.2rem">?</div>
+      <div class="min-w-0">
+        <h2 class="text-xl font-extrabold leading-tight" id="drawer-name" data-cf="name" data-ct="text" style="cursor:pointer">—</h2>
+        <div id="drawer-poste" class="text-[11px] font-bold uppercase tracking-wide mt-1"></div>
+        <p class="text-sm text-slate-500 mt-0.5" id="drawer-sub">—</p>
       </div>
     </div>
-    <button class="p-2 hover:bg-slate-100 rounded-lg" id="drawer-close">
+    <button class="p-2 hover:bg-slate-100 rounded-lg flex-shrink-0" id="drawer-close">
       <i data-lucide="x" class="w-5 h-5"></i>
     </button>
   </div>
@@ -701,14 +704,22 @@
     const d = drivers.find(x => x.key === key);
     if (!d) return;
     currentDriverKey = key;
-    $('drawer-avatar').textContent = initials(d.name);
+    const hdrColor = driverColor(d);
+    const hdrGrp = driverGroupLabel(d);
+    const avEl = $('drawer-avatar');
+    avEl.textContent = initials(d.name);
+    avEl.style.background = avatarColor(d);
     // Nom complet : prénom (d.name) + nom de famille si renseigné
     $('drawer-name').textContent = d.nom ? `${d.name} ${d.nom}` : d.name;
-    // Récap véhicule(s) dans l'en-tête : marque modèle + plaque
-    const vehResume = d.vehicules.length
-      ? d.vehicules.map(v => `${v.marque} ${v.modele} <span class="font-mono text-slate-500">${v.immat}</span>`).join(' · ')
-      : 'Aucun véhicule';
-    $('drawer-sub').innerHTML = `<span class="text-slate-700">${vehResume}</span> · ${d.amendes.length} amende${d.amendes.length > 1 ? 's' : ''}`;
+    // Poste (+ groupe) sous le nom, à la couleur du groupe
+    const posteEl = $('drawer-poste');
+    const posteTxt = [d.poste, hdrGrp].filter(Boolean).join(' · ');
+    if (posteTxt) { posteEl.textContent = posteTxt; posteEl.style.color = hdrColor; posteEl.style.display = ''; }
+    else { posteEl.style.display = 'none'; }
+    // Récap véhicule(s) dans l'en-tête : marque modèle + plaque (sans le nb d'amendes)
+    $('drawer-sub').innerHTML = d.vehicules.length
+      ? d.vehicules.map(v => `${v.marque} ${v.modele} <span class="font-mono text-slate-400">${v.immat}</span>`).join(' · ')
+      : 'Aucun véhicule assigné';
 
     const nbPoints = d.amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
     const totalPaye = d.amendes.filter(a => a.statut === 'payée').reduce((s, a) => s + (a.montant || 0), 0);
@@ -726,9 +737,10 @@
     let ficheStyle = localStorage.getItem('fp_cond_fiche_style');
     if (!allowed.includes(ficheStyle)) ficheStyle = 'cartes';
     const swBtn = (s, icon, label) => `<button type="button" class="fsw-btn ${ficheStyle === s ? 'active' : ''}" data-fstyle="${s}"><i data-lucide="${icon}"></i> ${label}</button>`;
-    const toggle = `<div class="flex justify-end"><div class="fiche-switch">${swBtn('cartes', 'layout-list', 'Cartes')}${swBtn('profil', 'id-card', 'Profil')}${swBtn('colore', 'palette', 'Coloré')}</div></div>`;
+    const toggle = `<div class="fiche-switch fiche-switch-full">${swBtn('cartes', 'layout-list', 'Cartes')}${swBtn('profil', 'id-card', 'Profil')}${swBtn('colore', 'palette', 'Coloré')}</div>`;
 
-    const stats = `<div class="grid grid-cols-3 gap-2.5">
+    const stats = `<div class="grid grid-cols-2 gap-2.5">
+        <div class="fiche-stat" style="border-color:rgba(99,102,241,.4)"><div class="kpi-label">Amendes</div><div class="kpi-value" style="font-size:1.3rem; color:#6366F1">${d.amendes.length}</div></div>
         <div class="fiche-stat"><div class="kpi-label">Points perdus</div><div class="kpi-value" style="font-size:1.3rem; color: var(--fp-danger)">${nbPoints}</div></div>
         <div class="fiche-stat"><div class="kpi-label">Payé</div><div class="kpi-value" style="font-size:1.05rem">${FP.euro(totalPaye)}</div></div>
         <div class="fiche-stat"><div class="kpi-label">À payer</div><div class="kpi-value" style="font-size:1.05rem; color:${dus > 0 ? 'var(--fp-danger)' : 'var(--fp-text)'}">${FP.euro(dus)}</div></div>
