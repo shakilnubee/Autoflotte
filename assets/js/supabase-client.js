@@ -78,6 +78,9 @@
     // La colonne historique "note_pneus" (champ "Note pneus" retiré de la fiche) est
     // réutilisée pour stocker l'autonomie du véhicule → propriété frontend "autonomie".
     'note_pneus':           'autonomie',
+    // De même, "type_pneus" (champ "Type" retiré) est réutilisée pour la version/finition
+    // du véhicule (lue sur la facture d'achat) → propriété frontend "version".
+    'type_pneus':           'version',
   };
   const CAMEL_TO_SNAKE_OVERRIDES = {};
   Object.entries(SNAKE_TO_CAMEL_OVERRIDES).forEach(([s, c]) => { CAMEL_TO_SNAKE_OVERRIDES[c] = s; });
