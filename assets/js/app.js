@@ -17,6 +17,14 @@ const FP = {
     if (isNaN(d)) return iso;
     return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
   },
+  // Format date numérique JJ/MM/AAAA (sans nom de mois)
+  dateNum(iso) {
+    if (!iso || iso === '—') return '—';
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    const p = n => String(n).padStart(2, '0');
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+  },
   // Nombre formaté — null/undefined/"" /NaN ⇒ 0 (évite d'afficher "NaN")
   num(n) {
     const v = Number(n);
