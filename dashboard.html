@@ -273,14 +273,17 @@
   const baseDriverKeys = FP.driverKeysFromData(data);
   document.getElementById('kpi-conducteurs').textContent = baseDriverKeys.size;
   if (FP.db && FP.db.select) {
-    FP.db.select('conducteurs').then(rows => {
+    FP.db.select('conducteurs').then(res => {
+      const rows = (res && res.data) || [];
       const keys = new Set(baseDriverKeys);
-      (rows || []).forEach(r => {
+      rows.forEach(r => {
         if (!r.key) return;
         if (r.masque) { keys.delete(r.key); return; }   // masqué → retiré du comptage
         if (r.manuel) keys.add(r.key);                  // manuel (sans véhicule) → compté
       });
       document.getElementById('kpi-conducteurs').textContent = keys.size;
+      data.conducteurs = rows;       // pour les alertes "permis qui expire"
+      if (typeof refreshAlertes === 'function') refreshAlertes();
     }).catch(() => {});
   }
 
@@ -316,30 +319,30 @@
   document.getElementById('kpi-couts').textContent = FP.euro(coutsMois);
 
   // === Alertes générées dynamiquement ===
-  const alerts = FP.buildAlertes(data);
-  const critiques = alerts.filter(a => a.niveau === 'danger' || a.niveau === 'warn').length;
-
-  // KPI : on affiche le nombre critique (rouges + oranges) car les info sont des "à savoir" pas des "à traiter"
-  document.getElementById('kpi-alertes').textContent = critiques;
-
-  // Rendu (5 alertes max, puis bouton "Voir tout")
-  const alertItems = alerts.map(a => {
-    const cls = a.niveau === 'danger' ? 'alert-danger' : a.niveau === 'warn' ? 'alert-warn' : 'alert-info';
-    const icon = a.niveau === 'danger' ? 'alert-triangle' : a.niveau === 'warn' ? 'bell' : 'info';
-    const color = a.niveau === 'danger' ? 'text-red-600' : a.niveau === 'warn' ? 'text-amber-600' : 'text-blue-600';
-    const tag = a.target ? 'a' : 'div';
-    const href = a.target ? ` href="pages/${a.target}"` : '';
-    return `<${tag}${href} class="alert ${cls} text-sm" style="text-decoration:none">
-      <i data-lucide="${icon}" class="w-4 h-4 ${color} flex-shrink-0 mt-0.5"></i>
-      <div>
-        <div class="font-semibold">${a.message}</div>
-        ${a.detail ? `<div class="text-xs text-slate-500 mt-0.5">${a.detail}</div>` : ''}
-      </div>
-    </${tag}>`;
-  });
-
   const alertesBox = document.getElementById('alertes-list');
   let alertesExpanded = false;
+  let alertItems = [];
+  function refreshAlertes() {
+    const alerts = FP.buildAlertes(data);
+    // KPI : nombre critique (rouges + oranges)
+    document.getElementById('kpi-alertes').textContent = alerts.filter(a => a.niveau === 'danger' || a.niveau === 'warn').length;
+    alertItems = alerts.map(a => {
+      const cls = a.niveau === 'danger' ? 'alert-danger' : a.niveau === 'warn' ? 'alert-warn' : 'alert-info';
+      const icon = a.niveau === 'danger' ? 'alert-triangle' : a.niveau === 'warn' ? 'bell' : 'info';
+      const color = a.niveau === 'danger' ? 'text-red-600' : a.niveau === 'warn' ? 'text-amber-600' : 'text-blue-600';
+      const tag = a.target ? 'a' : 'div';
+      const href = a.target ? ` href="pages/${a.target}"` : '';
+      return `<${tag}${href} class="alert ${cls} text-sm" style="text-decoration:none">
+        <i data-lucide="${icon}" class="w-4 h-4 ${color} flex-shrink-0 mt-0.5"></i>
+        <div>
+          <div class="font-semibold">${a.message}</div>
+          ${a.detail ? `<div class="text-xs text-slate-500 mt-0.5">${a.detail}</div>` : ''}
+        </div>
+      </${tag}>`;
+    });
+    renderAlertes();
+  }
+
   function renderAlertes() {
     if (!alertItems.length) {
       alertesBox.innerHTML = '<p class="text-sm text-slate-500 text-center py-6">Aucune alerte ✓</p>';
@@ -355,7 +358,7 @@
     if (tg) tg.addEventListener('click', () => { alertesExpanded = !alertesExpanded; renderAlertes(); lucide.createIcons(); });
     lucide.createIcons();
   }
-  renderAlertes();
+  refreshAlertes();
 
   // === Véhicules table ===
   const vehTbody = document.getElementById('vehicules-tbody');
