@@ -149,6 +149,20 @@ FP.addSociete = (name) => {
   if (arr.some(x => x.toLowerCase() === name.toLowerCase())) return false;
   arr.push(name); s.societes = arr; FP.settings.save(s); return true;
 };
+// Le cache statique data.js ne contient que PXP : si une autre société est active,
+// on le vide au démarrage (les vraies données filtrées arriveront via Supabase),
+// sinon on verrait des données PXP sur une autre société.
+(function filterStaticCacheBySociete() {
+  try {
+    const s = FP.activeSociete();
+    if (s === 'PXP' || s === '__all__') return;
+    const d = window.FP_DATA; if (!d) return;
+    ['vehicules', 'amendes', 'factures'].forEach(k => {
+      const arr = d[k]; if (!Array.isArray(arr)) return;
+      for (let i = arr.length - 1; i >= 0; i--) { if (((arr[i] && arr[i].societe) || 'PXP') !== s) arr.splice(i, 1); }
+    });
+  } catch (e) {}
+})();
 
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
