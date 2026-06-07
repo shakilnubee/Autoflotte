@@ -72,7 +72,10 @@
         <p class="text-slate-500 text-sm mt-1" data-edit-key="dashboard.subtitle">Vue d'ensemble de votre flotte — mai 2026</p>
       </div>
       <div class="flex items-center gap-3">
-        <button class="btn btn-outline text-sm"><i data-lucide="download" class="w-4 h-4"></i> Exporter</button>
+        <div class="relative" id="soc-switch">
+          <button id="soc-btn" class="btn btn-outline text-sm"><i data-lucide="building-2" class="w-4 h-4"></i> <span id="soc-current">PXP</span> <i data-lucide="chevron-down" class="w-4 h-4"></i></button>
+          <div id="soc-menu" class="hidden absolute right-0 mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-sm"></div>
+        </div>
         <button class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
       </div>
     </div>
@@ -537,6 +540,38 @@
       if (!drag) return; drag.classList.remove('dragging'); cont.classList.remove('is-dragging'); drag = null; save();
     });
     apply();
+  })();
+
+  // === Sélecteur de société (vue admin multi-flotte) ===
+  (function setupSociete() {
+    const wrap = document.getElementById('soc-switch');
+    if (!wrap) return;
+    if (FP.isAdmin && !FP.isAdmin()) { wrap.style.display = 'none'; return; }
+    const cur = FP.activeSociete();
+    const btn = document.getElementById('soc-btn'), menu = document.getElementById('soc-menu'), cs = document.getElementById('soc-current');
+    if (cs) cs.textContent = cur === '__all__' ? 'Toutes' : cur;
+    function render() {
+      const socs = FP.getSocietes();
+      let html = socs.map(s => `<button class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 ${s === cur ? 'font-bold' : ''}" data-soc="${s.replace(/"/g, '&quot;')}"><i data-lucide="building-2" class="w-4 h-4 text-slate-400"></i> ${s}${s === cur ? ' ✓' : ''}</button>`).join('');
+      html += `<button class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 ${cur === '__all__' ? 'font-bold' : ''}" data-soc="__all__"><i data-lucide="layers" class="w-4 h-4 text-slate-400"></i> Toutes les sociétés${cur === '__all__' ? ' ✓' : ''}</button>`;
+      html += `<div class="border-t border-slate-100 my-1"></div>`;
+      html += `<button class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2" style="color:var(--fp-accent)" id="soc-add"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter une société</button>`;
+      menu.innerHTML = html; lucide.createIcons();
+    }
+    btn.addEventListener('click', (e) => { e.stopPropagation(); render(); menu.classList.toggle('hidden'); });
+    document.addEventListener('click', () => menu.classList.add('hidden'));
+    menu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (e.target.closest('#soc-add')) {
+        const n = prompt('Nom de la nouvelle société :');
+        if (!n) return;
+        if (FP.addSociete(n)) { FP.setActiveSociete(n.trim()); location.reload(); }
+        else alert('Cette société existe déjà.');
+        return;
+      }
+      const b = e.target.closest('[data-soc]');
+      if (b) { FP.setActiveSociete(b.dataset.soc); location.reload(); }
+    });
   })();
 
   // Re-init icons
