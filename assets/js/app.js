@@ -137,6 +137,19 @@ FP.roleLabel = () => FP.isAdmin() ? 'Admin' : 'Gestionnaire';
 // Onglets réservés à l'admin (retirés du menu pour les autres rôles)
 FP.ADMIN_ONLY_NAV = ['parametres.html'];
 
+// === Multi-sociétés (vue admin) ===
+FP.activeSociete = () => { try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } };
+FP.setActiveSociete = (s) => { try { localStorage.setItem('fp_societe', s || 'PXP'); } catch (e) {} };
+FP.getSocietes = () => { const arr = (FP.settings.get().societes || ['PXP']).slice(); if (!arr.includes('PXP')) arr.unshift('PXP'); return arr; };
+FP.addSociete = (name) => {
+  name = (name || '').trim(); if (!name) return false;
+  const s = FP.settings.get();
+  const arr = Array.isArray(s.societes) ? s.societes.slice() : ['PXP'];
+  if (!arr.includes('PXP')) arr.unshift('PXP');
+  if (arr.some(x => x.toLowerCase() === name.toLowerCase())) return false;
+  arr.push(name); s.societes = arr; FP.settings.save(s); return true;
+};
+
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
   STORAGE_KEY: 'auto_flotte_settings',
@@ -169,6 +182,7 @@ FP.settings = {
     tableConfigs: {}, // ordre/largeurs/colonnes masquées de chaque tableau (partagés entre PC)
     contratSectionsOrder: [], // ordre des sections de la page Contrats (partagé)
     darkMode: false, // mode sombre 🌙 (partagé entre PC)
+    societes: ['PXP'], // liste des sociétés gérées (multi-flotte, partagée entre PC)
   },
   get() {
     try {
@@ -190,6 +204,7 @@ FP.settings = {
         tableConfigs: (stored.tableConfigs && typeof stored.tableConfigs === 'object') ? stored.tableConfigs : {},
         contratSectionsOrder: Array.isArray(stored.contratSectionsOrder) ? stored.contratSectionsOrder : [],
         darkMode: stored.darkMode === true,
+        societes: (Array.isArray(stored.societes) && stored.societes.length) ? stored.societes : ['PXP'],
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {

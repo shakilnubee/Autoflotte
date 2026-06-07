@@ -103,6 +103,24 @@
   const toClient = (row) => remapKeys(row, snakeToCamel);
   const toDb     = (row) => remapKeys(row, camelToSnake);
 
+  // ===== Multi-sociétés (étiquette "societe" par ligne) =====
+  // Société active = celle affichée par l'admin. Par défaut "PXP" (= comportement actuel).
+  function activeSociete() { try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } }
+  // Filtre des lignes selon la société active ('__all__' = tout afficher). Une ligne
+  // sans étiquette est considérée comme "PXP" (rétro-compatible avec les données existantes).
+  function filterSociete(rows) {
+    const s = activeSociete();
+    if (s === '__all__') return rows;
+    return (rows || []).filter(r => (r.societe || 'PXP') === s);
+  }
+  // Étiquette une nouvelle ligne avec la société active — UNIQUEMENT si on n'est pas sur "PXP"
+  // (ainsi, tant qu'on reste sur PXP, on n'envoie rien de nouveau → aucun risque avant la migration SQL).
+  function stampSociete(row) {
+    const s = activeSociete();
+    if (row && row.societe == null && s && s !== 'PXP' && s !== '__all__') return { ...row, societe: s };
+    return row;
+  }
+
   // ===== API publique =====
   FP.db = {
     /** Charge les 3 tables et retourne { vehicules, amendes, factures } en camelCase */
@@ -120,9 +138,9 @@
         throw new Error(errors.map(e => e.message).join(' | '));
       }
       return {
-        vehicules: (v.data || []).map(toClient),
-        amendes:   (a.data || []).map(toClient),
-        factures:  (f.data || []).map(toClient),
+        vehicules: filterSociete((v.data || []).map(toClient)),
+        amendes:   filterSociete((a.data || []).map(toClient)),
+        factures:  filterSociete((f.data || []).map(toClient)),
       };
     },
 
@@ -136,7 +154,7 @@
 
     /** Insère une nouvelle ligne. */
     async insert(table, row) {
-      const snake = toDb(row);
+      const snake = toDb(table === 'app_settings' ? row : stampSociete(row));
       const res = await client.from(table).insert(snake);
       if (res.error) console.error(`[FP.db.insert ${table}]`, res.error);
       return res;
@@ -151,12 +169,12 @@
         res = await client.from(table).select('*');
       }
       if (res.error) { console.error(`[FP.db.select ${table}]`, res.error); return { data: [], error: res.error }; }
-      return { data: (res.data || []).map(toClient), error: null };
+      return { data: filterSociete((res.data || []).map(toClient)), error: null };
     },
 
     /** Insère ou met à jour (upsert) une ligne par sa clé primaire. */
     async upsert(table, row) {
-      const snake = toDb(row);
+      const snake = toDb(table === 'app_settings' ? row : stampSociete(row));
       const res = await client.from(table).upsert(snake);
       if (res.error) console.error(`[FP.db.upsert ${table}]`, res.error);
       return res;
