@@ -698,44 +698,6 @@ FP.buildAlertes = (data) => {
     else if (diff < 120) out.push({ niveau: 'warn',   categorie: 'Permis', message: `Permis à renouveler (${diff}j)`, detail, sort: diff, target: tgt });
   });
 
-  // --- Anomalies détectées automatiquement ---
-  (function detectAnomalies() {
-    const fact = data.factures || [];
-    const sinByImmat = {}; const coutRepar = {};
-    fact.forEach(f => {
-      const t = (f.type || '').toLowerCase(); const im = f.vehiculeImmat; if (!im) return;
-      if (t === 'sinistre') (sinByImmat[im] = sinByImmat[im] || []).push(f);
-      if (['sinistre', 'réparation', 'reparation', 'entretien'].includes(t)) coutRepar[im] = (coutRepar[im] || 0) + (+f.montantTTC || 0);
-    });
-    const nbAccidents = (fs) => {
-      fs.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-      let n = 0, last = -Infinity;
-      fs.forEach(f => { const t = f.date ? new Date(f.date).getTime() : 0; if (t - last > 30 * 86400000) n++; last = t; });
-      return n;
-    };
-    (data.vehicules || []).forEach(v => {
-      const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
-      const tgt = 'vehicules.html?veh=' + v.id;
-      const na = sinByImmat[v.immat] ? nbAccidents(sinByImmat[v.immat]) : 0;
-      if (na >= 3)        out.push({ niveau: 'danger', categorie: 'Anomalie', message: `Véhicule accidentogène : ${na} accidents`, detail: veh, sort: -500, target: tgt });
-      else if (na === 2)  out.push({ niveau: 'warn',   categorie: 'Anomalie', message: `2 accidents sur ce véhicule`, detail: veh, sort: -200, target: tgt });
-      if ((v.km || 0) > 250000) out.push({ niveau: 'warn', categorie: 'Anomalie', message: `Kilométrage très élevé (${FP.num(v.km)} km)`, detail: veh, sort: 200, target: tgt });
-      const cost = coutRepar[v.immat] || 0;
-      if (v.valeurAchat && cost > v.valeurAchat * 0.6 && cost > 4000)
-        out.push({ niveau: 'warn', categorie: 'Anomalie', message: `Réparations élevées : ${FP.euro(cost)} (${Math.round(cost / v.valeurAchat * 100)}% de la valeur d'achat)`, detail: veh, sort: 150, target: tgt });
-      else if (cost > 12000)
-        out.push({ niveau: 'warn', categorie: 'Anomalie', message: `Réparations cumulées élevées : ${FP.euro(cost)}`, detail: veh, sort: 150, target: tgt });
-    });
-    // Conducteurs : cumul de points retirés (12 = permis invalidé en France)
-    const pts = {};
-    (data.amendes || []).forEach(a => { const k = FP.normPrenom(a.prenom); if (!k) return; (pts[k] = pts[k] || { n: 0, name: a.prenom }); pts[k].n += Number(a.points) || 0; });
-    Object.entries(pts).forEach(([k, d]) => {
-      const tgt = 'conducteurs.html?cond=' + encodeURIComponent(k);
-      if (d.n >= 12)      out.push({ niveau: 'danger', categorie: 'Anomalie', message: `${d.name} : ${d.n} points retirés (permis en danger)`, detail: 'Cumul des amendes', sort: -400, target: tgt });
-      else if (d.n >= 8)  out.push({ niveau: 'warn',   categorie: 'Anomalie', message: `${d.name} : ${d.n} points retirés au total`, detail: 'Cumul des amendes', sort: 100, target: tgt });
-    });
-  })();
-
   // --- Révisions constructeur ---
   (data.vehicules || []).forEach(v => {
     if (v.statut && v.statut !== 'actif') return; // on ignore vendus / à vendre / hors service
