@@ -311,6 +311,17 @@
         <div><div class="field-label">N° de télépaiement</div><input class="field-input" id="am-telepaiement" placeholder="ex. 6024329152" autocomplete="off" /></div>
         <div><div class="field-label">Clé</div><input class="field-input" id="am-cle" placeholder="ex. 46" autocomplete="off" /></div>
       </div>
+      <div id="am-majoration-box" class="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+        <label class="flex items-center gap-2 text-sm font-semibold text-amber-800 cursor-pointer">
+          <input type="checkbox" id="am-is-majoration" class="w-4 h-4 accent-amber-600" />
+          C'est une majoration d'une amende déjà enregistrée
+        </label>
+        <div id="am-majoration-pick" class="hidden space-y-1">
+          <div class="field-label !mb-0">Amende initiale à majorer</div>
+          <select class="field-input" id="am-majoration-parent"></select>
+          <p class="text-xs text-amber-700 leading-snug">Le <b>Montant</b> saisi ci-dessus sera enregistré comme <b>montant majoré</b> de l'amende choisie. Aucune nouvelle ligne n'est créée — la majoration est rattachée à l'amende d'origine.</p>
+        </div>
+      </div>
       <div class="flex gap-2 pt-2">
         <button type="button" class="btn btn-outline flex-1 justify-center" id="amende-cancel">Annuler</button>
         <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
@@ -405,11 +416,11 @@
     const apayer = all.filter(a => a.statut === 'à payer');
     const payees = all.filter(a => a.statut === 'payée');
     const points = all.reduce((s, a) => s + (Number(a.points) || 0), 0);
-    const montantApayer = apayer.reduce((s,a) => s + (a.montant || 0), 0);
-    const montantPayees = payees.reduce((s,a) => s + (a.montant || 0), 0);
+    const montantApayer = apayer.reduce((s,a) => s + montantDu(a), 0);
+    const montantPayees = payees.reduce((s,a) => s + montantDu(a), 0);
 
     $('kpi-total').textContent = all.length;
-    $('kpi-total-sub').textContent = FP.euro(all.reduce((s,a) => s + (a.montant || 0), 0)) + ' au total';
+    $('kpi-total-sub').textContent = FP.euro(all.reduce((s,a) => s + montantDu(a), 0)) + ' au total';
     $('kpi-apayer').textContent = apayer.length;
     $('kpi-apayer-montant').textContent = FP.euro(montantApayer) + ' dus';
     $('kpi-payees').textContent = payees.length;
@@ -422,7 +433,9 @@
     { key: 'date',         label: 'Date',        defaultWidth: 110, render: a => FP.date(a.date) },
     { key: 'prenom',       label: 'Conducteur',  defaultWidth: 140, cellCls: 'font-semibold', render: a => a.prenom || '—' },
     { key: 'motif',        label: 'Motif',       defaultWidth: 200, render: a => motifPill(a.motif) },
-    { key: 'montant',      label: 'Montant',     defaultWidth: 110, render: a => a.montant ? FP.euroPrecis(a.montant) : '<span class="text-slate-400">—</span>' },
+    { key: 'montant',      label: 'Montant',     defaultWidth: 110, render: a => a.majoree && a.montantMajore
+        ? `<span class="font-semibold text-red-700" title="Majorée — montant initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}">${FP.euroPrecis(a.montantMajore)} <span class="text-[10px]">⚠ maj.</span></span>`
+        : (a.montant ? FP.euroPrecis(a.montant) : '<span class="text-slate-400">—</span>') },
     { key: 'points',       label: 'Points',      defaultWidth: 80,  render: a => { const p = Number(a.points) || 0; return p > 0 ? `<span class="text-amber-600 font-bold">−${p}</span>` : '<span class="text-amber-500">●</span>'; } },
     { key: 'numeroAvis',   label: 'N° avis',     defaultWidth: 150, cellCls: 'font-mono text-xs text-slate-500', render: a => a.numeroAvis || '—' },
     { key: 'annee',        label: 'Année',       defaultWidth: 80,  render: a => a.annee || '—' },
@@ -446,8 +459,8 @@
   }
 
   function renderSummary(rows) {
-    const sumMontant = rows.reduce((s, a) => s + (a.montant || 0), 0);
-    const sumApayer = rows.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
+    const sumMontant = rows.reduce((s, a) => s + montantDu(a), 0);
+    const sumApayer = rows.filter(a => a.statut === 'à payer').reduce((s, a) => s + montantDu(a), 0);
     const sumPoints = rows.reduce((s, a) => s + (Number(a.points) || 0), 0);
     $('sum-count').textContent = rows.length;
     $('sum-montant').textContent = FP.euro(sumMontant);
@@ -761,7 +774,7 @@
       </div>
 
       <div class="grid grid-cols-2 gap-3">
-        <div class="kpi p-3"><div class="kpi-label">Montant</div><div class="kpi-value" style="font-size:1.4rem">${a.montant ? FP.euroPrecis(a.montant) : '—'}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">${a.majoree && a.montantMajore ? 'Montant majoré (dû)' : 'Montant'}</div><div class="kpi-value" style="font-size:1.4rem${a.majoree && a.montantMajore ? ';color:#B91C1C' : ''}">${montantDu(a) ? FP.euroPrecis(montantDu(a)) : '—'}</div>${a.majoree && a.montantMajore ? `<div class="text-xs text-slate-400 mt-0.5">Initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}${a.dateMajoration ? ' · majorée le ' + FP.date(a.dateMajoration) : ''}</div>` : ''}</div>
         <div class="kpi p-3"><div class="kpi-label">Points retirés</div><div class="kpi-value" style="font-size:1.4rem">${(Number(a.points) || 0) > 0 ? '−' + a.points : 'Aucun'}</div></div>
       </div>
 
@@ -1006,6 +1019,34 @@
     });
   }
 
+  // ---------- Majoration : rattacher une majoration à l'amende d'origine ----------
+  const escAmende = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // Montant réellement dû : si l'amende a été majorée, c'est le montant majoré
+  function montantDu(a) { return (a && a.majoree && a.montantMajore) ? Number(a.montantMajore) : (Number(a && a.montant) || 0); }
+  function amendeLabel(a) {
+    return `${a.prenom || '?'} · ${FP.date(a.date)} · ${a.motif || '—'} · ${a.montant ? FP.euroPrecis(a.montant) : '—'}${a.numeroAvis ? ' · n°' + a.numeroAvis : ''}`;
+  }
+  function populateMajorationParents(preselectId) {
+    const sel = $('am-majoration-parent'); if (!sel) return;
+    const list = data.amendes.filter(a => !a.majoree).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    sel.innerHTML = list.map(a => `<option value="${a.id}">${escAmende(amendeLabel(a))}</option>`).join('');
+    if (preselectId != null) sel.value = String(preselectId);
+  }
+  // Cherche l'amende d'origine la plus probable pour une majoration (même n° d'avis, sinon même conducteur + motif)
+  function trouverAmendeOrigine(p) {
+    const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
+    const cands = data.amendes.filter(a => !a.majoree);
+    if (p.numeroAvis) { const x = cands.find(a => norm(a.numeroAvis) && norm(a.numeroAvis) === norm(p.numeroAvis)); if (x) return x; }
+    if (p.prenom && p.motif) { const x = cands.find(a => norm(a.prenom) === norm(p.prenom) && norm(a.motif) === norm(p.motif)); if (x) return x; }
+    if (p.prenom && p.date) { const x = cands.find(a => norm(a.prenom) === norm(p.prenom) && a.date === p.date); if (x) return x; }
+    return null;
+  }
+  function setMajorationMode(on, preselectId) {
+    $('am-is-majoration').checked = !!on;
+    $('am-majoration-pick').classList.toggle('hidden', !on);
+    if (on) populateMajorationParents(preselectId);
+  }
+
   // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
   let _avisFile = null; // scan de l'avis sélectionné, envoyé au stockage à l'enregistrement
   function openAmendeModal() {
@@ -1022,12 +1063,34 @@
     $('am-statut').value = 'à payer'; $('am-avis').value = '';
     $('am-telepaiement').value = ''; $('am-cle').value = '';
     _avisFile = null;
+    // Réinitialise le bloc majoration
+    populateMajorationParents();
+    $('am-is-majoration').checked = false;
+    $('am-majoration-pick').classList.add('hidden');
     const avSt = $('av-status'); if (avSt) { avSt.classList.add('hidden'); avSt.innerHTML = ''; }
     $('amende-modal').classList.add('open');
     setTimeout(() => $('am-prenom').focus(), 50);
     lucide.createIcons();
   }
   function closeAmendeModal() { $('amende-modal').classList.remove('open'); }
+  // Rattache une majoration à l'amende d'origine (met à jour, ne crée pas de doublon)
+  function lierMajoration(parent, montantMaj, dateMaj, numAvisMaj) {
+    FP.history.commit();
+    parent.majoree = true;
+    parent.montantMajore = montantMaj;
+    parent.dateMajoration = dateMaj;
+    if (numAvisMaj) parent.numeroAvisMajore = numAvisMaj;
+    if (parent.statut !== 'payée') parent.statut = 'à payer';
+    _avisFile = null;
+    closeAmendeModal();
+    renderKPIs(); renderTable(); renderCharts();
+    const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
+    FP.persist.update('amendes', parent.id, {
+      majoree: true, montantMajore: montantMaj, dateMajoration: dateOrNull(dateMaj),
+      numeroAvisMajore: numAvisMaj || null, statut: parent.statut
+    });
+  }
+
   async function saveAmende(ev) {
     ev.preventDefault();
     const prenom = $('am-prenom').value.trim();
@@ -1036,12 +1099,34 @@
     const points = parseInt($('am-points').value, 10) || 0;
     const montant = parseFloat($('am-montant').value) || 0;
     const numAvis = fmtNumeroAvis($('am-avis').value);
-
-    // --- Détection de doublon ---
     const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
+
+    // === Cas 1 : rattacher une MAJORATION à une amende existante ===
+    if ($('am-is-majoration').checked) {
+      const parent = data.amendes.find(a => String(a.id) === String($('am-majoration-parent').value));
+      if (!parent) { alert("Choisissez l'amende d'origine à majorer."); return; }
+      if (!montant) { $('am-montant').focus(); alert('Indiquez le montant majoré dans le champ « Montant ».'); return; }
+      lierMajoration(parent, montant, date, numAvis);
+      return;
+    }
+
+    // === Cas 2 : nouvelle amende — détection doublon / majoration non signalée ===
     let doublon = null;
     if (numAvis) doublon = data.amendes.find(a => norm(a.numeroAvis) && norm(a.numeroAvis) === norm(numAvis));
     if (!doublon) doublon = data.amendes.find(a => norm(a.prenom) === norm(prenom) && a.date === date && Number(a.montant) === montant);
+    // Même conducteur + même motif mais montant plus élevé → probablement une majoration
+    const motifSaisi = $('am-motif').value.trim();
+    let majProbable = null;
+    if (!doublon) majProbable = data.amendes.find(a => !a.majoree && norm(a.prenom) === norm(prenom)
+      && norm(a.motif) === norm(motifSaisi) && Number(a.montant) > 0 && montant > Number(a.montant));
+    if (majProbable) {
+      const lien = confirm(`💡 Cela ressemble à une MAJORATION d'une amende déjà enregistrée :\n\n`
+        + `• ${majProbable.prenom || '?'} — ${FP.date(majProbable.date)}\n`
+        + `• ${majProbable.motif || '—'} — ${majProbable.montant ? FP.euroPrecis(majProbable.montant) : '—'}\n\n`
+        + `OK = la rattacher comme majoration (${FP.euroPrecis(montant)})\n`
+        + `Annuler = créer une amende séparée`);
+      if (lien) { lierMajoration(majProbable, montant, date, numAvis); return; }
+    }
     if (doublon) {
       const ok = confirm(`⚠️ Doublon possible : une amende très similaire existe déjà\n\n`
         + `• ${doublon.prenom || '?'} — ${FP.date(doublon.date)}\n`
@@ -1212,16 +1297,18 @@
     }
     if (amts.length) {
       const vals = t => amts.filter(a => a.type === t).map(a => a.val);
-      const forf = vals('forfaitaire'), mino = vals('minoree');
-      const distinct = [...new Set(amts.map(a => a.val))].sort((x, y) => x - y);
-      if (forf.length)              out.montant = Math.min(...forf);                        // idéal : étiqueté « forfaitaire »
+      const forf = vals('forfaitaire'), mino = vals('minoree'), majo = vals('majoree');
+      const nonMaj = amts.filter(a => a.type !== 'majoree').map(a => a.val);
+      const distinct = [...new Set(nonMaj)].sort((x, y) => x - y);
+      if (forf.length)               out.montant = Math.min(...forf);                        // idéal : étiqueté « forfaitaire »
       else if (distinct.length >= 3) out.montant = distinct[Math.floor((distinct.length - 1) / 2)]; // 3 montants non étiquetés → le médian = forfaitaire
-      else if (mino.length)         out.montant = Math.min(...mino);                        // sinon le minoré
-      else {                                                                                // sinon : le plus petit hors « majoré »
-        const nonMaj = amts.filter(a => a.type !== 'majoree').map(a => a.val);
-        out.montant = nonMaj.length ? Math.min(...nonMaj) : Math.min(...amts.map(a => a.val));
-      }
+      else if (mino.length)          out.montant = Math.min(...mino);                        // sinon le minoré
+      else if (nonMaj.length)        out.montant = Math.min(...nonMaj);                       // sinon le plus petit hors « majoré »
+      // sinon (que des montants majorés) : on ne fixe pas le montant initial
+      if (majo.length) out.montantMajore = Math.max(...majo);
     }
+    // Document de MAJORATION (amende non payée à temps → pénalité)
+    out.isMajoration = /avis\s+de\s+majoration|amende\s+forfaitaire\s+major/i.test(text);
 
     // Date de l'infraction — près de "commise le" / "infraction" / "le", sinon 1ère date
     const lines = text.split(/\r?\n/);
@@ -1295,6 +1382,21 @@
       if (parsed.numeroTelepaiement && !$('am-telepaiement').value) { $('am-telepaiement').value = parsed.numeroTelepaiement; filled.push('n° télépaiement'); }
       if (parsed.cle && !$('am-cle').value) { $('am-cle').value = parsed.cle; filled.push('clé'); }
 
+      // Avis de MAJORATION : on remplit le montant majoré et on propose de rattacher à l'amende d'origine
+      if (parsed.isMajoration) {
+        if (parsed.montantMajore && !$('am-montant').value) { $('am-montant').value = parsed.montantMajore; filled.push('montant majoré'); }
+        const origine = trouverAmendeOrigine(parsed);
+        setMajorationMode(true, origine ? origine.id : null);
+        avStatus(
+          `<b>⚠️ Cet avis est une MAJORATION.</b><br>` +
+          (origine
+            ? `Amende d'origine trouvée : <b>${escAmende(amendeLabel(origine))}</b>. Vérifiez puis cliquez « Enregistrer » pour la rattacher.`
+            : `Choisissez l'amende d'origine à majorer dans la liste ci-dessous, puis « Enregistrer ».`),
+          'ok');
+        lucide.createIcons();
+        return;
+      }
+
       if (filled.length) {
         avStatus(`<b>✓ ${filled.length} champ(s) pré-rempli(s)</b> : ${filled.join(', ')}.<br>Vérifiez les valeurs puis complétez le reste (points retirés, statut…).`, 'ok');
       } else {
@@ -1318,6 +1420,8 @@
     handleAvis(file);
     e.target.value = ''; // permet de re-sélectionner le même fichier
   });
+  // Case « C'est une majoration » : affiche/masque le choix de l'amende d'origine
+  $('am-is-majoration').addEventListener('change', (e) => setMajorationMode(e.target.checked));
 
   // ---------- Import / Export CSV ----------
   FP.injectDataIO({
