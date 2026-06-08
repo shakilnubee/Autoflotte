@@ -265,6 +265,8 @@
       <button class="p-2 hover:bg-slate-100 rounded-lg" id="amende-close"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
     <form id="amende-form" class="space-y-4">
+      <!-- Alerte doublon (affichée tout en haut, en temps réel pendant la saisie) -->
+      <div id="am-doublon-banner" class="hidden rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800"></div>
       <!-- Import de l'avis : pré-remplissage automatique des champs -->
       <div id="av-import">
         <input type="file" id="av-file" accept="image/*,application/pdf" class="hidden" />
@@ -1045,6 +1047,30 @@
     $('am-is-majoration').checked = !!on;
     $('am-majoration-pick').classList.toggle('hidden', !on);
     if (on) populateMajorationParents(preselectId);
+    checkDoublonLive();
+  }
+
+  // Cherche un doublon d'amende selon les valeurs saisies (n° d'avis, ou conducteur + date + montant)
+  function findDoublon(prenom, date, montant, numAvis) {
+    const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
+    let d = null;
+    if (numAvis) d = data.amendes.find(a => norm(a.numeroAvis) && norm(a.numeroAvis) === norm(numAvis));
+    if (!d && prenom && date) d = data.amendes.find(a => norm(a.prenom) === norm(prenom) && a.date === date && Number(a.montant) === Number(montant));
+    return d || null;
+  }
+  // Affiche/masque le bandeau de doublon EN HAUT du formulaire, en temps réel pendant la saisie
+  function checkDoublonLive() {
+    const banner = $('am-doublon-banner'); if (!banner) return;
+    if ($('am-is-majoration') && $('am-is-majoration').checked) { banner.classList.add('hidden'); return; }
+    const d = findDoublon($('am-prenom').value.trim(), $('am-date').value, parseFloat($('am-montant').value) || 0, fmtNumeroAvis($('am-avis').value));
+    if (d) {
+      banner.innerHTML = `<b>⚠️ Doublon : cette amende semble déjà enregistrée.</b><br>`
+        + `${escAmende(d.prenom || '?')} · ${FP.date(d.date)} · ${escAmende(d.motif || '—')} · ${d.montant ? FP.euroPrecis(d.montant) : '—'}`
+        + (d.numeroAvis ? ` · n°${escAmende(d.numeroAvis)}` : '');
+      banner.classList.remove('hidden');
+    } else {
+      banner.classList.add('hidden');
+    }
   }
 
   // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
@@ -1067,6 +1093,7 @@
     populateMajorationParents();
     $('am-is-majoration').checked = false;
     $('am-majoration-pick').classList.add('hidden');
+    $('am-doublon-banner').classList.add('hidden');
     const avSt = $('av-status'); if (avSt) { avSt.classList.add('hidden'); avSt.innerHTML = ''; }
     $('amende-modal').classList.add('open');
     setTimeout(() => $('am-prenom').focus(), 50);
@@ -1111,9 +1138,7 @@
     }
 
     // === Cas 2 : nouvelle amende — détection doublon / majoration non signalée ===
-    let doublon = null;
-    if (numAvis) doublon = data.amendes.find(a => norm(a.numeroAvis) && norm(a.numeroAvis) === norm(numAvis));
-    if (!doublon) doublon = data.amendes.find(a => norm(a.prenom) === norm(prenom) && a.date === date && Number(a.montant) === montant);
+    let doublon = findDoublon(prenom, date, montant, numAvis);
     // Même conducteur + même motif mais montant plus élevé → probablement une majoration
     const motifSaisi = $('am-motif').value.trim();
     let majProbable = null;
@@ -1394,6 +1419,7 @@
         return;
       }
 
+      checkDoublonLive(); // alerte immédiate si l'avis importé existe déjà
       if (filled.length) {
         avStatus(`<b>✓ ${filled.length} champ(s) pré-rempli(s)</b> : ${filled.join(', ')}.<br>Vérifiez les valeurs puis complétez le reste (points retirés, statut…).`, 'ok');
       } else {
@@ -1419,6 +1445,11 @@
   });
   // Case « C'est une majoration » : affiche/masque le choix de l'amende d'origine
   $('am-is-majoration').addEventListener('change', (e) => setMajorationMode(e.target.checked));
+  // Détection de doublon en temps réel (bandeau en haut du formulaire)
+  ['am-prenom', 'am-date', 'am-montant', 'am-avis'].forEach(id => {
+    $(id).addEventListener('input', checkDoublonLive);
+    $(id).addEventListener('change', checkDoublonLive);
+  });
 
   // ---------- Import / Export CSV ----------
   FP.injectDataIO({
