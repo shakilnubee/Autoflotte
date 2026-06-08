@@ -134,6 +134,9 @@ FP.role = () => {
 };
 FP.isAdmin = () => FP.role() === 'admin';
 FP.roleLabel = () => FP.isAdmin() ? 'Admin' : 'Gestionnaire';
+// Personnalisation de l'apparence (renommer titres/colonnes/onglets) : autorisée admin + gestionnaire.
+// Mettre `=> FP.isAdmin()` ici pour la réserver à l'admin.
+FP.canPersonnaliser = () => true;
 // Onglets réservés à l'admin (retirés du menu pour les autres rôles)
 FP.ADMIN_ONLY_NAV = ['parametres.html'];
 
@@ -1059,7 +1062,7 @@ FP.applyCustomNavLabels = () => {
       span = document.createElement('span');
       span.className = 'nav-label';
       a.appendChild(span);
-      if (FP.isAdmin()) { // renommage d'onglet réservé à l'admin
+      if (FP.canPersonnaliser()) { // renommage d'onglet (admin + gestionnaire)
         const editBtn = document.createElement('button');
         editBtn.type = 'button';
         editBtn.className = 'nav-edit-btn';
@@ -1337,7 +1340,7 @@ FP.vehGroupes = (v) => {
 //   editor.getVisibleColumns().map(k => `<td>${editor.getColumn(k).render(row)}</td>`)
 FP.makeColumnEditor = (config) => {
   const { pageKey, columns, tableEl, hiddenBtnContainer, onChange } = config;
-  const editable = (window.FP && FP.isAdmin) ? FP.isAdmin() : true; // perso. colonnes = admin only
+  const editable = (window.FP && FP.canPersonnaliser) ? FP.canPersonnaliser() : true; // perso. colonnes (admin + gestionnaire)
   const storageKey = `fp_table_${pageKey}`;
   const allKeys = columns.map(c => c.key);
   const defaultOrder = config.defaultOrder || allKeys.slice();
@@ -1880,7 +1883,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-edit-key]');
     if (!el || el.classList.contains('editing-text')) return;
-    if (!FP.isAdmin()) return; // édition des titres réservée à l'admin
+    if (!FP.canPersonnaliser()) return; // édition des titres (admin + gestionnaire)
     // Ignorer si on est en train de cliquer sur un autre bouton/lien
     if (e.target.closest('button, a, input, select')) return;
     FP.startTextEdit(el);
