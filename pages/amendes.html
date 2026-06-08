@@ -329,6 +329,16 @@
         <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
       </div>
     </form>
+    <!-- Panneau proposé juste après l'enregistrement : envoi du mail au conducteur -->
+    <div id="am-postsave" class="hidden text-center space-y-3 py-2">
+      <div class="text-green-700 font-bold text-lg"><i data-lucide="check-circle" class="w-5 h-5 inline"></i> Amende enregistrée</div>
+      <div class="text-sm text-slate-600">Envoyer un email au conducteur ?<br><span class="text-xs text-slate-400">Destinataire : le conducteur · en copie : Shakil & Mallaury</span></div>
+      <div class="grid grid-cols-1 gap-2 text-left">
+        <button type="button" id="ps-paiement" class="btn btn-outline justify-center"><i data-lucide="mail" class="w-4 h-4"></i> Demande de paiement</button>
+        <button type="button" id="ps-designation" class="btn btn-outline justify-center"><i data-lucide="user-check" class="w-4 h-4"></i> Demande de désignation</button>
+        <button type="button" id="ps-skip" class="btn btn-dark justify-center">Fermer sans envoyer</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -617,13 +627,15 @@
   }
   // Le mail part TOUJOURS depuis ce compte (Gmail / Google Workspace)
   const EXPEDITEUR = 'shakil.nubeebaccus@projectxparis.fr';
+  // Toujours en copie pour info (Shakil + Mallaury) ; le conducteur reste le destinataire
+  const COPIE_MAIL = 'shakil.nubeebaccus@projectxparis.fr,mallaury.herembert@projectxparis.fr';
   function ouvrirMail(body) {
     const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
     const to = lookupEmail(a.prenom);
     const subject = `Contravention du ${FP.date(a.date)}${a.numeroAvis ? ' — avis ' + a.numeroAvis : ''}`;
     // Ouvre la fenêtre de rédaction Gmail connectée au compte expéditeur
     const url = `https://mail.google.com/mail/?view=cm&fs=1&authuser=${encodeURIComponent(EXPEDITEUR)}`
-      + `&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      + `&to=${encodeURIComponent(to)}&cc=${encodeURIComponent(COPIE_MAIL)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.open(url, '_blank', 'noopener');
   }
   // Prénom du collaborateur lié à l'amende ouverte
@@ -1151,6 +1163,8 @@
     $('am-majoration-pick').classList.add('hidden');
     $('am-doublon-banner').classList.add('hidden');
     const avSt = $('av-status'); if (avSt) { avSt.classList.add('hidden'); avSt.innerHTML = ''; }
+    $('amende-form').classList.remove('hidden');
+    $('am-postsave').classList.add('hidden');
     $('amende-modal').classList.add('open');
     setTimeout(() => $('am-prenom').focus(), 50);
     lucide.createIcons();
@@ -1240,10 +1254,17 @@
     };
     data.amendes.push(newA);
     _avisFile = null;
-    closeAmendeModal();
     renderKPIs(); renderTable(); renderCharts();
     const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
     FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: newA.numeroAvis || null, commentaire: null, avisUrl: avisUrl || null });
+    showPostSaveMail(newA); // propose d'envoyer l'email au conducteur (sans avoir à rouvrir la fiche)
+  }
+  // Affiche le panneau d'envoi de mail juste après l'enregistrement d'une amende
+  function showPostSaveMail(a) {
+    state.currentId = a.id; // pour que ouvrirMail / prenomCourant ciblent cette amende
+    $('amende-form').classList.add('hidden');
+    $('am-postsave').classList.remove('hidden');
+    lucide.createIcons();
   }
 
   // ============================================================
@@ -1515,6 +1536,10 @@
   $('am-points').addEventListener('input', () => { _pointsTouched = true; });
   $('am-motif').addEventListener('change', autoPointsFromMotif);
   $('am-motif').addEventListener('input', autoPointsFromMotif);
+  // Panneau d'envoi de mail proposé juste après l'enregistrement
+  $('ps-paiement').addEventListener('click', () => { mailPaiement(); closeAmendeModal(); });
+  $('ps-designation').addEventListener('click', () => { mailDesignation(); closeAmendeModal(); });
+  $('ps-skip').addEventListener('click', closeAmendeModal);
 
   // ---------- Import / Export CSV ----------
   FP.injectDataIO({
