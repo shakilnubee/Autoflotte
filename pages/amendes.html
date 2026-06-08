@@ -1189,16 +1189,39 @@
     const mc = upper.match(/CL[ÉE]\s*(?:DE\s*CONTR[ÔO]LE)?\s*[:.\-]?\s*([0-9]{2,3})\b/);
     if (mc) out.cle = mc[1];
 
-    // Montant — on prend le plus grand montant en euros trouvé (souvent le montant majoré/forfaitaire)
-    const amounts = [];
+    // Montant — un avis affiche en général PLUSIEURS montants :
+    //   • amende forfaitaire MINORÉE  (réduit si on paie vite)
+    //   • amende forfaitaire           ← le montant « tel qu'on le reçoit »
+    //   • amende forfaitaire MAJORÉE   (pénalité si on paie en retard)
+    // On veut le montant forfaitaire (celui reçu), JAMAIS le majoré.
+    // Pour chaque montant trouvé, on regarde le texte juste avant pour le classer.
+    const amts = [];
     const re = /([0-9]{1,4}(?:[ .][0-9]{3})*)(?:[.,]([0-9]{2}))?\s*(?:€|EUR(?:OS?)?)/gi;
     let am;
     while ((am = re.exec(text)) !== null) {
       const intPart = am[1].replace(/[ .]/g, '');
       const val = parseFloat(intPart + '.' + (am[2] || '00'));
-      if (!isNaN(val) && val > 0 && val < 10000) amounts.push(val);
+      if (isNaN(val) || val <= 0 || val >= 10000) continue;
+      // Fenêtre courte AVANT le montant (≈ son étiquette, ex. « forfaitaire majorée »)
+      const win = text.slice(Math.max(0, am.index - 45), am.index).toLowerCase();
+      let type = 'autre';
+      if (/major/.test(win))                                       type = 'majoree';
+      else if (/minor/.test(win))                                  type = 'minoree';
+      else if (/forfaitaire|amende|[àa]\s*payer|montant/.test(win)) type = 'forfaitaire';
+      amts.push({ val, type });
     }
-    if (amounts.length) out.montant = Math.max(...amounts);
+    if (amts.length) {
+      const vals = t => amts.filter(a => a.type === t).map(a => a.val);
+      const forf = vals('forfaitaire'), mino = vals('minoree');
+      const distinct = [...new Set(amts.map(a => a.val))].sort((x, y) => x - y);
+      if (forf.length)              out.montant = Math.min(...forf);                        // idéal : étiqueté « forfaitaire »
+      else if (distinct.length >= 3) out.montant = distinct[Math.floor((distinct.length - 1) / 2)]; // 3 montants non étiquetés → le médian = forfaitaire
+      else if (mino.length)         out.montant = Math.min(...mino);                        // sinon le minoré
+      else {                                                                                // sinon : le plus petit hors « majoré »
+        const nonMaj = amts.filter(a => a.type !== 'majoree').map(a => a.val);
+        out.montant = nonMaj.length ? Math.min(...nonMaj) : Math.min(...amts.map(a => a.val));
+      }
+    }
 
     // Date de l'infraction — près de "commise le" / "infraction" / "le", sinon 1ère date
     const lines = text.split(/\r?\n/);
