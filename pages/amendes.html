@@ -984,8 +984,8 @@
     input._acOptions = options || [];
     let activeIdx = -1;
 
-    function render() {
-      const q = input.value.trim().toLowerCase();
+    function render(showAll) {
+      const q = showAll ? '' : input.value.trim().toLowerCase();
       const list = (input._acOptions || [])
         .filter(o => !q || o.toLowerCase().includes(q))
         .slice(0, 50);
@@ -998,11 +998,25 @@
     }
     function choose(val) { input.value = val; panel.classList.remove('open'); input.dispatchEvent(new Event('change', { bubbles: true })); }
 
-    if (input._acBound) { render(); return; }   // déjà branché : on rafraîchit juste les options
+    // Flèche cliquable pour dérouler / refermer la liste (la liste ne s'ouvre plus toute seule au focus)
+    let arrow = wrap.querySelector('.ac-arrow');
+    if (!arrow) {
+      arrow = document.createElement('button');
+      arrow.type = 'button';
+      arrow.className = 'ac-arrow';
+      arrow.setAttribute('aria-label', 'Afficher la liste');
+      wrap.appendChild(arrow);
+      arrow.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        if (panel.classList.contains('open')) { panel.classList.remove('open'); }
+        else { input.focus(); render(true); }
+      });
+    }
+
+    if (input._acBound) { return; }   // déjà branché : on garde le même comportement
     input._acBound = true;
 
-    input.addEventListener('focus', render);
-    input.addEventListener('input', render);
+    input.addEventListener('input', () => render(false));
     input.addEventListener('blur', () => setTimeout(() => panel.classList.remove('open'), 150));
     input.addEventListener('keydown', (e) => {
       const items = [...panel.querySelectorAll('.ac-item')];
