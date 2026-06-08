@@ -1,8 +1,8 @@
-# Auto-flotte — Contexte projet
+# Parc Pilot — Contexte projet
 
 ## C'est quoi ce projet ?
 
-**Auto-flotte** est un SaaS de gestion de flotte automobile, développé pour TJMAX (avec aussi des véhicules BPCE en leasing et PROJECT X PARIS RETAIL).
+**Parc Pilot** est un SaaS de gestion de flotte automobile, développé pour TJMAX (avec aussi des véhicules BPCE en leasing et PROJECT X PARIS RETAIL).
 
 - **Propriétaire** : Shakil Nubeebaccus
 - **Stack** : HTML/CSS/JS statique + Tailwind CDN (pas de build step)
