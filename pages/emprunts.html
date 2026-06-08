@@ -179,8 +179,12 @@
         </div>
       </div>
       <div>
+        <label class="flex items-center gap-2 cursor-pointer select-none bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mb-2">
+          <input type="checkbox" id="ret-par-inconnu" class="w-4 h-4 accent-teal-600" />
+          <span class="text-sm font-medium text-slate-700">Je ne connais pas le retourneur</span>
+        </label>
         <div class="field-label">Rendu par <span class="text-slate-400 normal-case font-normal">(si différent de l'emprunteur)</span></div>
-        <input class="field-input" id="ret-par" placeholder="Prénom Nom" />
+        <input class="field-input" id="ret-par" placeholder="Prénom Nom" autocomplete="off" />
       </div>
       <div class="flex gap-2 pt-2">
         <button type="button" class="btn btn-outline flex-1 justify-center" id="ret-cancel">Annuler</button>
@@ -263,6 +267,9 @@
       input.dispatchEvent(new Event('change'));
     });
     input.addEventListener('keydown', (e) => {
+      // Backspace sur un champ vide : sur certains navigateurs ça déclenche un "retour arrière"
+      // qui quitte la page. On neutralise (il n'y a de toute façon rien à effacer).
+      if (e.key === 'Backspace' && !input.value) { e.preventDefault(); return; }
       // Entrée ne doit JAMAIS soumettre le formulaire depuis ce champ (sinon ça ferme la fenêtre
       // quand on efface/modifie le nom) : on choisit la suggestion active si dispo, sinon on ferme juste le menu.
       if (e.key === 'Enter') {
@@ -414,6 +421,14 @@
     $('ret-date').disabled = on;
     $('ret-heure').disabled = on;
   }
+  function toggleRetParInconnu() {
+    const on = $('ret-par-inconnu').checked;
+    const inp = $('ret-par');
+    inp.disabled = on;
+    const wrap = inp.closest('.ac-wrap') || inp;
+    wrap.style.opacity = on ? '.4' : '';
+    if (on) inp.value = '';
+  }
   function openRet(id) {
     const e = cache.find(x => x.id === id); if (!e) return;
     $('ret-id').value = id;
@@ -422,8 +437,11 @@
     // Si déjà rendu (avec date), on pré-remplit pour corriger ; sinon aujourd'hui
     $('ret-date').value = (e.dateRetour && !inconnu) ? e.dateRetour : new Date().toISOString().slice(0, 10);
     $('ret-heure').value = e.heureRetour || new Date().toTimeString().slice(0, 5);
-    $('ret-par').value = e.renduPar || e.emprunteur || '';
+    const parInconnu = e.renduPar === 'Inconnu';
+    $('ret-par-inconnu').checked = parInconnu;
+    $('ret-par').value = parInconnu ? '' : (e.renduPar || e.emprunteur || '');
     toggleRetInconnu();
+    toggleRetParInconnu();
     $('modal-ret').classList.add('open');
   }
   function saveRet(ev) {
@@ -437,7 +455,7 @@
       e.dateRetour = $('ret-date').value;
       e.heureRetour = $('ret-heure').value || '';
     }
-    e.renduPar = $('ret-par').value.trim() || e.emprunteur;
+    e.renduPar = $('ret-par-inconnu').checked ? 'Inconnu' : ($('ret-par').value.trim() || e.emprunteur);
     $('modal-ret').classList.remove('open');
     render();
     if (dbOn()) FP.persist.upsert('emprunts', e); else lsSet();
@@ -462,6 +480,7 @@
   $('modal-new').addEventListener('click', e => { if (e.target === e.currentTarget) closeNew(); });
   $('form-new').addEventListener('submit', addEmprunt);
   $('ret-inconnu').addEventListener('change', toggleRetInconnu);
+  $('ret-par-inconnu').addEventListener('change', toggleRetParInconnu);
   $('ret-close').addEventListener('click', () => $('modal-ret').classList.remove('open'));
   $('ret-cancel').addEventListener('click', () => $('modal-ret').classList.remove('open'));
   $('modal-ret').addEventListener('click', e => { if (e.target === e.currentTarget) $('modal-ret').classList.remove('open'); });
