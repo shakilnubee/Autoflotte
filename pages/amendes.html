@@ -292,7 +292,7 @@
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div><div class="field-label">Montant (€) *</div><input class="field-input" type="number" id="am-montant" min="0" step="0.01" placeholder="0" required /></div>
-        <div><div class="field-label">Points retirés *</div><input class="field-input" type="number" id="am-points" min="0" step="1" placeholder="0" required /></div>
+        <div><div class="field-label">Points retirés *</div><input class="field-input" type="number" id="am-points" min="0" step="1" placeholder="0" required /><div class="text-xs text-slate-400 mt-0.5">Calculés selon l'infraction — modifiable</div></div>
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div><div class="field-label">Date *</div><input class="field-input" type="date" id="am-date" required /></div>
@@ -356,6 +356,40 @@
     if (m.includes('feu')) return 'feu';
     if (m.includes('voie') || m.includes('circulation') || m.includes('bus')) return 'voie';
     return 'autre';
+  }
+
+  // Estime l'excès de vitesse (km/h) à partir du texte de l'avis, sinon null
+  function excesVitesse(texte) {
+    if (!texte) return null;
+    const t = texte.toLowerCase().replace(/\s+/g, ' ');
+    let m = t.match(/d[ée]passement[^0-9]{0,20}(\d{1,3})\s*km/);
+    if (m) return parseInt(m[1], 10);
+    const ret = t.match(/vitesse\s+retenue[^0-9]{0,15}(\d{1,3})/);
+    const lim = t.match(/(?:vitesse\s+(?:maximale\s+)?autoris[ée]e|limit[ée]e\s+[àa])[^0-9]{0,15}(\d{1,3})/);
+    if (ret && lim) return Math.max(0, parseInt(ret[1], 10) - parseInt(lim[1], 10));
+    return null;
+  }
+  // Déduit le nombre de points retirés selon l'infraction (null si indéterminable → laissé à l'utilisateur)
+  function pointsRetrait(motif, texte) {
+    const m = (motif || '').toLowerCase();
+    const cat = categorize(motif);
+    if (cat === 'stationnement' || cat === 'voie') return 0;          // pas de retrait de points
+    if (cat === 'telephone') return 3;
+    if (cat === 'feu') return 4;
+    if (cat === 'vitesse') {
+      const exc = excesVitesse(texte);
+      if (exc == null) return null;                                   // excès inconnu → on ne devine pas
+      if (exc < 20) return 1;
+      if (exc < 30) return 2;
+      if (exc < 40) return 3;
+      if (exc < 50) return 4;
+      return 6;
+    }
+    if (m.includes('ceinture')) return 3;
+    if (m.includes('stop') || m.includes('priorit')) return 4;
+    if (m.includes('distance') || m.includes('sécurité') || m.includes('securite')) return 3;
+    if (m.includes('alcool') || m.includes('stupéfiant') || m.includes('stupefiant')) return 6;
+    return null;                                                      // motif inconnu → laisser à l'utilisateur
   }
   const CAT_META = {
     vitesse:        { label: 'Vitesse',       icon: 'gauge',         color: '#DC2626' },
@@ -1089,6 +1123,13 @@
 
   // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
   let _avisFile = null; // scan de l'avis sélectionné, envoyé au stockage à l'enregistrement
+  let _pointsTouched = false; // l'utilisateur a-t-il saisi les points à la main ? (sinon on les calcule)
+  // Calcule les points retirés à partir du motif choisi (sauf si l'utilisateur les a saisis lui-même)
+  function autoPointsFromMotif() {
+    if (_pointsTouched) return;
+    const pts = pointsRetrait($('am-motif').value.trim(), '');
+    if (pts != null) $('am-points').value = pts;
+  }
   function openAmendeModal() {
     // Suggestions conducteurs : chauffeurs des véhicules + prénoms d'amendes existantes
     const nonPersonnes = (window.FP && FP.NON_CHAUFFEURS) || ['Siège', 'Dépôt', 'Navette', 'VENDU', 'x', 'X', 'Fenwick'];
@@ -1103,6 +1144,7 @@
     $('am-statut').value = 'à payer'; $('am-avis').value = '';
     $('am-telepaiement').value = ''; $('am-cle').value = '';
     _avisFile = null;
+    _pointsTouched = false;
     // Réinitialise le bloc majoration
     populateMajorationParents();
     $('am-is-majoration').checked = false;
@@ -1370,6 +1412,10 @@
     ];
     for (const [rx, label] of motifMap) { if (rx.test(text)) { out.motif = label; break; } }
 
+    // Points retirés — déduits du type d'infraction (et de l'excès de vitesse si lisible)
+    const pts = pointsRetrait(out.motif, text);
+    if (pts != null) out.points = pts;
+
     return out;
   }
 
@@ -1412,6 +1458,7 @@
         if (veh && veh.chauffeur && !$('am-prenom').value) { $('am-prenom').value = veh.chauffeur; filled.push('conducteur (via la plaque)'); }
       }
       if (parsed.motif      && !$('am-motif').value)   { $('am-motif').value   = parsed.motif;      filled.push('motif'); }
+      if (parsed.points != null && !_pointsTouched)    { $('am-points').value  = parsed.points;     filled.push('points retirés'); }
       if (parsed.montant    && !$('am-montant').value) { $('am-montant').value = parsed.montant;    filled.push('montant'); }
       if (parsed.date       && !$('am-date').value)    { $('am-date').value    = parsed.date;       filled.push('date'); }
       if (parsed.numeroAvis && !$('am-avis').value)    { $('am-avis').value    = parsed.numeroAvis; filled.push('n° d\'avis'); }
@@ -1464,6 +1511,10 @@
     $(id).addEventListener('input', checkDoublonLive);
     $(id).addEventListener('change', checkDoublonLive);
   });
+  // Points : on retient si l'utilisateur les saisit lui-même, sinon on les calcule depuis le motif
+  $('am-points').addEventListener('input', () => { _pointsTouched = true; });
+  $('am-motif').addEventListener('change', autoPointsFromMotif);
+  $('am-motif').addEventListener('input', autoPointsFromMotif);
 
   // ---------- Import / Export CSV ----------
   FP.injectDataIO({
