@@ -232,7 +232,7 @@ FP.settings = {
         navOrder: Array.isArray(stored.navOrder) ? stored.navOrder : [],
         sidebarLabels: (stored.sidebarLabels && typeof stored.sidebarLabels === 'object') ? stored.sidebarLabels : {},
         customTexts: (stored.customTexts && typeof stored.customTexts === 'object') ? stored.customTexts : {},
-        platformColor: (typeof stored.platformColor === 'string' && /^#?[0-9a-fA-F]{3,6}$/.test(stored.platformColor)) ? stored.platformColor : this.defaults.platformColor,
+        platformColor: (typeof stored.platformColor === 'string' && /^#?[0-9a-fA-F]{3,6}$/.test(stored.platformColor) && stored.platformColor.replace('#', '').toUpperCase() !== '7D5E43') ? stored.platformColor : this.defaults.platformColor,
         leasingContrats: (stored.leasingContrats && typeof stored.leasingContrats === 'object') ? stored.leasingContrats : {},
         tableConfigs: (stored.tableConfigs && typeof stored.tableConfigs === 'object') ? stored.tableConfigs : {},
         contratSectionsOrder: Array.isArray(stored.contratSectionsOrder) ? stored.contratSectionsOrder : [],
