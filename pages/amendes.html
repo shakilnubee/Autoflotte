@@ -1275,10 +1275,10 @@
     if (mc) out.cle = mc[1];
 
     // Montant — un avis affiche en général PLUSIEURS montants :
-    //   • amende forfaitaire MINORÉE  (réduit si on paie vite)
-    //   • amende forfaitaire           ← le montant « tel qu'on le reçoit »
+    //   • amende forfaitaire MINORÉE  (réduit) ← montant payé après désignation du conducteur
+    //   • amende forfaitaire           (standard)
     //   • amende forfaitaire MAJORÉE   (pénalité si on paie en retard)
-    // On veut le montant forfaitaire (celui reçu), JAMAIS le majoré.
+    // L'entreprise désigne toujours le conducteur → on veut le montant MINORÉ, JAMAIS le majoré.
     // Pour chaque montant trouvé, on regarde le texte juste avant pour le classer.
     const amts = [];
     const re = /([0-9]{1,4}(?:[ .][0-9]{3})*)(?:[.,]([0-9]{2}))?\s*(?:€|EUR(?:OS?)?)/gi;
@@ -1297,13 +1297,10 @@
     }
     if (amts.length) {
       const vals = t => amts.filter(a => a.type === t).map(a => a.val);
-      const forf = vals('forfaitaire'), mino = vals('minoree'), majo = vals('majoree');
+      const mino = vals('minoree'), majo = vals('majoree');
       const nonMaj = amts.filter(a => a.type !== 'majoree').map(a => a.val);
-      const distinct = [...new Set(nonMaj)].sort((x, y) => x - y);
-      if (forf.length)               out.montant = Math.min(...forf);                        // idéal : étiqueté « forfaitaire »
-      else if (distinct.length >= 3) out.montant = distinct[Math.floor((distinct.length - 1) / 2)]; // 3 montants non étiquetés → le médian = forfaitaire
-      else if (mino.length)          out.montant = Math.min(...mino);                        // sinon le minoré
-      else if (nonMaj.length)        out.montant = Math.min(...nonMaj);                       // sinon le plus petit hors « majoré »
+      if (mino.length)        out.montant = Math.min(...mino);    // idéal : étiqueté « minoré »
+      else if (nonMaj.length) out.montant = Math.min(...nonMaj);  // sinon le plus petit hors « majoré » (= le minoré)
       // sinon (que des montants majorés) : on ne fixe pas le montant initial
       if (majo.length) out.montantMajore = Math.max(...majo);
     }
