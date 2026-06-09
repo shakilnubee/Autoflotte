@@ -152,7 +152,7 @@
 <script src="../assets/js/supabase-client.js"></script>
 <script src="../assets/js/data.js"></script>
 <script src="../assets/js/app.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -244,6 +244,9 @@
     // === Sinistres / accidents (factures type=sinistre, regroupées par accident) ===
     renderSinistres(fact, annee);
 
+    // Graphiques : seulement si Chart.js est chargé (il l'est en différé → dessiné dès qu'il est prêt).
+    // KPIs + tableau TCO s'affichent immédiatement, sans attendre → navigation fluide.
+    if (typeof Chart !== 'undefined') {
     destroyCharts();
 
     // Mensuel : 12 derniers mois (toutes années) ou Jan→Déc de l'année choisie
@@ -281,6 +284,7 @@
       data: { labels: Object.keys(perSociete), datasets: [{ data: Object.values(perSociete), backgroundColor: ['#0F1E3D', '#F97316', '#F59E0B', '#94A3B8'], borderWidth: 0 }] },
       options: { cutout: '60%', plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `${ctx.label} : ${FP.euro(ctx.parsed)}` } } }, maintainAspectRatio: false, responsive: true }
     });
+    } // fin "if Chart chargé"
 
     // TCO par véhicule (sur la période choisie)
     tcoData = data.vehicules.map(v => {
@@ -326,6 +330,8 @@
   // Filtre par année + premier rendu
   $('filter-annee').addEventListener('change', (e) => render(e.target.value));
   render('all');
+  // Graphiques (Chart.js en différé) dessinés dès qu'il est prêt, sans bloquer l'affichage
+  if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); } catch (e) {} });
   // Rafraîchit quand les données Supabase arrivent (sinon on reste sur le cache data.js)
   document.addEventListener('fp:data-ready', () => { const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
 
