@@ -21,6 +21,12 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
 - **ID** : `1OytuLYw0T8-0Hebsu0L6N8sgk1pC6SfKp3n7l1i0fkU`
 - Onglet véhicules en haut (col `CONDUCTEUR | N° de plaque | Type`), puis sections amendes.
 - Ne jamais utiliser les anciennes copies (« pour Claude », « Copie de Voiture + Contravention », etc.).
+- ⚠️ **RÈGLE « mettre à jour »** (consigne explicite) : quand l'utilisateur dit « mets à jour »,
+  ne prendre QUE **l'onglet `véhicules`** et **l'onglet `2026`** (amendes 2026). Ignorer tous les
+  autres onglets/sections (emprunts, anciennes amendes, etc.).
+- ⚠️ **Stockage autonomie/version** : côté DB, l'autonomie est dans la colonne `note_pneus`
+  (mapping `note_pneus`↔`autonomie`) et la version dans `type_pneus` (↔`version`). Écrire
+  l'autonomie dans `note_pneus`, PAS dans la colonne `autonomie` (ignorée par l'app).
 
 ## Structure du projet
 
