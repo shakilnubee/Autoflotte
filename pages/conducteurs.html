@@ -362,6 +362,11 @@
     localStorage.setItem(PERMIS_KEY, JSON.stringify(permis));
   }
   function seedCondCacheFromLS() {
+    // ⚠️ Les clés localStorage legacy (COND_KEY/PERMIS_KEY) contiennent UNIQUEMENT les données PXP
+    // d'origine. Pour toute AUTRE société, ne rien réinjecter (sinon les conducteurs PXP
+    // apparaîtraient — et pourraient être réécrits — sur une société qui doit rester vierge).
+    const soc = (window.FP && FP.activeSociete) ? FP.activeSociete() : 'PXP';
+    if (soc !== 'PXP') { condCache = []; return; }
     const store = (() => { try { return JSON.parse(localStorage.getItem(COND_KEY) || '{}'); } catch { return {}; } })();
     const permis = (() => { try { return JSON.parse(localStorage.getItem(PERMIS_KEY) || '{}'); } catch { return {}; } })();
     const map = {};
@@ -377,8 +382,11 @@
     return FP.db.select('conducteurs').then(r => {
       if (r.error) { seedCondCacheFromLS(); done(); return; }
       if ((r.data || []).length === 0) {
-        seedCondCacheFromLS();
-        condCache.forEach(row => FP.persist.upsert('conducteurs', toCondDb(row))); // migration unique
+        // Table vide : migration localStorage→Supabase UNIQUEMENT pour PXP (1ʳᵉ fois).
+        // Pour une autre société, 0 conducteur = réellement vide → on ne réinjecte/écrit rien.
+        seedCondCacheFromLS(); // (renvoie [] hors PXP)
+        const soc = (window.FP && FP.activeSociete) ? FP.activeSociete() : 'PXP';
+        if (soc === 'PXP') condCache.forEach(row => FP.persist.upsert('conducteurs', toCondDb(row)));
       } else {
         condCache = r.data;
         cacheCond();
