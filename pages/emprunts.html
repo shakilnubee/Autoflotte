@@ -217,12 +217,17 @@
     cache.sort((a, b) => `${b.dateEmprunt||''} ${b.heureEmprunt||''}`.localeCompare(`${a.dateEmprunt||''} ${a.heureEmprunt||''}`));
   }
   function load() {
+    // 1) Affichage INSTANTANÉ depuis le cache local (évite la page vide pendant la requête réseau)
+    const local = lsGet();
+    if (local.length) { cache = local; sortCache(); render(); }
+    // 2) Rafraîchit depuis Supabase, puis met le cache local à jour (pour le prochain affichage instantané)
     if (dbOn()) {
       FP.db.select('emprunts').then(r => {
-        if (r.error) { cache = lsGet(); } else { cache = r.data || []; }
+        if (!r.error) { cache = r.data || []; lsSet(); }
+        else if (!cache.length) { cache = local; }
         sortCache(); render();
       });
-    } else { cache = lsGet(); sortCache(); render(); }
+    } else if (!cache.length) { cache = local; sortCache(); render(); }
   }
 
   function vehLabel(immat) {

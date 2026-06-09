@@ -208,10 +208,22 @@
 
     try {
       const data = await FP.db.loadAll();
+      // Signature LÉGÈRE des champs affichés : si les données live sont IDENTIQUES à ce qui est
+      // déjà affiché (data.js régénéré à jour), on évite le re-rendu inutile (« grisaille » /
+      // page qui se remet). On ne ré-émet 'fp:data-ready' que si quelque chose a réellement changé.
+      const sig = (d) => {
+        const f = (arr, ks) => (arr || []).map(x => ks.map(k => (x[k] ?? '')).join('|')).join(';');
+        return f(d.vehicules, ['id','km','statut','chauffeur','prochainCT','derniereRevision','proprietaire'])
+             + '#' + f(d.amendes, ['id','statut','montant','montantTTC','points','date','prenom'])
+             + '#' + f(d.factures, ['id','montantTTC','type','date','vehiculeImmat']);
+      };
+      const sigBefore = sig(window.FP_DATA);
+      const sigAfter  = sig(data);
       // Remplace les contenus in-place
       replaceArrayInPlace(window.FP_DATA.vehicules, data.vehicules);
       replaceArrayInPlace(window.FP_DATA.amendes,   data.amendes);
       replaceArrayInPlace(window.FP_DATA.factures,  data.factures);
+      const dataChanged = (sigBefore !== sigAfter);
       // Cache local des dernières données live → sert d'affichage initial à la prochaine
       // ouverture (évite le "flash" data.js figé → vraies données). On garde le cache
       // LÉGER (véhicules + amendes, ce qui couvre les compteurs Conducteurs/Tableau de
@@ -243,7 +255,11 @@
           if (FP.applyCustomTexts) FP.applyCustomTexts();
         }
       } catch (e) { /* table absente ou hors-ligne : on garde les réglages locaux */ }
-      document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'supabase', counts: { vehicules: data.vehicules.length, amendes: data.amendes.length, factures: data.factures.length } } }));
+      // On ne déclenche le re-rendu des pages QUE si les données ont réellement changé
+      // (sinon le 1er affichage depuis data.js/cache est déjà bon → pas de clignotement).
+      if (dataChanged) {
+        document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'supabase', counts: { vehicules: data.vehicules.length, amendes: data.amendes.length, factures: data.factures.length } } }));
+      }
       return data;
     } catch (e) {
       console.warn('[FP.db] Supabase indisponible, fallback sur data.js local :', e);
