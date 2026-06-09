@@ -8,9 +8,12 @@
 // écraserait sinon le data.js (à jour) par de vieux chiffres → re-flash. En changeant
 // la clé, tout cache obsolète est ignoré et on repart du data.js frais jusqu'au 1er
 // chargement Supabase (qui réécrit un cache propre).
-window.FP_CACHE_KEY = 'fp_data_cache_v3';
+// ⚠️ Clé de cache PAR SOCIÉTÉ : sinon le cache d'une société (ex. PXP) s'afficherait sur une
+// autre (ex. « essaie B »). On suffixe par la société active (lue directement en localStorage,
+// car FP.activeSociete n'est pas encore défini à ce stade).
+window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } })();
 (function seedFromCache() {
-  try { localStorage.removeItem('fp_data_cache'); } catch (e) {} // purge l'ancienne clé
+  try { localStorage.removeItem('fp_data_cache'); } catch (e) {} // purge l'ancienne clé (non suffixée)
   try {
     const c = JSON.parse(localStorage.getItem(window.FP_CACHE_KEY) || 'null');
     if (c && window.FP_DATA && Array.isArray(c.amendes)) {
@@ -181,7 +184,7 @@ FP.addSociete = (name) => {
     const s = FP.activeSociete();
     if (s === 'PXP' || s === '__all__') return;
     const d = window.FP_DATA; if (!d) return;
-    ['vehicules', 'amendes', 'factures'].forEach(k => {
+    ['vehicules', 'amendes', 'factures', 'conducteurs'].forEach(k => {
       const arr = d[k]; if (!Array.isArray(arr)) return;
       for (let i = arr.length - 1; i >= 0; i--) { if (((arr[i] && arr[i].societe) || 'PXP') !== s) arr.splice(i, 1); }
     });
