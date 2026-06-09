@@ -28,7 +28,9 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
   organisé par pays → sous-dossier par véhicule (plaque) → PDF. Prendre **FRANCE, ITALIE,
   ALLEMAGNE, Pays-Bas** uniquement. **EXCLURE** les sous-dossiers `01. Autres` et `OUT`.
   Lier chaque PDF à la table `factures` par `file_id` ; « nouvelles » = `file_id` absent de la base.
-  ⚠️ N'ajouter QUE les **vraies factures** (« Facture d'achat / FACTURE … »). **EXCLURE** les « Code de cession », « Scan… », « Certificat de conformité » et autres documents qui ne sont pas des factures.
+  Les **nouvelles** factures se trouvent en général dans les sous-sous-dossiers **`2026`** de chaque véhicule.
+  ⚠️ **Vérifier par le CONTENU, pas par le nom** : il faut LIRE le PDF/scan pour décider (un fichier « Scan… » peut être une vraie facture). N'importer dans `factures` QUE les **vraies factures** (fournisseur + montants), avec OCR du HT / TVA / TTC / n° de facture / KM / fournisseur / description courte.
+  ⚠️ **Codes/certificats de cession** et **contrôles techniques** : NE PAS les mettre dans `factures` — les ajouter dans la **fiche véhicule → section « Documents »** (table `documents`, type `code-cession` ou `controle-technique`, `url` = lien Drive `https://drive.google.com/file/d/<id>/view`). Les autres documents (carte grise, attestation assurance, devis, photos…) sont ignorés.
 - ⚠️ **Stockage autonomie/version** : côté DB, l'autonomie est dans la colonne `note_pneus`
   (mapping `note_pneus`↔`autonomie`) et la version dans `type_pneus` (↔`version`). Écrire
   l'autonomie dans `note_pneus`, PAS dans la colonne `autonomie` (ignorée par l'app).
