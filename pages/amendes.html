@@ -859,17 +859,23 @@
       ${a.avisUrl ? `
         <div>
           <div class="field-label">Scan de l'avis</div>
-          <a href="${a.avisUrl}" target="_blank" rel="noopener" class="btn btn-outline text-sm w-full justify-center">
-            <i data-lucide="file-text" class="w-4 h-4"></i> Voir l'avis
-          </a>
+          <div class="flex gap-2">
+            <a href="${a.avisUrl}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
+              <i data-lucide="file-text" class="w-4 h-4"></i> Voir l'avis
+            </a>
+            <button type="button" id="avis-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le scan de l'avis"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
+          </div>
         </div>` : ''}
 
       <div>
         <div class="field-label">Justificatif de paiement</div>
         ${a.justifUrl ? `
-          <a href="${a.justifUrl}" target="_blank" rel="noopener" class="btn btn-outline text-sm w-full justify-center">
-            <i data-lucide="file-check" class="w-4 h-4"></i> Voir le justificatif
-          </a>
+          <div class="flex gap-2">
+            <a href="${a.justifUrl}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
+              <i data-lucide="file-check" class="w-4 h-4"></i> Voir le justificatif
+            </a>
+            <button type="button" id="justif-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le justificatif"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
+          </div>
           <p class="text-xs text-emerald-700 mt-1.5 flex items-center gap-1"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Payée &amp; archivée${a.archived ? ' — <button type="button" id="justif-unarchive" class="underline hover:text-red-600">retirer des archives</button>' : ''}</p>
         ` : `
           <button type="button" id="justif-btn" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Joindre un justificatif</button>
@@ -913,6 +919,8 @@
     // Boutons dynamiques du justificatif (re-rendus à chaque ouverture)
     const jb = $('justif-btn'); if (jb) jb.onclick = () => $('justif-file').click();
     const ju = $('justif-unarchive'); if (ju) ju.onclick = unarchiveAmende;
+    const ad = $('avis-del'); if (ad) ad.onclick = () => deleteAmDoc('avisUrl', "le scan de l'avis");
+    const jd = $('justif-del'); if (jd) jd.onclick = () => deleteAmDoc('justifUrl', 'le justificatif');
     const mp = $('mail-paiement'); if (mp) mp.onclick = mailPaiement;
     const md = $('mail-designation'); if (md) md.onclick = mailDesignation;
     const tv = $('am-tel-val'); if (tv) tv.onclick = () => editAmField('numeroTelepaiement', 'N° de télépaiement');
@@ -1021,6 +1029,18 @@
     renderTable();
     FP.persist.update('amendes', a.id, { [field]: a[field] });
     openDrawer(a.id);
+  }
+  // Supprime un document de l'amende (scan d'avis / justificatif) : on enlève le lien
+  function deleteAmDoc(field, label) {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
+    if (!confirm(`Supprimer ${label} de cette amende ?`)) return;
+    FP.history.commit();
+    a[field] = null;
+    const id = a.id;
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { [field]: null });
+    openDrawer(id);
   }
   function unarchiveAmende() {
     if (!state.currentId) return;
