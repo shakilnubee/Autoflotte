@@ -304,6 +304,9 @@
   let condCache = (() => { try { return JSON.parse(localStorage.getItem(COND_CACHE_KEY)) || []; } catch { return []; } })();
 
   function cacheCond() { try { localStorage.setItem(COND_CACHE_KEY, JSON.stringify(condCache)); } catch {} }
+  // Pendant le chargement initial, on bloque les rendus intermédiaires (véhicules OU conducteurs
+  // arrivant séparément) pour éviter le "flash" du nombre (ex. 43 → 46). Le rendu final est groupé.
+  let suppressRender = true;
   function condRow(key) { return condCache.find(r => r.key === key) || null; }
   function toCondDb(r) {
     return { key: r.key, name: r.name || null, nom: r.nom || null, prenom: r.prenom || null,
@@ -363,9 +366,9 @@
   }
   // Charge depuis Supabase ; migre le localStorage existant si la table est vide
   function loadConducteurs() {
-    const done = () => { drivers = buildDrivers(); renderKPIs(); renderGrid(); if (currentDriverKey && $('drawer').classList.contains('open')) openDrawer(currentDriverKey); };
-    if (!(window.FP && FP.db && FP.supabase)) { seedCondCacheFromLS(); done(); return; }
-    FP.db.select('conducteurs').then(r => {
+    const done = () => { drivers = buildDrivers(); if (!suppressRender) { renderKPIs(); renderGrid(); } if (currentDriverKey && $('drawer').classList.contains('open')) openDrawer(currentDriverKey); };
+    if (!(window.FP && FP.db && FP.supabase)) { seedCondCacheFromLS(); done(); return Promise.resolve(); }
+    return FP.db.select('conducteurs').then(r => {
       if (r.error) { seedCondCacheFromLS(); done(); return; }
       if ((r.data || []).length === 0) {
         seedCondCacheFromLS();
@@ -1208,17 +1211,19 @@
   $('modal-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
   $('driver-form').addEventListener('submit', addDriver);
 
-  // Premier rendu : on attend les vraies données (Supabase) pour ne pas afficher
-  // brièvement les chiffres figés de data.js (ex. 27 amendes → 25). Repli immédiat
-  // si le loader est absent / hors-ligne (data.js ou cache local).
+  // Anti-flash : si on a déjà un cache serveur fiable, on affiche TOUT DE SUITE le bon nombre
+  // (visites suivantes = 0 clignotement). Sinon on attend que véhicules/amendes ET conducteurs
+  // soient chargés pour faire UN SEUL rendu définitif (jamais de "43 → 46").
   function firstRender() { drivers = buildDrivers(); renderKPIs(); renderGrid(); openCondFromUrl(); }
-  if (window.FP && FP.dbReady && typeof FP.dbReady.then === 'function') {
-    FP.dbReady.then(firstRender, firstRender);
-  } else {
-    firstRender();
-  }
+  if (condCache.length) { suppressRender = false; firstRender(); suppressRender = true; }
   lucide.createIcons();
-  loadConducteurs(); // charge conducteurs + permis depuis Supabase (et migre le local si besoin)
+  const dbReady = (window.FP && FP.dbReady && typeof FP.dbReady.then === 'function') ? FP.dbReady : Promise.resolve();
+  // charge conducteurs + permis depuis Supabase (et migre le local si besoin)
+  Promise.allSettled([dbReady, loadConducteurs()]).then(() => {
+    suppressRender = false;
+    firstRender();
+    lucide.createIcons();
+  });
 
   // ---------- Import / Export CSV ----------
   FP.injectDataIO({
@@ -1276,7 +1281,7 @@
   openCondFromUrl();
 
   // Rafraîchit quand les véhicules/amendes Supabase arrivent (les conducteurs en dérivent)
-  document.addEventListener('fp:data-ready', () => { drivers = buildDrivers(); renderKPIs(); renderGrid(); openCondFromUrl(); });
+  document.addEventListener('fp:data-ready', () => { if (suppressRender) return; drivers = buildDrivers(); renderKPIs(); renderGrid(); openCondFromUrl(); });
 </script>
 </body>
 </html>
