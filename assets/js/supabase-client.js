@@ -216,12 +216,18 @@
       // ouverture (évite le "flash" data.js figé → vraies données). On garde le cache
       // LÉGER (véhicules + amendes, ce qui couvre les compteurs Conducteurs/Tableau de
       // bord) ; les factures (volumineuses) sont exclues pour ne pas dépasser le quota.
+      const CK = window.FP_CACHE_KEY || 'fp_data_cache_v3';
+      try { localStorage.removeItem('fp_data_cache'); } catch (e0) {} // ancienne clé périmée
       try {
-        localStorage.setItem('fp_data_cache', JSON.stringify({
-          vehicules: data.vehicules, amendes: data.amendes
+        // On cache TOUT (véhicules + amendes + factures) pour que le 1er affichage de chaque
+        // page corresponde exactement au live → zéro "flash" de chiffres.
+        localStorage.setItem(CK, JSON.stringify({
+          vehicules: data.vehicules, amendes: data.amendes, factures: data.factures
         }));
       } catch (e) {
-        try { localStorage.setItem('fp_data_cache', JSON.stringify({ amendes: data.amendes })); } catch (e2) { /* tant pis */ }
+        // Quota dépassé : on retombe sur véhicules + amendes (sans les factures, volumineuses).
+        try { localStorage.setItem(CK, JSON.stringify({ vehicules: data.vehicules, amendes: data.amendes })); }
+        catch (e2) { try { localStorage.setItem(CK, JSON.stringify({ amendes: data.amendes })); } catch (e3) { /* tant pis */ } }
       }
       console.log(`[FP.db] Chargé depuis Supabase : ${data.vehicules.length} véhicules, ${data.amendes.length} amendes, ${data.factures.length} factures`);
       // Re-appliquer les overrides locaux (cases cochées par l'utilisateur, etc.)

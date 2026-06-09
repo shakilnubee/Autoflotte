@@ -4,9 +4,15 @@
 // dernière copie live mise en cache (écrite après chaque chargement Supabase),
 // au lieu des données figées de data.js. Supabase rafraîchit juste après.
 // (app.js s'exécute après data.js et avant que les pages lisent window.FP_DATA)
+// ⚠️ La clé est VERSIONNÉE (…_v3). Un ancien cache périmé d'une session précédente
+// écraserait sinon le data.js (à jour) par de vieux chiffres → re-flash. En changeant
+// la clé, tout cache obsolète est ignoré et on repart du data.js frais jusqu'au 1er
+// chargement Supabase (qui réécrit un cache propre).
+window.FP_CACHE_KEY = 'fp_data_cache_v3';
 (function seedFromCache() {
+  try { localStorage.removeItem('fp_data_cache'); } catch (e) {} // purge l'ancienne clé
   try {
-    const c = JSON.parse(localStorage.getItem('fp_data_cache') || 'null');
+    const c = JSON.parse(localStorage.getItem(window.FP_CACHE_KEY) || 'null');
     if (c && window.FP_DATA && Array.isArray(c.amendes)) {
       if (Array.isArray(c.vehicules)) window.FP_DATA.vehicules = c.vehicules;
       if (Array.isArray(c.amendes))   window.FP_DATA.amendes   = c.amendes;
