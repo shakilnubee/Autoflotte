@@ -149,7 +149,6 @@
           <button class="filter-chip" data-value="à payer">À payer</button>
           <button class="filter-chip" data-value="payée">Payées</button>
           <button class="filter-chip" data-value="désignée">Désignées</button>
-          <button class="filter-chip" data-value="archivée">Archivées</button>
         </div>
 
         <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
@@ -209,7 +208,7 @@
       <p class="text-xs text-slate-500" id="result-count"></p>
       <button id="table-more" class="inline-flex items-center gap-1 text-sm font-semibold" style="color: var(--fp-accent); display:none">Cliquez pour tout voir</button>
       <span class="text-slate-300">·</span>
-      <button id="btn-voir-tout" class="text-xs font-semibold underline" style="color: var(--fp-accent)">Tout voir (toutes années + archivées)</button>
+      <button id="btn-voir-tout" class="text-xs font-semibold underline" style="color: var(--fp-accent)">Tout voir (toutes les années)</button>
     </div>
 
     <!-- Délai de paiement -->
@@ -446,12 +445,8 @@
     return data.amendes.filter(a => {
       // Par défaut : uniquement 2026. En mode "Tout voir" : toutes les années.
       if (!state.voirTout && a.annee !== '2026') return false;
-      // Les amendes archivées sont masquées sauf vue "Archivées" ou mode "Tout voir"
-      if (state.statut === 'archivée') { if (!a.archived) return false; }
-      else {
-        if (a.archived && !state.voirTout) return false;
-        if (state.statut !== 'all' && a.statut !== state.statut) return false;
-      }
+      // Filtre par statut (les payées restent visibles dans « Payées » / « Toutes »)
+      if (state.statut !== 'all' && a.statut !== state.statut) return false;
       if (state.motif !== 'all' && a.motif !== state.motif) return false;
       if (state.motifCat !== 'all' && categorize(a.motif) !== state.motifCat) return false;
       if (state.dateFrom && (a.date || '') < state.dateFrom) return false;
@@ -876,10 +871,10 @@
             </a>
             <button type="button" id="justif-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le justificatif"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
           </div>
-          <p class="text-xs text-emerald-700 mt-1.5 flex items-center gap-1"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Payée &amp; archivée${a.archived ? ' — <button type="button" id="justif-unarchive" class="underline hover:text-red-600">retirer des archives</button>' : ''}</p>
+          <p class="text-xs text-emerald-700 mt-1.5 flex items-center gap-1"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Payée</p>
         ` : `
           <button type="button" id="justif-btn" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Joindre un justificatif</button>
-          <p class="text-xs text-slate-400 mt-1.5">Joindre la preuve de paiement passe l'amende en <b>payée</b> et l'<b>archive</b> automatiquement.</p>
+          <p class="text-xs text-slate-400 mt-1.5">Joindre la preuve de paiement passe l'amende en <b>payée</b> automatiquement.</p>
         `}
       </div>
 
@@ -943,11 +938,11 @@
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a) return;
     FP.history.commit();
-    a.statut = 'payée'; a.archived = true; // payée = archivée (sort de la liste active)
+    a.statut = 'payée'; // reste visible dans « Payées »
     const id = a.id;
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
-    FP.persist.update('amendes', id, { statut: 'payée', archived: true });
+    FP.persist.update('amendes', id, { statut: 'payée' });
   }
   // Revenir en arrière : repasse une amende payée en "à payer" (et la sort des archives)
   function markUnpaid() {
@@ -978,11 +973,11 @@
     const prev = (a.commentaire || '').replace(/^Payée le [^\n]*\n?/i, '').trim();
     const newComment = prev ? `${mention}\n${prev}` : mention;
     FP.history.commit();
-    a.justifUrl = url; a.statut = 'payée'; a.archived = true; a.commentaire = newComment;
+    a.justifUrl = url; a.statut = 'payée'; a.commentaire = newComment;
     const id = a.id;
     renderKPIs(); renderTable(); renderCharts();
-    FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', archived: true, commentaire: newComment });
-    openDrawer(id); // rouvre la fiche à jour (montre le lien + état archivé + commentaire)
+    FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', commentaire: newComment });
+    openDrawer(id); // rouvre la fiche à jour (lien + commentaire « Payée le … »)
   }
   // Lit le justificatif (PDF/image) et tente d'en extraire la date de paiement
   async function extractDatePaiement(file) {
@@ -1724,7 +1719,7 @@
       const si = document.getElementById('search'); if (si) si.value = '';
       document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
     }
-    $('btn-voir-tout').textContent = state.voirTout ? 'Afficher seulement 2026' : 'Tout voir (toutes années + archivées)';
+    $('btn-voir-tout').textContent = state.voirTout ? 'Afficher seulement 2026' : 'Tout voir (toutes les années)';
     renderTable();
   });
   $('drawer-delete').addEventListener('click', deleteAmende);
