@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Amendes — Auto-flotte</title>
+<title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="../assets/css/tailwind.css">
 <script src="https://unpkg.com/lucide@latest"></script>
 <link rel="stylesheet" href="../assets/css/styles.css">
 <style>
@@ -25,7 +25,7 @@
   .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
-  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(20,184,166,.15); }
+  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(249,115,22,.15); }
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.5); display: none; align-items: center; justify-content: center; z-index: 70; padding: 1rem; }
   .modal-backdrop.open { display: flex; }
   .modal { background: white; border-radius: 1rem; width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto; }
@@ -54,7 +54,7 @@
 
   <aside class="fp-sidebar p-4 flex-shrink-0">
     <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
-      <span class="fp-logo-mark">AF</span><span>Auto-flotte</span>
+      <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic" fill="currentColor">Parc</text><text x="86" y="26" font-size="20" font-weight="900" font-style="italic" fill="#F97316">Pilot</text></svg>
     </a>
     <nav class="space-y-1">
       <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
@@ -71,6 +71,7 @@
       <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
       <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
       <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+      <a href="../brochure.html"   data-nav="brochure.html" target="_blank" rel="noopener"><i data-lucide="sparkles"></i> Brochure</a>
     </nav>
     <div class="mt-10 pt-6 border-t border-white/10 text-xs text-slate-300 px-2">
       <div class="font-semibold text-white mb-1">Données réelles</div>
@@ -294,6 +295,10 @@
         <div><div class="field-label">Montant (€) *</div><input class="field-input" type="number" id="am-montant" min="0" step="0.01" placeholder="0" required /></div>
         <div><div class="field-label">Points retirés *</div><input class="field-input" type="number" id="am-points" min="0" step="1" placeholder="0" required /><div class="text-xs text-slate-400 mt-0.5">Calculés selon l'infraction — modifiable</div></div>
       </div>
+      <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+        <input type="checkbox" id="am-etrangere" class="w-4 h-4 accent-amber-600" />
+        Amende étrangère (pas de retrait de points en France)
+      </label>
       <div class="grid grid-cols-2 gap-4">
         <div><div class="field-label">Date *</div><input class="field-input" type="date" id="am-date" required /></div>
         <div><div class="field-label">Statut *</div>
@@ -679,7 +684,7 @@
         labels: sortedMotifs.map(([k]) => k),
         datasets: [{
           data: sortedMotifs.map(([,v]) => v),
-          backgroundColor: ['#DC2626', '#F59E0B', '#7C3AED', '#14B8A6', '#0F1E3D', '#1E3A8A', '#5EEAD4', '#94A3B8'],
+          backgroundColor: ['#DC2626', '#F59E0B', '#7C3AED', '#F97316', '#0F1E3D', '#1E3A8A', '#FB923C', '#94A3B8'],
           borderWidth: 0,
         }]
       },
@@ -885,11 +890,10 @@
         <div>${a.annee}</div>
       </div>
 
-      ${a.commentaire ? `
-        <div>
-          <div class="field-label">Commentaire</div>
-          <div class="text-sm bg-slate-50 p-3 rounded-lg">${a.commentaire}</div>
-        </div>` : ''}
+      <div>
+        <div class="field-label">Commentaire</div>
+        <div id="am-comment-val" class="text-sm bg-slate-50 p-3 rounded-lg cursor-pointer hover:bg-slate-100" style="white-space:pre-line" title="Cliquer pour modifier">${a.commentaire ? escAmende(a.commentaire) : '<span class="text-slate-400">— cliquer pour ajouter un commentaire</span>'}</div>
+      </div>
     `;
 
     $('drawer').classList.add('open');
@@ -915,6 +919,7 @@
     const cv = $('am-cle-val'); if (cv) cv.onclick = () => editAmField('cle', 'Clé');
     const tc = $('am-tel-copy'); if (tc) tc.onclick = () => copierTexte(a.numeroTelepaiement, tc);
     const cc = $('am-cle-copy'); if (cc) cc.onclick = () => copierTexte(a.cle, cc);
+    const cmv = $('am-comment-val'); if (cmv) cmv.onclick = () => editAmField('commentaire', 'Commentaire');
     lucide.createIcons();
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
@@ -930,11 +935,11 @@
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a) return;
     FP.history.commit();
-    a.statut = 'payée';
+    a.statut = 'payée'; a.archived = true; // payée = archivée (sort de la liste active)
     const id = a.id;
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
-    FP.persist.update('amendes', id, { statut: 'payée' });
+    FP.persist.update('amendes', id, { statut: 'payée', archived: true });
   }
   // Revenir en arrière : repasse une amende payée en "à payer" (et la sort des archives)
   function markUnpaid() {
@@ -957,12 +962,46 @@
     try { url = await FP.uploadScan(file, 'justificatifs') || ''; }
     catch (e) { console.error(e); alert("Le justificatif n'a pas pu être envoyé. Réessaie."); return; }
     if (!url) { alert("Le justificatif n'a pas pu être envoyé. Réessaie."); return; }
+    // Cherche la date de paiement dans le justificatif (OCR), sinon date du jour
+    let dpaie = null;
+    try { dpaie = await extractDatePaiement(file); } catch (e) { console.warn('[justif] date non lue', e); }
+    const mention = `Payée le ${FP.date(dpaie || new Date().toISOString().slice(0, 10))}`;
+    // Préserve un éventuel commentaire existant, sans dupliquer la mention "Payée le …"
+    const prev = (a.commentaire || '').replace(/^Payée le [^\n]*\n?/i, '').trim();
+    const newComment = prev ? `${mention}\n${prev}` : mention;
     FP.history.commit();
-    a.justifUrl = url; a.statut = 'payée'; a.archived = true;
+    a.justifUrl = url; a.statut = 'payée'; a.archived = true; a.commentaire = newComment;
     const id = a.id;
     renderKPIs(); renderTable(); renderCharts();
-    FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', archived: true });
-    openDrawer(id); // rouvre la fiche à jour (montre le lien + état archivé)
+    FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', archived: true, commentaire: newComment });
+    openDrawer(id); // rouvre la fiche à jour (montre le lien + état archivé + commentaire)
+  }
+  // Lit le justificatif (PDF/image) et tente d'en extraire la date de paiement
+  async function extractDatePaiement(file) {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    let text = '';
+    if (isPdf) {
+      const pdf = await loadPdf(file);
+      text = await pdfText(pdf);
+      if ((text || '').replace(/\s/g, '').length < 30) {
+        await loadScript(TESSERACT_CDN);
+        const canvas = await pdfPageToCanvas(pdf);
+        const worker = await Tesseract.createWorker('fra');
+        const { data } = await worker.recognize(canvas); await worker.terminate();
+        text = data.text;
+      }
+    } else {
+      await loadScript(TESSERACT_CDN);
+      const worker = await Tesseract.createWorker('fra');
+      const { data } = await worker.recognize(file); await worker.terminate();
+      text = data.text;
+    }
+    const t = (text || '').replace(/\s+/g, ' ');
+    let m = t.match(/(?:pai?ement|pay[ée]e?|r[ée]gl[ée]e?|effectu[ée])[^0-9]{0,25}(\d{1,2})[\/.\- ](\d{1,2})[\/.\- ](\d{2,4})/i)
+         || t.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+    if (!m) return null;
+    let y = m[3]; if (y.length === 2) y = '20' + y;
+    return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   }
   // Copie un texte dans le presse-papier + petit retour visuel sur le bouton
   function copierTexte(txt, btn) {
@@ -1139,6 +1178,7 @@
   // Calcule les points retirés à partir du motif choisi (sauf si l'utilisateur les a saisis lui-même)
   function autoPointsFromMotif() {
     if (_pointsTouched) return;
+    if ($('am-etrangere') && $('am-etrangere').checked) return; // amende étrangère : 0 point
     const pts = pointsRetrait($('am-motif').value.trim(), '');
     if (pts != null) $('am-points').value = pts;
   }
@@ -1157,6 +1197,7 @@
     $('am-telepaiement').value = ''; $('am-cle').value = '';
     _avisFile = null;
     _pointsTouched = false;
+    $('am-etrangere').checked = false; $('am-points').removeAttribute('disabled');
     // Réinitialise le bloc majoration
     populateMajorationParents();
     $('am-is-majoration').checked = false;
@@ -1193,7 +1234,8 @@
     const prenom = $('am-prenom').value.trim();
     if (!prenom) { $('am-prenom').focus(); return; }
     const date = $('am-date').value || new Date().toISOString().slice(0, 10);
-    const points = parseInt($('am-points').value, 10) || 0;
+    const etrangere = $('am-etrangere').checked; // amende étrangère = pas de retrait de points
+    const points = etrangere ? 0 : (parseInt($('am-points').value, 10) || 0);
     const montant = parseFloat($('am-montant').value) || 0;
     const numAvis = fmtNumeroAvis($('am-avis').value);
     const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
@@ -1250,13 +1292,13 @@
       prenom, numeroAvis: numAvis, motif: $('am-motif').value.trim(),
       montant, points, retraitPoints: points > 0,
       numeroTelepaiement: $('am-telepaiement').value.trim(), cle: $('am-cle').value.trim(),
-      statut: $('am-statut').value || 'à payer', commentaire: '', avisUrl
+      statut: $('am-statut').value || 'à payer', commentaire: etrangere ? 'Amende étrangère' : '', avisUrl
     };
     data.amendes.push(newA);
     _avisFile = null;
     renderKPIs(); renderTable(); renderCharts();
     const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
-    FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: newA.numeroAvis || null, commentaire: null, avisUrl: avisUrl || null });
+    FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: newA.numeroAvis || null, commentaire: newA.commentaire || null, avisUrl: avisUrl || null });
     showPostSaveMail(newA); // propose d'envoyer l'email au conducteur (sans avoir à rouvrir la fiche)
   }
   // Affiche le panneau d'envoi de mail juste après l'enregistrement d'une amende
@@ -1479,7 +1521,7 @@
         if (veh && veh.chauffeur && !$('am-prenom').value) { $('am-prenom').value = veh.chauffeur; filled.push('conducteur (via la plaque)'); }
       }
       if (parsed.motif      && !$('am-motif').value)   { $('am-motif').value   = parsed.motif;      filled.push('motif'); }
-      if (parsed.points != null && !_pointsTouched)    { $('am-points').value  = parsed.points;     filled.push('points retirés'); }
+      if (parsed.points != null && !_pointsTouched && !$('am-etrangere').checked) { $('am-points').value = parsed.points; filled.push('points retirés'); }
       if (parsed.montant    && !$('am-montant').value) { $('am-montant').value = parsed.montant;    filled.push('montant'); }
       if (parsed.date       && !$('am-date').value)    { $('am-date').value    = parsed.date;       filled.push('date'); }
       if (parsed.numeroAvis && !$('am-avis').value)    { $('am-avis').value    = parsed.numeroAvis; filled.push('n° d\'avis'); }
@@ -1536,6 +1578,11 @@
   $('am-points').addEventListener('input', () => { _pointsTouched = true; });
   $('am-motif').addEventListener('change', autoPointsFromMotif);
   $('am-motif').addEventListener('input', autoPointsFromMotif);
+  // Amende étrangère : 0 point, champ points désactivé
+  $('am-etrangere').addEventListener('change', (e) => {
+    if (e.target.checked) { $('am-points').value = '0'; $('am-points').setAttribute('disabled', 'disabled'); }
+    else { $('am-points').removeAttribute('disabled'); }
+  });
   // Panneau d'envoi de mail proposé juste après l'enregistrement
   $('ps-paiement').addEventListener('click', () => { mailPaiement(); closeAmendeModal(); });
   $('ps-designation').addEventListener('click', () => { mailDesignation(); closeAmendeModal(); });

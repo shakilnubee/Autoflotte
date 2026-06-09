@@ -1,5 +1,20 @@
 // Auto-flotte — helpers JS partagés
 
+// Affichage instantané sans "flash" de chiffres : on ré-hydrate FP_DATA avec la
+// dernière copie live mise en cache (écrite après chaque chargement Supabase),
+// au lieu des données figées de data.js. Supabase rafraîchit juste après.
+// (app.js s'exécute après data.js et avant que les pages lisent window.FP_DATA)
+(function seedFromCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem('fp_data_cache') || 'null');
+    if (c && window.FP_DATA && Array.isArray(c.amendes)) {
+      if (Array.isArray(c.vehicules)) window.FP_DATA.vehicules = c.vehicules;
+      if (Array.isArray(c.amendes))   window.FP_DATA.amendes   = c.amendes;
+      if (Array.isArray(c.factures))  window.FP_DATA.factures  = c.factures;
+    }
+  } catch (e) { /* cache illisible : on garde data.js */ }
+})();
+
 const FP = {
   // Format euro — null/undefined/"" /NaN ⇒ 0 (évite d'afficher "NaN €")
   euro(n) {
@@ -198,7 +213,7 @@ FP.settings = {
       'non-classe':  { label: 'Non classé',  color: '#94A3B8' },
     },
     societe: { nom: 'Auto-flotte', siret: '', adresse: '' },
-    platformColor: '#7D5E43', // couleur de base de l'interface (sidebar/titres/boutons foncés) — marron
+    platformColor: '#111827', // couleur de base de l'interface (sidebar/titres/boutons foncés) — noir Parc Pilot
     sidebarLabels: {}, // ex: { 'vehicules.html': 'Mes voitures', 'amendes.html': 'PV' }
     customTexts: {}, // textes éditables sur les pages (titres, sous-titres) — ex: { 'amendes.subtitle': 'Mes PV' }
     vehiculesColumns: {
@@ -232,7 +247,7 @@ FP.settings = {
         navOrder: Array.isArray(stored.navOrder) ? stored.navOrder : [],
         sidebarLabels: (stored.sidebarLabels && typeof stored.sidebarLabels === 'object') ? stored.sidebarLabels : {},
         customTexts: (stored.customTexts && typeof stored.customTexts === 'object') ? stored.customTexts : {},
-        platformColor: (typeof stored.platformColor === 'string' && /^#?[0-9a-fA-F]{3,6}$/.test(stored.platformColor)) ? stored.platformColor : this.defaults.platformColor,
+        platformColor: (typeof stored.platformColor === 'string' && /^#?[0-9a-fA-F]{3,6}$/.test(stored.platformColor) && stored.platformColor.replace('#', '').toUpperCase() !== '7D5E43') ? stored.platformColor : this.defaults.platformColor,
         leasingContrats: (stored.leasingContrats && typeof stored.leasingContrats === 'object') ? stored.leasingContrats : {},
         tableConfigs: (stored.tableConfigs && typeof stored.tableConfigs === 'object') ? stored.tableConfigs : {},
         contratSectionsOrder: Array.isArray(stored.contratSectionsOrder) ? stored.contratSectionsOrder : [],
