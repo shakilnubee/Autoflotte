@@ -188,21 +188,11 @@ FP.addSociete = (name) => {
   } catch (e) {}
 })();
 
-// Anti-flash : en ligne, on masque brièvement le contenu (fondu) jusqu'à ce que les vraies
-// données Supabase soient chargées — évite de voir clignoter le cache statique (instantané PXP).
-(function antiFlashCache() {
-  try {
-    if (!window.FP || !FP.supabase) return; // hors-ligne : on garde l'affichage immédiat du cache
-    const st = document.createElement('style');
-    st.textContent = 'body.fp-prefetch main{opacity:0!important;transition:opacity .18s ease}';
-    (document.head || document.documentElement).appendChild(st);
-    const arm = () => { if (document.body) document.body.classList.add('fp-prefetch'); };
-    const reveal = () => { if (document.body) document.body.classList.remove('fp-prefetch'); };
-    if (document.body) arm(); else document.addEventListener('DOMContentLoaded', arm);
-    document.addEventListener('fp:data-ready', reveal);
-    setTimeout(reveal, 2000); // filet de sécurité
-  } catch (e) {}
-})();
+// (Anciennement « antiFlashCache » : on masquait le contenu jusqu'au chargement Supabase pour
+// cacher le clignotement du cache statique périmé. Désormais data.js est régénéré à jour et le
+// cache local ré-hydrate FP_DATA AVANT le rendu → le 1er affichage est déjà correct. On n'a donc
+// plus besoin de masquer la page : on l'affiche IMMÉDIATEMENT (zéro latence à chaque onglet).
+// La mise à jour live (fp:data-ready) se fait ensuite en place, sans masquage.)
 
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
