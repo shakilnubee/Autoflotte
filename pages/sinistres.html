@@ -119,6 +119,7 @@
     <div class="card p-6">
       <h3 class="font-bold text-slate-900 mb-5">Timeline des sinistres</h3>
       <div id="timeline" class="space-y-0"></div>
+      <div id="sin-more" class="hidden pt-3 text-center"></div>
       <div id="empty-state" class="hidden text-center py-8">
         <i data-lucide="check-circle-2" class="w-12 h-12 mx-auto text-emerald-400 mb-3"></i>
         <p class="text-slate-500">Aucun sinistre ne correspond aux filtres.</p>
@@ -176,14 +177,26 @@
     $('kpi-annee').textContent = sinistres.filter(s => (s.date || '').startsWith(cy)).length;
   }
 
+  const SIN_LIMIT = 15;
+  let sinExpanded = false;
   function renderTimeline() {
     const rows = filtered().slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const tl = $('timeline');
     const empty = $('empty-state');
-    if (rows.length === 0) { tl.innerHTML = ''; empty.classList.remove('hidden'); }
+    const more = $('sin-more');
+    if (rows.length === 0) { tl.innerHTML = ''; empty.classList.remove('hidden'); if (more) { more.classList.add('hidden'); more.innerHTML=''; } }
     else {
       empty.classList.add('hidden');
-      tl.innerHTML = rows.map(s => {
+      const shown = sinExpanded ? rows : rows.slice(0, SIN_LIMIT);
+      if (more) {
+        if (rows.length > SIN_LIMIT) {
+          more.classList.remove('hidden');
+          more.innerHTML = sinExpanded
+            ? `<button id="sin-toggle" class="btn btn-outline text-sm">Réduire la liste</button>`
+            : `<button id="sin-toggle" class="btn btn-outline text-sm">Voir les ${rows.length - SIN_LIMIT} autres sinistres</button>`;
+        } else { more.classList.add('hidden'); more.innerHTML = ''; }
+      }
+      tl.innerHTML = shown.map(s => {
         const veh = (data.vehicules || []).find(v => v.immat === s.vehiculeImmat);
         const vehInfo = veh ? `${veh.marque} ${veh.modele} (${veh.chauffeur})` : s.vehiculeImmat;
         const dotCls = s.montantTTC ? '' : 'info';
@@ -244,9 +257,10 @@
     });
   }
 
-  $('search').addEventListener('input', e => { state.search = e.target.value; renderTimeline(); });
-  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderTimeline(); });
-  $('filter-vehicule').addEventListener('change', e => { state.vehicule = e.target.value; renderTimeline(); });
+  $('sin-more').addEventListener('click', e => { if (e.target.closest('#sin-toggle')) { sinExpanded = !sinExpanded; renderTimeline(); } });
+  $('search').addEventListener('input', e => { state.search = e.target.value; sinExpanded = false; renderTimeline(); });
+  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; sinExpanded = false; renderTimeline(); });
+  $('filter-vehicule').addEventListener('change', e => { state.vehicule = e.target.value; sinExpanded = false; renderTimeline(); });
 
   renderKPIs();
   renderTimeline();

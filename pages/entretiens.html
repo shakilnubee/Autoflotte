@@ -182,6 +182,7 @@
         <i data-lucide="wrench" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
         <p class="text-slate-500 text-sm">Aucun entretien ne correspond aux filtres.</p>
       </div>
+      <div id="ent-more" class="hidden p-3 text-center border-t border-slate-100"></div>
     </div>
 
     <p class="text-xs text-slate-500 mt-4" id="result-count"></p>
@@ -288,17 +289,30 @@
   ];
   let entretiensEditor = null;
 
+  const ENT_LIMIT = 15;
+  let entExpanded = false;
   function renderTable() {
     const rows = filtered().slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
     const tbody = $('tbody');
     const empty = $('empty-state');
+    const more = $('ent-more');
     if (rows.length === 0) {
       tbody.innerHTML = '';
       empty.classList.remove('hidden');
+      if (more) { more.classList.add('hidden'); more.innerHTML = ''; }
     } else {
       empty.classList.add('hidden');
       const visible = entretiensEditor ? entretiensEditor.getVisibleColumns() : ENTRETIENS_COLUMNS.map(c => c.key);
-      tbody.innerHTML = rows.map(i => {
+      const shown = entExpanded ? rows : rows.slice(0, ENT_LIMIT);
+      if (more) {
+        if (rows.length > ENT_LIMIT) {
+          more.classList.remove('hidden');
+          more.innerHTML = entExpanded
+            ? `<button id="ent-toggle" class="btn btn-outline text-sm">Réduire la liste</button>`
+            : `<button id="ent-toggle" class="btn btn-outline text-sm">Voir les ${rows.length - ENT_LIMIT} autres interventions</button>`;
+        } else { more.classList.add('hidden'); more.innerHTML = ''; }
+      }
+      tbody.innerHTML = shown.map(i => {
         const cells = visible.map(k => {
           const def = ENTRETIENS_COLUMNS.find(c => c.key === k);
           if (!def) return '<td></td>';
@@ -365,15 +379,16 @@
   });
 
   // Wiring
-  $('search').addEventListener('input', e => { state.search = e.target.value; renderKPIs(); renderTable(); renderCharts(); });
+  $('ent-more').addEventListener('click', e => { if (e.target.closest('#ent-toggle')) { entExpanded = !entExpanded; renderTable(); } });
+  $('search').addEventListener('input', e => { state.search = e.target.value; entExpanded = false; renderKPIs(); renderTable(); renderCharts(); });
   document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.addEventListener('click', () => {
     document.querySelectorAll('#filters-type .filter-chip').forEach(x => x.classList.remove('active'));
     c.classList.add('active'); state.type = c.dataset.value;
-    renderKPIs(); renderTable(); renderCharts();
+    entExpanded = false; renderKPIs(); renderTable(); renderCharts();
   }));
   ['filter-vehicule','filter-annee'].forEach(id => $(id).addEventListener('change', e => {
     state[id.replace('filter-','')] = e.target.value;
-    renderKPIs(); renderTable(); renderCharts();
+    entExpanded = false; renderKPIs(); renderTable(); renderCharts();
   }));
 
   // Init éditeur de colonnes
