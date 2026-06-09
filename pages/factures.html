@@ -173,6 +173,7 @@
         <i data-lucide="file-x" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
         <p class="text-slate-500 text-sm">Aucune facture ne correspond aux filtres.</p>
       </div>
+      <div id="fa-more" class="hidden p-3 text-center border-t border-slate-100"></div>
     </div>
 
     <p class="text-xs text-slate-500 mt-4" id="result-count"></p>
@@ -346,17 +347,31 @@
 
   let facturesEditor = null;
 
+  const FA_LIMIT = 15;
+  let faExpanded = false;
   function renderTable() {
     const rows = filtered().slice().sort((a,b) => (b.date || '').localeCompare(a.date || ''));
     const tbody = $('factures-tbody');
     const empty = $('empty-state');
+    const more = $('fa-more');
     if (rows.length === 0) {
       tbody.innerHTML = '';
       empty.classList.remove('hidden');
+      if (more) { more.classList.add('hidden'); more.innerHTML = ''; }
     } else {
       empty.classList.add('hidden');
       const visible = facturesEditor ? facturesEditor.getVisibleColumns() : FACTURES_COLUMNS.map(c => c.key);
-      tbody.innerHTML = rows.map(f => {
+      const shown = faExpanded ? rows : rows.slice(0, FA_LIMIT);
+      // Bouton « voir plus / réduire » sous le tableau (au-delà de 15 lignes)
+      if (more) {
+        if (rows.length > FA_LIMIT) {
+          more.classList.remove('hidden');
+          more.innerHTML = faExpanded
+            ? `<button id="fa-toggle" class="btn btn-outline text-sm">Réduire la liste</button>`
+            : `<button id="fa-toggle" class="btn btn-outline text-sm">Voir les ${rows.length - FA_LIMIT} autres factures</button>`;
+        } else { more.classList.add('hidden'); more.innerHTML = ''; }
+      }
+      tbody.innerHTML = shown.map(f => {
         const cells = visible.map(k => {
           const def = FACTURES_COLUMNS.find(c => c.key === k);
           if (!def) return '<td></td>';
@@ -670,20 +685,22 @@
   $('fa-file').addEventListener('change', (e) => { const file = e.target.files && e.target.files[0]; _faFileName = file ? file.name : ''; handleFacture(file); e.target.value = ''; });
 
   // Wiring
-  $('search').addEventListener('input', e => { state.search = e.target.value; renderKPIs(); renderTable(); renderCharts(); });
+  // Bouton « Voir plus / Réduire » sous le tableau
+  $('fa-more').addEventListener('click', e => { if (e.target.closest('#fa-toggle')) { faExpanded = !faExpanded; renderTable(); } });
+  $('search').addEventListener('input', e => { state.search = e.target.value; faExpanded = false; renderKPIs(); renderTable(); renderCharts(); });
   document.querySelectorAll('#filters-type .filter-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       state.type = chip.dataset.value;
-      renderKPIs(); renderTable(); renderCharts();
+      faExpanded = false; renderKPIs(); renderTable(); renderCharts();
     });
   });
   ['filter-annee','filter-vehicule','filter-fournisseur'].forEach(id => {
     $(id).addEventListener('change', e => {
       const key = id.replace('filter-','');
       state[key] = e.target.value;
-      renderKPIs(); renderTable(); renderCharts();
+      faExpanded = false; renderKPIs(); renderTable(); renderCharts();
     });
   });
 
