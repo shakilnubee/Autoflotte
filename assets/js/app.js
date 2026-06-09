@@ -1,5 +1,20 @@
 // Auto-flotte — helpers JS partagés
 
+// Affichage instantané sans "flash" de chiffres : on ré-hydrate FP_DATA avec la
+// dernière copie live mise en cache (écrite après chaque chargement Supabase),
+// au lieu des données figées de data.js. Supabase rafraîchit juste après.
+// (app.js s'exécute après data.js et avant que les pages lisent window.FP_DATA)
+(function seedFromCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem('fp_data_cache') || 'null');
+    if (c && window.FP_DATA && Array.isArray(c.amendes)) {
+      if (Array.isArray(c.vehicules)) window.FP_DATA.vehicules = c.vehicules;
+      if (Array.isArray(c.amendes))   window.FP_DATA.amendes   = c.amendes;
+      if (Array.isArray(c.factures))  window.FP_DATA.factures  = c.factures;
+    }
+  } catch (e) { /* cache illisible : on garde data.js */ }
+})();
+
 const FP = {
   // Format euro — null/undefined/"" /NaN ⇒ 0 (évite d'afficher "NaN €")
   euro(n) {
