@@ -82,6 +82,13 @@ fleet-app/
 
 0bis. ⚠️ **Notifications / alertes** : dès qu'une alerte regroupe **plusieurs éléments**, proposer une **liste dépliable** (`<details>`) avec chaque élément cliquable vers sa fiche — jamais une simple redirection vers une page générique. (Champ `vehicules`/`items` sur l'alerte, rendu en `<details>` dans `notifications.html`.)
 
+0ter. ⚠️ **PERF / « flash » des chiffres & latence — LEÇONS (ne pas refaire les erreurs)** :
+  - **Cause du flash des chiffres** : chaque page peint d'abord `data.js` (instantané hors-ligne) puis se rafraîchit avec Supabase (`fp:data-ready`). Si `data.js` est **périmé**, on voit l'ancien chiffre → le nouveau.
+  - ✅ **Bonne solution = garder `data.js` À JOUR** (le régénérer depuis Supabase quand les données changent beaucoup). C'est un instantané camelCase de `{vehicules, amendes, factures, conducteurs}` (mapping snake→camel identique à `FP.db`, cf. `SNAKE_TO_CAMEL_OVERRIDES`). La table **`conducteurs` DOIT y figurer** sinon le compteur conducteurs fait « 43 → 46 » (calcul en 2 temps : véhicules d'abord, puis requête live de la table conducteurs).
+  - ❌ **NE PAS masquer le contenu** (opacity:0 jusqu'à `fp:data-ready`) : ça donne une **latence « page qui s'affiche puis se remet »** sur tous les onglets. On a retiré cet « antiFlashCache ». Le 1er affichage doit être direct.
+  - ❌ **Cache local léger uniquement** (`localStorage` clé versionnée `fp_data_cache_v3`, écrite par `loadAll`, relue par `seedFromCache` AVANT le rendu) : **véhicules + amendes seulement**. NE PAS y mettre les **factures** (~150 Ko → relues/écrites à chaque page = lenteur). Les factures viennent de `data.js`.
+  - Si on change `data.js`/`app.js`, prévenir l'utilisateur qu'**un seul Ctrl+Maj+R** suffit puis navigation normale (sinon le re-téléchargement à chaque hard-refresh paraît lent).
+
 1. **Tailwind précompilé** — pour éviter le délai du CDN à chaque page, Tailwind est compilé en local dans `assets/css/tailwind.css` (les pages le chargent via `<link>`, plus de `cdn.tailwindcss.com`). ⚠️ Après toute modif de classes Tailwind dans le HTML/JS, REBUILD : `npx tailwindcss@3.4.17 -c tailwind.config.js -i assets/css/_tw-input.css -o assets/css/tailwind.css --minify` (sinon les nouvelles classes ne seront pas stylées). Les pages `brochure.html` et `logos.html` (autonomes) restent sur le CDN.
 2. **Auth guard** synchrone dans le `<head>` de chaque page protégée (11 pages)
 3. **Personnalisation** : tout est éditable en double-cliquant (titres, sous-titres, colonnes, onglets sidebar)
