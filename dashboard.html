@@ -271,17 +271,23 @@
   // Nombre de conducteurs — conducteurs enregistrés (avec véhicule attribué)
   // + conducteurs ajoutés manuellement sans véhicule attitré (table conducteurs, manuel=true).
   const baseDriverKeys = FP.driverKeysFromData(data);
-  document.getElementById('kpi-conducteurs').textContent = baseDriverKeys.size;
+  // Compte = conducteurs avec véhicule + manuels (table conducteurs) − masqués.
+  function condCount(rows) {
+    const keys = new Set(baseDriverKeys);
+    (rows || []).forEach(r => {
+      if (!r.key) return;
+      if (r.masque) { keys.delete(r.key); return; }   // masqué → retiré du comptage
+      if (r.manuel) keys.add(r.key);                  // manuel (sans véhicule) → compté
+    });
+    return keys.size;
+  }
+  // Premier affichage : on utilise la table conducteurs DÉJÀ présente dans data.js (ou le cache),
+  // donc le bon nombre tout de suite — plus de "43 → 46". La requête live ne fait que confirmer.
+  document.getElementById('kpi-conducteurs').textContent = condCount(data.conducteurs);
   if (FP.db && FP.db.select) {
     FP.db.select('conducteurs').then(res => {
       const rows = (res && res.data) || [];
-      const keys = new Set(baseDriverKeys);
-      rows.forEach(r => {
-        if (!r.key) return;
-        if (r.masque) { keys.delete(r.key); return; }   // masqué → retiré du comptage
-        if (r.manuel) keys.add(r.key);                  // manuel (sans véhicule) → compté
-      });
-      document.getElementById('kpi-conducteurs').textContent = keys.size;
+      document.getElementById('kpi-conducteurs').textContent = condCount(rows);
       data.conducteurs = rows;       // pour les alertes "permis qui expire"
       if (typeof refreshAlertes === 'function') refreshAlertes();
     }).catch(() => {});
