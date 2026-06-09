@@ -893,7 +893,8 @@
 
       <div>
         <div class="field-label">Commentaire</div>
-        <div id="am-comment-val" class="text-sm bg-slate-50 p-3 rounded-lg cursor-pointer hover:bg-slate-100" style="white-space:pre-line" title="Cliquer pour modifier">${a.commentaire ? escAmende(a.commentaire) : '<span class="text-slate-400">— cliquer pour ajouter un commentaire</span>'}</div>
+        <textarea id="am-comment-edit" rows="3" placeholder="Ajouter un commentaire…" class="text-sm" style="width:100%;border:1px solid var(--fp-border);border-radius:.55rem;padding:.6rem .8rem;resize:vertical;background:#fff;font-family:inherit;color:var(--fp-text)">${a.commentaire ? escAmende(a.commentaire) : ''}</textarea>
+        <p class="text-xs text-slate-400 mt-1">Modifiable directement — enregistré quand tu cliques ailleurs.</p>
       </div>
     `;
 
@@ -922,7 +923,16 @@
     const cv = $('am-cle-val'); if (cv) cv.onclick = () => editAmField('cle', 'Clé');
     const tc = $('am-tel-copy'); if (tc) tc.onclick = () => copierTexte(a.numeroTelepaiement, tc);
     const cc = $('am-cle-copy'); if (cc) cc.onclick = () => copierTexte(a.cle, cc);
-    const cmv = $('am-comment-val'); if (cmv) cmv.onclick = () => editAmField('commentaire', 'Commentaire');
+    const cmv = $('am-comment-edit');
+    if (cmv) cmv.onchange = () => {
+      const aa = data.amendes.find(x => x.id === state.currentId); if (!aa) return;
+      const val = cmv.value.trim();
+      if (val === (aa.commentaire || '')) return;
+      FP.history.commit();
+      aa.commentaire = val;
+      renderTable();
+      FP.persist.update('amendes', aa.id, { commentaire: val || null });
+    };
     lucide.createIcons();
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
