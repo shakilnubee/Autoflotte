@@ -212,6 +212,13 @@
       replaceArrayInPlace(window.FP_DATA.vehicules, data.vehicules);
       replaceArrayInPlace(window.FP_DATA.amendes,   data.amendes);
       replaceArrayInPlace(window.FP_DATA.factures,  data.factures);
+      // Cache local des dernières données live → sert d'affichage initial à la prochaine
+      // ouverture (évite le "flash" data.js figé → vraies données).
+      try {
+        localStorage.setItem('fp_data_cache', JSON.stringify({
+          vehicules: data.vehicules, amendes: data.amendes, factures: data.factures
+        }));
+      } catch (e) { /* quota dépassé : tant pis, pas de cache */ }
       console.log(`[FP.db] Chargé depuis Supabase : ${data.vehicules.length} véhicules, ${data.amendes.length} amendes, ${data.factures.length} factures`);
       // Re-appliquer les overrides locaux (cases cochées par l'utilisateur, etc.)
       if (FP.loadVehicleOverrides) FP.loadVehicleOverrides();
