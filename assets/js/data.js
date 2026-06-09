@@ -1,5 +1,5 @@
-// Auto-flotte — données de SECOURS (fallback hors-ligne)
-// ⚠️ Généré automatiquement depuis Supabase le 2026-06-04. NE PAS éditer à la main.
+// Parc Pilot — données de SECOURS (fallback hors-ligne)
+// ⚠️ Généré automatiquement depuis Supabase le 2026-06-09. NE PAS éditer à la main.
 // La source de vérité est Supabase ; ce fichier ne sert que si la base est injoignable.
 // Pour régénérer : relancer le script de synchronisation depuis Supabase.
 
@@ -45,7 +45,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "Taycan Turbo S",
+      "dateChangementPneus": null,
+      "autonomie": "416 km",
+      "societe": "PXP"
     },
     {
       "id": "V-002",
@@ -87,7 +92,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "402 km",
+      "societe": "PXP"
     },
     {
       "id": "V-003",
@@ -129,7 +139,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "426 km",
+      "societe": "PXP"
     },
     {
       "id": "V-004",
@@ -171,7 +186,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "426 km",
+      "societe": "PXP"
     },
     {
       "id": "V-005",
@@ -213,7 +233,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "420 km",
+      "societe": "PXP"
     },
     {
       "id": "V-006",
@@ -222,12 +247,12 @@ window.FP_DATA = {
       "modele": "SPRING",
       "categorie": "Citadine",
       "carburant": "Électrique",
-      "km": 56051,
+      "km": 63201,
       "dateMiseEnCirculation": "2023-09-27",
       "chauffeur": "Conu",
       "statut": "actif",
       "prochainCT": "2027-09-27",
-      "derniereRevision": "2025-12-10",
+      "derniereRevision": "2026-04-03",
       "proprietaire": "TJMAX",
       "valeurAchat": 22352,
       "commentaire": null,
@@ -255,7 +280,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "Spring Expression Electric 45",
+      "dateChangementPneus": null,
+      "autonomie": "225 km",
+      "societe": "PXP"
     },
     {
       "id": "V-007",
@@ -263,7 +293,7 @@ window.FP_DATA = {
       "marque": "MERCEDES BENZ",
       "modele": "CLASSE S",
       "categorie": "Berline",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 186925,
       "dateMiseEnCirculation": "2019-04-08",
       "chauffeur": "Diana",
@@ -297,7 +327,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-008",
@@ -305,13 +340,13 @@ window.FP_DATA = {
       "marque": "VOLVO",
       "modele": "XC60",
       "categorie": "SUV",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 105701,
       "dateMiseEnCirculation": "2019-05-02",
       "chauffeur": "Raphaël",
       "statut": "actif",
       "prochainCT": "2027-05-22",
-      "derniereRevision": null,
+      "derniereRevision": "2025-07-31",
       "proprietaire": "TJMAX",
       "valeurAchat": 48217,
       "commentaire": null,
@@ -339,7 +374,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "XC60 2.0 hybride essence-élec.",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-009",
@@ -347,7 +387,7 @@ window.FP_DATA = {
       "marque": "TOYOTA",
       "modele": "TOYOTA C-HR",
       "categorie": "Berline",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 28200,
       "dateMiseEnCirculation": "2025-07-25",
       "chauffeur": "Pauline",
@@ -381,7 +421,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "C-HR Hybride NG 140 Dynamic MY25",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-010",
@@ -423,7 +468,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "225/55 R18",
+      "version": "5008 Allure Pack 1.2 PureTech 130 EAT8",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-011",
@@ -432,12 +482,12 @@ window.FP_DATA = {
       "modele": "5008",
       "categorie": "SUV",
       "carburant": "Essence",
-      "km": 104000,
+      "km": 107434,
       "dateMiseEnCirculation": "2023-03-29",
       "chauffeur": "Guerric",
       "statut": "actif",
       "prochainCT": "2027-03-28",
-      "derniereRevision": "2025-12-02",
+      "derniereRevision": "2026-06-08",
       "proprietaire": "TJMAX",
       "valeurAchat": 30960,
       "commentaire": null,
@@ -465,7 +515,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "225/55 R18",
+      "version": "5008 PureTech 130ch S&S EAT8 Active Pack",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-012",
@@ -507,7 +562,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "215/65 R17",
+      "version": "5008 PureTech 130ch S&S EAT8 Active Pack",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-013",
@@ -549,7 +609,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "225/55 R18",
+      "version": "XC60 Inscription Luxe T8 Twin Engine 303+87 Geartronic 8",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-014",
@@ -561,7 +626,7 @@ window.FP_DATA = {
       "km": 251365,
       "dateMiseEnCirculation": "2019-08-23",
       "chauffeur": "FX",
-      "statut": "à vendre",
+      "statut": "actif",
       "prochainCT": "2027-03-31",
       "derniereRevision": "2026-03-27",
       "proprietaire": "TJMAX",
@@ -591,7 +656,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "225/55 R18",
+      "version": "3008 Allure PureTech 180 S&S EAT8",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-015",
@@ -600,7 +670,7 @@ window.FP_DATA = {
       "modele": "5008",
       "categorie": "SUV",
       "carburant": "Essence",
-      "km": 47000,
+      "km": 87671,
       "dateMiseEnCirculation": "2023-06-28",
       "chauffeur": "David",
       "statut": "à vendre",
@@ -633,7 +703,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "225/55 R18",
+      "version": "5008 Allure Pack 1.2 PureTech 130 EAT8",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-016",
@@ -641,7 +716,7 @@ window.FP_DATA = {
       "marque": "BMW",
       "modele": "X1 SDRIVE201",
       "categorie": "SUV",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 0,
       "dateMiseEnCirculation": "2026-02-18",
       "chauffeur": "Xavi",
@@ -675,7 +750,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-017",
@@ -683,7 +763,7 @@ window.FP_DATA = {
       "marque": "NISSAN",
       "modele": "NISSAN X-TRAIL",
       "categorie": "SUV",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 0,
       "dateMiseEnCirculation": "2026-03-16",
       "chauffeur": "Daniel",
@@ -702,13 +782,13 @@ window.FP_DATA = {
       "cgFileId": "1cEO64IwagMhKYwt5hDprXgHxEBYf-xOL",
       "cleSiege": true,
       "cleSalarie": false,
-      "cgOrigSiege": false,
+      "cgOrigSiege": true,
       "cgOrigSalarie": false,
       "changerCG": false,
       "cgRecue": false,
       "assurance": "SWISSLIFE ( 011165247/0599 )",
       "etatDesLieux": true,
-      "sanef": false,
+      "sanef": true,
       "critAir": "oui",
       "dateDernierCT": null,
       "kmDernierReleve": null,
@@ -717,7 +797,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-018",
@@ -725,7 +810,7 @@ window.FP_DATA = {
       "marque": "BYD",
       "modele": "SEAL U DM-I",
       "categorie": "SUV",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 7005,
       "dateMiseEnCirculation": "2025-10-15",
       "chauffeur": "Nawelle",
@@ -759,7 +844,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "80 km (élec.)",
+      "societe": "PXP"
     },
     {
       "id": "V-019",
@@ -767,7 +857,7 @@ window.FP_DATA = {
       "marque": "TOYOTA",
       "modele": "TOYOTA YARIS CROSS",
       "categorie": "SUV",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 10200,
       "dateMiseEnCirculation": "2025-09-26",
       "chauffeur": "Martin",
@@ -801,7 +891,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-020",
@@ -809,8 +904,8 @@ window.FP_DATA = {
       "marque": "BYD",
       "modele": "BYD SEAL U DM-I",
       "categorie": "SUV",
-      "carburant": "Hybride",
-      "km": 16184,
+      "carburant": "Essence / Hybride",
+      "km": 18535,
       "dateMiseEnCirculation": "2025-12-24",
       "chauffeur": "Nicolas",
       "statut": "actif",
@@ -843,7 +938,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "80 km (élec.)",
+      "societe": "PXP"
     },
     {
       "id": "V-021",
@@ -885,7 +985,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "225/55 R18",
+      "version": "5008 1.2 PureTech 130 (essence)",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-022",
@@ -893,7 +998,7 @@ window.FP_DATA = {
       "marque": "AUDI",
       "modele": "Q3 E-TRON",
       "categorie": "SUV",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 100200,
       "dateMiseEnCirculation": "2021-12-22",
       "chauffeur": "Frédéric",
@@ -927,7 +1032,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "Q3 TFSI e 45 180 (245) S tronic",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-023",
@@ -969,7 +1079,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "225/55 R18",
+      "version": "3008 PureTech 130ch S&S EAT8 Active Pack",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-024",
@@ -981,7 +1096,7 @@ window.FP_DATA = {
       "km": 99191,
       "dateMiseEnCirculation": "2020-03-24",
       "chauffeur": "Mickaël",
-      "statut": "actif",
+      "statut": "à vendre",
       "prochainCT": "2027-01-20",
       "derniereRevision": "2026-04-30",
       "proprietaire": "TJMAX",
@@ -1011,7 +1126,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "225/55 R18",
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-025",
@@ -1019,7 +1139,7 @@ window.FP_DATA = {
       "marque": "BYD",
       "modele": "BYD SEAL U DM-I",
       "categorie": "SUV",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 4700,
       "dateMiseEnCirculation": "2025-12-29",
       "chauffeur": "Jocelyn",
@@ -1053,7 +1173,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "80 km (élec.)",
+      "societe": "PXP"
     },
     {
       "id": "V-026",
@@ -1095,7 +1220,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "MG4 Standard Electric 51 kWh - 125 kW 2WD",
+      "dateChangementPneus": null,
+      "autonomie": "350 km",
+      "societe": "PXP"
     },
     {
       "id": "V-027",
@@ -1103,13 +1233,13 @@ window.FP_DATA = {
       "marque": "BYD",
       "modele": "BYD SEAL U DM-I",
       "categorie": "SUV",
-      "carburant": "Hybride",
-      "km": 0,
+      "carburant": "Essence / Hybride",
+      "km": 16927,
       "dateMiseEnCirculation": "2024-12-28",
       "chauffeur": "Sofiane",
       "statut": "actif",
       "prochainCT": "2028-12-28",
-      "derniereRevision": null,
+      "derniereRevision": "2026-02-03",
       "proprietaire": "TJMAX",
       "valeurAchat": 36490,
       "commentaire": null,
@@ -1137,7 +1267,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "Seal U DM-i Boost",
+      "dateChangementPneus": null,
+      "autonomie": "80 km (élec.)",
+      "societe": "PXP"
     },
     {
       "id": "V-028",
@@ -1145,8 +1280,8 @@ window.FP_DATA = {
       "marque": "BYD",
       "modele": "BYD SEAL U DM-I",
       "categorie": "SUV",
-      "carburant": "Hybride",
-      "km": 28000,
+      "carburant": "Essence / Hybride",
+      "km": 28043,
       "dateMiseEnCirculation": "2024-12-28",
       "chauffeur": "Shakil",
       "statut": "actif",
@@ -1179,7 +1314,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "Seal U DM-i Boost",
+      "dateChangementPneus": null,
+      "autonomie": "80 km (élec.)",
+      "societe": "PXP"
     },
     {
       "id": "V-029",
@@ -1192,13 +1332,13 @@ window.FP_DATA = {
       "dateMiseEnCirculation": "2021-07-07",
       "chauffeur": "Siège",
       "statut": "actif",
-      "prochainCT": "2025-09-01",
+      "prochainCT": "2027-06-30",
       "derniereRevision": "2025-08-20",
       "proprietaire": "TJMAX",
       "valeurAchat": 50310,
       "commentaire": null,
       "groupes": [
-        "siege"
+        "depot"
       ],
       "puissanceFiscale": 10,
       "co2": 234,
@@ -1221,7 +1361,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-030",
@@ -1240,7 +1385,7 @@ window.FP_DATA = {
       "valeurAchat": 22144,
       "commentaire": null,
       "groupes": [
-        "siege"
+        "depot"
       ],
       "puissanceFiscale": 7,
       "co2": 143,
@@ -1263,7 +1408,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "Vivaro FGN L3H1 2.0 Diesel 120 Pack Clim",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-031",
@@ -1271,7 +1421,7 @@ window.FP_DATA = {
       "marque": "RENAULT",
       "modele": "CAPTUR E-TECH PLUG-IN HYBRID",
       "categorie": "SUV",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 82057,
       "dateMiseEnCirculation": "2021-07-08",
       "chauffeur": "Ilhem",
@@ -1282,6 +1432,7 @@ window.FP_DATA = {
       "valeurAchat": 27999,
       "commentaire": null,
       "groupes": [
+        "retail",
         "a-vendre"
       ],
       "puissanceFiscale": 5,
@@ -1305,7 +1456,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "Captur II 1.6 E-Tech Plug-in 160 Intens",
+      "dateChangementPneus": null,
+      "autonomie": "50 km (élec.)",
+      "societe": "PXP"
     },
     {
       "id": "V-032",
@@ -1347,7 +1503,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "Qashqai Pack N-Style Plus DIG-T 160 DCT (Toit Pano)",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-033",
@@ -1389,7 +1550,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-034",
@@ -1397,7 +1563,7 @@ window.FP_DATA = {
       "marque": "BYD",
       "modele": "BYD SEAL U DM-I",
       "categorie": "SUV",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 12155,
       "dateMiseEnCirculation": "2025-12-29",
       "chauffeur": "Sergio",
@@ -1431,7 +1597,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "80 km (élec.)",
+      "societe": "PXP"
     },
     {
       "id": "V-035",
@@ -1450,7 +1621,8 @@ window.FP_DATA = {
       "valeurAchat": 21766,
       "commentaire": null,
       "groupes": [
-        "retail"
+        "retail",
+        "a-vendre"
       ],
       "puissanceFiscale": 7,
       "co2": 141,
@@ -1473,7 +1645,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "215/60 R17",
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-036",
@@ -1492,7 +1669,8 @@ window.FP_DATA = {
       "valeurAchat": 21766,
       "commentaire": null,
       "groupes": [
-        "retail"
+        "retail",
+        "a-vendre"
       ],
       "puissanceFiscale": 7,
       "co2": 141,
@@ -1515,7 +1693,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "215/60 R17",
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-037",
@@ -1523,7 +1706,7 @@ window.FP_DATA = {
       "marque": "HYUNDAI",
       "modele": "TUCSON",
       "categorie": "SUV",
-      "carburant": "Hybride",
+      "carburant": "Essence / Hybride",
       "km": 27285,
       "dateMiseEnCirculation": "2025-10-01",
       "chauffeur": "Eugénie",
@@ -1557,7 +1740,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "Tucson 1.6 T-GDI 215 Hybrid BVA6 Initia",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-038",
@@ -1599,7 +1787,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-039",
@@ -1641,7 +1834,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-040",
@@ -1683,7 +1881,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": "Jumpy 1.6 BlueHDi 115 (diesel)",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-041",
@@ -1725,7 +1928,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-042",
@@ -1767,7 +1975,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-043",
@@ -1786,7 +1999,7 @@ window.FP_DATA = {
       "valeurAchat": 28645,
       "commentaire": null,
       "groupes": [
-        "siege"
+        "retail"
       ],
       "puissanceFiscale": 6,
       "co2": 109,
@@ -1809,7 +2022,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "225/55 R18",
+      "version": "3008 Allure PureTech 130ch EAT8",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-044",
@@ -1828,7 +2046,8 @@ window.FP_DATA = {
       "valeurAchat": 0,
       "commentaire": null,
       "groupes": [
-        "retail"
+        "retail",
+        "a-vendre"
       ],
       "puissanceFiscale": 7,
       "co2": 140,
@@ -1851,7 +2070,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-045",
@@ -1870,7 +2094,8 @@ window.FP_DATA = {
       "valeurAchat": 0,
       "commentaire": null,
       "groupes": [
-        "retail"
+        "retail",
+        "a-vendre"
       ],
       "puissanceFiscale": 7,
       "co2": 141,
@@ -1893,7 +2118,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "215/60 R17",
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-046",
@@ -1912,7 +2142,8 @@ window.FP_DATA = {
       "valeurAchat": 21766,
       "commentaire": "39.0",
       "groupes": [
-        "retail"
+        "retail",
+        "a-vendre"
       ],
       "puissanceFiscale": 7,
       "co2": 141,
@@ -1935,7 +2166,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "215/60 R17",
+      "version": "Duster TCe 130 FAP 4x2 Prestige",
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-047",
@@ -1972,19 +2208,24 @@ window.FP_DATA = {
       "critAir": "Oui",
       "dateDernierCT": null,
       "kmDernierReleve": null,
-      "prixVente": null,
+      "prixVente": 10000,
       "pipelineStatut": null,
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": "215/60 R17",
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-048",
       "immat": "6677880",
       "marque": "TOYOTA",
       "modele": "- FENWICK",
-      "categorie": "Engin",
+      "categorie": null,
       "carburant": "Essence",
       "km": 0,
       "dateMiseEnCirculation": "2016-07-07",
@@ -1996,7 +2237,7 @@ window.FP_DATA = {
       "valeurAchat": 0,
       "commentaire": null,
       "groupes": [
-        "non-classe"
+        "depot"
       ],
       "puissanceFiscale": null,
       "co2": null,
@@ -2019,7 +2260,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": null,
+      "societe": "PXP"
     },
     {
       "id": "V-049",
@@ -2061,7 +2307,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "320 km",
+      "societe": "PXP"
     },
     {
       "id": "V-050",
@@ -2103,7 +2354,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "320 km",
+      "societe": "PXP"
     },
     {
       "id": "V-051",
@@ -2112,12 +2368,12 @@ window.FP_DATA = {
       "modele": "ZS",
       "categorie": "SUV",
       "carburant": "Électrique",
-      "km": 23086,
+      "km": 28564,
       "dateMiseEnCirculation": null,
       "chauffeur": "Anna CORTS",
       "statut": "actif",
       "prochainCT": null,
-      "derniereRevision": null,
+      "derniereRevision": "2026-04-22",
       "proprietaire": "TJMAX",
       "valeurAchat": 26449,
       "commentaire": null,
@@ -2145,21 +2401,26 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "320 km",
+      "societe": "PXP"
     },
     {
       "id": "V-052",
-      "immat": "GY-719-JY",
+      "immat": "JPV-51-S",
       "marque": "MG",
       "modele": "ZS",
       "categorie": "SUV",
       "carburant": "Électrique",
-      "km": 35797,
+      "km": 43323,
       "dateMiseEnCirculation": "2025-03-05",
       "chauffeur": "Bram",
       "statut": "actif",
       "prochainCT": null,
-      "derniereRevision": "2025-10-14",
+      "derniereRevision": "2026-06-01",
       "proprietaire": "TJMAX",
       "valeurAchat": 0,
       "commentaire": null,
@@ -2187,7 +2448,12 @@ window.FP_DATA = {
       "updatedAt": "2026-05-28T12:58:24.106808+00:00",
       "photoUrl": null,
       "cgUrl": null,
-      "antiPollution": null
+      "antiPollution": null,
+      "dimensionPneus": null,
+      "version": null,
+      "dateChangementPneus": null,
+      "autonomie": "320 km",
+      "societe": "PXP"
     }
   ],
   "amendes": [
@@ -2198,12 +2464,21 @@ window.FP_DATA = {
       "prenom": "Maxime",
       "numeroAvis": "6132700593",
       "motif": "Circulation non autorisé",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé le 13/01/2026",
+      "commentaire": "Payée le 13/01/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 1327 0059 31",
+      "cle": "69",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0002",
@@ -2212,12 +2487,21 @@ window.FP_DATA = {
       "prenom": "Guerric",
       "numeroAvis": "332 242834",
       "motif": "Excès de vitesse",
-      "montant": 0,
+      "montant": 0.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "Désignation allemagne 14/01",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0003",
@@ -2226,12 +2510,21 @@ window.FP_DATA = {
       "prenom": "Daniel",
       "numeroAvis": "3892170338",
       "motif": "Excès de vitesse",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "Désignation faite le 25/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3333 8921 7033 81",
+      "cle": "19",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0004",
@@ -2240,12 +2533,21 @@ window.FP_DATA = {
       "prenom": "Jocelyn",
       "numeroAvis": "384889398",
       "motif": "Excès de vitesse",
-      "montant": 45,
+      "montant": 45.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "Désignation 15/01",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0005",
@@ -2254,12 +2556,21 @@ window.FP_DATA = {
       "prenom": "Nicolas",
       "numeroAvis": "6692802240",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé le 20/01",
+      "commentaire": "Payée le 20/01/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 6928 0224 01",
+      "cle": "53",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0006",
@@ -2271,9 +2582,18 @@ window.FP_DATA = {
       "montant": 157.2,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé le 19/01",
+      "commentaire": "Payée le 19/01/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0007",
@@ -2282,12 +2602,21 @@ window.FP_DATA = {
       "prenom": "Romuald",
       "numeroAvis": "6692936259",
       "motif": "Stationnement",
-      "montant": 135,
+      "montant": 135.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé 29/01",
+      "commentaire": "Payée le 29/01/2026\nPayé 29/01",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 6929 3625 91",
+      "cle": "91",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0008",
@@ -2296,12 +2625,21 @@ window.FP_DATA = {
       "prenom": "Jimmy",
       "numeroAvis": "3837812358",
       "motif": "Excès de vitesse",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé le 21/01",
+      "commentaire": "Payée le 21/01/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3333 8378 1235 81",
+      "cle": "71",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0009",
@@ -2310,12 +2648,21 @@ window.FP_DATA = {
       "prenom": "Nicolas",
       "numeroAvis": "3840344537",
       "motif": "Excès de vitesse",
-      "montant": 45,
+      "montant": 45.0,
       "retraitPoints": true,
       "statut": "payée",
       "commentaire": "Désignation le 05/02",
       "points": 1,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3333 8403 4453 71",
+      "cle": "11",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0010",
@@ -2324,12 +2671,21 @@ window.FP_DATA = {
       "prenom": "Nicolas",
       "numeroAvis": "3842341547",
       "motif": "Excès de vitesse",
-      "montant": 45,
+      "montant": 45.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 04/02",
+      "commentaire": "Payée le 04/02/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3333 8423 4154 71",
+      "cle": "42",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0011",
@@ -2337,13 +2693,22 @@ window.FP_DATA = {
       "annee": "2026",
       "prenom": "Shakil",
       "numeroAvis": "6004250636",
-      "motif": "Téléphone",
-      "montant": 90,
+      "motif": "Usage téléphone",
+      "montant": 90.0,
       "retraitPoints": true,
       "statut": "payée",
       "commentaire": "Désignation 10/02",
       "points": 3,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 0042 5063 61",
+      "cle": "10",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0012",
@@ -2352,12 +2717,21 @@ window.FP_DATA = {
       "prenom": "Mona",
       "numeroAvis": "32100-101048533",
       "motif": "Stationnement",
-      "montant": 47,
+      "montant": 47.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé 04/02",
+      "commentaire": "Payée le 04/02/2026\nPayé 04/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0013",
@@ -2366,12 +2740,21 @@ window.FP_DATA = {
       "prenom": "Youssouf",
       "numeroAvis": "3803279517",
       "motif": "Excès de vitesse",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": true,
       "statut": "payée",
       "commentaire": "Désignation 11/02",
       "points": 1,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3333 8032 7951 71",
+      "cle": "03",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0014",
@@ -2380,12 +2763,21 @@ window.FP_DATA = {
       "prenom": "Lucie",
       "numeroAvis": "6014792686",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 11/02",
+      "commentaire": "Payée le 11/02/2026\nPayée 11/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 0147 9268 61",
+      "cle": "37",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0015",
@@ -2394,12 +2786,21 @@ window.FP_DATA = {
       "prenom": "Maxime",
       "numeroAvis": "6682391248",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 11/02",
+      "commentaire": "Payée le 11/02/2026\nPayée 11/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0016",
@@ -2408,12 +2809,21 @@ window.FP_DATA = {
       "prenom": "Conu",
       "numeroAvis": "6622963234",
       "motif": "Stationnement",
-      "montant": 135,
+      "montant": 135.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé 10/02",
+      "commentaire": "Payée le 10/02/2026\nPayé 10/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 6229 6323 41",
+      "cle": "02",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0017",
@@ -2422,12 +2832,21 @@ window.FP_DATA = {
       "prenom": "Enguerrand",
       "numeroAvis": "26 1 036 349 012 19",
       "motif": "Stationnement",
-      "montant": 50,
+      "montant": 50.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "Payé",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0018",
@@ -2436,12 +2855,21 @@ window.FP_DATA = {
       "prenom": "Sofiane",
       "numeroAvis": "6102938587",
       "motif": "Usage téléphone",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": true,
       "statut": "payée",
       "commentaire": "Désignation faite le 18/02",
       "points": 3,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 1029 3858 71",
+      "cle": "65",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0019",
@@ -2450,12 +2878,21 @@ window.FP_DATA = {
       "prenom": "Jimmy",
       "numeroAvis": "26 2 031 573 084 17",
       "motif": "Stationnement",
-      "montant": 105,
+      "montant": 105.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 18/02",
+      "commentaire": "Payée le 18/02/2026\nPayée 18/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0020",
@@ -2464,12 +2901,21 @@ window.FP_DATA = {
       "prenom": "Nawelle",
       "numeroAvis": "6652844219",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 20/02",
+      "commentaire": "Payée le 20/02/2026\nPayée 20/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 6528 4421 91",
+      "cle": "91",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0021",
@@ -2478,12 +2924,21 @@ window.FP_DATA = {
       "prenom": "Léopold",
       "numeroAvis": "26 1 043 609 214 62",
       "motif": "Stationnement",
-      "montant": 50,
+      "montant": 50.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "Preuve par mail",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 043 609 214",
+      "cle": "62",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0022",
@@ -2495,9 +2950,18 @@ window.FP_DATA = {
       "montant": 52.5,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé le 26/02",
+      "commentaire": "Payée le 26/02/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 043 308 058",
+      "cle": "91",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0023",
@@ -2506,12 +2970,21 @@ window.FP_DATA = {
       "prenom": "Johanna",
       "numeroAvis": "3818602487",
       "motif": "Excès de vitesse",
-      "montant": 45,
+      "montant": 45.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 27/02",
+      "commentaire": "Payée le 27/02/2026\nPayée 27/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3333 8186 0248 71",
+      "cle": "64",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0024",
@@ -2520,12 +2993,21 @@ window.FP_DATA = {
       "prenom": "Farah",
       "numeroAvis": "6014845681",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé 26/02",
+      "commentaire": "Payée le 26/02/2026\nPayé 26/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 0148 4568 11",
+      "cle": "76",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0025",
@@ -2533,13 +3015,22 @@ window.FP_DATA = {
       "annee": "2026",
       "prenom": "Jimmy",
       "numeroAvis": "6094341645",
-      "motif": "Voie de Bus",
-      "montant": 90,
+      "motif": "voie de Bus",
+      "montant": 90.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé 26/02",
+      "commentaire": "Payée le 26/02/2026\nPayé 26/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 0943 4164 51",
+      "cle": "96",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0026",
@@ -2548,12 +3039,21 @@ window.FP_DATA = {
       "prenom": "Guerric",
       "numeroAvis": "825209926",
       "motif": "Excès de vitesse",
-      "montant": 0,
+      "montant": 0.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "Désignation allemagne le 02/03",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0027",
@@ -2562,12 +3062,21 @@ window.FP_DATA = {
       "prenom": "Ahmed",
       "numeroAvis": "6660133357",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 23/03",
+      "commentaire": "Payée le 23/03/2026\nPayée 23/03",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 6601 3335 71",
+      "cle": "45",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0028",
@@ -2576,12 +3085,21 @@ window.FP_DATA = {
       "prenom": "Akram",
       "numeroAvis": "3894277867",
       "motif": "Excès de vitesse",
-      "montant": 45,
+      "montant": 45.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 10/03",
+      "commentaire": "Payée le 10/03/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3333 8942 7786 71",
+      "cle": "22",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0029",
@@ -2590,12 +3108,21 @@ window.FP_DATA = {
       "prenom": "Léopold",
       "numeroAvis": "26 1 061 336 209 16",
       "motif": "Stationnement",
-      "montant": 50,
+      "montant": 50.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "Preuve par mail",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 061 336 209",
+      "cle": "16",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0030",
@@ -2604,12 +3131,21 @@ window.FP_DATA = {
       "prenom": "Léopold",
       "numeroAvis": "26 1 062 308 399 72",
       "motif": "Stationnement",
-      "montant": 75,
+      "montant": 75.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "Preuve par mail",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 062 308 399",
+      "cle": "72",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0031",
@@ -2618,12 +3154,21 @@ window.FP_DATA = {
       "prenom": "Yannis",
       "numeroAvis": "26 1 062 308 189 56",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payé le 17/03",
+      "commentaire": "Payée le 17/03/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 062 308 189",
+      "cle": "56",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0032",
@@ -2632,12 +3177,21 @@ window.FP_DATA = {
       "prenom": "Guerric",
       "numeroAvis": "26 1 057 013 067 91",
       "motif": "Stationnement",
-      "montant": 25,
+      "montant": 25.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 28/03",
+      "commentaire": "Payée le 28/03/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0033",
@@ -2646,12 +3200,21 @@ window.FP_DATA = {
       "prenom": "Charles",
       "numeroAvis": "3805097877",
       "motif": "Excès de vitesse",
-      "montant": 45,
+      "montant": 45.0,
       "retraitPoints": true,
       "statut": "payée",
       "commentaire": "Désignation le 17/03",
       "points": 1,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3333 8050 9787 71",
+      "cle": "80",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0034",
@@ -2660,12 +3223,21 @@ window.FP_DATA = {
       "prenom": "Guerric",
       "numeroAvis": "26 1 064 012 002 20",
       "motif": "Stationnement",
-      "montant": 17,
+      "montant": 17.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 28/03",
+      "commentaire": "Payée le 28/03/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 064 012 002",
+      "cle": "20",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0035",
@@ -2674,12 +3246,21 @@ window.FP_DATA = {
       "prenom": "Lucie",
       "numeroAvis": "6600392349",
       "motif": "voie de Bus",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 26/03",
+      "commentaire": "Payée le 26/03/2026\nPayée 26/03",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 6003 9234 91",
+      "cle": "64",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0036",
@@ -2688,12 +3269,21 @@ window.FP_DATA = {
       "prenom": "Charles",
       "numeroAvis": "26 1 064 012 001 19",
       "motif": "Stationnement",
-      "montant": 17,
+      "montant": 17.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 21/03",
+      "commentaire": "Payée le 21/03/2026\nPayée 21/03",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 064 012 001",
+      "cle": "19",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0037",
@@ -2701,13 +3291,22 @@ window.FP_DATA = {
       "annee": "2026",
       "prenom": "Pauline",
       "numeroAvis": "NA.98.C3.675252/2026",
-      "motif": "Excès de vitesse Belgique",
+      "motif": "Excès de vitesse",
       "montant": 63.67,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "Désignation le 30/03",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0038",
@@ -2716,12 +3315,21 @@ window.FP_DATA = {
       "prenom": "Ahmed",
       "numeroAvis": "6172038507",
       "motif": "Excès de vitesse",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": true,
       "statut": "payée",
       "commentaire": "Désignation 26/03",
       "points": 2,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 1720 3850 71",
+      "cle": "74",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0039",
@@ -2730,12 +3338,21 @@ window.FP_DATA = {
       "prenom": "Bram",
       "numeroAvis": "LE.94.LF.409245/2026",
       "motif": "Excès de vitesse",
-      "montant": 53,
+      "montant": 53.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 01/04",
+      "commentaire": "Payée le 01/04/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0040",
@@ -2744,12 +3361,21 @@ window.FP_DATA = {
       "prenom": "Enguerrand",
       "numeroAvis": "26 2 082 547 120 68",
       "motif": "Stationnement",
-      "montant": 50,
+      "montant": 50.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 13/04",
+      "commentaire": "Payée le 13/04/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0041",
@@ -2758,12 +3384,21 @@ window.FP_DATA = {
       "prenom": "Farah",
       "numeroAvis": "6094572690",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 10/04",
+      "commentaire": "Payée le 10/04/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 0945 7269 01",
+      "cle": "06",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0042",
@@ -2772,12 +3407,21 @@ window.FP_DATA = {
       "prenom": "Farah",
       "numeroAvis": "6034777696",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 10/04",
+      "commentaire": "Payée le 10/04/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 0347 7769 61",
+      "cle": "67",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0043",
@@ -2786,12 +3430,21 @@ window.FP_DATA = {
       "prenom": "Farah",
       "numeroAvis": "6034479696",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 10/04",
+      "commentaire": "Payée le 10/04/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 0344 7969 61",
+      "cle": "04",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0044",
@@ -2800,12 +3453,21 @@ window.FP_DATA = {
       "prenom": "Maxime",
       "numeroAvis": "26 3 087 032 044 59",
       "motif": "Stationnement",
-      "montant": 65,
+      "montant": 65.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 12/04",
+      "commentaire": "Payée le 12/04/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0045",
@@ -2814,12 +3476,21 @@ window.FP_DATA = {
       "prenom": "Frédéric",
       "numeroAvis": "3886029777",
       "motif": "Excès de vitesse",
-      "montant": 45,
+      "montant": 45.0,
       "retraitPoints": true,
       "statut": "payée",
-      "commentaire": "Désignation le 17/04",
+      "commentaire": "Payée le 11/02/2026\nDésignation le 17/04",
       "points": 1,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3333 8860 2977 71",
+      "cle": "65",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0046",
@@ -2828,12 +3499,21 @@ window.FP_DATA = {
       "prenom": "Jimmy",
       "numeroAvis": "6620601717",
       "motif": "voie de Bus",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 23/04",
+      "commentaire": "Payée le 23/04/2026\nPayée 23/04",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 6206 0171 71",
+      "cle": "64",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0047",
@@ -2842,12 +3522,21 @@ window.FP_DATA = {
       "prenom": "Akram",
       "numeroAvis": "26 1 100 633 721 12",
       "motif": "Stationnement",
-      "montant": 17,
+      "montant": 17.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 29/04",
+      "commentaire": "Payée le 29/04/2026\nPayée 29/04",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0048",
@@ -2856,12 +3545,21 @@ window.FP_DATA = {
       "prenom": "BYD",
       "numeroAvis": "26 1 099 411 229 14",
       "motif": "Stationnement",
-      "montant": 150,
+      "montant": 150.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "https://mail.google.com/mail/u/0/#inbox/FMfcgzQfCDKvzdHJXtlDqWxmFCHwLgbb",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 099 411 229",
+      "cle": "14",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0049",
@@ -2870,12 +3568,21 @@ window.FP_DATA = {
       "prenom": "BYD",
       "numeroAvis": "26 1 101 521 071 09",
       "motif": "Stationnement",
-      "montant": 150,
+      "montant": 150.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "https://mail.google.com/mail/u/0/#inbox/FMfcgzQfCDKvzdHJXtlDqWxmFCHwLgbb",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 101 521 071",
+      "cle": "09",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0050",
@@ -2884,12 +3591,21 @@ window.FP_DATA = {
       "prenom": "BYD",
       "numeroAvis": "26 1 104 431 123 61",
       "motif": "Stationnement",
-      "montant": 150,
+      "montant": 150.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "https://mail.google.com/mail/u/0/#inbox/FMfcgzQfCDKvzdHJXtlDqWxmFCHwLgbb",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 104 431 123",
+      "cle": "61",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0051",
@@ -2898,12 +3614,21 @@ window.FP_DATA = {
       "prenom": "BYD",
       "numeroAvis": "26 1 104 521 469 03",
       "motif": "Stationnement",
-      "montant": 150,
+      "montant": 150.0,
       "retraitPoints": false,
       "statut": "payée",
       "commentaire": "https://mail.google.com/mail/u/0/#inbox/FMfcgzQfCDKvzdHJXtlDqWxmFCHwLgbb",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "26 1 104 521 469",
+      "cle": "03",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0052",
@@ -2912,12 +3637,21 @@ window.FP_DATA = {
       "prenom": "Maxime",
       "numeroAvis": "26 2 099 086 260 29",
       "motif": "Stationnement",
-      "montant": 225,
+      "montant": 225.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 05/05",
+      "commentaire": "Payée le 05/05/2026\nPayée 05/05",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0053",
@@ -2926,12 +3660,21 @@ window.FP_DATA = {
       "prenom": "Daniel",
       "numeroAvis": "6600025763",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 13/05",
+      "commentaire": "Payée le 13/05/2026\nPayée 13/05",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 6000 2576 31",
+      "cle": "28",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0054",
@@ -2940,12 +3683,21 @@ window.FP_DATA = {
       "prenom": "Guerric",
       "numeroAvis": "26 1 106 014 029 48",
       "motif": "Stationnement",
-      "montant": 25,
+      "montant": 25.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 29/04",
+      "commentaire": "Payée le 29/04/2026\nPayée 29/04",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0055",
@@ -2954,12 +3706,21 @@ window.FP_DATA = {
       "prenom": "Jimmy",
       "numeroAvis": "6192527515",
       "motif": "voie de Bus",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 11/05",
+      "commentaire": "Payée le 11/05/2026\nPayée 11/05",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3336 1925 2751 51",
+      "cle": "61",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0056",
@@ -2968,26 +3729,44 @@ window.FP_DATA = {
       "prenom": "Frédéric",
       "numeroAvis": "3886029777",
       "motif": "Excès de vitesse",
-      "montant": 45,
+      "montant": 45.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée 11/02",
+      "commentaire": "Payée le 11/02/2026\nPayée 11/02",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": "3333 8860 2977 71",
+      "cle": "65",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0057",
       "date": "2026-05-13",
       "annee": "2026",
-      "prenom": "Nacim - Enguerrand",
+      "prenom": "Jimmy",
       "numeroAvis": "26 1 125 086 136 41",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "payée",
-      "commentaire": "Payée le 19/05",
+      "commentaire": "Payée le 19/05/2026",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0058",
@@ -2996,12 +3775,21 @@ window.FP_DATA = {
       "prenom": "Ahmed",
       "numeroAvis": "26 1 126 079 125 01",
       "motif": "Stationnement",
-      "montant": 25,
+      "montant": 25.0,
       "retraitPoints": false,
-      "statut": "à payer",
+      "statut": "payée",
       "commentaire": "Mail 19/05",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": "https://tzjuptlzoywjeigmyfuj.supabase.co/storage/v1/object/public/scans/justificatifs/1780655353749-2q24qv.pdf",
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0059",
@@ -3010,12 +3798,21 @@ window.FP_DATA = {
       "prenom": "Mégane",
       "numeroAvis": "26 2 129 090 123 46",
       "motif": "Stationnement",
-      "montant": 50,
+      "montant": 50.0,
       "retraitPoints": false,
-      "statut": "à payer",
-      "commentaire": "Mail 19/05",
+      "statut": "payée",
+      "commentaire": "Payée le 05/06/2026\nMail 19/05",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": "https://tzjuptlzoywjeigmyfuj.supabase.co/storage/v1/object/public/scans/justificatifs/1780688843875-8mfezu.jpg",
+      "archived": true,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0060",
@@ -3024,12 +3821,21 @@ window.FP_DATA = {
       "prenom": "Ahmed",
       "numeroAvis": "6014315617",
       "motif": "Inobservation",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": true,
-      "statut": "à payer",
+      "statut": "désignée",
       "commentaire": "Mail 26/05",
       "points": 4,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": null,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0061",
@@ -3038,12 +3844,21 @@ window.FP_DATA = {
       "prenom": "Maxime",
       "numeroAvis": "6690208054",
       "motif": "voie de Bus",
-      "montant": 90,
+      "montant": 90.0,
       "retraitPoints": false,
-      "statut": "à payer",
-      "commentaire": "Mail 28/05",
+      "statut": "payée",
+      "commentaire": "Payée le 05/06/2026\nMail 28/05",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": "https://tzjuptlzoywjeigmyfuj.supabase.co/storage/v1/object/public/scans/justificatifs/1780993583481-wm5etd.jpg",
+      "archived": true,
+      "numeroTelepaiement": "3336 6902 0805 41",
+      "cle": "67",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0062",
@@ -3052,12 +3867,21 @@ window.FP_DATA = {
       "prenom": "Ahmed",
       "numeroAvis": "6024329152",
       "motif": "Stationnement",
-      "montant": 135,
+      "montant": 135.0,
       "retraitPoints": false,
       "statut": "à payer",
       "commentaire": "Mail 28/05",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": false,
+      "numeroTelepaiement": "3336 0243 2915 21",
+      "cle": "20",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     },
     {
       "id": "AM-0063",
@@ -3066,75 +3890,93 @@ window.FP_DATA = {
       "prenom": "Ahmed",
       "numeroAvis": "6610639027",
       "motif": "Stationnement",
-      "montant": 35,
+      "montant": 35.0,
       "retraitPoints": false,
       "statut": "à payer",
       "commentaire": "Mail 02/06",
       "points": 0,
-      "avisUrl": null
+      "avisUrl": null,
+      "justifUrl": null,
+      "archived": null,
+      "numeroTelepaiement": "3336 6106 3902 71",
+      "cle": "21",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
+    },
+    {
+      "id": "AM-0064",
+      "date": "2026-06-02",
+      "annee": "2026",
+      "prenom": "Maxime",
+      "numeroAvis": "3884898637",
+      "motif": "Excès de vitesse",
+      "montant": 90.0,
+      "retraitPoints": true,
+      "statut": "à payer",
+      "commentaire": null,
+      "points": 1,
+      "avisUrl": "https://tzjuptlzoywjeigmyfuj.supabase.co/storage/v1/object/public/scans/avis/1780931751230-cuul5m.pdf",
+      "justifUrl": null,
+      "archived": null,
+      "numeroTelepaiement": "33338848986371",
+      "cle": "29",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
+    },
+    {
+      "id": "AM-0065",
+      "date": "2026-05-30",
+      "annee": "2026",
+      "prenom": "Nicolas",
+      "numeroAvis": "3881060617",
+      "motif": "Excès de vitesse",
+      "montant": 45.0,
+      "retraitPoints": false,
+      "statut": "payée",
+      "commentaire": "Payée le 08/06/2026",
+      "points": 0,
+      "avisUrl": "https://tzjuptlzoywjeigmyfuj.supabase.co/storage/v1/object/public/scans/avis/1780931848739-k6j0tm.pdf",
+      "justifUrl": "https://tzjuptlzoywjeigmyfuj.supabase.co/storage/v1/object/public/scans/justificatifs/1780997276310-c6sjcc.pdf",
+      "archived": true,
+      "numeroTelepaiement": "33338810606171",
+      "cle": "13",
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
+    },
+    {
+      "id": "AM-0066",
+      "date": "2026-06-04",
+      "annee": "2026",
+      "prenom": "Romuald",
+      "numeroAvis": "9010751082",
+      "motif": "Excès de vitesse",
+      "montant": 50.0,
+      "retraitPoints": false,
+      "statut": "payée",
+      "commentaire": "Payée le 07 juin 2026\nAmende espagnole (étrangère) — pas de retrait de points en France",
+      "points": 0,
+      "avisUrl": null,
+      "justifUrl": "https://tzjuptlzoywjeigmyfuj.supabase.co/storage/v1/object/public/scans/justificatifs/1781009620981-xppi50.jpg",
+      "archived": null,
+      "numeroTelepaiement": null,
+      "cle": null,
+      "societe": "PXP",
+      "majoree": false,
+      "montantMajore": null,
+      "dateMajoration": null,
+      "numeroAvisMajore": null
     }
   ],
   "factures": [
-    {
-      "id": "FA-0001",
-      "date": "2026-05-19",
-      "vehiculeImmat": "ET-095-LV",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": 132140,
-      "fileId": "1YRwHOW5k8gKrUS1Zl9i4ZCzgivLOfTji",
-      "fileName": "Scan_20260520_merged-3.pdf"
-    },
-    {
-      "id": "FA-0002",
-      "date": "2026-05-19",
-      "vehiculeImmat": "ET-095-LV",
-      "fournisseur": null,
-      "numeroFacture": "10601410565",
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": 392.76,
-      "km": null,
-      "fileId": "16FwVGau-_D8Xehus17gJRT83vAb5iYue",
-      "fileName": "Scan_20260520_merged-1.pdf"
-    },
-    {
-      "id": "FA-0003",
-      "date": "2026-05-19",
-      "vehiculeImmat": "ET-095-LV",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1uEUZF4DW21gwGg29QTAXlnIg9PSlXVHi",
-      "fileName": "Scan_20260520_merged-2.pdf"
-    },
-    {
-      "id": "FA-0004",
-      "date": "2026-05-19",
-      "vehiculeImmat": "ET-095-LV",
-      "fournisseur": "Autosécurité Arnouville",
-      "numeroFacture": "26118824",
-      "description": "Procès-verbal contrôle technique périodique (résultat favorable)",
-      "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": 132131,
-      "fileId": "11QJmhPeL8ENb8VpuHxE1MfvNDT5jmVqZ",
-      "fileName": "CT ET 095 LV.pdf"
-    },
     {
       "id": "FA-0005",
       "date": "2026-05-19",
@@ -3144,11 +3986,12 @@ window.FP_DATA = {
       "description": "Contrôle technique utilitaire avec pollution + débours carte grise + frais cession",
       "type": "entretien",
       "montantHT": 542.76,
-      "montantTVA": 30,
+      "montantTVA": 30.0,
       "montantTTC": 572.76,
       "km": 132131,
       "fileId": "1TWTo8P1cBiEjmszbCV52Ei31ZDpHW3wz",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-465.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-465.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0006",
@@ -3156,14 +3999,15 @@ window.FP_DATA = {
       "vehiculeImmat": "ET-095-LV",
       "fournisseur": "CAR WORLD CONSULTING FRANCE",
       "numeroFacture": "F-2025-184",
-      "description": "Régénération FAP (offerte)",
+      "description": "Régénération forcée FAP (offerte)",
       "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
+      "montantHT": 0.0,
+      "montantTVA": 0.0,
+      "montantTTC": 0.0,
       "km": 122167,
       "fileId": "1kdVqDwRIuciEXaK-fwX9jIUa7eybgF0X",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-184.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-184.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0007",
@@ -3173,12 +4017,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-156",
       "description": "Recherche de panne + réparation et nettoyage système AdBlue + reprogrammation",
       "type": "réparation",
-      "montantHT": 870,
-      "montantTVA": 174,
-      "montantTTC": 1044,
+      "montantHT": 870.0,
+      "montantTVA": 174.0,
+      "montantTTC": 1044.0,
       "km": 120981,
       "fileId": "1sDfZU68K_cQ3o7NVdkfhajWdyf_tIEB1",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-156.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-156.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0008",
@@ -3193,7 +4038,8 @@ window.FP_DATA = {
       "montantTTC": 487.03,
       "km": 129438,
       "fileId": "1MEgzjKWU-uHIOgCiHavvdassiyK3obWT",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-356.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-356.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0009",
@@ -3208,7 +4054,8 @@ window.FP_DATA = {
       "montantTTC": 680.71,
       "km": 129438,
       "fileId": "1148uKHuIZFQ3VQTDs0Iwa16mAcs7oGS3",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-355.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-355.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0010",
@@ -3218,12 +4065,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-354",
       "description": "Balais essuie-glaces AV",
       "type": "entretien",
-      "montantHT": 50,
-      "montantTVA": 10,
-      "montantTTC": 60,
+      "montantHT": 50.0,
+      "montantTVA": 10.0,
+      "montantTTC": 60.0,
       "km": 125000,
       "fileId": "1fDESoPB1uQ0eCA9XjC-O-lYE0vcG9V1B",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-354.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-354.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0011",
@@ -3238,7 +4086,8 @@ window.FP_DATA = {
       "montantTTC": 1547.02,
       "km": 124734,
       "fileId": "13tIgGp9PNAiNE4CKuyX22J0IglK8IY4Z",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-330.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-330.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0012",
@@ -3253,7 +4102,8 @@ window.FP_DATA = {
       "montantTTC": 759.17,
       "km": 124734,
       "fileId": "1hyuVhPj3OEn0Hw4ACe_xLCZ7TliRpnll",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-331.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-331.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0013",
@@ -3268,7 +4118,8 @@ window.FP_DATA = {
       "montantTTC": 1066.38,
       "km": 124734,
       "fileId": "1mqlE2efOk3d_bcqYJh8qGfjo02AT1Gui",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-332.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-332.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0014",
@@ -3283,7 +4134,8 @@ window.FP_DATA = {
       "montantTTC": 7196.43,
       "km": 125504,
       "fileId": "1gKC7DzGKbBmjbXHRzJLYxKKLmWFTZgsK",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-267.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-267.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0015",
@@ -3298,7 +4150,8 @@ window.FP_DATA = {
       "montantTTC": 772.64,
       "km": 95385,
       "fileId": "14Fero8Sa9c3eF0F2eSgbAzLdEFDnKvCu",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-263.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-263.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0016",
@@ -3313,7 +4166,8 @@ window.FP_DATA = {
       "montantTTC": 514.3,
       "km": 123623,
       "fileId": "1zsOiANi7gG_99UMrzqXLAJ-_VjHuuzqB",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-196.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-196.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0017",
@@ -3323,12 +4177,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-179",
       "description": "Tuyau lave-vitre + lave-glace",
       "type": "réparation",
-      "montantHT": 100,
-      "montantTVA": 20,
-      "montantTTC": 120,
+      "montantHT": 100.0,
+      "montantTVA": 20.0,
+      "montantTTC": 120.0,
       "km": 121907,
       "fileId": "1vRiF64Q1_L6BQE1z3bdOM7EhgpdOdsY3",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-179.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-179.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0018",
@@ -3343,7 +4198,8 @@ window.FP_DATA = {
       "montantTTC": 794.53,
       "km": 121633,
       "fileId": "1PCqNsI-fy4LRUdvyWWARxFIS1WFNU2ni",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-173.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-173.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0019",
@@ -3358,7 +4214,8 @@ window.FP_DATA = {
       "montantTTC": 2897.95,
       "km": 121427,
       "fileId": "13aoACFI5ZdLMJ9c4Mks8caP6f_Dz83NZ",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-163.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-163.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0020",
@@ -3373,22 +4230,24 @@ window.FP_DATA = {
       "montantTTC": 767.38,
       "km": 121427,
       "fileId": "11484kFf8tEsfmU07-gwjUZuSP2Uxwa34",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-164.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-164.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0021",
-      "date": "2026-05-19",
+      "date": "2026-05-15",
       "vehiculeImmat": "GC-885-LB",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "autre",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2026-462",
+      "description": "Mise à jour + contrôle phares/freins (offert)",
+      "type": "entretien",
+      "montantHT": 0.0,
+      "montantTVA": 0.0,
+      "montantTTC": 0.0,
+      "km": 51388,
       "fileId": "1quikDnxgzsnHTOmJVP-r2q-UaNMLJnoG",
-      "fileName": "GC885LB.pdf"
+      "fileName": "GC885LB.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0022",
@@ -3400,10 +4259,11 @@ window.FP_DATA = {
       "type": "achat",
       "montantHT": 168905.63,
       "montantTVA": 178.37,
-      "montantTTC": 169084,
+      "montantTTC": 169084.0,
       "km": 11201,
       "fileId": "1TV8enZGGFd4tlM6vegj7LTldZ58u8Xr0",
-      "fileName": "GC-885-LB FACTURE D ACHAT.pdf"
+      "fileName": "GC-885-LB FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0023",
@@ -3418,7 +4278,8 @@ window.FP_DATA = {
       "montantTTC": 2032.13,
       "km": 51401,
       "fileId": "1c6-qpStltAGkclCbf-9ZJAvObGtxzRmR",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-464.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-464.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0024",
@@ -3428,12 +4289,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2026-418",
       "description": null,
       "type": "réparation",
-      "montantHT": 185,
-      "montantTVA": 37,
-      "montantTTC": 222,
+      "montantHT": 185.0,
+      "montantTVA": 37.0,
+      "montantTTC": 222.0,
       "km": 48585,
       "fileId": "1_Ymew6LzPVWJKharKGh6AekT-khbSWnf",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-418.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-418.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0025",
@@ -3448,7 +4310,8 @@ window.FP_DATA = {
       "montantTTC": 105.88,
       "km": 48088,
       "fileId": "1uCk_pVCS6dbhHGnJTM2EBinDdk6MxnUG",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-413.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-413.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0026",
@@ -3463,7 +4326,8 @@ window.FP_DATA = {
       "montantTTC": 2478.46,
       "km": 47019,
       "fileId": "1RhETYBYcIJePtZ2UDbZJWPQ4-2vAbYuf",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-381.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-381.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0027",
@@ -3478,7 +4342,8 @@ window.FP_DATA = {
       "montantTTC": 5145.56,
       "km": 27747,
       "fileId": "1PavdiByJcVBtutHq__O1gzbTKEZmsJy1",
-      "fileName": "20250418172247.pdf"
+      "fileName": "20250418172247.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0028",
@@ -3493,7 +4358,8 @@ window.FP_DATA = {
       "montantTTC": 386.95,
       "km": 32817,
       "fileId": "1mO7Rh0L6U8nuVNRVtbkHkJ_9YlgE45Kc",
-      "fileName": "Porsche FAC 422503100543.pdf"
+      "fileName": "Porsche FAC 422503100543.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0029",
@@ -3503,12 +4369,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-287",
       "description": "Présentation contrôle technique véhicule électrique 4 roues motrices",
       "type": "entretien",
-      "montantHT": 125,
-      "montantTVA": 25,
-      "montantTTC": 150,
+      "montantHT": 125.0,
+      "montantTVA": 25.0,
+      "montantTTC": 150.0,
       "km": 43018,
       "fileId": "17K4PxhewRhXGPscNJS8YuohwhKkEzIFO",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-287.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-287.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0030",
@@ -3523,7 +4390,8 @@ window.FP_DATA = {
       "montantTTC": 528.84,
       "km": 33890,
       "fileId": "1uHTwqZVj2USrMql_FtdwaiCAKh-1Va8k",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-200.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-200.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0031",
@@ -3538,7 +4406,8 @@ window.FP_DATA = {
       "montantTTC": 857.59,
       "km": null,
       "fileId": "1Py0CTKvemTBZST0HxHk9YL1M17-NBZqs",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-147 (1).pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-147 (1).pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0032",
@@ -3553,7 +4422,8 @@ window.FP_DATA = {
       "montantTTC": 5145.56,
       "km": 27747,
       "fileId": "17Q3Sxy-CW-dF6YY1sMHqvl6aA2oUtpzh",
-      "fileName": "AD 11/02/25.pdf"
+      "fileName": "AD 11/02/25.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0033",
@@ -3568,7 +4438,8 @@ window.FP_DATA = {
       "montantTTC": null,
       "km": null,
       "fileId": "1m254bnFgOk6AmJVqDbhE0_MVoWiSYBK5",
-      "fileName": "24665111.PDF"
+      "fileName": "24665111.PDF",
+      "societe": "PXP"
     },
     {
       "id": "FA-0034",
@@ -3583,7 +4454,8 @@ window.FP_DATA = {
       "montantTTC": 5145.56,
       "km": 27747,
       "fileId": "1vvas2wCZ0aMv65PD0i6DAydxUx-mPwsl",
-      "fileName": "20250418172247.pdf"
+      "fileName": "20250418172247.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0035",
@@ -3598,22 +4470,8 @@ window.FP_DATA = {
       "montantTTC": 12431.34,
       "km": 24845,
       "fileId": "1TYNXQ1IFiBIhofPU1l_uuw8JmJYIgz0W",
-      "fileName": "20250127132607.pdf"
-    },
-    {
-      "id": "FA-0036",
-      "date": "2026-05-19",
-      "vehiculeImmat": "GR-019-ZG",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "autre",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "16GL3mXJIg3i0GgJqOQZ7Ioj1AB_9Fk2X",
-      "fileName": "Code cession GR-019-ZG.pdf"
+      "fileName": "20250127132607.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0037",
@@ -3628,7 +4486,8 @@ window.FP_DATA = {
       "montantTTC": 361.81,
       "km": 52251,
       "fileId": "1FWpmQKUTFLX7etZEFXxEgq2zUzdAkaoG",
-      "fileName": "REVISION 03/11/2025.pdf"
+      "fileName": "REVISION 03/11/2025.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0038",
@@ -3638,12 +4497,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2026-457",
       "description": "Tuyau climatisation + recherche fuite + recharge gaz 1234YF",
       "type": "réparation",
-      "montantHT": 565,
-      "montantTVA": 113,
-      "montantTTC": 678,
+      "montantHT": 565.0,
+      "montantTVA": 113.0,
+      "montantTTC": 678.0,
       "km": 61828,
       "fileId": "1pynuOwHqY1PsPwfzi5-rk-MKGdXFioE1",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-457.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-457.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0039",
@@ -3658,22 +4518,8 @@ window.FP_DATA = {
       "montantTTC": 2801.72,
       "km": 61828,
       "fileId": "16GTcE2uanYBhSOojsKjy7I04SfaubYLo",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-456.pdf"
-    },
-    {
-      "id": "FA-0040",
-      "date": "2026-05-30",
-      "vehiculeImmat": "GA-313-PK",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "autre",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "10fOJVx67PXH6ZkY8y_e8TBeN3lHwUuoL",
-      "fileName": "Code cession GA-313-PK.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-456.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0041",
@@ -3688,7 +4534,8 @@ window.FP_DATA = {
       "montantTTC": 1259.02,
       "km": 111969,
       "fileId": "1LmzBn6PUfGynbRxE3kj59TDjVMRE5wPe",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-333.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-333.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0042",
@@ -3703,7 +4550,8 @@ window.FP_DATA = {
       "montantTTC": 751.3,
       "km": 111969,
       "fileId": "1OSZZaD9YOnlcfkIZv5JEmRXOz04EjIfU",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-328.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-328.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0043",
@@ -3718,7 +4566,8 @@ window.FP_DATA = {
       "montantTTC": 833.58,
       "km": 111366,
       "fileId": "1tPDpUahZPygAWlk-IYrLxaL_GA9KarM6",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-307.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-307.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0044",
@@ -3728,12 +4577,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-298",
       "description": "2 pneus camion renforcés AR + montage + équilibrage",
       "type": "entretien",
-      "montantHT": 370,
-      "montantTVA": 74,
-      "montantTTC": 444,
+      "montantHT": 370.0,
+      "montantTVA": 74.0,
+      "montantTTC": 444.0,
       "km": 110728,
       "fileId": "1YzuQe9auiDegghTIkk7ovEVbgKbxMPNt",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-298.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-298.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0045",
@@ -3748,7 +4598,8 @@ window.FP_DATA = {
       "montantTTC": 515.7,
       "km": 110728,
       "fileId": "1KlDEKyQaf9BnQhYptio4atbbPWEiRs2I",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-299.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-299.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0046",
@@ -3763,7 +4614,8 @@ window.FP_DATA = {
       "montantTTC": 499.44,
       "km": 105399,
       "fileId": "1pdInhWeKq6o07SbT2baMkqL7upulkyX3",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-265.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-265.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0047",
@@ -3778,7 +4630,8 @@ window.FP_DATA = {
       "montantTTC": 1202.06,
       "km": 105399,
       "fileId": "1xuu8iv0M38sFDMXMUN4riIV1sKPeUziC",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-264.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-264.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0048",
@@ -3793,7 +4646,8 @@ window.FP_DATA = {
       "montantTTC": 796.25,
       "km": 104645,
       "fileId": "1AQr6qo00QDOgOq2gsB4HOJJU_d-55j2t",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-234.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-234.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0049",
@@ -3808,7 +4662,8 @@ window.FP_DATA = {
       "montantTTC": 1638.95,
       "km": 104645,
       "fileId": "1Ro34Q6LRF65Z0zOjBLCOq581WaLaqOMj",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-236.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-236.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0050",
@@ -3823,7 +4678,8 @@ window.FP_DATA = {
       "montantTTC": 615.26,
       "km": 104645,
       "fileId": "19PbKQsp_8ilFlW1CGRCfPR4ogPxkgxUj",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-237.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-237.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0051",
@@ -3833,12 +4689,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-242",
       "description": "Présentation contre-visite contrôle technique",
       "type": "entretien",
-      "montantHT": 50,
-      "montantTVA": 10,
-      "montantTTC": 60,
+      "montantHT": 50.0,
+      "montantTVA": 10.0,
+      "montantTTC": 60.0,
       "km": 104645,
       "fileId": "19af7sOjk2DUV1Y9NucryGoc0DN7mqqMM",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-242.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-242.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0052",
@@ -3853,7 +4710,8 @@ window.FP_DATA = {
       "montantTTC": 6735.29,
       "km": 104645,
       "fileId": "1sJcYK0TzlthoiNrlcDIF35JVRwYz-Yqc",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-235.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-235.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0053",
@@ -3863,12 +4721,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-221",
       "description": "Prestation présentation contrôle technique camion",
       "type": "entretien",
-      "montantHT": 80,
-      "montantTVA": 16,
-      "montantTTC": 96,
+      "montantHT": 80.0,
+      "montantTVA": 16.0,
+      "montantTTC": 96.0,
       "km": 104656,
       "fileId": "1bSg9KSw0KYoUCngtmHB4mxSghKpokGKO",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-221 (1).pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-221 (1).pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0054",
@@ -3883,7 +4742,8 @@ window.FP_DATA = {
       "montantTTC": 875.16,
       "km": 100501,
       "fileId": "1h9N3DBMfdcNiofs1rOCib0sXV10OFaAn",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-137.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-137.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0055",
@@ -3898,7 +4758,8 @@ window.FP_DATA = {
       "montantTTC": 2505.8,
       "km": 114325,
       "fileId": "1aObFM92EyBewMUgkn4tgqQau74Frt5uo",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-450.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-450.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0056",
@@ -3913,7 +4774,8 @@ window.FP_DATA = {
       "montantTTC": 852.84,
       "km": 114301,
       "fileId": "1nfA7OZLXt_cy66zo9BUFTx4YM6KUck5n",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-446.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-446.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0057",
@@ -3928,22 +4790,8 @@ window.FP_DATA = {
       "montantTTC": 4490.92,
       "km": 114301,
       "fileId": "1hgDLKTFyNr8uz7uYH7Ftn15PkjPiJeLK",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-447.pdf"
-    },
-    {
-      "id": "FA-0058",
-      "date": "2026-05-30",
-      "vehiculeImmat": "FZ-501-YZ",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "autre",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1fJsEeuNjWWEmDg9uBbXr1xE7ryWj8khB",
-      "fileName": "Code cession FZ-501-YZ.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-447.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0059",
@@ -3958,7 +4806,8 @@ window.FP_DATA = {
       "montantTTC": 718.36,
       "km": 145155,
       "fileId": "17OlY6LreToqYlkjTW27smlHKYEDxsmKG",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-388.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-388.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0060",
@@ -3973,7 +4822,8 @@ window.FP_DATA = {
       "montantTTC": 595.91,
       "km": 145155,
       "fileId": "1hgVOF6wtHmoA0U3_MdVYZ93LoUNMYO9F",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-387.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-387.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0061",
@@ -3988,22 +4838,8 @@ window.FP_DATA = {
       "montantTTC": 957.86,
       "km": 144974,
       "fileId": "1elrCPUcrziXqV2tun-jIiCCZIsa72Pl4",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-370.pdf"
-    },
-    {
-      "id": "FA-0062",
-      "date": "2025-05-03",
-      "vehiculeImmat": "FZ-501-YZ",
-      "fournisseur": "MONDIAL AUTO CONTROLE SECURITE (Autovision)",
-      "numeroFacture": "25057203",
-      "description": "Procès-verbal contrôle technique périodique (résultat favorable, défaillance mineure feu de brouillard)",
-      "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": 133552,
-      "fileId": "158k0QKD2ipSpduy86HRY_N4nJ6lAC_ls",
-      "fileName": "CT Kadjar (1).pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-370.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0063",
@@ -4018,7 +4854,8 @@ window.FP_DATA = {
       "montantTTC": 1593.53,
       "km": 127727,
       "fileId": "1_U7voPjf8GCc8ukjflOt5HFYH2K5C9rV",
-      "fileName": "b16b8lxbhfwlix_8248660.pdf"
+      "fileName": "b16b8lxbhfwlix_8248660.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0064",
@@ -4033,7 +4870,8 @@ window.FP_DATA = {
       "montantTTC": 392.7,
       "km": 135037,
       "fileId": "1O8hpCMoDvlM0jPddYv7E3OgV8q63usUf",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-208.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-208.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0065",
@@ -4048,7 +4886,8 @@ window.FP_DATA = {
       "montantTTC": 599.93,
       "km": 135037,
       "fileId": "1E8X8pSxaqzVa5GwPc0iDJft5TdOrv9Lb",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-211.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-211.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0066",
@@ -4063,7 +4902,8 @@ window.FP_DATA = {
       "montantTTC": 2087.92,
       "km": 135037,
       "fileId": "1dm1JM2wVMrR9ORu7TISp38QZVcusa0II",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-209.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-209.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0067",
@@ -4073,27 +4913,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-213",
       "description": "Complément carburant Excellium",
       "type": "entretien",
-      "montantHT": 50,
-      "montantTVA": 10,
-      "montantTTC": 60,
+      "montantHT": 50.0,
+      "montantTVA": 10.0,
+      "montantTTC": 60.0,
       "km": 135150,
       "fileId": "1cFqNA1Q_058V4SvipwzunnYe62nnQYwu",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-213.pdf"
-    },
-    {
-      "id": "FA-0068",
-      "date": "2026-05-30",
-      "vehiculeImmat": "GT-818-LC",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "autre",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1vSq_pkdCCb__OE9FHSdBQwCeDWPBOxEw",
-      "fileName": "2x Code cession GT-818-LC.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-213.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0069",
@@ -4108,7 +4934,8 @@ window.FP_DATA = {
       "montantTTC": 24716.76,
       "km": 10,
       "fileId": "1nFhfXRRd7zVs1nsShySs-ws2PPBq-Ftt",
-      "fileName": "GT-818-LC FACTURE D ACHAT.pdf"
+      "fileName": "GT-818-LC FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0070",
@@ -4123,7 +4950,8 @@ window.FP_DATA = {
       "montantTTC": 316.94,
       "km": 38117,
       "fileId": "1OCiQxPmu_XE97IJ8lX6620FmTKH3IKiG",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-285.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-285.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0071",
@@ -4138,7 +4966,8 @@ window.FP_DATA = {
       "montantTTC": 305.18,
       "km": 29719,
       "fileId": "1N1-XXxh0CWMIhrSMBhO_zNXdrP-kRaNQ",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-167.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-167.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0072",
@@ -4153,7 +4982,8 @@ window.FP_DATA = {
       "montantTTC": 294.58,
       "km": 25093,
       "fileId": "1Z4HH3HpZfoZXnmAVUmIMPrVXwq6TUaHg",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-112.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-112.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0073",
@@ -4168,7 +4998,8 @@ window.FP_DATA = {
       "montantTTC": 1325.93,
       "km": 46696,
       "fileId": "1ptn_KgNu7eOiwQJV_W8jTIsTsbOt_ULr",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-439.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-439.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0074",
@@ -4183,7 +5014,8 @@ window.FP_DATA = {
       "montantTTC": 354.19,
       "km": 46275,
       "fileId": "1dstt6Vh7ni88Eb5DS8HM_6gaFJ5gm2EL",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-431.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-431.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0075",
@@ -4198,7 +5030,8 @@ window.FP_DATA = {
       "montantTTC": 444.84,
       "km": 42565,
       "fileId": "1gy6r1nyFrix1l1MDX4JKDtHh9wGWIpfH",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-365.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-365.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0076",
@@ -4213,7 +5046,8 @@ window.FP_DATA = {
       "montantTTC": 1166.37,
       "km": 42565,
       "fileId": "1WPe0D5a5wZWQr7TYpzseERe78v64IQuo",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-364.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-364.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0077",
@@ -4228,7 +5062,8 @@ window.FP_DATA = {
       "montantTTC": 384.58,
       "km": 42000,
       "fileId": "1tQ-E9WnMprACAsrG9A7ESMSaJjRpeghp",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-360.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-360.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0078",
@@ -4238,12 +5073,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-334",
       "description": "Pneus neufs AV (2 unités) + pack service premium",
       "type": "entretien",
-      "montantHT": 368,
+      "montantHT": 368.0,
       "montantTVA": 73.6,
       "montantTTC": 441.6,
       "km": 132029,
       "fileId": "1Q4THsbe21yAZhI_xqf0p2uoOEIEO3N6I",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-334.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-334.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0079",
@@ -4258,7 +5094,8 @@ window.FP_DATA = {
       "montantTTC": 946.86,
       "km": 131715,
       "fileId": "1Vn7B4WRZnWYAuxDwtTuOSZi-dUZy4KW1",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-327.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-327.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0080",
@@ -4268,12 +5105,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-153",
       "description": "Prestation présentation contre-visite CT",
       "type": "autre",
-      "montantHT": 50,
-      "montantTVA": 10,
-      "montantTTC": 60,
+      "montantHT": 50.0,
+      "montantTVA": 10.0,
+      "montantTTC": 60.0,
       "km": 114515,
       "fileId": "1r5McHxe_NWf7lmFe_Nfyv-8cWFO63chM",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-153 (1).pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-153 (1).pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0081",
@@ -4285,10 +5123,11 @@ window.FP_DATA = {
       "type": "autre",
       "montantHT": 66.67,
       "montantTVA": 13.33,
-      "montantTTC": 80,
+      "montantTTC": 80.0,
       "km": 114499,
       "fileId": "1ZLG5MHcit4nUSNE1eFJgY14lkXzhsvQy",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-150.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-150.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0082",
@@ -4298,12 +5137,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2026-444",
       "description": "Protection sous-moteur complet Renault + lave-glace",
       "type": "réparation",
-      "montantHT": 345,
-      "montantTVA": 69,
-      "montantTTC": 414,
+      "montantHT": 345.0,
+      "montantTVA": 69.0,
+      "montantTTC": 414.0,
       "km": 140426,
       "fileId": "1lfaN7_jc_V9lNWk0e2FqEEUf3Tp_I5QR",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-444.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-444.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0083",
@@ -4318,7 +5158,8 @@ window.FP_DATA = {
       "montantTTC": 1088.12,
       "km": 140485,
       "fileId": "1g-SZLW2Slx5IX_uJwQjUZuoT6Bb-kZBc",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-445.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-445.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0084",
@@ -4333,7 +5174,8 @@ window.FP_DATA = {
       "montantTTC": 2887.46,
       "km": 138400,
       "fileId": "1DlY_ihGGwU0mwwYuseGYKb5TZMpDja79",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-429.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-429.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0085",
@@ -4343,12 +5185,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2026-430",
       "description": "Batterie Renault avec remplacement",
       "type": "réparation",
-      "montantHT": 328,
+      "montantHT": 328.0,
       "montantTVA": 65.6,
       "montantTTC": 393.6,
       "km": 138400,
       "fileId": "1COWUSLIYbHKLhcuYyn3Cn02HTKRZeKzC",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-430.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-430.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0086",
@@ -4363,7 +5206,8 @@ window.FP_DATA = {
       "montantTTC": 32467.76,
       "km": 10,
       "fileId": "1p3mNIjC57jDTKcGPRrnUJ_1Drx0ppOVd",
-      "fileName": "GW-087-EZ FACTURE D ACHAT.pdf"
+      "fileName": "GW-087-EZ FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0087",
@@ -4378,7 +5222,8 @@ window.FP_DATA = {
       "montantTTC": 181.18,
       "km": 43224,
       "fileId": "1gPrkzJO5Rr6w__255pfhJH2qGVtCpC5h",
-      "fileName": "20251023083723603.pdf"
+      "fileName": "20251023083723603.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0088",
@@ -4393,7 +5238,8 @@ window.FP_DATA = {
       "montantTTC": 5.12,
       "km": 35625,
       "fileId": "1nSmRlaSStk-xFiNA5NU9kOgsqN8uGqbg",
-      "fileName": "20250911141302750.pdf"
+      "fileName": "20250911141302750.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0089",
@@ -4408,7 +5254,8 @@ window.FP_DATA = {
       "montantTTC": 902.99,
       "km": 35625,
       "fileId": "1VQ_eVFb6rgBYSwhXONW4toCLsUwtBEhY",
-      "fileName": "20250731090549806.pdf"
+      "fileName": "20250731090549806.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0090",
@@ -4423,7 +5270,8 @@ window.FP_DATA = {
       "montantTTC": -736.04,
       "km": 35625,
       "fileId": "1sLTuCSaKlz4TUxqeAgOHUzQEjtZnNboB",
-      "fileName": "20250801105802346.pdf"
+      "fileName": "20250801105802346.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0091",
@@ -4438,7 +5286,8 @@ window.FP_DATA = {
       "montantTTC": 736.04,
       "km": 35625,
       "fileId": "1Mdg_3x3QfT9PJM1C4ZCkD7e6TBmT8Rez",
-      "fileName": "20250725082131414.pdf"
+      "fileName": "20250725082131414.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0092",
@@ -4453,7 +5302,8 @@ window.FP_DATA = {
       "montantTTC": 1158.8,
       "km": 50230,
       "fileId": "1IwUYEJnIULeC--dJWOi4CvmswN9gDigQ",
-      "fileName": "20260209084855662.pdf"
+      "fileName": "20260209084855662.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0093",
@@ -4468,7 +5318,8 @@ window.FP_DATA = {
       "montantTTC": 733.62,
       "km": 88813,
       "fileId": "11iz4_7OIvVtzlOJ2Ya1HGE-KT_P0XoMt",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-300.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-300.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0094",
@@ -4483,7 +5334,8 @@ window.FP_DATA = {
       "montantTTC": 312.04,
       "km": 87220,
       "fileId": "14HLILn31qs47ojpcqevTW-KX-u9qEWj6",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-290.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-290.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0095",
@@ -4498,7 +5350,8 @@ window.FP_DATA = {
       "montantTTC": 2377.56,
       "km": 87220,
       "fileId": "1mKIDNwrnJQmXnojJ3O3sH2VYlJQ3nTrD",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-289.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-289.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0096",
@@ -4513,7 +5366,8 @@ window.FP_DATA = {
       "montantTTC": 273.35,
       "km": 87220,
       "fileId": "1m5AwuEQOaQhdmtpArkBkD9RbVSL4-vgC",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-288.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-288.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0097",
@@ -4528,7 +5382,8 @@ window.FP_DATA = {
       "montantTTC": 4216.22,
       "km": 79147,
       "fileId": "1yc2YJRjAeoSJOIbp2pzarPfzFsOQu_a8",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-222.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-222.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0098",
@@ -4538,12 +5393,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-202",
       "description": "Révision constructeur (voyant rouge huile moteur)",
       "type": "entretien",
-      "montantHT": 198,
+      "montantHT": 198.0,
       "montantTVA": 39.6,
       "montantTTC": 237.6,
       "km": 78465,
       "fileId": "1loqTj1ckZ2XOLA5rGrRUwlVsVUWqhUIs",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-202.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-202.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0099",
@@ -4558,7 +5414,8 @@ window.FP_DATA = {
       "montantTTC": 649.12,
       "km": 78465,
       "fileId": "1Ciu4_XzhLhI5MMUNxic34Nv8JUK9WASv",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-203.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-203.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0100",
@@ -4573,7 +5430,8 @@ window.FP_DATA = {
       "montantTTC": 807.09,
       "km": 68684,
       "fileId": "1u5XIsPYz1tjCmGrgKQf5GBVVqoMtE0dg",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-113.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-113.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0101",
@@ -4588,7 +5446,8 @@ window.FP_DATA = {
       "montantTTC": 597.89,
       "km": 68960,
       "fileId": "1VvbubNvycg6cEAv7aEh_hlAeqwixoH88",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-110.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-110.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0102",
@@ -4603,7 +5462,8 @@ window.FP_DATA = {
       "montantTTC": 515.89,
       "km": 68960,
       "fileId": "1W0wbIXLBog5e53Vm2etKzr5uprKvKwQk",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-111.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-111.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0103",
@@ -4615,10 +5475,11 @@ window.FP_DATA = {
       "type": "autre",
       "montantHT": 66.67,
       "montantTVA": 13.33,
-      "montantTTC": 80,
+      "montantTTC": 80.0,
       "km": 68684,
       "fileId": "1OBokyDsJqa1_OQzBSZgwcfs2TtfgSPxh",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-100 (1).pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-100 (1).pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0104",
@@ -4633,7 +5494,8 @@ window.FP_DATA = {
       "montantTTC": 931.16,
       "km": 98751,
       "fileId": "13uvXnfNYlVzleXi___sUeMkoiHR0YK6Z",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-452.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-452.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0105",
@@ -4644,11 +5506,12 @@ window.FP_DATA = {
       "description": "Achat véhicule Opel Vivaro FGN L3H1 2.0 Diesel 120 Pack Clim neuf 0km + carte grise + plaques",
       "type": "achat",
       "montantHT": 18513.76,
-      "montantTVA": 3630,
+      "montantTVA": 3630.0,
       "montantTTC": 22143.76,
       "km": 10,
       "fileId": "1E71j1YDtMXOVD9Rx3QZq_vUD-xC_GFnS",
-      "fileName": "FR-141-MP FACTURE D ACHAT.pdf"
+      "fileName": "FR-141-MP FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0106",
@@ -4663,7 +5526,8 @@ window.FP_DATA = {
       "montantTTC": 776.29,
       "km": 98608,
       "fileId": "1f-To69sREIot7ZZ5M2bmH6TGWaCbTyvm",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-359.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-359.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0107",
@@ -4678,7 +5542,8 @@ window.FP_DATA = {
       "montantTTC": 236.31,
       "km": 98029,
       "fileId": "1uRsQ1LJiqILTt5aAWyQA63LCK67FoUZG",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-344.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-344.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0108",
@@ -4688,12 +5553,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-317",
       "description": "Prestation présentation contre-visite CT pour CTTE",
       "type": "autre",
-      "montantHT": 50,
-      "montantTVA": 10,
-      "montantTTC": 60,
+      "montantHT": 50.0,
+      "montantTVA": 10.0,
+      "montantTTC": 60.0,
       "km": 98109,
       "fileId": "1GjFvT-Vr0Lb_O6F24wZ2aPq-S7aqtWHz",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-317.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-317.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0109",
@@ -4708,7 +5574,8 @@ window.FP_DATA = {
       "montantTTC": 851.54,
       "km": 98029,
       "fileId": "1AiOuLtZRFgsEaM5ho4KgsGbR-0KrfqCv",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-314.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-314.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0110",
@@ -4723,7 +5590,8 @@ window.FP_DATA = {
       "montantTTC": 325.68,
       "km": 98029,
       "fileId": "1ZOER3rFiJV9sCavJnQgghOxpVXE-sbNp",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-313.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-313.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0111",
@@ -4738,7 +5606,8 @@ window.FP_DATA = {
       "montantTTC": 1417.86,
       "km": 98029,
       "fileId": "1KspxzEuHJX8RFCgzSorCmv45n_0BbDpQ",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-315.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-315.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0112",
@@ -4748,12 +5617,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-303",
       "description": "Prestation présentation CT pour CTTE + pollution",
       "type": "autre",
-      "montantHT": 100,
-      "montantTVA": 20,
-      "montantTTC": 120,
+      "montantHT": 100.0,
+      "montantTVA": 20.0,
+      "montantTTC": 120.0,
       "km": 97512,
       "fileId": "1bAycGocYogYY5pi-IxuJGQcX2NNxUi4c",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-303.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-303.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0113",
@@ -4768,7 +5638,8 @@ window.FP_DATA = {
       "montantTTC": 359.9,
       "km": 94870,
       "fileId": "1xaWW83cj8vBXGIbdtnYlAevvzTsYvTJB",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-212.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-212.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0114",
@@ -4783,7 +5654,8 @@ window.FP_DATA = {
       "montantTTC": 268.68,
       "km": 92942,
       "fileId": "1yN1t66a8U4o27cLUAyf6J2yQDnQDYORQ",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-188.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-188.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0115",
@@ -4798,7 +5670,8 @@ window.FP_DATA = {
       "montantTTC": 131.94,
       "km": 90445,
       "fileId": "1pO_hZBYI1MAao1ZPTwfF4G0wTZVqrdiy",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-146.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-146.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0116",
@@ -4808,12 +5681,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-99",
       "description": "2 ampoules",
       "type": "réparation",
-      "montantHT": 21,
+      "montantHT": 21.0,
       "montantTVA": 4.2,
       "montantTTC": 25.2,
       "km": null,
       "fileId": "1J_Sq2auF1KLYLnlcnyDF8F5HLs5NhlXU",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-99.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-99.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0117",
@@ -4828,7 +5702,8 @@ window.FP_DATA = {
       "montantTTC": 452.59,
       "km": 68406,
       "fileId": "1CcS7Z_0Q4P0gyHp__gdDNWIVPQAMS475",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-318 (1).pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-318 (1).pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0118",
@@ -4843,7 +5718,8 @@ window.FP_DATA = {
       "montantTTC": 303.05,
       "km": 67469,
       "fileId": "1LmlKIQpCdAL3H-RnoZ3i230joUql6r3Z",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-306.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-306.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0119",
@@ -4858,7 +5734,8 @@ window.FP_DATA = {
       "montantTTC": 627.77,
       "km": 67469,
       "fileId": "1a3_p9zXbD3iLGYFjgsMLWdrci7JYABzY",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-305.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-305.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0120",
@@ -4873,7 +5750,8 @@ window.FP_DATA = {
       "montantTTC": 434.24,
       "km": 59421,
       "fileId": "1yUceFEsy6nYzP1SNUrKcswu4oTzCIdt0",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-210.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-210.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0121",
@@ -4885,10 +5763,11 @@ window.FP_DATA = {
       "type": "autre",
       "montantHT": 66.67,
       "montantTVA": 13.33,
-      "montantTTC": 80,
+      "montantTTC": 80.0,
       "km": 56215,
       "fileId": "1SKFQrwyaSIPKRZ8X8SGtTWU5QUC_Nbso",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-166.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-166.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0122",
@@ -4898,12 +5777,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-165",
       "description": "Remplacement de 2 ampoules de croisement",
       "type": "réparation",
-      "montantHT": 50,
-      "montantTVA": 10,
-      "montantTTC": 60,
+      "montantHT": 50.0,
+      "montantTVA": 10.0,
+      "montantTTC": 60.0,
       "km": 56215,
       "fileId": "14-X12PWWS1rAUnR1vxFUfIcl2Dac-UNg",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-165.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-165.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0123",
@@ -4915,10 +5795,11 @@ window.FP_DATA = {
       "type": "entretien",
       "montantHT": 66.67,
       "montantTVA": 13.33,
-      "montantTTC": 80,
+      "montantTTC": 80.0,
       "km": 52095,
       "fileId": "14Ekp2Y9oW1Ge29A1tehRsyPsNKFFH2-x",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-123.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-123.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0124",
@@ -4933,7 +5814,8 @@ window.FP_DATA = {
       "montantTTC": 478.35,
       "km": 51745,
       "fileId": "16UJ1BSj1_ur1IOSq-fwYLxHOW8q5sjwn",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-116.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-116.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0125",
@@ -4948,7 +5830,8 @@ window.FP_DATA = {
       "montantTTC": 1038.67,
       "km": 51000,
       "fileId": "10Uwz0EMmVWq1XK3kArtsccEwNXMXzXQ6",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-115.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-115.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0126",
@@ -4958,12 +5841,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2026-427",
       "description": "Nettoyage intérieur et extérieur (à la main)",
       "type": "entretien",
-      "montantHT": 70,
-      "montantTVA": 14,
-      "montantTTC": 84,
+      "montantHT": 70.0,
+      "montantTVA": 14.0,
+      "montantTTC": 84.0,
       "km": 74062,
       "fileId": "1tnO1KP2302khUmpRziPrNEPRtayjDdqC",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-427.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-427.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0127",
@@ -4975,10 +5859,11 @@ window.FP_DATA = {
       "type": "entretien",
       "montantHT": 423.33,
       "montantTVA": 84.67,
-      "montantTTC": 508,
+      "montantTTC": 508.0,
       "km": 74062,
       "fileId": "1IRWhXINrhpy22ILflW3G73k8sX9SU1fn",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-428.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-428.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0128",
@@ -4993,7 +5878,8 @@ window.FP_DATA = {
       "montantTTC": 890.11,
       "km": 70657,
       "fileId": "1pozw62P5ESX0nTahHE7O2aGSDC850mRq",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-389.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-389.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0129",
@@ -5008,7 +5894,8 @@ window.FP_DATA = {
       "montantTTC": 28981.76,
       "km": 16455,
       "fileId": "1IiH3seOpY0Ti99_uPXqYl5iTnh2AS81e",
-      "fileName": "FT-338-AJ FACTURE D ACHAT.pdf"
+      "fileName": "FT-338-AJ FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0130",
@@ -5018,12 +5905,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-97",
       "description": "Remplacement + rinçage système de refroidissement",
       "type": "entretien",
-      "montantHT": 100,
-      "montantTVA": 20,
-      "montantTTC": 120,
+      "montantHT": 100.0,
+      "montantTVA": 20.0,
+      "montantTTC": 120.0,
       "km": 38585,
       "fileId": "1AmuStVQZ4EsFg805I3N0nnYdHE5xvN9v",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-97.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-97.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0131",
@@ -5035,10 +5923,11 @@ window.FP_DATA = {
       "type": "autre",
       "montantHT": 66.67,
       "montantTVA": 13.33,
-      "montantTTC": 80,
+      "montantTTC": 80.0,
       "km": 38581,
       "fileId": "13tzhQNlFdclYlqtssBSW4e4ph0tL-MbG",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-96.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-96.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0132",
@@ -5053,7 +5942,8 @@ window.FP_DATA = {
       "montantTTC": 1724.76,
       "km": 47656,
       "fileId": "1-hTaNA1ZIsZ9i4El0sUS0YtJqsPV-XO3",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-225.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-225.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0133",
@@ -5068,7 +5958,8 @@ window.FP_DATA = {
       "montantTTC": 393.58,
       "km": 47656,
       "fileId": "1JNSwRj2j_-tkFLDV4e8cxlHTdVluKE8x",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-226.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-226.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0134",
@@ -5083,7 +5974,8 @@ window.FP_DATA = {
       "montantTTC": 1466.31,
       "km": 46980,
       "fileId": "1IUMQoPe7QOi8XOQR6DaMwrRGn9xphuux",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-194.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-194.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0135",
@@ -5093,12 +5985,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-195",
       "description": "2 pneus neufs Bridgestone + équilibrage + valves",
       "type": "entretien",
-      "montantHT": 370,
-      "montantTVA": 74,
-      "montantTTC": 444,
+      "montantHT": 370.0,
+      "montantTVA": 74.0,
+      "montantTTC": 444.0,
       "km": 46980,
       "fileId": "1sP3htX6nwKmSkmwH8y6V4U5ljBao5QHu",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-195.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-195.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0136",
@@ -5113,7 +6006,8 @@ window.FP_DATA = {
       "montantTTC": 169.92,
       "km": 43202,
       "fileId": "164hIBqO5q3jfx1dkEPQktGrVillwd7Ev",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-162.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-162.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0137",
@@ -5123,12 +6017,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-143",
       "description": "Franchise assurance - avance franchise",
       "type": "sinistre",
-      "montantHT": 300,
+      "montantHT": 300.0,
       "montantTVA": null,
-      "montantTTC": 300,
+      "montantTTC": 300.0,
       "km": null,
       "fileId": "1jcueAc7QoKw7yA033kqBsfGRWchs__If",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-143.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-143.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0138",
@@ -5143,7 +6038,8 @@ window.FP_DATA = {
       "montantTTC": 302.32,
       "km": 40527,
       "fileId": "13t7fr9y_5jMIHUK-0W9fT3vRQ-U5seql",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-127.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-127.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0139",
@@ -5158,7 +6054,8 @@ window.FP_DATA = {
       "montantTTC": 1241.22,
       "km": 39931,
       "fileId": "1huQhCzNyJo7fF1r5YE_tz0DKamasJCu2",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-124.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-124.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0140",
@@ -5173,7 +6070,8 @@ window.FP_DATA = {
       "montantTTC": 343.76,
       "km": null,
       "fileId": "1PzZIVD5YlK5jj6rVGGFSbUaOOUYodUmx",
-      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-98.pdf"
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2025-98.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0141",
@@ -5188,7 +6086,8 @@ window.FP_DATA = {
       "montantTTC": 1175.11,
       "km": 60450,
       "fileId": "1zcWDi51KRDclQ8EHRAnmlmLs5B9c0HWV",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-442.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-442.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0142",
@@ -5203,22 +6102,8 @@ window.FP_DATA = {
       "montantTTC": 973.1,
       "km": 59878,
       "fileId": "1pLV1PpjSQ4NBFLuPcjWMmd_qohsaZKb8",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-423.pdf"
-    },
-    {
-      "id": "FA-0143",
-      "date": "2025-05-30",
-      "vehiculeImmat": "GY-860-FG",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1tlOFJEaKw8zm8MejNAHevb8-9x1Y2TWz",
-      "fileName": "Code cession GY-860-FG.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-423.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0144",
@@ -5233,7 +6118,8 @@ window.FP_DATA = {
       "montantTTC": 27638.66,
       "km": 21779,
       "fileId": "1fQAt183wqVsWPfU3ff20hjl9kdChJ10w",
-      "fileName": "GY-860-FG FACTURE D ACHAT.pdf"
+      "fileName": "GY-860-FG FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0145",
@@ -5248,7 +6134,8 @@ window.FP_DATA = {
       "montantTTC": 979.93,
       "km": 49351,
       "fileId": "12Tufa-r0639mbKvHDEn2JMB6AIa8xsCA",
-      "fileName": "Audi 1ere révision.pdf"
+      "fileName": "Audi 1ere révision.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0146",
@@ -5263,7 +6150,8 @@ window.FP_DATA = {
       "montantTTC": 979.93,
       "km": 49351,
       "fileId": "1JJaOeEFCqXh7M6okYalLBcCGB7PxmANu",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-79.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-79.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0147",
@@ -5275,10 +6163,11 @@ window.FP_DATA = {
       "type": "réparation",
       "montantHT": 1057.5,
       "montantTVA": 211.5,
-      "montantTTC": 1269,
+      "montantTTC": 1269.0,
       "km": 80602,
       "fileId": "13-06dd4y3CV3lkdIO8K3iv7AMZIUZdO1",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-335.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-335.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0148",
@@ -5293,7 +6182,8 @@ window.FP_DATA = {
       "montantTTC": 845.9,
       "km": 80602,
       "fileId": "10vdvSx9l273V0yrBHYkT6TRVBD_hZxsp",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-336.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-336.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0149",
@@ -5303,27 +6193,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-329",
       "description": "Prestation présentation contrôle technique",
       "type": "entretien",
-      "montantHT": 75,
-      "montantTVA": 15,
-      "montantTTC": 90,
+      "montantHT": 75.0,
+      "montantTVA": 15.0,
+      "montantTTC": 90.0,
       "km": 80602,
       "fileId": "1Ht5NEUi4JD3w0PJWmdxvhgazqdLClC3F",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-329.pdf"
-    },
-    {
-      "id": "FA-0150",
-      "date": "2025-12-15",
-      "vehiculeImmat": "GY-860-FG",
-      "fournisseur": "Autosécurité Arnouville",
-      "numeroFacture": "C68651331",
-      "description": "Procès-verbal de contrôle technique périodique - résultat favorable",
-      "type": "autre",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": 80602,
-      "fileId": "1FI-X6-K6sA6yS91dAwrlgnu6B2sKgCc4",
-      "fileName": "CT-Q3.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-329.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0151",
@@ -5338,7 +6214,8 @@ window.FP_DATA = {
       "montantTTC": 663.44,
       "km": 80020,
       "fileId": "1iNbDdBmVevaPocg0GHA0oBxnR0PvnEBV",
-      "fileName": "BRN94DDF8294386_002161.pdf"
+      "fileName": "BRN94DDF8294386_002161.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0152",
@@ -5353,7 +6230,8 @@ window.FP_DATA = {
       "montantTTC": 663.44,
       "km": 80020,
       "fileId": "1WOM1aq2HeIxpQ51buNoP2EYa7QhBZXZg",
-      "fileName": "FAC AUDI ENTRETIEN.pdf"
+      "fileName": "FAC AUDI ENTRETIEN.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0153",
@@ -5368,7 +6246,8 @@ window.FP_DATA = {
       "montantTTC": 663.44,
       "km": 80020,
       "fileId": "1rnnfQelIxIIlOL5vayQW9-4abpA5a7s3",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-323.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-323.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0154",
@@ -5383,7 +6262,8 @@ window.FP_DATA = {
       "montantTTC": 109.62,
       "km": 69400,
       "fileId": "1Hr4gKoL2xYkUZ753AvNJjbrrBVcoJvhq",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-262.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-262.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0155",
@@ -5398,7 +6278,8 @@ window.FP_DATA = {
       "montantTTC": 725.88,
       "km": 66323,
       "fileId": "1b6esEvOKo-9xjS_1aaquZU00YAWKes2F",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-249.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-249.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0156",
@@ -5413,7 +6294,8 @@ window.FP_DATA = {
       "montantTTC": 443.09,
       "km": 54185,
       "fileId": "10fjYFxZwZ59rOxkPe6LMJnFxvG9OrKLr",
-      "fileName": "AUDI 718753 GY-860-FG.pdf"
+      "fileName": "AUDI 718753 GY-860-FG.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0157",
@@ -5428,7 +6310,8 @@ window.FP_DATA = {
       "montantTTC": 443.09,
       "km": 54185,
       "fileId": "11aSP0qBdj8coENddgUHdRmpTGFBOgFfq",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-151.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-151.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0158",
@@ -5443,7 +6326,8 @@ window.FP_DATA = {
       "montantTTC": 1768.24,
       "km": 97605,
       "fileId": "1_0wf9q9gNbjEfaHIfFhKGZwFTt4zGQsZ",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-460.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-460.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0159",
@@ -5458,7 +6342,8 @@ window.FP_DATA = {
       "montantTTC": 949.45,
       "km": 96973,
       "fileId": "1tR84Ap1pL-hUkk0wFBH8qg-DP5J8xjDh",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-453.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-453.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0160",
@@ -5473,7 +6358,8 @@ window.FP_DATA = {
       "montantTTC": 233.06,
       "km": 92414,
       "fileId": "11s_hExkR6_zAbPTqYfaAMWVZgSD0q48k",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-426.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-426.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0161",
@@ -5484,26 +6370,12 @@ window.FP_DATA = {
       "description": "Kit réparation crevaison Osram",
       "type": "réparation",
       "montantHT": 74.99,
-      "montantTVA": 15,
+      "montantTVA": 15.0,
       "montantTTC": 89.99,
       "km": null,
       "fileId": "1OgLHfDrHlp6wUaBH3qhTjXJTdoqG1oNA",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-366.pdf"
-    },
-    {
-      "id": "FA-0162",
-      "date": "2025-05-30",
-      "vehiculeImmat": "GA-333-PZ",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1wBdT4EyntXaccBjH2-hhSrik4DMGkuTF",
-      "fileName": "Code cession GA-333-PZ.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-366.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0163",
@@ -5514,11 +6386,12 @@ window.FP_DATA = {
       "description": "Achat Renault Captur II Ph1 1.6 E-Tech Plug-in 160 Intens VO + frais formalités, kit sécurité, gravage, carte grise",
       "type": "achat",
       "montantHT": 23693.76,
-      "montantTVA": 4736,
+      "montantTVA": 4736.0,
       "montantTTC": 28429.76,
       "km": 1000,
       "fileId": "1yGqaqrYiUxpy70rf-dXEUBlkx-KS1vC3",
-      "fileName": "GA-333-PZ FACTURE D ACHAT.pdf"
+      "fileName": "GA-333-PZ FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0164",
@@ -5533,7 +6406,8 @@ window.FP_DATA = {
       "montantTTC": 355.13,
       "km": 76981,
       "fileId": "1JCZ4tFqemAdzcPE9G3ZiAbZiD33jK9iV",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-316.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-316.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0165",
@@ -5548,7 +6422,8 @@ window.FP_DATA = {
       "montantTTC": 355.13,
       "km": 72195,
       "fileId": "1TSe7IzUU0pbnmOw49534QMMNHaEAd10I",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-280.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-280.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0166",
@@ -5563,7 +6438,8 @@ window.FP_DATA = {
       "montantTTC": 1191.38,
       "km": 72195,
       "fileId": "1kcDGcWacS7Fq36Vu9gRQtWBCFkIsVqDt",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-281.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-281.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0167",
@@ -5578,7 +6454,8 @@ window.FP_DATA = {
       "montantTTC": 447.16,
       "km": 69214,
       "fileId": "1YQyIGt3AqWd6XycCPyEthFiP-VfNjBsl",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-260.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-260.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0168",
@@ -5593,7 +6470,8 @@ window.FP_DATA = {
       "montantTTC": 295.84,
       "km": 69214,
       "fileId": "1mwVenXSRmbk21nUI0QpaGC5NHYu7mst4",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-259.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-259.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0169",
@@ -5608,7 +6486,8 @@ window.FP_DATA = {
       "montantTTC": 399.47,
       "km": 69214,
       "fileId": "1RPznTQOAtV367I5Y0ioyDecuG_fyQVyl",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-258.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-258.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0170",
@@ -5618,12 +6497,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-232",
       "description": "Recharge climatisation gaz 1234YF + nettoyage système",
       "type": "entretien",
-      "montantHT": 190,
-      "montantTVA": 38,
-      "montantTTC": 228,
+      "montantHT": 190.0,
+      "montantTVA": 38.0,
+      "montantTTC": 228.0,
       "km": 65575,
       "fileId": "1PJLisuT8rsh-TzukZmDDtvi2ljeIAgPa",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-232.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-232.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0171",
@@ -5633,12 +6513,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-206",
       "description": "Prestation présentation contrôle technique",
       "type": "entretien",
-      "montantHT": 70,
-      "montantTVA": 14,
-      "montantTTC": 84,
+      "montantHT": 70.0,
+      "montantTVA": 14.0,
+      "montantTTC": 84.0,
       "km": 64182,
       "fileId": "1fvN3HMCPuJF5SCaa93G1ADCSFnTm9mlg",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-206.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-206.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0172",
@@ -5653,7 +6534,8 @@ window.FP_DATA = {
       "montantTTC": 954.99,
       "km": 63400,
       "fileId": "1i0NL6I_fwtfKXoX9hqR2806YYDCTIGDB",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-177.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-177.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0173",
@@ -5665,10 +6547,11 @@ window.FP_DATA = {
       "type": "entretien",
       "montantHT": 357.5,
       "montantTVA": 71.5,
-      "montantTTC": 429,
+      "montantTTC": 429.0,
       "km": 63400,
       "fileId": "14Mf2RLhfJBVSPWz8R6TV8bKp-ARyVoj6",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-178.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-178.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0174",
@@ -5683,7 +6566,8 @@ window.FP_DATA = {
       "montantTTC": 798.1,
       "km": 82057,
       "fileId": "11Y6bK0Z3ng9QtaxvBXrYYkiyyrC5CrG8",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-435.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-435.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0175",
@@ -5698,7 +6582,8 @@ window.FP_DATA = {
       "montantTTC": 1313.4,
       "km": 82057,
       "fileId": "1vWB7K43RXZ-qZcKFWUbXARDne6geXiYm",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-433.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-433.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0176",
@@ -5713,7 +6598,8 @@ window.FP_DATA = {
       "montantTTC": 8900.78,
       "km": 82057,
       "fileId": "1-oNQg0jYNszk9PxuttYMvNy6GvhnummT",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-434.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-434.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0177",
@@ -5728,7 +6614,8 @@ window.FP_DATA = {
       "montantTTC": 733.15,
       "km": 82057,
       "fileId": "1rODwBlqvxcNu1MXiC36bPAmKLrI2SiBE",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-436.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-436.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0178",
@@ -5743,7 +6630,8 @@ window.FP_DATA = {
       "montantTTC": 747.31,
       "km": 80225,
       "fileId": "1R6TD0EFbS2kRuEwxLxlBqmLfCub6DGV0",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-385.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-385.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0179",
@@ -5758,7 +6646,8 @@ window.FP_DATA = {
       "montantTTC": 472.12,
       "km": 80225,
       "fileId": "1GzApQA-xslt5iQLX_QPgSPwdBtv25Bpd",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-384.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-384.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0180",
@@ -5773,7 +6662,8 @@ window.FP_DATA = {
       "montantTTC": 391.14,
       "km": 79203,
       "fileId": "1Ddf67LHmDKgayRj1dvXLqwkCdR1DcUy7",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-363.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-363.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0181",
@@ -5788,7 +6678,8 @@ window.FP_DATA = {
       "montantTTC": 789.55,
       "km": 79203,
       "fileId": "1Avd4Gz63RbAJnJsIjE_G8nYb3X0CxJzT",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-362.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-362.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0182",
@@ -5803,7 +6694,8 @@ window.FP_DATA = {
       "montantTTC": null,
       "km": null,
       "fileId": "1p3E8DZL-dwa6_zRO7-QhKvrKzG5F7fez",
-      "fileName": "21559458.PDF"
+      "fileName": "21559458.PDF",
+      "societe": "PXP"
     },
     {
       "id": "FA-0183",
@@ -5818,7 +6710,8 @@ window.FP_DATA = {
       "montantTTC": 491.88,
       "km": null,
       "fileId": "1ceiad35k1SgIKp26tPYN-NjDFri9ZGLR",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0184",
@@ -5833,7 +6726,8 @@ window.FP_DATA = {
       "montantTTC": 605.05,
       "km": null,
       "fileId": "1E_gd456gxisMpk_knQrYpRxdyqAEXeTa",
-      "fileName": "20260424-202604-39673.pdf"
+      "fileName": "20260424-202604-39673.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0185",
@@ -5848,7 +6742,8 @@ window.FP_DATA = {
       "montantTTC": 97.99,
       "km": 3011,
       "fileId": "1TutA1CoxEt4TpBMPjNcRwKAQTbiDCGQF",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-449.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-449.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0186",
@@ -5858,12 +6753,13 @@ window.FP_DATA = {
       "numeroFacture": "202604-34297",
       "description": "Malus écologique refacturé VP/VU (NISSAN X-TRAIL HYB 1.5 HEV, contrat 62166024)",
       "type": "leasing",
-      "montantHT": 2813,
+      "montantHT": 2813.0,
       "montantTVA": 562.6,
       "montantTTC": 3375.6,
       "km": null,
       "fileId": "1hX4YiT4bVCv9KVsrzDu3LGLaNdNVu5_L",
-      "fileName": "20260416-202604-34297.pdf"
+      "fileName": "20260416-202604-34297.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0187",
@@ -5878,7 +6774,8 @@ window.FP_DATA = {
       "montantTTC": 507.58,
       "km": null,
       "fileId": "1PYiUv4LuUSbvz1X69VGBX8kTrs1OmMnw",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0188",
@@ -5893,7 +6790,8 @@ window.FP_DATA = {
       "montantTTC": 483.94,
       "km": null,
       "fileId": "1SAmOrNwkywuS_QKJN2o5n5D4LWOVuKuw",
-      "fileName": "20260424-202604-39673.pdf"
+      "fileName": "20260424-202604-39673.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0189",
@@ -5903,12 +6801,13 @@ window.FP_DATA = {
       "numeroFacture": "202604-34257",
       "description": "Malus écologique refacturé VP/VU (RENAULT TRAFIC combi GRAND, contrat 62181976)",
       "type": "leasing",
-      "montantHT": 180,
-      "montantTVA": 36,
-      "montantTTC": 216,
+      "montantHT": 180.0,
+      "montantTVA": 36.0,
+      "montantTTC": 216.0,
       "km": null,
       "fileId": "1TuvAuWKJy1IQmHVUswuDwQqjS8m01idp",
-      "fileName": "20260416-202604-34257.pdf"
+      "fileName": "20260416-202604-34257.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0190",
@@ -5923,7 +6822,8 @@ window.FP_DATA = {
       "montantTTC": 567.03,
       "km": null,
       "fileId": "10ybKNKZJWedA4_dGTa2gBSfP3AhevYnS",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0191",
@@ -5938,7 +6838,8 @@ window.FP_DATA = {
       "montantTTC": 97.99,
       "km": 2639,
       "fileId": "1t6vi9RYj6QB4Jr7OtL4UkiztYDfAGBOc",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-451.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-451.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0192",
@@ -5953,7 +6854,8 @@ window.FP_DATA = {
       "montantTTC": 567.03,
       "km": null,
       "fileId": "1NHfDlkR2OJim29KDVFH4owbx2HdSpMu-",
-      "fileName": "20260401-202604-19680.pdf"
+      "fileName": "20260401-202604-19680.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0193",
@@ -5968,7 +6870,8 @@ window.FP_DATA = {
       "montantTTC": 567.03,
       "km": null,
       "fileId": "1XUNNOsiksHxeJM0ZkgD_NH_jlcvmy7qZ",
-      "fileName": "20260302-202603-15465.pdf"
+      "fileName": "20260302-202603-15465.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0194",
@@ -5978,12 +6881,13 @@ window.FP_DATA = {
       "numeroFacture": "202602-28530",
       "description": "Malus écologique refacturé VP/VU (BYD SEAL U DM-I 1.5 PHEV 218HP, contrat 62184020)",
       "type": "leasing",
-      "montantHT": 2240,
-      "montantTVA": 448,
-      "montantTTC": 2688,
+      "montantHT": 2240.0,
+      "montantTVA": 448.0,
+      "montantTTC": 2688.0,
       "km": null,
       "fileId": "1vsEOx4o2LFz1FpO5UwFBYZvxckgPLZFk",
-      "fileName": "20260213-202602-28530.pdf"
+      "fileName": "20260213-202602-28530.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0195",
@@ -5998,7 +6902,8 @@ window.FP_DATA = {
       "montantTTC": 567.03,
       "km": null,
       "fileId": "1ayeZUlidC8FmNX3tu8FfQykZg9Uoe9bM",
-      "fileName": "20260204-202602-19418.pdf"
+      "fileName": "20260204-202602-19418.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0196",
@@ -6013,7 +6918,8 @@ window.FP_DATA = {
       "montantTTC": 335.58,
       "km": null,
       "fileId": "1LEG7k4ZSvyI9cpQ7pYw13TxiYrVlwtkZ",
-      "fileName": "20260204-202601-36020.pdf"
+      "fileName": "20260204-202601-36020.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0197",
@@ -6028,7 +6934,8 @@ window.FP_DATA = {
       "montantTTC": 1936.25,
       "km": 16816,
       "fileId": "1ZTLHWsER1wpj4Jgmzv559pU1hJkWLnUB",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-466.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-466.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0198",
@@ -6043,7 +6950,8 @@ window.FP_DATA = {
       "montantTTC": 567.03,
       "km": null,
       "fileId": "19VsQVOEpwlC6Vghc6vj8MRkdAtsL6eQU",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0199",
@@ -6058,7 +6966,8 @@ window.FP_DATA = {
       "montantTTC": 567.03,
       "km": null,
       "fileId": "1PoGLLpCeSe5cDnjjsainQ46MGzT_6LJR",
-      "fileName": "20260401-202604-19680.pdf"
+      "fileName": "20260401-202604-19680.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0200",
@@ -6073,7 +6982,8 @@ window.FP_DATA = {
       "montantTTC": 567.03,
       "km": null,
       "fileId": "1HOjiSkVY7zdyam7VJZoDF3BwwZQSOeue",
-      "fileName": "20260302-202603-15465.pdf"
+      "fileName": "20260302-202603-15465.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0201",
@@ -6083,12 +6993,13 @@ window.FP_DATA = {
       "numeroFacture": "202602-28411",
       "description": "Malus écologique refacturé VP/VU (BYD SEAL U DM-I 1.5 PHEV 218HP, contrat 62182784)",
       "type": "leasing",
-      "montantHT": 2240,
-      "montantTVA": 448,
-      "montantTTC": 2688,
+      "montantHT": 2240.0,
+      "montantTVA": 448.0,
+      "montantTTC": 2688.0,
       "km": null,
       "fileId": "1dbtqkRwg73icXxkNZcDLk21VA_f5mMxX",
-      "fileName": "20260213-202602-28411.pdf"
+      "fileName": "20260213-202602-28411.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0202",
@@ -6103,7 +7014,8 @@ window.FP_DATA = {
       "montantTTC": 558.6,
       "km": 2980,
       "fileId": "1NNq6TK92k0eG5P7vZBEz8ADXgjjK_Six",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-406.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-406.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0203",
@@ -6118,7 +7030,8 @@ window.FP_DATA = {
       "montantTTC": 567.03,
       "km": null,
       "fileId": "1_l1kHcAkW-AB-7eLFk_jXHITkqaaXzXv",
-      "fileName": "20260204-202602-19418.pdf"
+      "fileName": "20260204-202602-19418.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0204",
@@ -6133,7 +7046,8 @@ window.FP_DATA = {
       "montantTTC": 335.58,
       "km": null,
       "fileId": "1S27c_fxS0wnrYQfCAeuKmIgPioyTuk8S",
-      "fileName": "20260204-202601-36020.pdf"
+      "fileName": "20260204-202601-36020.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0205",
@@ -6148,7 +7062,8 @@ window.FP_DATA = {
       "montantTTC": 778.96,
       "km": null,
       "fileId": "1caZVjahN1oTLYyLlHeD9bVAQqZ-fh9Cw",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0206",
@@ -6163,7 +7078,8 @@ window.FP_DATA = {
       "montantTTC": 778.96,
       "km": null,
       "fileId": "1p-uYz-3d328e3GXjOO6zfG_Ekp-J_rBw",
-      "fileName": "20260401-202604-19680.pdf"
+      "fileName": "20260401-202604-19680.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0207",
@@ -6178,7 +7094,8 @@ window.FP_DATA = {
       "montantTTC": 855.76,
       "km": null,
       "fileId": "1aBbvhMY8obtks-pQg3dgrjPDifOPkcVQ",
-      "fileName": "20260321-202603-51330.pdf"
+      "fileName": "20260321-202603-51330.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0208",
@@ -6188,12 +7105,13 @@ window.FP_DATA = {
       "numeroFacture": "202603-27938",
       "description": "Malus écologique refacturé VP/VU - BMW X1 1.5 SDRIVE20I MHEV M Sport DCT",
       "type": "autre",
-      "montantHT": 1334,
+      "montantHT": 1334.0,
       "montantTVA": 266.8,
       "montantTTC": 1600.8,
       "km": null,
       "fileId": "16c68ki_SMHrPb3IBw-ktjAe1_s446GNZ",
-      "fileName": "20260313-202603-27938.pdf"
+      "fileName": "20260313-202603-27938.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0209",
@@ -6208,7 +7126,8 @@ window.FP_DATA = {
       "montantTTC": 628.6,
       "km": 55745,
       "fileId": "1W2HHFxA965ZO86V_ufmPnPM6nbcC8a5V",
-      "fileName": "TJMAX 217349.pdf"
+      "fileName": "TJMAX 217349.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0210",
@@ -6223,7 +7142,8 @@ window.FP_DATA = {
       "montantTTC": 725.81,
       "km": null,
       "fileId": "1kE40FSas1OJR59DA-QdOuxRUDYGABvN1",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0211",
@@ -6238,7 +7158,8 @@ window.FP_DATA = {
       "montantTTC": 725.81,
       "km": null,
       "fileId": "1VFz6Aorya29npbMABzZ8jV8DqPtx69he",
-      "fileName": "20260401-202604-19680.pdf"
+      "fileName": "20260401-202604-19680.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0212",
@@ -6253,7 +7174,8 @@ window.FP_DATA = {
       "montantTTC": 414.98,
       "km": null,
       "fileId": "1plYYPqy8ncqkZ5Hvq6GEYMaf08J5uzXt",
-      "fileName": "20260401-202604-22019.pdf"
+      "fileName": "20260401-202604-22019.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0213",
@@ -6268,7 +7190,8 @@ window.FP_DATA = {
       "montantTTC": 567.03,
       "km": null,
       "fileId": "1ZWXagskP_MYQtlrQzHURSm00C2yfSpWK",
-      "fileName": "20260302-202603-15465.pdf"
+      "fileName": "20260302-202603-15465.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0214",
@@ -6278,12 +7201,13 @@ window.FP_DATA = {
       "numeroFacture": "202602-28498",
       "description": "Malus écologique refacturé VP/VU - BYD SEAL U DM-I 1.5 PHEV 218HP DM-I BOOST",
       "type": "autre",
-      "montantHT": 2240,
-      "montantTVA": 448,
-      "montantTTC": 2688,
+      "montantHT": 2240.0,
+      "montantTVA": 448.0,
+      "montantTTC": 2688.0,
       "km": null,
       "fileId": "1ta0yR8ya-3V35F0Pirv78rbIU-ZKpMpy",
-      "fileName": "20260213-202602-28498.pdf"
+      "fileName": "20260213-202602-28498.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0215",
@@ -6298,7 +7222,8 @@ window.FP_DATA = {
       "montantTTC": 567.03,
       "km": null,
       "fileId": "1-adJHyL-osgkEGE3Iv9mMjh6YTRpPYZN",
-      "fileName": "20260204-202602-19418.pdf"
+      "fileName": "20260204-202602-19418.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0216",
@@ -6313,7 +7238,8 @@ window.FP_DATA = {
       "montantTTC": 335.58,
       "km": null,
       "fileId": "19SM38bjh4NgVNgfeKbI9k-sFVYSnzH8T",
-      "fileName": "20260204-202601-36020.pdf"
+      "fileName": "20260204-202601-36020.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0217",
@@ -6328,7 +7254,8 @@ window.FP_DATA = {
       "montantTTC": 445.12,
       "km": null,
       "fileId": "1thDkJI_w7v3DVFOcnWYBzhIxxnee_IiC",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0218",
@@ -6343,7 +7270,8 @@ window.FP_DATA = {
       "montantTTC": 445.12,
       "km": null,
       "fileId": "1MtR5ty7ReldbAxZG8kNCm1zQnt9W2A1y",
-      "fileName": "20260401-202604-19680.pdf"
+      "fileName": "20260401-202604-19680.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0219",
@@ -6358,7 +7286,8 @@ window.FP_DATA = {
       "montantTTC": 445.12,
       "km": null,
       "fileId": "19p2hkFqHprSag3nsw-TAeOMYQJrv4ZZO",
-      "fileName": "20260302-202603-15465.pdf"
+      "fileName": "20260302-202603-15465.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0220",
@@ -6373,7 +7302,8 @@ window.FP_DATA = {
       "montantTTC": 445.12,
       "km": null,
       "fileId": "1TVbfGVUzDBSxxURbGlyJQ0lROXF1U3iB",
-      "fileName": "20260204-202602-19418.pdf"
+      "fileName": "20260204-202602-19418.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0221",
@@ -6388,7 +7318,8 @@ window.FP_DATA = {
       "montantTTC": 445.12,
       "km": null,
       "fileId": "11mnjsSG0s5Z06bmTgwkPXOz-F2hJ1Ryn",
-      "fileName": "20260101-202601-14335.pdf"
+      "fileName": "20260101-202601-14335.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0222",
@@ -6403,7 +7334,8 @@ window.FP_DATA = {
       "montantTTC": 538.92,
       "km": null,
       "fileId": "1KVZH1TM3CSb5vrHTviZzKnGMPnE0iDQq",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0223",
@@ -6418,7 +7350,8 @@ window.FP_DATA = {
       "montantTTC": 538.92,
       "km": null,
       "fileId": "15sYNPWoQxzXCwqvZhm4FDYzuKpa6RekF",
-      "fileName": "20260401-202604-19680.pdf"
+      "fileName": "20260401-202604-19680.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0224",
@@ -6433,7 +7366,8 @@ window.FP_DATA = {
       "montantTTC": 538.92,
       "km": null,
       "fileId": "1gX2peZPsjMZYN7fLNbWWPdUMsA0rs5I8",
-      "fileName": "20260302-202603-15465.pdf"
+      "fileName": "20260302-202603-15465.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0225",
@@ -6448,7 +7382,8 @@ window.FP_DATA = {
       "montantTTC": 538.92,
       "km": null,
       "fileId": "1pp2cBDVC-Rqu-SJOZFwl--FKuaTdaaFx",
-      "fileName": "20260204-202602-19418.pdf"
+      "fileName": "20260204-202602-19418.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0226",
@@ -6463,7 +7398,8 @@ window.FP_DATA = {
       "montantTTC": 538.92,
       "km": null,
       "fileId": "1h7M7l7TfRdAavp7zUudsyXIfrdJikbBA",
-      "fileName": "20260101-202601-14335.pdf"
+      "fileName": "20260101-202601-14335.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0227",
@@ -6478,7 +7414,8 @@ window.FP_DATA = {
       "montantTTC": 425.21,
       "km": null,
       "fileId": "1aENnin-DXW17a1ur-OkaJAjBhzrkHkwd",
-      "fileName": "20251219-202512-33583.pdf"
+      "fileName": "20251219-202512-33583.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0228",
@@ -6493,7 +7430,8 @@ window.FP_DATA = {
       "montantTTC": 608.14,
       "km": null,
       "fileId": "1WTKCslMw_z7Ch5c0KeavCoDvQfVK6Xpx",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0229",
@@ -6508,7 +7446,8 @@ window.FP_DATA = {
       "montantTTC": 608.14,
       "km": null,
       "fileId": "1qfwkUEEBYn2hLkIlQ6ZNMCunh7LQQYvi",
-      "fileName": "20260401-202604-19680.pdf"
+      "fileName": "20260401-202604-19680.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0230",
@@ -6523,7 +7462,8 @@ window.FP_DATA = {
       "montantTTC": 608.14,
       "km": null,
       "fileId": "1N1C3h2wl6TGs2-uuuYmP_G9-iYMU1vEU",
-      "fileName": "20260302-202603-15465.pdf"
+      "fileName": "20260302-202603-15465.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0231",
@@ -6538,7 +7478,8 @@ window.FP_DATA = {
       "montantTTC": 608.14,
       "km": null,
       "fileId": "1ucpRSVYTpz1q5uDepJTWMYIeLlXLeMli",
-      "fileName": "20260204-202602-19418.pdf"
+      "fileName": "20260204-202602-19418.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0232",
@@ -6548,12 +7489,13 @@ window.FP_DATA = {
       "numeroFacture": "4196",
       "description": null,
       "type": "réparation",
-      "montantHT": 435,
-      "montantTVA": 87,
-      "montantTTC": 522,
+      "montantHT": 435.0,
+      "montantTVA": 87.0,
+      "montantTTC": 522.0,
       "km": 3780,
       "fileId": "1Sr_7J13tQpp1XLLUUEK6q7SEbkln84Nj",
-      "fileName": "LOGIC MOTOR.pdf"
+      "fileName": "LOGIC MOTOR.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0233",
@@ -6568,7 +7510,8 @@ window.FP_DATA = {
       "montantTTC": 608.14,
       "km": null,
       "fileId": "11UMVR1YQQls1-8pgaduArgWqZZGpvLGv",
-      "fileName": "20260101-202601-14335.pdf"
+      "fileName": "20260101-202601-14335.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0234",
@@ -6578,12 +7521,13 @@ window.FP_DATA = {
       "numeroFacture": "202511-27690",
       "description": "Malus écologique refacturé VP/VU - BYD SEAL U DM-I 1.5 PHEV 218HP DM-I BOOST",
       "type": "autre",
-      "montantHT": 2240,
-      "montantTVA": 448,
-      "montantTTC": 2688,
+      "montantHT": 2240.0,
+      "montantTVA": 448.0,
+      "montantTTC": 2688.0,
       "km": null,
       "fileId": "1sqKffmKwU1a0iyPBb__DIIGPTSaqfjjw",
-      "fileName": "20251114-202511-27690.pdf"
+      "fileName": "20251114-202511-27690.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0235",
@@ -6598,7 +7542,8 @@ window.FP_DATA = {
       "montantTTC": null,
       "km": null,
       "fileId": "1SilTA-5M61KMyNiK935xD_iSGQ6t1UB-",
-      "fileName": "24395120.PDF"
+      "fileName": "24395120.PDF",
+      "societe": "PXP"
     },
     {
       "id": "FA-0236",
@@ -6613,7 +7558,8 @@ window.FP_DATA = {
       "montantTTC": null,
       "km": null,
       "fileId": "1SpOUI_QE2pofmFUb3Ixi1JU62NajH-bh",
-      "fileName": "23880407.PDF"
+      "fileName": "23880407.PDF",
+      "societe": "PXP"
     },
     {
       "id": "FA-0237",
@@ -6628,7 +7574,8 @@ window.FP_DATA = {
       "montantTTC": null,
       "km": null,
       "fileId": "1Y_xZax6IdWFI8hlRSGt3ee2Ya3ts60ql",
-      "fileName": "PLAINTE HG 709 CH.pdf"
+      "fileName": "PLAINTE HG 709 CH.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0238",
@@ -6640,10 +7587,11 @@ window.FP_DATA = {
       "type": "achat",
       "montantHT": 25307.5,
       "montantTVA": 5061.5,
-      "montantTTC": 30399,
+      "montantTTC": 30399.0,
       "km": null,
       "fileId": "1Q1nVOkdRBw7ikdE4Al8Tgv-5zTQe7tLF",
-      "fileName": null
+      "fileName": null,
+      "societe": "PXP"
     },
     {
       "id": "FA-0239",
@@ -6655,10 +7603,11 @@ window.FP_DATA = {
       "type": "leasing",
       "montantHT": 751.67,
       "montantTVA": 150.33,
-      "montantTTC": 902,
+      "montantTTC": 902.0,
       "km": null,
       "fileId": "121uGTtZqMoT_asqgrdeg5fhqSDXo90DR",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0240",
@@ -6670,10 +7619,11 @@ window.FP_DATA = {
       "type": "leasing",
       "montantHT": 751.67,
       "montantTVA": 150.33,
-      "montantTTC": 902,
+      "montantTTC": 902.0,
       "km": null,
       "fileId": "1QCr3DC-pGZLz8u9D_DMP1AIsaTeeauZu",
-      "fileName": "20260401-202604-19680.pdf"
+      "fileName": "20260401-202604-19680.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0241",
@@ -6685,10 +7635,11 @@ window.FP_DATA = {
       "type": "leasing",
       "montantHT": 751.67,
       "montantTVA": 150.33,
-      "montantTTC": 902,
+      "montantTTC": 902.0,
       "km": null,
       "fileId": "1klMDeyYqTTgMfrWIKmgpJGyaHKjWf-tT",
-      "fileName": "20260302-202603-15465.pdf"
+      "fileName": "20260302-202603-15465.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0242",
@@ -6700,10 +7651,11 @@ window.FP_DATA = {
       "type": "leasing",
       "montantHT": 751.67,
       "montantTVA": 150.33,
-      "montantTTC": 902,
+      "montantTTC": 902.0,
       "km": null,
       "fileId": "1I7GzMvZ41IAb6eCUj8ctNGHK8Oj-6fSL",
-      "fileName": "20260204-202602-19418.pdf"
+      "fileName": "20260204-202602-19418.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0243",
@@ -6715,10 +7667,11 @@ window.FP_DATA = {
       "type": "leasing",
       "montantHT": 751.67,
       "montantTVA": 150.33,
-      "montantTTC": 902,
+      "montantTTC": 902.0,
       "km": null,
       "fileId": "1LRRh8jk3dl_OONIxiC3NjiMlFmNZr0su",
-      "fileName": "20260101-202601-14335.pdf"
+      "fileName": "20260101-202601-14335.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0244",
@@ -6728,12 +7681,13 @@ window.FP_DATA = {
       "numeroFacture": "202511-27649",
       "description": "Malus écologique refacturé - HYUNDAI TUCSON HYB 1.6 HYBRID 215 INITIA AUTO (contrat 62137917)",
       "type": "autre",
-      "montantHT": 400,
-      "montantTVA": 80,
-      "montantTTC": 480,
+      "montantHT": 400.0,
+      "montantTVA": 80.0,
+      "montantTTC": 480.0,
       "km": null,
       "fileId": "1_aicB7BAkLnqeeeQaW2OZ9dzD10xyWpT",
-      "fileName": "20251114-202511-27649.pdf"
+      "fileName": "20251114-202511-27649.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0245",
@@ -6745,10 +7699,11 @@ window.FP_DATA = {
       "type": "leasing",
       "montantHT": 751.67,
       "montantTVA": 150.33,
-      "montantTTC": 902,
+      "montantTTC": 902.0,
       "km": null,
       "fileId": "1ZxQA80Y712Hh9tCekyyJIdN--YjHmAfI",
-      "fileName": "20251101-202511-20004.pdf"
+      "fileName": "20251101-202511-20004.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0246",
@@ -6763,7 +7718,8 @@ window.FP_DATA = {
       "montantTTC": 533.8,
       "km": null,
       "fileId": "1x4A97cmF-7dtjp8Cv0jaS8470HJV83-y",
-      "fileName": "20251023-202510-38721.pdf"
+      "fileName": "20251023-202510-38721.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0247",
@@ -6778,7 +7734,8 @@ window.FP_DATA = {
       "montantTTC": -360.5,
       "km": null,
       "fileId": "1JFk5J8Z_C_ATOZIGoiMu43VOWAz4-zcZ",
-      "fileName": "003-PTO-17-2105549-401927-299190.pdf"
+      "fileName": "003-PTO-17-2105549-401927-299190.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0248",
@@ -6793,7 +7750,8 @@ window.FP_DATA = {
       "montantTTC": 29951.5,
       "km": null,
       "fileId": "1lpJBKMXDfv4s7bXV2KHuZXcj6o1FWwpT",
-      "fileName": "003-PTO-17-2105548-401927-299185.pdf"
+      "fileName": "003-PTO-17-2105548-401927-299185.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0249",
@@ -6808,7 +7766,8 @@ window.FP_DATA = {
       "montantTTC": 704.18,
       "km": null,
       "fileId": "1tDXO3hmMqdNoq3ChtpjnNZACFrKYFAOa",
-      "fileName": "20260501-202605-15982.pdf"
+      "fileName": "20260501-202605-15982.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0250",
@@ -6823,7 +7782,8 @@ window.FP_DATA = {
       "montantTTC": 704.18,
       "km": null,
       "fileId": "18bnHw3NnpV8vrN6WIkkyYZEVkmWTBfox",
-      "fileName": "20260401-202604-19680.pdf"
+      "fileName": "20260401-202604-19680.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0251",
@@ -6838,7 +7798,8 @@ window.FP_DATA = {
       "montantTTC": 704.18,
       "km": null,
       "fileId": "188dCJA1V8bVUIeqtxrILQpk6jeSCEejk",
-      "fileName": "20260302-202603-15465.pdf"
+      "fileName": "20260302-202603-15465.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0252",
@@ -6853,7 +7814,8 @@ window.FP_DATA = {
       "montantTTC": 704.18,
       "km": null,
       "fileId": "143ivj12lATxqoaBIZ1jaCMQV_JfdBsdM",
-      "fileName": "20260204-202602-19418.pdf"
+      "fileName": "20260204-202602-19418.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0253",
@@ -6868,7 +7830,8 @@ window.FP_DATA = {
       "montantTTC": 704.18,
       "km": null,
       "fileId": "1DC8-9f3VaYmOf6IdaLDArtUa0IGncmg3",
-      "fileName": "20260101-202601-14335.pdf"
+      "fileName": "20260101-202601-14335.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0254",
@@ -6883,7 +7846,8 @@ window.FP_DATA = {
       "montantTTC": 704.18,
       "km": null,
       "fileId": "1OBsih1XKumqq2d2WSSxH7DZUeq0JEisK",
-      "fileName": "20251101-202511-20004.pdf"
+      "fileName": "20251101-202511-20004.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0255",
@@ -6898,7 +7862,8 @@ window.FP_DATA = {
       "montantTTC": 704.18,
       "km": null,
       "fileId": "1WxVWJApXyQ62JjP5uegFrGCWQSETCXIZ",
-      "fileName": "20251001-202510-22008.pdf"
+      "fileName": "20251001-202510-22008.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0256",
@@ -6913,7 +7878,8 @@ window.FP_DATA = {
       "montantTTC": 704.18,
       "km": null,
       "fileId": "1fTPshLEP2Cioq3SJ6zNLiBEHcE84PSCH",
-      "fileName": "20250901-202509-19680.pdf"
+      "fileName": "20250901-202509-19680.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0257",
@@ -6928,22 +7894,8 @@ window.FP_DATA = {
       "montantTTC": 324.13,
       "km": null,
       "fileId": "1jMG6VhWr_3jTcwUHBfrUGA-WnlRtE-PV",
-      "fileName": "20250823-202508-32656.pdf"
-    },
-    {
-      "id": "FA-0258",
-      "date": "2025-05-30",
-      "vehiculeImmat": "GD-056-CR",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1zD9witmLsgoBciPy_SGPKNjlungreZSC",
-      "fileName": "Code cession GD-056-CR.pdf"
+      "fileName": "20250823-202508-32656.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0259",
@@ -6958,7 +7910,8 @@ window.FP_DATA = {
       "montantTTC": 693.91,
       "km": 77000,
       "fileId": "1oi2dOMjq_WC5mZOJ_C5wDEPcMSJs01Kh",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-296.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-296.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0260",
@@ -6973,22 +7926,8 @@ window.FP_DATA = {
       "montantTTC": 870.65,
       "km": 77000,
       "fileId": "1JNuQ5CCeUlP-b9Zp32LK9uq0wAZsAZd6",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-295.pdf"
-    },
-    {
-      "id": "FA-0261",
-      "date": "2025-10-30",
-      "vehiculeImmat": "GD-056-CR",
-      "fournisseur": "Autosécurité Arnouville",
-      "numeroFacture": "25110574",
-      "description": "Procès-verbal de contrôle technique périodique - résultat défavorable (Mercedes EQA 250)",
-      "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": 29407,
-      "fileId": "12zA5fZMr3HDK3Ugvs4-5BWjMkVPHK36V",
-      "fileName": "Numérisation_20251031.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-295.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0262",
@@ -7003,7 +7942,8 @@ window.FP_DATA = {
       "montantTTC": 345.48,
       "km": 76851,
       "fileId": "1ctG8x6FoHcOkVGn1GE4-mRQW1zEVWwK4",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-293.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-293.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0263",
@@ -7013,12 +7953,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-294",
       "description": "Prestation présentation contrôle technique (Mercedes EQA SUV électrique)",
       "type": "entretien",
-      "montantHT": 80,
-      "montantTVA": 16,
-      "montantTTC": 96,
+      "montantHT": 80.0,
+      "montantTVA": 16.0,
+      "montantTTC": 96.0,
       "km": 76851,
       "fileId": "1ufYtQwe01mbCsA90GrapQKFg8JXlaOgD",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-294.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-294.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0264",
@@ -7033,37 +7974,8 @@ window.FP_DATA = {
       "montantTTC": 1087.86,
       "km": 69022,
       "fileId": "1HDn46jqooH85gb6k3yLnRdi3vZq074VT",
-      "fileName": "84795220-OR_acceptation_travaux.pdf"
-    },
-    {
-      "id": "FA-0265",
-      "date": "2025-05-30",
-      "vehiculeImmat": "GE-349-FZ",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1yVqzPa2RDDcjK0Pc663uCPeRqFrZecu-",
-      "fileName": "2x Code cession GE-349-FZ.pdf"
-    },
-    {
-      "id": "FA-0266",
-      "date": "2026-01-05",
-      "vehiculeImmat": "GE-349-FZ",
-      "fournisseur": "Autosécurité Arnouville",
-      "numeroFacture": "26113079",
-      "description": "Procès-verbal de contrôle technique périodique - résultat favorable (Mercedes EQA classe)",
-      "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": 74207,
-      "fileId": "1rJQs8c-pbiYg45MSEB5OCQIZSl62roas",
-      "fileName": "CT-GE349FZ.pdf"
+      "fileName": "84795220-OR_acceptation_travaux.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0267",
@@ -7073,27 +7985,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2026-361",
       "description": "Prestation présentation contrôle technique (Mercedes EQA VL élec)",
       "type": "entretien",
-      "montantHT": 80,
-      "montantTVA": 16,
-      "montantTTC": 96,
+      "montantHT": 80.0,
+      "montantTVA": 16.0,
+      "montantTTC": 96.0,
       "km": 74207,
       "fileId": "1CcjXrRc2h2xKG2zuBSoNURpRByXJgWBO",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-361.pdf"
-    },
-    {
-      "id": "FA-0268",
-      "date": "2025-05-30",
-      "vehiculeImmat": "GJ-529-WE",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1UDQ7RbSOE1y9WTpQ_MukeFZiAnQhDnP6",
-      "fileName": "Code cession GJ-529-WE.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-361.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0269",
@@ -7108,7 +8006,8 @@ window.FP_DATA = {
       "montantTTC": 562.48,
       "km": 42578,
       "fileId": "1MN3QOvVjHCvhTcLfFTAoF7gicI01S_sC",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-187.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-187.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0270",
@@ -7123,7 +8022,8 @@ window.FP_DATA = {
       "montantTTC": 747.53,
       "km": 42578,
       "fileId": "14LJAYWUG71vmSYm5MBMiK_M_GERJj1uY",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-186.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-186.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0271",
@@ -7138,7 +8038,8 @@ window.FP_DATA = {
       "montantTTC": 35.88,
       "km": 67165,
       "fileId": "1IV770MDGj3M6mHmgIA7iXofhOiM4zmZx",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-454.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-454.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0272",
@@ -7153,7 +8054,8 @@ window.FP_DATA = {
       "montantTTC": 885.89,
       "km": 62716,
       "fileId": "1St6sehTS_f7Hhd-8VRhCnkWMjWGL3Ftt",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-420.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-420.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0273",
@@ -7168,7 +8070,8 @@ window.FP_DATA = {
       "montantTTC": 1404.15,
       "km": 62716,
       "fileId": "1dT8h0vhKRgzpc_vW0y8hxksxEYYeEVaX",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-421.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-421.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0274",
@@ -7183,7 +8086,8 @@ window.FP_DATA = {
       "montantTTC": 204.32,
       "km": 62716,
       "fileId": "1S6_jPfX2Lr1hu9FVm6-epC288SpcpvCI",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-419.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-419.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0275",
@@ -7198,7 +8102,8 @@ window.FP_DATA = {
       "montantTTC": 2693.92,
       "km": 188144,
       "fileId": "1COJoY_c2eWE3U7y9-Ocuhl6nc77xifBH",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-410.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-410.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0276",
@@ -7208,12 +8113,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-310",
       "description": "Prestation presentation CT vehicule hybride",
       "type": "entretien",
-      "montantHT": 90,
-      "montantTVA": 18,
-      "montantTTC": 108,
+      "montantHT": 90.0,
+      "montantTVA": 18.0,
+      "montantTTC": 108.0,
       "km": 186903,
       "fileId": "1CcCcLovEEMJmnWEPCdkNFuhtos8883Ri",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-310.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-310.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0277",
@@ -7228,7 +8134,8 @@ window.FP_DATA = {
       "montantTTC": 575.07,
       "km": 186903,
       "fileId": "1z3nfCtMHP6l_4I20CV3jEfsMcGwTUT_Y",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-308.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-308.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0278",
@@ -7243,22 +8150,8 @@ window.FP_DATA = {
       "montantTTC": 384.9,
       "km": 186903,
       "fileId": "1Rpk-60On394NF1L_N-t7Ov6Jfafjg2ww",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-309.pdf"
-    },
-    {
-      "id": "FA-0279",
-      "date": "2025-12-04",
-      "vehiculeImmat": "FF-304-GL",
-      "fournisseur": "Autosécurité Arnouville",
-      "numeroFacture": "25111963",
-      "description": "Controle technique periodique - resultat favorable - validite 03/12/2027",
-      "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": 186925,
-      "fileId": "195rBBzm_u_5mWvZw9xmZpP09eNHert-w",
-      "fileName": "CT-CLASSE-S.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-309.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0280",
@@ -7273,7 +8166,8 @@ window.FP_DATA = {
       "montantTTC": 860.26,
       "km": 183903,
       "fileId": "1C5YOSBZoDEQ9e8x4ZiR4Co14dO09ba-m",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-282.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-282.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0281",
@@ -7283,12 +8177,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-248",
       "description": "4 pneus reference constructeur, depose pose 4 roues, equilibrage, valves, parallelisme/geometrie",
       "type": "entretien",
-      "montantHT": 1525,
-      "montantTVA": 305,
-      "montantTTC": 1830,
+      "montantHT": 1525.0,
+      "montantTVA": 305.0,
+      "montantTTC": 1830.0,
       "km": 182046,
       "fileId": "1U3-d_81xQKicbYtp-fKW5kH-BVW153fb",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-248.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-248.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0282",
@@ -7298,12 +8193,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-240",
       "description": "Faisceaux remise en etat - voyant moteur masse reparee remplacement du faisceaux",
       "type": "réparation",
-      "montantHT": 252,
+      "montantHT": 252.0,
       "montantTVA": 50.4,
       "montantTTC": 302.4,
       "km": 181878,
       "fileId": "1dYfQaAQxH9ZqZlzXzc7NYP7jVk9ib4VA",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-240.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-240.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0283",
@@ -7318,7 +8214,8 @@ window.FP_DATA = {
       "montantTTC": 820.27,
       "km": 11878,
       "fileId": "1_AjPmaOWQkkIXjjCVvi1m-XB0Tibnl6A",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-238.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-238.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0284",
@@ -7333,7 +8230,8 @@ window.FP_DATA = {
       "montantTTC": 4255.19,
       "km": 181878,
       "fileId": "1lq0c7EYo2AiqzS1-GNI__CdobpK17P4K",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-239.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-239.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0285",
@@ -7348,7 +8246,8 @@ window.FP_DATA = {
       "montantTTC": 436.39,
       "km": 178633,
       "fileId": "12-y1XfSrhBWEcK73w0b3VzfJOw7pkRzL",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-204.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-204.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0286",
@@ -7359,11 +8258,12 @@ window.FP_DATA = {
       "description": "Tender courroie, vis torx, courroie, operation complexe, nettoyant frein pro",
       "type": "réparation",
       "montantHT": 439.95,
-      "montantTVA": 88,
+      "montantTVA": 88.0,
       "montantTTC": 527.95,
       "km": 175961,
       "fileId": "1GoejChcwIlJCAlVYVMRyFRTyg_PBhFOA",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-175.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-175.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0287",
@@ -7378,7 +8278,8 @@ window.FP_DATA = {
       "montantTTC": 1055.09,
       "km": 175961,
       "fileId": "1HJpIGtnksRTVV0pjcfkxI0ZSxJB6htnx",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-174.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-174.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0288",
@@ -7393,22 +8294,8 @@ window.FP_DATA = {
       "montantTTC": 1177.5,
       "km": 175961,
       "fileId": "1qPAoOrT0Fqu5E5OiqRCdeig0CUWbn9AX",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-176.pdf"
-    },
-    {
-      "id": "FA-0289",
-      "date": "2025-05-30",
-      "vehiculeImmat": "GT-565-XR",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1xI2yC0ULshp5xkPWrdZzE1nXqEw74HbL",
-      "fileName": "Code cession GT-565-XR.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-176.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0290",
@@ -7418,12 +8305,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-348",
       "description": "Balais essuie-glaces AV",
       "type": "entretien",
-      "montantHT": 50,
-      "montantTVA": 10,
-      "montantTTC": 60,
+      "montantHT": 50.0,
+      "montantTVA": 10.0,
+      "montantTTC": 60.0,
       "km": 27737,
       "fileId": "1Ta5_lRLn_GpNjaC9TH6nGjJhskYBqCj-",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-348.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-348.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0291",
@@ -7433,12 +8321,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-347",
       "description": "Lave-glace, remplacement liquide de frein, traitement anti bac/purifiant clim",
       "type": "entretien",
-      "montantHT": 153,
+      "montantHT": 153.0,
       "montantTVA": 30.6,
       "montantTTC": 183.6,
       "km": 27737,
       "fileId": "1H_tGdzNZjqC3PcHfFIe7yP8AGk7GfdhN",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-347.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-347.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0292",
@@ -7453,7 +8342,8 @@ window.FP_DATA = {
       "montantTTC": 23260.76,
       "km": 10,
       "fileId": "1Mfju_ef42e8ttPHF70HMV5ihFPUVHc71",
-      "fileName": "FS-224-PB FACTURE D ACHAT.pdf"
+      "fileName": "FS-224-PB FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0293",
@@ -7468,22 +8358,8 @@ window.FP_DATA = {
       "montantTTC": 151.08,
       "km": 145082,
       "fileId": "1-HqhPRLKT-Bd59QynBNRKF1XnOlsukdq",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-402.pdf"
-    },
-    {
-      "id": "FA-0294",
-      "date": "2026-02-05",
-      "vehiculeImmat": "FS-224-PB",
-      "fournisseur": "Autosécurité Arnouville",
-      "numeroFacture": "26114274",
-      "description": "Contre-visite controle technique - resultat favorable - validite 01/02/2028",
-      "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": 145104,
-      "fileId": "1I5XemsbVr-3Al3gsDRSeU91irZlsirbm",
-      "fileName": "CT-VALIDE-FS224PB.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-402.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0295",
@@ -7498,7 +8374,8 @@ window.FP_DATA = {
       "montantTTC": 149.82,
       "km": 145082,
       "fileId": "1HoZrHjQY8ZtATMVS67gdC2ywA1ysLLe-",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-403.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-403.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0296",
@@ -7508,12 +8385,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2026-404",
       "description": "Prestation contre-visite SUV",
       "type": "entretien",
-      "montantHT": 40,
-      "montantTVA": 8,
-      "montantTTC": 48,
+      "montantHT": 40.0,
+      "montantTVA": 8.0,
+      "montantTTC": 48.0,
       "km": 145082,
       "fileId": "16K5RrMQA_GgZgzwQdGQXnixscDZ0Whmm",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-404.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-404.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0297",
@@ -7528,7 +8406,8 @@ window.FP_DATA = {
       "montantTTC": 929.96,
       "km": 145082,
       "fileId": "1aBBqu7VSWQ6FkFRWIMn21NbVZJyQ6JF1",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-401.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-401.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0298",
@@ -7538,27 +8417,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2026-397",
       "description": "Prestation presentation CT",
       "type": "entretien",
-      "montantHT": 75,
-      "montantTVA": 15,
-      "montantTTC": 90,
+      "montantHT": 75.0,
+      "montantTVA": 15.0,
+      "montantTTC": 90.0,
       "km": 145082,
       "fileId": "1ZA35mrXuXpDYdEbtfklajv3NfXpgBxKb",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-397.pdf"
-    },
-    {
-      "id": "FA-0299",
-      "date": "2025-06-02",
-      "vehiculeImmat": "FS-224-PB",
-      "fournisseur": "Autosécurité Arnouville",
-      "numeroFacture": "25104406",
-      "description": "Controle technique periodique - resultat defavorable defaillances majeures (direction)",
-      "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": 132755,
-      "fileId": "1Cf3G7-z5Aomwfg1EQt74aRecGesTuYUr",
-      "fileName": "CT 2025.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-397.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0300",
@@ -7573,7 +8438,8 @@ window.FP_DATA = {
       "montantTTC": 2089.61,
       "km": 140571,
       "fileId": "1P_1aqPjKxhsMNpkUt7uAu_awEs1QNdPY",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-304.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-304.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0301",
@@ -7588,7 +8454,8 @@ window.FP_DATA = {
       "montantTTC": 2399.2,
       "km": 138623,
       "fileId": "17ZZCxCCEExbzuAeHZatJdodhoxtHva6B",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-277.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-277.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0302",
@@ -7598,12 +8465,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-228",
       "description": "Revision constructeur - huile RN17 5W30, filtre a huile, joint de vidange, complement fluides",
       "type": "entretien",
-      "montantHT": 159,
+      "montantHT": 159.0,
       "montantTVA": 31.8,
       "montantTTC": 190.8,
       "km": 134738,
       "fileId": "1qNw5TRBSUtWszOTySqI8RLblcXgIBLal",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-228.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-228.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0303",
@@ -7613,12 +8481,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-215",
       "description": "Recharge climatisation gaz 1234yf, nettoyage circuit de clim",
       "type": "entretien",
-      "montantHT": 190,
-      "montantTVA": 38,
-      "montantTTC": 228,
+      "montantHT": 190.0,
+      "montantTVA": 38.0,
+      "montantTTC": 228.0,
       "km": 133000,
       "fileId": "1t1FPU8A0jq8RG7BweoWUnEydMPV0Osjw",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-215.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-215.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0304",
@@ -7628,27 +8497,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-199",
       "description": "Prestation presentation contre-visite controle technique",
       "type": "entretien",
-      "montantHT": 50,
-      "montantTVA": 10,
-      "montantTTC": 60,
+      "montantHT": 50.0,
+      "montantTVA": 10.0,
+      "montantTTC": 60.0,
       "km": 132809,
       "fileId": "1U631ZoRxffle4Bq6IhW0oGqF0cELPs3C",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-199.pdf"
-    },
-    {
-      "id": "FA-0305",
-      "date": "2025-06-04",
-      "vehiculeImmat": "FS-224-PB",
-      "fournisseur": "Autosécurité Arnouville",
-      "numeroFacture": "25104527",
-      "description": "Contre-visite controle technique - resultat favorable - validite 01/06/2027",
-      "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": 132870,
-      "fileId": "18bKQRyDlNqCe2_RsrywFF_7ucsFk7IU9",
-      "fileName": "CONTRE VISITE CT 2025.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-199.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0306",
@@ -7663,7 +8518,8 @@ window.FP_DATA = {
       "montantTTC": 417.71,
       "km": 132809,
       "fileId": "1gli_ax-xGKa5Qf3a05-pNtz2k_7c_TeV",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-198.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-198.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0307",
@@ -7678,7 +8534,8 @@ window.FP_DATA = {
       "montantTTC": 1252.39,
       "km": 132809,
       "fileId": "1UfJMKGgCnjPEGvGnvaJbyWZ59Q6HkS31",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-197.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-197.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0308",
@@ -7688,27 +8545,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-193",
       "description": "Prestation presentation CT",
       "type": "entretien",
-      "montantHT": 70,
-      "montantTVA": 14,
-      "montantTTC": 84,
+      "montantHT": 70.0,
+      "montantTVA": 14.0,
+      "montantTTC": 84.0,
       "km": 132755,
       "fileId": "1Y1PXC_suJ8bB1lWG8Ip6pu-tE20LvBlH",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-193.pdf"
-    },
-    {
-      "id": "FA-0309",
-      "date": "2025-05-30",
-      "vehiculeImmat": "GP-232-WF",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1Ukxwg0WaZPzc5o6E7QKnytzqKA2hfbhB",
-      "fileName": "Code cession GP-232-WF.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-193.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0310",
@@ -7723,7 +8566,8 @@ window.FP_DATA = {
       "montantTTC": 34169.76,
       "km": 10,
       "fileId": "1gyk0AcwBFShAEIoWaEAkbe5CVKFskh3C",
-      "fileName": "GP-232-WF FACTURE D ACHAT.pdf"
+      "fileName": "GP-232-WF FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0311",
@@ -7738,7 +8582,8 @@ window.FP_DATA = {
       "montantTTC": 48216.76,
       "km": 35835,
       "fileId": "1CMJywF85c6GggphFMqxkK0zNcUuaY_ul",
-      "fileName": "FF-777-XK FACTURE PROFORMA D ACHAT.pdf"
+      "fileName": "FF-777-XK FACTURE PROFORMA D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0312",
@@ -7750,10 +8595,11 @@ window.FP_DATA = {
       "type": "entretien",
       "montantHT": 58.33,
       "montantTVA": 11.67,
-      "montantTTC": 70,
+      "montantTTC": 70.0,
       "km": 88874,
       "fileId": "1JzpnccT56GnKHbr01-KLjsHzN-O9sq8Q",
-      "fileName": "CT 2025.png"
+      "fileName": "CT 2025.png",
+      "societe": "PXP"
     },
     {
       "id": "FA-0313",
@@ -7768,7 +8614,8 @@ window.FP_DATA = {
       "montantTTC": 33473.9,
       "km": null,
       "fileId": "1UNxxR1S1CPXB99z4QiiZCKu6PxA3mUc1",
-      "fileName": "FJ-607-QH FACTURE D ACHAT.pdf"
+      "fileName": "FJ-607-QH FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0314",
@@ -7783,7 +8630,8 @@ window.FP_DATA = {
       "montantTTC": 1594.73,
       "km": 250088,
       "fileId": "1luRy1xTm1kPdFkYnQhl4o09Dx0bk9vZv",
-      "fileName": "IMG_1021.jpg"
+      "fileName": "IMG_1021.jpg",
+      "societe": "PXP"
     },
     {
       "id": "FA-0315",
@@ -7798,7 +8646,8 @@ window.FP_DATA = {
       "montantTTC": 978.44,
       "km": 223900,
       "fileId": "1XCryQ5Qm5_i1ajzIW9QOfhxxbibiw4M7",
-      "fileName": "CamScanner 30-04-2025 10.07 (1).pdf"
+      "fileName": "CamScanner 30-04-2025 10.07 (1).pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0316",
@@ -7810,10 +8659,11 @@ window.FP_DATA = {
       "type": "entretien",
       "montantHT": 66.67,
       "montantTVA": 13.33,
-      "montantTTC": 80,
+      "montantTTC": 80.0,
       "km": 223151,
       "fileId": "1bZQhJzreGl9FefozrgvFpllxREXnIsMh",
-      "fileName": "CamScanner 01-04-2025 15.58.pdf"
+      "fileName": "CamScanner 01-04-2025 15.58.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0317",
@@ -7823,27 +8673,13 @@ window.FP_DATA = {
       "numeroFacture": "VHI151830",
       "description": "Achat véhicule Iveco Daily 35C16, châssis ZCFCA35B80D669687",
       "type": "achat",
-      "montantHT": 46200,
+      "montantHT": 46200.0,
       "montantTVA": null,
-      "montantTTC": 46200,
+      "montantTTC": 46200.0,
       "km": 254,
       "fileId": "1WNHSIG60KtdFBS8k1AUXBrpqbkwWC_0l",
-      "fileName": "GK-281-CC FACTURE D ACHAT.pdf"
-    },
-    {
-      "id": "FA-0318",
-      "date": null,
-      "vehiculeImmat": "GW-075-EZ",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1c8LZlrdcJVi6rYNdVlGQMLIP-CchTmTz",
-      "fileName": "Code cession GW-075-EZ.pdf"
+      "fileName": "GK-281-CC FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0319",
@@ -7858,7 +8694,8 @@ window.FP_DATA = {
       "montantTTC": 32467.76,
       "km": 10,
       "fileId": "1WoGPTT5PtH_g7DHDmyqX0800DP77lBdQ",
-      "fileName": "GW-075-EZ FACTURE D ACHAT.pdf"
+      "fileName": "GW-075-EZ FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0320",
@@ -7873,22 +8710,24 @@ window.FP_DATA = {
       "montantTTC": 685.7,
       "km": 85030,
       "fileId": "1ubf0XgYA9W1tUd5VQjLBBCIlTIwcIt45",
-      "fileName": "FACTURE REVISION .pdf"
+      "fileName": "FACTURE REVISION .pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0321",
-      "date": null,
+      "date": "2025-03-06",
       "vehiculeImmat": "GW-075-EZ",
-      "fournisseur": "LD AUTOMOBILES",
-      "numeroFacture": null,
-      "description": "Document scanné illisible (lien web Spendesk)",
-      "type": "autre",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
+      "fournisseur": "SARL LD AUTOMOBILES",
+      "numeroFacture": "304644",
+      "description": "Révision + freins + vidange",
+      "type": "entretien",
+      "montantHT": 287.03,
+      "montantTVA": 57.4,
+      "montantTTC": 344.43,
       "km": null,
       "fileId": "1BzDBMErfQE_d4meJ_tkU10iSL_BmQD0p",
-      "fileName": "FACTURE  LD AUTOMOBILES.pdf"
+      "fileName": "FACTURE  LD AUTOMOBILES.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0322",
@@ -7903,7 +8742,8 @@ window.FP_DATA = {
       "montantTTC": null,
       "km": null,
       "fileId": "1tPZgZQjkfG8UvUP94KJJ5awc2BH4ijMg",
-      "fileName": "Messagerie Gov Denim - APO 30649157 - GW-075-EZ.pdf"
+      "fileName": "Messagerie Gov Denim - APO 30649157 - GW-075-EZ.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0323",
@@ -7918,7 +8758,8 @@ window.FP_DATA = {
       "montantTTC": null,
       "km": null,
       "fileId": "1dv03x9dYeEtEydHHMm81CNISeU7p-LbH",
-      "fileName": "20975492.PDF"
+      "fileName": "20975492.PDF",
+      "societe": "PXP"
     },
     {
       "id": "FA-0324",
@@ -7930,10 +8771,11 @@ window.FP_DATA = {
       "type": "achat",
       "montantHT": 29897.5,
       "montantTVA": 5979.5,
-      "montantTTC": 35877,
+      "montantTTC": 35877.0,
       "km": null,
       "fileId": "1Vj9IUK4k6pRcgWFhCM9kYzvCM6OvAW2a",
-      "fileName": "HB-733-DE FACTURE D ACHAT.pdf"
+      "fileName": "HB-733-DE FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0325",
@@ -7943,12 +8785,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2026-443",
       "description": "Remplacement cache complet avec isolant BYD, kit visserie",
       "type": "réparation",
-      "montantHT": 200,
-      "montantTVA": 40,
-      "montantTTC": 240,
+      "montantHT": 200.0,
+      "montantTVA": 40.0,
+      "montantTTC": 240.0,
       "km": 24554,
       "fileId": "1lOKth6LXTWW5uj9_3-xA_9IYoBDPJ8dF",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-443.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-443.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0326",
@@ -7963,7 +8806,8 @@ window.FP_DATA = {
       "montantTTC": 288.76,
       "km": null,
       "fileId": "1kOO0Ta3oiw0IIX6gpgv4P_SVT0L-C__M",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-158.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-158.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0327",
@@ -7978,7 +8822,8 @@ window.FP_DATA = {
       "montantTTC": 540.6,
       "km": 18012,
       "fileId": "12F1Ad1X8_6tmisSO3j5mVYaeH8nP9Q-O",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-358.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-358.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0328",
@@ -7986,14 +8831,15 @@ window.FP_DATA = {
       "vehiculeImmat": "HB-733-DE",
       "fournisseur": "CAR WORLD CONSULTING FRANCE",
       "numeroFacture": "F-2025-302",
-      "description": "Révision constructeur BYD (huile, filtres) + pack service premium - première révision offerte",
+      "description": "Révision constructeur BYD (offerte)",
       "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
+      "montantHT": 0.0,
+      "montantTVA": 0.0,
+      "montantTTC": 0.0,
       "km": 16099,
       "fileId": "1bF_oBeT0pHQLRBPcblSYdhxzDX_5ZJW1",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-302.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-302.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0329",
@@ -8008,7 +8854,8 @@ window.FP_DATA = {
       "montantTTC": 396.79,
       "km": 1500,
       "fileId": "1DI3cnDO2O1_yYq4g9KBQSirHGdqAknrB",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-169.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-169.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0330",
@@ -8020,10 +8867,11 @@ window.FP_DATA = {
       "type": "achat",
       "montantHT": 29897.5,
       "montantTVA": 5979.5,
-      "montantTTC": 35877,
+      "montantTTC": 35877.0,
       "km": null,
       "fileId": "1yzQZ4fZ0ysGFUFjft-os3Bae-AMw9eEF",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-138.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-138.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0331",
@@ -8038,7 +8886,8 @@ window.FP_DATA = {
       "montantTTC": 288.76,
       "km": null,
       "fileId": "1ahhJ1YpLNn6N5fNswMmg2JBG7Nqi_ywd",
-      "fileName": "HB-733-DE.pdf"
+      "fileName": "HB-733-DE.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0332",
@@ -8053,7 +8902,8 @@ window.FP_DATA = {
       "montantTTC": null,
       "km": null,
       "fileId": "1RAkweILCBBG4BCjCYj5EHSZEdvGyCVbe",
-      "fileName": null
+      "fileName": null,
+      "societe": "PXP"
     },
     {
       "id": "FA-0333",
@@ -8068,7 +8918,8 @@ window.FP_DATA = {
       "montantTTC": 396.79,
       "km": 1500,
       "fileId": "1PyGUdRxnvHCH8U1Ha1swFKTrpWUHFwXe",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-169.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-169.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0334",
@@ -8083,22 +8934,8 @@ window.FP_DATA = {
       "montantTTC": null,
       "km": null,
       "fileId": "1sdU3xrPtZcrIX4EZ98v2FP7Bp4eDA2jA",
-      "fileName": "21878682.PDF"
-    },
-    {
-      "id": "FA-0335",
-      "date": null,
-      "vehiculeImmat": "GW-173-JV",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1NWSBBINtVdSOFPFvcF-cBqaPUmXFiFvu",
-      "fileName": "Code cession GW-173-JV.pdf"
+      "fileName": "21878682.PDF",
+      "societe": "PXP"
     },
     {
       "id": "FA-0336",
@@ -8110,10 +8947,11 @@ window.FP_DATA = {
       "type": "achat",
       "montantHT": 25815.83,
       "montantTVA": 5144.17,
-      "montantTTC": 30960,
+      "montantTTC": 30960.0,
       "km": 1,
       "fileId": "1xXTLVZ-9oQzeH8OQgQ4TI3Y-3I8jELG2",
-      "fileName": "GW-173-JV FACTURE D ACHAT.pdf"
+      "fileName": "GW-173-JV FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0337",
@@ -8128,7 +8966,8 @@ window.FP_DATA = {
       "montantTTC": 3839.48,
       "km": 21618,
       "fileId": "1ACWGPu0oNVRW6tTL-YqetzqX_AS6xp_n",
-      "fileName": "FA2388-1.pdf"
+      "fileName": "FA2388-1.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0338",
@@ -8143,22 +8982,8 @@ window.FP_DATA = {
       "montantTTC": 1607.21,
       "km": 21618,
       "fileId": "1rGdv_Rh696zxoDRqHfPnjS97UewhK8uk",
-      "fileName": "FA2389-1.pdf"
-    },
-    {
-      "id": "FA-0339",
-      "date": null,
-      "vehiculeImmat": "FZ-301-YZ",
-      "fournisseur": null,
-      "numeroFacture": null,
-      "description": null,
-      "type": "cession",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
-      "km": null,
-      "fileId": "1AfKxPB2ezvwprmCaYpiopvAI0DsaZ6FJ",
-      "fileName": "Code cession FZ-301-YZ.pdf"
+      "fileName": "FA2389-1.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0340",
@@ -8173,7 +8998,8 @@ window.FP_DATA = {
       "montantTTC": 62.41,
       "km": 104725,
       "fileId": "1UAkQaz13-gSeQm3ACH8HYKj-ONSi7c0q",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-398.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-398.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0341",
@@ -8188,7 +9014,8 @@ window.FP_DATA = {
       "montantTTC": 869.38,
       "km": 104725,
       "fileId": "1vnylIILNLHWSTn3Miix9Q1Gk1fFLZp96",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-386.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-386.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0342",
@@ -8198,12 +9025,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-233",
       "description": "Kit distribution moteur PureTech, pignons arbre à cames, pompe à eau, courroie, kit courroie accessoires, remplacement courroie moteur",
       "type": "réparation",
-      "montantHT": 2186,
+      "montantHT": 2186.0,
       "montantTVA": 437.2,
       "montantTTC": 2623.2,
       "km": 93578,
       "fileId": "1I3GhGSoj5yh_tlZGV4AJnldiYP3qwSvO",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-233.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-233.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0343",
@@ -8213,12 +9041,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-231",
       "description": "Recharge climatisation gaz 1234YF, nettoyage système clim",
       "type": "entretien",
-      "montantHT": 190,
-      "montantTVA": 38,
-      "montantTTC": 228,
+      "montantHT": 190.0,
+      "montantTVA": 38.0,
+      "montantTTC": 228.0,
       "km": 93165,
       "fileId": "1vAd7KZ6vbFykElJeol6DxRDd9zeHHp-s",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-231.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-231.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0344",
@@ -8233,7 +9062,8 @@ window.FP_DATA = {
       "montantTTC": 603.93,
       "km": 93165,
       "fileId": "1n3oVPPS30_C8iG2rpclrxKqBG8vj77rB",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-230.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-230.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0345",
@@ -8245,10 +9075,11 @@ window.FP_DATA = {
       "type": "entretien",
       "montantHT": 66.67,
       "montantTVA": 13.33,
-      "montantTTC": 80,
+      "montantTTC": 80.0,
       "km": null,
       "fileId": "1VHiCRM7JJMH1qt6JO7HpkKt1r7mewPrT",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-134.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-134.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0346",
@@ -8263,7 +9094,8 @@ window.FP_DATA = {
       "montantTTC": 690.29,
       "km": 88594,
       "fileId": "1CZsoIRwtnUW5MD3gPZ-FhILnZ2O82li6",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-132.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-132.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0347",
@@ -8278,7 +9110,8 @@ window.FP_DATA = {
       "montantTTC": 965.05,
       "km": 88594,
       "fileId": "1hZ-MYCIA-4q9myFupybFFIoEKSQr3DSc",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-133.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-133.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0348",
@@ -8293,7 +9126,8 @@ window.FP_DATA = {
       "montantTTC": null,
       "km": null,
       "fileId": "1TIUtWaIJ5Z5L2qSOddvYHaINCYVL79VI",
-      "fileName": "Constat 12/01/26.pdf"
+      "fileName": "Constat 12/01/26.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0349",
@@ -8303,12 +9137,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-128",
       "description": "Achat véhicule neuf BYD SEAL U DM-I BoostHybride, VIN LGXC74C48R0753404, MEC 28/12/2024 (solde après acompte F-2025-125)",
       "type": "achat",
-      "montantHT": 34490,
+      "montantHT": 34490.0,
       "montantTVA": null,
-      "montantTTC": 34490,
+      "montantTTC": 34490.0,
       "km": null,
       "fileId": "11ANUjB-f-cEVFB_ZaR7UCdMcquKYSKgb",
-      "fileName": "HB-844-DE FACTURE D ACHAT.pdf"
+      "fileName": "HB-844-DE FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0350",
@@ -8320,10 +9155,11 @@ window.FP_DATA = {
       "type": "entretien",
       "montantHT": 169.17,
       "montantTVA": 33.83,
-      "montantTTC": 203,
+      "montantTTC": 203.0,
       "km": 17401,
       "fileId": "1IUgJBbumGJmfGMMQisWL_zLZD9v6CHVV",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-411.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-411.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0351",
@@ -8338,7 +9174,8 @@ window.FP_DATA = {
       "montantTTC": 127.44,
       "km": null,
       "fileId": "1vGSbScwZWOkdHJlvDjN2Hr6z6ybQlDcw",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-400.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-400.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0352",
@@ -8346,14 +9183,15 @@ window.FP_DATA = {
       "vehiculeImmat": "HB-844-DE",
       "fournisseur": "CAR WORLD CONSULTING FRANCE",
       "numeroFacture": "F-2026-399",
-      "description": "Révision constructeur offerte (huile moteur 0W20, filtres BYD, nettoyant frein) - suite achat véhicule facture 128",
+      "description": "Révision constructeur BYD (offerte)",
       "type": "entretien",
-      "montantHT": null,
-      "montantTVA": null,
-      "montantTTC": null,
+      "montantHT": 0.0,
+      "montantTVA": 0.0,
+      "montantTTC": 0.0,
       "km": 16927,
       "fileId": "16vDCp8r6HBji9UO4QF8S_kVsdsITgvjf",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-399.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-399.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0353",
@@ -8368,7 +9206,8 @@ window.FP_DATA = {
       "montantTTC": 288.76,
       "km": null,
       "fileId": "1DmAJ0uXFeWoB2agkQv8By1Wn5-5V1Jk-",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-160.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-160.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0354",
@@ -8378,12 +9217,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-171",
       "description": "Nettoyage intérieur et extérieur 4x4 / SUV 5 portes",
       "type": "entretien",
-      "montantHT": 100,
-      "montantTVA": 20,
-      "montantTTC": 120,
+      "montantHT": 100.0,
+      "montantTVA": 20.0,
+      "montantTTC": 120.0,
       "km": 2046,
       "fileId": "1GDY9X07expSSkClZh8EMmxuPTy0pwMX7",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-171.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-171.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0355",
@@ -8393,12 +9233,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-128",
       "description": "PAYE - Achat véhicule neuf BYD SEAL U DM-I (solde après acompte F-2025-125)",
       "type": "achat",
-      "montantHT": 34490,
+      "montantHT": 34490.0,
       "montantTVA": null,
-      "montantTTC": 34490,
+      "montantTTC": 34490.0,
       "km": null,
       "fileId": "1uhtxWDxDl8Vet4HxEKOJt2AlHeRo-Om4",
-      "fileName": "PAYE-Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-128.pdf"
+      "fileName": "PAYE-Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-128.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0356",
@@ -8408,12 +9249,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-128",
       "description": "Achat véhicule neuf BYD SEAL U DM-I (solde après acompte F-2025-125)",
       "type": "achat",
-      "montantHT": 34490,
+      "montantHT": 34490.0,
       "montantTVA": null,
-      "montantTTC": 34490,
+      "montantTTC": 34490.0,
       "km": null,
       "fileId": "1Qvq_YEwDmA-AOtVu0dNSsEDUuGNEcvJm",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-128.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-128.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0357",
@@ -8428,7 +9270,8 @@ window.FP_DATA = {
       "montantTTC": 33074.76,
       "km": 10,
       "fileId": "15DasoXrSpB3lnt352Kpl7jWE7QwI0e_3",
-      "fileName": "GM-548-QA FACTURE D ACHAT.pdf"
+      "fileName": "GM-548-QA FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0358",
@@ -8443,7 +9286,8 @@ window.FP_DATA = {
       "montantTTC": 1327.16,
       "km": 78613,
       "fileId": "1OTl5MgN0yWSHJtdTSyYVHpLxoGrqcTvw",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-350.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-350.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0359",
@@ -8458,7 +9302,8 @@ window.FP_DATA = {
       "montantTTC": 568.38,
       "km": 78613,
       "fileId": "1CvSQsMCeo4uMu5Te0v1gJ5iCIxKGWQNb",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-353.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-353.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0360",
@@ -8473,7 +9318,8 @@ window.FP_DATA = {
       "montantTTC": 863.28,
       "km": 78613,
       "fileId": "14ixdhiSXjkmm2nsyjyQ_akUoMy-u8ptx",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-351.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-351.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0361",
@@ -8488,7 +9334,8 @@ window.FP_DATA = {
       "montantTTC": 636.79,
       "km": 78613,
       "fileId": "154I6vyTZWkUNFFETe2DWizw7wTpUpCPk",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-349.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-349.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0362",
@@ -8498,12 +9345,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-352",
       "description": "Remplacement et purge liquide de refroidissement",
       "type": "entretien",
-      "montantHT": 79,
+      "montantHT": 79.0,
       "montantTVA": 15.8,
       "montantTTC": 94.8,
       "km": 78613,
       "fileId": "1QCLKNgturfLJC9Ny6M_K0MQXSBxVDrg7",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-352.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-352.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0363",
@@ -8518,7 +9366,8 @@ window.FP_DATA = {
       "montantTTC": 1798.41,
       "km": 54046,
       "fileId": "1nfHbokqPIxPBdzJZeo-fc935N4m6PrLE",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-83.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-83.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0364",
@@ -8529,11 +9378,12 @@ window.FP_DATA = {
       "description": "Achat véhicule neuf DACIA DUSTER TCe 130 FAP 4x2 Prestige, Orange Arizona, VIN VF1HJD20469955083, MEC 01/10/2022, frais de courtage, carte grise",
       "type": "achat",
       "montantHT": 18243.76,
-      "montantTVA": 3522,
+      "montantTVA": 3522.0,
       "montantTTC": 21765.76,
       "km": 1,
       "fileId": "1dfMGzLNnbK0bNr9Y-um9e3YOw_UGOGt6",
-      "fileName": null
+      "fileName": null,
+      "societe": "PXP"
     },
     {
       "id": "FA-0365",
@@ -8548,7 +9398,8 @@ window.FP_DATA = {
       "montantTTC": 1472.4,
       "km": 94137,
       "fileId": "1rU-QggXwADvXoe2BzNpxv8K__RaBMviR",
-      "fileName": "Facture Pneux et freins .pdf"
+      "fileName": "Facture Pneux et freins .pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0366",
@@ -8563,7 +9414,8 @@ window.FP_DATA = {
       "montantTTC": 585.76,
       "km": 61516,
       "fileId": "1U_9_WnhoyDKALgXPbgdsxeQtS7zVP8nj",
-      "fileName": "FACTURE REVISION DUSTER 60000KM.pdf"
+      "fileName": "FACTURE REVISION DUSTER 60000KM.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0367",
@@ -8578,7 +9430,8 @@ window.FP_DATA = {
       "montantTTC": 1672.3,
       "km": 135913,
       "fileId": "1XMK4KA9ya-Cz606PTRO2p4oamastZCcT",
-      "fileName": "TJMAX 1_2604_100188_20260424_152032.pdf"
+      "fileName": "TJMAX 1_2604_100188_20260424_152032.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0368",
@@ -8593,7 +9446,8 @@ window.FP_DATA = {
       "montantTTC": 33839.76,
       "km": 10,
       "fileId": "1jNF1Lj7ioPLP3_i0gZpMV451POOAZfPN",
-      "fileName": "GP-795-YL FACTURE D ACHAT.pdf"
+      "fileName": "GP-795-YL FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0369",
@@ -8608,7 +9462,8 @@ window.FP_DATA = {
       "montantTTC": 1097.04,
       "km": 110827,
       "fileId": "10AKGi8pAcYi5KCVrheBvdtrMc8dBUwyf",
-      "fileName": "FACTURE STE TJMAX_0030.pdf"
+      "fileName": "FACTURE STE TJMAX_0030.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0370",
@@ -8623,7 +9478,8 @@ window.FP_DATA = {
       "montantTTC": 623.8,
       "km": 85389,
       "fileId": "1b5jqadm9Kj6oWTecwPa9fIyZ-VI-hmgk",
-      "fileName": "Facture révision 5008.pdf"
+      "fileName": "Facture révision 5008.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0371",
@@ -8638,7 +9494,8 @@ window.FP_DATA = {
       "montantTTC": 843.13,
       "km": 63201,
       "fileId": "1cTsAvlYzzg76s6LpjJk5nf44CKqY9_xh",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-440.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-440.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0372",
@@ -8653,7 +9510,8 @@ window.FP_DATA = {
       "montantTTC": 268.68,
       "km": 63201,
       "fileId": "1LLLcrYq1ms5ydH-VGZbba4DY-XBgWP7N",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-441.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-441.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0373",
@@ -8668,7 +9526,8 @@ window.FP_DATA = {
       "montantTTC": 640.26,
       "km": 58533,
       "fileId": "1LtHl85kE7JBWDiiDm6AtQOeG7Pgmuf2o",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-377.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-377.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0374",
@@ -8683,7 +9542,8 @@ window.FP_DATA = {
       "montantTTC": 91.91,
       "km": 58533,
       "fileId": "1hhtLXijWes1m5JOZK_8X_v8ZZ95L56m4",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-378.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-378.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0375",
@@ -8698,7 +9558,8 @@ window.FP_DATA = {
       "montantTTC": 674.06,
       "km": 58533,
       "fileId": "1yog1zkS22lzhQSGsBKE-jKYWtpvOkAPM",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-376.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-376.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0376",
@@ -8713,7 +9574,8 @@ window.FP_DATA = {
       "montantTTC": 579.11,
       "km": 56115,
       "fileId": "1doV9X3Frwtyg_iUA49zQ9ut3XgbIykzO",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-324.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-324.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0377",
@@ -8728,7 +9590,8 @@ window.FP_DATA = {
       "montantTTC": 169.56,
       "km": 56115,
       "fileId": "1xaNpuAAxQ0rliYUv00H3KCICsEfrry1H",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-325.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-325.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0378",
@@ -8743,7 +9606,8 @@ window.FP_DATA = {
       "montantTTC": 309.53,
       "km": 56051,
       "fileId": "10mvtH7tl2CvBFWmqCGMXipquMZALfnzE",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-321.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-321.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0379",
@@ -8753,12 +9617,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-270",
       "description": "Bouchon réservoir liquide de frein constructeur",
       "type": "réparation",
-      "montantHT": 49,
+      "montantHT": 49.0,
       "montantTVA": 9.8,
       "montantTTC": 58.8,
       "km": 46553,
       "fileId": "1Z13oVwWTF-5pf3VS8SxD8pm4j0xqm-bP",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-270.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-270.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0380",
@@ -8773,7 +9638,8 @@ window.FP_DATA = {
       "montantTTC": 256.68,
       "km": 46553,
       "fileId": "1nrw_SWbkbNozUo84EbejWbEgMksJP10m",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-256.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-256.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0381",
@@ -8788,7 +9654,8 @@ window.FP_DATA = {
       "montantTTC": 589.08,
       "km": 46995,
       "fileId": "1qPfxQ1GyqYwcpc8ru9KZlF-bXW2Gbucf",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-257.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-257.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0382",
@@ -8798,12 +9665,13 @@ window.FP_DATA = {
       "numeroFacture": "F-2025-191",
       "description": "Système complet ouverture trappe Renault, opération complexe (1h), participation énergie et traitement déchets",
       "type": "réparation",
-      "montantHT": 230,
-      "montantTVA": 46,
-      "montantTTC": 276,
+      "montantHT": 230.0,
+      "montantTVA": 46.0,
+      "montantTTC": 276.0,
       "km": 42503,
       "fileId": "1Dy0ca-BCjofSsNzWUOTuYHpyGLkJLV7R",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-191.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-191.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0383",
@@ -8818,7 +9686,8 @@ window.FP_DATA = {
       "montantTTC": 398.8,
       "km": 34100,
       "fileId": "1AcNcm1cSPP1M5HaEuR4L8V2JnOzyZVzm",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-121.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-121.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0384",
@@ -8829,11 +9698,12 @@ window.FP_DATA = {
       "description": "Achat véhicule neuf DACIA SPRING EXPRESSION ELECTRIC 45, peinture Noir Maga, VIN UU1DBG009NU112685 + forfait sérénité, estimation carte grise, forfait Liberté (acompte 500€, reprise 19338€, bonus écologique 1099,50€)",
       "type": "achat",
       "montantHT": 18638.26,
-      "montantTVA": 3700,
+      "montantTVA": 3700.0,
       "montantTTC": 22351.76,
       "km": 14,
       "fileId": "1q-2I3zN6oSailaobaY4FvK0dcI0nN9Rb",
-      "fileName": "GR-745-LR FACTURE D ACHAT.pdf"
+      "fileName": "GR-745-LR FACTURE D ACHAT.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0385",
@@ -8845,10 +9715,11 @@ window.FP_DATA = {
       "type": "entretien",
       "montantHT": null,
       "montantTVA": null,
-      "montantTTC": 102,
+      "montantTTC": 102.0,
       "km": 77441,
       "fileId": "1stB671orXxRn8CHeU1es2DbQsHZsWcNN",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-469.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-469.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0386",
@@ -8863,7 +9734,8 @@ window.FP_DATA = {
       "montantTTC": 344.82,
       "km": 28043,
       "fileId": "17rgDq3JXIoI72ocbu5QXnl6Awei0hQzH",
-      "fileName": "D2C-O-0150_FR_INV_05_0216583729_1117985_95700_20260531.pdf"
+      "fileName": "D2C-O-0150_FR_INV_05_0216583729_1117985_95700_20260531.pdf",
+      "societe": "PXP"
     },
     {
       "id": "FA-0387",
@@ -8878,11 +9750,760 @@ window.FP_DATA = {
       "montantTTC": 1151.74,
       "km": 108136,
       "fileId": "1lI6ZuUnuK0SxSHC4OTf3HqcR5TIrZzPn",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-470.pdf"
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-470.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0388",
+      "date": "2026-01-28",
+      "vehiculeImmat": "GR-302-HP",
+      "fournisseur": "ELITE AUTO",
+      "numeroFacture": "1FVN000965",
+      "description": "Achat véhicule neuf Dacia Duster",
+      "type": "achat",
+      "montantHT": 18243.76,
+      "montantTVA": 3522.0,
+      "montantTTC": 21765.76,
+      "km": 1,
+      "fileId": "1lEk8U808l615s0vYcNIsQPWPJk--B6tz",
+      "fileName": "Facture d'achat GR-302-HP.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0396",
+      "date": "2026-01-28",
+      "vehiculeImmat": "GR-585-HP",
+      "fournisseur": "ELITE AUTO",
+      "numeroFacture": "1FVN000964",
+      "description": "Achat véhicule neuf Dacia Duster",
+      "type": "achat",
+      "montantHT": 18243.76,
+      "montantTVA": 3522.0,
+      "montantTTC": 21765.76,
+      "km": 1,
+      "fileId": "1yTmZSzk217Jj9Zo1yXkuA1GeEV5tQAr3",
+      "fileName": "Facture d'achat GR-585-HP.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0402",
+      "date": "2025-03-07",
+      "vehiculeImmat": "GY-720-JY",
+      "fournisseur": "Clerici Auto S.p.A.",
+      "numeroFacture": "81919",
+      "description": "Achat véhicule neuf MG ZS Hybrid+ (Italie)",
+      "type": "achat",
+      "montantHT": null,
+      "montantTVA": null,
+      "montantTTC": 27300.0,
+      "km": null,
+      "fileId": "1H2Tvh49_R3-vkT-6UX72TKbA1HFinpgI",
+      "fileName": "GY-720-JY FACTURE D ACHAT.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0403",
+      "date": "2025-03-07",
+      "vehiculeImmat": "GY-719-JY",
+      "fournisseur": "Clerici Auto S.p.A.",
+      "numeroFacture": "81921",
+      "description": "Achat véhicule neuf MG ZS Hybrid+ (Italie)",
+      "type": "achat",
+      "montantHT": null,
+      "montantTVA": null,
+      "montantTTC": 27300.0,
+      "km": null,
+      "fileId": "1QMCp5chb2NBDs3sv_Q3Hz1MmSjSI39Ii",
+      "fileName": "GY-719-JY FACTURE D ACHAT.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0404",
+      "date": "2025-03-14",
+      "vehiculeImmat": "D XP 300",
+      "fournisseur": "Glinicke British Cars Frankfurt",
+      "numeroFacture": null,
+      "description": "Achat véhicule neuf MG ZS Hybrid+ (Allemagne)",
+      "type": "achat",
+      "montantHT": 22226.05,
+      "montantTVA": 4222.95,
+      "montantTTC": 26449.0,
+      "km": 0,
+      "fileId": "1eAkACvM0424LuChJk1ZS4ahnJ2ALVhCk",
+      "fileName": "Scan_0280.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0405",
+      "date": "2024-12-16",
+      "vehiculeImmat": "GH-994-AR",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-68",
+      "description": "Entretien complet + freins",
+      "type": "entretien",
+      "montantHT": 1396.58,
+      "montantTVA": 279.32,
+      "montantTTC": 1675.9,
+      "km": 108340,
+      "fileId": "16WZ5YKR32X5xcDZ2v-JLzyKPDtIaxAtX",
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2024-68.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0406",
+      "date": "2024-12-16",
+      "vehiculeImmat": "GH-994-AR",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-67",
+      "description": "Pneus AR",
+      "type": "réparation",
+      "montantHT": 539.74,
+      "montantTVA": 107.95,
+      "montantTTC": 647.69,
+      "km": 108340,
+      "fileId": "1vJXZT6q7Ty730ddiFeKbHXMmCrfz5sqJ",
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2024-67.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0407",
+      "date": "2024-12-16",
+      "vehiculeImmat": "ET-095-LV",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-66",
+      "description": "Entretien complet camion",
+      "type": "entretien",
+      "montantHT": 1556.13,
+      "montantTVA": 311.24,
+      "montantTTC": 1867.37,
+      "km": 118193,
+      "fileId": "18_4Y53HT3xPnsLPo5US0_Zx2YWChTkfR",
+      "fileName": "Facture-PROJECT X PARIS RETAIL-CAR WORLD CONSULTING FRANCE-F-2024-66.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0408",
+      "date": "2024-12-23",
+      "vehiculeImmat": "GA-313-PK",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-70",
+      "description": "Filtre a particule + capteurs",
+      "type": "entretien",
+      "montantHT": 5320.09,
+      "montantTVA": 1064.02,
+      "montantTTC": 6384.11,
+      "km": 94866,
+      "fileId": "1JwgszX7sssjasDgACKh7ql4d8yIE04DB",
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2024-70.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0409",
+      "date": "2024-12-12",
+      "vehiculeImmat": "GE-948-WY",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-65",
+      "description": "Pneus + plaquettes",
+      "type": "réparation",
+      "montantHT": 660.88,
+      "montantTVA": 132.19,
+      "montantTTC": 793.07,
+      "km": 49334,
+      "fileId": "1v0DU7I36jwXpd_rq3n7JqQDAMtyLmu8-",
+      "fileName": "Facture-PXPR-CAR WORLD CONSULTING FRANCE-F-2024-65.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0410",
+      "date": "2024-11-26",
+      "vehiculeImmat": "GT-818-LC",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-60",
+      "description": "Pneus hiver",
+      "type": "réparation",
+      "montantHT": 950.32,
+      "montantTVA": 190.06,
+      "montantTTC": 1140.38,
+      "km": 21000,
+      "fileId": "1ncdjn4cRu-VvrIy7cfOVLdnMnM2x85-j",
+      "fileName": "Facture-PXPR-CAR WORLD CONSULTING FRANCE-F-2024-60.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0411",
+      "date": "2024-11-26",
+      "vehiculeImmat": "GT-818-LC",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-61",
+      "description": "Gardiennage pneus",
+      "type": "réparation",
+      "montantHT": 142.32,
+      "montantTVA": 28.46,
+      "montantTTC": 170.78,
+      "km": 21000,
+      "fileId": "1hWgKh5lqSETzX7wBVEAUKCIKoZN0KqsA",
+      "fileName": "Facture-PXPR-CAR WORLD CONSULTING FRANCE-F-2024-61.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0412",
+      "date": "2024-12-04",
+      "vehiculeImmat": "GY-860-FG",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-62",
+      "description": "Reparation pneu",
+      "type": "réparation",
+      "montantHT": 65.83,
+      "montantTVA": 13.17,
+      "montantTTC": 79.0,
+      "km": 43313,
+      "fileId": "1uQJ8OBpqBvlLrLd-3vUKXTj7qQmrvCRj",
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2024-62.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0413",
+      "date": "2024-12-08",
+      "vehiculeImmat": "FR-141-MP",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-63",
+      "description": "Reservoir uree",
+      "type": "autre",
+      "montantHT": 1974.14,
+      "montantTVA": 394.82,
+      "montantTTC": 2368.96,
+      "km": 84479,
+      "fileId": "1up3z-rdRvuAGHS3bbBvRUpPXyBbxK6zl",
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2024-63.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0414",
+      "date": "2024-12-10",
+      "vehiculeImmat": "FR-141-MP",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-64",
+      "description": "Entretien complet camion",
+      "type": "entretien",
+      "montantHT": 1332.87,
+      "montantTVA": 266.6,
+      "montantTTC": 1599.47,
+      "km": 84479,
+      "fileId": "1TMcAxlY7S6TwFxW261nr5ym3o-2JpTJG",
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2024-64.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0415",
+      "date": "2024-10-03",
+      "vehiculeImmat": "GA-333-PZ",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-41",
+      "description": "Diagnostic mecanique (offert)",
+      "type": "autre",
+      "montantHT": 0.0,
+      "montantTVA": 0.0,
+      "montantTTC": 0.0,
+      "km": 47504,
+      "fileId": "1FRbh3Rr9cQbUU4Zm6YXDHDKPY4KLHFdR",
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2024-41.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0416",
+      "date": "2024-10-01",
+      "vehiculeImmat": "GA-333-PZ",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2024-40",
+      "description": "Diagnostic mecanique (offert)",
+      "type": "autre",
+      "montantHT": 0.0,
+      "montantTVA": 0.0,
+      "montantTTC": 0.0,
+      "km": 47504,
+      "fileId": "17l4YNr8pZWl1oFvG7lrzprCIWfTmRV5O",
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2024-40.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0417",
+      "date": "2026-06-08",
+      "vehiculeImmat": "HH-613-KE",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2026-475",
+      "description": "Prise en charge vehicule",
+      "type": "autre",
+      "montantHT": 125.0,
+      "montantTVA": 25.0,
+      "montantTTC": 150.0,
+      "km": 18535,
+      "fileId": "1N8-0-ZU2ZAtf8AsqztdwRIfK4FEuf551",
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-475.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0418",
+      "date": "2026-06-05",
+      "vehiculeImmat": "GR-467-HP",
+      "fournisseur": "CAR WORLD CONSULTING FRANCE",
+      "numeroFacture": "F-2026-473",
+      "description": "Pneus + freins + clim",
+      "type": "réparation",
+      "montantHT": 1074.98,
+      "montantTVA": 214.99,
+      "montantTTC": 1289.97,
+      "km": 112157,
+      "fileId": "1bTf7HV5r1NEFR89oQRFEqjOCISeqZSBE",
+      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2026-473.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0419",
+      "date": "2024-11-25",
+      "vehiculeImmat": "GW-087-EZ",
+      "fournisseur": "AUTOMOBILES LECOMTE (Peugeot)",
+      "numeroFacture": "2024006756",
+      "description": "Entretien periodique Peugeot 5008",
+      "type": "entretien",
+      "montantHT": 189.34,
+      "montantTVA": 37.87,
+      "montantTTC": 227.21,
+      "km": 21599,
+      "fileId": "117fq6mTlz0EKvVh1UPDVVQ0SOhBxbP0L",
+      "fileName": "FA2024006756 (1).PDF",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0420",
+      "date": "2023-07-25",
+      "vehiculeImmat": "FT-338-AJ",
+      "fournisseur": "Auto-ICI",
+      "numeroFacture": "PF-2023-07-002",
+      "description": "Achat vehicule Peugeot 3008",
+      "type": "achat",
+      "montantHT": 23870.84,
+      "montantTVA": 4774.16,
+      "montantTTC": 28981.76,
+      "km": 16455,
+      "fileId": "1TmWVKTY6H6JDyCtmKjj1ChVyS-BvxWX_",
+      "fileName": "Facture d'achat.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0421",
+      "date": "2026-06-08",
+      "vehiculeImmat": "GW-075-EZ",
+      "fournisseur": "EUROMASTER",
+      "numeroFacture": "0216611802",
+      "description": "Revision constructeur + pneus",
+      "type": "entretien",
+      "montantHT": 558.74,
+      "montantTVA": 111.75,
+      "montantTTC": 670.49,
+      "km": 107434,
+      "fileId": "1HSmaZx-9wfU7dA61J_PKiv2E-b-zH4F6",
+      "fileName": "D2C-O-0150_FR_INV_05_0216611802_1117985_95700_20260608.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0422",
+      "date": "2025-07-11",
+      "vehiculeImmat": "D XP 300",
+      "fournisseur": "Glinicke British Cars (PXPR GE)",
+      "numeroFacture": "123418-7750481",
+      "description": "Frais de livraison vehicule",
+      "type": "autre",
+      "montantHT": 839.5,
+      "montantTVA": 159.51,
+      "montantTTC": 999.01,
+      "km": 13,
+      "fileId": "1iD62UJNvU7h2GYKQ1KnjXjvtjpgDPdlr",
+      "fileName": "7750481_PXPR GE GmbH D-XP 300.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0423",
+      "date": "2026-01-21",
+      "vehiculeImmat": "JPV-51-S",
+      "fournisseur": "Meijers Assurantien (PXPR NL)",
+      "numeroFacture": "4761068",
+      "description": "Assurance auto MG ZS (prime)",
+      "type": "autre",
+      "montantHT": null,
+      "montantTVA": null,
+      "montantTTC": 1747.63,
+      "km": null,
+      "fileId": "1hWq_amWZRncQ2jEBA80qYsb8KEuvtK9S",
+      "fileName": "Nota relatie 141526 Factuurnummer 4761068.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0424",
+      "date": "2026-01-23",
+      "vehiculeImmat": "GR-302-HP",
+      "fournisseur": "KEOS ENGLOS by Autosphere (Dacia)",
+      "numeroFacture": "676996",
+      "description": "Entretien Dacia Duster",
+      "type": "entretien",
+      "montantHT": 550.45,
+      "montantTVA": 110.09,
+      "montantTTC": 660.54,
+      "km": null,
+      "fileId": "1m1Dt9tDLQ3DoBKKfLIiflXfKxPlHjOzM",
+      "fileName": "02six9o5e923_e_4722554 (1).pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0425",
+      "date": "2025-03-21",
+      "vehiculeImmat": "FJ-607-QH",
+      "fournisseur": "STELLANTIS & YOU ESPANA (Peugeot)",
+      "numeroFacture": null,
+      "description": "Entretien/reparation Peugeot",
+      "type": "entretien",
+      "montantHT": 739.97,
+      "montantTVA": 155.39,
+      "montantTTC": 895.36,
+      "km": null,
+      "fileId": "13-SZzJsxCn1Ep4hJ8g9YBbIsNGLYbdzF",
+      "fileName": "Facture PEUGEOT.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0426",
+      "date": "2025-02-12",
+      "vehiculeImmat": "GP-795-YL",
+      "fournisseur": "POINT S (Usinetech Point)",
+      "numeroFacture": null,
+      "description": "Entretien / pneus",
+      "type": "entretien",
+      "montantHT": 1026.72,
+      "montantTVA": 205.34,
+      "montantTTC": 1232.06,
+      "km": null,
+      "fileId": "1oVbtDo3rj1UGzaNoGKqukoCwugTAs7ow",
+      "fileName": "POINT S.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0427",
+      "date": "2026-05-05",
+      "vehiculeImmat": "D XP 300",
+      "fournisseur": "Reifen Weigand (point S)",
+      "numeroFacture": "121847",
+      "description": "Stockage / montage pneus",
+      "type": "réparation",
+      "montantHT": 81.48,
+      "montantTVA": 15.48,
+      "montantTTC": 96.96,
+      "km": 26577,
+      "fileId": "1ZWDrf6RiODrwKUpGntczB_z4A9O60lBv",
+      "fileName": "PNEUS.jpeg",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0428",
+      "date": "2026-04-20",
+      "vehiculeImmat": "GY-719-JY",
+      "fournisseur": "Colnaghi Gomme",
+      "numeroFacture": "184/2026",
+      "description": "Pneus / equilibrage",
+      "type": "réparation",
+      "montantHT": 68.0,
+      "montantTVA": 14.96,
+      "montantTTC": 82.96,
+      "km": null,
+      "fileId": "1HElo_x3ZJemTXBfITkHX5LgqOU5GBpfo",
+      "fileName": "PNEUS GY-719-JY.jpg",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0429",
+      "date": "2024-12-16",
+      "vehiculeImmat": "GR-019-ZG",
+      "fournisseur": "SARL Garage Ferreira (Renault)",
+      "numeroFacture": "154619",
+      "description": "Revision Dacia Duster",
+      "type": "entretien",
+      "montantHT": 167.59,
+      "montantTVA": 33.52,
+      "montantTTC": 201.11,
+      "km": 30145,
+      "fileId": "1oIxhac51zEPV2IMoCINZ5Zqtla7-UCkh",
+      "fileName": "IMG_8495.jpeg",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0430",
+      "date": "2025-07-31",
+      "vehiculeImmat": "FF-777-XK",
+      "fournisseur": "CAVALLARI Automobiles (Volvo)",
+      "numeroFacture": "004441737",
+      "description": "Revision Volvo XC60",
+      "type": "entretien",
+      "montantHT": 564.03,
+      "montantTVA": 112.81,
+      "montantTTC": 676.84,
+      "km": 90129,
+      "fileId": "1KL1202PSL4-oAls8kRjqKAJ0ftH6HgSh",
+      "fileName": "2025_07_31-676.84-ndf_vehicule_de_fonction.jpg",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0431",
+      "date": "2026-06-01",
+      "vehiculeImmat": "JPV-51-S",
+      "fournisseur": "Van Mossel (Fiat/Jeep)",
+      "numeroFacture": "510310024414",
+      "description": "Entretien 24000km MG ZS",
+      "type": "entretien",
+      "montantHT": 374.61,
+      "montantTVA": 78.67,
+      "montantTTC": 453.28,
+      "km": 43323,
+      "fileId": "10kov9f21YYMQnFPy9IEt7-lkZap5ohlS",
+      "fileName": "IMG_2646.jpeg",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0432",
+      "date": "2024-06-25",
+      "vehiculeImmat": "GP-333-QJ",
+      "fournisseur": "Le Relais de la Forge (Peugeot)",
+      "numeroFacture": "338822",
+      "description": "Remplacement deshuileur",
+      "type": "entretien",
+      "montantHT": 314.5,
+      "montantTVA": 62.9,
+      "montantTTC": 377.4,
+      "km": 56400,
+      "fileId": "1UcuSvyd-Vo_yx2KrOPNtJAfE0to_fuPe",
+      "fileName": "7jsxbjNZW_7620425.jpeg",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0433",
+      "date": "2025-11-04",
+      "vehiculeImmat": "D XP 300",
+      "fournisseur": "Reifen Weigand (point S)",
+      "numeroFacture": "116019",
+      "description": "Jantes + pneus hiver",
+      "type": "réparation",
+      "montantHT": 1174.36,
+      "montantTVA": 223.13,
+      "montantTTC": 1397.49,
+      "km": 9353,
+      "fileId": "1zfW0J9FE69urAkkSvNq_k1If_ZiCshNf",
+      "fileName": "IMG_0505.jpg",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0434",
+      "date": "2026-02-06",
+      "vehiculeImmat": "GY-720-JY",
+      "fournisseur": "Carglass Italia",
+      "numeroFacture": "12548157",
+      "description": "Remplacement pare-brise",
+      "type": "autre",
+      "montantHT": 587.91,
+      "montantTVA": 129.34,
+      "montantTTC": 717.25,
+      "km": null,
+      "fileId": "1abBbNHudfHH-ehI4stErPinSzvU4gCjd",
+      "fileName": "Bris de glace.jpg",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0435",
+      "date": "2026-04-23",
+      "vehiculeImmat": "D XP 300",
+      "fournisseur": "aurego GmbH",
+      "numeroFacture": "7456163",
+      "description": "1ere revision MG ZS",
+      "type": "entretien",
+      "montantHT": 247.49,
+      "montantTVA": 47.02,
+      "montantTTC": 294.51,
+      "km": 24882,
+      "fileId": "1OrFRq1WGA9GeVOYTNjNX0vp5eXy-Ulqk",
+      "fileName": "Facture révision.jpeg",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0436",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HJ-804-VM",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 421.48,
+      "montantTVA": 84.3,
+      "montantTTC": 505.78,
+      "km": null,
+      "fileId": "1ih3dcyU6ckCBOwpsK2goQGhkotx2rEgE",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0437",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HJ-181-RN",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 408.4,
+      "montantTVA": 81.68,
+      "montantTTC": 490.08,
+      "km": null,
+      "fileId": "1kvq-C4KQFzzTEFOVprG77VX-AmaiaxrW",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0438",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HH-613-KE",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 471.02,
+      "montantTVA": 94.21,
+      "montantTTC": 565.23,
+      "km": null,
+      "fileId": "1p28T4fBDVLRQ4QxP6j1JuRFvb_IN-HnY",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0439",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HH-464-LQ",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 471.02,
+      "montantTVA": 94.21,
+      "montantTTC": 565.23,
+      "km": null,
+      "fileId": "1fj-eBe1hTUyibgV8w2Cbl8VzNjLoe8Rt",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0440",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HJ-285-FL",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 649.13,
+      "montantTVA": 129.83,
+      "montantTTC": 778.96,
+      "km": null,
+      "fileId": "1piQvJxJkVxEcP0D_q_9Tk9e2uoxUtkft",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0441",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HF-477-XW",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 751.67,
+      "montantTVA": 150.33,
+      "montantTTC": 902.0,
+      "km": null,
+      "fileId": "1SBVtbbetcWJvNXbe9_A3tjh72LTWKtMS",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0442",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HF-749-VD",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 369.43,
+      "montantTVA": 73.89,
+      "montantTTC": 443.32,
+      "km": null,
+      "fileId": "1fHRGz3pc2Hcs_BNrVfmbaOPk3xqfqhDj",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0443",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HG-709-CH",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 506.78,
+      "montantTVA": 101.36,
+      "montantTTC": 608.14,
+      "km": null,
+      "fileId": "1HQpFCvbmcJnkCbsI3TtAk55dLTXbC50s",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0444",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HE-739-WP",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 586.82,
+      "montantTVA": 117.36,
+      "montantTTC": 704.18,
+      "km": null,
+      "fileId": "1MxF7T-zHNB0UOGWp3Xf7r-2ZMrnC0SHQ",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0445",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HG-763-VP",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 449.1,
+      "montantTVA": 89.82,
+      "montantTTC": 538.92,
+      "km": null,
+      "fileId": "162bNskq6BXmM4l4bQQwWqihTOZN5SSGo",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
+    },
+    {
+      "id": "FA-0446",
+      "date": "2026-06-01",
+      "vehiculeImmat": "HH-458-LQ",
+      "fournisseur": "BPCE CAR LEASE",
+      "numeroFacture": "202606-18552",
+      "description": "Loyer + services leasing 06/2026",
+      "type": "leasing",
+      "montantHT": 603.34,
+      "montantTVA": 120.67,
+      "montantTTC": 724.01,
+      "km": null,
+      "fileId": "1rQlcVxJ4PZOg8u03vYr4OUx8mpIdR91I",
+      "fileName": "20260601-202606-18552.pdf",
+      "societe": "PXP"
     }
-  ],
-  "entretiens": [],
-  "carburant": [],
-  "contrats": [],
-  "alertes": []
+  ]
 };
