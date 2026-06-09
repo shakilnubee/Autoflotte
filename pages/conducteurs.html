@@ -299,8 +299,11 @@
   // Chaque ligne : { key, name, tel, email, note, permisUrl, permisFileId, masque, manuel }
   const COND_KEY = 'fp_conducteurs';   // fallback local
   const PERMIS_KEY = 'fp_permis';      // fallback local
-  let condCache = [];
+  const COND_CACHE_KEY = 'fp_cond_cache'; // dernier état serveur (évite le "flash" du nombre au chargement)
+  // Pré-remplit le cache mémoire avec le dernier état serveur connu → le 1er affichage montre déjà le bon nombre
+  let condCache = (() => { try { return JSON.parse(localStorage.getItem(COND_CACHE_KEY)) || []; } catch { return []; } })();
 
+  function cacheCond() { try { localStorage.setItem(COND_CACHE_KEY, JSON.stringify(condCache)); } catch {} }
   function condRow(key) { return condCache.find(r => r.key === key) || null; }
   function toCondDb(r) {
     return { key: r.key, name: r.name || null, nom: r.nom || null, prenom: r.prenom || null,
@@ -319,11 +322,13 @@
     let row = condRow(key);
     if (!row) { row = { key }; condCache.push(row); }
     Object.assign(row, changes);
+    cacheCond();
     if (FP.persist.available()) FP.persist.upsert('conducteurs', toCondDb(row));
     else persistCondToLS();
   }
   function deleteCondRow(key) {
     condCache = condCache.filter(r => r.key !== key);
+    cacheCond();
     if (FP.persist.available()) FP.persist.delete('conducteurs', key);
     else persistCondToLS();
   }
@@ -367,6 +372,7 @@
         condCache.forEach(row => FP.persist.upsert('conducteurs', toCondDb(row))); // migration unique
       } else {
         condCache = r.data;
+        cacheCond();
         // Fusionne les fiches saisies localement (hors-ligne) SANS écraser les valeurs du serveur,
         // puis renvoie au serveur ce qui manquait → reprise automatique entre postes.
         try {
@@ -524,7 +530,8 @@
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  seedCondCacheFromLS(); // affichage immédiat depuis le cache local (remplacé par Supabase au chargement)
+  // Si on n'a pas déjà le dernier état serveur en cache, on retombe sur l'ancien store local.
+  if (!condCache.length) seedCondCacheFromLS();
   let drivers = buildDrivers();
 
   function initials(name) {

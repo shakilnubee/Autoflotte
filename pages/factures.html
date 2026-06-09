@@ -151,6 +151,11 @@
           <option value="2025">2025</option>
         </select>
 
+        <div class="flex items-center gap-1">
+          <input id="filter-mois" type="month" class="text-sm border border-slate-200 rounded-lg px-3 py-2" title="Filtrer sur un mois précis" />
+          <button id="filter-mois-clear" type="button" class="text-xs text-slate-400 hover:text-slate-700 px-1 hidden" title="Effacer le mois">✕</button>
+        </div>
+
         <select id="filter-vehicule" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
           <option value="all">Tous véhicules</option>
         </select>
@@ -270,7 +275,7 @@
   // Les factures de leasing sont gérées sur la page Contrats (section Leasing BPCE),
   // pas dans cette vue qui se concentre sur les vraies factures (entretien, réparation, achat, sinistre, etc.)
   const factures = (data.factures || []).filter(f => f.type !== 'leasing');
-  const state = { search: '', type: 'all', annee: 'all', vehicule: 'all', fournisseur: 'all', currentId: null };
+  const state = { search: '', type: 'all', annee: 'all', mois: 'all', vehicule: 'all', fournisseur: 'all', currentId: null };
   const $ = (id) => document.getElementById(id);
 
   function typePill(t) {
@@ -301,6 +306,7 @@
     return factures.filter(f => {
       if (state.type !== 'all' && (f.type || 'autre') !== state.type) return false;
       if (state.annee !== 'all' && getYear(f.date) !== state.annee) return false;
+      if (state.mois !== 'all' && (f.date || '').slice(0,7) !== state.mois) return false;
       if (state.vehicule !== 'all' && f.vehiculeImmat !== state.vehicule) return false;
       if (state.fournisseur !== 'all' && f.fournisseur !== state.fournisseur) return false;
       if (q && !(`${f.fournisseur} ${f.description} ${f.numeroFacture} ${f.vehiculeImmat}`.toLowerCase().includes(q))) return false;
@@ -703,6 +709,24 @@
       faExpanded = false; renderKPIs(); renderTable(); renderCharts();
     });
   });
+
+  // Filtre par mois (sélecteur YYYY-MM) + bouton effacer
+  function applyMois(val) {
+    state.mois = val || 'all';
+    $('filter-mois').value = val || '';
+    $('filter-mois-clear').classList.toggle('hidden', !val);
+    if (val) { state.annee = 'all'; $('filter-annee').value = 'all'; } // mois prime sur année
+    renderKPIs(); renderTable(); renderCharts();
+  }
+  $('filter-mois').addEventListener('change', e => applyMois(e.target.value));
+  $('filter-mois-clear').addEventListener('click', () => applyMois(''));
+
+  // Lien « Coûts du mois » du tableau de bord : ?periode=mois → mois courant ; ?mois=YYYY-MM → ce mois
+  (function initPeriode(){
+    const p = new URLSearchParams(location.search);
+    if (p.get('mois')) applyMois(p.get('mois'));
+    else if (p.get('periode') === 'mois') applyMois(new Date().toISOString().slice(0,7));
+  })();
 
   // Édition par double-clic des cellules
   const FA_EDITABLE = { date: 'date', vehiculeImmat: 'text', fournisseur: 'text', description: 'text', type: 'select', montantHT: 'number', montantTVA: 'number', montantTTC: 'number', numeroFacture: 'text', km: 'number' };
