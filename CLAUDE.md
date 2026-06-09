@@ -28,6 +28,7 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
   organisé par pays → sous-dossier par véhicule (plaque) → PDF. Prendre **FRANCE, ITALIE,
   ALLEMAGNE, Pays-Bas** uniquement. **EXCLURE** les sous-dossiers `01. Autres` et `OUT`.
   Lier chaque PDF à la table `factures` par `file_id` ; « nouvelles » = `file_id` absent de la base.
+  ⚠️ N'ajouter QUE les **vraies factures** (« Facture d'achat / FACTURE … »). **EXCLURE** les « Code de cession », « Scan… », « Certificat de conformité » et autres documents qui ne sont pas des factures.
 - ⚠️ **Stockage autonomie/version** : côté DB, l'autonomie est dans la colonne `note_pneus`
   (mapping `note_pneus`↔`autonomie`) et la version dans `type_pneus` (↔`version`). Écrire
   l'autonomie dans `note_pneus`, PAS dans la colonne `autonomie` (ignorée par l'app).
