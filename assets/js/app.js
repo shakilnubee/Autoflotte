@@ -197,6 +197,31 @@ FP.addSociete = (name) => {
 // plus besoin de masquer la page : on l'affiche IMMÉDIATEMENT (zéro latence à chaque onglet).
 // La mise à jour live (fp:data-ready) se fait ensuite en place, sans masquage.)
 
+// === Navigation quasi-instantanée : préchargement des onglets (Speculation Rules) ===
+// Au survol d'un lien de la barre latérale, le navigateur précharge la page cible → le clic
+// affiche la page quasi instantanément. Combiné aux View Transitions (CSS), on obtient la
+// fluidité d'une "application" sans réécrire le site. Feature-detecté → aucun effet si non supporté.
+(function navSpeculation() {
+  try {
+    if (!HTMLScriptElement.supports || !HTMLScriptElement.supports('speculationrules')) return;
+    const add = () => {
+      try {
+        const urls = [...new Set(
+          [...document.querySelectorAll('.fp-sidebar a[href]')]
+            .map(a => a.href)
+            .filter(h => h && h.indexOf(location.origin) === 0 && h.indexOf('#') === -1)
+        )];
+        if (!urls.length) return;
+        const s = document.createElement('script');
+        s.type = 'speculationrules';
+        s.textContent = JSON.stringify({ prefetch: [{ source: 'list', urls: urls, eagerness: 'moderate' }] });
+        document.body.appendChild(s);
+      } catch (e) {}
+    };
+    if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
+  } catch (e) {}
+})();
+
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
   STORAGE_KEY: 'auto_flotte_settings',
