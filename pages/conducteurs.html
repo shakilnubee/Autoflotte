@@ -1211,11 +1211,14 @@
   $('modal-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
   $('driver-form').addEventListener('submit', addDriver);
 
-  // Anti-flash : si on a déjà un cache serveur fiable, on affiche TOUT DE SUITE le bon nombre
-  // (visites suivantes = 0 clignotement). Sinon on attend que véhicules/amendes ET conducteurs
-  // soient chargés pour faire UN SEUL rendu définitif (jamais de "43 → 46").
+  // Anti-flash : le nombre de conducteurs dépend des VÉHICULES + AMENDES (pas de la table
+  // conducteurs). app.js a déjà réinjecté ces données depuis le cache `fp_data_cache` AVANT ce
+  // script. Donc si ce cache existe, on affiche TOUT DE SUITE le bon nombre (visites suivantes =
+  // 0 clignotement). Sinon on attend les vraies données pour faire UN SEUL rendu (jamais "43 → 46").
   function firstRender() { drivers = buildDrivers(); renderKPIs(); renderGrid(); openCondFromUrl(); }
-  if (condCache.length) { suppressRender = false; firstRender(); suppressRender = true; }
+  let haveDataCache = false;
+  try { const _c = JSON.parse(localStorage.getItem('fp_data_cache') || 'null'); haveDataCache = !!(_c && Array.isArray(_c.amendes) && Array.isArray(_c.vehicules)); } catch {}
+  if (haveDataCache) { suppressRender = false; firstRender(); suppressRender = true; }
   lucide.createIcons();
   const dbReady = (window.FP && FP.dbReady && typeof FP.dbReady.then === 'function') ? FP.dbReady : Promise.resolve();
   // charge conducteurs + permis depuis Supabase (et migre le local si besoin)
