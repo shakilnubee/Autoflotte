@@ -226,17 +226,18 @@
       const dataChanged = (sigBefore !== sigAfter);
       // Cache local des dernières données live → sert d'affichage initial à la prochaine
       // ouverture (évite le "flash" data.js figé → vraies données). On garde le cache
-      // LÉGER (véhicules + amendes, ce qui couvre les compteurs Conducteurs/Tableau de
-      // bord) ; les factures (volumineuses) sont exclues pour ne pas dépasser le quota.
+      // ⚠️ On cache TOUT (véhicules + amendes + factures) — et à jour à chaque chargement — pour
+      // que le 1er affichage de chaque page corresponde EXACTEMENT au live → zéro "flash" de
+      // chiffres. (data.js, lui, est un instantané figé qui devient périmé dès qu'on ajoute des
+      // données ; le cache, lui, est rafraîchi à chaque visite.) Lecture ~10 ms : négligeable.
       const CK = window.FP_CACHE_KEY || 'fp_data_cache_v3';
       try { localStorage.removeItem('fp_data_cache'); } catch (e0) {} // ancienne clé périmée
-      // Cache LÉGER (véhicules + amendes seulement) : ces deux tables alimentent les compteurs
-      // (Conducteurs / Tableau de bord) sans alourdir chaque chargement de page. Les factures,
-      // volumineuses, ne sont PAS mises en cache (elles viennent de data.js, déjà à jour).
       try {
-        localStorage.setItem(CK, JSON.stringify({ vehicules: data.vehicules, amendes: data.amendes }));
+        localStorage.setItem(CK, JSON.stringify({ vehicules: data.vehicules, amendes: data.amendes, factures: data.factures }));
       } catch (e) {
-        try { localStorage.setItem(CK, JSON.stringify({ amendes: data.amendes })); } catch (e2) { /* tant pis */ }
+        // Quota dépassé : on retombe sur véhicules + amendes (au moins les compteurs restent justes)
+        try { localStorage.setItem(CK, JSON.stringify({ vehicules: data.vehicules, amendes: data.amendes })); }
+        catch (e2) { try { localStorage.setItem(CK, JSON.stringify({ amendes: data.amendes })); } catch (e3) { /* tant pis */ } }
       }
       console.log(`[FP.db] Chargé depuis Supabase : ${data.vehicules.length} véhicules, ${data.amendes.length} amendes, ${data.factures.length} factures`);
       // Re-appliquer les overrides locaux (cases cochées par l'utilisateur, etc.)
