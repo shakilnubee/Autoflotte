@@ -295,6 +295,10 @@
         <div><div class="field-label">Montant (€) *</div><input class="field-input" type="number" id="am-montant" min="0" step="0.01" placeholder="0" required /></div>
         <div><div class="field-label">Points retirés *</div><input class="field-input" type="number" id="am-points" min="0" step="1" placeholder="0" required /><div class="text-xs text-slate-400 mt-0.5">Calculés selon l'infraction — modifiable</div></div>
       </div>
+      <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+        <input type="checkbox" id="am-etrangere" class="w-4 h-4 accent-amber-600" />
+        Amende étrangère (pas de retrait de points en France)
+      </label>
       <div class="grid grid-cols-2 gap-4">
         <div><div class="field-label">Date *</div><input class="field-input" type="date" id="am-date" required /></div>
         <div><div class="field-label">Statut *</div>
@@ -886,11 +890,10 @@
         <div>${a.annee}</div>
       </div>
 
-      ${a.commentaire ? `
-        <div>
-          <div class="field-label">Commentaire</div>
-          <div class="text-sm bg-slate-50 p-3 rounded-lg">${a.commentaire}</div>
-        </div>` : ''}
+      <div>
+        <div class="field-label">Commentaire</div>
+        <div id="am-comment-val" class="text-sm bg-slate-50 p-3 rounded-lg cursor-pointer hover:bg-slate-100" style="white-space:pre-line" title="Cliquer pour modifier">${a.commentaire ? escAmende(a.commentaire) : '<span class="text-slate-400">— cliquer pour ajouter un commentaire</span>'}</div>
+      </div>
     `;
 
     $('drawer').classList.add('open');
@@ -916,6 +919,7 @@
     const cv = $('am-cle-val'); if (cv) cv.onclick = () => editAmField('cle', 'Clé');
     const tc = $('am-tel-copy'); if (tc) tc.onclick = () => copierTexte(a.numeroTelepaiement, tc);
     const cc = $('am-cle-copy'); if (cc) cc.onclick = () => copierTexte(a.cle, cc);
+    const cmv = $('am-comment-val'); if (cmv) cmv.onclick = () => editAmField('commentaire', 'Commentaire');
     lucide.createIcons();
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
@@ -931,11 +935,11 @@
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a) return;
     FP.history.commit();
-    a.statut = 'payée';
+    a.statut = 'payée'; a.archived = true; // payée = archivée (sort de la liste active)
     const id = a.id;
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
-    FP.persist.update('amendes', id, { statut: 'payée' });
+    FP.persist.update('amendes', id, { statut: 'payée', archived: true });
   }
   // Revenir en arrière : repasse une amende payée en "à payer" (et la sort des archives)
   function markUnpaid() {
@@ -958,12 +962,46 @@
     try { url = await FP.uploadScan(file, 'justificatifs') || ''; }
     catch (e) { console.error(e); alert("Le justificatif n'a pas pu être envoyé. Réessaie."); return; }
     if (!url) { alert("Le justificatif n'a pas pu être envoyé. Réessaie."); return; }
+    // Cherche la date de paiement dans le justificatif (OCR), sinon date du jour
+    let dpaie = null;
+    try { dpaie = await extractDatePaiement(file); } catch (e) { console.warn('[justif] date non lue', e); }
+    const mention = `Payée le ${FP.date(dpaie || new Date().toISOString().slice(0, 10))}`;
+    // Préserve un éventuel commentaire existant, sans dupliquer la mention "Payée le …"
+    const prev = (a.commentaire || '').replace(/^Payée le [^\n]*\n?/i, '').trim();
+    const newComment = prev ? `${mention}\n${prev}` : mention;
     FP.history.commit();
-    a.justifUrl = url; a.statut = 'payée'; a.archived = true;
+    a.justifUrl = url; a.statut = 'payée'; a.archived = true; a.commentaire = newComment;
     const id = a.id;
     renderKPIs(); renderTable(); renderCharts();
-    FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', archived: true });
-    openDrawer(id); // rouvre la fiche à jour (montre le lien + état archivé)
+    FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', archived: true, commentaire: newComment });
+    openDrawer(id); // rouvre la fiche à jour (montre le lien + état archivé + commentaire)
+  }
+  // Lit le justificatif (PDF/image) et tente d'en extraire la date de paiement
+  async function extractDatePaiement(file) {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    let text = '';
+    if (isPdf) {
+      const pdf = await loadPdf(file);
+      text = await pdfText(pdf);
+      if ((text || '').replace(/\s/g, '').length < 30) {
+        await loadScript(TESSERACT_CDN);
+        const canvas = await pdfPageToCanvas(pdf);
+        const worker = await Tesseract.createWorker('fra');
+        const { data } = await worker.recognize(canvas); await worker.terminate();
+        text = data.text;
+      }
+    } else {
+      await loadScript(TESSERACT_CDN);
+      const worker = await Tesseract.createWorker('fra');
+      const { data } = await worker.recognize(file); await worker.terminate();
+      text = data.text;
+    }
+    const t = (text || '').replace(/\s+/g, ' ');
+    let m = t.match(/(?:pai?ement|pay[ée]e?|r[ée]gl[ée]e?|effectu[ée])[^0-9]{0,25}(\d{1,2})[\/.\- ](\d{1,2})[\/.\- ](\d{2,4})/i)
+         || t.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+    if (!m) return null;
+    let y = m[3]; if (y.length === 2) y = '20' + y;
+    return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   }
   // Copie un texte dans le presse-papier + petit retour visuel sur le bouton
   function copierTexte(txt, btn) {
@@ -1140,6 +1178,7 @@
   // Calcule les points retirés à partir du motif choisi (sauf si l'utilisateur les a saisis lui-même)
   function autoPointsFromMotif() {
     if (_pointsTouched) return;
+    if ($('am-etrangere') && $('am-etrangere').checked) return; // amende étrangère : 0 point
     const pts = pointsRetrait($('am-motif').value.trim(), '');
     if (pts != null) $('am-points').value = pts;
   }
@@ -1158,6 +1197,7 @@
     $('am-telepaiement').value = ''; $('am-cle').value = '';
     _avisFile = null;
     _pointsTouched = false;
+    $('am-etrangere').checked = false; $('am-points').removeAttribute('disabled');
     // Réinitialise le bloc majoration
     populateMajorationParents();
     $('am-is-majoration').checked = false;
@@ -1194,7 +1234,8 @@
     const prenom = $('am-prenom').value.trim();
     if (!prenom) { $('am-prenom').focus(); return; }
     const date = $('am-date').value || new Date().toISOString().slice(0, 10);
-    const points = parseInt($('am-points').value, 10) || 0;
+    const etrangere = $('am-etrangere').checked; // amende étrangère = pas de retrait de points
+    const points = etrangere ? 0 : (parseInt($('am-points').value, 10) || 0);
     const montant = parseFloat($('am-montant').value) || 0;
     const numAvis = fmtNumeroAvis($('am-avis').value);
     const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
@@ -1251,13 +1292,13 @@
       prenom, numeroAvis: numAvis, motif: $('am-motif').value.trim(),
       montant, points, retraitPoints: points > 0,
       numeroTelepaiement: $('am-telepaiement').value.trim(), cle: $('am-cle').value.trim(),
-      statut: $('am-statut').value || 'à payer', commentaire: '', avisUrl
+      statut: $('am-statut').value || 'à payer', commentaire: etrangere ? 'Amende étrangère' : '', avisUrl
     };
     data.amendes.push(newA);
     _avisFile = null;
     renderKPIs(); renderTable(); renderCharts();
     const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
-    FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: newA.numeroAvis || null, commentaire: null, avisUrl: avisUrl || null });
+    FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: newA.numeroAvis || null, commentaire: newA.commentaire || null, avisUrl: avisUrl || null });
     showPostSaveMail(newA); // propose d'envoyer l'email au conducteur (sans avoir à rouvrir la fiche)
   }
   // Affiche le panneau d'envoi de mail juste après l'enregistrement d'une amende
@@ -1480,7 +1521,7 @@
         if (veh && veh.chauffeur && !$('am-prenom').value) { $('am-prenom').value = veh.chauffeur; filled.push('conducteur (via la plaque)'); }
       }
       if (parsed.motif      && !$('am-motif').value)   { $('am-motif').value   = parsed.motif;      filled.push('motif'); }
-      if (parsed.points != null && !_pointsTouched)    { $('am-points').value  = parsed.points;     filled.push('points retirés'); }
+      if (parsed.points != null && !_pointsTouched && !$('am-etrangere').checked) { $('am-points').value = parsed.points; filled.push('points retirés'); }
       if (parsed.montant    && !$('am-montant').value) { $('am-montant').value = parsed.montant;    filled.push('montant'); }
       if (parsed.date       && !$('am-date').value)    { $('am-date').value    = parsed.date;       filled.push('date'); }
       if (parsed.numeroAvis && !$('am-avis').value)    { $('am-avis').value    = parsed.numeroAvis; filled.push('n° d\'avis'); }
@@ -1537,6 +1578,11 @@
   $('am-points').addEventListener('input', () => { _pointsTouched = true; });
   $('am-motif').addEventListener('change', autoPointsFromMotif);
   $('am-motif').addEventListener('input', autoPointsFromMotif);
+  // Amende étrangère : 0 point, champ points désactivé
+  $('am-etrangere').addEventListener('change', (e) => {
+    if (e.target.checked) { $('am-points').value = '0'; $('am-points').setAttribute('disabled', 'disabled'); }
+    else { $('am-points').removeAttribute('disabled'); }
+  });
   // Panneau d'envoi de mail proposé juste après l'enregistrement
   $('ps-paiement').addEventListener('click', () => { mailPaiement(); closeAmendeModal(); });
   $('ps-designation').addEventListener('click', () => { mailDesignation(); closeAmendeModal(); });
