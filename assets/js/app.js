@@ -815,9 +815,10 @@ FP.buildAlertes = (data) => {
   });
 
   // --- Véhicules sans dernière révision enregistrée (info) ---
-  const sansRev = (data.vehicules || []).filter(v => v.statut === 'actif' && (!v.derniereRevision || v.derniereRevision === '—') && (!v.chauffeur || v.chauffeur !== 'VENDU')).length;
-  if (sansRev > 5) {
-    out.push({ niveau: 'info', categorie: 'Maintenance', message: `${sansRev} véhicules sans dernière révision enregistrée`, detail: 'À compléter pour le suivi maintenance', sort: 2000, target: 'vehicules.html' });
+  const sansRevList = (data.vehicules || []).filter(v => v.statut === 'actif' && (!v.derniereRevision || v.derniereRevision === '—') && (!v.chauffeur || v.chauffeur !== 'VENDU'));
+  if (sansRevList.length > 5) {
+    out.push({ niveau: 'info', categorie: 'Maintenance', message: `${sansRevList.length} véhicules sans dernière révision enregistrée`, detail: 'Clique pour voir la liste — à compléter pour le suivi maintenance', sort: 2000,
+      vehicules: sansRevList.map(v => ({ label: `${v.immat || '—'} · ${(v.marque || '')} ${(v.modele || '')}`.trim() + (v.chauffeur && v.chauffeur !== '—' ? ' — ' + v.chauffeur : ''), target: 'vehicules.html?veh=' + v.id })) });
   }
 
   const order = { danger: 0, warn: 1, info: 2 };
