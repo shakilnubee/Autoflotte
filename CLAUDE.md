@@ -5,7 +5,7 @@
 **Parc Pilot** est un SaaS de gestion de flotte automobile, développé pour TJMAX (avec aussi des véhicules BPCE en leasing et PROJECT X PARIS RETAIL).
 
 - **Propriétaire** : Shakil Nubeebaccus
-- **Stack** : HTML/CSS/JS statique + Tailwind CDN (pas de build step)
+- **Stack** : HTML/CSS/JS statique + Tailwind précompilé en local (`assets/css/tailwind.css`, voir Conventions)
 - **Backend** : Supabase (PostgreSQL + Auth)
 - **Hosting** : ✅ **GitHub Pages** (auto-déploiement depuis la branche `main`) → **https://shakilnubee.github.io/Autoflotte/**
   - ⚠️ Netlify (auto-flotte.netlify.app) = EN PAUSE (quota dépassé) — ne plus utiliser. Vercel (autoflotte.vercel.app) = version périmée — ne plus utiliser.
@@ -65,7 +65,7 @@ fleet-app/
 
 ## Conventions importantes
 
-1. **Pas de build step** — Tailwind est en CDN, tout est statique
+1. **Tailwind précompilé** — pour éviter le délai du CDN à chaque page, Tailwind est compilé en local dans `assets/css/tailwind.css` (les pages le chargent via `<link>`, plus de `cdn.tailwindcss.com`). ⚠️ Après toute modif de classes Tailwind dans le HTML/JS, REBUILD : `npx tailwindcss@3.4.17 -c tailwind.config.js -i assets/css/_tw-input.css -o assets/css/tailwind.css --minify` (sinon les nouvelles classes ne seront pas stylées). Les pages `brochure.html` et `logos.html` (autonomes) restent sur le CDN.
 2. **Auth guard** synchrone dans le `<head>` de chaque page protégée (11 pages)
 3. **Personnalisation** : tout est éditable en double-cliquant (titres, sous-titres, colonnes, onglets sidebar)
 4. **Drag & drop** : colonnes et lignes réorganisables avec HTML5 Drag API
