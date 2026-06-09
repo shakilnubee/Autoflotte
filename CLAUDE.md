@@ -24,6 +24,10 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
 - ⚠️ **RÈGLE « mettre à jour »** (consigne explicite) : quand l'utilisateur dit « mets à jour »,
   ne prendre QUE **l'onglet `véhicules`** et **l'onglet `2026`** (amendes 2026). Ignorer tous les
   autres onglets/sections (emprunts, anciennes amendes, etc.).
+- ⚠️ **Source FACTURES** (consigne explicite) : dossier Drive `111YMFZL-daGrBSIQcdfPmvOouDltbg0v`,
+  organisé par pays → sous-dossier par véhicule (plaque) → PDF. Prendre **FRANCE, ITALIE,
+  ALLEMAGNE, Pays-Bas** uniquement. **EXCLURE** les sous-dossiers `01. Autres` et `OUT`.
+  Lier chaque PDF à la table `factures` par `file_id` ; « nouvelles » = `file_id` absent de la base.
 - ⚠️ **Stockage autonomie/version** : côté DB, l'autonomie est dans la colonne `note_pneus`
   (mapping `note_pneus`↔`autonomie`) et la version dans `type_pneus` (↔`version`). Écrire
   l'autonomie dans `note_pneus`, PAS dans la colonne `autonomie` (ignorée par l'app).
