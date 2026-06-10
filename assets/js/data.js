@@ -1,7 +1,6 @@
 // Parc Pilot — données de SECOURS (fallback hors-ligne)
-// ⚠️ Généré automatiquement depuis Supabase le 2026-06-09. NE PAS éditer à la main.
-// La source de vérité est Supabase ; ce fichier ne sert que si la base est injoignable.
-// Pour régénérer : relancer le script de synchronisation depuis Supabase.
+// ⚠️ Généré depuis Supabase le 2026-06-10. NE PAS éditer à la main.
+// Source de vérité = Supabase ; ce fichier sert si la base est injoignable.
 
 window.FP_DATA = {
   "vehicules": [
@@ -4410,22 +4409,6 @@ window.FP_DATA = {
       "societe": "PXP"
     },
     {
-      "id": "FA-0032",
-      "date": "2025-02-11",
-      "vehiculeImmat": "GC-885-LB",
-      "fournisseur": "CARROSSERIE GLOBAUTO SAS",
-      "numeroFacture": "20181022/1",
-      "description": "Réparation collision sinistre MACIF (aile AVD, projecteur, clignotant, bouclier) - franchise 900€",
-      "type": "sinistre",
-      "montantHT": 4287.97,
-      "montantTVA": 857.59,
-      "montantTTC": 5145.56,
-      "km": 27747,
-      "fileId": "17Q3Sxy-CW-dF6YY1sMHqvl6aA2oUtpzh",
-      "fileName": "AD 11/02/25.pdf",
-      "societe": "PXP"
-    },
-    {
       "id": "FA-0033",
       "date": "2025-11-24",
       "vehiculeImmat": "GC-885-LB",
@@ -4439,22 +4422,6 @@ window.FP_DATA = {
       "km": null,
       "fileId": "1m254bnFgOk6AmJVqDbhE0_MVoWiSYBK5",
       "fileName": "24665111.PDF",
-      "societe": "PXP"
-    },
-    {
-      "id": "FA-0034",
-      "date": "2025-02-11",
-      "vehiculeImmat": "GC-885-LB",
-      "fournisseur": "CARROSSERIE GLOBAUTO SAS",
-      "numeroFacture": "20181022/1",
-      "description": "Réparation collision sinistre MACIF (duplicata dans dossier SINISTRES)",
-      "type": "sinistre",
-      "montantHT": 4287.97,
-      "montantTVA": 857.59,
-      "montantTTC": 5145.56,
-      "km": 27747,
-      "fileId": "1vvas2wCZ0aMv65PD0i6DAydxUx-mPwsl",
-      "fileName": "20250418172247.pdf",
       "societe": "PXP"
     },
     {
@@ -6138,22 +6105,6 @@ window.FP_DATA = {
       "societe": "PXP"
     },
     {
-      "id": "FA-0146",
-      "date": "2025-01-14",
-      "vehiculeImmat": "GY-860-FG",
-      "fournisseur": "CAR WORLD CONSULTING FRANCE",
-      "numeroFacture": "F-2025-79",
-      "description": "Entretien constructeur Audi - huile moteur, filtre à huile, filtre habitacle, bougies, balais AV",
-      "type": "entretien",
-      "montantHT": 816.61,
-      "montantTVA": 163.32,
-      "montantTTC": 979.93,
-      "km": 49351,
-      "fileId": "1JJaOeEFCqXh7M6okYalLBcCGB7PxmANu",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-79.pdf",
-      "societe": "PXP"
-    },
-    {
       "id": "FA-0147",
       "date": "2025-12-16",
       "vehiculeImmat": "GY-860-FG",
@@ -6218,38 +6169,6 @@ window.FP_DATA = {
       "societe": "PXP"
     },
     {
-      "id": "FA-0152",
-      "date": "2025-12-10",
-      "vehiculeImmat": "GY-860-FG",
-      "fournisseur": "Audi Bauer Paris",
-      "numeroFacture": "738448",
-      "description": "FAC AUDI entretien - Service 90000 km",
-      "type": "entretien",
-      "montantHT": 552.87,
-      "montantTVA": 110.57,
-      "montantTTC": 663.44,
-      "km": 80020,
-      "fileId": "1WOM1aq2HeIxpQ51buNoP2EYa7QhBZXZg",
-      "fileName": "FAC AUDI ENTRETIEN.pdf",
-      "societe": "PXP"
-    },
-    {
-      "id": "FA-0153",
-      "date": "2025-12-10",
-      "vehiculeImmat": "GY-860-FG",
-      "fournisseur": "CAR WORLD CONSULTING FRANCE",
-      "numeroFacture": "F-2025-323",
-      "description": "Débours facture Audi du 10/12/2025 (facture n°738448)",
-      "type": "entretien",
-      "montantHT": 552.87,
-      "montantTVA": 110.57,
-      "montantTTC": 663.44,
-      "km": 80020,
-      "fileId": "1rnnfQelIxIIlOL5vayQW9-4abpA5a7s3",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-323.pdf",
-      "societe": "PXP"
-    },
-    {
       "id": "FA-0154",
       "date": "2025-08-19",
       "vehiculeImmat": "GY-860-FG",
@@ -6295,22 +6214,6 @@ window.FP_DATA = {
       "km": 54185,
       "fileId": "10fjYFxZwZ59rOxkPe6LMJnFxvG9OrKLr",
       "fileName": "AUDI 718753 GY-860-FG.pdf",
-      "societe": "PXP"
-    },
-    {
-      "id": "FA-0157",
-      "date": "2025-03-25",
-      "vehiculeImmat": "GY-860-FG",
-      "fournisseur": "CAR WORLD CONSULTING FRANCE",
-      "numeroFacture": "F-2025-151",
-      "description": "Débours / avance facture Audi n°718753 du 25/03/2025",
-      "type": "entretien",
-      "montantHT": 443.09,
-      "montantTVA": null,
-      "montantTTC": 443.09,
-      "km": 54185,
-      "fileId": "11aSP0qBdj8coENddgUHdRmpTGFBOgFfq",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-151.pdf",
       "societe": "PXP"
     },
     {
@@ -8858,22 +8761,6 @@ window.FP_DATA = {
       "societe": "PXP"
     },
     {
-      "id": "FA-0330",
-      "date": "2025-03-03",
-      "vehiculeImmat": "HB-733-DE",
-      "fournisseur": "CAR WORLD CONSULTING FRANCE",
-      "numeroFacture": "F-2025-138",
-      "description": "Achat véhicule neuf BYD SEAL U DM-I BOOST (doublon dossier 2025), VIN LGXC74C46R0756690",
-      "type": "achat",
-      "montantHT": 29897.5,
-      "montantTVA": 5979.5,
-      "montantTTC": 35877.0,
-      "km": null,
-      "fileId": "1yzQZ4fZ0ysGFUFjft-os3Bae-AMw9eEF",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-138.pdf",
-      "societe": "PXP"
-    },
-    {
       "id": "FA-0331",
       "date": "2025-04-08",
       "vehiculeImmat": "HB-733-DE",
@@ -9223,38 +9110,6 @@ window.FP_DATA = {
       "km": 2046,
       "fileId": "1GDY9X07expSSkClZh8EMmxuPTy0pwMX7",
       "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-171.pdf",
-      "societe": "PXP"
-    },
-    {
-      "id": "FA-0355",
-      "date": "2025-02-19",
-      "vehiculeImmat": "HB-844-DE",
-      "fournisseur": "CAR WORLD CONSULTING FRANCE",
-      "numeroFacture": "F-2025-128",
-      "description": "PAYE - Achat véhicule neuf BYD SEAL U DM-I (solde après acompte F-2025-125)",
-      "type": "achat",
-      "montantHT": 34490.0,
-      "montantTVA": null,
-      "montantTTC": 34490.0,
-      "km": null,
-      "fileId": "1uhtxWDxDl8Vet4HxEKOJt2AlHeRo-Om4",
-      "fileName": "PAYE-Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-128.pdf",
-      "societe": "PXP"
-    },
-    {
-      "id": "FA-0356",
-      "date": "2025-02-19",
-      "vehiculeImmat": "HB-844-DE",
-      "fournisseur": "CAR WORLD CONSULTING FRANCE",
-      "numeroFacture": "F-2025-128",
-      "description": "Achat véhicule neuf BYD SEAL U DM-I (solde après acompte F-2025-125)",
-      "type": "achat",
-      "montantHT": 34490.0,
-      "montantTVA": null,
-      "montantTTC": 34490.0,
-      "km": null,
-      "fileId": "1Qvq_YEwDmA-AOtVu0dNSsEDUuGNEcvJm",
-      "fileName": "Facture-TJMAX-CAR WORLD CONSULTING FRANCE-F-2025-128.pdf",
       "societe": "PXP"
     },
     {
@@ -10071,22 +9926,6 @@ window.FP_DATA = {
       "km": 21599,
       "fileId": "117fq6mTlz0EKvVh1UPDVVQ0SOhBxbP0L",
       "fileName": "FA2024006756 (1).PDF",
-      "societe": "PXP"
-    },
-    {
-      "id": "FA-0420",
-      "date": "2023-07-25",
-      "vehiculeImmat": "FT-338-AJ",
-      "fournisseur": "Auto-ICI",
-      "numeroFacture": "PF-2023-07-002",
-      "description": "Achat vehicule Peugeot 3008",
-      "type": "achat",
-      "montantHT": 23870.84,
-      "montantTVA": 4774.16,
-      "montantTTC": 28981.76,
-      "km": 16455,
-      "fileId": "1TmWVKTY6H6JDyCtmKjj1ChVyS-BvxWX_",
-      "fileName": "Facture d'achat.pdf",
       "societe": "PXP"
     },
     {
