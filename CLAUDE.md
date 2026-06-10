@@ -79,6 +79,7 @@ fleet-app/
 ## Conventions importantes
 
 0. ⚠️ **MULTI-SOCIÉTÉS — règle clé** : toute modification du LOGICIEL (UI, boutons, features, mises en page) doit être **GLOBALE** : elle s'applique à **toutes les sociétés déjà créées ET futures**. Le code (HTML/JS/CSS) est partagé par toutes les sociétés (filtrage par `societe` côté données uniquement). Ne JAMAIS coder une fonctionnalité ou un libellé spécifique à une seule société — sinon l'utilisateur se perd entre les sociétés. (Les *données* — véhicules/amendes — restent, elles, propres à chaque société.)
+   - ⚠️ **Adresses d'envoi des mails par société** : l'expéditeur + copies des e-mails d'amende (`EXPEDITEUR` / `COPIE_MAIL` dans `pages/amendes.html`) sont aujourd'hui ceux de **PXP** (`shakil.nubeebaccus@projectxparis.fr` + `mallaury.herembert@projectxparis.fr`) — **NE PAS les changer** (ils appartiennent à PXP). Chaque structure a ses propres adresses : **à la création d'une nouvelle société, DEMANDER à l'utilisateur les adresses d'expédition/copie** et les stocker par société (ne pas réutiliser celles de PXP). Contact public (brochure) = **Shakil Nubee · jis.nubee@gmail.com** (différent des adresses pro PXP).
 
 0bis. ⚠️ **Notifications / alertes** : dès qu'une alerte regroupe **plusieurs éléments**, proposer une **liste dépliable** (`<details>`) avec chaque élément cliquable vers sa fiche — jamais une simple redirection vers une page générique. (Champ `vehicules`/`items` sur l'alerte, rendu en `<details>` dans `notifications.html`.)
 
