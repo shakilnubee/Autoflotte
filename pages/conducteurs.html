@@ -155,7 +155,6 @@
         <p class="text-slate-500 text-sm mt-1" data-edit-key="conducteurs.subtitle">Vue par personne — véhicule, amendes, points perdus</p>
       </div>
       <div class="flex items-center gap-3 flex-wrap"><span data-data-io></span>
-        <button class="btn btn-outline text-sm" id="btn-sync-cond" title="Envoyer vers le serveur les fiches conducteurs de ce PC"><i data-lucide="cloud-upload" class="w-4 h-4"></i> Synchroniser</button>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="user-plus" class="w-4 h-4"></i> Nouveau conducteur</button>
       </div>
     </div>
@@ -412,18 +411,8 @@
   }
   // Clé permis = prénom normalisé sans accents (cohérent avec FP_DOCS)
   function permisKeyOf(d){ return d.key.normalize('NFD').replace(/[̀-ͯ]/g, ''); }
-  // Pousse vers Supabase toutes les fiches conducteurs de ce PC (récupération entre postes)
-  async function syncConducteurs() {
-    if (!(window.FP && FP.db && FP.supabase)) { alert('Base de données indisponible — réessaie quand tu es en ligne.'); return; }
-    if (!confirm('Envoyer vers le serveur les fiches conducteurs de ce PC ?')) return;
-    let pushed = 0;
-    for (const row of condCache) {
-      if (!row || !row.key) continue;
-      try { const res = await FP.db.upsert('conducteurs', toCondDb(row)); if (res && res.error) throw res.error; pushed++; } catch (e) { console.warn('[syncConducteurs]', e); }
-    }
-    drivers = buildDrivers(); renderKPIs(); renderGrid();
-    alert(`Synchronisation terminée ✓\n${pushed} fiche(s) envoyée(s) au serveur. Elles sont visibles sur tous les postes (Ctrl+Shift+R).`);
-  }
+  // (Bouton « Synchroniser » retiré : chaque modification de fiche conducteur est déjà
+  //  enregistrée automatiquement sur le serveur via upsertCond → FP.persist.upsert.)
   function sanitizeUrl(u){
     let url = (u || '').trim();
     if (!url) return '';
@@ -1220,7 +1209,6 @@
 
   // Modal nouveau conducteur
   $('btn-new').addEventListener('click', openModal);
-  $('btn-sync-cond').addEventListener('click', syncConducteurs);
   $('modal-close').addEventListener('click', closeModal);
   $('modal-cancel').addEventListener('click', closeModal);
   $('modal-backdrop').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
