@@ -121,6 +121,10 @@
     return row;
   }
 
+  // Clé primaire par table : la table "conducteurs" est indexée par "key" (pas de colonne "id").
+  const PK_BY_TABLE = { conducteurs: 'key' };
+  function pkColumn(table) { return PK_BY_TABLE[table] || 'id'; }
+
   // ===== API publique =====
   FP.db = {
     /** Charge les 3 tables et retourne { vehicules, amendes, factures } en camelCase */
@@ -147,7 +151,7 @@
     /** Met à jour partiellement une ligne. Renvoie { error } si échec. */
     async update(table, id, fields) {
       const snake = toDb(fields);
-      const res = await client.from(table).update(snake).eq('id', id);
+      const res = await client.from(table).update(snake).eq(pkColumn(table), id);
       if (res.error) console.error(`[FP.db.update ${table}#${id}]`, res.error);
       return res;
     },
@@ -180,9 +184,9 @@
       return res;
     },
 
-    /** Supprime une ligne par id. */
+    /** Supprime une ligne par sa clé primaire (id, ou `key` pour conducteurs). */
     async delete(table, id) {
-      const res = await client.from(table).delete().eq('id', id);
+      const res = await client.from(table).delete().eq(pkColumn(table), id);
       if (res.error) console.error(`[FP.db.delete ${table}#${id}]`, res.error);
       return res;
     },

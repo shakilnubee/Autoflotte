@@ -1,6 +1,5 @@
 // Parc Pilot — données de SECOURS (fallback hors-ligne)
 // ⚠️ Généré depuis Supabase le 2026-06-10. NE PAS éditer à la main.
-// Source de vérité = Supabase ; ce fichier sert si la base est injoignable.
 
 window.FP_DATA = {
   "vehicules": [
