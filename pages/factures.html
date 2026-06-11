@@ -234,6 +234,7 @@
       <div><div class="field-label">Type</div><select id="di-type" class="field-input"></select></div>
       <div><div class="field-label">Nom (facultatif)</div><input id="di-label" class="field-input" placeholder="ex : Contrôle technique 2026"></div>
       <div><div class="field-label">Fichier (photo ou PDF)</div><input id="di-file" type="file" accept="image/*,application/pdf" multiple class="field-input" style="padding:8px"></div>
+      <div id="di-detect" class="hidden" style="font-size:12px;border-radius:8px;padding:8px 10px"></div>
       <button id="di-save" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Importer</button>
       <p class="text-xs text-slate-400">Le(s) fichier(s) sont enregistrés en ligne et rattachés au véhicule choisi (consultables ici et dans la fiche véhicule).</p>
     </div>
@@ -320,9 +321,9 @@
 </div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260611q"></script>
-<script src="../assets/js/data.js?v=20260611q"></script>
-<script src="../assets/js/app.js?v=20260611q"></script>
+<script src="../assets/js/supabase-client.js?v=20260611r"></script>
+<script src="../assets/js/data.js?v=20260611r"></script>
+<script src="../assets/js/app.js?v=20260611r"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script>
   lucide.createIcons();
@@ -848,7 +849,7 @@
   // ===== Onglet DOCUMENTS (archives & suivi) =====
   (function documentsTab(){
     const BASE_LABELS = {
-      'controle-technique':'Contrôle technique','carte-grise':'Carte grise','assurance':'Assurance',
+      'controle-technique':'Contrôle technique','pv':'PV (Procès-verbal)','carte-grise':'Carte grise','assurance':'Assurance',
       'code-cession':'Code / cession','contrat':'Contrat','facture-achat':'Facture','etat-des-lieux':'État des lieux','autre':'Autre',
     };
     // Libellés = types de base + types personnalisés créés par l'utilisateur (réglages partagés)
@@ -1016,13 +1017,33 @@
     const importModal = $('doc-import-modal');
     function openImport(){
       const vehs = (window.FP_DATA.vehicules||[]).slice().sort((a,b)=>(a.immat||'').localeCompare(b.immat||''));
-      $('di-veh').innerHTML = vehs.map(v=>`<option value="${v.id}">${(v.immat||'?')} · ${(v.marque||'')} ${(v.modele||'')}</option>`).join('');
+      $('di-veh').innerHTML = '<option value="">— Choisir un véhicule —</option>' + vehs.map(v=>`<option value="${v.id}">${(v.immat||'?')} · ${(v.marque||'')} ${(v.modele||'')}</option>`).join('');
       const DL = docLabels();
       $('di-type').innerHTML = Object.keys(DL).map(t=>`<option value="${t}">${DL[t]}</option>`).join('');
       $('di-label').value=''; $('di-file').value='';
+      const dd = $('di-detect'); dd.className = 'hidden'; dd.innerHTML = '';
       importModal.classList.add('open');
       if (window.lucide) lucide.createIcons();
     }
+
+    // Détection auto du véhicule (et du type) dès qu'un fichier est choisi
+    $('di-file').addEventListener('change', async () => {
+      const f = $('di-file').files && $('di-file').files[0];
+      const dd = $('di-detect');
+      if (!f || !(window.FP && FP.ocr)) return;
+      dd.className = ''; dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#F1F5F9;color:#475569');
+      dd.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="fa-spin"></span> Lecture du document…</span>';
+      try {
+        const text = await FP.ocr.fileToText(f);
+        const det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
+        const found = [];
+        if (det.vehicule && !$('di-veh').value) { $('di-veh').value = det.vehicule.id; found.push('véhicule <b>'+det.vehicule.immat+'</b>'); }
+        else if (det.vehicule) found.push('véhicule <b>'+det.vehicule.immat+'</b>');
+        if (det.type && det.type !== 'autre') { $('di-type').value = det.type; found.push('type <b>'+(docLabels()[det.type]||det.type)+'</b>'); }
+        if (found.length) { dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#ECFDF5;color:#047857'); dd.innerHTML = '✓ Détecté : ' + found.join(' · ') + '. Vérifie puis importe.'; }
+        else { dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#FEF2F2;color:#B91C1C'); dd.innerHTML = "Véhicule non reconnu sur le document — choisis-le dans la liste."; }
+      } catch (e) { console.error('[di detect]', e); dd.className='hidden'; }
+    });
     const closeImport = () => importModal.classList.remove('open');
     $('doc-import-btn').addEventListener('click', openImport);
     $('doc-import-close').addEventListener('click', closeImport);
