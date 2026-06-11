@@ -590,24 +590,30 @@ FP.revisionInfo = (v) => {
 
   const dRev = (v.derniereRevision && v.derniereRevision !== '—') ? new Date(v.derniereRevision) : null;
   const hasRev = dRev && !isNaN(dRev);
+  // Km RÉEL à la dernière révision (colonne « KM revision » du Drive → kmDernierReleve)
+  const kmRev = (Number(v.kmDernierReleve) > 0) ? Number(v.kmDernierReleve) : null;
 
   let prochaineKm = null, kmRestant = null, prochaineDate = null, joursRestant = null;
 
+  // Échéance temporelle : dernière révision + intervalle en mois
   if (hasRev) {
-    // Échéance temporelle : dernière révision + intervalle en mois
     prochaineDate = new Date(dRev);
     prochaineDate.setMonth(prochaineDate.getMonth() + intervalle.mois);
     joursRestant = Math.ceil((prochaineDate - today) / 86400000);
-    // Échéance km ANCRÉE sur la dernière révision : on estime les km parcourus depuis
-    // (rythme × jours écoulés) plutôt que de viser le prochain palier d'odomètre.
-    if (pace !== null) {
-      const joursDepuisRev = Math.max(0, (today - dRev) / 86400000);
-      const kmDepuisRev = pace * joursDepuisRev;
-      kmRestant = Math.round(intervalle.km - kmDepuisRev);
-      prochaineKm = Math.round(km + kmRestant);
-    }
+  }
+
+  // Échéance kilométrique — par ordre de fiabilité :
+  if (kmRev) {
+    // 1) EXACT : km de la dernière révision + intervalle préconisé
+    prochaineKm = kmRev + intervalle.km;
+    kmRestant = prochaineKm - km;
+  } else if (hasRev && pace !== null) {
+    // 2) Estimé : km parcourus depuis la révision (rythme × jours écoulés)
+    const joursDepuisRev = Math.max(0, (today - dRev) / 86400000);
+    kmRestant = Math.round(intervalle.km - pace * joursDepuisRev);
+    prochaineKm = Math.round(km + kmRestant);
   } else if (km > 0) {
-    // Pas de date de révision connue → estimation par paliers d'odomètre
+    // 3) Faute de mieux : prochain palier d'odomètre
     prochaineKm = Math.ceil(km / intervalle.km) * intervalle.km;
     if (prochaineKm <= km) prochaineKm = km + intervalle.km;
     kmRestant = prochaineKm - km;
