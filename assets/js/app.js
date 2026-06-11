@@ -1047,6 +1047,109 @@ FP.uploadScan = async function (file, folder) {
 };
 
 // =====================================================================
+// === OCR partagé + détection automatique de document =================
+// =====================================================================
+// Réutilisable par toutes les pages (scan depuis le tableau de bord, etc.).
+// Lit une image/PDF, en extrait le texte, puis devine : le véhicule (plaque),
+// le type de document, une date pertinente et le kilométrage.
+FP.ocr = {
+  TESSERACT_CDN: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js',
+  PDFJS_CDN:     'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js',
+  PDFJS_WORKER:  'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+  loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const ex = document.querySelector(`script[data-lazy="${src}"]`);
+      if (ex) {
+        if (ex.dataset.loaded === '1') return resolve();
+        ex.addEventListener('load', resolve);
+        ex.addEventListener('error', () => reject(new Error('Échec du chargement de ' + src)));
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = src; s.dataset.lazy = src;
+      s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+      s.onerror = () => reject(new Error('Échec du chargement de ' + src));
+      document.head.appendChild(s);
+    });
+  },
+  async pdfToCanvas(file) {
+    await this.loadScript(this.PDFJS_CDN);
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = this.PDFJS_WORKER;
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas;
+  },
+  async fileToText(file) {
+    await this.loadScript(this.TESSERACT_CDN);
+    let image = file;
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) image = await this.pdfToCanvas(file);
+    const worker = await Tesseract.createWorker('fra');
+    try { const { data } = await worker.recognize(image); return data.text || ''; }
+    finally { await worker.terminate(); }
+  },
+};
+
+// Devine le contenu d'un document à partir de son texte OCR.
+// Renvoie { type, vehicule, immat, date, km, raw }.
+FP.detectDoc = function (rawText, vehicules) {
+  const text = (rawText || '').toUpperCase().replace(/ /g, ' ');
+  const norm = s => (s || '').toString().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const out = { type: 'autre', vehicule: null, immat: null, date: null, km: null, raw: rawText || '' };
+
+  // --- Plaque (format SIV AA-123-AA) ---
+  let m = text.match(/\b([A-Z]{2})\s*[-\s]?\s*([0-9]{3})\s*[-\s]?\s*([A-Z]{2})\b/);
+  if (m) out.immat = `${m[1]}-${m[2]}-${m[3]}`;
+  const list = Array.isArray(vehicules) ? vehicules : [];
+  if (out.immat) {
+    const ni = norm(out.immat);
+    out.vehicule = list.find(v => norm(v.immat) === ni) || null;
+  }
+  // Repli : chercher n'importe quelle plaque connue présente dans le texte
+  if (!out.vehicule && list.length) {
+    const flat = norm(text);
+    for (const v of list) { const nv = norm(v.immat); if (nv && nv.length >= 6 && flat.includes(nv)) { out.vehicule = v; out.immat = v.immat; break; } }
+  }
+
+  // --- Type de document ---
+  if (/CONTR[OÔ]LE\s+TECHNIQUE|PROC[EÈ]S[-\s]?VERBAL|PROCHAIN\s+CONTR|FAVORABLE|D[EÉ]FAVORABLE/.test(text)) out.type = 'controle-technique';
+  else if (/CERTIFICAT\s+D.?IMMATRICULATION|CARTE\s+GRISE/.test(text)) out.type = 'carte-grise';
+  else if (/ATTESTATION\s+D.?ASSURANCE|CARTE\s+VERTE|\bASSURANCE\b/.test(text)) out.type = 'assurance';
+  else if (/\bFACTURE\b|TOTAL\s+TTC|MONTANT\s+TTC/.test(text)) out.type = 'facture-achat';
+
+  // --- Dates dd/mm/yyyy (filtrées sur une plage plausible) ---
+  const toIso = (d, mo, y) => { y = +y; if (y < 100) y += 2000; return `${y}-${String(+mo).padStart(2, '0')}-${String(+d).padStart(2, '0')}`; };
+  const allDates = [...text.matchAll(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/g)]
+    .map(d => { const iso = toIso(d[1], d[2], d[3]); return { iso, y: +iso.slice(0, 4) }; })
+    .filter(d => d.y >= 2015 && d.y <= 2035);
+  if (out.type === 'controle-technique') {
+    // Date du PROCHAIN contrôle (mots-clés), sinon la date la plus tardive (CT valable 2 ans).
+    const lines = text.split(/\r?\n/);
+    let ct = null;
+    for (const ln of lines) {
+      if (/PROCHAIN|AVANT\s+LE|VALABLE|VALIDIT/.test(ln)) {
+        const dm = ln.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+        if (dm) { ct = toIso(dm[1], dm[2], dm[3]); break; }
+      }
+    }
+    out.date = ct || (allDates.length ? allDates.map(d => d.iso).sort().slice(-1)[0] : null);
+  } else if (allDates.length) {
+    out.date = allDates.map(d => d.iso).sort().slice(-1)[0];
+  }
+
+  // --- Kilométrage ---
+  const kmM = text.match(/(\d[\d\s.]{2,})\s*KM\b/) || text.match(/\bKM\s*[:\.]?\s*(\d[\d\s.]{2,})/) || text.match(/KILOM[EÈ]TRAGE\s*[:\.]?\s*(\d[\d\s.]{2,})/);
+  if (kmM) { const n = parseInt(kmM[1].replace(/[\s.]/g, ''), 10); if (Number.isFinite(n) && n > 100 && n < 2000000) out.km = n; }
+
+  return out;
+};
+
+
+// =====================================================================
 // === Journal des modifications (qui / quoi / quand) ===================
 // =====================================================================
 // Enregistre chaque écriture en base (ajout / modification / suppression)

@@ -31,6 +31,9 @@
   #dash-widgets.is-dragging .dash-widget { transition: transform .08s; }
   /* Titres de section renommables (clic pour éditer) */
   .dash-widget [data-edit-key]:hover { cursor: text; box-shadow: inset 0 -2px 0 0 var(--fp-accent); border-radius: 3px; }
+  /* Spinner du scan de document */
+  .cg-spin { display: inline-block; width: 26px; height: 26px; border: 3px solid var(--fp-accent, #F97316); border-right-color: transparent; border-radius: 50%; animation: cg-spin .7s linear infinite; }
+  @keyframes cg-spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body class="bg-slate-50">
@@ -78,6 +81,7 @@
           <button id="soc-btn" class="btn btn-outline text-sm"><i data-lucide="building-2" class="w-4 h-4"></i> <span id="soc-current">PXP</span> <i data-lucide="chevron-down" class="w-4 h-4"></i></button>
           <div id="soc-menu" class="hidden absolute right-0 mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-sm"></div>
         </div>
+        <button id="btn-scan-doc" class="btn btn-outline text-sm"><i data-lucide="scan-line" class="w-4 h-4"></i> Scanner un document</button>
         <a href="pages/vehicules.html?new=1" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</a>
       </div>
     </div>
@@ -257,9 +261,9 @@
 </div>
 
 <script src="assets/js/vendor/supabase.js"></script>
-<script src="assets/js/supabase-client.js?v=20260610a"></script>
-<script src="assets/js/data.js?v=20260610a"></script>
-<script src="assets/js/app.js?v=20260610a"></script>
+<script src="assets/js/supabase-client.js?v=20260611a"></script>
+<script src="assets/js/data.js?v=20260611a"></script>
+<script src="assets/js/app.js?v=20260611a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script>
   lucide.createIcons();
@@ -606,6 +610,156 @@
     document.getElementById('kpi-couts').textContent = FP.euro((data.factures || []).filter(f => (f.date || '').startsWith(cm)).reduce((s, f) => s + (f.montantTTC || 0), 0));
     if (typeof refreshAlertes === 'function') refreshAlertes();
   });
+
+  // ============================================================
+  //  Scanner un document → rangement automatique dans la fiche véhicule
+  //  Lecture OCR (FP.ocr) → détection (FP.detectDoc) → upload + enregistrement.
+  // ============================================================
+  (function scanDocFeature() {
+    const TYPE_LABELS = {
+      'controle-technique': 'Contrôle technique',
+      'carte-grise': 'Carte grise',
+      'assurance': 'Assurance (carte verte)',
+      'facture-achat': "Facture d'achat",
+      'contrat': 'Contrat leasing/location',
+      'etat-des-lieux': 'État des lieux',
+      'autre': 'Autre document',
+    };
+    const $ = id => document.getElementById(id);
+    const btn = $('btn-scan-doc');
+    if (!btn) return;
+
+    // Input fichier caché + modale
+    const file = document.createElement('input');
+    file.type = 'file'; file.accept = 'image/*,application/pdf'; file.style.display = 'none';
+    document.body.appendChild(file);
+
+    const modal = document.createElement('div');
+    modal.id = 'scan-modal';
+    modal.setAttribute('style', 'position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;background:rgba(15,23,42,.55);padding:16px');
+    modal.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #E2E8F0">
+        <div style="font-weight:800;color:var(--fp-primary)"><i data-lucide="scan-line" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Scanner un document</div>
+        <button id="scan-close" style="border:none;background:transparent;cursor:pointer;color:#94A3B8;font-size:20px;line-height:1">&times;</button>
+      </div>
+      <div id="scan-body" style="padding:18px"></div>
+    </div>`;
+    document.body.appendChild(modal);
+    if (window.lucide) lucide.createIcons();
+
+    const openModal = () => { modal.style.display = 'flex'; };
+    const closeModal = () => { modal.style.display = 'none'; $('scan-body').innerHTML = ''; file.value = ''; };
+    $('scan-close').addEventListener('click', closeModal);
+    modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+
+    const body = () => $('scan-body');
+    const setBody = html => { body().innerHTML = html; if (window.lucide) lucide.createIcons(); };
+
+    btn.addEventListener('click', () => file.click());
+
+    file.addEventListener('change', async () => {
+      const f = file.files && file.files[0];
+      if (!f) return;
+      openModal();
+      setBody(`<div style="text-align:center;padding:14px 0">
+        <div class="cg-spin" style="margin:0 auto 12px"></div>
+        <div style="font-weight:600;color:#475569">Lecture du document en cours…</div>
+        <div style="font-size:12px;color:#94A3B8;margin-top:4px">Quelques secondes (un peu plus long au 1er usage).</div>
+      </div>`);
+
+      let det = { type: 'autre', vehicule: null, immat: null, date: null, km: null };
+      try {
+        const text = await FP.ocr.fileToText(f);
+        det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
+      } catch (err) {
+        console.error('[scan OCR]', err);
+        // pas grave : on bascule sur le formulaire manuel pré-rempli vide
+      }
+      showForm(f, det);
+    });
+
+    // Formulaire récapitulatif (pré-rempli par la détection) — l'utilisateur peut corriger.
+    function showForm(f, det) {
+      const vehs = ((window.FP_DATA && window.FP_DATA.vehicules) || []).slice()
+        .sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+      const vehOptions = ['<option value="">— Choisir un véhicule —</option>']
+        .concat(vehs.map(v => `<option value="${v.id}" ${det.vehicule && det.vehicule.id === v.id ? 'selected' : ''}>${(v.immat || '?')} · ${(v.marque || '')} ${(v.modele || '')}</option>`)).join('');
+      const typeOptions = Object.keys(TYPE_LABELS)
+        .map(k => `<option value="${k}" ${det.type === k ? 'selected' : ''}>${TYPE_LABELS[k]}</option>`).join('');
+
+      const detected = [];
+      if (det.vehicule) detected.push(`véhicule <b>${det.vehicule.immat}</b>`);
+      if (det.type && det.type !== 'autre') detected.push(`type <b>${TYPE_LABELS[det.type]}</b>`);
+      if (det.date) detected.push(`date <b>${FP.dateNum(det.date)}</b>`);
+      if (det.km) detected.push(`<b>${FP.num(det.km)} km</b>`);
+      const summary = detected.length
+        ? `<div style="background:#ECFDF5;color:#047857;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:14px">✓ Détecté automatiquement : ${detected.join(' · ')}.<br><span style="color:#475569">Vérifiez puis enregistrez.</span></div>`
+        : `<div style="background:#FEF2F2;color:#B91C1C;border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:14px">Lecture automatique incomplète. Choisissez le véhicule et le type ci-dessous.</div>`;
+
+      setBody(`${summary}
+        <label style="font-size:12px;font-weight:600;color:#475569">Véhicule</label>
+        <select id="scan-veh" class="field-input" style="margin:4px 0 10px">${vehOptions}</select>
+        <label style="font-size:12px;font-weight:600;color:#475569">Type de document</label>
+        <select id="scan-type" class="field-input" style="margin:4px 0 10px">${typeOptions}</select>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1"><label style="font-size:12px;font-weight:600;color:#475569">Date du document</label>
+            <input id="scan-date" type="date" class="field-input" style="margin-top:4px" value="${det.date || ''}"></div>
+          <div style="flex:1"><label style="font-size:12px;font-weight:600;color:#475569">Kilométrage (si lu)</label>
+            <input id="scan-km" type="number" class="field-input" style="margin-top:4px" value="${det.km || ''}" placeholder="—"></div>
+        </div>
+        <button id="scan-save" class="btn btn-dark text-sm w-full justify-center" style="margin-top:16px"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer dans la fiche véhicule</button>
+        <p style="font-size:11px;color:#94A3B8;margin-top:8px">Le fichier est stocké en ligne et rattaché au véhicule. Pour un contrôle technique, la date du prochain CT est mise à jour ; un kilométrage plus récent met à jour la fiche.</p>`);
+
+      $('scan-save').addEventListener('click', () => saveScan(f));
+    }
+
+    async function saveScan(f) {
+      const vehId = $('scan-veh').value;
+      const type = $('scan-type').value;
+      const date = $('scan-date').value;
+      const km = parseInt($('scan-km').value, 10);
+      if (!vehId) { alert('Choisissez le véhicule auquel rattacher ce document.'); return; }
+      const veh = (window.FP_DATA.vehicules || []).find(v => v.id === vehId);
+      const saveBtn = $('scan-save');
+      saveBtn.disabled = true; saveBtn.style.opacity = '.7'; saveBtn.innerHTML = '⏳ Enregistrement…';
+
+      try {
+        if (!(window.FP && FP.supabase && FP.uploadScan)) throw new Error('Connexion requise pour enregistrer en ligne.');
+        const url = await FP.uploadScan(f, 'documents');
+        const label = (TYPE_LABELS[type] || 'Document') + (date ? ' ' + (date.slice(0, 4)) : '');
+        const doc = { id: 'D' + Date.now().toString(36), vehiculeId: vehId, type, label, url, driveId: null };
+        await FP.persist.insert('documents', doc);
+
+        // Mises à jour de la fiche véhicule selon ce qui a été lu
+        const vehUpdate = {};
+        if (type === 'controle-technique' && date) vehUpdate.prochainCT = date;
+        if (Number.isFinite(km) && km > 0 && (!veh || !veh.km || km > veh.km)) vehUpdate.km = km;
+        if (Object.keys(vehUpdate).length) {
+          await FP.persist.update('vehicules', vehId, vehUpdate);
+          if (veh) Object.assign(veh, vehUpdate); // reflète tout de suite en mémoire
+        }
+
+        const done = [`Document « ${label} » rangé dans la fiche <b>${veh ? veh.immat : ''}</b>`];
+        if (vehUpdate.prochainCT) done.push(`Prochain CT → <b>${FP.dateNum(vehUpdate.prochainCT)}</b>`);
+        if (vehUpdate.km) done.push(`Kilométrage → <b>${FP.num(vehUpdate.km)} km</b>`);
+        setBody(`<div style="text-align:center;padding:8px 0">
+          <div style="font-size:34px">✅</div>
+          <div style="font-weight:700;color:#047857;margin:8px 0 10px">C'est rangé !</div>
+          <div style="font-size:13px;color:#475569;text-align:left;background:#F8FAFC;border-radius:10px;padding:12px">• ${done.join('<br>• ')}</div>
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <a href="pages/vehicules.html?veh=${encodeURIComponent(vehId)}" class="btn btn-outline text-sm" style="flex:1;justify-content:center">Voir la fiche</a>
+            <button id="scan-again" class="btn btn-dark text-sm" style="flex:1;justify-content:center">Scanner un autre</button>
+          </div>
+        </div>`);
+        $('scan-again').addEventListener('click', () => { file.value = ''; file.click(); });
+      } catch (err) {
+        console.error('[scan save]', err);
+        saveBtn.disabled = false; saveBtn.style.opacity = ''; saveBtn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Réessayer l\'enregistrement';
+        if (window.lucide) lucide.createIcons();
+        alert("Échec de l'enregistrement : " + (err && err.message ? err.message : err));
+      }
+    }
+  })();
 </script>
 </body>
 </html>
