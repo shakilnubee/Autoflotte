@@ -301,9 +301,9 @@
 </div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260611i"></script>
-<script src="../assets/js/data.js?v=20260611i"></script>
-<script src="../assets/js/app.js?v=20260611i"></script>
+<script src="../assets/js/supabase-client.js?v=20260611j"></script>
+<script src="../assets/js/data.js?v=20260611j"></script>
+<script src="../assets/js/app.js?v=20260611j"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script>
   lucide.createIcons();
@@ -828,10 +828,12 @@
 
   // ===== Onglet DOCUMENTS (archives & suivi) =====
   (function documentsTab(){
-    const DOC_LABELS = {
+    const BASE_LABELS = {
       'controle-technique':'Contrôle technique','carte-grise':'Carte grise','assurance':'Assurance',
       'code-cession':'Code / cession','contrat':'Contrat','facture-achat':'Facture','etat-des-lieux':'État des lieux','autre':'Autre',
     };
+    // Libellés = types de base + types personnalisés créés par l'utilisateur (réglages partagés)
+    const docLabels = () => Object.assign({}, BASE_LABELS, (FP.settings.get().docTypes) || {});
     let docs = null, loaded = false;
     const vehImmat = id => { const v = (window.FP_DATA.vehicules||[]).find(x => x.id === id); return v ? v.immat : (id || '?'); };
     const ts = d => d.createdAt || d.created_at || '';
@@ -854,7 +856,7 @@
       const vehs = [...new Set(docs.map(d => vehImmat(d.vehiculeId)))].sort();
       $('doc-filter-veh').innerHTML = '<option value="all">Tous véhicules</option>' + vehs.map(v => `<option value="${v}">${v}</option>`).join('');
       const types = [...new Set(docs.map(d => d.type))];
-      $('doc-filter-type').innerHTML = '<option value="all">Tous types</option>' + types.map(t => `<option value="${t}">${DOC_LABELS[t]||t}</option>`).join('');
+      $('doc-filter-type').innerHTML = '<option value="all">Tous types</option>' + types.map(t => `<option value="${t}">${docLabels()[t]||t}</option>`).join('');
       renderDocs();
     }
 
@@ -870,9 +872,10 @@
       const isArchived = d => override[d.id] === 'archive' ? true : override[d.id] === 'actuel' ? false : autoArchived.has(d.id);
 
       // Options véhicule / type (réutilisées dans chaque ligne)
+      const DL = docLabels();
       const vehsAll = (window.FP_DATA.vehicules||[]).slice().sort((a,b)=>(a.immat||'').localeCompare(b.immat||''));
       const vehOpts = sel => vehsAll.map(v => `<option value="${v.id}" ${sel===v.id?'selected':''}>${v.immat||'?'}</option>`).join('');
-      const typeOpts = sel => Object.keys(DOC_LABELS).map(t => `<option value="${t}" ${sel===t?'selected':''}>${DOC_LABELS[t]}</option>`).join('');
+      const typeOpts = sel => Object.keys(DL).map(t => `<option value="${t}" ${sel===t?'selected':''}>${DL[t]}</option>`).join('') + '<option value="__new__">➕ Créer un type…</option>';
 
       const q = ($('doc-search').value||'').toLowerCase();
       const fv = $('doc-filter-veh').value, ft = $('doc-filter-type').value, hideArch = $('doc-hide-arch').checked;
@@ -880,7 +883,7 @@
         if (fv !== 'all' && vehImmat(d.vehiculeId) !== fv) return false;
         if (ft !== 'all' && d.type !== ft) return false;
         if (hideArch && isArchived(d)) return false;
-        if (q){ const s = (vehImmat(d.vehiculeId)+' '+(DOC_LABELS[d.type]||d.type)+' '+(d.label||'')).toLowerCase(); if (!s.includes(q)) return false; }
+        if (q){ const s = (vehImmat(d.vehiculeId)+' '+(DL[d.type]||d.type)+' '+(d.label||'')).toLowerCase(); if (!s.includes(q)) return false; }
         return true;
       });
       const tb = $('doc-tbody');
@@ -895,8 +898,8 @@
         return `<tr>
           <td><select class="doc-veh" data-id="${d.id}" style="${selStyle}">${vehOpts(d.vehiculeId)}</select></td>
           <td><select class="doc-type" data-id="${d.id}" style="${selStyle}">${typeOpts(d.type)}</select></td>
-          <td>${d.label||'—'}</td>
-          <td style="white-space:nowrap">${date ? FP.dateNum(date) : '—'}</td>
+          <td><input class="doc-label" data-id="${d.id}" value="${(d.label||'').replace(/"/g,'&quot;')}" placeholder="(sans nom)" style="${selStyle};max-width:220px"></td>
+          <td><input type="date" class="doc-date" data-id="${d.id}" value="${date}" style="${selStyle};max-width:140px"></td>
           <td><select class="doc-stat" data-id="${d.id}" style="${selStyle};max-width:120px">
               <option value="auto" ${ov==='auto'?'selected':''}>Auto ${isArchived(d)&&ov==='auto'?'(archivé)':'(actuel)'}</option>
               <option value="actuel" ${ov==='actuel'?'selected':''}>✓ Actuel</option>
@@ -922,8 +925,25 @@
         if (FP.persist) FP.persist.update('documents', id, { vehiculeId: sel.value });
         renderDocs();
       } else if (sel.classList.contains('doc-type')) {
-        doc.type = sel.value;
-        if (FP.persist) FP.persist.update('documents', id, { type: sel.value });
+        if (sel.value === '__new__') {
+          const name = (prompt('Nom du nouveau type de document :') || '').trim();
+          if (!name) { renderDocs(); return; }
+          let key = 'custom-' + name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,30);
+          if (key === 'custom-') key = 'custom-' + Date.now().toString(36);
+          const s = FP.settings.get(); s.docTypes = s.docTypes || {}; s.docTypes[key] = name; FP.settings.save(s);
+          doc.type = key;
+          if (FP.persist) FP.persist.update('documents', id, { type: key });
+        } else {
+          doc.type = sel.value;
+          if (FP.persist) FP.persist.update('documents', id, { type: sel.value });
+        }
+        renderDocs();
+      } else if (sel.classList.contains('doc-label')) {
+        doc.label = sel.value.trim();
+        if (FP.persist) FP.persist.update('documents', id, { label: doc.label });
+      } else if (sel.classList.contains('doc-date')) {
+        doc.createdAt = sel.value || doc.createdAt;
+        if (FP.persist) FP.persist.update('documents', id, { createdAt: sel.value });
         renderDocs();
       } else if (sel.classList.contains('doc-stat')) {
         const s = FP.settings.get();

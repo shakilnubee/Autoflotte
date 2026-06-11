@@ -256,6 +256,7 @@ FP.settings = {
     darkMode: false, // mode sombre 🌙 (partagé entre PC)
     societes: ['PXP'], // liste des sociétés gérées (multi-flotte, partagée entre PC)
     docStatus: {}, // statut forcé des documents { docId: 'actuel' | 'archive' } (sinon auto par date)
+    docTypes: {},  // types de documents personnalisés { cle: 'Libellé' } (créés par l'utilisateur)
   },
   get() {
     try {
@@ -279,6 +280,7 @@ FP.settings = {
         darkMode: stored.darkMode === true,
         societes: (Array.isArray(stored.societes) && stored.societes.length) ? stored.societes : ['PXP'],
         docStatus: (stored.docStatus && typeof stored.docStatus === 'object') ? stored.docStatus : {},
+        docTypes: (stored.docTypes && typeof stored.docTypes === 'object') ? stored.docTypes : {},
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
