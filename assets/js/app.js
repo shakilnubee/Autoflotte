@@ -1218,6 +1218,22 @@ FP.detectDoc = function (rawText, vehicules) {
   else if (/COUP[EÉ]/.test(text)) out.categorie = 'Coupé';
   else if (/CITADINE/.test(text)) out.categorie = 'Citadine';
 
+  // --- Marque + modèle (ex. PV : « HYUNDAI TUCSON 1.6 HYBRID … ») ---
+  const BRANDS = ['MERCEDES-BENZ','MERCEDES','LAND ROVER','ALFA ROMEO','VOLKSWAGEN','HYUNDAI','PEUGEOT','RENAULT','CITROEN','CITROËN','PORSCHE','TOYOTA','NISSAN','DACIA','VOLVO','SUZUKI','MAZDA','LEXUS','CUPRA','TESLA','SKODA','IVECO','DUCATI','OPEL','AUDI','BMW','FIAT','FORD','MINI','JEEP','SEAT','HONDA','KIA','BYD','MG','DS'];
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let brand = null;
+  for (const b of BRANDS) { if (new RegExp('\\b' + esc(b) + '\\b').test(text)) { brand = b; break; } }
+  if (brand) {
+    out.marque = brand === 'VW' ? 'VOLKSWAGEN' : brand;
+    const mm = text.match(new RegExp(esc(brand) + '\\s+([A-Z0-9ÉÈÀ\\- ]{2,40})'));
+    if (mm) {
+      const STOP = /^(SUV|VP|VU|BERLINE|BREAK|MONOSPACE|HYBRID|HYBRIDE|DIESEL|ESSENCE|[ÉE]LECTRIQUE|AUTOMATIQUE|MANUELLE|BOITE|BOÎTE|CV|CH|NEUF|NEUVE)$/;
+      const words = [];
+      for (const w of mm[1].trim().split(/\s+/)) { if (/\d/.test(w) || STOP.test(w) || w.length < 2) break; words.push(w); if (words.length >= 3) break; }
+      if (words.length) out.modele = words.join(' ');
+    }
+  }
+
   return out;
 };
 
