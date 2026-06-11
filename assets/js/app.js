@@ -258,6 +258,7 @@ FP.settings = {
     docStatus: {}, // statut forcé des documents { docId: 'actuel' | 'archive' } (sinon auto par date)
     docTypes: {},  // types de documents personnalisés { cle: 'Libellé' } (créés par l'utilisateur)
     docColsOrder: [], // ordre des colonnes du tableau Documents (vide = ordre par défaut)
+    vehDin: {}, // puissance DIN (ch) par véhicule { vehId: nombre } — pas de colonne DB dédiée
   },
   get() {
     try {
@@ -283,6 +284,7 @@ FP.settings = {
         docStatus: (stored.docStatus && typeof stored.docStatus === 'object') ? stored.docStatus : {},
         docTypes: (stored.docTypes && typeof stored.docTypes === 'object') ? stored.docTypes : {},
         docColsOrder: Array.isArray(stored.docColsOrder) ? stored.docColsOrder : [],
+        vehDin: (stored.vehDin && typeof stored.vehDin === 'object') ? stored.vehDin : {},
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
@@ -1204,6 +1206,9 @@ FP.detectDoc = function (rawText, vehicules) {
   // VIN / n° de châssis (17 caractères, sans I/O/Q)
   const vinm = text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/);
   if (vinm) out.vin = vinm[1];
+  // Puissance DIN (chevaux réels — ex. PV : « 239 chevaux ») — à ne pas confondre avec les CV fiscaux
+  const dinm = text.match(/\b(\d{2,4})\s*(?:CHEVAUX|CH\b|CH DIN|CV DIN)/);
+  if (dinm) { const n = +dinm[1]; if (n >= 30 && n < 2000) out.puissanceDin = n; }
   // Carburant
   if (/\bHYBRID|HEV|PHEV/.test(text)) out.carburant = 'Essence / Hybride';
   else if (/[ÉE]LECTRIQUE|\bELEC\b|\bEV\b/.test(text)) out.carburant = 'Électrique';

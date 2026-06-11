@@ -622,10 +622,10 @@
 </div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260611n"></script>
-<script src="../assets/js/data.js?v=20260611n"></script>
+<script src="../assets/js/supabase-client.js?v=20260611o"></script>
+<script src="../assets/js/data.js?v=20260611o"></script>
 <script src="../assets/js/fleet-docs.js"></script>
-<script src="../assets/js/app.js?v=20260611n"></script>
+<script src="../assets/js/app.js?v=20260611o"></script>
 <script>
   lucide.createIcons();
 
@@ -1548,6 +1548,7 @@
           <div class="flex justify-between"><span class="text-slate-600">VIN</span><span class="font-mono text-xs" data-df="vin" data-dt="text">${v.vin || '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">CO₂ <span class="text-slate-400 text-xs">(V.7)</span></span><span class="font-medium" data-df="co2" data-dt="number">${(v.co2 != null && v.co2 !== '') ? FP.num(v.co2) + ' g/km' : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Puissance fiscale <span class="text-slate-400 text-xs">(P.6)</span></span><span class="font-medium" data-df="puissanceFiscale" data-dt="number">${(v.puissanceFiscale != null && v.puissanceFiscale !== '') ? FP.num(v.puissanceFiscale) + ' CV' : '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between items-center"><span class="text-slate-600">Puissance DIN <span class="text-slate-400 text-xs">(ch)</span></span><span class="font-medium" style="display:inline-flex;align-items:center;gap:4px"><input class="veh-din" data-id="${v.id}" type="number" value="${((FP.settings.get().vehDin || {})[v.id]) ?? ''}" placeholder="—" style="width:72px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:2px 6px;font-size:.9rem"> ch</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Autonomie</span><span class="font-medium" data-df="autonomie" data-dt="text">${v.autonomie || '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">TVS ${FP.TVS_ANNEE} détail</span><span class="font-medium text-right">${tvsDet.applicable ? (tvsDet.total != null ? `CO₂ ${FP.euro(tvsDet.co2)} + polluants ${FP.euro(tvsDet.polluant)}` : '<span class="text-amber-600">CO₂ manquant</span>') : '<span class="text-slate-400">' + (tvsDet.raison || 'Non soumis') + '</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Dernier CT</span><span class="font-medium" data-df="dateDernierCT" data-dt="date">${v.dateDernierCT ? FP.dateNum(v.dateDernierCT) : '<span class="text-slate-400">—</span>'}</span></div>
@@ -2292,6 +2293,16 @@
   $('drawer-backdrop').addEventListener('click', closeDrawer);
 
   // Cases à cocher éditables dans le drawer : sauvegarde immédiate en localStorage
+  // Puissance DIN (stockée dans les réglages partagés, pas de colonne dédiée)
+  $('drawer-body').addEventListener('change', (e) => {
+    const din = e.target.closest('input.veh-din');
+    if (!din) return;
+    const s = FP.settings.get(); s.vehDin = s.vehDin || {};
+    const val = parseInt(din.value, 10);
+    if (Number.isFinite(val) && val > 0) s.vehDin[din.dataset.id] = val; else delete s.vehDin[din.dataset.id];
+    FP.settings.save(s);
+  });
+
   $('drawer-body').addEventListener('change', (e) => {
     const cb = e.target.closest('input.veh-toggle');
     if (!cb || !state.editingId) return;
@@ -2383,9 +2394,13 @@
               if (det.puissanceFiscale != null && (v.puissanceFiscale == null || v.puissanceFiscale === '')) { upd.puissanceFiscale = det.puissanceFiscale; got.push('puissance fiscale'); }
               if (det.vin && !v.vin) { upd.vin = det.vin; got.push('VIN'); }
               if (det.carburant && !v.carburant) { upd.carburant = det.carburant; got.push('carburant'); }
-              if (Object.keys(upd).length) {
-                Object.assign(v, upd);
-                if (FP.persist) FP.persist.update('vehicules', vehId, upd);
+              // Puissance DIN (réglages partagés, pas de colonne) — on remplit si vide
+              if (det.puissanceDin) {
+                const s = FP.settings.get(); s.vehDin = s.vehDin || {};
+                if (!s.vehDin[vehId]) { s.vehDin[vehId] = det.puissanceDin; FP.settings.save(s); got.push('puissance DIN'); }
+              }
+              if (got.length) {
+                if (Object.keys(upd).length) { Object.assign(v, upd); if (FP.persist) FP.persist.update('vehicules', vehId, upd); }
                 openDrawer(vehId); // ré-affiche avec les nouvelles infos
                 const note = document.createElement('div');
                 note.setAttribute('style', 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#047857;color:#fff;padding:10px 16px;border-radius:9999px;font-size:13px;z-index:90;box-shadow:0 8px 24px rgba(0,0,0,.25)');
