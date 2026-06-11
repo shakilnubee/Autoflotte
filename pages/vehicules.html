@@ -622,10 +622,10 @@
 </div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260611r"></script>
-<script src="../assets/js/data.js?v=20260611r"></script>
+<script src="../assets/js/supabase-client.js?v=20260611s"></script>
+<script src="../assets/js/data.js?v=20260611s"></script>
 <script src="../assets/js/fleet-docs.js"></script>
-<script src="../assets/js/app.js?v=20260611r"></script>
+<script src="../assets/js/app.js?v=20260611s"></script>
 <script>
   lucide.createIcons();
 
@@ -2638,20 +2638,10 @@
     if (!file) return;
     try {
       cgWorking('Lecture de la carte grise… (quelques secondes au 1er usage)');
-      await loadScript(TESSERACT_CDN);
+      // FP.ocr lit d'abord la couche texte du PDF (fiable), sinon bascule sur l'OCR image multilingue.
+      const rawText = await FP.ocr.fileToText(file);
 
-      let image = file;
-      if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-        cgWorking('Conversion du PDF…');
-        image = await pdfToCanvas(file);
-      }
-
-      const worker = await Tesseract.createWorker('fra');
-      cgWorking('Analyse du texte…');
-      const { data } = await worker.recognize(image);
-      await worker.terminate();
-
-      const parsed = parseCarteGrise(data.text);
+      const parsed = parseCarteGrise(rawText);
       const filled = [];
       // On ne remplit que les champs vides : on n'écrase pas une saisie manuelle
       if (parsed.immat  && !$('f-immat').value)  { $('f-immat').value  = parsed.immat;  filled.push('immatriculation'); }
@@ -2682,11 +2672,13 @@
 
   // OCR brut d'un fichier (image ou PDF) → texte, en réutilisant un worker Tesseract existant.
   async function ocrFileToText(file, worker) {
-    let image = file;
+    // PDF avec couche texte → lecture exacte ; sinon OCR (worker partagé pour le lot)
     if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) {
-      image = await pdfToCanvas(file);
+      try { const t = await FP.ocr.pdfToText(file); if (t && t.replace(/\s/g, '').length > 80) return t; } catch (e) {}
+      const image = await pdfToCanvas(file);
+      const { data } = await worker.recognize(image); return data.text || '';
     }
-    const { data } = await worker.recognize(image);
+    const { data } = await worker.recognize(file);
     return data.text || '';
   }
 

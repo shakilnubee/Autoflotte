@@ -1100,11 +1100,26 @@ FP.ocr = {
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
     return canvas;
   },
+  // Extraction de la couche texte d'un PDF (si le PDF n'est pas une simple image) — fiable, sans OCR.
+  async pdfToText(file) {
+    await this.loadScript(this.PDFJS_CDN);
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = this.PDFJS_WORKER;
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    let out = '';
+    const n = Math.min(pdf.numPages, 3);
+    for (let p = 1; p <= n; p++) { const page = await pdf.getPage(p); const tc = await page.getTextContent(); out += tc.items.map(i => i.str).join(' ') + '\n'; }
+    return out;
+  },
   async fileToText(file) {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+    // 1) PDF avec texte intégré (PV, cartes grises de leasing, factures…) → lecture EXACTE sans OCR
+    if (isPdf) {
+      try { const t = await this.pdfToText(file); if (t && t.replace(/\s/g, '').length > 80) return t; } catch (e) { console.warn('[pdfToText]', e); }
+    }
+    // 2) Sinon (image, ou PDF scanné sans texte) → OCR Tesseract multilingue
     await this.loadScript(this.TESSERACT_CDN);
-    let image = file;
-    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) image = await this.pdfToCanvas(file);
-    // Multilingue : factures FR + Italie + Allemagne + Pays-Bas (téléchargé une fois, mis en cache).
+    const image = isPdf ? await this.pdfToCanvas(file) : file;
     const worker = await Tesseract.createWorker('fra+ita+deu+nld');
     try { const { data } = await worker.recognize(image); return data.text || ''; }
     finally { await worker.terminate(); }
