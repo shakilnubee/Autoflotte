@@ -640,6 +640,38 @@ FP.revisionInfo = (v) => {
 };
 
 // =====================================================================
+// === Widget « Coût par période » (réutilisable : factures, sinistres, stats) =====
+// =====================================================================
+// items() renvoie un tableau d'objets { date, montantTTC }. Affiche le total par
+// année (boutons cliquables) + un sélecteur de période personnalisée (du / au).
+FP.coutParPeriode = function (opts) {
+  const $ = id => document.getElementById(id);
+  const yearsEl = $(opts.yearsEl), fromEl = $(opts.fromEl), toEl = $(opts.toEl), totalEl = $(opts.totalEl), clearEl = $(opts.clearEl);
+  if (!yearsEl || !fromEl || !toEl) return { render() {} };
+  const list = () => (opts.items() || []);
+  function renderYears() {
+    const by = {};
+    list().forEach(f => { const y = (f.date || '').slice(0, 4); if (/^\d{4}$/.test(y)) by[y] = (by[y] || 0) + (Number(f.montantTTC) || 0); });
+    const ys = Object.keys(by).sort().reverse();
+    yearsEl.innerHTML = ys.length
+      ? ys.map(y => `<button type="button" class="kpi p-3" data-cp-year="${y}" style="cursor:pointer;text-align:left"><div class="kpi-label">${y}</div><div class="kpi-value" style="font-size:1.15rem">${FP.euro(by[y])}</div></button>`).join('')
+      : '<div class="text-sm text-slate-500">Aucune donnée pour le moment.</div>';
+  }
+  function renderRange() {
+    const from = fromEl.value, to = toEl.value;
+    if (!from && !to) { if (totalEl) totalEl.textContent = ''; if (clearEl) clearEl.classList.add('hidden'); return; }
+    if (clearEl) clearEl.classList.remove('hidden');
+    const t = list().filter(f => { const d = f.date || ''; if (from && d < from) return false; if (to && d > to) return false; return true; }).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    if (totalEl) totalEl.textContent = FP.euro(t);
+  }
+  yearsEl.addEventListener('click', e => { const b = e.target.closest('[data-cp-year]'); if (!b) return; const y = b.dataset.cpYear; fromEl.value = y + '-01-01'; toEl.value = y + '-12-31'; renderRange(); });
+  fromEl.addEventListener('change', renderRange);
+  toEl.addEventListener('change', renderRange);
+  if (clearEl) clearEl.addEventListener('click', () => { fromEl.value = ''; toEl.value = ''; renderRange(); });
+  return { render() { renderYears(); renderRange(); } };
+};
+
+// =====================================================================
 // === Leasing BPCE : forfait km contractuel + suivi de dépassement =====
 // =====================================================================
 // Termes issus des contrats signés BPCE Car Lease (dossier Drive flotte).
