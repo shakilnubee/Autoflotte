@@ -261,9 +261,9 @@
 </div>
 
 <script src="assets/js/vendor/supabase.js"></script>
-<script src="assets/js/supabase-client.js?v=20260611e"></script>
-<script src="assets/js/data.js?v=20260611e"></script>
-<script src="assets/js/app.js?v=20260611e"></script>
+<script src="assets/js/supabase-client.js?v=20260611f"></script>
+<script src="assets/js/data.js?v=20260611f"></script>
+<script src="assets/js/app.js?v=20260611f"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script>
   lucide.createIcons();
@@ -616,11 +616,12 @@
   //  Lecture OCR (FP.ocr) → détection (FP.detectDoc) → upload + enregistrement.
   // ============================================================
   (function scanDocFeature() {
+    // 'facture' = destination « liste Factures » ; les autres = « Documents » de la fiche véhicule.
     const TYPE_LABELS = {
+      'facture': '💶 Facture (→ liste Factures)',
       'controle-technique': 'Contrôle technique',
       'carte-grise': 'Carte grise',
       'assurance': 'Assurance (carte verte)',
-      'facture-achat': "Facture d'achat",
       'contrat': 'Contrat leasing/location',
       'etat-des-lieux': 'État des lieux',
       'autre': 'Autre document',
@@ -706,7 +707,8 @@
             ${vehSelect('b-veh-' + i, d.vehicule && d.vehicule.id)}
             ${typeSelect('b-type-' + i, d.type)}
             <input id="b-date-${i}" type="date" class="field-input" style="flex:1;min-width:130px" value="${d.date || ''}">
-            <input id="b-km-${i}" type="number" class="field-input" style="flex:1;min-width:95px" placeholder="km" value="${d.km || ''}">
+            <input id="b-km-${i}" type="number" class="field-input" style="flex:1;min-width:90px" placeholder="km" value="${d.km || ''}">
+            <input id="b-amt-${i}" type="number" step="0.01" class="field-input" style="flex:1;min-width:90px" placeholder="€ TTC" value="${d.montantTTC || ''}">
           </div>
         </div>`;
       }).join('');
@@ -717,13 +719,21 @@
       $('scan-save-all').addEventListener('click', () => saveBatch(items));
     }
 
+    function nextFactId() {
+      let max = 0;
+      (window.FP_DATA.factures || []).forEach(f => { const m = /^FA-(\d+)$/.exec(f.id || ''); if (m) max = Math.max(max, parseInt(m[1], 10)); });
+      return 'FA-' + String(max + 1).padStart(4, '0');
+    }
+
     async function saveBatch(items) {
       const rows = items.map((it, i) => ({
         file: it.file,
+        det: it.det,
         vehId: $('b-veh-' + i).value,
         type: $('b-type-' + i).value,
         date: $('b-date-' + i).value,
         km: parseInt($('b-km-' + i).value, 10),
+        amt: parseFloat($('b-amt-' + i).value),
       }));
       const missing = rows.filter(r => !r.vehId).length;
       if (missing) { alert(missing + ' document(s) sans véhicule choisi. Sélectionnez un véhicule pour chacun.'); return; }
@@ -738,16 +748,38 @@
         try {
           const veh = (window.FP_DATA.vehicules || []).find(v => v.id === r.vehId);
           const url = await FP.uploadScan(r.file, 'documents');
-          const label = (TYPE_LABELS[r.type] || 'Document') + (r.date ? ' ' + r.date.slice(0, 4) : '');
-          await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + i, vehiculeId: r.vehId, type: r.type, label, url, driveId: null });
-          const upd = {};
-          if (r.type === 'controle-technique' && r.date) upd.prochainCT = r.date;
-          if (Number.isFinite(r.km) && r.km > 0 && (!veh || !veh.km || r.km > veh.km)) upd.km = r.km;
-          if (Object.keys(upd).length) { await FP.persist.update('vehicules', r.vehId, upd); if (veh) Object.assign(veh, upd); }
-          let line = `<b>${veh ? veh.immat : ''}</b> — ${label}`;
-          if (upd.prochainCT) line += ` · CT→${FP.dateNum(upd.prochainCT)}`;
-          if (upd.km) line += ` · ${FP.num(upd.km)} km`;
-          done.push('• ' + line); okN++;
+
+          if (r.type === 'facture') {
+            // → table FACTURES (apparaît dans la liste Factures)
+            const cat = (r.det && r.det.factureCategorie) || 'autre';
+            const fact = {
+              id: nextFactId(), date: r.date || null,
+              vehiculeImmat: veh ? veh.immat : null,
+              fournisseur: null, numeroFacture: null,
+              description: r.file.name || 'Facture scannée',
+              type: cat,
+              montantHT: null, montantTVA: null,
+              montantTTC: Number.isFinite(r.amt) ? r.amt : null,
+              km: Number.isFinite(r.km) ? r.km : null,
+              fileId: url, fileName: r.file.name || null,
+            };
+            await FP.persist.insert('factures', fact);
+            if (window.FP_DATA.factures) window.FP_DATA.factures.push(fact); // live + prochain id
+            let line = `<b>${veh ? veh.immat : ''}</b> — Facture${Number.isFinite(r.amt) ? ' ' + FP.euro(r.amt) : ' (montant à compléter)'} → liste Factures`;
+            done.push('• ' + line); okN++;
+          } else {
+            // → DOCUMENTS de la fiche véhicule
+            const label = (TYPE_LABELS[r.type] || 'Document') + (r.date ? ' ' + r.date.slice(0, 4) : '');
+            await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + i, vehiculeId: r.vehId, type: r.type, label, url, driveId: null });
+            const upd = {};
+            if (r.type === 'controle-technique' && r.date) upd.prochainCT = r.date;
+            if (Number.isFinite(r.km) && r.km > 0 && (!veh || !veh.km || r.km > veh.km)) upd.km = r.km;
+            if (Object.keys(upd).length) { await FP.persist.update('vehicules', r.vehId, upd); if (veh) Object.assign(veh, upd); }
+            let line = `<b>${veh ? veh.immat : ''}</b> — ${label}`;
+            if (upd.prochainCT) line += ` · CT→${FP.dateNum(upd.prochainCT)}`;
+            if (upd.km) line += ` · ${FP.num(upd.km)} km`;
+            done.push('• ' + line); okN++;
+          }
         } catch (err) {
           console.error('[scan batch]', err);
           done.push(`• ⚠️ ${r.file.name} : échec (${err && err.message ? err.message : err})`);
