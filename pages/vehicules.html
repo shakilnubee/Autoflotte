@@ -622,10 +622,10 @@
 </div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260611k"></script>
-<script src="../assets/js/data.js?v=20260611k"></script>
+<script src="../assets/js/supabase-client.js?v=20260611l"></script>
+<script src="../assets/js/data.js?v=20260611l"></script>
 <script src="../assets/js/fleet-docs.js"></script>
-<script src="../assets/js/app.js?v=20260611k"></script>
+<script src="../assets/js/app.js?v=20260611l"></script>
 <script>
   lucide.createIcons();
 
@@ -807,10 +807,8 @@
           <select id="doc-type" class="field-input">${typeOptions}</select>
           <input id="doc-label" class="field-input" placeholder="Nom (ex : Contrôle technique 2026)" />
           <input id="doc-file" type="file" accept="image/*,application/pdf" class="field-input" style="padding:8px;font-size:13px" />
-          <div class="text-slate-400" style="font-size:11px;text-align:center">— ou coller un lien —</div>
-          <input id="doc-url" class="field-input" placeholder="Lien (Google Drive, Dropbox…)" />
-          <button type="button" id="doc-add" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter le document</button>
-          <p class="text-xs text-slate-400">Importez un fichier (photo ou PDF) depuis votre appareil, ou collez un lien. Le fichier est enregistré en ligne et consultable depuis n'importe quel poste.</p>
+          <button type="button" id="doc-add" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Importer le document</button>
+          <p class="text-xs text-slate-400">Choisissez une photo ou un PDF depuis votre appareil — il est enregistré en ligne et consultable depuis n'importe quel poste. Aucun lien externe nécessaire.</p>
         </div>
       </div>`;
   }
@@ -2358,30 +2356,47 @@
       const fileInput = body.querySelector('#doc-file');
       const file = fileInput && fileInput.files && fileInput.files[0];
 
-      // 1) Un fichier a été choisi → on l'envoie dans le stockage en ligne (Supabase)
-      if (file) {
-        if (!(window.FP && FP.supabase && FP.uploadScan)) {
-          alert("L'import de fichier nécessite d'être connecté. Réessayez une fois en ligne, ou collez un lien.");
-          return;
-        }
-        const old = btn.innerHTML;
-        btn.disabled = true;
-        btn.style.opacity = '.7';
-        btn.innerHTML = '⏳ Import en cours…';
-        FP.uploadScan(file, 'documents')
-          .then(url => { addVehDoc(state.editingId, type, label || file.name, url); }) // re-rend la fiche
-          .catch(err => {
-            console.error('[doc upload]', err);
-            alert("Échec de l'import du fichier : " + (err && err.message ? err.message : err));
-            btn.disabled = false; btn.style.opacity = ''; btn.innerHTML = old; if (window.lucide) lucide.createIcons();
-          });
+      if (!file) { alert('Choisissez un fichier (photo ou PDF) à importer.'); return; }
+      if (!(window.FP && FP.supabase && FP.uploadScan)) {
+        alert("L'import de fichier nécessite d'être connecté à internet. Réessayez une fois en ligne.");
         return;
       }
-
-      // 2) Sinon : un lien collé
-      const url = sanitizeUrl(body.querySelector('#doc-url').value);
-      if (!url) { alert('Choisissez un fichier à importer, ou collez un lien valide (http:// ou https://).'); return; }
-      addVehDoc(state.editingId, type, label, url);
+      const vehId = state.editingId;
+      const old = btn.innerHTML;
+      btn.disabled = true; btn.style.opacity = '.7'; btn.innerHTML = '⏳ Import en cours…';
+      FP.uploadScan(file, 'documents')
+        .then(async (url) => {
+          addVehDoc(vehId, type, label || file.name, url); // archive le doc + re-rend la fiche
+          // Lecture du document → on complète automatiquement les champs vides de la fiche
+          try {
+            const text = await FP.ocr.fileToText(file);
+            const det = FP.detectDoc(text, data.vehicules);
+            const v = data.vehicules.find(x => x.id === vehId);
+            if (v) {
+              const upd = {}; const got = [];
+              if (det.type === 'controle-technique' && det.date && !v.prochainCT) { upd.prochainCT = det.date; got.push('prochain CT'); }
+              if (det.km && (!v.km || det.km > v.km)) { upd.km = det.km; got.push('kilométrage'); }
+              if (det.co2 != null && (v.co2 == null || v.co2 === '')) { upd.co2 = det.co2; got.push('CO₂'); }
+              if (det.puissanceFiscale != null && (v.puissanceFiscale == null || v.puissanceFiscale === '')) { upd.puissanceFiscale = det.puissanceFiscale; got.push('puissance fiscale'); }
+              if (det.vin && !v.vin) { upd.vin = det.vin; got.push('VIN'); }
+              if (det.carburant && !v.carburant) { upd.carburant = det.carburant; got.push('carburant'); }
+              if (Object.keys(upd).length) {
+                Object.assign(v, upd);
+                if (FP.persist) FP.persist.update('vehicules', vehId, upd);
+                openDrawer(vehId); // ré-affiche avec les nouvelles infos
+                const note = document.createElement('div');
+                note.setAttribute('style', 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#047857;color:#fff;padding:10px 16px;border-radius:9999px;font-size:13px;z-index:90;box-shadow:0 8px 24px rgba(0,0,0,.25)');
+                note.textContent = '✓ Fiche complétée depuis le document : ' + got.join(', ');
+                document.body.appendChild(note); setTimeout(() => note.remove(), 4500);
+              }
+            }
+          } catch (e) { console.error('[doc extract]', e); }
+        })
+        .catch(err => {
+          console.error('[doc upload]', err);
+          alert("Échec de l'import du fichier : " + (err && err.message ? err.message : err));
+          btn.disabled = false; btn.style.opacity = ''; btn.innerHTML = old; if (window.lucide) lucide.createIcons();
+        });
     }
   });
 

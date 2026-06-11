@@ -1194,6 +1194,22 @@ FP.detectDoc = function (rawText, vehicules) {
   else if (/ACHAT\s+V[EÉ]HICULE|ACQUISITION|BON\s+DE\s+COMMANDE|ACQUISTO|KAUFVERTRAG|AANKOOP/.test(text)) cat = 'achat';
   out.factureCategorie = cat;
 
+  // --- Caractéristiques techniques (ex. PV de livraison, carte grise) ---
+  // CO2 (g/km)
+  let co2m = text.match(/CO2\s*[:\s]*(\d{1,3})/) || text.match(/\b(\d{1,3})\s*GR?\s*\/?\s*KM\b/);
+  if (co2m) { const n = +co2m[1]; if (n >= 0 && n < 600) out.co2 = n; }
+  // Puissance fiscale (CV)
+  const cvm = text.match(/\b(\d{1,2})\s*CV\b/);
+  if (cvm) { const n = +cvm[1]; if (n > 0 && n < 100) out.puissanceFiscale = n; }
+  // VIN / n° de châssis (17 caractères, sans I/O/Q)
+  const vinm = text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/);
+  if (vinm) out.vin = vinm[1];
+  // Carburant
+  if (/\bHYBRID|HEV|PHEV/.test(text)) out.carburant = 'Essence / Hybride';
+  else if (/[ÉE]LECTRIQUE|\bELEC\b|\bEV\b/.test(text)) out.carburant = 'Électrique';
+  else if (/DIESEL|GAZOLE|\bGO\b/.test(text)) out.carburant = 'Diesel';
+  else if (/\bESSENCE\b/.test(text)) out.carburant = 'Essence';
+
   return out;
 };
 
