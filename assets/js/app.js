@@ -1221,9 +1221,10 @@ FP.detectDoc = function (rawText, vehicules) {
   // Puissance fiscale (CV)
   const cvm = text.match(/\b(\d{1,2})\s*CV\b/);
   if (cvm) { const n = +cvm[1]; if (n > 0 && n < 100) out.puissanceFiscale = n; }
-  // VIN / n° de châssis (17 caractères, sans I/O/Q)
-  const vinm = text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/);
-  if (vinm) out.vin = vinm[1];
+  // VIN / n° de châssis — priorité au libellé « châssis » (plus fiable que le 1er bloc de 17 car.)
+  const chassisM = text.match(/CH[AÂ]SSIS\s*[:\s°N]*([A-HJ-NPR-Z0-9]{15,18})/) || text.match(/\bVIN\s*[:\s]*([A-HJ-NPR-Z0-9]{15,18})/);
+  if (chassisM) out.vin = chassisM[1];
+  else { const vinm = text.match(/\b([A-HJ-NPR-Z0-9]{17})\b/); if (vinm) out.vin = vinm[1]; }
   // Puissance DIN (chevaux réels — ex. PV : « 239 chevaux ») — à ne pas confondre avec les CV fiscaux
   const dinm = text.match(/\b(\d{2,4})\s*(?:CHEVAUX|CH\b|CH DIN|CV DIN)/);
   if (dinm) { const n = +dinm[1]; if (n >= 30 && n < 2000) out.puissanceDin = n; }
