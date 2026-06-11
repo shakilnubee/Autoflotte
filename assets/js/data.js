@@ -1219,7 +1219,7 @@ window.FP_DATA = {
       "photoUrl": null,
       "cgUrl": null,
       "antiPollution": null,
-      "dimensionPneus": null,
+      "dimensionPneus": "205/60 R16",
       "version": "MG4 Standard Electric 51 kWh - 125 kW 2WD",
       "dateChangementPneus": "2026-03-23",
       "autonomie": "350 km",
