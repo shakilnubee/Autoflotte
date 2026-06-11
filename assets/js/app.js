@@ -591,16 +591,12 @@ FP.REVISION_INTERVALS = {
   'CITROEN':       { km: 20000, mois: 12 },
   'DUCATI':        { km: 12000, mois: 12 },
 };
-FP.REVISION_DEFAUT = { km: 20000, mois: 12 };
+FP.REVISION_DEFAUT = { km: 15000, mois: 12 };
 
-// Intervalle applicable à un véhicule (avec nuance carburant)
-FP.revisionIntervalle = (v) => {
-  const base = FP.REVISION_INTERVALS[(v.marque || '').toUpperCase().trim()] || FP.REVISION_DEFAUT;
-  let km = base.km, mois = base.mois;
-  const carb = (v.carburant || '').toLowerCase();
-  if (carb.indexOf('lec') !== -1) { km = Math.max(km, 30000); mois = Math.max(mois, 24); } // électrique
-  return { km, mois };
-};
+// Intervalle de révision : règle unique demandée → tous les 15 000 km OU tous les 12 mois
+// (au premier des deux atteint), pour tous les véhicules.
+FP.revisionIntervalle = (v) => ({ km: 15000, mois: 12 });
+// (ancien calcul par marque/carburant remplacé par la règle unique 15 000 km / 12 mois ci-dessus)
 
 // Échéance de révision : estimation par paliers de km (multiples de l'intervalle)
 // + échéance temporelle si la dernière révision est connue. Renvoie le niveau
