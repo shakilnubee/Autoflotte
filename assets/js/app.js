@@ -1209,6 +1209,14 @@ FP.detectDoc = function (rawText, vehicules) {
   else if (/[ÉE]LECTRIQUE|\bELEC\b|\bEV\b/.test(text)) out.carburant = 'Électrique';
   else if (/DIESEL|GAZOLE|\bGO\b/.test(text)) out.carburant = 'Diesel';
   else if (/\bESSENCE\b/.test(text)) out.carburant = 'Essence';
+  // Catégorie / carrosserie (ex. PV : « … SUV … »)
+  if (/\bSUV\b|4X4|CROSSOVER/.test(text)) out.categorie = 'SUV';
+  else if (/\bBERLINE\b/.test(text)) out.categorie = 'Berline';
+  else if (/\bBREAK\b/.test(text)) out.categorie = 'Break';
+  else if (/MONOSPACE/.test(text)) out.categorie = 'Monospace';
+  else if (/UTILITAIRE|FOURGON|\bCTTE\b/.test(text)) out.categorie = 'Utilitaire';
+  else if (/COUP[EÉ]/.test(text)) out.categorie = 'Coupé';
+  else if (/CITADINE/.test(text)) out.categorie = 'Citadine';
 
   return out;
 };
