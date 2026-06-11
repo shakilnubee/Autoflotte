@@ -1094,7 +1094,8 @@ FP.ocr = {
     await this.loadScript(this.TESSERACT_CDN);
     let image = file;
     if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) image = await this.pdfToCanvas(file);
-    const worker = await Tesseract.createWorker('fra');
+    // Multilingue : factures FR + Italie + Allemagne + Pays-Bas (téléchargé une fois, mis en cache).
+    const worker = await Tesseract.createWorker('fra+ita+deu+nld');
     try { const { data } = await worker.recognize(image); return data.text || ''; }
     finally { await worker.terminate(); }
   },
@@ -1125,7 +1126,7 @@ FP.detectDoc = function (rawText, vehicules) {
   if (/CONTR[OÔ]LE\s+TECHNIQUE|PROC[EÈ]S[-\s]?VERBAL|PROCHAIN\s+CONTR|FAVORABLE|D[EÉ]FAVORABLE/.test(text)) out.type = 'controle-technique';
   else if (/CERTIFICAT\s+D.?IMMATRICULATION|CARTE\s+GRISE/.test(text)) out.type = 'carte-grise';
   else if (/ATTESTATION\s+D.?ASSURANCE|CARTE\s+VERTE|\bASSURANCE\b/.test(text)) out.type = 'assurance';
-  else if (/\bFACTURE\b|TOTAL\s+TTC|MONTANT\s+TTC|NET\s+[AÀ]\s+PAYER/.test(text)) out.type = 'facture';
+  else if (/\bFACTURE\b|\bFATTURA\b|\bRECHNUNG\b|\bFACTUUR\b|TOTAL\s+TTC|MONTANT\s+TTC|NET\s+[AÀ]\s+PAYER/.test(text)) out.type = 'facture';
 
   // --- Dates dd/mm/yyyy (filtrées sur une plage plausible) ---
   const toIso = (d, mo, y) => { y = +y; if (y < 100) y += 2000; return `${y}-${String(+mo).padStart(2, '0')}-${String(+d).padStart(2, '0')}`; };
@@ -1171,7 +1172,8 @@ FP.detectDoc = function (rawText, vehicules) {
     const n = parseFloat(s);
     return Number.isFinite(n) ? n : null;
   };
-  const ttcM = text.match(/T\.?\s*T\.?\s*C\.?[^\d]{0,14}(\d[\d  .,]*\d)/) || text.match(/NET\s+[AÀ]\s+PAYER[^\d]{0,14}(\d[\d  .,]*\d)/);
+  // Mots-clés « total à payer » en FR / IT / DE / NL (même ligne que le montant) ; sinon, repli sur le plus gros montant.
+  const ttcM = text.match(/(?:T\.?\s*T\.?\s*C\.?|NET\s+[AÀ]\s+PAYER|TOTALE|GESAMTBETRAG|GESAMT|BRUTTO|ZU\s+ZAHLEN|TOTAAL|TE\s+BETALEN)[^\d\n]{0,12}(\d[\d .,  ]*\d)/);
   let ttc = ttcM ? normAmount(ttcM[1]) : null;
   if (ttc == null) {
     const amts = [...text.matchAll(/(\d{1,3}(?:[  .]\d{3})*|\d+)[.,](\d{2})\b/g)].map(m => normAmount(m[0])).filter(n => n != null && n > 0 && n < 1000000);
@@ -1181,9 +1183,9 @@ FP.detectDoc = function (rawText, vehicules) {
 
   // --- Catégorie de dépense (pour la table factures) ---
   let cat = 'autre';
-  if (/ENTRETIEN|R[EÉ]VISION|VIDANGE|PNEU|PLAQUETTE|COURROIE|DISTRIBUTION|FREIN|FILTRE/.test(text)) cat = 'entretien';
-  else if (/R[EÉ]PARATION|CARROSSERIE|CHOC|PARE[- ]?BRISE|BRIS\s+DE\s+GLACE/.test(text)) cat = 'réparation';
-  else if (/ACHAT\s+V[EÉ]HICULE|ACQUISITION|BON\s+DE\s+COMMANDE/.test(text)) cat = 'achat';
+  if (/ENTRETIEN|R[EÉ]VISION|VIDANGE|PNEU|PLAQUETTE|COURROIE|DISTRIBUTION|FREIN|FILTRE|TAGLIANDO|MANODOPERA|RICAMBI|MANUTENZIONE|WARTUNG|INSPEKTION|ÖLWECHSEL|ONDERHOUD|BANDEN/.test(text)) cat = 'entretien';
+  else if (/R[EÉ]PARATION|CARROSSERIE|CHOC|PARE[- ]?BRISE|BRIS\s+DE\s+GLACE|RIPARAZIONE|GUASTO|PANNE|REPARATUR|REPARATIE/.test(text)) cat = 'réparation';
+  else if (/ACHAT\s+V[EÉ]HICULE|ACQUISITION|BON\s+DE\s+COMMANDE|ACQUISTO|KAUFVERTRAG|AANKOOP/.test(text)) cat = 'achat';
   out.factureCategorie = cat;
 
   return out;
