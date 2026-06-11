@@ -359,6 +359,19 @@ FP.darkMode = {
   set(v) { try { localStorage.setItem('fp_dark_mode', v ? '1' : '0'); } catch (e) {} if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme(); },
   toggle() { this.set(!this.get()); return this.get(); },
 };
+
+// Sécurité : empêche « Retour arrière » de faire « page précédente » (et de perdre une saisie)
+// quand le focus n'est pas dans un champ éditable.
+(function guardBackspace() {
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Backspace') return;
+    const t = e.target || {};
+    const tag = (t.tagName || '').toUpperCase();
+    const editable = t.isContentEditable || tag === 'TEXTAREA' ||
+      (tag === 'INPUT' && !/^(button|submit|reset|checkbox|radio|file|range|color|image)$/i.test(t.type || 'text'));
+    if (!editable) e.preventDefault();
+  });
+})();
 // Nettoie le modèle en retirant la marque répétée au début (ex. BYD "BYD SEAL U" → "SEAL U")
 FP.cleanModele = (marque, modele) => {
   let m = (modele || '').trim();
