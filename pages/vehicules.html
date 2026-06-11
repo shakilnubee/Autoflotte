@@ -623,10 +623,10 @@
 </div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260611t"></script>
-<script src="../assets/js/data.js?v=20260611t"></script>
+<script src="../assets/js/supabase-client.js?v=20260611u"></script>
+<script src="../assets/js/data.js?v=20260611u"></script>
 <script src="../assets/js/fleet-docs.js"></script>
-<script src="../assets/js/app.js?v=20260611t"></script>
+<script src="../assets/js/app.js?v=20260611u"></script>
 <script>
   lucide.createIcons();
 
@@ -1444,7 +1444,15 @@
       f.vehiculeImmat === v.immat
       && (f.date || '').startsWith('2026')
       && COUT_TYPES.includes((f.type || '').toLowerCase()));
-    const coutTotal = factures2026.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    // Sinistres 2026 NON remboursés → comptent dans le coût (reste à charge) ; remboursés = 0.
+    const sinStat = (FP.settings.get().sinistreStatut) || {};
+    const sinistres2026 = (data.factures || []).filter(f =>
+      f.vehiculeImmat === v.immat
+      && (f.date || '').startsWith('2026')
+      && (f.type || '').toLowerCase() === 'sinistre'
+      && sinStat[f.id] !== 'rembourse');
+    const coutSinistres = sinistres2026.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    const coutTotal = factures2026.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0) + coutSinistres;
     // Carnet d'entretien : toutes les factures entretien/réparation du véhicule (toutes années), récentes en premier
     const carnet = (data.factures || [])
       .filter(f => f.vehiculeImmat === v.immat && COUT_TYPES.includes((f.type || '').toLowerCase()))

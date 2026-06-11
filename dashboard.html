@@ -261,9 +261,9 @@
 </div>
 
 <script src="assets/js/vendor/supabase.js"></script>
-<script src="assets/js/supabase-client.js?v=20260611t"></script>
-<script src="assets/js/data.js?v=20260611t"></script>
-<script src="assets/js/app.js?v=20260611t"></script>
+<script src="assets/js/supabase-client.js?v=20260611u"></script>
+<script src="assets/js/data.js?v=20260611u"></script>
+<script src="assets/js/app.js?v=20260611u"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script>
   lucide.createIcons();
@@ -619,6 +619,7 @@
     // 'facture' = destination « liste Factures » ; les autres = « Documents » de la fiche véhicule.
     const TYPE_LABELS = {
       'facture': '💶 Facture (→ liste Factures)',
+      'sinistre': '🛡️ Sinistre (→ Sinistres)',
       'controle-technique': 'Contrôle technique',
       'pv': 'PV (Procès-verbal)',
       'carte-grise': 'Carte grise',
@@ -750,14 +751,15 @@
           const veh = (window.FP_DATA.vehicules || []).find(v => v.id === r.vehId);
           const url = await FP.uploadScan(r.file, 'documents');
 
-          if (r.type === 'facture') {
-            // → table FACTURES (apparaît dans la liste Factures)
-            const cat = (r.det && r.det.factureCategorie) || 'autre';
+          if (r.type === 'facture' || r.type === 'sinistre') {
+            // → table FACTURES (Facture → liste Factures ; Sinistre → page Sinistres)
+            const isSin = r.type === 'sinistre';
+            const cat = isSin ? 'sinistre' : ((r.det && r.det.factureCategorie) || 'autre');
             const fact = {
               id: nextFactId(), date: r.date || null,
               vehiculeImmat: veh ? veh.immat : null,
               fournisseur: null, numeroFacture: null,
-              description: r.file.name || 'Facture scannée',
+              description: r.file.name || (isSin ? 'Sinistre scanné' : 'Facture scannée'),
               type: cat,
               montantHT: null, montantTVA: null,
               montantTTC: Number.isFinite(r.amt) ? r.amt : null,
@@ -765,8 +767,11 @@
               fileId: url, fileName: r.file.name || null,
             };
             await FP.persist.insert('factures', fact);
-            if (window.FP_DATA.factures) window.FP_DATA.factures.push(fact); // live + prochain id
-            let line = `<b>${veh ? veh.immat : ''}</b> — Facture${Number.isFinite(r.amt) ? ' ' + FP.euro(r.amt) : ' (montant à compléter)'} → liste Factures`;
+            if (window.FP_DATA.factures) window.FP_DATA.factures.push(fact);
+            if (isSin) { // marque le sinistre « en attente de remboursement » pour le suivi
+              const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {}; s.sinistreStatut[fact.id] = 'attente'; FP.settings.save(s);
+            }
+            let line = `<b>${veh ? veh.immat : ''}</b> — ${isSin ? 'Sinistre' : 'Facture'}${Number.isFinite(r.amt) ? ' ' + FP.euro(r.amt) : ' (montant à compléter)'} → ${isSin ? 'Sinistres (en attente de remboursement)' : 'liste Factures'}`;
             done.push('• ' + line); okN++;
           } else {
             // → DOCUMENTS de la fiche véhicule

@@ -259,6 +259,7 @@ FP.settings = {
     docTypes: {},  // types de documents personnalisés { cle: 'Libellé' } (créés par l'utilisateur)
     docColsOrder: [], // ordre des colonnes du tableau Documents (vide = ordre par défaut)
     vehDin: {}, // puissance DIN (ch) par véhicule { vehId: nombre } — pas de colonne DB dédiée
+    sinistreStatut: {}, // suivi remboursement sinistre { factureId: 'attente'|'rembourse'|'refuse' }
   },
   get() {
     try {
@@ -285,6 +286,7 @@ FP.settings = {
         docTypes: (stored.docTypes && typeof stored.docTypes === 'object') ? stored.docTypes : {},
         docColsOrder: Array.isArray(stored.docColsOrder) ? stored.docColsOrder : [],
         vehDin: (stored.vehDin && typeof stored.vehDin === 'object') ? stored.vehDin : {},
+        sinistreStatut: (stored.sinistreStatut && typeof stored.sinistreStatut === 'object') ? stored.sinistreStatut : {},
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
@@ -861,6 +863,14 @@ FP.buildAlertes = (data) => {
       vehicules: sansRevList.map(v => ({ label: `${v.immat || '—'} · ${(v.marque || '')} ${(v.modele || '')}`.trim() + (v.chauffeur && v.chauffeur !== '—' ? ' — ' + v.chauffeur : ''), target: 'vehicules.html?veh=' + v.id })) });
   }
 
+  // --- Sinistres en attente de remboursement (rappel de suivi) ---
+  const sinStatut = (FP.settings.get().sinistreStatut) || {};
+  const sinAttente = (data.factures || []).filter(f => f.type === 'sinistre' && sinStatut[f.id] === 'attente');
+  if (sinAttente.length) {
+    out.push({ niveau: 'warn', categorie: 'Sinistres', message: `${sinAttente.length} sinistre(s) en attente de remboursement`, detail: "Vérifie si l'assureur t'a remboursé", sort: 500,
+      vehicules: sinAttente.map(s => ({ label: `${s.vehiculeImmat || '—'} · ${(s.description || 'sinistre').slice(0, 45)}${s.montantTTC ? ' — ' + FP.euro(s.montantTTC) : ''}`, target: 'sinistres.html' })) });
+  }
+
   const order = { danger: 0, warn: 1, info: 2 };
   out.sort((a, b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
   return out;
@@ -1148,7 +1158,8 @@ FP.detectDoc = function (rawText, vehicules) {
   }
 
   // --- Type de document ---
-  if (/PV\s+DE\s+LIVRAISON|PROC[EÈ]S[-\s]?VERBAL\s+DE\s+LIVRAISON|BON\s+DE\s+LIVRAISON/.test(text)) out.type = 'pv';
+  if (/PRISE\s+EN\s+CHARGE|\bSINISTRE\b|PARE.?BRISE|BRIS\s+DE\s+GLACE|POINTS?\s+DE\s+CHOC|\bVRADE\b/.test(text)) out.type = 'sinistre';
+  else if (/PV\s+DE\s+LIVRAISON|PROC[EÈ]S[-\s]?VERBAL\s+DE\s+LIVRAISON|BON\s+DE\s+LIVRAISON/.test(text)) out.type = 'pv';
   else if (/CONTR[OÔ]LE\s+TECHNIQUE|PROC[EÈ]S[-\s]?VERBAL|PROCHAIN\s+CONTR|FAVORABLE|D[EÉ]FAVORABLE/.test(text)) out.type = 'controle-technique';
   else if (/CERTIFICAT\s+D.?IMMATRICULATION|CARTE\s+GRISE/.test(text)) out.type = 'carte-grise';
   else if (/ATTESTATION\s+D.?ASSURANCE|CARTE\s+VERTE|\bASSURANCE\b/.test(text)) out.type = 'assurance';
