@@ -348,9 +348,16 @@ FP.settings = {
     document.documentElement.style.setProperty('--fp-logo-bg', useWhite ? '#FFFFFF' : '#111111');
     document.documentElement.style.setProperty('--fp-logo-fg', useWhite ? pc : '#FFFFFF');
     document.documentElement.style.setProperty('--fp-logo-border', useWhite ? 'rgba(0,0,0,.18)' : '#000000');
-    // Mode sombre 🌙
-    if (document.body) document.body.classList.toggle('fp-dark', !!s.darkMode);
+    // Mode sombre 🌙 — préférence LOCALE (par poste/utilisateur), pas synchronisée
+    if (document.body) { try { document.body.classList.toggle('fp-dark', localStorage.getItem('fp_dark_mode') === '1'); } catch (e) {} }
   },
+};
+
+// Mode sombre = choix propre à CHAQUE utilisateur/poste (stocké en local, jamais partagé).
+FP.darkMode = {
+  get() { try { return localStorage.getItem('fp_dark_mode') === '1'; } catch (e) { return false; } },
+  set(v) { try { localStorage.setItem('fp_dark_mode', v ? '1' : '0'); } catch (e) {} if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme(); },
+  toggle() { this.set(!this.get()); return this.get(); },
 };
 // Nettoie le modèle en retirant la marque répétée au début (ex. BYD "BYD SEAL U" → "SEAL U")
 FP.cleanModele = (marque, modele) => {
