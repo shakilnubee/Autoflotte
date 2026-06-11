@@ -93,6 +93,13 @@
       </div>
     </div>
 
+    <!-- Onglets : Factures / Documents -->
+    <div style="display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--fp-border)">
+      <button id="tab-btn-factures" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">Factures</button>
+      <button id="tab-btn-documents" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Documents <span style="font-size:11px;font-weight:600">· archives & suivi</span></button>
+    </div>
+
+    <div id="view-factures">
     <!-- KPIs -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       <div class="kpi">
@@ -182,6 +189,35 @@
     </div>
 
     <p class="text-xs text-slate-500 mt-4" id="result-count"></p>
+    </div><!-- /view-factures -->
+
+    <!-- ===== Vue DOCUMENTS (archives & suivi) ===== -->
+    <div id="view-documents" class="hidden">
+      <div class="card p-4 mb-6">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="relative flex-1 min-w-[220px]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="doc-search" type="text" placeholder="Véhicule, type, nom du document…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+          </div>
+          <select id="doc-filter-veh" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous véhicules</option></select>
+          <select id="doc-filter-type" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous types</option></select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#475569;cursor:pointer"><input type="checkbox" id="doc-hide-arch"> Masquer les archivés</label>
+        </div>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="scrollable">
+          <table class="fp-table">
+            <thead><tr><th>Véhicule</th><th>Type</th><th>Document</th><th>Ajouté le</th><th>Statut</th><th></th></tr></thead>
+            <tbody id="doc-tbody"></tbody>
+          </table>
+        </div>
+        <div id="doc-empty" class="hidden p-12 text-center">
+          <i data-lucide="folder-open" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+          <p class="text-slate-500 text-sm">Aucun document archivé pour le moment.</p>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-4">Le document le plus récent de chaque type (par véhicule) est marqué <b>« Actuel »</b> ; les versions précédentes — ex. un ancien contrôle technique remplacé — sont conservées et marquées <b>« Archivé »</b>. Rien n'est supprimé automatiquement.</p>
+    </div>
   </main>
 </div>
 
@@ -788,6 +824,90 @@
     if (!fid) return;
     const tryOpen = () => { if (factures.some(f => f.fileId === fid)) { openDrawer(fid); return true; } return false; };
     if (!tryOpen()) document.addEventListener('fp:data-ready', tryOpen, { once: true });
+  })();
+
+  // ===== Onglet DOCUMENTS (archives & suivi) =====
+  (function documentsTab(){
+    const DOC_LABELS = {
+      'controle-technique':'Contrôle technique','carte-grise':'Carte grise','assurance':'Assurance',
+      'code-cession':'Code / cession','contrat':'Contrat','facture-achat':'Facture','etat-des-lieux':'État des lieux','autre':'Autre',
+    };
+    let docs = null, loaded = false;
+    const vehImmat = id => { const v = (window.FP_DATA.vehicules||[]).find(x => x.id === id); return v ? v.immat : (id || '?'); };
+    const ts = d => d.createdAt || d.created_at || '';
+
+    function styleTab(btn, active){ btn.style.borderBottomColor = active ? 'var(--fp-accent)' : 'transparent'; btn.style.color = active ? 'var(--fp-primary)' : '#94A3B8'; }
+    function switchTab(toDocs){
+      $('view-factures').classList.toggle('hidden', toDocs);
+      $('view-documents').classList.toggle('hidden', !toDocs);
+      styleTab($('tab-btn-factures'), !toDocs); styleTab($('tab-btn-documents'), toDocs);
+      if (toDocs && !loaded) loadDocs();
+    }
+    $('tab-btn-factures').addEventListener('click', () => switchTab(false));
+    $('tab-btn-documents').addEventListener('click', () => switchTab(true));
+
+    async function loadDocs(){
+      loaded = true;
+      $('doc-tbody').innerHTML = '<tr><td colspan="6" class="p-6 text-center text-slate-400">Chargement…</td></tr>';
+      try { const r = await FP.db.select('documents'); docs = (r && r.data) || []; }
+      catch(e){ console.error('[documents]', e); docs = []; }
+      const vehs = [...new Set(docs.map(d => vehImmat(d.vehiculeId)))].sort();
+      $('doc-filter-veh').innerHTML = '<option value="all">Tous véhicules</option>' + vehs.map(v => `<option value="${v}">${v}</option>`).join('');
+      const types = [...new Set(docs.map(d => d.type))];
+      $('doc-filter-type').innerHTML = '<option value="all">Tous types</option>' + types.map(t => `<option value="${t}">${DOC_LABELS[t]||t}</option>`).join('');
+      renderDocs();
+    }
+
+    function renderDocs(){
+      if (!docs) return;
+      // Statut Actuel/Archivé : le + récent de chaque (véhicule,type) = Actuel
+      const groups = {};
+      docs.forEach(d => { const k = d.vehiculeId + '|' + d.type; (groups[k] = groups[k] || []).push(d); });
+      const archived = new Set();
+      Object.values(groups).forEach(arr => { arr.sort((a,b) => ts(b).localeCompare(ts(a))); arr.slice(1).forEach(d => archived.add(d.id)); });
+
+      const q = ($('doc-search').value||'').toLowerCase();
+      const fv = $('doc-filter-veh').value, ft = $('doc-filter-type').value, hideArch = $('doc-hide-arch').checked;
+      const rows = docs.slice().sort((a,b) => ts(b).localeCompare(ts(a))).filter(d => {
+        if (fv !== 'all' && vehImmat(d.vehiculeId) !== fv) return false;
+        if (ft !== 'all' && d.type !== ft) return false;
+        if (hideArch && archived.has(d.id)) return false;
+        if (q){ const s = (vehImmat(d.vehiculeId)+' '+(DOC_LABELS[d.type]||d.type)+' '+(d.label||'')).toLowerCase(); if (!s.includes(q)) return false; }
+        return true;
+      });
+      const tb = $('doc-tbody');
+      if (!rows.length){ tb.innerHTML = ''; $('doc-empty').classList.remove('hidden'); return; }
+      $('doc-empty').classList.add('hidden');
+      tb.innerHTML = rows.map(d => {
+        const arch = archived.has(d.id);
+        const date = ts(d).slice(0,10);
+        const url = d.url || (d.driveId ? ('https://drive.google.com/file/d/'+d.driveId+'/view') : '');
+        const statut = arch
+          ? '<span class="type-pill" style="background:#F1F5F9;color:#64748B">Archivé</span>'
+          : '<span class="type-pill" style="background:#DCFCE7;color:#14532D">Actuel</span>';
+        const voir = url ? `<a href="${url}" target="_blank" rel="noopener" class="btn btn-outline" style="padding:4px 10px;font-size:12px"><i data-lucide="eye" class="w-3 h-3"></i> Voir</a>` : '';
+        return `<tr>
+          <td><a href="vehicules.html?veh=${encodeURIComponent(d.vehiculeId)}" style="color:var(--fp-accent);font-weight:600">${vehImmat(d.vehiculeId)}</a></td>
+          <td>${DOC_LABELS[d.type]||d.type}</td>
+          <td>${d.label||'—'}</td>
+          <td style="white-space:nowrap">${date ? FP.dateNum(date) : '—'}</td>
+          <td>${statut}</td>
+          <td style="text-align:right;white-space:nowrap">${voir} <button data-doc-del="${d.id}" class="btn btn-outline" style="padding:4px 9px;font-size:12px;color:#b91c1c" title="Supprimer">✕</button></td>
+        </tr>`;
+      }).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    ['doc-search','doc-filter-veh','doc-filter-type','doc-hide-arch'].forEach(id => { const el = $(id); if (el) el.addEventListener('input', renderDocs); });
+    $('doc-tbody').addEventListener('click', e => {
+      const del = e.target.closest('[data-doc-del]');
+      if (del && confirm('Supprimer définitivement ce document ?')) {
+        const id = del.dataset.docDel;
+        if (FP.persist) FP.persist.delete('documents', id);
+        docs = docs.filter(x => x.id !== id);
+        renderDocs();
+      }
+    });
   })();
 </script>
 </body>
