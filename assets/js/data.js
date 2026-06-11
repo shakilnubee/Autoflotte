@@ -1880,7 +1880,7 @@ window.FP_DATA = {
       "photoUrl": null,
       "cgUrl": null,
       "antiPollution": null,
-      "dimensionPneus": null,
+      "dimensionPneus": "215/65 R16C",
       "version": "Jumpy 1.6 BlueHDi 115 (diesel)",
       "dateChangementPneus": "2025-12-24",
       "autonomie": null,
