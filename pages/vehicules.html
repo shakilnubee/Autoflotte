@@ -1453,6 +1453,19 @@
       && sinStat[f.id] !== 'rembourse' && sinStat[f.id] !== 'pec');
     const coutSinistres = sinistres2026.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
     const coutTotal = factures2026.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0) + coutSinistres;
+    // Coût par année : entretien/réparation + sinistres non remboursés/non pris en charge
+    const coutByYear = {};
+    (data.factures || []).forEach(f => {
+      if (f.vehiculeImmat !== v.immat) return;
+      const y = (f.date || '').slice(0, 4); if (!/^\d{4}$/.test(y)) return;
+      const t = (f.type || '').toLowerCase();
+      let amount = 0;
+      if (COUT_TYPES.includes(t)) amount = Number(f.montantTTC) || 0;
+      else if (t === 'sinistre' && sinStat[f.id] !== 'rembourse' && sinStat[f.id] !== 'pec') amount = Number(f.montantTTC) || 0;
+      if (amount) coutByYear[y] = (coutByYear[y] || 0) + amount;
+    });
+    const coutYears = Object.keys(coutByYear).sort().reverse();
+    const coutGrandTotal = coutYears.reduce((s, y) => s + coutByYear[y], 0);
     // Carnet d'entretien : toutes les factures entretien/réparation du véhicule (toutes années), récentes en premier
     const carnet = (data.factures || [])
       .filter(f => f.vehiculeImmat === v.immat && COUT_TYPES.includes((f.type || '').toLowerCase()))
@@ -1515,9 +1528,11 @@
       </div>
 
       <div>
-        <div class="field-label">Coût total annuel 2026</div>
-        <div class="text-2xl font-extrabold" style="color: var(--fp-primary)">${FP.euro(coutTotal)}</div>
-        <div class="text-xs text-slate-500 mt-1">${factures2026.length ? `${factures2026.length} facture${factures2026.length > 1 ? 's' : ''} d'entretien 2026` : 'Aucune facture d\'entretien 2026'}</div>
+        <div class="field-label">Coût total (entretien, réparation, sinistres à charge)</div>
+        <div class="text-2xl font-extrabold" style="color: var(--fp-primary)">${FP.euro(coutGrandTotal)}</div>
+        <div class="mt-2 space-y-1">
+          ${coutYears.length ? coutYears.map(y => `<div class="flex justify-between text-sm"><span class="text-slate-600">${y}</span><span class="font-semibold">${FP.euro(coutByYear[y])}</span></div>`).join('') : '<div class="text-xs text-slate-500">Aucune dépense enregistrée pour ce véhicule.</div>'}
+        </div>
       </div>
 
       <div>
