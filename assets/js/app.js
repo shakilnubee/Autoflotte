@@ -668,6 +668,19 @@ FP.coutParPeriode = function (opts) {
   fromEl.addEventListener('change', renderRange);
   toEl.addEventListener('change', renderRange);
   if (clearEl) clearEl.addEventListener('click', () => { fromEl.value = ''; toEl.value = ''; renderRange(); });
+  // Export CSV du total par année
+  const exportEl = $(opts.exportEl);
+  if (exportEl) exportEl.addEventListener('click', () => {
+    const by = {};
+    list().forEach(f => { const y = (f.date || '').slice(0, 4); if (/^\d{4}$/.test(y)) by[y] = (by[y] || 0) + (Number(f.montantTTC) || 0); });
+    const ys = Object.keys(by).sort();
+    const eur = n => n.toFixed(2).replace('.', ',');
+    const lines = ['Année;Total TTC (€)'].concat(ys.map(y => `${y};${eur(by[y])}`));
+    lines.push(`Total;${eur(ys.reduce((s, y) => s + by[y], 0))}`);
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (opts.fileLabel || 'cout-par-annee') + '.csv'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
   return { render() { renderYears(); renderRange(); } };
 };
 
