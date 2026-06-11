@@ -1445,38 +1445,29 @@
     const mc = upper.match(/CL[ÉE]\s*(?:DE\s*CONTR[ÔO]LE)?\s*[:.\-]?\s*([0-9]{2,3})\b/);
     if (mc) out.cle = mc[1];
 
-    // Montant — un avis affiche en général PLUSIEURS montants :
-    //   • amende forfaitaire MINORÉE  (réduit) ← montant payé après désignation du conducteur
-    //   • amende forfaitaire           (standard)
-    //   • amende forfaitaire MAJORÉE   (pénalité si on paie en retard)
-    // L'entreprise désigne toujours le conducteur → on veut le montant MINORÉ, JAMAIS le majoré.
-    // Pour chaque montant trouvé, on regarde le texte juste avant pour le classer.
-    const amts = [];
-    const re = /([0-9]{1,4}(?:[ .][0-9]{3})*)(?:[.,]([0-9]{2}))?\s*(?:€|EUR(?:OS?)?)/gi;
-    let am;
-    while ((am = re.exec(text)) !== null) {
-      const intPart = am[1].replace(/[ .]/g, '');
-      const val = parseFloat(intPart + '.' + (am[2] || '00'));
-      if (isNaN(val) || val <= 0 || val >= 10000) continue;
-      // Fenêtre courte AVANT le montant (≈ son étiquette, ex. « forfaitaire majorée »)
-      const win = text.slice(Math.max(0, am.index - 45), am.index).toLowerCase();
-      let type = 'autre';
-      if (/major/.test(win))                                       type = 'majoree';
-      else if (/minor/.test(win))                                  type = 'minoree';
-      else if (/forfaitaire|amende|[àa]\s*payer|montant/.test(win)) type = 'forfaitaire';
-      amts.push({ val, type });
-    }
-    if (amts.length) {
-      const vals = t => amts.filter(a => a.type === t).map(a => a.val);
-      const mino = vals('minoree'), majo = vals('majoree');
-      const nonMaj = amts.filter(a => a.type !== 'majoree').map(a => a.val);
-      if (mino.length)        out.montant = Math.min(...mino);    // idéal : étiqueté « minoré »
-      else if (nonMaj.length) out.montant = Math.min(...nonMaj);  // sinon le plus petit hors « majoré » (= le minoré)
-      // sinon (que des montants majorés) : on ne fixe pas le montant initial
-      if (majo.length) out.montantMajore = Math.max(...majo);
-    }
+    // Montant — règle (demande utilisateur) basée sur la ZONE « montant de l'amende » :
+    //   • 2 montants affichés  → on prend le 1er
+    //   • 3 montants affichés  → on prend le 2e (= forfaitaire MINORÉE)
+    //   • 1 seul               → on le prend
+    const grabAmts = (txt) => {
+      const re = /([0-9]{1,4}(?:[ .][0-9]{3})*)(?:[.,]([0-9]{2}))?\s*(?:€|EUR(?:OS?)?)/gi;
+      const arr = []; let am;
+      while ((am = re.exec(txt)) !== null) {
+        const v = parseFloat(am[1].replace(/[ .]/g, '') + '.' + (am[2] || '00'));
+        if (!isNaN(v) && v > 0 && v < 10000) arr.push(v);
+      }
+      return arr;
+    };
+    // On cible d'abord la zone qui suit « montant de l'amende » (évite les montants parasites)
+    const zi = text.search(/montant\s+de\s+l['’\s]*amende/i);
+    let list = zi >= 0 ? grabAmts(text.slice(zi, zi + 300)) : [];
+    if (list.length < 2) list = grabAmts(text); // repli : tout le document
+    if (list.length === 1)      out.montant = list[0];
+    else if (list.length === 2) out.montant = list[0];   // 2 montants → le 1er
+    else if (list.length >= 3)  out.montant = list[1];   // 3 montants → le 2e (minoré)
     // Document de MAJORATION (amende non payée à temps → pénalité)
     out.isMajoration = /avis\s+de\s+majoration|amende\s+forfaitaire\s+major/i.test(text);
+    if (out.isMajoration && list.length) out.montantMajore = Math.max(...list);
 
     // Date de l'infraction — près de "commise le" / "infraction" / "le", sinon 1ère date
     const lines = text.split(/\r?\n/);
