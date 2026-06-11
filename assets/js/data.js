@@ -1031,7 +1031,7 @@ window.FP_DATA = {
       "photoUrl": null,
       "cgUrl": null,
       "antiPollution": null,
-      "dimensionPneus": null,
+      "dimensionPneus": "235/55 R18",
       "version": "Q3 TFSI e 45 180 (245) S tronic",
       "dateChangementPneus": "2026-03-11",
       "autonomie": null,
