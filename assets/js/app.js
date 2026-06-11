@@ -255,6 +255,7 @@ FP.settings = {
     contratSectionsOrder: [], // ordre des sections de la page Contrats (partagé)
     darkMode: false, // mode sombre 🌙 (partagé entre PC)
     societes: ['PXP'], // liste des sociétés gérées (multi-flotte, partagée entre PC)
+    docStatus: {}, // statut forcé des documents { docId: 'actuel' | 'archive' } (sinon auto par date)
   },
   get() {
     try {
@@ -277,6 +278,7 @@ FP.settings = {
         contratSectionsOrder: Array.isArray(stored.contratSectionsOrder) ? stored.contratSectionsOrder : [],
         darkMode: stored.darkMode === true,
         societes: (Array.isArray(stored.societes) && stored.societes.length) ? stored.societes : ['PXP'],
+        docStatus: (stored.docStatus && typeof stored.docStatus === 'object') ? stored.docStatus : {},
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
