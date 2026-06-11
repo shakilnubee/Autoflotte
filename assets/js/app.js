@@ -1141,9 +1141,21 @@ FP.detectDoc = function (rawText, vehicules) {
     out.date = allDates.map(d => d.iso).sort().slice(-1)[0];
   }
 
-  // --- Kilométrage ---
-  const kmM = text.match(/(\d[\d\s.]{2,})\s*KM\b/) || text.match(/\bKM\s*[:\.]?\s*(\d[\d\s.]{2,})/) || text.match(/KILOM[EÈ]TRAGE\s*[:\.]?\s*(\d[\d\s.]{2,})/);
-  if (kmM) { const n = parseInt(kmM[1].replace(/[\s.]/g, ''), 10); if (Number.isFinite(n) && n > 100 && n < 2000000) out.km = n; }
+  // --- Kilométrage (ex. CT : « Kilométrage relevé : 123 456 km ») ---
+  // On cherche la ligne contenant « kilométrage » (tolérant l'OCR) puis le 1er nombre
+  // qui suit, sur la même ligne (après « relevé ») ou sur l'une des 2 lignes suivantes.
+  const cleanNum = s => parseInt(String(s).replace(/[^\d]/g, ''), 10);
+  const kmLines = text.split(/\r?\n/);
+  let km = null;
+  for (let i = 0; i < kmLines.length && km == null; i++) {
+    if (/KILOM.{0,3}TRAGE/.test(kmLines[i])) {
+      const here = kmLines[i].replace(/.*KILOM.{0,3}TRAGE\w*/, '');
+      const cand = here.match(/\d[\d\s.]{2,}/) || (kmLines[i + 1] || '').match(/\d[\d\s.]{2,}/) || (kmLines[i + 2] || '').match(/\d[\d\s.]{2,}/);
+      if (cand) { const n = cleanNum(cand[0]); if (n > 100 && n < 2000000) km = n; }
+    }
+  }
+  if (km == null) { const kmM = text.match(/(\d[\d\s.]{2,})\s*KM\b/) || text.match(/\bKM\s*[:\.]?\s*(\d[\d\s.]{2,})/); if (kmM) { const n = cleanNum(kmM[1]); if (n > 100 && n < 2000000) km = n; } }
+  out.km = km;
 
   return out;
 };
