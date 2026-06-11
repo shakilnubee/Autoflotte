@@ -441,6 +441,19 @@
           </span>
         </button>
         <div id="cg-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
+
+        <!-- Scanner un autre document (CT, PV…) pour compléter la fiche -->
+        <input type="file" id="f-doc-file" accept="image/*,application/pdf" class="hidden" />
+        <button type="button" id="doc-scan-trigger" class="w-full flex items-center gap-3 p-3 mt-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
+          <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
+            <i data-lucide="file-search" class="w-5 h-5"></i>
+          </span>
+          <span class="flex-1">
+            <span class="block text-sm font-semibold text-slate-800">Scanner un autre document (CT, PV…)</span>
+            <span class="block text-xs text-slate-500">Récupère le prochain CT, le kilométrage… pour compléter la fiche</span>
+          </span>
+        </button>
+        <div id="doc-scan-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
       </div>
 
       <div class="grid grid-cols-2 gap-4">
@@ -1625,6 +1638,7 @@
     _cgFile = null;
     _cgExtra = null;
     const cgSt = $('cg-status'); cgSt.classList.add('hidden'); cgSt.innerHTML = '';
+    const dsSt = $('doc-scan-status'); if (dsSt) { dsSt.classList.add('hidden'); dsSt.innerHTML = ''; }
     // Remplir les checkboxes groupes
     const currentGroupes = vehicule ? FP.vehGroupes(vehicule) : ['non-classe'];
     $('f-groupes-list').innerHTML = FP.groupeKeys().map(k => `
@@ -2542,9 +2556,16 @@
     if (m) out.vin = m[1];
 
     // Marque (code D.1) et dénomination commerciale / modèle (code D.3)
-    const clean = (s) => (s || '').replace(/[^A-Z0-9 \-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+    // On retire tout token type VIN (15-18 caractères) qui aurait débordé sur la ligne.
+    const stripVinLike = (s) => (s || '').replace(/\b[A-HJ-NPR-Z0-9]{15,18}\b/g, '').replace(/\s+/g, ' ').trim();
+    const clean = (s) => stripVinLike((s || '').replace(/[^A-Z0-9 \-]/g, ' ').replace(/\s+/g, ' ').trim()).slice(0, 40);
     out.marque = clean(afterCode(lines, /\bD\s*[.,]?\s*1\b/));
     out.modele = clean(afterCode(lines, /\bD\s*[.,]?\s*3\b/));
+
+    // Date de validité / prochain contrôle technique (code X.1)
+    const x1 = afterCode(lines, /\bX\s*[.,]?\s*1\b/);
+    const x1d = (x1 || '').match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/);
+    if (x1d) out.prochainCT = toIsoDate(x1d[1], x1d[2], x1d[3]);
 
     // Date de 1ère immatriculation (code B) — sinon 1ère date trouvée
     let bDate = null;
@@ -2605,6 +2626,7 @@
       if (parsed.modele && !$('f-modele').value) { $('f-modele').value = parsed.modele; filled.push('modèle'); }
       if (parsed.dateMiseEnCirculation && !$('f-dmc').value) { $('f-dmc').value = parsed.dateMiseEnCirculation; filled.push('1ère immat.'); }
       if (parsed.vin    && !$('f-vin').value)    { $('f-vin').value    = parsed.vin;    filled.push('VIN'); }
+      if (parsed.prochainCT && !$('f-ct').value) { $('f-ct').value = parsed.prochainCT; filled.push('prochain CT'); }
 
       // CO2 (V.7), puissance fiscale (P.6) et carburant (P.3) : pas de champ dans le
       // formulaire, on les conserve pour les écrire à l'enregistrement (utiles pour la TVS).
@@ -2770,6 +2792,26 @@
   $('cg-batch-close').addEventListener('click', closeBatchModal);
   $('cg-batch-cancel').addEventListener('click', closeBatchModal);
   $('cg-batch-create').addEventListener('click', createBatchVehicles);
+
+  // Scan d'un autre document (CT, PV, facture…) pour compléter la fiche en cours
+  async function handleExtraDoc(file){
+    if (!file) return;
+    const st = $('doc-scan-status');
+    const show = (msg, type) => { st.classList.remove('hidden'); const c = { working:'background:#F1F5F9;color:#475569;', ok:'background:#ECFDF5;color:#047857;', error:'background:#FEF2F2;color:#B91C1C;' }; st.setAttribute('style', c[type] || c.working); st.innerHTML = msg; };
+    try {
+      show('<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Lecture du document…</span>', 'working');
+      const text = await FP.ocr.fileToText(file);
+      const det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
+      const filled = [];
+      if (det.date && det.type === 'controle-technique' && !$('f-ct').value) { $('f-ct').value = det.date; filled.push('prochain CT'); }
+      if (det.km && (!$('f-km').value || Number($('f-km').value) === 0)) { $('f-km').value = det.km; filled.push('kilométrage'); }
+      if (det.immat && !$('f-immat').value) { $('f-immat').value = det.immat; filled.push('immatriculation'); }
+      if (filled.length) show('✓ Récupéré : ' + filled.join(', ') + '. Vérifie puis enregistre.', 'ok');
+      else show("Lu, mais aucune info exploitable trouvée (CT, km…). Saisis à la main si besoin.", 'error');
+    } catch (e) { console.error('[extra doc]', e); show("Impossible de lire ce document. Réessaie ou saisis à la main.", 'error'); }
+  }
+  $('doc-scan-trigger').addEventListener('click', () => $('f-doc-file').click());
+  $('f-doc-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) handleExtraDoc(f); });
 
   $('cg-trigger').addEventListener('click', () => $('f-cg-file').click());
   $('f-cg-file').addEventListener('change', (e) => {
