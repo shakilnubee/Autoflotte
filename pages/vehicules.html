@@ -622,10 +622,10 @@
 </div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260611o"></script>
-<script src="../assets/js/data.js?v=20260611o"></script>
+<script src="../assets/js/supabase-client.js?v=20260611p"></script>
+<script src="../assets/js/data.js?v=20260611p"></script>
 <script src="../assets/js/fleet-docs.js"></script>
-<script src="../assets/js/app.js?v=20260611o"></script>
+<script src="../assets/js/app.js?v=20260611p"></script>
 <script>
   lucide.createIcons();
 
@@ -806,9 +806,9 @@
           <div class="field-label !mb-0">Ajouter un document</div>
           <select id="doc-type" class="field-input">${typeOptions}</select>
           <input id="doc-label" class="field-input" placeholder="Nom (ex : Contrôle technique 2026)" />
-          <input id="doc-file" type="file" accept="image/*,application/pdf" class="field-input" style="padding:8px;font-size:13px" />
-          <button type="button" id="doc-add" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Importer le document</button>
-          <p class="text-xs text-slate-400">Choisissez une photo ou un PDF depuis votre appareil — il est enregistré en ligne et consultable depuis n'importe quel poste. Aucun lien externe nécessaire.</p>
+          <input id="doc-file" type="file" accept="image/*,application/pdf" multiple class="field-input" style="padding:8px;font-size:13px" />
+          <button type="button" id="doc-add" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Importer le(s) document(s)</button>
+          <p class="text-xs text-slate-400">Choisissez une ou plusieurs photos / PDF depuis votre appareil — ils sont enregistrés en ligne et consultables depuis n'importe quel poste, et l'app en lit les infos pour compléter la fiche. Aucun lien externe nécessaire.</p>
         </div>
       </div>`;
   }
@@ -2365,56 +2365,55 @@
       const type = body.querySelector('#doc-type').value;
       const label = body.querySelector('#doc-label').value.trim();
       const fileInput = body.querySelector('#doc-file');
-      const file = fileInput && fileInput.files && fileInput.files[0];
-
-      if (!file) { alert('Choisissez un fichier (photo ou PDF) à importer.'); return; }
+      const files = Array.from((fileInput && fileInput.files) || []);
+      if (!files.length) { alert('Choisissez un ou plusieurs fichiers (photo ou PDF) à importer.'); return; }
       if (!(window.FP && FP.supabase && FP.uploadScan)) {
         alert("L'import de fichier nécessite d'être connecté à internet. Réessayez une fois en ligne.");
         return;
       }
       const vehId = state.editingId;
-      const old = btn.innerHTML;
-      btn.disabled = true; btn.style.opacity = '.7'; btn.innerHTML = '⏳ Import en cours…';
-      FP.uploadScan(file, 'documents')
-        .then(async (url) => {
-          addVehDoc(vehId, type, label || file.name, url); // archive le doc + re-rend la fiche
-          // Lecture du document → on complète automatiquement les champs vides de la fiche
+      btn.disabled = true; btn.style.opacity = '.7';
+      (async () => {
+        const allGot = new Set();
+        for (let fi = 0; fi < files.length; fi++) {
+          const file = files[fi];
+          try { btn.innerHTML = `⏳ Import ${fi + 1}/${files.length}…`; } catch (e) {}
           try {
-            const text = await FP.ocr.fileToText(file);
-            const det = FP.detectDoc(text, data.vehicules);
-            const v = data.vehicules.find(x => x.id === vehId);
-            if (v) {
-              const upd = {}; const got = [];
-              if (det.type === 'controle-technique' && det.date && !v.prochainCT) { upd.prochainCT = det.date; got.push('prochain CT'); }
-              if (det.km && (!v.km || det.km > v.km)) { upd.km = det.km; got.push('kilométrage'); }
-              if (det.marque && !v.marque) { upd.marque = det.marque; got.push('marque'); }
-              if (det.modele && !v.modele) { upd.modele = det.modele; got.push('modèle'); }
-              if (det.categorie && (!v.categorie || v.categorie === 'Citadine')) { upd.categorie = det.categorie; got.push('catégorie'); }
-              if (det.co2 != null && (v.co2 == null || v.co2 === '')) { upd.co2 = det.co2; got.push('CO₂'); }
-              if (det.puissanceFiscale != null && (v.puissanceFiscale == null || v.puissanceFiscale === '')) { upd.puissanceFiscale = det.puissanceFiscale; got.push('puissance fiscale'); }
-              if (det.vin && !v.vin) { upd.vin = det.vin; got.push('VIN'); }
-              if (det.carburant && !v.carburant) { upd.carburant = det.carburant; got.push('carburant'); }
-              // Puissance DIN (réglages partagés, pas de colonne) — on remplit si vide
-              if (det.puissanceDin) {
-                const s = FP.settings.get(); s.vehDin = s.vehDin || {};
-                if (!s.vehDin[vehId]) { s.vehDin[vehId] = det.puissanceDin; FP.settings.save(s); got.push('puissance DIN'); }
-              }
-              if (got.length) {
+            const url = await FP.uploadScan(file, 'documents');
+            addVehDoc(vehId, type, (files.length === 1 ? (label || file.name) : file.name), url); // archive (re-rend la fiche)
+            // Lecture → complète les champs vides de la fiche (cumulatif sur tous les fichiers)
+            try {
+              const text = await FP.ocr.fileToText(file);
+              const det = FP.detectDoc(text, data.vehicules);
+              const v = data.vehicules.find(x => x.id === vehId);
+              if (v) {
+                const upd = {};
+                if (det.type === 'controle-technique' && det.date && !v.prochainCT) { upd.prochainCT = det.date; allGot.add('prochain CT'); }
+                if (det.km && (!v.km || det.km > v.km)) { upd.km = det.km; allGot.add('kilométrage'); }
+                if (det.marque && !v.marque) { upd.marque = det.marque; allGot.add('marque'); }
+                if (det.modele && !v.modele) { upd.modele = det.modele; allGot.add('modèle'); }
+                if (det.categorie && (!v.categorie || v.categorie === 'Citadine')) { upd.categorie = det.categorie; allGot.add('catégorie'); }
+                if (det.co2 != null && (v.co2 == null || v.co2 === '')) { upd.co2 = det.co2; allGot.add('CO₂'); }
+                if (det.puissanceFiscale != null && (v.puissanceFiscale == null || v.puissanceFiscale === '')) { upd.puissanceFiscale = det.puissanceFiscale; allGot.add('puissance fiscale'); }
+                if (det.vin && !v.vin) { upd.vin = det.vin; allGot.add('VIN'); }
+                if (det.carburant && !v.carburant) { upd.carburant = det.carburant; allGot.add('carburant'); }
+                if (det.puissanceDin) { const s = FP.settings.get(); s.vehDin = s.vehDin || {}; if (!s.vehDin[vehId]) { s.vehDin[vehId] = det.puissanceDin; FP.settings.save(s); allGot.add('puissance DIN'); } }
                 if (Object.keys(upd).length) { Object.assign(v, upd); if (FP.persist) FP.persist.update('vehicules', vehId, upd); }
-                openDrawer(vehId); // ré-affiche avec les nouvelles infos
-                const note = document.createElement('div');
-                note.setAttribute('style', 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#047857;color:#fff;padding:10px 16px;border-radius:9999px;font-size:13px;z-index:90;box-shadow:0 8px 24px rgba(0,0,0,.25)');
-                note.textContent = '✓ Fiche complétée depuis le document : ' + got.join(', ');
-                document.body.appendChild(note); setTimeout(() => note.remove(), 4500);
               }
-            }
-          } catch (e) { console.error('[doc extract]', e); }
-        })
-        .catch(err => {
-          console.error('[doc upload]', err);
-          alert("Échec de l'import du fichier : " + (err && err.message ? err.message : err));
-          btn.disabled = false; btn.style.opacity = ''; btn.innerHTML = old; if (window.lucide) lucide.createIcons();
-        });
+            } catch (e) { console.error('[doc extract]', e); }
+          } catch (err) {
+            console.error('[doc upload]', err);
+            alert("Échec de l'import de « " + file.name + " » : " + (err && err.message ? err.message : err));
+          }
+        }
+        openDrawer(vehId); // ré-affiche (documents archivés + champs complétés)
+        if (allGot.size) {
+          const note = document.createElement('div');
+          note.setAttribute('style', 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#047857;color:#fff;padding:10px 16px;border-radius:9999px;font-size:13px;z-index:90;box-shadow:0 8px 24px rgba(0,0,0,.25)');
+          note.textContent = '✓ Fiche complétée depuis les documents : ' + [...allGot].join(', ');
+          document.body.appendChild(note); setTimeout(() => note.remove(), 4500);
+        }
+      })();
     }
   });
 
@@ -2789,7 +2788,7 @@
         immat: String(p.immat).toUpperCase(),
         marque: p.marque, modele: p.modele,
         categorie: 'Berline',
-        km: 0, statut: 'actif', chauffeur: '—', prochainCT: '—',
+        km: 0, statut: 'actif', chauffeur: '—', prochainCT: p.prochainCT || '—',
         dateMiseEnCirculation: p.dateMiseEnCirculation || '',
         vin: (p.vin || '').toUpperCase(),
         carburant: p.carburant || null,
@@ -2797,6 +2796,19 @@
         puissanceFiscale: num(p.puissanceFiscale),
         groupes: ['non-classe'],
       };
+      // Modèle identique à un véhicule déjà renseigné → on reprend les specs communes
+      // (catégorie, carburant, CO2, puissance, version, DIN) que la carte grise ne donne pas.
+      const nm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const twin = data.vehicules.find(v => v.id !== newV.id && nm(v.marque) === nm(newV.marque) && nm(v.modele) === nm(newV.modele) && (v.categorie || v.carburant || v.co2 != null));
+      if (twin) {
+        if (!newV.categorie || newV.categorie === 'Berline') newV.categorie = twin.categorie || newV.categorie;
+        if (!newV.carburant) newV.carburant = twin.carburant || null;
+        if (newV.co2 == null && twin.co2 != null) newV.co2 = twin.co2;
+        if (newV.puissanceFiscale == null && twin.puissanceFiscale != null) newV.puissanceFiscale = twin.puissanceFiscale;
+        if (!newV.version && twin.version) newV.version = twin.version;
+        const dinTwin = (FP.settings.get().vehDin || {})[twin.id];
+        if (dinTwin) { const s = FP.settings.get(); s.vehDin = s.vehDin || {}; s.vehDin[newV.id] = dinTwin; FP.settings.save(s); }
+      }
       if (cgUrl) newV.cgUrl = cgUrl;
       data.vehicules.push(newV);
       const ok = await persistVehicleUpsert(newV, true);
