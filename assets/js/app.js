@@ -603,9 +603,11 @@ FP.revisionInfo = (v) => {
 
   let prochaineKm = null, kmRestant = null, prochaineDate = null, joursRestant = null;
 
-  // Échéance temporelle : dernière révision + intervalle en mois
-  if (hasRev) {
-    prochaineDate = new Date(dRev);
+  // Échéance temporelle : ancrée sur la dernière révision, sinon (véhicule neuf)
+  // sur la date de mise en circulation → 1ʳᵉ révision estimée.
+  const anchorDate = hasRev ? dRev : (mec && !isNaN(mec) ? mec : null);
+  if (anchorDate) {
+    prochaineDate = new Date(anchorDate);
     prochaineDate.setMonth(prochaineDate.getMonth() + intervalle.mois);
     joursRestant = Math.ceil((prochaineDate - today) / 86400000);
   }
@@ -620,8 +622,8 @@ FP.revisionInfo = (v) => {
     const joursDepuisRev = Math.max(0, (today - dRev) / 86400000);
     kmRestant = Math.round(intervalle.km - pace * joursDepuisRev);
     prochaineKm = Math.round(km + kmRestant);
-  } else if (km > 0) {
-    // 3) Faute de mieux : prochain palier d'odomètre
+  } else {
+    // 3) Faute de mieux (dont véhicule neuf km=0) : prochain palier d'odomètre
     prochaineKm = Math.ceil(km / intervalle.km) * intervalle.km;
     if (prochaineKm <= km) prochaineKm = km + intervalle.km;
     kmRestant = prochaineKm - km;
