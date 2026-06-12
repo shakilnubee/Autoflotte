@@ -1,5 +1,5 @@
 // Parc Pilot — données de SECOURS (fallback hors-ligne)
-// ⚠️ Généré depuis Supabase le 2026-06-11. NE PAS éditer à la main.
+// ⚠️ Généré depuis Supabase le 2026-06-12. NE PAS éditer à la main.
 
 window.FP_DATA = {
   "vehicules": [
@@ -11352,8 +11352,8 @@ window.FP_DATA = {
       "note": null,
       "permisUrl": null,
       "permisFileId": null,
-      "masque": false,
-      "manuel": true,
+      "masque": true,
+      "manuel": false,
       "nom": "HURTADO",
       "prenom": "Xavier",
       "adresse": null,

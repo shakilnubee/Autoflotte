@@ -179,7 +179,8 @@
     /** Insère ou met à jour (upsert) une ligne par sa clé primaire. */
     async upsert(table, row) {
       const snake = toDb(table === 'app_settings' ? row : stampSociete(row));
-      const res = await client.from(table).upsert(snake);
+      // Conflit sur la VRAIE clé primaire (ex. conducteurs → 'key', sinon 'id')
+      const res = await client.from(table).upsert(snake, { onConflict: pkColumn(table) });
       if (res.error) console.error(`[FP.db.upsert ${table}]`, res.error);
       return res;
     },
