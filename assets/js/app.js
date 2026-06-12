@@ -899,6 +899,27 @@ FP.buildAlertes = (data) => {
     else if (diff < 120) out.push({ niveau: 'warn',   categorie: 'Permis', message: `Permis à renouveler (${diff}j)`, detail, sort: diff, target: tgt });
   });
 
+  // --- Pièces d'identité (carte d'identité, titre de séjour…) qui expirent (réglages condDocs) ---
+  try {
+    const condDocs = (FP.settings.get().condDocs) || {};
+    const byKey = {}; (data.conducteurs || []).forEach(c => { if (c && c.key) byKey[c.key] = c; });
+    const LABELS = { 'carte-identite': "Carte d'identité", 'titre-sejour': 'Titre de séjour', 'rib': 'RIB', 'mutuelle': 'Carte mutuelle', 'visite-medicale': 'Visite médicale', 'autre': 'Document' };
+    Object.entries(condDocs).forEach(([key, docs]) => {
+      (docs || []).forEach(doc => {
+        if (!doc || !doc.date || isNaN(new Date(doc.date))) return;
+        const diff = days(doc.date);
+        const c = byKey[key];
+        const who = c ? ([c.prenom || c.name, c.nom].filter(Boolean).join(' ') || c.name || key) : key;
+        const lib = LABELS[doc.type] || doc.label || 'Document';
+        const detail = `${who} — ${lib} expire le ${FP.date(doc.date)}`;
+        const tgt = 'conducteurs.html?cond=' + encodeURIComponent(key);
+        if (diff < 0)        out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} EXPIRÉE depuis ${-diff}j`, detail, sort: diff, target: tgt });
+        else if (diff < 60)  out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} expire dans ${diff}j`, detail, sort: diff, target: tgt });
+        else if (diff < 120) out.push({ niveau: 'warn',   categorie: "Pièce d'identité", message: `${lib} à renouveler (${diff}j)`, detail, sort: diff, target: tgt });
+      });
+    });
+  } catch (e) {}
+
   // --- Révisions constructeur ---
   (data.vehicules || []).forEach(v => {
     if (v.statut && v.statut !== 'actif') return; // on ignore vendus / à vendre / hors service
