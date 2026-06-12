@@ -367,14 +367,28 @@ FP.darkMode = {
 // Sécurité : empêche « Retour arrière » de faire « page précédente » (et de perdre une saisie)
 // quand le focus n'est pas dans un champ éditable.
 (function guardBackspace() {
-  document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Backspace') return;
-    const t = e.target || {};
-    const tag = (t.tagName || '').toUpperCase();
-    const editable = t.isContentEditable || tag === 'TEXTAREA' ||
-      (tag === 'INPUT' && !/^(button|submit|reset|checkbox|radio|file|range|color|image)$/i.test(t.type || 'text'));
-    if (!editable) e.preventDefault();
-  });
+  // Empêche la touche « Retour arrière » de déclencher « page précédente » du navigateur
+  // (sinon : on efface du texte, le curseur sort du champ, un Backspace de plus = la page
+  // se ferme/recule et on perd tout). On autorise Backspace UNIQUEMENT si un vrai champ
+  // de saisie est actif. Phase capture + champ actif + repli keyCode = couverture maximale.
+  function editable(el) {
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    const tag = (el.tagName || '').toUpperCase();
+    if (tag === 'TEXTAREA') return true;
+    if (tag === 'INPUT') {
+      if (el.readOnly || el.disabled) return false;
+      return !/^(button|submit|reset|checkbox|radio|file|range|color|image)$/i.test(el.type || 'text');
+    }
+    return false;
+  }
+  function block(e) {
+    if (e.key !== 'Backspace' && e.keyCode !== 8 && e.which !== 8) return;
+    if (editable(e.target) || editable(document.activeElement)) return; // saisie en cours → on laisse
+    e.preventDefault();
+  }
+  window.addEventListener('keydown', block, true);   // capture : on intercepte avant tout
+  document.addEventListener('keydown', block, true);
 })();
 // Nettoie le modèle en retirant la marque répétée au début (ex. BYD "BYD SEAL U" → "SEAL U")
 FP.cleanModele = (marque, modele) => {
