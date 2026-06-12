@@ -322,9 +322,12 @@
   // Cache PAR SOCIÉTÉ (sinon les conducteurs d'une société s'afficheraient sur une autre)
   const COND_CACHE_KEY = 'fp_cond_cache_v2_' + (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return 'PXP'; } })();
   try { localStorage.removeItem('fp_cond_cache_' + ((localStorage.getItem('fp_societe')) || 'PXP')); } catch(e) {} // purge l'ancien cache (états masqués périmés)
-  // 1er affichage : on part des données embarquées (data.js, à jour) — PLUS du cache localStorage
-  // (qui se périmait et pouvait masquer un conducteur valide). La base de données fait toujours foi.
+  // 1er affichage : on part du CACHE LOCAL (rafraîchi automatiquement à chaque visite ET à chaque
+  // modif via cacheCond) → on voit tout de suite le dernier état réel connu (permis, infos…), sans
+  // attendre le serveur ni dépendre du vieux data.js. Repli sur data.js tant qu'il n'y a pas encore
+  // de cache (toute 1ʳᵉ ouverture). La base fait ensuite foi (loadConducteurs réécrit le cache).
   let condCache = (() => {
+    try { const c = JSON.parse(localStorage.getItem(COND_CACHE_KEY) || 'null'); if (Array.isArray(c) && c.length) return c; } catch {}
     try { if (window.FP_DATA && Array.isArray(window.FP_DATA.conducteurs)) return window.FP_DATA.conducteurs.slice(); } catch {}
     return [];
   })();

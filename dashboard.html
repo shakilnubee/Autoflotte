@@ -857,6 +857,15 @@
             const arr = window.FP_DATA.conducteurs || (window.FP_DATA.conducteurs = []);
             const ex = arr.find(c => c.key === r.condKey);
             if (ex) Object.assign(ex, payload); else arr.push(payload);
+            // …et on met à jour le cache local de la page Conducteurs → le permis y apparaît
+            // immédiatement, dès la 1ʳᵉ visite (sans attendre le rechargement serveur).
+            try {
+              const ck = 'fp_cond_cache_v2_' + ((localStorage.getItem('fp_societe')) || 'PXP');
+              let cc = []; try { cc = JSON.parse(localStorage.getItem(ck) || '[]') || []; } catch (e) {}
+              const ci = cc.findIndex(c => c.key === r.condKey);
+              if (ci >= 0) Object.assign(cc[ci], payload); else cc.push(payload);
+              localStorage.setItem(ck, JSON.stringify(cc));
+            } catch (e) {}
             done.push(`• <b>${drv.name || r.condKey}${drv.nom ? ' ' + drv.nom : ''}</b> — Permis → fiche conducteur`); okN++;
             continue;
           }
