@@ -2379,10 +2379,10 @@ FP.injectDataIO = (config) => {
 document.addEventListener('DOMContentLoaded', () => {
   // Appliquer le thème (couleurs des groupes) dès le chargement
   FP.settings.applyTheme();
-  // Rôle courant : marque le body + retire les onglets réservés à l'admin (rôle OU super-admin société)
+  // Rôle courant : marque le body + retire les onglets réservés à l'admin (rôle interne)
   const _isAdmin = FP.isAdmin();
   document.body.setAttribute('data-role', FP.role());
-  if (!_isAdmin || (FP.isSuperAdmin && !FP.isSuperAdmin())) {
+  if (!_isAdmin) {
     (FP.ADMIN_ONLY_NAV || []).forEach(key => {
       document.querySelectorAll(`a[data-nav="${key}"]`).forEach(a => a.remove());
     });
