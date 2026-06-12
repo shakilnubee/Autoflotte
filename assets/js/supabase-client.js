@@ -211,6 +211,24 @@
     if (!Array.isArray(window.FP_DATA.amendes))   window.FP_DATA.amendes   = [];
     if (!Array.isArray(window.FP_DATA.factures))  window.FP_DATA.factures  = [];
 
+    // Profil multi-société : récupère la société de l'utilisateur + s'il est super-admin.
+    // Un CLIENT (non-admin) est verrouillé sur SA société (le filtre + l'étiquetage suivent),
+    // AVANT de charger les données. (La base, via la RLS, ne renvoie de toute façon que SA société.)
+    try {
+      const { data: { session } } = await client.auth.getSession();
+      const u = session && session.user;
+      if (u) {
+        const pr = await client.from('profiles').select('societe,is_admin').eq('id', u.id).maybeSingle();
+        if (pr && pr.data) {
+          FP.profile = pr.data;
+          try { localStorage.setItem('fp_profile', JSON.stringify(pr.data)); } catch (e) {}
+          if (pr.data.is_admin === false && pr.data.societe) {
+            try { localStorage.setItem('fp_societe', pr.data.societe); } catch (e) {}
+          }
+        }
+      }
+    } catch (e) { /* table profiles absente / hors-ligne : on garde le comportement admin */ }
+
     try {
       const data = await FP.db.loadAll();
       // Signature LÉGÈRE des champs affichés : si les données live sont IDENTIQUES à ce qui est

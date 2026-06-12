@@ -1,5 +1,15 @@
 // Auto-flotte — helpers JS partagés
 
+// Multi-société : si l'utilisateur connecté est un CLIENT (non super-admin), on le verrouille sur
+// SA société AVANT tout (clé de cache, filtres, étiquetage des saisies). On lit le profil mis en
+// cache au précédent chargement (le serveur le rafraîchit ensuite via supabase-client.js).
+(function lockTenant(){
+  try {
+    const p = JSON.parse(localStorage.getItem('fp_profile') || 'null');
+    if (p && p.is_admin === false && p.societe) localStorage.setItem('fp_societe', p.societe);
+  } catch (e) {}
+})();
+
 // Affichage instantané sans "flash" de chiffres : on ré-hydrate FP_DATA avec la
 // dernière copie live mise en cache (écrite après chaque chargement Supabase),
 // au lieu des données figées de data.js. Supabase rafraîchit juste après.
@@ -157,6 +167,10 @@ FP.role = () => {
   } catch { return 'admin'; }
 };
 FP.isAdmin = () => FP.role() === 'admin';
+// Profil multi-société (société + super-admin) — lu du cache, rafraîchi par supabase-client.js.
+// is_admin = true → voit toutes les sociétés (sélecteur visible) ; sinon = client verrouillé.
+FP.profile = (() => { try { return JSON.parse(localStorage.getItem('fp_profile') || 'null'); } catch (e) { return null; } })();
+FP.isSuperAdmin = () => !FP.profile || FP.profile.is_admin !== false; // pas de profil = comportement admin (actuel)
 FP.roleLabel = () => FP.isAdmin() ? 'Admin' : 'Gestionnaire';
 // Personnalisation de l'apparence (renommer titres/colonnes/onglets) : autorisée admin + gestionnaire.
 // Mettre `=> FP.isAdmin()` ici pour la réserver à l'admin.
