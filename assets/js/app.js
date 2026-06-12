@@ -366,6 +366,9 @@ FP.darkMode = {
 
 // Sécurité : empêche « Retour arrière » de faire « page précédente » (et de perdre une saisie)
 // quand le focus n'est pas dans un champ éditable.
+// Normalisation pour la recherche : minuscules + SANS accents (taper « jeremy » trouve « Jérémy »).
+FP.norm = (s) => (s == null ? '' : s.toString()).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 (function guardBackspace() {
   // Empêche la touche « Retour arrière » de déclencher « page précédente » du navigateur
   // (sinon : on efface du texte, le curseur sort du champ, un Backspace de plus = la page
@@ -2034,24 +2037,24 @@ FP.injectGlobalSearch = () => {
 
 FP.searchAll = (q) => {
   if (!q || q.length < 2) return [];
-  q = q.toLowerCase().trim();
+  q = FP.norm(q).trim();
   const inPagesFolder = window.location.pathname.includes('/pages/');
   const pref = inPagesFolder ? '' : 'pages/';
   const out = [];
   (window.FP_DATA?.vehicules || []).forEach(v => {
-    const text = `${v.immat || ''} ${v.marque || ''} ${v.modele || ''} ${v.chauffeur || ''} ${v.vin || ''}`.toLowerCase();
+    const text = FP.norm(`${v.immat || ''} ${v.marque || ''} ${v.modele || ''} ${v.chauffeur || ''} ${v.vin || ''}`);
     if (text.includes(q)) {
       out.push({ type: 'véh.', icon: '🚗', label: `${v.immat} · ${v.marque} ${v.modele}`.trim(), sub: v.chauffeur || '', url: pref + 'vehicules.html?veh=' + encodeURIComponent(v.id) });
     }
   });
   (window.FP_DATA?.amendes || []).forEach(a => {
-    const text = `${a.prenom || ''} ${a.motif || ''} ${a.numeroAvis || ''}`.toLowerCase();
+    const text = FP.norm(`${a.prenom || ''} ${a.motif || ''} ${a.numeroAvis || ''}`);
     if (text.includes(q)) {
       out.push({ type: 'amende', icon: '🎫', label: `${a.prenom} · ${a.motif}`, sub: `${a.montant ? FP.euroPrecis(a.montant) : ''} · ${FP.date(a.date)}`, url: pref + 'amendes.html?amende=' + encodeURIComponent(a.id) });
     }
   });
   (window.FP_DATA?.factures || []).forEach(f => {
-    const text = `${f.vehiculeImmat || ''} ${f.fournisseur || ''} ${f.description || ''} ${f.numeroFacture || ''}`.toLowerCase();
+    const text = FP.norm(`${f.vehiculeImmat || ''} ${f.fournisseur || ''} ${f.description || ''} ${f.numeroFacture || ''}`);
     if (text.includes(q)) {
       out.push({ type: f.type || 'fact.', icon: f.type === 'sinistre' ? '⚠️' : '📄', label: `${f.vehiculeImmat} · ${f.fournisseur || ''}`, sub: `${f.description ? f.description.slice(0,60) : ''}`, url: pref + (f.type === 'sinistre' ? 'sinistres.html' : 'factures.html?facture=' + encodeURIComponent(f.fileId || '')) });
     }
