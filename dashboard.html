@@ -655,7 +655,16 @@
     if (window.lucide) lucide.createIcons();
 
     const openModal = () => { modal.style.display = 'flex'; };
-    const closeModal = () => { modal.style.display = 'none'; $('scan-body').innerHTML = ''; file.value = ''; };
+    const _objUrls = []; // aperçus PDF/image (libérés à la fermeture)
+    const revokeUrls = () => { _objUrls.splice(0).forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} }); };
+    const previewHtml = (f) => {
+      const u = URL.createObjectURL(f); _objUrls.push(u);
+      const isPdf = f.type === 'application/pdf' || /\.pdf($|\?)/i.test(f.name || '');
+      return isPdf
+        ? `<iframe src="${u}" style="width:100%;height:420px;border:1px solid #E2E8F0;border-radius:8px;background:#fff"></iframe>`
+        : `<img src="${u}" style="display:block;max-width:100%;border:1px solid #E2E8F0;border-radius:8px">`;
+    };
+    const closeModal = () => { modal.style.display = 'none'; revokeUrls(); $('scan-body').innerHTML = ''; file.value = ''; };
     $('scan-close').addEventListener('click', closeModal);
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 
@@ -756,9 +765,12 @@
       const rows = items.map((it, i) => {
         const type = it.det.type;
         return `<div style="border:1px solid #E2E8F0;border-radius:12px;padding:12px;margin-bottom:10px;background:#FBFCFE">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;margin-bottom:10px">
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${it.file.name}">${it.file.name}</span><span id="b-badge-${i}">${badgeHtml(it, type)}</span>
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;margin-bottom:10px">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${it.file.name}">${it.file.name}</span>
+            <button id="b-view-${i}" type="button" style="border:1px solid #E2E8F0;background:#fff;border-radius:7px;padding:3px 9px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap">👁 Voir</button>
+            <span id="b-badge-${i}">${badgeHtml(it, type)}</span>
           </div>
+          <div id="b-prev-${i}" style="display:none;margin-bottom:10px"></div>
           <div style="margin-bottom:8px">${fld('Type de document', typeSelect('b-type-' + i, type))}</div>
           <div id="b-fields-${i}" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px">${rowFields(i, it, type)}</div>
         </div>`;
@@ -770,12 +782,20 @@
       // Changer le type recompose les champs (véhicule ↔ conducteur) et la pastille
       items.forEach((it, i) => {
         const sel = $('b-type-' + i);
-        if (!sel) return;
-        sel.addEventListener('change', () => {
+        if (sel) sel.addEventListener('change', () => {
           const t = sel.value;
           const fc = $('b-fields-' + i); if (fc) fc.innerHTML = rowFields(i, it, t);
           const bg = $('b-badge-' + i); if (bg) bg.innerHTML = badgeHtml(it, t);
           if (window.lucide) lucide.createIcons();
+        });
+        // Bouton « Voir » : déplie/replie un aperçu du fichier (PDF ou image)
+        const vb = $('b-view-' + i);
+        if (vb) vb.addEventListener('click', () => {
+          const p = $('b-prev-' + i); if (!p) return;
+          if (p.style.display === 'none') {
+            if (!p.dataset.loaded) { p.innerHTML = previewHtml(it.file); p.dataset.loaded = '1'; }
+            p.style.display = 'block'; vb.innerHTML = '✕ Masquer';
+          } else { p.style.display = 'none'; vb.innerHTML = '👁 Voir'; }
         });
       });
       $('scan-save-all').addEventListener('click', () => saveBatch(items));
