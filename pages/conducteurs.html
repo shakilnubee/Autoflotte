@@ -264,6 +264,23 @@
   </div>
 </div>
 
+<!-- Modal : renommer un conducteur -->
+<div class="modal-backdrop" id="rename-backdrop">
+  <div class="modal p-6" style="max-width:420px">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-extrabold">Renommer le conducteur</h2>
+      <button class="p-2 hover:bg-slate-100 rounded-lg" id="rename-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="field-label">Nouveau nom affiché</div>
+    <input class="field-input" id="rename-input" placeholder="Prénom" />
+    <p class="text-xs text-slate-500 mt-2">Le nouveau nom sera appliqué partout : véhicule(s), amendes et fiche. Les infos de la fiche sont conservées.</p>
+    <div class="flex gap-2 pt-4">
+      <button type="button" class="btn btn-outline flex-1 justify-center" id="rename-cancel">Annuler</button>
+      <button type="button" class="btn btn-dark flex-1 justify-center" id="rename-confirm"><i data-lucide="check" class="w-4 h-4"></i> Renommer</button>
+    </div>
+  </div>
+</div>
+
 <!-- Visionneuse document (aperçu Drive) -->
 <div class="modal-backdrop" id="viewer-backdrop">
   <div class="viewer">
@@ -919,11 +936,21 @@
   }
 
   // Renomme un conducteur PARTOUT : véhicules (chauffeur) + amendes (prénom) + fiche conducteur.
+  let _renameKey = null;
   function renameDriver(key) {
     const d = drivers.find(x => x.key === key);
     if (!d) return;
-    const newName = (prompt('Nouveau nom affiché du conducteur :', d.name) || '').trim();
-    if (!newName || newName === d.name) return;
+    _renameKey = key;
+    $('rename-input').value = d.name || '';
+    $('rename-backdrop').classList.add('open');
+    setTimeout(() => { const i = $('rename-input'); if (i) { i.focus(); i.select(); } }, 40);
+  }
+  function applyRename() {
+    const key = _renameKey;
+    const d = key && drivers.find(x => x.key === key);
+    if (!d) { $('rename-backdrop').classList.remove('open'); return; }
+    const newName = ($('rename-input').value || '').trim();
+    if (!newName || newName === d.name) { $('rename-backdrop').classList.remove('open'); return; }
     const newKey = normPrenom(newName);
     FP.history && FP.history.commit && FP.history.commit();
     let nbVeh = 0, nbAm = 0;
@@ -948,11 +975,19 @@
     } else {
       upsertCond(key, { name: newName });
     }
+    $('rename-backdrop').classList.remove('open');
+    _renameKey = null;
     drivers = buildDrivers();
     renderKPIs(); renderGrid();
     if ($('drawer').classList.contains('open')) { currentDriverKey = newKey; openDrawer(newKey); }
     if (typeof showToast === 'function') showToast(`Renommé en « ${newName} »` + (nbVeh + nbAm ? ` (${nbVeh} véhicule(s), ${nbAm} amende(s))` : ''));
   }
+  // Boutons de la fenêtre de renommage
+  $('rename-confirm').addEventListener('click', applyRename);
+  $('rename-cancel').addEventListener('click', () => $('rename-backdrop').classList.remove('open'));
+  $('rename-close').addEventListener('click', () => $('rename-backdrop').classList.remove('open'));
+  $('rename-backdrop').addEventListener('click', e => { if (e.target === $('rename-backdrop')) $('rename-backdrop').classList.remove('open'); });
+  $('rename-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); applyRename(); } });
 
   // ---------- Modal nouveau conducteur ----------
   function openModal() {
