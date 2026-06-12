@@ -1226,6 +1226,7 @@ FP.detectDoc = function (rawText, vehicules) {
   else if (/CONTR[OÔ]LE\s+TECHNIQUE|PROC[EÈ]S[-\s]?VERBAL|PROCHAIN\s+CONTR|FAVORABLE|D[EÉ]FAVORABLE/.test(text)) out.type = 'controle-technique';
   else if (/CERTIFICAT\s+D.?IMMATRICULATION|CARTE\s+GRISE/.test(text)) out.type = 'carte-grise';
   else if (/ATTESTATION\s+D.?ASSURANCE|CARTE\s+VERTE|\bASSURANCE\b/.test(text)) out.type = 'assurance';
+  else if (/PERMIS\s+DE\s+CONDUIRE|DRIVING\s+LICEN|F[UÜ]HRERSCHEIN|RIJBEWIJS|PERMESSO\s+DI\s+GUIDA/.test(text)) out.type = 'permis';
   else if (/\bFACTURE\b|\bFATTURA\b|\bRECHNUNG\b|\bFACTUUR\b|TOTAL\s+TTC|MONTANT\s+TTC|NET\s+[AÀ]\s+PAYER/.test(text)) out.type = 'facture';
 
   // --- Dates dd/mm/yyyy (filtrées sur une plage plausible) ---
@@ -1246,6 +1247,21 @@ FP.detectDoc = function (rawText, vehicules) {
     out.date = ct || (allDates.length ? allDates.map(d => d.iso).sort().slice(-1)[0] : null);
   } else if (allDates.length) {
     out.date = allDates.map(d => d.iso).sort().slice(-1)[0];
+  }
+
+  // --- Permis de conduire : numéro, catégories, dates d'obtention / d'expiration ---
+  if (out.type === 'permis') {
+    const nm = text.match(/\b(\d{2}[A-Z]{2}\d{5,6})\b/) || text.match(/\b(\d{12,15})\b/);
+    if (nm) out.permisNumero = nm[1];
+    const cats = text.match(/\b(AM|A1|A2|B1|BE|C1E|C1|CE|D1E|D1|DE|A|B|C|D)\b/g);
+    if (cats && cats.length) out.permisType = [...new Set(cats)].join('/');
+    const pd = [...text.matchAll(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/g)]
+      .map(d => toIso(d[1], d[2], d[3])).filter(iso => { const y = +iso.slice(0, 4); return y >= 1960 && y <= 2050; });
+    const uniq = [...new Set(pd)].sort();
+    const today = new Date().toISOString().slice(0, 10);
+    const fut = uniq.filter(d => d > today), past = uniq.filter(d => d <= today);
+    if (fut.length) out.permisExpiration = fut[fut.length - 1];
+    if (past.length) out.permisObtention = past[0];
   }
 
   // --- Kilométrage (ex. CT : « Kilométrage relevé : 123 456 km ») ---

@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/tailwind.css">
 <script src="https://unpkg.com/lucide@latest"></script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260612c">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260612d">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -261,9 +261,9 @@
 </div>
 
 <script src="assets/js/vendor/supabase.js"></script>
-<script src="assets/js/supabase-client.js?v=20260612c"></script>
-<script src="assets/js/data.js?v=20260612c"></script>
-<script src="assets/js/app.js?v=20260612c"></script>
+<script src="assets/js/supabase-client.js?v=20260612d"></script>
+<script src="assets/js/data.js?v=20260612d"></script>
+<script src="assets/js/app.js?v=20260612d"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script>
   lucide.createIcons();
@@ -627,6 +627,7 @@
       'pv': 'PV (Procès-verbal)',
       'carte-grise': 'Carte grise',
       'assurance': 'Assurance (carte verte)',
+      'permis': '🪪 Permis (→ fiche conducteur)',
       'contrat': 'Contrat leasing/location',
       'etat-des-lieux': 'État des lieux',
       'autre': 'Autre document',
@@ -676,10 +677,15 @@
           <div style="font-size:12px;color:#94A3B8;margin-top:4px;max-width:320px;margin-left:auto;margin-right:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${files[i].name}</div>
         </div>`);
         let det = { type: 'autre', vehicule: null, immat: null, date: null, km: null };
+        let text = '';
         try {
-          const text = await FP.ocr.fileToText(files[i]);
+          text = await FP.ocr.fileToText(files[i]);
           det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
         } catch (err) { console.error('[scan OCR]', err); }
+        // Détection du conducteur (nom de fichier + texte) pour les permis
+        det.conducteur = detectConducteur(files[i].name, text);
+        // Si on a reconnu une personne et aucun véhicule, on suppose un permis
+        if (det.conducteur && det.type === 'autre' && !det.vehicule) det.type = 'permis';
         items.push({ file: files[i], det });
       }
       showBatchForm(items);
@@ -699,30 +705,79 @@
     // Petit libellé au-dessus de chaque champ
     const fld = (label, inner) => `<label style="display:block"><span style="display:block;font-size:10px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#94A3B8;margin-bottom:3px">${label}</span>${inner}</label>`;
 
+    // --- Conducteurs (pour le type « Permis ») ---
+    const stripAcc = s => (s || '').toString().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    function allDrivers() {
+      const map = new Map();
+      const norm = (window.FP && FP.normPrenom) ? FP.normPrenom : (s => String(s || '').trim().split(/\s+/)[0].toLowerCase());
+      const NON = (window.FP && FP.NON_CHAUFFEURS) ? FP.NON_CHAUFFEURS : [];
+      (window.FP_DATA.conducteurs || []).forEach(c => { if (c.masque) return; const k = c.key || norm(c.name); if (!k) return; map.set(k, { key: k, name: c.name || k, nom: c.nom || '' }); });
+      (window.FP_DATA.vehicules || []).forEach(v => { const n = v.chauffeur; if (!n || NON.includes(n)) return; const k = norm(n); if (!k || map.has(k)) return; map.set(k, { key: k, name: n, nom: '' }); });
+      return [...map.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+    // Devine le conducteur d'après le nom de fichier puis le texte OCR (nom de famille prioritaire)
+    function detectConducteur(filename, ocrText) {
+      const drivers = allDrivers();
+      const hay = stripAcc(filename + ' ' + (ocrText || ''));
+      for (const d of drivers) { const nom = stripAcc(d.nom); if (nom.length >= 3 && hay.includes(nom)) return d; }
+      for (const d of drivers) { const pre = stripAcc(d.name); if (pre.length >= 3 && new RegExp('\\b' + pre + '\\b').test(hay)) return d; }
+      return null;
+    }
+    function condSelect(id, selKey) {
+      const opts = ['<option value="">— Choisir un conducteur —</option>']
+        .concat(allDrivers().map(d => `<option value="${d.key}" ${selKey === d.key ? 'selected' : ''}>${d.name}${d.nom ? ' ' + d.nom : ''}</option>`)).join('');
+      return `<select id="${id}" class="field-input" style="width:100%">${opts}</select>`;
+    }
+    // Pastille de statut : ✓ cible détectée / ⚠ à choisir (selon le type)
+    function badgeHtml(it, type) {
+      const ok = 'color:#047857;font-weight:700;white-space:nowrap';
+      const ko = 'color:#B91C1C;font-weight:700;white-space:nowrap';
+      if (type === 'permis') return it.det.conducteur ? `<span style="${ok}">✓ ${it.det.conducteur.name}</span>` : `<span style="${ko}">⚠ à choisir</span>`;
+      return it.det.vehicule ? `<span style="${ok}">✓ ${it.det.vehicule.immat}</span>` : `<span style="${ko}">⚠ à choisir</span>`;
+    }
+    // Champs selon le type : permis → conducteur + infos permis ; sinon → véhicule + date/km/montant
+    function rowFields(i, it, type) {
+      const d = it.det;
+      if (type === 'permis') {
+        return `<div style="grid-column:1 / -1">${fld('Conducteur', condSelect('b-cond-' + i, d.conducteur && d.conducteur.key))}</div>
+          <div>${fld('Type de permis', `<input id="b-ptype-${i}" class="field-input" style="width:100%" placeholder="ex. B" value="${d.permisType || ''}">`)}</div>
+          <div>${fld('Numéro', `<input id="b-pnum-${i}" class="field-input" style="width:100%" placeholder="—" value="${d.permisNumero || ''}">`)}</div>
+          <div>${fld("Date d'obtention", `<input id="b-pobt-${i}" type="date" class="field-input" style="width:100%" value="${d.permisObtention || ''}">`)}</div>
+          <div>${fld("Date d'expiration", `<input id="b-pexp-${i}" type="date" class="field-input" style="width:100%" value="${d.permisExpiration || ''}">`)}</div>`;
+      }
+      return `<div style="grid-column:1 / -1">${fld('Véhicule', vehSelect('b-veh-' + i, d.vehicule && d.vehicule.id))}</div>
+          <div>${fld('Date', `<input id="b-date-${i}" type="date" class="field-input" style="width:100%" value="${d.date || ''}">`)}</div>
+          <div>${fld('Kilométrage', `<input id="b-km-${i}" type="number" class="field-input" style="width:100%" placeholder="—" value="${d.km || ''}">`)}</div>
+          <div style="grid-column:1 / -1">${fld('Montant TTC (€)', `<input id="b-amt-${i}" type="number" step="0.01" class="field-input" style="width:100%" placeholder="—" value="${d.montantTTC || ''}">`)}</div>`;
+    }
+
     // Liste : une ligne par document, pré-remplie par la détection, corrigeable.
     function showBatchForm(items) {
       const rows = items.map((it, i) => {
-        const d = it.det;
-        const badge = d.vehicule
-          ? `<span style="color:#047857;font-weight:700;white-space:nowrap">✓ ${d.vehicule.immat}</span>`
-          : `<span style="color:#B91C1C;font-weight:700;white-space:nowrap">⚠ à choisir</span>`;
+        const type = it.det.type;
         return `<div style="border:1px solid #E2E8F0;border-radius:12px;padding:12px;margin-bottom:10px;background:#FBFCFE">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;margin-bottom:10px">
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${it.file.name}">${it.file.name}</span>${badge}
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${it.file.name}">${it.file.name}</span><span id="b-badge-${i}">${badgeHtml(it, type)}</span>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px">
-            <div style="grid-column:1 / -1">${fld('Véhicule', vehSelect('b-veh-' + i, d.vehicule && d.vehicule.id))}</div>
-            <div style="grid-column:1 / -1">${fld('Type de document', typeSelect('b-type-' + i, d.type))}</div>
-            <div>${fld('Date', `<input id="b-date-${i}" type="date" class="field-input" style="width:100%" value="${d.date || ''}">`)}</div>
-            <div>${fld('Kilométrage', `<input id="b-km-${i}" type="number" class="field-input" style="width:100%" placeholder="—" value="${d.km || ''}">`)}</div>
-            <div style="grid-column:1 / -1">${fld('Montant TTC (€)', `<input id="b-amt-${i}" type="number" step="0.01" class="field-input" style="width:100%" placeholder="—" value="${d.montantTTC || ''}">`)}</div>
-          </div>
+          <div style="margin-bottom:8px">${fld('Type de document', typeSelect('b-type-' + i, type))}</div>
+          <div id="b-fields-${i}" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px">${rowFields(i, it, type)}</div>
         </div>`;
       }).join('');
-      setBody(`<div style="font-size:13px;color:#475569;margin-bottom:10px"><b>${items.length}</b> document(s) lu(s). Vérifiez le véhicule / type (pré-remplis), puis enregistrez.</div>
+      setBody(`<div style="font-size:13px;color:#475569;margin-bottom:10px"><b>${items.length}</b> document(s) lu(s). Vérifiez le type et la cible (pré-remplis), puis enregistrez.</div>
         <div style="max-height:46vh;overflow:auto;margin:0 -2px;padding:0 2px">${rows}</div>
         <button id="scan-save-all" class="btn btn-dark text-sm w-full justify-center" style="margin-top:14px"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer ${items.length} document(s)</button>
-        <p style="font-size:11px;color:#94A3B8;margin-top:8px">Chaque fichier est stocké en ligne et rangé dans la fiche du véhicule. CT → met à jour le prochain CT ; un kilométrage plus récent met à jour la fiche.</p>`);
+        <p style="font-size:11px;color:#94A3B8;margin-top:8px">Chaque fichier est stocké en ligne. <b>Permis</b> → rangé dans la fiche du conducteur ; les autres → fiche du véhicule. CT → met à jour le prochain CT ; un kilométrage plus récent met à jour la fiche.</p>`);
+      // Changer le type recompose les champs (véhicule ↔ conducteur) et la pastille
+      items.forEach((it, i) => {
+        const sel = $('b-type-' + i);
+        if (!sel) return;
+        sel.addEventListener('change', () => {
+          const t = sel.value;
+          const fc = $('b-fields-' + i); if (fc) fc.innerHTML = rowFields(i, it, t);
+          const bg = $('b-badge-' + i); if (bg) bg.innerHTML = badgeHtml(it, t);
+          if (window.lucide) lucide.createIcons();
+        });
+      });
       $('scan-save-all').addEventListener('click', () => saveBatch(items));
     }
 
@@ -733,17 +788,28 @@
     }
 
     async function saveBatch(items) {
-      const rows = items.map((it, i) => ({
-        file: it.file,
-        det: it.det,
-        vehId: $('b-veh-' + i).value,
-        type: $('b-type-' + i).value,
-        date: $('b-date-' + i).value,
-        km: parseInt($('b-km-' + i).value, 10),
-        amt: parseFloat($('b-amt-' + i).value),
-      }));
-      const missing = rows.filter(r => !r.vehId).length;
-      if (missing) { alert(missing + ' document(s) sans véhicule choisi. Sélectionnez un véhicule pour chacun.'); return; }
+      const val = id => { const el = $(id); return el ? el.value : ''; };
+      const rows = items.map((it, i) => {
+        const type = val('b-type-' + i);
+        const r = { file: it.file, det: it.det, type };
+        if (type === 'permis') {
+          r.condKey = val('b-cond-' + i);
+          r.permisType = val('b-ptype-' + i);
+          r.permisNumero = val('b-pnum-' + i);
+          r.permisObtention = val('b-pobt-' + i);
+          r.permisExpiration = val('b-pexp-' + i);
+        } else {
+          r.vehId = val('b-veh-' + i);
+          r.date = val('b-date-' + i);
+          r.km = parseInt(val('b-km-' + i), 10);
+          r.amt = parseFloat(val('b-amt-' + i));
+        }
+        return r;
+      });
+      const missVeh = rows.filter(r => r.type !== 'permis' && !r.vehId).length;
+      const missCond = rows.filter(r => r.type === 'permis' && !r.condKey).length;
+      if (missVeh) { alert(missVeh + ' document(s) sans véhicule choisi. Sélectionnez un véhicule pour chacun.'); return; }
+      if (missCond) { alert(missCond + ' permis sans conducteur choisi. Sélectionnez un conducteur pour chacun.'); return; }
       if (!(window.FP && FP.supabase && FP.uploadScan)) { alert('Connexion requise pour enregistrer en ligne.'); return; }
 
       const btnAll = $('scan-save-all');
@@ -753,6 +819,23 @@
         const r = rows[i];
         btnAll.innerHTML = `⏳ Enregistrement ${i + 1}/${rows.length}…`;
         try {
+          if (r.type === 'permis') {
+            // → fiche CONDUCTEUR (table conducteurs : scan + infos lues)
+            const url = await FP.uploadScan(r.file, 'permis');
+            const drv = allDrivers().find(d => d.key === r.condKey) || { key: r.condKey, name: r.condKey, nom: '' };
+            const payload = { key: r.condKey, name: drv.name || r.condKey, manuel: true, permisUrl: url, permisFileId: null };
+            if (r.permisType) payload.permisType = r.permisType;
+            if (r.permisNumero) payload.permisNumero = r.permisNumero;
+            if (r.permisObtention) payload.permisObtention = r.permisObtention;
+            if (r.permisExpiration) payload.permisExpiration = r.permisExpiration;
+            await FP.persist.upsert('conducteurs', payload);
+            // maj mémoire (évite le « flash » sur la page Conducteurs)
+            const arr = window.FP_DATA.conducteurs || (window.FP_DATA.conducteurs = []);
+            const ex = arr.find(c => c.key === r.condKey);
+            if (ex) Object.assign(ex, payload); else arr.push(payload);
+            done.push(`• <b>${drv.name || r.condKey}${drv.nom ? ' ' + drv.nom : ''}</b> — Permis → fiche conducteur`); okN++;
+            continue;
+          }
           const veh = (window.FP_DATA.vehicules || []).find(v => v.id === r.vehId);
           const url = await FP.uploadScan(r.file, 'documents');
 
