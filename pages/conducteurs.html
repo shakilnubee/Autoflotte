@@ -868,7 +868,8 @@
         </div>`)}`;
 
     const blocDelete = `
-      <div class="pt-2 border-t border-slate-100">
+      <div class="pt-2 border-t border-slate-100 space-y-2">
+        <button type="button" id="drawer-rename" data-key="${escapeHtml(d.key)}" class="btn btn-outline text-sm w-full justify-center"><i data-lucide="pencil" class="w-4 h-4"></i> Renommer ce conducteur</button>
         <button type="button" id="drawer-delete" data-key="${escapeHtml(d.key)}" class="btn text-sm text-red-600 hover:bg-red-50 w-full justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer ce conducteur</button>
       </div>`;
 
@@ -915,6 +916,42 @@
     closeDrawer();
     renderKPIs();
     renderGrid();
+  }
+
+  // Renomme un conducteur PARTOUT : véhicules (chauffeur) + amendes (prénom) + fiche conducteur.
+  function renameDriver(key) {
+    const d = drivers.find(x => x.key === key);
+    if (!d) return;
+    const newName = (prompt('Nouveau nom affiché du conducteur :', d.name) || '').trim();
+    if (!newName || newName === d.name) return;
+    const newKey = normPrenom(newName);
+    FP.history && FP.history.commit && FP.history.commit();
+    let nbVeh = 0, nbAm = 0;
+    // 1) Véhicules dont le chauffeur correspond à ce conducteur
+    (data.vehicules || []).forEach(v => {
+      if (normPrenom(v.chauffeur) === key) { v.chauffeur = newName; nbVeh++; if (FP.persist.available()) FP.persist.update('vehicules', v.id, { chauffeur: newName }); }
+    });
+    // 2) Amendes au prénom de ce conducteur
+    (data.amendes || []).forEach(a => {
+      if (normPrenom(a.prenom) === key) { a.prenom = newName; nbAm++; if (FP.persist.available()) FP.persist.update('amendes', a.id, { prenom: newName }); }
+    });
+    // 3) Fiche conducteur : on garde toutes les infos ; si la clé change, on migre la ligne
+    const row = condRow(key);
+    if (newKey !== key) {
+      const base = row ? { ...row } : { key: newKey };
+      base.key = newKey; base.name = newName;
+      condCache = condCache.filter(r => r.key !== key);
+      const exist = condCache.find(r => r.key === newKey);
+      if (exist) Object.assign(exist, base); else condCache.push(base);
+      cacheCond();
+      if (FP.persist.available()) { FP.persist.upsert('conducteurs', toCondDb(condCache.find(r => r.key === newKey))); FP.persist.delete('conducteurs', key); }
+    } else {
+      upsertCond(key, { name: newName });
+    }
+    drivers = buildDrivers();
+    renderKPIs(); renderGrid();
+    if ($('drawer').classList.contains('open')) { currentDriverKey = newKey; openDrawer(newKey); }
+    if (typeof showToast === 'function') showToast(`Renommé en « ${newName} »` + (nbVeh + nbAm ? ` (${nbVeh} véhicule(s), ${nbAm} amende(s))` : ''));
   }
 
   // ---------- Modal nouveau conducteur ----------
@@ -1048,6 +1085,8 @@
 
     const btn = e.target.closest('#drawer-delete');
     if (btn) deleteDriver(btn.dataset.key);
+    const rbtn = e.target.closest('#drawer-rename');
+    if (rbtn) renameDriver(rbtn.dataset.key);
   });
 
   // Réception du fichier permis téléversé → Supabase Storage, puis enregistrement du lien
