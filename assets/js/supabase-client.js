@@ -265,12 +265,18 @@
       console.log(`[FP.db] Chargé depuis Supabase : ${data.vehicules.length} véhicules, ${data.amendes.length} amendes, ${data.factures.length} factures`);
       // Re-appliquer les overrides locaux (cases cochées par l'utilisateur, etc.)
       if (FP.loadVehicleOverrides) FP.loadVehicleOverrides();
-      // Charger les réglages partagés (noms/couleurs de groupes, libellés, titres, couleur…)
+      // Charger les réglages PAR SOCIÉTÉ (apparence). Ligne app_settings = la société.
+      // Repli sur l'ancienne ligne 'global' pour PXP (compat config existante).
       try {
-        const sres = await client.from('app_settings').select('data').eq('id', 'global').maybeSingle();
-        const shared = sres && sres.data && sres.data.data;
+        const sid = (FP.settings && FP.settings._dbId) ? FP.settings._dbId() : 'global';
+        let sres = await client.from('app_settings').select('data').eq('id', sid).maybeSingle();
+        let shared = sres && sres.data && sres.data.data;
+        if ((!shared || typeof shared !== 'object') && sid === 'PXP') {
+          sres = await client.from('app_settings').select('data').eq('id', 'global').maybeSingle();
+          shared = sres && sres.data && sres.data.data;
+        }
         if (shared && typeof shared === 'object') {
-          const key = (FP.settings && FP.settings.STORAGE_KEY) || 'auto_flotte_settings';
+          const key = (FP.settings && FP.settings._key) ? FP.settings._key() : 'auto_flotte_settings';
           localStorage.setItem(key, JSON.stringify(shared));
           if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme();
           if (FP.applyCustomNavLabels) FP.applyCustomNavLabels();

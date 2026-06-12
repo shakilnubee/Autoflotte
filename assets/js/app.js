@@ -239,6 +239,19 @@ FP.addSociete = (name) => {
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
   STORAGE_KEY: 'auto_flotte_settings',
+  // Réglages (apparence : groupes, libellés, couleurs…) PROPRES À CHAQUE SOCIÉTÉ.
+  // Clé localStorage et ligne app_settings suffixées par la société. Repli sur l'ancienne
+  // clé/ligne ('global') pour PXP → la config actuelle n'est pas perdue.
+  _soc() { try { return (window.FP && FP.activeSociete) ? FP.activeSociete() : (localStorage.getItem('fp_societe') || 'PXP'); } catch (e) { return 'PXP'; } },
+  _key() { return this.STORAGE_KEY + '_' + this._soc(); },
+  _dbId() { return this._soc(); },
+  _readLocal() {
+    try {
+      let raw = localStorage.getItem(this._key());
+      if (raw == null && this._soc() === 'PXP') raw = localStorage.getItem(this.STORAGE_KEY); // repli legacy
+      return raw || '{}';
+    } catch (e) { return '{}'; }
+  },
   defaults: {
     groupes: {
       'siege':       { label: 'Siège',       color: '#F59E0B' },
@@ -279,7 +292,7 @@ FP.settings = {
   },
   get() {
     try {
-      const stored = JSON.parse(localStorage.getItem(this.STORAGE_KEY) || '{}');
+      const stored = JSON.parse(this._readLocal());
       const merged = {
         groupes: { ...this.defaults.groupes },
         societe: { ...this.defaults.societe, ...(stored.societe || {}) },
@@ -318,18 +331,18 @@ FP.settings = {
     } catch { return JSON.parse(JSON.stringify(this.defaults)); }
   },
   save(obj) {
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(obj));
+    localStorage.setItem(this._key(), JSON.stringify(obj));
     this.applyTheme();
-    // Partage les réglages (noms/couleurs des groupes, libellés, ordre/visibilité des onglets,
-    // titres, couleur d'interface…) sur TOUS les postes via Supabase. Passe par la file de
-    // sécurité : si la base est momentanément injoignable, c'est renvoyé automatiquement.
+    // Partage les réglages PAR SOCIÉTÉ sur tous les postes via Supabase (ligne app_settings = la
+    // société). Passe par la file de sécurité : renvoyé auto si la base est momentanément injoignable.
     try {
-      if (FP.persist && FP.persist.upsert) FP.persist.upsert('app_settings', { id: 'global', data: obj });
-      else if (FP.db && FP.supabase) FP.db.upsert('app_settings', { id: 'global', data: obj });
+      const id = this._dbId();
+      if (FP.persist && FP.persist.upsert) FP.persist.upsert('app_settings', { id, data: obj });
+      else if (FP.db && FP.supabase) FP.db.upsert('app_settings', { id, data: obj });
     } catch (e) {}
   },
   reset() {
-    localStorage.removeItem(this.STORAGE_KEY);
+    localStorage.removeItem(this._key());
     this.applyTheme();
   },
   // Éclaircit / assombrit une couleur hex (amt négatif = plus foncé)
@@ -1829,7 +1842,7 @@ FP.history = {
       if (window.FP_DATA.amendes)   fpData.amendes   = JSON.parse(JSON.stringify(window.FP_DATA.amendes));
     }
     return {
-      settings: JSON.parse(localStorage.getItem(FP.settings.STORAGE_KEY) || '{}'),
+      settings: JSON.parse(FP.settings._readLocal()),
       overrides: JSON.parse(localStorage.getItem(FP.VEH_OVERRIDES_KEY) || '{}'),
       fpData,
     };
@@ -1858,7 +1871,7 @@ FP.history = {
   },
 
   restore(snap) {
-    localStorage.setItem(FP.settings.STORAGE_KEY, JSON.stringify(snap.settings));
+    localStorage.setItem(FP.settings._key(), JSON.stringify(snap.settings));
     localStorage.setItem(FP.VEH_OVERRIDES_KEY, JSON.stringify(snap.overrides));
     if (snap.fpData && window.FP_DATA) {
       if (snap.fpData.vehicules) window.FP_DATA.vehicules = JSON.parse(JSON.stringify(snap.fpData.vehicules));
