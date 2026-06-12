@@ -517,33 +517,27 @@
       map.get(key).amendes.push(a);
     });
 
-    // Conducteurs ajoutés manuellement (+ infos de contact, même pour ceux déjà connus)
-    const store = getCondStore();
-    store.manuels.forEach(m => {
-      const name = (m.name || '').trim();
-      if (!name) return;
-      const key = normPrenom(name);
-      if (!map.has(key)) map.set(key, { name, key, vehicules: [], amendes: [] });
+    // Fiche (contact, poste, permis…) depuis la table conducteurs — pour TOUS les conducteurs
+    // (véhicule, amende ou ajout manuel), pas seulement les fiches manuelles.
+    const FICHE_F = ['tel', 'email', 'note', 'nom', 'prenom', 'poste', 'adresse', 'dateNaissance',
+                     'permisType', 'permisNumero', 'permisObtention', 'permisExpiration', 'permisUrl', 'permisFileId'];
+    const masques = [];
+    condCache.forEach(r => {
+      if (!r.key) return;
+      if (r.masque) { masques.push(r.key); return; }
+      let key = r.key;
+      if (!map.has(key)) {
+        if (!r.manuel) return; // sans véhicule ni amende : on ne crée une fiche QUE pour un ajout manuel
+        map.set(key, { name: (r.name || key), key, vehicules: [], amendes: [] });
+      }
       const d = map.get(key);
-      d.manual = true;
-      if (m.tel)    d.tel    = m.tel;
-      if (m.email)  d.email  = m.email;
-      if (m.permis) d.permis = m.permis;
-      if (m.note)   d.note   = m.note;
-      if (m.nom)          d.nom = m.nom;
-      if (m.prenom)       d.prenom = m.prenom;
-      if (m.poste)        d.poste = m.poste;
-      if (m.adresse)      d.adresse = m.adresse;
-      if (m.dateNaissance) d.dateNaissance = m.dateNaissance;
-      if (m.permisType)       d.permisType = m.permisType;
-      if (m.permisNumero)     d.permisNumero = m.permisNumero;
-      if (m.permisObtention)  d.permisObtention = m.permisObtention;
-      if (m.permisExpiration) d.permisExpiration = m.permisExpiration;
+      if (r.manuel) d.manual = true;
+      FICHE_F.forEach(f => { if (r[f] != null && r[f] !== '') d[f] = r[f]; });
     });
 
     // Masqués : retirés de la liste (sans supprimer véhicules/amendes)
     return Array.from(map.values())
-      .filter(d => !store.masques.includes(d.key))
+      .filter(d => !masques.includes(d.key))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
