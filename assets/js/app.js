@@ -1285,7 +1285,12 @@ FP.detectDoc = function (rawText, vehicules) {
   }
 
   // --- Type de document ---
+  // Une VRAIE facture (mot « Facture » + un récapitulatif Total TTC/TVA/HT) est prioritaire :
+  // sinon une facture qui MENTIONNE « contrôle technique » (prestation) finissait classée en CT.
+  const factureFort = /\bFACTURE\b|\bFATTURA\b|\bRECHNUNG\b|\bFACTUUR\b|\bINVOICE\b/.test(text)
+    && /TOTAL\s*TTC|MONTANT\s*TTC|TOTAL\s*TVA|NET\s+[AÀ]\s+PAYER|TOTALE\s*:?\s*€|\bTOTAAL\b|GESAMTBETRAG/.test(text);
   if (/PRISE\s+EN\s+CHARGE|\bSINISTRE\b|PARE.?BRISE|BRIS\s+DE\s+GLACE|POINTS?\s+DE\s+CHOC|\bVRADE\b/.test(text)) out.type = 'sinistre';
+  else if (factureFort) out.type = 'facture';
   else if (/PV\s+DE\s+LIVRAISON|PROC[EÈ]S[-\s]?VERBAL\s+DE\s+LIVRAISON|BON\s+DE\s+LIVRAISON/.test(text)) out.type = 'pv';
   else if (/CONTR[OÔ]LE\s+TECHNIQUE|PROC[EÈ]S[-\s]?VERBAL|PROCHAIN\s+CONTR|FAVORABLE|D[EÉ]FAVORABLE/.test(text)) out.type = 'controle-technique';
   else if (/CERTIFICAT\s+D.?IMMATRICULATION|CARTE\s+GRISE/.test(text)) out.type = 'carte-grise';
