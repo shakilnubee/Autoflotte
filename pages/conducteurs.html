@@ -423,14 +423,18 @@
     const done = () => { drivers = buildDrivers(); if (!suppressRender) { renderKPIs(); renderGrid(); } if (currentDriverKey && $('drawer').classList.contains('open')) openDrawer(currentDriverKey); };
     if (!(window.FP && FP.db && FP.supabase)) { seedCondCacheFromLS(); done(); return Promise.resolve(); }
     return FP.db.select('conducteurs').then(r => {
-      if (r.error) { seedCondCacheFromLS(); done(); return; }
-      if ((r.data || []).length === 0) {
-        // Table vide : migration localStorage→Supabase UNIQUEMENT pour PXP (1ʳᵉ fois).
-        // Pour une autre société, 0 conducteur = réellement vide → on ne réinjecte/écrit rien.
-        seedCondCacheFromLS(); // (renvoie [] hors PXP)
-        const soc = (window.FP && FP.activeSociete) ? FP.activeSociete() : 'PXP';
-        if (soc === 'PXP') condCache.forEach(row => FP.persist.upsert('conducteurs', toCondDb(row)));
-      } else {
+      // ⚠️ Lecture en erreur OU vide : on NE VIDE PAS ce qui est déjà affiché (cache local / data.js).
+      // Sinon, si le serveur renvoie 0 (souci réseau, droits…), toutes les infos (âge, contact…)
+      // disparaissaient. On ne (re)migre depuis le local QUE si on n'a vraiment aucun conducteur.
+      if (r.error || (r.data || []).length === 0) {
+        if (!condCache.length) {
+          seedCondCacheFromLS(); // (renvoie [] hors PXP)
+          const soc = (window.FP && FP.activeSociete) ? FP.activeSociete() : 'PXP';
+          if (soc === 'PXP' && !r.error) condCache.forEach(row => FP.persist.upsert('conducteurs', toCondDb(row)));
+        }
+        done(); return;
+      }
+      {
         condCache = r.data;
         cacheCond();
         // Fusionne les fiches saisies localement (hors-ligne) SANS écraser les valeurs du serveur,
