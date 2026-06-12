@@ -522,6 +522,7 @@
     { key: 'visite-medicale',label: 'Visite médicale' },
     { key: 'autre',          label: 'Autre document' },
   ];
+  const COND_DOC_NUM_REQUIRED = ['carte-identite', 'titre-sejour']; // pièces où le numéro est obligatoire
   function condDocsGet(key){ const m = (FP.settings.get().condDocs) || {}; return Array.isArray(m[key]) ? m[key] : []; }
   function condDocsSave(key, docs){ const s = FP.settings.get(); s.condDocs = s.condDocs || {}; s.condDocs[key] = docs; FP.settings.save(s); }
   function condDocsBadge(d){
@@ -549,6 +550,7 @@
       <div class="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
         <div class="field-label !mb-0">Ajouter un document (carte d'identité…)</div>
         <select id="conddoc-type" class="field-input">${typeOpts}</select>
+        <input id="conddoc-numero" class="field-input" placeholder="Numéro (obligatoire pour une pièce d'identité)" />
         <input id="conddoc-label" class="field-input" placeholder="Nom (optionnel)" />
         <input id="conddoc-exp" type="date" class="field-input" placeholder="Date d'expiration (optionnel)" />
         <input type="file" id="conddoc-file" accept="image/*,application/pdf" class="hidden" />
@@ -1169,9 +1171,16 @@
     // Documents perso (carte d'identité…) : téléversement
     const cdAdd = e.target.closest('#conddoc-add');
     if (cdAdd) {
+      const type = ($('conddoc-type') || {}).value || 'autre';
+      const numero = (($('conddoc-numero') || {}).value || '').trim();
+      if (COND_DOC_NUM_REQUIRED.includes(type) && !numero) {
+        alert("Le numéro est obligatoire pour ce type de document (ex. numéro de carte d'identité).");
+        return;
+      }
       _condDocMeta = {
         key: cdAdd.dataset.key,
-        type: ($('conddoc-type') || {}).value || 'autre',
+        type,
+        numero,
         label: (($('conddoc-label') || {}).value || '').trim(),
         date: ($('conddoc-exp') || {}).value || null,
       };
@@ -1229,7 +1238,7 @@
       const url = await FP.uploadScan(file, 'documents');
       if (!url) throw new Error('URL vide');
       const t = COND_DOC_TYPES.find(x => x.key === meta.type);
-      const doc = { id: 'DC' + Date.now().toString(36), type: meta.type, label: meta.label || (t ? t.label : 'Document'), url, date: meta.date || null, numero: null, createdAt: new Date().toISOString() };
+      const doc = { id: 'DC' + Date.now().toString(36), type: meta.type, label: meta.label || (t ? t.label : 'Document'), url, date: meta.date || null, numero: meta.numero || null, createdAt: new Date().toISOString() };
       condDocsSave(meta.key, [...condDocsGet(meta.key), doc]);
       openDrawer(currentDriverKey);
     } catch (err) {

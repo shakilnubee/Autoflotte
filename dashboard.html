@@ -653,8 +653,8 @@
       'pv':                 { target: 'vehicule',   fields: ['date'] },
       'contrat':            { target: 'vehicule',   fields: ['date'] },
       'etat-des-lieux':     { target: 'vehicule',   fields: ['date'] },
-      'permis':             { target: 'conducteur', fields: ['permisType', 'permisNumero', 'permisObtention', 'permisExpiration'] },
-      'carte-identite':     { target: 'conducteur', fields: ['idNumero', 'idExpiration'] },
+      'permis':             { target: 'conducteur', fields: ['permisType', 'permisNumero', 'permisObtention', 'permisExpiration'], numField: 'permisNumero' },
+      'carte-identite':     { target: 'conducteur', fields: ['idNumero', 'idExpiration'], numField: 'idNumero' },
       'autre':              { target: 'vehicule',   fields: ['date'] },
     };
     const docDef = t => DOC_DEFS[t] || DOC_DEFS['autre'];
@@ -778,10 +778,10 @@
         case 'km': return `<div>${fld('Kilométrage', inp('b-km-' + i, 'type="number" placeholder="—"', d.km))}</div>`;
         case 'amt': return `<div style="grid-column:1 / -1">${fld('Montant TTC (€)', inp('b-amt-' + i, 'type="number" step="0.01" placeholder="—"', d.montantTTC))}</div>`;
         case 'permisType': return `<div>${fld('Type de permis', inp('b-ptype-' + i, 'placeholder="ex. B"', d.permisType))}</div>`;
-        case 'permisNumero': return `<div>${fld('Numéro', inp('b-pnum-' + i, 'placeholder="—"', d.permisNumero))}</div>`;
+        case 'permisNumero': return `<div>${fld('Numéro *', inp('b-pnum-' + i, 'placeholder="obligatoire"', d.permisNumero))}</div>`;
         case 'permisObtention': return `<div>${fld("Date d'obtention", inp('b-pobt-' + i, 'type="date"', d.permisObtention))}</div>`;
         case 'permisExpiration': return `<div>${fld("Date d'expiration", inp('b-pexp-' + i, 'type="date"', d.permisExpiration))}</div>`;
-        case 'idNumero': return `<div>${fld('Numéro', inp('b-idnum-' + i, 'placeholder="—"', d.idNumero))}</div>`;
+        case 'idNumero': return `<div>${fld('Numéro *', inp('b-idnum-' + i, 'placeholder="obligatoire"', d.idNumero))}</div>`;
         case 'idExpiration': return `<div>${fld("Date d'expiration", inp('b-idexp-' + i, 'type="date"', d.idExpiration))}</div>`;
       }
       return '';
@@ -869,8 +869,10 @@
       });
       const missVeh = rows.filter(r => r.target !== 'conducteur' && !r.vehId).length;
       const missCond = rows.filter(r => r.target === 'conducteur' && !r.condKey).length;
+      const missNum = rows.filter(r => { const nf = docDef(r.type).numField; return nf && !((r[nf] || '').toString().trim()); }).length;
       if (missVeh) { alert(missVeh + ' document(s) sans véhicule choisi. Sélectionnez un véhicule pour chacun.'); return; }
-      if (missCond) { alert(missCond + ' permis sans conducteur choisi. Sélectionnez un conducteur pour chacun.'); return; }
+      if (missCond) { alert(missCond + ' document(s) sans conducteur choisi. Sélectionnez un conducteur pour chacun.'); return; }
+      if (missNum) { alert(missNum + " document(s) sans numéro d'identification. Le numéro (permis / carte d'identité) est obligatoire."); return; }
       if (!(window.FP && FP.supabase && FP.uploadScan)) { alert('Connexion requise pour enregistrer en ligne.'); return; }
 
       const btnAll = $('scan-save-all');
