@@ -1218,6 +1218,51 @@ FP.ocr = {
   },
 };
 
+// ---- Helpers factures : dates en toutes lettres (FR/IT/DE/NL/EN) + montants par libellé ----
+const _MONTHS = {
+  janvier:1,fevrier:2,mars:3,avril:4,mai:5,juin:6,juillet:7,aout:8,septembre:9,octobre:10,novembre:11,decembre:12,
+  gennaio:1,febbraio:2,marzo:3,aprile:4,maggio:5,giugno:6,luglio:7,agosto:8,settembre:9,ottobre:10,dicembre:12,
+  januar:1,februar:2,marz:3,april:4,juni:6,juli:7,august:8,september:9,oktober:10,november:11,dezember:12,
+  januari:1,februari:2,maart:3,mei:5,augustus:8,december:12,
+  january:1,february:2,march:3,may:5,june:6,july:7,october:10,
+};
+const _stripAcc = s => (s || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const _toIso2 = (d, mo, y) => { y = +y; if (y < 100) y += 2000; return `${y}-${String(+mo).padStart(2, '0')}-${String(+d).padStart(2, '0')}`; };
+function _normAmount(raw) {
+  let s = String(raw).replace(/[\s €$]/g, '');
+  if (s.includes('.') && s.includes(',')) s = s.replace(/\./g, '').replace(',', '.'); // 1.258,88 → 1258.88
+  else if (s.includes(',')) s = s.replace(',', '.');
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+// Montant juste après un libellé (Total TTC, Total HT…) — on prend le dernier nombre de la ligne (ou la suivante)
+function _amountNear(raw, labelRe) {
+  const lines = (raw || '').split(/\r?\n/);
+  const amtRe = /(\d{1,3}(?:[ .]\d{3})+(?:[.,]\d{2})?|\d+[.,]\d{2})/g;
+  const sameLine = [], nextLine = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!labelRe.test(lines[i])) continue;
+    let ms = lines[i].match(amtRe);
+    if (ms && ms.length) { const n = _normAmount(ms[ms.length - 1]); if (n != null) { sameLine.push(n); continue; } }
+    ms = (lines[i + 1] || '').match(amtRe);
+    if (ms && ms.length) { const n = _normAmount(ms[ms.length - 1]); if (n != null) nextLine.push(n); }
+  }
+  // Le montant du RÉCAPITULATIF est sur la même ligne que le libellé (≠ en-tête de colonne « Total HT »).
+  if (sameLine.length) return sameLine[sameLine.length - 1];
+  if (nextLine.length) return nextLine[nextLine.length - 1];
+  return null;
+}
+// Date de facture : priorité à « date d'émission / facture / data / datum » ; gère les mois en lettres
+function _invoiceDate(raw) {
+  const text = (raw || ''), up = text.toUpperCase();
+  const kw = '(?:DATE\\s*D.?[EÉ]MISSION|DATE\\s*(?:DE\\s*)?FACTURE|\\bDATA\\b|\\bDATUM\\b|RECHNUNGSDATUM|INVOICE\\s*DATE)';
+  let m = up.match(new RegExp(kw + '[^\\d]{0,30}(\\d{1,2})[\\/.\\-](\\d{1,2})[\\/.\\-](\\d{2,4})'));
+  if (m) return _toIso2(m[1], m[2], m[3]);
+  m = text.match(new RegExp('(?:[EÉ]MISSION|FACTURE|\\bDATA\\b|\\bDATUM\\b|RECHNUNGSDATUM)[^\\d]{0,30}(\\d{1,2})\\s+([A-Za-zÀ-ÿ]{3,12})\\.?\\s+(\\d{4})', 'i'));
+  if (m) { const mo = _MONTHS[_stripAcc(m[2])]; if (mo) return _toIso2(m[1], mo, m[3]); }
+  return null;
+}
+
 // Devine le contenu d'un document à partir de son texte OCR.
 // Renvoie { type, vehicule, immat, date, km, raw }.
 FP.detectDoc = function (rawText, vehicules) {
@@ -1265,6 +1310,10 @@ FP.detectDoc = function (rawText, vehicules) {
       }
     }
     out.date = ct || (allDates.length ? allDates.map(d => d.iso).sort().slice(-1)[0] : null);
+  } else if (out.type === 'facture' || out.type === 'sinistre') {
+    // Date de facture : « date d'émission/facture » en priorité (chiffres OU mois en lettres),
+    // sinon la PLUS ANCIENNE date plausible (évite d'attraper une date de garantie/échéance tardive).
+    out.date = _invoiceDate(rawText) || (allDates.length ? allDates.map(d => d.iso).sort()[0] : null);
   } else if (allDates.length) {
     out.date = allDates.map(d => d.iso).sort().slice(-1)[0];
   }
@@ -1319,7 +1368,8 @@ FP.detectDoc = function (rawText, vehicules) {
       if (cand) { const n = cleanNum(cand[0]); if (n > 100 && n < 2000000) km = n; }
     }
   }
-  if (km == null) { const kmM = text.match(/(\d[\d\s.]{2,})\s*KM\b/) || text.match(/\bKM\s*[:\.]?\s*(\d[\d\s.]{2,})/); if (kmM) { const n = cleanNum(kmM[1]); if (n > 100 && n < 2000000) km = n; } }
+  // « 14 768 KMS », « 89 548 KM », « KM : 8276 », « KMS 12000 »… (tolère le « S » du pluriel)
+  if (km == null) { const kmM = text.match(/(\d[\d\s.]{2,})\s*KMS?\b/) || text.match(/\bKMS?\s*[:\.]?\s*(\d[\d\s.]{2,})/); if (kmM) { const n = cleanNum(kmM[1]); if (n > 100 && n < 2000000) km = n; } }
   out.km = km;
 
   // --- Montant TTC (factures) : priorité au montant près de « TTC », sinon le plus gros montant à 2 décimales ---
@@ -1338,6 +1388,27 @@ FP.detectDoc = function (rawText, vehicules) {
     if (amts.length) ttc = Math.max(...amts);
   }
   out.montantTTC = ttc;
+  // Lecture PRÉCISE par libellé (Total HT / Total TVA / Total TTC) — prioritaire sur l'heuristique.
+  const _ht = _amountNear(rawText, /TOTAL\s*HT|MONTANT\s*HT|TOTALE\s*IMPONIBILE|\bIMPONIBILE\b|NETTOBETRAG/i);
+  const _tva = _amountNear(rawText, /TOTAL\s*(?:DE\s*)?T\.?\s?V\.?\s?A|TOTALE\s*IVA|\bMWST\b|\bBTW\b/i);
+  const _ttc = _amountNear(rawText, /TOTAL\s*TTC|NET\s*[AÀ]\s*PAYER|TOTAL\s*[AÀ]\s*PAYER|TOTALE\s*:?\s*€|GESAMTBETRAG|\bTOTAAL\b|TE\s*BETALEN/i);
+  if (_ht != null) out.montantHT = _ht;
+  if (_tva != null) out.montantTVA = _tva;
+  if (_ttc != null) out.montantTTC = _ttc;
+  // Numéro de facture
+  const _nf = rawText.match(/(?:Num[eé]ro|Facture\s*n[°ºo]?|N[°ºo]\s*(?:de\s*)?facture|Fattura\s*n[°ºo.]?|Rechnung(?:snummer)?|Invoice\s*(?:no|number))\s*[:.]?\s*([A-Z0-9][A-Z0-9\/\-]{2,})/i);
+  if (_nf) out.numeroFacture = _nf[1].trim();
+  // Fournisseur : 1ʳᵉ ligne « société » juste après « Émetteur / Fornitore / Lieferant »
+  const _ls = rawText.split(/\r?\n/);
+  for (let i = 0; i < _ls.length; i++) {
+    if (/[ÉE]METTE|FORNITORE|LIEFERANT/i.test(_ls[i])) {
+      for (let j = i + 1; j < Math.min(i + 4, _ls.length); j++) {
+        const c = (_ls[j] || '').trim();
+        if (c.length >= 3 && /[A-Za-zÀ-ÿ]/.test(c)) { out.fournisseur = c.slice(0, 60); break; }
+      }
+      break;
+    }
+  }
 
   // --- Catégorie de dépense (pour la table factures) ---
   let cat = 'autre';
