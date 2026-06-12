@@ -1,50 +1,43 @@
 -- ============================================================
---  Parc Pilot — Activation de la sécurité (RLS) sur Supabase
+--  Parc Pilot — Activation de la sécurité (RLS) sur Supabase  [v2 ROBUSTE]
 -- ============================================================
 --  But : interdire toute lecture/écriture des données SANS être connecté.
---  Aujourd'hui la clé publique permet à n'importe qui de lire/modifier la base ;
---  après ce script, seuls les utilisateurs CONNECTÉS (Auth) y ont accès.
+--  Cette version SUPPRIME aussi les anciennes règles « tout autoriser » qui
+--  laissaient certaines tables (vehicules/amendes/factures/app_settings)
+--  ouvertes au public, puis ne laisse QU'UNE règle : « connectés uniquement ».
 --
 --  ⚠️ À exécuter dans Supabase → SQL Editor → coller → "Run".
---  L'application continue de fonctionner normalement (elle est déjà derrière le login).
+--  L'application continue de fonctionner (elle est déjà derrière le login).
 --
---  Note : ceci ne sépare PAS encore les données société par société (tout
---  utilisateur connecté voit toutes les sociétés). C'est une étape suivante,
---  mais ce script bouche déjà le trou le plus important (accès public).
+--  Note : ceci ne sépare PAS encore les données société par société.
 -- ============================================================
 
--- 1) Activer la RLS sur toutes les tables
-alter table public.vehicules    enable row level security;
-alter table public.amendes      enable row level security;
-alter table public.factures     enable row level security;
-alter table public.conducteurs  enable row level security;
-alter table public.documents    enable row level security;
-alter table public.emprunts     enable row level security;
-alter table public.app_settings enable row level security;
-
--- 2) Autoriser TOUT (lecture + écriture) pour les utilisateurs CONNECTÉS uniquement.
---    (on supprime d'abord une éventuelle policy du même nom pour pouvoir relancer le script)
 do $$
-declare t text;
+declare t text; r record;
 begin
   foreach t in array array['vehicules','amendes','factures','conducteurs','documents','emprunts','app_settings']
   loop
-    execute format('drop policy if exists "auth_all_%1$s" on public.%1$s;', t);
+    -- 1) activer la RLS
+    execute format('alter table public.%I enable row level security;', t);
+    -- 2) supprimer TOUTES les règles existantes (y compris les anciennes « tout autoriser »)
+    for r in select policyname from pg_policies where schemaname = 'public' and tablename = t
+    loop
+      execute format('drop policy %I on public.%I;', r.policyname, t);
+    end loop;
+    -- 3) recréer UNE seule règle : accès complet réservé aux utilisateurs CONNECTÉS
     execute format('create policy "auth_all_%1$s" on public.%1$s for all to authenticated using (true) with check (true);', t);
   end loop;
 end $$;
 
--- ✅ Terminé. Teste ensuite l'application (connecté) : tout doit charger et s'enregistrer.
+-- ✅ Terminé. Teste l'application (connecté) : tout doit charger et s'enregistrer.
+-- Pour vérifier côté SQL, cette requête doit lister 7 lignes (une règle par table) :
+--   select tablename, policyname, roles from pg_policies where schemaname='public' order by tablename;
 
 
 -- ============================================================
---  ROLLBACK (à exécuter SEULEMENT si quelque chose ne marche plus)
---  → ré-ouvre l'accès comme avant.
+--  ROLLBACK (SEULEMENT si quelque chose ne marche plus) — ré-ouvre l'accès.
 -- ============================================================
--- alter table public.vehicules    disable row level security;
--- alter table public.amendes      disable row level security;
--- alter table public.factures     disable row level security;
--- alter table public.conducteurs  disable row level security;
--- alter table public.documents    disable row level security;
--- alter table public.emprunts     disable row level security;
--- alter table public.app_settings disable row level security;
+-- do $$ declare t text; begin
+--   foreach t in array array['vehicules','amendes','factures','conducteurs','documents','emprunts','app_settings']
+--   loop execute format('alter table public.%I disable row level security;', t); end loop;
+-- end $$;
