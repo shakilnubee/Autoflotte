@@ -155,7 +155,19 @@
         <p class="text-slate-500 text-sm mt-1" data-edit-key="conducteurs.subtitle">Vue par personne — véhicule, amendes, points perdus</p>
       </div>
       <div class="flex items-center gap-3 flex-wrap"><span data-data-io></span>
+        <button class="btn btn-outline text-sm" id="btn-reread-all" title="Relit les scans de permis et corrige les dates (rubrique 4a + 15 ans)"><i data-lucide="scan-line" class="w-4 h-4"></i> Relire les permis</button>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="user-plus" class="w-4 h-4"></i> Nouveau conducteur</button>
+      </div>
+    </div>
+
+    <!-- Modal : relecture de tous les permis (aperçu des corrections avant application) -->
+    <div id="reread-backdrop" style="position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;background:rgba(15,23,42,.55);padding:16px">
+      <div style="background:#fff;border-radius:16px;max-width:640px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #E2E8F0">
+          <div style="font-weight:800;color:var(--fp-primary)"><i data-lucide="scan-line" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Relecture des permis</div>
+          <button id="reread-close" style="border:none;background:transparent;cursor:pointer;color:#94A3B8;font-size:20px;line-height:1">&times;</button>
+        </div>
+        <div id="reread-body" style="padding:18px;max-height:70vh;overflow:auto"></div>
       </div>
     </div>
 
@@ -1374,6 +1386,68 @@
       setStatus('Relecture impossible : ' + (err.message || err) + '. (Le scan doit être hébergé sur la plateforme.)', 'background:#FEF2F2;color:#B91C1C;');
     }
   }
+
+  // ===== Relire TOUS les permis (scans stockés sur la plateforme) avec aperçu avant application =====
+  const FR = { permisObtention: "Date d'obtention", permisExpiration: "Date d'expiration", permisType: 'Type', permisNumero: 'Numéro' };
+  let _rereadResults = []; // [{key, name, changes:{champ:{old,new}}}]
+  function openReread(html){ $('reread-body').innerHTML = html; $('reread-backdrop').style.display = 'flex'; lucide.createIcons(); }
+  function closeReread(){ $('reread-backdrop').style.display = 'none'; $('reread-body').innerHTML = ''; }
+  $('reread-close').addEventListener('click', closeReread);
+  $('reread-backdrop').addEventListener('click', e => { if (e.target === $('reread-backdrop')) closeReread(); });
+
+  async function rereadAllPermis() {
+    // On ne peut relire QUE les scans hébergés sur la plateforme (les liens Drive ne sont pas relisibles)
+    const cibles = condCache.filter(r => r.permisUrl && /\/storage\/v1\/object\//.test(r.permisUrl));
+    if (!cibles.length) { openReread('<p class="text-sm text-slate-600">Aucun permis téléversé sur la plateforme à relire. (Les anciens liens Drive ne peuvent pas être relus automatiquement.)</p>'); return; }
+    _rereadResults = [];
+    for (let i = 0; i < cibles.length; i++) {
+      const r = cibles[i];
+      openReread(`<div style="text-align:center;padding:14px 0"><div style="font-weight:600;color:#475569">🔍 Relecture ${i + 1}/${cibles.length}…</div><div style="font-size:12px;color:#94A3B8;margin-top:4px">${escapeHtml(r.name || r.key)}</div><div style="font-size:11px;color:#CBD5E1;margin-top:6px">~10–20 s par permis, patiente…</div></div>`);
+      let parsed = null;
+      try { parsed = await rereadPermisFromUrl(r.permisUrl); } catch (e) { console.warn('[reread]', r.key, e); }
+      if (!parsed) continue;
+      const map = { obtention: 'permisObtention', expiration: 'permisExpiration', type: 'permisType', numero: 'permisNumero' };
+      const changes = {};
+      ['obtention', 'expiration', 'type', 'numero'].forEach(f => {
+        const champ = map[f];
+        if (parsed[f] && parsed[f] !== (r[champ] || '')) changes[champ] = { old: r[champ] || '', new: parsed[f] };
+      });
+      if (Object.keys(changes).length) _rereadResults.push({ key: r.key, name: r.name || r.key, changes });
+    }
+    renderRereadPreview();
+  }
+
+  function renderRereadPreview() {
+    if (!_rereadResults.length) { openReread('<p class="text-sm text-slate-600">✓ Relecture terminée — aucune correction nécessaire (les dates lues correspondent déjà).</p>'); return; }
+    const fmt = (champ, v) => (champ === 'permisObtention' || champ === 'permisExpiration') ? (v ? FP.dateNum(v) : '—') : (v || '—');
+    const rows = _rereadResults.map((res, i) => {
+      const lignes = Object.entries(res.changes).map(([champ, d]) =>
+        `<div class="text-xs text-slate-600">${FR[champ]} : <span class="line-through text-slate-400">${escapeHtml(fmt(champ, d.old))}</span> → <b style="color:#047857">${escapeHtml(fmt(champ, d.new))}</b></div>`).join('');
+      return `<label style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid #E2E8F0;border-radius:10px;margin-bottom:8px;cursor:pointer">
+        <input type="checkbox" class="rr-cb" data-i="${i}" checked style="margin-top:3px">
+        <div><div class="font-semibold text-sm">${escapeHtml(res.name)}</div>${lignes}</div>
+      </label>`;
+    }).join('');
+    openReread(`<div class="text-sm text-slate-600 mb-3"><b>${_rereadResults.length}</b> permis à corriger. Décoche ceux que tu ne veux pas changer, puis applique.</div>
+      ${rows}
+      <button id="reread-apply" class="btn btn-dark text-sm w-full justify-center" style="margin-top:6px"><i data-lucide="check" class="w-4 h-4"></i> Appliquer la sélection</button>`);
+    $('reread-apply').addEventListener('click', applyReread);
+  }
+
+  function applyReread() {
+    const checked = [...document.querySelectorAll('.rr-cb:checked')].map(cb => +cb.dataset.i);
+    let n = 0;
+    checked.forEach(i => {
+      const res = _rereadResults[i]; if (!res) return;
+      const ch = {}; Object.entries(res.changes).forEach(([champ, d]) => { ch[champ] = d.new; });
+      ch.manuel = true; upsertCond(res.key, ch); n++;
+    });
+    drivers = buildDrivers(); renderKPIs(); renderGrid();
+    if (currentDriverKey && $('drawer').classList.contains('open')) openDrawer(currentDriverKey);
+    openReread(`<p class="text-sm" style="color:#047857"><b>✓ ${n} permis corrigé(s).</b></p><button id="reread-done" class="btn btn-outline text-sm w-full justify-center" style="margin-top:12px">Fermer</button>`);
+    $('reread-done').addEventListener('click', closeReread);
+  }
+  $('btn-reread-all').addEventListener('click', rereadAllPermis);
 
   $('drawer-body').addEventListener('change', async (e) => {
     const inp = e.target.closest('#permis-file');
