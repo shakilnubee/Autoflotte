@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/tailwind.css">
 <script src="https://unpkg.com/lucide@latest"></script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260612n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260612o">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -209,6 +209,13 @@
       <div class="section-title">
         <i data-lucide="database" class="w-5 h-5"></i> Données
       </div>
+      <div class="mb-5 p-4 rounded-lg border border-slate-200" style="background:#F8FAFC">
+        <div class="font-semibold text-slate-900 mb-1 flex items-center gap-2"><i data-lucide="shield-check" class="w-4 h-4" style="color:var(--fp-accent)"></i> Sauvegarde complète (anti-perte)</div>
+        <p class="text-sm text-slate-600 mb-3">Télécharge un fichier contenant <b>toutes les données</b> (véhicules, amendes, factures, conducteurs, documents, emprunts) + tes réglages. Garde-le précieusement (Drive, disque). À refaire de temps en temps.</p>
+        <button class="btn btn-dark text-sm" id="btn-backup"><i data-lucide="download" class="w-4 h-4"></i> Télécharger la sauvegarde complète</button>
+        <span id="backup-status" class="text-xs text-slate-500 ml-2"></span>
+      </div>
+
       <p class="text-sm text-slate-600 mb-4">Tous les véhicules, amendes et factures sont stockés dans <code class="bg-slate-100 px-1 rounded text-xs">assets/js/data.js</code>. Pour réimporter ou remplacer, édite ce fichier directement.</p>
 
       <div class="flex gap-2">
@@ -283,9 +290,9 @@
 <div class="toast" id="toast">Enregistré ✓</div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260612n"></script>
-<script src="../assets/js/data.js?v=20260612n"></script>
-<script src="../assets/js/app.js?v=20260612n"></script>
+<script src="../assets/js/supabase-client.js?v=20260612o"></script>
+<script src="../assets/js/data.js?v=20260612o"></script>
+<script src="../assets/js/app.js?v=20260612o"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -623,6 +630,14 @@
     applyNavFromForm(false);
   });
   $('btn-save-societe').addEventListener('click', saveSociete);
+  const _bkBtn = $('btn-backup');
+  if (_bkBtn) _bkBtn.addEventListener('click', async () => {
+    const st = $('backup-status'); _bkBtn.disabled = true; const old = _bkBtn.innerHTML;
+    _bkBtn.innerHTML = '⏳ Préparation…'; if (st) st.textContent = '';
+    try { const d = await FP.exportBackup(); if (st) st.textContent = `✓ ${(d.vehicules||[]).length} véhicules, ${(d.amendes||[]).length} amendes, ${(d.factures||[]).length} factures, ${(d.conducteurs||[]).length} conducteurs sauvegardés.`; }
+    catch (e) { if (st) st.textContent = 'Échec : ' + (e.message || e); }
+    finally { _bkBtn.disabled = false; _bkBtn.innerHTML = old; if (window.lucide) lucide.createIcons(); }
+  });
   $('btn-export-all').addEventListener('click', exportAll);
   $('btn-import-all').addEventListener('click', importAll);
   $('btn-reset-all').addEventListener('click', resetAll);

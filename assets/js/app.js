@@ -1168,6 +1168,27 @@ FP.uploadScan = async function (file, folder) {
   return (data && data.publicUrl) || null;
 };
 
+// === Sauvegarde complète : exporte TOUTES les données en un fichier JSON (anti-perte) ===
+// Récupère chaque table en direct (l'admin voit tout via la RLS) + les réglages, et télécharge
+// un fichier daté. À garder précieusement (Drive, disque…). Réimportable si besoin.
+FP.exportBackup = async function () {
+  if (!(FP.supabase && FP.db)) { alert('Connexion requise pour exporter.'); return; }
+  const tables = ['vehicules', 'amendes', 'factures', 'conducteurs', 'documents', 'emprunts'];
+  const out = { app: 'Parc Pilot', exportedAt: new Date().toISOString() };
+  for (const t of tables) {
+    try { const r = await FP.supabase.from(t).select('*'); out[t] = (r && r.data) || []; }
+    catch (e) { out[t] = []; }
+  }
+  try { out.reglages = FP.settings.get(); } catch (e) {}
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `parc-pilot-sauvegarde-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return out;
+};
+
 // === Documents privés : ouverture via un lien temporaire SIGNÉ (sécurité + RGPD) ===
 // Quand le bucket "scans" est privé, les URL "…/object/public/scans/…" ne marchent plus.
 // On extrait le chemin du fichier et on génère un lien signé (valable quelques minutes),
