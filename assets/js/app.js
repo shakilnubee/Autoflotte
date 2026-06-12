@@ -1287,6 +1287,10 @@ FP.detectDoc = function (rawText, vehicules) {
     const fut = uniq.filter(d => d > today), past = uniq.filter(d => d <= today);
     if (!out.permisExpiration && fut.length) out.permisExpiration = fut[fut.length - 1];
     if (!out.permisObtention && past.length) out.permisObtention = past[0];
+    // Si l'expiration reste introuvable : un permis (cat. A/B) est valable 15 ans → obtention + 15 ans
+    if (out.permisObtention && !out.permisExpiration) {
+      const p = out.permisObtention.split('-'); out.permisExpiration = `${(+p[0]) + 15}-${p[1]}-${p[2]}`;
+    }
   }
 
   // --- Carte d'identité : numéro (best effort) + date d'expiration ---
