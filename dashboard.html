@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/tailwind.css">
 <script src="https://unpkg.com/lucide@latest"></script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260612e">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260612f">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -261,9 +261,9 @@
 </div>
 
 <script src="assets/js/vendor/supabase.js"></script>
-<script src="assets/js/supabase-client.js?v=20260612e"></script>
-<script src="assets/js/data.js?v=20260612e"></script>
-<script src="assets/js/app.js?v=20260612e"></script>
+<script src="assets/js/supabase-client.js?v=20260612f"></script>
+<script src="assets/js/data.js?v=20260612f"></script>
+<script src="assets/js/app.js?v=20260612f"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script>
   lucide.createIcons();
@@ -627,11 +627,29 @@
       'pv': 'PV (Procès-verbal)',
       'carte-grise': 'Carte grise',
       'assurance': 'Assurance (carte verte)',
-      'permis': '🪪 Permis (→ fiche conducteur)',
+      'memo': 'Carte mémo',
+      'permis': '🪪 Permis (→ conducteur)',
+      'carte-identite': "🪪 Carte d'identité (→ conducteur)",
       'contrat': 'Contrat leasing/location',
       'etat-des-lieux': 'État des lieux',
       'autre': 'Autre document',
     };
+    // Pour chaque type : cible (conducteur/vehicule/facture) + champs à afficher.
+    const DOC_DEFS = {
+      'facture':            { target: 'facture',    fields: ['date', 'km', 'amt'] },
+      'sinistre':           { target: 'facture',    fields: ['date', 'amt'] },
+      'controle-technique': { target: 'vehicule',   fields: ['date', 'km'] },
+      'carte-grise':        { target: 'vehicule',   fields: ['date'] },
+      'assurance':          { target: 'vehicule',   fields: ['date'] },
+      'memo':               { target: 'vehicule',   fields: ['date'] },
+      'pv':                 { target: 'vehicule',   fields: ['date'] },
+      'contrat':            { target: 'vehicule',   fields: ['date'] },
+      'etat-des-lieux':     { target: 'vehicule',   fields: ['date'] },
+      'permis':             { target: 'conducteur', fields: ['permisType', 'permisNumero', 'permisObtention', 'permisExpiration'] },
+      'carte-identite':     { target: 'conducteur', fields: ['idNumero', 'idExpiration'] },
+      'autre':              { target: 'vehicule',   fields: ['date'] },
+    };
+    const docDef = t => DOC_DEFS[t] || DOC_DEFS['autre'];
     const $ = id => document.getElementById(id);
     const btn = $('btn-scan-doc');
     if (!btn) return;
@@ -737,27 +755,36 @@
         .concat(allDrivers().map(d => `<option value="${d.key}" ${selKey === d.key ? 'selected' : ''}>${d.name}${d.nom ? ' ' + d.nom : ''}</option>`)).join('');
       return `<select id="${id}" class="field-input" style="width:100%">${opts}</select>`;
     }
-    // Pastille de statut : ✓ cible détectée / ⚠ à choisir (selon le type)
+    // Pastille de statut : ✓ cible détectée / ⚠ à choisir (selon la cible du type)
     function badgeHtml(it, type) {
       const ok = 'color:#047857;font-weight:700;white-space:nowrap';
       const ko = 'color:#B91C1C;font-weight:700;white-space:nowrap';
-      if (type === 'permis') return it.det.conducteur ? `<span style="${ok}">✓ ${it.det.conducteur.name}</span>` : `<span style="${ko}">⚠ à choisir</span>`;
+      if (docDef(type).target === 'conducteur') return it.det.conducteur ? `<span style="${ok}">✓ ${it.det.conducteur.name}</span>` : `<span style="${ko}">⚠ à choisir</span>`;
       return it.det.vehicule ? `<span style="${ok}">✓ ${it.det.vehicule.immat}</span>` : `<span style="${ko}">⚠ à choisir</span>`;
     }
-    // Champs selon le type : permis → conducteur + infos permis ; sinon → véhicule + date/km/montant
-    function rowFields(i, it, type) {
-      const d = it.det;
-      if (type === 'permis') {
-        return `<div style="grid-column:1 / -1">${fld('Conducteur', condSelect('b-cond-' + i, d.conducteur && d.conducteur.key))}</div>
-          <div>${fld('Type de permis', `<input id="b-ptype-${i}" class="field-input" style="width:100%" placeholder="ex. B" value="${d.permisType || ''}">`)}</div>
-          <div>${fld('Numéro', `<input id="b-pnum-${i}" class="field-input" style="width:100%" placeholder="—" value="${d.permisNumero || ''}">`)}</div>
-          <div>${fld("Date d'obtention", `<input id="b-pobt-${i}" type="date" class="field-input" style="width:100%" value="${d.permisObtention || ''}">`)}</div>
-          <div>${fld("Date d'expiration", `<input id="b-pexp-${i}" type="date" class="field-input" style="width:100%" value="${d.permisExpiration || ''}">`)}</div>`;
+    // Un champ de saisie selon sa clé
+    function fieldInput(i, key, d) {
+      const inp = (id, attrs, val) => `<input id="${id}" class="field-input" style="width:100%" ${attrs} value="${val || ''}">`;
+      switch (key) {
+        case 'date': return `<div>${fld('Date', inp('b-date-' + i, 'type="date"', d.date))}</div>`;
+        case 'km': return `<div>${fld('Kilométrage', inp('b-km-' + i, 'type="number" placeholder="—"', d.km))}</div>`;
+        case 'amt': return `<div style="grid-column:1 / -1">${fld('Montant TTC (€)', inp('b-amt-' + i, 'type="number" step="0.01" placeholder="—"', d.montantTTC))}</div>`;
+        case 'permisType': return `<div>${fld('Type de permis', inp('b-ptype-' + i, 'placeholder="ex. B"', d.permisType))}</div>`;
+        case 'permisNumero': return `<div>${fld('Numéro', inp('b-pnum-' + i, 'placeholder="—"', d.permisNumero))}</div>`;
+        case 'permisObtention': return `<div>${fld("Date d'obtention", inp('b-pobt-' + i, 'type="date"', d.permisObtention))}</div>`;
+        case 'permisExpiration': return `<div>${fld("Date d'expiration", inp('b-pexp-' + i, 'type="date"', d.permisExpiration))}</div>`;
+        case 'idNumero': return `<div>${fld('Numéro', inp('b-idnum-' + i, 'placeholder="—"', d.idNumero))}</div>`;
+        case 'idExpiration': return `<div>${fld("Date d'expiration", inp('b-idexp-' + i, 'type="date"', d.idExpiration))}</div>`;
       }
-      return `<div style="grid-column:1 / -1">${fld('Véhicule', vehSelect('b-veh-' + i, d.vehicule && d.vehicule.id))}</div>
-          <div>${fld('Date', `<input id="b-date-${i}" type="date" class="field-input" style="width:100%" value="${d.date || ''}">`)}</div>
-          <div>${fld('Kilométrage', `<input id="b-km-${i}" type="number" class="field-input" style="width:100%" placeholder="—" value="${d.km || ''}">`)}</div>
-          <div style="grid-column:1 / -1">${fld('Montant TTC (€)', `<input id="b-amt-${i}" type="number" step="0.01" class="field-input" style="width:100%" placeholder="—" value="${d.montantTTC || ''}">`)}</div>`;
+      return '';
+    }
+    // Champs selon le type : cible (véhicule ou conducteur) + champs propres au type
+    function rowFields(i, it, type) {
+      const d = it.det, def = docDef(type);
+      const head = def.target === 'conducteur'
+        ? `<div style="grid-column:1 / -1">${fld('Conducteur', condSelect('b-cond-' + i, d.conducteur && d.conducteur.key))}</div>`
+        : `<div style="grid-column:1 / -1">${fld('Véhicule', vehSelect('b-veh-' + i, d.vehicule && d.vehicule.id))}</div>`;
+      return head + def.fields.map(f => fieldInput(i, f, d)).join('');
     }
 
     // Liste : une ligne par document, pré-remplie par la détection, corrigeable.
@@ -815,13 +842,15 @@
       const val = id => { const el = $(id); return el ? el.value : ''; };
       const rows = items.map((it, i) => {
         const type = val('b-type-' + i);
-        const r = { file: it.file, det: it.det, type };
-        if (type === 'permis') {
+        const r = { file: it.file, det: it.det, type, target: docDef(type).target };
+        if (r.target === 'conducteur') {
           r.condKey = val('b-cond-' + i);
           r.permisType = val('b-ptype-' + i);
           r.permisNumero = val('b-pnum-' + i);
           r.permisObtention = val('b-pobt-' + i);
           r.permisExpiration = val('b-pexp-' + i);
+          r.idNumero = val('b-idnum-' + i);
+          r.idExpiration = val('b-idexp-' + i);
         } else {
           r.vehId = val('b-veh-' + i);
           r.date = val('b-date-' + i);
@@ -830,8 +859,8 @@
         }
         return r;
       });
-      const missVeh = rows.filter(r => r.type !== 'permis' && !r.vehId).length;
-      const missCond = rows.filter(r => r.type === 'permis' && !r.condKey).length;
+      const missVeh = rows.filter(r => r.target !== 'conducteur' && !r.vehId).length;
+      const missCond = rows.filter(r => r.target === 'conducteur' && !r.condKey).length;
       if (missVeh) { alert(missVeh + ' document(s) sans véhicule choisi. Sélectionnez un véhicule pour chacun.'); return; }
       if (missCond) { alert(missCond + ' permis sans conducteur choisi. Sélectionnez un conducteur pour chacun.'); return; }
       if (!(window.FP && FP.supabase && FP.uploadScan)) { alert('Connexion requise pour enregistrer en ligne.'); return; }
@@ -867,6 +896,16 @@
               localStorage.setItem(ck, JSON.stringify(cc));
             } catch (e) {}
             done.push(`• <b>${drv.name || r.condKey}${drv.nom ? ' ' + drv.nom : ''}</b> — Permis → fiche conducteur`); okN++;
+            continue;
+          }
+          if (r.target === 'conducteur') {
+            // Doc perso (carte d'identité…) → section « Documents » du conducteur (réglages condDocs)
+            const url = await FP.uploadScan(r.file, 'documents');
+            const drv = allDrivers().find(d => d.key === r.condKey) || { key: r.condKey, name: r.condKey, nom: '' };
+            const label = (TYPE_LABELS[r.type] || 'Document').replace(/\s*\(→.*?\)/, '').replace(/^🪪\s*/, '').trim();
+            const doc = { id: 'DC' + Date.now().toString(36) + i, type: r.type, label, url, date: r.idExpiration || null, numero: r.idNumero || null, createdAt: new Date().toISOString() };
+            const s = FP.settings.get(); s.condDocs = s.condDocs || {}; (s.condDocs[r.condKey] = s.condDocs[r.condKey] || []).push(doc); FP.settings.save(s);
+            done.push(`• <b>${drv.name || r.condKey}${drv.nom ? ' ' + drv.nom : ''}</b> — ${label} → fiche conducteur`); okN++;
             continue;
           }
           const veh = (window.FP_DATA.vehicules || []).find(v => v.id === r.vehId);

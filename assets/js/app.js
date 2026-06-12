@@ -261,6 +261,7 @@ FP.settings = {
     vehDin: {}, // puissance DIN (ch) par véhicule { vehId: nombre } — pas de colonne DB dédiée
     sinistreStatut: {}, // suivi remboursement sinistre { factureId: 'attente'|'rembourse'|'refuse' }
     permisMasque: {}, // permis intégré (FP_DOCS) masqué par l'utilisateur { conducteurKey: true }
+    condDocs: {}, // documents perso d'un conducteur { conducteurKey: [ {id,type,label,url,date,createdAt} ] }
   },
   get() {
     try {
@@ -289,6 +290,7 @@ FP.settings = {
         vehDin: (stored.vehDin && typeof stored.vehDin === 'object') ? stored.vehDin : {},
         sinistreStatut: (stored.sinistreStatut && typeof stored.sinistreStatut === 'object') ? stored.sinistreStatut : {},
         permisMasque: (stored.permisMasque && typeof stored.permisMasque === 'object') ? stored.permisMasque : {},
+        condDocs: (stored.condDocs && typeof stored.condDocs === 'object') ? stored.condDocs : {},
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
@@ -1226,6 +1228,7 @@ FP.detectDoc = function (rawText, vehicules) {
   else if (/CONTR[OÔ]LE\s+TECHNIQUE|PROC[EÈ]S[-\s]?VERBAL|PROCHAIN\s+CONTR|FAVORABLE|D[EÉ]FAVORABLE/.test(text)) out.type = 'controle-technique';
   else if (/CERTIFICAT\s+D.?IMMATRICULATION|CARTE\s+GRISE/.test(text)) out.type = 'carte-grise';
   else if (/ATTESTATION\s+D.?ASSURANCE|CARTE\s+VERTE|\bASSURANCE\b/.test(text)) out.type = 'assurance';
+  else if (/CARTE\s+NATIONALE\s+D.?IDENTIT|CARTE\s+D.?IDENTIT|\bIDENTITY\s+CARD\b|CARTA\s+D.?IDENTIT|PERSONALAUSWEIS|IDENTITEITSKAART/.test(text)) out.type = 'carte-identite';
   else if (/PERMIS\s+DE\s+CONDUIRE|DRIVING\s+LICEN|F[UÜ]HRERSCHEIN|RIJBEWIJS|PERMESSO\s+DI\s+GUIDA/.test(text)) out.type = 'permis';
   else if (/\bFACTURE\b|\bFATTURA\b|\bRECHNUNG\b|\bFACTUUR\b|TOTAL\s+TTC|MONTANT\s+TTC|NET\s+[AÀ]\s+PAYER/.test(text)) out.type = 'facture';
 
@@ -1262,6 +1265,16 @@ FP.detectDoc = function (rawText, vehicules) {
     const fut = uniq.filter(d => d > today), past = uniq.filter(d => d <= today);
     if (fut.length) out.permisExpiration = fut[fut.length - 1];
     if (past.length) out.permisObtention = past[0];
+  }
+
+  // --- Carte d'identité : numéro (best effort) + date d'expiration ---
+  if (out.type === 'carte-identite') {
+    const idDates = [...text.matchAll(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/g)]
+      .map(d => toIso(d[1], d[2], d[3])).filter(iso => { const y = +iso.slice(0, 4); return y >= 2000 && y <= 2045; });
+    const fut = [...new Set(idDates)].sort().filter(d => d > new Date().toISOString().slice(0, 10));
+    if (fut.length) out.idExpiration = fut[fut.length - 1];
+    const nm = text.match(/\b([0-9A-Z]{9,14})\b/);
+    if (nm) out.idNumero = nm[1];
   }
 
   // --- Kilométrage (ex. CT : « Kilométrage relevé : 123 456 km ») ---

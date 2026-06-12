@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/tailwind.css">
 <script src="https://unpkg.com/lucide@latest"></script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260612e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260612f">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -299,10 +299,10 @@
 </div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260612e"></script>
-<script src="../assets/js/data.js?v=20260612e"></script>
+<script src="../assets/js/supabase-client.js?v=20260612f"></script>
+<script src="../assets/js/data.js?v=20260612f"></script>
 <script src="../assets/js/fleet-docs.js"></script>
-<script src="../assets/js/app.js?v=20260612e"></script>
+<script src="../assets/js/app.js?v=20260612f"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -511,6 +511,50 @@
     if (days < 0) return '<span class="badge-exp danger">Expiré</span>';
     if (days < 183) return '<span class="badge-exp warn">Expire bientôt</span>';
     return '<span class="badge-exp ok">Valide</span>';
+  }
+
+  // ====== Documents perso du conducteur (carte d'identité, RIB…) — stockés dans les réglages ======
+  const COND_DOC_TYPES = [
+    { key: 'carte-identite', label: "Carte d'identité" },
+    { key: 'titre-sejour',   label: 'Titre de séjour' },
+    { key: 'rib',            label: 'RIB' },
+    { key: 'mutuelle',       label: 'Carte mutuelle' },
+    { key: 'visite-medicale',label: 'Visite médicale' },
+    { key: 'autre',          label: 'Autre document' },
+  ];
+  function condDocsGet(key){ const m = (FP.settings.get().condDocs) || {}; return Array.isArray(m[key]) ? m[key] : []; }
+  function condDocsSave(key, docs){ const s = FP.settings.get(); s.condDocs = s.condDocs || {}; s.condDocs[key] = docs; FP.settings.save(s); }
+  function condDocsBadge(d){
+    const docs = condDocsGet(d.key);
+    const soon = docs.some(x => x.date && (new Date(x.date) - new Date()) / 86400000 < 0);
+    if (soon) return '<span class="badge-exp danger">Pièce expirée</span>';
+    return '';
+  }
+  function condDocsSectionHTML(d){
+    const docs = condDocsGet(d.key);
+    const typeOpts = COND_DOC_TYPES.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+    const rows = docs.length ? docs.map(doc => {
+      const t = COND_DOC_TYPES.find(x => x.key === doc.type);
+      const tl = t ? t.label : (doc.label || 'Document');
+      const num = doc.numero ? ` · n° ${escapeHtml(doc.numero)}` : '';
+      const exp = doc.date ? ` · expire le ${FP.dateNum(doc.date)}` : '';
+      return `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm">
+        <i data-lucide="file-text" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+        <div class="flex-1 min-w-0"><div class="font-medium truncate">${escapeHtml(doc.label || tl)}</div><div class="text-xs text-slate-500">${tl}${num}${exp}</div></div>
+        <a href="${escapeHtml(sanitizeUrl(doc.url))}" target="_blank" rel="noopener" class="btn btn-outline !py-1 !px-2.5 text-xs"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</a>
+        <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-conddoc-del="${escapeHtml(doc.id)}" title="Supprimer ce document"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+      </div>`;
+    }).join('') : '<p class="text-sm text-slate-500">Aucun document pour le moment.</p>';
+    return `<div class="mt-1">${rows}</div>
+      <div class="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+        <div class="field-label !mb-0">Ajouter un document (carte d'identité…)</div>
+        <select id="conddoc-type" class="field-input">${typeOpts}</select>
+        <input id="conddoc-label" class="field-input" placeholder="Nom (optionnel)" />
+        <input id="conddoc-exp" type="date" class="field-input" placeholder="Date d'expiration (optionnel)" />
+        <input type="file" id="conddoc-file" accept="image/*,application/pdf" class="hidden" />
+        <button type="button" id="conddoc-add" class="btn btn-dark text-sm w-full justify-center" data-key="${escapeHtml(d.key)}"><i data-lucide="upload" class="w-4 h-4"></i> Téléverser un fichier</button>
+        <div id="conddoc-status" class="hidden text-xs rounded px-2 py-1"></div>
+      </div>`;
   }
 
   // Conducteurs de référence = ceux présents dans le fichier Drive (véhicules + contraventions).
@@ -901,6 +945,7 @@
     let corps;
     if (ficheStyle === 'profil') {
       corps = blocProfil + card('id-card', `Permis de conduire ${permisBadge(d)}`, permisSectionHTML(d))
+        + card('folder', `Documents ${condDocsBadge(d)}`, condDocsSectionHTML(d))
         + card('car', `Véhicules · ${d.vehicules.length}`, vehiculesInner)
         + card('ticket', `Amendes · ${d.amendes.length}`, amendesInner)
         + card('alert-triangle', `Accidents · ${accs.length}`, accidentsInner)
@@ -910,6 +955,7 @@
       corps = cCard('#6366F1', 'user', 'Identité', identiteInner)
         + cCard('#F97316', 'contact', 'Contact', contactInner)
         + cCard('#8B5CF6', 'id-card', `Permis de conduire ${permisBadge(d)}`, permisSectionHTML(d))
+        + cCard('#0D9488', 'folder', `Documents ${condDocsBadge(d)}`, condDocsSectionHTML(d))
         + cCard('#F59E0B', 'car', `Véhicules · ${d.vehicules.length}`, vehiculesInner)
         + cCard('#EF4444', 'ticket', `Amendes · ${d.amendes.length}`, amendesInner)
         + cCard('#F97316', 'alert-triangle', `Accidents · ${accs.length}`, accidentsInner)
@@ -1120,6 +1166,26 @@
     const upBtn = e.target.closest('#permis-upload');
     if (upBtn) { _permisUploadKey = upBtn.dataset.key; $('permis-file').click(); return; }
 
+    // Documents perso (carte d'identité…) : téléversement
+    const cdAdd = e.target.closest('#conddoc-add');
+    if (cdAdd) {
+      _condDocMeta = {
+        key: cdAdd.dataset.key,
+        type: ($('conddoc-type') || {}).value || 'autre',
+        label: (($('conddoc-label') || {}).value || '').trim(),
+        date: ($('conddoc-exp') || {}).value || null,
+      };
+      $('conddoc-file').click();
+      return;
+    }
+    const cdDel = e.target.closest('[data-conddoc-del]');
+    if (cdDel) {
+      const id = cdDel.dataset.conddocDel;
+      condDocsSave(currentDriverKey, condDocsGet(currentDriverKey).filter(x => x.id !== id));
+      openDrawer(currentDriverKey);
+      return;
+    }
+
     // Relire un scan déjà enregistré (haute qualité + binarisation pour effacer la rosette)
     const rr = e.target.closest('#permis-reread');
     if (rr) { rereadPermis(rr.dataset.url, rr.dataset.key); return; }
@@ -1147,6 +1213,30 @@
 
   // Réception du fichier permis téléversé → Supabase Storage, puis enregistrement du lien
   let _permisUploadKey = null;
+  let _condDocMeta = null; // métadonnées du document perso en cours de téléversement
+
+  // Réception d'un document perso (carte d'identité…) → Storage, puis ajout dans condDocs
+  $('drawer-body').addEventListener('change', async (e) => {
+    const inp = e.target.closest('#conddoc-file');
+    if (!inp || !inp.files || !inp.files[0] || !_condDocMeta) return;
+    const file = inp.files[0]; inp.value = '';
+    const meta = _condDocMeta; _condDocMeta = null;
+    const st = $('conddoc-status');
+    const show = (msg, color) => { if (st) { st.classList.remove('hidden'); st.setAttribute('style', color); st.innerHTML = msg; } };
+    if (!(FP.uploadScan && FP.supabase && FP.supabase.storage)) { alert('Stockage indisponible. Recharge la page et réessaie.'); return; }
+    try {
+      show('☁️ Envoi du fichier en cours…', 'background:#F1F5F9;color:#475569;');
+      const url = await FP.uploadScan(file, 'documents');
+      if (!url) throw new Error('URL vide');
+      const t = COND_DOC_TYPES.find(x => x.key === meta.type);
+      const doc = { id: 'DC' + Date.now().toString(36), type: meta.type, label: meta.label || (t ? t.label : 'Document'), url, date: meta.date || null, numero: null, createdAt: new Date().toISOString() };
+      condDocsSave(meta.key, [...condDocsGet(meta.key), doc]);
+      openDrawer(currentDriverKey);
+    } catch (err) {
+      console.error('[conddoc upload]', err);
+      show("Échec de l'envoi : " + (err.message || err), 'background:#FEF2F2;color:#B91C1C;');
+    }
+  });
 
   // ---------- Lecture automatique du permis (OCR navigateur) ----------
   const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
