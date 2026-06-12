@@ -1168,6 +1168,37 @@ FP.uploadScan = async function (file, folder) {
   return (data && data.publicUrl) || null;
 };
 
+// === Documents privés : ouverture via un lien temporaire SIGNÉ (sécurité + RGPD) ===
+// Quand le bucket "scans" est privé, les URL "…/object/public/scans/…" ne marchent plus.
+// On extrait le chemin du fichier et on génère un lien signé (valable quelques minutes),
+// réservé à l'utilisateur connecté. Si le bucket est resté public, le lien d'origine marche
+// quand même (repli) → aucun risque de coupure.
+FP.scanPath = (url) => { const m = String(url || '').match(/\/scans\/([^?]+)/); return m ? decodeURIComponent(m[1]) : null; };
+FP.signedScanUrl = async (url) => {
+  try {
+    const path = FP.scanPath(url);
+    if (!path || !(FP.supabase && FP.supabase.storage)) return url;
+    const { data, error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).createSignedUrl(path, 180);
+    return (error || !data || !data.signedUrl) ? url : data.signedUrl;
+  } catch (e) { return url; }
+};
+// Ouvre un document : lien signé si c'est un fichier du bucket, sinon ouverture normale.
+FP.openScan = (url) => {
+  if (!url) return;
+  if (!/\/scans\//.test(url)) { window.open(url, '_blank', 'noopener'); return; }
+  const w = window.open('', '_blank'); // ouvert TOUT DE SUITE (dans le geste de clic → pas bloqué)
+  FP.signedScanUrl(url).then(u => { if (w) { try { w.opener = null; } catch (e) {} w.location = u; } else { location.href = u; } });
+};
+// Intercepte les clics sur les liens « Voir / Ouvrir » d'un document → ouverture signée.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('a[href]');
+  if (!a) return;
+  const href = a.getAttribute('href') || '';
+  if (!/\/scans\//.test(href)) return; // seulement les fichiers stockés (pas les liens Drive, etc.)
+  e.preventDefault();
+  FP.openScan(href);
+}, true);
+
 // =====================================================================
 // === OCR partagé + détection automatique de document =================
 // =====================================================================
