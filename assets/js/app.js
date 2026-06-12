@@ -260,6 +260,7 @@ FP.settings = {
     docColsOrder: [], // ordre des colonnes du tableau Documents (vide = ordre par défaut)
     vehDin: {}, // puissance DIN (ch) par véhicule { vehId: nombre } — pas de colonne DB dédiée
     sinistreStatut: {}, // suivi remboursement sinistre { factureId: 'attente'|'rembourse'|'refuse' }
+    permisMasque: {}, // permis intégré (FP_DOCS) masqué par l'utilisateur { conducteurKey: true }
   },
   get() {
     try {
@@ -287,6 +288,7 @@ FP.settings = {
         docColsOrder: Array.isArray(stored.docColsOrder) ? stored.docColsOrder : [],
         vehDin: (stored.vehDin && typeof stored.vehDin === 'object') ? stored.vehDin : {},
         sinistreStatut: (stored.sinistreStatut && typeof stored.sinistreStatut === 'object') ? stored.sinistreStatut : {},
+        permisMasque: (stored.permisMasque && typeof stored.permisMasque === 'object') ? stored.permisMasque : {},
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {

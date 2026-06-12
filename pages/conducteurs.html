@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/tailwind.css">
 <script src="https://unpkg.com/lucide@latest"></script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260612a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260612b">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -299,10 +299,10 @@
 </div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260612a"></script>
-<script src="../assets/js/data.js?v=20260612a"></script>
+<script src="../assets/js/supabase-client.js?v=20260612b"></script>
+<script src="../assets/js/data.js?v=20260612b"></script>
 <script src="../assets/js/fleet-docs.js"></script>
-<script src="../assets/js/app.js?v=20260612a"></script>
+<script src="../assets/js/app.js?v=20260612b"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -459,7 +459,8 @@
   function permisSectionHTML(d){
     const key = permisKeyOf(d);
     const manual = getManualPermis()[key];
-    const builtin = (window.FP_DOCS && FP_DOCS.permis) ? FP_DOCS.permis[key] : null;
+    const permisMasque = (FP.settings.get().permisMasque) || {};
+    const builtin = (window.FP_DOCS && FP_DOCS.permis && !permisMasque[key]) ? FP_DOCS.permis[key] : null;
     const eff = manual || builtin;
     let body;
     if (eff) {
@@ -473,7 +474,7 @@
         <div class="flex-1 min-w-0"><div class="font-medium truncate">${escapeHtml(name)}</div><div class="text-xs text-slate-500">${manual ? 'Ajouté manuellement' : 'Google Drive'}</div></div>
         ${action}
         ${eff.url ? `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" id="permis-reread" data-url="${escapeHtml(eff.url)}" data-key="${escapeHtml(key)}" title="Relire le scan en haute qualité"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i> Relire</button>` : ''}
-        ${manual ? `<button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-permis-del="${escapeHtml(key)}" title="Supprimer ce permis"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>` : ''}
+        <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-permis-del="${escapeHtml(key)}" data-permis-builtin="${manual ? '0' : '1'}" title="Supprimer ce permis"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
       </div>`;
     } else {
       body = '<p class="text-sm text-slate-500">Aucun permis pour ce conducteur.</p>';
@@ -1081,7 +1082,10 @@
       if (nv !== null) apply(nv.trim());
     }
   }
-  $('drawer').addEventListener('dblclick', e => {
+  // Édition au simple clic (plus besoin de double-clic) — on ignore les clics
+  // dans un éditeur déjà ouvert (input/select/textarea) ou sur un bouton.
+  $('drawer').addEventListener('click', e => {
+    if (e.target.closest('input, select, textarea, button, a')) return;
     const row = e.target.closest('[data-cf]');
     if (row) editCondField(row);
   });
@@ -1117,7 +1121,15 @@
 
     const delPermis = e.target.closest('[data-permis-del]');
     if (delPermis) {
-      upsertCond(delPermis.dataset.permisDel, { permisUrl: null, permisFileId: null });
+      const pk = delPermis.dataset.permisDel;
+      if (delPermis.dataset.permisBuiltin === '1') {
+        // Permis intégré (lien Drive d'origine) : on le masque via les réglages (synchro multi-PC)
+        const s = FP.settings.get();
+        s.permisMasque = { ...(s.permisMasque || {}) }; s.permisMasque[pk] = true;
+        FP.settings.save(s);
+      } else {
+        upsertCond(pk, { permisUrl: null, permisFileId: null });
+      }
       openDrawer(currentDriverKey);
       return;
     }
