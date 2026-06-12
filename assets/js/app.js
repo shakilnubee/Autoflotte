@@ -1272,13 +1272,21 @@ FP.detectDoc = function (rawText, vehicules) {
     if (nm) out.permisNumero = nm[1];
     const cats = text.match(/\b(AM|A1|A2|B1|BE|C1E|C1|CE|D1E|D1|DE|A|B|C|D)\b/g);
     if (cats && cats.length) out.permisType = [...new Set(cats)].join('/');
+    // Dates : on lit en PRIORITÉ les rubriques 4a (délivrance/obtention) et 4b (expiration).
+    // (le « [^\dA-Z]{0,5} » autorise « . », espaces, « : » mais s'arrête avant la lettre suivante,
+    //  donc 4a ne « déborde » pas sur 4b.)
+    const m4a = text.match(/4\s*A[^\dA-Z]{0,5}(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{2,4})/);
+    const m4b = text.match(/4\s*B[^\dA-Z]{0,5}(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{2,4})/);
+    if (m4a) out.permisObtention = toIso(m4a[1], m4a[2], m4a[3]);
+    if (m4b) out.permisExpiration = toIso(m4b[1], m4b[2], m4b[3]);
+    // Repli heuristique si 4a/4b sont illisibles à l'OCR
     const pd = [...text.matchAll(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/g)]
       .map(d => toIso(d[1], d[2], d[3])).filter(iso => { const y = +iso.slice(0, 4); return y >= 1960 && y <= 2050; });
     const uniq = [...new Set(pd)].sort();
     const today = new Date().toISOString().slice(0, 10);
     const fut = uniq.filter(d => d > today), past = uniq.filter(d => d <= today);
-    if (fut.length) out.permisExpiration = fut[fut.length - 1];
-    if (past.length) out.permisObtention = past[0];
+    if (!out.permisExpiration && fut.length) out.permisExpiration = fut[fut.length - 1];
+    if (!out.permisObtention && past.length) out.permisObtention = past[0];
   }
 
   // --- Carte d'identité : numéro (best effort) + date d'expiration ---
