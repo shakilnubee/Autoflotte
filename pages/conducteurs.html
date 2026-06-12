@@ -338,6 +338,14 @@
   function deleteCondRow(key) {
     condCache = condCache.filter(r => r.key !== key);
     cacheCond();
+    // Purge AUSSI l'ancien stockage local (sinon la fiche manuelle est ré-injectée au prochain chargement)
+    try {
+      const store = JSON.parse(localStorage.getItem(COND_KEY) || '{}');
+      if (Array.isArray(store.manuels)) store.manuels = store.manuels.filter(m => normPrenom(m.name) !== key);
+      if (Array.isArray(store.masques)) store.masques = store.masques.filter(k => k !== key);
+      localStorage.setItem(COND_KEY, JSON.stringify(store));
+      const permis = JSON.parse(localStorage.getItem(PERMIS_KEY) || '{}'); if (permis[key]) { delete permis[key]; localStorage.setItem(PERMIS_KEY, JSON.stringify(permis)); }
+    } catch (e) {}
     if (FP.persist.available()) FP.persist.delete('conducteurs', key);
     else persistCondToLS();
   }
