@@ -181,14 +181,24 @@ FP.ADMIN_ONLY_NAV = ['parametres.html'];
 // === Multi-sociétés (vue admin) ===
 FP.activeSociete = () => { try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } };
 FP.setActiveSociete = (s) => { try { localStorage.setItem('fp_societe', s || 'PXP'); } catch (e) {} };
-FP.getSocietes = () => { const arr = (FP.settings.get().societes || ['PXP']).slice(); if (!arr.includes('PXP')) arr.unshift('PXP'); return arr; };
+// Liste des sociétés = métadonnée GLOBALE de l'admin (pas par société, sinon elle se
+// réinitialiserait en changeant de société). Stockée à part ; repli sur l'ancienne liste des réglages.
+FP.SOCIETES_KEY = 'fp_societes_list';
+FP.getSocietes = () => {
+  let arr = null;
+  try { arr = JSON.parse(localStorage.getItem(FP.SOCIETES_KEY) || 'null'); } catch (e) {}
+  if (!Array.isArray(arr) || !arr.length) { try { arr = (FP.settings.get().societes || []).slice(); } catch (e) { arr = []; } }
+  if (!Array.isArray(arr)) arr = [];
+  if (!arr.includes('PXP')) arr.unshift('PXP');
+  return arr;
+};
 FP.addSociete = (name) => {
   name = (name || '').trim(); if (!name) return false;
-  const s = FP.settings.get();
-  const arr = Array.isArray(s.societes) ? s.societes.slice() : ['PXP'];
-  if (!arr.includes('PXP')) arr.unshift('PXP');
+  const arr = FP.getSocietes();
   if (arr.some(x => x.toLowerCase() === name.toLowerCase())) return false;
-  arr.push(name); s.societes = arr; FP.settings.save(s); return true;
+  arr.push(name);
+  try { localStorage.setItem(FP.SOCIETES_KEY, JSON.stringify(arr)); } catch (e) {}
+  return true;
 };
 // Le cache statique data.js ne contient que PXP : si une autre société est active,
 // on le vide au démarrage (les vraies données filtrées arriveront via Supabase),
@@ -242,7 +252,7 @@ FP.settings = {
   // Réglages (apparence : groupes, libellés, couleurs…) PROPRES À CHAQUE SOCIÉTÉ.
   // Clé localStorage et ligne app_settings suffixées par la société. Repli sur l'ancienne
   // clé/ligne ('global') pour PXP → la config actuelle n'est pas perdue.
-  _soc() { try { return (window.FP && FP.activeSociete) ? FP.activeSociete() : (localStorage.getItem('fp_societe') || 'PXP'); } catch (e) { return 'PXP'; } },
+  _soc() { try { const s = (window.FP && FP.activeSociete) ? FP.activeSociete() : (localStorage.getItem('fp_societe') || 'PXP'); return (s === '__all__') ? 'PXP' : s; } catch (e) { return 'PXP'; } },
   _key() { return this.STORAGE_KEY + '_' + this._soc(); },
   _dbId() { return this._soc(); },
   _readLocal() {
