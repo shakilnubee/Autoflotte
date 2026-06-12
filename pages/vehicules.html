@@ -705,7 +705,9 @@
     { key: 'etat-des-lieux',      label: 'État des lieux',           icon: 'clipboard-list' },
     { key: 'autre',               label: 'Autre',                    icon: 'paperclip' },
   ];
-  let docsCache = null; // array de docs {id, vehiculeId, type, label, url, driveId} une fois chargé
+  // Cache local des documents (par société) → 1er affichage immédiat, sans « flash » vide.
+  const DOCS_CACHE_KEY = 'fp_docs_cache_v1_' + (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return 'PXP'; } })();
+  let docsCache = (() => { try { const c = JSON.parse(localStorage.getItem(DOCS_CACHE_KEY) || 'null'); return Array.isArray(c) ? c : null; } catch { return null; } })();
   function driveIdFromUrl(url){
     const m = String(url || '').match(/\/d\/([A-Za-z0-9_-]{20,})/) || String(url || '').match(/[?&]id=([A-Za-z0-9_-]{20,})/);
     return m ? m[1] : null;
@@ -720,12 +722,14 @@
     const doc = { id: 'D' + Date.now().toString(36), vehiculeId: vehId, type, label, url, driveId: driveIdFromUrl(url) };
     if (docsCache) docsCache.push(doc);
     else { const all = lsGetAllDocs(); (all[vehId] = all[vehId] || []).push(doc); localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
+    if (docsCache) { try { localStorage.setItem(DOCS_CACHE_KEY, JSON.stringify(docsCache)); } catch (e) {} }
     openDrawer(vehId);
     if (FP.persist.available()) FP.persist.insert('documents', doc);
   }
   async function delVehDoc(vehId, docId) {
     if (docsCache) docsCache = docsCache.filter(d => d.id !== docId);
     else { const all = lsGetAllDocs(); all[vehId] = (all[vehId] || []).filter(d => d.id !== docId); localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
+    if (docsCache) { try { localStorage.setItem(DOCS_CACHE_KEY, JSON.stringify(docsCache)); } catch (e) {} }
     openDrawer(vehId);
     if (FP.persist.available()) FP.persist.delete('documents', docId);
   }
@@ -734,6 +738,7 @@
     FP.db.select('documents').then(r => {
       if (r.error) return; // garde le fallback localStorage
       docsCache = r.data || [];
+      try { localStorage.setItem(DOCS_CACHE_KEY, JSON.stringify(docsCache)); } catch (e) {} // pour le prochain affichage
       if ($('drawer').classList.contains('open') && state.editingId) openDrawer(state.editingId);
     });
   }
