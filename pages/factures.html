@@ -1284,12 +1284,23 @@
       empty.classList.toggle('hidden', rows.length > 0);
       if (!rows.length) { tbody.innerHTML = ''; tfoot.innerHTML = ''; emptyMsg.textContent = 'Aucun détail de consommation pour ce mois.'; return; }
 
+      // Index des véhicules par plaque (normalisée) → pour retrouver le conducteur
+      // quand la ligne de conso n'a qu'une plaque (ex. « GP-333-QJ ») au lieu d'un prénom.
+      const normPlaque = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const vehByPlaque = {};
+      (window.FP_DATA.vehicules || []).forEach(v => { if (v.immat) vehByPlaque[normPlaque(v.immat)] = v; });
+
       const who = (c) => {
-        const parts = [];
-        if (c.conducteur) parts.push(`<span class="font-semibold">${esc(c.conducteur)}</span>`);
-        if (c.plaque) parts.push(`<span class="font-mono text-slate-500 text-xs">${esc(c.plaque)}</span>`);
-        if (!parts.length) parts.push('<span class="text-slate-400">—</span>');
-        return parts.join(' · ');
+        let nom = c.conducteur;
+        // Pas de conducteur sur la ligne mais une plaque → on cherche le véhicule et on
+        // affiche SON conducteur à la place de la plaque.
+        if (!nom && c.plaque) {
+          const v = vehByPlaque[normPlaque(c.plaque)];
+          if (v && v.chauffeur && v.chauffeur.trim() && v.chauffeur !== '—') nom = v.chauffeur;
+        }
+        if (nom) return `<span class="font-semibold">${esc(nom)}</span>`;
+        if (c.plaque) return `<span class="font-mono text-slate-500 text-xs">${esc(c.plaque)}</span>`;
+        return '<span class="text-slate-400">—</span>';
       };
       const cell = (v) => v ? FP.euro(v) : '<span class="text-slate-300">—</span>';
       tbody.innerHTML = rows.map(c => `<tr>
