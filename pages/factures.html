@@ -263,14 +263,14 @@
 
       <!-- Import d'un relevé Total (lecture auto du PDF) -->
       <div class="card p-4 mb-6">
-        <input type="file" id="tf-import-file" accept="application/pdf" class="hidden" />
+        <input type="file" id="tf-import-file" accept="application/pdf" multiple class="hidden" />
         <button type="button" id="tf-import-trigger" class="w-full flex items-center gap-3 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
           <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
             <i data-lucide="upload-cloud" class="w-5 h-5"></i>
           </span>
           <span class="flex-1">
-            <span class="block text-sm font-semibold text-slate-800">Importer un relevé Total (PDF)</span>
-            <span class="block text-xs text-slate-500">Dépose le relevé TotalEnergies — les factures par pays sont lues et enregistrées toutes seules. Le relevé lui-même n'est jamais compté deux fois.</span>
+            <span class="block text-sm font-semibold text-slate-800">Importer un ou plusieurs relevés Total (PDF)</span>
+            <span class="block text-xs text-slate-500">Dépose un ou plusieurs relevés TotalEnergies — les factures par pays sont lues et enregistrées toutes seules. Le relevé lui-même n'est jamais compté deux fois.</span>
           </span>
         </button>
         <div id="tf-import-status" class="hidden mt-3 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
@@ -1432,30 +1432,36 @@
       render();
     }
 
-    async function handleReleve(file){
-      if (!file) return;
+    async function handleReleves(fileList){
+      const files = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+      if (!files.length){ tfImpReset(); tfImpStatus("Dépose un ou plusieurs <b>PDF</b> de relevés TotalEnergies (pas des images).", 'error'); return; }
       tfImpReset();
-      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-      if (!isPdf){ tfImpStatus("Dépose le <b>PDF</b> du relevé TotalEnergies (pas une image).", 'error'); return; }
-      try {
-        tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture du relevé…</span>', 'working');
-        const pdf = await loadPdf(file);
-        const text = await pdfText(pdf);
-        const rows = parseReleve(text);
-        if (!rows.length){
-          tfImpStatus("Aucune facture détectée. Vérifie que c'est bien le <b>relevé de factures</b> TotalEnergies (la page qui liste les factures par pays), pas une facture isolée.", 'error');
-          return;
-        }
-        $('tf-import-status').classList.add('hidden');
-        showPreview(rows);
-      } catch (err) {
-        console.error(err);
-        tfImpStatus("Impossible de lire le PDF. Vérifie ta connexion internet, puis réessaie.", 'error');
+      const all = [], seen = new Set(), failed = [];
+      let read = 0;
+      for (const file of files){
+        tfImpStatus(`<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture ${read + 1}/${files.length} : ${esc(file.name)}…</span>`, 'working');
+        try {
+          const pdf = await loadPdf(file);
+          const rows = parseReleve(await pdfText(pdf));
+          if (!rows.length) failed.push(file.name);
+          for (const r of rows){ if (!seen.has(r.numero)){ seen.add(r.numero); all.push(r); } }
+        } catch (err) { console.error(err); failed.push(file.name); }
+        read++;
       }
+      if (!all.length){
+        tfImpStatus(`Aucune facture détectée dans ${files.length > 1 ? 'ces fichiers' : 'ce fichier'}. Vérifie que ce sont bien des <b>relevés de factures</b> TotalEnergies (la page qui liste les factures par pays), pas des factures isolées.`, 'error');
+        return;
+      }
+      if (failed.length){
+        tfImpStatus(`⚠ ${failed.length} fichier(s) sans facture détectée (ignoré·s) : ${failed.map(esc).join(', ')}.`, 'error');
+      } else {
+        $('tf-import-status').classList.add('hidden');
+      }
+      showPreview(all);
     }
 
     $('tf-import-trigger').addEventListener('click', () => $('tf-import-file').click());
-    $('tf-import-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; handleReleve(f); e.target.value = ''; });
+    $('tf-import-file').addEventListener('change', (e) => { handleReleves(e.target.files); e.target.value = ''; });
   })();
 </script>
 </body>
