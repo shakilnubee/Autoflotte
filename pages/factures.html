@@ -1290,15 +1290,28 @@
       const vehByPlaque = {};
       (window.FP_DATA.vehicules || []).forEach(v => { if (v.immat) vehByPlaque[normPlaque(v.immat)] = v; });
 
-      const who = (c) => {
-        let nom = c.conducteur;
-        // Pas de conducteur sur la ligne mais une plaque → on cherche le véhicule et on
-        // affiche SON conducteur à la place de la plaque.
-        if (!nom && c.plaque) {
+      // Nom du conducteur : celui de la ligne, sinon celui du véhicule (via la plaque).
+      const resolveName = (c) => {
+        if (c.conducteur) return c.conducteur;
+        if (c.plaque) {
           const v = vehByPlaque[normPlaque(c.plaque)];
-          if (v && v.chauffeur && v.chauffeur.trim() && v.chauffeur !== '—') nom = v.chauffeur;
+          if (v && v.chauffeur && v.chauffeur.trim() && v.chauffeur !== '—') return v.chauffeur;
         }
-        if (nom) return `<span class="font-semibold">${esc(nom)}</span>`;
+        return null;
+      };
+      // Combien de lignes par conducteur ce mois-ci ? S'il en a plusieurs (plusieurs
+      // véhicules), on garde la plaque à côté du nom pour distinguer ses lignes.
+      const nameCount = {};
+      rows.forEach(c => { const n = resolveName(c); if (n) nameCount[n] = (nameCount[n] || 0) + 1; });
+
+      const who = (c) => {
+        const nom = resolveName(c);
+        if (nom) {
+          if (c.plaque && nameCount[nom] > 1) {
+            return `<span class="font-semibold">${esc(nom)}</span> <span class="font-mono text-slate-400 text-xs">${esc(c.plaque)}</span>`;
+          }
+          return `<span class="font-semibold">${esc(nom)}</span>`;
+        }
         if (c.plaque) return `<span class="font-mono text-slate-500 text-xs">${esc(c.plaque)}</span>`;
         return '<span class="text-slate-400">—</span>';
       };
