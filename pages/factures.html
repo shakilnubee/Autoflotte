@@ -276,6 +276,30 @@
         </div>
       </div>
       <p class="text-xs text-slate-500 mt-4">Factures <b>TotalEnergies Fleet</b> (carburant, lavage, péages…). ⚠️ Le <b>relevé de factures</b> mensuel récapitule les factures par pays : on n'importe QUE les factures détaillées (France, Allemagne, Pays-Bas…), jamais le relevé, pour éviter de compter deux fois.</p>
+
+      <!-- Consommation par conducteur / véhicule -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mt-10 mb-3">
+        <h3 class="text-lg font-extrabold" style="color: var(--fp-primary)">Consommation par conducteur / véhicule</h3>
+        <select id="tf-conso-mois" class="text-sm border border-slate-200 rounded-lg px-3 py-2"></select>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="scrollable">
+          <table class="fp-table" id="tf-conso-table">
+            <thead><tr>
+              <th>Conducteur / Véhicule</th><th style="text-align:center">Type</th>
+              <th style="text-align:right">Carburant</th><th style="text-align:right">Litres</th>
+              <th style="text-align:right">Boutique / Repas</th><th style="text-align:right">Lavage</th>
+              <th style="text-align:right">Péage / Parking</th><th style="text-align:right">Total TTC</th>
+            </tr></thead>
+            <tbody id="tf-conso-tbody"></tbody>
+            <tfoot id="tf-conso-tfoot"></tfoot>
+          </table>
+        </div>
+        <div id="tf-conso-empty" class="hidden p-10 text-center">
+          <p class="text-slate-500 text-sm" id="tf-conso-empty-msg">Aucun détail de consommation pour ce mois.</p>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">Détail reconstitué depuis les factures TotalEnergies (par carte carburant). Les « Frais de gestion » ne sont pas rattachés à un conducteur. Clique sur l'en-tête « Total TTC » pour trier.</p>
     </div>
   </main>
 </div>
@@ -1207,7 +1231,78 @@
     $('tf-search').addEventListener('input', (e) => { tfState.search = e.target.value; render(); });
     $('tf-filter-annee').addEventListener('change', (e) => { tfState.annee = e.target.value; render(); });
 
-    window.renderTotalFleet = render;
+    // --- Consommation par conducteur / véhicule (table total_conso) ---
+    let conso = null, consoLoaded = false, consoSortDesc = true;
+    const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
+
+    async function loadConso(){
+      consoLoaded = true;
+      try {
+        const r = await FP.supabase.from('total_conso').select('*');
+        if (r.error) throw r.error;
+        conso = r.data || [];
+      } catch (e) {
+        console.warn('[total_conso] indisponible :', e && (e.message || e));
+        conso = null; // table absente → on affiche un message d'aide
+      }
+      renderConso();
+    }
+
+    function renderConso(){
+      const sel = $('tf-conso-mois'), tbody = $('tf-conso-tbody'), tfoot = $('tf-conso-tfoot');
+      const empty = $('tf-conso-empty'), emptyMsg = $('tf-conso-empty-msg');
+      if (conso === null) {
+        sel.innerHTML = ''; tbody.innerHTML = ''; tfoot.innerHTML = '';
+        empty.classList.remove('hidden');
+        emptyMsg.innerHTML = "Le suivi détaillé n'est pas encore activé. Exécute le script <b>total-conso</b> dans Supabase (SQL Editor) pour créer le tableau.";
+        return;
+      }
+      const moisDispo = [...new Set(conso.map(c => c.mois).filter(Boolean))].sort().reverse();
+      if (sel.dataset.filled !== moisDispo.join(',')) {
+        sel.innerHTML = moisDispo.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join('');
+        sel.dataset.filled = moisDispo.join(',');
+      }
+      const mois = sel.value || moisDispo[0] || '';
+      let rows = conso.filter(c => c.mois === mois);
+      rows.sort((a,b) => consoSortDesc ? (b.total_ttc - a.total_ttc) : (a.total_ttc - b.total_ttc));
+      empty.classList.toggle('hidden', rows.length > 0);
+      if (!rows.length) { tbody.innerHTML = ''; tfoot.innerHTML = ''; emptyMsg.textContent = 'Aucun détail de consommation pour ce mois.'; return; }
+
+      const who = (c) => {
+        const parts = [];
+        if (c.conducteur) parts.push(`<span class="font-semibold">${esc(c.conducteur)}</span>`);
+        if (c.plaque) parts.push(`<span class="font-mono text-slate-500 text-xs">${esc(c.plaque)}</span>`);
+        if (!parts.length) parts.push('<span class="text-slate-400">—</span>');
+        return parts.join(' · ');
+      };
+      const cell = (v) => v ? FP.euro(v) : '<span class="text-slate-300">—</span>';
+      tbody.innerHTML = rows.map(c => `<tr>
+        <td>${who(c)}</td>
+        <td style="text-align:center" class="text-slate-500">${c.type_vehicule ? esc(c.type_vehicule) : '—'}</td>
+        <td style="text-align:right">${cell(c.carburant_ttc)}</td>
+        <td style="text-align:right" class="text-slate-500">${c.litres ? FP.num(Math.round(c.litres)) + ' L' : '—'}</td>
+        <td style="text-align:right">${cell(c.boutique_ttc)}</td>
+        <td style="text-align:right">${cell(c.lavage_ttc)}</td>
+        <td style="text-align:right">${cell(c.peage_ttc)}</td>
+        <td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc)}</td>
+      </tr>`).join('');
+      const sum = (k) => rows.reduce((s,c) => s + (Number(c[k]) || 0), 0);
+      tfoot.innerHTML = `<tr style="border-top:2px solid var(--fp-border);font-weight:700;background:#f8fafc">
+        <td>Total ${moisLabel(mois)}</td><td></td>
+        <td style="text-align:right">${FP.euro(sum('carburant_ttc'))}</td>
+        <td style="text-align:right" class="text-slate-500">${FP.num(Math.round(sum('litres')))} L</td>
+        <td style="text-align:right">${FP.euro(sum('boutique_ttc'))}</td>
+        <td style="text-align:right">${FP.euro(sum('lavage_ttc'))}</td>
+        <td style="text-align:right">${FP.euro(sum('peage_ttc'))}</td>
+        <td style="text-align:right">${FP.euro(sum('total_ttc'))}</td>
+      </tr>`;
+    }
+
+    $('tf-conso-mois').addEventListener('change', renderConso);
+    document.querySelector('#tf-conso-table thead th:last-child').style.cursor = 'pointer';
+    document.querySelector('#tf-conso-table thead th:last-child').addEventListener('click', () => { consoSortDesc = !consoSortDesc; renderConso(); });
+
+    window.renderTotalFleet = () => { render(); if (!consoLoaded) loadConso(); else renderConso(); };
     document.addEventListener('fp:data-ready', () => { if (!$('view-total').classList.contains('hidden')) render(); });
   })();
 </script>
