@@ -261,6 +261,22 @@
         </div>
       </div>
 
+      <!-- Import d'un relevé Total (lecture auto du PDF) -->
+      <div class="card p-4 mb-6">
+        <input type="file" id="tf-import-file" accept="application/pdf" class="hidden" />
+        <button type="button" id="tf-import-trigger" class="w-full flex items-center gap-3 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
+          <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
+            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+          </span>
+          <span class="flex-1">
+            <span class="block text-sm font-semibold text-slate-800">Importer un relevé Total (PDF)</span>
+            <span class="block text-xs text-slate-500">Dépose le relevé TotalEnergies — les factures par pays sont lues et enregistrées toutes seules. Le relevé lui-même n'est jamais compté deux fois.</span>
+          </span>
+        </button>
+        <div id="tf-import-status" class="hidden mt-3 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
+        <div id="tf-import-preview" class="hidden mt-3"></div>
+      </div>
+
       <!-- Table -->
       <div class="card overflow-hidden">
         <div class="scrollable">
@@ -1304,6 +1320,142 @@
 
     window.renderTotalFleet = () => { render(); if (!consoLoaded) loadConso(); else renderConso(); };
     document.addEventListener('fp:data-ready', () => { if (!$('view-total').classList.contains('hidden')) render(); });
+
+    // ============================================================
+    //  Import d'un relevé Total (PDF) → factures par pays, en auto.
+    //  On lit le tableau récapitulatif du relevé (Numéro de pièce /
+    //  Pays / HT / TVA / TTC) et on enregistre chaque facture détaillée.
+    //  Le relevé lui-même n'est PAS enregistré (anti-doublon).
+    //  Réutilise loadPdf / pdfText / parseEuro définis plus haut (même <script>).
+    // ============================================================
+    const PAYS = { FRA:'France', NLD:'Pays-Bas', BEL:'Belgique', DEU:'Allemagne', LUX:'Luxembourg',
+                   ESP:'Espagne', ITA:'Italie', PRT:'Portugal', GBR:'Royaume-Uni', CHE:'Suisse',
+                   AUT:'Autriche', POL:'Pologne', CZE:'Tchéquie', DNK:'Danemark', SWE:'Suède' };
+
+    // Extrait les lignes "facture" du récapitulatif :
+    //   <N° pièce> Facture <date> <PAYS> EUR <HT> <TVA> <TTC> [<contrevaleur>]
+    function parseReleve(raw){
+      const t = (raw || '').replace(/[  ]/g, ' ');
+      const AMT = '([0-9][0-9 ]*[.,][0-9]{2})';
+      const re = new RegExp('([A-Z][0-9][A-Z][0-9]{4,6})\\s+Facture\\s+(\\d{2}/\\d{2}/\\d{4})\\s+([A-Z]{3})\\s+EUR\\s+' + AMT + '\\s+' + AMT + '\\s+' + AMT, 'g');
+      const seen = new Set(), rows = [];
+      let m;
+      while ((m = re.exec(t))){
+        const numero = m[1];
+        if (seen.has(numero)) continue; seen.add(numero);
+        const [dd, mm, yyyy] = m[2].split('/');
+        rows.push({
+          numero, dmy: m[2], pays: m[3], paysLabel: PAYS[m[3]] || m[3],
+          date: `${yyyy}-${mm}-${dd}`,
+          ht: parseEuro(m[4]), tva: parseEuro(m[5]), ttc: parseEuro(m[6]),
+        });
+      }
+      return rows;
+    }
+
+    function tfImpStatus(msg, type){
+      const el = $('tf-import-status'); el.classList.remove('hidden');
+      const colors = { working:'background:#F1F5F9;color:#475569;', ok:'background:#ECFDF5;color:#047857;', error:'background:#FEF2F2;color:#B91C1C;' };
+      el.setAttribute('style', colors[type] || colors.working);
+      el.innerHTML = msg;
+    }
+
+    function tfImpReset(){
+      $('tf-import-status').classList.add('hidden');
+      $('tf-import-status').innerHTML = '';
+      $('tf-import-preview').classList.add('hidden');
+      $('tf-import-preview').innerHTML = '';
+    }
+
+    // Affiche un aperçu cliquable + bouton « Confirmer » AVANT d'écrire en base.
+    function showPreview(rows){
+      const existing = new Set((window.FP_DATA.factures || []).map(f => (f.numeroFacture || '').toUpperCase()));
+      const fresh = rows.filter(r => !existing.has(r.numero.toUpperCase()));
+      const dupes = rows.length - fresh.length;
+      const sumTTC = rows.reduce((s,r)=>s+(r.ttc||0),0);
+
+      const warn = (r) => {
+        if (r.ht == null || r.tva == null || r.ttc == null) return ' <span style="color:#B91C1C">⚠ montant manquant</span>';
+        if (Math.abs((r.ht + r.tva) - r.ttc) > 0.05) return ' <span style="color:#B45309">⚠ HT+TVA ≠ TTC</span>';
+        return '';
+      };
+      const lines = rows.map(r => `<tr style="border-top:1px solid var(--fp-border)">
+        <td style="font-family:monospace">${esc(r.numero)}</td>
+        <td>${esc(r.paysLabel)}</td>
+        <td style="white-space:nowrap">${esc(r.dmy)}</td>
+        <td style="text-align:right">${r.ht!=null?FP.euro(r.ht):'—'}</td>
+        <td style="text-align:right">${r.tva!=null?FP.euro(r.tva):'—'}</td>
+        <td style="text-align:right;font-weight:700">${r.ttc!=null?FP.euro(r.ttc):'—'}${existing.has(r.numero.toUpperCase())?' <span style="color:#94A3B8;font-weight:400">· déjà importée</span>':''}${warn(r)}</td>
+      </tr>`).join('');
+
+      $('tf-import-preview').classList.remove('hidden');
+      $('tf-import-preview').innerHTML = `
+        <div class="text-sm font-semibold mb-2">${rows.length} facture(s) détectée(s) — total ${FP.euro(sumTTC)} TTC${dupes?` · ${dupes} déjà présente(s)`:''}</div>
+        <div class="scrollable" style="max-height:260px"><table class="fp-table" style="font-size:13px">
+          <thead><tr><th>N°</th><th>Pays</th><th>Date</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th></tr></thead>
+          <tbody>${lines}</tbody>
+        </table></div>
+        <div class="flex gap-2 mt-3">
+          <button type="button" class="btn btn-outline text-sm" id="tf-import-cancel">Annuler</button>
+          <button type="button" class="btn btn-dark text-sm" id="tf-import-confirm"${fresh.length?'':' disabled style="opacity:.5;cursor:not-allowed"'}>
+            <i data-lucide="check" class="w-4 h-4"></i> Enregistrer ${fresh.length} nouvelle(s) facture(s)
+          </button>
+        </div>`;
+      if (window.lucide) lucide.createIcons();
+
+      $('tf-import-cancel').addEventListener('click', tfImpReset);
+      $('tf-import-confirm').addEventListener('click', () => commitRows(fresh));
+    }
+
+    async function commitRows(rows){
+      if (!rows.length) return;
+      $('tf-import-confirm').disabled = true;
+      tfImpStatus(`<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement de ${rows.length} facture(s)…</span>`, 'working');
+      let ok = 0;
+      for (const r of rows){
+        const newF = {
+          id: 'TF-' + r.numero,
+          date: r.date,
+          vehiculeImmat: null,
+          fournisseur: 'TotalEnergies',
+          numeroFacture: r.numero,
+          description: `Carburant & services flotte — ${r.paysLabel} — relevé ${r.dmy}`,
+          type: 'carburant',
+          montantHT: r.ht, montantTVA: r.tva, montantTTC: r.ttc,
+        };
+        window.FP_DATA.factures.push(newF);
+        try { await FP.persist.insert('factures', newF); ok++; }
+        catch (e) { console.error('[tf-import]', e); }
+      }
+      $('tf-import-preview').classList.add('hidden');
+      tfImpStatus(`<b>✓ ${ok} facture(s) enregistrée(s)</b> dans Total Fleet. C'est aussi sauvegardé dans la base — visible sur tous les postes.`, 'ok');
+      render();
+    }
+
+    async function handleReleve(file){
+      if (!file) return;
+      tfImpReset();
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+      if (!isPdf){ tfImpStatus("Dépose le <b>PDF</b> du relevé TotalEnergies (pas une image).", 'error'); return; }
+      try {
+        tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture du relevé…</span>', 'working');
+        const pdf = await loadPdf(file);
+        const text = await pdfText(pdf);
+        const rows = parseReleve(text);
+        if (!rows.length){
+          tfImpStatus("Aucune facture détectée. Vérifie que c'est bien le <b>relevé de factures</b> TotalEnergies (la page qui liste les factures par pays), pas une facture isolée.", 'error');
+          return;
+        }
+        $('tf-import-status').classList.add('hidden');
+        showPreview(rows);
+      } catch (err) {
+        console.error(err);
+        tfImpStatus("Impossible de lire le PDF. Vérifie ta connexion internet, puis réessaie.", 'error');
+      }
+    }
+
+    $('tf-import-trigger').addEventListener('click', () => $('tf-import-file').click());
+    $('tf-import-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; handleReleve(f); e.target.value = ''; });
   })();
 </script>
 </body>
