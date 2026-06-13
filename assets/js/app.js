@@ -528,6 +528,7 @@ FP.groupeKeysVisible = () => {
 FP.DEFAULT_NAV_LABELS = {
   'dashboard.html':     'Tableau de bord',
   'notifications.html': 'Notifications',
+  'calendrier.html':   'Calendrier',
   'statistiques.html': 'Statistiques',
   'vehicules.html':    'Véhicules',
   'emprunts.html':     'Emprunt véhicule',
@@ -1015,6 +1016,62 @@ FP.buildAlertes = (data) => {
   out.sort((a, b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
   return out;
 };
+
+// Échéances DATÉES (pour le calendrier) : chaque entrée a une vraie date.
+// { date:'YYYY-MM-DD', categorie, label, detail, niveau, target }
+FP.buildEcheances = (data) => {
+  const out = [];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const iso = (d) => { const x = new Date(d); return isNaN(x) ? null : x.toISOString().slice(0, 10); };
+  const niv = (dateStr) => {
+    const diff = Math.ceil((new Date(dateStr) - today) / 86400000);
+    if (diff < 0) return 'danger';
+    if (diff < 30) return 'danger';
+    if (diff < 90) return 'warn';
+    return 'info';
+  };
+  const push = (dateStr, categorie, label, detail, target) => {
+    const d = iso(dateStr); if (!d) return;
+    out.push({ date: d, categorie, label, detail, niveau: niv(d), target });
+  };
+
+  (data.vehicules || []).forEach(v => {
+    const veh = `${v.immat} · ${v.marque} ${v.modele}`;
+    const tgt = 'vehicules.html?veh=' + v.id;
+    if (v.prochainCT && v.prochainCT !== '—') push(v.prochainCT, 'Contrôle technique', 'CT — ' + v.immat, veh, tgt);
+    if (FP.concerneAntiPollution(v) && v.antiPollution && v.antiPollution !== '—') push(v.antiPollution, 'Anti-pollution', 'Anti-pollution — ' + v.immat, veh, tgt);
+    // Fin de leasing (BPCE)
+    const l = FP.leasingInfo && FP.leasingInfo(v);
+    if (l && l.finContrat && !isNaN(l.finContrat)) push(l.finContrat.toISOString(), 'Leasing', 'Fin leasing — ' + v.immat, veh, 'contrats.html');
+  });
+
+  // Permis qui expirent
+  (data.conducteurs || []).forEach(c => {
+    if (!c || !c.permisExpiration) return;
+    const who = [c.prenom || c.name, c.nom].filter(Boolean).join(' ') || c.name || c.key;
+    push(c.permisExpiration, 'Permis', 'Permis — ' + who, who, 'conducteurs.html?cond=' + encodeURIComponent(c.key));
+  });
+
+  // Pièces d'identité qui expirent (réglages condDocs)
+  try {
+    const condDocs = (FP.settings.get().condDocs) || {};
+    const byKey = {}; (data.conducteurs || []).forEach(c => { if (c && c.key) byKey[c.key] = c; });
+    const LABELS = { 'carte-identite': "Carte d'identité", 'titre-sejour': 'Titre de séjour', 'rib': 'RIB', 'mutuelle': 'Carte mutuelle', 'visite-medicale': 'Visite médicale', 'autre': 'Document' };
+    Object.entries(condDocs).forEach(([key, docs]) => {
+      (docs || []).forEach(doc => {
+        if (!doc || !doc.date) return;
+        const c = byKey[key];
+        const who = c ? ([c.prenom || c.name, c.nom].filter(Boolean).join(' ') || c.name || key) : key;
+        const lib = LABELS[doc.type] || doc.label || 'Document';
+        push(doc.date, "Pièce d'identité", lib + ' — ' + who, who, 'conducteurs.html?cond=' + encodeURIComponent(key));
+      });
+    });
+  } catch (e) {}
+
+  out.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
+};
+
 FP.persist = {
   _QKEY: 'fp_pending_writes',
   available() { return !!(FP.db && FP.supabase); },

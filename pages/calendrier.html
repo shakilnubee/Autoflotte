@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calendrier des échéances — Parc Pilot</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css">
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260613a">
+<style>
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-dow { text-align: center; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--fp-muted); padding-bottom: 4px; }
+  .cal-cell { min-height: 96px; background: white; border: 1px solid var(--fp-border); border-radius: .55rem; padding: 5px 6px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+  .cal-cell.muted { background: #f8fafc; }
+  .cal-cell.today { border-color: var(--fp-accent); box-shadow: 0 0 0 1px var(--fp-accent) inset; }
+  .cal-num { font-size: .72rem; font-weight: 700; color: var(--fp-muted); align-self: flex-end; }
+  .cal-cell.today .cal-num { color: var(--fp-accent); }
+  .cal-ev { display: block; font-size: .66rem; line-height: 1.2; padding: 2px 5px; border-radius: 5px; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .cal-ev.danger { background: #FEE2E2; color: #B91C1C; }
+  .cal-ev.warn   { background: #FEF3C7; color: #92400E; }
+  .cal-ev.info   { background: #DBEAFE; color: #1D4ED8; }
+  .cal-ev:hover { filter: brightness(.96); }
+  .ech-row { display: flex; gap: .75rem; align-items: center; padding: .7rem .9rem; border-radius: .6rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
+  .ech-row + .ech-row { margin-top: .5rem; }
+  a.ech-row:hover { box-shadow: 0 10px 24px -12px rgba(15,30,61,.25); transform: translateY(-1px); }
+  .ech-row.danger { border-left: 4px solid var(--fp-danger); }
+  .ech-row.warn   { border-left: 4px solid var(--fp-warn); }
+  .ech-row.info   { border-left: 4px solid #3B82F6; }
+  .ech-date { flex-shrink: 0; text-align: center; width: 52px; }
+  .ech-date .d { font-size: 1.25rem; font-weight: 800; line-height: 1; }
+  .ech-date .m { font-size: .62rem; text-transform: uppercase; color: var(--fp-muted); font-weight: 700; }
+  .ech-cat { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--fp-muted); }
+  @media (max-width: 640px) { .cal-cell { min-height: 64px; } .cal-ev { font-size: .58rem; } }
+</style>
+<script>
+(function(){
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic" fill="currentColor">Parc</text><text x="86" y="26" font-size="20" font-weight="900" font-style="italic" fill="#F97316">Pilot</text></svg>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="notifications.html" data-nav="notifications.html"><i data-lucide="bell"></i> Notifications</a>
+      <a href="calendrier.html" data-nav="calendrier.html"><i data-lucide="calendar-days"></i> Calendrier</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="emprunts.html" data-nav="emprunts.html"><i data-lucide="key-round"></i> Emprunt véhicule</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+      <a href="../brochure.html"   data-nav="brochure.html" target="_blank" rel="noopener"><i data-lucide="sparkles"></i> Brochure</a>
+      <a href="../prix.html" data-nav="prix.html" target="_blank" rel="noopener"><i data-lucide="badge-euro"></i> Tarifs</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="mb-6">
+      <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)">Calendrier des échéances</h1>
+      <p class="text-slate-500 text-sm mt-1">Contrôles techniques, anti-pollution, permis, pièces d'identité et fins de leasing — par mois.</p>
+    </div>
+
+    <!-- Légende + navigation mois -->
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div class="flex items-center gap-2">
+        <button id="cal-prev" class="btn btn-outline !py-1.5 !px-2.5"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+        <span id="cal-month" class="font-extrabold text-lg min-w-[180px] text-center" style="color: var(--fp-primary)"></span>
+        <button id="cal-next" class="btn btn-outline !py-1.5 !px-2.5"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+        <button id="cal-today" class="btn btn-outline !py-1.5 text-sm">Aujourd'hui</button>
+      </div>
+      <div class="flex items-center gap-3 text-xs text-slate-500">
+        <span class="inline-flex items-center gap-1.5"><span style="width:11px;height:11px;border-radius:3px;background:#FEE2E2;border:1px solid #FCA5A5;display:inline-block"></span> Urgent / dépassé</span>
+        <span class="inline-flex items-center gap-1.5"><span style="width:11px;height:11px;border-radius:3px;background:#FEF3C7;border:1px solid #FCD34D;display:inline-block"></span> Bientôt</span>
+        <span class="inline-flex items-center gap-1.5"><span style="width:11px;height:11px;border-radius:3px;background:#DBEAFE;border:1px solid #93C5FD;display:inline-block"></span> À venir</span>
+      </div>
+    </div>
+
+    <!-- Grille calendrier -->
+    <div class="cal-grid mb-2" id="cal-dows"></div>
+    <div class="cal-grid" id="cal-body"></div>
+
+    <!-- Prochaines échéances (liste) -->
+    <h2 class="text-lg font-extrabold mt-10 mb-3" style="color: var(--fp-primary)">Prochaines échéances</h2>
+    <div id="ech-list"></div>
+
+  </main>
+</div>
+
+<script src="../assets/js/vendor/supabase.js"></script>
+<script src="../assets/js/supabase-client.js?v=20260613a"></script>
+<script src="../assets/js/data.js?v=20260613a"></script>
+<script src="../assets/js/app.js?v=20260613a"></script>
+<script>
+  lucide.createIcons();
+  const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+  const MONTHS_SHORT = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+  const DOWS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+  let viewYear, viewMonth; // mois affiché
+  let events = [];
+
+  function loadEvents() {
+    const data = window.FP_DATA || { vehicules: [], amendes: [], factures: [], conducteurs: [] };
+    events = (FP.buildEcheances ? FP.buildEcheances(data) : []);
+  }
+
+  // En-têtes jours
+  (function () {
+    document.getElementById('cal-dows').innerHTML = DOWS.map(d => `<div class="cal-dow">${d}</div>`).join('');
+  })();
+
+  function renderCalendar() {
+    document.getElementById('cal-month').textContent = MONTHS[viewMonth] + ' ' + viewYear;
+    const first = new Date(viewYear, viewMonth, 1);
+    let startDow = first.getDay(); startDow = (startDow === 0) ? 6 : startDow - 1; // lundi = 0
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    // Regroupe les évènements par date du mois affiché
+    const byDay = {};
+    events.forEach(e => {
+      const [y, m] = e.date.split('-').map(Number);
+      if (y === viewYear && (m - 1) === viewMonth) {
+        const day = Number(e.date.slice(8, 10));
+        (byDay[day] = byDay[day] || []).push(e);
+      }
+    });
+
+    let cells = '';
+    // Cases du mois précédent (grisées)
+    const prevDays = new Date(viewYear, viewMonth, 0).getDate();
+    for (let i = startDow - 1; i >= 0; i--) cells += `<div class="cal-cell muted"><span class="cal-num">${prevDays - i}</span></div>`;
+    // Jours du mois
+    for (let d = 1; d <= daysInMonth; d++) {
+      const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const evs = (byDay[d] || []).slice().sort((a, b) => ({ danger: 0, warn: 1, info: 2 }[a.niveau] - { danger: 0, warn: 1, info: 2 }[b.niveau]));
+      const shown = evs.slice(0, 3).map(e => `<a class="cal-ev ${e.niveau}" href="${e.target || '#'}" title="${escAttr(e.categorie + ' · ' + e.label)}">${escHtml(e.label)}</a>`).join('');
+      const more = evs.length > 3 ? `<span class="cal-ev info" style="background:#F1F5F9;color:#475569">+${evs.length - 3} autres</span>` : '';
+      cells += `<div class="cal-cell ${iso === todayIso ? 'today' : ''}"><span class="cal-num">${d}</span>${shown}${more}</div>`;
+    }
+    // Compléter la dernière semaine
+    const total = startDow + daysInMonth;
+    const trailing = (7 - (total % 7)) % 7;
+    for (let i = 1; i <= trailing; i++) cells += `<div class="cal-cell muted"><span class="cal-num">${i}</span></div>`;
+
+    document.getElementById('cal-body').innerHTML = cells;
+    lucide.createIcons();
+  }
+
+  function renderList() {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    // À venir + dépassés non réglés (on garde tout ce qui est >= il y a 30j, trié par date)
+    const limitPast = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const upcoming = events.filter(e => e.date >= limitPast).slice(0, 40);
+    if (!upcoming.length) {
+      document.getElementById('ech-list').innerHTML = '<p class="text-slate-500 text-sm">Aucune échéance à venir. 🎉</p>';
+      return;
+    }
+    document.getElementById('ech-list').innerHTML = upcoming.map(e => {
+      const [y, m, d] = e.date.split('-').map(Number);
+      const diff = Math.ceil((new Date(e.date) - new Date(todayIso)) / 86400000);
+      const when = diff < 0 ? `Dépassé de ${-diff}j` : (diff === 0 ? "Aujourd'hui" : `Dans ${diff}j`);
+      const tag = e.target ? 'a' : 'div';
+      const href = e.target ? ` href="${e.target}"` : '';
+      return `<${tag}${href} class="ech-row ${e.niveau}">
+        <div class="ech-date"><div class="d">${d}</div><div class="m">${MONTHS_SHORT[m - 1]}</div></div>
+        <div class="flex-1 min-w-0">
+          <div class="ech-cat">${escHtml(e.categorie)}</div>
+          <div class="font-semibold text-slate-900 truncate">${escHtml(e.label)}</div>
+          <div class="text-sm text-slate-500">${escHtml(when)}</div>
+        </div>
+        ${e.target ? '<i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>' : ''}
+      </${tag}>`;
+    }).join('');
+    lucide.createIcons();
+  }
+
+  function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+  function escAttr(s) { return escHtml(s).replace(/"/g, '&quot;'); }
+
+  function renderAll() { loadEvents(); renderCalendar(); renderList(); }
+
+  // Navigation
+  document.getElementById('cal-prev').addEventListener('click', () => { viewMonth--; if (viewMonth < 0) { viewMonth = 11; viewYear--; } renderCalendar(); });
+  document.getElementById('cal-next').addEventListener('click', () => { viewMonth++; if (viewMonth > 11) { viewMonth = 0; viewYear++; } renderCalendar(); });
+  document.getElementById('cal-today').addEventListener('click', () => { const n = new Date(); viewYear = n.getFullYear(); viewMonth = n.getMonth(); renderCalendar(); });
+
+  // Init
+  (function () { const n = new Date(); viewYear = n.getFullYear(); viewMonth = n.getMonth(); })();
+  renderAll();
+  // Rafraîchit quand les données live arrivent de Supabase
+  document.addEventListener('fp:data-ready', renderAll);
+</script>
+</body>
+</html>
