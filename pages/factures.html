@@ -1346,33 +1346,95 @@
     document.addEventListener('fp:data-ready', () => { if (!$('view-total').classList.contains('hidden')) render(); });
 
     // ============================================================
-    //  Import d'un relevé Total (PDF) → factures par pays, en auto.
-    //  On lit le tableau récapitulatif du relevé (Numéro de pièce /
-    //  Pays / HT / TVA / TTC) et on enregistre chaque facture détaillée.
-    //  Le relevé lui-même n'est PAS enregistré (anti-doublon).
-    //  Réutilise loadPdf / pdfText / parseEuro définis plus haut (même <script>).
+    //  Import Total (PDF) -> 1) factures par pays  2) consommation par carte.
+    //  - Le releve (RLP) donne le recap des factures par pays.
+    //  - Chaque facture detaillee (FAC) donne SA facture + le detail PAR CARTE
+    //    (section « Votre Facture et son detail » -> lignes « Total Support »).
+    //  Le conducteur est resolu via la correspondance carte->nom deja connue
+    //  (les noms du PDF sont abreges, le n° de carte est le seul repere fiable).
+    //  Reutilise loadPdf / parseEuro definis plus haut (meme <script>).
     // ============================================================
     const PAYS = { FRA:'France', NLD:'Pays-Bas', BEL:'Belgique', DEU:'Allemagne', LUX:'Luxembourg',
                    ESP:'Espagne', ITA:'Italie', PRT:'Portugal', GBR:'Royaume-Uni', CHE:'Suisse',
-                   AUT:'Autriche', POL:'Pologne', CZE:'Tchéquie', DNK:'Danemark', SWE:'Suède' };
+                   AUT:'Autriche', POL:'Pologne', CZE:'Tchequie', DNK:'Danemark', SWE:'Suede' };
+    const PAYS_FAC = { FRANCE:'France', BELGIE:'Belgique', BELGIQUE:'Belgique', NEDERLAND:'Pays-Bas',
+                       DEUTSCHLAND:'Allemagne', ALLEMAGNE:'Allemagne' };
+    const DEC = '\\d[\\d \\u00a0\\u202f]*[.,]\\d{2}';
+    const SP = /[\u00a0\u202f\u2009\u2007]/g;
+    const n0 = (v) => parseEuro(v) || 0;
+    const isPlaque = (s) => /^[A-Z]{2}-?\d{3}-?[A-Z]{2}$/.test(String(s || '').toUpperCase().trim());
 
-    // Extrait les lignes "facture" du récapitulatif :
-    //   <N° pièce> Facture <date> <PAYS> EUR <HT> <TVA> <TTC> [<contrevaleur>]
+    async function pdfTextAll(pdf){
+      let txt = '';
+      for (let p = 1; p <= pdf.numPages; p++){ const page = await pdf.getPage(p); const c = await page.getTextContent(); txt += c.items.map(it => it.str).join(' ') + '\n'; }
+      return txt;
+    }
+
+    // 1) Recap du releve : <N° piece> Facture <date> <PAYS3> EUR <HT> <TVA> <TTC>
     function parseReleve(raw){
-      const t = (raw || '').replace(/[  ]/g, ' ');
-      const AMT = '([0-9][0-9 ]*[.,][0-9]{2})';
-      const re = new RegExp('([A-Z][0-9][A-Z][0-9]{4,6})\\s+Facture\\s+(\\d{2}/\\d{2}/\\d{4})\\s+([A-Z]{3})\\s+EUR\\s+' + AMT + '\\s+' + AMT + '\\s+' + AMT, 'g');
-      const seen = new Set(), rows = [];
-      let m;
+      const t = (raw || '').replace(SP, ' ');
+      const A = '([0-9][0-9 ]*[.,][0-9]{2})';
+      const re = new RegExp('([A-Z][0-9][A-Z][0-9]{4,6})\\s+Facture\\s+(\\d{2}/\\d{2}/\\d{4})\\s+([A-Z]{3})\\s+EUR\\s+' + A + '\\s+' + A + '\\s+' + A, 'g');
+      const seen = new Set(), rows = []; let m;
       while ((m = re.exec(t))){
-        const numero = m[1];
-        if (seen.has(numero)) continue; seen.add(numero);
+        if (seen.has(m[1])) continue; seen.add(m[1]);
         const [dd, mm, yyyy] = m[2].split('/');
-        rows.push({
-          numero, dmy: m[2], pays: m[3], paysLabel: PAYS[m[3]] || m[3],
-          date: `${yyyy}-${mm}-${dd}`,
-          ht: parseEuro(m[4]), tva: parseEuro(m[5]), ttc: parseEuro(m[6]),
-        });
+        rows.push({ numero: m[1], dmy: m[2], paysLabel: PAYS[m[3]] || m[3], date: yyyy + '-' + mm + '-' + dd,
+                    ht: parseEuro(m[4]), tva: parseEuro(m[5]), ttc: parseEuro(m[6]) });
+      }
+      return rows;
+    }
+
+    // 2) Une facture detaillee (FAC) -> { numero, pays, date, HT, TVA, TTC }
+    function parseFac(raw){
+      const t = (raw || '').replace(SP, ' ');
+      const mh = t.match(/(FRANCE|BELGIE|BELGIQUE|NEDERLAND|DEUTSCHLAND|ALLEMAGNE)\s*-\s*N°\s*([A-Z][0-9][A-Z][0-9]{4,6})/);
+      if (!mh) return null;
+      const md = t.match(/(?:Le|Factuurdatum)\s*(\d{2})\/(\d{2})\/(\d{4})/);
+      const mt = t.match(new RegExp('(?:Total General|Total Général|Totaal)\\s+(' + DEC + ')\\s+(' + DEC + ')\\s+EUR\\s+(' + DEC + ')'));
+      return { numero: mh[2], paysLabel: PAYS_FAC[mh[1]] || mh[1],
+               dmy: md ? (md[1] + '/' + md[2] + '/' + md[3]) : null,
+               date: md ? (md[3] + '-' + md[2] + '-' + md[1]) : null,
+               ht: mt ? parseEuro(mt[1]) : null, tva: mt ? parseEuro(mt[2]) : null, ttc: mt ? parseEuro(mt[3]) : null };
+    }
+
+    // 3) Detail par carte. Categories imprimees en colonnes -> on de-mele :
+    //    N libelles consecutifs puis 4N nombres (qte,HT,TVA,TTC par colonnes).
+    const CATS = [
+      { key:'carburant', lit:true, rx:'Total Essences & Gazole|Totaal Benzines en Diesel' },
+      { key:'boutique',           rx:'Total Services et Partenaires|Totaal Services en Partners' },
+      { key:'peage',              rx:'Total Parkings|Totaal Parkings' },
+      { key:'lavage',             rx:'Total Lavages?|Totaal Wassen' },
+    ];
+    const CAT_LABELS = CATS.map(c => c.rx).join('|');
+    function parseConso(raw){
+      const t = (raw || '').replace(SP, ' ');
+      const idx = t.indexOf('Votre Facture et son détail');
+      const det = idx >= 0 ? t.slice(idx) : t;
+      const supRe = new RegExp('Total Support (\\d+)(?: \\d+)? (.+?) Type véh\\. (\\d+)\\D{0,30}?(' + DEC + ')\\s+(' + DEC + ')\\s+(' + DEC + ')|Totaal Kaart (\\d+) \\d+ (.+?) (\\d{2}) (' + DEC + ') (' + DEC + ') (' + DEC + ')', 'g');
+      const hits = []; let m;
+      while ((m = supRe.exec(det))){
+        if (m[1] != null) hits.push({ i:m.index, end:supRe.lastIndex, carte:m[1], nom:m[2].trim(), type:m[3], total:n0(m[6]) });
+        else              hits.push({ i:m.index, end:supRe.lastIndex, carte:m[7], nom:m[8].trim(), type:m[9], total:n0(m[12]) });
+      }
+      const grpRe = new RegExp('((?:(?:' + CAT_LABELS + ')\\s*)+)((?:(?:' + DEC + '|\\d+)\\s*)+)');
+      const rows = []; let prev = 0;
+      for (const h of hits){
+        const block = det.slice(prev, h.i); prev = h.end;
+        const r = { carte:h.carte, nom:h.nom, type:h.type, carburant:0, litres:0, boutique:0, peage:0, lavage:0, total:h.total };
+        const g = block.match(grpRe);
+        if (g){
+          const order = []; let lm; const lre = new RegExp(CAT_LABELS, 'g');
+          while ((lm = lre.exec(g[1]))) order.push(CATS.find(c => new RegExp('^(?:' + c.rx + ')$').test(lm[0])));
+          const N = order.length, toks = g[2].trim().split(/\s+/).map(n0);
+          order.forEach((c, k) => { if (!c) return; r[c.key] = toks[3 * N + k] || 0; if (c.lit) r.litres = toks[k] || 0; });
+        }
+        // Si la ventilation ne tombe pas juste sur le total de la carte (format
+        // etranger different) -> tout en carburant (ce sont des cartes essence).
+        if (Math.abs(r.carburant + r.boutique + r.peage + r.lavage - r.total) > 0.02){
+          r.carburant = r.total; r.boutique = 0; r.peage = 0; r.lavage = 0; r.litres = 0;
+        }
+        rows.push(r);
       }
       return rows;
     }
@@ -1383,109 +1445,157 @@
       el.setAttribute('style', colors[type] || colors.working);
       el.innerHTML = msg;
     }
-
     function tfImpReset(){
-      $('tf-import-status').classList.add('hidden');
-      $('tf-import-status').innerHTML = '';
-      $('tf-import-preview').classList.add('hidden');
-      $('tf-import-preview').innerHTML = '';
+      $('tf-import-status').classList.add('hidden'); $('tf-import-status').innerHTML = '';
+      $('tf-import-preview').classList.add('hidden'); $('tf-import-preview').innerHTML = '';
     }
 
-    // Affiche un aperçu cliquable + bouton « Confirmer » AVANT d'écrire en base.
-    function showPreview(rows){
-      const existing = new Set((window.FP_DATA.factures || []).map(f => (f.numeroFacture || '').toUpperCase()));
-      const fresh = rows.filter(r => !existing.has(r.numero.toUpperCase()));
-      const dupes = rows.length - fresh.length;
-      const sumTTC = rows.reduce((s,r)=>s+(r.ttc||0),0);
+    let _pending = null; // { freshF, conso } en attente de confirmation
 
+    function showPreview(factures, conso){
+      const existing = new Set((window.FP_DATA.factures || []).map(f => (f.numeroFacture || '').toUpperCase()));
+      const freshF = factures.filter(r => !existing.has(r.numero.toUpperCase()));
+      const dupes = factures.length - freshF.length;
+      const sumTTC = factures.reduce((s,r)=>s+(r.ttc||0),0);
       const warn = (r) => {
-        if (r.ht == null || r.tva == null || r.ttc == null) return ' <span style="color:#B91C1C">⚠ montant manquant</span>';
-        if (Math.abs((r.ht + r.tva) - r.ttc) > 0.05) return ' <span style="color:#B45309">⚠ HT+TVA ≠ TTC</span>';
+        if (r.ht == null || r.tva == null || r.ttc == null) return ' <span style="color:#B91C1C">! montant manquant</span>';
+        if (Math.abs((r.ht + r.tva) - r.ttc) > 0.05) return ' <span style="color:#B45309">! HT+TVA != TTC</span>';
         return '';
       };
-      const lines = rows.map(r => `<tr style="border-top:1px solid var(--fp-border)">
-        <td style="font-family:monospace">${esc(r.numero)}</td>
-        <td>${esc(r.paysLabel)}</td>
-        <td style="white-space:nowrap">${esc(r.dmy)}</td>
-        <td style="text-align:right">${r.ht!=null?FP.euro(r.ht):'—'}</td>
-        <td style="text-align:right">${r.tva!=null?FP.euro(r.tva):'—'}</td>
-        <td style="text-align:right;font-weight:700">${r.ttc!=null?FP.euro(r.ttc):'—'}${existing.has(r.numero.toUpperCase())?' <span style="color:#94A3B8;font-weight:400">· déjà importée</span>':''}${warn(r)}</td>
-      </tr>`).join('');
+      const facLines = factures.map(r => '<tr style="border-top:1px solid var(--fp-border)">'
+        + '<td style="font-family:monospace">' + esc(r.numero) + '</td><td>' + esc(r.paysLabel) + '</td>'
+        + '<td style="white-space:nowrap">' + esc(r.dmy||'—') + '</td>'
+        + '<td style="text-align:right">' + (r.ht!=null?FP.euro(r.ht):'—') + '</td>'
+        + '<td style="text-align:right">' + (r.tva!=null?FP.euro(r.tva):'—') + '</td>'
+        + '<td style="text-align:right;font-weight:700">' + (r.ttc!=null?FP.euro(r.ttc):'—')
+        + (existing.has(r.numero.toUpperCase())?' <span style="color:#94A3B8;font-weight:400">· deja importee</span>':'') + warn(r) + '</td></tr>').join('');
 
+      const sumC = (k) => conso.reduce((s,c)=>s+(c[k]||0),0);
+      const consoLines = conso.map(c => '<tr style="border-top:1px solid var(--fp-border)">'
+        + '<td>' + esc(c.conducteur || c.plaque || c.carte) + (c.isNew?' <span style="color:#B45309;font-size:11px">! nouvelle carte</span>':'') + '</td>'
+        + '<td style="text-align:center;color:#64748B">' + esc(c.type_vehicule||'—') + '</td>'
+        + '<td style="text-align:right">' + FP.euro(c.carburant_ttc) + '</td>'
+        + '<td style="text-align:right;color:#64748B">' + (c.litres?Math.round(c.litres)+' L':'—') + '</td>'
+        + '<td style="text-align:right">' + (c.boutique_ttc?FP.euro(c.boutique_ttc):'—') + '</td>'
+        + '<td style="text-align:right">' + (c.peage_ttc?FP.euro(c.peage_ttc):'—') + '</td>'
+        + '<td style="text-align:right;font-weight:700">' + FP.euro(c.total_ttc) + '</td></tr>').join('');
+
+      const facBlock = factures.length ? (
+        '<div class="text-sm font-semibold mb-2">Factures : ' + factures.length + ' detectee(s) — ' + FP.euro(sumTTC) + ' TTC' + (dupes?(' · ' + dupes + ' deja presente(s)'):'') + '</div>'
+        + '<div class="scrollable" style="max-height:200px"><table class="fp-table" style="font-size:13px">'
+        + '<thead><tr><th>N°</th><th>Pays</th><th>Date</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th></tr></thead>'
+        + '<tbody>' + facLines + '</tbody></table></div>') : '';
+      const consoBlock = conso.length ? (
+        '<div class="text-sm font-semibold mt-4 mb-2">Consommation par conducteur : ' + conso.length + ' carte(s) — ' + FP.euro(sumC('total_ttc')) + ' TTC'
+        + ' <span style="font-weight:400;color:#64748B">· remplace le detail existant du/des mois concerne(s)</span></div>'
+        + '<div class="scrollable" style="max-height:240px"><table class="fp-table" style="font-size:13px">'
+        + '<thead><tr><th>Conducteur</th><th style="text-align:center">Type</th><th style="text-align:right">Carburant</th><th style="text-align:right">Litres</th><th style="text-align:right">Boutique</th><th style="text-align:right">Peage</th><th style="text-align:right">Total</th></tr></thead>'
+        + '<tbody>' + consoLines + '</tbody></table></div>') : '';
+
+      const willDo = [];
+      if (freshF.length) willDo.push(freshF.length + ' facture(s)');
+      if (conso.length) willDo.push('la conso de ' + conso.length + ' carte(s)');
+
+      _pending = { freshF, conso };
       $('tf-import-preview').classList.remove('hidden');
-      $('tf-import-preview').innerHTML = `
-        <div class="text-sm font-semibold mb-2">${rows.length} facture(s) détectée(s) — total ${FP.euro(sumTTC)} TTC${dupes?` · ${dupes} déjà présente(s)`:''}</div>
-        <div class="scrollable" style="max-height:260px"><table class="fp-table" style="font-size:13px">
-          <thead><tr><th>N°</th><th>Pays</th><th>Date</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th></tr></thead>
-          <tbody>${lines}</tbody>
-        </table></div>
-        <div class="flex gap-2 mt-3">
-          <button type="button" class="btn btn-outline text-sm" id="tf-import-cancel">Annuler</button>
-          <button type="button" class="btn btn-dark text-sm" id="tf-import-confirm"${fresh.length?'':' disabled style="opacity:.5;cursor:not-allowed"'}>
-            <i data-lucide="check" class="w-4 h-4"></i> Enregistrer ${fresh.length} nouvelle(s) facture(s)
-          </button>
-        </div>`;
+      $('tf-import-preview').innerHTML = facBlock + consoBlock
+        + '<div class="flex gap-2 mt-3">'
+        + '<button type="button" class="btn btn-outline text-sm" id="tf-import-cancel">Annuler</button>'
+        + '<button type="button" class="btn btn-dark text-sm" id="tf-import-confirm"' + (willDo.length?'':' disabled style="opacity:.5;cursor:not-allowed"') + '>'
+        + '<i data-lucide="check" class="w-4 h-4"></i> Enregistrer ' + (willDo.join(' + ') || '—') + '</button></div>';
       if (window.lucide) lucide.createIcons();
-
       $('tf-import-cancel').addEventListener('click', tfImpReset);
-      $('tf-import-confirm').addEventListener('click', () => commitRows(fresh));
+      $('tf-import-confirm').addEventListener('click', commitPending);
     }
 
-    async function commitRows(rows){
-      if (!rows.length) return;
+    async function commitPending(){
+      if (!_pending) return;
+      const freshF = _pending.freshF, conso = _pending.conso;
       $('tf-import-confirm').disabled = true;
-      tfImpStatus(`<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement de ${rows.length} facture(s)…</span>`, 'working');
-      let ok = 0;
-      for (const r of rows){
-        const newF = {
-          id: 'TF-' + r.numero,
-          date: r.date,
-          vehiculeImmat: null,
-          fournisseur: 'TotalEnergies',
-          numeroFacture: r.numero,
-          description: `Carburant & services flotte — ${r.paysLabel} — relevé ${r.dmy}`,
-          type: 'carburant',
-          montantHT: r.ht, montantTVA: r.tva, montantTTC: r.ttc,
-        };
+      tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement...</span>', 'working');
+      let okF = 0, okC = 0;
+      for (const r of freshF){
+        const newF = { id:'TF-' + r.numero, date:r.date, vehiculeImmat:null, fournisseur:'TotalEnergies',
+          numeroFacture:r.numero, description:('Carburant & services flotte — ' + r.paysLabel + ' — releve ' + (r.dmy||'')).trim(),
+          type:'carburant', montantHT:r.ht, montantTVA:r.tva, montantTTC:r.ttc };
         window.FP_DATA.factures.push(newF);
-        try { await FP.persist.insert('factures', newF); ok++; }
-        catch (e) { console.error('[tf-import]', e); }
+        try { await FP.persist.insert('factures', newF); okF++; } catch (e) { console.error('[tf-import facture]', e); }
+      }
+      for (const c of conso){
+        const row = { id:(c.mois + '-' + c.carte), mois:c.mois, carte:c.carte, conducteur:c.conducteur || null,
+          plaque:c.plaque || null, typeVehicule:c.type_vehicule || null, carburantTtc:c.carburant_ttc,
+          litres:c.litres, boutiqueTtc:c.boutique_ttc, lavageTtc:c.lavage_ttc, peageTtc:c.peage_ttc, totalTtc:c.total_ttc };
+        try { await FP.persist.upsert('total_conso', row); okC++; } catch (e) { console.error('[tf-import conso]', e); }
       }
       $('tf-import-preview').classList.add('hidden');
-      tfImpStatus(`<b>✓ ${ok} facture(s) enregistrée(s)</b> dans Total Fleet. C'est aussi sauvegardé dans la base — visible sur tous les postes.`, 'ok');
+      tfImpStatus('<b>OK Enregistre</b> : ' + okF + ' facture(s) + conso de ' + okC + ' carte(s). Sauvegarde dans la base (visible sur tous les postes).', 'ok');
+      _pending = null;
       render();
+      consoLoaded = false; loadConso(); // recharge le detail conso depuis la base
     }
 
     async function handleReleves(fileList){
       const files = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
-      if (!files.length){ tfImpReset(); tfImpStatus("Dépose un ou plusieurs <b>PDF</b> de relevés TotalEnergies (pas des images).", 'error'); return; }
+      if (!files.length){ tfImpReset(); tfImpStatus('Depose un ou plusieurs <b>PDF</b> TotalEnergies (releve et/ou factures detaillees).', 'error'); return; }
       tfImpReset();
-      const all = [], seen = new Set(), failed = [];
-      let read = 0;
+      if (!consoLoaded) await loadConso(); // correspondance carte -> conducteur deja connue
+      const cardMap = {};
+      (conso || []).forEach(c => { if (c.carte) cardMap[String(c.carte)] = c; });
+
+      const facBySig = new Map();   // numero -> facture (dedup)
+      const consoByKey = new Map(); // mois|carte -> conso agregee
+      const failed = []; let read = 0;
       for (const file of files){
-        tfImpStatus(`<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture ${read + 1}/${files.length} : ${esc(file.name)}…</span>`, 'working');
+        tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture ' + (read + 1) + '/' + files.length + ' : ' + esc(file.name) + '...</span>', 'working');
         try {
           const pdf = await loadPdf(file);
-          const rows = parseReleve(await pdfText(pdf));
-          if (!rows.length) failed.push(file.name);
-          for (const r of rows){ if (!seen.has(r.numero)){ seen.add(r.numero); all.push(r); } }
+          const text = await pdfTextAll(pdf);
+          let used = false;
+          const fromRel = parseReleve(text);
+          const fromFac = parseFac(text);
+          fromRel.concat(fromFac ? [fromFac] : []).forEach(f => { if (f && f.numero && !facBySig.has(f.numero)) { facBySig.set(f.numero, f); used = true; } });
+          const mois = (fromFac && fromFac.date) ? fromFac.date.slice(0,7) : (fromRel[0] ? fromRel[0].date.slice(0,7) : null);
+          if (mois){
+            for (const r of parseConso(text)){
+              used = true;
+              const key = mois + '|' + r.carte;
+              const agg = consoByKey.get(key) || { mois:mois, carte:r.carte, nom:r.nom, type:r.type, carburant:0, litres:0, boutique:0, peage:0, lavage:0, total:0 };
+              agg.carburant += r.carburant; agg.litres += r.litres; agg.boutique += r.boutique;
+              agg.peage += r.peage; agg.lavage += r.lavage; agg.total += r.total;
+              consoByKey.set(key, agg);
+            }
+          }
+          if (!used) failed.push(file.name);
         } catch (err) { console.error(err); failed.push(file.name); }
         read++;
       }
-      if (!all.length){
-        tfImpStatus(`Aucune facture détectée dans ${files.length > 1 ? 'ces fichiers' : 'ce fichier'}. Vérifie que ce sont bien des <b>relevés de factures</b> TotalEnergies (la page qui liste les factures par pays), pas des factures isolées.`, 'error');
+
+      const factures = Array.from(facBySig.values());
+      const conso = Array.from(consoByKey.values()).map(a => {
+        const ref = cardMap[String(a.carte)] || {};
+        const pdfNom = a.nom || '';
+        const conducteur = ref.conducteur || (isPlaque(pdfNom) ? null : (pdfNom || null));
+        const plaque = ref.plaque || (isPlaque(pdfNom) ? pdfNom : null);
+        return { carte:a.carte, mois:a.mois, conducteur:conducteur, plaque:plaque,
+          type_vehicule: ref.type_vehicule || a.type || null,
+          carburant_ttc:+a.carburant.toFixed(2), litres:+a.litres.toFixed(2),
+          boutique_ttc:+a.boutique.toFixed(2), lavage_ttc:+a.lavage.toFixed(2),
+          peage_ttc:+a.peage.toFixed(2), total_ttc:+a.total.toFixed(2),
+          isNew: !cardMap[String(a.carte)] };
+      }).sort((x,y)=> (y.total_ttc - x.total_ttc));
+
+      if (!factures.length && !conso.length){
+        tfImpStatus('Aucune donnee detectee. Verifie que ce sont bien des releves / factures <b>TotalEnergies</b>.', 'error');
         return;
       }
-      if (failed.length){
-        tfImpStatus(`⚠ ${failed.length} fichier(s) sans facture détectée (ignoré·s) : ${failed.map(esc).join(', ')}.`, 'error');
-      } else {
-        $('tf-import-status').classList.add('hidden');
-      }
-      showPreview(all);
+      if (failed.length) tfImpStatus('! ' + failed.length + ' fichier(s) non reconnu(s) (ignore.s) : ' + failed.map(esc).join(', ') + '.', 'error');
+      else $('tf-import-status').classList.add('hidden');
+      showPreview(factures, conso);
     }
 
     $('tf-import-trigger').addEventListener('click', () => $('tf-import-file').click());
     $('tf-import-file').addEventListener('change', (e) => { handleReleves(e.target.files); e.target.value = ''; });
+
   })();
 </script>
 </body>
