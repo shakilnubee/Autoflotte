@@ -1246,7 +1246,7 @@
         <td style="text-align:right">${f.montantHT != null ? FP.euro(f.montantHT) : '—'}</td>
         <td style="text-align:right">${f.montantTVA != null ? FP.euro(f.montantTVA) : '—'}</td>
         <td style="text-align:right;font-weight:700">${f.montantTTC != null ? FP.euro(f.montantTTC) : '—'}</td>
-        <td style="text-align:right"><button type="button" class="btn btn-outline" style="padding:3px 10px;font-size:12px" data-tf-voir="${esc(f.id)}"><i data-lucide="eye" class="w-3 h-3"></i> Voir</button></td>
+        <td style="text-align:right;white-space:nowrap"><button type="button" class="btn btn-outline" style="padding:3px 10px;font-size:12px" data-tf-voir="${esc(f.id)}"><i data-lucide="eye" class="w-3 h-3"></i> Voir</button> <button type="button" class="btn btn-outline" style="padding:3px 8px;font-size:12px;color:#B91C1C;border-color:#FCA5A5" data-tf-del="${esc(f.id)}" title="Supprimer cette facture (et retirer sa conso du cumul)"><i data-lucide="trash-2" class="w-3 h-3"></i></button></td>
       </tr>`).join('');
       if (window.lucide) lucide.createIcons();
     }
@@ -1275,10 +1275,29 @@
       if (window.lucide) lucide.createIcons();
     }
     $('tf-tbody').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-tf-voir]'); if (!b) return;
-      const f = (window.FP_DATA.factures || []).find(x => String(x.id) === b.getAttribute('data-tf-voir'));
-      if (f) openTfDrawer(f);
+      const voir = e.target.closest('[data-tf-voir]');
+      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-tf-voir')); if (f) openTfDrawer(f); return; }
+      const del = e.target.closest('[data-tf-del]');
+      if (del){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === del.getAttribute('data-tf-del')); if (f) deleteTfFacture(f); }
     });
+
+    // Supprime une facture Total + RETIRE sa conso du cumul (lignes total_conso
+    // dont l'identifiant se termine par le n° de cette facture : mois-carte-NoFacture).
+    async function deleteTfFacture(f){
+      const num = f.numeroFacture || '';
+      const liees = (conso || []).filter(c => String(c.id).split('-').pop() === num);
+      const msg = `Supprimer la facture ${num || f.id} (${f.montantTTC != null ? FP.euro(f.montantTTC) : '—'}) ?`
+        + (liees.length ? `\n\n${liees.length} ligne(s) de consommation liée(s) seront aussi retirées du cumul.` : '');
+      if (!confirm(msg)) return;
+      // 1) la facture
+      const idx = (window.FP_DATA.factures || []).findIndex(x => x.id === f.id);
+      if (idx >= 0) window.FP_DATA.factures.splice(idx, 1);
+      try { await FP.persist.delete('factures', f.id); } catch (e) { console.error('[tf-del facture]', e); }
+      // 2) la conso liée (décompte du cumul)
+      for (const c of liees){ try { await FP.persist.delete('total_conso', c.id); } catch (e) { console.error('[tf-del conso]', e); } }
+      if (conso) conso = conso.filter(c => String(c.id).split('-').pop() !== num);
+      render(); renderConso();
+    }
 
     // --- Consommation par conducteur / véhicule (table total_conso) ---
     let conso = null, consoLoaded = false, consoSortDesc = true;
