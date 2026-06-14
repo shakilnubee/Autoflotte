@@ -281,7 +281,7 @@
       <div class="card overflow-hidden">
         <div class="scrollable">
           <table class="fp-table" id="tf-table">
-            <thead><tr><th>Date</th><th>N° facture</th><th>Désignation</th><th>Fournisseur</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th></tr></thead>
+            <thead><tr><th>Date</th><th>N° facture</th><th>Désignation</th><th>Fournisseur</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th></th></tr></thead>
             <tbody id="tf-tbody"></tbody>
           </table>
         </div>
@@ -1246,6 +1246,7 @@
         <td style="text-align:right">${f.montantHT != null ? FP.euro(f.montantHT) : '—'}</td>
         <td style="text-align:right">${f.montantTVA != null ? FP.euro(f.montantTVA) : '—'}</td>
         <td style="text-align:right;font-weight:700">${f.montantTTC != null ? FP.euro(f.montantTTC) : '—'}</td>
+        <td style="text-align:right"><button type="button" class="btn btn-outline" style="padding:3px 10px;font-size:12px" data-tf-voir="${esc(f.id)}"><i data-lucide="eye" class="w-3 h-3"></i> Voir</button></td>
       </tr>`).join('');
       if (window.lucide) lucide.createIcons();
     }
@@ -1253,6 +1254,31 @@
 
     $('tf-search').addEventListener('input', (e) => { tfState.search = e.target.value; render(); });
     $('tf-filter-annee').addEventListener('change', (e) => { tfState.annee = e.target.value; render(); });
+
+    // Bouton « Voir » : ouvre le tiroir de détail de la facture Total (réutilise #drawer).
+    function openTfDrawer(f){
+      $('drawer-num').textContent = f.numeroFacture || '—';
+      $('drawer-title').textContent = f.description || 'Facture TotalEnergies';
+      $('drawer-subtitle').textContent = `${f.fournisseur || 'TotalEnergies'} · ${f.date ? FP.date(f.date) : '—'}`;
+      $('drawer-body').innerHTML = `
+        <div class="grid grid-cols-3 gap-3">
+          <div class="kpi p-3"><div class="kpi-label">HT</div><div class="kpi-value" style="font-size:1rem">${f.montantHT != null ? FP.euroPrecis(f.montantHT) : '—'}</div></div>
+          <div class="kpi p-3"><div class="kpi-label">TVA</div><div class="kpi-value" style="font-size:1rem">${f.montantTVA != null ? FP.euroPrecis(f.montantTVA) : '—'}</div></div>
+          <div class="kpi p-3"><div class="kpi-label">TTC</div><div class="kpi-value" style="font-size:1rem; color: var(--fp-primary)">${f.montantTTC != null ? FP.euroPrecis(f.montantTTC) : '—'}</div></div>
+        </div>
+        <div><div class="field-label">N° de facture</div><div class="text-sm bg-slate-50 p-3 rounded-lg">${esc(f.numeroFacture || '—')}</div></div>
+        <div><div class="field-label">Date</div><div class="text-sm">${f.date ? FP.date(f.date) : '—'}</div></div>`;
+      const openBtn = $('drawer-open-drive');
+      const url = f.url || (f.fileId && !/^IMP-/.test(f.fileId) ? (/^https?:\/\//.test(f.fileId) ? f.fileId : `https://drive.google.com/file/d/${f.fileId}/view`) : null);
+      if (url){ openBtn.href = url; openBtn.style.display = ''; } else { openBtn.removeAttribute('href'); openBtn.style.display = 'none'; }
+      $('drawer').classList.add('open'); $('drawer-backdrop').classList.add('open');
+      if (window.lucide) lucide.createIcons();
+    }
+    $('tf-tbody').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tf-voir]'); if (!b) return;
+      const f = (window.FP_DATA.factures || []).find(x => String(x.id) === b.getAttribute('data-tf-voir'));
+      if (f) openTfDrawer(f);
+    });
 
     // --- Consommation par conducteur / véhicule (table total_conso) ---
     let conso = null, consoLoaded = false, consoSortDesc = true;
@@ -1282,10 +1308,10 @@
       }
       const moisDispo = [...new Set(conso.map(c => c.mois).filter(Boolean))].sort().reverse();
       if (sel.dataset.filled !== moisDispo.join(',')) {
-        sel.innerHTML = moisDispo.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join('');
+        sel.innerHTML = '<option value="__all__">Toutes les périodes</option>' + moisDispo.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join('');
         sel.dataset.filled = moisDispo.join(',');
       }
-      // Période : soit un mois (menu déroulant), soit un intervalle de dates (Du → Au).
+      // Période : soit un mois / Toutes (menu déroulant), soit un intervalle de dates (Du → Au).
       const from = $('tf-conso-from').value, to = $('tf-conso-to').value;
       const dateMode = !!(from || to);
       $('tf-conso-clear').classList.toggle('hidden', !dateMode);
@@ -1297,8 +1323,8 @@
         label = (from ? FP.date(from) : '…') + ' → ' + (to ? FP.date(to) : '…');
       } else {
         const mois = sel.value || moisDispo[0] || '';
-        src = conso.filter(c => c.mois === mois);
-        label = moisLabel(mois);
+        if (mois === '__all__'){ src = conso.slice(); label = 'Toutes les périodes'; }
+        else { src = conso.filter(c => c.mois === mois); label = moisLabel(mois); }
       }
 
       // Index des véhicules par plaque (normalisée) → pour retrouver le conducteur
