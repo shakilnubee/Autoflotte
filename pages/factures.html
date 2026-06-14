@@ -296,7 +296,14 @@
       <!-- Consommation par conducteur / véhicule -->
       <div class="flex flex-wrap items-center justify-between gap-3 mt-10 mb-3">
         <h3 class="text-lg font-extrabold" style="color: var(--fp-primary)">Consommation par conducteur / véhicule</h3>
-        <select id="tf-conso-mois" class="text-sm border border-slate-200 rounded-lg px-3 py-2"></select>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="tf-conso-mois" class="text-sm border border-slate-200 rounded-lg px-3 py-2"></select>
+          <span class="text-xs text-slate-400">ou période :</span>
+          <input type="date" id="tf-conso-from" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Du" />
+          <span class="text-xs text-slate-400">→</span>
+          <input type="date" id="tf-conso-to" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Au" />
+          <button id="tf-conso-clear" type="button" class="hidden text-xs text-slate-500 underline">effacer</button>
+        </div>
       </div>
       <div class="card overflow-hidden">
         <div class="scrollable">
@@ -1278,19 +1285,27 @@
         sel.innerHTML = moisDispo.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join('');
         sel.dataset.filled = moisDispo.join(',');
       }
-      const mois = sel.value || moisDispo[0] || '';
-      let rows = conso.filter(c => c.mois === mois);
-      rows.sort((a,b) => consoSortDesc ? (b.total_ttc - a.total_ttc) : (a.total_ttc - b.total_ttc));
-      empty.classList.toggle('hidden', rows.length > 0);
-      if (!rows.length) { tbody.innerHTML = ''; tfoot.innerHTML = ''; emptyMsg.textContent = 'Aucun détail de consommation pour ce mois.'; return; }
+      // Période : soit un mois (menu déroulant), soit un intervalle de dates (Du → Au).
+      const from = $('tf-conso-from').value, to = $('tf-conso-to').value;
+      const dateMode = !!(from || to);
+      $('tf-conso-clear').classList.toggle('hidden', !dateMode);
+      sel.disabled = dateMode; sel.style.opacity = dateMode ? '0.5' : '';
+      let src, label;
+      if (dateMode){
+        const fromM = from ? from.slice(0,7) : null, toM = to ? to.slice(0,7) : null;
+        src = conso.filter(c => (!fromM || (c.mois||'') >= fromM) && (!toM || (c.mois||'') <= toM));
+        label = (from ? FP.date(from) : '…') + ' → ' + (to ? FP.date(to) : '…');
+      } else {
+        const mois = sel.value || moisDispo[0] || '';
+        src = conso.filter(c => c.mois === mois);
+        label = moisLabel(mois);
+      }
 
       // Index des véhicules par plaque (normalisée) → pour retrouver le conducteur
       // quand la ligne de conso n'a qu'une plaque (ex. « GP-333-QJ ») au lieu d'un prénom.
       const normPlaque = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
       const vehByPlaque = {};
       (window.FP_DATA.vehicules || []).forEach(v => { if (v.immat) vehByPlaque[normPlaque(v.immat)] = v; });
-
-      // Nom du conducteur : celui de la ligne, sinon celui du véhicule (via la plaque).
       const resolveName = (c) => {
         if (c.conducteur) return c.conducteur;
         if (c.plaque) {
@@ -1299,11 +1314,28 @@
         }
         return null;
       };
-      // Combien de lignes par conducteur ce mois-ci ? S'il en a plusieurs (plusieurs
-      // véhicules), on garde la plaque à côté du nom pour distinguer ses lignes.
+
+      // ⚠️ On N'ÉCRASE RIEN : on CUMULE. Plusieurs relevés/factures d'une même
+      // période sont additionnés par carte (ou par conducteur si pas de carte).
+      const KNUM = ['carburant_ttc','litres','boutique_ttc','lavage_ttc','peage_ttc','total_ttc'];
+      const groups = new Map();
+      for (const c of src){
+        const key = (c.carte && String(c.carte)) || resolveName(c) || c.plaque || c.id;
+        let g = groups.get(key);
+        if (!g){ g = { carte:c.carte, conducteur:c.conducteur, plaque:c.plaque, type_vehicule:c.type_vehicule }; KNUM.forEach(k => g[k] = 0); groups.set(key, g); }
+        g.conducteur = g.conducteur || c.conducteur;
+        g.plaque = g.plaque || c.plaque;
+        g.type_vehicule = g.type_vehicule || c.type_vehicule;
+        KNUM.forEach(k => g[k] += Number(c[k]) || 0);
+      }
+      let rows = [...groups.values()];
+      rows.sort((a,b) => consoSortDesc ? (b.total_ttc - a.total_ttc) : (a.total_ttc - b.total_ttc));
+      empty.classList.toggle('hidden', rows.length > 0);
+      if (!rows.length) { tbody.innerHTML = ''; tfoot.innerHTML = ''; emptyMsg.textContent = 'Aucun détail de consommation pour cette période.'; return; }
+
+      // Si un conducteur a plusieurs véhicules (plusieurs lignes), on garde la plaque.
       const nameCount = {};
       rows.forEach(c => { const n = resolveName(c); if (n) nameCount[n] = (nameCount[n] || 0) + 1; });
-
       const who = (c) => {
         const nom = resolveName(c);
         if (nom) {
@@ -1328,7 +1360,7 @@
       </tr>`).join('');
       const sum = (k) => rows.reduce((s,c) => s + (Number(c[k]) || 0), 0);
       tfoot.innerHTML = `<tr style="border-top:2px solid var(--fp-border);font-weight:700;background:#f8fafc">
-        <td>Total ${moisLabel(mois)}</td><td></td>
+        <td>Total ${esc(label)}</td><td></td>
         <td style="text-align:right">${FP.euro(sum('carburant_ttc'))}</td>
         <td style="text-align:right" class="text-slate-500">${FP.num(Math.round(sum('litres')))} L</td>
         <td style="text-align:right">${FP.euro(sum('boutique_ttc'))}</td>
@@ -1339,6 +1371,9 @@
     }
 
     $('tf-conso-mois').addEventListener('change', renderConso);
+    $('tf-conso-from').addEventListener('change', renderConso);
+    $('tf-conso-to').addEventListener('change', renderConso);
+    $('tf-conso-clear').addEventListener('click', () => { $('tf-conso-from').value = ''; $('tf-conso-to').value = ''; renderConso(); });
     document.querySelector('#tf-conso-table thead th:last-child').style.cursor = 'pointer';
     document.querySelector('#tf-conso-table thead th:last-child').addEventListener('click', () => { consoSortDesc = !consoSortDesc; renderConso(); });
 
@@ -1487,7 +1522,7 @@
         + '<tbody>' + facLines + '</tbody></table></div>') : '';
       const consoBlock = conso.length ? (
         '<div class="text-sm font-semibold mt-4 mb-2">Consommation par conducteur : ' + conso.length + ' carte(s) — ' + FP.euro(sumC('total_ttc')) + ' TTC'
-        + ' <span style="font-weight:400;color:#64748B">· remplace le detail existant du/des mois concerne(s)</span></div>'
+        + ' <span style="font-weight:400;color:#64748B">· s\'ajoute (cumul) au detail existant, sans rien ecraser</span></div>'
         + '<div class="scrollable" style="max-height:240px"><table class="fp-table" style="font-size:13px">'
         + '<thead><tr><th>Conducteur</th><th style="text-align:center">Type</th><th style="text-align:right">Carburant</th><th style="text-align:right">Litres</th><th style="text-align:right">Boutique</th><th style="text-align:right">Peage</th><th style="text-align:right">Total</th></tr></thead>'
         + '<tbody>' + consoLines + '</tbody></table></div>') : '';
@@ -1522,7 +1557,7 @@
         try { await FP.persist.insert('factures', newF); okF++; } catch (e) { console.error('[tf-import facture]', e); }
       }
       for (const c of conso){
-        const row = { id:(c.mois + '-' + c.carte), mois:c.mois, carte:c.carte, conducteur:c.conducteur || null,
+        const row = { id:(c.mois + '-' + c.carte + '-' + c.facNum), mois:c.mois, carte:c.carte, conducteur:c.conducteur || null,
           plaque:c.plaque || null, typeVehicule:c.type_vehicule || null, carburantTtc:c.carburant_ttc,
           litres:c.litres, boutiqueTtc:c.boutique_ttc, lavageTtc:c.lavage_ttc, peageTtc:c.peage_ttc, totalTtc:c.total_ttc };
         try { await FP.persist.upsert('total_conso', row); okC++; } catch (e) { console.error('[tf-import conso]', e); }
@@ -1555,14 +1590,15 @@
           const fromFac = parseFac(text);
           fromRel.concat(fromFac ? [fromFac] : []).forEach(f => { if (f && f.numero && !facBySig.has(f.numero)) { facBySig.set(f.numero, f); used = true; } });
           const mois = (fromFac && fromFac.date) ? fromFac.date.slice(0,7) : (fromRel[0] ? fromRel[0].date.slice(0,7) : null);
+          // facNum = n° de la facture détaillée → sert d'identifiant de contribution
+          // (on ne CUMULE jamais en écrasant : 1 ligne par carte ET par facture).
+          const facNum = fromFac ? fromFac.numero : (file.name.replace(/\W+/g,'').slice(-10));
           if (mois){
             for (const r of parseConso(text)){
               used = true;
-              const key = mois + '|' + r.carte;
-              const agg = consoByKey.get(key) || { mois:mois, carte:r.carte, nom:r.nom, type:r.type, carburant:0, litres:0, boutique:0, peage:0, lavage:0, total:0 };
-              agg.carburant += r.carburant; agg.litres += r.litres; agg.boutique += r.boutique;
-              agg.peage += r.peage; agg.lavage += r.lavage; agg.total += r.total;
-              consoByKey.set(key, agg);
+              const key = mois + '|' + r.carte + '|' + facNum;
+              consoByKey.set(key, { mois:mois, carte:r.carte, nom:r.nom, type:r.type, facNum:facNum,
+                carburant:r.carburant, litres:r.litres, boutique:r.boutique, peage:r.peage, lavage:r.lavage, total:r.total });
             }
           }
           if (!used) failed.push(file.name);
@@ -1576,7 +1612,7 @@
         const pdfNom = a.nom || '';
         const conducteur = ref.conducteur || (isPlaque(pdfNom) ? null : (pdfNom || null));
         const plaque = ref.plaque || (isPlaque(pdfNom) ? pdfNom : null);
-        return { carte:a.carte, mois:a.mois, conducteur:conducteur, plaque:plaque,
+        return { carte:a.carte, mois:a.mois, facNum:a.facNum, conducteur:conducteur, plaque:plaque,
           type_vehicule: ref.type_vehicule || a.type || null,
           carburant_ttc:+a.carburant.toFixed(2), litres:+a.litres.toFixed(2),
           boutique_ttc:+a.boutique.toFixed(2), lavage_ttc:+a.lavage.toFixed(2),
