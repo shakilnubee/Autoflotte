@@ -265,10 +265,11 @@
         <div class="scrollable">
           <table class="fp-table" id="tf-conso-table">
             <thead><tr>
-              <th>Conducteur / Véhicule</th><th style="text-align:center">Type</th>
+              <th>Conducteur / Véhicule</th>
               <th style="text-align:right">Carburant</th><th style="text-align:right">Litres</th>
               <th style="text-align:right">Boutique / Repas</th><th style="text-align:right">Lavage</th>
-              <th style="text-align:right">Péage / Parking</th><th style="text-align:right">Total TTC</th>
+              <th style="text-align:right">Péage / Parking</th>
+              <th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">Total TTC</th>
             </tr></thead>
             <tbody id="tf-conso-tbody"></tbody>
             <tfoot id="tf-conso-tfoot"></tfoot>
@@ -1370,7 +1371,7 @@
 
       // ⚠️ On N'ÉCRASE RIEN : on CUMULE. Plusieurs relevés/factures d'une même
       // période sont additionnés par carte (ou par conducteur si pas de carte).
-      const KNUM = ['carburant_ttc','litres','boutique_ttc','lavage_ttc','peage_ttc','total_ttc'];
+      const KNUM = ['carburant_ttc','litres','boutique_ttc','lavage_ttc','peage_ttc','total_ht','total_tva','total_ttc'];
       const groups = new Map();
       for (const c of src){
         const key = (c.carte && String(c.carte)) || resolveName(c) || c.plaque || c.id;
@@ -1403,22 +1404,25 @@
       const cell = (v) => v ? FP.euro(v) : '<span class="text-slate-300">—</span>';
       tbody.innerHTML = rows.map(c => `<tr>
         <td>${who(c)}</td>
-        <td style="text-align:center" class="text-slate-500">${c.type_vehicule ? esc(c.type_vehicule) : '—'}</td>
         <td style="text-align:right">${cell(c.carburant_ttc)}</td>
         <td style="text-align:right" class="text-slate-500">${c.litres ? FP.num(Math.round(c.litres)) + ' L' : '—'}</td>
         <td style="text-align:right">${cell(c.boutique_ttc)}</td>
         <td style="text-align:right">${cell(c.lavage_ttc)}</td>
         <td style="text-align:right">${cell(c.peage_ttc)}</td>
+        <td style="text-align:right" class="text-slate-500">${cell(c.total_ht)}</td>
+        <td style="text-align:right" class="text-slate-500">${cell(c.total_tva)}</td>
         <td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc)}</td>
       </tr>`).join('');
       const sum = (k) => rows.reduce((s,c) => s + (Number(c[k]) || 0), 0);
       tfoot.innerHTML = `<tr style="border-top:2px solid var(--fp-border);font-weight:700;background:#f8fafc">
-        <td>Total ${esc(label)}</td><td></td>
+        <td>Total ${esc(label)}</td>
         <td style="text-align:right">${FP.euro(sum('carburant_ttc'))}</td>
         <td style="text-align:right" class="text-slate-500">${FP.num(Math.round(sum('litres')))} L</td>
         <td style="text-align:right">${FP.euro(sum('boutique_ttc'))}</td>
         <td style="text-align:right">${FP.euro(sum('lavage_ttc'))}</td>
         <td style="text-align:right">${FP.euro(sum('peage_ttc'))}</td>
+        <td style="text-align:right">${FP.euro(sum('total_ht'))}</td>
+        <td style="text-align:right">${FP.euro(sum('total_tva'))}</td>
         <td style="text-align:right">${FP.euro(sum('total_ttc'))}</td>
       </tr>`;
     }
@@ -1502,14 +1506,14 @@
       const supRe = new RegExp('Total Support (\\d+)(?: \\d+)? (.+?) Type véh\\. (\\d+)\\D{0,30}?(' + DEC + ')\\s+(' + DEC + ')\\s+(' + DEC + ')|Totaal Kaart (\\d+) \\d+ (.+?) (\\d{2}) (' + DEC + ') (' + DEC + ') (' + DEC + ')', 'g');
       const hits = []; let m;
       while ((m = supRe.exec(det))){
-        if (m[1] != null) hits.push({ i:m.index, end:supRe.lastIndex, carte:m[1], nom:m[2].trim(), type:m[3], total:n0(m[6]) });
-        else              hits.push({ i:m.index, end:supRe.lastIndex, carte:m[7], nom:m[8].trim(), type:m[9], total:n0(m[12]) });
+        if (m[1] != null) hits.push({ i:m.index, end:supRe.lastIndex, carte:m[1], nom:m[2].trim(), type:m[3], ht:n0(m[4]), tva:n0(m[5]), total:n0(m[6]) });
+        else              hits.push({ i:m.index, end:supRe.lastIndex, carte:m[7], nom:m[8].trim(), type:m[9], ht:n0(m[10]), tva:n0(m[11]), total:n0(m[12]) });
       }
       const grpRe = new RegExp('((?:(?:' + CAT_LABELS + ')\\s*)+)((?:(?:' + DEC + '|\\d+)\\s*)+)');
       const rows = []; let prev = 0;
       for (const h of hits){
         const block = det.slice(prev, h.i); prev = h.end;
-        const r = { carte:h.carte, nom:h.nom, type:h.type, carburant:0, litres:0, boutique:0, peage:0, lavage:0, total:h.total };
+        const r = { carte:h.carte, nom:h.nom, type:h.type, carburant:0, litres:0, boutique:0, peage:0, lavage:0, total:h.total, ht:h.ht, tva:h.tva };
         const g = block.match(grpRe);
         if (g){
           const order = []; let lm; const lre = new RegExp(CAT_LABELS, 'g');
@@ -1612,7 +1616,8 @@
       for (const c of conso){
         const row = { id:(c.mois + '-' + c.carte + '-' + c.facNum), mois:c.mois, carte:c.carte, conducteur:c.conducteur || null,
           plaque:c.plaque || null, typeVehicule:c.type_vehicule || null, carburantTtc:c.carburant_ttc,
-          litres:c.litres, boutiqueTtc:c.boutique_ttc, lavageTtc:c.lavage_ttc, peageTtc:c.peage_ttc, totalTtc:c.total_ttc };
+          litres:c.litres, boutiqueTtc:c.boutique_ttc, lavageTtc:c.lavage_ttc, peageTtc:c.peage_ttc,
+          totalHt:c.total_ht, totalTva:c.total_tva, totalTtc:c.total_ttc };
         try { await FP.persist.upsert('total_conso', row); okC++; } catch (e) { console.error('[tf-import conso]', e); }
       }
       $('tf-import-preview').classList.add('hidden');
@@ -1651,7 +1656,7 @@
               used = true;
               const key = mois + '|' + r.carte + '|' + facNum;
               consoByKey.set(key, { mois:mois, carte:r.carte, nom:r.nom, type:r.type, facNum:facNum,
-                carburant:r.carburant, litres:r.litres, boutique:r.boutique, peage:r.peage, lavage:r.lavage, total:r.total });
+                carburant:r.carburant, litres:r.litres, boutique:r.boutique, peage:r.peage, lavage:r.lavage, total:r.total, ht:r.ht, tva:r.tva });
             }
           }
           if (!used) failed.push(file.name);
@@ -1669,7 +1674,7 @@
           type_vehicule: ref.type_vehicule || a.type || null,
           carburant_ttc:+a.carburant.toFixed(2), litres:+a.litres.toFixed(2),
           boutique_ttc:+a.boutique.toFixed(2), lavage_ttc:+a.lavage.toFixed(2),
-          peage_ttc:+a.peage.toFixed(2), total_ttc:+a.total.toFixed(2),
+          peage_ttc:+a.peage.toFixed(2), total_ht:+(a.ht||0).toFixed(2), total_tva:+(a.tva||0).toFixed(2), total_ttc:+a.total.toFixed(2),
           isNew: !cardMap[String(a.carte)] };
       }).sort((x,y)=> (y.total_ttc - x.total_ttc));
 
