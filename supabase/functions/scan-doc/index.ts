@@ -10,7 +10,7 @@
 // ============================================================
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-haiku-4-5";
+const MODEL = "claude-sonnet-4-6"; // lecture d'image plus fine (documents difficiles)
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -24,7 +24,7 @@ function json(body, status) {
 }
 function buildPrompt() {
   return [
-    "Lis attentivement ce document de gestion de flotte (facture, permis de conduire, carte identite, carte grise, assurance, controle technique, etc.).",
+    "Lis attentivement ce document de gestion de flotte (facture, permis de conduire, carte identite, carte grise, assurance, controle technique, etc.). Le document peut etre incline ou de travers : redresse-le mentalement.",
     "Identifie son type puis extrais les infos. Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour, avec ces cles (mets null si l info est absente) :",
     "docType : un parmi facture, sinistre, permis, carte-identite, carte-grise, assurance, controle-technique, autre.",
     "date : date principale du document au format AAAA-MM-JJ (pour une facture, la date d emission).",
@@ -32,11 +32,11 @@ function buildPrompt() {
     "numeroFacture, vehiculeImmat (plaque francaise AB-123-CD), km (entier sans espaces).",
     "montantHT, montantTVA, montantTTC (nombres a point decimal).",
     "description : courte, max 80 caracteres.",
-    "permisNumero : numero du permis (rubrique 5). permisType : categories (ex B). permisObtention : date de delivrance rubrique 4a (AAAA-MM-JJ). permisExpiration : date de fin de validite rubrique 4b (AAAA-MM-JJ).",
+    "permisNumero : numero du permis (rubrique 5). permisType : categories (ex B). permisObtention : date rubrique 4a (AAAA-MM-JJ). permisExpiration : date rubrique 4b au RECTO uniquement (AAAA-MM-JJ) - n utilise jamais les dates par categorie du verso.",
     "idNumero (numero de carte identite ou titre de sejour), idExpiration (AAAA-MM-JJ).",
     "personne : nom complet de la personne sur le document (permis, carte identite), sinon null.",
-    "REGLES DATES : les dates chiffrees sont au format europeen jour/mois/annee. Ex 05/03/2030 = 5 mars 2030 = 2030-03-05 (n inverse JAMAIS le jour et le mois). Convertis aussi les dates en lettres (12 juin 2026 = 2026-06-12).",
-    "IMPORTANT : ne devine jamais. Si tu n es pas certain d une valeur, surtout une date, mets null plutot qu une valeur approximative. Verifie chaque date avant de repondre.",
+    "REGLES DATES : format europeen jour/mois/annee. Ex 11.03.2030 = 11 mars 2030 = 2030-03-11 (n inverse JAMAIS le jour et le mois). Convertis aussi les dates en lettres.",
+    "IMPORTANT : ne devine JAMAIS et n invente JAMAIS. Si tu ne lis pas clairement une valeur, surtout une date, mets null. Ne mets jamais la date du jour. Verifie chaque date avant de repondre.",
     "Montants sans symbole euro ni separateur de milliers (ex 1466.48).",
   ].join("\n");
 }
