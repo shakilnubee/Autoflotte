@@ -24,18 +24,20 @@ function json(body, status) {
 }
 function buildPrompt() {
   return [
-    "Lis ce document de gestion de flotte (facture, permis de conduire, carte identite, carte grise, assurance, controle technique, etc.).",
+    "Lis attentivement ce document de gestion de flotte (facture, permis de conduire, carte identite, carte grise, assurance, controle technique, etc.).",
     "Identifie son type puis extrais les infos. Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour, avec ces cles (mets null si l info est absente) :",
     "docType : un parmi facture, sinistre, permis, carte-identite, carte-grise, assurance, controle-technique, autre.",
     "date : date principale du document au format AAAA-MM-JJ (pour une facture, la date d emission).",
-    "fournisseur : pour une facture, nom de la societe qui EMET la facture (souvent en haut avec un SIREN ou SIRET). ATTENTION ce n est PAS le client : le client est TJMAX, ne mets jamais TJMAX.",
+    "fournisseur : pour une facture, nom de la societe qui EMET la facture (souvent en haut avec un SIREN ou SIRET). Ce n est PAS le client TJMAX.",
     "numeroFacture, vehiculeImmat (plaque francaise AB-123-CD), km (entier sans espaces).",
     "montantHT, montantTVA, montantTTC (nombres a point decimal).",
     "description : courte, max 80 caracteres.",
-    "permisNumero, permisType (ex B), permisObtention (AAAA-MM-JJ), permisExpiration (AAAA-MM-JJ).",
+    "permisNumero : numero du permis (rubrique 5). permisType : categories (ex B). permisObtention : date de delivrance rubrique 4a (AAAA-MM-JJ). permisExpiration : date de fin de validite rubrique 4b (AAAA-MM-JJ).",
     "idNumero (numero de carte identite ou titre de sejour), idExpiration (AAAA-MM-JJ).",
     "personne : nom complet de la personne sur le document (permis, carte identite), sinon null.",
-    "Convertis les dates en lettres (ex 12 juin 2026 donne 2026-06-12). Montants sans symbole euro ni separateur de milliers (ex 1466.48).",
+    "REGLES DATES : les dates chiffrees sont au format europeen jour/mois/annee. Ex 05/03/2030 = 5 mars 2030 = 2030-03-05 (n inverse JAMAIS le jour et le mois). Convertis aussi les dates en lettres (12 juin 2026 = 2026-06-12).",
+    "IMPORTANT : ne devine jamais. Si tu n es pas certain d une valeur, surtout une date, mets null plutot qu une valeur approximative. Verifie chaque date avant de repondre.",
+    "Montants sans symbole euro ni separateur de milliers (ex 1466.48).",
   ].join("\n");
 }
 function extractJson(text) {
