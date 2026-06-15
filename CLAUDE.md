@@ -115,7 +115,7 @@ git push              # Netlify redéploie automatiquement
 
 - [ ] Brancher Netlify à GitHub pour auto-déploiement (Site settings → Build & deploy → Link to GitHub)
 - [ ] Créer compte utilisateur Supabase (Auth → Add user → Auto Confirm User)
-- [ ] Activer RLS (Row Level Security) sur les tables Supabase
+- [x] Activer RLS (Row Level Security) sur les tables Supabase — ✅ confirmé le 2026-06-15 : `rowsecurity = true` sur les 9 tables + policies `tenant_*` (isolation par société) sur vehicules, amendes, factures, conducteurs, documents, emprunts, total_conso, app_settings + `profiles_self_read`. (Reste recommandé : test réel avec un compte client `is_admin=false`.)
 - [ ] Phase 3 : activer les écritures Supabase pour les mutations (drawer, bulk actions)
 - [ ] Phase 4 : page "Espace salarié"
 - [ ] Acheter domaine personnalisé (.fr ou .com) via OVH/Gandi
