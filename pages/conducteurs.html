@@ -833,6 +833,7 @@
     items.forEach(d => {
       if (d.vehicules.length + d.amendes.length > 0) upsertCond(d.key, { masque: true, manuel: false, name: condRow(d.key) ? condRow(d.key).name : d.name });
       else deleteCondRow(d.key);
+      unassignVehiclesOf(d.key); // ← retire aussi le conducteur de son/ses véhicule(s)
     });
     state.selected.clear();
     drivers = buildDrivers();
@@ -992,6 +993,19 @@
 
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
 
+  // Retire un conducteur de tous ses véhicules (vide le champ « chauffeur ») + enregistre.
+  function unassignVehiclesOf(key) {
+    let n = 0;
+    (window.FP_DATA.vehicules || []).forEach(v => {
+      if (v.chauffeur && normPrenom(v.chauffeur) === key) {
+        v.chauffeur = '';
+        if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.update('vehicules', v.id, { chauffeur: '' });
+        n++;
+      }
+    });
+    return n;
+  }
+
   function deleteDriver(key) {
     const d = drivers.find(x => x.key === key);
     if (!d) return;
@@ -1000,9 +1014,10 @@
       if (!confirm(`Supprimer le conducteur « ${d.name} » ?`)) return;
       deleteCondRow(key);
     } else {
-      if (!confirm(`« ${d.name} » est lié à ${d.vehicules.length} véhicule(s) et ${d.amendes.length} amende(s).\n\nLe retirer de la liste des conducteurs ?\n(Les véhicules et amendes ne sont PAS supprimés.)`)) return;
+      if (!confirm(`« ${d.name} » est lié à ${d.vehicules.length} véhicule(s) et ${d.amendes.length} amende(s).\n\nLe retirer de la liste des conducteurs et de son/ses véhicule(s) ?\n(Les véhicules et amendes ne sont PAS supprimés, juste désassociés.)`)) return;
       upsertCond(key, { masque: true, manuel: false, name: (condRow(key) && condRow(key).name) || d.name });
     }
+    unassignVehiclesOf(key); // ← retire le conducteur de son/ses véhicule(s)
     drivers = buildDrivers();
     closeDrawer();
     renderKPIs();
@@ -1457,6 +1472,15 @@
     const cv = await srcToCanvas(blob, 3);
     return ocrCanvas(killPink(cv, 125));
   }
+  // Garde-fou : la date d'obtention du permis doit être bien postérieure à la naissance
+  // (sinon l'IA/OCR a confondu avec la rubrique 3). On exige au moins 15 ans d'écart.
+  function permisObtentionPlausible(obtention, dateNaissance) {
+    if (!obtention) return true;
+    const o = new Date(obtention); if (isNaN(o)) return false;
+    if (dateNaissance) { const n = new Date(dateNaissance); if (!isNaN(n) && ((o - n) / 31557600000) < 15) return false; }
+    return true;
+  }
+
   // Bouton "Relire" : relit le scan stocké et met à jour les champs trouvés
   async function rereadPermis(url, k) {
     const lbl = { permisType: 'type', permisNumero: 'numéro', permisObtention: "date d'obtention", permisExpiration: "date d'expiration" };
@@ -1464,6 +1488,8 @@
     try {
       setStatus('🔍 Relecture du permis par l\'IA… (quelques secondes)', 'background:#F1F5F9;color:#475569;');
       const parsed = await rereadPermisFromUrl(url);
+      const drv = drivers.find(x => x.key === k) || {};
+      if (parsed && parsed.obtention && !permisObtentionPlausible(parsed.obtention, drv.dateNaissance)) parsed.obtention = ''; // rejette la date de naissance
       const changes = {};
       ['type', 'numero', 'obtention', 'expiration'].forEach(f => {
         const map = { type: 'permisType', numero: 'permisNumero', obtention: 'permisObtention', expiration: 'permisExpiration' };
@@ -1502,6 +1528,7 @@
       let parsed = null;
       try { parsed = await rereadPermisFromUrl(r.permisUrl); } catch (e) { console.warn('[reread]', r.key, e); }
       if (!parsed) continue;
+      if (parsed.obtention && !permisObtentionPlausible(parsed.obtention, r.dateNaissance)) parsed.obtention = ''; // rejette la date de naissance
       const map = { obtention: 'permisObtention', expiration: 'permisExpiration', type: 'permisType', numero: 'permisNumero' };
       const changes = {};
       ['obtention', 'expiration', 'type', 'numero'].forEach(f => {
