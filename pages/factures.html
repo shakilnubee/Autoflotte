@@ -2091,11 +2091,14 @@
       const mNum = t.match(/Facture\s*n[°ºo]\s*([A-Z]{1,3}\d{6,})/i);
       const mEm  = t.match(/[ÉE]mise?\s*le\s*(\d{2})\/(\d{2})\/(\d{4})/i);
       const numero = mNum ? mNum[1] : null;
-      const date = mEm ? `${mEm[3]}-${mEm[2]}-${mEm[1]}` : '';
+      const emise = mEm ? `${mEm[3]}-${mEm[2]}-${mEm[1]}` : '';
       let mois = '';
       const mPer = t.match(/Facture\s+(?:de|d['’])\s*([a-zA-ZéèûôA-ZÀ-Ý]+)\s*(\d{4})/);
       if (mPer){ const mm = MOIS_FR[ulsNorm(mPer[1])]; if (mm) mois = mPer[2] + '-' + mm; }
-      if (!mois && date){ const d = new Date(date); d.setMonth(d.getMonth()-1); mois = d.toISOString().slice(0,7); }
+      if (!mois && emise){ const d = new Date(emise); d.setMonth(d.getMonth()-1); mois = d.toISOString().slice(0,7); }
+      // Date de la facture = 1er jour de la PÉRIODE (ex. janvier = 2026-01-01), pas la date d'émission
+      // (sinon la facture « de janvier » s'afficherait en février → confusion de mois).
+      const date = mois ? (mois + '-01') : emise;
       // Montants : nombres après "NET A PAYER TTC" jusqu'au premier € → dernier = TTC, somme des autres = TVA
       let ht=null, tva=null, ttc=null;
       const seg = (t.split(/NET\s*A\s*PAYER\s*TTC/i)[1]||'').split('€')[0];
