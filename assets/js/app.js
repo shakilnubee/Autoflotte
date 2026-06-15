@@ -125,17 +125,19 @@ FP.tvsCo2 = (co2) => {
   }
   return Math.round(total);
 };
-// Taxe annuelle sur les émissions de polluants atmosphériques — barème OFFICIEL 2026 :
-//  - Électrique / hydrogène (Crit'Air E) : 0 €
-//  - Catégorie 1 (essence/hybride/diesel Euro 5-6, Crit'Air 1) : 130 €
-//  - Véhicules les plus polluants (Crit'Air 2 et +, non classés) : 650 €
-// On applique 130 € par défaut (flotte récente) : la donnée Crit'Air dispo ne distingue pas
-// la catégorie (juste "oui"), et les véhicules à 650 € (anciens) sont rares en flotte gérée.
-// (Passe à 160 € / 800 € en 2027.)
-FP.tvsPolluant = (carburant) => {
+// Taxe annuelle sur les émissions de polluants atmosphériques — barème OFFICIEL 2026
+// (source : entreprendre.service-public.gouv.fr/vosdroits/F22203) :
+//  - Catégorie E : électrique / hydrogène → 0 €
+//  - Catégorie 1 : essence, hybride, gaz conformes Euro 5/6 (1re immat ≳ 2011) → 130 €
+//  - « Les plus polluants » : tout le reste (TOUS les diesels, essence/hybride antérieurs) → 650 €
+// (Passe à 160 € / 800 € en 2027.) `anneeImmat` = année de 1re mise en circulation si connue.
+FP.tvsPolluant = (carburant, anneeImmat) => {
   const c = (carburant || '').toLowerCase();
-  if (/lectri|hydrog/.test(c)) return 0;
-  return 130;
+  if (/lectri|hydrog/.test(c)) return 0;                 // Catégorie E
+  if (/diesel|gazole|gas-?oil/.test(c)) return 650;      // diesel : jamais Crit'Air 1 → catégorie la + chère
+  const y = Number(anneeImmat);
+  if (Number.isFinite(y) && y > 0 && y < 2011) return 650; // essence/hybride/gaz d'avant Euro 5
+  return 130;                                            // essence/hybride/gaz Euro 5/6 (ou année inconnue → flotte récente)
 };
 // Détail TVS d'un véhicule : { applicable, raison?, co2, polluant, total, ... }
 FP.tvsDetail = (v) => {
@@ -143,7 +145,7 @@ FP.tvsDetail = (v) => {
   const carb = v.carburant || '';
   if (/moto/.test(cat)) return { applicable: false, raison: 'Moto — non soumise' };
   if (/utilit|engin/.test(cat)) return { applicable: false, raison: 'Utilitaire — non soumis' };
-  const polluant = FP.tvsPolluant(carb);
+  const polluant = FP.tvsPolluant(carb, (v.dateMiseEnCirculation || v.dateImmat || '').slice(0, 4));
   if (/lectri|hydrog/i.test(carb)) return { applicable: true, elec: true, co2: 0, polluant: 0, total: 0 };
   const co2 = Number(v.co2);
   if (!Number.isFinite(co2) || co2 <= 0) return { applicable: true, co2Manquant: true, co2: null, polluant, total: null };
