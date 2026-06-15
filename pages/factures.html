@@ -416,7 +416,7 @@
           </span>
           <span class="flex-1">
             <span class="block text-sm font-semibold text-slate-800">Lire le PDF de la facture</span>
-            <span class="block text-xs text-slate-500">Le PDF n'est pas conservé — seuls les montants sont récupérés pour les calculs</span>
+            <span class="block text-xs text-slate-500">Le PDF est lu par l'IA et conservé en ligne (consultable depuis la fiche)</span>
           </span>
         </button>
         <div id="fa-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
@@ -942,23 +942,34 @@
     return 'FA-' + String(max + 1).padStart(4, '0');
   }
   let _faFileName = '';
+  let _faFile = null; // le fichier importé, conservé pour le stocker en ligne à l'enregistrement
   function openFactureModal(){
     ['fa-fournisseur','fa-num','fa-ht','fa-tva','fa-ttc','fa-immat','fa-km','fa-desc'].forEach(id => $(id).value = '');
     $('fa-date').value = new Date().toISOString().slice(0,10);
     $('fa-type').value = 'entretien';
-    _faFileName = '';
+    _faFileName = ''; _faFile = null;
     const st = $('fa-status'); st.classList.add('hidden'); st.innerHTML = '';
     $('facture-modal').classList.add('open');
     lucide.createIcons();
   }
   function closeFactureModal(){ $('facture-modal').classList.remove('open'); }
-  function saveFacture(ev){
+  async function saveFacture(ev){
     ev.preventDefault();
     // Normalise « 1 466,48 » / « 1466.48 » → 1466.48
     const num = (n) => { const v = parseFloat(String(n == null ? '' : n).replace(/\s/g, '').replace(',', '.')); return isNaN(v) ? null : v; };
     const ttc = num($('fa-ttc').value);
     if (ttc == null || ttc <= 0){ $('fa-ttc').focus(); faStatus('Indiquez au moins le montant TTC (il sert aux calculs).', 'error'); return; }
     const date = $('fa-date').value || new Date().toISOString().slice(0,10);
+    // Conserve le PDF en ligne (consultable + relisable plus tard par l'IA).
+    let fileId = 'IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+    let fileName = _faFileName || null;
+    if (_faFile && FP.uploadScan) {
+      try {
+        faWorking('Enregistrement du document en ligne…');
+        const url = await FP.uploadScan(_faFile, 'factures');
+        if (url) { fileId = url; fileName = _faFile.name; }
+      } catch (e) { console.warn('[facture upload]', e); }
+    }
     const newF = {
       id: nextFactId(), date,
       vehiculeImmat: $('fa-immat').value.trim().toUpperCase() || null,
@@ -968,8 +979,8 @@
       type: $('fa-type').value || 'autre',
       montantHT: num($('fa-ht').value), montantTVA: num($('fa-tva').value), montantTTC: ttc,
       km: num($('fa-km').value),
-      fileId: 'IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
-      fileName: _faFileName || null,
+      fileId,
+      fileName,
     };
     if (FP.history && FP.history.commit) FP.history.commit();
     data.factures.push(newF);
@@ -1017,7 +1028,7 @@
   $('facture-modal').addEventListener('click', (e) => { if (e.target.id === 'facture-modal') closeFactureModal(); });
   $('facture-form').addEventListener('submit', saveFacture);
   $('fa-trigger').addEventListener('click', () => $('fa-file').click());
-  $('fa-file').addEventListener('change', (e) => { const file = e.target.files && e.target.files[0]; _faFileName = file ? file.name : ''; handleFacture(file); e.target.value = ''; });
+  $('fa-file').addEventListener('change', (e) => { const file = e.target.files && e.target.files[0]; _faFileName = file ? file.name : ''; _faFile = file || null; handleFacture(file); e.target.value = ''; });
 
   // ---- Autocomplete maison (fournisseur + plaque), stylé « à notre sauce » ----
   function setupAutocomplete(input, optionsFn){
