@@ -789,12 +789,16 @@
     return list;
   }
 
-  function builtinDocRowHTML(doc){
+  function builtinDocRowHTML(doc, vehId){
     const t = DOC_TYPES.find(x => x.key === doc.type) || DOC_TYPES[DOC_TYPES.length - 1];
     // Document stocké dans Supabase (lien direct) ou ancien lien Google Drive
     const viewBtn = doc.url
       ? `<a href="${escapeHtml(sanitizeUrl(doc.url))}" target="_blank" rel="noopener" class="btn btn-outline !py-1 !px-2.5 text-xs"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</a>`
       : `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-view="${escapeHtml(doc.drive)}" data-doc-title="${escapeHtml(doc.label)}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`;
+    // La carte grise « lien Drive » est supprimable (utile si un doublon apparaît après un scan)
+    const delBtn = (doc.type === 'carte-grise' && vehId)
+      ? `<button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-cg-del="${escapeHtml(vehId)}" title="Retirer la carte grise (lien Drive)"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>`
+      : '';
     return `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm">
       <i data-lucide="${t.icon}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
       <div class="flex-1 min-w-0">
@@ -802,6 +806,7 @@
         <div class="text-xs text-slate-500">${t.label}${doc.url ? '' : ' · Google Drive'}</div>
       </div>
       ${viewBtn}
+      ${delBtn}
     </div>`;
   }
 
@@ -833,7 +838,7 @@
     const builtin = builtinDocs(v);
     const docs = getVehDocs(v.id);
     const typeOptions = DOC_TYPES.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
-    const builtinRows = builtin.map(builtinDocRowHTML).join('');
+    const builtinRows = builtin.map(d => builtinDocRowHTML(d, v.id)).join('');
     const linkRows = docs.length ? docs.map(docRowHTML).join('') : '';
     const rows = (builtinRows + linkRows) || '<p class="text-sm text-slate-500">Aucun document pour le moment.</p>';
     const count = builtin.length + docs.length;
@@ -1206,20 +1211,22 @@
   // ---------- KPIs + compteurs onglets ----------
   function renderKPIs() {
     // KPIs : sur le scope filtré (onglet groupe actif)
+    // Flotte ACTIVE = hors véhicules vendus (archivés ; consultables via le filtre "Vendus")
+    const active = data.vehicules.filter(v => v.statut !== 'vendu');
     const scope = state.groupe === 'all'
-      ? data.vehicules
-      : data.vehicules.filter(v => FP.vehGroupes(v).includes(state.groupe));
+      ? active
+      : active.filter(v => FP.vehGroupes(v).includes(state.groupe));
 
     $('kpi-total').textContent       = scope.length;
     $('kpi-actifs').textContent      = scope.filter(v => v.statut === 'actif').length;
     $('kpi-entretien').textContent   = scope.filter(v => v.statut === 'entretien').length;
 
-    // Compteurs des onglets (toujours sur le total — un véhicule dans 2 groupes compte dans les 2)
+    // Compteurs des onglets (sur la flotte active, hors vendus — un véhicule dans 2 groupes compte dans les 2)
     const cntAll = document.getElementById('cnt-all');
-    if (cntAll) cntAll.textContent = data.vehicules.length;
+    if (cntAll) cntAll.textContent = active.length;
     FP.groupeKeys().forEach(k => {
       const el = document.getElementById('cnt-' + k);
-      if (el) el.textContent = data.vehicules.filter(v => FP.vehGroupes(v).includes(k)).length;
+      if (el) el.textContent = active.filter(v => FP.vehGroupes(v).includes(k)).length;
     });
   }
 
@@ -1228,7 +1235,9 @@
     const q = FP.norm(state.search).trim();
     const filteredList = data.vehicules.filter(v => {
       if (state.groupe !== 'all' && !FP.vehGroupes(v).includes(state.groupe)) return false;
-      if (state.statut !== 'all' && v.statut !== state.statut) return false;
+      // Véhicules VENDUS masqués par défaut (archivés) ; visibles seulement via le filtre "Vendus"
+      if (state.statut === 'all') { if (v.statut === 'vendu') return false; }
+      else if (v.statut !== state.statut) return false;
       if (state.categorie !== 'all' && v.categorie !== state.categorie) return false;
       if (q && !(FP.norm(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`).includes(q))) return false;
       return true;
@@ -1301,7 +1310,7 @@
       }).join('');
     }
 
-    $('result-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} affiché${rows.length > 1 ? 's' : ''} sur ${data.vehicules.length}`;
+    $('result-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} affiché${rows.length > 1 ? 's' : ''} sur ${data.vehicules.filter(v => v.statut !== 'vendu').length}`;
 
     // Synchroniser l'état du "tout sélectionner" pour la vue actuelle
     const visibleIds = rows.map(r => r.id);
@@ -2426,6 +2435,16 @@
     const del = e.target.closest('[data-doc-del]');
     if (del) {
       delVehDoc(state.editingId, del.dataset.docDel);
+      return;
+    }
+    const cgDel = e.target.closest('[data-cg-del]');
+    if (cgDel) {
+      const v = data.vehicules.find(x => x.id === state.editingId);
+      if (v && confirm('Retirer la carte grise (lien Drive) de cette fiche ?\n(Le document scanné/importé, lui, n\'est pas touché.)')) {
+        v.cgUrl = null; v.cgFileId = null;
+        persistVehFields(v, 'cgUrl');
+        openDrawer(v.id);
+      }
       return;
     }
     if (e.target.closest('#doc-add')) {
