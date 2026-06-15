@@ -32,6 +32,7 @@ function buildPrompt() {
     "numeroFacture, vehiculeImmat (plaque francaise AB-123-CD), km (entier sans espaces).",
     "montantHT, montantTVA, montantTTC (nombres a point decimal).",
     "description : courte, max 80 caracteres.",
+    "AMENDE ou PV : motif (ex Exces de vitesse, Stationnement, Feu rouge, Telephone au volant, Ceinture), points (nombre de points retires, entier ; 0 pour stationnement), numeroAvis (numero de l avis de contravention). Pour une amende : date = date de l infraction, montantTTC = montant a payer (le montant minore s il existe), vehiculeImmat = la plaque.",
     "PERMIS - distingue bien les rubriques numerotees : rubrique 3 = DATE DE NAISSANCE (ne l utilise JAMAIS comme date du permis). rubrique 4a = date de delivrance du permis = permisObtention. rubrique 4b = date d expiration = permisExpiration. rubrique 5 = numero du permis = permisNumero. rubrique 9 = categories = permisType.",
     "permisNumero : RUBRIQUE 5 uniquement (ex 16AQ28381, 9 a 12 caracteres). N utilise JAMAIS la longue ligne tout en bas (zone machine qui commence par D1FRA).",
     "permisObtention (4a) est toujours bien POSTERIEURE a la date de naissance (4a apres la rubrique 3). Si la date que tu allais mettre en permisObtention est egale ou proche de la rubrique 3, c est une erreur : reprends la 4a, ou mets null. permisExpiration = 4b du RECTO uniquement (jamais les dates par categorie du verso).",

@@ -1532,6 +1532,21 @@
         parsed = parseAvis(data.text);
       }
 
+      // Lecture IA (Sonnet) en complément : remplit les champs que l'OCR a ratés
+      // (date, montant, motif, points, plaque, n° d'avis). On GARDE l'OCR pour le
+      // n° de télépaiement / la clé / la majoration (formats précis, critiques pour payer).
+      try {
+        const ia = await FP.scanIA(file, 'amende');
+        if (ia) {
+          if (!parsed.date && ia.date) parsed.date = ia.date;
+          if (!parsed.motif && ia.motif) parsed.motif = ia.motif;
+          if ((parsed.points == null) && ia.points != null) parsed.points = ia.points;
+          if (!parsed.immat && ia.vehiculeImmat) parsed.immat = ia.vehiculeImmat;
+          if (!parsed.numeroAvis && ia.numeroAvis) parsed.numeroAvis = ia.numeroAvis;
+          if (!parsed.isMajoration && !parsed.montant && ia.montantTTC != null) parsed.montant = ia.montantTTC;
+        }
+      } catch (e) { console.warn('[amende IA]', e); }
+
       const filled = [];
       // Conducteur : on déduit le chauffeur via la plaque ↔ véhicule
       if (parsed.immat) {
