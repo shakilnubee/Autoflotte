@@ -137,6 +137,7 @@
       <button id="tab-btn-factures" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">Factures</button>
       <button id="tab-btn-documents" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Documents <span style="font-size:11px;font-weight:600">· archives & suivi</span></button>
       <button id="tab-btn-total" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Total Fleet <span style="font-size:11px;font-weight:600">· carburant & péages</span></button>
+      <button id="tab-btn-ulys" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Ulys <span style="font-size:11px;font-weight:600">· péages</span></button>
       <button id="tab-btn-fourn" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Fournisseurs</button>
     </div>
 
@@ -366,6 +367,58 @@
 
     </div>
 
+    <!-- ===== Vue ULYS (péages) — même mise en forme que Total Fleet ===== -->
+    <div id="view-ulys" class="hidden">
+      <!-- KPIs -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="kpi"><div class="kpi-label">Total péages (TTC)</div><div class="kpi-value" id="uls-kpi-ttc">—</div><div class="kpi-delta" id="uls-kpi-sub">—</div></div>
+        <div class="kpi"><div class="kpi-label">Total HT</div><div class="kpi-value" id="uls-kpi-ht">—</div><div class="kpi-delta">hors taxe</div></div>
+        <div class="kpi"><div class="kpi-label">TVA</div><div class="kpi-value" id="uls-kpi-tva">—</div><div class="kpi-delta">récupérable</div></div>
+        <div class="kpi"><div class="kpi-label">Nb factures</div><div class="kpi-value" id="uls-kpi-count">—</div><div class="kpi-delta">filtre actif</div></div>
+      </div>
+
+      <!-- Filtres -->
+      <div class="card p-4 mb-6">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="relative flex-1 min-w-[220px]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="uls-search" type="text" placeholder="N° facture, description…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+          </div>
+          <select id="uls-filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Toutes années</option></select>
+        </div>
+      </div>
+
+      <!-- Import facture Ulys -->
+      <div class="card p-4 mb-6">
+        <button type="button" id="uls-import-trigger" class="w-full flex items-center gap-3 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
+          <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
+            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+          </span>
+          <span class="flex-1">
+            <span class="block text-sm font-semibold text-slate-800">Importer une facture Ulys (PDF / photo)</span>
+            <span class="block text-xs text-slate-500">Les montants sont lus automatiquement. Mets le fournisseur « Ulys » → la facture apparaît ici.</span>
+          </span>
+        </button>
+      </div>
+
+      <!-- Table -->
+      <div class="card overflow-hidden">
+        <div class="scrollable">
+          <table class="fp-table" id="uls-table">
+            <thead><tr><th>Date</th><th>N° facture</th><th>Désignation</th><th>Fournisseur</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th><th></th></tr></thead>
+            <tbody id="uls-tbody"></tbody>
+          </table>
+        </div>
+        <div id="uls-empty" class="hidden p-12 text-center">
+          <i data-lucide="route" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+          <p class="text-slate-500 text-sm">Aucune facture Ulys pour le moment.</p>
+          <p class="text-slate-400 text-xs mt-1">Importe tes factures de péage Ulys — elles s'afficheront ici.</p>
+        </div>
+      </div>
+      <div id="uls-more" class="mt-3 text-center"></div>
+      <p class="text-xs text-slate-500 mt-4">Factures <b>Ulys</b> (péages VINCI Autoroutes). Même présentation que Total Fleet.</p>
+    </div>
+
     <!-- ===== Vue FOURNISSEURS (nettoyage des doublons) ===== -->
     <div id="view-fourn" class="hidden">
       <div class="card p-4 mb-6">
@@ -504,12 +557,15 @@
   // Les sinistres ont leur propre page ; le leasing aussi (contrats) → on les sort de la liste Factures
   // Le carburant / péages TotalEnergies a son propre onglet « Total Fleet » → on les sort aussi de la liste.
   const _norm = (s) => (s == null ? '' : s.toString()).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  // Péages Ulys (VINCI Autoroutes) : onglet dédié → identifiés par le fournisseur (ou type 'ulys').
+  const isUlys = (f) => _norm(f.type) === 'ulys' || /\bulys\b/.test(_norm(f.fournisseur));
   const isTotalFleet = (f) => {
+    if (isUlys(f)) return false; // Ulys a son propre onglet (ne pas compter dans Total Fleet)
     const t = _norm(f.type);
     if (t === 'carburant' || t === 'peage') return true;
     return /total\s*energies|totalenergies/.test(_norm(f.fournisseur));
   };
-  const factures = (data.factures || []).filter(f => f.type !== 'leasing' && f.type !== 'sinistre' && !isTotalFleet(f));
+  const factures = (data.factures || []).filter(f => f.type !== 'leasing' && f.type !== 'sinistre' && !isTotalFleet(f) && !isUlys(f));
   const state = { search: '', type: 'all', annee: 'all', mois: 'all', vehicule: 'all', fournisseur: 'all', currentId: null };
   const $ = (id) => document.getElementById(id);
 
@@ -1222,18 +1278,22 @@
       $('view-factures').classList.toggle('hidden', name !== 'factures');
       $('view-documents').classList.toggle('hidden', name !== 'documents');
       $('view-total').classList.toggle('hidden', name !== 'total');
+      $('view-ulys').classList.toggle('hidden', name !== 'ulys');
       $('view-fourn').classList.toggle('hidden', name !== 'fournisseurs');
       styleTab($('tab-btn-factures'), name === 'factures');
       styleTab($('tab-btn-documents'), name === 'documents');
       styleTab($('tab-btn-total'), name === 'total');
+      styleTab($('tab-btn-ulys'), name === 'ulys');
       styleTab($('tab-btn-fourn'), name === 'fournisseurs');
       if (name === 'documents' && !loaded) loadDocs();
       if (name === 'total' && window.renderTotalFleet) window.renderTotalFleet();
+      if (name === 'ulys' && window.renderUlys) window.renderUlys();
       if (name === 'fournisseurs' && window.renderFournisseurs) window.renderFournisseurs();
     }
     $('tab-btn-factures').addEventListener('click', () => switchTab('factures'));
     $('tab-btn-documents').addEventListener('click', () => switchTab('documents'));
     $('tab-btn-total').addEventListener('click', () => switchTab('total'));
+    $('tab-btn-ulys').addEventListener('click', () => switchTab('ulys'));
     $('tab-btn-fourn').addEventListener('click', () => switchTab('fournisseurs'));
 
     async function loadDocs(){
@@ -1937,6 +1997,99 @@
     $('tf-import-trigger').addEventListener('click', () => $('tf-import-file').click());
     $('tf-import-file').addEventListener('change', (e) => { handleReleves(e.target.files); e.target.value = ''; });
 
+  })();
+
+  // ===== Onglet ULYS (péages VINCI) — même présentation que Total Fleet =====
+  (function ulysTab(){
+    const ust = { search: '', annee: 'all', expanded: false };
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+    const list = () => (window.FP_DATA.factures || []).filter(isUlys);
+
+    function render(){
+      const all = list();
+      const annees = [...new Set(all.map(f => (f.date || '').slice(0,4)).filter(Boolean))].sort().reverse();
+      const sel = $('uls-filter-annee');
+      if (sel && sel.dataset.filled !== annees.join(',')) {
+        sel.innerHTML = '<option value="all">Toutes années</option>' + annees.map(a => `<option value="${a}">${a}</option>`).join('');
+        sel.value = ust.annee; sel.dataset.filled = annees.join(',');
+      }
+      const q = FP.norm(ust.search).trim();
+      const rows = all.filter(f => {
+        if (ust.annee !== 'all' && (f.date || '').slice(0,4) !== ust.annee) return false;
+        if (q && !FP.norm(`${f.numeroFacture||''} ${f.description||''} ${f.fournisseur||''}`).includes(q)) return false;
+        return true;
+      }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
+      const sum = (k) => rows.reduce((s,f) => s + (Number(f[k]) || 0), 0);
+      $('uls-kpi-ttc').textContent   = FP.euro(sum('montantTTC'));
+      $('uls-kpi-ht').textContent    = FP.euro(sum('montantHT'));
+      $('uls-kpi-tva').textContent   = FP.euro(sum('montantTVA'));
+      $('uls-kpi-count').textContent = rows.length;
+      $('uls-kpi-sub').textContent   = ust.annee === 'all' ? 'toutes années' : ust.annee;
+
+      const tbody = $('uls-tbody');
+      $('uls-empty').classList.toggle('hidden', rows.length > 0);
+      const LIMIT = 15;
+      const visible = ust.expanded ? rows : rows.slice(0, LIMIT);
+      tbody.innerHTML = visible.map(f => `<tr>
+        <td style="white-space:nowrap">${f.date ? FP.date(f.date) : '—'}</td>
+        <td style="font-family:monospace">${esc(f.numeroFacture || '—')}</td>
+        <td>${esc(f.description || '—')}</td>
+        <td>${esc(f.fournisseur || 'Ulys')}</td>
+        <td style="text-align:right">${f.montantHT != null ? FP.euro(f.montantHT) : '—'}</td>
+        <td style="text-align:right">${f.montantTVA != null ? FP.euro(f.montantTVA) : '—'}</td>
+        <td style="text-align:right;font-weight:700">${f.montantTTC != null ? FP.euro(f.montantTTC) : '—'}</td>
+        <td style="text-align:right;white-space:nowrap"><button type="button" class="btn btn-outline" style="padding:3px 10px;font-size:12px" data-uls-voir="${esc(f.id)}"><i data-lucide="eye" class="w-3 h-3"></i> Voir</button> <button type="button" class="btn btn-outline" style="padding:3px 8px;font-size:12px;color:#B91C1C;border-color:#FCA5A5" data-uls-del="${esc(f.id)}" title="Supprimer cette facture"><i data-lucide="trash-2" class="w-3 h-3"></i></button></td>
+      </tr>`).join('');
+      const more = $('uls-more');
+      if (rows.length > LIMIT){
+        more.innerHTML = `<button type="button" id="uls-more-btn" class="btn btn-outline text-sm">${ust.expanded ? 'Réduire' : `Voir tout (${rows.length})`}</button>`;
+        $('uls-more-btn').addEventListener('click', () => { ust.expanded = !ust.expanded; render(); });
+      } else { more.innerHTML = ''; }
+      if (window.lucide) lucide.createIcons();
+    }
+
+    $('uls-search').addEventListener('input', (e) => { ust.search = e.target.value; render(); });
+    $('uls-filter-annee').addEventListener('change', (e) => { ust.annee = e.target.value; render(); });
+    // Import : on réutilise la fenêtre d'import de facture (OCR auto) — fournisseur « Ulys » → atterrit ici
+    $('uls-import-trigger').addEventListener('click', () => { if (typeof openFactureModal === 'function') openFactureModal(); });
+
+    function openUlsDrawer(f){
+      $('drawer-num').textContent = f.numeroFacture || '—';
+      $('drawer-title').textContent = f.description || 'Facture Ulys';
+      $('drawer-subtitle').textContent = `${f.fournisseur || 'Ulys'} · ${f.date ? FP.date(f.date) : '—'}`;
+      $('drawer-body').innerHTML = `
+        <div class="grid grid-cols-3 gap-3">
+          <div class="kpi p-3"><div class="kpi-label">HT</div><div class="kpi-value" style="font-size:1rem">${f.montantHT != null ? FP.euroPrecis(f.montantHT) : '—'}</div></div>
+          <div class="kpi p-3"><div class="kpi-label">TVA</div><div class="kpi-value" style="font-size:1rem">${f.montantTVA != null ? FP.euroPrecis(f.montantTVA) : '—'}</div></div>
+          <div class="kpi p-3"><div class="kpi-label">TTC</div><div class="kpi-value" style="font-size:1rem; color: var(--fp-primary)">${f.montantTTC != null ? FP.euroPrecis(f.montantTTC) : '—'}</div></div>
+        </div>
+        <div><div class="field-label">N° de facture</div><div class="text-sm bg-slate-50 p-3 rounded-lg">${esc(f.numeroFacture || '—')}</div></div>
+        <div><div class="field-label">Date</div><div class="text-sm">${f.date ? FP.date(f.date) : '—'}</div></div>`;
+      const openBtn = $('drawer-open-drive');
+      const url = f.url || (f.fileId && !/^IMP-/.test(f.fileId) ? (/^https?:\/\//.test(f.fileId) ? f.fileId : `https://drive.google.com/file/d/${f.fileId}/view`) : null);
+      if (url){ openBtn.href = url; openBtn.style.display = ''; } else { openBtn.removeAttribute('href'); openBtn.style.display = 'none'; }
+      $('drawer').classList.add('open'); $('drawer-backdrop').classList.add('open');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    async function deleteUlsFacture(f){
+      if (!confirm(`Supprimer la facture ${f.numeroFacture || f.id} (${f.montantTTC != null ? FP.euro(f.montantTTC) : '—'}) ?`)) return;
+      const idx = (window.FP_DATA.factures || []).findIndex(x => x.id === f.id);
+      if (idx >= 0) window.FP_DATA.factures.splice(idx, 1);
+      try { await FP.persist.delete('factures', f.id); } catch (e) { console.error('[uls-del]', e); }
+      render();
+    }
+
+    $('uls-tbody').addEventListener('click', (e) => {
+      const voir = e.target.closest('[data-uls-voir]');
+      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-uls-voir')); if (f) openUlsDrawer(f); return; }
+      const del = e.target.closest('[data-uls-del]');
+      if (del){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === del.getAttribute('data-uls-del')); if (f) deleteUlsFacture(f); }
+    });
+
+    window.renderUlys = render;
+    document.addEventListener('fp:data-ready', () => { if (!$('view-ulys').classList.contains('hidden')) render(); });
   })();
 
   // ===== Onglet FOURNISSEURS (voir + nettoyer les doublons) =====
