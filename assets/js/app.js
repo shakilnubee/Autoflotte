@@ -101,9 +101,9 @@ const FP = {
 // Remplace l'ancienne "TVS". Deux composantes :
 //   1) taxe annuelle sur les émissions de CO2 (barème WLTP, marginal €/g)
 //   2) taxe annuelle sur les émissions de polluants atmosphériques (selon énergie)
-// ⚠️ Barème 2026 — les montants changent chaque année. Facile à mettre à jour ici.
-// Ne s'applique qu'aux véhicules de tourisme (VP) : ni utilitaires, ni motos.
-// Vérifié : un véhicule à 100 g CO2 (WLTP) = 213 € en 2026.
+// ⚠️ Barème OFFICIEL 2026 (source : entreprendre.service-public.gouv.fr/vosdroits/F22203).
+// Les montants changent chaque année. Ne s'applique qu'aux véhicules de tourisme (VP).
+// Vérifié : un véhicule à 100 g CO2 (WLTP) = 213 € en 2026 ; 150 g = 1 733 €.
 FP.TVS_ANNEE = 2026;
 // Barème WLTP 2026 : tarif marginal par g/km (cumulatif par tranches)
 FP.TVS_CO2_BAREME = [
@@ -112,7 +112,10 @@ FP.TVS_CO2_BAREME = [
   { jusqua: 53,       taux: 2 },
   { jusqua: 85,       taux: 3 },
   { jusqua: 105,      taux: 4 },
-  { jusqua: Infinity, taux: 10 },
+  { jusqua: 125,      taux: 10 },
+  { jusqua: 145,      taux: 50 },
+  { jusqua: 165,      taux: 60 },
+  { jusqua: Infinity, taux: 65 },
 ];
 FP.tvsCo2 = (co2) => {
   let total = 0, prev = 0;
@@ -122,14 +125,17 @@ FP.tvsCo2 = (co2) => {
   }
   return Math.round(total);
 };
-// Taxe polluants atmosphériques (barème 2026) selon l'énergie / Crit'Air
-//  - Électrique / hydrogène : 0 €
-//  - Véhicules récents Euro 5/6 (essence, hybride, diesel) : 100 €
-//  - (Véhicules les plus polluants Crit'Air 3+ : 500 € — rares, à ajuster au cas par cas)
+// Taxe annuelle sur les émissions de polluants atmosphériques — barème OFFICIEL 2026 :
+//  - Électrique / hydrogène (Crit'Air E) : 0 €
+//  - Catégorie 1 (essence/hybride/diesel Euro 5-6, Crit'Air 1) : 130 €
+//  - Véhicules les plus polluants (Crit'Air 2 et +, non classés) : 650 €
+// On applique 130 € par défaut (flotte récente) : la donnée Crit'Air dispo ne distingue pas
+// la catégorie (juste "oui"), et les véhicules à 650 € (anciens) sont rares en flotte gérée.
+// (Passe à 160 € / 800 € en 2027.)
 FP.tvsPolluant = (carburant) => {
   const c = (carburant || '').toLowerCase();
   if (/lectri|hydrog/.test(c)) return 0;
-  return 100;
+  return 130;
 };
 // Détail TVS d'un véhicule : { applicable, raison?, co2, polluant, total, ... }
 FP.tvsDetail = (v) => {
