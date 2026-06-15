@@ -427,6 +427,10 @@
     <button aria-label="Fermer" class="absolute top-3 right-3 z-10 p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-close">
       <i data-lucide="x" class="w-5 h-5"></i>
     </button>
+    <div class="absolute top-3 left-3 z-10 flex gap-1">
+      <button aria-label="Véhicule précédent" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-prev"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+      <button aria-label="Véhicule suivant" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-next"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+    </div>
     <div id="drawer-photo" class="w-full bg-slate-100 overflow-hidden" style="height:176px;display:none"></div>
     <div class="p-6 text-center">
       <span id="drawer-logo" class="inline-flex items-center justify-center" style="min-height:44px"></span>
@@ -1477,6 +1481,19 @@
     if (!v) return;
     drawerVehId = id;
 
+    // Flèches précédent / suivant : suivent l'ordre du tableau affiché (filtré/trié)
+    (function setupDrawerNav(){
+      const liste = filtered();
+      const idx = liste.findIndex(x => x.id === id);
+      const prevId = idx > 0 ? liste[idx - 1].id : null;
+      const nextId = (idx >= 0 && idx < liste.length - 1) ? liste[idx + 1].id : null;
+      [['drawer-prev', prevId], ['drawer-next', nextId]].forEach(([bid, tid]) => {
+        const btn = $(bid); if (!btn) return;
+        btn.dataset.targetId = tid || '';
+        btn.style.display = tid ? '' : 'none';
+      });
+    })();
+
     $('drawer-immat').querySelector('.num').textContent = v.immat || '—';
     $('drawer-title').textContent = v.modele || v.marque || '—';
     $('drawer-subtitle').textContent = v.categorie;
@@ -2349,6 +2366,16 @@
   })();
 
   $('drawer-close').addEventListener('click', closeDrawer);
+  $('drawer-prev').addEventListener('click', () => { const t = $('drawer-prev').dataset.targetId; if (t) openDrawer(t); });
+  $('drawer-next').addEventListener('click', () => { const t = $('drawer-next').dataset.targetId; if (t) openDrawer(t); });
+  // Flèches clavier ← → pour naviguer entre véhicules quand la fiche est ouverte
+  document.addEventListener('keydown', (e) => {
+    if (!$('drawer').classList.contains('open')) return;
+    const ae = document.activeElement; // pas pendant une saisie
+    if (ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable)) return;
+    if (e.key === 'ArrowLeft')  { const t = $('drawer-prev').dataset.targetId; if (t) { e.preventDefault(); openDrawer(t); } }
+    if (e.key === 'ArrowRight') { const t = $('drawer-next').dataset.targetId; if (t) { e.preventDefault(); openDrawer(t); } }
+  });
   // Édition par double-clic des champs de la fiche
   // Édition au simple clic (plus besoin de double-clic) — on ignore les clics
   // dans un éditeur déjà ouvert (input/select/textarea) ou sur un bouton/lien.
