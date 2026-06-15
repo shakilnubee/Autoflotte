@@ -221,10 +221,12 @@ FP.addSociete = (name) => {
 // plus besoin de masquer la page : on l'affiche IMMÉDIATEMENT (zéro latence à chaque onglet).
 // La mise à jour live (fp:data-ready) se fait ensuite en place, sans masquage.)
 
-// === Navigation quasi-instantanée : préchargement des onglets (Speculation Rules) ===
-// Au survol d'un lien de la barre latérale, le navigateur précharge la page cible → le clic
-// affiche la page quasi instantanément. Combiné aux View Transitions (CSS), on obtient la
-// fluidité d'une "application" sans réécrire le site. Feature-detecté → aucun effet si non supporté.
+// === Navigation INSTANTANÉE : PRÉ-RENDU des onglets (Speculation Rules) ===
+// Au survol d'un lien de la barre latérale, le navigateur REND la page cible en arrière-plan
+// (HTML + JS + données Supabase + tableau + icônes). Au clic, il affiche une page DÉJÀ rendue
+// → instantané et complet, sans "pause" ni flash, même sur les grosses pages (Véhicules,
+// Amendes, Conducteurs). C'est ce qui manquait : 'prefetch' ne téléchargeait que le HTML
+// (la page se rendait encore APRÈS le clic). Feature-detecté → aucun effet si non supporté.
 (function navSpeculation() {
   try {
     if (!HTMLScriptElement.supports || !HTMLScriptElement.supports('speculationrules')) return;
@@ -238,7 +240,7 @@ FP.addSociete = (name) => {
         if (!urls.length) return;
         const s = document.createElement('script');
         s.type = 'speculationrules';
-        s.textContent = JSON.stringify({ prefetch: [{ source: 'list', urls: urls, eagerness: 'moderate' }] });
+        s.textContent = JSON.stringify({ prerender: [{ source: 'list', urls: urls, eagerness: 'moderate' }] });
         document.body.appendChild(s);
       } catch (e) {}
     };
