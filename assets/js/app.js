@@ -240,7 +240,13 @@ FP.addSociete = (name) => {
         if (!urls.length) return;
         const s = document.createElement('script');
         s.type = 'speculationrules';
-        s.textContent = JSON.stringify({ prerender: [{ source: 'list', urls: urls, eagerness: 'moderate' }] });
+        // 'eager' = pré-rendu PROACTIF dès l'arrivée sur la page (sans attendre le survol) →
+        // un clic direct tombe sur une page déjà rendue. Le navigateur en prépare quelques-unes
+        // à la fois (les 1ères de la liste = ordre du menu) ; les autres restent en moderate (survol).
+        s.textContent = JSON.stringify({ prerender: [
+          { source: 'list', urls: urls.slice(0, 4), eagerness: 'eager' },
+          { source: 'list', urls: urls, eagerness: 'moderate' }
+        ] });
         document.body.appendChild(s);
       } catch (e) {}
     };
