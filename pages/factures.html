@@ -371,6 +371,7 @@
   <div class="p-6 space-y-5" id="drawer-body"></div>
   <div class="p-6 border-t border-slate-200 flex gap-2">
     <a class="btn btn-primary text-sm flex-1 justify-center" id="drawer-open-drive" target="_blank" rel="noopener"><i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir le PDF</a>
+    <button class="btn text-sm text-red-600 hover:bg-red-50 justify-center" id="drawer-delete" title="Supprimer cette facture"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer</button>
   </div>
 </aside>
 
@@ -666,6 +667,19 @@
     lucide.createIcons();
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
+
+  function deleteFacture() {
+    const f = factures.find(x => x.fileId === state.currentId);
+    if (!f) return;
+    const label = f.numeroFacture || f.description || 'cette facture';
+    if (!confirm(`Supprimer « ${label} » ?\n\nLa facture est retirée définitivement de la base.`)) return;
+    if (FP.history && FP.history.commit) FP.history.commit();
+    const rm = (arr) => { const i = arr.findIndex(x => x.id === f.id); if (i >= 0) arr.splice(i, 1); };
+    rm(data.factures); rm(factures);
+    if (FP.persist) FP.persist.delete('factures', f.id);
+    closeDrawer();
+    renderKPIs(); renderTable(); renderCharts();
+  }
 
   // Import / Export CSV
   FP.injectDataIO({
@@ -1054,6 +1068,7 @@
   });
   $('drawer-close').addEventListener('click', closeDrawer);
   $('drawer-backdrop').addEventListener('click', closeDrawer);
+  $('drawer-delete').addEventListener('click', deleteFacture);
 
   // Init éditeur de colonnes
   facturesEditor = FP.makeColumnEditor({
