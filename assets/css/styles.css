@@ -38,7 +38,10 @@
 .groupe-pill { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 600; background: #F1F5F9; color: var(--fp-text); }
 .groupe-pill .dot { width: 8px; height: 8px; border-radius: 50%; }
 
-html { scroll-behavior: smooth; font-size: 16px; }
+/* Fond défini sur html (et pas seulement via des classes Tailwind sur le wrapper) : ainsi,
+   pendant le bref instant de chargement d'une page, l'écran montre le fond clair de l'appli
+   au lieu du BLANC par défaut du navigateur (cause du "flash blanc"). */
+html { scroll-behavior: smooth; font-size: 16px; background: var(--fp-bg); }
 body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--fp-text); background: var(--fp-bg); }
 
 /* === Adaptation au zoom navigateur ===
@@ -98,13 +101,14 @@ body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; c
    Crossfade doux entre les pages au lieu du flash blanc/gris. La barre latérale, identique
    partout, garde un nom de transition stable → elle ne "clignote" pas (seul le contenu change).
    Géré nativement par le navigateur (Chrome/Edge) ; ignoré ailleurs (aucun effet négatif). */
-/* Pas de fondu de navigation : le cross-fade (view-transition) passe par un fond BLANC au
-   milieu de l'animation (ancienne page à ~50% + nouvelle à ~50% sur fond blanc) → un "flash
-   blanc" visible, surtout sur les grosses pages. On le désactive. La fluidité vient du PRÉ-RENDU
-   (prerender, app.js) : au survol, la page est rendue en arrière-plan → le clic l'affiche déjà
-   complète, instantanément. Sans pré-rendu (clic immédiat), le navigateur garde l'ancienne page
-   jusqu'à ce que la nouvelle soit peinte AVEC son CSS sombre → pas de blanc non plus. */
-@view-transition { navigation: none; }
+/* Navigation sans flash blanc. La View-Transition GARDE l'ancienne page affichée jusqu'à ce
+   que la nouvelle soit prête (pas de "trou" blanc pendant le chargement), MAIS on met l'échange
+   en INSTANTANÉ (animation:none) → pas de fondu, donc pas de "passage par le blanc" (le fondu
+   faisait apparaître le fond blanc au milieu de l'animation). Résultat : l'ancienne page reste,
+   puis bascule net sur la nouvelle, sans blanc ni clignotement. */
+@view-transition { navigation: auto; }
+::view-transition-old(root) { animation: none; }
+::view-transition-new(root) { animation: none; }
 
 /* --- Sidebar dashboard --- */
 .fp-sidebar { width: 240px; background: var(--fp-primary); color: white; min-height: 100vh; }

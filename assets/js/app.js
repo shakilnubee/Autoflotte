@@ -221,12 +221,11 @@ FP.addSociete = (name) => {
 // plus besoin de masquer la page : on l'affiche IMMÉDIATEMENT (zéro latence à chaque onglet).
 // La mise à jour live (fp:data-ready) se fait ensuite en place, sans masquage.)
 
-// === Navigation INSTANTANÉE : PRÉ-RENDU des onglets (Speculation Rules) ===
-// Au survol d'un lien de la barre latérale, le navigateur REND la page cible en arrière-plan
-// (HTML + JS + données Supabase + tableau + icônes). Au clic, il affiche une page DÉJÀ rendue
-// → instantané et complet, sans "pause" ni flash, même sur les grosses pages (Véhicules,
-// Amendes, Conducteurs). C'est ce qui manquait : 'prefetch' ne téléchargeait que le HTML
-// (la page se rendait encore APRÈS le clic). Feature-detecté → aucun effet si non supporté.
+// === Navigation rapide : PRÉCHARGEMENT (prefetch) du HTML des onglets (Speculation Rules) ===
+// On précharge le HTML des liens de la barre latérale → le clic charge la page sans aller
+// rechercher le HTML sur le réseau. Combiné à la View-Transition (qui garde l'ancienne page
+// affichée jusqu'à ce que la nouvelle soit prête, échange instantané, cf. styles.css), la
+// navigation est fluide et SANS flash blanc. Feature-detecté → aucun effet si non supporté.
 (function navSpeculation() {
   try {
     if (!HTMLScriptElement.supports || !HTMLScriptElement.supports('speculationrules')) return;
@@ -240,13 +239,12 @@ FP.addSociete = (name) => {
         if (!urls.length) return;
         const s = document.createElement('script');
         s.type = 'speculationrules';
-        // 'eager' = pré-rendu PROACTIF dès l'arrivée sur la page (sans attendre le survol) →
-        // un clic direct tombe sur une page déjà rendue. Le navigateur en prépare quelques-unes
-        // à la fois (les 1ères de la liste = ordre du menu) ; les autres restent en moderate (survol).
-        s.textContent = JSON.stringify({ prerender: [
-          { source: 'list', urls: urls.slice(0, 4), eagerness: 'eager' },
-          { source: 'list', urls: urls, eagerness: 'moderate' }
-        ] });
+        // PREFETCH (et non prerender) : on précharge seulement le HTML des onglets → fiable,
+        // sans effet de bord (le prerender rendait la page en arrière-plan et s'activait parfois
+        // à moitié prête → flash aléatoire). La View-Transition garde l'ancienne page visible
+        // jusqu'à ce que la nouvelle soit peinte → pas de trou blanc. 'eager' = préchargement
+        // immédiat (le HTML est léger), donc le chargement réel au clic est quasi instantané.
+        s.textContent = JSON.stringify({ prefetch: [{ source: 'list', urls: urls, eagerness: 'eager' }] });
         document.body.appendChild(s);
       } catch (e) {}
     };
