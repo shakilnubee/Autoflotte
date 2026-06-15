@@ -377,6 +377,23 @@
         <div class="kpi"><div class="kpi-label">Nb factures</div><div class="kpi-value" id="uls-kpi-count">—</div><div class="kpi-delta">filtre actif</div></div>
       </div>
 
+      <!-- Consommation par conducteur (péages par badge) — comme Total Fleet -->
+      <div class="flex flex-wrap items-center justify-between gap-3 mt-2 mb-3">
+        <h3 class="text-lg font-extrabold" style="color: var(--fp-primary)">Consommation par conducteur</h3>
+        <select id="uls-conso-mois" class="text-sm border border-slate-200 rounded-lg px-3 py-2"></select>
+      </div>
+      <div class="card overflow-hidden mb-2">
+        <div class="scrollable">
+          <table class="fp-table" id="uls-conso-table">
+            <thead><tr><th>Conducteur</th><th style="text-align:right">Trajets</th><th style="text-align:right">Km</th><th style="text-align:right">Total TTC</th></tr></thead>
+            <tbody id="uls-conso-tbody"></tbody>
+            <tfoot id="uls-conso-tfoot"></tfoot>
+          </table>
+        </div>
+        <div id="uls-conso-empty" class="hidden p-10 text-center"><p class="text-slate-500 text-sm" id="uls-conso-empty-msg">Aucun détail de consommation pour ce mois.</p></div>
+      </div>
+      <p class="text-xs text-slate-500 mb-6">Détail des péages par conducteur (reconstitué depuis les factures Ulys, par badge).</p>
+
       <!-- Filtres -->
       <div class="card p-4 mb-6">
         <div class="flex flex-wrap items-center gap-3">
@@ -2091,7 +2108,33 @@
       if (del){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === del.getAttribute('data-uls-del')); if (f) deleteUlsFacture(f); }
     });
 
-    window.renderUlys = render;
+    // --- Consommation par conducteur (table ulys_conso) ---
+    let conso = null, consoLoaded = false;
+    const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
+    async function loadConso(){
+      consoLoaded = true;
+      try { const r = await FP.supabase.from('ulys_conso').select('*'); if (r.error) throw r.error; conso = r.data || []; }
+      catch (e) { console.warn('[ulys_conso] indisponible :', e && (e.message || e)); conso = null; }
+      renderConso();
+    }
+    function renderConso(){
+      const sel = $('uls-conso-mois'), tbody = $('uls-conso-tbody'), tfoot = $('uls-conso-tfoot');
+      const empty = $('uls-conso-empty'), emptyMsg = $('uls-conso-empty-msg');
+      if (conso === null) { sel.innerHTML = ''; tbody.innerHTML = ''; tfoot.innerHTML = ''; empty.classList.remove('hidden'); emptyMsg.textContent = 'Table ulys_conso absente — lance le script SQL fourni (supabase/ulys-conso-setup.sql).'; return; }
+      const moisList = [...new Set(conso.map(c => c.mois).filter(Boolean))].sort().reverse();
+      if (sel.dataset.filled !== moisList.join(',')) { sel.innerHTML = moisList.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join(''); sel.dataset.filled = moisList.join(','); if (moisList.length) sel.value = moisList[0]; }
+      const mois = sel.value || (moisList[0] || '');
+      const rows = conso.filter(c => c.mois === mois).sort((a,b) => (Number(b.total_ttc)||0) - (Number(a.total_ttc)||0));
+      empty.classList.toggle('hidden', rows.length > 0);
+      if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation pour ce mois.';
+      tbody.innerHTML = rows.map(c => `<tr><td>${esc(c.conducteur || '—')}</td><td style="text-align:right">${c.nb_trajets || 0}</td><td style="text-align:right">${FP.num(c.km || 0)} km</td><td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc || 0)}</td></tr>`).join('');
+      const tot = rows.reduce((s,c) => s + (Number(c.total_ttc)||0), 0);
+      const totKm = rows.reduce((s,c) => s + (Number(c.km)||0), 0);
+      tfoot.innerHTML = rows.length ? `<tr style="font-weight:700;border-top:2px solid var(--fp-border)"><td>Total ${moisLabel(mois)}</td><td></td><td style="text-align:right">${FP.num(totKm)} km</td><td style="text-align:right">${FP.euro(tot)}</td></tr>` : '';
+    }
+    $('uls-conso-mois').addEventListener('change', renderConso);
+
+    window.renderUlys = () => { render(); if (!consoLoaded) loadConso(); else renderConso(); };
     document.addEventListener('fp:data-ready', () => { if (!$('view-ulys').classList.contains('hidden')) render(); });
   })();
 
