@@ -131,12 +131,13 @@
     async loadAll() {
       // Tri explicite par id : sans ça, PostgreSQL renvoie les lignes dans l'ordre
       // du tas (heap), et toute ligne modifiée passe en dernier → ordre instable.
-      const [v, a, f] = await Promise.all([
+      const [v, a, f, c] = await Promise.all([
         client.from('vehicules').select('*').order('id', { ascending: true }),
         client.from('amendes').select('*').order('id', { ascending: true }),
         client.from('factures').select('*').order('id', { ascending: true }),
+        client.from('conducteurs').select('*'),
       ]);
-      const errors = [v.error, a.error, f.error].filter(Boolean);
+      const errors = [v.error, a.error, f.error].filter(Boolean); // conducteurs non bloquant (compteur)
       if (errors.length) {
         console.error('[FP.db.loadAll] erreurs :', errors);
         throw new Error(errors.map(e => e.message).join(' | '));
@@ -145,6 +146,7 @@
         vehicules: filterSociete((v.data || []).map(toClient)),
         amendes:   filterSociete((a.data || []).map(toClient)),
         factures:  filterSociete((f.data || []).map(toClient)),
+        conducteurs: filterSociete((c.data || []).map(toClient)),
       };
     },
 
@@ -206,10 +208,11 @@
   // ===== Loader async qui remplace les données dans window.FP_DATA =====
   FP.dbReady = (async function loadDataFromSupabase() {
     // S'assurer que window.FP_DATA existe avec les bonnes propriétés (sinon créer)
-    window.FP_DATA = window.FP_DATA || { vehicules: [], amendes: [], factures: [] };
+    window.FP_DATA = window.FP_DATA || { vehicules: [], amendes: [], factures: [], conducteurs: [] };
     if (!Array.isArray(window.FP_DATA.vehicules)) window.FP_DATA.vehicules = [];
     if (!Array.isArray(window.FP_DATA.amendes))   window.FP_DATA.amendes   = [];
     if (!Array.isArray(window.FP_DATA.factures))  window.FP_DATA.factures  = [];
+    if (!Array.isArray(window.FP_DATA.conducteurs)) window.FP_DATA.conducteurs = [];
 
     // Profil multi-société : récupère la société de l'utilisateur + s'il est super-admin.
     // Un CLIENT (non-admin) est verrouillé sur SA société (le filtre + l'étiquetage suivent),
@@ -246,6 +249,7 @@
       replaceArrayInPlace(window.FP_DATA.vehicules, data.vehicules);
       replaceArrayInPlace(window.FP_DATA.amendes,   data.amendes);
       replaceArrayInPlace(window.FP_DATA.factures,  data.factures);
+      if (Array.isArray(data.conducteurs)) replaceArrayInPlace(window.FP_DATA.conducteurs, data.conducteurs);
       const dataChanged = (sigBefore !== sigAfter);
       // Cache local des dernières données live → sert d'affichage initial à la prochaine
       // ouverture (évite le "flash" data.js figé → vraies données). On garde le cache
@@ -256,11 +260,11 @@
       const CK = window.FP_CACHE_KEY || 'fp_data_cache_v3';
       try { localStorage.removeItem('fp_data_cache'); } catch (e0) {} // ancienne clé périmée
       try {
-        localStorage.setItem(CK, JSON.stringify({ vehicules: data.vehicules, amendes: data.amendes, factures: data.factures }));
+        localStorage.setItem(CK, JSON.stringify({ vehicules: data.vehicules, amendes: data.amendes, factures: data.factures, conducteurs: data.conducteurs }));
       } catch (e) {
-        // Quota dépassé : on retombe sur véhicules + amendes (au moins les compteurs restent justes)
-        try { localStorage.setItem(CK, JSON.stringify({ vehicules: data.vehicules, amendes: data.amendes })); }
-        catch (e2) { try { localStorage.setItem(CK, JSON.stringify({ amendes: data.amendes })); } catch (e3) { /* tant pis */ } }
+        // Quota dépassé : on retombe sur véhicules + amendes + conducteurs (compteurs justes), sans factures
+        try { localStorage.setItem(CK, JSON.stringify({ vehicules: data.vehicules, amendes: data.amendes, conducteurs: data.conducteurs })); }
+        catch (e2) { try { localStorage.setItem(CK, JSON.stringify({ amendes: data.amendes, conducteurs: data.conducteurs })); } catch (e3) { /* tant pis */ } }
       }
       console.log(`[FP.db] Chargé depuis Supabase : ${data.vehicules.length} véhicules, ${data.amendes.length} amendes, ${data.factures.length} factures`);
       // Re-appliquer les overrides locaux (cases cochées par l'utilisateur, etc.)

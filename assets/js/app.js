@@ -30,6 +30,7 @@ window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStora
       if (Array.isArray(c.vehicules)) window.FP_DATA.vehicules = c.vehicules;
       if (Array.isArray(c.amendes))   window.FP_DATA.amendes   = c.amendes;
       if (Array.isArray(c.factures))  window.FP_DATA.factures  = c.factures;
+      if (Array.isArray(c.conducteurs)) window.FP_DATA.conducteurs = c.conducteurs;
     }
   } catch (e) { /* cache illisible : on garde data.js */ }
 })();
