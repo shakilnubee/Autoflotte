@@ -1442,6 +1442,18 @@
     const resp = await fetch(u, { mode: 'cors' });
     if (!resp.ok) throw new Error('téléchargement impossible (' + resp.status + ')');
     const blob = await resp.blob();
+    // 1) Lecture IA (Sonnet) en priorité — bien plus fiable que l'OCR
+    if (window.FP && FP.scanIA) {
+      try {
+        const ext = (blob.type === 'application/pdf') ? '.pdf' : '.jpg';
+        const f = new File([blob], 'permis' + ext, { type: blob.type || 'image/jpeg' });
+        const ia = await FP.scanIA(f, 'permis');
+        if (ia && (ia.permisNumero || ia.permisExpiration || ia.permisObtention || ia.permisType)) {
+          return { type: ia.permisType || '', numero: ia.permisNumero || '', obtention: ia.permisObtention || '', expiration: ia.permisExpiration || '' };
+        }
+      } catch (e) { console.warn('[reread IA]', e); }
+    }
+    // 2) Secours : OCR local (binarisation pour effacer la rosette)
     const cv = await srcToCanvas(blob, 3);
     return ocrCanvas(killPink(cv, 125));
   }
@@ -1450,7 +1462,7 @@
     const lbl = { permisType: 'type', permisNumero: 'numéro', permisObtention: "date d'obtention", permisExpiration: "date d'expiration" };
     const setStatus = (msg, color) => { const st = $('permis-upload-status'); if (st) { st.classList.remove('hidden'); st.setAttribute('style', color); st.innerHTML = msg; } };
     try {
-      setStatus('🔍 Relecture du scan en haute qualité… (10–20 s)', 'background:#F1F5F9;color:#475569;');
+      setStatus('🔍 Relecture du permis par l\'IA… (quelques secondes)', 'background:#F1F5F9;color:#475569;');
       const parsed = await rereadPermisFromUrl(url);
       const changes = {};
       ['type', 'numero', 'obtention', 'expiration'].forEach(f => {
@@ -1486,7 +1498,7 @@
     _rereadResults = [];
     for (let i = 0; i < cibles.length; i++) {
       const r = cibles[i];
-      openReread(`<div style="text-align:center;padding:14px 0"><div style="font-weight:600;color:#475569">🔍 Relecture ${i + 1}/${cibles.length}…</div><div style="font-size:12px;color:#94A3B8;margin-top:4px">${escapeHtml(r.name || r.key)}</div><div style="font-size:11px;color:#CBD5E1;margin-top:6px">~10–20 s par permis, patiente…</div></div>`);
+      openReread(`<div style="text-align:center;padding:14px 0"><div style="font-weight:600;color:#475569">🔍 Relecture ${i + 1}/${cibles.length}…</div><div style="font-size:12px;color:#94A3B8;margin-top:4px">${escapeHtml(r.name || r.key)}</div><div style="font-size:11px;color:#CBD5E1;margin-top:6px">~5 s par permis (IA), patiente…</div></div>`);
       let parsed = null;
       try { parsed = await rereadPermisFromUrl(r.permisUrl); } catch (e) { console.warn('[reread]', r.key, e); }
       if (!parsed) continue;
