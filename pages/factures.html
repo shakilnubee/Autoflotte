@@ -106,6 +106,7 @@
       <button id="tab-btn-factures" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">Factures</button>
       <button id="tab-btn-documents" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Documents <span style="font-size:11px;font-weight:600">· archives & suivi</span></button>
       <button id="tab-btn-total" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Total Fleet <span style="font-size:11px;font-weight:600">· carburant & péages</span></button>
+      <button id="tab-btn-fourn" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Fournisseurs</button>
     </div>
 
     <div id="view-factures">
@@ -332,6 +333,29 @@
       <div id="tf-more" class="mt-3 text-center"></div>
       <p class="text-xs text-slate-500 mt-4">Factures <b>TotalEnergies Fleet</b> (carburant, lavage, péages…). ⚠️ Le <b>relevé de factures</b> mensuel récapitule les factures par pays : on n'importe QUE les factures détaillées (France, Allemagne, Pays-Bas…), jamais le relevé, pour éviter de compter deux fois.</p>
 
+    </div>
+
+    <!-- ===== Vue FOURNISSEURS (nettoyage des doublons) ===== -->
+    <div id="view-fourn" class="hidden">
+      <div class="card p-4 mb-6">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="relative flex-1 min-w-[220px]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="fn-search" type="text" placeholder="Rechercher un fournisseur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+          </div>
+          <span class="text-sm text-slate-500" id="fn-count"></span>
+        </div>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="scrollable">
+          <table class="fp-table">
+            <thead><tr><th>Fournisseur</th><th style="text-align:center">Nb factures</th><th style="text-align:right">Total TTC</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody id="fn-tbody"></tbody>
+          </table>
+        </div>
+        <div id="fn-empty" class="hidden p-10 text-center"><p class="text-slate-500 text-sm">Aucun fournisseur.</p></div>
+      </div>
+      <p class="text-xs text-slate-500 mt-3"><b>Renommer / fusionner</b> : corrige un doublon (ex. « CAR WORLD » → « CAR WORLD CONSULTING FRANCE ») — toutes les factures sont mises à jour. <b>Supprimer le nom</b> : retire le fournisseur des factures concernées (les factures restent).</p>
     </div>
   </main>
 </div>
@@ -950,9 +974,41 @@
     if (FP.history && FP.history.commit) FP.history.commit();
     data.factures.push(newF);
     if (newF.type !== 'leasing') factures.push(newF); // `factures` = vue de cette page (hors leasing)
+    FP.persist.insert('factures', newF);
+    // Entretien / réparation liée à un véhicule → met à jour sa fiche : dernière révision (date)
+    // + km. « Prochaine révision » se recalcule alors toute seule dans la fiche véhicule.
+    const majVeh = syncRevisionVehicule(newF);
     closeFactureModal();
     renderKPIs(); renderTable(); renderCharts();
-    FP.persist.insert('factures', newF);
+    if (majVeh) {
+      const note = document.createElement('div');
+      note.setAttribute('style', 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#047857;color:#fff;padding:10px 16px;border-radius:9999px;font-size:13px;z-index:90;box-shadow:0 8px 24px rgba(0,0,0,.25)');
+      note.textContent = '✓ Fiche véhicule mise à jour : ' + majVeh;
+      document.body.appendChild(note); setTimeout(() => note.remove(), 4500);
+    }
+  }
+
+  // Met à jour la fiche du véhicule à partir d'une facture d'entretien/réparation.
+  // Renvoie un libellé de ce qui a été mis à jour, ou null.
+  function syncRevisionVehicule(f){
+    try {
+      const t = (f.type || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      if (!(t === 'entretien' || t === 'reparation') || !f.vehiculeImmat) return null;
+      const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === String(f.vehiculeImmat).toUpperCase());
+      if (!v) return null;
+      const patch = {}; const bits = [];
+      if (f.date && (!v.derniereRevision || v.derniereRevision === '—' || f.date > v.derniereRevision)) {
+        v.derniereRevision = f.date; patch.derniereRevision = f.date; bits.push('révision ' + FP.date(f.date));
+      }
+      if (f.km != null && (!v.kmDernierReleve || f.km >= v.kmDernierReleve)) {
+        v.kmDernierReleve = f.km; patch.kmDernierReleve = f.km;
+        if (!v.km || f.km > v.km) { v.km = f.km; patch.km = f.km; }
+        bits.push(FP.num(f.km) + ' km');
+      }
+      if (!Object.keys(patch).length) return null;
+      if (FP.persist) FP.persist.update('vehicules', v.id, patch);
+      return `${v.immat} (${bits.join(' · ')})`;
+    } catch (e) { return null; }
   }
 
   $('btn-import-facture').addEventListener('click', openFactureModal);
@@ -1114,19 +1170,23 @@
     const ts = d => d.createdAt || d.created_at || '';
 
     function styleTab(btn, active){ btn.style.borderBottomColor = active ? 'var(--fp-accent)' : 'transparent'; btn.style.color = active ? 'var(--fp-primary)' : '#94A3B8'; }
-    function switchTab(name){ // 'factures' | 'documents' | 'total'
+    function switchTab(name){ // 'factures' | 'documents' | 'total' | 'fournisseurs'
       $('view-factures').classList.toggle('hidden', name !== 'factures');
       $('view-documents').classList.toggle('hidden', name !== 'documents');
       $('view-total').classList.toggle('hidden', name !== 'total');
+      $('view-fourn').classList.toggle('hidden', name !== 'fournisseurs');
       styleTab($('tab-btn-factures'), name === 'factures');
       styleTab($('tab-btn-documents'), name === 'documents');
       styleTab($('tab-btn-total'), name === 'total');
+      styleTab($('tab-btn-fourn'), name === 'fournisseurs');
       if (name === 'documents' && !loaded) loadDocs();
       if (name === 'total' && window.renderTotalFleet) window.renderTotalFleet();
+      if (name === 'fournisseurs' && window.renderFournisseurs) window.renderFournisseurs();
     }
     $('tab-btn-factures').addEventListener('click', () => switchTab('factures'));
     $('tab-btn-documents').addEventListener('click', () => switchTab('documents'));
     $('tab-btn-total').addEventListener('click', () => switchTab('total'));
+    $('tab-btn-fourn').addEventListener('click', () => switchTab('fournisseurs'));
 
     async function loadDocs(){
       loaded = true;
@@ -1829,6 +1889,62 @@
     $('tf-import-trigger').addEventListener('click', () => $('tf-import-file').click());
     $('tf-import-file').addEventListener('change', (e) => { handleReleves(e.target.files); e.target.value = ''; });
 
+  })();
+
+  // ===== Onglet FOURNISSEURS (voir + nettoyer les doublons) =====
+  (function fournisseursTab(){
+    let fnSearch = '';
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    function stats(){
+      const m = new Map();
+      (data.factures || []).forEach(f => {
+        const name = (f.fournisseur || '').trim();
+        if (!name) return;
+        const e = m.get(name) || { name, count: 0, total: 0 };
+        e.count++; e.total += (Number(f.montantTTC) || 0);
+        m.set(name, e);
+      });
+      return [...m.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'fr'));
+    }
+    function render(){
+      const all = stats();
+      const q = FP.norm(fnSearch.trim());
+      const rows = all.filter(r => !q || FP.norm(r.name).includes(q));
+      $('fn-count').textContent = all.length + ' fournisseur(s)';
+      $('fn-empty').classList.toggle('hidden', rows.length > 0);
+      $('fn-tbody').innerHTML = rows.map(r => `<tr>
+        <td class="font-medium">${esc(r.name)}</td>
+        <td style="text-align:center">${r.count}</td>
+        <td style="text-align:right">${FP.euro(r.total)}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn btn-outline" style="padding:4px 9px;font-size:12px" data-fn-rename="${esc(r.name)}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Renommer</button>
+          <button class="btn btn-outline" style="padding:4px 9px;font-size:12px;color:#b91c1c" data-fn-del="${esc(r.name)}" title="Retirer le nom des factures">✕</button>
+        </td></tr>`).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+    function applyRename(oldName, newName){
+      newName = (newName || '').trim();
+      let n = 0;
+      (data.factures || []).forEach(f => {
+        if ((f.fournisseur || '').trim() === oldName) {
+          f.fournisseur = newName || null;
+          if (FP.persist) FP.persist.update('factures', f.id, { fournisseur: f.fournisseur });
+          n++;
+        }
+      });
+      if (FP.history && FP.history.commit) FP.history.commit();
+      render(); renderKPIs(); renderTable(); renderCharts();
+      return n;
+    }
+    $('fn-search').addEventListener('input', (e) => { fnSearch = e.target.value; render(); });
+    $('fn-tbody').addEventListener('click', (e) => {
+      const rn = e.target.closest('[data-fn-rename]');
+      if (rn){ const old = rn.dataset.fnRename; const nn = prompt(`Renommer / fusionner « ${old} » en :`, old); if (nn != null && nn.trim() && nn.trim() !== old){ const k = applyRename(old, nn); alert(`${k} facture(s) mises à jour.`); } return; }
+      const dl = e.target.closest('[data-fn-del]');
+      if (dl){ const old = dl.dataset.fnDel; if (confirm(`Retirer le fournisseur « ${old} » de ses factures ?\n(Les factures restent, sans fournisseur.)`)){ applyRename(old, ''); } }
+    });
+    window.renderFournisseurs = render;
+    document.addEventListener('fp:data-ready', () => { if (!$('view-fourn').classList.contains('hidden')) render(); });
   })();
 </script>
 </body>
