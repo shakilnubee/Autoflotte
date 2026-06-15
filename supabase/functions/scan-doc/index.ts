@@ -32,7 +32,7 @@ function buildPrompt() {
     "numeroFacture, vehiculeImmat (plaque francaise AB-123-CD), km (entier sans espaces).",
     "montantHT, montantTVA, montantTTC (nombres a point decimal).",
     "description : courte, max 80 caracteres.",
-    "permisNumero : numero du permis (rubrique 5). permisType : categories (ex B). permisObtention : date rubrique 4a (AAAA-MM-JJ). permisExpiration : date rubrique 4b au RECTO uniquement (AAAA-MM-JJ) - n utilise jamais les dates par categorie du verso.",
+    "permisNumero : le numero a la RUBRIQUE 5 uniquement (ex 16AQ28381, environ 9 a 12 caracteres). N utilise JAMAIS la longue ligne tout en bas de la carte (zone machine qui commence par D1FRA et finit par le nom), ni la rubrique 4c. permisType : categories rubrique 9 (ex B). permisObtention : date rubrique 4a (AAAA-MM-JJ). permisExpiration : date rubrique 4b au RECTO uniquement (AAAA-MM-JJ) - jamais les dates par categorie du verso.",
     "idNumero (numero de carte identite ou titre de sejour), idExpiration (AAAA-MM-JJ).",
     "personne : nom complet de la personne sur le document (permis, carte identite), sinon null.",
     "REGLES DATES : format europeen jour/mois/annee. Ex 11.03.2030 = 11 mars 2030 = 2030-03-11 (n inverse JAMAIS le jour et le mois). Convertis aussi les dates en lettres.",
