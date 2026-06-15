@@ -1072,6 +1072,17 @@ FP.buildEcheances = (data) => {
   return out;
 };
 
+// Notification d'erreur visible (bandeau rouge en bas). Utilisée quand une
+// écriture en base échoue DÉFINITIVEMENT (rejet base : RLS, colonne, contrainte…),
+// pour ne jamais laisser croire à un faux « enregistré ».
+FP.notifyError = (msg) => {
+  const el = document.createElement('div');
+  el.textContent = '⚠️ ' + (msg || 'Échec de l’enregistrement dans la base. Réessaie ou vérifie ta connexion.');
+  el.style.cssText = 'position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:#dc2626;color:#fff;padding:.7rem 1.1rem;border-radius:8px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2);font-weight:600;max-width:90vw;text-align:center';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+};
+
 FP.persist = {
   _QKEY: 'fp_pending_writes',
   available() { return !!(FP.db && FP.supabase); },
@@ -1107,22 +1118,22 @@ FP.persist = {
   async insert(table, row) {
     if (!this.available()) { this._enqueue({ op: 'insert', table, row }); return; }
     try { const r = await FP.db.insert(table, row); if (r && r.error) throw r.error; this.flush(); }
-    catch (e) { this._err(e); this._enqueue({ op: 'insert', table, row }); }
+    catch (e) { this._err(e); this._enqueue({ op: 'insert', table, row }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
   },
   async upsert(table, row) {
     if (!this.available()) { this._enqueue({ op: 'upsert', table, row }); return; }
     try { const r = await FP.db.upsert(table, row); if (r && r.error) throw r.error; this.flush(); }
-    catch (e) { this._err(e); this._enqueue({ op: 'upsert', table, row }); }
+    catch (e) { this._err(e); this._enqueue({ op: 'upsert', table, row }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
   },
   async update(table, id, fields) {
     if (!this.available()) { this._enqueue({ op: 'update', table, id, fields }); return; }
     try { const r = await FP.db.update(table, id, fields); if (r && r.error) throw r.error; this.flush(); }
-    catch (e) { this._err(e); this._enqueue({ op: 'update', table, id, fields }); }
+    catch (e) { this._err(e); this._enqueue({ op: 'update', table, id, fields }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
   },
   async delete(table, id) {
     if (!this.available()) { this._enqueue({ op: 'delete', table, id }); return; }
     try { const r = await FP.db.delete(table, id); if (r && r.error) throw r.error; this.flush(); }
-    catch (e) { this._err(e); this._enqueue({ op: 'delete', table, id }); }
+    catch (e) { this._err(e); this._enqueue({ op: 'delete', table, id }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
   },
   _flushing: false,
   // Renvoie tout ce qui est en attente. Les insert sont rejoués en upsert
