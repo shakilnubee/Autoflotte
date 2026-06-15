@@ -127,7 +127,7 @@
       <div class="kpi">
         <div class="kpi-label">Coût annuel total</div>
         <div class="kpi-value" id="kpi-annuel" style="color: var(--fp-primary)">—</div>
-        <div class="kpi-delta">leasing 12 mois</div>
+        <div class="kpi-delta">leasing + assurance</div>
       </div>
     </div>
 
@@ -181,6 +181,14 @@
         <i data-lucide="shield-check" class="w-5 h-5"></i> Assurance — SWISSLIFE (011165247/0599)
       </div>
       <p class="text-sm text-slate-600 mb-4">Police unique couvrant tous les véhicules de la flotte.</p>
+      <div class="flex flex-wrap items-end gap-6 mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+        <div>
+          <div class="field-label !mb-1">Prime annuelle (flotte)</div>
+          <div class="flex items-center gap-1"><input id="assur-prime" type="text" inputmode="decimal" class="field-input" style="width:150px" placeholder="0" /><span class="text-slate-500 text-sm">€ / an</span></div>
+        </div>
+        <div><div class="kpi-label">Par mois</div><div class="font-extrabold text-xl" id="assur-mensuel" style="color:var(--fp-primary)">—</div></div>
+        <div><div class="kpi-label">Par véhicule / an</div><div class="font-extrabold text-xl" id="assur-parveh" style="color:var(--fp-primary)">—</div></div>
+      </div>
       <div class="scrollable">
         <table class="fp-table">
           <thead>
@@ -190,6 +198,7 @@
               <th>Chauffeur</th>
               <th>Groupe</th>
               <th>Statut</th>
+              <th style="text-align:right">Coût annuel/véh.</th>
             </tr>
           </thead>
           <tbody id="tbody-assurance"></tbody>
@@ -264,7 +273,7 @@
 
   function renderKPIs() {
     $('kpi-assur').textContent = vehicules.length;
-    $('kpi-assur-sub').textContent = 'sur SWISSLIFE';
+    $('kpi-assur-sub').textContent = assurPrime() ? FP.euro(assurPrime()) + ' /an' : 'sur SWISSLIFE';
 
     const nbLeasing = leasingImmats.size;
     $('kpi-leasing').textContent = nbLeasing;
@@ -280,10 +289,21 @@
       }
     });
     $('kpi-mens-leasing').textContent = FP.euro(mensTotal);
-    $('kpi-annuel').textContent = FP.euro(mensTotal * 12);
+    $('kpi-annuel').textContent = FP.euro(mensTotal * 12 + assurPrime()); // leasing + prime assurance
   }
 
+  // Prime d'assurance annuelle de la flotte (un seul montant, saisi par l'utilisateur, sync par société)
+  function assurPrime(){ const s = (FP.settings && FP.settings.get) ? FP.settings.get() : {}; const n = Number(s.assurancePrimeAnnuelle); return Number.isFinite(n) ? n : 0; }
+  function renderAssurInfo(){
+    const prime = assurPrime(); const n = vehicules.length || 0;
+    const inp = $('assur-prime');
+    if (inp && document.activeElement !== inp) inp.value = prime ? String(prime).replace('.', ',') : '';
+    if ($('assur-mensuel')) $('assur-mensuel').textContent = prime ? FP.euro(prime/12) : '—';
+    if ($('assur-parveh'))  $('assur-parveh').textContent  = (prime && n) ? FP.euro(prime/n) : '—';
+  }
   function renderAssurance() {
+    const prime = assurPrime(); const n = vehicules.length || 0;
+    const parVeh = (prime && n) ? prime / n : 0;
     const tbody = $('tbody-assurance');
     tbody.innerHTML = vehicules.map(v => `
       <tr>
@@ -292,8 +312,10 @@
         <td>${v.chauffeur}</td>
         <td><div class="flex flex-wrap gap-1">${FP.vehGroupes(v).map(k => `<span class="groupe-pill gp-${k}"><span class="dot"></span>${FP.groupeLabel(k)}</span>`).join('')}</div></td>
         <td><span class="badge badge-ok">Couvert</span></td>
+        <td style="text-align:right">${parVeh ? FP.euro(parVeh) : '—'}</td>
       </tr>
     `).join('');
+    renderAssurInfo();
   }
 
   function renderLeasing() {
@@ -465,6 +487,12 @@
   renderKPIs();
   renderAssurance();
   renderLeasing();
+  // Saisie de la prime annuelle d'assurance (sauvegardée + synchronisée par société)
+  if ($('assur-prime')) $('assur-prime').addEventListener('change', (e) => {
+    const val = parseFloat(String(e.target.value).replace(/[\s ]/g, '').replace(',', '.'));
+    const s = FP.settings.get(); s.assurancePrimeAnnuelle = Number.isFinite(val) ? val : 0; FP.settings.save(s);
+    renderAssurance(); renderKPIs();
+  });
   // Rafraîchit quand Supabase a chargé (sinon on reste sur le cache data.js)
   document.addEventListener('fp:data-ready', () => {
     leasingFactures = (data.factures || []).filter(f => f.type === 'leasing');
