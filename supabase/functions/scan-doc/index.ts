@@ -24,16 +24,18 @@ function json(body, status) {
 }
 function buildPrompt() {
   return [
-    "Lis ce document de gestion de flotte automobile (facture de garage, carburant, etc.).",
-    "Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour, avec ces cles :",
-    "date au format AAAA-MM-JJ (convertis les dates en lettres, ex 12 juin 2026 donne 2026-06-12),",
-    "fournisseur (nom de la societe qui EMET la facture - souvent en haut du document avec un numero SIREN ou SIRET. ATTENTION ce n est PAS le client : le client est TJMAX, ne mets jamais TJMAX comme fournisseur),",
-    "numeroFacture,",
-    "vehiculeImmat (plaque francaise format AB-123-CD, sinon null),",
-    "km (kilometrage entier sans espaces, sinon null),",
-    "montantHT, montantTVA, montantTTC (nombres a point decimal, sinon null),",
-    "description (courte, max 80 caracteres, sinon null).",
-    "Si une info est absente mets null. Montants sans symbole euro ni separateur de milliers (ex 1466.48).",
+    "Lis ce document de gestion de flotte (facture, permis de conduire, carte identite, carte grise, assurance, controle technique, etc.).",
+    "Identifie son type puis extrais les infos. Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour, avec ces cles (mets null si l info est absente) :",
+    "docType : un parmi facture, sinistre, permis, carte-identite, carte-grise, assurance, controle-technique, autre.",
+    "date : date principale du document au format AAAA-MM-JJ (pour une facture, la date d emission).",
+    "fournisseur : pour une facture, nom de la societe qui EMET la facture (souvent en haut avec un SIREN ou SIRET). ATTENTION ce n est PAS le client : le client est TJMAX, ne mets jamais TJMAX.",
+    "numeroFacture, vehiculeImmat (plaque francaise AB-123-CD), km (entier sans espaces).",
+    "montantHT, montantTVA, montantTTC (nombres a point decimal).",
+    "description : courte, max 80 caracteres.",
+    "permisNumero, permisType (ex B), permisObtention (AAAA-MM-JJ), permisExpiration (AAAA-MM-JJ).",
+    "idNumero (numero de carte identite ou titre de sejour), idExpiration (AAAA-MM-JJ).",
+    "personne : nom complet de la personne sur le document (permis, carte identite), sinon null.",
+    "Convertis les dates en lettres (ex 12 juin 2026 donne 2026-06-12). Montants sans symbole euro ni separateur de milliers (ex 1466.48).",
   ].join("\n");
 }
 function extractJson(text) {

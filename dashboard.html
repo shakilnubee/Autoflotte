@@ -716,12 +716,33 @@
         </div>`);
         let det = { type: 'autre', vehicule: null, immat: null, date: null, km: null };
         let text = '';
-        try {
-          text = await FP.ocr.fileToText(files[i]);
-          det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
-        } catch (err) { console.error('[scan OCR]', err); }
-        // Détection du conducteur (nom de fichier + texte) pour les permis
-        det.conducteur = detectConducteur(files[i].name, text);
+        let ia = null;
+        // 1) Lecture IA (Haiku) en priorité
+        try { ia = await FP.scanIA(files[i]); } catch (e) { /* IA indispo → OCR */ }
+        if (ia) {
+          const KNOWN = ['facture','sinistre','permis','carte-identite','carte-grise','assurance','controle-technique','autre'];
+          if (ia.docType && KNOWN.includes(ia.docType)) det.type = ia.docType;
+          det.date = ia.date || null;
+          if (ia.km != null) det.km = ia.km;
+          if (ia.montantTTC != null) det.montantTTC = ia.montantTTC;
+          if (ia.montantHT != null) det.montantHT = ia.montantHT;
+          if (ia.montantTVA != null) det.montantTVA = ia.montantTVA;
+          if (ia.fournisseur) det.fournisseur = ia.fournisseur;
+          if (ia.numeroFacture) det.numeroFacture = ia.numeroFacture;
+          ['permisNumero','permisType','permisObtention','permisExpiration','idNumero','idExpiration'].forEach(k => { if (ia[k]) det[k] = ia[k]; });
+          if (ia.vehiculeImmat) {
+            const vv = ((window.FP_DATA && window.FP_DATA.vehicules) || []).find(v => (v.immat || '').toUpperCase() === String(ia.vehiculeImmat).toUpperCase());
+            if (vv) { det.vehicule = vv; det.immat = vv.immat; } else { det.immat = String(ia.vehiculeImmat).toUpperCase(); }
+          }
+        } else {
+          // 2) Secours : OCR local + détection par règles
+          try {
+            text = await FP.ocr.fileToText(files[i]);
+            det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
+          } catch (err) { console.error('[scan OCR]', err); }
+        }
+        // Détection du conducteur (nom de fichier + texte OCR + nom lu par l'IA) pour les permis/CI
+        det.conducteur = detectConducteur(files[i].name, text + ' ' + ((ia && ia.personne) || '') + ' ' + ((ia && ia.description) || ''));
         // Si on a reconnu une personne et aucun véhicule, on suppose un permis
         if (det.conducteur && det.type === 'autre' && !det.vehicule) det.type = 'permis';
         items.push({ file: files[i], det });
