@@ -764,18 +764,18 @@
   function parseFacture(raw){
     const text = (raw || '').replace(/ /g, ' ');
     const out = {};
-    out.montantTTC = findAmount(text, ['Net\\s*à\\s*payer', 'Total\\s*TTC', 'Montant\\s*TTC', 'TOTAL\\s*T\\.?T\\.?C', 'Total\\s*à\\s*payer', 'À\\s*payer', 'Total\\s*général']);
-    out.montantHT  = findAmount(text, ['Total\\s*HT', 'Montant\\s*HT', 'TOTAL\\s*H\\.?T', 'Base\\s*HT']);
-    out.montantTVA = findAmount(text, ['Total\\s*TVA', 'Montant\\s*TVA', 'T\\.?V\\.?A\\.?']);
-    // Mises en page où les montants sont séparés de leurs libellés (ex. Pennylane / CAR WORLD) :
-    // on cherche un triplet HT + TVA = TTC parmi tous les montants du document (robuste, sans étiquette).
-    if (out.montantTTC == null || out.montantHT == null || out.montantTVA == null) {
-      const trip = deriveTotals(text);
-      if (trip) {
-        if (out.montantHT  == null) out.montantHT  = trip.ht;
-        if (out.montantTVA == null) out.montantTVA = trip.tva;
-        if (out.montantTTC == null) out.montantTTC = trip.ttc;
-      }
+    // Le triplet arithmétique HT + TVA = TTC est LE plus fiable (il s'auto-vérifie) :
+    // on le prend en PRIORITÉ. Sinon seulement, on retombe sur la détection par étiquettes
+    // (qui peut se tromper sur les mises en page type Pennylane / CAR WORLD où les libellés
+    // sont loin des chiffres — ex. attraper le « 1 » de « 1 unité »).
+    const trip = deriveTotals(text);
+    if (trip) {
+      out.montantHT = trip.ht; out.montantTVA = trip.tva; out.montantTTC = trip.ttc;
+    } else {
+      out.montantTTC = findAmount(text, ['Net\\s*à\\s*payer', 'Total\\s*TTC', 'Montant\\s*TTC', 'TOTAL\\s*T\\.?T\\.?C', 'Total\\s*à\\s*payer', 'À\\s*payer', 'Total\\s*général']);
+      out.montantHT  = findAmount(text, ['Total\\s*HT', 'Montant\\s*HT', 'TOTAL\\s*H\\.?T', 'Base\\s*HT']);
+      out.montantTVA = findAmount(text, ['Total\\s*TVA', 'Montant\\s*TVA', 'T\\.?V\\.?A\\.?']);
+      if (out.montantTTC == null && out.montantHT != null && out.montantTVA != null) out.montantTTC = Math.round((out.montantHT + out.montantTVA) * 100) / 100;
     }
     // Numéro de facture
     let m = text.match(/Num[ée]ro\s*[:\-]?\s*([A-Z]{1,4}-?\d[A-Z0-9\-\/]{2,})/i)
