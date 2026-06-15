@@ -321,13 +321,21 @@
         } else { more.classList.add('hidden'); more.innerHTML = ''; }
       }
       tbody.innerHTML = shown.map(i => {
-        const cells = visible.map(k => {
+        const cellsArr = visible.map(k => {
           const def = ENTRETIENS_COLUMNS.find(c => c.key === k);
           if (!def) return '<td></td>';
           return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''}>${def.render(i)}</td>`;
-        }).join('');
-        const driveLink = i.fileId ? `<a href="https://drive.google.com/file/d/${i.fileId}/view" target="_blank" rel="noopener" class="ml-2 text-slate-400 hover:text-slate-700"><i data-lucide="external-link" class="w-3.5 h-3.5 inline"></i></a>` : '';
-        return `<tr>${cells}</tr>`;
+        });
+        // Lien « ouvrir le PDF » : fichier Drive (id) OU fichier stocké en ligne (URL). Ajouté
+        // à la dernière cellule pour ne pas décaler les colonnes. (Avant : calculé mais jamais affiché.)
+        const fileHref = (i.fileId && !/^IMP-/.test(i.fileId))
+          ? (/^https?:\/\//.test(i.fileId) ? i.fileId : `https://drive.google.com/file/d/${i.fileId}/view`)
+          : null;
+        if (fileHref && cellsArr.length) {
+          const link = `<a href="${fileHref}" target="_blank" rel="noopener" class="ml-2 text-slate-400 hover:text-slate-700" title="Ouvrir le PDF"><i data-lucide="external-link" class="w-3.5 h-3.5 inline"></i></a>`;
+          cellsArr[cellsArr.length - 1] = cellsArr[cellsArr.length - 1].replace(/<\/td>\s*$/, link + '</td>');
+        }
+        return `<tr>${cellsArr.join('')}</tr>`;
       }).join('');
     }
     $('result-count').textContent = `${rows.length} intervention${rows.length > 1 ? 's' : ''} sur ${interventions.length}`;
@@ -418,7 +426,7 @@
       perVeh[k] = (perVeh[k] || 0) + (i.montantTTC || 0);
     });
     const top = Object.entries(perVeh).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    const vlabel = (immat) => { const v = data.vehicules.find(x => x.immat === immat); return v ? `${v.marque} ${v.modele}`.trim() : immat; };
+    const vlabel = (immat) => { const v = (data.vehicules || []).find(x => x.immat === immat); return v ? `${v.marque} ${v.modele}`.trim() : immat; };
     const el = $('podium');
     if (!top.length) { el.innerHTML = `<p class="col-span-3 text-sm text-slate-500 text-center py-4">Aucune facture d'entretien ${annee}.</p>`; return; }
     const medals = ['🥇', '🥈', '🥉'];

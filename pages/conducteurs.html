@@ -542,6 +542,8 @@
   const COND_DOC_NUM_REQUIRED = ['carte-identite', 'titre-sejour']; // pièces où le numéro est obligatoire
   function condDocsGet(key){ const m = (FP.settings.get().condDocs) || {}; return Array.isArray(m[key]) ? m[key] : []; }
   function condDocsSave(key, docs){ const s = FP.settings.get(); s.condDocs = s.condDocs || {}; s.condDocs[key] = docs; FP.settings.save(s); }
+  // Purge les documents perso (CI, titre de séjour…) + le masquage de permis d'un conducteur supprimé
+  function condDocsRemove(key){ const s = FP.settings.get(); let ch = false; if (s.condDocs && s.condDocs[key]){ delete s.condDocs[key]; ch = true; } if (s.permisMasque && s.permisMasque[key]){ delete s.permisMasque[key]; ch = true; } if (ch) FP.settings.save(s); }
   function condDocsBadge(d){
     const docs = condDocsGet(d.key);
     const soon = docs.some(x => x.date && (new Date(x.date) - new Date()) / 86400000 < 0);
@@ -834,6 +836,7 @@
       if (d.vehicules.length + d.amendes.length > 0) upsertCond(d.key, { masque: true, manuel: false, name: condRow(d.key) ? condRow(d.key).name : d.name });
       else deleteCondRow(d.key);
       unassignVehiclesOf(d.key); // ← retire aussi le conducteur de son/ses véhicule(s)
+      condDocsRemove(d.key);     // ← purge ses documents perso
     });
     state.selected.clear();
     drivers = buildDrivers();
@@ -1018,6 +1021,7 @@
       upsertCond(key, { masque: true, manuel: false, name: (condRow(key) && condRow(key).name) || d.name });
     }
     unassignVehiclesOf(key); // ← retire le conducteur de son/ses véhicule(s)
+    condDocsRemove(key);     // ← purge ses documents perso (CI…) pour ne pas laisser d'orphelin
     drivers = buildDrivers();
     closeDrawer();
     renderKPIs();
