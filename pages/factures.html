@@ -447,6 +447,11 @@
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
             <input id="fn-search" type="text" placeholder="Rechercher un fournisseur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
           </div>
+          <select id="fn-sort" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+            <option value="total">Ranger par : Total TTC ↓</option>
+            <option value="count">Ranger par : Nb factures ↓</option>
+            <option value="name">Ranger par : Nom (A→Z)</option>
+          </select>
           <span class="text-sm text-slate-500" id="fn-count"></span>
         </div>
       </div>
@@ -2250,6 +2255,7 @@
   // ===== Onglet FOURNISSEURS (voir + nettoyer les doublons) =====
   (function fournisseursTab(){
     let fnSearch = '';
+    let fnSort = 'total';
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
     function stats(){
       const m = new Map();
@@ -2266,6 +2272,10 @@
       const all = stats();
       const q = FP.norm(fnSearch.trim());
       const rows = all.filter(r => !q || FP.norm(r.name).includes(q));
+      rows.sort((a, b) =>
+        fnSort === 'name'  ? a.name.localeCompare(b.name, 'fr') :
+        fnSort === 'count' ? (b.count - a.count) || a.name.localeCompare(b.name, 'fr') :
+                             (b.total - a.total) || a.name.localeCompare(b.name, 'fr'));
       $('fn-count').textContent = all.length + ' fournisseur(s)';
       $('fn-empty').classList.toggle('hidden', rows.length > 0);
       $('fn-tbody').innerHTML = rows.map(r => `<tr>
@@ -2293,6 +2303,7 @@
       return n;
     }
     $('fn-search').addEventListener('input', (e) => { fnSearch = e.target.value; render(); });
+    $('fn-sort').addEventListener('change', (e) => { fnSort = e.target.value; render(); });
     $('fn-tbody').addEventListener('click', (e) => {
       const rn = e.target.closest('[data-fn-rename]');
       if (rn){ const old = rn.dataset.fnRename; const nn = prompt(`Renommer / fusionner « ${old} » en :`, old); if (nn != null && nn.trim() && nn.trim() !== old){ const k = applyRename(old, nn); alert(`${k} facture(s) mises à jour.`); } return; }
