@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Factures — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260615m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260615n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260615m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260615n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260615m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260615n">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -405,17 +405,20 @@
         </div>
       </div>
 
-      <!-- Import facture Ulys -->
+      <!-- Import facture Ulys (lecture auto : facture + détail par conducteur) -->
       <div class="card p-4 mb-6">
+        <input type="file" id="uls-import-file" accept="application/pdf" multiple class="hidden" />
         <button type="button" id="uls-import-trigger" class="w-full flex items-center gap-3 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
           <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
             <i data-lucide="upload-cloud" class="w-5 h-5"></i>
           </span>
           <span class="flex-1">
-            <span class="block text-sm font-semibold text-slate-800">Importer une facture Ulys (PDF / photo)</span>
-            <span class="block text-xs text-slate-500">Les montants sont lus automatiquement. Mets le fournisseur « Ulys » → la facture apparaît ici.</span>
+            <span class="block text-sm font-semibold text-slate-800">Importer une ou plusieurs factures Ulys (PDF)</span>
+            <span class="block text-xs text-slate-500">Lecture automatique : la facture (n°, montants) ET le détail des péages par conducteur. Aperçu avant validation.</span>
           </span>
         </button>
+        <div id="uls-import-status" class="hidden mt-3 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
+        <div id="uls-import-preview" class="hidden mt-3"></div>
       </div>
 
       <!-- Table -->
@@ -560,10 +563,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260615m"></script>
-<script src="../assets/js/supabase-client.js?v=20260615m"></script>
-<script src="../assets/js/data.js?v=20260615m"></script>
-<script src="../assets/js/app.js?v=20260615m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260615n"></script>
+<script src="../assets/js/supabase-client.js?v=20260615n"></script>
+<script src="../assets/js/data.js?v=20260615n"></script>
+<script src="../assets/js/app.js?v=20260615n"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2071,8 +2074,102 @@
 
     $('uls-search').addEventListener('input', (e) => { ust.search = e.target.value; render(); });
     $('uls-filter-annee').addEventListener('change', (e) => { ust.annee = e.target.value; render(); });
-    // Import : on réutilise la fenêtre d'import de facture (OCR auto) — fournisseur « Ulys » → atterrit ici
-    $('uls-import-trigger').addEventListener('click', () => { if (typeof openFactureModal === 'function') openFactureModal({ fournisseur: 'Ulys' }); });
+    // ===== Import auto des factures Ulys (PDF) : facture + détail par conducteur =====
+    const MOIS_FR = { janvier:'01',fevrier:'02',mars:'03',avril:'04',mai:'05',juin:'06',juillet:'07',aout:'08',septembre:'09',octobre:'10',novembre:'11',decembre:'12' };
+    const ulsNum  = (s) => parseFloat(String(s).replace(/[\s  ]/g,'').replace(',','.')) || 0;
+    const ulsNorm = (s) => (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+    const ulsSlug = (s) => (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+    function ulsKnownNames(){
+      const set = new Set();
+      const add = (str) => String(str||'').split(/[\s/]+/).forEach(tok => { if (tok.length>=3 && /^[A-ZÀ-Ý][a-zà-ÿ]/.test(tok)) set.add(tok); });
+      (window.FP_DATA.conducteurs||[]).forEach(c => add(c.prenom||c.nom||c.label||c.conducteur||c.key));
+      (window.FP_DATA.vehicules||[]).forEach(v => add(v.chauffeur));
+      return set;
+    }
+    function parseUlys(text){
+      const t = text || '';
+      const mNum = t.match(/Facture\s*n[°ºo]\s*([A-Z]{1,3}\d{6,})/i);
+      const mEm  = t.match(/[ÉE]mise?\s*le\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+      const numero = mNum ? mNum[1] : null;
+      const date = mEm ? `${mEm[3]}-${mEm[2]}-${mEm[1]}` : '';
+      let mois = '';
+      const mPer = t.match(/Facture\s+(?:de|d['’])\s*([a-zA-ZéèûôA-ZÀ-Ý]+)\s*(\d{4})/);
+      if (mPer){ const mm = MOIS_FR[ulsNorm(mPer[1])]; if (mm) mois = mPer[2] + '-' + mm; }
+      if (!mois && date){ const d = new Date(date); d.setMonth(d.getMonth()-1); mois = d.toISOString().slice(0,7); }
+      // Montants : nombres après "NET A PAYER TTC" jusqu'au premier € → dernier = TTC, somme des autres = TVA
+      let ht=null, tva=null, ttc=null;
+      const seg = (t.split(/NET\s*A\s*PAYER\s*TTC/i)[1]||'').split('€')[0];
+      const nums = (seg.match(/\d[\d\s  ]*,\d{2}/g)||[]).map(ulsNum);
+      if (nums.length){ ttc = nums[nums.length-1]; tva = +nums.slice(0,-1).reduce((a,b)=>a+b,0).toFixed(2); ht = +(ttc - tva).toFixed(2); }
+      // Détail par badge → conducteur
+      const known = ulsKnownNames();
+      const KW = new Set(['Date','Entrée','Sortie','Aut','Nom','Classe','Tarif','Total','Badge','Page','Code','Commercial','Consommations','Péage','Parking','Obs','Origine','Kma']);
+      const conso = [];
+      t.split(/Badge n[°ºo]/).slice(1).forEach(b => {
+        const mt = b.match(/Total Badge[\s\S]*?(\d+)\s*consommation\(s\)\s*([\d\s  ,]+?)\s*€?\s*TTC\s*([\d\s  ,]+?)\s*km/i);
+        if (!mt) return;
+        let who = null;
+        for (const nm of known){ if (new RegExp('\\b'+nm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b').test(b)){ who = nm; break; } }
+        if (!who){ const tok = (b.slice(0,600).match(/\b[A-ZÀ-Ý][a-zà-ÿ]{2,}\b/g)||[]).find(x => !KW.has(x)); who = tok || 'Non identifié'; }
+        conso.push({ conducteur: who, nb: parseInt(mt[1],10)||0, ttc: ulsNum(mt[2]), km: ulsNum(mt[3]) });
+      });
+      return { numero, date, mois, ht, tva, ttc, conso };
+    }
+
+    let _ulsPending = null;
+    function ulsImpStatus(html, kind){ const el=$('uls-import-status'); el.classList.remove('hidden'); el.innerHTML=html; el.style.background = kind==='ok'?'#ECFDF5':kind==='err'?'#FEF2F2':'#F1F5F9'; el.style.color = kind==='ok'?'#047857':kind==='err'?'#B91C1C':'#334155'; }
+    function ulsImpReset(){ _ulsPending=null; $('uls-import-preview').classList.add('hidden'); $('uls-import-preview').innerHTML=''; $('uls-import-status').classList.add('hidden'); }
+    async function handleUlysImport(files){
+      if (!files || !files.length) return;
+      if (!(window.FP && FP.ocr)){ ulsImpStatus('Lecteur PDF indisponible.', 'err'); return; }
+      ulsImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture de '+files.length+' fichier(s)…</span>', 'working');
+      const fac=[], rows=[];
+      for (const f of files){
+        try {
+          const text = await FP.ocr.fileToText(f, 99); // toutes les pages (détail multi-pages)
+          const p = parseUlys(text);
+          if (!p.numero || p.ttc == null) continue;
+          fac.push(p);
+          p.conso.forEach(c => rows.push(Object.assign({ mois:p.mois, numero:p.numero }, c)));
+        } catch (e){ console.error('[uls-import]', e); }
+      }
+      if (!fac.length){ ulsImpStatus('Aucune facture Ulys lisible (PDF avec couche texte attendu).', 'err'); return; }
+      _ulsPending = { fac, rows };
+      const facLines = fac.map(p => `<tr><td style="font-family:monospace">${esc(p.numero)}</td><td>${p.date?FP.date(p.date):'—'}</td><td>${esc(moisLabel(p.mois))}</td><td style="text-align:right">${p.ht!=null?FP.euro(p.ht):'—'}</td><td style="text-align:right">${p.tva!=null?FP.euro(p.tva):'—'}</td><td style="text-align:right;font-weight:700">${FP.euro(p.ttc)}</td></tr>`).join('');
+      const consoLines = rows.map(c => `<tr><td>${esc(c.conducteur)}</td><td>${esc(moisLabel(c.mois))}</td><td style="text-align:right">${c.nb}</td><td style="text-align:right">${FP.num(c.km)} km</td><td style="text-align:right;font-weight:700">${FP.euro(c.ttc)}</td></tr>`).join('');
+      $('uls-import-preview').classList.remove('hidden');
+      $('uls-import-preview').innerHTML =
+        '<div class="text-sm font-semibold mb-2">'+fac.length+' facture(s) Ulys</div>'
+        + '<div class="scrollable" style="max-height:170px"><table class="fp-table" style="font-size:13px"><thead><tr><th>N°</th><th>Date</th><th>Période</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th></tr></thead><tbody>'+facLines+'</tbody></table></div>'
+        + '<div class="text-sm font-semibold mt-4 mb-2">Détail par conducteur : '+rows.length+' ligne(s)</div>'
+        + '<div class="scrollable" style="max-height:240px"><table class="fp-table" style="font-size:13px"><thead><tr><th>Conducteur</th><th>Période</th><th style="text-align:right">Trajets</th><th style="text-align:right">Km</th><th style="text-align:right">TTC</th></tr></thead><tbody>'+consoLines+'</tbody></table></div>'
+        + '<div class="flex gap-2 mt-3"><button type="button" class="btn btn-outline text-sm" id="uls-import-cancel">Annuler</button><button type="button" class="btn btn-dark text-sm" id="uls-import-confirm"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button></div>';
+      ulsImpStatus('Vérifie l\'aperçu puis valide.', 'working');
+      if (window.lucide) lucide.createIcons();
+      $('uls-import-cancel').addEventListener('click', ulsImpReset);
+      $('uls-import-confirm').addEventListener('click', commitUlys);
+    }
+    async function commitUlys(){
+      if (!_ulsPending) return;
+      $('uls-import-confirm').disabled = true;
+      ulsImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement…</span>', 'working');
+      let okF=0, okC=0;
+      for (const p of _ulsPending.fac){
+        const newF = { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc };
+        const i = (window.FP_DATA.factures||[]).findIndex(x => x.id === newF.id);
+        if (i>=0) window.FP_DATA.factures[i]=newF; else window.FP_DATA.factures.push(newF);
+        try { await FP.persist.upsert('factures', newF); okF++; } catch(e){ console.error('[uls facture]', e); }
+      }
+      for (const c of _ulsPending.rows){
+        const row = { id:'ULYSC-'+c.mois+'-'+ulsSlug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe:'PXP' };
+        try { await FP.persist.upsert('ulys_conso', row); okC++; } catch(e){ console.error('[uls conso]', e); }
+      }
+      ulsImpStatus('<b>Enregistré</b> : '+okF+' facture(s) + détail de '+okC+' conducteur(s). Visible sur tous les postes.', 'ok');
+      $('uls-import-preview').classList.add('hidden'); _ulsPending=null;
+      render(); consoLoaded=false; loadConso();
+    }
+    $('uls-import-trigger').addEventListener('click', () => $('uls-import-file').click());
+    $('uls-import-file').addEventListener('change', (e) => { handleUlysImport(e.target.files); e.target.value=''; });
 
     function openUlsDrawer(f){
       $('drawer-num').textContent = f.numeroFacture || '—';
