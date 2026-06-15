@@ -775,6 +775,13 @@
     });
   }
 
+  // Documents « intégrés » masqués par véhicule (ex. mémo assurance/carte grise retiré par l'utilisateur).
+  // Mémorisé en local (par société) ; la carte grise est en plus effacée du véhicule (champ cgUrl).
+  const HIDDEN_BUILTIN_KEY = 'fp_hidden_builtin_docs_' + (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return 'PXP'; } })();
+  function hiddenBuiltinAll(){ try { return JSON.parse(localStorage.getItem(HIDDEN_BUILTIN_KEY) || '{}'); } catch(e){ return {}; } }
+  function hiddenBuiltinFor(id){ return hiddenBuiltinAll()[id] || []; }
+  function hideBuiltinDoc(id, key){ const h = hiddenBuiltinAll(); const a = (h[id] = h[id] || []); if (!a.includes(key)) a.push(key); try { localStorage.setItem(HIDDEN_BUILTIN_KEY, JSON.stringify(h)); } catch(e){} }
+
   // Immatriculation normalisée (clé des mémos assurance dans FP_DOCS)
   function normImmat(s){ return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 
@@ -786,7 +793,8 @@
     const docs = (typeof window !== 'undefined' && window.FP_DOCS) ? window.FP_DOCS : { assurance: {} };
     const aId = docs.assurance && docs.assurance[normImmat(v.immat)];
     if (aId) list.push({ type: 'assurance', label: 'Mémo assurance', drive: aId });
-    return list;
+    const hidden = hiddenBuiltinFor(v.id);
+    return list.filter(d => !hidden.includes(d.drive || d.url || d.type));
   }
 
   function builtinDocRowHTML(doc, vehId){
@@ -796,8 +804,8 @@
       ? `<a href="${escapeHtml(sanitizeUrl(doc.url))}" target="_blank" rel="noopener" class="btn btn-outline !py-1 !px-2.5 text-xs"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</a>`
       : `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-view="${escapeHtml(doc.drive)}" data-doc-title="${escapeHtml(doc.label)}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`;
     // La carte grise « lien Drive » est supprimable (utile si un doublon apparaît après un scan)
-    const delBtn = (doc.type === 'carte-grise' && vehId)
-      ? `<button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-cg-del="${escapeHtml(vehId)}" title="Retirer la carte grise (lien Drive)"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>`
+    const delBtn = vehId
+      ? `<button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-builtin-del="${escapeHtml(vehId)}" data-builtin-type="${escapeHtml(doc.type)}" data-builtin-key="${escapeHtml(doc.drive || doc.url || doc.type)}" title="Retirer ce document de la fiche"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>`
       : '';
     return `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm">
       <i data-lucide="${t.icon}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
@@ -2437,12 +2445,15 @@
       delVehDoc(state.editingId, del.dataset.docDel);
       return;
     }
-    const cgDel = e.target.closest('[data-cg-del]');
-    if (cgDel) {
+    const bDel = e.target.closest('[data-builtin-del]');
+    if (bDel) {
       const v = data.vehicules.find(x => x.id === state.editingId);
-      if (v && confirm('Retirer la carte grise (lien Drive) de cette fiche ?\n(Le document scanné/importé, lui, n\'est pas touché.)')) {
-        v.cgUrl = null; v.cgFileId = null;
-        persistVehFields(v, 'cgUrl');
+      if (v && confirm('Retirer ce document de la fiche ?\n(Le document scanné/importé, lui, n\'est pas touché.)')) {
+        if (bDel.dataset.builtinType === 'carte-grise') {
+          v.cgUrl = null; v.cgFileId = null;
+          persistVehFields(v, 'cgUrl');     // effacé du véhicule (synchronisé)
+        }
+        hideBuiltinDoc(v.id, bDel.dataset.builtinKey); // masqué côté fiche
         openDrawer(v.id);
       }
       return;
