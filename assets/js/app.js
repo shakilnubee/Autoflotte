@@ -1268,11 +1268,17 @@ FP.scanIA = async function (file, docType) {
       r.readAsDataURL(file);
     });
     const mediaType = file.type || (/\.pdf$/i.test(file.name || '') ? 'application/pdf' : 'image/jpeg');
-    const { data, error } = await FP.supabase.functions.invoke('scan-doc', {
-      body: { fileBase64: b64, mediaType, docType: docType || 'facture' },
-    });
-    if (error || !data || !data.ok || !data.fields) return null;
-    return data.fields;
+    const payload = { fileBase64: b64, mediaType, docType: docType || 'facture' };
+    // Le nom de l'Edge Function est sensible à la casse côté serveur. On essaie les
+    // variantes courantes pour que ça marche quelle que soit la façon dont elle a été créée.
+    const names = ['scan-doc', 'Scan-doc'];
+    for (const name of names) {
+      try {
+        const { data, error } = await FP.supabase.functions.invoke(name, { body: payload });
+        if (!error && data && data.ok && data.fields) { FP._scanFn = name; return data.fields; }
+      } catch (_) { /* essaie le nom suivant */ }
+    }
+    return null;
   } catch (e) {
     console.warn('[FP.scanIA] indisponible :', e && (e.message || e));
     return null;
