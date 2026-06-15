@@ -2222,15 +2222,24 @@
       const empty = $('uls-conso-empty'), emptyMsg = $('uls-conso-empty-msg');
       if (conso === null) { sel.innerHTML = ''; tbody.innerHTML = ''; tfoot.innerHTML = ''; empty.classList.remove('hidden'); emptyMsg.textContent = 'Table ulys_conso absente — lance le script SQL fourni (supabase/ulys-conso-setup.sql).'; return; }
       const moisList = [...new Set(conso.map(c => c.mois).filter(Boolean))].sort().reverse();
-      if (sel.dataset.filled !== moisList.join(',')) { sel.innerHTML = moisList.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join(''); sel.dataset.filled = moisList.join(','); if (moisList.length) sel.value = moisList[0]; }
-      const mois = sel.value || (moisList[0] || '');
-      const rows = conso.filter(c => c.mois === mois).sort((a,b) => (Number(b.total_ttc)||0) - (Number(a.total_ttc)||0));
+      const filledKey = 'all,' + moisList.join(',');
+      if (sel.dataset.filled !== filledKey) { sel.innerHTML = '<option value="all">Toutes les périodes</option>' + moisList.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join(''); sel.dataset.filled = filledKey; sel.value = 'all'; }
+      const mois = sel.value || 'all';
+      let rows;
+      if (mois === 'all') {
+        const byCond = {};
+        conso.forEach(c => { const k = c.conducteur || '—'; const a = (byCond[k] = byCond[k] || { conducteur:k, nb_trajets:0, km:0, total_ttc:0 }); a.nb_trajets += Number(c.nb_trajets)||0; a.km += Number(c.km)||0; a.total_ttc += Number(c.total_ttc)||0; });
+        rows = Object.values(byCond).sort((a,b) => b.total_ttc - a.total_ttc);
+      } else {
+        rows = conso.filter(c => c.mois === mois).sort((a,b) => (Number(b.total_ttc)||0) - (Number(a.total_ttc)||0));
+      }
       empty.classList.toggle('hidden', rows.length > 0);
-      if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation pour ce mois.';
+      if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation.';
       tbody.innerHTML = rows.map(c => `<tr><td>${esc(c.conducteur || '—')}</td><td style="text-align:right">${c.nb_trajets || 0}</td><td style="text-align:right">${FP.num(c.km || 0)} km</td><td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc || 0)}</td></tr>`).join('');
       const tot = rows.reduce((s,c) => s + (Number(c.total_ttc)||0), 0);
       const totKm = rows.reduce((s,c) => s + (Number(c.km)||0), 0);
-      tfoot.innerHTML = rows.length ? `<tr style="font-weight:700;border-top:2px solid var(--fp-border)"><td>Total ${moisLabel(mois)}</td><td></td><td style="text-align:right">${FP.num(totKm)} km</td><td style="text-align:right">${FP.euro(tot)}</td></tr>` : '';
+      const lbl = mois === 'all' ? 'Toutes les périodes' : moisLabel(mois);
+      tfoot.innerHTML = rows.length ? `<tr style="font-weight:700;border-top:2px solid var(--fp-border)"><td>Total ${lbl}</td><td></td><td style="text-align:right">${FP.num(totKm)} km</td><td style="text-align:right">${FP.euro(tot)}</td></tr>` : '';
     }
     $('uls-conso-mois').addEventListener('change', renderConso);
 
