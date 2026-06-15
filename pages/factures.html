@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../assets/css/tailwind.css">
 <script src="https://unpkg.com/lucide@latest"></script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260613a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260614a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -29,6 +29,13 @@
   .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(249,115,22,.15); }
   .modal-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.5); display: none; align-items: center; justify-content: center; z-index: 70; padding: 1rem; }
   .modal-backdrop.open { display: flex; }
+  /* Autocomplete maison (fournisseur / plaque) — à la place du menu déroulant natif */
+  .fp-ac-wrap { position: relative; }
+  .fp-ac { position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; background: #fff; border: 1px solid var(--fp-border); border-radius: .6rem; box-shadow: 0 14px 32px -12px rgba(15,30,61,.30); max-height: 220px; overflow-y: auto; padding: 4px; z-index: 90; }
+  .fp-ac.hidden { display: none; }
+  .fp-ac-item { padding: 8px 10px; border-radius: .45rem; font-size: 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fp-ac-item.active, .fp-ac-item:hover { background: var(--fp-accent); color: #fff; }
+  .fp-ac-empty { padding: 8px 10px; font-size: 13px; color: var(--fp-muted); }
   .modal { background: white; border-radius: 1rem; width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; }
   .fa-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: fa-spin .7s linear infinite; }
   @keyframes fa-spin { to { transform: rotate(360deg); } }
@@ -391,7 +398,7 @@
       </div>
 
       <div class="grid grid-cols-2 gap-4">
-        <div><div class="field-label">Fournisseur</div><input class="field-input" id="fa-fournisseur" list="fa-fournisseurs" placeholder="ex. Car World" autocomplete="off" /><datalist id="fa-fournisseurs"></datalist></div>
+        <div><div class="field-label">Fournisseur</div><input class="field-input" id="fa-fournisseur" placeholder="ex. Car World" autocomplete="off" /></div>
         <div><div class="field-label">Date</div><input class="field-input" type="date" id="fa-date" /></div>
       </div>
       <div class="grid grid-cols-2 gap-4">
@@ -409,13 +416,13 @@
         </div>
       </div>
       <div class="grid grid-cols-3 gap-4">
-        <div><div class="field-label">Montant HT (€)</div><input class="field-input" type="number" step="0.01" id="fa-ht" placeholder="0" /></div>
-        <div><div class="field-label">TVA (€)</div><input class="field-input" type="number" step="0.01" id="fa-tva" placeholder="0" /></div>
-        <div><div class="field-label">Montant TTC (€) *</div><input class="field-input" type="number" step="0.01" id="fa-ttc" placeholder="0" required /></div>
+        <div><div class="field-label">Montant HT (€)</div><input class="field-input" type="text" inputmode="decimal" id="fa-ht" placeholder="0" /></div>
+        <div><div class="field-label">TVA (€)</div><input class="field-input" type="text" inputmode="decimal" id="fa-tva" placeholder="0" /></div>
+        <div><div class="field-label">Montant TTC (€) *</div><input class="field-input" type="text" inputmode="decimal" id="fa-ttc" placeholder="0" required /></div>
       </div>
       <div class="grid grid-cols-2 gap-4">
-        <div><div class="field-label">Véhicule (plaque)</div><input class="field-input" id="fa-immat" list="fa-immats" placeholder="ex. GC-885-LB" autocomplete="off" /><datalist id="fa-immats"></datalist></div>
-        <div><div class="field-label">Kilométrage</div><input class="field-input" type="number" min="0" id="fa-km" placeholder="" /></div>
+        <div><div class="field-label">Véhicule (plaque)</div><input class="field-input" id="fa-immat" placeholder="ex. GC-885-LB" autocomplete="off" /></div>
+        <div><div class="field-label">Kilométrage</div><input class="field-input" type="text" inputmode="numeric" id="fa-km" placeholder="" /></div>
       </div>
       <div><div class="field-label">Description</div><input class="field-input" id="fa-desc" placeholder="ex. Révision, pneus…" /></div>
 
@@ -428,9 +435,9 @@
 </div>
 
 <script src="../assets/js/vendor/supabase.js"></script>
-<script src="../assets/js/supabase-client.js?v=20260613a"></script>
-<script src="../assets/js/data.js?v=20260613a"></script>
-<script src="../assets/js/app.js?v=20260613a"></script>
+<script src="../assets/js/supabase-client.js?v=20260614a"></script>
+<script src="../assets/js/data.js?v=20260614a"></script>
+<script src="../assets/js/app.js?v=20260614a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script>
   lucide.createIcons();
@@ -840,8 +847,35 @@
     return `${year}-${String(mo).padStart(2,'0')}-${String(parseInt(day,10)).padStart(2,'0')}`;
   }
 
+  // Remplit les champs du formulaire depuis les données lues (IA ou lecteur local)
+  function applyFactureFields(parsed, fromIA){
+    if (!parsed) parsed = {};
+    const filled = [];
+    const set = (id, val, label) => { const el = $(id); if (el && val != null && val !== '' && !el.value){ el.value = val; filled.push(label); } };
+    if (parsed.date){ $('fa-date').value = parsed.date; filled.push('date'); } // écrase la date du jour pré-remplie
+    set('fa-ttc', parsed.montantTTC, 'montant TTC');
+    set('fa-ht',  parsed.montantHT,  'HT');
+    set('fa-tva', parsed.montantTVA, 'TVA');
+    set('fa-num', parsed.numeroFacture, 'n° facture');
+    if (parsed.vehiculeImmat) set('fa-immat', String(parsed.vehiculeImmat).toUpperCase(), 'véhicule');
+    set('fa-km', parsed.km, 'km');
+    if (fromIA){ set('fa-fournisseur', parsed.fournisseur, 'fournisseur'); set('fa-desc', parsed.description, 'description'); }
+    if (filled.length) faStatus(`<b>✓ ${fromIA ? 'Lecture IA' : 'Lecture'} — ${filled.length} champ(s)</b> : ${filled.join(', ')}.${fromIA ? '' : '<br>Complétez le fournisseur et le type.'}`, 'ok');
+    else faStatus("Lecture terminée, mais rien n'a pu être détecté. Saisissez les montants à la main (surtout le TTC).", 'error');
+  }
+
   async function handleFacture(file){
     if (!file) return;
+    // 0) Lecture IA (Haiku via le relais sécurisé) — la meilleure ; sinon on retombe sur le lecteur local
+    try {
+      faWorking('Lecture IA du document…');
+      const ia = await FP.scanIA(file, 'facture');
+      if (ia && (ia.montantTTC != null || ia.montantHT != null || ia.numeroFacture)) {
+        applyFactureFields(ia, true);
+        return;
+      }
+    } catch (_) { /* on bascule sur le lecteur local */ }
+    // 1) Lecteur local (texte PDF / OCR) — gratuit, fonctionne hors-ligne
     try {
       let parsed = {};
       const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
@@ -857,16 +891,7 @@
         const w = await Tesseract.createWorker('fra'); const { data } = await w.recognize(file); await w.terminate();
         parsed = parseFacture(data.text);
       }
-      const filled = [];
-      if (parsed.montantTTC != null && !$('fa-ttc').value) { $('fa-ttc').value = parsed.montantTTC; filled.push('montant TTC'); }
-      if (parsed.montantHT  != null && !$('fa-ht').value)  { $('fa-ht').value  = parsed.montantHT;  filled.push('HT'); }
-      if (parsed.montantTVA != null && !$('fa-tva').value) { $('fa-tva').value = parsed.montantTVA; filled.push('TVA'); }
-      if (parsed.date          && !$('fa-date').value) { $('fa-date').value = parsed.date; filled.push('date'); }
-      if (parsed.numeroFacture && !$('fa-num').value)  { $('fa-num').value  = parsed.numeroFacture; filled.push('n° facture'); }
-      if (parsed.vehiculeImmat && !$('fa-immat').value){ $('fa-immat').value = parsed.vehiculeImmat; filled.push('véhicule'); }
-      if (parsed.km != null && $('fa-km') && !$('fa-km').value){ $('fa-km').value = parsed.km; filled.push('km'); }
-      if (filled.length) faStatus(`<b>✓ ${filled.length} champ(s) lus</b> : ${filled.join(', ')}.<br>Vérifiez le montant puis complétez le fournisseur / type.`, 'ok');
-      else faStatus("Lecture terminée, mais aucun montant n'a pu être détecté. Saisissez-le à la main (surtout le TTC, c'est lui qui compte dans les totaux).", 'error');
+      applyFactureFields(parsed, false);
     } catch (err) {
       console.error(err);
       faStatus("Impossible de lire le document. Vérifiez votre connexion internet, ou saisissez les montants manuellement.", 'error');
@@ -880,10 +905,6 @@
   }
   let _faFileName = '';
   function openFactureModal(){
-    const fourn = [...new Set(data.factures.map(f => f.fournisseur).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'fr'));
-    $('fa-fournisseurs').innerHTML = fourn.map(s => `<option value="${s.replace(/"/g,'&quot;')}"></option>`).join('');
-    const immats = [...new Set((data.vehicules||[]).map(v => v.immat).filter(Boolean))].sort();
-    $('fa-immats').innerHTML = immats.map(s => `<option value="${s}"></option>`).join('');
     ['fa-fournisseur','fa-num','fa-ht','fa-tva','fa-ttc','fa-immat','fa-km','fa-desc'].forEach(id => $(id).value = '');
     $('fa-date').value = new Date().toISOString().slice(0,10);
     $('fa-type').value = 'entretien';
@@ -895,9 +916,10 @@
   function closeFactureModal(){ $('facture-modal').classList.remove('open'); }
   function saveFacture(ev){
     ev.preventDefault();
-    const ttc = parseFloat($('fa-ttc').value);
-    if (isNaN(ttc) || ttc <= 0){ $('fa-ttc').focus(); faStatus('Indiquez au moins le montant TTC (il sert aux calculs).', 'error'); return; }
-    const num = (n) => { const v = parseFloat(n); return isNaN(v) ? null : v; };
+    // Normalise « 1 466,48 » / « 1466.48 » → 1466.48
+    const num = (n) => { const v = parseFloat(String(n == null ? '' : n).replace(/\s/g, '').replace(',', '.')); return isNaN(v) ? null : v; };
+    const ttc = num($('fa-ttc').value);
+    if (ttc == null || ttc <= 0){ $('fa-ttc').focus(); faStatus('Indiquez au moins le montant TTC (il sert aux calculs).', 'error'); return; }
     const date = $('fa-date').value || new Date().toISOString().slice(0,10);
     const newF = {
       id: nextFactId(), date,
@@ -926,6 +948,38 @@
   $('facture-form').addEventListener('submit', saveFacture);
   $('fa-trigger').addEventListener('click', () => $('fa-file').click());
   $('fa-file').addEventListener('change', (e) => { const file = e.target.files && e.target.files[0]; _faFileName = file ? file.name : ''; handleFacture(file); e.target.value = ''; });
+
+  // ---- Autocomplete maison (fournisseur + plaque), stylé « à notre sauce » ----
+  function setupAutocomplete(input, optionsFn){
+    if (!input) return;
+    const acEsc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    input.parentElement.classList.add('fp-ac-wrap');
+    const box = document.createElement('div');
+    box.className = 'fp-ac hidden';
+    input.parentElement.appendChild(box);
+    let items = [], active = -1;
+    function paint(){
+      const q = FP.norm(input.value.trim());
+      items = (optionsFn() || []).filter(o => !q || FP.norm(o).includes(q)).slice(0, 8);
+      if (!items.length){ box.classList.add('hidden'); return; }
+      box.innerHTML = items.map((o, i) => `<div class="fp-ac-item${i === active ? ' active' : ''}" data-i="${i}">${acEsc(o)}</div>`).join('');
+      box.classList.remove('hidden');
+    }
+    const pick = (i) => { if (items[i] != null){ input.value = items[i]; } box.classList.add('hidden'); active = -1; };
+    input.addEventListener('input', () => { active = -1; paint(); });
+    input.addEventListener('focus', () => { active = -1; paint(); });
+    input.addEventListener('blur', () => setTimeout(() => box.classList.add('hidden'), 150));
+    input.addEventListener('keydown', (e) => {
+      if (box.classList.contains('hidden')) return;
+      if (e.key === 'ArrowDown'){ e.preventDefault(); active = Math.min(active + 1, items.length - 1); paint(); }
+      else if (e.key === 'ArrowUp'){ e.preventDefault(); active = Math.max(active - 1, 0); paint(); }
+      else if (e.key === 'Enter' && active >= 0){ e.preventDefault(); pick(active); }
+      else if (e.key === 'Escape'){ box.classList.add('hidden'); }
+    });
+    box.addEventListener('mousedown', (e) => { const it = e.target.closest('.fp-ac-item'); if (it) pick(+it.dataset.i); });
+  }
+  setupAutocomplete($('fa-fournisseur'), () => [...new Set((data.factures || []).map(f => f.fournisseur).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')));
+  setupAutocomplete($('fa-immat'), () => [...new Set((data.vehicules || []).map(v => v.immat).filter(Boolean))].sort());
 
   // Wiring
   // Bouton « Voir plus / Réduire » sous le tableau

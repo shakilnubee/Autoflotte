@@ -1252,6 +1252,32 @@ FP.compressImage = async function (file, { maxSide = 2000, quality = 0.72 } = {}
   }
 };
 
+// Lecture IA d'un document via l'Edge Function sécurisée « scan-doc » (Haiku).
+// Renvoie un objet de champs { date, fournisseur, numeroFacture, vehiculeImmat, km,
+// montantHT, montantTVA, montantTTC, description } ou null si indisponible/échec
+// (dans ce cas l'appelant retombe sur le lecteur local). La clé API reste côté
+// serveur : on n'envoie que le fichier + le type de document.
+FP.scanIA = async function (file, docType) {
+  try {
+    if (!file || !(FP.supabase && FP.supabase.functions)) return null;
+    // base64 (sans le préfixe data:)
+    const b64 = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => { const s = String(r.result || ''); resolve(s.slice(s.indexOf(',') + 1)); };
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+    const mediaType = file.type || (/\.pdf$/i.test(file.name || '') ? 'application/pdf' : 'image/jpeg');
+    const { data, error } = await FP.supabase.functions.invoke('scan-doc', {
+      body: { fileBase64: b64, mediaType, docType: docType || 'facture' },
+    });
+    if (error || !data || !data.ok || !data.fields) return null;
+    return data.fields;
+  } catch (e) {
+    console.warn('[FP.scanIA] indisponible :', e && (e.message || e));
+    return null;
+  }
+};
 FP.uploadScan = async function (file, folder) {
   if (!FP.supabase || !FP.supabase.storage) throw new Error('Stockage indisponible (Supabase non chargé).');
   if (!file) return null;
