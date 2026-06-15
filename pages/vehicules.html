@@ -239,7 +239,7 @@
   // Bloque l'affichage si pas connecté
   var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
   var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
-  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
 })();
 </script>
 </head>
@@ -843,12 +843,12 @@
   // === Définition des colonnes du tableau ===
   // key (id stable), label (titre), defaultWidth (px), render(v), cellCls (classes optionnelles)
   const DATA_COLUMNS = [
-    { key: 'immat',                 label: 'Immat.',            defaultWidth: 110, cellCls: 'font-mono font-semibold', render: v => v.immat },
-    { key: 'modele',                label: 'Modèle',            defaultWidth: 200, render: v => `<div class="font-semibold">${v.marque || ''} ${v.modele || ''}</div>` },
+    { key: 'immat',                 label: 'Immat.',            defaultWidth: 110, cellCls: 'font-mono font-semibold', render: v => escapeHtml(v.immat || '') },
+    { key: 'modele',                label: 'Modèle',            defaultWidth: 200, render: v => `<div class="font-semibold">${escapeHtml(v.marque || '')} ${escapeHtml(v.modele || '')}</div>` },
     { key: 'groupes',               label: 'Groupe',            defaultWidth: 150, render: v => `<div class="inline-flex gap-1">${multiGroupePills(v)}</div>` },
     { key: 'categorie',             label: 'Catégorie',         defaultWidth: 110, render: v => `<span class="text-slate-600">${v.categorie || '—'}</span>` },
     { key: 'km',                    label: 'Km',                defaultWidth: 100, render: v => `${FP.num(v.km)} km` },
-    { key: 'chauffeur',             label: 'Chauffeur',         defaultWidth: 140, render: v => v.chauffeur || '—' },
+    { key: 'chauffeur',             label: 'Chauffeur',         defaultWidth: 140, render: v => escapeHtml(v.chauffeur || '—') },
     { key: 'prochainCT',            label: 'Prochain CT',       defaultWidth: 170, render: v => ctCell(v.prochainCT) },
     { key: 'statut',                label: 'Statut',            defaultWidth: 110, render: v => FP.statutBadge(v.statut) },
     { key: 'dateMiseEnCirculation', label: '1ère immat.',       defaultWidth: 120, render: v => v.dateMiseEnCirculation ? FP.dateNum(v.dateMiseEnCirculation) : '—' },
@@ -1387,7 +1387,7 @@
     const excl = ['', '—', 'x', 'X', 'Siège', 'Dépôt', 'Navette', 'VENDU', 'Fenwick'];
     if (excl.includes(raw)) return raw || '—';
     const key = raw.split(/\s+/)[0].toLowerCase();
-    return `<a href="conducteurs.html?cond=${encodeURIComponent(key)}" style="color: var(--fp-accent); text-decoration: none" title="Voir la fiche conducteur">${raw}</a>`;
+    return `<a href="conducteurs.html?cond=${encodeURIComponent(key)}" style="color: var(--fp-accent); text-decoration: none" title="Voir la fiche conducteur">${escapeHtml(raw)}</a>`;
   }
 
   let drawerVehId = null;
@@ -1437,7 +1437,7 @@
     // Nom du chauffeur à côté, s'il y en a un
     const chauf = $('drawer-chauffeur');
     const hasChauf = v.chauffeur && v.chauffeur !== '—' && v.chauffeur.trim() !== '';
-    chauf.innerHTML = hasChauf ? `<i data-lucide="user" class="w-5 h-5 text-white/70"></i> ${v.chauffeur}` : '';
+    chauf.innerHTML = hasChauf ? `<i data-lucide="user" class="w-5 h-5 text-white/70"></i> ${escapeHtml(v.chauffeur)}` : '';
     if (window.lucide) lucide.createIcons();
 
     // Calculs liés (data.entretiens/contrats peuvent être absents de FP_DATA → garde || [])
@@ -1484,8 +1484,8 @@
           ${carnet.map(f => `
             <div class="flex justify-between items-start gap-2 border-b border-slate-100 pb-1.5">
               <div>
-                <div class="text-slate-700">${f.description || f.fournisseur || f.numeroFacture || 'Facture'}</div>
-                <div class="text-xs text-slate-400">${FP.dateNum(f.date)}${f.fournisseur && f.description ? ' · ' + f.fournisseur : ''}${f.km ? ' · ' + FP.num(f.km) + ' km' : ''}</div>
+                <div class="text-slate-700">${escapeHtml(f.description || f.fournisseur || f.numeroFacture || 'Facture')}</div>
+                <div class="text-xs text-slate-400">${FP.dateNum(f.date)}${f.fournisseur && f.description ? ' · ' + escapeHtml(f.fournisseur) : ''}${f.km ? ' · ' + FP.num(f.km) + ' km' : ''}</div>
               </div>
               <div class="font-semibold whitespace-nowrap">${FP.euro(f.montantTTC)}</div>
             </div>`).join('')}
@@ -1579,8 +1579,8 @@
       <div>
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Technique</div>
         <div class="text-sm space-y-1.5 mt-3">
-          <div class="flex justify-between"><span class="text-slate-600">Version / finition</span><span class="font-medium text-right" data-df="version" data-dt="text">${v.version || '<span class="text-slate-400">—</span>'}</span></div>
-          <div class="flex justify-between"><span class="text-slate-600">VIN</span><span class="font-mono text-xs" data-df="vin" data-dt="text">${v.vin || '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between"><span class="text-slate-600">Version / finition</span><span class="font-medium text-right" data-df="version" data-dt="text">${v.version ? escapeHtml(v.version) : '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between"><span class="text-slate-600">VIN</span><span class="font-mono text-xs" data-df="vin" data-dt="text">${v.vin ? escapeHtml(v.vin) : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">CO₂ <span class="text-slate-400 text-xs">(V.7)</span></span><span class="font-medium" data-df="co2" data-dt="number">${(v.co2 != null && v.co2 !== '') ? FP.num(v.co2) + ' g/km' : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Puissance fiscale <span class="text-slate-400 text-xs">(P.6)</span></span><span class="font-medium" data-df="puissanceFiscale" data-dt="number">${(v.puissanceFiscale != null && v.puissanceFiscale !== '') ? FP.num(v.puissanceFiscale) + ' CV' : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between items-center"><span class="text-slate-600">Puissance DIN <span class="text-slate-400 text-xs">(ch)</span></span><span class="font-medium" style="display:inline-flex;align-items:center;gap:4px"><input class="veh-din" data-id="${v.id}" type="number" value="${((FP.settings.get().vehDin || {})[v.id]) ?? ''}" placeholder="—" style="width:72px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:2px 6px;font-size:.9rem"> ch</span></div>
@@ -1629,7 +1629,7 @@
           : contrats.map(c => `
               <div class="flex justify-between items-center py-2 border-b border-slate-100 text-sm">
                 <div>
-                  <div class="font-medium">${c.type} · ${c.fournisseur}</div>
+                  <div class="font-medium">${c.type} · ${escapeHtml(c.fournisseur || '')}</div>
                   <div class="text-xs text-slate-500">${c.numero} · jusqu'au ${FP.dateNum(c.fin)}</div>
                 </div>
                 <div class="font-semibold">${c.coutMensuel ? FP.euro(c.coutMensuel) + '/mois' : '—'}</div>

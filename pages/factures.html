@@ -51,7 +51,7 @@
   // Bloque l'affichage si pas connecté
   var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
   var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
-  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
 })();
 </script>
 </head>
@@ -467,6 +467,7 @@
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
+  const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   // Les factures de leasing sont gérées sur la page Contrats (section Leasing BPCE),
   // pas dans cette vue qui se concentre sur les vraies factures (entretien, réparation, achat, sinistre, etc.)
   // Les sinistres ont leur propre page ; le leasing aussi (contrats) → on les sort de la liste Factures
@@ -543,9 +544,9 @@
   // === Config colonnes éditables ===
   const FACTURES_COLUMNS = [
     { key: 'date',          label: 'Date',         defaultWidth: 110, render: f => FP.date(f.date) },
-    { key: 'vehiculeImmat', label: 'Véhicule',     defaultWidth: 110, cellCls: 'font-mono text-sm', render: f => f.vehiculeImmat || '—' },
-    { key: 'fournisseur',   label: 'Fournisseur',  defaultWidth: 220, render: f => f.fournisseur || '—' },
-    { key: 'description',   label: 'Description',  defaultWidth: 300, render: f => `<span title="${(f.description || '').replace(/"/g,'&quot;')}">${f.description ? f.description.slice(0,60) + (f.description.length > 60 ? '…' : '') : '—'}</span>` },
+    { key: 'vehiculeImmat', label: 'Véhicule',     defaultWidth: 110, cellCls: 'font-mono text-sm', render: f => escapeHtml(f.vehiculeImmat || '—') },
+    { key: 'fournisseur',   label: 'Fournisseur',  defaultWidth: 220, render: f => escapeHtml(f.fournisseur || '—') },
+    { key: 'description',   label: 'Description',  defaultWidth: 300, render: f => `<span title="${escapeHtml(f.description || '')}">${f.description ? escapeHtml(f.description.slice(0,60)) + (f.description.length > 60 ? '…' : '') : '—'}</span>` },
     { key: 'type',          label: 'Type',         defaultWidth: 100, render: f => typePill(f.type) },
     { key: 'montantHT',     label: 'HT',           defaultWidth: 100, render: f => f.montantHT != null ? FP.euroPrecis(f.montantHT) : '<span class="text-slate-400">—</span>' },
     { key: 'montantTVA',    label: 'TVA',          defaultWidth: 90,  render: f => f.montantTVA != null ? FP.euroPrecis(f.montantTVA) : '<span class="text-slate-400">—</span>' },
@@ -1353,7 +1354,7 @@
     const importModal = $('doc-import-modal');
     function openImport(){
       const vehs = (window.FP_DATA.vehicules||[]).slice().sort((a,b)=>(a.immat||'').localeCompare(b.immat||''));
-      $('di-veh').innerHTML = '<option value="">— Choisir un véhicule —</option>' + vehs.map(v=>`<option value="${v.id}">${(v.immat||'?')} · ${(v.marque||'')} ${(v.modele||'')}</option>`).join('');
+      $('di-veh').innerHTML = '<option value="">— Choisir un véhicule —</option>' + vehs.map(v=>`<option value="${v.id}">${escapeHtml(v.immat||'?')} · ${escapeHtml(v.marque||'')} ${escapeHtml(v.modele||'')}</option>`).join('');
       const DL = docLabels();
       $('di-type').innerHTML = Object.keys(DL).map(t=>`<option value="${t}">${DL[t]}</option>`).join('');
       $('di-label').value=''; $('di-file').value='';

@@ -26,7 +26,7 @@
   // Bloque l'affichage si pas connecté
   var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
   var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
-  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
 })();
 </script>
 </head>
@@ -158,6 +158,7 @@
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
+  const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   const $ = (id) => document.getElementById(id);
 
   // Tous les sinistres = factures type=sinistre
@@ -227,7 +228,7 @@
       }
       tl.innerHTML = shown.map(s => {
         const veh = (data.vehicules || []).find(v => v.immat === s.vehiculeImmat);
-        const vehInfo = veh ? `${veh.marque} ${veh.modele}${veh.chauffeur && veh.chauffeur !== '—' ? ' · ' + veh.chauffeur : ''}` : (s.vehiculeImmat || '');
+        const vehInfo = veh ? `${escapeHtml(veh.marque)} ${escapeHtml(veh.modele)}${veh.chauffeur && veh.chauffeur !== '—' ? ' · ' + escapeHtml(veh.chauffeur) : ''}` : (s.vehiculeImmat || '');
         const cur = (FP.settings.get().sinistreStatut || {})[s.id] || '';
         const bar = statColor(cur);
         const pdf = s.fileId ? `<a href="${/^https?:\/\//.test(s.fileId) ? s.fileId : ('https://drive.google.com/file/d/' + s.fileId + '/view')}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs hover:underline" style="color: var(--fp-accent)"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Voir le document</a>` : '<span></span>';
@@ -235,14 +236,14 @@
           <div class="card p-4" style="border-left:4px solid ${bar}">
             <div class="flex justify-between items-start gap-2">
               <div class="min-w-0">
-                <div class="font-mono font-extrabold text-slate-900">${s.vehiculeImmat || '—'}</div>
-                <div class="text-xs text-slate-500 mt-0.5">${FP.date(s.date)}${s.fournisseur ? ' · ' + s.fournisseur : ''}</div>
+                <div class="font-mono font-extrabold text-slate-900">${escapeHtml(s.vehiculeImmat || '—')}</div>
+                <div class="text-xs text-slate-500 mt-0.5">${FP.date(s.date)}${s.fournisseur ? ' · ' + escapeHtml(s.fournisseur) : ''}</div>
               </div>
               <div class="text-right shrink-0">
                 ${s.montantTTC ? `<div class="font-extrabold text-red-600 text-lg leading-none">${FP.euroPrecis(s.montantTTC)}</div>` : '<div class="text-xs text-slate-400 italic">Sans montant</div>'}
               </div>
             </div>
-            <div class="text-sm text-slate-700 mt-2">${s.description || '—'}</div>
+            <div class="text-sm text-slate-700 mt-2">${escapeHtml(s.description || '—')}</div>
             ${vehInfo ? `<div class="text-xs text-slate-400 mt-1">${vehInfo}</div>` : ''}
             <div class="flex items-center justify-between gap-2 mt-3 pt-3" style="border-top:1px solid var(--fp-border)">
               ${statutSelect(s.id)}

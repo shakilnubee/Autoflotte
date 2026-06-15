@@ -115,7 +115,7 @@
   // Bloque l'affichage si pas connecté
   var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
   var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
-  if (!t || !t.access_token) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
 })();
 </script>
 </head>
@@ -863,7 +863,7 @@
     else { posteEl.style.display = 'none'; }
     // Récap véhicule(s) dans l'en-tête : marque modèle + plaque (sans le nb d'amendes)
     $('drawer-sub').innerHTML = d.vehicules.length
-      ? d.vehicules.map(v => `${v.marque} ${v.modele} <span class="font-mono text-slate-400">${v.immat}</span>`).join(' · ')
+      ? d.vehicules.map(v => `${escapeHtml(v.marque)} ${escapeHtml(v.modele)} <span class="font-mono text-slate-400">${escapeHtml(v.immat)}</span>`).join(' · ')
       : 'Aucun véhicule assigné';
 
     const nbPoints = d.amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
@@ -915,14 +915,14 @@
         <div class="fiche-line">
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="plate-badge">${v.immat}</span>
-            <span class="text-xs text-slate-500 truncate">${v.marque} ${v.modele}</span>
+            <span class="text-xs text-slate-500 truncate">${escapeHtml(v.marque)} ${escapeHtml(v.modele)}</span>
           </div>
           <div class="text-right flex-shrink-0">${FP.statutBadge(v.statut)}<span class="text-xs text-slate-500 ml-1">${FP.num(v.km)} km</span></div>
         </div>`).join('');
     const amendesInner = (d.amendes.length === 0 ? '<p class="text-sm text-slate-500">Aucune amende ✓</p>' :
       d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 20).map(a => `
         <div class="fiche-line">
-          <div class="min-w-0"><div class="font-medium truncate">${a.motif || '—'}</div><div class="text-xs text-slate-500">${FP.date(a.date)}${(Number(a.points) || 0) > 0 ? ' · −' + a.points + ' pt' : ''}</div></div>
+          <div class="min-w-0"><div class="font-medium truncate">${escapeHtml(a.motif || '—')}</div><div class="text-xs text-slate-500">${FP.date(a.date)}${(Number(a.points) || 0) > 0 ? ' · −' + a.points + ' pt' : ''}</div></div>
           <div class="text-right flex-shrink-0"><div class="font-semibold">${a.montant ? FP.euroPrecis(a.montant) : '—'}</div><div class="text-xs">${a.statut === 'payée' ? '<span class="text-emerald-600">Payée</span>' : '<span class="text-red-600">À payer</span>'}</div></div>
         </div>`).join('')) + (d.amendes.length > 20 ? `<p class="text-xs text-slate-500 mt-2">… et ${d.amendes.length - 20} de plus</p>` : '');
     // Accidents (sinistres déduits des factures)
@@ -936,7 +936,7 @@
     const totalKm = d.vehicules.reduce((s, v) => s + (v.km || 0), 0);
     const kmInner = d.vehicules.length === 0 ? '<p class="text-sm text-slate-500">Aucun véhicule.</p>' :
       `<div class="fiche-line"><span class="text-slate-600">Total parcouru</span><span class="font-bold" style="font-size:1.05rem">${FP.num(totalKm)} km</span></div>`
-      + (d.vehicules.length > 1 ? d.vehicules.map(v => `<div class="fiche-line"><span class="flex items-center gap-2"><span class="plate-badge">${v.immat}</span><span class="text-xs text-slate-500">${v.marque} ${v.modele}</span></span><span class="text-sm font-medium">${FP.num(v.km || 0)} km</span></div>`).join('') : '');
+      + (d.vehicules.length > 1 ? d.vehicules.map(v => `<div class="fiche-line"><span class="flex items-center gap-2"><span class="plate-badge">${escapeHtml(v.immat)}</span><span class="text-xs text-slate-500">${escapeHtml(v.marque)} ${escapeHtml(v.modele)}</span></span><span class="text-sm font-medium">${FP.num(v.km || 0)} km</span></div>`).join('') : '');
 
     // Helpers de carte (neutre / colorée)
     const card  = (icon, title, inner) => `<div class="fiche-card"><div class="fiche-title"><i data-lucide="${icon}"></i> ${title}</div>${inner}</div>`;
