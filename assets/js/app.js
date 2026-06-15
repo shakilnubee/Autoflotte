@@ -1260,14 +1260,20 @@ FP.compressImage = async function (file, { maxSide = 2000, quality = 0.72 } = {}
 FP.scanIA = async function (file, docType) {
   try {
     if (!file || !(FP.supabase && FP.supabase.functions)) return null;
+    // Les permis/CI sont souvent des PHOTOS lourdes : on les allège avant l'envoi
+    // (sinon l'API refuse l'image ou le transfert échoue). Les PDF passent tels quels.
+    let f = file;
+    if (/^image\//i.test(file.type || '') && FP.compressImage) {
+      try { f = await FP.compressImage(file, { maxSide: 1600, quality: 0.7 }); } catch (_) { f = file; }
+    }
     // base64 (sans le préfixe data:)
     const b64 = await new Promise((resolve, reject) => {
       const r = new FileReader();
       r.onload = () => { const s = String(r.result || ''); resolve(s.slice(s.indexOf(',') + 1)); };
       r.onerror = reject;
-      r.readAsDataURL(file);
+      r.readAsDataURL(f);
     });
-    const mediaType = file.type || (/\.pdf$/i.test(file.name || '') ? 'application/pdf' : 'image/jpeg');
+    const mediaType = f.type || (/\.pdf$/i.test(f.name || '') ? 'application/pdf' : 'image/jpeg');
     const payload = { fileBase64: b64, mediaType, docType: docType || 'facture' };
     // Le nom de l'Edge Function est sensible à la casse côté serveur. On essaie les
     // variantes courantes pour que ça marche quelle que soit la façon dont elle a été créée.
