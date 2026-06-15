@@ -2430,85 +2430,9 @@ FP.csv = {
   },
 };
 
-// Toolbar Import/Export réutilisable.
-// config = {
-//   filename, columns, getRows(),                 // export
-//   table?, collection?,                          // import par défaut (Supabase + FP_DATA)
-//   idPrefix?, onChange?,                          // re-render après import
-//   makeRecord?(csvRow)  -> record (camelCase),   // mapping ligne CSV → enregistrement
-//   onImport?(records)                            // sinon : upsert générique
-//   container? (élément hôte ; défaut [data-data-io])
-// }
-FP.injectDataIO = (config) => {
-  return; // Boutons Importer/Exporter CSV retirés (remplacés par l'import de document sur Véhicules/Amendes)
-  const host = config.container || document.querySelector('[data-data-io]');
-  if (!host || host.querySelector('.fp-io-wrap')) return;
-
-  const wrap = document.createElement('span');
-  wrap.className = 'fp-io-wrap';
-  wrap.style.cssText = 'display:inline-flex; gap:.5rem; align-items:center';
-  wrap.innerHTML = `
-    <button type="button" class="btn btn-outline text-sm fp-io-export"><i data-lucide="download" class="w-4 h-4"></i> Exporter</button>
-    ${config.exportOnly ? '' : `<button type="button" class="btn btn-outline text-sm fp-io-import"><i data-lucide="upload" class="w-4 h-4"></i> Importer</button>
-    <input type="file" accept=".csv,text/csv" class="fp-io-file" style="display:none" />`}`;
-  host.appendChild(wrap);
-  if (window.lucide) lucide.createIcons();
-
-  wrap.querySelector('.fp-io-export').addEventListener('click', () => {
-    FP.csv.download(config.filename, config.columns, config.getRows() || []);
-  });
-  if (config.exportOnly) return;
-
-  const fileInput = wrap.querySelector('.fp-io-file');
-  wrap.querySelector('.fp-io-import').addEventListener('click', () => fileInput.click());
-
-  const makeRecord = config.makeRecord || function (csvRow) {
-    const rec = {};
-    config.columns.forEach(c => {
-      let v = csvRow[c.label];
-      if (v === undefined) return;
-      if (c.parse) v = c.parse(v, csvRow);
-      rec[c.key] = v;
-    });
-    return rec;
-  };
-
-  const defaultImport = function (records) {
-    const coll = (window.FP_DATA && config.collection) ? (window.FP_DATA[config.collection] || (window.FP_DATA[config.collection] = [])) : null;
-    let added = 0, updated = 0;
-    records.forEach(rec => {
-      if (!rec.id) rec.id = (config.idPrefix || 'IMP-') + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-      if (coll) {
-        const i = coll.findIndex(x => x.id === rec.id);
-        if (i >= 0) { coll[i] = { ...coll[i], ...rec }; updated++; } else { coll.push(rec); added++; }
-      }
-      if (config.table && FP.persist && FP.persist.available && FP.persist.available()) FP.persist.upsert(config.table, rec);
-    });
-    if (config.onChange) config.onChange();
-    alert(`Import terminé ✓\n${added} ajout(s), ${updated} mise(s) à jour.`);
-  };
-
-  fileInput.addEventListener('change', () => {
-    const file = fileInput.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = FP.csv.parse(reader.result);
-        if (!parsed.length) { alert('Fichier vide ou illisible.'); return; }
-        const records = parsed.map(makeRecord).filter(Boolean);
-        if (!records.length) { alert('Aucune ligne exploitable dans le fichier.'); return; }
-        if (!confirm(`Importer ${records.length} ligne(s) ?\n\n• Les lignes existantes (même ID) sont mises à jour\n• Les nouvelles sont ajoutées\n• Rien n'est supprimé`)) return;
-        (config.onImport || defaultImport)(records);
-      } catch (e) {
-        alert('Erreur de lecture du fichier : ' + (e.message || e));
-      } finally {
-        fileInput.value = '';
-      }
-    };
-    reader.readAsText(file, 'UTF-8');
-  });
-};
+// Toolbar Import/Export CSV retirée (remplacée par l'import de document sur Véhicules/Amendes).
+// Conservée en NO-OP : encore appelée par plusieurs pages (amendes, vehicules, factures…).
+FP.injectDataIO = () => {};
 
 // Navigation active state (sidebar)
 document.addEventListener('DOMContentLoaded', () => {
