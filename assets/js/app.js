@@ -35,6 +35,18 @@ window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStora
   } catch (e) { /* cache illisible : on garde data.js */ }
 })();
 
+// === Modales / tiroirs : fermeture UNIQUEMENT par la croix (pas au clic à l'extérieur) ===
+// Évite les fermetures accidentelles qui font perdre une saisie (ex. import de facture).
+// Garde GLOBAL (toutes les pages + futures) : on intercepte le clic en phase de CAPTURE ; si la
+// cible est le FOND (overlay) lui-même, on stoppe avant le handler « clic extérieur = fermer ».
+// Les clics sur le CONTENU (boutons, champs) passent normalement.
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (t && t.matches && t.matches('.modal-backdrop, .drawer-backdrop, [id$="-modal"], [id$="backdrop"]')) {
+    e.stopPropagation();
+  }
+}, true);
+
 const FP = {
   // Format euro — null/undefined/"" /NaN ⇒ 0 (évite d'afficher "NaN €")
   euro(n) {
