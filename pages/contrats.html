@@ -174,6 +174,28 @@
       <p class="text-xs text-slate-500 mt-3" id="leasing-count"></p>
     </div>
 
+    <!-- Section Leasing Localease (Ayvens) — séparée de BPCE -->
+    <div class="card p-6 mb-6 contrat-section" data-section="localease">
+      <div class="section-title">
+        <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
+        <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — Localease (Ayvens)
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Contrats LLD <b>Localease / Ayvens</b> (distincts de BPCE) — pour comparer les loyers et accéder aux contrats.</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div class="kpi"><div class="kpi-label">Véhicules Localease</div><div class="kpi-value" id="kpi-loc-nb">—</div></div>
+        <div class="kpi"><div class="kpi-label">Loyer mensuel total</div><div class="kpi-value" id="kpi-loc-mens" style="color:var(--fp-primary)">—</div><div class="kpi-delta">TTC / mois</div></div>
+        <div class="kpi"><div class="kpi-label">Engagement total</div><div class="kpi-value" id="kpi-loc-total" style="color:var(--fp-primary)">—</div><div class="kpi-delta">loyers × durée</div></div>
+        <div class="kpi"><div class="kpi-label">Loyer moyen / mois</div><div class="kpi-value" id="kpi-loc-moy" style="color:var(--fp-primary)">—</div></div>
+      </div>
+      <div class="scrollable">
+        <table class="fp-table">
+          <thead><tr><th>Conducteur</th><th>Véhicule</th><th style="text-align:center">Durée</th><th style="text-align:right">Km</th><th style="text-align:right">Loyer TTC/mois</th><th style="text-align:right">Coût total</th><th>Offre</th><th style="text-align:center">Contrat</th></tr></thead>
+          <tbody id="tbody-localease"></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-slate-500 mt-3">Une même <b>offre</b> peut couvrir 2 véhicules (ex. <b>26MI086362</b> = Samira + David). Clique sur « + lien » pour rattacher le PDF du contrat (colle l'URL Drive/stockage).</p>
+    </div>
+
     <!-- Section Assurance -->
     <div class="card p-6 mb-6 contrat-section" data-section="assurance">
       <div class="section-title">
@@ -487,6 +509,53 @@
   renderKPIs();
   renderAssurance();
   renderLeasing();
+
+  // ===== Leasing Localease (Ayvens) — contrats LLD séparés de BPCE =====
+  const LOCALEASE_DEFAUT = [
+    { conducteur:'Mégane', marque:'Hyundai', modele:'Kona Hybrid 138',   dureeMois:25, kmTotal:40000, loyerTTC:263.62, offre:'26AV048044', co2:104 },
+    { conducteur:'Ambre',  marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:40000, loyerTTC:386.77, offre:'26AV048023', co2:126, malus:1130 },
+    { conducteur:'Ahmed',  marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:60000, loyerTTC:463.75, offre:'26AV048026', co2:126, malus:1130 },
+    { conducteur:'Samira', marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:50000, loyerTTC:414.71, offre:'26MI086362', co2:126, malus:1130 },
+    { conducteur:'David',  marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:50000, loyerTTC:414.71, offre:'26MI086362', co2:126, malus:1130 },
+  ];
+  function getLocalease(){
+    const s = FP.settings.get();
+    if (!Array.isArray(s.localeaseContrats)) { s.localeaseContrats = LOCALEASE_DEFAUT.slice(); FP.settings.save(s); }
+    return FP.settings.get().localeaseContrats || [];
+  }
+  function escC(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function renderLocalease(){
+    const list = getLocalease();
+    const tbody = $('tbody-localease'); if (!tbody) return;
+    const mensTotal = list.reduce((s,c)=>s+(Number(c.loyerTTC)||0),0);
+    const engTotal  = list.reduce((s,c)=>s+((Number(c.loyerTTC)||0)*(Number(c.dureeMois)||0)),0);
+    $('kpi-loc-nb').textContent    = list.length;
+    $('kpi-loc-mens').textContent  = FP.euro(mensTotal);
+    $('kpi-loc-total').textContent = FP.euro(engTotal);
+    $('kpi-loc-moy').textContent   = list.length ? FP.euro(mensTotal/list.length) : '—';
+    tbody.innerHTML = list.map((c,i)=>`<tr>
+      <td class="font-medium">${escC(c.conducteur)}</td>
+      <td>${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}</td>
+      <td style="text-align:center">${c.dureeMois||'—'} mois</td>
+      <td style="text-align:right">${c.kmTotal?FP.num(c.kmTotal):'—'}</td>
+      <td style="text-align:right;font-weight:700">${FP.euro(c.loyerTTC)}</td>
+      <td style="text-align:right">${FP.euro((Number(c.loyerTTC)||0)*(Number(c.dureeMois)||0))}</td>
+      <td style="font-family:monospace;font-size:12px">${escC(c.offre||'')}</td>
+      <td style="text-align:center">${c.pdfUrl?`<a href="${escC(c.pdfUrl)}" target="_blank" rel="noopener" class="btn btn-outline" style="padding:3px 9px;font-size:12px"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Ouvrir</a>`:`<button type="button" class="btn btn-outline" style="padding:3px 9px;font-size:12px" data-loc-link="${i}">+ lien</button>`}</td>
+    </tr>`).join('');
+    if (window.lucide) lucide.createIcons();
+  }
+  $('tbody-localease').addEventListener('click', (e)=>{
+    const b = e.target.closest('[data-loc-link]'); if (!b) return;
+    const i = +b.dataset.locLink; const list = getLocalease();
+    const url = prompt('Colle le lien du PDF du contrat (Drive / stockage) :', (list[i] && list[i].pdfUrl) || '');
+    if (url==null) return;
+    const s = FP.settings.get(); if(!Array.isArray(s.localeaseContrats)) s.localeaseContrats=list;
+    s.localeaseContrats[i].pdfUrl = url.trim() || null; FP.settings.save(s);
+    renderLocalease();
+  });
+  renderLocalease();
+
   // Saisie de la prime annuelle d'assurance (sauvegardée + synchronisée par société)
   if ($('assur-prime')) $('assur-prime').addEventListener('change', (e) => {
     const val = parseFloat(String(e.target.value).replace(/[\s ]/g, '').replace(',', '.'));
@@ -496,7 +565,7 @@
   // Rafraîchit quand Supabase a chargé (sinon on reste sur le cache data.js)
   document.addEventListener('fp:data-ready', () => {
     leasingFactures = (data.factures || []).filter(f => f.type === 'leasing');
-    renderKPIs(); renderAssurance(); renderLeasing();
+    renderKPIs(); renderAssurance(); renderLeasing(); renderLocalease();
   });
 </script>
 </body>
