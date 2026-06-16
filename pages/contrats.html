@@ -193,7 +193,8 @@
           <tbody id="tbody-localease"></tbody>
         </table>
       </div>
-      <p class="text-xs text-slate-500 mt-3">Une même <b>offre</b> peut couvrir 2 véhicules (ex. <b>26MI086362</b> = Samira + David). Clique sur « + lien » pour rattacher le PDF du contrat (colle l'URL Drive/stockage).</p>
+      <p class="text-xs text-slate-500 mt-3">Une même <b>offre</b> peut couvrir 2 véhicules (ex. <b>26MI086362</b> = Samira + David, <b>26AV048042</b> = les 2 « Nouveau collaborateur »). Clique sur « + téléverser » pour <b>enregistrer le PDF du contrat sur Supabase</b> (comme les cartes grises) — consultable depuis tous les postes.</p>
+      <input type="file" id="loc-upload-file" accept="application/pdf,image/*" class="hidden" />
     </div>
 
     <!-- Section Assurance -->
@@ -568,8 +569,8 @@
       }
       kmCell += ` <button type="button" data-loc-km="${i}" class="text-xs underline decoration-dotted text-slate-500">${c.kmActuel!=null?'maj':'+ km'}</button>`;
       const lienCell = c.pdfUrl
-        ? `<a href="${escC(c.pdfUrl)}" target="_blank" rel="noopener" class="btn btn-outline" style="padding:3px 9px;font-size:12px"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Ouvrir</a>`
-        : `<button type="button" class="btn btn-outline" style="padding:3px 9px;font-size:12px" data-loc-link="${i}">+ lien</button>`;
+        ? `<a href="${escC(c.pdfUrl)}" target="_blank" rel="noopener" class="btn btn-outline" style="padding:3px 9px;font-size:12px"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Ouvrir</a> <button type="button" data-loc-up="${i}" class="text-xs underline decoration-dotted text-slate-500" title="Remplacer le PDF">remplacer</button>`
+        : `<button type="button" class="btn btn-outline" style="padding:3px 9px;font-size:12px" data-loc-up="${i}"><i data-lucide="upload" class="w-3.5 h-3.5"></i> + téléverser</button>`;
       return `<tr>
         <td class="font-medium">${escC(c.conducteur)}</td>
         <td>${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}<div class="text-xs text-slate-400">${c.dureeMois||'—'} mois</div></td>
@@ -583,12 +584,25 @@
     }).join('');
     if (window.lucide) lucide.createIcons();
   }
+  let _locUpIdx = null;
   $('tbody-localease').addEventListener('click', (e)=>{
     const list = getLocalease();
     const save = () => { const s=FP.settings.get(); s.localeaseContrats=list; FP.settings.save(s); renderLocalease(); };
-    const lk=e.target.closest('[data-loc-link]'); if(lk){ const i=+lk.dataset.locLink; const u=prompt('Lien du PDF du contrat (Drive / stockage) :', list[i].pdfUrl||''); if(u==null)return; list[i].pdfUrl=u.trim()||null; save(); return; }
+    const up=e.target.closest('[data-loc-up]'); if(up){ _locUpIdx=+up.dataset.locUp; const inp=$('loc-upload-file'); inp.value=''; inp.click(); return; }
     const db=e.target.closest('[data-loc-debut]'); if(db){ const i=+db.dataset.locDebut; const u=prompt('Date de début / livraison (format AAAA-MM-JJ) :', list[i].debut||''); if(u==null)return; list[i].debut=u.trim()||null; save(); return; }
     const km=e.target.closest('[data-loc-km]'); if(km){ const i=+km.dataset.locKm; const u=prompt('Kilométrage actuel du véhicule :', list[i].kmActuel!=null?list[i].kmActuel:''); if(u==null)return; const n=parseInt(String(u).replace(/\D/g,''),10); list[i].kmActuel=Number.isFinite(n)?n:null; save(); return; }
+  });
+  // Téléversement du PDF du contrat vers Supabase (bucket scans, comme les cartes grises)
+  $('loc-upload-file').addEventListener('change', async (e)=>{
+    const file = e.target.files && e.target.files[0]; e.target.value='';
+    if (!file || _locUpIdx==null) return;
+    const i = _locUpIdx; _locUpIdx=null;
+    if (!FP.uploadScan){ alert('Stockage indisponible — recharge la page (Ctrl+Maj+R).'); return; }
+    try {
+      const url = await FP.uploadScan(file, 'contrats-leasing');
+      if (!url) throw new Error('upload vide');
+      const list = getLocalease(); const s = FP.settings.get(); s.localeaseContrats = list; list[i].pdfUrl = url; FP.settings.save(s); renderLocalease();
+    } catch(err){ console.error('[localease upload]', err); alert('Échec du téléversement du contrat. Réessaie.'); }
   });
   renderLocalease();
 
