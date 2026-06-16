@@ -1566,18 +1566,20 @@
         parsed = parseAvis(data.text);
       }
 
-      // Lecture IA (Sonnet) en complément : remplit les champs que l'OCR a ratés
-      // (date, montant, motif, points, plaque, n° d'avis). On GARDE l'OCR pour le
-      // n° de télépaiement / la clé / la majoration (formats précis, critiques pour payer).
+      // Lecture IA (Sonnet) PRIORITAIRE : sur un avis dense, l'IA est plus fiable que l'OCR local
+      // pour date / montant / motif / points / plaque / n° d'avis. L'OCR ne sert que de SECOURS
+      // (si l'IA n'a pas trouvé). On GARDE l'OCR pour n° de télépaiement / clé / majoration
+      // (formats précis, critiques pour payer, que l'IA ne lit pas toujours bien).
       try {
         const ia = await FP.scanIA(file, 'amende');
         if (ia) {
-          if (!parsed.date && ia.date) parsed.date = ia.date;
-          if (!parsed.motif && ia.motif) parsed.motif = ia.motif;
-          if ((parsed.points == null) && ia.points != null) parsed.points = ia.points;
-          if (!parsed.immat && ia.vehiculeImmat) parsed.immat = ia.vehiculeImmat;
-          if (!parsed.numeroAvis && ia.numeroAvis) parsed.numeroAvis = ia.numeroAvis;
-          if (!parsed.isMajoration && !parsed.montant && ia.montantTTC != null) parsed.montant = ia.montantTTC;
+          parsed._ia = true;
+          if (ia.date) parsed.date = ia.date;
+          if (ia.motif) parsed.motif = ia.motif;
+          if (ia.points != null) parsed.points = ia.points;
+          if (ia.vehiculeImmat) parsed.immat = ia.vehiculeImmat;
+          if (ia.numeroAvis) parsed.numeroAvis = ia.numeroAvis;
+          if (!parsed.isMajoration && ia.montantTTC != null) parsed.montant = ia.montantTTC;
         }
       } catch (e) { console.warn('[amende IA]', e); }
 
@@ -1612,8 +1614,9 @@
       }
 
       checkDoublonLive(); // alerte immédiate si l'avis importé existe déjà
+      const iaTag = parsed._ia ? ' <span style="font-weight:600">· lu par IA 🤖</span>' : ' <span style="color:#B45309">· lecture locale (IA non disponible)</span>';
       if (filled.length) {
-        avStatus(`<b>✓ ${filled.length} champ(s) pré-rempli(s)</b> : ${filled.join(', ')}.<br>Vérifiez les valeurs puis complétez le reste (points retirés, statut…).`, 'ok');
+        avStatus(`<b>✓ ${filled.length} champ(s) pré-rempli(s)</b> : ${filled.join(', ')}.${iaTag}<br>Vérifiez les valeurs puis complétez le reste (points retirés, statut…).`, 'ok');
       } else {
         avStatus("Lecture terminée, mais aucun champ n'a pu être détecté automatiquement. Saisissez les infos à la main — astuce : une photo nette, bien cadrée et droite donne de meilleurs résultats.", 'error');
       }
