@@ -1302,7 +1302,8 @@ FP.scanIA = async function (file, docType) {
     // (sinon l'API refuse l'image ou le transfert échoue). Les PDF passent tels quels.
     let f = file;
     if (/^image\//i.test(file.type || '') && FP.compressImage) {
-      try { f = await FP.compressImage(file, { maxSide: 1600, quality: 0.7 }); } catch (_) { f = file; }
+      // Résolution plus haute pour l'OCR des documents denses (avis d'amende : montant/n° en petit)
+      try { f = await FP.compressImage(file, { maxSide: 2200, quality: 0.85 }); } catch (_) { f = file; }
     }
     // base64 (sans le préfixe data:)
     const b64 = await new Promise((resolve, reject) => {
