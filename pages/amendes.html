@@ -874,7 +874,7 @@
           <div>
             <div class="text-xs text-slate-400 mb-0.5">N° de télépaiement</div>
             <div class="flex items-center gap-1">
-              <div id="am-tel-val" class="flex-1 min-w-0 font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour saisir / modifier">${a.numeroTelepaiement || '<span class="text-slate-400">— ajouter</span>'}</div>
+              <div id="am-tel-val" class="flex-1 min-w-0 font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour saisir / modifier">${fmtTel(a.numeroTelepaiement) || '<span class="text-slate-400">— ajouter</span>'}</div>
               ${a.numeroTelepaiement ? `<button type="button" id="am-tel-copy" class="btn btn-outline !p-2 flex-shrink-0" title="Copier le n° de télépaiement"><i data-lucide="copy" class="w-4 h-4"></i></button>` : ''}
             </div>
           </div>
@@ -958,7 +958,7 @@
     const md = $('mail-designation'); if (md) md.onclick = mailDesignation;
     const tv = $('am-tel-val'); if (tv) tv.onclick = () => editAmField('numeroTelepaiement', 'N° de télépaiement');
     const cv = $('am-cle-val'); if (cv) cv.onclick = () => editAmField('cle', 'Clé');
-    const tc = $('am-tel-copy'); if (tc) tc.onclick = () => copierTexte(a.numeroTelepaiement, tc);
+    const tc = $('am-tel-copy'); if (tc) tc.onclick = () => copierTexte((a.numeroTelepaiement || '').replace(/\D/g, ''), tc);
     const cc = $('am-cle-copy'); if (cc) cc.onclick = () => copierTexte(a.cle, cc);
     const cmv = $('am-comment-edit');
     if (cmv) cmv.onchange = () => {
@@ -1535,6 +1535,9 @@
     return out;
   }
 
+  // Formate un n° de télépaiement par groupes de 4 chiffres (comme sur l'avis : 3333 8593 2214 71)
+  function fmtTel(s){ return String(s || '').replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 '); }
+
   async function handleAvis(file){
     if (!file) return;
     try {
@@ -1573,9 +1576,7 @@
       try {
         const ia = await FP.scanIA(file, 'amende');
         if (ia) {
-          console.log('[amende IA] champs renvoyés :', ia); // diagnostic
           parsed._ia = true;
-          parsed._iaTele = ('numeroTelepaiement' in ia) ? (ia.numeroTelepaiement || '(vide)') : '(clé absente du JSON)';
           if (ia.date) parsed.date = ia.date;
           if (ia.motif) parsed.motif = ia.motif;
           if (ia.points != null) parsed.points = ia.points;
@@ -1599,7 +1600,7 @@
       if (parsed.montant    && !$('am-montant').value) { $('am-montant').value = parsed.montant;    filled.push('montant'); }
       if (parsed.date)      { $('am-date').value    = parsed.date;       filled.push('date'); }
       if (parsed.numeroAvis && !$('am-avis').value)    { $('am-avis').value    = parsed.numeroAvis; filled.push('n° d\'avis'); }
-      if (parsed.numeroTelepaiement && !$('am-telepaiement').value) { $('am-telepaiement').value = parsed.numeroTelepaiement; filled.push('n° télépaiement'); }
+      if (parsed.numeroTelepaiement && !$('am-telepaiement').value) { $('am-telepaiement').value = fmtTel(parsed.numeroTelepaiement); filled.push('n° télépaiement'); }
       if (parsed.cle && !$('am-cle').value) { $('am-cle').value = parsed.cle; filled.push('clé'); }
 
       // Avis de MAJORATION : on remplit le montant majoré et on propose de rattacher à l'amende d'origine
@@ -1618,7 +1619,7 @@
       }
 
       checkDoublonLive(); // alerte immédiate si l'avis importé existe déjà
-      const iaTag = parsed._ia ? ` <span style="font-weight:600">· lu par IA 🤖</span> <span style="color:#64748B">[télépaiement renvoyé par l'IA : ${parsed._iaTele}]</span>` : ' <span style="color:#B45309">· lecture locale (IA non disponible)</span>';
+      const iaTag = parsed._ia ? ' <span style="font-weight:600">· lu par IA 🤖</span>' : ' <span style="color:#B45309">· lecture locale (IA non disponible)</span>';
       if (filled.length) {
         avStatus(`<b>✓ ${filled.length} champ(s) pré-rempli(s)</b> : ${filled.join(', ')}.${iaTag}<br>Vérifiez les valeurs puis complétez le reste (points retirés, statut…).`, 'ok');
       } else {
