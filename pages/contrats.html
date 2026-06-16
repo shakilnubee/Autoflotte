@@ -189,7 +189,7 @@
       </div>
       <div class="scrollable">
         <table class="fp-table">
-          <thead><tr><th>Conducteur</th><th>Véhicule</th><th style="text-align:center">Durée</th><th style="text-align:right">Km</th><th style="text-align:right">Loyer TTC/mois</th><th style="text-align:right">Coût total</th><th>Offre</th><th style="text-align:center">Contrat</th></tr></thead>
+          <thead><tr><th>Conducteur</th><th>Véhicule</th><th style="text-align:center">Fin de contrat</th><th style="text-align:right">Km (reste)</th><th style="text-align:right">Loyer TTC/mois</th><th style="text-align:right">TVS/an</th><th>Offre</th><th style="text-align:center">Contrat</th></tr></thead>
           <tbody id="tbody-localease"></tbody>
         </table>
       </div>
@@ -517,13 +517,19 @@
     { conducteur:'Ahmed',  marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:60000, loyerTTC:463.75, offre:'26AV048026', co2:126, malus:1130 },
     { conducteur:'Samira', marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:50000, loyerTTC:414.71, offre:'26MI086362', co2:126, malus:1130 },
     { conducteur:'David',  marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:50000, loyerTTC:414.71, offre:'26MI086362', co2:126, malus:1130 },
-    { conducteur:'Nouveaux collaborateurs', marque:'Hyundai', modele:'Kona Hybrid 138', dureeMois:25, kmTotal:70000, loyerTTC:354.97, offre:'26AV048042', co2:104 },
+    // Offre 26AV048042 = 2 véhicules identiques (Kona), pas encore nominatifs → 2 lignes
+    { conducteur:'Nouveau collaborateur (1)', marque:'Hyundai', modele:'Kona Hybrid 138', dureeMois:25, kmTotal:70000, loyerTTC:354.97, offre:'26AV048042', co2:104 },
+    { conducteur:'Nouveau collaborateur (2)', marque:'Hyundai', modele:'Kona Hybrid 138', dureeMois:25, kmTotal:70000, loyerTTC:354.97, offre:'26AV048042', co2:104 },
   ];
   function getLocalease(){
     const s = FP.settings.get();
     let list = Array.isArray(s.localeaseContrats) ? s.localeaseContrats : [];
     let changed = !Array.isArray(s.localeaseContrats);
-    // Ajoute les contrats par défaut manquants (clé = offre+conducteur), sans écraser les liens PDF déjà saisis
+    // Migration : l'offre 26AV048042 couvre 2 véhicules → on retire l'ancienne ligne unique
+    const before = list.length;
+    list = list.filter(c => !(c.offre === '26AV048042' && c.conducteur === 'Nouveaux collaborateurs'));
+    if (list.length !== before) changed = true;
+    // Ajoute les contrats par défaut manquants (clé = offre+conducteur), sans écraser ce qui est saisi
     LOCALEASE_DEFAUT.forEach(def => {
       if (!list.some(c => c.offre === def.offre && c.conducteur === def.conducteur)) { list.push({ ...def }); changed = true; }
     });
@@ -531,6 +537,9 @@
     return list;
   }
   function escC(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function addMonths(iso, n){ const d=new Date(iso); if(isNaN(d)) return null; d.setMonth(d.getMonth()+(+n||0)); return d; }
+  // TVS annuelle estimée : barème CO2 officiel (app.js) + 130 € polluants (hybride essence = catégorie 1)
+  function tvsEst(c){ const co2=Number(c.co2)||0; const elec=/électri|electri/i.test((c.modele||'')); return (FP.tvsCo2?FP.tvsCo2(co2):0) + (elec?0:130); }
   function renderLocalease(){
     const list = getLocalease();
     const tbody = $('tbody-localease'); if (!tbody) return;
@@ -540,26 +549,46 @@
     $('kpi-loc-mens').textContent  = FP.euro(mensTotal);
     $('kpi-loc-total').textContent = FP.euro(engTotal);
     $('kpi-loc-moy').textContent   = list.length ? FP.euro(mensTotal/list.length) : '—';
-    tbody.innerHTML = list.map((c,i)=>`<tr>
-      <td class="font-medium">${escC(c.conducteur)}</td>
-      <td>${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}</td>
-      <td style="text-align:center">${c.dureeMois||'—'} mois</td>
-      <td style="text-align:right">${c.kmTotal?FP.num(c.kmTotal):'—'}</td>
-      <td style="text-align:right;font-weight:700">${FP.euro(c.loyerTTC)}</td>
-      <td style="text-align:right">${FP.euro((Number(c.loyerTTC)||0)*(Number(c.dureeMois)||0))}</td>
-      <td style="font-family:monospace;font-size:12px">${escC(c.offre||'')}</td>
-      <td style="text-align:center">${c.pdfUrl?`<a href="${escC(c.pdfUrl)}" target="_blank" rel="noopener" class="btn btn-outline" style="padding:3px 9px;font-size:12px"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Ouvrir</a>`:`<button type="button" class="btn btn-outline" style="padding:3px 9px;font-size:12px" data-loc-link="${i}">+ lien</button>`}</td>
-    </tr>`).join('');
+    tbody.innerHTML = list.map((c,i)=>{
+      // Fin de contrat (date de début éditable → fin = début + durée)
+      let finCell = `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-debut="${i}">+ début</button>`;
+      if (c.debut){
+        const fin = addMonths(c.debut, c.dureeMois);
+        if (fin){
+          const j = Math.round((fin - new Date())/86400000);
+          const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`);
+          finCell = `<span class="cursor-pointer underline decoration-dotted" data-loc-debut="${i}" title="Modifier la date de début">${FP.dateNum(fin.toISOString().slice(0,10))}</span><div>${badge}</div>`;
+        }
+      }
+      // Km : forfait + reste (km actuel éditable)
+      let kmCell = c.kmTotal ? FP.num(c.kmTotal) : '—';
+      if (c.kmTotal && c.kmActuel!=null){
+        const reste = c.kmTotal - c.kmActuel;
+        kmCell += reste<0 ? `<div style="color:#B91C1C;font-weight:700">dépassé ${FP.num(-reste)}</div>` : (reste<5000 ? `<div style="color:#B45309;font-weight:700">reste ${FP.num(reste)}</div>` : `<div class="text-xs text-slate-500">reste ${FP.num(reste)}</div>`);
+      }
+      kmCell += ` <button type="button" data-loc-km="${i}" class="text-xs underline decoration-dotted text-slate-500">${c.kmActuel!=null?'maj':'+ km'}</button>`;
+      const lienCell = c.pdfUrl
+        ? `<a href="${escC(c.pdfUrl)}" target="_blank" rel="noopener" class="btn btn-outline" style="padding:3px 9px;font-size:12px"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Ouvrir</a>`
+        : `<button type="button" class="btn btn-outline" style="padding:3px 9px;font-size:12px" data-loc-link="${i}">+ lien</button>`;
+      return `<tr>
+        <td class="font-medium">${escC(c.conducteur)}</td>
+        <td>${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}<div class="text-xs text-slate-400">${c.dureeMois||'—'} mois</div></td>
+        <td style="text-align:center">${finCell}</td>
+        <td style="text-align:right">${kmCell}</td>
+        <td style="text-align:right;font-weight:700">${FP.euro(c.loyerTTC)}</td>
+        <td style="text-align:right">${FP.euro(tvsEst(c))}</td>
+        <td style="font-family:monospace;font-size:12px">${escC(c.offre||'')}</td>
+        <td style="text-align:center">${lienCell}</td>
+      </tr>`;
+    }).join('');
     if (window.lucide) lucide.createIcons();
   }
   $('tbody-localease').addEventListener('click', (e)=>{
-    const b = e.target.closest('[data-loc-link]'); if (!b) return;
-    const i = +b.dataset.locLink; const list = getLocalease();
-    const url = prompt('Colle le lien du PDF du contrat (Drive / stockage) :', (list[i] && list[i].pdfUrl) || '');
-    if (url==null) return;
-    const s = FP.settings.get(); if(!Array.isArray(s.localeaseContrats)) s.localeaseContrats=list;
-    s.localeaseContrats[i].pdfUrl = url.trim() || null; FP.settings.save(s);
-    renderLocalease();
+    const list = getLocalease();
+    const save = () => { const s=FP.settings.get(); s.localeaseContrats=list; FP.settings.save(s); renderLocalease(); };
+    const lk=e.target.closest('[data-loc-link]'); if(lk){ const i=+lk.dataset.locLink; const u=prompt('Lien du PDF du contrat (Drive / stockage) :', list[i].pdfUrl||''); if(u==null)return; list[i].pdfUrl=u.trim()||null; save(); return; }
+    const db=e.target.closest('[data-loc-debut]'); if(db){ const i=+db.dataset.locDebut; const u=prompt('Date de début / livraison (format AAAA-MM-JJ) :', list[i].debut||''); if(u==null)return; list[i].debut=u.trim()||null; save(); return; }
+    const km=e.target.closest('[data-loc-km]'); if(km){ const i=+km.dataset.locKm; const u=prompt('Kilométrage actuel du véhicule :', list[i].kmActuel!=null?list[i].kmActuel:''); if(u==null)return; const n=parseInt(String(u).replace(/\D/g,''),10); list[i].kmActuel=Number.isFinite(n)?n:null; save(); return; }
   });
   renderLocalease();
 
