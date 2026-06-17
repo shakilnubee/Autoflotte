@@ -210,23 +210,51 @@
     $('filter-vehicule').appendChild(opt);
   });
 
-  function filtered() {
+  function matchFilter(s) {
     const q = FP.norm(state.search).trim();
-    return sinistres.filter(s => {
-      if (state.annee !== 'all' && !(s.date || '').startsWith(state.annee)) return false;
-      if (state.vehicule !== 'all' && s.vehiculeImmat !== state.vehicule) return false;
-      if (q && !(FP.norm(`${s.vehiculeImmat} ${s.description} ${s.fournisseur}`).includes(q))) return false;
-      return true;
-    });
+    if (state.annee !== 'all' && !(s.date || '').startsWith(state.annee)) return false;
+    if (state.vehicule !== 'all' && s.vehiculeImmat !== state.vehicule) return false;
+    if (q && !(FP.norm(`${s.vehiculeImmat} ${s.description} ${s.fournisseur}`).includes(q))) return false;
+    return true;
   }
+  function filtered() { return sinistres.filter(matchFilter); }
+
+  // ---------- Association devis ↔ facture (un "incident" = plusieurs documents) ----------
+  // Stockage dans les réglages partagés : sinistreGroupes {idDoc: clé de groupe}, sinistreStage {idDoc: 'devis'|'facture'}.
+  const isGroupKey = (k) => /^grp_/.test(k);
+  function maps() { const s = FP.settings.get(); return { grp: s.sinistreGroupes || {}, stg: s.sinistreStage || {}, st: s.sinistreStatut || {} }; }
+  const groupKeyOf = (id) => maps().grp[id] || id;
+  const stageOf = (id) => maps().stg[id] || 'facture';
+  // Regroupe une liste de sinistres par incident → [{ key, lines:[…trié par date desc], rep, cost }]
+  function buildGroups(list) {
+    const by = new Map();
+    list.forEach(s => { const k = groupKeyOf(s.id); if (!by.has(k)) by.set(k, []); by.get(k).push(s); });
+    const out = [];
+    by.forEach((lines, key) => {
+      lines.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const nonDevis = lines.filter(l => stageOf(l.id) !== 'devis');
+      const src = nonDevis.length ? nonDevis : lines;
+      const cost = nonDevis.length
+        ? nonDevis.reduce((t, l) => t + (l.montantTTC || 0), 0)
+        : Math.max(0, ...lines.map(l => l.montantTTC || 0));
+      out.push({ key, lines, rep: src[0], cost });
+    });
+    return out;
+  }
+  // Groupes visibles (un groupe apparaît si AU MOINS une de ses lignes passe le filtre) — on ne casse pas un incident.
+  function visibleGroups() {
+    return buildGroups(sinistres).filter(g => g.lines.some(matchFilter))
+      .sort((a, b) => (b.rep.date || '').localeCompare(a.rep.date || ''));
+  }
+  const allGroups = () => buildGroups(sinistres);
 
   function renderKPIs() {
-    $('kpi-total').textContent = sinistres.length;
-    const cout = sinistres.reduce((s, x) => s + (x.montantTTC || 0), 0);
-    $('kpi-cout').textContent = FP.euro(cout);
+    const groups = allGroups();
+    $('kpi-total').textContent = groups.length;
+    $('kpi-cout').textContent = FP.euro(groups.reduce((s, g) => s + g.cost, 0));
     $('kpi-vehicules').textContent = new Set(sinistres.map(s => s.vehiculeImmat)).size;
     const cy = new Date().getFullYear().toString();
-    $('kpi-annee').textContent = sinistres.filter(s => (s.date || '').startsWith(cy)).length;
+    $('kpi-annee').textContent = groups.filter(g => (g.rep.date || '').startsWith(cy)).length;
   }
 
   // Suivi du remboursement (stocké dans les réglages partagés)
@@ -238,89 +266,217 @@
     return `<select class="sin-stat" data-id="${id}" style="font-size:12px;border:1px solid var(--fp-border);border-radius:8px;padding:4px 6px;color:${statColor(cur)};font-weight:700;cursor:pointer">${opts}</select>`;
   }
 
+  const STAGE_LABELS = { devis: 'Devis', facture: 'Facture', autre: 'Autre' };
+  const docLink = (fileId, compact) => fileId
+    ? `<a href="${/^https?:\/\//.test(fileId) ? fileId : ('https://drive.google.com/file/d/' + fileId + '/view')}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs hover:underline" style="color: var(--fp-accent)" title="Voir le document"><i data-lucide="file-text" class="w-3.5 h-3.5"></i>${compact ? '' : ' Voir le document'}</a>`
+    : (compact ? '<span class="text-xs text-slate-300" title="Pas de document">—</span>' : '<span></span>');
+  // Bloc d'une ligne (un document) à l'intérieur d'un incident regroupé
+  function lineBlock(line) {
+    const stg = stageOf(line.id);
+    const opts = Object.keys(STAGE_LABELS).map(k => `<option value="${k}" ${stg === k ? 'selected' : ''}>${STAGE_LABELS[k]}</option>`).join('');
+    const montant = line.montantTTC
+      ? `<span class="font-bold text-sm ${stg === 'devis' ? 'text-slate-400 line-through' : 'text-red-600'}">${FP.euroPrecis(line.montantTTC)}</span>`
+      : '<span class="text-xs text-slate-300 italic">—</span>';
+    return `
+      <div class="flex items-center justify-between gap-2 mt-2 px-2.5 py-2 rounded-lg" style="background:#f8fafc;border:1px solid var(--fp-border)">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <select class="sin-stage" data-id="${line.id}" style="font-size:11px;border:1px solid var(--fp-border);border-radius:6px;padding:2px 4px;font-weight:700;cursor:pointer">${opts}</select>
+            <span class="text-xs text-slate-500">${FP.date(line.date)}${line.fournisseur ? ' · ' + escapeHtml(line.fournisseur) : ''}</span>
+          </div>
+          <div class="text-xs text-slate-600 mt-0.5 truncate">${escapeHtml(line.description || '—')}</div>
+        </div>
+        <div class="text-right shrink-0 flex items-center gap-2.5">
+          ${montant}
+          ${docLink(line.fileId, true)}
+          <button type="button" data-sin-detach="${line.id}" title="Détacher de l'incident" class="text-slate-400 hover:text-amber-600"><i data-lucide="unlink" class="w-3.5 h-3.5"></i></button>
+          <button type="button" data-sin-del="${line.id}" title="Supprimer ce document" class="text-slate-400 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        </div>
+      </div>`;
+  }
+
   const SIN_LIMIT = 15;
   let sinExpanded = false;
   function renderTimeline() {
-    const rows = filtered().slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const groups = visibleGroups();
     const tl = $('timeline');
     const empty = $('empty-state');
     const more = $('sin-more');
-    if (rows.length === 0) { tl.innerHTML = ''; empty.classList.remove('hidden'); if (more) { more.classList.add('hidden'); more.innerHTML=''; } }
+    if (groups.length === 0) { tl.innerHTML = ''; empty.classList.remove('hidden'); if (more) { more.classList.add('hidden'); more.innerHTML=''; } }
     else {
       empty.classList.add('hidden');
-      const shown = sinExpanded ? rows : rows.slice(0, SIN_LIMIT);
+      const shown = sinExpanded ? groups : groups.slice(0, SIN_LIMIT);
       if (more) {
-        if (rows.length > SIN_LIMIT) {
+        if (groups.length > SIN_LIMIT) {
           more.classList.remove('hidden');
           more.innerHTML = sinExpanded
             ? `<button id="sin-toggle" class="btn btn-outline text-sm">Réduire la liste</button>`
-            : `<button id="sin-toggle" class="btn btn-outline text-sm">Voir les ${rows.length - SIN_LIMIT} autres sinistres</button>`;
+            : `<button id="sin-toggle" class="btn btn-outline text-sm">Voir les ${groups.length - SIN_LIMIT} autres incidents</button>`;
         } else { more.classList.add('hidden'); more.innerHTML = ''; }
       }
-      tl.innerHTML = shown.map(s => {
+      tl.innerHTML = shown.map(g => {
+        const s = g.rep;
+        const multi = g.lines.length > 1;
         const veh = (data.vehicules || []).find(v => v.immat === s.vehiculeImmat);
         const vehInfo = veh ? `${escapeHtml(veh.marque)} ${escapeHtml(veh.modele)}${veh.chauffeur && veh.chauffeur !== '—' ? ' · ' + escapeHtml(veh.chauffeur) : ''}` : (s.vehiculeImmat || '');
-        const cur = (FP.settings.get().sinistreStatut || {})[s.id] || '';
+        const cur = (FP.settings.get().sinistreStatut || {})[g.key] || '';
         const bar = statColor(cur);
-        const pdf = s.fileId ? `<a href="${/^https?:\/\//.test(s.fileId) ? s.fileId : ('https://drive.google.com/file/d/' + s.fileId + '/view')}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs hover:underline" style="color: var(--fp-accent)"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Voir le document</a>` : '<span></span>';
+        // Candidats à associer : autres sinistres du même véhicule pas déjà dans cet incident
+        const candidats = sinistres.filter(c => c.vehiculeImmat === s.vehiculeImmat && groupKeyOf(c.id) !== g.key);
+        const assocPanel = `
+          <div data-assoc-panel="${g.key}" class="hidden mt-3 pt-3" style="border-top:1px dashed var(--fp-border)">
+            ${candidats.length ? `
+              <div class="text-xs text-slate-500 mb-1">Rattacher un autre sinistre de <b>${escapeHtml(s.vehiculeImmat || '')}</b> à cet incident :</div>
+              <div class="flex gap-2">
+                <select class="sin-assoc-pick flex-1" style="font-size:12px;border:1px solid var(--fp-border);border-radius:8px;padding:4px 6px">
+                  ${candidats.map(c => `<option value="${c.id}">${FP.date(c.date)} · ${c.montantTTC ? FP.euroPrecis(c.montantTTC) : 'sans montant'}${c.description ? ' · ' + escapeHtml(c.description.slice(0, 40)) : ''}</option>`).join('')}
+                </select>
+                <button type="button" data-sin-assoc-ok="${g.key}" class="btn btn-primary text-xs">Rattacher</button>
+              </div>` : `<div class="text-xs text-slate-400">Aucun autre sinistre enregistré pour ${escapeHtml(s.vehiculeImmat || 'ce véhicule')}.</div>`}
+          </div>`;
         return `
           <div class="card p-4" style="border-left:4px solid ${bar}">
             <div class="flex justify-between items-start gap-2">
               <div class="min-w-0">
                 <div class="font-mono font-extrabold text-slate-900">${escapeHtml(s.vehiculeImmat || '—')}</div>
-                <div class="text-xs text-slate-500 mt-0.5">${FP.date(s.date)}${s.fournisseur ? ' · ' + escapeHtml(s.fournisseur) : ''}</div>
+                <div class="text-xs text-slate-500 mt-0.5">${FP.date(s.date)}${!multi && s.fournisseur ? ' · ' + escapeHtml(s.fournisseur) : ''}</div>
               </div>
               <div class="text-right shrink-0">
-                ${s.montantTTC ? `<div class="font-extrabold text-red-600 text-lg leading-none">${FP.euroPrecis(s.montantTTC)}</div>` : '<div class="text-xs text-slate-400 italic">Sans montant</div>'}
+                ${g.cost ? `<div class="font-extrabold text-red-600 text-lg leading-none">${FP.euroPrecis(g.cost)}</div>` : '<div class="text-xs text-slate-400 italic">Sans montant</div>'}
+                ${multi ? `<div class="text-[11px] text-slate-400 mt-0.5">${g.lines.length} documents</div>` : ''}
               </div>
             </div>
-            <div class="text-sm text-slate-700 mt-2">${escapeHtml(s.description || '—')}</div>
+            ${multi
+              ? g.lines.map(lineBlock).join('')
+              : `<div class="text-sm text-slate-700 mt-2">${escapeHtml(s.description || '—')}</div>`}
             ${vehInfo ? `<div class="text-xs text-slate-400 mt-1">${vehInfo}</div>` : ''}
             <div class="flex items-center justify-between gap-2 mt-3 pt-3" style="border-top:1px solid var(--fp-border)">
-              ${statutSelect(s.id)}
+              ${statutSelect(g.key)}
               <div class="flex items-center gap-3 shrink-0">
-                ${pdf}
-                <button type="button" data-sin-del="${s.id}" title="Supprimer ce sinistre" class="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>
+                <button type="button" data-sin-assoc="${g.key}" title="Associer un devis / une facture" class="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"><i data-lucide="link-2" class="w-3.5 h-3.5"></i> Associer</button>
+                ${multi ? '' : docLink(s.fileId, false)}
+                ${multi ? '' : `<button type="button" data-sin-del="${s.id}" title="Supprimer ce sinistre" class="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>`}
               </div>
             </div>
+            ${assocPanel}
           </div>
         `;
       }).join('');
     }
     const stat = FP.settings.get().sinistreStatut || {};
-    const attente = sinistres.filter(s => stat[s.id] === 'attente').length;
-    $('result-count').innerHTML = `${rows.length} sinistre${rows.length > 1 ? 's' : ''} sur ${sinistres.length}` + (attente ? ` · <b style="color:#B45309">${attente} en attente de remboursement</b>` : '');
+    const all = allGroups();
+    const attente = all.filter(g => stat[g.key] === 'attente').length;
+    $('result-count').innerHTML = `${groups.length} incident${groups.length > 1 ? 's' : ''} sur ${all.length}` + (attente ? ` · <b style="color:#B45309">${attente} en attente de remboursement</b>` : '');
     lucide.createIcons();
   }
 
-  // Changement du statut de remboursement (sauvegardé + synchronisé)
-  $('timeline').addEventListener('change', (e) => {
-    const sel = e.target.closest('.sin-stat'); if (!sel) return;
-    const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {};
-    if (sel.value) s.sinistreStatut[sel.dataset.id] = sel.value; else delete s.sinistreStatut[sel.dataset.id];
+  function refreshAll() { renderKPIs(); renderTimeline(); renderCharts(); coutPeriode.render(); }
+
+  // Rattache un sinistre (memberId) à l'incident de clé groupKey
+  function associate(groupKey, memberId) {
+    const s = FP.settings.get();
+    const grp = s.sinistreGroupes = s.sinistreGroupes || {};
+    const st = s.sinistreStatut = s.sinistreStatut || {};
+    let target = groupKey;
+    if (!isGroupKey(groupKey)) { // l'incident était encore un sinistre seul → on crée un vrai groupe
+      target = 'grp_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+      grp[groupKey] = target;
+      if (st[groupKey]) { st[target] = st[groupKey]; delete st[groupKey]; }
+    }
+    const memberKey = grp[memberId] || memberId;
+    if (isGroupKey(memberKey)) { // le membre était lui-même un groupe → on déplace toutes ses lignes
+      Object.keys(grp).forEach(id => { if (grp[id] === memberKey) grp[id] = target; });
+      if (st[memberKey] && !st[target]) st[target] = st[memberKey];
+      if (st[memberKey]) delete st[memberKey];
+    }
+    grp[memberId] = target;
     FP.settings.save(s);
-    renderTimeline();
+  }
+
+  // Détache une ligne de son incident (et dissout l'incident s'il ne reste qu'une ligne)
+  function detach(lineId) {
+    const s = FP.settings.get();
+    const grp = s.sinistreGroupes = s.sinistreGroupes || {};
+    const st = s.sinistreStatut = s.sinistreStatut || {};
+    const key = grp[lineId]; if (!key) return;
+    delete grp[lineId];
+    const remaining = Object.keys(grp).filter(id => grp[id] === key);
+    if (remaining.length <= 1) {
+      if (remaining.length === 1) { const last = remaining[0]; delete grp[last]; if (st[key]) st[last] = st[key]; }
+      if (st[key]) delete st[key];
+    }
+    FP.settings.save(s);
+  }
+
+  // Nettoie les réglages liés à un sinistre supprimé (groupe + stage + statut)
+  function forgetSinistre(id) {
+    const s = FP.settings.get();
+    const grp = s.sinistreGroupes = s.sinistreGroupes || {};
+    const stg = s.sinistreStage = s.sinistreStage || {};
+    const st = s.sinistreStatut = s.sinistreStatut || {};
+    const key = grp[id];
+    delete grp[id]; delete stg[id];
+    if (key) {
+      const remaining = Object.keys(grp).filter(x => grp[x] === key);
+      if (remaining.length <= 1) {
+        if (remaining.length === 1) { const last = remaining[0]; delete grp[last]; if (st[key]) st[last] = st[key]; }
+        if (st[key]) delete st[key];
+      }
+    } else if (st[id]) { delete st[id]; }
+    FP.settings.save(s);
+  }
+
+  // Changements (statut de remboursement, stade devis/facture)
+  $('timeline').addEventListener('change', (e) => {
+    const sel = e.target.closest('.sin-stat');
+    if (sel) {
+      const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {};
+      if (sel.value) s.sinistreStatut[sel.dataset.id] = sel.value; else delete s.sinistreStatut[sel.dataset.id];
+      FP.settings.save(s); renderTimeline(); return;
+    }
+    const stg = e.target.closest('.sin-stage');
+    if (stg) {
+      const s = FP.settings.get(); s.sinistreStage = s.sinistreStage || {};
+      if (stg.value && stg.value !== 'facture') s.sinistreStage[stg.dataset.id] = stg.value; else delete s.sinistreStage[stg.dataset.id];
+      FP.settings.save(s); refreshAll(); return;
+    }
   });
 
-  // Suppression d'un sinistre (l'utilisateur retire lui-même un document/doublon)
+  // Clics : associer / détacher / supprimer
   $('timeline').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-sin-del]'); if (!btn) return;
-    const id = btn.dataset.sinDel;
-    const s = sinistres.find(x => x.id === id);
-    const label = s ? `${s.vehiculeImmat || ''} · ${FP.date(s.date)}${s.description ? ' — ' + s.description : ''}` : '';
-    if (!confirm(`Supprimer définitivement ce sinistre ?\n\n${label}`)) return;
-    // Retire le statut de remboursement associé
-    const st = FP.settings.get(); if (st.sinistreStatut && st.sinistreStatut[id]) { delete st.sinistreStatut[id]; FP.settings.save(st); }
-    // Retire de la mémoire locale puis de Supabase
-    if (data.factures) { const i = data.factures.findIndex(f => f.id === id); if (i !== -1) data.factures.splice(i, 1); }
-    sinistres = sinistres.filter(x => x.id !== id);
-    if (FP.persist) FP.persist.delete('factures', id);
-    renderKPIs(); renderTimeline(); renderCharts(); coutPeriode.render();
+    const assoc = e.target.closest('[data-sin-assoc]');
+    if (assoc) { const p = $('timeline').querySelector(`[data-assoc-panel="${assoc.dataset.sinAssoc}"]`); if (p) p.classList.toggle('hidden'); return; }
+
+    const ok = e.target.closest('[data-sin-assoc-ok]');
+    if (ok) {
+      const panel = ok.closest('[data-assoc-panel]');
+      const pick = panel && panel.querySelector('.sin-assoc-pick');
+      if (pick && pick.value) { associate(ok.dataset.sinAssocOk, pick.value); refreshAll(); }
+      return;
+    }
+
+    const det = e.target.closest('[data-sin-detach]');
+    if (det) { detach(det.dataset.sinDetach); refreshAll(); return; }
+
+    const del = e.target.closest('[data-sin-del]');
+    if (del) {
+      const id = del.dataset.sinDel;
+      const s = sinistres.find(x => x.id === id);
+      const label = s ? `${s.vehiculeImmat || ''} · ${FP.date(s.date)}${s.description ? ' — ' + s.description : ''}` : '';
+      if (!confirm(`Supprimer définitivement ce sinistre ?\n\n${label}`)) return;
+      forgetSinistre(id);
+      if (data.factures) { const i = data.factures.findIndex(f => f.id === id); if (i !== -1) data.factures.splice(i, 1); }
+      sinistres = sinistres.filter(x => x.id !== id);
+      if (FP.persist) FP.persist.delete('factures', id);
+      refreshAll();
+      return;
+    }
   });
 
   // Charts
+  let _chTop = null, _chTrim = null;
   function renderCharts() {
-    const rows = filtered();
+    const rows = visibleGroups().map(g => ({ vehiculeImmat: g.rep.vehiculeImmat, montantTTC: g.cost, date: g.rep.date }));
     // Top vehicules
     const perVeh = {};
     rows.forEach(s => {
@@ -328,7 +484,8 @@
       perVeh[k] = (perVeh[k] || 0) + (s.montantTTC || 0);
     });
     const top = Object.entries(perVeh).sort((a, b) => b[1] - a[1]).slice(0, 8);
-    new Chart($('topVehChart'), {
+    if (_chTop) _chTop.destroy();
+    _chTop = new Chart($('topVehChart'), {
       type: 'bar',
       data: { labels: top.map(([k]) => k), datasets: [{ data: top.map(([, v]) => v), backgroundColor: '#DC2626', borderRadius: 4 }] },
       options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => v + ' €' } } }, maintainAspectRatio: false, responsive: true }
@@ -342,7 +499,8 @@
       perTrim[tr] = (perTrim[tr] || 0) + 1;
     });
     const trims = Object.keys(perTrim).sort();
-    new Chart($('trimChart'), {
+    if (_chTrim) _chTrim.destroy();
+    _chTrim = new Chart($('trimChart'), {
       type: 'bar',
       data: { labels: trims, datasets: [{ data: trims.map(t => perTrim[t]), backgroundColor: '#F59E0B', borderRadius: 4 }] },
       options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, maintainAspectRatio: false, responsive: true }
@@ -358,7 +516,7 @@
   renderTimeline();
   renderCharts();
   const coutPeriode = FP.coutParPeriode({
-    items: () => (data.factures || []).filter(f => f.type === 'sinistre'),
+    items: () => allGroups().map(g => ({ date: g.rep.date, montantTTC: g.cost, vehiculeImmat: g.rep.vehiculeImmat })),
     yearsEl: 'cp-years', fromEl: 'cp-from', toEl: 'cp-to', totalEl: 'cp-range-total', clearEl: 'cp-clear', exportEl: 'cp-export', fileLabel: 'cout-sinistres-par-annee',
   });
   coutPeriode.render();
