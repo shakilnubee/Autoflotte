@@ -353,6 +353,8 @@ FP.settings = {
         docColsOrder: Array.isArray(stored.docColsOrder) ? stored.docColsOrder : [],
         vehDin: (stored.vehDin && typeof stored.vehDin === 'object') ? stored.vehDin : {},
         sinistreStatut: (stored.sinistreStatut && typeof stored.sinistreStatut === 'object') ? stored.sinistreStatut : {},
+        sinistreGroupes: (stored.sinistreGroupes && typeof stored.sinistreGroupes === 'object') ? stored.sinistreGroupes : {},
+        sinistreStage: (stored.sinistreStage && typeof stored.sinistreStage === 'object') ? stored.sinistreStage : {},
         permisMasque: (stored.permisMasque && typeof stored.permisMasque === 'object') ? stored.permisMasque : {},
         condDocs: (stored.condDocs && typeof stored.condDocs === 'object') ? stored.condDocs : {},
       };
