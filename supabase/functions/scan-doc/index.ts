@@ -76,10 +76,15 @@ Deno.serve(async (req) => {
   const fileBlock = isPdf
     ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: fileBase64 } }
     : { type: "image", source: { type: "base64", media_type: mediaType || "image/jpeg", data: fileBase64 } };
+  // Le prompt peut venir du SITE (payload.prompt) : ainsi on ajuste la lecture par un simple
+  // deploiement GitHub, SANS jamais avoir a redeployer cette fonction. Repli : le prompt interne.
+  const promptText = (typeof payload.prompt === "string" && payload.prompt.trim().length > 30)
+    ? payload.prompt
+    : buildPrompt();
   const body = {
     model: MODEL,
     max_tokens: 1024,
-    messages: [{ role: "user", content: [fileBlock, { type: "text", text: buildPrompt() }] }],
+    messages: [{ role: "user", content: [fileBlock, { type: "text", text: promptText }] }],
   };
   let apiRes;
   try {

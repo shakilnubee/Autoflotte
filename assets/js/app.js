@@ -1292,6 +1292,39 @@ FP.compressImage = async function (file, { maxSide = 2000, quality = 0.72 } = {}
   }
 };
 
+// Instructions de lecture envoyées à l'IA. ⚠️ Vit ICI (côté site) pour pouvoir être améliorée
+// par un simple déploiement GitHub, SANS jamais redéployer l'Edge Function. La fonction « scan-doc »
+// utilise ce texte s'il est fourni, sinon son prompt interne (repli). Pour ajuster ce que l'IA lit,
+// modifier UNIQUEMENT ce texte ci-dessous.
+FP.SCAN_PROMPT = [
+  "Lis attentivement ce document de gestion de flotte (facture, permis de conduire, carte identite, carte grise, assurance, controle technique, etc.). Le document peut etre incline ou de travers : redresse-le mentalement.",
+  "Identifie son type puis extrais les infos. Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour, avec ces cles (mets null si l info est absente) :",
+  "docType : un parmi facture, sinistre, permis, carte-identite, carte-grise, assurance, controle-technique, autre.",
+  "date : date principale du document au format AAAA-MM-JJ (pour une facture, la date d emission).",
+  "fournisseur : pour une facture, nom de la societe qui EMET la facture (souvent en haut avec un SIREN ou SIRET). Ce n est PAS le client TJMAX.",
+  "numeroFacture, vehiculeImmat (plaque francaise AB-123-CD), km (entier sans espaces).",
+  "montantHT, montantTVA, montantTTC (nombres a point decimal).",
+  "description : courte, max 80 caracteres.",
+  "AMENDE / AVIS DE CONTRAVENTION / PV - repere precisement :",
+  "- numeroAvis : le grand numero 'Numero de l avis de contravention', en general EN HAUT A GAUCHE, 10 chiffres. Recopie CHAQUE chiffre exactement (ne confonds pas 3 et 8, 0 et 6, 1 et 7).",
+  "- motif : nature de l infraction (ex Exces de vitesse, Stationnement, Feu rouge, Telephone au volant, Ceinture).",
+  "- points : nombre de points retires (entier). Exces de vitesse inferieur a 20 km/h = 1 point ; stationnement = 0. Si ce n est pas ecrit clairement, mets null (ne devine pas).",
+  "- date : la date de l INFRACTION / de constatation (souvent 'constate le JJ/MM/AAAA a HHhMM'), PAS la date d edition de l avis, ET SURTOUT PAS la date du jour.",
+  "- montantTTC : le montant a payer, dans la section 'Montant de l amende' EN BAS de l avis. Il y a souvent 3 montants : amende forfaitaire (ex 68), montant MINORE 'ramene a' si paiement rapide (ex 45), montant MAJORE (ex 180). Mets le montant MINORE s il existe, sinon le forfaitaire. C est un PETIT montant (en general entre 11 et 1500 euros). NE prends JAMAIS comme montant un numero d avis, de telepaiement, de telephone, une reference, un code, une annee ou un code postal.",
+  "- vehiculeImmat : la plaque.",
+  "- numeroTelepaiement : le numero de telepaiement pour payer en ligne. Il est sur la NOTICE / CARTE DE PAIEMENT (souvent une AUTRE PAGE du document, pas la 1re), sous le libelle 'N° de telepaiement'. C'est ~10 a 14 chiffres. Donne UNIQUEMENT les chiffres, sans espaces.",
+  "- cle : la 'Cle' (de telepaiement) associee, en general 2 chiffres, juste a cote du numero de telepaiement.",
+  "PERMIS - distingue bien les rubriques numerotees : rubrique 3 = DATE DE NAISSANCE (ne l utilise JAMAIS comme date du permis). rubrique 4a = date de delivrance du permis = permisObtention. rubrique 4b = date d expiration = permisExpiration. rubrique 5 = numero du permis = permisNumero. rubrique 9 = categories = permisType.",
+  "dateNaissance : la DATE DE NAISSANCE = RUBRIQUE 3 du permis (ou la date de naissance d une carte d identite / titre de sejour). Format AAAA-MM-JJ. C est une date passee (personne agee d environ 16 a 100 ans). Ne la confonds PAS avec la date de delivrance (4a) ni d expiration (4b).",
+  "permisNumero : RUBRIQUE 5 uniquement (ex 16AQ28381, 9 a 12 caracteres). N utilise JAMAIS la longue ligne tout en bas (zone machine qui commence par D1FRA).",
+  "permisObtention (4a) est toujours bien POSTERIEURE a la date de naissance (4a apres la rubrique 3). Si la date que tu allais mettre en permisObtention est egale ou proche de la rubrique 3, c est une erreur : reprends la 4a, ou mets null. permisExpiration = 4b du RECTO uniquement (jamais les dates par categorie du verso).",
+  "idNumero (numero de carte identite ou titre de sejour), idExpiration (AAAA-MM-JJ).",
+  "personne : nom complet de la personne sur le document (permis, carte identite), sinon null.",
+  "REGLES DATES : format europeen jour/mois/annee. Ex 11.03.2030 = 11 mars 2030 = 2030-03-11 (n inverse JAMAIS le jour et le mois). Convertis aussi les dates en lettres.",
+  "IMPORTANT : ne devine JAMAIS et n invente JAMAIS. Si tu ne lis pas clairement une valeur, surtout une date, mets null. Ne mets jamais la date du jour. Verifie chaque date avant de repondre.",
+  "Montants sans symbole euro ni separateur de milliers (ex 1466.48).",
+].join("\n");
+
 // Lecture IA d'un document via l'Edge Function sécurisée « scan-doc » (Haiku).
 // Renvoie un objet de champs { date, fournisseur, numeroFacture, vehiculeImmat, km,
 // montantHT, montantTVA, montantTTC, description } ou null si indisponible/échec
@@ -1315,7 +1348,7 @@ FP.scanIA = async function (file, docType) {
       r.readAsDataURL(f);
     });
     const mediaType = f.type || (/\.pdf$/i.test(f.name || '') ? 'application/pdf' : 'image/jpeg');
-    const payload = { fileBase64: b64, mediaType, docType: docType || 'facture' };
+    const payload = { fileBase64: b64, mediaType, docType: docType || 'facture', prompt: FP.SCAN_PROMPT };
     // Le nom de l'Edge Function est sensible à la casse côté serveur. On essaie les
     // variantes courantes pour que ça marche quelle que soit la façon dont elle a été créée.
     const names = ['scan-doc', 'Scan-doc'];
