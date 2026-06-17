@@ -224,7 +224,14 @@
   const isGroupKey = (k) => /^grp_/.test(k);
   function maps() { const s = FP.settings.get(); return { grp: s.sinistreGroupes || {}, stg: s.sinistreStage || {}, st: s.sinistreStatut || {} }; }
   const groupKeyOf = (id) => maps().grp[id] || id;
-  const stageOf = (id) => maps().stg[id] || 'facture';
+  // Stade d'un document : choix manuel s'il existe, sinon détection auto (mot « devis »/« proforma » dans la description ou le fournisseur)
+  function stageOf(id) {
+    const explicit = maps().stg[id];
+    if (explicit) return explicit;
+    const rec = sinistres.find(x => x.id === id);
+    const txt = FP.norm(`${(rec && rec.description) || ''} ${(rec && rec.fournisseur) || ''}`);
+    return /\b(devis|proforma|estimation)\b/.test(txt) ? 'devis' : 'facture';
+  }
   // Regroupe une liste de sinistres par incident → [{ key, lines:[…trié par date desc], rep, cost }]
   function buildGroups(list) {
     const by = new Map();
@@ -437,7 +444,7 @@
     const stg = e.target.closest('.sin-stage');
     if (stg) {
       const s = FP.settings.get(); s.sinistreStage = s.sinistreStage || {};
-      if (stg.value && stg.value !== 'facture') s.sinistreStage[stg.dataset.id] = stg.value; else delete s.sinistreStage[stg.dataset.id];
+      s.sinistreStage[stg.dataset.id] = stg.value; // choix manuel = prioritaire sur la détection auto
       FP.settings.save(s); refreshAll(); return;
     }
   });
