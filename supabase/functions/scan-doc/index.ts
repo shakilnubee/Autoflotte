@@ -45,6 +45,7 @@ function buildPrompt() {
     "permisNumero : RUBRIQUE 5 uniquement (ex 16AQ28381, 9 a 12 caracteres). N utilise JAMAIS la longue ligne tout en bas (zone machine qui commence par D1FRA).",
     "permisObtention (4a) est toujours bien POSTERIEURE a la date de naissance (4a apres la rubrique 3). Si la date que tu allais mettre en permisObtention est egale ou proche de la rubrique 3, c est une erreur : reprends la 4a, ou mets null. permisExpiration = 4b du RECTO uniquement (jamais les dates par categorie du verso).",
     "idNumero (numero de carte identite ou titre de sejour), idExpiration (AAAA-MM-JJ).",
+    "dateNaissance : la DATE DE NAISSANCE = RUBRIQUE 3 du permis (ou la date de naissance d une carte d identite / titre de sejour). Format AAAA-MM-JJ. C est une date passee (personne agee d environ 16 a 100 ans). Ne la confonds PAS avec la date de delivrance (4a) ni d expiration (4b).",
     "personne : nom complet de la personne sur le document (permis, carte identite), sinon null.",
     "REGLES DATES : format europeen jour/mois/annee. Ex 11.03.2030 = 11 mars 2030 = 2030-03-11 (n inverse JAMAIS le jour et le mois). Convertis aussi les dates en lettres.",
     "IMPORTANT : ne devine JAMAIS et n invente JAMAIS. Si tu ne lis pas clairement une valeur, surtout une date, mets null. Ne mets jamais la date du jour. Verifie chaque date avant de repondre.",

@@ -1519,8 +1519,8 @@
         const ext = (blob.type === 'application/pdf') ? '.pdf' : '.jpg';
         const f = new File([blob], 'permis' + ext, { type: blob.type || 'image/jpeg' });
         const ia = await FP.scanIA(f, 'permis');
-        if (ia && (ia.permisNumero || ia.permisExpiration || ia.permisObtention || ia.permisType)) {
-          return { type: ia.permisType || '', numero: ia.permisNumero || '', obtention: ia.permisObtention || '', expiration: ia.permisExpiration || '' };
+        if (ia && (ia.permisNumero || ia.permisExpiration || ia.permisObtention || ia.permisType || ia.dateNaissance)) {
+          return { type: ia.permisType || '', numero: ia.permisNumero || '', obtention: ia.permisObtention || '', expiration: ia.permisExpiration || '', naissance: ia.dateNaissance || '' };
         }
       } catch (e) { console.warn('[reread IA]', e); }
     }
@@ -1535,6 +1535,13 @@
     const o = new Date(obtention); if (isNaN(o)) return false;
     if (dateNaissance) { const n = new Date(dateNaissance); if (!isNaN(n) && ((o - n) / 31557600000) < 15) return false; }
     return true;
+  }
+  // Garde-fou : une date de naissance lue sur le permis doit être passée et donner un âge crédible (16–100 ans)
+  function naissancePlausible(d) {
+    if (!d) return false;
+    const n = new Date(d); if (isNaN(n)) return false;
+    const age = (Date.now() - n) / 31557600000;
+    return age >= 16 && age <= 100;
   }
 
   // Bouton "Relire" : relit le scan stocké et met à jour les champs trouvés
@@ -1551,6 +1558,8 @@
         const map = { type: 'permisType', numero: 'permisNumero', obtention: 'permisObtention', expiration: 'permisExpiration' };
         if (parsed[f]) changes[map[f]] = parsed[f];
       });
+      // Date de naissance lue sur le permis (rubrique 3) : on ne remplit que si le champ est vide
+      if (parsed.naissance && !drv.dateNaissance && naissancePlausible(parsed.naissance)) { changes.dateNaissance = parsed.naissance; lbl.dateNaissance = 'date de naissance'; }
       if (Object.keys(changes).length) {
         upsertCond(k, changes);
         drivers = buildDrivers();
@@ -1566,7 +1575,7 @@
   }
 
   // ===== Relire TOUS les permis (scans stockés sur la plateforme) avec aperçu avant application =====
-  const FR = { permisObtention: "Date d'obtention", permisExpiration: "Date d'expiration", permisType: 'Type', permisNumero: 'Numéro' };
+  const FR = { permisObtention: "Date d'obtention", permisExpiration: "Date d'expiration", permisType: 'Type', permisNumero: 'Numéro', dateNaissance: 'Date de naissance' };
   let _rereadResults = []; // [{key, name, changes:{champ:{old,new}}}]
   function openReread(html){ $('reread-body').innerHTML = html; $('reread-backdrop').style.display = 'flex'; lucide.createIcons(); }
   function closeReread(){ $('reread-backdrop').style.display = 'none'; $('reread-body').innerHTML = ''; }
@@ -1585,9 +1594,11 @@
       try { parsed = await rereadPermisFromUrl(r.permisUrl); } catch (e) { console.warn('[reread]', r.key, e); }
       if (!parsed) continue;
       if (parsed.obtention && !permisObtentionPlausible(parsed.obtention, r.dateNaissance)) parsed.obtention = ''; // rejette la date de naissance
-      const map = { obtention: 'permisObtention', expiration: 'permisExpiration', type: 'permisType', numero: 'permisNumero' };
+      // Date de naissance : ne proposer que si le conducteur n'en a pas encore et qu'elle est crédible
+      if (parsed.naissance && (r.dateNaissance || !naissancePlausible(parsed.naissance))) parsed.naissance = '';
+      const map = { obtention: 'permisObtention', expiration: 'permisExpiration', type: 'permisType', numero: 'permisNumero', naissance: 'dateNaissance' };
       const changes = {};
-      ['obtention', 'expiration', 'type', 'numero'].forEach(f => {
+      ['obtention', 'expiration', 'type', 'numero', 'naissance'].forEach(f => {
         const champ = map[f];
         if (parsed[f] && parsed[f] !== (r[champ] || '')) changes[champ] = { old: r[champ] || '', new: parsed[f] };
       });
@@ -1598,7 +1609,7 @@
 
   function renderRereadPreview() {
     if (!_rereadResults.length) { openReread('<p class="text-sm text-slate-600">✓ Relecture terminée — aucune correction nécessaire (les dates lues correspondent déjà).</p>'); return; }
-    const fmt = (champ, v) => (champ === 'permisObtention' || champ === 'permisExpiration') ? (v ? FP.dateNum(v) : '—') : (v || '—');
+    const fmt = (champ, v) => (champ === 'permisObtention' || champ === 'permisExpiration' || champ === 'dateNaissance') ? (v ? FP.dateNum(v) : '—') : (v || '—');
     const rows = _rereadResults.map((res, i) => {
       const lignes = Object.entries(res.changes).map(([champ, d]) =>
         `<div class="text-xs text-slate-600">${FR[champ]} : <span class="line-through text-slate-400">${escapeHtml(fmt(champ, d.old))}</span> → <b style="color:#047857">${escapeHtml(fmt(champ, d.new))}</b></div>`).join('');
@@ -1654,6 +1665,7 @@
       if (parsed.numero && !cur.permisNumero) { changes.permisNumero = parsed.numero; lus.push('numéro'); }
       if (parsed.obtention && !cur.permisObtention) { changes.permisObtention = parsed.obtention; lus.push('date d\'obtention'); }
       if (parsed.expiration && !cur.permisExpiration) { changes.permisExpiration = parsed.expiration; lus.push('date d\'expiration'); }
+      if (parsed.naissance && !cur.dateNaissance && naissancePlausible(parsed.naissance)) { changes.dateNaissance = parsed.naissance; lus.push('date de naissance'); }
       upsertCond(k, changes);
       drivers = buildDrivers();
       openDrawer(currentDriverKey);
