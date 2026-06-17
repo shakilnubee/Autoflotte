@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Notifications — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260617c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260617d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260617c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260617d">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -98,16 +98,20 @@
 
     <div id="notif-cols" class="grid gap-6 md:grid-cols-2 xl:grid-cols-4"></div>
 
+    <div id="notif-masquees" class="mt-8"></div>
+
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260617c"></script>
-<script src="../assets/js/supabase-client.js?v=20260617c"></script>
-<script src="../assets/js/data.js?v=20260617c"></script>
-<script src="../assets/js/app.js?v=20260617c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260617d"></script>
+<script src="../assets/js/supabase-client.js?v=20260617d"></script>
+<script src="../assets/js/data.js?v=20260617d"></script>
+<script src="../assets/js/app.js?v=20260617d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
   function notifHTML(a) {
     const icon = a.niveau === 'danger' ? 'alert-triangle' : a.niveau === 'warn' ? 'bell' : 'info';
@@ -115,7 +119,7 @@
     const tag = a.target ? 'a' : 'div';
     const href = a.target ? ` href="${a.target}"` : '';
     const arrow = a.target ? '<i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 flex-shrink-0 self-center"></i>' : '';
-    return `<${tag}${href} class="notif lvl-${a.niveau}">
+    const card = `<${tag}${href} class="notif lvl-${a.niveau}">
       <i data-lucide="${icon}" class="w-5 h-5 ${color} flex-shrink-0 mt-0.5"></i>
       <div class="flex-1 min-w-0">
         ${a.categorie ? `<div class="notif-cat">${a.categorie}</div>` : ''}
@@ -128,6 +132,29 @@
       </div>
       ${arrow}
     </${tag}>`;
+    // Alerte liée à un véhicule/échéance → bouton « Masquer » (en haut à droite, hors du lien)
+    if (!a.muteKey) return card;
+    return `<div style="position:relative">${card}
+      <button type="button" data-mute="${esc(a.muteKey)}" title="Masquer cette alerte" class="absolute top-1.5 right-1.5 p-1 rounded-md text-slate-300 hover:text-red-600 hover:bg-red-50" style="background:rgba(255,255,255,.85)"><i data-lucide="bell-off" class="w-3.5 h-3.5"></i></button>
+    </div>`;
+  }
+
+  function renderMasquees() {
+    const box = document.getElementById('notif-masquees');
+    const keys = (FP.alertes && FP.alertes.masquees()) || [];
+    if (!keys.length) { box.innerHTML = ''; return; }
+    const labels = (FP.alertes && FP.alertes.infos()) || {};
+    box.innerHTML = `<details class="card p-4">
+      <summary class="cursor-pointer font-semibold text-slate-700 flex items-center gap-2"><i data-lucide="bell-off" class="w-4 h-4 text-slate-400"></i> ${keys.length} alerte${keys.length > 1 ? 's' : ''} masquée${keys.length > 1 ? 's' : ''} <span class="text-xs font-normal text-slate-400">(cliquer pour gérer)</span></summary>
+      <div class="mt-3 space-y-1.5">
+        ${keys.map(k => `<div class="flex items-center justify-between gap-3 text-sm">
+          <span class="text-slate-600 truncate">${esc(labels[k] || k)}</span>
+          <button type="button" data-unmute="${esc(k)}" class="text-xs font-semibold shrink-0" style="color:var(--fp-accent)">Réafficher</button>
+        </div>`).join('')}
+        <button type="button" id="unmute-all" class="btn btn-outline text-xs mt-2">Tout réafficher</button>
+      </div>
+    </details>`;
+    lucide.createIcons();
   }
 
   // Colonnes : une par catégorie d'alerte
@@ -153,8 +180,27 @@
         <div class="space-y-2" id="col-${i}">${body}</div>
       </div>`;
     }).join('');
+    renderMasquees();
     lucide.createIcons();
   }
+
+  // Masquer une alerte (le bouton est hors du lien → on bloque la navigation par sécurité)
+  document.getElementById('notif-cols').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mute]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const card = b.parentElement.querySelector('.notif');
+    const cat = card ? (card.querySelector('.notif-cat') || {}).textContent || '' : '';
+    const msg = card ? (card.querySelector('.font-semibold') || {}).textContent || '' : '';
+    const label = [cat, msg].filter(Boolean).join(' — ');
+    FP.alertes.masquer(b.dataset.mute, label);
+    render();
+  });
+  // Réafficher
+  document.getElementById('notif-masquees').addEventListener('click', (e) => {
+    if (e.target.closest('#unmute-all')) { FP.alertes.reafficherTout(); render(); return; }
+    const u = e.target.closest('[data-unmute]'); if (!u) return;
+    FP.alertes.reafficher(u.dataset.unmute); render();
+  });
 
   render();
   document.addEventListener('fp:data-ready', render);

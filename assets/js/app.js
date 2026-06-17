@@ -355,6 +355,8 @@ FP.settings = {
         sinistreStatut: (stored.sinistreStatut && typeof stored.sinistreStatut === 'object') ? stored.sinistreStatut : {},
         sinistreGroupes: (stored.sinistreGroupes && typeof stored.sinistreGroupes === 'object') ? stored.sinistreGroupes : {},
         sinistreStage: (stored.sinistreStage && typeof stored.sinistreStage === 'object') ? stored.sinistreStage : {},
+        alertesMasquees: Array.isArray(stored.alertesMasquees) ? stored.alertesMasquees : [],
+        alertesMasqueesInfo: (stored.alertesMasqueesInfo && typeof stored.alertesMasqueesInfo === 'object') ? stored.alertesMasqueesInfo : {},
         permisMasque: (stored.permisMasque && typeof stored.permisMasque === 'object') ? stored.permisMasque : {},
         condDocs: (stored.condDocs && typeof stored.condDocs === 'object') ? stored.condDocs : {},
       };
@@ -904,10 +906,11 @@ FP.buildAlertes = (data) => {
     const diff = days(v.prochainCT);
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
     const tgt = 'vehicules.html?veh=' + v.id; // ouvre directement la fiche du véhicule
-    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt });
-    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt });
-    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt });
-    else if (diff < 90)  out.push({ niveau: 'info',   categorie: 'Contrôle technique', message: `CT dans ~2 mois (${diff}j)`, detail: veh, sort: diff, target: tgt });
+    const mk = 'ct|' + v.id + '|' + v.prochainCT;
+    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < 90)  out.push({ niveau: 'info',   categorie: 'Contrôle technique', message: `CT dans ~2 mois (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
 
   // --- Contrôle anti-pollution (utilitaires / camions diesel) ---
@@ -919,9 +922,10 @@ FP.buildAlertes = (data) => {
     const diff = days(v.antiPollution);
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
     const tgt = 'vehicules.html?veh=' + v.id;
-    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt });
-    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt });
-    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Anti-pollution', message: `Anti-pollution à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt });
+    const mk = 'pol|' + v.id + '|' + v.antiPollution;
+    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Anti-pollution', message: `Anti-pollution à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
 
   // --- Amendes à payer ---
@@ -947,9 +951,10 @@ FP.buildAlertes = (data) => {
     const who = [c.prenom || c.name, c.nom].filter(Boolean).join(' ') || c.name || c.key;
     const detail = `${who} — expire le ${FP.date(c.permisExpiration)}`;
     const tgt = 'conducteurs.html?cond=' + encodeURIComponent(c.key);
-    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis EXPIRÉ depuis ${-diff}j`, detail, sort: diff, target: tgt });
-    else if (diff < 60)  out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis expire dans ${diff}j`, detail, sort: diff, target: tgt });
-    else if (diff < 120) out.push({ niveau: 'warn',   categorie: 'Permis', message: `Permis à renouveler (${diff}j)`, detail, sort: diff, target: tgt });
+    const mk = 'permis|' + c.key + '|' + c.permisExpiration;
+    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis EXPIRÉ depuis ${-diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
+    else if (diff < 60)  out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis expire dans ${diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
+    else if (diff < 120) out.push({ niveau: 'warn',   categorie: 'Permis', message: `Permis à renouveler (${diff}j)`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
   });
 
   // --- Pièces d'identité (carte d'identité, titre de séjour…) qui expirent (réglages condDocs) ---
@@ -966,9 +971,10 @@ FP.buildAlertes = (data) => {
         const lib = LABELS[doc.type] || doc.label || 'Document';
         const detail = `${who} — ${lib} expire le ${FP.date(doc.date)}`;
         const tgt = 'conducteurs.html?cond=' + encodeURIComponent(key);
-        if (diff < 0)        out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} EXPIRÉE depuis ${-diff}j`, detail, sort: diff, target: tgt });
-        else if (diff < 60)  out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} expire dans ${diff}j`, detail, sort: diff, target: tgt });
-        else if (diff < 120) out.push({ niveau: 'warn',   categorie: "Pièce d'identité", message: `${lib} à renouveler (${diff}j)`, detail, sort: diff, target: tgt });
+        const mk = 'cid|' + key + '|' + doc.type + '|' + doc.date;
+        if (diff < 0)        out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} EXPIRÉE depuis ${-diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
+        else if (diff < 60)  out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} expire dans ${diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
+        else if (diff < 120) out.push({ niveau: 'warn',   categorie: "Pièce d'identité", message: `${lib} à renouveler (${diff}j)`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
       });
     });
   } catch (e) {}
@@ -992,7 +998,7 @@ FP.buildAlertes = (data) => {
     }
     const detail = `${veh} — préconisé tous les ${FP.num(r.intervalle.km)} km / ${r.intervalle.mois} mois`;
     const sort = r.kmRestant !== null ? r.kmRestant : r.joursRestant * 100;
-    out.push({ niveau: r.niveau, categorie: 'Révision', message: msg, detail, sort, target: tgt });
+    out.push({ niveau: r.niveau, categorie: 'Révision', message: msg, detail, sort, target: tgt, muteKey: 'rev|' + v.id + '|' + (v.derniereRevision || ''), vehLabel: veh });
   });
 
   // --- Dépassement kilométrique leasing BPCE ---
@@ -1007,7 +1013,7 @@ FP.buildAlertes = (data) => {
     else msg = `Leasing : rythme soutenu, projection ~${FP.num(l.projectionFin)} km / ${FP.num(l.kmContrat)} km`;
     let detail = `${veh} — ${FP.num(Math.round(l.kmParMoisReel))} km/mois vs ${FP.num(Math.round(l.kmParMoisAutorise))} autorisés`;
     if (l.kmSupp && l.depassementProjete > 0) detail += ` · pénalité estimée ~${FP.euro(Math.round(l.depassementProjete * l.kmSupp))}`;
-    out.push({ niveau: l.niveau, categorie: 'Leasing', message: msg, detail, sort: 3000 - Math.round((l.ratio || 0) * 100), target: 'contrats.html' });
+    out.push({ niveau: l.niveau, categorie: 'Leasing', message: msg, detail, sort: 3000 - Math.round((l.ratio || 0) * 100), target: 'contrats.html', muteKey: 'leasingkm|' + v.id, vehLabel: veh });
   });
 
   // --- Fin de contrat leasing BPCE approchant (par date de fin) ---
@@ -1023,7 +1029,7 @@ FP.buildAlertes = (data) => {
     else if (diff < 90)  { niveau = 'danger'; msg = `Fin de leasing dans ${diff}j (${finStr})`; }
     else if (diff < 180) { niveau = 'warn';   msg = `Fin de leasing dans ~${Math.round(diff / 30)} mois (${finStr})`; }
     else return;
-    out.push({ niveau, categorie: 'Leasing', message: msg, detail: veh, sort: diff, target: 'contrats.html' });
+    out.push({ niveau, categorie: 'Leasing', message: msg, detail: veh, sort: diff, target: 'contrats.html', muteKey: 'leasingfin|' + v.id + '|' + finStr, vehLabel: veh });
   });
 
   // --- Véhicules sans dernière révision enregistrée (info) ---
@@ -1043,7 +1049,29 @@ FP.buildAlertes = (data) => {
 
   const order = { danger: 0, warn: 1, info: 2 };
   out.sort((a, b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
-  return out;
+  // Masque les alertes que l'utilisateur a explicitement enlevées (par véhicule / échéance)
+  const masquees = (FP.settings.get().alertesMasquees) || [];
+  return masquees.length ? out.filter(a => !a.muteKey || !masquees.includes(a.muteKey)) : out;
+};
+
+// Masquer / réafficher une alerte (clé liée au véhicule + échéance : reparaît si l'échéance change)
+FP.alertes = {
+  masquees() { return (FP.settings.get().alertesMasquees) || []; },
+  infos() { return (FP.settings.get().alertesMasqueesInfo) || {}; },
+  masquer(key, label) {
+    if (!key) return;
+    const s = FP.settings.get(); s.alertesMasquees = s.alertesMasquees || []; s.alertesMasqueesInfo = s.alertesMasqueesInfo || {};
+    if (!s.alertesMasquees.includes(key)) s.alertesMasquees.push(key);
+    if (label) s.alertesMasqueesInfo[key] = label;
+    FP.settings.save(s);
+  },
+  reafficher(key) {
+    const s = FP.settings.get();
+    s.alertesMasquees = (s.alertesMasquees || []).filter(k => k !== key);
+    if (s.alertesMasqueesInfo) delete s.alertesMasqueesInfo[key];
+    FP.settings.save(s);
+  },
+  reafficherTout() { const s = FP.settings.get(); s.alertesMasquees = []; s.alertesMasqueesInfo = {}; FP.settings.save(s); },
 };
 
 // Échéances DATÉES (pour le calendrier) : chaque entrée a une vraie date.
