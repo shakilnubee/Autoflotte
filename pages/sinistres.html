@@ -278,7 +278,10 @@
             ${vehInfo ? `<div class="text-xs text-slate-400 mt-1">${vehInfo}</div>` : ''}
             <div class="flex items-center justify-between gap-2 mt-3 pt-3" style="border-top:1px solid var(--fp-border)">
               ${statutSelect(s.id)}
-              ${pdf}
+              <div class="flex items-center gap-3 shrink-0">
+                ${pdf}
+                <button type="button" data-sin-del="${s.id}" title="Supprimer ce sinistre" class="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>
+              </div>
             </div>
           </div>
         `;
@@ -297,6 +300,22 @@
     if (sel.value) s.sinistreStatut[sel.dataset.id] = sel.value; else delete s.sinistreStatut[sel.dataset.id];
     FP.settings.save(s);
     renderTimeline();
+  });
+
+  // Suppression d'un sinistre (l'utilisateur retire lui-même un document/doublon)
+  $('timeline').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-sin-del]'); if (!btn) return;
+    const id = btn.dataset.sinDel;
+    const s = sinistres.find(x => x.id === id);
+    const label = s ? `${s.vehiculeImmat || ''} · ${FP.date(s.date)}${s.description ? ' — ' + s.description : ''}` : '';
+    if (!confirm(`Supprimer définitivement ce sinistre ?\n\n${label}`)) return;
+    // Retire le statut de remboursement associé
+    const st = FP.settings.get(); if (st.sinistreStatut && st.sinistreStatut[id]) { delete st.sinistreStatut[id]; FP.settings.save(st); }
+    // Retire de la mémoire locale puis de Supabase
+    if (data.factures) { const i = data.factures.findIndex(f => f.id === id); if (i !== -1) data.factures.splice(i, 1); }
+    sinistres = sinistres.filter(x => x.id !== id);
+    if (FP.persist) FP.persist.delete('factures', id);
+    renderKPIs(); renderTimeline(); renderCharts(); coutPeriode.render();
   });
 
   // Charts
