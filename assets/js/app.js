@@ -329,8 +329,12 @@ FP.settings = {
   },
   get() {
     try {
-      const stored = JSON.parse(this._readLocal());
+      const stored = JSON.parse(this._readLocal()) || {};
       const merged = {
+        // ⚠️ On REPART de tout ce qui est stocké : ainsi TOUTE nouvelle clé de réglage est
+        // conservée automatiquement, même si elle n'est pas listée ci-dessous. (Sans ce spread,
+        // une clé non listée serait silencieusement effacée à chaque lecture — bug déjà rencontré.)
+        ...stored,
         groupes: { ...this.defaults.groupes },
         societe: { ...this.defaults.societe, ...(stored.societe || {}) },
         vehiculesColumns: stored.vehiculesColumns && Array.isArray(stored.vehiculesColumns.order)
