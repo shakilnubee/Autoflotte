@@ -761,6 +761,8 @@
           const KNOWN = ['facture','sinistre','permis','carte-identite','carte-grise','assurance','controle-technique','autre'];
           if (ia.docType && KNOWN.includes(ia.docType)) det.type = ia.docType;
           det.date = ia.date || null;
+          if (ia.controleTechniqueProchain) det.controleTechniqueProchain = ia.controleTechniqueProchain;
+          if (ia.description) det.description = ia.description;
           if (ia.km != null) det.km = ia.km;
           if (ia.montantTTC != null) det.montantTTC = ia.montantTTC;
           if (ia.montantHT != null) det.montantHT = ia.montantHT;
@@ -1006,14 +1008,34 @@
             if (isSin) { // marque le sinistre « en attente de remboursement » pour le suivi
               const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {}; s.sinistreStatut[fact.id] = 'attente'; FP.settings.save(s);
             }
-            let line = `<b>${veh ? veh.immat : ''}</b> — ${isSin ? 'Sinistre' : 'Facture'}${Number.isFinite(r.amt) ? ' ' + FP.euro(r.amt) : ' (montant à compléter)'} → ${isSin ? 'Sinistres (en attente de remboursement)' : 'liste Factures'}`;
+            // Entretien / réparation → met à jour la fiche véhicule (dernière révision, km, pneus)
+            let majMsg = '';
+            if (!isSin && veh) {
+              const today = new Date().toISOString().slice(0, 10);
+              const maintTxt = `${det.description || ''} ${r.file.name || ''} ${cat}`.toLowerCase();
+              const isMaint = cat === 'entretien' || cat === 'reparation' || /pneu|vidange|entretien|r[eé]vision|frein|climatisation|distribution|filtre|amortisseur|courroie|plaquette|disque|embrayage/.test(maintTxt);
+              const vUpd = {}; const bits = [];
+              if (isMaint && r.date && r.date <= today && (!veh.derniereRevision || veh.derniereRevision === '—' || r.date > veh.derniereRevision)) { vUpd.derniereRevision = r.date; bits.push('révision'); }
+              if (isMaint && Number.isFinite(r.km) && r.km > 0 && (!veh.kmDernierReleve || r.km >= veh.kmDernierReleve)) { vUpd.kmDernierReleve = r.km; bits.push(FP.num(r.km) + ' km'); }
+              if (/pneu/i.test(maintTxt) && r.date && r.date <= today && (!veh.dateChangementPneus || r.date > veh.dateChangementPneus)) { vUpd.dateChangementPneus = r.date; bits.push('pneus'); }
+              if (Object.keys(vUpd).length) { await FP.persist.update('vehicules', veh.id, vUpd); Object.assign(veh, vUpd); majMsg = ` · fiche maj (${bits.join(', ')})`; }
+            }
+            let line = `<b>${veh ? veh.immat : ''}</b> — ${isSin ? 'Sinistre' : 'Facture'}${Number.isFinite(r.amt) ? ' ' + FP.euro(r.amt) : ' (montant à compléter)'} → ${isSin ? 'Sinistres (en attente de remboursement)' : 'liste Factures'}` + majMsg;
             done.push('• ' + line); okN++;
           } else {
             // → DOCUMENTS de la fiche véhicule
             const label = (TYPE_LABELS[r.type] || 'Document') + (r.date ? ' ' + r.date.slice(0, 4) : '');
             await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + i, vehiculeId: r.vehId, type: r.type, label, url, driveId: null });
             const upd = {};
-            if (r.type === 'controle-technique' && r.date) upd.prochainCT = r.date;
+            if (r.type === 'controle-technique') {
+              const today = new Date().toISOString().slice(0, 10);
+              const addY = (iso, n) => { const d = new Date(iso); if (isNaN(d)) return null; d.setFullYear(d.getFullYear() + n); return d.toISOString().slice(0, 10); };
+              const insp = r.date || null;
+              let next = (r.det && r.det.controleTechniqueProchain) || null;
+              if (!next && insp) next = insp > today ? insp : addY(insp, 2); // estimation : visite + 2 ans
+              if (next && (!veh || !veh.prochainCT || veh.prochainCT === '—' || next > veh.prochainCT)) upd.prochainCT = next;
+              if (insp && insp <= today && veh && (!veh.dateDernierCT || insp > veh.dateDernierCT)) upd.dateDernierCT = insp;
+            }
             if (Number.isFinite(r.km) && r.km > 0 && (!veh || !veh.km || r.km > veh.km)) upd.km = r.km;
             if (Object.keys(upd).length) { await FP.persist.update('vehicules', r.vehId, upd); if (veh) Object.assign(veh, upd); }
             let line = `<b>${veh ? veh.immat : ''}</b> — ${label}`;
