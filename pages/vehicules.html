@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Véhicules — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260617d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260617e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260617d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260617e">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -658,11 +658,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260617d"></script>
-<script src="../assets/js/supabase-client.js?v=20260617d"></script>
-<script src="../assets/js/data.js?v=20260617d"></script>
-<script src="../assets/js/fleet-docs.js?v=20260617d"></script>
-<script src="../assets/js/app.js?v=20260617d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260617e"></script>
+<script src="../assets/js/supabase-client.js?v=20260617e"></script>
+<script src="../assets/js/data.js?v=20260617e"></script>
+<script src="../assets/js/fleet-docs.js?v=20260617e"></script>
+<script src="../assets/js/app.js?v=20260617e"></script>
 <script>
   lucide.createIcons();
 
@@ -2508,15 +2508,38 @@
           try {
             const url = await FP.uploadScan(file, 'documents');
             addVehDoc(vehId, type, (files.length === 1 ? (label || file.name) : file.name), url); // archive (re-rend la fiche)
-            // Lecture → complète les champs vides de la fiche (cumulatif sur tous les fichiers)
+            // Lecture → complète/maj la fiche (IA prioritaire, fiable même sur un scan sans texte ; repli OCR local)
             try {
-              const text = await FP.ocr.fileToText(file);
-              const det = FP.detectDoc(text, data.vehicules);
+              let ia = null;
+              try { ia = await FP.scanIA(file, type === 'controle-technique' ? 'controle-technique' : 'facture'); } catch (e) {}
+              let det = {};
+              try { const text = await FP.ocr.fileToText(file); det = FP.detectDoc(text, data.vehicules) || {}; } catch (e) {}
               const v = data.vehicules.find(x => x.id === vehId);
               if (v) {
                 const upd = {};
-                if (det.type === 'controle-technique' && det.date && !v.prochainCT) { upd.prochainCT = det.date; allGot.add('prochain CT'); }
-                if (det.km && (!v.km || det.km > v.km)) { upd.km = det.km; allGot.add('kilométrage'); }
+                const today = new Date().toISOString().slice(0, 10);
+                const addYears = (iso, n) => { const d = new Date(iso); if (isNaN(d)) return null; d.setFullYear(d.getFullYear() + n); return d.toISOString().slice(0, 10); };
+                // --- Contrôle technique : met à jour le PROCHAIN CT (on AVANCE la date, même si déjà remplie) ---
+                if (type === 'controle-technique') {
+                  const insp = (ia && ia.date) || det.date || null;
+                  let next = (ia && ia.controleTechniqueProchain) || null;
+                  if (!next && det.type === 'controle-technique' && det.date) next = det.date; // detectDoc lit déjà le « prochain contrôle »
+                  if (!next && insp) next = insp > today ? insp : addYears(insp, 2);
+                  if (next && (!v.prochainCT || v.prochainCT === '—' || next > v.prochainCT)) { upd.prochainCT = next; allGot.add('prochain CT'); }
+                  if (insp && insp <= today && (!v.dateDernierCT || insp > v.dateDernierCT)) upd.dateDernierCT = insp;
+                }
+                // --- Facture d'entretien/réparation : met à jour la dernière révision + km ---
+                const maintTxt = `${(ia && ia.description) || ''} ${det.description || ''} ${file.name || ''}`.toLowerCase();
+                const isMaint = /pneu|vidange|entretien|r[eé]vision|frein|climatisation|distribution|filtre|amortisseur|courroie|plaquette|disque|embrayage/.test(maintTxt);
+                const fdate = (ia && ia.date) || det.date || null;
+                if (isMaint && type !== 'controle-technique' && type !== 'carte-grise' && type !== 'assurance') {
+                  if (fdate && fdate <= today && (!v.derniereRevision || v.derniereRevision === '—' || fdate > v.derniereRevision)) { upd.derniereRevision = fdate; allGot.add('dernière révision'); }
+                  const km = (ia && ia.km) || det.km;
+                  if (km != null && (!v.kmDernierReleve || km >= v.kmDernierReleve)) { upd.kmDernierReleve = km; allGot.add('km dernière révision'); }
+                }
+                // --- Champs génériques ---
+                const anyKm = (ia && ia.km) || det.km;
+                if (anyKm && (!v.km || anyKm > v.km)) { upd.km = anyKm; allGot.add('kilométrage'); }
                 if (det.marque && !v.marque) { upd.marque = det.marque; allGot.add('marque'); }
                 if (det.modele && !v.modele) { upd.modele = det.modele; allGot.add('modèle'); }
                 if (det.categorie && (!v.categorie || v.categorie === 'Citadine')) { upd.categorie = det.categorie; allGot.add('catégorie'); }
