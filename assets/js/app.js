@@ -47,6 +47,24 @@ document.addEventListener('click', (e) => {
   }
 }, true);
 
+// Garde GLOBAL (toutes les pages + futures) : la touche ÉCHAP ferme le tiroir / la fenêtre ouverte.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' && e.keyCode !== 27) return;
+  let closed = false;
+  // 1) Tiroirs latéraux (drawer) ouverts
+  document.querySelectorAll('.drawer.open, .drawer-backdrop.open').forEach(el => { el.classList.remove('open'); closed = true; });
+  // 2) Fenêtres modales visibles (backdrops + éléments dont l'id finit par -modal)
+  document.querySelectorAll('.modal-backdrop, [id$="-modal"], [id$="-backdrop"]').forEach(el => {
+    const vis = !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
+    if (!vis) return;
+    el.classList.add('hidden');
+    if (el.style && el.style.display && el.style.display !== 'none') el.style.display = 'none';
+    el.classList.remove('open');
+    closed = true;
+  });
+  if (closed) e.stopPropagation();
+});
+
 const FP = {
   // Format euro — null/undefined/"" /NaN ⇒ 0 (évite d'afficher "NaN €")
   euro(n) {
