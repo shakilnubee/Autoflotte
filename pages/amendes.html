@@ -860,13 +860,29 @@
       </div>
 
       <div class="grid grid-cols-2 gap-3">
-        <div class="kpi p-3"><div class="kpi-label">${a.majoree && a.montantMajore ? 'Montant majoré (dû)' : 'Montant'}</div><div class="kpi-value" style="font-size:1.4rem${a.majoree && a.montantMajore ? ';color:#B91C1C' : ''}">${montantDu(a) ? FP.euroPrecis(montantDu(a)) : '—'}</div>${a.majoree && a.montantMajore ? `<div class="text-xs text-slate-400 mt-0.5">Initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}${a.dateMajoration ? ' · majorée le ' + FP.date(a.dateMajoration) : ''}</div>` : ''}</div>
-        <div class="kpi p-3"><div class="kpi-label">Points retirés</div><div class="kpi-value" style="font-size:1.4rem">${(Number(a.points) || 0) > 0 ? '−' + a.points : 'Aucun'}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">${a.majoree && a.montantMajore ? 'Montant majoré (dû)' : 'Montant'}</div><div class="kpi-value" style="font-size:1.4rem${a.majoree && a.montantMajore ? ';color:#B91C1C' : ''}"><span id="am-montant-val" class="cursor-pointer hover:underline" title="Cliquer pour modifier le montant">${montantDu(a) ? FP.euroPrecis(montantDu(a)) : '<span class="text-slate-400">— ajouter</span>'}</span></div>${a.majoree && a.montantMajore ? `<div class="text-xs text-slate-400 mt-0.5">Initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}${a.dateMajoration ? ' · majorée le ' + FP.date(a.dateMajoration) : ''}</div>` : ''}</div>
+        <div class="kpi p-3"><div class="kpi-label">Points retirés</div><div class="kpi-value" style="font-size:1.4rem"><span id="am-points-val" class="cursor-pointer hover:underline" title="Cliquer pour modifier">${(Number(a.points) || 0) > 0 ? '−' + a.points : 'Aucun'}</span></div></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <div class="field-label">Conducteur</div>
+          <div id="am-prenom-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour modifier">${a.prenom || '<span class="text-slate-400">— ajouter</span>'}</div>
+        </div>
+        <div>
+          <div class="field-label">Date de l'amende</div>
+          <div id="am-date-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${a.date ? FP.date(a.date) : '<span class="text-slate-400">— ajouter</span>'}</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">Motif</div>
+        <div id="am-motif-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${a.motif || '<span class="text-slate-400">— ajouter</span>'}</div>
       </div>
 
       <div>
         <div class="field-label">Numéro d'avis</div>
-        <div class="font-mono text-sm bg-slate-50 p-3 rounded-lg">${a.numeroAvis || '—'}</div>
+        <div id="am-avis-val" class="font-mono text-sm bg-slate-50 p-3 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${a.numeroAvis || '<span class="text-slate-400">— ajouter</span>'}</div>
       </div>
 
       <div>
@@ -960,6 +976,12 @@
     const md = $('mail-designation'); if (md) md.onclick = mailDesignation;
     const tv = $('am-tel-val'); if (tv) tv.onclick = () => editAmField('numeroTelepaiement', 'N° de télépaiement');
     const cv = $('am-cle-val'); if (cv) cv.onclick = () => editAmField('cle', 'Clé');
+    const mtv = $('am-montant-val'); if (mtv) mtv.onclick = () => editAmField('montant', 'Montant (€)', 'number');
+    const ptv = $('am-points-val'); if (ptv) ptv.onclick = () => editAmField('points', 'Points retirés', 'number');
+    const pnv = $('am-prenom-val'); if (pnv) pnv.onclick = () => editAmField('prenom', 'Conducteur');
+    const dtv = $('am-date-val'); if (dtv) dtv.onclick = () => editAmField('date', 'Date de l\'amende', 'date');
+    const mfv = $('am-motif-val'); if (mfv) mfv.onclick = () => editAmField('motif', 'Motif');
+    const avv = $('am-avis-val'); if (avv) avv.onclick = () => editAmField('numeroAvis', 'Numéro d\'avis');
     const tc = $('am-tel-copy'); if (tc) tc.onclick = () => copierTexte((a.numeroTelepaiement || '').replace(/\D/g, ''), tc);
     const cc = $('am-cle-copy'); if (cc) cc.onclick = () => copierTexte(a.cle, cc);
     const cmv = $('am-comment-edit');
@@ -1090,15 +1112,28 @@
     else window.prompt('Copier :', txt);
   }
   // Édition rapide d'un champ texte de l'amende (télépaiement, clé) depuis la fiche
-  function editAmField(field, label) {
+  function editAmField(field, label, type) {
     if (!state.currentId) return;
     const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
-    const v = prompt(label + ' :', a[field] || '');
+    let cur = a[field]; if (cur == null) cur = '';
+    const v = prompt(label + (type === 'date' ? ' (AAAA-MM-JJ)' : '') + ' :', cur);
     if (v === null) return;
     FP.history.commit();
-    a[field] = v.trim();
-    renderTable();
-    FP.persist.update('amendes', a.id, { [field]: a[field] });
+    let val = String(v).trim();
+    const patch = {};
+    if (type === 'number') {
+      const n = field === 'points' ? (parseInt(val, 10) || 0) : (parseFloat(val.replace(',', '.')) || 0);
+      a[field] = n; patch[field] = n;
+      if (field === 'points') { a.retraitPoints = n > 0; patch.retraitPoints = n > 0; }
+    } else if (type === 'date') {
+      if (val && !/^\d{4}-\d{2}-\d{2}$/.test(val)) { alert('Format attendu : AAAA-MM-JJ (ex. 2026-06-18).'); return; }
+      a[field] = val || null; patch[field] = val || null;
+      if (field === 'date') { a.annee = (val || '').slice(0, 4); patch.annee = a.annee || null; }
+    } else {
+      a[field] = val; patch[field] = val || null;
+    }
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', a.id, patch);
     openDrawer(a.id);
   }
   // Supprime un document de l'amende (scan d'avis / justificatif) : on enlève le lien
