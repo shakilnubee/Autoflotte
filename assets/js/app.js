@@ -901,9 +901,12 @@ FP.buildAlertes = (data) => {
   const out = [];
   const today = new Date();
   const days = (d) => Math.ceil((new Date(d) - today) / (1000 * 60 * 60 * 24));
+  // Véhicules sortis de la flotte active (vendus / à vendre / cédés…) : pas d'alertes pour eux.
+  const horsFlotte = (v) => ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 'cédé', 'cede', 'cédée', 'hors service', 'hs', 'archive', 'archivé', 'archivée', 'restitué', 'restitue'].includes(((v && v.statut) || '').toString().toLowerCase().trim());
 
   // --- Contrôles techniques ---
   (data.vehicules || []).forEach(v => {
+    if (horsFlotte(v)) return;
     if (!v.prochainCT || v.prochainCT === '—') return;
     const d = new Date(v.prochainCT);
     if (isNaN(d)) return;
@@ -919,6 +922,7 @@ FP.buildAlertes = (data) => {
 
   // --- Contrôle anti-pollution (utilitaires / camions diesel) ---
   (data.vehicules || []).forEach(v => {
+    if (horsFlotte(v)) return;
     if (!FP.concerneAntiPollution(v)) return;
     if (!v.antiPollution || v.antiPollution === '—') return;
     const d = new Date(v.antiPollution);
