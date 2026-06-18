@@ -50,6 +50,10 @@ document.addEventListener('click', (e) => {
 // Garde GLOBAL (toutes les pages + futures) : la touche ÉCHAP ferme le tiroir / la fenêtre ouverte.
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' && e.keyCode !== 27) return;
+  // Si on est en train de saisir dans un champ (édition inline, recherche…), Échap annule la
+  // saisie (géré par le champ lui-même) et NE ferme PAS le tiroir/la fenêtre.
+  const ae = document.activeElement;
+  if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
   let closed = false;
   // 1) Tiroirs latéraux (drawer) ouverts
   document.querySelectorAll('.drawer.open, .drawer-backdrop.open').forEach(el => { el.classList.remove('open'); closed = true; });

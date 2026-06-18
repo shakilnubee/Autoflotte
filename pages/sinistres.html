@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sinistres — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260617i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260617j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260617i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260617j">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -181,10 +181,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260617i"></script>
-<script src="../assets/js/supabase-client.js?v=20260617i"></script>
-<script src="../assets/js/data.js?v=20260617i"></script>
-<script src="../assets/js/app.js?v=20260617i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260617j"></script>
+<script src="../assets/js/supabase-client.js?v=20260617j"></script>
+<script src="../assets/js/data.js?v=20260617j"></script>
+<script src="../assets/js/app.js?v=20260617j"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
   lucide.createIcons();
@@ -465,7 +465,7 @@
     }
 
     const ed = e.target.closest('[data-sin-edit]');
-    if (ed) { editSinField(ed.dataset.sinEdit, ed.dataset.fld, ed.dataset.lbl || ed.dataset.fld, ed.dataset.typ); return; }
+    if (ed) { editSinField(ed, ed.dataset.sinEdit, ed.dataset.fld, ed.dataset.typ); return; }
 
     const det = e.target.closest('[data-sin-detach]');
     if (det) { detach(det.dataset.sinDetach); refreshAll(); return; }
@@ -485,19 +485,21 @@
     }
   });
 
-  // Édition au clic d'un champ d'un sinistre (carte ou ligne d'incident)
-  function editSinField(id, field, label, type) {
-    const s = sinistres.find(x => x.id === id); if (!s) return;
-    let cur = s[field]; if (cur == null) cur = '';
-    const v = prompt(label + (type === 'date' ? ' (AAAA-MM-JJ)' : '') + ' :', cur);
-    if (v === null) return;
-    let val = String(v).trim(); const patch = {};
-    if (type === 'number') { const n = parseFloat(val.replace(/\s/g, '').replace(',', '.')); const num = Number.isFinite(n) ? n : null; s[field] = num; patch[field] = num; }
-    else if (type === 'date') { if (val && !/^\d{4}-\d{2}-\d{2}$/.test(val)) { alert('Format attendu : AAAA-MM-JJ.'); return; } s[field] = val || null; patch[field] = val || null; }
-    else { val = field === 'vehiculeImmat' ? val.toUpperCase() : val; s[field] = val || null; patch[field] = val || null; }
-    const df = (data.factures || []).find(x => x.id === id); if (df) df[field] = s[field];
-    if (FP.persist) FP.persist.update('factures', id, patch);
-    refreshAll();
+  // Édition au clic d'un champ d'un sinistre — éditeur maison (FP.cellEditor)
+  function editSinField(el, id, field, type) {
+    const s = sinistres.find(x => x.id === id); if (!s || !el || !FP.cellEditor) return;
+    FP.cellEditor(el, s[field] != null ? s[field] : '', type || 'text', {
+      onSave: (nv) => {
+        const patch = {};
+        if (type === 'number') { const num = (nv == null || nv === '') ? null : nv; s[field] = num; patch[field] = num; }
+        else if (type === 'date') { const v = nv || null; s[field] = v; patch[field] = v; }
+        else { let v = (nv == null ? '' : String(nv)).trim(); if (field === 'vehiculeImmat') v = v.toUpperCase(); s[field] = v || null; patch[field] = v || null; }
+        const df = (data.factures || []).find(x => x.id === id); if (df) df[field] = s[field];
+        if (FP.persist) FP.persist.update('factures', id, patch);
+        refreshAll();
+      },
+      onCancel: () => refreshAll(),
+    });
   }
 
   // Charts
