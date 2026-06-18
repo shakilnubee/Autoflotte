@@ -371,13 +371,20 @@
     }).join('');
     const mz = $('assur-missing');
     if (mz) {
-      if (hasPerVeh && missing.length) {
+      const ignore = (FP.settings.get().assuranceIgnore) || [];
+      const shown = missing.filter(v => !ignore.includes(normPlaque(v.immat)));
+      if (hasPerVeh && shown.length) {
         mz.innerHTML = `<div style="padding:10px 12px;border-radius:10px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E">`
-          + `<b>${missing.length} véhicule(s) actif(s) sans prime d'assurance</b> (absents de l'état de parc) :<br>`
-          + missing.map(v => `• ${v.immat || '—'} · ${v.marque || ''} ${v.modele || ''}`).join('<br>')
+          + `<b>${shown.length} véhicule(s) actif(s) sans prime d'assurance</b> (absents de l'état de parc) :`
+          + shown.map(v => `<div class="flex items-center justify-between gap-2 mt-1">`
+              + `<span>• ${v.immat || '—'} · ${v.marque || ''} ${v.modele || ''}</span>`
+              + `<button type="button" data-assur-ignore="${v.immat || ''}" class="text-xs underline shrink-0" style="color:#92400E">ne plus signaler</button></div>`).join('')
+          + (ignore.length ? `<div class="text-xs mt-2" style="color:#B45309">${ignore.length} véhicule(s) ignoré(s) · <button type="button" id="assur-ignore-reset" class="underline">tout réafficher</button></div>` : '')
           + `</div>`;
       } else if (hasPerVeh) {
-        mz.innerHTML = `<div class="text-emerald-700">✓ Tous les véhicules actifs ont une prime d'assurance.</div>`;
+        mz.innerHTML = `<div class="text-emerald-700">✓ Tous les véhicules actifs ont une prime d'assurance.`
+          + (ignore.length ? ` <span class="text-xs text-slate-500">(${ignore.length} ignoré(s) · <button type="button" id="assur-ignore-reset" class="underline">réafficher</button>)</span>` : '')
+          + `</div>`;
       } else { mz.innerHTML = ''; }
     }
     renderAssurInfo();
@@ -700,6 +707,12 @@
   // Import de l'état de parc (assurance)
   if ($('assur-import')) $('assur-import').addEventListener('click', () => { const inp = $('assur-import-file'); if (inp) { inp.value = ''; inp.click(); } });
   if ($('assur-import-file')) $('assur-import-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importEtatParc(f); });
+  // Masquer / réafficher les véhicules « sans prime » que l'utilisateur sait normaux
+  if ($('assur-missing')) $('assur-missing').addEventListener('click', (e) => {
+    const ig = e.target.closest('[data-assur-ignore]');
+    if (ig) { const s = FP.settings.get(); s.assuranceIgnore = Array.isArray(s.assuranceIgnore) ? s.assuranceIgnore : []; const k = normPlaque(ig.dataset.assurIgnore); if (k && !s.assuranceIgnore.includes(k)) s.assuranceIgnore.push(k); FP.settings.save(s); renderAssurance(); return; }
+    if (e.target.closest('#assur-ignore-reset')) { const s = FP.settings.get(); s.assuranceIgnore = []; FP.settings.save(s); renderAssurance(); return; }
+  });
 
   document.addEventListener('fp:data-ready', () => {
     leasingFactures = (data.factures || []).filter(f => f.type === 'leasing');
