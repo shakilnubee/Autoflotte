@@ -946,6 +946,23 @@ FP.buildAlertes = (data) => {
     });
   }
 
+  // --- Amendes marquées payées SANS justificatif (uniquement celles suivies = à partir de maintenant) ---
+  try {
+    const watchJ = (FP.settings.get().amendesJustifWatch) || [];
+    if (watchJ.length) {
+      const sansJustif = (data.amendes || []).filter(a => watchJ.includes(a.id) && a.statut === 'payée' && !a.justifUrl);
+      if (sansJustif.length) {
+        out.push({
+          niveau: 'warn', categorie: 'Amendes',
+          message: `${sansJustif.length} amende${sansJustif.length > 1 ? 's' : ''} payée${sansJustif.length > 1 ? 's' : ''} sans justificatif`,
+          detail: 'Ajoute le reçu de paiement sur la fiche de l\'amende',
+          sort: 1200,
+          vehicules: sansJustif.map(a => ({ label: `${a.prenom || '?'} · ${a.motif || 'amende'}${a.montant ? ' · ' + FP.euro(a.montant) : ''} (${FP.date(a.date)})`, target: 'amendes.html?amende=' + encodeURIComponent(a.id) })),
+        });
+      }
+    }
+  } catch (e) {}
+
   // --- Permis de conduire qui expirent (table conducteurs) ---
   (data.conducteurs || []).forEach(c => {
     if (!c || !c.permisExpiration) return;

@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260617f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260617g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260617f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260617g">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -286,6 +286,7 @@
     <button class="btn btn-primary text-sm flex-1 justify-center" id="drawer-pay"><i data-lucide="check" class="w-4 h-4"></i> Marquer payée</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-designer" title="Conducteur désigné — l'amende n'est plus à votre charge"><i data-lucide="user-check" class="w-4 h-4"></i> Désigner</button>
     <button class="btn btn-outline text-sm" id="drawer-relance" title="Envoyer un email de relance au conducteur"><i data-lucide="mail" class="w-4 h-4"></i> Relancer</button>
+    <button class="btn btn-outline text-sm" id="drawer-conteste" title="Marquer cette amende comme contestée"><i data-lucide="gavel" class="w-4 h-4"></i> Contester</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
@@ -379,10 +380,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260617f"></script>
-<script src="../assets/js/supabase-client.js?v=20260617f"></script>
-<script src="../assets/js/data.js?v=20260617f"></script>
-<script src="../assets/js/app.js?v=20260617f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260617g"></script>
+<script src="../assets/js/supabase-client.js?v=20260617g"></script>
+<script src="../assets/js/data.js?v=20260617g"></script>
+<script src="../assets/js/app.js?v=20260617g"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -949,6 +950,7 @@
       payBtn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Marquer payée';
     }
     $('drawer-designer').style.display = (a.statut === 'désignée' || a.statut === 'payée') ? 'none' : '';
+    { const cb = $('drawer-conteste'); if (cb) cb.style.display = (a.statut === 'contestée' || a.statut === 'payée') ? 'none' : ''; }
     // Boutons dynamiques du justificatif (re-rendus à chaque ouverture)
     const jb = $('justif-btn'); if (jb) jb.onclick = () => $('justif-file').click();
     const ju = $('justif-unarchive'); if (ju) ju.onclick = unarchiveAmende;
@@ -987,9 +989,34 @@
     FP.history.commit();
     a.statut = 'payée'; // reste visible dans « Payées »
     const id = a.id;
+    setJustifWatch(id, !a.justifUrl); // surveille : payée sans justificatif → alerte (uniquement à partir de maintenant)
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { statut: 'payée' });
+  }
+  // Marque une amende comme CONTESTÉE
+  function markConteste() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    FP.history.commit();
+    a.statut = 'contestée';
+    const id = a.id;
+    setJustifWatch(id, false); // une amende contestée n'a pas à avoir de justificatif de paiement
+    closeDrawer();
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { statut: 'contestée' });
+  }
+  // Liste (réglages) des amendes marquées payées SANS justificatif → sert à l'alerte.
+  // On n'y inscrit que les amendes traitées À PARTIR DE MAINTENANT (les anciennes n'y figurent pas).
+  function setJustifWatch(id, on) {
+    const s = FP.settings.get();
+    const arr = Array.isArray(s.amendesJustifWatch) ? s.amendesJustifWatch : [];
+    const has = arr.includes(id);
+    if (on && !has) arr.push(id);
+    else if (!on && has) arr.splice(arr.indexOf(id), 1);
+    else return;
+    s.amendesJustifWatch = arr; FP.settings.save(s);
   }
   // Revenir en arrière : repasse une amende payée en "à payer" (et la sort des archives)
   function markUnpaid() {
@@ -999,6 +1026,7 @@
     FP.history.commit();
     a.statut = 'à payer'; a.archived = false;
     const id = a.id;
+    setJustifWatch(id, false);
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { statut: 'à payer', archived: false });
@@ -1022,6 +1050,7 @@
     FP.history.commit();
     a.justifUrl = url; a.statut = 'payée'; a.commentaire = newComment;
     const id = a.id;
+    setJustifWatch(id, false); // justificatif présent → plus d'alerte
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', commentaire: newComment });
     openDrawer(id); // rouvre la fiche à jour (lien + commentaire « Payée le … »)
@@ -1357,6 +1386,7 @@
       statut: $('am-statut').value || 'à payer', commentaire: etrangere ? 'Amende étrangère' : '', avisUrl
     };
     data.amendes.push(newA);
+    if (newA.statut === 'payée') setJustifWatch(newA.id, true); // payée sans justificatif dès la création → à surveiller
     _avisFile = null;
     renderKPIs(); renderTable(); renderCharts();
     const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
@@ -1728,6 +1758,7 @@
     renderTable(); scrollToTable();
   });
   $('drawer-relance').addEventListener('click', relanceEmail);
+  $('drawer-conteste').addEventListener('click', markConteste);
 
   // Édition par double-clic des cellules
   const AM_EDITABLE = { date: 'date', annee: 'text', prenom: 'text', motif: 'text', montant: 'number', points: 'number', numeroAvis: 'text', statut: 'select', commentaire: 'text' };
