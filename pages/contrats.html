@@ -211,7 +211,12 @@
         </div>
         <div><div class="kpi-label">Par mois</div><div class="font-extrabold text-xl" id="assur-mensuel" style="color:var(--fp-primary)">—</div></div>
         <div><div class="kpi-label">Par véhicule / an</div><div class="font-extrabold text-xl" id="assur-parveh" style="color:var(--fp-primary)">—</div></div>
+        <div class="ml-auto">
+          <button id="assur-import" type="button" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Importer l'état de parc</button>
+          <input type="file" id="assur-import-file" accept="application/pdf,image/*" class="hidden" />
+        </div>
       </div>
+      <div id="assur-import-status" class="hidden text-sm mb-3" style="padding:10px 12px;border-radius:10px"></div>
       <div class="scrollable">
         <table class="fp-table">
           <thead>
@@ -227,6 +232,7 @@
           <tbody id="tbody-assurance"></tbody>
         </table>
       </div>
+      <div id="assur-missing" class="text-sm mt-3"></div>
     </div>
 
     </div>
@@ -316,29 +322,107 @@
   }
 
   // Prime d'assurance annuelle de la flotte (un seul montant, saisi par l'utilisateur, sync par société)
-  function assurPrime(){ const s = (FP.settings && FP.settings.get) ? FP.settings.get() : {}; const n = Number(s.assurancePrimeAnnuelle); return Number.isFinite(n) ? n : 0; }
+  // Primes d'assurance PAR VÉHICULE (importées de l'état de parc), indexées par plaque
+  function assurPrimes(){ const s = (FP.settings && FP.settings.get) ? FP.settings.get() : {}; return (s.assurancePrimes && typeof s.assurancePrimes === 'object') ? s.assurancePrimes : {}; }
+  const normPlaque = s => (s || '').toString().toUpperCase().replace(/\s/g, '');
+  function vehPrime(v){
+    const p = assurPrimes(); const k = normPlaque(v.immat); if (!k) return null;
+    for (const key in p) { if (normPlaque(key) === k) return p[key]; }
+    return null;
+  }
+  // Total annuel : si des primes par véhicule existent, on somme celles des véhicules de la plateforme ;
+  // sinon on retombe sur la prime « flotte » saisie à la main.
+  function assurPrime(){
+    const p = assurPrimes();
+    if (Object.keys(p).length) {
+      let t = 0; vehicules.forEach(v => { const pr = vehPrime(v); if (pr && Number.isFinite(pr.ttc)) t += pr.ttc; });
+      if (t > 0) return t;
+    }
+    const s = (FP.settings && FP.settings.get) ? FP.settings.get() : {};
+    const n = Number(s.assurancePrimeAnnuelle); return Number.isFinite(n) ? n : 0;
+  }
   function renderAssurInfo(){
     const prime = assurPrime(); const n = vehicules.length || 0;
     const inp = $('assur-prime');
-    if (inp && document.activeElement !== inp) inp.value = prime ? String(prime).replace('.', ',') : '';
+    if (inp && document.activeElement !== inp) inp.value = prime ? String(Math.round(prime)).replace('.', ',') : '';
     if ($('assur-mensuel')) $('assur-mensuel').textContent = prime ? FP.euro(prime/12) : '—';
     if ($('assur-parveh'))  $('assur-parveh').textContent  = (prime && n) ? FP.euro(prime/n) : '—';
   }
   function renderAssurance() {
     const prime = assurPrime(); const n = vehicules.length || 0;
+    const hasPerVeh = Object.keys(assurPrimes()).length > 0;
     const parVeh = (prime && n) ? prime / n : 0;
     const tbody = $('tbody-assurance');
-    tbody.innerHTML = vehicules.map(v => `
+    const missing = [];
+    tbody.innerHTML = vehicules.map(v => {
+      const pr = vehPrime(v);
+      if (!pr && (!v.statut || v.statut === 'actif')) missing.push(v);
+      const cout = pr && Number.isFinite(pr.ttc) ? FP.euro(pr.ttc)
+        : (hasPerVeh ? '<span class="text-amber-600 font-semibold">à compléter</span>' : (parVeh ? FP.euro(parVeh) : '—'));
+      return `
       <tr>
         <td class="font-mono font-semibold">${v.immat}</td>
         <td>${v.marque} ${v.modele}</td>
         <td>${v.chauffeur}</td>
         <td><div class="flex flex-wrap gap-1">${FP.vehGroupes(v).map(k => `<span class="groupe-pill gp-${k}"><span class="dot"></span>${FP.groupeLabel(k)}</span>`).join('')}</div></td>
-        <td><span class="badge badge-ok">Couvert</span></td>
-        <td style="text-align:right">${parVeh ? FP.euro(parVeh) : '—'}</td>
-      </tr>
-    `).join('');
+        <td><span class="badge ${pr ? 'badge-ok' : (hasPerVeh ? 'badge-warn' : 'badge-ok')}">${pr ? 'Couvert' : (hasPerVeh ? 'Prime manquante' : 'Couvert')}</span></td>
+        <td style="text-align:right">${cout}</td>
+      </tr>`;
+    }).join('');
+    const mz = $('assur-missing');
+    if (mz) {
+      if (hasPerVeh && missing.length) {
+        mz.innerHTML = `<div style="padding:10px 12px;border-radius:10px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E">`
+          + `<b>${missing.length} véhicule(s) actif(s) sans prime d'assurance</b> (absents de l'état de parc) :<br>`
+          + missing.map(v => `• ${v.immat || '—'} · ${v.marque || ''} ${v.modele || ''}`).join('<br>')
+          + `</div>`;
+      } else if (hasPerVeh) {
+        mz.innerHTML = `<div class="text-emerald-700">✓ Tous les véhicules actifs ont une prime d'assurance.</div>`;
+      } else { mz.innerHTML = ''; }
+    }
     renderAssurInfo();
+  }
+
+  // ----- Import de l'état de parc (assureur) : plaque → prime annuelle HT/TTC -----
+  function parseEtatParc(text){
+    const lines = (text || '').split(/\r?\n/).map(s => s.trim());
+    const plate = /^[A-Z]{2}-\d{3}-[A-Z]{2}$/;
+    const out = {}; let cur = null, pend = [];
+    for (const l of lines) {
+      if (plate.test(l)) { cur = l; pend = []; continue; }
+      const m = l.match(/([\d][\d .  ]*,\d{2})\s*€/);
+      if (m && cur) {
+        const num = parseFloat(m[1].replace(/[^\d,]/g, '').replace(',', '.'));
+        if (Number.isFinite(num)) { pend.push(num); if (pend.length === 2) { out[cur] = { ht: pend[0], ttc: pend[1] }; cur = null; } }
+      }
+    }
+    return out;
+  }
+  function assurStatus(msg, kind){
+    const el = $('assur-import-status'); if (!el) return;
+    el.classList.remove('hidden');
+    const c = { working: 'background:#F1F5F9;color:#475569', ok: 'background:#ECFDF5;color:#047857', error: 'background:#FEF2F2;color:#B91C1C' };
+    el.setAttribute('style', 'padding:10px 12px;border-radius:10px;' + (c[kind] || c.working));
+    el.innerHTML = msg;
+  }
+  async function importEtatParc(file){
+    if (!file) return;
+    if (!(FP.settings && FP.settings.save)) { assurStatus('Connexion requise.', 'error'); return; }
+    assurStatus('🔍 Lecture de l\'état de parc…', 'working');
+    let text = '';
+    try { text = await FP.ocr.fileToText(file, 12); } catch (e) { console.warn('[etat-parc]', e); }
+    const prem = parseEtatParc(text);
+    const nb = Object.keys(prem).length;
+    if (!nb) { assurStatus('Aucune prime lue. Vérifie que c\'est bien l\'état de parc (PDF avec les colonnes « Prime annuelle HT / TTC »).', 'error'); return; }
+    const s = FP.settings.get(); s.assurancePrimes = Object.assign(s.assurancePrimes || {}, prem); FP.settings.save(s);
+    // Bilan : combien de véhicules plateforme couverts, total, et plaques sans véhicule
+    let couverts = 0, total = 0;
+    vehicules.forEach(v => { const pr = vehPrime(v); if (pr) { couverts++; total += pr.ttc || 0; } });
+    const platSet = new Set(vehicules.map(v => normPlaque(v.immat)));
+    const sansVeh = Object.keys(prem).filter(p => !platSet.has(normPlaque(p)));
+    renderKPIs(); renderAssurance();
+    assurStatus(`✓ <b>${nb} primes importées.</b> ${couverts} véhicule(s) de la plateforme couverts · total ≈ <b>${FP.euro(total)}/an</b>.`
+      + (sansVeh.length ? `<br><span class="text-amber-700">${sansVeh.length} plaque(s) assurée(s) sans véhicule sur la plateforme : ${sansVeh.join(', ')}.</span>` : ''), 'ok');
   }
 
   function renderLeasing() {
@@ -613,6 +697,10 @@
     renderAssurance(); renderKPIs();
   });
   // Rafraîchit quand Supabase a chargé (sinon on reste sur le cache data.js)
+  // Import de l'état de parc (assurance)
+  if ($('assur-import')) $('assur-import').addEventListener('click', () => { const inp = $('assur-import-file'); if (inp) { inp.value = ''; inp.click(); } });
+  if ($('assur-import-file')) $('assur-import-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importEtatParc(f); });
+
   document.addEventListener('fp:data-ready', () => {
     leasingFactures = (data.factures || []).filter(f => f.type === 'leasing');
     renderKPIs(); renderAssurance(); renderLeasing(); renderLocalease();
