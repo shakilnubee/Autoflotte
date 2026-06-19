@@ -185,10 +185,11 @@
 
     <!-- TCO table -->
     <div class="card overflow-hidden mb-6">
-      <div class="p-6 pb-3 flex justify-between items-center">
-        <h3 class="font-bold text-slate-900">Coût total et TCO par véhicule</h3>
+      <div class="p-6 pb-1 flex justify-between items-center">
+        <h3 class="font-bold text-slate-900">Coût total par véhicule (tout compris)</h3>
         <button class="btn btn-outline text-sm" id="btn-export-tco"><i data-lucide="download" class="w-4 h-4"></i> Exporter</button>
       </div>
+      <p class="text-xs text-slate-400 px-6 pb-3">Factures (entretien, réparation, leasing, sinistre, achat) + assurance + TVS + amendes du conducteur. Assurance et TVS sont des montants <b>annuels</b> : pour comparer une année précise, choisis-la dans le filtre en haut.</p>
       <div class="scrollable">
         <table class="fp-table" id="tco-table">
           <thead></thead>
@@ -337,12 +338,23 @@
     });
     } // fin "if Chart chargé"
 
-    // TCO par véhicule (sur la période choisie)
+    // TCO par véhicule (sur la période choisie) — TOUT ce que le véhicule coûte :
+    // factures (entretien/répa/leasing/sinistre/achat) + assurance + TVS + amendes du conducteur.
+    const primes = (FP.settings && FP.settings.get) ? (FP.settings.get().assurancePrimes || {}) : {};
+    const normP = s => (s || '').toString().toUpperCase().replace(/\s/g, '');
+    const findPrime = (immat) => { const k = normP(immat); for (const key in primes) { if (normP(key) === k) return primes[key]; } return null; };
+    const normN = s => (s || '').toString().trim().toLowerCase();
+    const amAll = (annee === 'all') ? (data.amendes || []) : (data.amendes || []).filter(a => (a.date || '').startsWith(annee));
     tcoData = data.vehicules.map(v => {
       const fv = fact.filter(f => f.vehiculeImmat === v.immat);
-      const total = fv.reduce((s, f) => s + (+f.montantTTC || 0), 0);
+      const factTotal = fv.reduce((s, f) => s + (+f.montantTTC || 0), 0);
+      const pr = findPrime(v.immat); const assur = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : 0;
+      const tvsD = FP.tvsDetail(v); const tvs = (tvsD.applicable && tvsD.total != null) ? tvsD.total : 0;
+      const drv = normN(v.chauffeur);
+      const amendes = drv ? amAll.filter(a => normN(a.prenom) === drv).reduce((s, a) => s + (+a.montant || 0), 0) : 0;
+      const total = factTotal + assur + tvs + amendes;
       const achatF = fv.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-      return { immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, total, perKm: v.km > 0 ? total / v.km : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
+      return { immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, fact: factTotal, assur, tvs, amendes, total, perKm: v.km > 0 ? total / v.km : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
     }).sort((a, b) => b.total - a.total);
     renderTcoTable();
   }
@@ -350,9 +362,13 @@
   // === Config colonnes éditables (TCO) ===
   const TCO_COLUMNS = [
     { key: 'immat',     label: 'Immat.',       defaultWidth: 110, cellCls: 'font-mono font-semibold', render: t => t.immat },
-    { key: 'modele',    label: 'Modèle',       defaultWidth: 200, render: t => t.modele || '—' },
-    { key: 'km',        label: 'Km',           defaultWidth: 110, render: t => FP.num(t.km) + ' km' },
-    { key: 'total',     label: 'Coût total',   defaultWidth: 130, cellCls: 'font-semibold', render: t => FP.euro(t.total) },
+    { key: 'modele',    label: 'Modèle',       defaultWidth: 190, render: t => t.modele || '—' },
+    { key: 'km',        label: 'Km',           defaultWidth: 100, render: t => FP.num(t.km) + ' km' },
+    { key: 'fact',      label: 'Factures',     defaultWidth: 120, render: t => t.fact ? FP.euro(t.fact) : '<span class="text-slate-400">—</span>' },
+    { key: 'assur',     label: 'Assurance/an', defaultWidth: 120, render: t => t.assur ? FP.euro(t.assur) : '<span class="text-slate-400">—</span>' },
+    { key: 'tvs',       label: 'TVS/an',       defaultWidth: 110, render: t => t.tvs ? FP.euro(t.tvs) : '<span class="text-slate-400">—</span>' },
+    { key: 'amendes',   label: 'Amendes',      defaultWidth: 110, render: t => t.amendes ? FP.euro(t.amendes) : '<span class="text-slate-400">—</span>' },
+    { key: 'total',     label: 'Coût total',   defaultWidth: 130, cellCls: 'font-extrabold', render: t => FP.euro(t.total) },
     { key: 'perKm',     label: '€ / km',       defaultWidth: 100, render: t => `<span class="${t.perKm > 1 ? 'text-red-600 font-semibold' : t.perKm > 0.5 ? 'text-amber-600' : 'text-slate-700'}">${t.perKm > 0 ? FP.euroPrecis(t.perKm) : '—'}</span>` },
     { key: 'nb',        label: 'Nb factures',  defaultWidth: 110, render: t => t.nb },
     { key: 'achatDate', label: 'Dernier achat',defaultWidth: 140, render: t => t.achatDate ? FP.date(t.achatDate) : '<span class="text-slate-400">—</span>' },
@@ -394,8 +410,8 @@
   document.addEventListener('fp:data-ready', () => { const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
 
   $('btn-export-tco').addEventListener('click', () => {
-    const headers = ['Immat', 'Modèle', 'Km', 'Coût total TTC', 'Coût par km', 'Nb factures', 'Dernier achat'];
-    const rows = tcoData.map(t => [t.immat, t.modele, t.km, t.total, t.perKm.toFixed(4), t.nb, t.achatDate]);
+    const headers = ['Immat', 'Modèle', 'Km', 'Factures TTC', 'Assurance/an', 'TVS/an', 'Amendes', 'Coût total TTC', 'Coût par km', 'Nb factures', 'Dernier achat'];
+    const rows = tcoData.map(t => [t.immat, t.modele, t.km, t.fact, t.assur, t.tvs, t.amendes, t.total, t.perKm.toFixed(4), t.nb, t.achatDate]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
