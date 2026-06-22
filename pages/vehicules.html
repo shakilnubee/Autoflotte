@@ -1585,6 +1585,27 @@
       return val;
     };
 
+    // Alertes de CE véhicule (masquables depuis la fiche) — réutilise FP.buildAlertes + FP.alertes
+    let alertesHTML = '';
+    try {
+      const vid = v.id;
+      const belongs = k => { const p = (k || '').split('|'); return ['ct', 'pol', 'rev', 'leasingkm', 'leasingfin'].includes(p[0]) && p[1] === vid; };
+      const actives = (FP.buildAlertes ? FP.buildAlertes(data) : []).filter(a => a.muteKey && belongs(a.muteKey));
+      const masquees = ((FP.alertes && FP.alertes.masquees && FP.alertes.masquees()) || []).filter(belongs);
+      const infos = (FP.alertes && FP.alertes.infos && FP.alertes.infos()) || {};
+      if (actives.length || masquees.length) {
+        alertesHTML = `<div>
+          <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Alertes</div>
+          ${actives.map(a => `<div class="flex justify-between items-center gap-2 py-1.5 text-sm">
+            <span class="min-w-0"><span class="text-[11px] font-semibold uppercase tracking-wide" style="color:var(--fp-muted)">${a.categorie}</span> · ${escapeHtml(a.message)}</span>
+            <button type="button" data-veh-mute="${escapeHtml(a.muteKey)}" data-veh-label="${escapeHtml(a.categorie + ' — ' + (a.vehLabel || a.message))}" class="text-xs underline shrink-0 text-slate-500 hover:text-red-600">masquer</button>
+          </div>`).join('')}
+          ${masquees.length ? `<div class="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-400">Masquées : ${masquees.map(k => `${escapeHtml(infos[k] || 'alerte')} <button type="button" data-veh-unmute="${escapeHtml(k)}" class="underline">réafficher</button>`).join(' · ')}</div>` : ''}
+          ${(!actives.length && !masquees.length) ? '<p class="text-sm text-slate-500">Aucune alerte.</p>' : ''}
+        </div>`;
+      }
+    } catch (e) { console.warn('[fiche alertes]', e); }
+
     $('drawer-body').innerHTML = `
       <div class="flex justify-between items-start">
         <div class="flex flex-wrap gap-1"><span data-df="statut" data-dt="select">${FP.statutBadge(v.statut)}</span> ${multiGroupePills(v)}</div>
@@ -1705,6 +1726,7 @@
       </div>
 
       ${carnetHTML}
+      ${alertesHTML}
     `;
 
     $('drawer').classList.add('open');
@@ -1717,6 +1739,14 @@
     $('drawer').classList.remove('open');
     $('drawer-backdrop').classList.remove('open');
   }
+
+  // Masquer / réafficher une alerte directement depuis la fiche véhicule
+  $('drawer-body').addEventListener('click', (e) => {
+    const m = e.target.closest('[data-veh-mute]');
+    if (m && FP.alertes) { e.preventDefault(); FP.alertes.masquer(m.dataset.vehMute, m.dataset.vehLabel); if (state.editingId) openDrawer(state.editingId); return; }
+    const u = e.target.closest('[data-veh-unmute]');
+    if (u && FP.alertes) { e.preventDefault(); FP.alertes.reafficher(u.dataset.vehUnmute); if (state.editingId) openDrawer(state.editingId); return; }
+  });
 
   // ---------- Modal ----------
   function openModal(vehicule) {
