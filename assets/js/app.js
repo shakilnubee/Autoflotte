@@ -1079,12 +1079,8 @@ FP.buildAlertes = (data) => {
     out.push({ niveau, categorie: 'Leasing', message: msg, detail: veh, sort: diff, target: 'contrats.html', muteKey: 'leasingfin|' + v.id + '|' + finStr, vehLabel: veh });
   });
 
-  // --- Véhicules sans dernière révision enregistrée (info) ---
-  const sansRevList = (data.vehicules || []).filter(v => v.statut === 'actif' && (!v.derniereRevision || v.derniereRevision === '—') && (!v.chauffeur || v.chauffeur !== 'VENDU'));
-  if (sansRevList.length > 5) {
-    out.push({ niveau: 'info', categorie: 'Maintenance', message: `${sansRevList.length} véhicules sans dernière révision enregistrée`, detail: 'Clique pour voir la liste — à compléter pour le suivi maintenance', sort: 2000,
-      vehicules: sansRevList.map(v => ({ label: `${v.immat || '—'} · ${(v.marque || '')} ${(v.modele || '')}`.trim() + (v.chauffeur && v.chauffeur !== '—' ? ' — ' + v.chauffeur : ''), target: 'vehicules.html?veh=' + v.id })) });
-  }
+  // (Le « véhicules sans dernière révision » n'est PAS une alerte : véhicules neufs, etc.
+  //  → retiré des notifications. L'info reste visible dans la fiche véhicule.)
 
   // --- Sinistres en attente de remboursement (rappel de suivi) ---
   const sinStatut = (FP.settings.get().sinistreStatut) || {};
