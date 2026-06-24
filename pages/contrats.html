@@ -638,6 +638,17 @@
   function addMonths(iso, n){ const d=new Date(iso); if(isNaN(d)) return null; d.setMonth(d.getMonth()+(+n||0)); return d; }
   // TVS annuelle estimée : barème CO2 officiel (app.js) + 130 € polluants (hybride essence = catégorie 1)
   function tvsEst(c){ const co2=Number(c.co2)||0; const elec=/électri|electri/i.test((c.modele||'')); return (FP.tvsCo2?FP.tvsCo2(co2):0) + (elec?0:130); }
+  // Retrouve la plaque d'un contrat Localease via l'onglet Véhicules (conducteur + modèle)
+  function autoImmatLoc(c){
+    const norm = s => (s||'').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    const cond = norm(c.conducteur);
+    if (!cond || /nouveau collaborateur|nouveaux collaborateurs/.test(cond)) return '';
+    const mdl = norm(c.modele).split(' ')[0]; // 'kona' / 'tucson'
+    const cands = (data.vehicules||[]).filter(v => norm(v.chauffeur) === cond && (!mdl || norm(v.modele).includes(mdl)));
+    // priorité aux véhicules marqués Localease, sinon le 1er trouvé
+    const v = cands.find(x => /localease/.test(norm(x.proprietaire))) || cands[0];
+    return v ? (v.immat || '') : '';
+  }
   function renderLocalease(){
     const list = getLocalease();
     const tbody = $('tbody-localease'); if (!tbody) return;
@@ -670,7 +681,9 @@
         : `<button type="button" class="btn btn-outline" style="padding:3px 9px;font-size:12px" data-loc-up="${i}"><i data-lucide="upload" class="w-3.5 h-3.5"></i> + téléverser</button>`;
       return `<tr>
         <td class="font-medium">${escC(c.conducteur)}</td>
-        <td class="font-mono">${c.immat ? `<span class="cursor-pointer underline decoration-dotted" data-loc-immat="${i}" title="Modifier la plaque">${escC(c.immat)}</span>` : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-immat="${i}">+ plaque</button>`}</td>
+        <td class="font-mono">${(() => { const auto = c.immat || autoImmatLoc(c); return auto
+          ? `<span class="cursor-pointer underline decoration-dotted ${c.immat ? '' : 'text-slate-500'}" data-loc-immat="${i}" title="${c.immat ? 'Modifier la plaque' : 'Plaque liée automatiquement depuis la fiche véhicule — cliquer pour forcer'}">${escC(auto)}</span>`
+          : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-immat="${i}">+ plaque</button>`; })()}</td>
         <td>${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}<div class="text-xs text-slate-400">${c.dureeMois||'—'} mois</div></td>
         <td style="text-align:center">${finCell}</td>
         <td style="text-align:right">${kmCell}</td>
