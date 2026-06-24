@@ -1438,16 +1438,20 @@ FP.scanIA = async function (file, docType) {
     return null;
   }
 };
-FP.uploadScan = async function (file, folder) {
+FP.uploadScan = async function (file, folder, opts) {
+  opts = opts || {};
   if (!FP.supabase || !FP.supabase.storage) throw new Error('Stockage indisponible (Supabase non chargé).');
   if (!file) return null;
   file = await FP.compressImage(file); // photos allégées ; PDF intacts
   const extMatch = (file.name || '').match(/\.[a-z0-9]+$/i);
   const ext = extMatch ? extMatch[0].toLowerCase() : (file.type === 'application/pdf' ? '.pdf' : '.jpg');
-  const rand = Math.random().toString(36).slice(2, 8);
-  const path = `${folder || 'divers'}/${Date.now()}-${rand}${ext}`;
+  let path, named = false;
+  // opts.name : nomme le fichier de façon lisible (ex. n° de contravention) au lieu d'un nom aléatoire
+  const slug = opts.name ? String(opts.name).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) : '';
+  if (slug) { path = `${folder || 'divers'}/${slug}${ext}`; named = true; }
+  else { const rand = Math.random().toString(36).slice(2, 8); path = `${folder || 'divers'}/${Date.now()}-${rand}${ext}`; }
   const { error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).upload(path, file, {
-    upsert: false,
+    upsert: named, // un fichier nommé (n° d'avis) remplace l'ancien ; un aléatoire ne doit jamais écraser
     contentType: file.type || 'application/octet-stream',
   });
   if (error) throw error;
