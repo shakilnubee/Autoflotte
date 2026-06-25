@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617m">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260617l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260617m"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260617l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260617m">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -380,10 +380,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260617l"></script>
-<script src="../assets/js/supabase-client.js?v=20260617l"></script>
-<script src="../assets/js/data.js?v=20260617l"></script>
-<script src="../assets/js/app.js?v=20260617l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260617m"></script>
+<script src="../assets/js/supabase-client.js?v=20260617m"></script>
+<script src="../assets/js/data.js?v=20260617m"></script>
+<script src="../assets/js/app.js?v=20260617m"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -666,7 +666,7 @@
   function ouvrirMail(body) {
     const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
     const to = lookupEmail(a.prenom);
-    const subject = `Contravention du ${FP.date(a.date)}${a.numeroAvis ? ' — avis ' + a.numeroAvis : ''}`;
+    const subject = `Avis de contravention du ${FP.date(a.date)}${a.numeroAvis ? ' — avis ' + a.numeroAvis : ''}`;
     // Gmail/compose n'accepte pas de pièce jointe via URL → on ajoute le LIEN vers le scan de l'avis (PDF).
     let fullBody = body;
     if (a.avisUrl) fullBody += `\n\n📎 Avis de contravention (PDF) : ${a.avisUrl}`;
@@ -1605,6 +1605,17 @@
   // Formate un n° de télépaiement par groupes de 4 chiffres (comme sur l'avis : 3333 8593 2214 71)
   function fmtTel(s){ return String(s || '').replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 '); }
 
+  // Barème officiel des points pour excès de vitesse (dépassement = vitesse retenue − limite)
+  function pointsExcesVitesse(retenue, limite){
+    const d = (Number(retenue) || 0) - (Number(limite) || 0);
+    if (!(d > 0)) return null;
+    if (d < 20) return 1;
+    if (d < 30) return 2;
+    if (d < 40) return 3;
+    if (d < 50) return 4;
+    return 6;
+  }
+
   async function handleAvis(file){
     if (!file) return;
     try {
@@ -1647,6 +1658,11 @@
           if (ia.date) parsed.date = ia.date;
           if (ia.motif) parsed.motif = ia.motif;
           if (ia.points != null) parsed.points = ia.points;
+          // Points d'un excès de vitesse : calculés à partir de la vitesse (source de vérité, barème officiel)
+          if (ia.vitesseRetenue != null && ia.vitesseLimite != null) {
+            const p = pointsExcesVitesse(ia.vitesseRetenue, ia.vitesseLimite);
+            if (p != null) parsed.points = p;
+          }
           if (ia.vehiculeImmat) parsed.immat = ia.vehiculeImmat;
           if (ia.numeroAvis) parsed.numeroAvis = ia.numeroAvis;
           if (!parsed.isMajoration && ia.montantTTC != null) parsed.montant = ia.montantTTC;
