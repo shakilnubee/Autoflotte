@@ -594,7 +594,11 @@
   // référence) reconstruit en place → reste à jour quand Supabase charge ou après un import.
   const factures = [];
   function rebuildFactures(){
-    const list = (data.factures || []).filter(f => f.type !== 'leasing' && f.type !== 'sinistre' && !isTotalFleet(f) && !isUlys(f));
+    const seen = new Set(), list = [];
+    (data.factures || []).filter(f => f.type !== 'leasing' && f.type !== 'sinistre' && !isTotalFleet(f) && !isUlys(f)).forEach(f => {
+      const k = (f.numeroFacture || '').toString().toUpperCase();
+      if (k && seen.has(k)) return; if (k) seen.add(k); list.push(f); // dé-doublonnage par n° de facture
+    });
     factures.length = 0; Array.prototype.push.apply(factures, list);
   }
   rebuildFactures();
@@ -1614,7 +1618,16 @@
   // ===== Onglet TOTAL FLEET (carburant & péages TotalEnergies) =====
   (function totalFleetTab(){
     const tfState = { search: '', annee: 'all', expanded: false };
-    const list = () => (window.FP_DATA.factures || []).filter(isTotalFleet);
+    // Liste Total Fleet, dé-doublonnée par n° de facture (un n° = une seule ligne, même si la base
+    // contient un doublon d'un ancien import) → corrige l'affichage ET les totaux.
+    const list = () => {
+      const seen = new Set(), out = [];
+      (window.FP_DATA.factures || []).filter(isTotalFleet).forEach(f => {
+        const k = (f.numeroFacture || f.id || '').toString().toUpperCase();
+        if (k && seen.has(k)) return; if (k) seen.add(k); out.push(f);
+      });
+      return out;
+    };
 
     function render(){
       const all = list();
@@ -2026,7 +2039,7 @@
           numeroFacture:r.numero, description:('Carburant & services flotte — ' + r.paysLabel + ' — releve ' + (r.dmy||'')).trim(),
           type:'carburant', montantHT:r.ht, montantTVA:r.tva, montantTTC:r.ttc };
         window.FP_DATA.factures.push(newF);
-        try { await FP.persist.insert('factures', newF); okF++; } catch (e) { console.error('[tf-import facture]', e); }
+        try { await FP.persist.upsert('factures', newF); okF++; } catch (e) { console.error('[tf-import facture]', e); }
       }
       for (const c of conso){
         const row = { id:(c.mois + '-' + c.carte + '-' + c.facNum), mois:c.mois, carte:c.carte, conducteur:c.conducteur || null,
