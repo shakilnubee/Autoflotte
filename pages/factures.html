@@ -1881,7 +1881,13 @@
     // 2) Une facture detaillee (FAC) -> { numero, pays, date, HT, TVA, TTC }
     function parseFac(raw, fileName){
       const t = (raw || '').replace(SP, ' ');
-      const mh = t.match(/(FRANCE|BELGIE|BELGIQUE|NEDERLAND|DEUTSCHLAND|ALLEMAGNE)\s*-\s*N°\s*([A-Z][0-9][A-Z0-9]{5,7})/);
+      let mh = t.match(/(FRANCE|BELGIE|BELGIQUE|NEDERLAND|DEUTSCHLAND|ALLEMAGNE)\s*[-–]\s*N\s*[°ºo]?\s*([A-Z][0-9][A-Z0-9]{5,7})/i);
+      // Repli : pays détecté n'importe où + n° pris dans le nom de fichier (…_F6J72387_…)
+      if (!mh) {
+        const pays = (t.match(/\b(FRANCE|BELGIE|BELGIQUE|NEDERLAND|DEUTSCHLAND|ALLEMAGNE)\b/i) || [])[1];
+        const num = fileName && (String(fileName).match(/_([A-Z][0-9][A-Z0-9]{5,7})_/) || [])[1];
+        if (pays && num) mh = [null, pays.toUpperCase(), num];
+      }
       if (!mh) return null;
       const md = t.match(/(?:Le|Factuurdatum)\s*(\d{2})\/(\d{2})\/(\d{4})/);
       let dmy = md ? (md[1] + '/' + md[2] + '/' + md[3]) : null;
@@ -1890,7 +1896,7 @@
       if (!date && fileName) { const mf = String(fileName).match(/(20\d{2})(\d{2})(\d{2})/); if (mf) { date = mf[1] + '-' + mf[2] + '-' + mf[3]; dmy = mf[3] + '/' + mf[2] + '/' + mf[1]; } }
       // Total : « Total Général » (FR), « Totaal » (NL) ou « Insgesamt » (DE)
       const mt = t.match(new RegExp('(?:Total General|Total Général|Totaal|Insgesamt)\\s+(' + DEC + ')\\s+(' + DEC + ')\\s+EUR\\s+(' + DEC + ')'));
-      return { numero: mh[2], paysLabel: PAYS_FAC[mh[1]] || mh[1],
+      return { numero: mh[2], paysLabel: PAYS_FAC[String(mh[1]).toUpperCase()] || mh[1],
                dmy: dmy, date: date,
                ht: mt ? parseEuro(mt[1]) : null, tva: mt ? parseEuro(mt[2]) : null, ttc: mt ? parseEuro(mt[3]) : null };
     }
@@ -1898,7 +1904,7 @@
     // 3) Detail par carte. Categories imprimees en colonnes -> on de-mele :
     //    N libelles consecutifs puis 4N nombres (qte,HT,TVA,TTC par colonnes).
     const CATS = [
-      { key:'carburant', lit:true, rx:'Total Essences & Gazole|Totaal Benzines en Diesel' },
+      { key:'carburant', lit:true, rx:'Total Essences & Gazole|Totaal Benzines en Diesel|Summe Benzin & Diesel' },
       { key:'boutique',           rx:'Total Services et Partenaires|Totaal Services en Partners' },
       { key:'peage',              rx:'Total Parkings|Totaal Parkings' },
       { key:'lavage',             rx:'Total Lavages?|Totaal Wassen' },
@@ -1908,11 +1914,15 @@
       const t = (raw || '').replace(SP, ' ');
       const idx = t.indexOf('Votre Facture et son détail');
       const det = idx >= 0 ? t.slice(idx) : t;
-      const supRe = new RegExp('Total Support (\\d+)(?: \\d+)? (.+?) Type véh\\. (\\d+)\\D{0,30}?(' + DEC + ')\\s+(' + DEC + ')\\s+(' + DEC + ')|Totaal Kaart (\\d+) \\d+ (.+?) (\\d{2}) (' + DEC + ') (' + DEC + ') (' + DEC + ')', 'g');
+      const supRe = new RegExp(
+        'Total Support (\\d+)(?: \\d+)? (.+?) Type véh\\. (\\d+)\\D{0,30}?(' + DEC + ')\\s+(' + DEC + ')\\s+(' + DEC + ')'
+        + '|Totaal Kaart (\\d+) \\d+ (.+?) (\\d{2}) (' + DEC + ') (' + DEC + ') (' + DEC + ')'
+        + '|Summe Karte / Telebadge (\\d+) \\d+ (.+?) Kfz-Typ (\\d+)\\s+(' + DEC + ')\\s+(' + DEC + ')\\s+(' + DEC + ')', 'g');
       const hits = []; let m;
       while ((m = supRe.exec(det))){
-        if (m[1] != null) hits.push({ i:m.index, end:supRe.lastIndex, carte:m[1], nom:m[2].trim(), type:m[3], ht:n0(m[4]), tva:n0(m[5]), total:n0(m[6]) });
-        else              hits.push({ i:m.index, end:supRe.lastIndex, carte:m[7], nom:m[8].trim(), type:m[9], ht:n0(m[10]), tva:n0(m[11]), total:n0(m[12]) });
+        if (m[1] != null)       hits.push({ i:m.index, end:supRe.lastIndex, carte:m[1],  nom:m[2].trim(),  type:m[3],  ht:n0(m[4]),  tva:n0(m[5]),  total:n0(m[6]) });
+        else if (m[7] != null)  hits.push({ i:m.index, end:supRe.lastIndex, carte:m[7],  nom:m[8].trim(),  type:m[9],  ht:n0(m[10]), tva:n0(m[11]), total:n0(m[12]) });
+        else                    hits.push({ i:m.index, end:supRe.lastIndex, carte:m[13], nom:m[14].trim(), type:m[15], ht:n0(m[16]), tva:n0(m[17]), total:n0(m[18]) });
       }
       const grpRe = new RegExp('((?:(?:' + CAT_LABELS + ')\\s*)+)((?:(?:' + DEC + '|\\d+)\\s*)+)');
       const rows = []; let prev = 0;
@@ -2036,7 +2046,9 @@
       const files = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
       if (!files.length){ tfImpReset(); tfImpStatus('Depose un ou plusieurs <b>PDF</b> TotalEnergies (releve et/ou factures detaillees).', 'error'); return; }
       tfImpReset();
-      if (!consoLoaded) await loadConso(); // correspondance carte -> conducteur deja connue
+      tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture des PDF…</span>', 'working');
+      // Correspondance carte -> conducteur (ne DOIT PAS bloquer l'import si la base tarde/échoue)
+      try { if (!consoLoaded) await loadConso(); } catch (e) { console.warn('[loadConso]', e); }
       const cardMap = {};
       (conso || []).forEach(c => { if (c.carte) cardMap[String(c.carte)] = c; });
 
@@ -2098,7 +2110,14 @@
     }
 
     $('tf-import-trigger').addEventListener('click', () => $('tf-import-file').click());
-    $('tf-import-file').addEventListener('change', (e) => { handleReleves(e.target.files); e.target.value = ''; });
+    $('tf-import-file').addEventListener('change', (e) => {
+      const files = e.target.files; e.target.value = '';
+      // Filet de sécurité : toute erreur s'affiche au lieu de « rien ne se passe »
+      Promise.resolve().then(() => handleReleves(files)).catch(err => {
+        console.error('[import Total Fleet]', err);
+        tfImpStatus('Erreur pendant l\'import : ' + esc(err && err.message ? err.message : String(err)) + '. Réessaie ou envoie-moi le PDF.', 'error');
+      });
+    });
 
   })();
 
