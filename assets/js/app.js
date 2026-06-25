@@ -737,12 +737,18 @@ FP.revisionInfo = (v) => {
 
   let prochaineKm = null, kmRestant = null, prochaineDate = null, joursRestant = null;
 
-  // Échéance temporelle : ancrée sur la dernière révision, sinon (véhicule neuf)
+  // Échéance temporelle : ancrée sur la dernière révision, sinon (pas de révision connue)
   // sur la date de mise en circulation → 1ʳᵉ révision estimée.
   const anchorDate = hasRev ? dRev : (mec && !isNaN(mec) ? mec : null);
   if (anchorDate) {
     prochaineDate = new Date(anchorDate);
     prochaineDate.setMonth(prochaineDate.getMonth() + intervalle.mois);
+    // Sans révision enregistrée, la mise en circulation peut être ancienne : on avance d'un
+    // intervalle à la fois jusqu'à une date FUTURE (sinon on afficherait une date passée absurde).
+    if (!hasRev) {
+      let guard = 0;
+      while (prochaineDate < today && guard++ < 600) prochaineDate.setMonth(prochaineDate.getMonth() + intervalle.mois);
+    }
     joursRestant = Math.ceil((prochaineDate - today) / 86400000);
   }
 
