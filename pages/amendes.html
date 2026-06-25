@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260617m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260617n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260617m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260617n">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -380,10 +380,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260617m"></script>
-<script src="../assets/js/supabase-client.js?v=20260617m"></script>
-<script src="../assets/js/data.js?v=20260617m"></script>
-<script src="../assets/js/app.js?v=20260617m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260617n"></script>
+<script src="../assets/js/supabase-client.js?v=20260617n"></script>
+<script src="../assets/js/data.js?v=20260617n"></script>
+<script src="../assets/js/app.js?v=20260617n"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1615,6 +1615,19 @@
     if (d < 50) return 4;
     return 6;
   }
+  // Points retirés selon le motif (motifs courants, hors excès de vitesse). null = inconnu (on ne devine pas).
+  function pointsParMotif(motif){
+    const m = (motif || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (/telephone|portable|tenu en main/.test(m)) return 3;
+    if (/feu rouge|feu tricolore/.test(m)) return 4;
+    if (/\bstop\b/.test(m)) return 4;
+    if (/ceinture/.test(m)) return 3;
+    if (/distance de securite/.test(m)) return 3;
+    if (/sens interdit/.test(m)) return 4;
+    if (/priorite/.test(m)) return 4;
+    if (/stationnement|voie de bus|voie reservee|voie de circulation reservee|arret/.test(m)) return 0;
+    return null;
+  }
 
   async function handleAvis(file){
     if (!file) return;
@@ -1658,10 +1671,13 @@
           if (ia.date) parsed.date = ia.date;
           if (ia.motif) parsed.motif = ia.motif;
           if (ia.points != null) parsed.points = ia.points;
-          // Points d'un excès de vitesse : calculés à partir de la vitesse (source de vérité, barème officiel)
+          // Points : barème officiel appliqué côté logiciel (fiable). Vitesse > motif > IA.
           if (ia.vitesseRetenue != null && ia.vitesseLimite != null) {
             const p = pointsExcesVitesse(ia.vitesseRetenue, ia.vitesseLimite);
             if (p != null) parsed.points = p;
+          } else {
+            const pm = pointsParMotif(ia.motif || parsed.motif);
+            if (pm != null) parsed.points = pm;
           }
           if (ia.vehiculeImmat) parsed.immat = ia.vehiculeImmat;
           if (ia.numeroAvis) parsed.numeroAvis = ia.numeroAvis;
