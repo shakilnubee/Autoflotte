@@ -277,28 +277,27 @@
   // Labels des groupes fournis par FP.groupeLabel (configurables via /pages/parametres.html)
   const VEH_INACTIFS = ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 'cédé', 'cede', 'cédée', 'hors service', 'hs', 'archive', 'archivé', 'archivée', 'restitué', 'restitue'];
   const estActif = v => !VEH_INACTIFS.includes((v && v.statut || '').toString().toLowerCase().trim());
-  const vehicules = (data.vehicules || []).filter(estActif);
-  let leasingFactures = (data.factures || []).filter(f => f.type === 'leasing');
-
-  // Agréger leasing par véhicule
-  const leasingByVeh = {};
-  leasingFactures.forEach(f => {
-    const k = f.vehiculeImmat;
-    if (!k) return;
-    if (!leasingByVeh[k]) leasingByVeh[k] = { count: 0, total: 0, lastDate: '', lastFile: null };
-    leasingByVeh[k].count++;
-    leasingByVeh[k].total += (f.montantTTC || 0);
-    if ((f.date || '') > leasingByVeh[k].lastDate) {
-      leasingByVeh[k].lastDate = f.date || '';
-      leasingByVeh[k].lastFile = f;
-    }
-  });
-
-  // Liste des véhicules en leasing : ceux avec proprietaire BPCE OU avec >= 1 facture leasing
-  const leasingImmats = new Set([
-    ...vehicules.filter(v => v.proprietaire === 'BPCE').map(v => v.immat),
-    ...Object.keys(leasingByVeh)
-  ]);
+  // ⚠️ Reconstruit à CHAQUE chargement Supabase (fp:data-ready) — sinon les véhicules / factures
+  // leasing importés restent invisibles (vehicules est une COPIE filtrée, pas une réf. vivante).
+  let vehicules = [], leasingFactures = [], leasingByVeh = {}, leasingImmats = new Set();
+  function rebuildLeasingData() {
+    vehicules = (data.vehicules || []).filter(estActif);
+    leasingFactures = (data.factures || []).filter(f => f.type === 'leasing');
+    leasingByVeh = {};
+    leasingFactures.forEach(f => {
+      const k = f.vehiculeImmat;
+      if (!k) return;
+      if (!leasingByVeh[k]) leasingByVeh[k] = { count: 0, total: 0, lastDate: '', lastFile: null };
+      leasingByVeh[k].count++;
+      leasingByVeh[k].total += (f.montantTTC || 0);
+      if ((f.date || '') > leasingByVeh[k].lastDate) { leasingByVeh[k].lastDate = f.date || ''; leasingByVeh[k].lastFile = f; }
+    });
+    leasingImmats = new Set([
+      ...vehicules.filter(v => v.proprietaire === 'BPCE').map(v => v.immat),
+      ...Object.keys(leasingByVeh),
+    ]);
+  }
+  rebuildLeasingData();
 
   let leasingSearch = '';
 
@@ -736,7 +735,7 @@
   });
 
   document.addEventListener('fp:data-ready', () => {
-    leasingFactures = (data.factures || []).filter(f => f.type === 'leasing');
+    rebuildLeasingData();
     renderKPIs(); renderAssurance(); renderLeasing(); renderLocalease();
   });
 </script>
