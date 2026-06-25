@@ -131,6 +131,22 @@
       </div>
     </div>
 
+    <!-- Classement coût au km -->
+    <div class="card p-5 mb-6">
+      <h3 class="font-bold text-slate-900 mb-1 flex items-center gap-2"><i data-lucide="gauge" class="w-4 h-4" style="color:#F97316"></i> Classement coût au km <span class="text-xs font-normal text-slate-400">(<span id="perkm-periode">toutes années</span>)</span></h3>
+      <p class="text-xs text-slate-400 mb-4">Coût total (factures + assurance + TVS + amendes) rapporté au kilométrage. Véhicules sans km exclus.</p>
+      <div class="grid md:grid-cols-2 gap-6">
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wide text-red-600 mb-2">🔺 Les plus chères au km</div>
+          <div id="podium-chers"></div>
+        </div>
+        <div>
+          <div class="text-xs font-bold uppercase tracking-wide text-emerald-600 mb-2">🔻 Les moins chères au km</div>
+          <div id="podium-eco"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Stats sinistres / accidents -->
     <div class="card p-5 mb-6">
       <h3 class="font-bold text-slate-900 mb-4 flex items-center gap-2"><i data-lucide="alert-octagon" class="w-4 h-4" style="color:#F97316"></i> Sinistres / accidents <span class="text-xs font-normal text-slate-400">(<span id="sin-periode">toutes années</span>)</span></h3>
@@ -360,9 +376,37 @@
       const amendes = drv ? amAll.filter(a => normN(a.prenom) === drv).reduce((s, a) => s + (+a.montant || 0), 0) : 0;
       const total = factTotal + assur + tvs + amendes;
       const achatF = fv.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-      return { immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, fact: factTotal, assur, tvs, amendes, total, perKm: v.km > 0 ? total / v.km : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
+      return { id: v.id, immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, fact: factTotal, assur, tvs, amendes, total, perKm: v.km > 0 ? total / v.km : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
     }).sort((a, b) => b.total - a.total);
     renderTcoTable();
+    renderPodiumPerKm(annee);
+  }
+
+  // === Podium coût au km (les plus chères / les moins chères) ===
+  function renderPodiumPerKm(annee) {
+    $('perkm-periode').textContent = (annee === 'all') ? 'toutes années' : annee;
+    const ranked = tcoData.filter(t => t.perKm > 0 && t.km > 0);
+    const chers = ranked.slice().sort((a, b) => b.perKm - a.perKm).slice(0, 3);
+    const eco   = ranked.slice().sort((a, b) => a.perKm - b.perKm).slice(0, 3);
+    const medals = ['🥇', '🥈', '🥉'];
+    const row = (t, i, mode) => {
+      const color = mode === 'chers' ? '#DC2626' : '#059669';
+      const href = t.id != null ? `vehicules.html?veh=${encodeURIComponent(t.id)}` : '#';
+      return `<a href="${href}" class="flex items-center gap-3 py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg px-2 -mx-2 transition" style="text-decoration:none">
+        <span style="font-size:1.3rem;width:1.8rem;text-align:center;flex-shrink:0">${medals[i] || (i + 1)}</span>
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold text-slate-900 truncate">${escSin(t.immat)}</div>
+          <div class="text-xs text-slate-500 truncate">${escSin(t.modele) || '—'} · ${FP.num(t.km)} km</div>
+        </div>
+        <div class="text-right flex-shrink-0">
+          <div class="font-extrabold" style="color:${color}">${FP.euroPrecis(t.perKm)}<span class="text-xs font-normal text-slate-400">/km</span></div>
+          <div class="text-xs text-slate-400">${FP.euro(t.total)} total</div>
+        </div>
+      </a>`;
+    };
+    const empty = '<p class="text-sm text-slate-400 py-2">Pas assez de données (km manquants).</p>';
+    $('podium-chers').innerHTML = chers.length ? chers.map((t, i) => row(t, i, 'chers')).join('') : empty;
+    $('podium-eco').innerHTML   = eco.length   ? eco.map((t, i) => row(t, i, 'eco')).join('') : empty;
   }
 
   // === Config colonnes éditables (TCO) ===
