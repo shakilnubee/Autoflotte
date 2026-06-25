@@ -2039,9 +2039,15 @@
       tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement...</span>', 'working');
       let okF = 0, okC = 0;
       for (const r of freshF){
+        // Stocke le PDF d'origine pour pouvoir le rouvrir (bouton « Ouvrir le PDF »)
+        let fileUrl = null;
+        if (r._file && FP.uploadScan) {
+          try { fileUrl = await FP.uploadScan(r._file, 'factures-total', { name: 'TF-' + r.numero }); } catch (e) { console.warn('[tf-import upload PDF]', e); }
+        }
         const newF = { id:'TF-' + r.numero, date:r.date, vehiculeImmat:null, fournisseur:'TotalEnergies',
           numeroFacture:r.numero, description:('Carburant & services flotte — ' + r.paysLabel + ' — releve ' + (r.dmy||'')).trim(),
-          type:'carburant', montantHT:r.ht, montantTVA:r.tva, montantTTC:r.ttc };
+          type:'carburant', montantHT:r.ht, montantTVA:r.tva, montantTTC:r.ttc,
+          fileId: fileUrl, fileName: r._file ? r._file.name : null };
         window.FP_DATA.factures.push(newF);
         try { await FP.persist.upsert('factures', newF); okF++; } catch (e) { console.error('[tf-import facture]', e); }
       }
@@ -2080,7 +2086,7 @@
           let used = false;
           const fromRel = parseReleve(text);
           const fromFac = parseFac(text, file.name);
-          fromRel.concat(fromFac ? [fromFac] : []).forEach(f => { if (f && f.numero && !facBySig.has(f.numero)) { facBySig.set(f.numero, f); used = true; } });
+          fromRel.concat(fromFac ? [fromFac] : []).forEach(f => { if (f && f.numero && !facBySig.has(f.numero)) { f._file = file; facBySig.set(f.numero, f); used = true; } });
           const mois = (fromFac && fromFac.date) ? fromFac.date.slice(0,7) : (fromRel[0] ? fromRel[0].date.slice(0,7) : null);
           // facNum = n° de la facture détaillée → sert d'identifiant de contribution
           // (on ne CUMULE jamais en écrasant : 1 ligne par carte ET par facture).
