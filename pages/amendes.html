@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617p">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617q">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260617p"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260617q"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260617p">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260617q">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -380,10 +380,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260617p"></script>
-<script src="../assets/js/supabase-client.js?v=20260617p"></script>
-<script src="../assets/js/data.js?v=20260617p"></script>
-<script src="../assets/js/app.js?v=20260617p"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260617q"></script>
+<script src="../assets/js/supabase-client.js?v=20260617q"></script>
+<script src="../assets/js/data.js?v=20260617q"></script>
+<script src="../assets/js/app.js?v=20260617q"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -466,13 +466,14 @@
     return '<span class="badge badge-danger">À payer</span>';
   }
 
-  // Populate motif filter dynamically (uniquement motifs de 2026)
-  const motifs = [...new Set(data.amendes.filter(a => a.annee === '2026').map(a => a.motif).filter(Boolean))].sort();
-  motifs.forEach(m => {
-    const opt = document.createElement('option');
-    opt.value = m; opt.textContent = m;
-    $('filter-motif').appendChild(opt);
-  });
+  // Populate motif filter dynamically — reconstruit aussi au chargement Supabase
+  function rebuildMotifFilter() {
+    const sel = $('filter-motif'); if (!sel) return; const cur = sel.value;
+    const motifs = [...new Set(data.amendes.filter(a => a.annee === '2026').map(a => a.motif).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="all">Tous motifs</option>' + motifs.map(m => `<option value="${escAmende(m)}">${escAmende(m)}</option>`).join('');
+    sel.value = (motifs.includes(cur) || cur === 'all') ? cur : 'all';
+  }
+  rebuildMotifFilter();
 
   function filtered() {
     const q = FP.norm(state.search).trim();
@@ -1950,7 +1951,7 @@
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });
 
   // Rafraîchit quand les données Supabase arrivent (ajouts/suppressions d'autres appareils)
-  document.addEventListener('fp:data-ready', () => { renderKPIs(); renderTable(); renderCharts(); });
+  document.addEventListener('fp:data-ready', () => { rebuildMotifFilter(); renderKPIs(); renderTable(); renderCharts(); });
 </script>
 </body>
 </html>

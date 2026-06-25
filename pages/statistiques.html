@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Statistiques — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617p">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617q">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260617p"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260617q"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260617p">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260617q">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -200,10 +200,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260617p"></script>
-<script src="../assets/js/supabase-client.js?v=20260617p"></script>
-<script src="../assets/js/data.js?v=20260617p"></script>
-<script src="../assets/js/app.js?v=20260617p"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260617q"></script>
+<script src="../assets/js/supabase-client.js?v=20260617q"></script>
+<script src="../assets/js/data.js?v=20260617q"></script>
+<script src="../assets/js/app.js?v=20260617q"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -215,16 +215,22 @@
   const USAGE_TYPES = ['entretien', 'réparation', 'reparation', 'leasing', 'sinistre', 'autre'];
   const isUsage = (f) => USAGE_TYPES.includes((f.type || '').toLowerCase());
 
-  // Années disponibles (depuis les dates de factures)
-  const annees = [...new Set(factures.map(f => (f.date || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
-  annees.forEach(y => { const o = document.createElement('option'); o.value = y; o.textContent = y; $('filter-annee').appendChild(o); });
-
-  // Total TVS — taxe ANNUELLE courante (indépendante de l'année des factures)
-  if (FP.TVS_ANNEE) $('kpi-tvs-annee').textContent = FP.TVS_ANNEE;
-  const totalTVS = data.vehicules.reduce((s, v) => { const d = FP.tvsDetail(v); return s + (d.applicable && d.total != null ? d.total : 0); }, 0);
-  const nbSoumis = data.vehicules.filter(v => { const d = FP.tvsDetail(v); return d.applicable && d.total != null; }).length;
-  $('kpi-tvs').textContent = FP.euro(totalTVS);
-  $('kpi-tvs-sub').textContent = `${nbSoumis} véhicule${nbSoumis > 1 ? 's' : ''} soumis`;
+  // Années disponibles + KPI TVS — reconstruits aussi au chargement Supabase (sinon figés au cache)
+  function rebuildAnneeFilter() {
+    const sel = $('filter-annee'); if (!sel) return; const cur = sel.value || 'all';
+    const annees = [...new Set((data.factures || []).map(f => (f.date || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
+    sel.innerHTML = '<option value="all">Toutes années</option>' + annees.map(y => `<option value="${y}">${y}</option>`).join('');
+    sel.value = (annees.includes(cur) || cur === 'all') ? cur : 'all';
+  }
+  function updateTvsKpi() {
+    if (FP.TVS_ANNEE) $('kpi-tvs-annee').textContent = FP.TVS_ANNEE;
+    const totalTVS = (data.vehicules || []).reduce((s, v) => { const d = FP.tvsDetail(v); return s + (d.applicable && d.total != null ? d.total : 0); }, 0);
+    const nbSoumis = (data.vehicules || []).filter(v => { const d = FP.tvsDetail(v); return d.applicable && d.total != null; }).length;
+    $('kpi-tvs').textContent = FP.euro(totalTVS);
+    $('kpi-tvs-sub').textContent = `${nbSoumis} véhicule${nbSoumis > 1 ? 's' : ''} soumis`;
+  }
+  rebuildAnneeFilter();
+  updateTvsKpi();
 
   function buildLast12() {
     const out = []; const now = new Date();
@@ -407,7 +413,7 @@
   // Graphiques (Chart.js en différé) dessinés dès qu'il est prêt, sans bloquer l'affichage
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); } catch (e) {} });
   // Rafraîchit quand les données Supabase arrivent (sinon on reste sur le cache data.js)
-  document.addEventListener('fp:data-ready', () => { const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
+  document.addEventListener('fp:data-ready', () => { rebuildAnneeFilter(); updateTvsKpi(); const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
 
   $('btn-export-tco').addEventListener('click', () => {
     const headers = ['Immat', 'Modèle', 'Km', 'Factures TTC', 'Assurance/an', 'TVS/an', 'Amendes', 'Coût total TTC', 'Coût par km', 'Nb factures', 'Dernier achat'];

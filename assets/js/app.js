@@ -2139,8 +2139,11 @@ FP.history = {
     localStorage.setItem(FP.settings._key(), JSON.stringify(snap.settings));
     localStorage.setItem(FP.VEH_OVERRIDES_KEY, JSON.stringify(snap.overrides));
     if (snap.fpData && window.FP_DATA) {
-      if (snap.fpData.vehicules) window.FP_DATA.vehicules = JSON.parse(JSON.stringify(snap.fpData.vehicules));
-      if (snap.fpData.amendes)   window.FP_DATA.amendes   = JSON.parse(JSON.stringify(snap.fpData.amendes));
+      // Remplacement EN PLACE (même référence de tableau) — sinon les pages qui ont capté
+      // data.vehicules au chargement gardent l'ancien tableau et affichent des données périmées.
+      const replace = (arr, src) => { if (Array.isArray(arr) && Array.isArray(src)) { arr.length = 0; JSON.parse(JSON.stringify(src)).forEach(x => arr.push(x)); } };
+      if (snap.fpData.vehicules) replace(window.FP_DATA.vehicules, snap.fpData.vehicules);
+      if (snap.fpData.amendes)   replace(window.FP_DATA.amendes,   snap.fpData.amendes);
     }
     FP.settings.applyTheme();
     this.renderAll();

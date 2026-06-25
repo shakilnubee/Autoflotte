@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sinistres — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617p">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260617q">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260617p"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260617q"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260617p">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260617q">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -181,10 +181,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260617p"></script>
-<script src="../assets/js/supabase-client.js?v=20260617p"></script>
-<script src="../assets/js/data.js?v=20260617p"></script>
-<script src="../assets/js/app.js?v=20260617p"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260617q"></script>
+<script src="../assets/js/supabase-client.js?v=20260617q"></script>
+<script src="../assets/js/data.js?v=20260617q"></script>
+<script src="../assets/js/app.js?v=20260617q"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script>
   lucide.createIcons();
@@ -196,19 +196,20 @@
   let sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
   const state = { search: '', annee: 'all', vehicule: 'all' };
 
-  // Init filtres dynamiques
-  const annees = [...new Set(sinistres.map(s => (s.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
-  annees.forEach(y => {
-    const opt = document.createElement('option');
-    opt.value = y; opt.textContent = y;
-    $('filter-annee').appendChild(opt);
-  });
-  const vehs = [...new Set(sinistres.map(s => s.vehiculeImmat).filter(Boolean))].sort();
-  vehs.forEach(v => {
-    const opt = document.createElement('option');
-    opt.value = v; opt.textContent = v;
-    $('filter-vehicule').appendChild(opt);
-  });
+  // Init filtres dynamiques — reconstruits aussi au chargement Supabase (sinon les nouvelles
+  // années / nouveaux véhicules n'apparaissent pas dans les filtres).
+  function rebuildFiltres() {
+    const fillSel = (id, vals, allLabel) => {
+      const sel = $(id); if (!sel) return; const cur = sel.value;
+      sel.innerHTML = `<option value="all">${allLabel}</option>` + vals.map(v => `<option value="${v}">${v}</option>`).join('');
+      sel.value = (vals.includes(cur) || cur === 'all') ? cur : 'all';
+    };
+    const annees = [...new Set(sinistres.map(s => (s.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+    const vehs = [...new Set(sinistres.map(s => s.vehiculeImmat).filter(Boolean))].sort();
+    fillSel('filter-annee', annees, 'Toutes années');
+    fillSel('filter-vehicule', vehs, 'Tous véhicules');
+  }
+  rebuildFiltres();
 
   function matchFilter(s) {
     const q = FP.norm(state.search).trim();
@@ -552,6 +553,7 @@
   // Rafraîchit quand Supabase a chargé (sinon on reste sur le cache data.js)
   document.addEventListener('fp:data-ready', () => {
     sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
+    rebuildFiltres();
     renderKPIs(); renderTimeline(); renderCharts(); coutPeriode.render();
   });
 
