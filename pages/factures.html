@@ -1879,15 +1879,19 @@
     }
 
     // 2) Une facture detaillee (FAC) -> { numero, pays, date, HT, TVA, TTC }
-    function parseFac(raw){
+    function parseFac(raw, fileName){
       const t = (raw || '').replace(SP, ' ');
       const mh = t.match(/(FRANCE|BELGIE|BELGIQUE|NEDERLAND|DEUTSCHLAND|ALLEMAGNE)\s*-\s*N°\s*([A-Z][0-9][A-Z0-9]{5,7})/);
       if (!mh) return null;
       const md = t.match(/(?:Le|Factuurdatum)\s*(\d{2})\/(\d{2})\/(\d{4})/);
-      const mt = t.match(new RegExp('(?:Total General|Total Général|Totaal)\\s+(' + DEC + ')\\s+(' + DEC + ')\\s+EUR\\s+(' + DEC + ')'));
+      let dmy = md ? (md[1] + '/' + md[2] + '/' + md[3]) : null;
+      let date = md ? (md[3] + '-' + md[2] + '-' + md[1]) : null;
+      // Repli (factures allemandes notamment) : la date est dans le nom du fichier (…_AAAAMMJJFAC…)
+      if (!date && fileName) { const mf = String(fileName).match(/(20\d{2})(\d{2})(\d{2})/); if (mf) { date = mf[1] + '-' + mf[2] + '-' + mf[3]; dmy = mf[3] + '/' + mf[2] + '/' + mf[1]; } }
+      // Total : « Total Général » (FR), « Totaal » (NL) ou « Insgesamt » (DE)
+      const mt = t.match(new RegExp('(?:Total General|Total Général|Totaal|Insgesamt)\\s+(' + DEC + ')\\s+(' + DEC + ')\\s+EUR\\s+(' + DEC + ')'));
       return { numero: mh[2], paysLabel: PAYS_FAC[mh[1]] || mh[1],
-               dmy: md ? (md[1] + '/' + md[2] + '/' + md[3]) : null,
-               date: md ? (md[3] + '-' + md[2] + '-' + md[1]) : null,
+               dmy: dmy, date: date,
                ht: mt ? parseEuro(mt[1]) : null, tva: mt ? parseEuro(mt[2]) : null, ttc: mt ? parseEuro(mt[3]) : null };
     }
 
@@ -2046,7 +2050,7 @@
           const text = await pdfTextAll(pdf);
           let used = false;
           const fromRel = parseReleve(text);
-          const fromFac = parseFac(text);
+          const fromFac = parseFac(text, file.name);
           fromRel.concat(fromFac ? [fromFac] : []).forEach(f => { if (f && f.numero && !facBySig.has(f.numero)) { facBySig.set(f.numero, f); used = true; } });
           const mois = (fromFac && fromFac.date) ? fromFac.date.slice(0,7) : (fromRel[0] ? fromRel[0].date.slice(0,7) : null);
           // facNum = n° de la facture détaillée → sert d'identifiant de contribution
