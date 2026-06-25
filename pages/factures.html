@@ -590,7 +590,14 @@
     if (t === 'carburant' || t === 'peage') return true;
     return /total\s*energies|totalenergies/.test(_norm(f.fournisseur));
   };
-  const factures = (data.factures || []).filter(f => f.type !== 'leasing' && f.type !== 'sinistre' && !isTotalFleet(f) && !isUlys(f));
+  // Liste de la vue Factures (hors leasing/sinistre/Total Fleet/Ulys). Tableau STABLE (même
+  // référence) reconstruit en place → reste à jour quand Supabase charge ou après un import.
+  const factures = [];
+  function rebuildFactures(){
+    const list = (data.factures || []).filter(f => f.type !== 'leasing' && f.type !== 'sinistre' && !isTotalFleet(f) && !isUlys(f));
+    factures.length = 0; Array.prototype.push.apply(factures, list);
+  }
+  rebuildFactures();
   const state = { search: '', type: 'all', annee: 'all', mois: 'all', vehicule: 'all', fournisseur: 'all', currentId: null };
   const $ = (id) => document.getElementById(id);
 
@@ -1341,6 +1348,8 @@
   });
   coutPeriode.render();
   document.addEventListener('fp:data-ready', () => coutPeriode.render());
+  // Données Supabase arrivées (ou import) → on reconstruit la liste et on rafraîchit le tableau
+  document.addEventListener('fp:data-ready', () => { rebuildFactures(); renderKPIs(); renderTable(); renderCharts(); });
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });
 
   // Ouverture directe d'une facture via l'URL (?facture=FILEID) — depuis la recherche globale
