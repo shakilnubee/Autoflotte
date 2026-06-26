@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260626g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260626h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260626g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260626h">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -283,7 +283,7 @@
   </div>
   <div class="p-6 space-y-5" id="drawer-body"></div>
   <input type="file" id="justif-file" accept="image/*,application/pdf" class="hidden" />
-  <div class="p-6 border-t border-slate-200 flex flex-wrap gap-2">
+  <div class="p-6 border-t border-slate-200 flex flex-wrap gap-2 sticky bottom-0 bg-white z-10" style="box-shadow:0 -6px 16px -10px rgba(15,30,61,.25)">
     <button class="btn btn-primary text-sm flex-1 justify-center" id="drawer-pay"><i data-lucide="check" class="w-4 h-4"></i> Marquer payée</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-designer" title="Conducteur désigné — l'amende n'est plus à votre charge"><i data-lucide="user-check" class="w-4 h-4"></i> Désigner</button>
     <button class="btn btn-outline text-sm" id="drawer-relance" title="Envoyer un email de relance au conducteur"><i data-lucide="mail" class="w-4 h-4"></i> Relancer</button>
@@ -381,10 +381,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260626g"></script>
-<script src="../assets/js/supabase-client.js?v=20260626g"></script>
-<script src="../assets/js/data.js?v=20260626g"></script>
-<script src="../assets/js/app.js?v=20260626g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260626h"></script>
+<script src="../assets/js/supabase-client.js?v=20260626h"></script>
+<script src="../assets/js/data.js?v=20260626h"></script>
+<script src="../assets/js/app.js?v=20260626h"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -398,6 +398,15 @@
   // ⚠️ Échappement HTML — DÉFINI TÔT car utilisé dès l'init (rebuildMotifFilter, motifPill…).
   // S'il était déclaré plus bas (const = TDZ), l'appel à l'init plantait toute la page.
   const escAmende = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // Aperçu inline d'un scan (image -> <img> ; PDF/inconnu -> <iframe>) directement dans le tiroir.
+  function scanPreview(url) {
+    if (!url) return '';
+    const box = 'width:100%;border:1px solid var(--fp-border);border-radius:.55rem;background:#f8fafc;';
+    if (/\.(jpe?g|png|webp|gif|bmp)(\?|#|$)/i.test(url)) {
+      return `<img src="${url}" loading="lazy" style="${box}max-height:380px;object-fit:contain;cursor:zoom-in;display:block" title="Cliquer pour agrandir" onclick="window.open('${url}','_blank','noopener')">`;
+    }
+    return `<iframe src="${url}" loading="lazy" style="${box}height:420px" title="Aperçu du document"></iframe>`;
+  }
   const DEFAULT_DATE_FROM = '2026-01-01'; // par défaut, on n'affiche que les amendes à partir du 01/01/2026
   const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false };
   const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
@@ -932,9 +941,10 @@
       ${a.avisUrl ? `
         <div>
           <div class="field-label">Scan de l'avis</div>
-          <div class="flex gap-2">
+          ${scanPreview(a.avisUrl)}
+          <div class="flex gap-2 mt-2">
             <a href="${a.avisUrl}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
-              <i data-lucide="file-text" class="w-4 h-4"></i> Voir l'avis
+              <i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir en grand
             </a>
             <button type="button" id="avis-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le scan de l'avis"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
           </div>
@@ -943,9 +953,10 @@
       <div>
         <div class="field-label">Justificatif de paiement</div>
         ${a.justifUrl ? `
-          <div class="flex gap-2">
+          ${scanPreview(a.justifUrl)}
+          <div class="flex gap-2 mt-2">
             <a href="${a.justifUrl}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
-              <i data-lucide="file-check" class="w-4 h-4"></i> Voir le justificatif
+              <i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir en grand
             </a>
             <button type="button" id="justif-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le justificatif"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
           </div>
