@@ -168,10 +168,11 @@
 
     /** Lit toutes les lignes d'une table (converties en camelCase). */
     async select(table) {
-      let res = await client.from(table).select('*').order('id', { ascending: true });
-      // Certaines tables (ex. conducteurs, clé primaire = "key") n'ont pas de colonne "id" :
-      // l'ORDER BY id échoue → on réessaie sans tri plutôt que de renvoyer vide.
-      if (res.error && /column .*\bid\b.* does not exist/i.test(res.error.message || '')) {
+      // Trier par la VRAIE clé primaire (conducteurs → "key", sinon "id") : sinon un ORDER BY id
+      // sur une table sans colonne "id" renvoyait un 400 (visible dans la console) avant le repli.
+      let res = await client.from(table).select('*').order(pkColumn(table), { ascending: true });
+      // Filet de sécurité : si malgré tout le tri échoue (colonne absente), on réessaie sans tri.
+      if (res.error && /column .* does not exist/i.test(res.error.message || '')) {
         res = await client.from(table).select('*');
       }
       if (res.error) { console.error(`[FP.db.select ${table}]`, res.error); return { data: [], error: res.error }; }
