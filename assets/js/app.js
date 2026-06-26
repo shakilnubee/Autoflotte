@@ -27,10 +27,15 @@ window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStora
   try {
     const c = JSON.parse(localStorage.getItem(window.FP_CACHE_KEY) || 'null');
     if (c && window.FP_DATA && Array.isArray(c.amendes)) {
-      if (Array.isArray(c.vehicules)) window.FP_DATA.vehicules = c.vehicules;
-      if (Array.isArray(c.amendes))   window.FP_DATA.amendes   = c.amendes;
-      if (Array.isArray(c.factures))  window.FP_DATA.factures  = c.factures;
-      if (Array.isArray(c.conducteurs)) window.FP_DATA.conducteurs = c.conducteurs;
+      // Auto-réparation : un cache VIDE ne doit JAMAIS écraser des données présentes dans data.js
+      // (sinon une visite faite pendant un incident — ex. 0 amende — fige la page à 0 ensuite).
+      const seed = (k) => {
+        if (!Array.isArray(c[k])) return;
+        const cur = window.FP_DATA[k];
+        if (c[k].length === 0 && Array.isArray(cur) && cur.length > 0) return; // garde data.js
+        window.FP_DATA[k] = c[k];
+      };
+      seed('vehicules'); seed('amendes'); seed('factures'); seed('conducteurs');
     }
   } catch (e) { /* cache illisible : on garde data.js */ }
 })();
