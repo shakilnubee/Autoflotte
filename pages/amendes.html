@@ -1304,10 +1304,17 @@
   // Cherche un doublon d'amende selon les valeurs saisies (n° d'avis, ou conducteur + date + montant)
   function findDoublon(prenom, date, montant, numAvis) {
     const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
-    let d = null;
-    if (numAvis) d = data.amendes.find(a => norm(a.numeroAvis) && norm(a.numeroAvis) === norm(numAvis));
-    if (!d && prenom && date) d = data.amendes.find(a => norm(a.prenom) === norm(prenom) && a.date === date && Number(a.montant) === Number(montant));
-    return d || null;
+    // Un n° d'avis est une CLE UNIQUE : s'il est renseigne, on ne compare QUE par n° d'avis
+    // (sinon 2 amendes differentes du meme conducteur, meme jour, meme montant seraient vues
+    //  comme doublons a tort — cas typique de 2 FPS pour la meme personne le meme jour).
+    if (numAvis && norm(numAvis)) {
+      return data.amendes.find(a => norm(a.numeroAvis) && norm(a.numeroAvis) === norm(numAvis)) || null;
+    }
+    // Pas de n° d'avis (saisie manuelle incomplete) : repli sur conducteur + date + montant.
+    if (prenom && date) {
+      return data.amendes.find(a => norm(a.prenom) === norm(prenom) && a.date === date && Number(a.montant) === Number(montant)) || null;
+    }
+    return null;
   }
   // Affiche/masque le bandeau de doublon EN HAUT du formulaire, en temps réel pendant la saisie
   function checkDoublonLive() {
@@ -1714,7 +1721,11 @@
           // FPS : le numero d'avis groupe fait 12 chiffres, la cle 2 -> on les combine (14 chiffres)
           // pour que fmtNumeroAvis l'affiche "26 1 163 072 245 37" (cle incluse, espaces conserves).
           if (parsed.numeroAvis && parsed.cle) {
-            const _ad = String(parsed.numeroAvis).replace(/\D/g, ''), _cd = String(parsed.cle).replace(/\D/g, '');
+            const _cd = String(parsed.cle).replace(/\D/g, '');
+            const _full = String(parsed.numeroAvis).replace(/\D/g, '');
+            // l'IA renvoie soit le numero groupe seul (12 ch.), soit deja avec la cle (14 ch.) :
+            // on isole le numero d'avis groupe (12 ch.) dans les deux cas.
+            const _ad = (_cd && _full.length === 14 && _full.endsWith(_cd)) ? _full.slice(0, 12) : _full;
             if (_ad.length === 12 && _cd.length === 2) {           // FPS
               // N° de telepaiement COMPLET = prefixe (~14 ch.) + numero d'avis groupe (12 ch.) ;
               // l'IA ne capte souvent que le prefixe -> on recompose le numero entier.
