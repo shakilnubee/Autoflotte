@@ -601,7 +601,21 @@
         const total = (data.amendes || []).length;
         const en2026 = (data.amendes || []).filter(a => anneeOf(a) === '2026').length;
         if (total === 0) {
-          msg.innerHTML = '⚠️ <b>0 amende chargée</b> depuis la base (le tableau est vide côté données, pas un filtre). Préviens Claude.';
+          const soc = (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return '?'; } })();
+          msg.innerHTML = `⚠️ <b>0 amende chargée</b> (société active : <b>${soc}</b>). Diagnostic base en cours…`;
+          // Interroge directement Supabase avec la session connectée (sans filtre société)
+          if (FP.supabase) {
+            Promise.all([
+              FP.supabase.from('amendes').select('id', { count: 'exact', head: true }),
+              FP.supabase.from('amendes').select('id,societe,annee,prenom').limit(4),
+            ]).then(([cnt, samp]) => {
+              const prof = FP.profile ? JSON.stringify(FP.profile) : 'n/a';
+              const c = (cnt && cnt.count != null) ? cnt.count : '?';
+              const err = (cnt && cnt.error && cnt.error.message) || (samp && samp.error && samp.error.message) || '';
+              const sample = (samp && samp.data) ? JSON.stringify(samp.data) : '[]';
+              msg.innerHTML = `⚠️ <b>0 amende affichée.</b><br>Société active : <b>${soc}</b> · Profil : ${prof}<br>Amendes visibles en base (ton accès) : <b>${c}</b><br>Échantillon : <code style="font-size:11px">${sample}</code>${err ? '<br>Erreur base : <b>' + err + '</b>' : ''}<br><span class="text-slate-400">Copie ce message à Claude.</span>`;
+            }).catch(e => { msg.innerHTML = '⚠️ 0 amende. Diagnostic base échoué : ' + (e && e.message); });
+          }
         } else if (en2026 === 0) {
           const annees = [...new Set((data.amendes || []).map(a => anneeOf(a)).filter(Boolean))].sort().join(', ');
           msg.innerHTML = `ℹ️ <b>${total} amende(s) chargée(s)</b> mais aucune en 2026. Années présentes : <b>${annees || '—'}</b>. (Clique « Tout voir » pour les afficher.)`;
