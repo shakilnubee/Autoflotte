@@ -1,7 +1,22 @@
 -- ============================================================
 --  Nettoyage des doublons : AMENDES + SINISTRES
---  Supabase → SQL Editor. Lance le 1) (aperçu) puis le 2) (suppression).
+--  Supabase → SQL Editor.
+--  ⚠️ ORDRE OBLIGATOIRE : 0) SAUVEGARDE → 1) APERÇU (vérifier les n° et le nb) → 2) SUPPRESSION.
+--  Ne JAMAIS lancer le 2) sans avoir lu le 1). En cas de souci, restaurer depuis la
+--  table de sauvegarde (voir tout en bas : « RESTAURATION D'URGENCE »).
 -- ============================================================
+
+-- ===== 0) SAUVEGARDE AUTOMATIQUE (à lancer AVANT toute suppression) =====
+-- Crée une copie horodatée des tables. Si une suppression se passe mal, on restaure depuis ces copies.
+drop table if exists public.amendes_backup;
+create table public.amendes_backup as table public.amendes;
+drop table if exists public.factures_backup;
+create table public.factures_backup as table public.factures;
+-- Vérif : doit afficher le MÊME nombre que la table d'origine
+select (select count(*) from public.amendes)  as amendes_avant,
+       (select count(*) from public.amendes_backup)  as amendes_sauvegardees,
+       (select count(*) from public.factures) as factures_avant,
+       (select count(*) from public.factures_backup) as factures_sauvegardees;
 
 -- ===== AMENDES (doublons = même n° d'avis dans la même société) =====
 -- 1) Aperçu
@@ -49,3 +64,10 @@ group by numero_avis, societe having count(*) > 1;
 select file_id, count(*) from public.factures
 where file_id is not null and file_id <> ''
 group by file_id having count(*) > 1;
+
+-- ============================================================
+--  RESTAURATION D'URGENCE (si une suppression a effacé trop de lignes)
+--  Réinjecte depuis la sauvegarde du 0). ON CONFLICT = aucun doublon recréé.
+-- ============================================================
+-- insert into public.amendes  select * from public.amendes_backup  on conflict (id) do nothing;
+-- insert into public.factures select * from public.factures_backup on conflict (id) do nothing;
