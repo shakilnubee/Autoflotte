@@ -394,38 +394,6 @@
   // alors que data.js la stocke en CHAÎNE ("2026"). On compare donc toujours via String().
   // Si `annee` est absente, on retombe sur l'année de la date.
   const anneeOf = (a) => { const y = a && a.annee; return (y === 0 || y) ? String(y) : ((a && a.date) || '').slice(0, 4); };
-  // === DIAGNOSTIC TEMPORAIRE (page amendes vide) : gros bandeau en haut, impossible à manquer.
-  // S'efface tout seul si les amendes se chargent normalement. (À retirer une fois le souci réglé.)
-  (function diagAmendes() {
-    function banner(html, color) {
-      let b = document.getElementById('diag-banner');
-      if (!b) { b = document.createElement('div'); b.id = 'diag-banner'; b.style.cssText = 'position:sticky;top:0;z-index:99999;padding:14px 18px;font-size:14px;font-weight:600;color:#fff;text-align:center;line-height:1.5'; document.body.insertBefore(b, document.body.firstChild); }
-      b.style.background = color || '#dc2626'; b.innerHTML = html;
-    }
-    function run() {
-      const soc = (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return '?'; } })();
-      const n = (window.FP_DATA && FP_DATA.amendes && FP_DATA.amendes.length) || 0;
-      if (n > 0) { const b = document.getElementById('diag-banner'); if (b) b.remove(); return; } // tout va bien
-      banner(`🔎 Société active : <b>${soc}</b> — amendes chargées : <b>${n}</b> · interrogation de la base…`, '#b45309');
-      if (window.FP && FP.supabase) {
-        Promise.all([
-          FP.supabase.from('amendes').select('id', { count: 'exact', head: true }),
-          FP.supabase.from('amendes').select('id,societe,annee').limit(3),
-        ]).then(([c, s]) => {
-          const cnt = (c && c.count != null) ? c.count : '?';
-          const err = (c && c.error && c.error.message) || (s && s.error && s.error.message) || '';
-          const samp = (s && s.data) ? JSON.stringify(s.data) : '[]';
-          const prof = FP.profile ? JSON.stringify(FP.profile) : 'n/a';
-          banner(`🔎 Société active : <b>${soc}</b> · AMENDES EN BASE (ton accès) : <b style="font-size:20px">${cnt}</b> · Profil : ${prof}<br>Échantillon : ${samp}${err ? ' · ⚠️ Erreur base : ' + err : ''}<br><span style="opacity:.8">Lis ce chiffre à Claude.</span>`, '#dc2626');
-        }).catch(e => banner('🔎 Diagnostic base échoué : ' + (e && e.message)));
-      } else {
-        banner(`🔎 Société active : <b>${soc}</b> · amendes chargées : <b>${n}</b> · (client Supabase indisponible)`, '#dc2626');
-      }
-    }
-    if (window.FP && FP.dbReady && FP.dbReady.then) { FP.dbReady.then(run).catch(run); }
-    else { window.addEventListener('DOMContentLoaded', () => setTimeout(run, 1500)); }
-  })();
-
   const DEFAULT_DATE_FROM = '2026-01-01'; // par défaut, on n'affiche que les amendes à partir du 01/01/2026
   const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false };
   const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
@@ -634,20 +602,7 @@
         const en2026 = (data.amendes || []).filter(a => anneeOf(a) === '2026').length;
         if (total === 0) {
           const soc = (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return '?'; } })();
-          msg.innerHTML = `⚠️ <b>0 amende chargée</b> (société active : <b>${soc}</b>). Diagnostic base en cours…`;
-          // Interroge directement Supabase avec la session connectée (sans filtre société)
-          if (FP.supabase) {
-            Promise.all([
-              FP.supabase.from('amendes').select('id', { count: 'exact', head: true }),
-              FP.supabase.from('amendes').select('id,societe,annee,prenom').limit(4),
-            ]).then(([cnt, samp]) => {
-              const prof = FP.profile ? JSON.stringify(FP.profile) : 'n/a';
-              const c = (cnt && cnt.count != null) ? cnt.count : '?';
-              const err = (cnt && cnt.error && cnt.error.message) || (samp && samp.error && samp.error.message) || '';
-              const sample = (samp && samp.data) ? JSON.stringify(samp.data) : '[]';
-              msg.innerHTML = `⚠️ <b>0 amende affichée.</b><br>Société active : <b>${soc}</b> · Profil : ${prof}<br>Amendes visibles en base (ton accès) : <b>${c}</b><br>Échantillon : <code style="font-size:11px">${sample}</code>${err ? '<br>Erreur base : <b>' + err + '</b>' : ''}<br><span class="text-slate-400">Copie ce message à Claude.</span>`;
-            }).catch(e => { msg.innerHTML = '⚠️ 0 amende. Diagnostic base échoué : ' + (e && e.message); });
-          }
+          msg.innerHTML = `Aucune amende chargée (société active : <b>${soc}</b>).`;
         } else if (en2026 === 0) {
           const annees = [...new Set((data.amendes || []).map(a => anneeOf(a)).filter(Boolean))].sort().join(', ');
           msg.innerHTML = `ℹ️ <b>${total} amende(s) chargée(s)</b> mais aucune en 2026. Années présentes : <b>${annees || '—'}</b>. (Clique « Tout voir » pour les afficher.)`;
