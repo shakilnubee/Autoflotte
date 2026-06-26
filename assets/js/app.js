@@ -52,23 +52,41 @@ document.addEventListener('click', (e) => {
   }
 }, true);
 
-// Garde GLOBAL (toutes les pages + futures) : la touche ÉCHAP ferme le tiroir / la fenêtre ouverte.
+// Garde GLOBAL (toutes les pages + futures) : ÉCHAP ferme TOUTE zone ouverte
+// (tiroir, fenêtre modale, popover, menu déroulant, résultats de recherche).
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' && e.keyCode !== 27) return;
-  // Si on est en train de saisir dans un champ (édition inline, recherche…), Échap annule la
-  // saisie (géré par le champ lui-même) et NE ferme PAS le tiroir/la fenêtre.
   const ae = document.activeElement;
+  // Cas spécial : barre de recherche -> ÉCHAP vide la recherche et ferme les résultats.
+  if (ae && ae.classList && ae.classList.contains('fp-search-input')) {
+    ae.value = '';
+    try { ae.dispatchEvent(new Event('input', { bubbles: true })); } catch (_) {}
+    const res = document.querySelector('.fp-search-results'); if (res) { res.innerHTML = ''; res.style.display = 'none'; }
+    ae.blur(); e.stopPropagation(); return;
+  }
+  // Si on saisit dans un autre champ (édition inline…), ÉCHAP est géré par le champ lui-même
+  // (annule la saisie) et NE ferme PAS la zone parente.
   if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
   let closed = false;
-  // 1) Tiroirs latéraux (drawer) ouverts
+  // 1) Tiroirs latéraux (drawer)
   document.querySelectorAll('.drawer.open, .drawer-backdrop.open').forEach(el => { el.classList.remove('open'); closed = true; });
-  // 2) Fenêtres modales visibles (backdrops + éléments dont l'id finit par -modal)
+  // 2) Fenêtres modales (backdrops + éléments dont l'id finit par -modal / -backdrop)
   document.querySelectorAll('.modal-backdrop, [id$="-modal"], [id$="-backdrop"]').forEach(el => {
     const vis = !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
     if (!vis) return;
     el.classList.add('hidden');
     if (el.style && el.style.display && el.style.display !== 'none') el.style.display = 'none';
     el.classList.remove('open');
+    closed = true;
+  });
+  // 3) Popovers ouverts via la classe .open (éditeur de colonnes, etc.)
+  document.querySelectorAll('.hidden-cols-popover.open, .fp-hidden-cols-popover.open, .popover.open, .fp-popover.open').forEach(el => { el.classList.remove('open'); closed = true; });
+  // 4) Menus / petites zones ouverts via affichage (menu société, menu mobile, autres popovers/menus)
+  document.querySelectorAll('#soc-menu, #mobile-menu, [id$="-menu"], [id$="-popover"], .fp-menu, .popover, .fp-popover').forEach(el => {
+    if (el.classList.contains('hidden')) return;
+    const vis = getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
+    if (!vis) return;
+    el.classList.add('hidden'); el.classList.remove('open', 'show');
     closed = true;
   });
   if (closed) e.stopPropagation();
