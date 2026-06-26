@@ -394,6 +394,38 @@
   // alors que data.js la stocke en CHAÎNE ("2026"). On compare donc toujours via String().
   // Si `annee` est absente, on retombe sur l'année de la date.
   const anneeOf = (a) => { const y = a && a.annee; return (y === 0 || y) ? String(y) : ((a && a.date) || '').slice(0, 4); };
+  // === DIAGNOSTIC TEMPORAIRE (page amendes vide) : gros bandeau en haut, impossible à manquer.
+  // S'efface tout seul si les amendes se chargent normalement. (À retirer une fois le souci réglé.)
+  (function diagAmendes() {
+    function banner(html, color) {
+      let b = document.getElementById('diag-banner');
+      if (!b) { b = document.createElement('div'); b.id = 'diag-banner'; b.style.cssText = 'position:sticky;top:0;z-index:99999;padding:14px 18px;font-size:14px;font-weight:600;color:#fff;text-align:center;line-height:1.5'; document.body.insertBefore(b, document.body.firstChild); }
+      b.style.background = color || '#dc2626'; b.innerHTML = html;
+    }
+    function run() {
+      const soc = (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return '?'; } })();
+      const n = (window.FP_DATA && FP_DATA.amendes && FP_DATA.amendes.length) || 0;
+      if (n > 0) { const b = document.getElementById('diag-banner'); if (b) b.remove(); return; } // tout va bien
+      banner(`🔎 Société active : <b>${soc}</b> — amendes chargées : <b>${n}</b> · interrogation de la base…`, '#b45309');
+      if (window.FP && FP.supabase) {
+        Promise.all([
+          FP.supabase.from('amendes').select('id', { count: 'exact', head: true }),
+          FP.supabase.from('amendes').select('id,societe,annee').limit(3),
+        ]).then(([c, s]) => {
+          const cnt = (c && c.count != null) ? c.count : '?';
+          const err = (c && c.error && c.error.message) || (s && s.error && s.error.message) || '';
+          const samp = (s && s.data) ? JSON.stringify(s.data) : '[]';
+          const prof = FP.profile ? JSON.stringify(FP.profile) : 'n/a';
+          banner(`🔎 Société active : <b>${soc}</b> · AMENDES EN BASE (ton accès) : <b style="font-size:20px">${cnt}</b> · Profil : ${prof}<br>Échantillon : ${samp}${err ? ' · ⚠️ Erreur base : ' + err : ''}<br><span style="opacity:.8">Lis ce chiffre à Claude.</span>`, '#dc2626');
+        }).catch(e => banner('🔎 Diagnostic base échoué : ' + (e && e.message)));
+      } else {
+        banner(`🔎 Société active : <b>${soc}</b> · amendes chargées : <b>${n}</b> · (client Supabase indisponible)`, '#dc2626');
+      }
+    }
+    if (window.FP && FP.dbReady && FP.dbReady.then) { FP.dbReady.then(run).catch(run); }
+    else { window.addEventListener('DOMContentLoaded', () => setTimeout(run, 1500)); }
+  })();
+
   const DEFAULT_DATE_FROM = '2026-01-01'; // par défaut, on n'affiche que les amendes à partir du 01/01/2026
   const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false };
   const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
