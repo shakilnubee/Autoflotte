@@ -390,6 +390,10 @@
   const data = window.FP_DATA;
   // Cette page n'affiche que les amendes de 2026 (les 2025 sont historiques)
   // Le filtre est appliqué dans filtered() pour résister au rechargement depuis Supabase
+  // ⚠️ TOLÉRANCE DE TYPE : la colonne `annee` peut revenir en NOMBRE (2026) depuis Supabase
+  // alors que data.js la stocke en CHAÎNE ("2026"). On compare donc toujours via String().
+  // Si `annee` est absente, on retombe sur l'année de la date.
+  const anneeOf = (a) => { const y = a && a.annee; return (y === 0 || y) ? String(y) : ((a && a.date) || '').slice(0, 4); };
   const DEFAULT_DATE_FROM = '2026-01-01'; // par défaut, on n'affiche que les amendes à partir du 01/01/2026
   const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false };
   const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
@@ -469,7 +473,7 @@
   // Populate motif filter dynamically — reconstruit aussi au chargement Supabase
   function rebuildMotifFilter() {
     const sel = $('filter-motif'); if (!sel) return; const cur = sel.value;
-    const motifs = [...new Set(data.amendes.filter(a => a.annee === '2026').map(a => a.motif).filter(Boolean))].sort();
+    const motifs = [...new Set(data.amendes.filter(a => anneeOf(a) === '2026').map(a => a.motif).filter(Boolean))].sort();
     sel.innerHTML = '<option value="all">Tous motifs</option>' + motifs.map(m => `<option value="${escAmende(m)}">${escAmende(m)}</option>`).join('');
     sel.value = (motifs.includes(cur) || cur === 'all') ? cur : 'all';
   }
@@ -479,7 +483,7 @@
     const q = FP.norm(state.search).trim();
     return data.amendes.filter(a => {
       // Par défaut : uniquement 2026. En mode "Tout voir" : toutes les années.
-      if (!state.voirTout && a.annee !== '2026') return false;
+      if (!state.voirTout && anneeOf(a) !== '2026') return false;
       // Filtre par statut (les payées restent visibles dans « Payées » / « Toutes »)
       if (state.statut !== 'all' && a.statut !== state.statut) return false;
       if (state.motif !== 'all' && a.motif !== state.motif) return false;
@@ -493,7 +497,7 @@
 
   function renderKPIs() {
     // Uniquement les amendes 2026
-    const all = data.amendes.filter(a => a.annee === '2026');
+    const all = data.amendes.filter(a => anneeOf(a) === '2026');
     const apayer = all.filter(a => a.statut === 'à payer');
     const payees = all.filter(a => a.statut === 'payée');
     const points = all.reduce((s, a) => s + (Number(a.points) || 0), 0);
@@ -702,7 +706,7 @@
   function renderCharts() {
     if (typeof Chart === 'undefined') return; // Chart.js en différé : dessiné dès qu'il est prêt
     // Uniquement amendes 2026
-    const amendes2026 = data.amendes.filter(a => a.annee === '2026');
+    const amendes2026 = data.amendes.filter(a => anneeOf(a) === '2026');
     // Motifs
     const motifsCount = {};
     amendes2026.forEach(a => {
@@ -740,7 +744,7 @@
   // ---------- Podium des conducteurs (extensible) ----------
   let podiumExpanded = false;
   function renderPodium() {
-    const amendes2026 = data.amendes.filter(a => a.annee === '2026');
+    const amendes2026 = data.amendes.filter(a => anneeOf(a) === '2026');
     const agg = {};
     amendes2026.forEach(a => { const c = (a.prenom || '—').trim() || '—'; if (!agg[c]) agg[c] = { n: 0, montant: 0, points: 0 }; agg[c].n++; agg[c].montant += (a.montant || 0); agg[c].points += (Number(a.points) || 0); });
     const all = Object.entries(agg).sort((a, b) => b[1].n - a[1].n || b[1].montant - a[1].montant);
