@@ -140,7 +140,7 @@
         <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
         <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — BPCE Car Lease
       </div>
-      <p class="text-sm text-slate-600 mb-4">Véhicules sous contrat de leasing BPCE. Mensualités calculées depuis les factures.</p>
+      <p class="text-sm text-slate-600 mb-4">Véhicules sous contrat de leasing BPCE. Mensualités <b>théoriques</b> = mois écoulés depuis le début du contrat × mensualité fixe (médiane des factures). « X facturées » indique le nombre de factures réellement importées.</p>
 
       <div class="flex flex-wrap items-center gap-3 mb-4">
         <div class="relative flex-1 min-w-[220px]">
@@ -287,9 +287,10 @@
     leasingFactures.forEach(f => {
       const k = f.vehiculeImmat;
       if (!k) return;
-      if (!leasingByVeh[k]) leasingByVeh[k] = { count: 0, total: 0, lastDate: '', lastFile: null };
+      if (!leasingByVeh[k]) leasingByVeh[k] = { count: 0, total: 0, lastDate: '', lastFile: null, amounts: [] };
       leasingByVeh[k].count++;
       leasingByVeh[k].total += (f.montantTTC || 0);
+      if (f.montantTTC > 0) leasingByVeh[k].amounts.push(f.montantTTC);
       if ((f.date || '') > leasingByVeh[k].lastDate) { leasingByVeh[k].lastDate = f.date || ''; leasingByVeh[k].lastFile = f; }
     });
     leasingImmats = new Set([
@@ -298,6 +299,21 @@
     ]);
   }
   rebuildLeasingData();
+
+  // Mensualité FIXE estimée = médiane des factures leasing importées (robuste à une 1re facture
+  // gonflée par des frais de dossier). Les montants ne changent pas → médiane = vraie mensualité.
+  function median(arr) {
+    if (!arr || !arr.length) return null;
+    const s = arr.slice().sort((a, b) => a - b); const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+  function mensualiteFixe(immat) { const a = leasingByVeh[immat]; return a ? median(a.amounts) : null; }
+  // Nb de mensualités THÉORIQUES = mois écoulés depuis le début du contrat (plafonné à la durée).
+  function moisTheoriques(l) {
+    if (!l || !l.debut || isNaN(l.debut)) return null;
+    if (l.debut > new Date()) return 0;               // contrat pas encore démarré
+    return Math.min(l.dureeMois, Math.floor(l.moisEcoules) + 1);
+  }
 
   let leasingSearch = '';
 
@@ -312,11 +328,8 @@
     let mensTotal = 0;
     let countWithCost = 0;
     leasingImmats.forEach(immat => {
-      const agg = leasingByVeh[immat];
-      if (agg && agg.count > 0) {
-        const moy = agg.total / agg.count;
-        if (moy > 0) { mensTotal += moy; countWithCost++; }
-      }
+      const moy = mensualiteFixe(immat);
+      if (moy > 0) { mensTotal += moy; countWithCost++; }
     });
     $('kpi-mens-leasing').textContent = FP.euro(mensTotal);
     $('kpi-annuel').textContent = FP.euro(mensTotal * 12 + assurPrime()); // leasing + prime assurance
@@ -442,7 +455,7 @@
     const rows = [...leasingImmats]
       .map(immat => {
         const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
-        return { v, agg: leasingByVeh[immat] || { count: 0, total: 0, lastDate: '', lastFile: null } };
+        return { v, agg: leasingByVeh[immat] || { count: 0, total: 0, lastDate: '', lastFile: null, amounts: [] } };
       })
       .filter(({ v }) => !q || FP.norm(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`).includes(q))
       .sort((a,b) => b.agg.total - a.agg.total);
@@ -468,6 +481,12 @@
     tbody.innerHTML = rows.map(({ v, agg }) => {
       const l = FP.leasingInfo(v);
       const projColor = l && l.niveau === 'danger' ? 'color:var(--fp-danger);font-weight:700' : l && l.niveau === 'warn' ? 'color:var(--fp-warn);font-weight:600' : '';
+      // Théorique : mois écoulés × mensualité fixe (les montants ne changent pas).
+      const mens = mensualiteFixe(v.immat);                         // mensualité fixe (médiane des factures)
+      const moisT = moisTheoriques(l);                              // nb de mensualités théoriques
+      const nbMens = (moisT != null) ? moisT : agg.count;
+      const totalTheo = (mens != null && moisT != null) ? mens * moisT : agg.total;
+      const moyMens = (mens != null) ? mens : (agg.count > 0 ? agg.total / agg.count : null);
       return `
       <tr>
         <td class="font-mono font-semibold">${v.immat}</td>
@@ -478,9 +497,9 @@
         <td style="${projColor}">${l && l.projectionFin !== null ? '~' + FP.num(l.projectionFin) + ' km' : '<span class="text-slate-400">—</span>'}</td>
         <td>${statutKm(l)}</td>
         <td>${finContratCell(l)}</td>
-        <td>${agg.count}</td>
-        <td class="font-semibold">${agg.total > 0 ? FP.euroPrecis(agg.total) : '<span class="text-slate-400">—</span>'}</td>
-        <td>${agg.count > 0 ? FP.euroPrecis(agg.total / agg.count) : '<span class="text-slate-400">—</span>'}</td>
+        <td>${nbMens}${(moisT != null && agg.count !== moisT) ? `<br><span class="text-xs text-slate-400">${agg.count} facturée${agg.count > 1 ? 's' : ''}</span>` : ''}</td>
+        <td class="font-semibold">${totalTheo > 0 ? FP.euroPrecis(totalTheo) : '<span class="text-slate-400">—</span>'}</td>
+        <td>${moyMens != null && moyMens > 0 ? FP.euroPrecis(moyMens) : '<span class="text-slate-400">—</span>'}</td>
         <td>${agg.lastFile ? `<a href="https://drive.google.com/file/d/${agg.lastFile.fileId}/view" target="_blank" rel="noopener" class="text-xs hover:underline" style="color: var(--fp-accent)">${FP.date(agg.lastDate)} <i data-lucide="external-link" class="w-3 h-3 inline"></i></a>` : '<span class="text-slate-400">—</span>'}</td>
         <td><button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}" title="Modifier le forfait du contrat"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></td>
       </tr>`;
@@ -507,8 +526,11 @@
       vehicules.forEach(v => out.push({ section: 'Assurance', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: 'SWISSLIFE 011165247/0599', detail: 'Police flotte', cout: '' }));
       leasingImmats.forEach(immat => {
         const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
-        const agg = leasingByVeh[immat] || { count: 0, total: 0 };
-        out.push({ section: 'Leasing', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: 'BPCE Car Lease', detail: `${agg.count} mensualités payées`, cout: agg.total });
+        const agg = leasingByVeh[immat] || { count: 0, total: 0, amounts: [] };
+        const l = FP.leasingInfo(v); const mens = mensualiteFixe(immat); const moisT = moisTheoriques(l);
+        const nbMens = (moisT != null) ? moisT : agg.count;
+        const totalTheo = (mens != null && moisT != null) ? mens * moisT : agg.total;
+        out.push({ section: 'Leasing', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: 'BPCE Car Lease', detail: `${nbMens} mensualités (théorique)`, cout: totalTheo });
       });
       return out;
     },
