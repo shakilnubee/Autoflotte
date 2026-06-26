@@ -394,6 +394,9 @@
   // alors que data.js la stocke en CHAÎNE ("2026"). On compare donc toujours via String().
   // Si `annee` est absente, on retombe sur l'année de la date.
   const anneeOf = (a) => { const y = a && a.annee; return (y === 0 || y) ? String(y) : ((a && a.date) || '').slice(0, 4); };
+  // ⚠️ Échappement HTML — DÉFINI TÔT car utilisé dès l'init (rebuildMotifFilter, motifPill…).
+  // S'il était déclaré plus bas (const = TDZ), l'appel à l'init plantait toute la page.
+  const escAmende = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const DEFAULT_DATE_FROM = '2026-01-01'; // par défaut, on n'affiche que les amendes à partir du 01/01/2026
   const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false };
   const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
@@ -558,10 +561,7 @@
     if (state.motifCat !== 'all') actifs.push((CAT_META[state.motifCat] || {}).label || state.motifCat);
     if (state.statut !== 'all') actifs.push(state.statut);
     if (state.dateFrom || state.dateTo) actifs.push(`${state.dateFrom ? FP.date(state.dateFrom) : '…'} → ${state.dateTo ? FP.date(state.dateTo) : '…'}`);
-    const _soc = (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return '?'; } })();
-    const _tot = (data.amendes || []).length;
-    const _diag = `société : ${_soc} · ${_tot} amende(s) en mémoire`;
-    $('sum-context').textContent = (actifs.length ? '🔎 ' + actifs.join(' · ') + ' · ' : '') + _diag;
+    $('sum-context').textContent = actifs.length ? '🔎 ' + actifs.join(' · ') : '';
 
     // Drill-down : qui sont les collaborateurs (par légende) ?
     const drill = $('drill-info');
@@ -590,14 +590,6 @@
 
   function renderTable() {
     const allRows = sortRows(filtered());
-    // === DIAGNOSTIC TEMP : pourquoi 0 affichées alors que X chargées ? ===
-    try {
-      const A = data.amendes || [];
-      const passAnnee = A.filter(a => anneeOf(a) === '2026').length;
-      const passDate  = A.filter(a => !(state.dateFrom && (a.date || '') < state.dateFrom)).length;
-      console.log('[AMENDES DIAG] total=' + A.length + ' | passe annee2026=' + passAnnee + ' | passe date>=' + state.dateFrom + '=' + passDate + ' | voirTout=' + state.voirTout + ' | affichées=' + allRows.length);
-      if (A[0]) console.log('[AMENDES DIAG] exemple amende #1 :', JSON.stringify({ id: A[0].id, annee: A[0].annee, typeAnnee: typeof A[0].annee, date: A[0].date, statut: A[0].statut }));
-    } catch (e) { console.log('[AMENDES DIAG] err', e); }
     renderSummary(allRows);
     const tbody = $('amendes-tbody');
     const empty = $('empty-state');
@@ -1280,7 +1272,7 @@
   }
 
   // ---------- Majoration : rattacher une majoration à l'amende d'origine ----------
-  const escAmende = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // (escAmende est défini tout en haut du script — utilisé dès l'init.)
   // Montant réellement dû : si l'amende a été majorée, c'est le montant majoré
   function montantDu(a) { return (a && a.majoree && a.montantMajore) ? Number(a.montantMajore) : (Number(a && a.montant) || 0); }
   function amendeLabel(a) {
