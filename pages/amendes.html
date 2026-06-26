@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260626h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260626i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260626h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260626i">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -36,6 +36,12 @@
   .podium-tag { display: inline-flex; align-items: center; padding: .12rem .45rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; white-space: nowrap; }
   .av-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: av-spin .7s linear infinite; }
   @keyframes av-spin { to { transform: rotate(360deg); } }
+  /* Actions rapides au survol d'une ligne (payer / copier n° / ouvrir) */
+  #amendes-tbody tr { position: relative; }
+  .row-actions { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; gap: 4px; align-items: center; background: rgba(255,255,255,.97); padding: 3px 5px; border: 1px solid var(--fp-border); border-radius: 9px; box-shadow: 0 6px 16px -8px rgba(15,30,61,.35); z-index: 3; }
+  #amendes-tbody tr:hover .row-actions { display: inline-flex; }
+  .ra-btn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--fp-border); border-radius: 7px; background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  .ra-btn:hover { background: var(--fp-primary); color: white; border-color: var(--fp-primary); }
 </style>
 <script>
 (function(){
@@ -381,10 +387,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260626h"></script>
-<script src="../assets/js/supabase-client.js?v=20260626h"></script>
-<script src="../assets/js/data.js?v=20260626h"></script>
-<script src="../assets/js/app.js?v=20260626h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260626i"></script>
+<script src="../assets/js/supabase-client.js?v=20260626i"></script>
+<script src="../assets/js/data.js?v=20260626i"></script>
+<script src="../assets/js/app.js?v=20260626i"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -627,12 +633,18 @@
       empty.classList.add('hidden');
       const visible = amendesEditor ? amendesEditor.getVisibleColumns() : AMENDES_COLUMNS.map(c => c.key);
       tbody.innerHTML = rows.map(a => {
-        const cells = visible.map(k => {
+        const cellsArr = visible.map(k => {
           const def = AMENDES_COLUMNS.find(c => c.key === k);
           if (!def) return '<td></td>';
           return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''} data-col="${k}">${def.render(a)}</td>`;
-        }).join('');
-        return `<tr class="cursor-pointer" data-id="${a.id}">${cells}</tr>`;
+        });
+        // Barre d'actions rapides (apparait au survol) injectee dans la derniere cellule
+        const ra = `<div class="row-actions">`
+          + ((a.statut !== 'payée' && a.statut !== 'désignée') ? `<button type="button" class="ra-btn" data-ra="pay" title="Marquer payée"><i data-lucide="check" class="w-4 h-4"></i></button>` : '')
+          + (a.numeroAvis ? `<button type="button" class="ra-btn" data-ra="copy" title="Copier le n° d'avis"><i data-lucide="copy" class="w-4 h-4"></i></button>` : '')
+          + `<button type="button" class="ra-btn" data-ra="open" title="Ouvrir la fiche"><i data-lucide="square-arrow-out-up-right" class="w-4 h-4"></i></button></div>`;
+        if (cellsArr.length) cellsArr[cellsArr.length - 1] = cellsArr[cellsArr.length - 1].replace(/<\/td>$/, ra + '</td>');
+        return `<tr class="cursor-pointer" data-id="${a.id}">${cellsArr.join('')}</tr>`;
       }).join('');
     }
     // Bouton déplier / replier
@@ -1899,6 +1911,17 @@
   let _amClickTimer = null;
   $('amendes-tbody').addEventListener('click', e => {
     if (e.target.closest('.cell-edit, select')) return;
+    // Actions rapides au survol : interceptees AVANT l'ouverture du tiroir
+    const ra = e.target.closest('[data-ra]');
+    if (ra) {
+      e.stopPropagation();
+      const row = ra.closest('tr[data-id]'); if (!row) return;
+      const id = row.dataset.id, act = ra.dataset.ra;
+      if (act === 'open') openDrawer(id);
+      else if (act === 'copy') { const am = data.amendes.find(x => x.id === id); copierTexte(am && am.numeroAvis, ra); }
+      else if (act === 'pay') { state.currentId = id; markPaid(); }
+      return;
+    }
     const tr = e.target.closest('tr[data-id]');
     if (!tr) return;
     const td = e.target.closest('td[data-col]');
