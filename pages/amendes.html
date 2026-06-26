@@ -911,11 +911,11 @@
 
       <div>
         <div class="field-label">Paiement en ligne</div>
-        <div class="grid grid-cols-2 gap-3 text-sm">
+        <div class="grid grid-cols-1 gap-3 text-sm">
           <div>
             <div class="text-xs text-slate-400 mb-0.5">N° de télépaiement</div>
             <div class="flex items-center gap-1">
-              <div id="am-tel-val" class="flex-1 min-w-0 font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour saisir / modifier">${fmtTel(a.numeroTelepaiement) || '<span class="text-slate-400">— ajouter</span>'}</div>
+              <div id="am-tel-val" class="flex-1 min-w-0 font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" style="word-break:break-all" title="Cliquer pour saisir / modifier">${fmtTel(a.numeroTelepaiement) || '<span class="text-slate-400">— ajouter</span>'}</div>
               ${a.numeroTelepaiement ? `<button type="button" id="am-tel-copy" class="btn btn-outline !p-2 flex-shrink-0" title="Copier le n° de télépaiement"><i data-lucide="copy" class="w-4 h-4"></i></button>` : ''}
             </div>
           </div>
@@ -1715,7 +1715,13 @@
           // pour que fmtNumeroAvis l'affiche "26 1 163 072 245 37" (cle incluse, espaces conserves).
           if (parsed.numeroAvis && parsed.cle) {
             const _ad = String(parsed.numeroAvis).replace(/\D/g, ''), _cd = String(parsed.cle).replace(/\D/g, '');
-            if (_ad.length === 12 && _cd.length === 2) parsed.numeroAvis = fmtNumeroAvis(_ad + _cd);
+            if (_ad.length === 12 && _cd.length === 2) {           // FPS
+              // N° de telepaiement COMPLET = prefixe (~14 ch.) + numero d'avis groupe (12 ch.) ;
+              // l'IA ne capte souvent que le prefixe -> on recompose le numero entier.
+              const _tp = String(parsed.numeroTelepaiement || '').replace(/\D/g, '');
+              if (_tp && !_tp.includes(_ad)) parsed.numeroTelepaiement = _tp + _ad;
+              parsed.numeroAvis = fmtNumeroAvis(_ad + _cd);        // "26 1 163 072 245 37"
+            }
           }
         }
       } catch (e) { console.warn('[amende IA]', e); }
