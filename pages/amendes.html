@@ -233,7 +233,7 @@
       </div>
       <div id="empty-state" class="hidden p-12 text-center">
         <i data-lucide="ticket-x" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
-        <p class="text-slate-500 text-sm">Aucune amende ne correspond aux filtres.</p>
+        <p class="text-slate-500 text-sm" id="empty-msg">Aucune amende ne correspond aux filtres.</p>
       </div>
     </div>
 
@@ -595,6 +595,20 @@
     if (allRows.length === 0) {
       tbody.innerHTML = '';
       empty.classList.remove('hidden');
+      // Message parlant : distingue "aucune donnée chargée" de "filtrée par année/filtres"
+      const msg = $('empty-msg');
+      if (msg) {
+        const total = (data.amendes || []).length;
+        const en2026 = (data.amendes || []).filter(a => anneeOf(a) === '2026').length;
+        if (total === 0) {
+          msg.innerHTML = '⚠️ <b>0 amende chargée</b> depuis la base (le tableau est vide côté données, pas un filtre). Préviens Claude.';
+        } else if (en2026 === 0) {
+          const annees = [...new Set((data.amendes || []).map(a => anneeOf(a)).filter(Boolean))].sort().join(', ');
+          msg.innerHTML = `ℹ️ <b>${total} amende(s) chargée(s)</b> mais aucune en 2026. Années présentes : <b>${annees || '—'}</b>. (Clique « Tout voir » pour les afficher.)`;
+        } else {
+          msg.textContent = 'Aucune amende ne correspond aux filtres.';
+        }
+      }
     } else {
       empty.classList.add('hidden');
       const visible = amendesEditor ? amendesEditor.getVisibleColumns() : AMENDES_COLUMNS.map(c => c.key);
