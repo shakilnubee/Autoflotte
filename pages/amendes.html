@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626n">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626o">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260626n"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260626o"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260626n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260626o">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -50,6 +50,15 @@
   /* #6 : nom du conducteur cliquable pour filtrer */
   .lien-cond { cursor: pointer; text-decoration: underline dotted transparent; text-underline-offset: 2px; }
   .lien-cond:hover { color: var(--fp-accent); text-decoration-color: var(--fp-accent); }
+  /* #7 : sélection multiple */
+  .am-bulk-bar { display: none; align-items: center; gap: .75rem; padding: .6rem .9rem; border-radius: .65rem; background: var(--fp-primary); color: #fff; margin-bottom: .75rem; flex-wrap: wrap; }
+  .am-bulk-bar.active { display: flex; }
+  .am-bulk-btn { padding: .35rem .7rem; border-radius: .45rem; font-weight: 600; display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
+  .am-bulk-btn:hover { background: rgba(255,255,255,.12); }
+  .am-bulk-btn.danger { color: #FCA5A5; } .am-bulk-btn.danger:hover { background: rgba(220,38,38,.25); color: #FEE2E2; }
+  .am-cb { width: 15px; height: 15px; cursor: pointer; accent-color: var(--fp-accent); vertical-align: middle; margin-right: .55rem; flex-shrink: 0; }
+  #amendes-tbody tr.row-selected td { box-shadow: inset 0 0 0 9999px rgba(249,115,22,.06); }
+  #amendes-tbody tr.row-selected td:first-child { box-shadow: inset 3px 0 0 var(--fp-accent), inset 0 0 0 9999px rgba(249,115,22,.06); }
 </style>
 <script>
 (function(){
@@ -238,6 +247,17 @@
     <!-- Drill-down : collaborateurs par légende (motif) -->
     <div id="drill-info" class="card p-4 mb-4 hidden"></div>
 
+    <!-- #7 : barre d'actions groupées (sélection multiple) -->
+    <div class="am-bulk-bar" id="am-bulk-bar">
+      <span class="font-semibold text-sm"><span id="am-bulk-count">0</span> amende(s) sélectionnée(s)</span>
+      <div class="flex items-center gap-1 flex-wrap" style="margin-left:auto">
+        <button type="button" class="am-bulk-btn" id="am-bulk-pay"><i data-lucide="check" class="w-3.5 h-3.5"></i> Marquer payées</button>
+        <button type="button" class="am-bulk-btn" id="am-bulk-unpay"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Marquer non payées</button>
+        <button type="button" class="am-bulk-btn danger" id="am-bulk-delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>
+        <button type="button" class="am-bulk-btn" id="am-bulk-clear"><i data-lucide="x" class="w-3.5 h-3.5"></i> Désélectionner</button>
+      </div>
+    </div>
+
     <!-- Tableau amendes -->
     <div class="card overflow-hidden">
       <div class="scrollable">
@@ -399,10 +419,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260626n"></script>
-<script src="../assets/js/supabase-client.js?v=20260626n"></script>
-<script src="../assets/js/data.js?v=20260626n"></script>
-<script src="../assets/js/app.js?v=20260626n"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260626o"></script>
+<script src="../assets/js/supabase-client.js?v=20260626o"></script>
+<script src="../assets/js/data.js?v=20260626o"></script>
+<script src="../assets/js/app.js?v=20260626o"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -426,7 +446,7 @@
     return `<iframe src="${url}" loading="lazy" style="${box}height:420px" title="Aperçu du document"></iframe>`;
   }
   const DEFAULT_DATE_FROM = '2026-01-01'; // par défaut, on n'affiche que les amendes à partir du 01/01/2026
-  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false };
+  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false, selectedIds: new Set() };
   const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
   const $ = (id) => document.getElementById(id);
 
@@ -634,6 +654,14 @@
     }
   }
 
+  // #7 : barre de sélection multiple (affichée quand ≥1 amende cochée)
+  function updateBulkBar() {
+    const bar = $('am-bulk-bar'); if (!bar) return;
+    const n = state.selectedIds.size;
+    bar.classList.toggle('active', n > 0);
+    const c = $('am-bulk-count'); if (c) c.textContent = n;
+  }
+
   let drawerOrder = []; // ordre courant (filtré + trié) pour la navigation ‹ › dans le tiroir
   function renderTable() {
     saveFilters(); // #8 : mémorise le filtre/tri courant
@@ -679,12 +707,16 @@
           + (a.numeroAvis ? `<button type="button" class="ra-btn" data-ra="copy" title="Copier le n° d'avis"><i data-lucide="copy" class="w-4 h-4"></i></button>` : '')
           + `<button type="button" class="ra-btn" data-ra="open" title="Ouvrir la fiche"><i data-lucide="square-arrow-out-up-right" class="w-4 h-4"></i></button></div>`;
         if (cellsArr.length) cellsArr[cellsArr.length - 1] = cellsArr[cellsArr.length - 1].replace(/<\/td>$/, ra + '</td>');
+        // #7 : case à cocher de sélection en tête de la 1re cellule
+        const sel = state.selectedIds.has(a.id);
+        if (cellsArr.length) cellsArr[0] = cellsArr[0].replace(/^(<td[^>]*>)/, `$1<input type="checkbox" class="am-cb" data-id="${a.id}"${sel ? ' checked' : ''} title="Sélectionner" />`);
         // Couleur de ligne selon le statut
         const stc = a.statut === 'payée' ? 'row-paid'
           : a.statut === 'contestée' ? 'row-contested'
           : (a.statut === 'à payer' && a.date && (Date.now() - new Date(a.date)) / 86400000 > 30) ? 'row-overdue' : '';
-        return `<tr class="cursor-pointer ${stc}" data-id="${a.id}">${cellsArr.join('')}</tr>`;
+        return `<tr class="cursor-pointer ${stc}${sel ? ' row-selected' : ''}" data-id="${a.id}">${cellsArr.join('')}</tr>`;
       }).join('');
+      updateBulkBar();
     }
     // Bouton déplier / replier
     const moreBtn = $('table-more');
@@ -1983,8 +2015,37 @@
   const AM_EDITABLE = { date: 'date', annee: 'text', prenom: 'text', motif: 'text', montant: 'number', points: 'number', numeroAvis: 'text', statut: 'select', commentaire: 'text' };
   const AM_STATUTS = ['à payer', 'payée', 'contestée'];
   let _amClickTimer = null;
+  // #7 : cocher / décocher une amende (ne pas ouvrir la fiche)
+  $('amendes-tbody').addEventListener('change', e => {
+    const cb = e.target.closest('.am-cb'); if (!cb) return;
+    const id = cb.dataset.id;
+    if (cb.checked) state.selectedIds.add(id); else state.selectedIds.delete(id);
+    const tr = cb.closest('tr'); if (tr) tr.classList.toggle('row-selected', cb.checked);
+    updateBulkBar();
+  });
+  function bulkStatut(st) {
+    const ids = [...state.selectedIds]; if (!ids.length) return;
+    FP.history.commit();
+    ids.forEach(id => { const a = data.amendes.find(x => x.id === id); if (!a) return; a.statut = st; if (st === 'à payer') a.archived = false; FP.persist.update('amendes', id, st === 'à payer' ? { statut: 'à payer', archived: false } : { statut: 'payée' }); });
+    const n = ids.length; state.selectedIds.clear();
+    renderKPIs(); renderTable(); renderCharts();
+    if (FP.toast) FP.toast(`✓ ${n} amende(s) → ${st === 'payée' ? 'payées' : 'à payer'}`);
+  }
+  $('am-bulk-pay').addEventListener('click', () => bulkStatut('payée'));
+  $('am-bulk-unpay').addEventListener('click', () => bulkStatut('à payer'));
+  $('am-bulk-delete').addEventListener('click', () => {
+    const ids = [...state.selectedIds]; if (!ids.length) return;
+    if (!confirm(`Supprimer ${ids.length} amende(s) ? (annulable avec Ctrl+Z)`)) return;
+    FP.history.commit();
+    ids.forEach(id => { const i = data.amendes.findIndex(x => x.id === id); if (i >= 0) data.amendes.splice(i, 1); FP.persist.delete('amendes', id); });
+    const n = ids.length; state.selectedIds.clear();
+    renderKPIs(); renderTable(); renderCharts();
+    if (FP.toast) FP.toast(`🗑 ${n} amende(s) supprimée(s)`);
+  });
+  $('am-bulk-clear').addEventListener('click', () => { state.selectedIds.clear(); renderTable(); });
+
   $('amendes-tbody').addEventListener('click', e => {
-    if (e.target.closest('.cell-edit, select')) return;
+    if (e.target.closest('.cell-edit, select, .am-cb')) return;
     // Actions rapides au survol : interceptees AVANT l'ouverture du tiroir
     // #6 : clic sur le nom du conducteur -> filtre ses amendes (n'ouvre pas la fiche)
     const lc = e.target.closest('.lien-cond');
