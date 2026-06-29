@@ -95,31 +95,49 @@ document.addEventListener('keydown', (e) => {
   if (closed) e.stopPropagation();
 });
 
-// Garde GLOBAL (toutes les pages + futures) : un CLIC EN DEHORS ferme la zone flottante
-// ouverte (menu déroulant, popover, résultats de recherche), exactement comme ÉCHAP.
-// (Les tiroirs/modales se ferment déjà via leur fond sombre « backdrop » sur chaque page.)
-// Astuce robuste : on mémorise au mousedown les zones DÉJÀ ouvertes, pour ne JAMAIS
-// refermer une zone que CE clic vient justement d'ouvrir (sinon le menu clignote).
+// Garde GLOBAL (toutes les pages + futures) : un CLIC EN DEHORS ferme la zone ouverte
+// (tiroir/fiche, fenêtre modale, menu déroulant, popover, résultats de recherche),
+// EXACTEMENT comme ÉCHAP. Astuce robuste : on mémorise au mousedown les zones DÉJÀ
+// ouvertes, pour ne JAMAIS refermer une zone que CE clic vient justement d'ouvrir
+// (sinon le menu clignote / se rouvre).
 (function () {
   const FLOAT_SEL = '.hidden-cols-popover.open, .fp-hidden-cols-popover.open, .popover.open, .fp-popover.open, .fp-menu, #soc-menu, #mobile-menu, [id$="-menu"], [id$="-popover"]';
   const isVisible = (el) => el && !el.classList.contains('hidden')
     && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
-  function openFloats() {
+  function openZones() {
     const out = [];
-    document.querySelectorAll(FLOAT_SEL).forEach(el => { if (isVisible(el) && !out.includes(el)) out.push(el); });
+    const push = (el, type) => { if (el && !out.some(o => o.el === el)) out.push({ el, type }); };
+    document.querySelectorAll('.drawer.open').forEach(el => push(el, 'drawer'));
+    document.querySelectorAll('.modal-backdrop.open, [id$="-modal"], [id$="-backdrop"]').forEach(el => {
+      if (el.classList.contains('drawer-backdrop')) return; // géré avec le tiroir
+      if (isVisible(el) && (el.classList.contains('open') || getComputedStyle(el).display === 'flex')) push(el, 'modal');
+    });
+    document.querySelectorAll(FLOAT_SEL).forEach(el => { if (isVisible(el)) push(el, 'float'); });
     document.querySelectorAll('.fp-search-results').forEach(el => {
-      if (el.style.display !== 'none' && (el.innerHTML || '').trim() && !out.includes(el)) out.push(el);
+      if (el.style.display !== 'none' && (el.innerHTML || '').trim()) push(el, 'search');
     });
     return out;
   }
   let openAtDown = [];
-  document.addEventListener('mousedown', () => { openAtDown = openFloats(); }, true);
+  document.addEventListener('mousedown', () => { openAtDown = openZones(); }, true);
   document.addEventListener('click', (e) => {
     if (!openAtDown.length) return;
     const snap = openAtDown; openAtDown = [];
-    snap.forEach(el => {
-      if (el.contains(e.target)) return;           // clic À L'INTÉRIEUR de la zone : on garde
-      if (el.classList.contains('fp-search-results')) { el.innerHTML = ''; el.style.display = 'none'; return; }
+    const t = e.target;
+    snap.forEach(({ el, type }) => {
+      if (type === 'drawer') {
+        if (el.contains(t)) return;                 // clic DANS la fiche : on garde
+        if (t.closest('.modal-backdrop.open, [id$="-modal"]')) return; // une modale par-dessus la fiche
+        el.classList.remove('open');
+        document.querySelectorAll('.drawer-backdrop').forEach(bd => bd.classList.remove('open'));
+        return;
+      }
+      if (type === 'modal') {
+        if (t === el) { el.classList.add('hidden'); el.classList.remove('open'); if (el.style && el.style.display) el.style.display = 'none'; }
+        return;                                     // clic dans le panneau : on garde
+      }
+      if (el.contains(t)) return;                   // clic À L'INTÉRIEUR de la zone : on garde
+      if (type === 'search') { el.innerHTML = ''; el.style.display = 'none'; return; }
       el.classList.add('hidden'); el.classList.remove('open', 'show');
     });
   }, false);
