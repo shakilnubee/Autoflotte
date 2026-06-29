@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Factures — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626t">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626u">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260626t"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260626u"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260626t">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260626u">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -27,6 +27,12 @@
   .drawer.open { transform: translateX(0); }
   /* #1 : zone d'import en surbrillance pendant le glisser-déposer */
   #fa-trigger.drag-over, #tf-import-trigger.drag-over, #uls-import-trigger.drag-over { border-color: var(--fp-accent); background: rgba(20,184,166,.12); }
+  /* #5 : actions rapides au survol d'une ligne facture */
+  #factures-tbody tr { position: relative; }
+  #factures-tbody .row-actions { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; gap: 4px; align-items: center; background: rgba(255,255,255,.97); padding: 3px 5px; border: 1px solid var(--fp-border); border-radius: 9px; box-shadow: 0 6px 16px -8px rgba(15,30,61,.35); z-index: 3; }
+  #factures-tbody tr:hover .row-actions { display: inline-flex; }
+  #factures-tbody .ra-btn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--fp-border); border-radius: 7px; background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  #factures-tbody .ra-btn:hover { background: var(--fp-primary); color: white; border-color: var(--fp-primary); }
   .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
   .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
@@ -571,10 +577,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260626t"></script>
-<script src="../assets/js/supabase-client.js?v=20260626t"></script>
-<script src="../assets/js/data.js?v=20260626t"></script>
-<script src="../assets/js/app.js?v=20260626t"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260626u"></script>
+<script src="../assets/js/supabase-client.js?v=20260626u"></script>
+<script src="../assets/js/data.js?v=20260626u"></script>
+<script src="../assets/js/app.js?v=20260626u"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -708,12 +714,17 @@
         } else { more.classList.add('hidden'); more.innerHTML = ''; }
       }
       tbody.innerHTML = shown.map(f => {
-        const cells = visible.map(k => {
+        const cellsArr = visible.map(k => {
           const def = FACTURES_COLUMNS.find(c => c.key === k);
           if (!def) return '<td></td>';
           return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''} data-col="${k}">${def.render(f)}</td>`;
-        }).join('');
-        return `<tr class="cursor-pointer" data-id="${f.fileId}">${cells}</tr>`;
+        });
+        // #5 : actions rapides au survol (ouvrir + copier le n° de facture)
+        const ra = `<div class="row-actions">`
+          + (f.numeroFacture ? `<button type="button" class="ra-btn" data-ra="copy" title="Copier le n° de facture"><i data-lucide="copy" class="w-4 h-4"></i></button>` : '')
+          + `<button type="button" class="ra-btn" data-ra="open" title="Ouvrir la fiche"><i data-lucide="square-arrow-out-up-right" class="w-4 h-4"></i></button></div>`;
+        if (cellsArr.length) cellsArr[cellsArr.length - 1] = cellsArr[cellsArr.length - 1].replace(/<\/td>$/, ra + '</td>');
+        return `<tr class="cursor-pointer" data-id="${f.fileId}">${cellsArr.join('')}</tr>`;
       }).join('');
     }
     $('result-count').textContent = `${rows.length} facture${rows.length > 1 ? 's' : ''} affichée${rows.length > 1 ? 's' : ''} sur ${factures.length}`;
@@ -1323,6 +1334,16 @@
   let _faClickTimer = null;
   $('factures-tbody').addEventListener('click', e => {
     if (e.target.closest('.cell-edit, select')) return;
+    // #5 : actions rapides (ouvrir / copier le n°) interceptées avant l'ouverture
+    const ra = e.target.closest('[data-ra]');
+    if (ra) {
+      e.stopPropagation();
+      const row = ra.closest('tr[data-id]'); if (!row) return;
+      const id = row.dataset.id, act = ra.dataset.ra;
+      if (act === 'open') openDrawer(id);
+      else if (act === 'copy') { const f = factures.find(x => x.fileId === id); const num = f && f.numeroFacture; try { if (navigator.clipboard && num) navigator.clipboard.writeText(num); } catch (_) {} if (FP.toast) FP.toast('✓ N° de facture copié'); }
+      return;
+    }
     const tr = e.target.closest('tr[data-id]');
     if (!tr) return;
     const td = e.target.closest('td[data-col]');
