@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Factures — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626s">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626t">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260626s"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260626t"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260626s">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260626t">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -25,6 +25,8 @@
   .type-autre { background: #F1F5F9; color: #475569; }
   .drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 100%; max-width: 600px; background: white; box-shadow: -20px 0 60px -20px rgba(15,30,61,.25); transform: translateX(100%); transition: transform .25s ease; z-index: 60; overflow-y: auto; overflow-x: hidden; }
   .drawer.open { transform: translateX(0); }
+  /* #1 : zone d'import en surbrillance pendant le glisser-déposer */
+  #fa-trigger.drag-over, #tf-import-trigger.drag-over, #uls-import-trigger.drag-over { border-color: var(--fp-accent); background: rgba(20,184,166,.12); }
   .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
   .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
@@ -569,10 +571,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260626s"></script>
-<script src="../assets/js/supabase-client.js?v=20260626s"></script>
-<script src="../assets/js/data.js?v=20260626s"></script>
-<script src="../assets/js/app.js?v=20260626s"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260626t"></script>
+<script src="../assets/js/supabase-client.js?v=20260626t"></script>
+<script src="../assets/js/data.js?v=20260626t"></script>
+<script src="../assets/js/app.js?v=20260626t"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -777,6 +779,17 @@
     });
   }
 
+  // #14 : aperçu intégré du fichier dans la fiche (PDF Drive en /preview, ou image/PDF stocké)
+  function facturePreviewHTML(f) {
+    const id = f && f.fileId; if (!id || /^IMP-/.test(id)) return '';
+    const box = 'width:100%;border:1px solid var(--fp-border);border-radius:.55rem;background:#f8fafc;margin-top:.5rem;';
+    if (/^https?:\/\//.test(id)) {
+      if (/\.(jpe?g|png|webp|gif|bmp)(\?|#|$)/i.test(id)) return `<img src="${id}" loading="lazy" style="${box}max-height:440px;object-fit:contain;display:block">`;
+      return `<iframe src="${id}" loading="lazy" style="${box}height:460px"></iframe>`;
+    }
+    return `<iframe src="https://drive.google.com/file/d/${id}/preview" loading="lazy" style="${box}height:460px"></iframe>`;
+  }
+
   // Drawer
   function openDrawer(fileId) {
     const f = factures.find(x => x.fileId === fileId);
@@ -816,6 +829,7 @@
       <div>
         <div class="field-label">Fichier source</div>
         <div class="text-sm bg-slate-50 p-3 rounded-lg break-all">${f.fileName || '—'}</div>
+        ${facturePreviewHTML(f)}
       </div>
     `;
     const oc = (id, fn) => { const el = $(id); if (el) el.onclick = () => fn(el); };
@@ -1224,6 +1238,14 @@
   $('facture-form').addEventListener('submit', saveFacture);
   $('fa-trigger').addEventListener('click', () => $('fa-file').click());
   $('fa-file').addEventListener('change', (e) => { const file = e.target.files && e.target.files[0]; _faFileName = file ? file.name : ''; _faFile = file || null; handleFacture(file); e.target.value = ''; });
+  // #1 : glisser-déposer un PDF/photo sur la zone d'import de facture
+  (function(){
+    const z = $('fa-trigger'); if (!z) return;
+    const stop = e => { e.preventDefault(); e.stopPropagation(); };
+    ['dragenter', 'dragover'].forEach(ev => z.addEventListener(ev, e => { stop(e); z.classList.add('drag-over'); }));
+    z.addEventListener('dragleave', e => { stop(e); z.classList.remove('drag-over'); });
+    z.addEventListener('drop', e => { stop(e); z.classList.remove('drag-over'); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) { _faFile = f; _faFileName = f.name; handleFacture(f); } });
+  })();
 
   // ---- Autocomplete maison (fournisseur + plaque), stylé « à notre sauce » ----
   function setupAutocomplete(input, optionsFn){
