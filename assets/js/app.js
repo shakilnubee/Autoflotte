@@ -1240,6 +1240,20 @@ FP.toast = (msg, opts) => {
   return el;
 };
 
+// Avatar « initiales colorées » réutilisable (couleur stable dérivée du nom).
+FP.initiales = (name) => {
+  const parts = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+};
+FP.avatarHTML = (name, size) => {
+  const s = size || 24;
+  const n = String(name == null ? '' : name).trim();
+  let h = 0; for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return `<span class="fp-avatar" aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:${s}px;height:${s}px;border-radius:50%;background:hsl(${hue} 65% 90%);color:hsl(${hue} 55% 35%);font-size:${Math.round(s * 0.42)}px;font-weight:700;flex-shrink:0;line-height:1">${FP.initiales(n)}</span>`;
+};
+
 FP.persist = {
   _QKEY: 'fp_pending_writes',
   available() { return !!(FP.db && FP.supabase); },
