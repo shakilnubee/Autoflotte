@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Contrats — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260627e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260627f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260627e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260627f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260627e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260627f">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -273,10 +273,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260627e"></script>
-<script src="../assets/js/supabase-client.js?v=20260627e"></script>
-<script src="../assets/js/data.js?v=20260627e"></script>
-<script src="../assets/js/app.js?v=20260627e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260627f"></script>
+<script src="../assets/js/supabase-client.js?v=20260627f"></script>
+<script src="../assets/js/data.js?v=20260627f"></script>
+<script src="../assets/js/app.js?v=20260627f"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -655,10 +655,22 @@
   renderLeasing();
 
   // ===== Leasing Localease (Ayvens) — contrats LLD séparés de BPCE =====
+  // Prompt de lecture automatique d'une offre/contrat LLD Ayvens (Localease)
+  const LOCALEASE_PROMPT = [
+    "Lis ce contrat / offre de Location Longue Duree (LLD) Ayvens (ex Localease) de vehicule.",
+    "Renvoie UNIQUEMENT un objet JSON valide, sans texte autour, avec ces cles (mets null si absent) :",
+    "loyerTTC : le LOYER MENSUEL total TTC (par mois), nombre a point decimal (ex 414.71). C'est le loyer global incluant services, PAS le seul loyer financier.",
+    "dureeMois : la duree du contrat en mois (ex 25).",
+    "kmTotal : le kilometrage TOTAL du contrat (ex 50000 ; '50.000 km' -> 50000).",
+    "co2 : les grammes de CO2 par km (ex 126).",
+    "malus : le malus ecologique en euros TTC s'il est present (ex 1130), sinon 0.",
+    "offre : le numero d'offre (souvent 'Offre N°', ex 26AV048026).",
+    "conducteur : le prenom ou nom du conducteur/societe s'il est indique."
+  ];
   const LOCALEASE_DEFAUT = [
     { conducteur:'Mégane', marque:'Hyundai', modele:'Kona Hybrid 138',   dureeMois:25, kmTotal:40000, loyerTTC:263.62, offre:'26AV048044', co2:104 },
-    { conducteur:'Ambre',  marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:40000, loyerTTC:386.77, offre:'26AV048023', co2:126, malus:1130 },
-    { conducteur:'Ahmed',  marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:60000, loyerTTC:463.75, offre:'26AV048026', co2:126, malus:1130 },
+    { conducteur:'Ambre',  marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:40000, loyerTTC:386.77, offre:'26AV048023', co2:126, malus:1130, immat:'HL-729-CD' },
+    { conducteur:'Ahmed',  marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:60000, loyerTTC:463.75, offre:'26AV048026', co2:126, malus:1130, immat:'HL-724-CD' },
     { conducteur:'Samira', marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:50000, loyerTTC:414.71, offre:'26MI086362', co2:126, malus:1130 },
     { conducteur:'David',  marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:50000, loyerTTC:414.71, offre:'26MI086362', co2:126, malus:1130 },
     // Offre 26AV048042 = 2 véhicules identiques (Kona), pas encore nominatifs → 2 lignes
@@ -676,6 +688,12 @@
     // Ajoute les contrats par défaut manquants (clé = offre+conducteur), sans écraser ce qui est saisi
     LOCALEASE_DEFAUT.forEach(def => {
       if (!list.some(c => c.offre === def.offre && c.conducteur === def.conducteur)) { list.push({ ...def }); changed = true; }
+    });
+    // Backfill : applique la plaque du défaut sur un contrat déjà enregistré qui n'en a pas encore
+    LOCALEASE_DEFAUT.forEach(def => {
+      if (!def.immat) return;
+      const c = list.find(x => x.offre === def.offre && x.conducteur === def.conducteur);
+      if (c && !c.immat) { c.immat = def.immat; changed = true; }
     });
     if (changed) { s.localeaseContrats = list; FP.settings.save(s); }
     return list;
@@ -760,6 +778,25 @@
       const url = await FP.uploadScan(file, 'contrats-leasing');
       if (!url) throw new Error('upload vide');
       const list = getLocalease(); const s = FP.settings.get(); s.localeaseContrats = list; list[i].pdfUrl = url; FP.settings.save(s); renderLocalease();
+      // Lecture automatique du contrat (loyer / durée / km / CO2 / malus / offre) via l'IA
+      if (FP.scanIA) {
+        if (FP.toast) FP.toast('📄 Lecture du contrat en cours…');
+        try {
+          const fields = await FP.scanIA(file, 'leasing', LOCALEASE_PROMPT);
+          if (fields) {
+            const num = v => { if (v == null) return null; const n = parseFloat(String(v).replace(/[\s ]/g, '').replace(',', '.')); return isFinite(n) ? n : null; };
+            const c = list[i]; let maj = [];
+            if (num(fields.loyerTTC) != null) { c.loyerTTC = num(fields.loyerTTC); maj.push('loyer'); }
+            if (num(fields.dureeMois) != null) { c.dureeMois = Math.round(num(fields.dureeMois)); maj.push('durée'); }
+            if (num(fields.kmTotal) != null) { c.kmTotal = Math.round(num(fields.kmTotal)); maj.push('km'); }
+            if (num(fields.co2) != null) { c.co2 = Math.round(num(fields.co2)); maj.push('CO2'); }
+            if (num(fields.malus) != null) { c.malus = num(fields.malus); }
+            if (fields.offre) { c.offre = String(fields.offre).trim(); }
+            const s2 = FP.settings.get(); s2.localeaseContrats = list; FP.settings.save(s2); renderLocalease();
+            if (FP.toast) FP.toast(maj.length ? ('✓ Contrat lu : ' + maj.join(', ') + ' mis à jour') : '✓ Contrat enregistré (rien à mettre à jour)');
+          } else if (FP.toast) { FP.toast('✓ Contrat enregistré (lecture auto indisponible)'); }
+        } catch (e2) { console.warn('[localease scan]', e2); }
+      }
     } catch(err){ console.error('[localease upload]', err); alert('Échec du téléversement du contrat. Réessaie.'); }
   });
   renderLocalease();
