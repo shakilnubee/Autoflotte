@@ -1257,6 +1257,26 @@ FP.avatarHTML = (name, size) => {
   return `<span class="fp-avatar" aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:${s}px;height:${s}px;border-radius:50%;background:hsl(${hue} 65% 90%);color:hsl(${hue} 55% 35%);font-size:${Math.round(s * 0.42)}px;font-weight:700;flex-shrink:0;line-height:1">${FP.initiales(n)}</span>`;
 };
 
+// Liens cliquables RÉUTILISABLES (toute la plateforme) :
+//  • une PLAQUE -> fiche véhicule (vehicules.html?immat=…)
+//  • un PRÉNOM/conducteur -> fiche conducteur (conducteurs.html?cond=…)
+FP._pagePrefix = function () { try { return location.pathname.indexOf('/pages/') !== -1 ? '' : 'pages/'; } catch (e) { return ''; } };
+FP._escLien = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); };
+FP.lienVehicule = function (immat, label) {
+  const im = (immat == null ? '' : String(immat)).trim();
+  const txt = FP._escLien(label != null ? label : im);
+  if (!im) return txt;
+  return `<a class="fp-lien" href="${FP._pagePrefix()}vehicules.html?immat=${encodeURIComponent(im)}" title="Voir la fiche véhicule" onclick="event.stopPropagation()">${txt}</a>`;
+};
+FP.lienConducteur = function (name, label) {
+  const raw = (name == null ? '' : String(name)).trim();
+  const txt = FP._escLien(label != null ? label : raw);
+  const excl = ['', '—', 'x', 'X', 'Siège', 'Dépôt', 'Navette', 'VENDU', 'Fenwick'];
+  if (excl.includes(raw)) return txt;
+  const key = raw.split(/\s+/)[0].toLowerCase();
+  return `<a class="fp-lien" href="${FP._pagePrefix()}conducteurs.html?cond=${encodeURIComponent(key)}" title="Voir la fiche conducteur" onclick="event.stopPropagation()">${txt}</a>`;
+};
+
 // Densité d'affichage : bascule compact/confortable (mémorisée, appliquée partout).
 FP.getDensity = () => { try { return (localStorage.getItem('fp_density') || '') === 'compact' ? 'compact' : 'confort'; } catch (e) { return 'confort'; } };
 FP.setDensity = (compact) => {
