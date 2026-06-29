@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Véhicules — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260627b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260627c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260627b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260627c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260627b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260627c">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -664,11 +664,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260627b"></script>
-<script src="../assets/js/supabase-client.js?v=20260627b"></script>
-<script src="../assets/js/data.js?v=20260627b"></script>
-<script src="../assets/js/fleet-docs.js?v=20260627b"></script>
-<script src="../assets/js/app.js?v=20260627b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260627c"></script>
+<script src="../assets/js/supabase-client.js?v=20260627c"></script>
+<script src="../assets/js/data.js?v=20260627c"></script>
+<script src="../assets/js/fleet-docs.js?v=20260627c"></script>
+<script src="../assets/js/app.js?v=20260627c"></script>
 <script>
   lucide.createIcons();
 
@@ -966,6 +966,7 @@
       if (!def) return '';
       const label = getColLabel(k);
       const SORTABLE = { prochainCT: 1, km: 1 };
+      if (state.groupe !== 'all') SORTABLE.modele = 1; // tri par modèle UNIQUEMENT dans un groupe (pas sur « Tous »)
       const arrow = state.sortKey === k ? (state.sortDir === 'asc' ? '▲' : '▼') : '⇅';
       const sortBtn = SORTABLE[k]
         ? `<button class="ct-sort-btn" data-sort-key="${k}" title="Trier">${arrow}</button>${state.sortKey === k ? `<button class="ct-sort-btn ct-sort-reset" data-sort-reset title="Revenir à l'ordre normal">↺</button>` : ''}`
@@ -1260,15 +1261,20 @@
       if (q && !(FP.norm(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`).includes(q))) return false;
       return true;
     });
-    // Tri par colonne (prioritaire s'il est activé) : échéance CT ou kilométrage
-    if (state.sortKey) {
+    // Tri par colonne (échéance CT, km, ou modèle). ⚠️ Le tri par MODÈLE ne s'applique
+    // QUE dans un groupe précis — sur « Tous » on l'ignore (ordre normal).
+    if (state.sortKey && !(state.sortKey === 'modele' && state.groupe === 'all')) {
       const dir = state.sortDir === 'desc' ? -1 : 1;
       const key = state.sortKey;
-      const valOf = (v) => {
-        if (key === 'prochainCT') { const j = FP.joursRestants(v.prochainCT); return (j === null || j === undefined) ? Infinity : j; }
-        const n = Number(v[key]); return isFinite(n) ? n : Infinity; // sans valeur → à la fin
-      };
-      filteredList.sort((a, b) => { const va = valOf(a), vb = valOf(b); return va === vb ? 0 : (va - vb) * dir; });
+      if (key === 'modele') {
+        filteredList.sort((a, b) => String(a.modele || '').localeCompare(String(b.modele || ''), 'fr', { sensitivity: 'base' }) * dir);
+      } else {
+        const valOf = (v) => {
+          if (key === 'prochainCT') { const j = FP.joursRestants(v.prochainCT); return (j === null || j === undefined) ? Infinity : j; }
+          const n = Number(v[key]); return isFinite(n) ? n : Infinity; // sans valeur → à la fin
+        };
+        filteredList.sort((a, b) => { const va = valOf(a), vb = valOf(b); return va === vb ? 0 : (va - vb) * dir; });
+      }
       return filteredList;
     }
     // Application de l'ordre custom utilisateur si défini (drag-and-drop des lignes)
