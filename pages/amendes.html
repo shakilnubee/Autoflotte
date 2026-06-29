@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626v">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626w">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260626v"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260626w"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260626v">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260626w">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -343,15 +343,16 @@
       <!-- Alerte doublon (affichée tout en haut, en temps réel pendant la saisie) -->
       <div id="am-doublon-banner" class="hidden rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800"></div>
       <!-- Import de l'avis : pré-remplissage automatique des champs -->
+      <div id="av-queue-banner" class="hidden rounded-lg border border-teal-300 bg-teal-50 p-2.5 text-sm text-teal-800 mb-2"></div>
       <div id="av-import">
-        <input type="file" id="av-file" accept="image/*,application/pdf" class="hidden" />
+        <input type="file" id="av-file" accept="image/*,application/pdf" class="hidden" multiple />
         <button type="button" id="av-trigger" class="w-full flex items-center gap-3 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
           <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
             <i data-lucide="scan-line" class="w-5 h-5"></i>
           </span>
           <span class="flex-1">
-            <span class="block text-sm font-semibold text-slate-800">Importer l'avis</span>
-            <span class="block text-xs text-slate-500">Photo ou PDF — les champs lisibles se remplissent tout seuls</span>
+            <span class="block text-sm font-semibold text-slate-800">Importer l'avis (ou plusieurs)</span>
+            <span class="block text-xs text-slate-500">Photo ou PDF — glisse/dépose plusieurs avis pour les enchaîner</span>
           </span>
         </button>
         <div id="av-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
@@ -421,10 +422,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260626v"></script>
-<script src="../assets/js/supabase-client.js?v=20260626v"></script>
-<script src="../assets/js/data.js?v=20260626v"></script>
-<script src="../assets/js/app.js?v=20260626v"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260626w"></script>
+<script src="../assets/js/supabase-client.js?v=20260626w"></script>
+<script src="../assets/js/data.js?v=20260626w"></script>
+<script src="../assets/js/app.js?v=20260626w"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1464,6 +1465,43 @@
 
   // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
   let _avisFile = null; // scan de l'avis sélectionné, envoyé au stockage à l'enregistrement
+  // #4 — Import MULTIPLE : file d'attente d'avis. On enchaîne le formulaire avis par avis.
+  let _avisQueue = [];
+  let _avisQueueTotal = 0;
+  function resetAmendeFormFields() {
+    $('am-prenom').value = ''; $('am-motif').value = ''; $('am-montant').value = '';
+    $('am-points').value = '0'; $('am-date').value = new Date().toISOString().slice(0, 10);
+    $('am-statut').value = 'à payer'; $('am-avis').value = '';
+    $('am-telepaiement').value = ''; $('am-cle').value = '';
+    _avisFile = null; _pointsTouched = false;
+    $('am-etrangere').checked = false; $('am-points').removeAttribute('disabled');
+    $('am-is-majoration').checked = false; $('am-majoration-pick').classList.add('hidden');
+    $('am-doublon-banner').classList.add('hidden');
+  }
+  function updateQueueBanner() {
+    const b = $('av-queue-banner'); if (!b) return;
+    if (_avisQueueTotal <= 1) { b.classList.add('hidden'); b.innerHTML = ''; return; }
+    const courant = _avisQueueTotal - _avisQueue.length; // avis affiché (1-based)
+    b.classList.remove('hidden');
+    b.innerHTML = `📥 Import multiple : avis <b>${courant}</b> / <b>${_avisQueueTotal}</b> — vérifie puis <b>Enregistre</b>. <button type="button" id="av-queue-skip" class="underline ml-1">Passer celui-ci</button>`;
+    const sk = $('av-queue-skip'); if (sk) sk.onclick = () => { if (!loadNextQueued()) { _avisQueueTotal = 0; updateQueueBanner(); } };
+  }
+  function startAvisQueue(files) {
+    _avisQueue = Array.from(files);
+    _avisQueueTotal = _avisQueue.length;
+    loadNextQueued();
+  }
+  function loadNextQueued() {
+    if (!_avisQueue.length) { _avisQueueTotal = 0; updateQueueBanner(); return false; }
+    const file = _avisQueue.shift();
+    resetAmendeFormFields();
+    $('amende-form').classList.remove('hidden');
+    $('am-postsave').classList.add('hidden');
+    _avisFile = file;
+    handleAvis(file);
+    updateQueueBanner();
+    return true;
+  }
   let _pointsTouched = false; // l'utilisateur a-t-il saisi les points à la main ? (sinon on les calcule)
   // Calcule les points retirés à partir du motif choisi (sauf si l'utilisateur les a saisis lui-même)
   function autoPointsFromMotif() {
@@ -1500,7 +1538,7 @@
     setTimeout(() => $('am-prenom').focus(), 50);
     lucide.createIcons();
   }
-  function closeAmendeModal() { $('amende-modal').classList.remove('open'); }
+  function closeAmendeModal() { _avisQueue = []; _avisQueueTotal = 0; const b = $('av-queue-banner'); if (b) { b.classList.add('hidden'); b.innerHTML = ''; } $('amende-modal').classList.remove('open'); }
   // Rattache une majoration à l'amende d'origine (met à jour, ne crée pas de doublon)
   function lierMajoration(parent, montantMaj, dateMaj, numAvisMaj) {
     FP.history.commit();
@@ -1593,6 +1631,15 @@
     renderKPIs(); renderTable(); renderCharts();
     const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
     FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: newA.numeroAvis || null, commentaire: newA.commentaire || null, avisUrl: avisUrl || null });
+    // #4 : import multiple en cours -> on enchaîne sur l'avis suivant (sans l'écran e-mail par avis)
+    if (_avisQueueTotal > 1) {
+      const fait = _avisQueueTotal - _avisQueue.length;
+      if (FP.toast) FP.toast(`✓ Amende enregistrée (${fait}/${_avisQueueTotal})`);
+      if (_avisQueue.length > 0) { loadNextQueued(); return; }
+      _avisQueueTotal = 0; updateQueueBanner(); closeAmendeModal();
+      if (FP.toast) FP.toast('✓ Import multiple terminé');
+      return;
+    }
     showPostSaveMail(newA); // propose d'envoyer l'email au conducteur (sans avoir à rouvrir la fiche)
   }
   // Affiche le panneau d'envoi de mail juste après l'enregistrement d'une amende
@@ -1921,18 +1968,18 @@
   });
   $('av-trigger').addEventListener('click', () => $('av-file').click());
   $('av-file').addEventListener('change', (e) => {
-    const file = e.target.files && e.target.files[0];
-    _avisFile = file || null; // conservé pour l'envoi dans le stockage à l'enregistrement
-    handleAvis(file);
+    const files = e.target.files;
+    if (files && files.length > 1) { startAvisQueue(files); }       // #4 : import multiple
+    else { const file = files && files[0]; _avisFile = file || null; handleAvis(file); }
     e.target.value = ''; // permet de re-sélectionner le même fichier
   });
-  // #1 : glisser-déposer un PDF/photo directement sur la zone d'import
+  // #1 : glisser-déposer un PDF/photo directement sur la zone d'import (un OU plusieurs)
   (function(){
     const zone = $('av-import'); if (!zone) return;
     const stop = e => { e.preventDefault(); e.stopPropagation(); };
     ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => { stop(e); zone.classList.add('drag-over'); }));
     zone.addEventListener('dragleave', e => { stop(e); if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
-    zone.addEventListener('drop', e => { stop(e); zone.classList.remove('drag-over'); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) { _avisFile = f; handleAvis(f); } });
+    zone.addEventListener('drop', e => { stop(e); zone.classList.remove('drag-over'); const files = e.dataTransfer && e.dataTransfer.files; if (!files || !files.length) return; if (files.length > 1) startAvisQueue(files); else { _avisFile = files[0]; handleAvis(files[0]); } });
   })();
   // Case « C'est une majoration » : affiche/masque le choix de l'amende d'origine
   $('am-is-majoration').addEventListener('change', (e) => setMajorationMode(e.target.checked));
