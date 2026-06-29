@@ -95,6 +95,36 @@ document.addEventListener('keydown', (e) => {
   if (closed) e.stopPropagation();
 });
 
+// Garde GLOBAL (toutes les pages + futures) : un CLIC EN DEHORS ferme la zone flottante
+// ouverte (menu déroulant, popover, résultats de recherche), exactement comme ÉCHAP.
+// (Les tiroirs/modales se ferment déjà via leur fond sombre « backdrop » sur chaque page.)
+// Astuce robuste : on mémorise au mousedown les zones DÉJÀ ouvertes, pour ne JAMAIS
+// refermer une zone que CE clic vient justement d'ouvrir (sinon le menu clignote).
+(function () {
+  const FLOAT_SEL = '.hidden-cols-popover.open, .fp-hidden-cols-popover.open, .popover.open, .fp-popover.open, .fp-menu, #soc-menu, #mobile-menu, [id$="-menu"], [id$="-popover"]';
+  const isVisible = (el) => el && !el.classList.contains('hidden')
+    && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
+  function openFloats() {
+    const out = [];
+    document.querySelectorAll(FLOAT_SEL).forEach(el => { if (isVisible(el) && !out.includes(el)) out.push(el); });
+    document.querySelectorAll('.fp-search-results').forEach(el => {
+      if (el.style.display !== 'none' && (el.innerHTML || '').trim() && !out.includes(el)) out.push(el);
+    });
+    return out;
+  }
+  let openAtDown = [];
+  document.addEventListener('mousedown', () => { openAtDown = openFloats(); }, true);
+  document.addEventListener('click', (e) => {
+    if (!openAtDown.length) return;
+    const snap = openAtDown; openAtDown = [];
+    snap.forEach(el => {
+      if (el.contains(e.target)) return;           // clic À L'INTÉRIEUR de la zone : on garde
+      if (el.classList.contains('fp-search-results')) { el.innerHTML = ''; el.style.display = 'none'; return; }
+      el.classList.add('hidden'); el.classList.remove('open', 'show');
+    });
+  }, false);
+})();
+
 const FP = {
   // Format euro — null/undefined/"" /NaN ⇒ 0 (évite d'afficher "NaN €")
   euro(n) {
