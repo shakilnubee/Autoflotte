@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Contrats — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260627f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260627g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260627f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260627g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260627f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260627g">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -273,10 +273,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260627f"></script>
-<script src="../assets/js/supabase-client.js?v=20260627f"></script>
-<script src="../assets/js/data.js?v=20260627f"></script>
-<script src="../assets/js/app.js?v=20260627f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260627g"></script>
+<script src="../assets/js/supabase-client.js?v=20260627g"></script>
+<script src="../assets/js/data.js?v=20260627g"></script>
+<script src="../assets/js/app.js?v=20260627g"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -708,7 +708,14 @@
     const cond = norm(c.conducteur);
     if (!cond || /nouveau collaborateur|nouveaux collaborateurs/.test(cond)) return '';
     const mdl = norm(c.modele).split(' ')[0]; // 'kona' / 'tucson'
-    const cands = (data.vehicules||[]).filter(v => norm(v.chauffeur) === cond && (!mdl || norm(v.modele).includes(mdl)));
+    const condFirst = cond.split(' ')[0];     // Localease = souvent juste le prénom
+    // Correspondance TOLÉRANTE : même prénom (1er mot) suffit (Véhicules peut avoir le nom complet)
+    const cands = (data.vehicules||[]).filter(v => {
+      const vc = norm(v.chauffeur); if (!vc) return false;
+      const vcFirst = vc.split(' ')[0];
+      const condOk = vc === cond || vcFirst === condFirst || vc.startsWith(cond + ' ') || cond.startsWith(vc + ' ');
+      return condOk && (!mdl || norm(v.modele).includes(mdl));
+    });
     // priorité aux véhicules marqués Localease, sinon le 1er trouvé
     const v = cands.find(x => /localease/.test(norm(x.proprietaire))) || cands[0];
     return v ? (v.immat || '') : '';
