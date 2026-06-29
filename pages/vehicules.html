@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Véhicules — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626z">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260627a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260626z"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260627a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260626z">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260627a">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -377,6 +377,8 @@
           <option>SUV</option>
           <option>Utilitaire</option>
         </select>
+
+        <button id="btn-fiche-groupe" class="btn btn-outline text-sm ml-auto" title="Télécharger la liste des véhicules du groupe affiché (ou Tous) en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> Télécharger la fiche</button>
       </div>
     </div>
 
@@ -662,11 +664,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260626z"></script>
-<script src="../assets/js/supabase-client.js?v=20260626z"></script>
-<script src="../assets/js/data.js?v=20260626z"></script>
-<script src="../assets/js/fleet-docs.js?v=20260626z"></script>
-<script src="../assets/js/app.js?v=20260626z"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260627a"></script>
+<script src="../assets/js/supabase-client.js?v=20260627a"></script>
+<script src="../assets/js/data.js?v=20260627a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260627a"></script>
+<script src="../assets/js/app.js?v=20260627a"></script>
 <script>
   lucide.createIcons();
 
@@ -2272,6 +2274,31 @@
   }
 
   let _rowClickTimer = null;
+  // Fiche imprimable (PDF) des véhicules du groupe affiché (ou « Tous »)
+  function printGroupeFiche() {
+    const grp = state.groupe;
+    const label = grp === 'all' ? 'Toute la flotte' : FP.groupeLabel(grp);
+    const list = data.vehicules
+      .filter(v => grp === 'all' ? v.statut !== 'vendu' : FP.vehGroupes(v).includes(grp))
+      .sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+    const today = new Date().toLocaleDateString('fr-FR');
+    const esc = (s) => escapeHtml(s == null ? '' : String(s));
+    const rows = list.map((v, i) => `<tr><td>${i + 1}</td><td><b>${esc(v.immat)}</b></td><td>${esc((v.marque || '') + ' ' + (v.modele || '')).trim()}</td><td>${esc(v.chauffeur && v.chauffeur !== '—' ? v.chauffeur : '')}</td><td style="text-align:right">${v.km != null ? FP.num(v.km) + ' km' : ''}</td><td>${esc(v.statut || '')}</td><td>${v.prochainCT && v.prochainCT !== '—' ? FP.date(v.prochainCT) : ''}</td></tr>`).join('');
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche — ${esc(label)}</title>
+      <style>body{font-family:Arial,Helvetica,sans-serif;color:#0F1E3D;padding:26px}h1{font-size:20px;margin:0 0 2px}.sub{color:#64748b;font-size:12px;margin-bottom:16px}table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;background:#F1F5F9;padding:6px 8px;border-bottom:2px solid #cbd5e1}td{padding:5px 8px;border-bottom:1px solid #e2e8f0}tr:nth-child(even) td{background:#fafbfc}.noprint{margin-top:18px;padding:8px 16px;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;background:#0F1E3D;color:#fff;font-weight:600}@media print{.noprint{display:none}}</style></head>
+      <body>
+      <h1>Parc Pilot — ${esc(label)}</h1>
+      <div class="sub">${list.length} véhicule(s) · édité le ${today}</div>
+      <table><thead><tr><th>#</th><th>Immat.</th><th>Modèle</th><th>Conducteur</th><th>Km</th><th>Statut</th><th>Prochain CT</th></tr></thead><tbody>${rows}</tbody></table>
+      <button class="noprint" onclick="window.print()">Imprimer / Enregistrer en PDF</button>
+      <scr` + `ipt>setTimeout(function(){try{window.print()}catch(e){}},400)</scr` + `ipt>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { alert('Autorise les fenêtres pop-up pour générer la fiche.'); return; }
+    w.document.write(html); w.document.close();
+  }
+  { const b = $('btn-fiche-groupe'); if (b) b.addEventListener('click', printGroupeFiche); }
+
   $('vehicules-tbody').addEventListener('click', (e) => {
     // Ne pas ouvrir le drawer si on clique sur une checkbox, la poignée ou un champ en édition
     if (e.target.closest('input[type="checkbox"], .row-drag-handle, .cell-edit, select')) return;
