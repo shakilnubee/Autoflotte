@@ -398,9 +398,13 @@
       if (hasPerVeh && shown.length) {
         mz.innerHTML = `<div style="padding:10px 12px;border-radius:10px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E">`
           + `<b>${shown.length} véhicule(s) actif(s) sans prime d'assurance</b> (absents de l'état de parc) :`
-          + shown.map(v => `<div class="flex items-center justify-between gap-2 mt-1">`
+          + shown.map(v => `<div class="flex items-center justify-between gap-2 mt-1 flex-wrap">`
               + `<span>• ${v.immat || '—'} · ${v.marque || ''} ${v.modele || ''}</span>`
-              + `<button type="button" data-assur-ignore="${v.immat || ''}" class="text-xs underline shrink-0" style="color:#92400E">ne plus signaler</button></div>`).join('')
+              + `<span class="flex items-center gap-1 shrink-0">`
+                + `<input type="text" inputmode="decimal" data-assur-prime-in="${v.immat || ''}" placeholder="Prime €/an TTC" class="text-xs px-2 py-1 rounded border" style="border-color:#FDE68A;width:120px" />`
+                + `<button type="button" data-assur-prime-save="${v.immat || ''}" class="text-xs px-2 py-1 rounded shrink-0" style="background:#92400E;color:#fff">Enregistrer</button>`
+                + `<button type="button" data-assur-ignore="${v.immat || ''}" class="text-xs underline shrink-0" style="color:#92400E">ne plus signaler</button>`
+              + `</span></div>`).join('')
           + (ignore.length ? `<div class="text-xs mt-2" style="color:#B45309">${ignore.length} véhicule(s) ignoré(s) · <button type="button" id="assur-ignore-reset" class="underline">tout réafficher</button></div>` : '')
           + `</div>`;
       } else if (hasPerVeh) {
@@ -831,9 +835,28 @@
   if ($('assur-import-file')) $('assur-import-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importEtatParc(f); });
   // Masquer / réafficher les véhicules « sans prime » que l'utilisateur sait normaux
   if ($('assur-missing')) $('assur-missing').addEventListener('click', (e) => {
+    const sv = e.target.closest('[data-assur-prime-save]');
+    if (sv) {
+      const immat = sv.dataset.assurPrimeSave;
+      const inp = e.currentTarget.querySelector(`[data-assur-prime-in="${immat}"]`);
+      const val = parseFloat(((inp && inp.value) || '').replace(/[^\d,.\-]/g, '').replace(',', '.'));
+      if (!Number.isFinite(val) || val <= 0) { if (inp) inp.focus(); return; }
+      const s = FP.settings.get(); s.assurancePrimes = (s.assurancePrimes && typeof s.assurancePrimes === 'object') ? s.assurancePrimes : {};
+      s.assurancePrimes[immat] = { ht: null, ttc: val }; FP.settings.save(s);
+      renderAssurance(); renderKPIs();
+      if (FP.toast) FP.toast(`Prime enregistrée pour ${immat} : ${FP.euro(val)}/an`);
+      return;
+    }
     const ig = e.target.closest('[data-assur-ignore]');
     if (ig) { const s = FP.settings.get(); s.assuranceIgnore = Array.isArray(s.assuranceIgnore) ? s.assuranceIgnore : []; const k = normPlaque(ig.dataset.assurIgnore); if (k && !s.assuranceIgnore.includes(k)) s.assuranceIgnore.push(k); FP.settings.save(s); renderAssurance(); return; }
     if (e.target.closest('#assur-ignore-reset')) { const s = FP.settings.get(); s.assuranceIgnore = []; FP.settings.save(s); renderAssurance(); return; }
+  });
+  if ($('assur-missing')) $('assur-missing').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const inp = e.target.closest('[data-assur-prime-in]'); if (!inp) return;
+    e.preventDefault();
+    const btn = e.currentTarget.querySelector(`[data-assur-prime-save="${inp.dataset.assurPrimeIn}"]`);
+    if (btn) btn.click();
   });
 
   document.addEventListener('fp:data-ready', () => {
