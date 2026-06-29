@@ -43,17 +43,9 @@ window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStora
 // === Densité d'affichage (compact / confortable) — réglée dans Paramètres, appliquée à TOUTES les pages ===
 (function applyDensity(){ try { if ((localStorage.getItem('fp_density') || '') === 'compact') document.documentElement.classList.add('fp-compact'); } catch (e) {} })();
 
-// === Modales / tiroirs : fermeture UNIQUEMENT par la croix (pas au clic à l'extérieur) ===
-// Évite les fermetures accidentelles qui font perdre une saisie (ex. import de facture).
-// Garde GLOBAL (toutes les pages + futures) : on intercepte le clic en phase de CAPTURE ; si la
-// cible est le FOND (overlay) lui-même, on stoppe avant le handler « clic extérieur = fermer ».
-// Les clics sur le CONTENU (boutons, champs) passent normalement.
-document.addEventListener('click', (e) => {
-  const t = e.target;
-  if (t && t.matches && t.matches('.modal-backdrop, .drawer-backdrop, [id$="-modal"], [id$="backdrop"]')) {
-    e.stopPropagation();
-  }
-}, true);
+// (Anciennement : un garde en phase de capture empêchait la fermeture des tiroirs/modales
+//  au clic sur le fond. Retiré à la demande de l'utilisateur — désormais un clic en dehors
+//  ferme la zone, comme ÉCHAP. Voir le handler « clic en dehors » plus bas.)
 
 // Garde GLOBAL (toutes les pages + futures) : ÉCHAP ferme TOUTE zone ouverte
 // (tiroir, fenêtre modale, popover, menu déroulant, résultats de recherche).
