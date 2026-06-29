@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Véhicules — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260626m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260626n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260626m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260626n">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -662,11 +662,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260626m"></script>
-<script src="../assets/js/supabase-client.js?v=20260626m"></script>
-<script src="../assets/js/data.js?v=20260626m"></script>
-<script src="../assets/js/fleet-docs.js?v=20260626m"></script>
-<script src="../assets/js/app.js?v=20260626m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260626n"></script>
+<script src="../assets/js/supabase-client.js?v=20260626n"></script>
+<script src="../assets/js/data.js?v=20260626n"></script>
+<script src="../assets/js/fleet-docs.js?v=20260626n"></script>
+<script src="../assets/js/app.js?v=20260626n"></script>
 <script>
   lucide.createIcons();
 
@@ -1317,8 +1317,11 @@
         return `<tr class="cursor-pointer${state.selectedIds.has(v.id) ? ' row-selected' : ''}" data-id="${v.id}">
           <td class="cb-col"><span class="row-drag-handle" draggable="true" title="Glisser pour réorganiser">⋮⋮</span><input type="checkbox" class="row-cb" data-id="${v.id}" ${state.selectedIds.has(v.id) ? 'checked' : ''} /></td>
           ${cells}
-          <td class="text-right">
-            <button aria-label="Suivant" class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700" data-action="open" data-id="${v.id}">
+          <td class="text-right whitespace-nowrap">
+            <button aria-label="Copier l'immatriculation" class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700" data-action="copy" data-immat="${v.immat || ''}" title="Copier l'immatriculation">
+              <i data-lucide="copy" class="w-4 h-4"></i>
+            </button>
+            <button aria-label="Ouvrir la fiche" class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700" data-action="open" data-id="${v.id}" title="Ouvrir la fiche">
               <i data-lucide="chevron-right" class="w-4 h-4"></i>
             </button>
           </td>
@@ -2272,6 +2275,21 @@
   $('vehicules-tbody').addEventListener('click', (e) => {
     // Ne pas ouvrir le drawer si on clique sur une checkbox, la poignée ou un champ en édition
     if (e.target.closest('input[type="checkbox"], .row-drag-handle, .cell-edit, select')) return;
+    // Actions de ligne (copier l'immat / ouvrir) — interceptées avant l'ouverture
+    const actBtn = e.target.closest('[data-action]');
+    if (actBtn) {
+      e.stopPropagation();
+      const act = actBtn.dataset.action, aid = actBtn.dataset.id;
+      if (act === 'copy') {
+        const v = aid ? data.vehicules.find(x => x.id === aid) : null;
+        const im = (v && v.immat) || actBtn.dataset.immat || '';
+        try { if (navigator.clipboard) navigator.clipboard.writeText(im); } catch (_) {}
+        if (FP.toast) FP.toast('✓ Immatriculation copiée');
+      } else if (act === 'open') {
+        openDrawer(actBtn.dataset.id || (e.target.closest('tr[data-id]') || {}).dataset?.id);
+      }
+      return;
+    }
     const tr = e.target.closest('tr[data-id]');
     if (!tr) return;
     const id = tr.dataset.id;
