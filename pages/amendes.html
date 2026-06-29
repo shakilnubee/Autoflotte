@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260626m">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260626l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260626m"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260626l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260626m">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -47,6 +47,9 @@
   #amendes-tbody tr.row-overdue { background: #fef2f2; }    /* à payer en retard -> rouge très pâle */
   #amendes-tbody tr.row-contested { background: #fffbeb; }  /* contestée -> ambre très pâle */
   #amendes-tbody tr.row-paid:hover, #amendes-tbody tr.row-overdue:hover, #amendes-tbody tr.row-contested:hover { filter: brightness(.97); }
+  /* #6 : nom du conducteur cliquable pour filtrer */
+  .lien-cond { cursor: pointer; text-decoration: underline dotted transparent; text-underline-offset: 2px; }
+  .lien-cond:hover { color: var(--fp-accent); text-decoration-color: var(--fp-accent); }
 </style>
 <script>
 (function(){
@@ -396,10 +399,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260626l"></script>
-<script src="../assets/js/supabase-client.js?v=20260626l"></script>
-<script src="../assets/js/data.js?v=20260626l"></script>
-<script src="../assets/js/app.js?v=20260626l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260626m"></script>
+<script src="../assets/js/supabase-client.js?v=20260626m"></script>
+<script src="../assets/js/data.js?v=20260626m"></script>
+<script src="../assets/js/app.js?v=20260626m"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -426,6 +429,24 @@
   const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false };
   const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
   const $ = (id) => document.getElementById(id);
+
+  // #8 — Mémorise le dernier filtre/tri (par société) et le restaure à la prochaine visite.
+  const AM_FILTERS_KEY = 'fp_amendes_filters_' + (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } })();
+  function saveFilters() {
+    try { localStorage.setItem(AM_FILTERS_KEY, JSON.stringify({ statut: state.statut, motif: state.motif, motifCat: state.motifCat, dateFrom: state.dateFrom, dateTo: state.dateTo, sortKey: state.sortKey, sortDir: state.sortDir, voirTout: state.voirTout })); } catch (e) {}
+  }
+  function restoreFilters() {
+    try { const s = JSON.parse(localStorage.getItem(AM_FILTERS_KEY) || 'null'); if (s && typeof s === 'object') Object.assign(state, s); } catch (e) {}
+  }
+  function syncFiltersUI() {
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === state.statut));
+    const fm = $('filter-motif'); if (fm) { fm.value = state.motif; if (fm.value !== state.motif) { state.motif = 'all'; fm.value = 'all'; } }
+    if ($('filter-date-from')) $('filter-date-from').value = state.dateFrom || '';
+    if ($('filter-date-to')) $('filter-date-to').value = state.dateTo || '';
+    const sk = $('sort-key'); if (sk) sk.value = state.sortKey;
+    const sd = $('sort-dir'); if (sd) { const i = sd.querySelector('i'); if (i) i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); }
+    const vt = $('btn-voir-tout'); if (vt) vt.textContent = state.voirTout ? 'Afficher seulement 2026' : 'Tout voir (toutes les années)';
+  }
 
   // Catégorise un motif en grande famille (pour les mini-stats et le filtre par type)
   function categorize(motif) {
@@ -544,7 +565,7 @@
   // === Configuration colonnes (éditables via drag / ✕ / dblclick) ===
   const AMENDES_COLUMNS = [
     { key: 'date',         label: 'Date',        defaultWidth: 110, render: a => FP.date(a.date) },
-    { key: 'prenom',       label: 'Conducteur',  defaultWidth: 140, cellCls: 'font-semibold', render: a => escAmende(a.prenom || '—') },
+    { key: 'prenom',       label: 'Conducteur',  defaultWidth: 140, cellCls: 'font-semibold', render: a => a.prenom ? `<span class="lien-cond" data-cond="${escAmende(a.prenom)}" title="Filtrer les amendes de ${escAmende(a.prenom)}">${escAmende(a.prenom)}</span>` : '<span class="text-slate-400">—</span>' },
     { key: 'motif',        label: 'Motif',       defaultWidth: 200, render: a => motifPill(a.motif) },
     { key: 'montant',      label: 'Montant',     defaultWidth: 110, render: a => a.majoree && a.montantMajore
         ? `<span class="font-semibold text-red-700" title="Majorée — montant initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}">${FP.euroPrecis(a.montantMajore)} <span class="text-[10px]">⚠ maj.</span></span>`
@@ -615,6 +636,7 @@
 
   let drawerOrder = []; // ordre courant (filtré + trié) pour la navigation ‹ › dans le tiroir
   function renderTable() {
+    saveFilters(); // #8 : mémorise le filtre/tri courant
     const allRows = sortRows(filtered());
     drawerOrder = allRows.map(a => a.id);
     renderSummary(allRows);
@@ -1964,6 +1986,9 @@
   $('amendes-tbody').addEventListener('click', e => {
     if (e.target.closest('.cell-edit, select')) return;
     // Actions rapides au survol : interceptees AVANT l'ouverture du tiroir
+    // #6 : clic sur le nom du conducteur -> filtre ses amendes (n'ouvre pas la fiche)
+    const lc = e.target.closest('.lien-cond');
+    if (lc) { e.stopPropagation(); setConducteurFilter(lc.dataset.cond); return; }
     const ra = e.target.closest('[data-ra]');
     if (ra) {
       e.stopPropagation();
@@ -2090,7 +2115,8 @@
   })();
 
   // Init
-  if ($('filter-date-from')) $('filter-date-from').value = state.dateFrom; // défaut : 01/01/2026
+  restoreFilters();   // #8 : recharge le dernier filtre/tri mémorisé…
+  syncFiltersUI();    // …et remet les contrôles (puces statut, motif, dates, tri) dans cet état
   renderKPIs();
   renderTable();
   renderCharts();
