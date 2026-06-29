@@ -40,6 +40,9 @@ window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStora
   } catch (e) { /* cache illisible : on garde data.js */ }
 })();
 
+// === Densité d'affichage (compact / confortable) — réglée dans Paramètres, appliquée à TOUTES les pages ===
+(function applyDensity(){ try { if ((localStorage.getItem('fp_density') || '') === 'compact') document.documentElement.classList.add('fp-compact'); } catch (e) {} })();
+
 // === Modales / tiroirs : fermeture UNIQUEMENT par la croix (pas au clic à l'extérieur) ===
 // Évite les fermetures accidentelles qui font perdre une saisie (ex. import de facture).
 // Garde GLOBAL (toutes les pages + futures) : on intercepte le clic en phase de CAPTURE ; si la
@@ -1252,6 +1255,13 @@ FP.avatarHTML = (name, size) => {
   let h = 0; for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0;
   const hue = h % 360;
   return `<span class="fp-avatar" aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:${s}px;height:${s}px;border-radius:50%;background:hsl(${hue} 65% 90%);color:hsl(${hue} 55% 35%);font-size:${Math.round(s * 0.42)}px;font-weight:700;flex-shrink:0;line-height:1">${FP.initiales(n)}</span>`;
+};
+
+// Densité d'affichage : bascule compact/confortable (mémorisée, appliquée partout).
+FP.getDensity = () => { try { return (localStorage.getItem('fp_density') || '') === 'compact' ? 'compact' : 'confort'; } catch (e) { return 'confort'; } };
+FP.setDensity = (compact) => {
+  try { localStorage.setItem('fp_density', compact ? 'compact' : 'confort'); } catch (e) {}
+  document.documentElement.classList.toggle('fp-compact', !!compact);
 };
 
 FP.persist = {
