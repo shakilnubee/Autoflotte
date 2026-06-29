@@ -1212,6 +1212,34 @@ FP.notifyError = (msg) => {
   setTimeout(() => el.remove(), 5000);
 };
 
+// Petit message de confirmation (toast) en bas d'écran, avec bouton d'action optionnel ("Annuler").
+// FP.toast('✓ Enregistré')  ou  FP.toast('Amende payée', { actionLabel:'Annuler', onAction: fn })
+FP.toast = (msg, opts) => {
+  opts = opts || {};
+  const old = document.getElementById('fp-toast'); if (old) old.remove();
+  const el = document.createElement('div');
+  el.id = 'fp-toast';
+  el.style.cssText = 'position:fixed;bottom:1.25rem;left:50%;transform:translateX(-50%);background:#0F1E3D;color:#fff;padding:.7rem 1rem;border-radius:10px;z-index:9998;box-shadow:0 12px 32px -12px rgba(0,0,0,.45);font-weight:600;display:flex;align-items:center;gap:.85rem;max-width:92vw;font-size:.9rem;animation:fp-toast-in .2s ease';
+  const span = document.createElement('span'); span.textContent = msg; el.appendChild(span);
+  let timer;
+  const close = () => { clearTimeout(timer); el.style.opacity = '0'; el.style.transition = 'opacity .25s'; setTimeout(() => el.remove(), 250); };
+  if (opts.actionLabel && typeof opts.onAction === 'function') {
+    const btn = document.createElement('button');
+    btn.textContent = opts.actionLabel;
+    btn.style.cssText = 'background:#F97316;color:#fff;border:none;border-radius:7px;padding:.35rem .75rem;font-weight:700;cursor:pointer;flex-shrink:0';
+    btn.onclick = () => { close(); try { opts.onAction(); } catch (e) {} };
+    el.appendChild(btn);
+  }
+  if (!document.getElementById('fp-toast-style')) {
+    const st = document.createElement('style'); st.id = 'fp-toast-style';
+    st.textContent = '@keyframes fp-toast-in{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
+    document.head.appendChild(st);
+  }
+  document.body.appendChild(el);
+  timer = setTimeout(close, opts.duration || (opts.actionLabel ? 6000 : 3000));
+  return el;
+};
+
 FP.persist = {
   _QKEY: 'fp_pending_writes',
   available() { return !!(FP.db && FP.supabase); },
