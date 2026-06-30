@@ -2895,6 +2895,82 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
   FP.xlsx.download(baseName + '.xlsx', colDefs, rows, opts);
 };
 
+// Composant RÉUTILISABLE : un bouton « Exporter » + menu (Excel .xlsx / CSV), avec en option
+// un export PAR PÉRIODE (Du → Au). Identique sur toutes les pages (et futures sociétés).
+//   opts = {
+//     mount,            // élément (ou sélecteur) où insérer le bouton
+//     label,            // libellé du bouton (def. « Exporter »)
+//     baseName,         // string | () => string  (nom de fichier sans extension)
+//     columns,          // [{ label, value(row), number?, noTotal? }]
+//     getRows,          // () => rows (vue courante, respecte les filtres de la page)
+//     period,           // optionnel { dateOf(row) => 'YYYY-MM-DD' }  -> active l'export par période
+//     total, sheetName, // passés à l'export
+//   }
+(function () {
+  let styleInjected = false;
+  function injectStyleOnce() {
+    if (styleInjected) return; styleInjected = true;
+    const st = document.createElement('style');
+    st.textContent = `.fp-export-wrap{position:relative;display:inline-block}
+.fp-export-menu{position:absolute;right:0;top:100%;margin-top:6px;background:#fff;border:1px solid var(--fp-border,#e2e8f0);border-radius:10px;box-shadow:0 14px 34px -12px rgba(15,30,61,.3);z-index:60;min-width:236px;overflow:hidden;padding:5px}
+.fp-export-menu .fp-exp-it{width:100%;text-align:left;border:none;background:none;cursor:pointer;font-size:13px;padding:8px 10px;border-radius:7px;display:flex;align-items:center;gap:8px;color:#1e293b}
+.fp-export-menu .fp-exp-it:hover{background:#f1f5f9}
+.fp-export-menu .fp-exp-sec{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#94a3b8;padding:6px 10px 3px}
+.fp-export-menu .fp-exp-div{height:1px;background:#eef2f7;margin:5px 0}
+.fp-export-menu .fp-exp-dates{display:flex;gap:8px;padding:2px 10px 6px}
+.fp-export-menu .fp-exp-dates label{font-size:11px;color:#64748b;display:flex;flex-direction:column;gap:2px;flex:1}
+.fp-export-menu .fp-exp-dates input{font-size:12px;padding:4px 6px;border:1px solid var(--fp-border,#e2e8f0);border-radius:6px}`;
+    document.head.appendChild(st);
+  }
+  FP.makeExportMenu = function (opts) {
+    injectStyleOnce();
+    const mount = (typeof opts.mount === 'string') ? document.querySelector(opts.mount) : opts.mount;
+    if (!mount) { console.warn('[makeExportMenu] mount introuvable'); return; }
+    const nameOf = () => (typeof opts.baseName === 'function' ? opts.baseName() : opts.baseName) || 'export';
+    const wrap = document.createElement('div'); wrap.className = 'fp-export-wrap';
+    const hasPeriod = !!(opts.period && typeof opts.period.dateOf === 'function');
+    wrap.innerHTML = `
+      <button type="button" class="btn btn-outline text-sm fp-export-btn"><i data-lucide="download" class="w-4 h-4"></i> ${opts.label || 'Exporter'} <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i></button>
+      <div class="fp-menu fp-export-menu hidden">
+        <div class="fp-exp-sec">Vue actuelle</div>
+        <button type="button" class="fp-exp-it" data-exp="xlsx"><i data-lucide="sheet" class="w-4 h-4" style="color:#16a34a"></i> Excel (.xlsx)</button>
+        <button type="button" class="fp-exp-it" data-exp="csv"><i data-lucide="file-text" class="w-4 h-4" style="color:#64748b"></i> CSV</button>
+        ${hasPeriod ? `<div class="fp-exp-div"></div>
+        <div class="fp-exp-sec">Par période</div>
+        <div class="fp-exp-dates"><label>Du <input type="date" class="fp-exp-from"></label><label>Au <input type="date" class="fp-exp-to"></label></div>
+        <button type="button" class="fp-exp-it" data-exp="xlsx" data-period="1"><i data-lucide="sheet" class="w-4 h-4" style="color:#16a34a"></i> Excel — période</button>
+        <button type="button" class="fp-exp-it" data-exp="csv" data-period="1"><i data-lucide="file-text" class="w-4 h-4" style="color:#64748b"></i> CSV — période</button>` : ''}
+      </div>`;
+    mount.appendChild(wrap);
+    if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
+    const menu = wrap.querySelector('.fp-export-menu');
+    const btn = wrap.querySelector('.fp-export-btn');
+    btn.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); });
+    menu.addEventListener('click', (e) => {
+      const it = e.target.closest('[data-exp]'); if (!it) return;
+      const kind = it.dataset.exp;
+      let rows = (opts.getRows() || []).slice();
+      let suffix = '';
+      if (it.dataset.period) {
+        const from = (wrap.querySelector('.fp-exp-from') || {}).value || '';
+        const to = (wrap.querySelector('.fp-exp-to') || {}).value || '';
+        rows = rows.filter(r => {
+          const d = opts.period.dateOf(r) || '';
+          if (from && d < from) return false;
+          if (to && d > to) return false;
+          return true;
+        });
+        suffix = '-' + (from || 'debut') + '_' + (to || 'fin');
+      }
+      menu.classList.add('hidden');
+      if (!rows.length) { if (FP.toast) FP.toast('Aucune ligne à exporter (vérifie les filtres / la période).'); return; }
+      FP.exportRows(nameOf() + suffix, opts.columns, rows, kind, { total: opts.total, sheetName: opts.sheetName });
+      if (FP.toast) FP.toast(`${rows.length} ligne(s) exportée(s) en ${kind === 'csv' ? 'CSV' : 'Excel'}`);
+    });
+    return { el: wrap };
+  };
+})();
+
 // Toolbar Import/Export CSV retirée (remplacée par l'import de document sur Véhicules/Amendes).
 // Conservée en NO-OP : encore appelée par plusieurs pages (amendes, vehicules, factures…).
 FP.injectDataIO = () => {};

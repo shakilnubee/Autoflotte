@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Véhicules — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260630b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260630c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260630b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260630c">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -328,6 +328,7 @@
           <div class="hidden-cols-popover" id="hidden-cols-popover"></div>
         </div>
         <span data-data-io></span>
+        <span id="veh-export-mount"></span>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
       </div>
     </div>
@@ -664,11 +665,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260630b"></script>
-<script src="../assets/js/supabase-client.js?v=20260630b"></script>
-<script src="../assets/js/data.js?v=20260630b"></script>
-<script src="../assets/js/fleet-docs.js?v=20260630b"></script>
-<script src="../assets/js/app.js?v=20260630b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260630c"></script>
+<script src="../assets/js/supabase-client.js?v=20260630c"></script>
+<script src="../assets/js/data.js?v=20260630c"></script>
+<script src="../assets/js/fleet-docs.js?v=20260630c"></script>
+<script src="../assets/js/app.js?v=20260630c"></script>
 <script>
   lucide.createIcons();
 
@@ -2348,6 +2349,27 @@
     w.document.write(html); w.document.close();
   }
   { const b = $('btn-fiche-groupe'); if (b) b.addEventListener('click', printGroupeFiche); }
+
+  // Export de la liste des véhicules affichés (filtres/groupe en cours) — Excel/CSV.
+  if (FP.makeExportMenu) FP.makeExportMenu({
+    mount: '#veh-export-mount', label: 'Exporter', sheetName: 'Véhicules',
+    columns: [
+      { label: 'Immatriculation', value: v => v.immat || '' },
+      { label: 'Marque',          value: v => v.marque || '' },
+      { label: 'Modèle',          value: v => v.modele || '' },
+      { label: 'Catégorie',       value: v => v.categorie || '' },
+      { label: 'Km',              value: v => { const n = Number(v.km); return isNaN(n) ? null : n; }, number: true, noTotal: true },
+      { label: 'Conducteur',      value: v => (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '' },
+      { label: 'Statut',          value: v => v.statut || '' },
+      { label: 'Prochain CT',     value: v => v.prochainCT || '' },
+      { label: 'Mise en circ.',   value: v => v.dateMiseEnCirculation || '' },
+      { label: 'Carburant',       value: v => v.carburant || '' },
+      { label: 'Propriétaire',    value: v => v.proprietaire || '' },
+      { label: 'Groupes',         value: v => (FP.vehGroupes(v) || []).map(k => FP.groupeLabel(k)).join(', ') },
+    ],
+    getRows: () => filtered(),
+    baseName: () => 'vehicules-' + (state.groupe === 'all' ? 'tous' : state.groupe),
+  });
 
   $('vehicules-tbody').addEventListener('click', (e) => {
     // Ne pas ouvrir le drawer si on clique sur une checkbox, la poignée ou un champ en édition

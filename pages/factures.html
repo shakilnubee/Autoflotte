@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Factures — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260630b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260630c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260630b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260630c">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -137,13 +137,7 @@
       </div>
       <div class="flex items-center gap-3">
         <span data-data-io></span>
-        <div style="position:relative">
-          <button class="btn btn-outline text-sm" id="btn-export-compta" title="Exporter les factures affichées (selon les filtres) pour le comptable"><i data-lucide="download" class="w-4 h-4"></i> Export comptable <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i></button>
-          <div id="export-menu" class="hidden" style="position:absolute;right:0;top:100%;margin-top:6px;background:#fff;border:1px solid var(--fp-border);border-radius:10px;box-shadow:0 14px 34px -12px rgba(15,30,61,.3);z-index:60;min-width:210px;overflow:hidden;padding:4px">
-            <button type="button" id="exp-xlsx" class="w-full text-left rounded-md text-sm flex items-center gap-2" style="padding:8px 10px"><i data-lucide="sheet" class="w-4 h-4" style="color:#16a34a"></i> Excel (.xlsx)</button>
-            <button type="button" id="exp-csv" class="w-full text-left rounded-md text-sm flex items-center gap-2" style="padding:8px 10px"><i data-lucide="file-text" class="w-4 h-4" style="color:#64748b"></i> CSV</button>
-          </div>
-        </div>
+        <span id="fa-export-mount"></span>
         <button class="btn btn-dark text-sm" id="btn-import-facture"><i data-lucide="file-up" class="w-4 h-4"></i> Importer une facture</button>
       </div>
     </div>
@@ -584,10 +578,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260630b"></script>
-<script src="../assets/js/supabase-client.js?v=20260630b"></script>
-<script src="../assets/js/data.js?v=20260630b"></script>
-<script src="../assets/js/app.js?v=20260630b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260630c"></script>
+<script src="../assets/js/supabase-client.js?v=20260630c"></script>
+<script src="../assets/js/data.js?v=20260630c"></script>
+<script src="../assets/js/app.js?v=20260630c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1252,18 +1246,11 @@
   $('btn-import-facture').addEventListener('click', openFactureModal);
 
   // Export comptable : les factures AFFICHÉES (selon les filtres en cours), ligne par ligne,
-  // avec Société (déduite du propriétaire du véhicule) et Mois — au choix en Excel (.xlsx) ou CSV.
-  const expMenu = $('export-menu');
-  $('btn-export-compta').addEventListener('click', (e) => { e.stopPropagation(); expMenu.classList.toggle('hidden'); });
-  const doExport = (kind) => {
-    expMenu.classList.add('hidden');
+  // avec Société (déduite du propriétaire du véhicule) et Mois — Excel/CSV, vue courante ou période.
+  (function () {
     const normP = s => (s || '').toString().toUpperCase().replace(/\s/g, '');
-    const vehByImmat = {};
-    (window.FP_DATA.vehicules || []).forEach(v => { vehByImmat[normP(v.immat)] = v; });
-    const soc = (immat) => { const v = vehByImmat[normP(immat)]; return v ? (v.proprietaire || '') : ''; };
+    const soc = (immat) => { const map = {}; (window.FP_DATA.vehicules || []).forEach(v => { map[normP(v.immat)] = v; }); const v = map[normP(immat)]; return v ? (v.proprietaire || '') : ''; };
     const num = (v) => (v === null || v === undefined || v === '' || isNaN(v)) ? null : Number(v);
-    const rows = filtered().slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    if (!rows.length) { if (FP.toast) FP.toast('Aucune facture à exporter (vérifie les filtres).'); return; }
     const colDefs = [
       { label: 'Date',        value: r => r.date || '' },
       { label: 'Mois',        value: r => (r.date || '').slice(0, 7) },
@@ -1278,13 +1265,13 @@
       { label: 'TTC (€)',     value: r => num(r.montantTTC), number: true },
       { label: 'Km',          value: r => num(r.km),         number: true, noTotal: true },
     ];
-    const periode = state.mois !== 'all' ? state.mois : (state.annee !== 'all' ? state.annee : 'tout');
-    const totalTTC = rows.reduce((s, f) => s + (+f.montantTTC || 0), 0);
-    FP.exportRows(`factures-comptable-${periode}`, colDefs, rows, kind, { sheetName: 'Factures', total: true });
-    if (FP.toast) FP.toast(`${rows.length} facture(s) exportée(s) en ${kind === 'csv' ? 'CSV' : 'Excel'} · ${FP.euro(totalTTC)} TTC`);
-  };
-  $('exp-xlsx').addEventListener('click', () => doExport('xlsx'));
-  $('exp-csv').addEventListener('click', () => doExport('csv'));
+    FP.makeExportMenu({
+      mount: '#fa-export-mount', label: 'Export comptable', sheetName: 'Factures', total: true, columns: colDefs,
+      getRows: () => filtered().slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')),
+      period: { dateOf: r => r.date || '' },
+      baseName: () => 'factures-comptable-' + (state.mois !== 'all' ? state.mois : (state.annee !== 'all' ? state.annee : 'tout')),
+    });
+  })();
   $('facture-close').addEventListener('click', closeFactureModal);
   $('facture-cancel').addEventListener('click', closeFactureModal);
   $('facture-modal').addEventListener('click', (e) => { if (e.target.id === 'facture-modal') closeFactureModal(); });

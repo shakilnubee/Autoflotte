@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Amendes — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260630b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260630c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260630b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260630c">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -152,6 +152,7 @@
           <button class="btn btn-outline text-sm !px-2.5" data-history-redo title="Refaire (Ctrl+Y)" disabled><i data-lucide="redo-2" class="w-4 h-4"></i></button>
         </div>
         <span data-data-io></span>
+        <span id="am-export-mount"></span>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle amende</button>
       </div>
     </div>
@@ -422,10 +423,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260630b"></script>
-<script src="../assets/js/supabase-client.js?v=20260630b"></script>
-<script src="../assets/js/data.js?v=20260630b"></script>
-<script src="../assets/js/app.js?v=20260630b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260630c"></script>
+<script src="../assets/js/supabase-client.js?v=20260630c"></script>
+<script src="../assets/js/data.js?v=20260630c"></script>
+<script src="../assets/js/app.js?v=20260630c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2186,6 +2187,26 @@
   });
   $('drawer-delete').addEventListener('click', deleteAmende);
   $('btn-new').addEventListener('click', openAmendeModal);
+
+  // Export des amendes affichées (filtres en cours) — Excel/CSV, vue courante ou période.
+  if (FP.makeExportMenu) FP.makeExportMenu({
+    mount: '#am-export-mount', label: 'Exporter', sheetName: 'Amendes', total: true,
+    columns: [
+      { label: 'Date',        value: a => a.date || '' },
+      { label: 'Conducteur',  value: a => a.prenom || '' },
+      { label: 'Motif',       value: a => a.motif || '' },
+      { label: 'Montant (€)', value: a => { const v = (a.majoree && a.montantMajore) ? a.montantMajore : a.montant; return (v == null || v === '' || isNaN(v)) ? null : Number(v); }, number: true },
+      { label: 'Majorée',     value: a => a.majoree ? 'oui' : '' },
+      { label: 'Points',      value: a => { const p = Number(a.points); return isNaN(p) ? null : p; }, number: true, noTotal: true },
+      { label: 'N° avis',     value: a => a.numeroAvis || '' },
+      { label: 'Statut',      value: a => a.statut || '' },
+      { label: 'Année',       value: a => a.annee || anneeOf(a) || '' },
+      { label: 'Commentaire', value: a => a.commentaire || '' },
+    ],
+    getRows: () => filtered().slice().sort((x, y) => (x.date || '').localeCompare(y.date || '')),
+    period: { dateOf: a => a.date || '' },
+    baseName: () => 'amendes-' + (state.voirTout ? 'toutes' : '2026'),
+  });
   $('amende-close').addEventListener('click', closeAmendeModal);
   $('amende-cancel').addEventListener('click', closeAmendeModal);
   $('amende-modal').addEventListener('click', (e) => { if (e.target.id === 'amende-modal') closeAmendeModal(); });

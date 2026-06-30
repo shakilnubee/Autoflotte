@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Statistiques — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260630b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260630c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260630b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260630c">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -204,7 +204,7 @@
     <div class="card overflow-hidden mb-6">
       <div class="p-6 pb-1 flex justify-between items-center">
         <h3 class="font-bold text-slate-900">Coût total par véhicule (tout compris)</h3>
-        <button class="btn btn-outline text-sm" id="btn-export-tco"><i data-lucide="download" class="w-4 h-4"></i> Exporter</button>
+        <span id="tco-export-mount"></span>
       </div>
       <p class="text-xs text-slate-400 px-6 pb-3">Factures (entretien, réparation, leasing, sinistre, achat) + assurance + TVS + amendes du conducteur. Assurance et TVS sont des montants <b>annuels</b> : pour comparer une année précise, choisis-la dans le filtre en haut.</p>
       <div class="scrollable">
@@ -217,10 +217,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260630b"></script>
-<script src="../assets/js/supabase-client.js?v=20260630b"></script>
-<script src="../assets/js/data.js?v=20260630b"></script>
-<script src="../assets/js/app.js?v=20260630b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260630c"></script>
+<script src="../assets/js/supabase-client.js?v=20260630c"></script>
+<script src="../assets/js/data.js?v=20260630c"></script>
+<script src="../assets/js/app.js?v=20260630c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -460,16 +460,24 @@
   // Rafraîchit quand les données Supabase arrivent (sinon on reste sur le cache data.js)
   document.addEventListener('fp:data-ready', () => { rebuildAnneeFilter(); updateTvsKpi(); const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
 
-  $('btn-export-tco').addEventListener('click', () => {
-    const headers = ['Immat', 'Modèle', 'Km', 'Factures TTC', 'Assurance/an', 'TVS/an', 'Amendes', 'Coût total TTC', 'Coût par km', 'Nb factures', 'Dernier achat'];
-    const rows = tcoData.map(t => [t.immat, t.modele, t.km, t.fact, t.assur, t.tvs, t.amendes, t.total, t.perKm.toFixed(4), t.nb, t.achatDate]);
-    const csv = [headers, ...rows].map(r => r.map(c => `"${(c ?? '').toString().replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `auto-flotte-tco-${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000); // libère la mémoire
+  // Export du coût total par véhicule (TCO) — Excel/CSV, selon l'année choisie en haut.
+  if (FP.makeExportMenu) FP.makeExportMenu({
+    mount: '#tco-export-mount', label: 'Exporter', sheetName: 'Cout par vehicule', total: true,
+    columns: [
+      { label: 'Immatriculation', value: t => t.immat || '' },
+      { label: 'Modèle',          value: t => t.modele || '' },
+      { label: 'Km',              value: t => { const n = Number(t.km); return isNaN(n) ? null : n; }, number: true, noTotal: true },
+      { label: 'Factures TTC (€)',value: t => Number(t.fact) || 0, number: true },
+      { label: 'Assurance/an (€)',value: t => Number(t.assur) || 0, number: true },
+      { label: 'TVS/an (€)',      value: t => Number(t.tvs) || 0, number: true },
+      { label: 'Amendes (€)',     value: t => Number(t.amendes) || 0, number: true },
+      { label: 'Coût total (€)',  value: t => Number(t.total) || 0, number: true },
+      { label: 'Coût / km (€)',   value: t => t.perKm ? Math.round(t.perKm * 1000) / 1000 : null, number: true, noTotal: true },
+      { label: 'Nb factures',     value: t => Number(t.nb) || 0, number: true, noTotal: true },
+      { label: 'Dernier achat',   value: t => t.achatDate || '' },
+    ],
+    getRows: () => tcoData,
+    baseName: () => { const a = $('filter-annee'); return 'cout-par-vehicule-' + (a && a.value && a.value !== 'all' ? a.value : 'toutes-annees'); },
   });
 </script>
 </body>
