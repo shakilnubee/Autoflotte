@@ -1041,6 +1041,28 @@ FP.santeVehicule = (v) => {
   return { score, niveau, raisons };
 };
 
+// Estimation INDICATIVE de la valeur de revente d'un véhicule (décote).
+// Repose sur la valeur d'achat, l'âge (mise en circulation) et le kilométrage.
+//   { valeur, ageAnnees, residuel, kmAdj, attendu } | null si données insuffisantes
+FP.decoteVehicule = (v) => {
+  if (!v) return null;
+  const achat = Number(v.valeurAchat);
+  if (!Number.isFinite(achat) || achat <= 0) return null;
+  const mec = v.dateMiseEnCirculation ? new Date(v.dateMiseEnCirculation) : null;
+  if (!mec || isNaN(mec)) return null;
+  const ageY = Math.max(0, (Date.now() - mec.getTime()) / (365.25 * 86400000));
+  // Résiduel selon l'âge : ~-20% la 1re année, puis ~-12%/an. Plancher à 10%.
+  let res = ageY <= 1 ? (1 - 0.20 * ageY) : (0.80 * Math.pow(0.88, ageY - 1));
+  res = Math.max(0.10, Math.min(1, res));
+  // Ajustement kilométrage vs attendu (~20 000 km/an) : 100 000 km d'écart ≈ ±10%.
+  const km = Number(v.km) || 0;
+  const attendu = ageY * 20000;
+  let kmAdj = 1;
+  if (attendu > 0) { kmAdj = 1 - ((km - attendu) / 100000) * 0.10; kmAdj = Math.max(0.80, Math.min(1.10, kmAdj)); }
+  const valeur = Math.max(0, Math.round((achat * res * kmAdj) / 50) * 50);
+  return { valeur, ageAnnees: ageY, residuel: res, kmAdj, attendu };
+};
+
 FP.buildAlertes = (data) => {
   const out = [];
   const today = new Date();
