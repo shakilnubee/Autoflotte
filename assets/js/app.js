@@ -663,6 +663,8 @@ FP.DEFAULT_NAV_LABELS = {
   'dashboard.html':     'Tableau de bord',
   'notifications.html': 'Notifications',
   'calendrier.html':   'Calendrier',
+  'taches.html':       'Tâches',
+  'renouvellements.html': 'Renouvellements',
   'statistiques.html': 'Statistiques',
   'vehicules.html':    'Véhicules',
   'emprunts.html':     'Emprunt véhicule',
@@ -675,6 +677,8 @@ FP.DEFAULT_NAV_LABELS = {
   'contrats.html':     'Contrats',
   'guide.html':        'Guide',
   'parametres.html':   'Paramètres',
+  'brochure.html':     'Brochure',
+  'prix.html':         'Tarifs',
 };
 // Ordre d'affichage des onglets du menu (clés data-nav), navOrder en tête puis le reste
 FP.navKeysOrdered = () => {
