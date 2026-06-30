@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <title>Dashboard — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260630k">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260630l">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260630k"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260630l"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260630k">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260630l">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -193,6 +193,7 @@
           <div>
             <div class="kpi-label">Coûts du mois</div>
             <div class="kpi-value" id="kpi-couts">—</div>
+            <div id="kpi-couts-spark" class="mt-1" title="Tendance des 6 derniers mois"></div>
             <div class="kpi-delta">Voir le détail →</div>
           </div>
           <div class="kpi-ic">
@@ -342,10 +343,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260630k"></script>
-<script src="assets/js/supabase-client.js?v=20260630k"></script>
-<script src="assets/js/data.js?v=20260630k"></script>
-<script src="assets/js/app.js?v=20260630k"></script>
+<script src="assets/js/vendor/supabase.js?v=20260630l"></script>
+<script src="assets/js/supabase-client.js?v=20260630l"></script>
+<script src="assets/js/data.js?v=20260630l"></script>
+<script src="assets/js/app.js?v=20260630l"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -413,6 +414,15 @@
     .filter(f => (f.date || '').startsWith(currentMonth))
     .reduce((s, f) => s + (f.montantTTC || 0), 0);
   document.getElementById('kpi-couts').textContent = FP.euro(coutsMois);
+
+  // Sparkline : coûts (factures TTC) des 6 derniers mois
+  (function () {
+    const spark = document.getElementById('kpi-couts-spark'); if (!spark || !FP.sparklineHTML) return;
+    const months = [];
+    for (let i = 5; i >= 0; i--) { const d = new Date(today.getFullYear(), today.getMonth() - i, 1); months.push(d.toISOString().slice(0, 7)); }
+    const série = months.map(ym => (data.factures || []).filter(f => (f.date || '').startsWith(ym)).reduce((s, f) => s + (f.montantTTC || 0), 0));
+    if (série.some(v => v > 0)) spark.innerHTML = FP.sparklineHTML(série, { width: 110, height: 26, color: '#0e7490' });
+  })();
 
   // Compteurs animés : les chiffres montent au chargement
   ['kpi-vehicules', 'kpi-conducteurs', 'kpi-amendes', 'kpi-couts'].forEach(id => {

@@ -251,6 +251,23 @@ const FP = {
       ${center !== '' ? `<text x="${size / 2}" y="${size / 2}" text-anchor="middle" dominant-baseline="central" style="font-size:${opts.fontSize || 19}px;font-weight:800;fill:${opts.textColor || '#0f1e3d'}">${center}</text>` : ''}
     </svg>`;
   },
+  // Mini-courbe (sparkline) en SVG à partir d'une série de valeurs. opts: {width,height,color}
+  sparklineHTML(values, opts) {
+    opts = opts || {};
+    const w = opts.width || 96, h = opts.height || 28;
+    const vals = (values || []).map(v => Number(v) || 0);
+    if (vals.length < 2) return '';
+    const max = Math.max(...vals), min = Math.min(...vals), span = (max - min) || 1;
+    const x = (i) => (i / (vals.length - 1) * (w - 4) + 2);
+    const y = (v) => (h - 3 - ((v - min) / span) * (h - 6));
+    const pts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    const col = opts.color || '#0e7490';
+    const lx = x(vals.length - 1).toFixed(1), ly = y(vals[vals.length - 1]).toFixed(1);
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="overflow:visible">
+      <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${lx}" cy="${ly}" r="2.6" fill="${col}"/>
+    </svg>`;
+  },
   // Jours restants entre aujourd'hui et une date ISO
   joursRestants(iso) {
     if (!iso || iso === '—') return null;
