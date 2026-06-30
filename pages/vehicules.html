@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Véhicules — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260630d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260630e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260630d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260630e">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -328,7 +328,6 @@
           <div class="hidden-cols-popover" id="hidden-cols-popover"></div>
         </div>
         <span data-data-io></span>
-        <span id="veh-views-mount"></span>
         <span id="veh-export-mount"></span>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
       </div>
@@ -453,9 +452,29 @@
   <div class="p-6 border-t border-slate-200 flex flex-wrap gap-2 sticky bottom-0 bg-white z-10" style="box-shadow:0 -6px 16px -10px rgba(15,30,61,.25)">
     <button class="btn btn-outline text-sm flex-1 justify-center" id="drawer-edit"><i data-lucide="pencil" class="w-4 h-4"></i> Modifier</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-pdf" title="Exporter la fiche en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> PDF</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-qr" title="QR code à coller dans la boîte à gants (ouvre la fiche du véhicule)"><i data-lucide="qr-code" class="w-4 h-4"></i> QR</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
+
+<!-- =============== MODAL QR CODE =============== -->
+<div class="modal-backdrop" id="qr-backdrop">
+  <div class="modal p-6" style="max-width:380px">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-extrabold" style="color:var(--fp-primary)">QR code véhicule</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="qr-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm text-slate-500 mb-3">À coller dans la boîte à gants : un scan ouvre la fiche du véhicule (kilométrage, documents, contact…).</p>
+    <div class="flex flex-col items-center gap-2">
+      <div id="qr-holder" style="background:#fff;padding:8px;border:1px solid var(--fp-border);border-radius:12px"></div>
+      <div id="qr-label" class="text-center font-mono font-bold text-slate-800"></div>
+    </div>
+    <div class="flex gap-2 pt-4">
+      <button type="button" class="btn btn-outline flex-1 justify-center" id="qr-print"><i data-lucide="printer" class="w-4 h-4"></i> Imprimer</button>
+      <button type="button" class="btn btn-dark flex-1 justify-center" id="qr-download"><i data-lucide="download" class="w-4 h-4"></i> PNG</button>
+    </div>
+  </div>
+</div>
 
 <!-- =============== MODAL NOUVEAU / MODIFIER =============== -->
 <div class="modal-backdrop" id="modal-backdrop">
@@ -666,11 +685,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260630d"></script>
-<script src="../assets/js/supabase-client.js?v=20260630d"></script>
-<script src="../assets/js/data.js?v=20260630d"></script>
-<script src="../assets/js/fleet-docs.js?v=20260630d"></script>
-<script src="../assets/js/app.js?v=20260630d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260630e"></script>
+<script src="../assets/js/supabase-client.js?v=20260630e"></script>
+<script src="../assets/js/data.js?v=20260630e"></script>
+<script src="../assets/js/fleet-docs.js?v=20260630e"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260630e"></script>
+<script src="../assets/js/app.js?v=20260630e"></script>
 <script>
   lucide.createIcons();
 
@@ -2351,24 +2371,6 @@
   }
   { const b = $('btn-fiche-groupe'); if (b) b.addEventListener('click', printGroupeFiche); }
 
-  // Vues sauvegardées : enregistre une combinaison de filtres (groupe + statut + catégorie + tri)
-  // sous un nom (ex. « Commerciaux à vendre ») et la rejoue en un clic.
-  if (FP.makeViewsMenu) FP.makeViewsMenu({
-    mount: '#veh-views-mount', pageKey: 'vehicules',
-    getState: () => ({ groupe: state.groupe, statut: state.statut, categorie: state.categorie, search: state.search, sortKey: state.sortKey, sortDir: state.sortDir }),
-    applyState: (s) => {
-      state.groupe = s.groupe || 'all';
-      state.categorie = s.categorie || 'all';
-      state.search = s.search || '';
-      state.sortKey = s.sortKey || null;
-      state.sortDir = s.sortDir || 'asc';
-      if ($('search')) $('search').value = state.search;
-      if ($('filter-categorie')) $('filter-categorie').value = state.categorie;
-      applyStatutFilter(s.statut || 'all'); // gère l'état actif des chips + renderTable
-      renderTabBar(); renderTable();
-    },
-  });
-
   // Export de la liste des véhicules affichés (filtres/groupe en cours) — Excel/CSV.
   if (FP.makeExportMenu) FP.makeExportMenu({
     mount: '#veh-export-mount', label: 'Exporter', sheetName: 'Véhicules',
@@ -2824,6 +2826,60 @@
     w.document.close();
   }
   $('drawer-pdf').addEventListener('click', exportFichePDF);
+
+  // ---------- QR code véhicule (ouvre la fiche live ; à coller dans la boîte à gants) ----------
+  const QR_BASE = 'https://shakilnubee.github.io/Autoflotte/pages/vehicules.html?immat=';
+  let qrCurrent = null;
+  function buildQrCanvas(url, scale, margin) {
+    const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
+    const n = qr.getModuleCount(), s = scale || 10, m = (margin == null ? 4 : margin);
+    const size = (n + m * 2) * s;
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size, size); ctx.fillStyle = '#000';
+    for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (qr.isDark(r, col)) ctx.fillRect((col + m) * s, (r + m) * s, s, s);
+    return c;
+  }
+  function openQr(v) {
+    if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
+    const immat = v.immat || '';
+    const url = QR_BASE + encodeURIComponent(immat);
+    const label = `${immat} · ${v.marque || ''} ${v.modele || ''}`.trim();
+    const canvas = buildQrCanvas(url, 6, 4);
+    canvas.style.width = '240px'; canvas.style.height = '240px'; canvas.style.imageRendering = 'pixelated';
+    qrCurrent = { immat, label, url };
+    const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
+    $('qr-label').textContent = label;
+    $('qr-backdrop').classList.add('open');
+  }
+  function downloadQr() {
+    if (!qrCurrent) return;
+    buildQrCanvas(qrCurrent.url, 12, 4).toBlob(b => {
+      const a = document.createElement('a'); a.href = URL.createObjectURL(b);
+      a.download = 'qr-' + (qrCurrent.immat || 'vehicule') + '.png'; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    }, 'image/png');
+  }
+  function printQr() {
+    if (!qrCurrent) return;
+    const png = buildQrCanvas(qrCurrent.url, 12, 4).toDataURL('image/png');
+    const esc = s => (s || '').toString().replace(/</g, '&lt;');
+    const w = window.open('', '_blank');
+    if (!w) { alert('Autorise les fenêtres pop-up pour imprimer.'); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>QR ' + esc(qrCurrent.immat) + '</title>'
+      + '<style>body{font-family:Inter,Arial,sans-serif;text-align:center;padding:40px;color:#0f1e3d}'
+      + '.card{display:inline-block;border:2px solid #0f1e3d;border-radius:16px;padding:24px 28px}'
+      + 'img{width:280px;height:280px;image-rendering:pixelated}'
+      + '.plate{font-size:26px;font-weight:900;margin-top:12px;font-family:monospace}'
+      + '.mod{color:#64748b;font-size:13px;margin-top:2px}.hint{margin-top:10px;font-size:12px;color:#94a3b8}</style></head>'
+      + '<body><div class="card"><img src="' + png + '"><div class="plate">' + esc(qrCurrent.immat) + '</div>'
+      + '<div class="mod">' + esc(qrCurrent.label) + '</div><div class="hint">Scannez pour ouvrir la fiche du véhicule</div></div>'
+      + '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print()},250)}</scr' + 'ipt></body></html>');
+    w.document.close();
+  }
+  $('drawer-qr').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v); });
+  $('qr-close').addEventListener('click', () => $('qr-backdrop').classList.remove('open'));
+  $('qr-print').addEventListener('click', printQr);
+  $('qr-download').addEventListener('click', downloadQr);
 
   // Wiring modal édition groupe
   $('grp-save').addEventListener('click', saveGroupEdit);

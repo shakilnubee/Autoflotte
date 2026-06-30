@@ -2970,53 +2970,6 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     return { el: wrap };
   };
 
-  // VUES SAUVEGARDÉES — enregistre une combinaison de filtres sous un nom (ex. « Commerciaux à
-  // vendre ») et la rejoue en un clic. Réutilisable, partagé par société (app_settings).
-  //   opts = { mount, pageKey, getState(), applyState(state), label? }
-  FP.makeViewsMenu = function (opts) {
-    injectStyleOnce();
-    const mount = (typeof opts.mount === 'string') ? document.querySelector(opts.mount) : opts.mount;
-    if (!mount) { console.warn('[makeViewsMenu] mount introuvable'); return; }
-    const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const getVues = () => { try { const v = FP.settings.get().vues; return (v && Array.isArray(v[opts.pageKey])) ? v[opts.pageKey] : []; } catch { return []; } };
-    const setVues = (arr) => { const s = FP.settings.get(); s.vues = (s.vues && typeof s.vues === 'object') ? s.vues : {}; s.vues[opts.pageKey] = arr; FP.settings.save(s); };
-    const wrap = document.createElement('div'); wrap.className = 'fp-export-wrap';
-    wrap.innerHTML = `<button type="button" class="btn btn-outline text-sm fp-views-btn"><i data-lucide="bookmark" class="w-4 h-4"></i> ${opts.label || 'Vues'} <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i></button><div class="fp-menu fp-export-menu fp-views-menu hidden"></div>`;
-    mount.appendChild(wrap);
-    const menu = wrap.querySelector('.fp-views-menu');
-    const btn = wrap.querySelector('.fp-views-btn');
-    function renderMenu() {
-      const vues = getVues();
-      menu.innerHTML = `<div class="fp-exp-sec">Vues enregistrées</div>`
-        + (vues.length
-          ? vues.map(v => `<div style="display:flex;align-items:center;gap:2px"><button type="button" class="fp-exp-it" data-vue="${esc(v.id)}" style="flex:1"><i data-lucide="bookmark" class="w-4 h-4" style="color:var(--fp-accent)"></i> ${esc(v.name)}</button><button type="button" data-vue-del="${esc(v.id)}" title="Supprimer" style="border:none;background:none;cursor:pointer;color:#cbd5e1;padding:6px 8px;font-size:13px">✕</button></div>`).join('')
-          : `<div style="font-size:12px;color:#94a3b8;padding:4px 10px 8px">Aucune vue. Filtre la page puis « Enregistrer ».</div>`)
-        + `<div class="fp-exp-div"></div>`
-        + `<button type="button" class="fp-exp-it" data-vue-save><i data-lucide="plus" class="w-4 h-4" style="color:#16a34a"></i> Enregistrer la vue actuelle</button>`;
-      if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
-    }
-    btn.addEventListener('click', (e) => { e.stopPropagation(); const willOpen = menu.classList.contains('hidden'); if (willOpen) renderMenu(); menu.classList.toggle('hidden'); });
-    menu.addEventListener('click', (e) => {
-      const del = e.target.closest('[data-vue-del]');
-      if (del) { setVues(getVues().filter(v => v.id !== del.dataset.vueDel)); renderMenu(); return; }
-      if (e.target.closest('[data-vue-save]')) {
-        const name = (prompt('Nom de la vue (ex. « Commerciaux à vendre ») :') || '').trim();
-        if (!name) return;
-        const arr = getVues();
-        arr.push({ id: 'V' + Math.random().toString(36).slice(2, 9), name, state: opts.getState() });
-        setVues(arr); renderMenu();
-        if (FP.toast) FP.toast(`Vue « ${name} » enregistrée`);
-        return;
-      }
-      const ap = e.target.closest('[data-vue]');
-      if (ap) {
-        const v = getVues().find(x => x.id === ap.dataset.vue);
-        menu.classList.add('hidden');
-        if (v) { try { opts.applyState(v.state || {}); } catch (err) { console.error(err); } if (FP.toast) FP.toast(`Vue « ${v.name} » appliquée`); }
-      }
-    });
-    return { el: wrap };
-  };
 })();
 
 // Toolbar Import/Export CSV retirée (remplacée par l'import de document sur Véhicules/Amendes).
