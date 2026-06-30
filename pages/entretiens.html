@@ -169,7 +169,10 @@
 
     <!-- Podium : véhicules les plus coûteux en entretien -->
     <div class="card p-6 mb-6">
-      <h3 class="font-bold text-slate-900 mb-1">🏆 Podium — véhicules les plus coûteux <span id="podium-annee" class="text-slate-400 font-normal"></span></h3>
+      <div class="flex items-start justify-between gap-3 flex-wrap mb-1">
+        <h3 class="font-bold text-slate-900">🏆 Podium — véhicules les plus coûteux</h3>
+        <select id="podium-year" class="text-sm border border-slate-200 rounded-lg px-2 py-1 bg-white" title="Choisir l'année"></select>
+      </div>
       <p class="text-xs text-slate-500 mb-4">Classement par coût d'entretien + réparation</p>
       <div id="podium" class="grid grid-cols-3 gap-3 items-end"></div>
     </div>
@@ -452,9 +455,23 @@
     onChange: () => renderTable(),
   });
 
+  function fillPodiumYears() {
+    const sel = $('podium-year'); if (!sel) return;
+    const years = [...new Set(interventions.map(i => (i.date || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y)))];
+    const cur = new Date().getFullYear().toString();
+    if (!years.includes(cur)) years.push(cur);
+    years.sort().reverse();
+    if (sel.dataset.filled !== years.join(',')) {
+      const prev = sel.value;
+      sel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+      sel.dataset.filled = years.join(',');
+      sel.value = (prev && years.includes(prev)) ? prev : cur;
+    }
+  }
   function renderPodium() {
-    const annee = new Date().getFullYear().toString(); // année courante (avant : figé à 2026)
-    $('podium-annee').textContent = '(' + annee + ')';
+    fillPodiumYears();
+    const sel = $('podium-year');
+    const annee = (sel && sel.value) || new Date().getFullYear().toString();
     const perVeh = {};
     interventions.filter(i => (i.date || '').startsWith(annee)).forEach(i => {
       const k = i.vehiculeImmat || '?';
@@ -483,6 +500,7 @@
   }
 
   renderKPIs(); renderCTList(); renderPodium(); renderTable(); renderCharts();
+  { const sel = $('podium-year'); if (sel) sel.addEventListener('change', renderPodium); }
   // Graphiques (Chart.js en différé) dessinés dès qu'il est prêt, sans bloquer l'affichage
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });
   // Rafraîchit quand Supabase a chargé (sinon on reste sur le cache data.js)
