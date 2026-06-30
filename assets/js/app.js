@@ -1002,6 +1002,45 @@ FP.concerneAntiPollution = (v) => {
   return (/utilit/.test(cat) || /engin/.test(cat)) && !isChariot;
 };
 
+// Score « santé » d'un véhicule (0–100) à partir de ses échéances (CT, révision, leasing,
+// anti-pollution). Renvoie null pour les véhicules sortis de la flotte (vendu/HS…).
+//   { score, niveau:'bon'|'surveiller'|'critique', raisons:[...] }
+FP.santeVehicule = (v) => {
+  if (!v) return null;
+  const st = (v.statut || 'actif').toString().toLowerCase().trim();
+  if (st && st !== 'actif') return null; // seulement les véhicules en service
+  let score = 100; const raisons = [];
+  // Contrôle technique
+  const jCT = (v.prochainCT && v.prochainCT !== '—') ? FP.joursRestants(v.prochainCT) : null;
+  if (jCT !== null && jCT !== undefined) {
+    if (jCT < 0) { score -= 40; raisons.push(`CT dépassé (${-jCT} j)`); }
+    else if (jCT < 30) { score -= 25; raisons.push(`CT dans ${jCT} j`); }
+    else if (jCT < 60) { score -= 10; raisons.push(`CT dans ${jCT} j`); }
+  }
+  // Révision
+  const r = FP.revisionInfo ? FP.revisionInfo(v) : null;
+  if (r && r.niveau === 'danger') { score -= 22; raisons.push('Révision dépassée/imminente'); }
+  else if (r && r.niveau === 'warn') { score -= 9; raisons.push('Révision à prévoir'); }
+  // Leasing : dépassement km + fin de contrat proche
+  const l = FP.leasingInfo ? FP.leasingInfo(v) : null;
+  if (l && l.niveau === 'danger') { score -= 18; raisons.push('Dépassement km leasing'); }
+  else if (l && l.niveau === 'warn') { score -= 7; raisons.push('Km leasing à surveiller'); }
+  if (l && l.finContrat && !isNaN(l.finContrat)) {
+    const jf = Math.ceil((l.finContrat - new Date()) / 86400000);
+    if (jf < 0) { score -= 12; raisons.push('Leasing terminé'); }
+    else if (jf < 90) { score -= 7; raisons.push(`Fin leasing dans ${jf} j`); }
+  }
+  // Anti-pollution (utilitaires concernés)
+  if (FP.concerneAntiPollution(v) && v.antiPollution && v.antiPollution !== '—') {
+    const ja = FP.joursRestants(v.antiPollution);
+    if (ja !== null && ja < 0) { score -= 14; raisons.push('Anti-pollution dépassé'); }
+    else if (ja !== null && ja < 30) { score -= 7; raisons.push('Anti-pollution proche'); }
+  }
+  score = Math.max(0, Math.min(100, score));
+  const niveau = score >= 80 ? 'bon' : (score >= 55 ? 'surveiller' : 'critique');
+  return { score, niveau, raisons };
+};
+
 FP.buildAlertes = (data) => {
   const out = [];
   const today = new Date();
