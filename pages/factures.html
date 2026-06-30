@@ -137,6 +137,7 @@
       </div>
       <div class="flex items-center gap-3">
         <span data-data-io></span>
+        <button class="btn btn-outline text-sm" id="btn-export-compta" title="Exporter les factures affichées (selon les filtres) en CSV pour le comptable"><i data-lucide="download" class="w-4 h-4"></i> Export comptable</button>
         <button class="btn btn-dark text-sm" id="btn-import-facture"><i data-lucide="file-up" class="w-4 h-4"></i> Importer une facture</button>
       </div>
     </div>
@@ -1243,6 +1244,35 @@
   }
 
   $('btn-import-facture').addEventListener('click', openFactureModal);
+
+  // Export comptable : les factures AFFICHÉES (selon les filtres en cours), ligne par ligne,
+  // avec Société (déduite du propriétaire du véhicule) et Mois — prêt pour le comptable.
+  $('btn-export-compta').addEventListener('click', () => {
+    const normP = s => (s || '').toString().toUpperCase().replace(/\s/g, '');
+    const vehByImmat = {};
+    (window.FP_DATA.vehicules || []).forEach(v => { vehByImmat[normP(v.immat)] = v; });
+    const soc = (immat) => { const v = vehByImmat[normP(immat)]; return v ? (v.proprietaire || '') : ''; };
+    const rows = filtered().slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    if (!rows.length) { if (FP.toast) FP.toast('Aucune facture à exporter (vérifie les filtres).'); return; }
+    const cols = [
+      { key: 'date',          label: 'Date' },
+      { key: 'mois',          label: 'Mois',        format: (_, r) => (r.date || '').slice(0, 7) },
+      { key: 'societe',       label: 'Société',     format: (_, r) => soc(r.vehiculeImmat) },
+      { key: 'vehiculeImmat', label: 'Véhicule' },
+      { key: 'fournisseur',   label: 'Fournisseur' },
+      { key: 'numeroFacture', label: 'N° facture' },
+      { key: 'type',          label: 'Type' },
+      { key: 'description',   label: 'Description' },
+      { key: 'montantHT',     label: 'HT (€)',  format: FP.csv.numFormat },
+      { key: 'montantTVA',    label: 'TVA (€)', format: FP.csv.numFormat },
+      { key: 'montantTTC',    label: 'TTC (€)', format: FP.csv.numFormat },
+      { key: 'km',            label: 'Km' },
+    ];
+    const periode = state.mois !== 'all' ? state.mois : (state.annee !== 'all' ? state.annee : 'tout');
+    const totalTTC = rows.reduce((s, f) => s + (+f.montantTTC || 0), 0);
+    FP.csv.download(`factures-comptable-${periode}.csv`, cols, rows);
+    if (FP.toast) FP.toast(`${rows.length} facture(s) exportée(s) · ${FP.euro(totalTTC)} TTC`);
+  });
   $('facture-close').addEventListener('click', closeFactureModal);
   $('facture-cancel').addEventListener('click', closeFactureModal);
   $('facture-modal').addEventListener('click', (e) => { if (e.target.id === 'facture-modal') closeFactureModal(); });
