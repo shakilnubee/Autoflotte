@@ -43,9 +43,20 @@ window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStora
 // === Densité d'affichage (compact / confortable) — réglée dans Paramètres, appliquée à TOUTES les pages ===
 (function applyDensity(){ try { if ((localStorage.getItem('fp_density') || '') === 'compact') document.documentElement.classList.add('fp-compact'); } catch (e) {} })();
 
-// (Anciennement : un garde en phase de capture empêchait la fermeture des tiroirs/modales
-//  au clic sur le fond. Retiré à la demande de l'utilisateur — désormais un clic en dehors
-//  ferme la zone, comme ÉCHAP. Voir le handler « clic en dehors » plus bas.)
+// EXCEPTION (demande utilisateur) : les fenêtres d'IMPORT / TÉLÉVERSEMENT ne se ferment QUE
+// par la croix — pas au clic sur le fond — pour ne pas perdre une saisie en cours (ex. import
+// de facture, scan d'avis, carte grise). Tout le RESTE (fiches, autres modales) se ferme au clic
+// en dehors, comme ÉCHAP (cf. handler plus bas). On reconnaît une fenêtre d'import si son fond
+// contient une zone de téléversement (input file) ou un élément « import »/« upload ».
+// On bloque alors le clic sur le fond en phase de CAPTURE (avant tout handler de fermeture).
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (!t || !t.matches) return;
+  if (!t.matches('.modal-backdrop, [id$="-modal"]')) return;   // uniquement le FOND d'une modale
+  const estImport = (t.id && /import|upload/i.test(t.id))
+    || t.querySelector('input[type="file"], [id*="import" i], [id*="upload" i]');
+  if (estImport) e.stopPropagation();
+}, true);
 
 // Garde GLOBAL (toutes les pages + futures) : ÉCHAP ferme TOUTE zone ouverte
 // (tiroir, fenêtre modale, popover, menu déroulant, résultats de recherche).
