@@ -235,6 +235,22 @@ const FP = {
     }
     setTimeout(() => wrap.remove(), 1000);
   },
+  // Anneau de progression (donut) en SVG. opts: {size, stroke, color, label, textColor, fontSize, track}
+  donutHTML(pct, opts) {
+    opts = opts || {};
+    const size = opts.size || 88, sw = opts.stroke || 10, r = (size - sw) / 2, c = 2 * Math.PI * r;
+    const p = Math.max(0, Math.min(100, Number(pct) || 0));
+    const off = c * (1 - p / 100);
+    const col = opts.color || '#16a34a';
+    const center = (opts.label != null) ? opts.label : (Math.round(p) + '%');
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="flex:0 0 ${size}px">
+      <g transform="rotate(-90 ${size / 2} ${size / 2})">
+        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${opts.track || '#e2e8f0'}" stroke-width="${sw}"/>
+        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" style="transition:stroke-dashoffset .8s ease"/>
+      </g>
+      ${center !== '' ? `<text x="${size / 2}" y="${size / 2}" text-anchor="middle" dominant-baseline="central" style="font-size:${opts.fontSize || 19}px;font-weight:800;fill:${opts.textColor || '#0f1e3d'}">${center}</text>` : ''}
+    </svg>`;
+  },
   // Jours restants entre aujourd'hui et une date ISO
   joursRestants(iso) {
     if (!iso || iso === '—') return null;
