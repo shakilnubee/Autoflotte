@@ -1268,6 +1268,41 @@ FP.buildAlertes = (data) => {
       vehicules: sinAttente.map(s => ({ label: `${s.vehiculeImmat || '—'} · ${(s.description || 'sinistre').slice(0, 45)}${s.montantTTC ? ' — ' + FP.euro(s.montantTTC) : ''}`, target: 'sinistres.html' })) });
   }
 
+  // --- Budgets d'entretien dépassés (budget annuel défini par véhicule) ---
+  try {
+    const budgets = (FP.settings.get().budgets) || {};
+    if (Object.keys(budgets).length) {
+      const yr = String(new Date().getFullYear());
+      const COUT = ['entretien', 'réparation', 'reparation'];
+      const spendByImmat = {};
+      (data.factures || []).forEach(f => {
+        if (!(f.date || '').startsWith(yr)) return;
+        const t = (f.type || '').toLowerCase();
+        let amt = 0;
+        if (COUT.includes(t)) amt = Number(f.montantTTC) || 0;
+        else if (t === 'sinistre' && sinStatut[f.id] !== 'rembourse' && sinStatut[f.id] !== 'pec') amt = Number(f.montantTTC) || 0;
+        if (amt && f.vehiculeImmat) spendByImmat[f.vehiculeImmat] = (spendByImmat[f.vehiculeImmat] || 0) + amt;
+      });
+      const over = [];
+      (data.vehicules || []).forEach(v => {
+        if (horsFlotte(v)) return;
+        const b = Number(budgets[v.id]); if (!Number.isFinite(b) || b <= 0) return;
+        const spent = spendByImmat[v.immat] || 0;
+        if (spent > b) over.push({ v, b, spent });
+      });
+      if (over.length) {
+        over.sort((a, b) => (b.spent - b.b) - (a.spent - a.b));
+        out.push({
+          niveau: 'warn', categorie: 'Budget',
+          message: `${over.length} véhicule(s) au-dessus du budget entretien ${yr}`,
+          detail: 'Dépenses d\'entretien supérieures au budget défini',
+          sort: 600,
+          vehicules: over.map(o => ({ label: `${o.v.immat} · ${o.v.marque} ${o.v.modele} — ${FP.euro(o.spent)} / ${FP.euro(o.b)} (+${FP.euro(o.spent - o.b)})`, target: 'vehicules.html?immat=' + encodeURIComponent(o.v.immat) })),
+        });
+      }
+    }
+  } catch (e) {}
+
   const order = { danger: 0, warn: 1, info: 2 };
   out.sort((a, b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
   // Masque les alertes que l'utilisateur a explicitement enlevées (par véhicule / échéance)
