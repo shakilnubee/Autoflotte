@@ -183,13 +183,57 @@ const FP = {
   // Badge HTML selon statut véhicule
   statutBadge(statut) {
     const map = {
-      'actif':       { cls: 'badge-ok',     label: 'Actif' },
-      'entretien':   { cls: 'badge-warn',   label: 'En entretien' },
-      'à vendre':    { cls: 'badge-warn',   label: 'À vendre' },
-      'vendu':       { cls: 'badge-info',   label: 'Vendu' },
+      'actif':        { cls: 'badge-ok',     label: 'Actif' },
+      'entretien':    { cls: 'badge-warn',   label: 'En entretien', pulse: true },
+      'à vendre':     { cls: 'badge-warn',   label: 'À vendre' },
+      'vendu':        { cls: 'badge-info',   label: 'Vendu' },
+      'sinistre':     { cls: 'badge-danger', label: 'Sinistre', pulse: true },
+      'hors service': { cls: 'badge-danger', label: 'Hors service', pulse: true },
     };
     const m = map[statut] || { cls: 'badge-info', label: statut };
-    return `<span class="badge ${m.cls}">${m.label}</span>`;
+    return `<span class="badge ${m.cls}">${m.pulse ? '<span class="badge-dot"></span>' : ''}${m.label}</span>`;
+  },
+  // Anime un nombre de 0 → valeur finale (compteur), en gardant préfixe/suffixe (€, km…).
+  // Appeler APRÈS avoir posé la valeur finale dans l'élément. Idempotent (1 seule fois).
+  countUp(el, durationMs) {
+    if (!el || el.dataset.counted === '1') return;
+    try { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { el.dataset.counted = '1'; return; } } catch (e) {}
+    const txt = (el.textContent || '').trim();
+    const m = txt.match(/^(\D*?)([\d  .,]*\d)(.*)$/s);
+    if (!m) return;
+    const target = parseInt(m[2].replace(/[^\d]/g, ''), 10);
+    if (!isFinite(target) || target <= 0) { el.dataset.counted = '1'; return; }
+    el.dataset.counted = '1';
+    const pre = m[1], suf = m[3], dur = durationMs || 800, t0 = performance.now();
+    const step = (t) => {
+      const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = pre + Math.round(target * e).toLocaleString('fr-FR') + suf;
+      if (p < 1) requestAnimationFrame(step); else el.textContent = txt;
+    };
+    requestAnimationFrame(step);
+  },
+  // Petite explosion de confettis (succès). Respecte prefers-reduced-motion.
+  celebrate(opts) {
+    opts = opts || {};
+    try { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch (e) {}
+    const colors = ['#F97316', '#16a34a', '#3b82f6', '#eab308', '#ec4899', '#06b6d4'];
+    const n = opts.n || 20;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden';
+    document.body.appendChild(wrap);
+    const cx = opts.x != null ? opts.x : innerWidth / 2;
+    const cy = opts.y != null ? opts.y : innerHeight * 0.3;
+    for (let i = 0; i < n; i++) {
+      const p = document.createElement('div');
+      const sz = 6 + Math.random() * 7;
+      p.style.cssText = `position:absolute;left:${cx}px;top:${cy}px;width:${sz}px;height:${sz * 0.6}px;background:${colors[i % colors.length]};border-radius:2px;opacity:1;will-change:transform,opacity;transition:transform .9s cubic-bezier(.2,.6,.3,1),opacity .9s ease`;
+      wrap.appendChild(p);
+      const ang = (Math.PI * 2) * (i / n) + Math.random() * 0.6;
+      const dist = 70 + Math.random() * 130;
+      const dx = Math.cos(ang) * dist, dy = Math.sin(ang) * dist + 130;
+      requestAnimationFrame(() => { p.style.transform = `translate(${dx}px,${dy}px) rotate(${Math.random() * 600}deg)`; p.style.opacity = '0'; });
+    }
+    setTimeout(() => wrap.remove(), 1000);
   },
   // Jours restants entre aujourd'hui et une date ISO
   joursRestants(iso) {
