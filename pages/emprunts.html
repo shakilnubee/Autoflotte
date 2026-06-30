@@ -19,6 +19,7 @@
   .modal-backdrop.open { display: flex; }
   .modal { background: white; border-radius: 1rem; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
   .pill-encours { background: #FEF3C7; color: #78350F; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
+  .pill-avenir { background: #E0E7FF; color: #3730A3; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
   .pill-rendu { background: #DCFCE7; color: #14532D; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
   .pill-retard { background: #FEE2E2; color: #991B1B; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
   tr.is-retard { background: #FEF2F2; }
@@ -107,6 +108,7 @@
         <p class="text-slate-500 text-sm mt-1">Qui a pris quel véhicule, quand, et quand il l'a rendu.</p>
       </div>
       <div class="flex items-center gap-3 flex-wrap"><span data-data-io></span>
+        <button class="btn btn-outline text-sm" id="btn-reserve" title="Planifier un véhicule pour une date à venir"><i data-lucide="calendar-plus" class="w-4 h-4"></i> Réserver un véhicule</button>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouvel emprunt</button>
       </div>
     </div>
@@ -122,6 +124,21 @@
     <div id="emprunt-alert" class="hidden mb-6 rounded-lg border border-red-200 bg-red-50 p-4 flex items-start gap-3">
       <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"></i>
       <div class="text-sm text-red-800" id="emprunt-alert-text"></div>
+    </div>
+
+    <!-- Réservations (futures) -->
+    <div class="card p-0 mb-6 overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+        <h2 class="font-bold text-slate-800 flex items-center gap-2"><i data-lucide="calendar-clock" class="w-4 h-4" style="color:var(--fp-accent)"></i> Réservations <span id="resa-count" class="text-xs font-normal text-slate-400"></span></h2>
+        <button class="btn btn-outline !py-1 !px-2.5 text-xs" id="btn-reserve2"><i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i> Réserver</button>
+      </div>
+      <div class="scrollable">
+        <table class="fp-table">
+          <thead><tr><th>Véhicule</th><th>Réservé pour</th><th>Du</th><th>Au</th><th>Statut</th><th></th></tr></thead>
+          <tbody id="tbody-resa"></tbody>
+        </table>
+      </div>
+      <div id="resa-empty" class="hidden p-8 text-center text-slate-500 text-sm">Aucune réservation à venir. Clique sur « Réserver » pour planifier un véhicule.</div>
     </div>
 
     <!-- Recherche -->
@@ -153,6 +170,7 @@
       </div>
       <div id="empty" class="hidden p-12 text-center text-slate-500 text-sm">Aucun emprunt enregistré.</div>
     </div>
+    <div id="emprunt-more" class="mt-3 text-center"></div>
   </main>
 </div>
 
@@ -229,6 +247,55 @@
   </div>
 </div>
 
+<!-- Modal réservation -->
+<div class="modal-backdrop" id="modal-resa">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold" id="resa-title">Réserver un véhicule</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="resa-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="form-resa" class="space-y-4">
+      <div>
+        <div class="field-label">Véhicule *</div>
+        <input class="field-input" id="r-vehicule" required autocomplete="off" placeholder="Tape une plaque ou un modèle…" />
+      </div>
+      <div>
+        <div class="field-label">Réservé pour (prénom + nom) *</div>
+        <input class="field-input" id="r-personne" required autocomplete="off" placeholder="Tape un nom (ou choisis un existant)" />
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Du (date) *</div>
+          <input class="field-input" type="date" id="r-debut" required autocomplete="off" />
+        </div>
+        <div>
+          <div class="field-label">Heure</div>
+          <input class="field-input" type="time" id="r-heure-debut" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Au (date) *</div>
+          <input class="field-input" type="date" id="r-fin" required autocomplete="off" />
+        </div>
+        <div>
+          <div class="field-label">Heure</div>
+          <input class="field-input" type="time" id="r-heure-fin" />
+        </div>
+      </div>
+      <div>
+        <div class="field-label">Note <span class="text-slate-400 normal-case font-normal">(optionnel)</span></div>
+        <input class="field-input" id="r-note" placeholder="Motif, lieu…" autocomplete="off" />
+      </div>
+      <div id="resa-conflit" class="hidden text-sm rounded-lg px-3 py-2" style="background:#FEF3C7;color:#92400E"></div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="resa-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Réserver</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script src="../assets/js/vendor/supabase.js?v=20260630c"></script>
 <script src="../assets/js/supabase-client.js?v=20260630c"></script>
 <script src="../assets/js/data.js?v=20260630c"></script>
@@ -237,7 +304,8 @@
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
   const data = window.FP_DATA;
-  const state = { search: '' };
+  const state = { search: '', voirTout: false };
+  const EMP_LIMIT = 15;
 
   // ---- Stockage : Supabase si dispo, sinon localStorage ----
   // Cache local PAR SOCIÉTÉ (sinon les emprunts d'une société s'afficheraient sur une autre)
@@ -371,10 +439,16 @@
     } else {
       alertBox.classList.add('hidden');
     }
-    const tbody = $('tbody'), empty = $('empty');
-    if (!rows.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); lucide.createIcons(); return; }
+    const tbody = $('tbody'), empty = $('empty'), more = $('emprunt-more');
+    if (!rows.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); if (more) more.innerHTML = ''; lucide.createIcons(); return; }
     empty.classList.add('hidden');
-    tbody.innerHTML = rows.map(e => {
+    const shown = state.voirTout ? rows : rows.slice(0, EMP_LIMIT);
+    if (more) {
+      more.innerHTML = rows.length > EMP_LIMIT
+        ? `<button class="btn btn-outline text-sm" id="emp-toggle">${state.voirTout ? 'Réduire la liste' : `Voir tout (${rows.length})`}</button>`
+        : '';
+    }
+    tbody.innerHTML = shown.map(e => {
       const rendu = !!e.dateRetour;
       const retard = estEnRetard(e);
       return `<tr data-id="${escapeHtml(e.id)}" class="${retard ? 'is-retard' : ''}" style="cursor:pointer" title="Cliquer pour modifier cet emprunt">
@@ -511,9 +585,151 @@
     if (dbOn()) FP.persist.delete('emprunts', id); else lsSet();
   }
 
+  // ============================================================
+  //  RÉSERVATIONS (futures) — planifier un véhicule pour plus tard.
+  //  Différent de l'emprunt (= tout de suite). Stockées dans les réglages
+  //  partagés (app_settings, synchro multi-postes, par société).
+  // ============================================================
+  function getResas() { try { const r = FP.settings.get().reservations; return Array.isArray(r) ? r : []; } catch { return []; } }
+  function saveResas(arr) { const s = FP.settings.get(); s.reservations = arr; FP.settings.save(s); }
+  const todayIso = () => new Date().toISOString().slice(0, 10);
+  function resaStatut(r) {
+    const t = todayIso();
+    if (r.fin && r.fin < t) return { label: 'Terminée', cls: 'pill-rendu' };
+    if (r.debut && r.debut > t) return { label: 'À venir', cls: 'pill-avenir' };
+    return { label: 'En cours', cls: 'pill-encours' };
+  }
+  // Conflit : autre réservation du même véhicule qui chevauche, ou emprunt en cours
+  function resaConflit(immat, debut, fin, excludeId) {
+    const overlap = getResas().some(r => r.id !== excludeId && r.vehicule === immat && !((fin || debut) < r.debut || debut > (r.fin || r.debut)));
+    const empEnCours = cache.some(e => e.vehicule === immat && !e.dateRetour);
+    return { overlap, empEnCours };
+  }
+  function renderResas() {
+    const t = todayIso();
+    const resas = getResas().filter(r => !r.fin || r.fin >= t).sort((a, b) => (a.debut || '').localeCompare(b.debut || ''));
+    $('resa-count').textContent = resas.length ? `(${resas.length})` : '';
+    const tbody = $('tbody-resa'), empty = $('resa-empty');
+    if (!resas.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); lucide.createIcons(); return; }
+    empty.classList.add('hidden');
+    tbody.innerHTML = resas.map(r => {
+      const st = resaStatut(r);
+      return `<tr data-resa-id="${escapeHtml(r.id)}" style="cursor:pointer" title="Cliquer pour modifier la réservation">
+        <td class="font-mono font-semibold">${escapeHtml(vehLabel(r.vehicule))}</td>
+        <td class="font-medium">${escapeHtml(r.personne || '—')}</td>
+        <td>${dt(r.debut, r.heureDebut)}</td>
+        <td>${dt(r.fin, r.heureFin)}</td>
+        <td><span class="${st.cls}">${st.label}</span>${r.note ? `<div class="text-xs text-slate-400">${escapeHtml(r.note)}</div>` : ''}</td>
+        <td class="text-right whitespace-nowrap">
+          <button class="btn btn-dark !py-1 !px-2.5 text-xs" data-start="${escapeHtml(r.id)}" title="Le véhicule est pris maintenant : créer l'emprunt"><i data-lucide="play" class="w-3.5 h-3.5"></i> Démarrer</button>
+          <button class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-teal-600" data-resa-edit="${escapeHtml(r.id)}" title="Modifier"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+          <button class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-resa-del="${escapeHtml(r.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+    lucide.createIcons();
+  }
+  let editingResaId = null;
+  function checkResaConflit() {
+    const box = $('resa-conflit');
+    const immat = resolveImmat($('r-vehicule').value);
+    const debut = parseFrDate($('r-debut').value), fin = parseFrDate($('r-fin').value) || debut;
+    if (!immat || !debut) { box.classList.add('hidden'); return; }
+    const c = resaConflit(immat, debut, fin, editingResaId);
+    const msgs = [];
+    if (c.overlap) msgs.push('⚠️ Ce véhicule est déjà réservé sur cette période.');
+    if (c.empEnCours) msgs.push('⚠️ Ce véhicule est actuellement emprunté (non rendu).');
+    if (msgs.length) { box.innerHTML = msgs.join('<br>') + '<br><span class="text-xs">Tu peux quand même réserver.</span>'; box.classList.remove('hidden'); }
+    else box.classList.add('hidden');
+  }
+  function openResa() {
+    editingResaId = null;
+    $('resa-title').textContent = 'Réserver un véhicule';
+    $('form-resa').reset();
+    $('resa-conflit').classList.add('hidden');
+    fillVehSelect();
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    $('r-debut').value = tomorrow; $('r-fin').value = tomorrow;
+    $('modal-resa').classList.add('open');
+  }
+  function openEditResa(id) {
+    const r = getResas().find(x => x.id === id); if (!r) return;
+    editingResaId = id;
+    $('resa-title').textContent = 'Modifier la réservation';
+    $('form-resa').reset();
+    fillVehSelect();
+    $('r-vehicule').value = vehLabel(r.vehicule);
+    $('r-personne').value = r.personne || '';
+    $('r-debut').value = (r.debut || '').slice(0, 10);
+    $('r-heure-debut').value = r.heureDebut || '';
+    $('r-fin').value = (r.fin || '').slice(0, 10);
+    $('r-heure-fin').value = r.heureFin || '';
+    $('r-note').value = r.note || '';
+    checkResaConflit();
+    $('modal-resa').classList.add('open');
+  }
+  function saveResa(ev) {
+    ev.preventDefault();
+    const immat = resolveImmat($('r-vehicule').value);
+    const personne = $('r-personne').value.trim();
+    const debut = parseFrDate($('r-debut').value);
+    const fin = parseFrDate($('r-fin').value) || debut;
+    if (!immat || !personne || !debut) { alert('Véhicule, personne et date de début sont obligatoires.'); return; }
+    if (fin && debut && fin < debut) { alert('La date de fin doit être après la date de début.'); return; }
+    const arr = getResas();
+    if (editingResaId) {
+      const r = arr.find(x => x.id === editingResaId);
+      if (r) { Object.assign(r, { vehicule: immat, personne, debut, heureDebut: $('r-heure-debut').value || '', fin, heureFin: $('r-heure-fin').value || '', note: $('r-note').value.trim() }); }
+    } else {
+      arr.push({ id: 'R' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehicule: immat, personne, debut, heureDebut: $('r-heure-debut').value || '', fin, heureFin: $('r-heure-fin').value || '', note: $('r-note').value.trim() });
+    }
+    saveResas(arr);
+    editingResaId = null;
+    $('modal-resa').classList.remove('open');
+    renderResas();
+    if (FP.toast) FP.toast('Réservation enregistrée');
+  }
+  function delResa(id) {
+    if (!confirm('Supprimer cette réservation ?')) return;
+    saveResas(getResas().filter(x => x.id !== id));
+    renderResas();
+  }
+  // Transforme une réservation en emprunt réel (le véhicule est pris maintenant)
+  function startEmpruntFromResa(id) {
+    const r = getResas().find(x => x.id === id); if (!r) return;
+    const now = new Date();
+    const obj = {
+      id: 'E' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      vehicule: r.vehicule, emprunteur: r.personne,
+      dateEmprunt: todayIso(), heureEmprunt: now.toTimeString().slice(0, 5),
+      dateRetour: null, heureRetour: '', renduPar: '',
+    };
+    cache.unshift(obj);
+    if (dbOn()) FP.persist.insert('emprunts', obj); else lsSet();
+    saveResas(getResas().filter(x => x.id !== id));
+    renderResas(); render();
+    if (FP.toast) FP.toast(`Emprunt démarré pour ${r.personne}`);
+  }
+
   // ---- Wiring ----
   $('search').addEventListener('input', e => { state.search = e.target.value; render(); });
   $('btn-new').addEventListener('click', openNew);
+  $('btn-reserve').addEventListener('click', openResa);
+  $('btn-reserve2').addEventListener('click', openResa);
+  setupAutocomplete($('r-vehicule'), () => _vehOpts);
+  setupAutocomplete($('r-personne'), () => _empOpts);
+  const closeResa = () => { editingResaId = null; $('modal-resa').classList.remove('open'); };
+  $('resa-close').addEventListener('click', closeResa);
+  $('resa-cancel').addEventListener('click', closeResa);
+  $('form-resa').addEventListener('submit', saveResa);
+  ['r-vehicule', 'r-debut', 'r-fin'].forEach(id => { const el = $(id); if (el) { el.addEventListener('change', checkResaConflit); el.addEventListener('input', checkResaConflit); } });
+  $('tbody-resa').addEventListener('click', e => {
+    const s = e.target.closest('[data-start]'); if (s) { startEmpruntFromResa(s.dataset.start); return; }
+    const ed = e.target.closest('[data-resa-edit]'); if (ed) { openEditResa(ed.dataset.resaEdit); return; }
+    const dl = e.target.closest('[data-resa-del]'); if (dl) { delResa(dl.dataset.resaDel); return; }
+    const tr = e.target.closest('tr[data-resa-id]'); if (tr) openEditResa(tr.dataset.resaId);
+  });
+  $('emprunt-more').addEventListener('click', e => { if (e.target.closest('#emp-toggle')) { state.voirTout = !state.voirTout; render(); } });
   setupAutocomplete($('f-vehicule'), () => _vehOpts);
   setupAutocomplete($('f-emprunteur'), () => _empOpts);
   setupAutocomplete($('ret-par'), () => _empOpts); // menu déroulant des prénoms au retour
@@ -534,6 +750,7 @@
   $('ret-close').addEventListener('click', () => $('modal-ret').classList.remove('open'));
   $('ret-cancel').addEventListener('click', () => $('modal-ret').classList.remove('open'));
   backdropClose('modal-ret', () => $('modal-ret').classList.remove('open'));
+  backdropClose('modal-resa', closeResa);
   $('form-ret').addEventListener('submit', saveRet);
   $('tbody').addEventListener('click', e => {
     const ret = e.target.closest('[data-ret]'); if (ret) { openRet(ret.dataset.ret); return; }
@@ -543,6 +760,7 @@
   });
 
   load();
+  renderResas();
 
   // ---------- Import / Export CSV ----------
   FP.injectDataIO({
@@ -573,7 +791,7 @@
     },
   });
 
-  document.addEventListener('fp:data-ready', () => { fillVehSelect(); render(); });
+  document.addEventListener('fp:data-ready', () => { fillVehSelect(); render(); renderResas(); });
 </script>
 </body>
 </html>
