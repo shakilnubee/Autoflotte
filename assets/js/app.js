@@ -1072,6 +1072,40 @@ FP.buildAlertes = (data) => {
     }
   } catch (e) {}
 
+  // --- Amendes à payer approchant la MAJORATION ---
+  // Pas de date d'échéance stockée → on l'estime depuis la date de l'amende :
+  // stationnement/FPS ~90 j, contravention forfaitaire ~45 j (même logique que la page Amendes).
+  try {
+    const maintenant = new Date();
+    const risque = (data.amendes || [])
+      .filter(a => a && a.statut === 'à payer' && a.date && !isNaN(new Date(a.date)))
+      .map(a => {
+        const base = new Date(a.date);
+        const isFps = /stationnement/i.test(a.motif || '');
+        const lim = new Date(base); lim.setDate(lim.getDate() + (isFps ? 90 : 45));
+        const jours = Math.ceil((lim - maintenant) / 86400000);
+        return { a, lim, jours };
+      })
+      .filter(x => x.jours < 30)            // bientôt majorée (< 30 j) ou déjà dépassée
+      .sort((x, y) => x.jours - y.jours);
+    if (risque.length) {
+      const depasse = risque.filter(x => x.jours < 0).length;
+      out.push({
+        niveau: depasse ? 'danger' : 'warn',
+        categorie: 'Amendes',
+        message: depasse
+          ? `${depasse} amende(s) probablement majorée(s)` + (risque.length > depasse ? ` · ${risque.length - depasse} bientôt` : '')
+          : `${risque.length} amende(s) bientôt majorée(s)`,
+        detail: 'Payez avant la date limite estimée pour éviter la majoration (estimation — vérifiez l\'avis)',
+        sort: 1100,
+        vehicules: risque.map(x => ({
+          label: `${x.a.prenom || '?'} · ${x.a.motif || 'amende'}${x.a.montant ? ' · ' + FP.euro(x.a.montant) : ''} — ${x.jours < 0 ? `limite dépassée (~${-x.jours} j)` : `~${x.jours} j restants`} · limite est. ${FP.date(x.lim.toISOString())}`,
+          target: 'amendes.html?amende=' + encodeURIComponent(x.a.id),
+        })),
+      });
+    }
+  } catch (e) {}
+
   // --- Permis de conduire qui expirent (table conducteurs) ---
   (data.conducteurs || []).forEach(c => {
     if (!c || !c.permisExpiration) return;
