@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<title>Tâches & rappels — Parc Pilot</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630h">
+<script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
+  <script defer src="../assets/js/lucide.min.js?v=20260630h"></script>
+  <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260630h">
+<style>
+  .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+  .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
+  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(249,115,22,.15); }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.5); display: none; align-items: center; justify-content: center; z-index: 70; padding: 1rem; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: white; border-radius: 1rem; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
+  .task-card { display:flex; align-items:flex-start; gap:.75rem; padding:.85rem 1rem; border:1px solid var(--fp-border); border-radius:.7rem; background:#fff; transition:box-shadow .15s; }
+  .task-card:hover { box-shadow:0 6px 18px -10px rgba(15,30,61,.25); }
+  .task-card.done { opacity:.62; }
+  .task-card.done .task-title { text-decoration: line-through; color:#64748b; }
+  .task-check { width:20px; height:20px; flex-shrink:0; margin-top:2px; accent-color:#16a34a; cursor:pointer; }
+  .task-title { font-weight:700; color:#0f1e3d; }
+  .pill-ech { font-size:.72rem; font-weight:700; padding:.12rem .5rem; border-radius:9999px; white-space:nowrap; }
+  .ech-retard { background:#FEE2E2; color:#991B1B; }
+  .ech-proche { background:#FEF3C7; color:#92400E; }
+  .ech-ok { background:#E0E7FF; color:#3730A3; }
+  .ta-icon-btn { padding:.35rem; border-radius:.4rem; color:#cbd5e1; border:none; background:none; cursor:pointer; }
+  .ta-icon-btn:hover { background:#f1f5f9; color:#0f1e3d; }
+</style>
+<script>
+(function(){
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body class="bg-slate-50">
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../index.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic" fill="currentColor">Parc</text><text x="86" y="26" font-size="20" font-weight="900" font-style="italic" fill="#F97316">Pilot</text></svg>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="notifications.html" data-nav="notifications.html"><i data-lucide="bell"></i> Notifications</a>
+      <a href="calendrier.html" data-nav="calendrier.html"><i data-lucide="calendar-days"></i> Calendrier</a>
+      <a href="taches.html" data-nav="taches.html"><i data-lucide="list-todo"></i> Tâches</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="emprunts.html"     data-nav="emprunts.html"><i data-lucide="key-round"></i> Emprunt véhicule</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="a-vendre.html"     data-nav="a-vendre.html"><i data-lucide="tag"></i> À vendre</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="entretiens.html"   data-nav="entretiens.html"><i data-lucide="wrench"></i> Entretiens</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+      <a href="../brochure.html"   data-nav="brochure.html" target="_blank" rel="noopener"><i data-lucide="sparkles"></i> Brochure</a>
+      <a href="../prix.html" data-nav="prix.html" target="_blank" rel="noopener"><i data-lucide="badge-euro"></i> Tarifs</a>
+    </nav>
+    <script>/* Sidebar : reconstruit la barre dans son état final AVANT le 1er affichage. Autonome (localStorage). */
+    (function(){try{
+      var soc=(localStorage.getItem('fp_societe')||'PXP');if(soc==='__all__')soc='PXP';
+      var raw=localStorage.getItem('auto_flotte_settings_'+soc);
+      if(raw==null&&soc==='PXP')raw=localStorage.getItem('auto_flotte_settings');
+      var s=raw?(JSON.parse(raw)||{}):{};
+      var sb=document.querySelector('.fp-sidebar');if(!sb)return;
+      var nav=sb.querySelector('nav');if(!nav)return;
+      if(!sb.querySelector('.fp-global-search')){
+        var w=document.createElement('div');w.className='fp-global-search';
+        w.innerHTML='<div style="position: relative"><span style="position:absolute; left:.65rem; top:50%; transform:translateY(-50%); color:rgba(255,255,255,.5); font-size:.85rem">\u{1F50D}</span><input type="text" class="fp-search-input" placeholder="Rechercher..." /></div><div class="fp-search-results"></div>';
+        sb.insertBefore(w,nav);
+      }
+      var links=[].slice.call(nav.querySelectorAll('a[data-nav]'));if(!links.length)return;
+      if(Array.isArray(s.navOrder)&&s.navOrder.length){
+        var by={};links.forEach(function(a){by[a.dataset.nav]=a;});var ord=[];
+        s.navOrder.forEach(function(k){if(by[k]){ord.push(by[k]);delete by[k];}});
+        links.forEach(function(a){if(by[a.dataset.nav])ord.push(a);});
+        ord.forEach(function(a){nav.appendChild(a);});}
+      if(Array.isArray(s.navHidden)){var h={};s.navHidden.forEach(function(k){h[k]=1;});
+        links.forEach(function(a){if(h[a.dataset.nav]&&a.dataset.nav!=='parametres.html')a.style.display='none';});}
+      var lb=s.sidebarLabels||{};
+      links.forEach(function(a){var t=lb[a.dataset.nav];if(!t)return;
+        for(var i=0;i<a.childNodes.length;i++){var n=a.childNodes[i];if(n.nodeType===3&&n.textContent.trim()){n.textContent=' '+t;break;}}});
+      var path=(location.pathname.split('/').pop()||'index').replace(/\.html$/,'');
+      links.forEach(function(a){if((a.dataset.nav||'').replace(/\.html$/,'')===path)a.classList.add('active');});
+    }catch(e){}})();</script>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="mb-8 flex justify-between items-start gap-3 flex-wrap">
+      <div>
+        <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)">Tâches &amp; rappels</h1>
+        <p class="text-slate-500 text-sm mt-1">Les petites choses à ne pas oublier : changer des pneus, rapporter une clé, prendre un RDV…</p>
+      </div>
+      <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle tâche</button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="kpi"><div class="kpi-label">À faire</div><div class="kpi-value" id="kpi-todo">—</div></div>
+      <div class="kpi"><div class="kpi-label">En retard</div><div class="kpi-value" id="kpi-late" style="color: var(--fp-danger)">—</div></div>
+      <div class="kpi"><div class="kpi-label">Terminées</div><div class="kpi-value" id="kpi-done" style="color: var(--fp-ok, #16a34a)">—</div></div>
+    </div>
+
+    <!-- Filtres + recherche -->
+    <div class="card p-4 mb-6 flex flex-wrap items-center gap-3">
+      <div class="flex gap-1" id="filters-statut">
+        <button class="filter-chip active" data-value="actives">À faire</button>
+        <button class="filter-chip" data-value="faites">Terminées</button>
+        <button class="filter-chip" data-value="all">Toutes</button>
+      </div>
+      <div class="relative flex-1 min-w-[200px]">
+        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input id="search" type="text" placeholder="Rechercher (titre, véhicule, note…)" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+      </div>
+    </div>
+
+    <div id="taches-list" class="space-y-3"></div>
+    <div id="empty" class="hidden p-12 text-center text-slate-500 text-sm card">Aucune tâche. Clique sur « Nouvelle tâche » pour en créer une.</div>
+  </main>
+</div>
+
+<!-- Modal tâche -->
+<div class="modal-backdrop" id="modal-task">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold" id="task-title">Nouvelle tâche</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="task-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="form-task" class="space-y-4">
+      <div>
+        <div class="field-label">Intitulé *</div>
+        <input class="field-input" id="t-titre" required placeholder="Ex : Changer les pneus hiver" autocomplete="off" />
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Véhicule (optionnel)</div>
+          <select class="field-input" id="t-vehicule"></select>
+        </div>
+        <div>
+          <div class="field-label">Échéance (optionnel)</div>
+          <input class="field-input" type="date" id="t-echeance" />
+        </div>
+      </div>
+      <div>
+        <div class="field-label">Note (optionnel)</div>
+        <textarea class="field-input" id="t-note" rows="3" placeholder="Détails…"></textarea>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="task-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="../assets/js/vendor/supabase.js?v=20260630h"></script>
+<script src="../assets/js/supabase-client.js?v=20260630h"></script>
+<script src="../assets/js/data.js?v=20260630h"></script>
+<script src="../assets/js/app.js?v=20260630h"></script>
+<script>
+  lucide.createIcons();
+  const $ = (id) => document.getElementById(id);
+  const data = window.FP_DATA;
+  const state = { filtre: 'actives', search: '' };
+  let editingId = null;
+
+  function getTaches() { try { const t = FP.settings.get().taches; return Array.isArray(t) ? t : []; } catch { return []; } }
+  function saveTaches(arr) { const s = FP.settings.get(); s.taches = arr; FP.settings.save(s); }
+  const todayIso = () => new Date().toISOString().slice(0, 10);
+  function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function vehLabel(id) {
+    const v = (data.vehicules || []).find(x => x.id === id);
+    return v ? `${v.immat} · ${v.marque} ${v.modele}`.trim() : '';
+  }
+  function fillVehSelect(sel, current) {
+    const opts = (data.vehicules || []).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
+      .map(v => `<option value="${escapeHtml(v.id)}"${v.id === current ? ' selected' : ''}>${escapeHtml(v.immat)} · ${escapeHtml(v.marque)} ${escapeHtml(v.modele)}</option>`).join('');
+    sel.innerHTML = '<option value="">— Aucun —</option>' + opts;
+  }
+
+  function echeanceInfo(t) {
+    if (!t.echeance) return null;
+    const j = Math.ceil((new Date(t.echeance) - new Date(todayIso())) / 86400000);
+    if (j < 0) return { cls: 'ech-retard', txt: `En retard de ${-j} j`, retard: true };
+    if (j === 0) return { cls: 'ech-retard', txt: "Aujourd'hui", retard: false };
+    if (j <= 7) return { cls: 'ech-proche', txt: `Dans ${j} j`, retard: false };
+    return { cls: 'ech-ok', txt: FP.date(t.echeance), retard: false };
+  }
+
+  function render() {
+    const all = getTaches();
+    const todo = all.filter(t => !t.fait);
+    const late = todo.filter(t => { const e = echeanceInfo(t); return e && e.retard; });
+    $('kpi-todo').textContent = todo.length;
+    $('kpi-late').textContent = late.length;
+    $('kpi-done').textContent = all.filter(t => t.fait).length;
+
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === state.filtre));
+    const q = FP.norm(state.search).trim();
+    let rows = all.filter(t => {
+      if (state.filtre === 'actives' && t.fait) return false;
+      if (state.filtre === 'faites' && !t.fait) return false;
+      if (q && !FP.norm(`${t.titre} ${vehLabel(t.vehiculeId)} ${t.note || ''}`).includes(q)) return false;
+      return true;
+    });
+    // tri : non faites d'abord, par échéance (les sans-échéance à la fin), puis créées récemment
+    rows.sort((a, b) => {
+      if (!!a.fait !== !!b.fait) return a.fait ? 1 : -1;
+      const ea = a.echeance || '9999-12-31', eb = b.echeance || '9999-12-31';
+      if (ea !== eb) return ea.localeCompare(eb);
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+
+    const box = $('taches-list'), empty = $('empty');
+    if (!rows.length) { box.innerHTML = ''; empty.classList.remove('hidden'); lucide.createIcons(); return; }
+    empty.classList.add('hidden');
+    box.innerHTML = rows.map(t => {
+      const e = echeanceInfo(t);
+      const vl = vehLabel(t.vehiculeId);
+      return `<div class="task-card ${t.fait ? 'done' : ''}" data-id="${escapeHtml(t.id)}">
+        <input type="checkbox" class="task-check" data-toggle="${escapeHtml(t.id)}" ${t.fait ? 'checked' : ''} title="Marquer comme ${t.fait ? 'à faire' : 'terminée'}">
+        <div class="flex-1 min-w-0">
+          <div class="task-title">${escapeHtml(t.titre)}</div>
+          <div class="flex items-center gap-2 flex-wrap mt-1">
+            ${e ? `<span class="pill-ech ${e.cls}">${e.txt}</span>` : ''}
+            ${vl ? `<a href="vehicules.html?immat=${encodeURIComponent((data.vehicules.find(v=>v.id===t.vehiculeId)||{}).immat||'')}" class="text-xs font-semibold" style="color:var(--fp-accent);text-decoration:none">🚗 ${escapeHtml(vl)}</a>` : ''}
+          </div>
+          ${t.note ? `<div class="text-sm text-slate-500 mt-1 whitespace-pre-line">${escapeHtml(t.note)}</div>` : ''}
+        </div>
+        <div class="flex flex-shrink-0 gap-1">
+          <button class="ta-icon-btn" data-edit="${escapeHtml(t.id)}" title="Modifier"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+          <button class="ta-icon-btn" data-del="${escapeHtml(t.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+    lucide.createIcons();
+  }
+
+  function openNew() {
+    editingId = null;
+    $('task-title').textContent = 'Nouvelle tâche';
+    $('form-task').reset();
+    fillVehSelect($('t-vehicule'), '');
+    $('modal-task').classList.add('open');
+    setTimeout(() => $('t-titre').focus(), 50);
+  }
+  function openEdit(id) {
+    const t = getTaches().find(x => x.id === id); if (!t) return;
+    editingId = id;
+    $('task-title').textContent = 'Modifier la tâche';
+    $('form-task').reset();
+    fillVehSelect($('t-vehicule'), t.vehiculeId || '');
+    $('t-titre').value = t.titre || '';
+    $('t-echeance').value = t.echeance || '';
+    $('t-note').value = t.note || '';
+    $('modal-task').classList.add('open');
+  }
+  function closeModal() { editingId = null; $('modal-task').classList.remove('open'); }
+  function saveTask(ev) {
+    ev.preventDefault();
+    const titre = $('t-titre').value.trim();
+    if (!titre) { alert("L'intitulé est obligatoire."); return; }
+    const arr = getTaches();
+    if (editingId) {
+      const t = arr.find(x => x.id === editingId);
+      if (t) { t.titre = titre; t.vehiculeId = $('t-vehicule').value || null; t.echeance = $('t-echeance').value || null; t.note = $('t-note').value.trim(); }
+    } else {
+      arr.push({ id: 'T' + Math.random().toString(36).slice(2, 9), titre, vehiculeId: $('t-vehicule').value || null, echeance: $('t-echeance').value || null, note: $('t-note').value.trim(), fait: false, createdAt: new Date().toISOString() });
+    }
+    saveTaches(arr); closeModal(); render();
+    if (FP.toast) FP.toast('Tâche enregistrée');
+  }
+  function toggleTask(id) {
+    const arr = getTaches(); const t = arr.find(x => x.id === id); if (!t) return;
+    t.fait = !t.fait; t.faitLe = t.fait ? todayIso() : null;
+    saveTaches(arr); render();
+  }
+  function delTask(id) {
+    if (!confirm('Supprimer cette tâche ?')) return;
+    saveTaches(getTaches().filter(x => x.id !== id)); render();
+  }
+
+  // Wiring
+  $('btn-new').addEventListener('click', openNew);
+  $('task-close').addEventListener('click', closeModal);
+  $('task-cancel').addEventListener('click', closeModal);
+  $('form-task').addEventListener('submit', saveTask);
+  $('search').addEventListener('input', e => { state.search = e.target.value; render(); });
+  document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.addEventListener('click', () => { state.filtre = c.dataset.value; render(); }));
+  $('taches-list').addEventListener('click', e => {
+    const tg = e.target.closest('[data-toggle]'); if (tg) { toggleTask(tg.dataset.toggle); return; }
+    const ed = e.target.closest('[data-edit]'); if (ed) { openEdit(ed.dataset.edit); return; }
+    const dl = e.target.closest('[data-del]'); if (dl) { delTask(dl.dataset.del); return; }
+  });
+
+  render();
+  document.addEventListener('fp:data-ready', render);
+</script>
+</body>
+</html>
