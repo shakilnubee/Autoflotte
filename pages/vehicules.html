@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Véhicules — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260630c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260630d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260630c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260630d">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -328,6 +328,7 @@
           <div class="hidden-cols-popover" id="hidden-cols-popover"></div>
         </div>
         <span data-data-io></span>
+        <span id="veh-views-mount"></span>
         <span id="veh-export-mount"></span>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
       </div>
@@ -665,11 +666,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260630c"></script>
-<script src="../assets/js/supabase-client.js?v=20260630c"></script>
-<script src="../assets/js/data.js?v=20260630c"></script>
-<script src="../assets/js/fleet-docs.js?v=20260630c"></script>
-<script src="../assets/js/app.js?v=20260630c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260630d"></script>
+<script src="../assets/js/supabase-client.js?v=20260630d"></script>
+<script src="../assets/js/data.js?v=20260630d"></script>
+<script src="../assets/js/fleet-docs.js?v=20260630d"></script>
+<script src="../assets/js/app.js?v=20260630d"></script>
 <script>
   lucide.createIcons();
 
@@ -2349,6 +2350,24 @@
     w.document.write(html); w.document.close();
   }
   { const b = $('btn-fiche-groupe'); if (b) b.addEventListener('click', printGroupeFiche); }
+
+  // Vues sauvegardées : enregistre une combinaison de filtres (groupe + statut + catégorie + tri)
+  // sous un nom (ex. « Commerciaux à vendre ») et la rejoue en un clic.
+  if (FP.makeViewsMenu) FP.makeViewsMenu({
+    mount: '#veh-views-mount', pageKey: 'vehicules',
+    getState: () => ({ groupe: state.groupe, statut: state.statut, categorie: state.categorie, search: state.search, sortKey: state.sortKey, sortDir: state.sortDir }),
+    applyState: (s) => {
+      state.groupe = s.groupe || 'all';
+      state.categorie = s.categorie || 'all';
+      state.search = s.search || '';
+      state.sortKey = s.sortKey || null;
+      state.sortDir = s.sortDir || 'asc';
+      if ($('search')) $('search').value = state.search;
+      if ($('filter-categorie')) $('filter-categorie').value = state.categorie;
+      applyStatutFilter(s.statut || 'all'); // gère l'état actif des chips + renderTable
+      renderTabBar(); renderTable();
+    },
+  });
 
   // Export de la liste des véhicules affichés (filtres/groupe en cours) — Excel/CSV.
   if (FP.makeExportMenu) FP.makeExportMenu({
