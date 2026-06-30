@@ -327,7 +327,6 @@
   <div class="p-6 border-t border-slate-200 flex flex-wrap gap-2 sticky bottom-0 bg-white z-10" style="box-shadow:0 -6px 16px -10px rgba(15,30,61,.25)">
     <button class="btn btn-primary text-sm flex-1 justify-center" id="drawer-pay"><i data-lucide="check" class="w-4 h-4"></i> Marquer payée</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-designer" title="Conducteur désigné — l'amende n'est plus à votre charge"><i data-lucide="user-check" class="w-4 h-4"></i> Désigner</button>
-    <button class="btn btn-outline text-sm justify-center" id="drawer-antai" title="Générer la lettre de désignation du conducteur (à imprimer / signer)"><i data-lucide="file-text" class="w-4 h-4"></i> Désignation ANTAI</button>
     <button class="btn btn-outline text-sm" id="drawer-relance" title="Envoyer un email de relance au conducteur"><i data-lucide="mail" class="w-4 h-4"></i> Relancer</button>
     <button class="btn btn-outline text-sm" id="drawer-conteste" title="Marquer cette amende comme contestée"><i data-lucide="gavel" class="w-4 h-4"></i> Contester</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
@@ -2173,88 +2172,6 @@
   $('drawer-next').addEventListener('click', () => gotoAdjacentAmende(1));
   // (le bouton drawer-pay reçoit son action dans openDrawer : payer / annuler le paiement)
   $('drawer-designer').addEventListener('click', markDesigne);
-
-  // ---------- Lettre de désignation du conducteur (ANTAI, art. L121-6) ----------
-  function findConducteur(prenomAmende) {
-    const list = (window.FP_DATA && FP_DATA.conducteurs) || [];
-    const norm = s => FP.norm((s || '').toString()).trim();
-    const p = norm(prenomAmende);
-    if (!p) return null;
-    return list.find(c => norm(c.prenom) === p)
-      || list.find(c => norm(c.name) === p)
-      || list.find(c => norm(c.name).split(' ')[0] === p || norm(c.prenom).split(' ')[0] === p)
-      || list.find(c => norm(c.name).includes(p))
-      || null;
-  }
-  function plaquePourAmende(a, cond) {
-    if (a.immat) return a.immat;
-    const who = FP.norm((cond && (cond.name || cond.prenom)) || a.prenom || '');
-    const v = (window.FP_DATA.vehicules || []).find(x => FP.norm(x.chauffeur || '') === who || FP.norm(x.chauffeur || '').split(' ')[0] === who.split(' ')[0]);
-    return v ? v.immat : '';
-  }
-  function genererDesignation(a) {
-    const soc = (FP.settings.get && FP.settings.get().societe) || {};
-    const cond = findConducteur(a.prenom);
-    const esc = s => (s == null ? '' : String(s)).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-    const ou = (val) => val ? esc(val) : '<span style="color:#94a3b8">……………………………</span>';
-    const nomComplet = cond ? ([cond.prenom, cond.nom].filter(Boolean).join(' ') || cond.name || a.prenom) : (a.prenom || '');
-    const plaque = plaquePourAmende(a, cond);
-    const dateInfra = a.date ? FP.date(a.date) : '';
-    const today = FP.date(new Date().toISOString());
-    const w = window.open('', '_blank');
-    if (!w) { alert('Autorise les fenêtres pop-up pour générer la lettre.'); return; }
-    w.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Désignation conducteur — avis ${esc(a.numeroAvis || '')}</title>
-      <style>
-        @page{margin:22mm}
-        body{font-family:Arial,Helvetica,sans-serif;color:#0f1e3d;font-size:13px;line-height:1.55;max-width:720px;margin:0 auto;padding:24px}
-        h1{font-size:17px;margin:0 0 4px}
-        .muted{color:#64748b;font-size:12px}
-        .box{border:1px solid #cbd5e1;border-radius:8px;padding:12px 14px;margin:14px 0}
-        .row{display:flex;justify-content:space-between;gap:12px;margin:3px 0}
-        .lbl{color:#64748b}
-        .sign{margin-top:36px;display:flex;justify-content:space-between}
-        .note{margin-top:22px;font-size:11px;color:#94a3b8}
-        b{color:#0f1e3d}
-        @media print{.noprint{display:none}}
-      </style></head><body>
-      <div class="noprint" style="text-align:right;margin-bottom:10px"><button onclick="window.print()" style="padding:8px 14px;border:none;border-radius:8px;background:#0f1e3d;color:#fff;cursor:pointer">🖨️ Imprimer / PDF</button></div>
-      <h1>Désignation du conducteur</h1>
-      <div class="muted">Article L121-6 du Code de la route — désignation de la personne physique conductrice</div>
-
-      <div class="box">
-        <div style="font-weight:700;margin-bottom:6px">Société (titulaire du certificat d'immatriculation)</div>
-        <div class="row"><span class="lbl">Raison sociale</span><span>${ou(soc.nom)}</span></div>
-        <div class="row"><span class="lbl">SIRET</span><span>${ou(soc.siret)}</span></div>
-        <div class="row"><span class="lbl">Adresse</span><span>${ou(soc.adresse)}</span></div>
-        <div class="row"><span class="lbl">Représentant légal</span><span>${ou('')}</span></div>
-      </div>
-
-      <p>À l'attention de Monsieur l'Officier du Ministère Public,</p>
-      <p>En qualité de représentant légal de la société ci-dessus, titulaire du véhicule immatriculé
-      <b>${ou(plaque)}</b>, je désigne, conformément à l'article L121-6 du Code de la route, la personne
-      ayant conduit ce véhicule lors de l'infraction constatée le <b>${ou(dateInfra)}</b>
-      (avis de contravention n° <b>${ou(a.numeroAvis)}</b>${a.motif ? ', ' + esc(a.motif) : ''}) :</p>
-
-      <div class="box">
-        <div style="font-weight:700;margin-bottom:6px">Conducteur désigné</div>
-        <div class="row"><span class="lbl">Nom et prénom</span><span>${ou(nomComplet)}</span></div>
-        <div class="row"><span class="lbl">Né(e) le</span><span>${ou(cond && cond.dateNaissance ? FP.date(cond.dateNaissance) : '')}</span></div>
-        <div class="row"><span class="lbl">Adresse</span><span>${ou(cond && cond.adresse)}</span></div>
-        <div class="row"><span class="lbl">Permis de conduire n°</span><span>${ou(cond && cond.permisNumero)}</span></div>
-      </div>
-
-      <div class="sign">
-        <div>Fait le ${esc(today)}</div>
-        <div style="text-align:center">Signature + cachet de la société<br><br><br>__________________________</div>
-      </div>
-
-      <div class="note">Document d'aide pré-rempli par Parc Pilot. Vérifiez les informations avant envoi.
-      La désignation peut aussi se faire en ligne sur antai.gouv.fr (munissez-vous de l'avis : n° d'avis et n° de dossier).
-      Champs vides = information manquante dans la fiche conducteur (à compléter à la main).</div>
-      </body></html>`);
-    w.document.close();
-  }
-  $('drawer-antai').addEventListener('click', () => { const a = data.amendes.find(x => x.id === state.currentId); if (a) genererDesignation(a); });
   // Formate le n° d'avis quand on quitte le champ (FPS espacé / contravention attaché)
   $('am-avis').addEventListener('blur', (e) => { e.target.value = fmtNumeroAvis(e.target.value); });
   $('table-more').addEventListener('click', () => { state.tableExpanded = !state.tableExpanded; renderTable(); });
