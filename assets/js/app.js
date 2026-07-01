@@ -199,7 +199,9 @@ const FP = {
     if (!el || el.dataset.counted === '1') return;
     try { if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { el.dataset.counted = '1'; return; } } catch (e) {}
     const txt = (el.textContent || '').trim();
-    const m = txt.match(/^(\D*?)([\d  .,]*\d)(.*)$/s);
+    // On n'anime PAS les valeurs décimales (ex. « 0,09 €/km ») pour ne pas les déformer.
+    if (/\d[.,]\d/.test(txt)) return;
+    const m = txt.match(/^(\D*?)([\d  ]*\d)(.*)$/s);
     if (!m) return;
     const target = parseInt(m[2].replace(/[^\d]/g, ''), 10);
     if (!isFinite(target) || target <= 0) { el.dataset.counted = '1'; return; }
@@ -3152,6 +3154,18 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
 // Toolbar Import/Export CSV retirée (remplacée par l'import de document sur Véhicules/Amendes).
 // Conservée en NO-OP : encore appelée par plusieurs pages (amendes, vehicules, factures…).
 FP.injectDataIO = () => {};
+
+// Compteurs animés GLOBAUX : anime tous les chiffres « .kpi-value » (montée depuis 0) au
+// chargement de N'IMPORTE QUELLE page, puis à chaque arrivée de données Supabase. Idempotent
+// (chaque valeur n'est animée qu'une fois) et sans toucher aux valeurs décimales.
+(function () {
+  function animateKpis() {
+    if (!FP.countUp) return;
+    document.querySelectorAll('.kpi-value').forEach(el => FP.countUp(el));
+  }
+  document.addEventListener('DOMContentLoaded', () => setTimeout(animateKpis, 130));
+  document.addEventListener('fp:data-ready', () => setTimeout(animateKpis, 40));
+})();
 
 // Navigation active state (sidebar)
 document.addEventListener('DOMContentLoaded', () => {
