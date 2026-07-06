@@ -2126,15 +2126,27 @@
         window.FP_DATA.factures.push(newF);
         try { await FP.persist.upsert('factures', newF); okF++; } catch (e) { console.error('[tf-import facture]', e); }
       }
+      let consoErr = null;
       for (const c of conso){
         const row = { id:(c.mois + '-' + c.carte + '-' + c.facNum), mois:c.mois, carte:c.carte, conducteur:c.conducteur || null,
           plaque:c.plaque || null, typeVehicule:c.type_vehicule || null, carburantTtc:c.carburant_ttc,
           litres:c.litres, boutiqueTtc:c.boutique_ttc, lavageTtc:c.lavage_ttc, peageTtc:c.peage_ttc,
           totalHt:c.total_ht, totalTva:c.total_tva, totalTtc:c.total_ttc };
-        try { await FP.persist.upsert('total_conso', row); okC++; } catch (e) { console.error('[tf-import conso]', e); }
+        try {
+          // Écriture DIRECTE (on récupère le VRAI résultat de la base au lieu d'un « OK » de file d'attente).
+          let res = null;
+          if (FP.db && FP.db.upsert) res = await FP.db.upsert('total_conso', row);
+          if (res && res.error) throw res.error;
+          if (!res && FP.persist) await FP.persist.upsert('total_conso', row); // repli hors-ligne
+          okC++;
+        } catch (e) { console.error('[tf-import conso]', e); if (!consoErr) consoErr = (e && (e.message || e.details || e.hint)) || String(e); }
       }
       $('tf-import-preview').classList.add('hidden');
-      tfImpStatus('<b>OK Enregistre</b> : ' + okF + ' facture(s) + conso de ' + okC + ' carte(s). Sauvegarde dans la base (visible sur tous les postes).', 'ok');
+      if (consoErr) {
+        tfImpStatus('⚠️ ' + okF + ' facture(s) enregistrée(s), mais la CONSO par conducteur n\'a PAS pu être sauvegardée : <b>' + esc(consoErr) + '</b><br>Copie-moi ce message.', 'error');
+      } else {
+        tfImpStatus('<b>✓ Enregistré</b> : ' + okF + ' facture(s) + conso de ' + okC + ' carte(s). Sauvegardé dans la base (visible sur tous les postes).', 'ok');
+      }
       _pending = null;
       render();
       consoLoaded = false; loadConso(); // recharge le detail conso depuis la base
