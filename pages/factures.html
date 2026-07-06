@@ -2140,6 +2140,42 @@
       consoLoaded = false; loadConso(); // recharge le detail conso depuis la base
     }
 
+    // Résout le NOM du conducteur écrit sur la facture (souvent partiel : « BRAM », « THOMAS H »)
+    // en le rapprochant des conducteurs DÉJÀ enregistrés (table conducteurs + chauffeurs des
+    // véhicules). Renvoie le nom complet trouvé, sinon le nom du PDF tel quel.
+    function resolveConducteurName(pdfNom){
+      const raw = (pdfNom || '').trim();
+      if (!raw || isPlaque(raw)) return raw || null;
+      const norm = s => FP.norm(s || '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+      const nRaw = norm(raw);
+      if (!nRaw) return raw;
+      const cands = [];
+      (window.FP_DATA.conducteurs || []).forEach(c => {
+        const full = [c.prenom, c.nom].filter(Boolean).join(' ') || c.name || '';
+        if (full) cands.push(full);
+        if (c.name && c.name !== full) cands.push(c.name);
+      });
+      (window.FP_DATA.vehicules || []).forEach(v => { if (v.chauffeur && v.chauffeur !== '—') cands.push(v.chauffeur); });
+      const uniq = [...new Set(cands.map(x => (x || '').trim()).filter(Boolean))];
+      if (!uniq.length) return raw;
+      // 1) correspondance exacte (accents/casse ignorés)
+      let hit = uniq.find(x => norm(x) === nRaw);
+      if (hit) return hit;
+      // 2) « PRÉNOM + initiale(s) du nom » : ex. « THOMAS H » → Thomas Hocquet
+      const toks = nRaw.split(' ');
+      if (toks.length >= 2) {
+        const first = toks[0], rest = toks.slice(1).join('');
+        hit = uniq.find(x => { const nt = norm(x).split(' '); return nt[0] === first && nt.slice(1).join('').startsWith(rest); });
+        if (hit) return hit;
+      }
+      // 3) prénom seul : « BRAM » → conducteur dont le 1er mot correspond
+      hit = uniq.find(x => norm(x).split(' ')[0] === nRaw);
+      if (hit) return hit;
+      // 4) rapprochement souple (l'un commence par l'autre)
+      hit = uniq.find(x => { const n = norm(x); return n.startsWith(nRaw) || nRaw.startsWith(n.split(' ')[0]); });
+      return hit || raw;
+    }
+
     async function handleReleves(fileList){
       const files = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
       if (!files.length){ tfImpReset(); tfImpStatus('Depose un ou plusieurs <b>PDF</b> TotalEnergies (releve et/ou factures detaillees).', 'error'); return; }
@@ -2188,8 +2224,17 @@
       const consoOut = Array.from(consoByKey.values()).map(a => {
         const ref = cardMap[String(a.carte)] || {};
         const pdfNom = a.nom || '';
-        const conducteur = ref.conducteur || (isPlaque(pdfNom) ? null : (pdfNom || null));
-        const plaque = ref.plaque || (isPlaque(pdfNom) ? pdfNom : null);
+        // Priorité au nom DÉJÀ enregistré pour cette carte ; sinon on résout le nom du PDF
+        // (« BRAM », « THOMAS H »…) contre les conducteurs connus.
+        let conducteur = ref.conducteur || null;
+        let plaque = ref.plaque || (isPlaque(pdfNom) ? pdfNom : null);
+        if (!conducteur && !isPlaque(pdfNom)) conducteur = resolveConducteurName(pdfNom);
+        // Si on n'a qu'une plaque, on tente le chauffeur du véhicule correspondant.
+        if (plaque && !conducteur) {
+          const np = String(plaque).toUpperCase().replace(/[^A-Z0-9]/g, '');
+          const v = (window.FP_DATA.vehicules || []).find(x => String(x.immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === np);
+          if (v && v.chauffeur && v.chauffeur !== '—') conducteur = v.chauffeur;
+        }
         return { carte:a.carte, mois:a.mois, facNum:a.facNum, conducteur:conducteur, plaque:plaque,
           type_vehicule: ref.type_vehicule || a.type || null,
           carburant_ttc:+a.carburant.toFixed(2), litres:+a.litres.toFixed(2),
