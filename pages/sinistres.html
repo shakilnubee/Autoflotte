@@ -35,6 +35,11 @@
   .drive-folder-del { position: absolute; top: 6px; right: 6px; background: rgba(15,30,61,.12); color: #64748b; border: none; border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: 11px; line-height: 22px; padding: 0; opacity: 0; transition: opacity .15s, background .15s, color .15s; }
   .drive-folder:hover .drive-folder-del { opacity: 1; }
   .drive-folder-del:hover { background: var(--fp-danger); color: #fff; }
+  .drive-folder-ren { position: absolute; top: 6px; left: 6px; background: rgba(15,30,61,.12); color: #64748b; border: none; border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: 11px; line-height: 22px; padding: 0; opacity: 0; transition: opacity .15s, background .15s, color .15s; }
+  .drive-folder:hover .drive-folder-ren { opacity: 1; }
+  .drive-folder-ren:hover { background: var(--fp-accent); color: #fff; }
+  .fp-btn-sm { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--fp-primary); background: #fff; border: 1px solid var(--fp-border); border-radius: 8px; padding: 7px 12px; cursor: pointer; transition: background .15s, border-color .15s; }
+  .fp-btn-sm:hover { background: rgba(20,184,166,.08); border-color: var(--fp-accent); }
   .drive-upload { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 150px; border: 2px dashed var(--fp-border); border-radius: 10px; background: #f8fafc; color: #64748b; cursor: pointer; font-size: 12px; font-weight: 600; }
   .drive-upload:hover { border-color: var(--fp-accent); color: var(--fp-primary); background: rgba(20,184,166,.06); }
   .drive-upload svg { width: 26px; height: 26px; }
@@ -596,6 +601,36 @@
   let driveDossiers = null; // liste des dossiers créés (plaques), persistée dans settings.sinistreDossiers
   let driveSearch = '';     // filtre de recherche (barre d'outils)
   let driveSort = 'plaque'; // tri : plaque | plaque-desc | modele | fichiers
+  let driveSub = null;      // sous-dossier ouvert (ex. "2026"), ou null (racine du dossier véhicule)
+  // Sous-dossiers : gérés dans les réglages (aucune colonne SQL). Liste par véhicule +
+  // rattachement de chaque fichier (docId → sous-dossier). Persisté par société.
+  function getSubs(pl){ try { return ((FP.settings.get().sinistreSous) || {})[normPl(pl)] || []; } catch (e) { return []; } }
+  function saveSubs(pl, arr){ try { const s = FP.settings.get(); s.sinistreSous = s.sinistreSous || {}; s.sinistreSous[normPl(pl)] = (arr || []).slice(); FP.settings.save(s); } catch (e) {} }
+  function docSub(id){ try { return ((FP.settings.get().sinistreDocSub) || {})[id] || null; } catch (e) { return null; } }
+  function setDocSub(id, sub){ try { const s = FP.settings.get(); s.sinistreDocSub = s.sinistreDocSub || {}; if (sub) s.sinistreDocSub[id] = sub; else delete s.sinistreDocSub[id]; FP.settings.save(s); } catch (e) {} }
+  function addSub(pl, name){ name = (name || '').trim(); if (!name) return false; const arr = getSubs(pl); if (arr.some(s => s.toLowerCase() === name.toLowerCase())) { alert('Ce sous-dossier existe déjà.'); return false; } arr.push(name); saveSubs(pl, arr); return true; }
+  function renameSub(pl, oldName, newName){
+    newName = (newName || '').trim(); if (!newName || newName === oldName) return;
+    const arr = getSubs(pl);
+    if (arr.some(s => s.toLowerCase() === newName.toLowerCase())) { alert('Ce sous-dossier existe déjà.'); return; }
+    saveSubs(pl, arr.map(s => s === oldName ? newName : s));
+    // réattribue les fichiers de l'ancien nom vers le nouveau
+    try { const s = FP.settings.get(); s.sinistreDocSub = s.sinistreDocSub || {}; Object.keys(s.sinistreDocSub).forEach(id => { if (s.sinistreDocSub[id] === oldName) s.sinistreDocSub[id] = newName; }); FP.settings.save(s); } catch (e) {}
+    if (driveSub === oldName) driveSub = newName;
+  }
+  function delSub(pl, name){
+    const files = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl) && docSub(d.id) === name);
+    if (files.length){
+      if (!confirm('Le sous-dossier « ' + name + ' » contient ' + files.length + ' fichier(s). Supprimer le sous-dossier ET ces fichiers ?')) return;
+      files.forEach(d => { if (FP.persist) FP.persist.delete('documents', d.id); setDocSub(d.id, null); });
+      sinDocs = sinDocs.filter(d => !(normPl(d.vehiculeId) === normPl(pl) && files.some(x => x.id === d.id)));
+    } else {
+      if (!confirm('Supprimer le sous-dossier « ' + name + ' » ?')) return;
+    }
+    saveSubs(pl, getSubs(pl).filter(s => s !== name));
+    if (driveSub === name) driveSub = null;
+    renderDrive();
+  }
   const normPl = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const isImg = u => /\.(jpe?g|png|gif|webp|heic|bmp)(\?|$)/i.test(u || '');
   function loadSinDocs(){
@@ -674,9 +709,9 @@
       const sortOpt = (val, lab) => `<option value="${val}"${driveSort === val ? ' selected' : ''}>${lab}</option>`;
       const toolbar = `
         <div class="flex flex-wrap items-center gap-2 mb-4">
-          <div class="relative flex-1" style="min-width:200px">
-            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" style="pointer-events:none"></i>
-            <input id="drive-search" type="search" placeholder="Rechercher un véhicule (plaque, modèle)…" value="${escapeHtml(driveSearch)}" class="w-full pl-9 pr-3 py-2 text-sm border rounded-lg" style="background:#fff">
+          <div style="position:relative;flex:1;min-width:200px">
+            <i data-lucide="search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:#94a3b8;pointer-events:none"></i>
+            <input id="drive-search" type="search" placeholder="Rechercher un véhicule (plaque, modèle)…" value="${escapeHtml(driveSearch)}" style="width:100%;padding:8px 12px 8px 38px;font-size:14px;border:1px solid var(--fp-border);border-radius:8px;background:#fff">
           </div>
           <select id="drive-sort" class="text-sm border rounded-lg px-2 py-2" style="background:#fff" title="Trier">
             ${sortOpt('plaque', 'Plaque A→Z')}${sortOpt('plaque-desc', 'Plaque Z→A')}${sortOpt('modele', 'Modèle A→Z')}${sortOpt('fichiers', 'Plus de fichiers')}
@@ -690,20 +725,42 @@
     } else {
       const pl = driveFolder;
       const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
-      crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <b>${escapeHtml(pl)}</b>${veh ? ' · ' + escapeHtml(veh.marque + ' ' + veh.modele) : ''}`;
-      const files = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl));
-      const tiles = files.map(d => {
+      const vehLbl = veh ? ' · ' + escapeHtml(veh.marque + ' ' + veh.modele) : '';
+      const allFiles = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl));
+      const fileTile = d => {
         const u = escapeHtml(d.url || '');
         return `<div class="drive-file">
           <a href="${u}" target="_blank" rel="noopener" class="drive-file-preview">${isImg(d.url) ? `<img src="${u}" loading="lazy">` : `<i data-lucide="file-text"></i>`}</a>
           <div class="drive-file-name" title="${escapeHtml(d.label || '')}">${escapeHtml(d.label || 'fichier')}</div>
           <button type="button" class="drive-file-del" data-drive-del="${escapeHtml(d.id)}" title="Supprimer">✕</button>
         </div>`;
-      }).join('');
-      view.innerHTML = '<div class="drive-grid">'
-        + `<button type="button" class="drive-upload" id="drive-add"><i data-lucide="upload-cloud"></i><span>Ajouter des fichiers</span></button>`
-        + tiles + '</div>'
-        + '<input type="file" id="drive-file-input" accept="image/*,application/pdf" multiple class="hidden">';
+      };
+      const uploadTile = `<button type="button" class="drive-upload" id="drive-add"><i data-lucide="upload-cloud"></i><span>Ajouter des fichiers</span></button>`;
+      const fileInput = '<input type="file" id="drive-file-input" accept="image/*,application/pdf" multiple class="hidden">';
+      if (!driveSub){
+        // Racine du dossier véhicule : sous-dossiers (années) + fichiers non classés
+        crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <b>${escapeHtml(pl)}</b>${vehLbl}`;
+        const subs = getSubs(pl).slice().sort((a, b) => b.localeCompare(a)); // années récentes d'abord
+        const subTiles = subs.map(name => {
+          const n = allFiles.filter(d => docSub(d.id) === name).length;
+          return `<div class="drive-folder" data-sub="${escapeHtml(name)}" style="position:relative">
+            <button type="button" class="drive-folder-ren" data-sub-ren="${escapeHtml(name)}" title="Renommer">✎</button>
+            <button type="button" class="drive-folder-del" data-sub-del="${escapeHtml(name)}" title="Supprimer le sous-dossier">✕</button>
+            <i data-lucide="folder" class="drive-folder-ic"></i>
+            <div class="drive-folder-name" style="font-family:inherit">${escapeHtml(name)}</div>
+            <div class="drive-folder-count">${n} fichier${n > 1 ? 's' : ''}</div>
+          </div>`;
+        }).join('');
+        const rootFiles = allFiles.filter(d => !docSub(d.id));
+        view.innerHTML = `<div class="flex items-center gap-2 mb-4"><button type="button" id="drive-new-sub" class="fp-btn-sm"><i data-lucide="folder-plus" class="w-4 h-4"></i> Nouveau sous-dossier</button></div>`
+          + '<div class="drive-grid">' + subTiles + uploadTile + rootFiles.map(fileTile).join('') + '</div>'
+          + fileInput;
+      } else {
+        // Dans un sous-dossier
+        crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <button type="button" id="drive-back-plate" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">${escapeHtml(pl)}</button>${vehLbl} › <b>${escapeHtml(driveSub)}</b>`;
+        const files = allFiles.filter(d => docSub(d.id) === driveSub);
+        view.innerHTML = '<div class="drive-grid">' + uploadTile + files.map(fileTile).join('') + '</div>' + fileInput;
+      }
     }
     lucide.createIcons();
   }
@@ -749,7 +806,7 @@
       try {
         const url = await FP.uploadScan(f, 'sinistres/' + normPl(pl));
         if (url){ const doc = { id: 'SD' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: pl, type: 'sinistre-doc', label: f.name, url, driveId: null };
-          sinDocs.push(doc); if (FP.persist) FP.persist.insert('documents', doc); ok++; }
+          sinDocs.push(doc); if (FP.persist) FP.persist.insert('documents', doc); if (driveSub) setDocSub(doc.id, driveSub); ok++; }
       } catch (e) { console.error('[drive sinistre upload]', e); }
     }
     renderDrive();
@@ -759,11 +816,16 @@
     if (!confirm('Supprimer ce fichier ?')) return;
     sinDocs = sinDocs.filter(d => d.id !== id);
     if (FP.persist) FP.persist.delete('documents', id);
+    setDocSub(id, null); // nettoie le rattachement sous-dossier
     renderDrive();
   }
   $('drive-view').addEventListener('click', (e) => {
     const delD = e.target.closest('[data-dossier-del]'); if (delD){ e.stopPropagation(); delDossier(delD.dataset.dossierDel); return; }
-    const f = e.target.closest('[data-folder]'); if (f){ driveFolder = f.dataset.folder; renderDrive(); return; }
+    const renS = e.target.closest('[data-sub-ren]'); if (renS){ e.stopPropagation(); const old = renS.dataset.subRen; const nv = prompt('Renommer le sous-dossier :', old); if (nv != null){ renameSub(driveFolder, old, nv); renderDrive(); } return; }
+    const delS = e.target.closest('[data-sub-del]'); if (delS){ e.stopPropagation(); delSub(driveFolder, delS.dataset.subDel); return; }
+    const sub = e.target.closest('[data-sub]'); if (sub){ driveSub = sub.dataset.sub; renderDrive(); return; }
+    if (e.target.closest('#drive-new-sub')){ const nv = prompt('Nom du sous-dossier (ex. 2026) :', String(new Date().getFullYear())); if (nv != null && addSub(driveFolder, nv)) renderDrive(); return; }
+    const f = e.target.closest('[data-folder]'); if (f){ driveFolder = f.dataset.folder; driveSub = null; renderDrive(); return; }
     if (e.target.closest('#drive-add')){ const inp = $('drive-file-input'); if (inp) inp.click(); return; }
     const del = e.target.closest('[data-drive-del]'); if (del){ delDriveDoc(del.dataset.driveDel); return; }
   });
@@ -775,7 +837,10 @@
     const srt = e.target.closest('#drive-sort'); if (srt){ driveSort = srt.value; renderDriveGrid(); return; }
     const sel = e.target.closest('#drive-new-veh'); if (sel && sel.value){ addDossier(sel.value); driveFolder = sel.value; renderDrive(); }
   });
-  $('drive-crumb').addEventListener('click', (e) => { if (e.target.closest('#drive-back')){ driveFolder = null; renderDrive(); } });
+  $('drive-crumb').addEventListener('click', (e) => {
+    if (e.target.closest('#drive-back')){ driveFolder = null; driveSub = null; renderDrive(); return; }
+    if (e.target.closest('#drive-back-plate')){ driveSub = null; renderDrive(); return; }
+  });
   renderDrive();   // affiche les dossiers tout de suite (depuis les sinistres), sans attendre le chargement des fichiers
   loadSinDocs();   // puis récupère les fichiers déjà stockés et rafraîchit
 
