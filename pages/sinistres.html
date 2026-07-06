@@ -18,6 +18,23 @@
   .timeline-dot.success { background: var(--fp-ok); }
   .timeline-dot.info { background: var(--fp-primary-2); }
   .chart-wrap { position: relative; height: 240px; }
+  /* Drive sinistres : dossiers par véhicule + vignettes */
+  .drive-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .drive-folder { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 16px 10px; border: 1px solid var(--fp-border); border-radius: 12px; background: linear-gradient(145deg, #fff, #f8fafc); cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s; }
+  .drive-folder:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -14px rgba(15,30,61,.35); border-color: var(--fp-accent); }
+  .drive-folder-ic { width: 42px; height: 42px; color: #F59E0B; margin-bottom: 4px; }
+  .drive-folder-name { font-weight: 800; font-family: monospace; color: #0f1e3d; }
+  .drive-folder-sub { font-size: 11px; color: #64748b; }
+  .drive-folder-count { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .drive-file { position: relative; border: 1px solid var(--fp-border); border-radius: 10px; overflow: hidden; background: #fff; }
+  .drive-file-preview { display: flex; align-items: center; justify-content: center; height: 112px; background: #f1f5f9; overflow: hidden; }
+  .drive-file-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .drive-file-preview svg { width: 34px; height: 34px; color: #64748b; }
+  .drive-file-name { font-size: 11px; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #334155; }
+  .drive-file-del { position: absolute; top: 4px; right: 4px; background: rgba(15,30,61,.72); color: #fff; border: none; border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: 11px; line-height: 22px; padding: 0; }
+  .drive-upload { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 150px; border: 2px dashed var(--fp-border); border-radius: 10px; background: #f8fafc; color: #64748b; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .drive-upload:hover { border-color: var(--fp-accent); color: var(--fp-primary); background: rgba(20,184,166,.06); }
+  .drive-upload svg { width: 26px; height: 26px; }
 </style>
 <script>
 (function(){
@@ -133,6 +150,15 @@
         <h3 class="font-bold text-slate-900 mb-4">Évolution par trimestre</h3>
         <div class="chart-wrap"><canvas id="trimChart"></canvas></div>
       </div>
+    </div>
+
+    <!-- Photos & documents des sinistres (façon Drive) -->
+    <div class="card p-5 mb-6">
+      <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <h3 class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="folder-open" class="w-4 h-4" style="color:var(--fp-accent)"></i> Photos &amp; documents des sinistres <span class="text-xs font-normal text-slate-400">— un dossier par véhicule</span></h3>
+        <div id="drive-crumb" class="text-sm text-slate-500"></div>
+      </div>
+      <div id="drive-view"></div>
     </div>
 
     <!-- Coût par période -->
@@ -558,7 +584,91 @@
     sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
     rebuildFiltres();
     renderKPIs(); renderTimeline(); renderCharts(); coutPeriode.render();
+    if (typeof renderDrive === 'function') renderDrive();
   });
+
+  // ---------- Drive sinistres : dossiers par véhicule + fichiers (photos/PDF) ----------
+  let sinDocs = [];        // documents type 'sinistre-doc' : { id, vehiculeId(=plaque), label, url }
+  let driveFolder = null;  // plaque du dossier ouvert, ou null (vue dossiers)
+  const normPl = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const isImg = u => /\.(jpe?g|png|gif|webp|heic|bmp)(\?|$)/i.test(u || '');
+  function loadSinDocs(){
+    if (!(window.FP && FP.db && FP.supabase)) { renderDrive(); return; }
+    FP.db.select('documents').then(r => { if (!r.error) { sinDocs = (r.data || []).filter(d => d.type === 'sinistre-doc'); renderDrive(); } }).catch(() => {});
+  }
+  function driveFolders(){
+    const plates = new Set();
+    sinistres.forEach(s => { if (s.vehiculeImmat) plates.add(s.vehiculeImmat); });
+    sinDocs.forEach(d => { if (d.vehiculeId) plates.add(d.vehiculeId); });
+    return [...plates].sort().map(pl => {
+      const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
+      const n = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl)).length;
+      return { plaque: pl, veh, n };
+    });
+  }
+  function renderDrive(){
+    const view = $('drive-view'), crumb = $('drive-crumb'); if (!view) return;
+    if (!driveFolder){
+      crumb.textContent = '';
+      const fs = driveFolders();
+      if (!fs.length){ view.innerHTML = '<div class="fp-empty"><div class="fp-empty-ic"><i data-lucide="folder"></i></div><div class="fp-empty-title">Aucun dossier</div><div class="text-sm mt-1">Les véhicules ayant un sinistre apparaîtront ici.</div></div>'; lucide.createIcons(); return; }
+      view.innerHTML = '<div class="drive-grid">' + fs.map(f => `
+        <button type="button" class="drive-folder" data-folder="${escapeHtml(f.plaque)}">
+          <i data-lucide="folder" class="drive-folder-ic"></i>
+          <div class="drive-folder-name">${escapeHtml(f.plaque)}</div>
+          <div class="drive-folder-sub">${f.veh ? escapeHtml(f.veh.marque + ' ' + f.veh.modele) : '—'}</div>
+          <div class="drive-folder-count">${f.n} fichier${f.n > 1 ? 's' : ''}</div>
+        </button>`).join('') + '</div>';
+    } else {
+      const pl = driveFolder;
+      const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
+      crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <b>${escapeHtml(pl)}</b>${veh ? ' · ' + escapeHtml(veh.marque + ' ' + veh.modele) : ''}`;
+      const files = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl));
+      const tiles = files.map(d => {
+        const u = escapeHtml(d.url || '');
+        return `<div class="drive-file">
+          <a href="${u}" target="_blank" rel="noopener" class="drive-file-preview">${isImg(d.url) ? `<img src="${u}" loading="lazy">` : `<i data-lucide="file-text"></i>`}</a>
+          <div class="drive-file-name" title="${escapeHtml(d.label || '')}">${escapeHtml(d.label || 'fichier')}</div>
+          <button type="button" class="drive-file-del" data-drive-del="${escapeHtml(d.id)}" title="Supprimer">✕</button>
+        </div>`;
+      }).join('');
+      view.innerHTML = '<div class="drive-grid">'
+        + `<button type="button" class="drive-upload" id="drive-add"><i data-lucide="upload-cloud"></i><span>Ajouter des fichiers</span></button>`
+        + tiles + '</div>'
+        + '<input type="file" id="drive-file-input" accept="image/*,application/pdf" multiple class="hidden">';
+    }
+    lucide.createIcons();
+  }
+  async function uploadDrive(fileList){
+    const files = Array.from(fileList || []); if (!files.length) return;
+    if (!(window.FP && FP.supabase && FP.uploadScan)){ alert("L'ajout de fichiers nécessite d'être connecté à internet."); return; }
+    const pl = driveFolder; let ok = 0;
+    const btn = $('drive-add'); if (btn) { btn.style.opacity = '.6'; }
+    for (const f of files){
+      try {
+        const url = await FP.uploadScan(f, 'sinistres/' + normPl(pl));
+        if (url){ const doc = { id: 'SD' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: pl, type: 'sinistre-doc', label: f.name, url, driveId: null };
+          sinDocs.push(doc); if (FP.persist) FP.persist.insert('documents', doc); ok++; }
+      } catch (e) { console.error('[drive sinistre upload]', e); }
+    }
+    renderDrive();
+    if (FP.toast) FP.toast(`${ok}/${files.length} fichier(s) ajouté(s)`);
+  }
+  function delDriveDoc(id){
+    if (!confirm('Supprimer ce fichier ?')) return;
+    sinDocs = sinDocs.filter(d => d.id !== id);
+    if (FP.persist) FP.persist.delete('documents', id);
+    renderDrive();
+  }
+  $('drive-view').addEventListener('click', (e) => {
+    const f = e.target.closest('[data-folder]'); if (f){ driveFolder = f.dataset.folder; renderDrive(); return; }
+    if (e.target.closest('#drive-add')){ const inp = $('drive-file-input'); if (inp) inp.click(); return; }
+    const del = e.target.closest('[data-drive-del]'); if (del){ delDriveDoc(del.dataset.driveDel); return; }
+  });
+  $('drive-view').addEventListener('change', (e) => { const inp = e.target.closest('#drive-file-input'); if (inp) uploadDrive(inp.files); });
+  $('drive-crumb').addEventListener('click', (e) => { if (e.target.closest('#drive-back')){ driveFolder = null; renderDrive(); } });
+  renderDrive();   // affiche les dossiers tout de suite (depuis les sinistres), sans attendre le chargement des fichiers
+  loadSinDocs();   // puis récupère les fichiers déjà stockés et rafraîchit
 
   // ---------- Export CSV ----------
   FP.injectDataIO({
