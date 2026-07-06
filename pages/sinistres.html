@@ -594,6 +594,8 @@
   let sinDocs = [];        // documents type 'sinistre-doc' : { id, vehiculeId(=plaque), label, url }
   let driveFolder = null;  // plaque du dossier ouvert, ou null (vue dossiers)
   let driveDossiers = null; // liste des dossiers créés (plaques), persistée dans settings.sinistreDossiers
+  let driveSearch = '';     // filtre de recherche (barre d'outils)
+  let driveSort = 'plaque'; // tri : plaque | plaque-desc | modele | fichiers
   const normPl = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const isImg = u => /\.(jpe?g|png|gif|webp|heic|bmp)(\?|$)/i.test(u || '');
   function loadSinDocs(){
@@ -662,31 +664,29 @@
     const view = $('drive-view'), crumb = $('drive-crumb'); if (!view) return;
     if (!driveFolder){
       crumb.textContent = '';
-      const fs = driveFolders();
-      const dejaPl = new Set(fs.map(f => normPl(f.plaque)));
-      const opts = (data.vehicules || [])
+      // Menu "＋ Nouveau dossier" : véhicules qui n'ont pas encore de dossier.
+      const dejaPl = new Set(driveFolders().map(f => normPl(f.plaque)));
+      const optsNew = (data.vehicules || [])
         .slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
-        .filter(v => v.immat)
+        .filter(v => v.immat && !dejaPl.has(normPl(v.immat)))
         .map(v => `<option value="${escapeHtml(v.immat)}">${escapeHtml(v.immat)}${v.marque || v.modele ? ' — ' + escapeHtml((v.marque || '') + ' ' + (v.modele || '')).trim() : ''}</option>`)
         .join('');
-      const nouveau = `
-        <div class="drive-folder" style="cursor:default;border-style:dashed">
-          <i data-lucide="folder-plus" class="drive-folder-ic"></i>
-          <div class="drive-folder-name" style="font-family:inherit;font-weight:700">Nouveau dossier</div>
-          <select id="drive-new-veh" class="mt-1 text-xs border rounded px-1.5 py-1" style="max-width:130px;background:#fff">
-            <option value="">Choisir un véhicule…</option>${opts}
+      const sortOpt = (val, lab) => `<option value="${val}"${driveSort === val ? ' selected' : ''}>${lab}</option>`;
+      const toolbar = `
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <div class="relative flex-1" style="min-width:200px">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" style="pointer-events:none"></i>
+            <input id="drive-search" type="search" placeholder="Rechercher un véhicule (plaque, modèle)…" value="${escapeHtml(driveSearch)}" class="w-full pl-9 pr-3 py-2 text-sm border rounded-lg" style="background:#fff">
+          </div>
+          <select id="drive-sort" class="text-sm border rounded-lg px-2 py-2" style="background:#fff" title="Trier">
+            ${sortOpt('plaque', 'Plaque A→Z')}${sortOpt('plaque-desc', 'Plaque Z→A')}${sortOpt('modele', 'Modèle A→Z')}${sortOpt('fichiers', 'Plus de fichiers')}
+          </select>
+          <select id="drive-new-veh" class="text-sm border rounded-lg px-2 py-2" style="background:#fff;max-width:220px" title="Créer un nouveau dossier">
+            <option value="">＋ Nouveau dossier…</option>${optsNew}
           </select>
         </div>`;
-      const grid = fs.map(f => `
-        <div class="drive-folder" data-folder="${escapeHtml(f.plaque)}" style="position:relative">
-          <button type="button" class="drive-folder-del" data-dossier-del="${escapeHtml(f.plaque)}" title="Supprimer le dossier">✕</button>
-          <i data-lucide="folder" class="drive-folder-ic"></i>
-          <div class="drive-folder-name">${escapeHtml(f.plaque)}</div>
-          <div class="drive-folder-sub">${f.veh ? escapeHtml(f.veh.marque + ' ' + f.veh.modele) : '—'}</div>
-          <div class="drive-folder-count">${f.n} fichier${f.n > 1 ? 's' : ''}</div>
-        </div>`).join('');
-      view.innerHTML = (fs.length ? '' : '<div class="text-sm text-slate-500 mb-3">Aucun dossier pour l’instant. Crée-en un pour ranger les photos et documents d’un sinistre, véhicule par véhicule.</div>')
-        + '<div class="drive-grid">' + grid + nouveau + '</div>';
+      view.innerHTML = toolbar + '<div id="drive-grid-wrap"></div>';
+      renderDriveGrid();
     } else {
       const pl = driveFolder;
       const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
@@ -705,6 +705,39 @@
         + tiles + '</div>'
         + '<input type="file" id="drive-file-input" accept="image/*,application/pdf" multiple class="hidden">';
     }
+    lucide.createIcons();
+  }
+  // Ne redessine QUE la grille des dossiers (filtre + tri) sans toucher à la barre d'outils
+  // → le focus reste dans le champ de recherche pendant la frappe.
+  function renderDriveGrid(){
+    const wrap = $('drive-grid-wrap'); if (!wrap) return;
+    let fs = driveFolders();
+    const q = normPl(driveSearch);
+    const qraw = driveSearch.trim().toLowerCase();
+    if (qraw){
+      fs = fs.filter(f => normPl(f.plaque).includes(q)
+        || (f.veh && ((f.veh.marque || '') + ' ' + (f.veh.modele || '')).toLowerCase().includes(qraw)));
+    }
+    fs.sort((a, b) => {
+      if (driveSort === 'plaque-desc') return b.plaque.localeCompare(a.plaque);
+      if (driveSort === 'modele') return ((a.veh ? a.veh.marque + ' ' + a.veh.modele : 'zzz')).localeCompare(b.veh ? b.veh.marque + ' ' + b.veh.modele : 'zzz') || a.plaque.localeCompare(b.plaque);
+      if (driveSort === 'fichiers') return (b.n - a.n) || a.plaque.localeCompare(b.plaque);
+      return a.plaque.localeCompare(b.plaque);
+    });
+    if (!fs.length){
+      wrap.innerHTML = qraw
+        ? '<div class="text-sm text-slate-500 py-4">Aucun dossier ne correspond à « ' + escapeHtml(driveSearch.trim()) + ' ».</div>'
+        : '<div class="text-sm text-slate-500 py-4">Aucun dossier. Utilise « ＋ Nouveau dossier » pour en créer un.</div>';
+      return;
+    }
+    wrap.innerHTML = '<div class="drive-grid">' + fs.map(f => `
+      <div class="drive-folder" data-folder="${escapeHtml(f.plaque)}" style="position:relative">
+        <button type="button" class="drive-folder-del" data-dossier-del="${escapeHtml(f.plaque)}" title="Supprimer le dossier">✕</button>
+        <i data-lucide="folder" class="drive-folder-ic"></i>
+        <div class="drive-folder-name">${escapeHtml(f.plaque)}</div>
+        <div class="drive-folder-sub">${f.veh ? escapeHtml(f.veh.marque + ' ' + f.veh.modele) : '—'}</div>
+        <div class="drive-folder-count">${f.n} fichier${f.n > 1 ? 's' : ''}</div>
+      </div>`).join('') + '</div>';
     lucide.createIcons();
   }
   async function uploadDrive(fileList){
@@ -734,8 +767,12 @@
     if (e.target.closest('#drive-add')){ const inp = $('drive-file-input'); if (inp) inp.click(); return; }
     const del = e.target.closest('[data-drive-del]'); if (del){ delDriveDoc(del.dataset.driveDel); return; }
   });
+  $('drive-view').addEventListener('input', (e) => {
+    const s = e.target.closest('#drive-search'); if (s){ driveSearch = s.value; renderDriveGrid(); }
+  });
   $('drive-view').addEventListener('change', (e) => {
     const inp = e.target.closest('#drive-file-input'); if (inp){ uploadDrive(inp.files); return; }
+    const srt = e.target.closest('#drive-sort'); if (srt){ driveSort = srt.value; renderDriveGrid(); return; }
     const sel = e.target.closest('#drive-new-veh'); if (sel && sel.value){ addDossier(sel.value); driveFolder = sel.value; renderDrive(); }
   });
   $('drive-crumb').addEventListener('click', (e) => { if (e.target.closest('#drive-back')){ driveFolder = null; renderDrive(); } });
