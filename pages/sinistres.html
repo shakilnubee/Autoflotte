@@ -32,6 +32,9 @@
   .drive-file-preview svg { width: 34px; height: 34px; color: #64748b; }
   .drive-file-name { font-size: 11px; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #334155; }
   .drive-file-del { position: absolute; top: 4px; right: 4px; background: rgba(15,30,61,.72); color: #fff; border: none; border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: 11px; line-height: 22px; padding: 0; }
+  .drive-folder-del { position: absolute; top: 6px; right: 6px; background: rgba(15,30,61,.12); color: #64748b; border: none; border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: 11px; line-height: 22px; padding: 0; opacity: 0; transition: opacity .15s, background .15s, color .15s; }
+  .drive-folder:hover .drive-folder-del { opacity: 1; }
+  .drive-folder-del:hover { background: var(--fp-danger); color: #fff; }
   .drive-upload { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 150px; border: 2px dashed var(--fp-border); border-radius: 10px; background: #f8fafc; color: #64748b; cursor: pointer; font-size: 12px; font-weight: 600; }
   .drive-upload:hover { border-color: var(--fp-accent); color: var(--fp-primary); background: rgba(20,184,166,.06); }
   .drive-upload svg { width: 26px; height: 26px; }
@@ -590,17 +593,66 @@
   // ---------- Drive sinistres : dossiers par véhicule + fichiers (photos/PDF) ----------
   let sinDocs = [];        // documents type 'sinistre-doc' : { id, vehiculeId(=plaque), label, url }
   let driveFolder = null;  // plaque du dossier ouvert, ou null (vue dossiers)
+  let driveDossiers = null; // liste des dossiers créés (plaques), persistée dans settings.sinistreDossiers
   const normPl = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const isImg = u => /\.(jpe?g|png|gif|webp|heic|bmp)(\?|$)/i.test(u || '');
   function loadSinDocs(){
     if (!(window.FP && FP.db && FP.supabase)) { renderDrive(); return; }
     FP.db.select('documents').then(r => { if (!r.error) { sinDocs = (r.data || []).filter(d => d.type === 'sinistre-doc'); renderDrive(); } }).catch(() => {});
   }
+  function saveDossiers(){
+    try { const s = FP.settings.get(); s.sinistreDossiers = (driveDossiers || []).slice(); FP.settings.save(s); } catch (e) {}
+  }
+  // Charge la liste des dossiers ; à la 1re ouverture, en crée UN PAR VÉHICULE (pré-prêt).
+  function ensureDossiers(){
+    if (driveDossiers === null){
+      let stored = null;
+      try { stored = FP.settings.get().sinistreDossiers; } catch (e) {}
+      if (Array.isArray(stored)) { driveDossiers = stored.slice(); return; }
+    }
+    // Pas encore de liste enregistrée : on attend d'avoir les véhicules pour semer une 1re fois.
+    if (!Array.isArray(driveDossiers)) driveDossiers = [];
+    const vehs = (data.vehicules || []);
+    if (vehs.length){
+      let stored = null; try { stored = FP.settings.get().sinistreDossiers; } catch (e) {}
+      if (!Array.isArray(stored)){
+        const set = [];
+        vehs.forEach(v => { if (v.immat) set.push(v.immat); });
+        sinistres.forEach(x => { if (x.vehiculeImmat && !set.some(p => normPl(p) === normPl(x.vehiculeImmat))) set.push(x.vehiculeImmat); });
+        driveDossiers = set;
+        saveDossiers();
+      }
+    }
+  }
+  function addDossier(pl){
+    if (!pl) return;
+    ensureDossiers();
+    if (!(driveDossiers || []).some(p => normPl(p) === normPl(pl))){ driveDossiers.push(pl); saveDossiers(); }
+  }
+  function delDossier(pl){
+    const files = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl));
+    const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
+    const nom = pl + (veh ? (' — ' + veh.marque + ' ' + veh.modele) : '');
+    if (files.length){
+      if (!confirm('Le dossier « ' + nom + ' » contient ' + files.length + ' fichier(s). Supprimer le dossier ET ces fichiers ?')) return;
+      files.forEach(d => { if (FP.persist) FP.persist.delete('documents', d.id); });
+      sinDocs = sinDocs.filter(d => normPl(d.vehiculeId) !== normPl(pl));
+    } else {
+      if (!confirm('Supprimer le dossier « ' + nom + ' » ?')) return;
+    }
+    driveDossiers = (driveDossiers || []).filter(p => normPl(p) !== normPl(pl));
+    saveDossiers();
+    if (driveFolder && normPl(driveFolder) === normPl(pl)) driveFolder = null;
+    renderDrive();
+    if (FP.toast) FP.toast('Dossier supprimé');
+  }
   function driveFolders(){
-    const plates = new Set();
-    sinistres.forEach(s => { if (s.vehiculeImmat) plates.add(s.vehiculeImmat); });
-    sinDocs.forEach(d => { if (d.vehiculeId) plates.add(d.vehiculeId); });
-    return [...plates].sort().map(pl => {
+    ensureDossiers();
+    const map = new Map(); // normPl -> plaque affichée
+    (driveDossiers || []).forEach(pl => { if (pl) map.set(normPl(pl), pl); });
+    // Sécurité : un dossier qui contient des fichiers reste toujours visible.
+    sinDocs.forEach(d => { if (d.vehiculeId && !map.has(normPl(d.vehiculeId))) map.set(normPl(d.vehiculeId), d.vehiculeId); });
+    return [...map.values()].sort((a, b) => a.localeCompare(b)).map(pl => {
       const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
       const n = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl)).length;
       return { plaque: pl, veh, n };
@@ -626,12 +678,13 @@
           </select>
         </div>`;
       const grid = fs.map(f => `
-        <button type="button" class="drive-folder" data-folder="${escapeHtml(f.plaque)}">
+        <div class="drive-folder" data-folder="${escapeHtml(f.plaque)}" style="position:relative">
+          <button type="button" class="drive-folder-del" data-dossier-del="${escapeHtml(f.plaque)}" title="Supprimer le dossier">✕</button>
           <i data-lucide="folder" class="drive-folder-ic"></i>
           <div class="drive-folder-name">${escapeHtml(f.plaque)}</div>
           <div class="drive-folder-sub">${f.veh ? escapeHtml(f.veh.marque + ' ' + f.veh.modele) : '—'}</div>
           <div class="drive-folder-count">${f.n} fichier${f.n > 1 ? 's' : ''}</div>
-        </button>`).join('');
+        </div>`).join('');
       view.innerHTML = (fs.length ? '' : '<div class="text-sm text-slate-500 mb-3">Aucun dossier pour l’instant. Crée-en un pour ranger les photos et documents d’un sinistre, véhicule par véhicule.</div>')
         + '<div class="drive-grid">' + grid + nouveau + '</div>';
     } else {
@@ -676,13 +729,14 @@
     renderDrive();
   }
   $('drive-view').addEventListener('click', (e) => {
+    const delD = e.target.closest('[data-dossier-del]'); if (delD){ e.stopPropagation(); delDossier(delD.dataset.dossierDel); return; }
     const f = e.target.closest('[data-folder]'); if (f){ driveFolder = f.dataset.folder; renderDrive(); return; }
     if (e.target.closest('#drive-add')){ const inp = $('drive-file-input'); if (inp) inp.click(); return; }
     const del = e.target.closest('[data-drive-del]'); if (del){ delDriveDoc(del.dataset.driveDel); return; }
   });
   $('drive-view').addEventListener('change', (e) => {
     const inp = e.target.closest('#drive-file-input'); if (inp){ uploadDrive(inp.files); return; }
-    const sel = e.target.closest('#drive-new-veh'); if (sel && sel.value){ driveFolder = sel.value; renderDrive(); }
+    const sel = e.target.closest('#drive-new-veh'); if (sel && sel.value){ addDossier(sel.value); driveFolder = sel.value; renderDrive(); }
   });
   $('drive-crumb').addEventListener('click', (e) => { if (e.target.closest('#drive-back')){ driveFolder = null; renderDrive(); } });
   renderDrive();   // affiche les dossiers tout de suite (depuis les sinistres), sans attendre le chargement des fichiers
