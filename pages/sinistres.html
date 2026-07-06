@@ -611,14 +611,29 @@
     if (!driveFolder){
       crumb.textContent = '';
       const fs = driveFolders();
-      if (!fs.length){ view.innerHTML = '<div class="fp-empty"><div class="fp-empty-ic"><i data-lucide="folder"></i></div><div class="fp-empty-title">Aucun dossier</div><div class="text-sm mt-1">Les véhicules ayant un sinistre apparaîtront ici.</div></div>'; lucide.createIcons(); return; }
-      view.innerHTML = '<div class="drive-grid">' + fs.map(f => `
+      const dejaPl = new Set(fs.map(f => normPl(f.plaque)));
+      const opts = (data.vehicules || [])
+        .slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
+        .filter(v => v.immat)
+        .map(v => `<option value="${escapeHtml(v.immat)}">${escapeHtml(v.immat)}${v.marque || v.modele ? ' — ' + escapeHtml((v.marque || '') + ' ' + (v.modele || '')).trim() : ''}</option>`)
+        .join('');
+      const nouveau = `
+        <div class="drive-folder" style="cursor:default;border-style:dashed">
+          <i data-lucide="folder-plus" class="drive-folder-ic"></i>
+          <div class="drive-folder-name" style="font-family:inherit;font-weight:700">Nouveau dossier</div>
+          <select id="drive-new-veh" class="mt-1 text-xs border rounded px-1.5 py-1" style="max-width:130px;background:#fff">
+            <option value="">Choisir un véhicule…</option>${opts}
+          </select>
+        </div>`;
+      const grid = fs.map(f => `
         <button type="button" class="drive-folder" data-folder="${escapeHtml(f.plaque)}">
           <i data-lucide="folder" class="drive-folder-ic"></i>
           <div class="drive-folder-name">${escapeHtml(f.plaque)}</div>
           <div class="drive-folder-sub">${f.veh ? escapeHtml(f.veh.marque + ' ' + f.veh.modele) : '—'}</div>
           <div class="drive-folder-count">${f.n} fichier${f.n > 1 ? 's' : ''}</div>
-        </button>`).join('') + '</div>';
+        </button>`).join('');
+      view.innerHTML = (fs.length ? '' : '<div class="text-sm text-slate-500 mb-3">Aucun dossier pour l’instant. Crée-en un pour ranger les photos et documents d’un sinistre, véhicule par véhicule.</div>')
+        + '<div class="drive-grid">' + grid + nouveau + '</div>';
     } else {
       const pl = driveFolder;
       const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
@@ -665,7 +680,10 @@
     if (e.target.closest('#drive-add')){ const inp = $('drive-file-input'); if (inp) inp.click(); return; }
     const del = e.target.closest('[data-drive-del]'); if (del){ delDriveDoc(del.dataset.driveDel); return; }
   });
-  $('drive-view').addEventListener('change', (e) => { const inp = e.target.closest('#drive-file-input'); if (inp) uploadDrive(inp.files); });
+  $('drive-view').addEventListener('change', (e) => {
+    const inp = e.target.closest('#drive-file-input'); if (inp){ uploadDrive(inp.files); return; }
+    const sel = e.target.closest('#drive-new-veh'); if (sel && sel.value){ driveFolder = sel.value; renderDrive(); }
+  });
   $('drive-crumb').addEventListener('click', (e) => { if (e.target.closest('#drive-back')){ driveFolder = null; renderDrive(); } });
   renderDrive();   // affiche les dossiers tout de suite (depuis les sinistres), sans attendre le chargement des fichiers
   loadSinDocs();   // puis récupère les fichiers déjà stockés et rafraîchit
