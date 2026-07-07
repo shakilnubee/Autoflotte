@@ -154,6 +154,19 @@
       </div>
     </div>
 
+    <!-- Premiers pas (onboarding) — masqué une fois terminé/masqué, par société -->
+    <div id="onboarding" class="card p-5 mb-6" style="display:none;background:linear-gradient(145deg,#fff,#f0fdfa);border-color:#99f6e4">
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <h3 class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="rocket" class="w-4 h-4" style="color:var(--fp-accent)"></i> Premiers pas</h3>
+          <p class="text-xs text-slate-500 mt-1">Configurez votre flotte en quelques minutes. <span id="onb-count" class="font-semibold text-slate-700"></span></p>
+        </div>
+        <button id="onb-hide" class="text-xs text-slate-400 hover:text-slate-600" title="Masquer ce guide">Masquer ✕</button>
+      </div>
+      <div style="height:8px;background:#e2e8f0;border-radius:9999px;overflow:hidden;margin-bottom:14px"><div id="onb-bar" style="height:100%;width:0;background:linear-gradient(90deg,#14b8a6,#0e7490);border-radius:9999px;transition:width .5s ease"></div></div>
+      <div id="onb-steps" class="grid sm:grid-cols-2 gap-2"></div>
+    </div>
+
     <!-- KPIs -->
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
       <a href="pages/vehicules.html" class="kpi" style="cursor:pointer" title="Voir tous les véhicules">
@@ -434,7 +447,46 @@
   });
 
   // Rapport de direction (one-pager imprimable / PDF)
-  { const rb = document.getElementById('btn-rapport-dir'); if (rb && FP.rapportDirection) rb.addEventListener('click', () => FP.rapportDirection(data)); }
+  const markRapportVu = () => { try { const s = FP.settings.get(); if (!s.rapportVu) { s.rapportVu = true; FP.settings.save(s); } } catch (e) {} };
+  { const rb = document.getElementById('btn-rapport-dir'); if (rb && FP.rapportDirection) rb.addEventListener('click', () => { FP.rapportDirection(data); markRapportVu(); renderOnboarding(); }); }
+
+  // === Premiers pas (onboarding) — par société, se remplit tout seul, se masque une fois fini ===
+  function renderOnboarding() {
+    const box = document.getElementById('onboarding'); if (!box) return;
+    let s = {}; try { s = FP.settings.get(); } catch (e) {}
+    if (s.onboardingDismissed) { box.style.display = 'none'; return; }
+    const vehs = data.vehicules || [];
+    const hasCond = (data.conducteurs && data.conducteurs.length) || vehs.some(v => v.chauffeur && v.chauffeur !== '—' && String(v.chauffeur).trim());
+    const hasCG = vehs.some(v => v.vin || v.co2 != null || v.puissanceFiscale != null);
+    const hasEch = vehs.some(v => v.prochainCT && v.prochainCT !== '—');
+    const steps = [
+      { done: vehs.length > 0, ic: 'car', label: 'Ajoutez votre premier véhicule', href: 'pages/vehicules.html?new=1' },
+      { done: !!hasCond, ic: 'users', label: 'Renseignez vos conducteurs', href: 'pages/conducteurs.html' },
+      { done: !!hasCG, ic: 'scan-line', label: 'Importez une carte grise (remplissage auto)', href: 'pages/vehicules.html' },
+      { done: !!hasEch, ic: 'calendar-clock', label: 'Vérifiez vos échéances (CT, assurance)', href: 'pages/renouvellements.html' },
+      { done: !!s.rapportVu, ic: 'file-bar-chart-2', label: 'Générez votre rapport de direction', action: 'rapport' },
+    ];
+    const done = steps.filter(x => x.done).length;
+    if (done >= steps.length) { box.style.display = 'none'; return; } // tout fait → on masque
+    box.style.display = '';
+    document.getElementById('onb-count').textContent = `${done}/${steps.length} terminé${done > 1 ? 's' : ''}`;
+    document.getElementById('onb-bar').style.width = Math.round(done / steps.length * 100) + '%';
+    const style = 'display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;text-decoration:none';
+    document.getElementById('onb-steps').innerHTML = steps.map(st => {
+      const badge = `<span style="display:inline-flex;width:22px;height:22px;border-radius:50%;align-items:center;justify-content:center;flex:0 0 auto;background:${st.done ? '#10B981' : '#e2e8f0'};color:${st.done ? '#fff' : '#64748b'};font-size:12px">${st.done ? '✓' : `<i data-lucide="${st.ic}" style="width:13px;height:13px"></i>`}</span>`;
+      const txt = `<span style="font-size:13px;${st.done ? 'color:#94a3b8;text-decoration:line-through' : 'color:#0f1e3d;font-weight:600'}">${st.label}</span>`;
+      if (st.action) return `<button type="button" data-onb-action="${st.action}" style="${style};font:inherit;text-align:left;cursor:pointer">${badge}${txt}</button>`;
+      return `<a href="${st.href}" style="${style}">${badge}${txt}</a>`;
+    }).join('');
+    if (window.lucide && lucide.createIcons) lucide.createIcons();
+  }
+  {
+    const hide = document.getElementById('onb-hide');
+    if (hide) hide.addEventListener('click', () => { try { const s = FP.settings.get(); s.onboardingDismissed = true; FP.settings.save(s); } catch (e) {} const b = document.getElementById('onboarding'); if (b) b.style.display = 'none'; });
+    const steps = document.getElementById('onb-steps');
+    if (steps) steps.addEventListener('click', (e) => { if (e.target.closest('[data-onb-action="rapport"]') && FP.rapportDirection) { FP.rapportDirection(data); markRapportVu(); renderOnboarding(); } });
+  }
+  renderOnboarding();
 
   // === Alertes générées dynamiquement ===
   const alertesBox = document.getElementById('alertes-list');
@@ -765,6 +817,7 @@
     document.getElementById('kpi-couts').textContent = FP.euro((data.factures || []).filter(f => (f.date || '').startsWith(cm)).reduce((s, f) => s + (f.montantTTC || 0), 0));
     if (typeof refreshAlertes === 'function') refreshAlertes();
     if (typeof renderSante === 'function') renderSante();
+    if (typeof renderOnboarding === 'function') renderOnboarding();
   });
 
   // ============================================================
