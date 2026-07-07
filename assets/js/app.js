@@ -669,6 +669,16 @@ FP.darkMode = {
   toggle() { this.set(!this.get()); return this.get(); },
 };
 
+// Apparence : thème « moderne » (défaut) ou « classique » (ancien design conservé).
+// Choix LOCAL par poste/utilisateur (comme le mode sombre). Appliqué via l'attribut
+// data-skin sur <html> (posé très tôt par un script inline dans le <head> → sans flash).
+// Le CSS moderne (theme-modern.css) n'agit que si data-skin="modern".
+FP.skin = {
+  get() { try { return localStorage.getItem('fp_skin') === 'classic' ? 'classic' : 'modern'; } catch (e) { return 'modern'; } },
+  set(v) { v = (v === 'classic') ? 'classic' : 'modern'; try { localStorage.setItem('fp_skin', v); } catch (e) {} try { document.documentElement.dataset.skin = v; } catch (e) {} },
+  toggle() { this.set(this.get() === 'modern' ? 'classic' : 'modern'); return this.get(); },
+};
+
 // Sécurité : empêche « Retour arrière » de faire « page précédente » (et de perdre une saisie)
 // quand le focus n'est pas dans un champ éditable.
 // Normalisation pour la recherche : minuscules + SANS accents (taper « jeremy » trouve « Jérémy »).
