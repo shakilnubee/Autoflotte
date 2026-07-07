@@ -3085,6 +3085,71 @@ FP.searchAll = (q) => {
   return out;
 };
 
+// === RECHERCHE INTELLIGENTE (réponses directes) ============================
+// Détecte des intentions courantes et renvoie des « cartes réponse » (0 à 4),
+// affichées EN TÊTE des résultats. 100 % client, déterministe (aucune clé/API).
+FP.smartAnswers = (q) => {
+  if (!q) return [];
+  const raw = FP.norm(q).trim();
+  if (raw.length < 2) return [];
+  const compact = raw.replace(/[^a-z0-9]/g, '');
+  const D = window.FP_DATA || {};
+  const vehs = D.vehicules || [], facts = D.factures || [], am = D.amendes || [], conds = D.conducteurs || [];
+  const pref = location.pathname.includes('/pages/') ? '' : 'pages/';
+  const eur = n => FP.euro ? FP.euro(n) : Math.round(n) + ' €';
+  const has = (...w) => w.some(x => raw.includes(x));
+  const out = [];
+
+  // 1) « combien de … »
+  if (has('combien', 'nombre de', 'nb ')) {
+    if (has('vehicule', 'voiture')) { const n = vehs.filter(v => !/vendu/i.test(v.statut || '')).length; out.push({ icon: '💡', label: `${n} véhicules actifs`, sub: 'dans la flotte', url: pref + 'vehicules.html' }); }
+    if (has('amende')) out.push({ icon: '💡', label: `${am.length} amendes`, sub: 'enregistrées', url: pref + 'amendes.html' });
+    if (has('facture')) out.push({ icon: '💡', label: `${facts.length} factures`, sub: 'enregistrées', url: pref + 'factures.html' });
+    if (has('conducteur', 'chauffeur', 'salarie')) out.push({ icon: '💡', label: `${conds.length} conducteurs`, sub: 'enregistrés', url: pref + 'conducteurs.html' });
+  }
+
+  // 2) coût total d'un véhicule (plaque/modèle cité + mot « coût/dépense/total »)
+  if (has('cout', 'total', 'depense', 'coute', 'combien')) {
+    const v = vehs.find(v => {
+      const imm = FP.norm(v.immat || ''); const immc = imm.replace(/[^a-z0-9]/g, '');
+      const mod = FP.norm(v.modele || '');
+      return (imm && (raw.includes(imm) || (immc.length >= 4 && compact.includes(immc)))) || (mod.length >= 4 && raw.includes(mod));
+    });
+    if (v) {
+      const total = facts.filter(f => f.vehiculeImmat && FP.norm(f.vehiculeImmat) === FP.norm(v.immat)).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+      const nb = facts.filter(f => f.vehiculeImmat && FP.norm(f.vehiculeImmat) === FP.norm(v.immat)).length;
+      out.push({ icon: '💶', label: `${eur(total)} — coût total ${v.immat}`, sub: `${v.marque || ''} ${v.modele || ''} · ${nb} facture${nb > 1 ? 's' : ''}`.trim(), url: pref + 'vehicules.html?veh=' + encodeURIComponent(v.id) });
+    }
+  }
+
+  // 3) Contrôle technique : par mois, ou expirés
+  const MOIS = { janvier: '01', fevrier: '02', mars: '03', avril: '04', mai: '05', juin: '06', juillet: '07', aout: '08', septembre: '09', octobre: '10', novembre: '11', decembre: '12' };
+  if (has('ct', 'controle', 'technique')) {
+    if (has('expire', 'depasse', 'perime', 'perimee')) {
+      const l = vehs.filter(v => { const j = (v.prochainCT && v.prochainCT !== '—') ? FP.joursRestants(v.prochainCT) : null; return j !== null && j < 0; });
+      out.push({ icon: '⚠️', label: `${l.length} CT dépassé${l.length > 1 ? 's' : ''}`, sub: l.slice(0, 4).map(v => v.immat).join(', ') || '—', url: pref + 'renouvellements.html' });
+    } else {
+      const mk = Object.keys(MOIS).find(m => raw.includes(m));
+      if (mk) { const mm = MOIS[mk]; const l = vehs.filter(v => v.prochainCT && v.prochainCT.slice(5, 7) === mm); out.push({ icon: '🛠️', label: `${l.length} CT en ${mk}`, sub: l.slice(0, 4).map(v => v.immat).join(', ') || 'aucun', url: pref + 'renouvellements.html' }); }
+    }
+  }
+
+  // 4) Carburant (mot seul ou en bord de requête)
+  [['diesel', 'diesel'], ['essence', 'essence'], ['electrique', 'électriques'], ['hybride', 'hybrides']].forEach(([kw, lbl]) => {
+    if (raw === kw || raw.startsWith(kw + ' ') || raw.endsWith(' ' + kw)) {
+      const n = vehs.filter(v => FP.norm(v.carburant || '').includes(kw)).length;
+      if (n) out.push({ icon: '⛽', label: `${n} véhicules ${lbl}`, sub: 'dans la flotte', url: pref + 'vehicules.html' });
+    }
+  });
+
+  // 5) TVS / CO₂ (totaux flotte)
+  if (has('tvs', 'taxe')) { const t = vehs.reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0); out.push({ icon: '🏛️', label: `${eur(t)} — TVS annuelle`, sub: 'estimée sur la flotte', url: pref + 'statistiques.html' }); }
+  if (has('co2', 'carbone', 'emission')) { let g = 0; vehs.forEach(v => { const cat = (v.categorie || '').toLowerCase(); if (/moto|utilit|engin|remorque/.test(cat) || /vendu/i.test(v.statut || '')) return; const c = Number(v.co2); if (/lectri|hydrog/.test((v.carburant || '').toLowerCase())) return; if (Number.isFinite(c) && c > 0) g += c * 15000; }); out.push({ icon: '🌱', label: `${(Math.round(g / 1e5) / 10).toLocaleString('fr-FR')} t CO₂/an`, sub: 'estimation (15 000 km/an)', url: pref + 'statistiques.html' }); }
+
+  const seen = new Set();
+  return out.filter(a => { if (seen.has(a.label)) return false; seen.add(a.label); return true; }).slice(0, 4);
+};
+
 // =====================================================================
 // === Import / Export CSV (moteur partagé, compatible Excel FR) ========
 // =====================================================================
@@ -3418,19 +3483,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const results = wrap.querySelector('.fp-search-results');
     const q = input.value.toLowerCase().trim();
     if (q.length < 2) { results.innerHTML = ''; results.classList.remove('open'); return; }
-    const matches = FP.searchAll(q).slice(0, 15);
-    if (matches.length === 0) {
-      results.innerHTML = '<div class="fp-search-empty">Aucun résultat</div>';
-    } else {
-      results.innerHTML = matches.map(m => `
+    const item = (m) => `
         <a href="${m.url}" class="fp-search-item">
           <span class="fp-search-icon">${m.icon}</span>
           <span class="fp-search-text">
             <span class="fp-search-label">${m.label}</span>
             ${m.sub ? `<span class="fp-search-sub">${m.sub}</span>` : ''}
           </span>
-        </a>
-      `).join('');
+        </a>`;
+    const answers = FP.smartAnswers ? FP.smartAnswers(q) : [];
+    const matches = FP.searchAll(q).slice(0, 15);
+    if (!answers.length && !matches.length) {
+      results.innerHTML = '<div class="fp-search-empty">Aucun résultat</div>';
+    } else {
+      let html = '';
+      if (answers.length) html += '<div class="fp-search-cat">Réponse</div>' + answers.map(item).join('');
+      if (matches.length) html += (answers.length ? '<div class="fp-search-cat">Résultats</div>' : '') + matches.map(item).join('');
+      results.innerHTML = html;
     }
     results.classList.add('open');
   });
