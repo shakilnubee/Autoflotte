@@ -143,6 +143,7 @@
       <div class="flex items-center gap-3">
         <span data-data-io></span>
         <span id="fa-export-mount"></span>
+        <span id="fa-recap-mount"></span>
         <button class="btn btn-dark text-sm" id="btn-import-facture"><i data-lucide="file-up" class="w-4 h-4"></i> Importer une facture</button>
       </div>
     </div>
@@ -1275,6 +1276,32 @@
       getRows: () => filtered().slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')),
       period: { dateOf: r => r.date || '' },
       baseName: () => 'factures-comptable-' + (state.mois !== 'all' ? state.mois : (state.annee !== 'all' ? state.annee : 'tout')),
+    });
+    // Récap comptable PAR POSTE (ventilation HT/TVA/TTC par catégorie) — sur la vue filtrée en cours.
+    FP.makeExportMenu({
+      mount: '#fa-recap-mount', label: 'Récap par poste', sheetName: 'Ventilation', total: true,
+      columns: [
+        { label: 'Poste',       value: r => r.poste },
+        { label: 'Nb factures', value: r => r.nb,  number: true, noTotal: false },
+        { label: 'HT (€)',      value: r => r.ht,  number: true },
+        { label: 'TVA (€)',     value: r => r.tva, number: true },
+        { label: 'TTC (€)',     value: r => r.ttc, number: true },
+      ],
+      getRows: () => {
+        const g = {};
+        filtered().forEach(r => {
+          const k = (r.type && String(r.type).trim()) || 'Autre';
+          const o = g[k] || (g[k] = { poste: k, nb: 0, ht: 0, tva: 0, ttc: 0 });
+          o.nb += 1;
+          o.ht += Number(r.montantHT) || 0;
+          o.tva += Number(r.montantTVA) || 0;
+          o.ttc += Number(r.montantTTC) || 0;
+        });
+        return Object.values(g)
+          .map(o => ({ poste: o.poste, nb: o.nb, ht: Math.round(o.ht * 100) / 100, tva: Math.round(o.tva * 100) / 100, ttc: Math.round(o.ttc * 100) / 100 }))
+          .sort((a, b) => b.ttc - a.ttc);
+      },
+      baseName: () => 'ventilation-postes-' + (state.mois !== 'all' ? state.mois : (state.annee !== 'all' ? state.annee : 'tout')),
     });
   })();
   $('facture-close').addEventListener('click', closeFactureModal);
