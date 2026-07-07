@@ -931,6 +931,45 @@
           <button type="button" id="edl-add" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="camera" class="w-4 h-4"></i> Ajouter les photos</button>
           <p class="text-xs text-slate-400">Photos stockées en ligne (consultables depuis tous les postes). Sur mobile, tu peux prendre la photo directement.</p>
         </div>
+        ${inspectionsBlockHTML(v)}
+      </div>`;
+  }
+
+  // Inspection STRUCTURÉE (état des lieux daté : km + état par poste + note), en plus des photos.
+  // Stockée dans les réglages (settings.inspections[vehId]) — même mécanisme que budgets/tâches,
+  // aucune table Supabase à créer. Partagée par société.
+  const INSP_ITEMS = ['Carrosserie', 'Pare-brise', 'Pneus', 'Intérieur', 'Niveaux / voyants', 'Équipements (roue de secours, gilet…)'];
+  function getInspections(vehId) { try { return ((FP.settings.get().inspections) || {})[vehId] || []; } catch (e) { return []; } }
+  function inspectionsBlockHTML(v) {
+    const list = getInspections(v.id);
+    const rows = list.map(ins => {
+      const flags = Object.entries(ins.items || {}).filter(([, val]) => val === 'ko').map(([k]) => k);
+      const badge = ins.sens === 'Sortie'
+        ? '<span style="background:#fef3c7;color:#92400e;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:700">📤 Sortie</span>'
+        : '<span style="background:#dcfce7;color:#166534;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:700">📥 Entrée</span>';
+      return `<div style="border:1px solid var(--fp-border);border-radius:10px;padding:9px 11px;position:relative">
+        <button type="button" data-insp-del="${escapeHtml(ins.id)}" title="Supprimer" style="position:absolute;top:7px;right:7px;background:rgba(15,30,61,.1);color:#64748b;border:none;border-radius:6px;width:22px;height:22px;cursor:pointer">✕</button>
+        <div class="flex items-center gap-2 flex-wrap">${badge}<span class="text-sm font-semibold text-slate-800">${escapeHtml(FP.dateNum(ins.date))}</span>${ins.km != null ? `<span class="text-xs text-slate-500">${FP.num(ins.km)} km</span>` : ''}</div>
+        ${flags.length ? `<div class="text-xs mt-1" style="color:#dc2626">⚠ À signaler : ${flags.map(escapeHtml).join(', ')}</div>` : '<div class="text-xs mt-1 text-emerald-600">✓ Rien à signaler</div>'}
+        ${ins.note ? `<div class="text-xs text-slate-500 mt-1">${escapeHtml(ins.note)}</div>` : ''}
+      </div>`;
+    }).join('');
+    const items = INSP_ITEMS.map(it => `<label class="flex items-center justify-between gap-2 text-sm py-0.5"><span class="text-slate-600">${escapeHtml(it)}</span>
+      <select class="insp-item field-input" data-item="${escapeHtml(it)}" style="width:auto;padding:3px 8px;font-size:12px"><option value="ok">OK</option><option value="ko">À signaler</option></select></label>`).join('');
+    return `
+      <div class="mt-4">
+        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">États des lieux datés (${list.length})</div>
+        ${rows ? `<div class="space-y-2 mb-3">${rows}</div>` : '<p class="text-xs text-slate-400 mb-3">Aucun état des lieux enregistré.</p>'}
+        <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+          <div class="field-label !mb-0">Nouvel état des lieux</div>
+          <div class="grid grid-cols-2 gap-2">
+            <select id="insp-sens" class="field-input"><option value="Entrée">📥 Entrée</option><option value="Sortie">📤 Sortie</option></select>
+            <input id="insp-km" type="number" class="field-input" placeholder="Km" value="${v.km != null ? escapeHtml(v.km) : ''}" />
+          </div>
+          <div class="mt-1">${items}</div>
+          <textarea id="insp-note" class="field-input" rows="2" placeholder="Note (rayures, chocs, manquants…)"></textarea>
+          <button type="button" id="insp-save" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="clipboard-check" class="w-4 h-4"></i> Enregistrer l'état des lieux</button>
+        </div>
       </div>`;
   }
 
@@ -2750,6 +2789,42 @@
         hideBuiltinDoc(v.id, bDel.dataset.builtinKey); // masqué côté fiche
         openDrawer(v.id);
       }
+      return;
+    }
+    if (e.target.closest('#insp-save')) {
+      const body = $('drawer-body');
+      const vehId = state.editingId;
+      const v = data.vehicules.find(x => x.id === vehId); if (!v) return;
+      const items = {};
+      body.querySelectorAll('.insp-item').forEach(sel => { items[sel.dataset.item] = sel.value; });
+      const kmRaw = (body.querySelector('#insp-km') || {}).value;
+      const rec = {
+        id: 'INS' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+        date: new Date().toISOString().slice(0, 10),
+        sens: (body.querySelector('#insp-sens') || {}).value || 'Entrée',
+        km: (kmRaw === '' || kmRaw == null) ? null : parseInt(kmRaw, 10),
+        items,
+        note: ((body.querySelector('#insp-note') || {}).value || '').trim(),
+      };
+      try {
+        const s = FP.settings.get(); s.inspections = s.inspections || {};
+        s.inspections[vehId] = [rec, ...(s.inspections[vehId] || [])];
+        FP.settings.save(s);
+      } catch (err) { alert("Impossible d'enregistrer l'état des lieux."); return; }
+      if (FP.toast) FP.toast('✓ État des lieux enregistré');
+      openDrawer(vehId); // rafraîchit la liste
+      return;
+    }
+    if (e.target.closest('[data-insp-del]')) {
+      const id = e.target.closest('[data-insp-del]').dataset.inspDel;
+      const vehId = state.editingId;
+      if (!confirm('Supprimer cet état des lieux ?')) return;
+      try {
+        const s = FP.settings.get(); s.inspections = s.inspections || {};
+        s.inspections[vehId] = (s.inspections[vehId] || []).filter(x => x.id !== id);
+        FP.settings.save(s);
+      } catch (err) {}
+      openDrawer(vehId);
       return;
     }
     if (e.target.closest('#edl-add')) {
