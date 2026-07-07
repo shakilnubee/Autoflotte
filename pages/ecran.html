@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<title>Mode écran — Parc Pilot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260707l">
+<script>window.lucide={createIcons:function(){}};</script>
+<script defer src="../assets/js/lucide.min.js?v=20260707l"></script>
+<script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260707l">
+<style>
+  body { background:#0B1220; color:#fff; overflow:hidden; }
+  .ec-top { display:flex; align-items:center; justify-content:space-between; padding:18px 28px; }
+  .ec-btn { background:rgba(255,255,255,.1); border:none; color:#fff; padding:8px 14px; border-radius:10px; cursor:pointer; font-weight:600; font-size:14px; display:inline-flex; align-items:center; gap:6px; }
+  .ec-btn:hover { background:rgba(255,255,255,.2); }
+  .ec-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:22px; padding:10px 28px 20px; }
+  .ec-tile { background:linear-gradient(150deg,#111f38,#0d1830); border:1px solid rgba(255,255,255,.08); border-radius:22px; padding:26px 28px; position:relative; overflow:hidden; }
+  .ec-label { font-size:15px; text-transform:uppercase; letter-spacing:.06em; color:#8aa0c4; font-weight:700; }
+  .ec-value { font-size:clamp(2.4rem,5vw,4rem); font-weight:900; line-height:1.05; margin-top:8px; letter-spacing:-.02em; }
+  .ec-sub { font-size:15px; color:#8aa0c4; margin-top:6px; }
+  .ec-ic { position:absolute; top:22px; right:24px; opacity:.16; }
+  .ec-ic svg { width:56px; height:56px; }
+  .ec-ticker { margin:6px 28px 0; background:rgba(255,255,255,.05); border-radius:16px; padding:16px 24px; display:flex; align-items:center; gap:16px; min-height:64px; }
+  .ec-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
+  #ec-clock { font-variant-numeric:tabular-nums; font-weight:800; font-size:22px; }
+</style>
+<script>
+(function(){
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace('../login.html'); document.documentElement.style.display = 'none'; }
+})();
+</script>
+</head>
+<body>
+
+<div class="ec-top">
+  <div class="flex items-center gap-4">
+    <svg width="140" height="32" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic" fill="#fff">Parc</text><text x="86" y="26" font-size="20" font-weight="900" font-style="italic" fill="#F97316">Pilot</text></svg>
+    <span id="ec-soc" class="text-lg font-bold" style="color:#8aa0c4"></span>
+  </div>
+  <div class="flex items-center gap-3">
+    <span id="ec-clock">—</span>
+    <button class="ec-btn" id="ec-full"><i data-lucide="maximize" class="w-4 h-4"></i> Plein écran</button>
+    <a href="../dashboard.html" class="ec-btn"><i data-lucide="log-out" class="w-4 h-4"></i> Quitter</a>
+  </div>
+</div>
+
+<div class="ec-grid" id="ec-grid"></div>
+<div class="ec-ticker"><i data-lucide="siren" class="w-6 h-6" style="color:#F59E0B;flex-shrink:0"></i><div id="ec-ticker-txt" class="text-lg font-semibold" style="min-width:0">—</div></div>
+
+<script src="../assets/js/vendor/supabase.js?v=20260707l"></script>
+<script src="../assets/js/supabase-client.js?v=20260707l"></script>
+<script src="../assets/js/data.js?v=20260707l"></script>
+<script src="../assets/js/app.js?v=20260707l"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let soc = 'PXP'; try { soc = localStorage.getItem('fp_societe') || 'PXP'; if (soc === '__all__') soc = 'Toutes sociétés'; } catch (e) {}
+  $('ec-soc').textContent = soc;
+
+  function metrics() {
+    const D = window.FP_DATA || {};
+    const now = new Date();
+    const ym = now.toISOString().slice(0, 7);
+    const y12 = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString().slice(0, 7);
+    const actifs = (D.vehicules || []).filter(v => !/vendu/i.test(v.statut || ''));
+    const km = actifs.reduce((s, v) => s + (Number(v.km) || 0), 0);
+    const facts = D.factures || [];
+    const coutMois = facts.filter(f => (f.date || '').slice(0, 7) === ym).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+    const cout12 = facts.filter(f => (f.date || '').slice(0, 7) >= y12).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+    const alerts = FP.buildAlertes ? FP.buildAlertes(D) : [];
+    const critiques = alerts.filter(a => a.niveau === 'danger' || a.niveau === 'warn').length;
+    const ech = (FP.buildEcheances ? FP.buildEcheances(D) : []).filter(e => { const j = Math.ceil((new Date(e.date) - now) / 86400000); return j <= 90; });
+    const tvs = actifs.reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0);
+    return { nb: actifs.length, km, coutMois, cout12, critiques, ech, tvs };
+  }
+  const eur = n => FP.euro ? FP.euro(n) : Math.round(n) + ' €';
+  const num = n => FP.num ? FP.num(n) : String(n);
+
+  function render() {
+    const m = metrics();
+    const tiles = [
+      { label: 'Parc actif', value: num(m.nb), sub: 'véhicules en service', ic: 'car', color: '#38bdf8' },
+      { label: 'Coûts du mois', value: eur(m.coutMois), sub: 'entretien, réparations…', ic: 'wallet', color: '#F97316' },
+      { label: 'Alertes actives', value: num(m.critiques), sub: 'à traiter', ic: 'siren', color: m.critiques ? '#F87171' : '#34d399' },
+      { label: 'Échéances 90 j', value: num(m.ech.length), sub: 'CT, assurance, leasing…', ic: 'calendar-clock', color: '#fbbf24' },
+      { label: 'Kilométrage total', value: num(m.km) + ' km', sub: 'cumul flotte', ic: 'gauge', color: '#a78bfa' },
+      { label: 'Coûts 12 mois', value: eur(m.cout12), sub: 'glissants', ic: 'trending-up', color: '#f472b6' },
+    ];
+    $('ec-grid').innerHTML = tiles.map(t => `<div class="ec-tile">
+      <div class="ec-ic"><i data-lucide="${t.ic}"></i></div>
+      <div class="ec-label">${t.label}</div>
+      <div class="ec-value" style="color:${t.color}">${t.value}</div>
+      <div class="ec-sub">${t.sub}</div>
+    </div>`).join('');
+    // ticker : échéances les plus proches
+    const col = { danger: '#F87171', warn: '#fbbf24', info: '#38bdf8' };
+    _ticker = m.ech.slice(0, 12).map(e => ({ c: col[e.niveau] || '#8aa0c4', txt: `${esc(e.label)} — ${FP.dateNum ? FP.dateNum(e.date) : e.date}` }));
+    if (!_ticker.length) _ticker = [{ c: '#34d399', txt: 'Aucune échéance sous 90 jours — tout est à jour ✓' }];
+    _ti = 0; showTick();
+    if (window.lucide && lucide.createIcons) lucide.createIcons();
+  }
+  let _ticker = [], _ti = 0;
+  function showTick() {
+    const t = _ticker[_ti % _ticker.length]; if (!t) return;
+    $('ec-ticker-txt').innerHTML = `<span class="ec-dot" style="background:${t.c};display:inline-block;margin-right:10px"></span>${t.txt}`;
+  }
+
+  function clock() { const d = new Date(); $('ec-clock').textContent = d.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' }) + ' · ' + d.toTimeString().slice(0, 5); }
+
+  $('ec-full').addEventListener('click', () => { if (!document.fullscreenElement) { (document.documentElement.requestFullscreen && document.documentElement.requestFullscreen()); } else { document.exitFullscreen && document.exitFullscreen(); } });
+
+  render();
+  clock();
+  document.addEventListener('fp:data-ready', render);
+  setInterval(() => { _ti++; showTick(); }, 6000);         // fait défiler les alertes
+  setInterval(clock, 30000);                                // horloge
+  setInterval(() => { if (window.FP && FP.db && FP.supabase) FP.db.loadAll().then(d => { Object.assign(window.FP_DATA, d); render(); }).catch(() => {}); }, 300000); // rafraîchit les données (5 min)
+</script>
+</body>
+</html>
