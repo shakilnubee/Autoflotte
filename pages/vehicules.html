@@ -904,45 +904,25 @@
   }
 
 
-  // Galerie PHOTOS « état des lieux » (entrée / sortie) — stockées dans la table documents
-  // (type 'etat-des-lieux', label = phase), fichiers dans le bucket scans via FP.uploadScan.
-  function edlSectionHTML(v){
-    const photos = getVehDocs(v.id).filter(d => d.type === 'etat-des-lieux');
-    const grp = (pref) => photos.filter(p => (p.label || '').toLowerCase().startsWith(pref));
-    const tile = (p) => `<div style="position:relative">
-      <a href="${escapeHtml(sanitizeUrl(p.url))}" target="_blank" rel="noopener" title="Ouvrir en grand">
-        <img src="${escapeHtml(sanitizeUrl(p.url))}" loading="lazy" style="width:100%;height:88px;object-fit:cover;border-radius:8px;border:1px solid var(--fp-border);display:block" /></a>
-      <button type="button" data-doc-del="${escapeHtml(p.id)}" title="Supprimer la photo" style="position:absolute;top:3px;right:3px;background:rgba(15,30,61,.72);color:#fff;border:none;border-radius:6px;width:22px;height:22px;cursor:pointer;font-size:11px;line-height:22px;text-align:center;padding:0">✕</button>
-    </div>`;
-    const grid = (arr) => arr.length
-      ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px">${arr.map(tile).join('')}</div>`
-      : '<p class="text-xs text-slate-400">Aucune photo.</p>';
-    return `
-      <div>
-        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">État des lieux — photos (${photos.length})</div>
-        <div class="mt-2 text-xs font-bold text-slate-500 uppercase tracking-wide">📥 Entrée (prise en main)</div>
-        <div class="mt-1">${grid(grp('entr'))}</div>
-        <div class="mt-3 text-xs font-bold text-slate-500 uppercase tracking-wide">📤 Sortie (restitution)</div>
-        <div class="mt-1">${grid(grp('sort'))}</div>
-        <div class="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-          <div class="field-label !mb-0">Ajouter des photos</div>
-          <select id="edl-phase" class="field-input"><option value="Entrée">Entrée (prise en main)</option><option value="Sortie">Sortie (restitution)</option></select>
-          <input id="edl-file" type="file" accept="image/*" multiple capture="environment" class="field-input" style="padding:8px;font-size:13px" />
-          <button type="button" id="edl-add" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="camera" class="w-4 h-4"></i> Ajouter les photos</button>
-          <p class="text-xs text-slate-400">Photos stockées en ligne (consultables depuis tous les postes). Sur mobile, tu peux prendre la photo directement.</p>
-        </div>
-        ${inspectionsBlockHTML(v)}
-      </div>`;
-  }
-
-  // Inspection STRUCTURÉE (état des lieux daté : km + état par poste + note), en plus des photos.
-  // Stockée dans les réglages (settings.inspections[vehId]) — même mécanisme que budgets/tâches,
-  // aucune table Supabase à créer. Partagée par société.
+  // === ÉTAT DES LIEUX — une seule zone : historique daté (km + état par poste + note),
+  // galerie photos, et UN formulaire qui enregistre l'inspection ET ses photos d'un coup.
+  // Inspection structurée stockée dans les réglages (settings.inspections[vehId], par société,
+  // même mécanisme que budgets/tâches) ; photos dans la table documents (type 'etat-des-lieux').
   const INSP_ITEMS = ['Carrosserie', 'Pare-brise', 'Pneus', 'Intérieur', 'Niveaux / voyants', 'Équipements (roue de secours, gilet…)'];
   function getInspections(vehId) { try { return ((FP.settings.get().inspections) || {})[vehId] || []; } catch (e) { return []; } }
-  function inspectionsBlockHTML(v) {
+  function edlSectionHTML(v){
+    const photos = getVehDocs(v.id).filter(d => d.type === 'etat-des-lieux');
     const list = getInspections(v.id);
-    const rows = list.map(ins => {
+    const photoTile = (p) => {
+      const ph = (p.label || '').toLowerCase().startsWith('sort') ? '📤' : '📥';
+      return `<div style="position:relative">
+        <a href="${escapeHtml(sanitizeUrl(p.url))}" target="_blank" rel="noopener" title="Ouvrir en grand">
+          <img src="${escapeHtml(sanitizeUrl(p.url))}" loading="lazy" style="width:100%;height:88px;object-fit:cover;border-radius:8px;border:1px solid var(--fp-border);display:block" /></a>
+        <span style="position:absolute;bottom:3px;left:3px;background:rgba(15,30,61,.72);color:#fff;border-radius:5px;font-size:10px;padding:0 4px">${ph}</span>
+        <button type="button" data-doc-del="${escapeHtml(p.id)}" title="Supprimer la photo" style="position:absolute;top:3px;right:3px;background:rgba(15,30,61,.72);color:#fff;border:none;border-radius:6px;width:22px;height:22px;cursor:pointer;font-size:11px;line-height:22px;text-align:center;padding:0">✕</button>
+      </div>`;
+    };
+    const histRows = list.map(ins => {
       const flags = Object.entries(ins.items || {}).filter(([, val]) => val === 'ko').map(([k]) => k);
       const badge = ins.sens === 'Sortie'
         ? '<span style="background:#fef3c7;color:#92400e;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:700">📤 Sortie</span>'
@@ -957,18 +937,23 @@
     const items = INSP_ITEMS.map(it => `<label class="flex items-center justify-between gap-2 text-sm py-0.5"><span class="text-slate-600">${escapeHtml(it)}</span>
       <select class="insp-item field-input" data-item="${escapeHtml(it)}" style="width:auto;padding:3px 8px;font-size:12px"><option value="ok">OK</option><option value="ko">À signaler</option></select></label>`).join('');
     return `
-      <div class="mt-4">
-        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">États des lieux datés (${list.length})</div>
-        ${rows ? `<div class="space-y-2 mb-3">${rows}</div>` : '<p class="text-xs text-slate-400 mb-3">Aucun état des lieux enregistré.</p>'}
+      <div>
+        <div class="font-semibold mb-3 text-slate-900 border-b border-slate-200 pb-1 flex items-center gap-2">État des lieux <span class="text-xs font-normal text-slate-400">${list.length} inspection${list.length > 1 ? 's' : ''} · ${photos.length} photo${photos.length > 1 ? 's' : ''}</span></div>
+        ${list.length ? `<div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Historique</div><div class="space-y-2 mb-4">${histRows}</div>` : ''}
+        ${photos.length ? `<div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Photos</div><div class="mb-4" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px">${photos.map(photoTile).join('')}</div>` : ''}
+        ${(!list.length && !photos.length) ? '<p class="text-xs text-slate-400 mb-3">Aucun état des lieux enregistré pour ce véhicule.</p>' : ''}
         <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
           <div class="field-label !mb-0">Nouvel état des lieux</div>
           <div class="grid grid-cols-2 gap-2">
-            <select id="insp-sens" class="field-input"><option value="Entrée">📥 Entrée</option><option value="Sortie">📤 Sortie</option></select>
+            <select id="insp-sens" class="field-input"><option value="Entrée">📥 Entrée (prise en main)</option><option value="Sortie">📤 Sortie (restitution)</option></select>
             <input id="insp-km" type="number" class="field-input" placeholder="Km" value="${v.km != null ? escapeHtml(v.km) : ''}" />
           </div>
           <div class="mt-1">${items}</div>
           <textarea id="insp-note" class="field-input" rows="2" placeholder="Note (rayures, chocs, manquants…)"></textarea>
+          <div><div class="field-label !mb-0">Photos (facultatif)</div>
+          <input id="edl-file" type="file" accept="image/*" multiple capture="environment" class="field-input" style="padding:8px;font-size:13px" /></div>
           <button type="button" id="insp-save" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="clipboard-check" class="w-4 h-4"></i> Enregistrer l'état des lieux</button>
+          <p class="text-xs text-slate-400">Inspection + photos enregistrées ensemble, consultables depuis tous les postes.</p>
         </div>
       </div>`;
   }
@@ -2811,8 +2796,26 @@
         s.inspections[vehId] = [rec, ...(s.inspections[vehId] || [])];
         FP.settings.save(s);
       } catch (err) { alert("Impossible d'enregistrer l'état des lieux."); return; }
-      if (FP.toast) FP.toast('✓ État des lieux enregistré');
-      openDrawer(vehId); // rafraîchit la liste
+      // Photos jointes (facultatif) → uploadées avec la phase = sens
+      const fileInput = body.querySelector('#edl-file');
+      const files = Array.from((fileInput && fileInput.files) || []);
+      const btn = e.target.closest('#insp-save');
+      if (files.length && window.FP && FP.supabase && FP.uploadScan) {
+        btn.disabled = true; btn.style.opacity = '.7';
+        (async () => {
+          let ok = 0;
+          for (let i = 0; i < files.length; i++) {
+            try { btn.innerHTML = `⏳ Envoi ${i + 1}/${files.length}…`; } catch (e) {}
+            try { const url = await FP.uploadScan(files[i], 'etat-des-lieux/' + normImmat(v.immat || 'veh')); if (url) { await addVehDoc(vehId, 'etat-des-lieux', rec.sens, url); ok++; } } catch (err) { console.error('[edl upload]', err); }
+          }
+          if (ok && !v.etatDesLieux) { v.etatDesLieux = true; try { persistVehFields(v, 'etatDesLieux'); } catch (e) {} }
+          if (FP.toast) FP.toast(`✓ État des lieux enregistré · ${ok}/${files.length} photo(s)`);
+          openDrawer(vehId);
+        })();
+      } else {
+        if (FP.toast) FP.toast('✓ État des lieux enregistré');
+        openDrawer(vehId);
+      }
       return;
     }
     if (e.target.closest('[data-insp-del]')) {
@@ -2825,31 +2828,6 @@
         FP.settings.save(s);
       } catch (err) {}
       openDrawer(vehId);
-      return;
-    }
-    if (e.target.closest('#edl-add')) {
-      const body = $('drawer-body');
-      const btn = e.target.closest('#edl-add');
-      const fileInput = body.querySelector('#edl-file');
-      const files = Array.from((fileInput && fileInput.files) || []);
-      if (!files.length) { alert('Choisis au moins une photo à ajouter.'); return; }
-      if (!(window.FP && FP.supabase && FP.uploadScan)) { alert("L'ajout de photos nécessite d'être connecté à internet."); return; }
-      const phase = (body.querySelector('#edl-phase') || {}).value || 'Entrée';
-      const vehId = state.editingId;
-      const v = data.vehicules.find(x => x.id === vehId);
-      btn.disabled = true; btn.style.opacity = '.7';
-      (async () => {
-        let ok = 0;
-        for (let i = 0; i < files.length; i++) {
-          try { btn.innerHTML = `⏳ Envoi ${i + 1}/${files.length}…`; } catch (e) {}
-          try {
-            const url = await FP.uploadScan(files[i], 'etat-des-lieux/' + normImmat(v ? v.immat : 'veh'));
-            if (url) { await addVehDoc(vehId, 'etat-des-lieux', phase, url); ok++; }
-          } catch (err) { console.error('[edl upload]', err); }
-        }
-        if (ok && v && !v.etatDesLieux) { v.etatDesLieux = true; try { persistVehFields(v, 'etatDesLieux'); } catch (e) {} }
-        if (FP.toast) FP.toast(`${ok}/${files.length} photo(s) ajoutée(s)`);
-      })();
       return;
     }
     if (e.target.closest('#doc-add')) {
