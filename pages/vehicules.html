@@ -1603,12 +1603,15 @@
     'CITROEN': 'citroen.fr', 'CITROËN': 'citroen.fr', 'PORSCHE': 'porsche.com', 'VOLVO': 'volvocars.com',
     'HYUNDAI': 'hyundai.com', 'IVECO': 'iveco.com', 'DUCATI': 'ducati.com',
   };
+  // Logos stockés EN LOCAL (fiables, hors-ligne) pour les marques mal servies par les CDN.
+  const LOGO_LOCAL = { 'PEUGEOT': 'peugeot.svg', 'BYD': 'byd.svg', 'MERCEDES BENZ': 'mercedes.svg', 'MERCEDES': 'mercedes.svg' };
   function renderDrawerLogo(v) {
     const wrap = $('drawer-logo');
     const marque = (v.marque || '').toUpperCase().trim();
     const badge = `<span class="brand-badge">${(v.marque || '').replace(/</g, '&lt;')}</span>`;
-    // Sources tentées dans l'ordre : Simple Icons (officiel), puis Clearbit (par domaine), puis badge texte.
+    // Sources tentées dans l'ordre : logo LOCAL, puis Simple Icons, puis Clearbit, puis badge texte.
     const urls = [];
+    if (LOGO_LOCAL[marque]) urls.push('../assets/logos/' + LOGO_LOCAL[marque]);
     if (LOGO_SLUGS[marque]) urls.push('https://cdn.simpleicons.org/' + LOGO_SLUGS[marque]);
     if (LOGO_DOMAINS[marque]) urls.push('https://logo.clearbit.com/' + LOGO_DOMAINS[marque] + '?size=96');
     if (!urls.length) { wrap.innerHTML = v.marque ? badge : ''; return; }
@@ -1618,28 +1621,47 @@
     img.onerror = () => { i++; if (i < urls.length) { img.src = urls[i]; } else { wrap.innerHTML = badge; } };
     img.src = urls[0];
   }
-  // Stationnement gratuit à Paris (règle mairie de Paris, lue sur la carte grise) :
-  // - électrique / hydrogène (P.3) ≤ 2 t → gratuit en surface ;
-  // - hybride rechargeable → gratuit sous un seuil CO₂ selon la date de 1re immat
-  //   (< 60 g avant 2020 · < 50 g janv–févr 2020 · < 78 g depuis mars 2020) ;
-  // - sinon (thermique) → payant. Source : paris.fr.
+  // Masses connues (masse en ordre de marche, kg) pour des modèles de la flotte — vérifiées.
+  // Sert au critère « ≤ 2 t » de Paris quand la masse n'est pas saisie manuellement.
+  const KNOWN_MASS = { 'SEAL U': 2102, 'ATTO 3': 1750 };
+  function vehMasse(v) {
+    try { const m = (FP.settings.get().vehMasse || {})[v.id]; if (m != null && m !== '') return Number(m); } catch (e) {}
+    const mod = (v.modele || '').toUpperCase();
+    for (const k in KNOWN_MASS) { if (mod.includes(k)) return KNOWN_MASS[k]; }
+    return null;
+  }
+  // Stationnement gratuit à Paris (règle officielle, lue sur la carte grise — source paris.fr) :
+  //  gratuité de surface UNIQUEMENT pour les véhicules « basse émission LÉGERS » :
+  //   • motorisation : électrique/hydrogène (P.3), OU hybride RECHARGEABLE sous seuil CO₂
+  //     (< 60 g avant 2020 · < 50 g janv–févr 2020 · < 78 g depuis mars 2020) ;
+  //   • ET masse en ordre de marche (champ G) ≤ 2 000 kg.
+  //  Au-dessus de 2 t → « véhicule lourd » = tarif visiteur (payant). Ex. BYD Seal U DM-i (2102 kg).
   function parkingParis(v) {
     const carb = (v.carburant || '').toLowerCase();
+    const mod = (v.modele || '').toLowerCase();
     const co2 = Number(v.co2);
     const mec = (v.dateMiseEnCirculation || '').slice(0, 10);
-    if (/lectri|hydrog/.test(carb)) return { ok: true, txt: 'Gratuit à Paris', detail: 'Électrique / hydrogène (gratuit en surface si ≤ 2 t · règle mairie de Paris)' };
-    if (/hybrid/.test(carb)) {
-      let seuil = 78;
-      if (mec && mec < '2020-01-01') seuil = 60;
-      else if (mec >= '2020-01-01' && mec <= '2020-02-29') seuil = 50;
-      if (Number.isFinite(co2) && co2 > 0) {
-        return co2 <= seuil
-          ? { ok: true, txt: 'Gratuit à Paris', detail: `Hybride rechargeable : ${co2} g ≤ ${seuil} g/km (seuil Paris)` }
-          : { ok: false, txt: 'Payant à Paris', detail: `Hybride : ${co2} g > ${seuil} g/km (au-dessus du seuil Paris)` };
-      }
-      return { ok: null, txt: 'À vérifier', detail: `Hybride — CO₂ non renseigné (seuil gratuité Paris : ${seuil} g/km)` };
+    const masse = vehMasse(v);
+    const isElec = /lectri|hydrog/.test(carb);
+    const isHybride = /hybrid/.test(carb);
+    const isPHEV = isHybride && /(dm-?i|phev|rechargea|plug)/.test(carb + ' ' + mod);
+
+    // 1) Éligibilité MOTORISATION (indépendante du poids)
+    let motorOk = false, motorTxt = '';
+    if (isElec) { motorOk = true; motorTxt = 'électrique / hydrogène'; }
+    else if (isHybride) {
+      let seuil = 78; if (mec && mec < '2020-01-01') seuil = 60; else if (mec >= '2020-01-01' && mec <= '2020-02-29') seuil = 50;
+      const co2Ok = Number.isFinite(co2) && co2 > 0 && co2 <= seuil;
+      if (isPHEV && (co2Ok || !Number.isFinite(co2) || co2 === 0)) { motorOk = true; motorTxt = `hybride rechargeable${Number.isFinite(co2) && co2 > 0 ? ' (' + co2 + ' g/km)' : ''}`; }
+      else if (co2Ok) { motorOk = true; motorTxt = `hybride ${co2} g ≤ ${seuil} g/km`; }
+      else { motorOk = false; motorTxt = 'hybride non rechargeable / CO₂ trop élevé'; }
     }
-    return { ok: false, txt: 'Payant à Paris', detail: 'Motorisation thermique — pas de gratuité à Paris' };
+    if (!motorOk) return { ok: false, txt: 'Payant à Paris', detail: `Motorisation non éligible (${motorTxt || 'thermique'}) — pas de gratuité de surface à Paris.` };
+
+    // 2) Condition POIDS (≤ 2 t)
+    if (masse != null && masse > 2000) return { ok: false, txt: 'Payant à Paris', detail: `${motorTxt}, MAIS masse ${masse} kg > 2 000 kg → « véhicule lourd » = tarif visiteur (règle Paris).` };
+    if (masse != null && masse <= 2000) return { ok: true, txt: 'Gratuit à Paris', detail: `${motorTxt}, masse ${masse} kg ≤ 2 000 kg → gratuité de surface à Paris.` };
+    return { ok: null, txt: 'Gratuit si ≤ 2 t', detail: `${motorTxt} — gratuit à Paris SI la masse (champ G de la carte grise) ≤ 2 000 kg. Renseigne la masse dans la fiche pour confirmer.` };
   }
   function parkingBadge(v) {
     const p = parkingParis(v);
@@ -1881,6 +1903,7 @@
           <div class="flex justify-between"><span class="text-slate-600">CO₂ <span class="text-slate-400 text-xs">(V.7)</span></span><span class="font-medium" data-df="co2" data-dt="number">${(v.co2 != null && v.co2 !== '') ? FP.num(v.co2) + ' g/km' : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Puissance fiscale <span class="text-slate-400 text-xs">(P.6)</span></span><span class="font-medium" data-df="puissanceFiscale" data-dt="number">${(v.puissanceFiscale != null && v.puissanceFiscale !== '') ? FP.num(v.puissanceFiscale) + ' CV' : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between items-center"><span class="text-slate-600">Puissance DIN <span class="text-slate-400 text-xs">(ch)</span></span><span class="font-medium" style="display:inline-flex;align-items:center;gap:4px"><input class="veh-din" data-id="${v.id}" type="number" value="${((FP.settings.get().vehDin || {})[v.id]) ?? ''}" placeholder="—" style="width:72px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:2px 6px;font-size:.9rem"> ch</span></div>
+          <div class="flex justify-between items-center"><span class="text-slate-600">Masse <span class="text-slate-400 text-xs">(champ G)</span></span><span class="font-medium" style="display:inline-flex;align-items:center;gap:4px"><input class="veh-masse" data-id="${v.id}" type="number" value="${((FP.settings.get().vehMasse || {})[v.id]) ?? ''}" placeholder="—" style="width:72px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:2px 6px;font-size:.9rem"> kg</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Autonomie</span><span class="font-medium" data-df="autonomie" data-dt="text">${v.autonomie || '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">TVS ${FP.TVS_ANNEE} détail</span><span class="font-medium text-right">${tvsDet.applicable ? (tvsDet.total != null ? `CO₂ ${FP.euro(tvsDet.co2)} + polluants ${FP.euro(tvsDet.polluant)}` : '<span class="text-amber-600">CO₂ manquant</span>') : '<span class="text-slate-400">' + (tvsDet.raison || 'Non soumis') + '</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Dernier CT</span><span class="font-medium" data-df="dateDernierCT" data-dt="date">${v.dateDernierCT ? FP.dateNum(v.dateDernierCT) : '<span class="text-slate-400">—</span>'}</span></div>
@@ -2749,6 +2772,16 @@
     const val = parseInt(din.value, 10);
     if (Number.isFinite(val) && val > 0) s.vehDin[din.dataset.id] = val; else delete s.vehDin[din.dataset.id];
     FP.settings.save(s);
+  });
+  // Masse (champ G de la carte grise) — sert au calcul du stationnement Paris (≤ 2 t)
+  $('drawer-body').addEventListener('change', (e) => {
+    const m = e.target.closest('input.veh-masse');
+    if (!m) return;
+    const s = FP.settings.get(); s.vehMasse = s.vehMasse || {};
+    const val = parseInt(m.value, 10);
+    if (Number.isFinite(val) && val > 0) s.vehMasse[m.dataset.id] = val; else delete s.vehMasse[m.dataset.id];
+    FP.settings.save(s);
+    if (drawerVehId) openDrawer(drawerVehId); // recalcule le badge stationnement Paris
   });
 
   // Budget entretien annuel par véhicule (réglages partagés) → met à jour la barre + l'alerte
