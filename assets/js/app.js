@@ -365,10 +365,33 @@ FP.role = () => {
   try {
     const t = JSON.parse(localStorage.getItem(FP.SUPA_TOKEN_KEY) || 'null');
     const r = t && t.user && t.user.user_metadata && t.user.user_metadata.role;
+    if (r === 'chauffeur' || r === 'salarie') return 'chauffeur';
     return r === 'gestionnaire' ? 'gestionnaire' : 'admin';
   } catch { return 'admin'; }
 };
 FP.isAdmin = () => FP.role() === 'admin';
+FP.isChauffeur = () => FP.role() === 'chauffeur';
+// Plaque(s) du salarié — lues dans ses métadonnées Supabase { immat: 'XX-123-XX' } ou
+// { immats: ['A','B'] } (ou liste séparée par , / ;). Sert au filtrage AFFICHÉ du portail.
+FP.chauffeurImmats = () => {
+  try {
+    const t = JSON.parse(localStorage.getItem(FP.SUPA_TOKEN_KEY) || 'null');
+    const m = (t && t.user && t.user.user_metadata) || {};
+    let list = m.immats != null ? m.immats : (m.immat || '');
+    if (Array.isArray(list)) return list.map(x => String(x).trim()).filter(Boolean);
+    return String(list).split(/[;,]/).map(x => x.trim()).filter(Boolean);
+  } catch (e) { return []; }
+};
+// Redirection automatique du salarié vers SON espace (dormant pour admin/gestionnaire →
+// ne s'active QUE si un compte de rôle 'chauffeur' existe, donc aucun impact sur l'existant).
+(function chauffeurGuard() {
+  try {
+    if (!FP.isChauffeur()) return;
+    if (/espace-salarie\.html/.test(location.pathname)) return;
+    const base = location.pathname.indexOf('/pages/') !== -1 ? '' : 'pages/';
+    location.replace(base + 'espace-salarie.html');
+  } catch (e) {}
+})();
 // Profil multi-société (société + super-admin) — lu du cache, rafraîchi par supabase-client.js.
 // is_admin = true → voit toutes les sociétés (sélecteur visible) ; sinon = client verrouillé.
 FP.profile = (() => { try { return JSON.parse(localStorage.getItem('fp_profile') || 'null'); } catch (e) { return null; } })();
