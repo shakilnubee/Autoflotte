@@ -6,11 +6,11 @@
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Statistiques — Parc Pilot</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260630n">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260707a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260630n"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260707a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260630n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260707a">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -166,6 +166,21 @@
       <div id="sin-detail" class="mt-4 text-sm"></div>
     </div>
 
+    <!-- Bilan CO₂ / RSE -->
+    <div class="card p-5 mb-6">
+      <h3 class="font-bold text-slate-900 mb-1 flex items-center gap-2"><i data-lucide="leaf" class="w-4 h-4" style="color:#10B981"></i> Bilan CO₂ / RSE <span class="text-xs font-normal text-slate-400">(estimation sur 15 000 km/an)</span></h3>
+      <p class="text-xs text-slate-400 mb-4">Estimation « du réservoir à la roue » basée sur le CO₂ homologué (WLTP, champ V.7 de la carte grise) × 15 000 km/an. Les véhicules électriques comptent 0 à l'usage. Renseigne le CO₂ des véhicules pour affiner.</p>
+      <div class="flex items-center gap-6 flex-wrap">
+        <div id="co2-donut" style="flex:0 0 auto"></div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 flex-1" style="min-width:280px">
+          <div class="kpi"><div class="kpi-label">CO₂ annuel estimé</div><div class="kpi-value" id="kpi-co2-total" style="color:#10B981">—</div><div class="kpi-delta">tonnes / an</div></div>
+          <div class="kpi"><div class="kpi-label">Émissions moyennes</div><div class="kpi-value" id="kpi-co2-moy" style="color: var(--fp-primary)">—</div><div class="kpi-delta">g CO₂/km (flotte)</div></div>
+          <div class="kpi"><div class="kpi-label">Flotte électrifiée</div><div class="kpi-value" id="kpi-co2-elec" style="color:#10B981">—</div><div class="kpi-delta" id="kpi-co2-elec-sub">élec. + hybride</div></div>
+          <div class="kpi"><div class="kpi-label">CO₂ à compléter</div><div class="kpi-value" id="kpi-co2-missing" style="color: var(--fp-warn, #F59E0B)">—</div><div class="kpi-delta">véhicules sans donnée</div></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Charts -->
     <div class="grid lg:grid-cols-2 gap-6 mb-6">
       <div class="card p-6">
@@ -224,10 +239,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260630n"></script>
-<script src="../assets/js/supabase-client.js?v=20260630n"></script>
-<script src="../assets/js/data.js?v=20260630n"></script>
-<script src="../assets/js/app.js?v=20260630n"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260707a"></script>
+<script src="../assets/js/supabase-client.js?v=20260707a"></script>
+<script src="../assets/js/data.js?v=20260707a"></script>
+<script src="../assets/js/app.js?v=20260707a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -253,8 +268,40 @@
     $('kpi-tvs').textContent = FP.euro(totalTVS);
     $('kpi-tvs-sub').textContent = `${nbSoumis} véhicule${nbSoumis > 1 ? 's' : ''} soumis`;
   }
+  // Bilan CO₂ / RSE — estimation annuelle (réservoir→roue) sur 15 000 km/an
+  function renderCO2() {
+    const KM_AN = 15000;
+    const vs = (data.vehicules || []).filter(v => {
+      const cat = (v.categorie || '').toLowerCase();
+      if (/moto|utilit|engin|remorque/.test(cat)) return false;      // non concernés
+      if (/vendu/i.test((v.statut || v.etat || ''))) return false;   // exclut les vendus
+      return true;
+    });
+    let totalG = 0, sumCo2 = 0, nCo2 = 0, missing = 0, elec = 0;
+    vs.forEach(v => {
+      const carb = (v.carburant || '').toLowerCase();
+      const electrifie = /lectri|hydrog|hybrid/.test(carb);
+      if (electrifie) elec++;
+      if (/lectri|hydrog/.test(carb)) { sumCo2 += 0; nCo2++; return; } // 0 à l'usage
+      const c = Number(v.co2);
+      if (Number.isFinite(c) && c > 0) { totalG += c * KM_AN; sumCo2 += c; nCo2++; }
+      else missing++;
+    });
+    const tonnes = totalG / 1e6;
+    const moy = nCo2 ? Math.round(sumCo2 / nCo2) : 0;
+    const pctElec = vs.length ? Math.round(elec / vs.length * 100) : 0;
+    const set = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
+    set('kpi-co2-total', (Math.round(tonnes * 10) / 10).toLocaleString('fr-FR') + ' t');
+    set('kpi-co2-moy', moy + ' g');
+    set('kpi-co2-elec', pctElec + ' %');
+    set('kpi-co2-elec-sub', `${elec}/${vs.length} véhicule${elec > 1 ? 's' : ''}`);
+    set('kpi-co2-missing', String(missing));
+    const donut = $('co2-donut');
+    if (donut && FP.donutHTML) { donut.innerHTML = FP.donutHTML(pctElec, { size: 108, color: '#10B981', label: pctElec + '%' }); }
+  }
   rebuildAnneeFilter();
   updateTvsKpi();
+  renderCO2();
 
   function buildLast12() {
     const out = []; const now = new Date();
@@ -465,7 +512,7 @@
   // Graphiques (Chart.js en différé) dessinés dès qu'il est prêt, sans bloquer l'affichage
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); } catch (e) {} });
   // Rafraîchit quand les données Supabase arrivent (sinon on reste sur le cache data.js)
-  document.addEventListener('fp:data-ready', () => { rebuildAnneeFilter(); updateTvsKpi(); const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
+  document.addEventListener('fp:data-ready', () => { rebuildAnneeFilter(); updateTvsKpi(); renderCO2(); const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
 
   // Export du coût total par véhicule (TCO) — Excel/CSV, selon l'année choisie en haut.
   if (FP.makeExportMenu) FP.makeExportMenu({

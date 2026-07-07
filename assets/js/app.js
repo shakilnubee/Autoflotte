@@ -451,6 +451,35 @@ FP.addSociete = (name) => {
   } catch (e) {}
 })();
 
+// === PWA : appli installable (« Ajouter à l'écran d'accueil ») + fonctionnement hors-ligne ===
+// Injecte le manifest + les balises iOS et enregistre le service worker (fichiers à la RACINE
+// du site : manifest.json et sw.js). Le chemin de base s'adapte selon qu'on est dans /pages/.
+(function pwaSetup() {
+  try {
+    const base = location.pathname.indexOf('/pages/') !== -1 ? '../' : './';
+    const head = document.head;
+    const linkOnce = (rel, href, extra) => {
+      if (head.querySelector('link[rel="' + rel + '"]')) return;
+      const l = document.createElement('link'); l.rel = rel; l.href = href;
+      if (extra) Object.assign(l, extra); head.appendChild(l);
+    };
+    linkOnce('manifest', base + 'manifest.json');
+    linkOnce('apple-touch-icon', base + 'assets/icons/apple-touch-icon.png');
+    const metaOnce = (name, content, useNameAttr) => {
+      const sel = (useNameAttr ? 'meta[name="' : 'meta[name="') + name + '"]';
+      if (head.querySelector(sel)) return;
+      const m = document.createElement('meta'); m.setAttribute('name', name); m.content = content; head.appendChild(m);
+    };
+    metaOnce('theme-color', '#0F1E3D');
+    metaOnce('apple-mobile-web-app-capable', 'yes');
+    metaOnce('apple-mobile-web-app-status-bar-style', 'black-translucent');
+    metaOnce('apple-mobile-web-app-title', 'Parc Pilot');
+    if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      addEventListener('load', () => { navigator.serviceWorker.register(base + 'sw.js').catch(() => {}); });
+    }
+  } catch (e) {}
+})();
+
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
   STORAGE_KEY: 'auto_flotte_settings',
