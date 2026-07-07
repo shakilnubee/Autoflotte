@@ -1500,6 +1500,150 @@ FP.buildEcheances = (data) => {
   return out;
 };
 
+// === RAPPORT DE DIRECTION ===================================================
+// One-pager imprimable / PDF (synthèse à envoyer à la direction) : KPI clés,
+// coûts, TVS, CO₂, échéances à venir et top coûts par véhicule. Purement client
+// (aucune écriture), réutilise les helpers existants → dispo sur toutes les pages.
+FP.rapportDirection = (data) => {
+  data = data || (window.FP_DATA || {});
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let soc = 'PXP'; try { soc = localStorage.getItem('fp_societe') || 'PXP'; if (soc === '__all__') soc = 'Toutes sociétés'; } catch (e) {}
+  const now = new Date();
+  const moisLabel = now.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  const ym = now.toISOString().slice(0, 7);
+  const y12 = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString().slice(0, 7);
+  const today = now.toLocaleDateString('fr-FR');
+
+  const vehs = (data.vehicules || []);
+  const actifs = vehs.filter(v => !/vendu/i.test(v.statut || ''));
+  const kmTotal = actifs.reduce((s, v) => s + (Number(v.km) || 0), 0);
+  const valeurParc = actifs.reduce((s, v) => s + (Number(v.valeurAchat) || Number(v.prix) || 0), 0);
+
+  const facts = (data.factures || []);
+  const coutMois = facts.filter(f => (f.date || '').slice(0, 7) === ym).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+  const cout12 = facts.filter(f => (f.date || '').slice(0, 7) >= y12).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+
+  const byVeh = {};
+  facts.filter(f => (f.date || '').slice(0, 7) >= y12).forEach(f => { const k = f.vehiculeImmat || '—'; byVeh[k] = (byVeh[k] || 0) + (+f.montantTTC || 0); });
+  const topCouts = Object.entries(byVeh).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const topMax = topCouts.length ? topCouts[0][1] : 0;
+
+  const tvsTotal = actifs.reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0);
+  let co2G = 0; actifs.forEach(v => { const carb = (v.carburant || '').toLowerCase(); if (/lectri|hydrog/.test(carb)) return; const c = Number(v.co2); if (Number.isFinite(c) && c > 0) co2G += c * 15000; });
+  const co2T = co2G / 1e6;
+  const nbElec = actifs.filter(v => /lectri|hydrog|hybrid/.test((v.carburant || '').toLowerCase())).length;
+
+  const am = (data.amendes || []);
+  const amTot = am.reduce((s, a) => s + (+a.montant || 0), 0);
+
+  const alerts = FP.buildAlertes ? FP.buildAlertes(data) : [];
+  const ech = (FP.buildEcheances ? FP.buildEcheances(data) : []).filter(e => {
+    const diff = Math.ceil((new Date(e.date) - now) / 86400000); return diff <= 90;
+  }).slice(0, 14);
+
+  const eur = (n) => FP.euro ? FP.euro(n) : Math.round(n) + ' €';
+  const num = (n) => FP.num ? FP.num(n) : String(n);
+  const dnum = (d) => FP.dateNum ? FP.dateNum(d) : d;
+  const nivColor = { danger: '#DC2626', warn: '#F59E0B', info: '#0e7490' };
+
+  const kpi = (label, val, sub, color) =>
+    `<div class="kpi"><div class="kl">${esc(label)}</div><div class="kv" style="color:${color || '#0F1E3D'}">${val}</div>${sub ? `<div class="ks">${esc(sub)}</div>` : ''}</div>`;
+
+  const echRows = ech.length ? ech.map(e => `<tr>
+      <td><span class="dot" style="background:${nivColor[e.niveau] || '#94a3b8'}"></span>${esc(dnum(e.date))}</td>
+      <td>${esc(e.categorie)}</td>
+      <td>${esc((e.label || '').replace(/^.*? — /, ''))}</td>
+      <td class="muted">${esc(e.detail || '')}</td>
+    </tr>`).join('') : '<tr><td colspan="4" class="muted" style="text-align:center;padding:14px">Aucune échéance dans les 90 jours 🎉</td></tr>';
+
+  const topRows = topCouts.length ? topCouts.map(([k, v]) => `<div class="bar-row">
+      <div class="bar-lbl">${esc(k)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${topMax ? Math.max(4, Math.round(v / topMax * 100)) : 0}%"></div></div>
+      <div class="bar-val">${eur(v)}</div>
+    </div>`).join('') : '<div class="muted">Aucune facture sur 12 mois.</div>';
+
+  const logo = `<svg width="120" height="27" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic" fill="#fff">Parc</text><text x="86" y="26" font-size="20" font-weight="900" font-style="italic" fill="#F97316">Pilot</text></svg>`;
+
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport de direction — ${esc(soc)} — ${esc(moisLabel)}</title>
+    <style>
+      @page { margin: 12mm; }
+      * { box-sizing: border-box; }
+      body { font-family: 'Inter','Segoe UI',Roboto,Arial,sans-serif; color:#0F1E3D; margin:0; padding:26px; background:#fff; }
+      .head { display:flex; align-items:center; justify-content:space-between; background:#0F1E3D; color:#fff; padding:16px 22px; border-radius:14px; }
+      .head h1 { font-size:18px; margin:0; font-weight:800; }
+      .head .grp { color:#FB923C; }
+      .head .meta { font-size:11px; opacity:.85; margin-top:3px; text-transform:capitalize; }
+      .sec { margin-top:22px; }
+      .sec-t { font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.04em; color:#F97316; margin:0 0 10px; }
+      .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+      .kpi { border:1px solid #e2e8f0; border-radius:12px; padding:12px 14px; background:linear-gradient(145deg,#fff,#f8fafc); }
+      .kl { font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; color:#64748b; font-weight:700; }
+      .kv { font-size:22px; font-weight:800; margin-top:3px; line-height:1.1; }
+      .ks { font-size:10.5px; color:#94a3b8; margin-top:2px; }
+      table { width:100%; border-collapse:collapse; font-size:12px; }
+      thead th { text-align:left; background:#f1f5f9; color:#334155; padding:8px 10px; border-bottom:2px solid #cbd5e1; text-transform:uppercase; font-size:10px; letter-spacing:.03em; }
+      tbody td { padding:7px 10px; border-bottom:1px solid #eef2f7; }
+      .muted { color:#94a3b8; }
+      .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; vertical-align:middle; }
+      .grid2 { display:grid; grid-template-columns:1.15fr .85fr; gap:22px; align-items:start; }
+      .bar-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:12px; }
+      .bar-lbl { width:88px; font-family:'Courier New',monospace; font-weight:700; flex:0 0 auto; }
+      .bar-track { flex:1; height:14px; background:#f1f5f9; border-radius:7px; overflow:hidden; }
+      .bar-fill { height:100%; background:linear-gradient(90deg,#FB923C,#F97316); border-radius:7px; }
+      .bar-val { width:88px; text-align:right; font-weight:700; flex:0 0 auto; }
+      .foot { margin-top:22px; font-size:10px; color:#94a3b8; text-align:center; border-top:1px solid #eef2f7; padding-top:10px; }
+      .noprint { position:fixed; top:14px; right:14px; padding:9px 18px; border:none; border-radius:8px; cursor:pointer; background:#F97316; color:#fff; font-weight:700; font-size:13px; box-shadow:0 6px 18px -6px rgba(249,115,22,.6); }
+      @media print { .noprint { display:none; } body { padding:0; } }
+    </style></head>
+    <body>
+      <button class="noprint" onclick="window.print()">Imprimer / Enregistrer en PDF</button>
+      <div class="head">
+        <div>
+          <h1>Rapport de direction — <span class="grp">${esc(soc)}</span></h1>
+          <div class="meta">${esc(moisLabel)} · édité le ${esc(today)}</div>
+        </div>
+        <div>${logo}</div>
+      </div>
+
+      <div class="sec">
+        <div class="kpis">
+          ${kpi('Parc actif', num(actifs.length), (nbElec ? nbElec + ' électrifiés' : 'véhicules'), '#0F1E3D')}
+          ${kpi('Kilométrage total', num(kmTotal) + ' km', 'cumul compteurs', '#0e7490')}
+          ${kpi('Valeur du parc', eur(valeurParc), "prix d'acquisition", '#7c3aed')}
+          ${kpi('Coûts du mois', eur(coutMois), 'entretien, répa…', '#F97316')}
+          ${kpi('Coûts 12 mois', eur(cout12), 'glissants', '#F97316')}
+          ${kpi('TVS annuelle', eur(tvsTotal), 'taxe estimée', '#DC2626')}
+          ${kpi('CO₂ estimé', (Math.round(co2T * 10) / 10).toLocaleString('fr-FR') + ' t', '/ an (15 000 km)', '#10B981')}
+          ${kpi('Amendes', eur(amTot), am.length + ' au total', '#F59E0B')}
+        </div>
+      </div>
+
+      <div class="sec grid2">
+        <div>
+          <div class="sec-t">Échéances à venir (90 jours)</div>
+          <table><thead><tr><th>Date</th><th>Type</th><th>Concerné</th><th>Détail</th></tr></thead><tbody>${echRows}</tbody></table>
+        </div>
+        <div>
+          <div class="sec-t">Top 5 coûts / véhicule (12 mois)</div>
+          ${topRows}
+          <div class="sec-t" style="margin-top:20px">Vigilance</div>
+          <div style="font-size:12px;line-height:1.6">
+            <div>🔔 <b>${alerts.length}</b> alerte${alerts.length > 1 ? 's' : ''} active${alerts.length > 1 ? 's' : ''}</div>
+            <div>📅 <b>${ech.length}</b> échéance${ech.length > 1 ? 's' : ''} sous 90 j</div>
+            <div>🌱 <b>${actifs.length ? Math.round(nbElec / actifs.length * 100) : 0}%</b> de flotte électrifiée</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="foot">Généré par Parc Pilot — gestion de flotte · ${esc(soc)} · ${esc(today)}. Les montants TVS et CO₂ sont des estimations.</div>
+      <scr` + `ipt>setTimeout(function(){try{window.print()}catch(e){}},450)</scr` + `ipt>
+    </body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { alert('Autorise les fenêtres pop-up pour générer le rapport.'); return; }
+  w.document.write(html); w.document.close();
+};
+
 // Notification d'erreur visible (bandeau rouge en bas). Utilisée quand une
 // écriture en base échoue DÉFINITIVEMENT (rejet base : RLS, colonne, contrainte…),
 // pour ne jamais laisser croire à un faux « enregistré ».
