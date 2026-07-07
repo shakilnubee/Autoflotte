@@ -181,6 +181,7 @@
           <div class="kpi"><div class="kpi-label">CO₂ à compléter</div><div class="kpi-value" id="kpi-co2-missing" style="color: var(--fp-warn, #F59E0B)">—</div><div class="kpi-delta">véhicules sans donnée</div></div>
         </div>
       </div>
+      <div id="co2-missing-list" class="mt-4 text-sm"></div>
     </div>
 
     <!-- Score de conformité réglementaire -->
@@ -296,7 +297,8 @@
       if (/vendu/i.test((v.statut || v.etat || ''))) return false;   // exclut les vendus
       return true;
     });
-    let totalG = 0, sumCo2 = 0, nCo2 = 0, missing = 0, elec = 0;
+    const IG = (window.FP && FP.ignore) ? FP.ignore : { has: () => false, countPrefix: () => 0 };
+    let totalG = 0, sumCo2 = 0, nCo2 = 0, elec = 0; const missingVehs = [];
     vs.forEach(v => {
       const carb = (v.carburant || '').toLowerCase();
       const electrifie = /lectri|hydrog|hybrid/.test(carb);
@@ -304,8 +306,9 @@
       if (/lectri|hydrog/.test(carb)) { sumCo2 += 0; nCo2++; return; } // 0 à l'usage
       const c = Number(v.co2);
       if (Number.isFinite(c) && c > 0) { totalG += c * KM_AN; sumCo2 += c; nCo2++; }
-      else missing++;
+      else if (!IG.has('co2:' + v.id)) missingVehs.push(v); // « à compléter » sauf si ignoré
     });
+    const missing = missingVehs.length;
     const tonnes = totalG / 1e6;
     const moy = nCo2 ? Math.round(sumCo2 / nCo2) : 0;
     const pctElec = vs.length ? Math.round(elec / vs.length * 100) : 0;
@@ -317,7 +320,27 @@
     set('kpi-co2-missing', String(missing));
     const donut = $('co2-donut');
     if (donut && FP.donutHTML) { donut.innerHTML = FP.donutHTML(pctElec, { size: 108, color: '#10B981', label: pctElec + '%' }); }
+    const ml = $('co2-missing-list');
+    if (ml) {
+      const nbIgn = IG.countPrefix('co2:');
+      if (!missing) {
+        ml.innerHTML = nbIgn ? `<div class="text-xs text-slate-400">${nbIgn} véhicule(s) ignoré(s) · <button type="button" id="co2-restore" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline">réafficher</button></div>` : '';
+      } else {
+        ml.innerHTML = '<div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">CO₂ à compléter</div>'
+          + missingVehs.slice(0, 12).map(v => `<div class="flex justify-between items-center gap-2 py-1 border-b border-slate-100 hover:bg-slate-50 rounded px-1">
+              <a href="vehicules.html?veh=${encodeURIComponent(v.id)}" class="flex-1 font-mono font-semibold text-slate-700">${(v.immat || '—')} <span class="text-xs font-normal text-slate-400">${(v.marque || '')} ${(v.modele || '')}</span></a>
+              <button type="button" class="text-xs text-slate-400 hover:text-slate-700 flex-shrink-0" data-co2-ign="${encodeURIComponent(v.id)}" title="Ignorer (ne plus compter)">🙈 ignorer</button>
+            </div>`).join('')
+          + (missing > 12 ? `<div class="text-xs text-slate-400 mt-1">… et ${missing - 12} autre(s).</div>` : '')
+          + (nbIgn ? `<div class="text-xs text-slate-400 mt-2">${nbIgn} ignoré(s) · <button type="button" id="co2-restore" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline">tout réafficher</button></div>` : '');
+      }
+    }
   }
+  { const ml = $('co2-missing-list'); if (ml) ml.addEventListener('click', (e) => {
+      const ign = e.target.closest('[data-co2-ign]');
+      if (ign && window.FP && FP.ignore) { e.preventDefault(); FP.ignore.set('co2:' + decodeURIComponent(ign.dataset.co2Ign), true); renderCO2(); return; }
+      if (e.target.closest('#co2-restore') && window.FP && FP.ignore) { FP.ignore.clearPrefix('co2:'); renderCO2(); return; }
+    }); }
   // #10 — Score de conformité réglementaire (CT à jour + assurance renseignée)
   let confDocs = null; // documents chargés (assurance, CT…) pour croiser avec la conformité
   function loadConfDocs() {
