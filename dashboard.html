@@ -149,7 +149,8 @@
           <div id="soc-menu" class="hidden absolute right-0 mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-sm"></div>
         </div>
         <button id="btn-scan-doc" class="btn btn-outline text-sm"><i data-lucide="scan-line" class="w-4 h-4"></i> Scanner un document</button>
-        <button id="btn-rapport-dir" class="btn btn-outline text-sm" title="Synthèse imprimable à envoyer à la direction"><i data-lucide="file-bar-chart-2" class="w-4 h-4"></i> Rapport de direction</button>
+        <a href="pages/amendes.html?new=1" class="btn btn-outline text-sm"><i data-lucide="ticket" class="w-4 h-4"></i> Ajouter une amende</a>
+        <a href="pages/emprunts.html?new=1" class="btn btn-outline text-sm"><i data-lucide="key-round" class="w-4 h-4"></i> Ajouter un emprunt</a>
         <a href="pages/vehicules.html?new=1" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</a>
       </div>
     </div>
@@ -1098,6 +1099,7 @@
       const btnAll = $('scan-save-all');
       btnAll.disabled = true; btnAll.style.opacity = '.7';
       const done = []; let okN = 0;
+      const openLink = (href) => ` <a href="${href}" style="color:var(--fp-accent,#F97316);font-weight:700;text-decoration:none;white-space:nowrap">→ ouvrir</a>`;
       for (let i = 0; i < rows.length; i++) {
         const r = rows[i];
         btnAll.innerHTML = `⏳ Enregistrement ${i + 1}/${rows.length}…`;
@@ -1125,7 +1127,7 @@
               if (ci >= 0) Object.assign(cc[ci], payload); else cc.push(payload);
               localStorage.setItem(ck, JSON.stringify(cc));
             } catch (e) {}
-            done.push(`• <b>${drv.name || r.condKey}${drv.nom ? ' ' + drv.nom : ''}</b> — Permis → fiche conducteur`); okN++;
+            done.push(`• <b>${drv.name || r.condKey}${drv.nom ? ' ' + drv.nom : ''}</b> — Permis → fiche conducteur` + openLink('pages/conducteurs.html?cond=' + encodeURIComponent(r.condKey))); okN++;
             continue;
           }
           if (r.target === 'conducteur') {
@@ -1135,7 +1137,7 @@
             const label = (TYPE_LABELS[r.type] || 'Document').replace(/\s*\(→.*?\)/, '').replace(/^🪪\s*/, '').trim();
             const doc = { id: 'DC' + Date.now().toString(36) + i, type: r.type, label, url, date: r.idExpiration || null, numero: r.idNumero || null, createdAt: new Date().toISOString() };
             const s = FP.settings.get(); s.condDocs = s.condDocs || {}; (s.condDocs[r.condKey] = s.condDocs[r.condKey] || []).push(doc); FP.settings.save(s);
-            done.push(`• <b>${drv.name || r.condKey}${drv.nom ? ' ' + drv.nom : ''}</b> — ${label} → fiche conducteur`); okN++;
+            done.push(`• <b>${drv.name || r.condKey}${drv.nom ? ' ' + drv.nom : ''}</b> — ${label} → fiche conducteur` + openLink('pages/conducteurs.html?cond=' + encodeURIComponent(r.condKey))); okN++;
             continue;
           }
           const veh = (window.FP_DATA.vehicules || []).find(v => v.id === r.vehId);
@@ -1177,7 +1179,7 @@
               if (Object.keys(vUpd).length) { await FP.persist.update('vehicules', veh.id, vUpd); Object.assign(veh, vUpd); majMsg = ` · fiche maj (${bits.join(', ')})`; }
             }
             let line = `<b>${veh ? veh.immat : ''}</b> — ${isSin ? 'Sinistre' : 'Facture'}${Number.isFinite(r.amt) ? ' ' + FP.euro(r.amt) : ' (montant à compléter)'} → ${isSin ? 'Sinistres (en attente de remboursement)' : 'liste Factures'}` + majMsg;
-            done.push('• ' + line); okN++;
+            done.push('• ' + line + openLink('pages/' + (isSin ? 'sinistres.html' : 'factures.html'))); okN++;
           } else {
             // → DOCUMENTS de la fiche véhicule
             const label = (TYPE_LABELS[r.type] || 'Document') + (r.date ? ' ' + r.date.slice(0, 4) : '');
@@ -1197,7 +1199,7 @@
             let line = `<b>${veh ? veh.immat : ''}</b> — ${label}`;
             if (upd.prochainCT) line += ` · CT→${FP.dateNum(upd.prochainCT)}`;
             if (upd.km) line += ` · ${FP.num(upd.km)} km`;
-            done.push('• ' + line); okN++;
+            done.push('• ' + line + openLink('pages/vehicules.html?veh=' + encodeURIComponent(r.vehId))); okN++;
           }
         } catch (err) {
           console.error('[scan batch]', err);
