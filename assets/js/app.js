@@ -807,24 +807,25 @@ FP.groupeKeysVisible = () => {
 // === Labels des onglets sidebar (personnalisables via Paramètres) ===
 FP.DEFAULT_NAV_LABELS = {
   'dashboard.html':     'Tableau de bord',
-  'notifications.html': 'Notifications',
-  'calendrier.html':   'Calendrier',
+  'notifications.html': 'Suivi & alertes',
   'taches.html':       'Tâches',
-  'renouvellements.html': 'Renouvellements',
   'statistiques.html': 'Statistiques',
   'vehicules.html':    'Véhicules',
   'emprunts.html':     'Emprunt véhicule',
   'conducteurs.html':  'Conducteurs',
   'amendes.html':      'Amendes',
   'sinistres.html':    'Sinistres',
-  'a-vendre.html':     'À vendre',
   'factures.html':     'Factures',
-  'entretiens.html':   'Entretiens',
   'contrats.html':     'Contrats',
   'guide.html':        'Guide',
   'parametres.html':   'Paramètres',
   'brochure.html':     'Brochure',
   'prix.html':         'Tarifs',
+  // Regroupés (accessibles depuis leur page parente, retirés du menu) :
+  'calendrier.html':   'Calendrier',
+  'renouvellements.html': 'Renouvellements',
+  'entretiens.html':   'Entretiens',
+  'a-vendre.html':     'À vendre',
 };
 // Ordre d'affichage des onglets du menu (clés data-nav), navOrder en tête puis le reste
 FP.navKeysOrdered = () => {
