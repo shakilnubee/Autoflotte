@@ -98,13 +98,16 @@
         <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)">Suivi &amp; alertes</h1>
         <p class="text-slate-500 text-sm mt-1">Le détail des alertes de ta flotte — ce qui demande ton attention.</p>
       </div>
-      <div class="flex items-center gap-2">
-        <a href="renouvellements.html" class="btn btn-outline text-sm"><i data-lucide="calendar-clock" class="w-4 h-4"></i> Renouvellements</a>
-        <a href="calendrier.html" class="btn btn-outline text-sm"><i data-lucide="calendar-days" class="w-4 h-4"></i> Calendrier</a>
-      </div>
+      <a href="calendrier.html" class="btn btn-outline text-sm"><i data-lucide="calendar-days" class="w-4 h-4"></i> Vue calendrier</a>
+    </div>
+
+    <div class="flex gap-1 border-b border-slate-200 mb-6">
+      <button type="button" id="tab-alertes" style="padding:8px 16px;font-weight:700;font-size:14px;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">🔔 Alertes</button>
+      <button type="button" id="tab-echeances" style="padding:8px 16px;font-weight:700;font-size:14px;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔄 Renouvellements</button>
     </div>
 
     <div id="notif-cols" class="grid gap-6 md:grid-cols-2 xl:grid-cols-4"></div>
+    <div id="suivi-echeances" class="hidden"></div>
 
     <div id="notif-masquees" class="mt-8"></div>
 
@@ -210,8 +213,41 @@
     FP.alertes.reafficher(u.dataset.unmute); render();
   });
 
+  // Sous-onglet « Renouvellements » embarqué (échéances CT/assurance/leasing/permis via FP.buildEcheances)
+  function renderEcheances() {
+    const box = document.getElementById('suivi-echeances'); if (!box) return;
+    const ech = (FP.buildEcheances ? FP.buildEcheances(data) : []);
+    if (!ech.length) { box.innerHTML = '<p class="text-sm text-slate-400">Aucune échéance à venir ✓</p>'; return; }
+    const col = { danger: '#DC2626', warn: '#F59E0B', info: '#0e7490' };
+    box.innerHTML = '<div class="space-y-2" style="max-width:780px">' + ech.map(e => {
+      const c = col[e.niveau] || '#94a3b8';
+      return `<a href="${esc(e.target || '#')}" class="notif lvl-${e.niveau}" style="text-decoration:none">
+        <span style="width:9px;height:9px;border-radius:50%;background:${c};flex-shrink:0;margin-top:6px"></span>
+        <div class="flex-1 min-w-0">
+          <div class="notif-cat">${esc(e.categorie)}</div>
+          <div class="font-semibold text-slate-900">${esc(e.label)}</div>
+          ${e.detail ? `<div class="text-sm text-slate-500">${esc(e.detail)}</div>` : ''}
+        </div>
+        <div class="text-sm font-semibold self-center" style="color:${c};white-space:nowrap">${FP.dateNum ? FP.dateNum(e.date) : e.date}</div>
+      </a>`;
+    }).join('') + '</div>';
+    lucide.createIcons();
+  }
+  const tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances');
+  function showTab(which) {
+    const alertes = which !== 'echeances';
+    document.getElementById('notif-cols').classList.toggle('hidden', !alertes);
+    document.getElementById('notif-masquees').classList.toggle('hidden', !alertes);
+    document.getElementById('suivi-echeances').classList.toggle('hidden', alertes);
+    tabA.style.borderBottomColor = alertes ? 'var(--fp-accent)' : 'transparent'; tabA.style.color = alertes ? 'var(--fp-primary)' : '#94A3B8';
+    tabE.style.borderBottomColor = !alertes ? 'var(--fp-accent)' : 'transparent'; tabE.style.color = !alertes ? 'var(--fp-primary)' : '#94A3B8';
+    if (!alertes) renderEcheances();
+  }
+  if (tabA) tabA.addEventListener('click', () => showTab('alertes'));
+  if (tabE) tabE.addEventListener('click', () => showTab('echeances'));
+
   render();
-  document.addEventListener('fp:data-ready', render);
+  document.addEventListener('fp:data-ready', () => { render(); if (!document.getElementById('suivi-echeances').classList.contains('hidden')) renderEcheances(); });
 
   // Charge les conducteurs (table à part) pour générer les alertes "permis qui expire"
   if (window.FP && FP.db && FP.db.select) {
