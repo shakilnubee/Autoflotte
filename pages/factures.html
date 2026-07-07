@@ -281,10 +281,12 @@
           <select id="doc-filter-veh" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous véhicules</option></select>
           <select id="doc-filter-type" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous types</option></select>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#475569;cursor:pointer"><input type="checkbox" id="doc-hide-arch"> Masquer les archivés</label>
-          <button id="doc-import-btn" type="button" class="btn btn-dark text-sm" style="margin-left:auto"><i data-lucide="upload" class="w-4 h-4"></i> Importer un document</button>
+          <button id="doc-view-toggle" type="button" class="btn btn-outline text-sm" style="margin-left:auto"><i data-lucide="list" class="w-4 h-4"></i> <span id="doc-view-label">Vue liste</span></button>
+          <button id="doc-import-btn" type="button" class="btn btn-dark text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Importer un document</button>
         </div>
       </div>
-      <div class="card overflow-hidden">
+      <div id="doc-drive"></div>
+      <div id="doc-list-card" class="card overflow-hidden hidden">
         <div class="scrollable">
           <table class="fp-table">
             <thead id="doc-thead"></thead>
@@ -1568,7 +1570,7 @@
       $('doc-filter-veh').innerHTML = '<option value="all">Tous véhicules</option>' + vehs.map(v => `<option value="${v}">${v}</option>`).join('');
       const types = [...new Set(docs.map(d => d.type))];
       $('doc-filter-type').innerHTML = '<option value="all">Tous types</option>' + types.map(t => `<option value="${t}">${docLabels()[t]||t}</option>`).join('');
-      renderDocs();
+      renderDocuments();
     }
 
     function renderDocs(){
@@ -1651,7 +1653,87 @@
       });
     })();
 
-    ['doc-search','doc-filter-veh','doc-filter-type','doc-hide-arch'].forEach(id => { const el = $(id); if (el) el.addEventListener('input', renderDocs); });
+    ['doc-search','doc-filter-veh','doc-filter-type','doc-hide-arch'].forEach(id => { const el = $(id); if (el) el.addEventListener('input', renderDocuments); });
+
+    // ===== Vue « Drive » (dossiers par véhicule → tuiles) + expiration & rappel (#22) =====
+    let driveFolder = null;   // vehiculeId du dossier ouvert
+    let docView = 'drive';    // 'drive' | 'list'
+    const getExp = id => { try { return ((FP.settings.get().docExpire) || {})[id] || ''; } catch (e) { return ''; } };
+    const setExp = (id, val) => { try { const s = FP.settings.get(); s.docExpire = s.docExpire || {}; if (val) s.docExpire[id] = val; else delete s.docExpire[id]; FP.settings.save(s); } catch (e) {} };
+    const expBadge = id => {
+      const d = getExp(id); if (!d) return '';
+      const j = FP.joursRestants ? FP.joursRestants(d) : Math.ceil((new Date(d) - new Date()) / 86400000);
+      let c, t;
+      if (j < 0) { c = '#DC2626'; t = 'Expiré'; } else if (j < 30) { c = '#F59E0B'; t = `Expire dans ${j} j`; } else if (j < 90) { c = '#0e7490'; t = `Expire dans ${j} j`; } else { c = '#16a34a'; t = 'À jour'; }
+      return `<span style="font-size:11px;font-weight:700;color:${c}">● ${t}</span>`;
+    };
+    const vehById = id => (window.FP_DATA.vehicules || []).find(v => v.id === id);
+    const docUrl = d => d.url || (d.driveId ? ('https://drive.google.com/file/d/' + d.driveId + '/view') : '');
+    const isImgU = u => /\.(jpe?g|png|gif|webp|heic|bmp)(\?|$)/i.test(u || '');
+
+    function renderDrive() {
+      const box = $('doc-drive'); if (!box || !docs) return;
+      const DL = docLabels();
+      const q = ($('doc-search').value || '').toLowerCase();
+      if (!driveFolder) {
+        const byVeh = {};
+        docs.forEach(d => { (byVeh[d.vehiculeId] = byVeh[d.vehiculeId] || []).push(d); });
+        let entries = Object.entries(byVeh).map(([vid, arr]) => ({ vid, arr, veh: vehById(vid), immat: vehImmat(vid) }));
+        if (q) entries = entries.filter(e => (e.immat + ' ' + (e.veh ? (e.veh.marque + ' ' + e.veh.modele) : '')).toLowerCase().includes(q));
+        entries.sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+        if (!entries.length) { box.innerHTML = '<div class="card p-8 text-center text-slate-400 text-sm">Aucun document. Utilise « Importer un document » pour commencer.</div>'; return; }
+        box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px">' + entries.map(e => {
+          const soon = e.arr.some(d => { const dd = getExp(d.id); return dd && (new Date(dd) - new Date()) / 86400000 < 30 && new Date(dd) >= new Date(); });
+          const expired = e.arr.some(d => { const dd = getExp(d.id); return dd && new Date(dd) < new Date(); });
+          const dot = expired ? '#DC2626' : (soon ? '#F59E0B' : '');
+          return `<button type="button" data-folder="${escapeHtml(e.vid)}" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:16px 10px;border:1px solid var(--fp-border);border-radius:12px;background:#fff;cursor:pointer">
+            ${dot ? `<span style="position:absolute;top:8px;right:8px;width:9px;height:9px;border-radius:50%;background:${dot}"></span>` : ''}
+            <i data-lucide="folder" style="width:40px;height:40px;color:#F59E0B"></i>
+            <div style="font-family:monospace;font-weight:800;color:#0f1e3d">${escapeHtml(e.immat)}</div>
+            <div style="font-size:11px;color:#64748b">${e.veh ? escapeHtml(e.veh.marque + ' ' + e.veh.modele) : '—'}</div>
+            <div style="font-size:11px;color:#94a3b8">${e.arr.length} doc${e.arr.length > 1 ? 's' : ''}</div>
+          </button>`;
+        }).join('') + '</div>';
+      } else {
+        const veh = vehById(driveFolder), immat = vehImmat(driveFolder);
+        const arr = docs.filter(d => d.vehiculeId === driveFolder).sort((a, b) => ts(b).localeCompare(ts(a)));
+        const tiles = arr.map(d => {
+          const u = docUrl(d);
+          const prev = u ? (isImgU(u) ? `<img src="${escapeHtml(u)}" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : `<i data-lucide="file-text" style="width:30px;height:30px;color:#64748b"></i>`) : `<i data-lucide="file" style="width:30px;height:30px;color:#cbd5e1"></i>`;
+          return `<div style="position:relative;border:1px solid var(--fp-border);border-radius:12px;overflow:hidden;background:#fff">
+            <a href="${u || '#'}" ${u ? 'target="_blank" rel="noopener"' : ''} style="display:flex;align-items:center;justify-content:center;height:100px;background:#f1f5f9">${prev}</a>
+            <button type="button" data-doc-del="${escapeHtml(d.id)}" title="Supprimer" style="position:absolute;top:4px;right:4px;background:rgba(15,30,61,.72);color:#fff;border:none;border-radius:6px;width:22px;height:22px;cursor:pointer">✕</button>
+            <div style="padding:8px">
+              <div style="font-size:11px;font-weight:700;color:var(--fp-accent);text-transform:uppercase">${escapeHtml(DL[d.type] || d.type || 'Document')}</div>
+              <div style="font-size:12px;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(d.label || '')}">${escapeHtml(d.label || '(sans nom)')}</div>
+              <div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <label style="font-size:10px;color:#94a3b8">Expire</label>
+                <input type="date" class="doc-exp" data-id="${escapeHtml(d.id)}" value="${escapeHtml(getExp(d.id))}" style="border:1px solid var(--fp-border);border-radius:6px;padding:1px 4px;font-size:11px">
+              </div>
+              <div style="margin-top:3px">${expBadge(d.id)}</div>
+            </div>
+          </div>`;
+        }).join('');
+        box.innerHTML = `<div style="margin-bottom:12px"><button type="button" id="doc-drive-back" class="btn btn-outline text-sm"><i data-lucide="arrow-left" class="w-4 h-4"></i> Tous les dossiers</button> <span style="margin-left:8px;font-weight:700;font-family:monospace">${escapeHtml(immat)}</span> <span style="color:#64748b">${veh ? escapeHtml('· ' + veh.marque + ' ' + veh.modele) : ''}</span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px">${tiles || '<div class="text-sm text-slate-400">Aucun document.</div>'}</div>`;
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+    function renderDocuments() {
+      if (docView === 'list') { $('doc-list-card').classList.remove('hidden'); $('doc-drive').classList.add('hidden'); renderDocs(); }
+      else { $('doc-list-card').classList.add('hidden'); $('doc-drive').classList.remove('hidden'); renderDrive(); }
+    }
+    $('doc-view-toggle').addEventListener('click', () => {
+      docView = (docView === 'drive') ? 'list' : 'drive';
+      const lbl = $('doc-view-label'); if (lbl) lbl.textContent = (docView === 'drive') ? 'Vue liste' : 'Vue dossiers';
+      renderDocuments();
+    });
+    $('doc-drive').addEventListener('click', e => {
+      const f = e.target.closest('[data-folder]'); if (f) { driveFolder = f.dataset.folder; renderDrive(); return; }
+      if (e.target.closest('#doc-drive-back')) { driveFolder = null; renderDrive(); return; }
+      const del = e.target.closest('[data-doc-del]'); if (del && confirm('Supprimer définitivement ce document ?')) { const id = del.dataset.docDel; if (FP.persist) FP.persist.delete('documents', id); docs = docs.filter(x => x.id !== id); renderDrive(); }
+    });
+    $('doc-drive').addEventListener('change', e => { const inp = e.target.closest('.doc-exp'); if (inp) { setExp(inp.dataset.id, inp.value); renderDrive(); } });
 
     // Édition véhicule / type / statut directement dans la liste
     $('doc-tbody').addEventListener('change', e => {
@@ -1767,7 +1849,7 @@
           doc.createdAt = new Date().toISOString();
           docs.push(doc);
         }
-        closeImport(); renderDocs();
+        closeImport(); renderDocuments();
       } catch (err) {
         console.error('[doc import]', err);
         alert("Échec de l'import : " + (err && err.message ? err.message : err));
