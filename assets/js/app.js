@@ -107,9 +107,11 @@ document.addEventListener('keydown', (e) => {
   const FLOAT_SEL = '.hidden-cols-popover.open, .fp-hidden-cols-popover.open, .popover.open, .fp-popover.open, .fp-menu, #soc-menu, #mobile-menu, [id$="-menu"], [id$="-popover"]';
   const isVisible = (el) => el && !el.classList.contains('hidden')
     && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
-  function openZones() {
+  function openZones(downTarget) {
     const out = [];
-    const push = (el, type) => { if (el && !out.some(o => o.el === el)) out.push({ el, type }); };
+    // downInside : le mousedown a-t-il DÉMARRÉ dans cette zone ? Évalué au mousedown, AVANT tout
+    // re-render → immunisé si le clic (ex. édition inline) remplace le DOM et détache la cible.
+    const push = (el, type) => { if (el && !out.some(o => o.el === el)) out.push({ el, type, downInside: !!(downTarget && el.contains(downTarget)) }); };
     document.querySelectorAll('.drawer.open').forEach(el => push(el, 'drawer'));
     document.querySelectorAll('.modal-backdrop.open, [id$="-modal"], [id$="-backdrop"]').forEach(el => {
       if (el.classList.contains('drawer-backdrop')) return; // géré avec le tiroir
@@ -122,24 +124,25 @@ document.addEventListener('keydown', (e) => {
     return out;
   }
   let openAtDown = [];
-  document.addEventListener('mousedown', () => { openAtDown = openZones(); }, true);
+  document.addEventListener('mousedown', (e) => { openAtDown = openZones(e.target); }, true);
   document.addEventListener('click', (e) => {
     if (!openAtDown.length) return;
     const snap = openAtDown; openAtDown = [];
     const t = e.target;
-    snap.forEach(({ el, type }) => {
+    snap.forEach(({ el, type, downInside }) => {
       if (type === 'drawer') {
-        if (el.contains(t)) return;                 // clic DANS la fiche : on garde
+        if (downInside || el.contains(t)) return;   // clic DANS la fiche (ou démarré dedans) : on garde
         if (t.closest('.modal-backdrop.open, [id$="-modal"]')) return; // une modale par-dessus la fiche
         el.classList.remove('open');
         document.querySelectorAll('.drawer-backdrop').forEach(bd => bd.classList.remove('open'));
         return;
       }
       if (type === 'modal') {
+        if (downInside) return;                     // sélection/édition démarrée dans le panneau : on garde
         if (t === el) { el.classList.add('hidden'); el.classList.remove('open'); if (el.style && el.style.display) el.style.display = 'none'; }
         return;                                     // clic dans le panneau : on garde
       }
-      if (el.contains(t)) return;                   // clic À L'INTÉRIEUR de la zone : on garde
+      if (downInside || el.contains(t)) return;     // clic À L'INTÉRIEUR de la zone (ou démarré dedans) : on garde
       if (type === 'search') { el.innerHTML = ''; el.style.display = 'none'; return; }
       el.classList.add('hidden'); el.classList.remove('open', 'show');
     });
