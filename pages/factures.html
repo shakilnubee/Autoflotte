@@ -714,20 +714,33 @@
       if (f.numeroFacture && String(f.numeroFacture).trim()) keys.push('n:' + norm(f.numeroFacture));
       keys.forEach(k => { (groups[k] = groups[k] || []).push(f); });
     });
-    const dups = Object.values(groups).filter(g => g.length > 1);
+    // dédoublonnage des groupes (une facture peut matcher sur montant ET n°) via une signature triée
+    const seen = new Set();
+    const dups = Object.values(groups).filter(g => g.length > 1).filter(g => {
+      const sig = g.map(f => f.fileId || f.id || (f.fournisseur + f.date + f.montantTTC)).sort().join('|');
+      if (seen.has(sig)) return false; seen.add(sig); return true;
+    });
     if (!dups.length) { box.innerHTML = ''; return; }
-    const nbFact = new Set(dups.flat().map(f => f.fileId || f.id || (f.fournisseur + f.date + f.montantTTC))).size;
-    const items = dups.slice(0, 8).map(g => {
-      const f = g[0];
-      return `<li class="text-sm text-amber-900">• <b>${escapeHtml(f.fournisseur || '—')}</b> · ${f.montantTTC != null ? FP.euroPrecis(f.montantTTC) : ''} · ${f.date ? FP.dateNum(f.date) : ''} ${f.numeroFacture ? '· n° ' + escapeHtml(f.numeroFacture) : ''} <span class="text-amber-700">(${g.length}×)</span></li>`;
+    const groupsHTML = dups.slice(0, 12).map(g => {
+      const f0 = g[0];
+      const entete = `${escapeHtml(f0.fournisseur || '—')} · ${f0.montantTTC != null ? FP.euroPrecis(f0.montantTTC) : ''} · ${f0.date ? FP.dateNum(f0.date) : ''}${f0.numeroFacture ? ' · n° ' + escapeHtml(f0.numeroFacture) : ''}`;
+      const lignes = g.map(f => {
+        const fid = f.fileId || '';
+        const info = [f.date ? FP.dateNum(f.date) : '', f.vehiculeImmat || '', f.numeroFacture ? 'n° ' + f.numeroFacture : '', f.description ? String(f.description).slice(0, 40) : ''].filter(Boolean).map(escapeHtml).join(' · ');
+        return `<button type="button" ${fid ? `data-dup-open="${escapeHtml(fid)}"` : 'disabled'} class="block w-full text-left text-xs px-2 py-1.5 rounded hover:bg-amber-100" style="color:#78350f;${fid ? 'cursor:pointer' : 'opacity:.7;cursor:default'}">${fid ? '🔎 ' : '• '}${info || 'facture'}${fid ? '' : ' <span class=\"text-amber-600\">(saisie manuelle)</span>'}</button>`;
+      }).join('');
+      return `<div class="border border-amber-200 rounded-lg p-2 bg-white/60">
+        <div class="text-sm font-semibold text-amber-900 mb-1">⚠ ${entete} <span class="text-amber-700">(${g.length}×)</span></div>
+        ${lignes}
+      </div>`;
     }).join('');
     box.innerHTML = `<details class="card p-4" style="border-color:#FDE68A;background:#FFFBEB">
       <summary style="cursor:pointer;font-weight:700;color:#92400e;list-style:none" class="flex items-center gap-2">
-        <i data-lucide="copy" class="w-4 h-4"></i> ${dups.length} doublon(s) potentiel(s) détecté(s) — à vérifier
+        <i data-lucide="copy" class="w-4 h-4"></i> ${dups.length} doublon(s) potentiel(s) détecté(s) — cliquer pour voir lesquels
       </summary>
-      <ul class="mt-3 space-y-1">${items}</ul>
-      ${dups.length > 8 ? `<div class="text-xs text-amber-700 mt-2">… et ${dups.length - 8} autre(s).</div>` : ''}
-      <div class="text-xs text-amber-700 mt-2">Même fournisseur + montant + date, ou même n° de facture. Vérifie avant de payer.</div>
+      <div class="mt-3 space-y-2">${groupsHTML}</div>
+      ${dups.length > 12 ? `<div class="text-xs text-amber-700 mt-2">… et ${dups.length - 12} autre(s) groupe(s).</div>` : ''}
+      <div class="text-xs text-amber-700 mt-2">Même fournisseur + montant + date, ou même n° de facture. Clique une ligne 🔎 pour ouvrir la facture et vérifier avant de payer.</div>
     </details>`;
     if (window.lucide && lucide.createIcons) lucide.createIcons();
   }
@@ -1494,6 +1507,12 @@
   // Données Supabase arrivées (ou import) → on reconstruit la liste et on rafraîchit le tableau
   document.addEventListener('fp:data-ready', () => { rebuildFactures(); renderKPIs(); renderTable(); renderCharts(); });
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });
+
+  // Doublons : clic sur une ligne 🔎 → ouvre la facture concernée (drawer)
+  { const dupBox = $('fa-doublons'); if (dupBox) dupBox.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-dup-open]'); if (!b) return;
+      const fid = b.dataset.dupOpen; if (fid && typeof openDrawer === 'function') openDrawer(fid);
+    }); }
 
   // Ouverture directe d'une facture via l'URL (?facture=FILEID) — depuis la recherche globale
   (function openFactureFromQuery() {
