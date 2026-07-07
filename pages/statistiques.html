@@ -320,6 +320,11 @@
     if (donut && FP.donutHTML) { donut.innerHTML = FP.donutHTML(pctElec, { size: 108, color: '#10B981', label: pctElec + '%' }); }
   }
   // #10 — Score de conformité réglementaire (CT à jour + assurance renseignée)
+  let confDocs = null; // documents chargés (assurance, CT…) pour croiser avec la conformité
+  function loadConfDocs() {
+    if (!(window.FP && FP.db && FP.supabase)) return;
+    FP.db.select('documents').then(r => { if (!r.error) { confDocs = r.data || []; renderConformite(); } }).catch(() => {});
+  }
   function renderConformite() {
     const vs = (data.vehicules || []).filter(v => {
       const cat = (v.categorie || '').toLowerCase();
@@ -337,12 +342,17 @@
     const nPl = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     const primeKeys = new Set(Object.keys(_s.assurancePrimes || {}).map(nPl));
     const assurIgnore = new Set((Array.isArray(_s.assuranceIgnore) ? _s.assuranceIgnore : []).map(nPl));
+    // On croise AUSSI les documents déjà présents (attestation d'assurance, contrôle technique) :
+    // si l'info existe dans la fiche, on ne la redemande pas.
+    const docsArr = confDocs || [];
+    const hasDoc = (v, types) => docsArr.some(d => types.includes(d.type) && (d.vehiculeId === v.id || nPl(d.vehiculeId) === nPl(v.immat)));
     let ok = 0, ctKO = 0, assurKO = 0; const nonConf = [];
     vs.forEach(v => {
-      const ctVal = (v.prochainCT && v.prochainCT !== '—') ? FP.joursRestants(v.prochainCT) : null;
-      const ctOk = ctVal !== null && ctVal >= 0;
       const pl = nPl(v.immat);
-      const assurOk = (v.assurance && String(v.assurance).trim() && v.assurance !== '—') || primeKeys.has(pl) || assurIgnore.has(pl);
+      const ctVal = (v.prochainCT && v.prochainCT !== '—') ? FP.joursRestants(v.prochainCT) : null;
+      // CT à jour, OU date inconnue mais un document de contrôle technique existe déjà.
+      const ctOk = (ctVal !== null && ctVal >= 0) || (ctVal === null && hasDoc(v, ['controle-technique']));
+      const assurOk = (v.assurance && String(v.assurance).trim() && v.assurance !== '—') || primeKeys.has(pl) || assurIgnore.has(pl) || hasDoc(v, ['assurance']);
       // « Ignorer » : un critère marqué ignoré ne compte plus comme non conforme
       const ctBad = !ctOk && !IG.has('conf:ct:' + v.id);
       const assurBad = !assurOk && !IG.has('conf:assur:' + v.id);
@@ -393,6 +403,7 @@
   updateTvsKpi();
   renderCO2();
   renderConformite();
+  loadConfDocs();
 
   function buildLast12() {
     const out = []; const now = new Date();
@@ -603,7 +614,7 @@
   // Graphiques (Chart.js en différé) dessinés dès qu'il est prêt, sans bloquer l'affichage
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); } catch (e) {} });
   // Rafraîchit quand les données Supabase arrivent (sinon on reste sur le cache data.js)
-  document.addEventListener('fp:data-ready', () => { rebuildAnneeFilter(); updateTvsKpi(); renderCO2(); renderConformite(); const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
+  document.addEventListener('fp:data-ready', () => { rebuildAnneeFilter(); updateTvsKpi(); renderCO2(); renderConformite(); loadConfDocs(); const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
 
   // Export du coût total par véhicule (TCO) — Excel/CSV, selon l'année choisie en haut.
   if (FP.makeExportMenu) FP.makeExportMenu({
