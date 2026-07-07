@@ -365,6 +365,20 @@
         const vehInfo = veh ? `${escapeHtml(veh.marque)} ${escapeHtml(veh.modele)}${veh.chauffeur && veh.chauffeur !== '—' ? ' · ' + (FP.lienConducteur ? FP.lienConducteur(veh.chauffeur) : escapeHtml(veh.chauffeur)) : ''}` : (s.vehiculeImmat || '');
         const cur = (FP.settings.get().sinistreStatut || {})[g.key] || '';
         const bar = statColor(cur);
+        // Dossier assurance structuré (franchise / remboursé / responsabilité) — par incident
+        const dv = (FP.settings.get().sinistreAssurance || {})[g.key] || {};
+        const respOpts = [['', '—'], ['responsable', 'Responsable'], ['non-responsable', 'Non responsable'], ['partagee', 'Partagée'], ['en-cours', 'En cours']];
+        const reste = (g.cost || 0) - (Number(dv.rembourse) || 0);
+        const dossierPanel = `
+          <details class="mt-2">
+            <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#475569;list-style:none" class="inline-flex items-center gap-1"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Dossier assurance</summary>
+            <div class="grid grid-cols-3 gap-2 mt-2">
+              <label class="text-xs text-slate-500">Franchise (€)<input class="sin-doss" data-key="${g.key}" data-k="franchise" type="number" value="${dv.franchise ?? ''}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
+              <label class="text-xs text-slate-500">Remboursé (€)<input class="sin-doss" data-key="${g.key}" data-k="rembourse" type="number" value="${dv.rembourse ?? ''}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
+              <label class="text-xs text-slate-500">Responsabilité<select class="sin-doss" data-key="${g.key}" data-k="resp" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px">${respOpts.map(([v, l]) => `<option value="${v}" ${dv.resp === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+            </div>
+            ${g.cost ? `<div class="text-xs text-slate-500 mt-2">Coût ${FP.euroPrecis(g.cost)}${Number(dv.rembourse) ? ` · remboursé ${FP.euroPrecis(dv.rembourse)}` : ''} → <b style="color:${reste > 0 ? '#b45309' : '#047857'}">reste à charge ${FP.euroPrecis(Math.max(0, reste))}</b></div>` : ''}
+          </details>`;
         // Candidats à associer : autres sinistres du même véhicule pas déjà dans cet incident
         const candidats = sinistres.filter(c => c.vehiculeImmat === s.vehiculeImmat && groupKeyOf(c.id) !== g.key);
         const assocPanel = `
@@ -404,6 +418,7 @@
                 ${multi ? '' : `<button type="button" data-sin-del="${s.id}" title="Supprimer ce sinistre" class="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>`}
               </div>
             </div>
+            ${dossierPanel}
             ${assocPanel}
           </div>
         `;
@@ -485,6 +500,18 @@
       const s = FP.settings.get(); s.sinistreStage = s.sinistreStage || {};
       s.sinistreStage[stg.dataset.id] = stg.value; // choix manuel = prioritaire sur la détection auto
       FP.settings.save(s); refreshAll(); return;
+    }
+    // Dossier assurance (franchise / remboursé / responsabilité) par incident
+    const doss = e.target.closest('.sin-doss');
+    if (doss) {
+      const key = doss.dataset.key, fld = doss.dataset.k;
+      const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
+      const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
+      let val = doss.value;
+      if (fld === 'franchise' || fld === 'rembourse') { val = (val === '' ? null : parseFloat(String(val).replace(',', '.'))); }
+      if (val === '' || val == null) delete o[fld]; else o[fld] = val;
+      if (!Object.keys(o).length) delete s.sinistreAssurance[key];
+      FP.settings.save(s); renderTimeline(); return;
     }
   });
 
