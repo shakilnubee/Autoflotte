@@ -3043,23 +3043,40 @@ FP.searchAll = (q) => {
   q = FP.norm(q).trim();
   const inPagesFolder = window.location.pathname.includes('/pages/');
   const pref = inPagesFolder ? '' : 'pages/';
+  const D = window.FP_DATA || {};
   const out = [];
-  (window.FP_DATA?.vehicules || []).forEach(v => {
-    const text = FP.norm(`${v.immat || ''} ${v.marque || ''} ${v.modele || ''} ${v.chauffeur || ''} ${v.vin || ''}`);
+  // texte de date « cherchable » : ISO + format FR (12/07/2026) → tape « 07/2026 » ou « 2026 »
+  const dstr = (d) => d ? (d + ' ' + (FP.date ? FP.date(d) : '')) : '';
+  const clip = (s, n) => (s && s.length > n) ? s.slice(0, n) + '…' : (s || '');
+
+  // Véhicules — plaque, marque, modèle, conducteur, VIN, ASSURANCE, propriétaire, catégorie, carburant, version
+  (D.vehicules || []).forEach(v => {
+    const text = FP.norm([v.immat, v.marque, v.modele, v.chauffeur, v.vin, v.assurance, v.proprietaire, v.categorie, v.carburant, v.version].filter(Boolean).join(' '));
     if (text.includes(q)) {
-      out.push({ type: 'véh.', icon: '🚗', label: `${v.immat} · ${v.marque} ${v.modele}`.trim(), sub: v.chauffeur || '', url: pref + 'vehicules.html?veh=' + encodeURIComponent(v.id) });
+      out.push({ type: 'véh.', icon: '🚗', label: `${v.immat || ''} · ${v.marque || ''} ${v.modele || ''}`.trim(), sub: [v.chauffeur, v.assurance].filter(x => x && x !== '—').join(' · '), url: pref + 'vehicules.html?veh=' + encodeURIComponent(v.id) });
     }
   });
-  (window.FP_DATA?.amendes || []).forEach(a => {
-    const text = FP.norm(`${a.prenom || ''} ${a.motif || ''} ${a.numeroAvis || ''}`);
-    if (text.includes(q)) {
-      out.push({ type: 'amende', icon: '🎫', label: `${a.prenom} · ${a.motif}`, sub: `${a.montant ? FP.euroPrecis(a.montant) : ''} · ${FP.date(a.date)}`, url: pref + 'amendes.html?amende=' + encodeURIComponent(a.id) });
+  // Conducteurs (fiche) — nom complet, e-mail, téléphone
+  (D.conducteurs || []).forEach(c => {
+    const nom = [c.prenom || c.name, c.nom].filter(Boolean).join(' ').trim() || c.name || c.key || '';
+    const text = FP.norm([nom, c.email, c.telephone, c.tel, c.societe].filter(Boolean).join(' '));
+    if (nom && text.includes(q)) {
+      out.push({ type: 'conduct.', icon: '👤', label: nom, sub: c.email || c.telephone || c.tel || '', url: pref + 'conducteurs.html?cond=' + encodeURIComponent(c.key || nom) });
     }
   });
-  (window.FP_DATA?.factures || []).forEach(f => {
-    const text = FP.norm(`${f.vehiculeImmat || ''} ${f.fournisseur || ''} ${f.description || ''} ${f.numeroFacture || ''}`);
+  // Amendes — conducteur, motif, n° avis, DATE
+  (D.amendes || []).forEach(a => {
+    const text = FP.norm([a.prenom, a.motif, a.numeroAvis, dstr(a.date)].filter(Boolean).join(' '));
     if (text.includes(q)) {
-      out.push({ type: f.type || 'fact.', icon: f.type === 'sinistre' ? '⚠️' : '📄', label: `${f.vehiculeImmat} · ${f.fournisseur || ''}`, sub: `${f.description ? f.description.slice(0,60) : ''}`, url: pref + (f.type === 'sinistre' ? 'sinistres.html' : 'factures.html?facture=' + encodeURIComponent(f.fileId || '')) });
+      out.push({ type: 'amende', icon: '🎫', label: `${a.prenom || ''} · ${a.motif || ''}`.trim(), sub: `${a.montant ? FP.euroPrecis(a.montant) : ''} · ${FP.date(a.date)}`, url: pref + 'amendes.html?amende=' + encodeURIComponent(a.id) });
+    }
+  });
+  // Factures / sinistres — véhicule, GARAGE (fournisseur), description, n° facture, DATE
+  (D.factures || []).forEach(f => {
+    const text = FP.norm([f.vehiculeImmat, f.fournisseur, f.description, f.numeroFacture, f.type, dstr(f.date)].filter(Boolean).join(' '));
+    if (text.includes(q)) {
+      const isSin = f.type === 'sinistre';
+      out.push({ type: f.type || 'fact.', icon: isSin ? '⚠️' : '📄', label: `${f.vehiculeImmat || ''} · ${f.fournisseur || ''}`.trim(), sub: [clip(f.description, 48), FP.date(f.date)].filter(Boolean).join(' · '), url: pref + (isSin ? 'sinistres.html' : 'factures.html?facture=' + encodeURIComponent(f.fileId || '')) });
     }
   });
   return out;
@@ -3419,6 +3436,29 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!e.target.closest('.fp-global-search')) {
       document.querySelectorAll('.fp-search-results').forEach(r => r.classList.remove('open'));
     }
+  });
+  // Spotlight : ⌘K / Ctrl+K ouvre la recherche ; ↑ ↓ naviguent, Entrée ouvre, Échap ferme.
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      const inp = document.querySelector('.fp-search-input');
+      if (inp) { e.preventDefault(); inp.focus(); inp.select(); }
+      return;
+    }
+    const inp = e.target && e.target.closest && e.target.closest('.fp-search-input');
+    if (!inp) return;
+    const wrap = inp.closest('.fp-global-search');
+    const results = wrap && wrap.querySelector('.fp-search-results');
+    if (!results || !results.classList.contains('open')) return;
+    const items = Array.from(results.querySelectorAll('.fp-search-item'));
+    if (!items.length) return;
+    let idx = items.findIndex(it => it.classList.contains('kbd-active'));
+    if (e.key === 'ArrowDown') { e.preventDefault(); idx = (idx + 1) % items.length; }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); idx = (idx - 1 + items.length) % items.length; }
+    else if (e.key === 'Enter') { e.preventDefault(); (items[idx] || items[0]).click(); return; }
+    else if (e.key === 'Escape') { results.classList.remove('open'); inp.blur(); return; }
+    else return;
+    items.forEach(it => it.classList.remove('kbd-active'));
+    if (items[idx]) { items[idx].classList.add('kbd-active'); items[idx].scrollIntoView({ block: 'nearest' }); }
   });
 
   const path = (window.location.pathname.split('/').pop() || 'index').replace(/\.html$/, '');
