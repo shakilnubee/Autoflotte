@@ -506,6 +506,33 @@ FP.addSociete = (name) => {
   } catch (e) {}
 })();
 
+// === Navigation MOBILE : barre + menu latéral repliable (hamburger) ===
+// Injecté sur toutes les pages qui ont une sidebar. N'apparaît qu'en < 769px (CSS).
+(function mobileNav() {
+  const build = () => {
+    try {
+      const sb = document.querySelector('.fp-sidebar');
+      if (!sb || document.querySelector('.fp-mobile-bar')) return;
+      const bar = document.createElement('div');
+      bar.className = 'fp-mobile-bar';
+      bar.innerHTML = '<button type="button" class="fp-burger" aria-label="Ouvrir le menu"><i data-lucide="menu"></i></button><span style="font-weight:900;font-style:italic;font-size:1.05rem">Parc<span style="color:var(--fp-accent)">Pilot</span></span>';
+      document.body.insertBefore(bar, document.body.firstChild);
+      const bd = document.createElement('div');
+      bd.className = 'fp-sidebar-backdrop';
+      document.body.appendChild(bd);
+      const open = () => { sb.classList.add('fp-open'); bd.classList.add('fp-open'); };
+      const close = () => { sb.classList.remove('fp-open'); bd.classList.remove('fp-open'); };
+      bar.querySelector('.fp-burger').addEventListener('click', open);
+      bd.addEventListener('click', close);
+      // clic sur un lien du menu ou en dehors → on referme
+      sb.addEventListener('click', (e) => { if (e.target.closest('a[href]')) close(); });
+      addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+      if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
+    } catch (e) {}
+  };
+  if (document.body) build(); else document.addEventListener('DOMContentLoaded', build);
+})();
+
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
   STORAGE_KEY: 'auto_flotte_settings',
