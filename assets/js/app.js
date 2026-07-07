@@ -3048,11 +3048,14 @@ FP.searchAll = (q) => {
   // texte de date « cherchable » : ISO + format FR (12/07/2026) → tape « 07/2026 » ou « 2026 »
   const dstr = (d) => d ? (d + ' ' + (FP.date ? FP.date(d) : '')) : '';
   const clip = (s, n) => (s && s.length > n) ? s.slice(0, n) + '…' : (s || '');
+  // Recherche insensible aux tirets/espaces : « ff777xk » trouve « FF-777-XK ».
+  const qc = q.replace(/[^a-z0-9]/g, '');
+  const hit = (text) => text.includes(q) || (qc.length >= 2 && text.replace(/[^a-z0-9]/g, '').includes(qc));
 
   // Véhicules — plaque, marque, modèle, conducteur, VIN, ASSURANCE, propriétaire, catégorie, carburant, version
   (D.vehicules || []).forEach(v => {
     const text = FP.norm([v.immat, v.marque, v.modele, v.chauffeur, v.vin, v.assurance, v.proprietaire, v.categorie, v.carburant, v.version].filter(Boolean).join(' '));
-    if (text.includes(q)) {
+    if (hit(text)) {
       out.push({ type: 'véh.', icon: '🚗', label: `${v.immat || ''} · ${v.marque || ''} ${v.modele || ''}`.trim(), sub: [v.chauffeur, v.assurance].filter(x => x && x !== '—').join(' · '), url: pref + 'vehicules.html?veh=' + encodeURIComponent(v.id) });
     }
   });
@@ -3060,21 +3063,21 @@ FP.searchAll = (q) => {
   (D.conducteurs || []).forEach(c => {
     const nom = [c.prenom || c.name, c.nom].filter(Boolean).join(' ').trim() || c.name || c.key || '';
     const text = FP.norm([nom, c.email, c.telephone, c.tel, c.societe].filter(Boolean).join(' '));
-    if (nom && text.includes(q)) {
+    if (nom && hit(text)) {
       out.push({ type: 'conduct.', icon: '👤', label: nom, sub: c.email || c.telephone || c.tel || '', url: pref + 'conducteurs.html?cond=' + encodeURIComponent(c.key || nom) });
     }
   });
   // Amendes — conducteur, motif, n° avis, DATE
   (D.amendes || []).forEach(a => {
     const text = FP.norm([a.prenom, a.motif, a.numeroAvis, dstr(a.date)].filter(Boolean).join(' '));
-    if (text.includes(q)) {
+    if (hit(text)) {
       out.push({ type: 'amende', icon: '🎫', label: `${a.prenom || ''} · ${a.motif || ''}`.trim(), sub: `${a.montant ? FP.euroPrecis(a.montant) : ''} · ${FP.date(a.date)}`, url: pref + 'amendes.html?amende=' + encodeURIComponent(a.id) });
     }
   });
   // Factures / sinistres — véhicule, GARAGE (fournisseur), description, n° facture, DATE
   (D.factures || []).forEach(f => {
     const text = FP.norm([f.vehiculeImmat, f.fournisseur, f.description, f.numeroFacture, f.type, dstr(f.date)].filter(Boolean).join(' '));
-    if (text.includes(q)) {
+    if (hit(text)) {
       const isSin = f.type === 'sinistre';
       out.push({ type: f.type || 'fact.', icon: isSin ? '⚠️' : '📄', label: `${f.vehiculeImmat || ''} · ${f.fournisseur || ''}`.trim(), sub: [clip(f.description, 48), FP.date(f.date)].filter(Boolean).join(' · '), url: pref + (isSin ? 'sinistres.html' : 'factures.html?facture=' + encodeURIComponent(f.fileId || '')) });
     }
