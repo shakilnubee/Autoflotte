@@ -36,6 +36,9 @@
   #factures-tbody tr:hover .row-actions { display: inline-flex; }
   #factures-tbody .ra-btn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--fp-border); border-radius: 7px; background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   #factures-tbody .ra-btn:hover { background: var(--fp-primary); color: white; border-color: var(--fp-primary); }
+  /* Renommage inline des documents dans le Drive */
+  #doc-drive .doc-rename:hover { border-color: var(--fp-border) !important; }
+  #doc-drive .doc-rename:focus { border-color: var(--fp-accent) !important; background: #fff !important; outline: none; }
   .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
   .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
@@ -1705,7 +1708,8 @@
             <button type="button" data-doc-del="${escapeHtml(d.id)}" title="Supprimer" style="position:absolute;top:4px;right:4px;background:rgba(15,30,61,.72);color:#fff;border:none;border-radius:6px;width:22px;height:22px;cursor:pointer">✕</button>
             <div style="padding:8px">
               <div style="font-size:11px;font-weight:700;color:var(--fp-accent);text-transform:uppercase">${escapeHtml(DL[d.type] || d.type || 'Document')}</div>
-              <div style="font-size:12px;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(d.label || '')}">${escapeHtml(d.label || '(sans nom)')}</div>
+              <input class="doc-rename" data-id="${escapeHtml(d.id)}" value="${escapeHtml(d.label || '')}" placeholder="Renommer…" title="Cliquer pour renommer" style="width:100%;font-size:12px;color:#334155;border:1px solid transparent;border-radius:6px;padding:2px 5px;background:transparent">
+              <select class="doc-type-tile" data-id="${escapeHtml(d.id)}" title="Type de document" style="width:100%;margin-top:4px;font-size:11px;color:#64748b;border:1px solid var(--fp-border);border-radius:6px;padding:2px 4px;background:#fff">${Object.keys(DL).map(t => `<option value="${t}" ${d.type === t ? 'selected' : ''}>${escapeHtml(DL[t])}</option>`).join('')}</select>
               <div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                 <label style="font-size:10px;color:#94a3b8">Expire</label>
                 <input type="date" class="doc-exp" data-id="${escapeHtml(d.id)}" value="${escapeHtml(getExp(d.id))}" style="border:1px solid var(--fp-border);border-radius:6px;padding:1px 4px;font-size:11px">
@@ -1733,7 +1737,11 @@
       if (e.target.closest('#doc-drive-back')) { driveFolder = null; renderDrive(); return; }
       const del = e.target.closest('[data-doc-del]'); if (del && confirm('Supprimer définitivement ce document ?')) { const id = del.dataset.docDel; if (FP.persist) FP.persist.delete('documents', id); docs = docs.filter(x => x.id !== id); renderDrive(); }
     });
-    $('doc-drive').addEventListener('change', e => { const inp = e.target.closest('.doc-exp'); if (inp) { setExp(inp.dataset.id, inp.value); renderDrive(); } });
+    $('doc-drive').addEventListener('change', e => {
+      const exp = e.target.closest('.doc-exp'); if (exp) { setExp(exp.dataset.id, exp.value); renderDrive(); return; }
+      const nm = e.target.closest('.doc-rename'); if (nm) { const d = docs.find(x => x.id === nm.dataset.id); if (d) { d.label = nm.value.trim(); if (FP.persist) FP.persist.update('documents', d.id, { label: d.label }); if (FP.toast) FP.toast('✓ Renommé'); } return; }
+      const ty = e.target.closest('.doc-type-tile'); if (ty) { const d = docs.find(x => x.id === ty.dataset.id); if (d) { d.type = ty.value; if (FP.persist) FP.persist.update('documents', d.id, { type: ty.value }); renderDrive(); } return; }
+    });
 
     // Édition véhicule / type / statut directement dans la liste
     $('doc-tbody').addEventListener('change', e => {
