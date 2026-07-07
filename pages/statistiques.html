@@ -184,6 +184,23 @@
       </div>
     </div>
 
+    <!-- Score de conformité réglementaire -->
+    <div class="card p-5 mb-6">
+      <h3 class="font-bold text-slate-900 mb-1 flex items-center gap-2"><i data-lucide="shield-check" class="w-4 h-4" style="color:#0e7490"></i> Conformité réglementaire <span class="text-xs font-normal text-slate-400">(CT à jour + assurance renseignée)</span></h3>
+      <p class="text-xs text-slate-400 mb-4">Part des véhicules en service qui sont en règle : contrôle technique non dépassé et assurance renseignée.</p>
+      <div class="flex items-center gap-6 flex-wrap">
+        <div id="conf-donut" style="flex:0 0 auto"></div>
+        <div class="flex-1" style="min-width:280px">
+          <div class="grid grid-cols-3 gap-4 mb-3">
+            <div class="kpi"><div class="kpi-label">Véhicules en règle</div><div class="kpi-value" id="kpi-conf-ok" style="color:#16a34a">—</div><div class="kpi-delta" id="kpi-conf-sub">—</div></div>
+            <div class="kpi"><div class="kpi-label">CT à traiter</div><div class="kpi-value" id="kpi-conf-ct" style="color: var(--fp-danger)">—</div><div class="kpi-delta">dépassé / manquant</div></div>
+            <div class="kpi"><div class="kpi-label">Assurance manquante</div><div class="kpi-value" id="kpi-conf-assur" style="color: var(--fp-warn, #F59E0B)">—</div><div class="kpi-delta">non renseignée</div></div>
+          </div>
+          <div id="conf-list" class="text-sm"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Charts -->
     <div class="grid lg:grid-cols-2 gap-6 mb-6">
       <div class="card p-6">
@@ -302,9 +319,48 @@
     const donut = $('co2-donut');
     if (donut && FP.donutHTML) { donut.innerHTML = FP.donutHTML(pctElec, { size: 108, color: '#10B981', label: pctElec + '%' }); }
   }
+  // #10 — Score de conformité réglementaire (CT à jour + assurance renseignée)
+  function renderConformite() {
+    const vs = (data.vehicules || []).filter(v => {
+      const cat = (v.categorie || '').toLowerCase();
+      if (/moto|utilit|engin|remorque/.test(cat)) return false;
+      if (/vendu/i.test((v.statut || v.etat || ''))) return false;
+      return true;
+    });
+    const set = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
+    if (!vs.length) { set('kpi-conf-ok', '—'); return; }
+    let ok = 0, ctKO = 0, assurKO = 0; const nonConf = [];
+    vs.forEach(v => {
+      const ctVal = (v.prochainCT && v.prochainCT !== '—') ? FP.joursRestants(v.prochainCT) : null;
+      const ctOk = ctVal !== null && ctVal >= 0;
+      const assurOk = v.assurance && String(v.assurance).trim() && v.assurance !== '—';
+      const raisons = [];
+      if (!ctOk) { ctKO++; raisons.push(ctVal === null ? 'CT non renseigné' : 'CT dépassé'); }
+      if (!assurOk) { assurKO++; raisons.push('assurance manquante'); }
+      if (ctOk && assurOk) ok++; else nonConf.push({ v, raisons });
+    });
+    const pct = Math.round(ok / vs.length * 100);
+    set('kpi-conf-ok', pct + ' %');
+    set('kpi-conf-sub', `${ok}/${vs.length} en règle`);
+    set('kpi-conf-ct', String(ctKO));
+    set('kpi-conf-assur', String(assurKO));
+    const donut = $('conf-donut');
+    if (donut && FP.donutHTML) { donut.innerHTML = FP.donutHTML(pct, { size: 108, color: pct >= 90 ? '#16a34a' : (pct >= 70 ? '#F59E0B' : '#DC2626'), label: pct + '%' }); }
+    const list = $('conf-list');
+    if (list) {
+      list.innerHTML = nonConf.length
+        ? '<div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">À régulariser</div>' + nonConf.slice(0, 8).map(x =>
+            `<a href="vehicules.html?veh=${encodeURIComponent(x.v.id)}" class="flex justify-between items-center py-1 border-b border-slate-100 hover:bg-slate-50 rounded px-1">
+               <span class="font-mono font-semibold text-slate-700">${(x.v.immat || '—')}</span>
+               <span class="text-xs" style="color:#b45309">${x.raisons.join(' · ')}</span></a>`).join('')
+          + (nonConf.length > 8 ? `<div class="text-xs text-slate-400 mt-1">… et ${nonConf.length - 8} autre(s).</div>` : '')
+        : '<div class="text-sm text-emerald-600">✓ Toute la flotte en service est en règle.</div>';
+    }
+  }
   rebuildAnneeFilter();
   updateTvsKpi();
   renderCO2();
+  renderConformite();
 
   function buildLast12() {
     const out = []; const now = new Date();
@@ -515,7 +571,7 @@
   // Graphiques (Chart.js en différé) dessinés dès qu'il est prêt, sans bloquer l'affichage
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); } catch (e) {} });
   // Rafraîchit quand les données Supabase arrivent (sinon on reste sur le cache data.js)
-  document.addEventListener('fp:data-ready', () => { rebuildAnneeFilter(); updateTvsKpi(); renderCO2(); const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
+  document.addEventListener('fp:data-ready', () => { rebuildAnneeFilter(); updateTvsKpi(); renderCO2(); renderConformite(); const a = $('filter-annee'); render(a ? (a.value || 'all') : 'all'); });
 
   // Export du coût total par véhicule (TCO) — Excel/CSV, selon l'année choisie en haut.
   if (FP.makeExportMenu) FP.makeExportMenu({
