@@ -1595,16 +1595,56 @@
     'BMW': 'bmw', 'NISSAN': 'nissan', 'AUDI': 'audi', 'IVECO': 'iveco', 'OPEL': 'opel',
     'RENAULT': 'renault', 'HYUNDAI': 'hyundai', 'CITROEN': 'citroen', 'CITROËN': 'citroen', 'DUCATI': 'ducati',
   };
+  // Domaines pour le repli logo (Clearbit) quand Simple Icons a retiré la marque (ex. BYD, Mercedes)
+  const LOGO_DOMAINS = {
+    'PEUGEOT': 'peugeot.com', 'RENAULT': 'renault.fr', 'BYD': 'byd.com', 'MG': 'mgmotor.eu',
+    'DACIA': 'dacia.fr', 'MERCEDES BENZ': 'mercedes-benz.com', 'MERCEDES': 'mercedes-benz.com',
+    'TOYOTA': 'toyota.fr', 'BMW': 'bmw.fr', 'NISSAN': 'nissan.fr', 'AUDI': 'audi.fr', 'OPEL': 'opel.fr',
+    'CITROEN': 'citroen.fr', 'CITROËN': 'citroen.fr', 'PORSCHE': 'porsche.com', 'VOLVO': 'volvocars.com',
+    'HYUNDAI': 'hyundai.com', 'IVECO': 'iveco.com', 'DUCATI': 'ducati.com',
+  };
   function renderDrawerLogo(v) {
     const wrap = $('drawer-logo');
     const marque = (v.marque || '').toUpperCase().trim();
-    const slug = LOGO_SLUGS[marque];
     const badge = `<span class="brand-badge">${(v.marque || '').replace(/</g, '&lt;')}</span>`;
-    if (!slug) { wrap.innerHTML = v.marque ? badge : ''; return; }
+    // Sources tentées dans l'ordre : Simple Icons (officiel), puis Clearbit (par domaine), puis badge texte.
+    const urls = [];
+    if (LOGO_SLUGS[marque]) urls.push('https://cdn.simpleicons.org/' + LOGO_SLUGS[marque]);
+    if (LOGO_DOMAINS[marque]) urls.push('https://logo.clearbit.com/' + LOGO_DOMAINS[marque] + '?size=96');
+    if (!urls.length) { wrap.innerHTML = v.marque ? badge : ''; return; }
     wrap.innerHTML = `<img alt="${(v.marque || '').replace(/"/g, '')}" style="height:44px;width:auto;max-width:130px;object-fit:contain">`;
     const img = wrap.querySelector('img');
-    img.onerror = () => { wrap.innerHTML = badge; };
-    img.src = `https://cdn.simpleicons.org/${slug}`;
+    let i = 0;
+    img.onerror = () => { i++; if (i < urls.length) { img.src = urls[i]; } else { wrap.innerHTML = badge; } };
+    img.src = urls[0];
+  }
+  // Stationnement gratuit à Paris (règle mairie de Paris, lue sur la carte grise) :
+  // - électrique / hydrogène (P.3) ≤ 2 t → gratuit en surface ;
+  // - hybride rechargeable → gratuit sous un seuil CO₂ selon la date de 1re immat
+  //   (< 60 g avant 2020 · < 50 g janv–févr 2020 · < 78 g depuis mars 2020) ;
+  // - sinon (thermique) → payant. Source : paris.fr.
+  function parkingParis(v) {
+    const carb = (v.carburant || '').toLowerCase();
+    const co2 = Number(v.co2);
+    const mec = (v.dateMiseEnCirculation || '').slice(0, 10);
+    if (/lectri|hydrog/.test(carb)) return { ok: true, txt: 'Gratuit à Paris', detail: 'Électrique / hydrogène (gratuit en surface si ≤ 2 t · règle mairie de Paris)' };
+    if (/hybrid/.test(carb)) {
+      let seuil = 78;
+      if (mec && mec < '2020-01-01') seuil = 60;
+      else if (mec >= '2020-01-01' && mec <= '2020-02-29') seuil = 50;
+      if (Number.isFinite(co2) && co2 > 0) {
+        return co2 <= seuil
+          ? { ok: true, txt: 'Gratuit à Paris', detail: `Hybride rechargeable : ${co2} g ≤ ${seuil} g/km (seuil Paris)` }
+          : { ok: false, txt: 'Payant à Paris', detail: `Hybride : ${co2} g > ${seuil} g/km (au-dessus du seuil Paris)` };
+      }
+      return { ok: null, txt: 'À vérifier', detail: `Hybride — CO₂ non renseigné (seuil gratuité Paris : ${seuil} g/km)` };
+    }
+    return { ok: false, txt: 'Payant à Paris', detail: 'Motorisation thermique — pas de gratuité à Paris' };
+  }
+  function parkingBadge(v) {
+    const p = parkingParis(v);
+    const col = p.ok === true ? ['#dcfce7', '#166534'] : p.ok === false ? ['#f1f5f9', '#475569'] : ['#fef3c7', '#92400e'];
+    return `<span title="${(p.detail || '').replace(/"/g, '&quot;')}" style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:${col[0]};color:${col[1]}">🅿️ ${p.txt}</span>`;
   }
   function renderDrawerPhoto(v) {
     const box = $('drawer-photo');
@@ -1756,7 +1796,7 @@
     $('drawer-body').innerHTML = `
       <div class="flex justify-between items-start">
         <div class="flex flex-wrap gap-1"><span data-df="statut" data-dt="select">${FP.statutBadge(v.statut)}</span> ${multiGroupePills(v)}</div>
-        <div class="text-xs text-slate-500 text-right">Mise en circulation<br><span class="font-semibold text-slate-700" data-df="dateMiseEnCirculation" data-dt="date">${FP.dateNum(v.dateMiseEnCirculation)}</span></div>
+        <div class="text-xs text-slate-500 text-right">Mise en circulation<br><span class="font-semibold text-slate-700" data-df="dateMiseEnCirculation" data-dt="date">${FP.dateNum(v.dateMiseEnCirculation)}</span><br>${parkingBadge(v)}</div>
       </div>
 
       <div class="grid grid-cols-2 gap-3">
