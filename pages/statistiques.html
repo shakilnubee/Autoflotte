@@ -330,11 +330,19 @@
     const set = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
     if (!vs.length) { set('kpi-conf-ok', '—'); return; }
     const IG = (window.FP && FP.ignore) ? FP.ignore : { has: () => false, countPrefix: () => 0 };
+    // Assurance : le champ « assurance » du véhicule N'EST PAS la seule source.
+    // Un véhicule est assuré s'il a une PRIME enregistrée (settings.assurancePrimes, ex. Tucson via l'état de parc)
+    // ou s'il a été marqué « sans prime à ignorer » (settings.assuranceIgnore) — même logique que l'onglet Contrats.
+    const _s = (window.FP && FP.settings && FP.settings.get) ? FP.settings.get() : {};
+    const nPl = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const primeKeys = new Set(Object.keys(_s.assurancePrimes || {}).map(nPl));
+    const assurIgnore = new Set((Array.isArray(_s.assuranceIgnore) ? _s.assuranceIgnore : []).map(nPl));
     let ok = 0, ctKO = 0, assurKO = 0; const nonConf = [];
     vs.forEach(v => {
       const ctVal = (v.prochainCT && v.prochainCT !== '—') ? FP.joursRestants(v.prochainCT) : null;
       const ctOk = ctVal !== null && ctVal >= 0;
-      const assurOk = v.assurance && String(v.assurance).trim() && v.assurance !== '—';
+      const pl = nPl(v.immat);
+      const assurOk = (v.assurance && String(v.assurance).trim() && v.assurance !== '—') || primeKeys.has(pl) || assurIgnore.has(pl);
       // « Ignorer » : un critère marqué ignoré ne compte plus comme non conforme
       const ctBad = !ctOk && !IG.has('conf:ct:' + v.id);
       const assurBad = !assurOk && !IG.has('conf:assur:' + v.id);
