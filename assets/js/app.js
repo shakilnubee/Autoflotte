@@ -669,6 +669,18 @@ FP.darkMode = {
   toggle() { this.set(!this.get()); return this.get(); },
 };
 
+// « Ignorer » réutilisable (toute la plateforme) : masque une info manquante / une alerte
+// pour qu'elle ne compte plus (ex. conformité, CO₂ à compléter…). Clé libre (ex. 'conf:ct:<id>').
+// Mémorisé PAR SOCIÉTÉ dans les réglages (settings.ignores) ; get() conserve la clé automatiquement.
+FP.ignore = {
+  _all() { try { return FP.settings.get().ignores || {}; } catch (e) { return {}; } },
+  has(key) { return !!this._all()[key]; },
+  set(key, on) { try { const s = FP.settings.get(); s.ignores = s.ignores || {}; if (on) s.ignores[key] = true; else delete s.ignores[key]; FP.settings.save(s); } catch (e) {} },
+  toggle(key) { this.set(key, !this.has(key)); return this.has(key); },
+  clearPrefix(prefix) { try { const s = FP.settings.get(); s.ignores = s.ignores || {}; Object.keys(s.ignores).forEach(k => { if (k.indexOf(prefix) === 0) delete s.ignores[k]; }); FP.settings.save(s); } catch (e) {} },
+  countPrefix(prefix) { return Object.keys(this._all()).filter(k => k.indexOf(prefix) === 0).length; },
+};
+
 // Sécurité : empêche « Retour arrière » de faire « page précédente » (et de perdre une saisie)
 // quand le focus n'est pas dans un champ éditable.
 // Normalisation pour la recherche : minuscules + SANS accents (taper « jeremy » trouve « Jérémy »).

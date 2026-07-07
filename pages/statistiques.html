@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260707h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260707i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260707h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260707i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260707h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260707i">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -259,10 +259,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260707h"></script>
-<script src="../assets/js/supabase-client.js?v=20260707h"></script>
-<script src="../assets/js/data.js?v=20260707h"></script>
-<script src="../assets/js/app.js?v=20260707h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260707i"></script>
+<script src="../assets/js/supabase-client.js?v=20260707i"></script>
+<script src="../assets/js/data.js?v=20260707i"></script>
+<script src="../assets/js/app.js?v=20260707i"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -329,15 +329,19 @@
     });
     const set = (id, txt) => { const el = $(id); if (el) el.textContent = txt; };
     if (!vs.length) { set('kpi-conf-ok', '—'); return; }
+    const IG = (window.FP && FP.ignore) ? FP.ignore : { has: () => false, countPrefix: () => 0 };
     let ok = 0, ctKO = 0, assurKO = 0; const nonConf = [];
     vs.forEach(v => {
       const ctVal = (v.prochainCT && v.prochainCT !== '—') ? FP.joursRestants(v.prochainCT) : null;
       const ctOk = ctVal !== null && ctVal >= 0;
       const assurOk = v.assurance && String(v.assurance).trim() && v.assurance !== '—';
+      // « Ignorer » : un critère marqué ignoré ne compte plus comme non conforme
+      const ctBad = !ctOk && !IG.has('conf:ct:' + v.id);
+      const assurBad = !assurOk && !IG.has('conf:assur:' + v.id);
       const raisons = [];
-      if (!ctOk) { ctKO++; raisons.push(ctVal === null ? 'CT non renseigné' : 'CT dépassé'); }
-      if (!assurOk) { assurKO++; raisons.push('assurance manquante'); }
-      if (ctOk && assurOk) ok++; else nonConf.push({ v, raisons });
+      if (ctBad) { ctKO++; raisons.push(ctVal === null ? 'CT non renseigné' : 'CT dépassé'); }
+      if (assurBad) { assurKO++; raisons.push('assurance manquante'); }
+      if (!ctBad && !assurBad) ok++; else nonConf.push({ v, raisons });
     });
     const pct = Math.round(ok / vs.length * 100);
     set('kpi-conf-ok', pct + ' %');
@@ -348,15 +352,35 @@
     if (donut && FP.donutHTML) { donut.innerHTML = FP.donutHTML(pct, { size: 108, color: pct >= 90 ? '#16a34a' : (pct >= 70 ? '#F59E0B' : '#DC2626'), label: pct + '%' }); }
     const list = $('conf-list');
     if (list) {
+      const nbIgnores = IG.countPrefix('conf:');
+      const shown = confExpanded ? nonConf : nonConf.slice(0, 8);
+      const rows = shown.map(x => {
+        const crits = [];
+        if (x.raisons.some(r => r.indexOf('CT') === 0)) crits.push('ct');
+        if (x.raisons.some(r => r.indexOf('assurance') === 0)) crits.push('assur');
+        return `<div class="flex justify-between items-center gap-2 py-1 border-b border-slate-100 hover:bg-slate-50 rounded px-1">
+           <a href="vehicules.html?veh=${encodeURIComponent(x.v.id)}" class="flex-1 min-w-0 flex justify-between items-center gap-2">
+             <span class="font-mono font-semibold text-slate-700">${(x.v.immat || '—')}</span>
+             <span class="text-xs text-right" style="color:#b45309">${x.raisons.join(' · ')}</span>
+           </a>
+           <button type="button" class="text-xs text-slate-400 hover:text-slate-700 flex-shrink-0" data-conf-ign="${encodeURIComponent(x.v.id)}" data-conf-crits="${crits.join(',')}" title="Ignorer (ne plus compter)">🙈 ignorer</button>
+         </div>`;
+      }).join('');
       list.innerHTML = nonConf.length
-        ? '<div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">À régulariser</div>' + nonConf.slice(0, 8).map(x =>
-            `<a href="vehicules.html?veh=${encodeURIComponent(x.v.id)}" class="flex justify-between items-center py-1 border-b border-slate-100 hover:bg-slate-50 rounded px-1">
-               <span class="font-mono font-semibold text-slate-700">${(x.v.immat || '—')}</span>
-               <span class="text-xs" style="color:#b45309">${x.raisons.join(' · ')}</span></a>`).join('')
-          + (nonConf.length > 8 ? `<div class="text-xs text-slate-400 mt-1">… et ${nonConf.length - 8} autre(s).</div>` : '')
-        : '<div class="text-sm text-emerald-600">✓ Toute la flotte en service est en règle.</div>';
+        ? '<div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">À régulariser</div>' + rows
+          + (nonConf.length > 8 ? `<button type="button" id="conf-toggle" class="text-xs mt-1" style="color:var(--fp-accent);background:none;border:none;cursor:pointer">${confExpanded ? '▲ Réduire' : '▼ Voir les ' + (nonConf.length - 8) + ' autre(s)'}</button>` : '')
+          + (nbIgnores ? `<div class="text-xs text-slate-400 mt-2">${nbIgnores} info(s) ignorée(s) · <button type="button" id="conf-restore" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline">tout réafficher</button></div>` : '')
+        : '<div class="text-sm text-emerald-600">✓ Toute la flotte en service est en règle.'
+          + (nbIgnores ? ` <button type="button" id="conf-restore" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline;font-size:12px">réafficher ${nbIgnores} ignorée(s)</button>` : '') + '</div>';
     }
   }
+  let confExpanded = false;
+  { const cl = $('conf-list'); if (cl) cl.addEventListener('click', (e) => {
+      const ign = e.target.closest('[data-conf-ign]');
+      if (ign && window.FP && FP.ignore) { e.preventDefault(); const id = decodeURIComponent(ign.dataset.confIgn); (ign.dataset.confCrits || '').split(',').filter(Boolean).forEach(c => FP.ignore.set('conf:' + c + ':' + id, true)); renderConformite(); return; }
+      if (e.target.closest('#conf-toggle')) { confExpanded = !confExpanded; renderConformite(); return; }
+      if (e.target.closest('#conf-restore') && window.FP && FP.ignore) { FP.ignore.clearPrefix('conf:'); confExpanded = false; renderConformite(); return; }
+    }); }
   rebuildAnneeFilter();
   updateTvsKpi();
   renderCO2();
