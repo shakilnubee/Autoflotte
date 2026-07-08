@@ -832,6 +832,9 @@
       'carte-identite': "🪪 Carte d'identité (→ conducteur)",
       'controle-technique': 'Contrôle technique',
       'facture': '💶 Facture (→ liste Factures)',
+      'facture-total': '⛽ Facture Total — carburant / péages (→ Total Fleet)',
+      'facture-ulys': '🛣️ Facture Ulys — péages (→ Ulys)',
+      'facture-entretien': '🔧 Facture entretien / réparation (→ Factures)',
       'sinistre': '🛡️ Sinistre (→ Sinistres)',
       'pv': 'PV (Procès-verbal)',
       'contrat': 'Contrat leasing/location',
@@ -841,6 +844,9 @@
     // Pour chaque type : cible (conducteur/vehicule/facture) + champs à afficher.
     const DOC_DEFS = {
       'facture':            { target: 'facture',    fields: ['date', 'km', 'amt'] },
+      'facture-total':      { target: 'facture',    fields: ['date', 'km', 'amt'] },
+      'facture-ulys':       { target: 'facture',    fields: ['date', 'amt'] },
+      'facture-entretien':  { target: 'facture',    fields: ['date', 'km', 'amt'] },
       'sinistre':           { target: 'facture',    fields: ['date', 'amt'] },
       'controle-technique': { target: 'vehicule',   fields: ['date', 'km'] },
       'carte-grise':        { target: 'vehicule',   fields: ['date'] },
@@ -853,6 +859,16 @@
       'autre':              { target: 'vehicule',   fields: ['date'] },
     };
     const docDef = t => DOC_DEFS[t] || DOC_DEFS['autre'];
+    // Sous-types de facture → catégorie stockée dans `factures.type` (= ce qui range la facture dans
+    // le bon onglet de la page Factures) + fournisseur par défaut. 'facture' = catégorie libre (détectée).
+    // Total Fleet = type carburant/péage ; Ulys = type 'ulys' ; le reste tombe dans la liste Factures.
+    const FACTURE_TYPES = {
+      'facture':           { cat: null,          dest: 'liste Factures',      page: 'factures.html' },
+      'facture-total':     { cat: 'carburant',   four: 'TotalEnergies', dest: 'Total Fleet',  page: 'factures.html?tab=total' },
+      'facture-ulys':      { cat: 'ulys',        four: 'Ulys',          dest: 'Ulys',         page: 'factures.html?tab=ulys' },
+      'facture-entretien': { cat: 'entretien',   dest: 'liste Factures',      page: 'factures.html' },
+    };
+    const isFactureType = t => Object.prototype.hasOwnProperty.call(FACTURE_TYPES, t);
     const $ = id => document.getElementById(id);
     const btn = $('btn-scan-doc');
     if (!btn) return;
@@ -935,6 +951,12 @@
             text = await FP.ocr.fileToText(files[i]);
             det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
           } catch (err) { console.error('[scan OCR]', err); }
+        }
+        // Affine le type facture selon le fournisseur → pré-route vers le bon onglet (Total Fleet / Ulys)
+        if (det.type === 'facture' || det.type === 'autre') {
+          const hay = `${det.fournisseur || ''} ${files[i].name || ''} ${text || ''} ${(ia && ia.description) || ''}`.toLowerCase();
+          if (/\bulys\b|vinci\s*autoroute|autoroutes?\s+du\s+sud|\basf\b|cofiroute|escota|sanef|aprr|\barea\b/.test(hay)) det.type = 'facture-ulys';
+          else if (/total\s*energies|totalenergies|total\s*fleet|total\s*card|totalcard/.test(hay)) det.type = 'facture-total';
         }
         // Détection du conducteur (nom de fichier + texte OCR + nom lu par l'IA) pour les permis/CI
         det.conducteur = detectConducteur(files[i].name, text + ' ' + ((ia && ia.personne) || '') + ' ' + ((ia && ia.description) || ''));
@@ -1036,7 +1058,7 @@
       setBody(`<div style="font-size:13px;color:#475569;margin-bottom:10px"><b>${items.length}</b> document(s) lu(s). Vérifiez le type et la cible (pré-remplis), puis enregistrez.</div>
         <div style="max-height:46vh;overflow:auto;margin:0 -2px;padding:0 2px">${rows}</div>
         <button id="scan-save-all" class="btn btn-dark text-sm w-full justify-center" style="margin-top:14px"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer ${items.length} document(s)</button>
-        <p style="font-size:11px;color:#94A3B8;margin-top:8px">Chaque fichier est stocké en ligne. <b>Permis</b> → rangé dans la fiche du conducteur ; les autres → fiche du véhicule. CT → met à jour le prochain CT ; un kilométrage plus récent met à jour la fiche.</p>`);
+        <p style="font-size:11px;color:#94A3B8;margin-top:8px">Chaque fichier est stocké en ligne. <b>Permis / carte d'identité</b> → fiche conducteur ; <b>factures</b> → onglet Factures correspondant (Total Fleet, Ulys, liste) ; <b>sinistre</b> → Sinistres ; le reste (carte grise, CT, assurance…) → Documents de la fiche véhicule. CT → met à jour le prochain CT ; un kilométrage plus récent met à jour la fiche.</p>`);
       // Changer le type recompose les champs (véhicule ↔ conducteur) et la pastille
       items.forEach((it, i) => {
         const sel = $('b-type-' + i);
@@ -1086,7 +1108,9 @@
         }
         return r;
       });
-      const missVeh = rows.filter(r => r.target !== 'conducteur' && !r.vehId).length;
+      // Véhicule obligatoire seulement pour les DOCUMENTS de fiche véhicule (CT, carte grise…).
+      // Les factures (surtout Total Fleet / Ulys, qui couvrent toute la flotte) : véhicule facultatif.
+      const missVeh = rows.filter(r => r.target === 'vehicule' && !r.vehId).length;
       const missCond = rows.filter(r => r.target === 'conducteur' && !r.condKey).length;
       const missNum = rows.filter(r => { const nf = docDef(r.type).numField; return nf && !((r[nf] || '').toString().trim()); }).length;
       if (missVeh) { alert(missVeh + ' document(s) sans véhicule choisi. Sélectionnez un véhicule pour chacun.'); return; }
@@ -1141,15 +1165,17 @@
           const veh = (window.FP_DATA.vehicules || []).find(v => v.id === r.vehId);
           const url = await FP.uploadScan(r.file, 'documents');
 
-          if (r.type === 'facture' || r.type === 'sinistre') {
-            // → table FACTURES (Facture → liste Factures ; Sinistre → page Sinistres)
+          if (isFactureType(r.type) || r.type === 'sinistre') {
+            // → table FACTURES. La catégorie (`type`) range la facture dans le bon onglet :
+            //   Total Fleet (carburant/péage) · Ulys (péages) · sinon liste Factures.
             const isSin = r.type === 'sinistre';
-            const cat = isSin ? 'sinistre' : ((r.det && r.det.factureCategorie) || 'autre');
+            const routing = FACTURE_TYPES[r.type] || {};
             const det = r.det || {};
+            const cat = isSin ? 'sinistre' : (routing.cat || det.factureCategorie || 'autre');
             const fact = {
               id: nextFactId(), date: r.date || null,
               vehiculeImmat: veh ? veh.immat : null,
-              fournisseur: det.fournisseur || null,
+              fournisseur: det.fournisseur || routing.four || null,
               numeroFacture: det.numeroFacture || null,
               description: r.file.name || (isSin ? 'Sinistre scanné' : 'Facture scannée'),
               type: cat,
@@ -1176,8 +1202,12 @@
               if (/pneu/i.test(maintTxt) && r.date && r.date <= today && (!veh.dateChangementPneus || r.date > veh.dateChangementPneus)) { vUpd.dateChangementPneus = r.date; bits.push('pneus'); }
               if (Object.keys(vUpd).length) { await FP.persist.update('vehicules', veh.id, vUpd); Object.assign(veh, vUpd); majMsg = ` · fiche maj (${bits.join(', ')})`; }
             }
-            let line = `<b>${veh ? veh.immat : ''}</b> — ${isSin ? 'Sinistre' : 'Facture'}${Number.isFinite(r.amt) ? ' ' + FP.euro(r.amt) : ' (montant à compléter)'} → ${isSin ? 'Sinistres (en attente de remboursement)' : 'liste Factures'}` + majMsg;
-            done.push('• ' + line + openLink('pages/' + (isSin ? 'sinistres.html' : 'factures.html'))); okN++;
+            const dest = isSin ? 'Sinistres (en attente de remboursement)' : (routing.dest || 'liste Factures');
+            const page = isSin ? 'sinistres.html' : (routing.page || 'factures.html');
+            const cible = veh ? `<b>${veh.immat}</b> — ` : '';
+            let line = `${cible}${isSin ? 'Sinistre' : 'Facture'}${Number.isFinite(r.amt) ? ' ' + FP.euro(r.amt) : ' (montant à compléter)'} → ${dest}` + majMsg;
+            if (r.type === 'facture-ulys') line += ` · <span style="color:#94A3B8">détail par conducteur : utilise l'import Ulys dédié</span>`;
+            done.push('• ' + line + openLink('pages/' + page)); okN++;
           } else {
             // → DOCUMENTS de la fiche véhicule
             const label = (TYPE_LABELS[r.type] || 'Document') + (r.date ? ' ' + r.date.slice(0, 4) : '');
