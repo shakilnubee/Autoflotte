@@ -435,7 +435,7 @@
           </span>
           <span class="flex-1">
             <span class="block text-sm font-semibold text-slate-800">Importer une ou plusieurs factures Ulys (PDF)</span>
-            <span class="block text-xs text-slate-500">Lecture automatique : n° de facture, montants (HT / TVA / TTC) et détection des collaborateurs. Aperçu avant validation.</span>
+            <span class="block text-xs text-slate-500">Lecture automatique : n° de facture, montants (HT / TVA / TTC) ET le total de péage par collaborateur. Aperçu avant validation.</span>
           </span>
         </button>
         <div id="uls-import-status" class="hidden mt-3 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
@@ -2550,18 +2550,38 @@
         if (best){ tva = best.tv; ht = +(ttc - tva).toFixed(2); }
         else { ht = +(ttc / 1.2).toFixed(2); tva = +(ttc - ht).toFixed(2); }   // repli : tout à 20 %
       }
-      // --- Collaborateurs détectés ----------------------------------------
-      // Cette facture Ulys nomme chaque collaborateur dans le détail des péages, MAIS les colonnes
-      // (montant / km / nb trajets par personne) sont entremêlées à la lecture auto du PDF → non
-      // fiables. On remonte donc au moins QUI a roulé : les prénoms connus (conducteurs enregistrés)
-      // présents dans la facture. Le montant par personne se règle ensuite (cf. note d'import).
+      // --- Détail par collaborateur (TTC par badge) -----------------------
+      // Chaque badge Ulys = un collaborateur. Son total est imprimé « <montant> € TTC »
+      // (ex. « 116,20 € TTC »). Les totaux sortent dans l'ordre des badges. Le PDF imprime aussi
+      // un GRAND total (= somme des badges) qu'on retire. Les prénoms connus (conducteurs
+      // enregistrés) apparaissent dans le MÊME ordre → on associe prénom[i] ↔ total[i].
+      // Garde-fou : on ne rattache les montants QUE si (nb prénoms == nb totaux) ; sinon on se
+      // contente de lister les collaborateurs détectés, sans jamais inventer de chiffre.
       const known = ulsKnownNames();
+      const badgeTot = [];
+      { const rxT = /(\d[\d  ]*,\d{2})\s*€\s*TTC/g; let m; while ((m = rxT.exec(t))) badgeTot.push(ulsNum(m[1])); }
+      const nameOrder = [];
+      if (known.size){
+        const alt = [...known].map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+        const rxN = new RegExp('\\b(' + alt + ')\\b', 'g');
+        const seenN = new Set(); let m;
+        while ((m = rxN.exec(t))){ const k = ulsSlug(m[1]); if (k && !seenN.has(k)){ seenN.add(k); nameOrder.push(m[1]); } }
+      }
+      // retire le grand total (une valeur == somme de toutes les autres)
+      let tots = badgeTot.slice();
+      if (tots.length > 1){
+        const S = tots.reduce((a,b)=>a+b,0);
+        const gi = tots.findIndex(v => Math.abs(v - (S - v)) <= 0.02);
+        if (gi >= 0 && (tots.length === nameOrder.length + 1 || tots.length > nameOrder.length)) tots.splice(gi,1);
+      }
       const conso = [];
-      const seen = new Set();
-      for (const nm of known){
-        const rx = new RegExp('\\b' + nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
-        const key = ulsSlug(nm);
-        if (rx.test(t) && key && !seen.has(key)){ seen.add(key); conso.push({ conducteur: nm, nb: null, ttc: null, km: null }); }
+      if (tots.length && tots.length === nameOrder.length){
+        // rattachement fiable : prénom ↔ total, dans l'ordre des badges
+        for (let i=0;i<tots.length;i++) conso.push({ conducteur: nameOrder[i], nb: null, ttc: tots[i], km: null });
+      } else {
+        // repli : on liste au moins les collaborateurs détectés (sans montant, pour ne pas inventer)
+        const seen = new Set();
+        for (const nm of nameOrder){ const k = ulsSlug(nm); if (!seen.has(k)){ seen.add(k); conso.push({ conducteur: nm, nb: null, ttc: null, km: null }); } }
       }
       return { numero, date, mois, ht, tva, ttc, conso };
     }
@@ -2587,16 +2607,29 @@
       _ulsPending = { fac, rows };
       const facLines = fac.map(p => `<tr><td style="font-family:monospace">${esc(p.numero)}</td><td>${p.date?FP.date(p.date):'—'}</td><td>${esc(moisLabel(p.mois))}</td><td style="text-align:right">${p.ht!=null?FP.euro(p.ht):'—'}</td><td style="text-align:right">${p.tva!=null?FP.euro(p.tva):'—'}</td><td style="text-align:right;font-weight:700">${FP.euro(p.ttc)}</td></tr>`).join('');
       const collabs = [...new Set(rows.map(c => c.conducteur).filter(Boolean))];
-      const collabChips = collabs.length
-        ? collabs.map(n => `<span class="inline-block text-xs font-semibold px-2.5 py-1 rounded-full" style="background:#EEF2F6;color:#334155;margin:2px">${esc(n)}</span>`).join('')
-        : '<span class="text-sm text-slate-400">Aucun collaborateur reconnu (vérifie que leurs prénoms figurent dans l\'onglet Conducteurs).</span>';
+      const withTtc = rows.filter(c => c.ttc != null);
+      const sumTtc = withTtc.reduce((s,c) => s + (Number(c.ttc)||0), 0);
+      // Bloc détail : tableau avec montants si dispo, sinon puces (noms seuls)
+      let detailBlock;
+      if (withTtc.length){
+        const consoLines = rows.map(c => `<tr><td>${esc(c.conducteur)}</td><td>${esc(moisLabel(c.mois))}</td><td style="text-align:right">${c.nb!=null?c.nb:'—'}</td><td style="text-align:right">${c.km!=null?FP.num(c.km)+' km':'—'}</td><td style="text-align:right;font-weight:700">${c.ttc!=null?FP.euro(c.ttc):'—'}</td></tr>`).join('');
+        detailBlock =
+          '<div class="text-sm font-semibold mt-4 mb-2">Détail par collaborateur : '+withTtc.length+' · total '+FP.euro(sumTtc)+'</div>'
+          + '<div class="scrollable" style="max-height:260px"><table class="fp-table" style="font-size:13px"><thead><tr><th>Collaborateur</th><th>Période</th><th style="text-align:right">Trajets</th><th style="text-align:right">Km</th><th style="text-align:right">TTC</th></tr></thead><tbody>'+consoLines+'</tbody></table></div>';
+      } else {
+        const collabChips = collabs.length
+          ? collabs.map(n => `<span class="inline-block text-xs font-semibold px-2.5 py-1 rounded-full" style="background:#EEF2F6;color:#334155;margin:2px">${esc(n)}</span>`).join('')
+          : '<span class="text-sm text-slate-400">Aucun collaborateur reconnu (vérifie que leurs prénoms figurent dans l\'onglet Conducteurs).</span>';
+        detailBlock =
+          '<div class="text-sm font-semibold mt-4 mb-1">Collaborateurs détectés : '+collabs.length+'</div>'
+          + '<div class="mb-1">'+collabChips+'</div>'
+          + '<div class="text-xs text-slate-500 mb-2" style="line-height:1.5">ℹ️ Les prénoms ont été détectés mais le <b>montant par collaborateur</b> n\'a pas pu être rattaché de façon fiable sur cette facture (nombre de prénoms ≠ nombre de totaux). On n\'invente pas de chiffre. Le total de la facture, lui, est correct.</div>';
+      }
       $('uls-import-preview').classList.remove('hidden');
       $('uls-import-preview').innerHTML =
         '<div class="text-sm font-semibold mb-2">'+fac.length+' facture(s) Ulys</div>'
         + '<div class="scrollable" style="max-height:170px"><table class="fp-table" style="font-size:13px"><thead><tr><th>N°</th><th>Date</th><th>Période</th><th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">TTC</th></tr></thead><tbody>'+facLines+'</tbody></table></div>'
-        + '<div class="text-sm font-semibold mt-4 mb-1">Collaborateurs détectés : '+collabs.length+'</div>'
-        + '<div class="mb-1">'+collabChips+'</div>'
-        + '<div class="text-xs text-slate-500 mb-2" style="line-height:1.5">ℹ️ Sur ce format de facture Ulys, le <b>montant et les km par collaborateur</b> ne sont pas lisibles automatiquement (les colonnes du détail sont entremêlées à la lecture du PDF). On détecte donc uniquement <b>qui a roulé</b>. Le <b>total de la facture</b> (HT / TVA / TTC), lui, est correct.</div>'
+        + detailBlock
         + '<div class="flex gap-2 mt-3"><button type="button" class="btn btn-outline text-sm" id="uls-import-cancel">Annuler</button><button type="button" class="btn btn-dark text-sm" id="uls-import-confirm"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button></div>';
       ulsImpStatus('Vérifie l\'aperçu puis valide.', 'working');
       if (window.lucide) lucide.createIcons();
@@ -2690,11 +2723,11 @@
       }
       empty.classList.toggle('hidden', rows.length > 0);
       if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation.';
-      tbody.innerHTML = rows.map(c => `<tr><td>${esc(c.conducteur || '—')}</td><td style="text-align:right">${c.nb_trajets || 0}</td><td style="text-align:right">${FP.num(c.km || 0)} km</td><td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc || 0)}</td></tr>`).join('');
+      tbody.innerHTML = rows.map(c => `<tr><td>${esc(c.conducteur || '—')}</td><td style="text-align:right">${c.nb_trajets ? c.nb_trajets : '—'}</td><td style="text-align:right">${c.km ? FP.num(c.km) + ' km' : '—'}</td><td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc || 0)}</td></tr>`).join('');
       const tot = rows.reduce((s,c) => s + (Number(c.total_ttc)||0), 0);
       const totKm = rows.reduce((s,c) => s + (Number(c.km)||0), 0);
       const lbl = mois === 'all' ? 'Toutes les périodes' : moisLabel(mois);
-      tfoot.innerHTML = rows.length ? `<tr style="font-weight:700;border-top:2px solid var(--fp-border)"><td>Total ${lbl}</td><td></td><td style="text-align:right">${FP.num(totKm)} km</td><td style="text-align:right">${FP.euro(tot)}</td></tr>` : '';
+      tfoot.innerHTML = rows.length ? `<tr style="font-weight:700;border-top:2px solid var(--fp-border)"><td>Total ${lbl}</td><td></td><td style="text-align:right">${totKm ? FP.num(totKm) + ' km' : '—'}</td><td style="text-align:right">${FP.euro(tot)}</td></tr>` : '';
     }
     $('uls-conso-mois').addEventListener('change', renderConso);
 
