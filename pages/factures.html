@@ -1169,7 +1169,13 @@
     if (parsed.vehiculeImmat) set('fa-immat', String(parsed.vehiculeImmat).toUpperCase(), 'véhicule');
     set('fa-km', parsed.km, 'km');
     if (fromIA){ set('fa-fournisseur', parsed.fournisseur, 'fournisseur'); set('fa-desc', parsed.description, 'description'); }
-    if (filled.length) faStatus(`<b>✓ ${fromIA ? 'Lecture IA' : 'Lecture'} — ${filled.length} champ(s)</b> : ${filled.join(', ')}.${fromIA ? '' : '<br>Complétez le fournisseur et le type.'}`, 'ok');
+    // Contrôle de cohérence HT + TVA = TTC (à vérifier sur TOUTE facture) : on alerte si l'écart
+    // dépasse 2 centimes, pour ne jamais valider des montants incohérents en silence.
+    const _ht = num($('fa-ht').value), _tva = num($('fa-tva').value), _ttc = num($('fa-ttc').value);
+    let _warn = '';
+    if (_ht != null && _tva != null && _ttc != null && Math.abs((_ht + _tva) - _ttc) > 0.02)
+      _warn = `<br>⚠️ <b>À vérifier</b> : HT (${FP.euroPrecis(_ht)}) + TVA (${FP.euroPrecis(_tva)}) = ${FP.euroPrecis(_ht + _tva)} ≠ TTC (${FP.euroPrecis(_ttc)}).`;
+    if (filled.length) faStatus(`<b>✓ ${fromIA ? 'Lecture IA' : 'Lecture'} — ${filled.length} champ(s)</b> : ${filled.join(', ')}.${fromIA ? '' : '<br>Complétez le fournisseur et le type.'}${_warn}`, _warn ? 'error' : 'ok');
     else faStatus("Lecture terminée, mais rien n'a pu être détecté. Saisissez les montants à la main (surtout le TTC).", 'error');
   }
 
