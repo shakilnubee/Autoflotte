@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260707l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260708a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260707l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260708a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260707l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260708a">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -688,12 +688,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260707l"></script>
-<script src="../assets/js/supabase-client.js?v=20260707l"></script>
-<script src="../assets/js/data.js?v=20260707l"></script>
-<script src="../assets/js/fleet-docs.js?v=20260707l"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260707l"></script>
-<script src="../assets/js/app.js?v=20260707l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260708a"></script>
+<script src="../assets/js/supabase-client.js?v=20260708a"></script>
+<script src="../assets/js/data.js?v=20260708a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260708a"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260708a"></script>
+<script src="../assets/js/app.js?v=20260708a"></script>
 <script>
   lucide.createIcons();
 
@@ -2239,6 +2239,8 @@
       if (updated) persistVehicleUpsert(updated, false);
     } else {
       const newV = { id: nextVehId(), ...payload };
+      // Anti-doublon : immatriculation déjà présente → on demande confirmation avant d'ajouter.
+      if (FP.dupe && !FP.dupe.confirmAdd('vehicules', newV, data.vehicules)) return;
       data.vehicules.push(newV);
       saveMasse(newV.id);
       closeModal();
@@ -3427,7 +3429,7 @@
 
     FP.history.commit();
     $('cg-batch-create').disabled = true;
-    let done = 0, failed = 0;
+    let done = 0, failed = 0, skipped = 0;
     for (let i = 0; i < valides.length; i++) {
       const p = valides[i].parsed;
       batchProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Création ${i + 1}/${valides.length} — ${p.immat}…</span>`, 'working');
@@ -3465,13 +3467,16 @@
       const masseVal = Number.isFinite(p.masse) ? p.masse : (twin ? (FP.settings.get().vehMasse || {})[twin.id] : null);
       if (masseVal) { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; s.vehMasse[newV.id] = masseVal; FP.settings.save(s); }
       if (cgUrl) newV.cgUrl = cgUrl;
+      // Anti-doublon : immatriculation déjà présente → on ne recrée pas le véhicule.
+      if (FP.dupe && FP.dupe.find('vehicules', newV, data.vehicules)) { skipped++; continue; }
       data.vehicules.push(newV);
       const ok = await persistVehicleUpsert(newV, true);
       if (ok) done++; else { failed++; }
     }
     renderKPIs(); renderTabBar(); renderTable();
-    if (failed) batchProgress(`<b>${done} véhicule(s) créé(s)</b>, mais ${failed} n'ont pas pu être enregistrés en base (voir console). Ils restent visibles localement.`, 'error');
-    else { batchProgress(`<b>✓ ${done} véhicule(s) créé(s) et enregistré(s).</b>`, 'ok'); setTimeout(closeBatchModal, 1200); }
+    const skipMsg = skipped ? ` · ${skipped} doublon(s) ignoré(s) (immatriculation déjà présente)` : '';
+    if (failed) batchProgress(`<b>${done} véhicule(s) créé(s)</b>, mais ${failed} n'ont pas pu être enregistrés en base (voir console). Ils restent visibles localement.${skipMsg}`, 'error');
+    else { batchProgress(`<b>✓ ${done} véhicule(s) créé(s) et enregistré(s).</b>${skipMsg}`, 'ok'); setTimeout(closeBatchModal, 1200); }
   }
 
   // Délégation : édition des champs + cases à cocher dans le tableau d'import en lot

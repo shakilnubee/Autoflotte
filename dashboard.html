@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260707l">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260708a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260707l"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260708a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260707l">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260708a">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -359,10 +359,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260707l"></script>
-<script src="assets/js/supabase-client.js?v=20260707l"></script>
-<script src="assets/js/data.js?v=20260707l"></script>
-<script src="assets/js/app.js?v=20260707l"></script>
+<script src="assets/js/vendor/supabase.js?v=20260708a"></script>
+<script src="assets/js/supabase-client.js?v=20260708a"></script>
+<script src="assets/js/data.js?v=20260708a"></script>
+<script src="assets/js/app.js?v=20260708a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -869,23 +869,18 @@
       'facture-entretien': { cat: 'entretien',   dest: 'liste Factures',      page: 'factures.html' },
     };
     const isFactureType = t => Object.prototype.hasOwnProperty.call(FACTURE_TYPES, t);
-    // Anti-doublon factures : normalisation + recherche d'une facture déjà présente.
-    const normDup = s => (s == null ? '' : String(s)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+    // Anti-doublon factures : délègue au helper centralisé FP.dupe (règle durcie : n° + montant,
+    // sinon fournisseur + TTC + date). Construit un enregistrement candidat depuis la ligne scannée.
     function findDuplicateFacture(r) {
       const routing = FACTURE_TYPES[r.type] || {};
       const det = r.det || {};
-      const num = normDup(det.numeroFacture);
-      const four = normDup(det.fournisseur || routing.four);
-      const ttc = Number.isFinite(r.amt) ? +(+r.amt).toFixed(2) : null;
-      const date = r.date || null;
-      return (window.FP_DATA.factures || []).find(f => {
-        // 1) même N° de facture = doublon certain (le plus fiable)
-        if (num && num.length >= 4 && normDup(f.numeroFacture) === num) return true;
-        // 2) sinon : même fournisseur + même montant TTC + même date
-        if (ttc != null && date && four && f.montantTTC != null &&
-            Math.abs((+f.montantTTC) - ttc) < 0.01 && f.date === date && normDup(f.fournisseur) === four) return true;
-        return false;
-      });
+      const cand = {
+        numeroFacture: det.numeroFacture || null,
+        fournisseur: det.fournisseur || routing.four || null,
+        montantTTC: Number.isFinite(r.amt) ? r.amt : (Number.isFinite(det.montantTTC) ? det.montantTTC : null),
+        date: r.date || null,
+      };
+      return (window.FP && FP.dupe) ? FP.dupe.find('factures', cand, window.FP_DATA.factures || []) : null;
     }
     const $ = id => document.getElementById(id);
     const btn = $('btn-scan-doc');

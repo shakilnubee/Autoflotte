@@ -2182,6 +2182,81 @@ FP.ocr = {
   },
 };
 
+// ================= DÉTECTION DE DOUBLONS (toute la plateforme) =================
+// Un helper unique pour éviter d'ajouter deux fois le même élément (factures, amendes,
+// véhicules, conducteurs, emprunts, sinistres). Chaque table a sa règle d'identité.
+//   • FP.dupe.find(table, rec, list)  → l'enregistrement existant en doublon, ou null.
+//   • FP.dupe.confirmAdd(table, rec, list) → true si on peut ajouter (pas de doublon, ou
+//     l'utilisateur confirme malgré tout). Sert de garde AVANT chaque insertion.
+FP.dupe = {
+  _n(s){ return (s == null ? '' : String(s)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ''); },
+  _num(v){ if (v == null || v === '') return null; const n = parseFloat(String(v).replace(/\s/g, '').replace(',', '.')); return isNaN(n) ? null : n; },
+  _amtEq(a, b){ const x = this._num(a), y = this._num(b); return x != null && y != null && Math.abs(x - y) < 0.01; },
+  _same(a, b){ return a && b && a === b; },
+  find(table, rec, list){
+    if (!rec) return null;
+    list = list || [];
+    const n = (s) => this._n(s);
+    const notSelf = (o) => o !== rec && !(rec.id != null && o.id === rec.id);
+    switch (table){
+      case 'factures': {
+        // Doublon SÛR = même n° de facture ET même montant TTC. À défaut de n°, on retombe sur
+        // fournisseur + TTC + date. (Durci sur demande : le n° seul ne suffit pas, on exige le montant.)
+        const num = n(rec.numeroFacture), ttc = this._num(rec.montantTTC), four = n(rec.fournisseur), date = rec.date || null;
+        return list.find(f => {
+          if (!notSelf(f)) return false;
+          if (num && num.length >= 4 && n(f.numeroFacture) === num){
+            // même n° : si les deux ont un TTC, il doit coïncider ; sinon on considère doublon (même n°)
+            if (ttc != null && f.montantTTC != null) return this._amtEq(f.montantTTC, ttc);
+            return true;
+          }
+          return ttc != null && date && four && this._amtEq(f.montantTTC, ttc) && this._same(f.date, date) && n(f.fournisseur) === four;
+        }) || null;
+      }
+      case 'amendes': {
+        // Même n° d'avis (+ montant si dispo), sinon prénom + date + montant.
+        const av = n(rec.numeroAvis), mt = this._num(rec.montant), pre = n(rec.prenom), date = rec.date || null;
+        return list.find(a => {
+          if (!notSelf(a)) return false;
+          if (av && av.length >= 4 && n(a.numeroAvis) === av){
+            if (mt != null && a.montant != null) return this._amtEq(a.montant, mt);
+            return true;
+          }
+          return pre && date && mt != null && n(a.prenom) === pre && this._same(a.date, date) && this._amtEq(a.montant, mt);
+        }) || null;
+      }
+      case 'vehicules': {
+        const im = n(rec.immat); if (!im) return null;
+        return list.find(v => notSelf(v) && n(v.immat) === im) || null;
+      }
+      case 'conducteurs': {
+        const key = n(rec.key), nom = n((rec.name || '') + ' ' + (rec.nom || ''));
+        return list.find(c => { if (!notSelf(c)) return false; if (key && n(c.key) === key) return true; return nom && nom.length >= 3 && n((c.name || '') + ' ' + (c.nom || '')) === nom; }) || null;
+      }
+      case 'emprunts': {
+        const veh = n(rec.vehicule || rec.vehiculeId || rec.immat);
+        const cond = n(rec.conducteur || rec.emprunteur);
+        const deb = rec.dateDebut || rec.debut || rec.dateEmprunt || rec.date || null;
+        if (!veh || !deb) return null;
+        return list.find(e => notSelf(e)
+          && n(e.vehicule || e.vehiculeId || e.immat) === veh
+          && n(e.conducteur || e.emprunteur) === cond
+          && this._same(e.dateDebut || e.debut || e.dateEmprunt || e.date, deb)) || null;
+      }
+      default: return null;
+    }
+  },
+  _label(table){ return { factures:'Une facture', amendes:'Une amende', vehicules:'Un véhicule', conducteurs:'Un conducteur', emprunts:'Un emprunt' }[table] || 'Un élément'; },
+  _tag(d){ return d.numeroFacture ? ' n° ' + d.numeroFacture : d.numeroAvis ? ' avis ' + d.numeroAvis : d.immat ? ' ' + d.immat : (d.name || d.prenom) ? ' ' + (d.name || d.prenom) : ''; },
+  // Garde AVANT insertion : renvoie false si l'utilisateur refuse d'ajouter un doublon.
+  confirmAdd(table, rec, list){
+    const d = this.find(table, rec, list);
+    if (!d) return true;
+    const extra = d.montantTTC != null ? ' · ' + FP.euro(d.montantTTC) : d.montant != null ? ' · ' + FP.euro(d.montant) : '';
+    return confirm(`⚠️ Doublon possible\n\n${this._label(table)} identique semble déjà exister (${this._tag(d).trim()}${extra}).\n\nL'ajouter quand même ?`);
+  },
+};
+
 // ---- Helpers factures : dates en toutes lettres (FR/IT/DE/NL/EN) + montants par libellé ----
 const _MONTHS = {
   janvier:1,fevrier:2,mars:3,avril:4,mai:5,juin:6,juillet:7,aout:8,septembre:9,octobre:10,novembre:11,decembre:12,
