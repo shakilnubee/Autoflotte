@@ -2708,7 +2708,17 @@
       const idx = (window.FP_DATA.factures || []).findIndex(x => x.id === f.id);
       if (idx >= 0) window.FP_DATA.factures.splice(idx, 1);
       try { await FP.persist.delete('factures', f.id); } catch (e) { console.error('[uls-del]', e); }
+      // Purge aussi le détail conso rattaché à cette facture (sinon conso orpheline → total faussé).
+      try {
+        const num = String(f.numeroFacture || '').trim();
+        if (num && Array.isArray(conso)){
+          const orphans = conso.filter(c => String(c.numeroFacture || '').trim() === num);
+          for (const c of orphans){ if (c.id){ try { await FP.persist.delete('ulys_conso', c.id); } catch (_){} } }
+          if (orphans.length) conso = conso.filter(c => !orphans.includes(c));
+        }
+      } catch (_){}
       render();
+      if (consoLoaded) renderConso();
     }
 
     $('uls-tbody').addEventListener('click', (e) => {
@@ -2731,20 +2741,27 @@
       const sel = $('uls-conso-mois'), tbody = $('uls-conso-tbody'), tfoot = $('uls-conso-tfoot');
       const empty = $('uls-conso-empty'), emptyMsg = $('uls-conso-empty-msg');
       if (conso === null) { sel.innerHTML = ''; tbody.innerHTML = ''; tfoot.innerHTML = ''; empty.classList.remove('hidden'); emptyMsg.textContent = 'Table ulys_conso absente — lance le script SQL fourni (supabase/ulys-conso-setup.sql).'; return; }
-      const moisList = [...new Set(conso.map(c => c.mois).filter(Boolean))].sort().reverse();
+      // ⚠️ Ne compter QUE la conso ADOSSÉE À UNE FACTURE Ulys réellement présente. Une conso orpheline
+      // (facture jamais importée, ou supprimée) fausserait le total → à ne PAS compter. On relie par le
+      // n° de facture ; à défaut (anciennes lignes sans n°), par le mois d'une facture Ulys existante.
+      const ulsFac = (window.FP_DATA.factures || []).filter(isUlys);
+      const facNums = new Set(ulsFac.map(f => String(f.numeroFacture || '').trim()).filter(Boolean));
+      const facMois = new Set(ulsFac.map(f => (f.date || '').slice(0,7)).filter(Boolean));
+      const backed = conso.filter(c => { const n = String(c.numeroFacture || '').trim(); return n ? facNums.has(n) : facMois.has(c.mois); });
+      const moisList = [...new Set(backed.map(c => c.mois).filter(Boolean))].sort().reverse();
       const filledKey = 'all,' + moisList.join(',');
       if (sel.dataset.filled !== filledKey) { sel.innerHTML = '<option value="all">Toutes les périodes</option>' + moisList.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join(''); sel.dataset.filled = filledKey; sel.value = 'all'; }
       const mois = sel.value || 'all';
       let rows;
       if (mois === 'all') {
         const byCond = {};
-        conso.forEach(c => { const k = c.conducteur || '—'; const a = (byCond[k] = byCond[k] || { conducteur:k, nb_trajets:0, km:0, total_ttc:0 }); a.nb_trajets += Number(c.nb_trajets)||0; a.km += Number(c.km)||0; a.total_ttc += Number(c.total_ttc)||0; });
+        backed.forEach(c => { const k = c.conducteur || '—'; const a = (byCond[k] = byCond[k] || { conducteur:k, nb_trajets:0, km:0, total_ttc:0 }); a.nb_trajets += Number(c.nb_trajets)||0; a.km += Number(c.km)||0; a.total_ttc += Number(c.total_ttc)||0; });
         rows = Object.values(byCond).sort((a,b) => b.total_ttc - a.total_ttc);
       } else {
-        rows = conso.filter(c => c.mois === mois).sort((a,b) => (Number(b.total_ttc)||0) - (Number(a.total_ttc)||0));
+        rows = backed.filter(c => c.mois === mois).sort((a,b) => (Number(b.total_ttc)||0) - (Number(a.total_ttc)||0));
       }
       empty.classList.toggle('hidden', rows.length > 0);
-      if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation.';
+      if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation (importe la facture Ulys correspondante).';
       tbody.innerHTML = rows.map(c => `<tr><td>${esc(c.conducteur || '—')}</td><td style="text-align:right">${c.nb_trajets ? c.nb_trajets : '—'}</td><td style="text-align:right">${c.km ? FP.num(c.km) + ' km' : '—'}</td><td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc || 0)}</td></tr>`).join('');
       const tot = rows.reduce((s,c) => s + (Number(c.total_ttc)||0), 0);
       const totKm = rows.reduce((s,c) => s + (Number(c.km)||0), 0);
@@ -2754,7 +2771,7 @@
     $('uls-conso-mois').addEventListener('change', renderConso);
 
     window.renderUlys = () => { render(); if (!consoLoaded) loadConso(); else renderConso(); };
-    document.addEventListener('fp:data-ready', () => { if (!$('view-ulys').classList.contains('hidden')) render(); });
+    document.addEventListener('fp:data-ready', () => { if (!$('view-ulys').classList.contains('hidden')){ render(); if (consoLoaded) renderConso(); } });
   })();
 
   // ===== Onglet FOURNISSEURS (voir + nettoyer les doublons) =====
