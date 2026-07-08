@@ -869,6 +869,24 @@
       'facture-entretien': { cat: 'entretien',   dest: 'liste Factures',      page: 'factures.html' },
     };
     const isFactureType = t => Object.prototype.hasOwnProperty.call(FACTURE_TYPES, t);
+    // Anti-doublon factures : normalisation + recherche d'une facture déjà présente.
+    const normDup = s => (s == null ? '' : String(s)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+    function findDuplicateFacture(r) {
+      const routing = FACTURE_TYPES[r.type] || {};
+      const det = r.det || {};
+      const num = normDup(det.numeroFacture);
+      const four = normDup(det.fournisseur || routing.four);
+      const ttc = Number.isFinite(r.amt) ? +(+r.amt).toFixed(2) : null;
+      const date = r.date || null;
+      return (window.FP_DATA.factures || []).find(f => {
+        // 1) même N° de facture = doublon certain (le plus fiable)
+        if (num && num.length >= 4 && normDup(f.numeroFacture) === num) return true;
+        // 2) sinon : même fournisseur + même montant TTC + même date
+        if (ttc != null && date && four && f.montantTTC != null &&
+            Math.abs((+f.montantTTC) - ttc) < 0.01 && f.date === date && normDup(f.fournisseur) === four) return true;
+        return false;
+      });
+    }
     const $ = id => document.getElementById(id);
     const btn = $('btn-scan-doc');
     if (!btn) return;
@@ -1161,6 +1179,15 @@
             const s = FP.settings.get(); s.condDocs = s.condDocs || {}; (s.condDocs[r.condKey] = s.condDocs[r.condKey] || []).push(doc); FP.settings.save(s);
             done.push(`• <b>${drv.name || r.condKey}${drv.nom ? ' ' + drv.nom : ''}</b> — ${label} → fiche conducteur` + openLink('pages/conducteurs.html?cond=' + encodeURIComponent(r.condKey))); okN++;
             continue;
+          }
+          // Anti-doublon : si une facture équivalente existe déjà, on ne la ré-importe pas (avant tout upload).
+          if (isFactureType(r.type)) {
+            const dup = findDuplicateFacture(r);
+            if (dup) {
+              const tag = dup.numeroFacture || dup.fournisseur || (dup.montantTTC != null ? FP.euro(dup.montantTTC) : '');
+              done.push(`• ⚠️ <b>${r.file.name}</b> — facture déjà présente${tag ? ' (' + tag + ')' : ''} → non ré-importée` + openLink('pages/factures.html'));
+              continue;
+            }
           }
           const veh = (window.FP_DATA.vehicules || []).find(v => v.id === r.vehId);
           const url = await FP.uploadScan(r.file, 'documents');
