@@ -2550,43 +2550,58 @@
         if (best){ tva = best.tv; ht = +(ttc - tva).toFixed(2); }
         else { ht = +(ttc / 1.2).toFixed(2); tva = +(ttc - ht).toFixed(2); }   // repli : tout à 20 %
       }
-      // --- Détail par collaborateur (TTC par badge) -----------------------
-      // Chaque badge Ulys = un collaborateur. Son total est imprimé « <montant> € TTC »
-      // (ex. « 116,20 € TTC »). Les totaux sortent dans l'ordre des badges. Le PDF imprime aussi
-      // un GRAND total (= somme des badges) qu'on retire. Les prénoms connus (conducteurs
-      // enregistrés) apparaissent dans le MÊME ordre → on associe prénom[i] ↔ total[i].
-      // Garde-fou : on ne rattache les montants QUE si (nb prénoms == nb totaux) ; sinon on se
-      // contente de lister les collaborateurs détectés, sans jamais inventer de chiffre.
-      const known = ulsKnownNames();
-      const badgeTot = [];
-      { const rxT = /(\d[\d  ]*,\d{2})\s*€\s*TTC/g; let m; while ((m = rxT.exec(t))) badgeTot.push(ulsNum(m[1])); }
-      const nameOrder = [];
-      if (known.size){
-        const alt = [...known].map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
-        const rxN = new RegExp('\\b(' + alt + ')\\b', 'g');
-        const seenN = new Set(); let m;
-        while ((m = rxN.exec(t))){ const k = ulsSlug(m[1]); if (k && !seenN.has(k)){ seenN.add(k); nameOrder.push(m[1]); } }
-      }
-      // retire le grand total (une valeur == somme de toutes les autres)
-      let tots = badgeTot.slice();
-      if (tots.length > 1){
-        const S = tots.reduce((a,b)=>a+b,0);
-        const gi = tots.findIndex(v => Math.abs(v - (S - v)) <= 0.02);
-        if (gi >= 0 && (tots.length === nameOrder.length + 1 || tots.length > nameOrder.length)) tots.splice(gi,1);
-      }
+      // --- Détail par collaborateur (ancré sur le N° de BADGE) ------------
+      // Texte reconstruit EN LIGNES par position (cf. ulysPdfToText) :
+      //   « Badge n° <id> <Nom> »
+      //   « Total Badge <id> <n> consommation(s) <ttc> € TTC <km> km »
+      // On rattache le prénom à son total PAR NUMÉRO DE BADGE (fiable — l'ordre des prénoms ne
+      // l'est PAS, colonnes inversées). Le « Total Contrat » (grand total) est ignoré (pas « Badge »).
+      const badgeSuffix = (x) => String(x).replace(/\D/g,'').slice(-5);
+      const nameByBadge = {};
+      { const rx = /Badge\s*n[°ºo]\s+([\d ]+\d)\s+([A-Za-zÀ-ÿ][^\n]*?)\s*$/gim; let m;
+        while ((m = rx.exec(t))){ const suf = badgeSuffix(m[1]); const nm = m[2].trim();
+          if (suf && nm && !nameByBadge[suf]) nameByBadge[suf] = nm; } }
       const conso = [];
-      if (tots.length && tots.length === nameOrder.length){
-        // rattachement fiable : prénom ↔ total, dans l'ordre des badges
-        for (let i=0;i<tots.length;i++) conso.push({ conducteur: nameOrder[i], nb: null, ttc: tots[i], km: null });
-      } else {
-        // repli : on liste au moins les collaborateurs détectés (sans montant, pour ne pas inventer)
-        const seen = new Set();
-        for (const nm of nameOrder){ const k = ulsSlug(nm); if (!seen.has(k)){ seen.add(k); conso.push({ conducteur: nm, nb: null, ttc: null, km: null }); } }
+      { const rx = /Total\s+Badge\s+([\d ]+?\d)\s+(\d+)\s*consommation\(s\)\s*([\d  .,]+?)\s*€\s*TTC\s*([\d  .,]+?)\s*km/gi; let m;
+        const seenB = new Set();
+        while ((m = rx.exec(t))){
+          const suf = badgeSuffix(m[1]); if (seenB.has(suf)) continue; seenB.add(suf);
+          conso.push({ conducteur: nameByBadge[suf] || ('Badge ' + suf), nb: parseInt(m[2],10)||0, ttc: ulsNum(m[3]), km: ulsNum(m[4]) });
+        }
       }
       return { numero, date, mois, ht, tva, ttc, conso };
     }
 
     let _ulsPending = null;
+    // Reconstruit le texte du PDF Ulys EN LIGNES, en triant les fragments par POSITION (y puis x).
+    // Indispensable : « Badge n° <id> <Nom> » et « Total Badge <id> … <ttc> € TTC <km> km » doivent
+    // rester sur une seule ligne. La lecture standard (FP.ocr) colle les fragments dans le désordre
+    // (colonnes entremêlées) → montants/prénoms illisibles. Repli sur FP.ocr si pas de couche texte.
+    async function ulysPdfToText(file){
+      try {
+        await FP.ocr.loadScript(FP.ocr.PDFJS_CDN);
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = FP.ocr.PDFJS_WORKER;
+        const buf = await file.arrayBuffer();
+        const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+        let text = '';
+        for (let pg=1; pg<=pdf.numPages; pg++){
+          const page = await pdf.getPage(pg);
+          const tc = await page.getTextContent();
+          const items = tc.items
+            .filter(i => i.str && i.str.trim() !== '')
+            .map(i => ({ x: i.transform[4], y: i.transform[5], s: i.str.trim() }));
+          items.sort((a,b) => (b.y - a.y) || (a.x - b.x));   // haut→bas (y décroissant), puis gauche→droite
+          const lines = []; let cur = null;
+          for (const it of items){
+            if (!cur || Math.abs(it.y - cur.y) > 2){ cur = { y: it.y, parts: [it] }; lines.push(cur); }
+            else cur.parts.push(it);
+          }
+          for (const ln of lines){ ln.parts.sort((a,b)=>a.x-b.x); text += ln.parts.map(p=>p.s).join(' ') + '\n'; }
+          text += '\n';
+        }
+        return text;
+      } catch(e){ console.warn('[ulysPdfToText]', e); return ''; }
+    }
     function ulsImpStatus(html, kind){ const el=$('uls-import-status'); el.classList.remove('hidden'); el.innerHTML=html; el.style.background = kind==='ok'?'#ECFDF5':kind==='err'?'#FEF2F2':'#F1F5F9'; el.style.color = kind==='ok'?'#047857':kind==='err'?'#B91C1C':'#334155'; }
     function ulsImpReset(){ _ulsPending=null; $('uls-import-preview').classList.add('hidden'); $('uls-import-preview').innerHTML=''; $('uls-import-status').classList.add('hidden'); }
     async function handleUlysImport(files){
@@ -2596,7 +2611,8 @@
       const fac=[], rows=[];
       for (const f of files){
         try {
-          const text = await FP.ocr.fileToText(f, 99); // toutes les pages (détail multi-pages)
+          let text = await ulysPdfToText(f);                 // reconstruction par position (lignes)
+          if (!text || text.replace(/\s/g,'').length < 80) text = await FP.ocr.fileToText(f, 99); // repli
           const p = parseUlys(text);
           if (!p.numero || p.ttc == null) continue;
           fac.push(p);
