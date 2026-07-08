@@ -34,6 +34,18 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
 - ⚠️ **Stockage autonomie/version** : côté DB, l'autonomie est dans la colonne `note_pneus`
   (mapping `note_pneus`↔`autonomie`) et la version dans `type_pneus` (↔`version`). Écrire
   l'autonomie dans `note_pneus`, PAS dans la colonne `autonomie` (ignorée par l'app).
+- ⚠️ **Factures Ulys (péages VINCI) — MÉTHODE DE LECTURE À CONSERVER** (validée par l'utilisateur) :
+  ces PDF ont une couche texte, mais la lecture standard (fragments collés par espaces) **mélange
+  les colonnes** → montants aberrants et mauvais prénoms. Il faut **reconstruire les lignes en
+  triant les fragments pdf.js par POSITION** (y décroissant puis x croissant) — cf.
+  `ulysPdfToText()` dans `pages/factures.html`. Ensuite :
+  - **Montants facture** : TTC = le montant imprimé avec « € » après `NET A PAYER TTC` ; TVA = 20 %
+    d'une base HT présente dans le récap 1re page (couple base/TVA, base max, base+TVA ≤ TTC) ;
+    HT = TTC − TVA. (NE PAS sommer tous les nombres après `NET A PAYER` → HT/TVA aberrants.)
+  - **Détail par collaborateur** : ancrer sur le **N° DE BADGE** (jamais sur l'ordre des prénoms,
+    colonnes inversées). Lire `Badge n° <id> <Nom>` (prénom) et
+    `Total Badge <id> <n> consommation(s) <ttc> € TTC <km> km` (trajets + TTC + km), puis relier
+    par le n° de badge. Le `Total Contrat` (grand total) est ignoré. Table `ulys_conso`.
 
 ## Structure du projet
 
