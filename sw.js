@@ -6,7 +6,7 @@
    • NAVIGATIONS HTML → NETWORK-FIRST (en ligne = toujours la version fraîche ; le cache ne
      sert qu'en secours hors-ligne). Évite toute « page périmée ».
    On NE touche PAS aux autres origines (Supabase, Google Fonts, CDN) : réseau direct. */
-const CACHE = 'parcpilot-v20260709a';
+const CACHE = 'parcpilot-v20260709c';
 
 self.addEventListener('install', () => { self.skipWaiting(); });
 
