@@ -450,8 +450,9 @@
         <span id="drawer-logo" class="inline-flex items-center justify-center" style="min-height:40px"></span>
       </div>
       <h2 class="text-white leading-tight" id="drawer-title" style="cursor:pointer;color:#fff;font-style:italic;font-weight:900;font-size:2rem;letter-spacing:-.02em" title="Cliquer pour renommer (marque + modèle)">—</h2>
-      <p class="text-base mb-3" style="color:#8598B4" id="drawer-subtitle">—</p>
-      <div><span id="drawer-chauffeur" class="text-base font-semibold text-white inline-flex items-center gap-1.5"></span></div>
+      <p class="text-base" style="color:#8598B4" id="drawer-subtitle">—</p>
+      <div class="mt-2"><span id="drawer-chauffeur" class="text-base font-semibold text-white inline-flex items-center gap-1.5"></span></div>
+      <div id="drawer-readouts" class="grid grid-cols-2 gap-x-6 gap-y-3 mt-4" style="max-width:420px"></div>
     </div>
   </div>
 
@@ -1722,6 +1723,20 @@
     const chauf = $('drawer-chauffeur');
     const hasChauf = v.chauffeur && v.chauffeur !== '—' && v.chauffeur.trim() !== '';
     chauf.innerHTML = hasChauf ? `<i data-lucide="user" class="w-5 h-5 text-white/70"></i> ${escapeHtml(v.chauffeur)}` : '';
+    // Readouts "instruments" dans l'en-tête sombre (comme l'artefact) : km · carburant · CT · TVS
+    (function fillReadouts(){
+      const box = $('drawer-readouts'); if (!box) return;
+      const td = (window.FP && FP.tvsDetail) ? FP.tvsDetail(v) : null;
+      const tvsTxt = td && td.applicable ? (td.total != null ? FP.euro(td.total) : '—') : 'Non soumis';
+      const ct = (v.prochainCT && v.prochainCT !== '—') ? FP.dateNum(v.prochainCT) : '—';
+      const items = [
+        ['Kilométrage', (FP.num(Number(v.km) || 0)) + ' km'],
+        ['Carburant', v.carburant || '—'],
+        ['Prochain CT', ct],
+        ['TVS ' + (FP.TVS_ANNEE || ''), tvsTxt],
+      ];
+      box.innerHTML = items.map(([k, val]) => `<div><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8598B4">${k}</div><div style="color:#EAF1FB;font-weight:800;font-size:1.15rem;margin-top:2px">${val}</div></div>`).join('');
+    })();
     if (window.lucide) lucide.createIcons();
 
     // Calculs liés (data.entretiens/contrats peuvent être absents de FP_DATA → garde || [])
@@ -1832,11 +1847,8 @@
         <div class="text-xs text-slate-500 text-right">Mise en circulation<br><span class="font-semibold text-slate-700" data-df="dateMiseEnCirculation" data-dt="date">${FP.dateNum(v.dateMiseEnCirculation)}</span><br>${parkingBadge(v)}</div>
       </div>
 
+      <div class="fiche-title" style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--fp-muted);margin-bottom:.15rem">Entretien &amp; échéances</div>
       <div class="grid grid-cols-2 gap-3">
-        <div class="kpi p-3"><div class="kpi-label">Kilométrage</div><div class="kpi-value" style="font-size:1.3rem" data-df="km" data-dt="number">${FP.num(v.km)} km</div></div>
-        <div class="kpi p-3"><div class="kpi-label">Carburant</div><div class="kpi-value" style="font-size:1rem" data-df="carburant" data-dt="text">${v.carburant || '<span class="text-slate-400">—</span>'}</div></div>
-        <div class="kpi p-3"><div class="kpi-label">Prochain CT</div><div class="kpi-value" style="font-size:1rem" data-df="prochainCT" data-dt="date">${ctCell(v.prochainCT)}</div></div>
-        <div class="kpi p-3"><div class="kpi-label">TVS ${FP.TVS_ANNEE}</div><div class="kpi-value" style="font-size:1.3rem">${tvsDet.applicable ? (tvsDet.total != null ? FP.euro(tvsDet.total) : '<span class="text-amber-600" style="font-size:.85rem">CO₂ manquant</span>') : '<span class="text-slate-400" style="font-size:.85rem">Non soumis</span>'}</div></div>
         <div class="kpi p-3"><div class="kpi-label">Dernière révision</div><div class="kpi-value" style="font-size:1rem"><span data-df="derniereRevision" data-dt="date">${v.derniereRevision ? FP.dateNum(v.derniereRevision) : (estNeuf ? '<span class="text-emerald-600" style="font-size:.85rem">Véhicule neuf</span>' : '<span class="text-slate-400">—</span>')}</span></div><div class="text-xs text-slate-500" style="margin-top:1px">${estNeuf && !v.derniereRevision ? 'pas encore de révision' : 'à <span data-df="kmDernierReleve" data-dt="number">' + ((v.kmDernierReleve != null && v.kmDernierReleve !== '') ? FP.num(v.kmDernierReleve) + ' km' : '—') + '</span>'}</div></div>
         <div class="kpi p-3"><div class="kpi-label">Prochaine révision (est.)</div><div class="kpi-value" style="font-size:1rem;${revColor}">${revProchaine}${rev.niveau ? ' ⚠️' : ''}</div></div>
       </div>
