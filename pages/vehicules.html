@@ -1730,12 +1730,17 @@
       const tvsTxt = td && td.applicable ? (td.total != null ? FP.euro(td.total) : '—') : 'Non soumis';
       const ct = (v.prochainCT && v.prochainCT !== '—') ? FP.dateNum(v.prochainCT) : '—';
       const items = [
-        ['Kilométrage', (FP.num(Number(v.km) || 0)) + ' km'],
-        ['Carburant', v.carburant || '—'],
-        ['Prochain CT', ct],
-        ['TVS ' + (FP.TVS_ANNEE || ''), tvsTxt],
+        ['Kilométrage', (FP.num(Number(v.km) || 0)) + ' km', 'km', 'number'],
+        ['Carburant', v.carburant || '—', 'carburant', 'text'],
+        ['Prochain CT', ct, 'prochainCT', 'date'],
+        ['TVS ' + (FP.TVS_ANNEE || ''), tvsTxt, null, null],
       ];
-      box.innerHTML = items.map(([k, val]) => `<div><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8598B4">${k}</div><div style="color:#EAF1FB;font-weight:800;font-size:1.15rem;margin-top:2px">${val}</div></div>`).join('');
+      box.innerHTML = items.map(([k, val, df, dt]) => {
+        const inner = df
+          ? `<span data-df="${df}" data-dt="${dt}" class="cursor-pointer" style="border-bottom:1px dashed rgba(255,255,255,.30)" title="Cliquer pour modifier">${val}</span>`
+          : val;
+        return `<div><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8598B4">${k}</div><div style="color:#EAF1FB;font-weight:800;font-size:1.15rem;margin-top:2px">${inner}</div></div>`;
+      }).join('');
     })();
     if (window.lucide) lucide.createIcons();
 
@@ -2768,6 +2773,14 @@
   // Édition au simple clic (plus besoin de double-clic) — on ignore les clics
   // dans un éditeur déjà ouvert (input/select/textarea) ou sur un bouton/lien.
   $('drawer-body').addEventListener('click', (e) => {
+    if (e.target.closest('input, select, textarea, button, a')) return;
+    const el = e.target.closest('[data-df]');
+    if (!el) return;
+    const v = data.vehicules.find(x => x.id === drawerVehId);
+    if (v) startCellEdit(el, v, el.dataset.df, el.dataset.dt || 'text');
+  });
+  // Readouts de l'en-tête (Kilométrage, Carburant, Prochain CT) : cliquables → édition directe
+  $('drawer-readouts').addEventListener('click', (e) => {
     if (e.target.closest('input, select, textarea, button, a')) return;
     const el = e.target.closest('[data-df]');
     if (!el) return;
