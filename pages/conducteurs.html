@@ -265,21 +265,25 @@
 <!-- Drawer fiche conducteur -->
 <div class="drawer-backdrop" id="drawer-backdrop"></div>
 <aside class="drawer" id="drawer">
-  <div class="p-6 flex justify-between items-start" style="background:linear-gradient(135deg, var(--fp-primary), var(--fp-primary-2))">
-    <div class="flex items-center gap-3.5 min-w-0">
-      <div class="driver-avatar" id="drawer-avatar" style="width:54px;height:54px;font-size:1.2rem">?</div>
-      <div class="min-w-0">
-        <div class="flex items-center gap-1.5">
-          <h2 class="text-xl font-extrabold leading-tight text-white" style="color:#fff" id="drawer-name" data-cf="name" data-ct="text">—</h2>
-          <button type="button" id="drawer-rename-top" title="Renommer ce conducteur (partout)" class="p-1 rounded flex-shrink-0" style="color:rgba(255,255,255,.6)"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+  <div class="p-6" style="background:linear-gradient(135deg, var(--fp-primary), var(--fp-primary-2))">
+    <div class="flex justify-between items-start">
+      <div class="flex items-center gap-3.5 min-w-0">
+        <div class="driver-avatar" id="drawer-avatar" style="width:54px;height:54px;font-size:1.2rem">?</div>
+        <div class="min-w-0">
+          <div id="drawer-poste" class="text-xs font-bold uppercase tracking-wide" style="margin-bottom:.25rem"></div>
+          <div class="flex items-center gap-1.5">
+            <h2 class="leading-tight text-white" style="color:#fff;font-style:italic;font-weight:900;font-size:1.7rem;letter-spacing:-.02em" id="drawer-name" data-cf="name" data-ct="text">—</h2>
+            <button type="button" id="drawer-rename-top" title="Renommer ce conducteur (partout)" class="p-1 rounded flex-shrink-0" style="color:rgba(255,255,255,.6)"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+          </div>
+          <p class="text-[0.95rem] mt-0.5" style="color:#8598B4" id="drawer-sub">—</p>
         </div>
-        <div id="drawer-poste" class="text-xs font-bold uppercase tracking-wide mt-1"></div>
-        <p class="text-[0.95rem] mt-0.5" style="color:#8598B4" id="drawer-sub">—</p>
       </div>
+      <button aria-label="Fermer" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm flex-shrink-0" id="drawer-close">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
     </div>
-    <button aria-label="Fermer" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm flex-shrink-0" id="drawer-close">
-      <i data-lucide="x" class="w-5 h-5"></i>
-    </button>
+    <div id="drawer-chips" class="flex flex-wrap gap-2 mt-3"></div>
+    <div id="drawer-gauge" class="flex flex-col items-center mt-2"></div>
   </div>
   <div class="p-6 space-y-5" id="drawer-body"></div>
 </aside>
@@ -916,6 +920,22 @@
     $('drawer-sub').innerHTML = d.vehicules.length
       ? d.vehicules.map(v => `${escapeHtml(v.marque)} ${escapeHtml(v.modele)} <span class="font-mono text-slate-400">${escapeHtml(v.immat)}</span>`).join(' · ')
       : 'Aucun véhicule assigné';
+    // Chips + GROSSE jauge de points de permis dans l'en-tête (comme l'artefact)
+    const hdrPts = d.amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
+    const hdrRest = Math.max(0, 12 - hdrPts);
+    const gCol = hdrRest >= 9 ? '#34d399' : hdrRest >= 6 ? '#fbbf24' : '#f87171';
+    const permisOk = !d.permisExpiration || new Date(d.permisExpiration) > new Date();
+    const hdrChips = [permisOk ? '<span class="fp-chip good">Permis valide</span>' : '<span class="fp-chip bad">Permis expiré</span>'];
+    if (d.amendes.length) hdrChips.push(`<span class="fp-chip warn">${d.amendes.length} amende${d.amendes.length > 1 ? 's' : ''}</span>`);
+    if (d.vehicules.length) hdrChips.push(`<span class="fp-chip ghost">Véhicule · ${escapeHtml(d.vehicules[0].immat || '')}</span>`);
+    $('drawer-chips').innerHTML = hdrChips.join('');
+    $('drawer-gauge').innerHTML = `
+      <svg viewBox="0 0 200 116" style="width:220px;max-width:72%" role="img" aria-label="Points de permis : ${hdrRest} sur 12">
+        <path d="M18,104 A82,82 0 0 1 182,104" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="13" stroke-linecap="round"/>
+        <path d="M18,104 A82,82 0 0 1 182,104" fill="none" stroke="${gCol}" stroke-width="13" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="${(100 - hdrRest / 12 * 100).toFixed(1)}"/>
+        <text x="100" y="94" text-anchor="middle" fill="#EAF1FB" font-size="36" font-weight="800">${hdrRest}<tspan font-size="18" fill="#8598B4">/12</tspan></text>
+      </svg>
+      <div style="font-size:11px;color:#8598B4;margin-top:-4px;font-weight:700;letter-spacing:.05em;text-transform:uppercase">Points de permis</div>`;
 
     const nbPoints = d.amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
     const totalPaye = d.amendes.filter(a => a.statut === 'payée').reduce((s, a) => s + (a.montant || 0), 0);
@@ -944,10 +964,9 @@
           <div class="fiche-stat" style="border-color:rgba(99,102,241,.4)"><div class="kpi-label">Amendes</div><div class="kpi-value" style="font-size:1.8rem; color:#6366F1">${d.amendes.length}</div></div>
           <div class="fiche-stat" style="border-color:rgba(249,115,22,.4)"><div class="kpi-label">Accidents</div><div class="kpi-value" style="font-size:1.8rem; color:#F97316">${accs.length}</div></div>
         </div>
-        <div class="grid grid-cols-3 gap-2.5">
-          <div class="fiche-stat"><div class="kpi-label">Points permis</div><div class="kpi-value" style="font-size:1.6rem; color:${ptsCol}">${ptsRest}<span style="font-size:.85rem; color:var(--fp-faint); font-weight:700">/12</span></div><div style="height:5px; border-radius:3px; background:rgba(148,163,184,.22); margin-top:7px; overflow:hidden"><div style="height:100%; width:${ptsRest / 12 * 100}%; background:${ptsCol}; border-radius:3px"></div></div></div>
-          <div class="fiche-stat"><div class="kpi-label">Payé</div><div class="kpi-value" style="font-size:1.2rem; color:#059669">${FP.euro(totalPaye)}</div></div>
-          <div class="fiche-stat"><div class="kpi-label">À payer</div><div class="kpi-value" style="font-size:1.2rem; color:${dus > 0 ? 'var(--fp-danger)' : 'var(--fp-text)'}">${FP.euro(dus)}</div></div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div class="fiche-stat"><div class="kpi-label">Payé</div><div class="kpi-value" style="font-size:1.4rem; color:#059669">${FP.euro(totalPaye)}</div></div>
+          <div class="fiche-stat"><div class="kpi-label">À payer</div><div class="kpi-value" style="font-size:1.4rem; color:${dus > 0 ? 'var(--fp-danger)' : 'var(--fp-text)'}">${FP.euro(dus)}</div></div>
         </div>
       </div>`;
 
