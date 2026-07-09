@@ -502,6 +502,12 @@ FP.addSociete = (name) => {
     metaOnce('apple-mobile-web-app-title', 'Parc Pilot');
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
       addEventListener('load', () => { navigator.serviceWorker.register(base + 'sw.js').catch(() => {}); });
+      // Rechargement AUTO quand une nouvelle version prend le contrôle → fini le cache périmé
+      // (une seule fois, pour éviter toute boucle de rechargement).
+      let _swReloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (_swReloaded) return; _swReloaded = true; location.reload();
+      });
     }
   } catch (e) {}
 })();
