@@ -464,7 +464,10 @@
     $('sin-periode').textContent = (annee === 'all') ? 'toutes années' : annee;
     const sins = fact.filter(f => (f.type || '').toLowerCase() === 'sinistre');
     const { count, perImmat } = clusterAccidents(sins);
-    const cout = sins.reduce((s, f) => s + (+f.montantTTC || 0), 0);
+    // Coût = comme la page Sinistres, on EXCLUT les devis (choix manuel sinistreStage, sinon mot « devis/proforma/estimation »)
+    const _stg = (FP.settings && FP.settings.get) ? (FP.settings.get().sinistreStage || {}) : {};
+    const isDevis = (f) => { const m = _stg[f.id]; if (m) return m === 'devis'; return /\b(devis|proforma|estimation)\b/i.test(((f.description || '') + ' ' + (f.fournisseur || ''))); };
+    const cout = sins.filter(f => !isDevis(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0);
     const condCount = {};
     Object.entries(perImmat).forEach(([immat, c]) => {
       let ch = immatChauffeur[immat] || '';
@@ -494,8 +497,16 @@
     const achat = fact.filter(f => (f.type || '').toLowerCase() === 'achat').reduce((s, f) => s + (+f.montantTTC || 0), 0);
     $('kpi-usage').textContent = FP.euro(usage);
     $('kpi-achat').textContent = FP.euro(achat);
+    // Coût d'usage / km = coût d'usage TOTAL (toutes années, dédoublonné) rapporté au km au compteur.
+    // Métrique « à vie » cohérente : on ne divise PAS un coût d'une seule année par le km cumulé du véhicule.
+    const usageAllTime = (function () {
+      const seen = new Set();
+      return (factures || [])
+        .filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; })
+        .filter(isUsage).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+    })();
     const totalKm = data.vehicules.reduce((s, v) => s + (v.km || 0), 0);
-    $('kpi-perkm').textContent = totalKm > 0 ? FP.euroPrecis(usage / totalKm) : '—';
+    $('kpi-perkm').textContent = totalKm > 0 ? FP.euroPrecis(usageAllTime / totalKm) : '—';
     const topF = fact.slice().sort((a, b) => (b.montantTTC || 0) - (a.montantTTC || 0))[0];
     if (topF) { $('kpi-top').textContent = FP.euro(topF.montantTTC); $('kpi-top-sub').textContent = `${topF.vehiculeImmat || ''} · ${topF.fournisseur || topF.type || ''}`; }
     else { $('kpi-top').textContent = '—'; $('kpi-top-sub').textContent = ''; }

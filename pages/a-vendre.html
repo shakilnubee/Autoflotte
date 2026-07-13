@@ -153,19 +153,24 @@
     { key: 'vendu',      label: 'Vendu' },
   ];
 
+  // Statuts normalisés (insensibles aux accents / à la casse) → robustes aux imports « Vendu », « a vendre », etc.
+  const _ns = (v) => ((v && v.statut) || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const estVendu = (v) => { const s = _ns(v); return s === 'vendu' || s === 'vendue'; };
+  const estAVendre = (v) => /^a[\s-]?vendre$/.test(_ns(v));
+
   // Tous les véhicules avec statut "à vendre" ou "vendu"
   function getVendreVehs() {
-    return data.vehicules.filter(v => v.statut === 'à vendre' || v.statut === 'vendu');
+    return data.vehicules.filter(v => estVendu(v) || estAVendre(v));
   }
 
   function pipelineOf(v) {
-    if (v.statut === 'vendu') return 'vendu';
+    if (estVendu(v)) return 'vendu';
     return v.pipelineStatut || 'a-publier';
   }
 
   function renderKPIs() {
     const all = getVendreVehs();
-    const vendus = all.filter(v => v.statut === 'vendu');
+    const vendus = all.filter(estVendu);
     $('kpi-total').textContent = all.length;
     // Même estimation que les cartes : prix de vente saisi, sinon la décote calculée (pas achat×0,7 brut).
     $('kpi-valeur').textContent = FP.euro(all.filter(v => v.statut !== 'vendu').reduce((s, v) => {

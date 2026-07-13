@@ -451,7 +451,7 @@
     }
     return `<iframe src="${url}" loading="lazy" style="${box}height:420px" title="Aperçu du document"></iframe>`;
   }
-  const DEFAULT_DATE_FROM = '2026-01-01'; // par défaut, on n'affiche que les amendes à partir du 01/01/2026
+  const DEFAULT_DATE_FROM = ''; // le filtrage par année se fait via le sélecteur (state.annee), pas par une date plancher
   const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false, selectedIds: new Set() };
   const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
   const $ = (id) => document.getElementById(id);
@@ -471,7 +471,7 @@
     if ($('filter-date-to')) $('filter-date-to').value = state.dateTo || '';
     const sk = $('sort-key'); if (sk) sk.value = state.sortKey;
     const sd = $('sort-dir'); if (sd) { const i = sd.querySelector('i'); if (i) i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); }
-    const vt = $('btn-voir-tout'); if (vt) vt.textContent = state.voirTout ? 'Afficher seulement 2026' : 'Tout voir (toutes les années)';
+    const vt = $('btn-voir-tout'); if (vt) vt.textContent = state.annee === 'all' ? 'Filtrer par année' : 'Voir toutes les années';
   }
 
   // Catégorise un motif en grande famille (pour les mini-stats et le filtre par type)
@@ -548,17 +548,28 @@
   // Populate motif filter dynamically — reconstruit aussi au chargement Supabase
   function rebuildMotifFilter() {
     const sel = $('filter-motif'); if (!sel) return; const cur = sel.value;
-    const motifs = [...new Set(data.amendes.filter(a => anneeOf(a) === '2026').map(a => a.motif).filter(Boolean))].sort();
+    const motifs = [...new Set(data.amendes.map(a => a.motif).filter(Boolean))].sort();
     sel.innerHTML = '<option value="all">Tous motifs</option>' + motifs.map(m => `<option value="${escAmende(m)}">${escAmende(m)}</option>`).join('');
     sel.value = (motifs.includes(cur) || cur === 'all') ? cur : 'all';
   }
   rebuildMotifFilter();
 
+  // Remplit le sélecteur d'année avec toutes les années présentes (2026, 2027, …) + « Toutes années ».
+  function fillAnneeFilter() {
+    const sel = $('filter-annee'); if (!sel) return;
+    const years = [...new Set((data.amendes || []).map(anneeOf).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
+    const cur = sel.value;
+    sel.innerHTML = '<option value="all">Toutes années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    const val = (cur && (cur === 'all' || years.includes(cur))) ? cur : (years[0] || 'all'); // défaut = année la plus récente
+    sel.value = val; state.annee = val;
+  }
+  fillAnneeFilter();
+
   function filtered() {
     const q = FP.norm(state.search).trim();
     return data.amendes.filter(a => {
-      // Par défaut : uniquement 2026. En mode "Tout voir" : toutes les années.
-      if (!state.voirTout && anneeOf(a) !== '2026') return false;
+      // Filtre par année : celle choisie dans le sélecteur (2026, 2027, …) ou « Toutes années ».
+      if (state.annee !== 'all' && anneeOf(a) !== state.annee) return false;
       // Filtre par statut (les payées restent visibles dans « Payées » / « Toutes »)
       if (state.statut !== 'all' && a.statut !== state.statut) return false;
       if (state.motif !== 'all' && a.motif !== state.motif) return false;
@@ -571,8 +582,8 @@
   }
 
   function renderKPIs() {
-    // Uniquement les amendes 2026
-    const all = data.amendes.filter(a => anneeOf(a) === '2026');
+    // KPIs sur l'année sélectionnée (ou toutes années)
+    const all = (state.annee === 'all') ? data.amendes.slice() : data.amendes.filter(a => anneeOf(a) === state.annee);
     const apayer = all.filter(a => a.statut === 'à payer');
     const payees = all.filter(a => a.statut === 'payée');
     const points = all.reduce((s, a) => s + (Number(a.points) || 0), 0);
@@ -2066,7 +2077,7 @@
       renderTable();
     });
   });
-  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderTable(); });
+  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderKPIs(); renderTable(); });
   $('filter-motif').addEventListener('change', e => { state.motif = e.target.value; renderTable(); });
   $('filter-date-from').addEventListener('change', e => { state.dateFrom = e.target.value; renderTable(); });
   $('filter-date-to').addEventListener('change', e => { state.dateTo = e.target.value; renderTable(); });
@@ -2198,14 +2209,12 @@
   $('am-avis').addEventListener('blur', (e) => { e.target.value = fmtNumeroAvis(e.target.value); });
   $('table-more').addEventListener('click', () => { state.tableExpanded = !state.tableExpanded; renderTable(); });
   $('btn-voir-tout').addEventListener('click', () => {
-    state.voirTout = !state.voirTout;
-    if (state.voirTout) { // on remet à zéro les autres filtres pour vraiment tout voir
-      state.statut = 'all'; state.motif = 'all'; state.motifCat = 'all'; state.search = ''; state.dateFrom = ''; state.dateTo = '';
-      const si = document.getElementById('search'); if (si) si.value = '';
-      document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
-    }
-    $('btn-voir-tout').textContent = state.voirTout ? 'Afficher seulement 2026' : 'Tout voir (toutes les années)';
-    renderTable();
+    // Bascule entre « toutes les années » et l'année la plus récente
+    const years = [...new Set((data.amendes || []).map(anneeOf).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
+    state.annee = (state.annee === 'all') ? (years[0] || 'all') : 'all';
+    const sel = $('filter-annee'); if (sel) sel.value = state.annee;
+    $('btn-voir-tout').textContent = state.annee === 'all' ? 'Filtrer par année' : 'Voir toutes les années';
+    renderKPIs(); renderTable();
   });
   $('drawer-delete').addEventListener('click', deleteAmende);
   $('btn-new').addEventListener('click', openAmendeModal);
@@ -2227,7 +2236,7 @@
     ],
     getRows: () => filtered().slice().sort((x, y) => (x.date || '').localeCompare(y.date || '')),
     period: { dateOf: a => a.date || '' },
-    baseName: () => 'amendes-' + (state.voirTout ? 'toutes' : '2026'),
+    baseName: () => 'amendes-' + (state.annee === 'all' ? 'toutes' : state.annee),
   });
   $('amende-close').addEventListener('click', closeAmendeModal);
   $('amende-cancel').addEventListener('click', closeAmendeModal);
@@ -2300,7 +2309,7 @@
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });
 
   // Rafraîchit quand les données Supabase arrivent (ajouts/suppressions d'autres appareils)
-  document.addEventListener('fp:data-ready', () => { rebuildMotifFilter(); renderKPIs(); renderTable(); renderCharts(); });
+  document.addEventListener('fp:data-ready', () => { fillAnneeFilter(); rebuildMotifFilter(); renderKPIs(); renderTable(); renderCharts(); });
 </script>
 </body>
 </html>
