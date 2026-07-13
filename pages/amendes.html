@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260709d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260709e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260709d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260709e">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -425,10 +425,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260709d"></script>
-<script src="../assets/js/supabase-client.js?v=20260709d"></script>
-<script src="../assets/js/data.js?v=20260709d"></script>
-<script src="../assets/js/app.js?v=20260709d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260709e"></script>
+<script src="../assets/js/supabase-client.js?v=20260709e"></script>
+<script src="../assets/js/data.js?v=20260709e"></script>
+<script src="../assets/js/app.js?v=20260709e"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -785,24 +785,35 @@
   const EXPEDITEUR = 'shakil.nubeebaccus@projectxparis.fr';
   // Toujours en copie pour info (Shakil + Mallaury) ; le conducteur reste le destinataire
   const COPIE_MAIL = 'shakil.nubeebaccus@projectxparis.fr,mallaury.herembert@projectxparis.fr';
-  function ouvrirMail(body) {
+  async function ouvrirMail(body) {
     const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
     const to = lookupEmail(a.prenom);
     const subject = `Avis de contravention du ${FP.date(a.date)}${a.numeroAvis ? ' — avis ' + a.numeroAvis : ''}`;
-    // Gmail/compose n'accepte pas de pièce jointe via URL → on ajoute le LIEN vers le scan de l'avis (PDF).
+    // On ajoute le LIEN vers le scan de l'avis (PDF) via une page de redirection propre.
     let fullBody = body;
     if (a.avisUrl) {
-      // On ne met PAS l'URL technique Supabase dans le mail : on passe par une page de
-      // redirection sur notre propre domaine → le destinataire voit un lien propre au n° d'avis.
       const fn = String(a.avisUrl).split('?')[0].split('/').pop() || '';
       const m = fn.match(/^avis-(.+)\.pdf$/i);
       let lien;
-      if (m) lien = `https://shakilnubee.github.io/Autoflotte/avis.html?${encodeURIComponent(m[1])}`;     // court : ?6014854136
-      else if (fn) lien = `https://shakilnubee.github.io/Autoflotte/avis.html?f=${encodeURIComponent(fn)}`; // repli (image / nom non standard)
+      if (m) lien = `https://shakilnubee.github.io/Autoflotte/avis.html?${encodeURIComponent(m[1])}`;
+      else if (fn) lien = `https://shakilnubee.github.io/Autoflotte/avis.html?f=${encodeURIComponent(fn)}`;
       else lien = a.avisUrl;
       fullBody += `\n\n📎 Avis de contravention n° ${a.numeroAvis || '—'} :\n${lien}`;
     }
-    // Ouvre la fenêtre de rédaction Gmail connectée au compte expéditeur
+    // 1) Envoi AUTOMATIQUE via la fonction Resend (si déployée) — un clic = envoyé.
+    if (to && window.FP && FP.sendEmail) {
+      const html = String(fullBody).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+      try {
+        if (FP.toast) FP.toast('Envoi de l\'e-mail…');
+        await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: fullBody, replyTo: EXPEDITEUR });
+        if (FP.toast) FP.toast('✓ E-mail envoyé à ' + to); else alert('✓ E-mail envoyé à ' + to);
+        return;
+      } catch (e) {
+        console.warn('[sendEmail] échec → repli Gmail', e);
+        // on continue vers Gmail (utile tant que la fonction n'est pas déployée)
+      }
+    }
+    // 2) Repli : ouvre la fenêtre de rédaction Gmail (comportement d'origine)
     const url = `https://mail.google.com/mail/?view=cm&fs=1&authuser=${encodeURIComponent(EXPEDITEUR)}`
       + `&to=${encodeURIComponent(to)}&cc=${encodeURIComponent(COPIE_MAIL)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullBody)}`;
     window.open(url, '_blank', 'noopener');

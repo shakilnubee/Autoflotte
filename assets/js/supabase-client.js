@@ -15,6 +15,29 @@
   window.FP = window.FP || {};
   FP.supabase = client;
 
+  // Envoi d'e-mail via l'Edge Function 'send-email' (la clé Resend reste SECRÈTE côté serveur).
+  // Rejette si la fonction n'est pas (encore) déployée → l'appelant peut alors se replier sur Gmail.
+  // msg = { to, cc?, subject, html?, text?, replyTo? }
+  FP.sendEmail = async (msg) => {
+    if (client.functions && typeof client.functions.invoke === 'function') {
+      const { data, error } = await client.functions.invoke('send-email', { body: msg });
+      if (error) throw error;
+      if (data && data.error) throw new Error(data.error);
+      return data;
+    }
+    // Repli : appel direct de l'endpoint avec le jeton de l'utilisateur connecté
+    let jwt = SUPABASE_KEY;
+    try { const t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token') || '{}'); if (t && t.access_token) jwt = t.access_token; } catch (_) {}
+    const res = await fetch(SUPABASE_URL + '/functions/v1/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + jwt },
+      body: JSON.stringify(msg),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || (d && d.error)) throw new Error((d && d.error) || ('HTTP ' + res.status));
+    return d;
+  };
+
   // ===== Authentification =====
   // Détermine le chemin vers login.html selon le contexte (racine vs sous-dossier pages/)
   const loginPath = window.location.pathname.includes('/pages/') ? '../login.html' : 'login.html';
