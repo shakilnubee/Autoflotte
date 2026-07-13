@@ -2782,6 +2782,24 @@
   $('drawer-close').addEventListener('click', closeDrawer);
   $('drawer-prev').addEventListener('click', () => { const t = $('drawer-prev').dataset.targetId; if (t) openDrawer(t); });
   $('drawer-next').addEventListener('click', () => { const t = $('drawer-next').dataset.targetId; if (t) openDrawer(t); });
+
+  // ✦ Tilt 3D discret de la plaque d'immatriculation au survol (souris fine + mouvement autorisé)
+  (function plateTilt(){
+    const plate = $('drawer-immat');
+    if (!plate) return;
+    if (!matchMedia('(hover:hover) and (pointer:fine)').matches || !matchMedia('(prefers-reduced-motion: no-preference)').matches) return;
+    let raf = 0;
+    plate.style.willChange = 'transform';
+    plate.addEventListener('mousemove', (e) => {
+      const r = plate.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+      const rx = (0.5 - py) * 7, ry = (px - 0.5) * 9;
+      plate.style.transition = 'transform .08s ease-out';
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => { plate.style.transform = `perspective(600px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateZ(4px)`; });
+    });
+    plate.addEventListener('mouseleave', () => { cancelAnimationFrame(raf); plate.style.transition = 'transform .25s var(--fp-ease)'; plate.style.transform = ''; });
+  })();
   // Flèches clavier ← → pour naviguer entre véhicules quand la fiche est ouverte
   document.addEventListener('keydown', (e) => {
     if (!$('drawer').classList.contains('open')) return;
