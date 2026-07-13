@@ -124,7 +124,14 @@
       <h1 class="text-2xl font-extrabold text-white" style="color:#fff" data-edit-key="sinistres.title">Sinistres</h1>
       <p class="text-sm mt-1" style="color:#8598B4" data-edit-key="sinistres.subtitle">Tous les sinistres de la flotte — accidents, bris de glace, vols</p>
     </div>
-    <div class="mb-8 flex justify-end"><span data-data-io></span></div>
+    <div class="mb-8 flex justify-end items-center gap-3">
+      <label class="btn btn-dark text-sm" style="cursor:pointer" title="Scanner / importer une facture de sinistre (même lecture que le scan du tableau de bord)">
+        <i data-lucide="scan-line" class="w-4 h-4"></i> Ajouter une facture sinistre
+        <input type="file" id="sin-facture-file" accept="image/*,application/pdf" multiple class="hidden">
+      </label>
+      <span data-data-io></span>
+    </div>
+    <div id="sin-facture-status" class="hidden mb-6 text-sm rounded-lg px-4 py-3"></div>
 
     <!-- KPIs -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -604,6 +611,44 @@
   $('search').addEventListener('input', e => { state.search = e.target.value; sinExpanded = false; renderTimeline(); });
   $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; sinExpanded = false; renderTimeline(); });
   $('filter-vehicule').addEventListener('change', e => { state.vehicule = e.target.value; sinExpanded = false; renderTimeline(); });
+
+  // === Ajouter une facture sinistre (scan) — crée une facture type='sinistre', identique au scan du tableau de bord ===
+  (function sinFactureImport(){
+    const inp = $('sin-facture-file'); if (!inp) return;
+    const el = $('sin-facture-status');
+    const setStatus = (html, kind) => { el.classList.remove('hidden'); el.innerHTML = html; el.style.background = kind==='ok'?'#ECFDF5':kind==='err'?'#FEF2F2':'#F1F5F9'; el.style.color = kind==='ok'?'#047857':kind==='err'?'#B91C1C':'#334155'; };
+    const newId = () => 'F-SIN-' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+    inp.addEventListener('change', async () => {
+      const files = [...(inp.files || [])]; inp.value = ''; if (!files.length) return;
+      if (!(window.FP && FP.uploadScan && FP.persist)) { setStatus('Connexion requise pour enregistrer en ligne.', 'err'); return; }
+      setStatus('<span class="inline-flex items-center gap-2">⏳ Lecture de ' + files.length + ' fichier(s)…</span>', 'working');
+      let ok = 0, dup = 0;
+      for (const f of files) {
+        try {
+          let det = {};
+          try { const ia = await FP.scanIA(f, 'facture'); if (ia) det = ia; } catch (_) {}
+          const url = await FP.uploadScan(f, 'documents');
+          const fact = {
+            id: newId(), date: det.date || null, vehiculeImmat: det.vehiculeImmat || null,
+            fournisseur: det.fournisseur || null, numeroFacture: det.numeroFacture || null,
+            description: f.name || 'Facture sinistre', type: 'sinistre',
+            montantHT: Number.isFinite(det.montantHT) ? det.montantHT : null,
+            montantTVA: Number.isFinite(det.montantTVA) ? det.montantTVA : null,
+            montantTTC: Number.isFinite(det.montantTTC) ? det.montantTTC : null,
+            fileId: url, fileName: f.name || null,
+          };
+          if (FP.dupe && FP.dupe.find('factures', fact, data.factures || [])) { dup++; continue; }
+          await FP.persist.insert('factures', fact);
+          (data.factures = data.factures || []).push(fact);
+          const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {}; s.sinistreStatut[fact.id] = 'attente'; FP.settings.save(s);
+          ok++;
+        } catch (e) { console.error('[sin facture import]', e); }
+      }
+      sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
+      refreshAll(); if (typeof renderDrive === 'function') renderDrive();
+      setStatus(`<b>✓ ${ok} facture(s) sinistre ajoutée(s)</b>${dup ? ' · ' + dup + ' doublon(s) ignoré(s)' : ''}. Complète le montant / véhicule sur la ligne si besoin.`, ok ? 'ok' : 'err');
+    });
+  })();
 
   renderKPIs();
   renderTimeline();
