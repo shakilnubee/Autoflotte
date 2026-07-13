@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260709r">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260709s">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260709r"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260709s"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260709r">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260709s">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -362,10 +362,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260709r"></script>
-<script src="assets/js/supabase-client.js?v=20260709r"></script>
-<script src="assets/js/data.js?v=20260709r"></script>
-<script src="assets/js/app.js?v=20260709r"></script>
+<script src="assets/js/vendor/supabase.js?v=20260709s"></script>
+<script src="assets/js/supabase-client.js?v=20260709s"></script>
+<script src="assets/js/data.js?v=20260709s"></script>
+<script src="assets/js/app.js?v=20260709s"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -406,19 +406,20 @@
     }).catch(() => {});
   }
 
-  // Amendes restant à payer (statut « à payer »)
+  // Amendes restant à payer (statut « à payer ») — année 2026, comme la page Amendes
   const amendesAPayer = (data.amendes || []).filter(a => {
     const s = (a.statut || '').trim().toLowerCase();
-    return s === 'à payer' || s === 'a payer';
+    const an = String(a.annee || (a.date || '').slice(0, 4));
+    return (s === 'à payer' || s === 'a payer') && an === '2026';
   }).length;
   document.getElementById('kpi-amendes').textContent = amendesAPayer;
 
-  // Indicateurs détaillés (section repliable)
+  // Indicateurs détaillés (section repliable) — sur la flotte active (hors vendus)
   const kmTotal = flotteActive.reduce((s, v) => s + (v.km || 0), 0);
   document.getElementById('kpi-km').textContent = FP.num(kmTotal) + ' km';
   document.getElementById('kpi-km-moyen').textContent = FP.num(flotteActive.length ? Math.round(kmTotal / flotteActive.length) : 0) + ' km';
-  document.getElementById('kpi-valeur').textContent = FP.euro(data.vehicules.reduce((s, v) => s + (v.valeurAchat || 0), 0));
-  document.getElementById('kpi-entretien').textContent = data.vehicules.filter(v => v.statut === 'entretien').length;
+  document.getElementById('kpi-valeur').textContent = FP.euro(flotteActive.reduce((s, v) => s + (v.valeurAchat || 0), 0));
+  document.getElementById('kpi-entretien').textContent = flotteActive.filter(v => v.statut === 'entretien').length;
 
   // Repli / dépli de la section détaillée
   document.getElementById('toggle-details').addEventListener('click', () => {
@@ -810,14 +811,21 @@
   // Rafraîchit les KPIs dépendant des données quand Supabase a chargé (live),
   // sinon le tableau de bord reste sur le cache statique data.js (ex. amendes à payer périmé).
   document.addEventListener('fp:data-ready', () => {
-    document.getElementById('kpi-vehicules').textContent = data.vehicules.length;
-    const ap = (data.amendes || []).filter(a => { const s = (a.statut || '').trim().toLowerCase(); return s === 'à payer' || s === 'a payer'; }).length;
+    // ⚠️ MÊMES règles que le 1er rendu (sinon le live ré-affiche l'ancien comptage) :
+    // flotte = hors vendus ; amendes à payer = 2026 ; km/valeur sur la flotte active.
+    const fa = (data.vehicules || []).filter(v => v.statut !== 'vendu');
+    document.getElementById('kpi-vehicules').textContent = fa.length;
+    const ap = (data.amendes || []).filter(a => {
+      const s = (a.statut || '').trim().toLowerCase();
+      const an = String(a.annee || (a.date || '').slice(0, 4));
+      return (s === 'à payer' || s === 'a payer') && an === '2026';
+    }).length;
     document.getElementById('kpi-amendes').textContent = ap;
-    const km = data.vehicules.reduce((s, v) => s + (v.km || 0), 0);
+    const km = fa.reduce((s, v) => s + (v.km || 0), 0);
     document.getElementById('kpi-km').textContent = FP.num(km) + ' km';
-    document.getElementById('kpi-km-moyen').textContent = FP.num(data.vehicules.length ? Math.round(km / data.vehicules.length) : 0) + ' km';
-    document.getElementById('kpi-valeur').textContent = FP.euro(data.vehicules.reduce((s, v) => s + (v.valeurAchat || 0), 0));
-    document.getElementById('kpi-entretien').textContent = data.vehicules.filter(v => v.statut === 'entretien').length;
+    document.getElementById('kpi-km-moyen').textContent = FP.num(fa.length ? Math.round(km / fa.length) : 0) + ' km';
+    document.getElementById('kpi-valeur').textContent = FP.euro(fa.reduce((s, v) => s + (v.valeurAchat || 0), 0));
+    document.getElementById('kpi-entretien').textContent = fa.filter(v => v.statut === 'entretien').length;
     const cm = new Date().toISOString().slice(0, 7);
     document.getElementById('kpi-couts').textContent = FP.euro((data.factures || []).filter(f => (f.date || '').startsWith(cm)).reduce((s, f) => s + (f.montantTTC || 0), 0));
     if (typeof refreshAlertes === 'function') refreshAlertes();
