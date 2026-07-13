@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709n">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709o">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260709n"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260709o"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260709n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260709o">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -519,9 +519,13 @@
       <h2 class="text-xl font-extrabold mt-1 text-white" id="drawer-title">—</h2>
       <p class="text-sm mt-0.5" style="color:#8598B4" id="drawer-subtitle">—</p>
     </div>
-    <button aria-label="Fermer" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-close">
-      <i data-lucide="x" class="w-5 h-5"></i>
-    </button>
+    <div class="flex items-center gap-1 flex-shrink-0">
+      <button aria-label="Facture précédente" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-prev" title="Facture précédente"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+      <button aria-label="Facture suivante" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-next" title="Facture suivante"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+      <button aria-label="Fermer" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-close">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
   </div>
   <div class="p-6 space-y-5" id="drawer-body"></div>
   <div class="p-6 border-t border-slate-200 flex flex-wrap gap-2 sticky bottom-0 bg-white z-10" style="box-shadow:0 -6px 16px -10px rgba(15,30,61,.25)">
@@ -590,10 +594,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260709n"></script>
-<script src="../assets/js/supabase-client.js?v=20260709n"></script>
-<script src="../assets/js/data.js?v=20260709n"></script>
-<script src="../assets/js/app.js?v=20260709n"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260709o"></script>
+<script src="../assets/js/supabase-client.js?v=20260709o"></script>
+<script src="../assets/js/data.js?v=20260709o"></script>
+<script src="../assets/js/app.js?v=20260709o"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -865,6 +869,17 @@
     const f = factures.find(x => x.fileId === fileId);
     if (!f) return;
     state.currentId = fileId;
+    // Navigation précédente / suivante (suit l'ordre affiché dans le tableau : date décroissante)
+    (function setupDrawerNav(){
+      const liste = filtered().slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const idx = liste.findIndex(x => x.fileId === fileId);
+      const prevId = idx > 0 ? liste[idx - 1].fileId : '';
+      const nextId = (idx >= 0 && idx < liste.length - 1) ? liste[idx + 1].fileId : '';
+      [['drawer-prev', prevId], ['drawer-next', nextId]].forEach(([bid, tid]) => {
+        const btn = $(bid); if (!btn) return;
+        btn.dataset.targetId = tid; btn.style.opacity = tid ? '1' : '.3'; btn.style.pointerEvents = tid ? 'auto' : 'none';
+      });
+    })();
     $('drawer-num').textContent = f.numeroFacture || '—';
     $('drawer-title').textContent = f.description || 'Facture';
     $('drawer-subtitle').textContent = `${f.fournisseur || '—'} · ${FP.date(f.date)}`;
@@ -923,6 +938,7 @@
     else { openBtn.removeAttribute('href'); openBtn.style.display = 'none'; }
     $('drawer').classList.add('open');
     $('drawer-backdrop').classList.add('open');
+    (function(){ const dr = $('drawer'); dr.classList.remove('fiche-in'); void dr.offsetWidth; dr.classList.add('fiche-in'); })();
     lucide.createIcons();
   }
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
@@ -1495,6 +1511,8 @@
     });
   });
   $('drawer-close').addEventListener('click', closeDrawer);
+  $('drawer-prev')?.addEventListener('click', () => { const id = $('drawer-prev').dataset.targetId; if (id) openDrawer(id); });
+  $('drawer-next')?.addEventListener('click', () => { const id = $('drawer-next').dataset.targetId; if (id) openDrawer(id); });
   $('drawer-backdrop').addEventListener('click', closeDrawer);
   $('drawer-delete').addEventListener('click', deleteFacture);
 

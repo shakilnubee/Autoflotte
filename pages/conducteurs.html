@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709n">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709o">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260709n"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260709o"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260709n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260709o">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -278,9 +278,13 @@
           <p class="text-[0.95rem] mt-0.5" style="color:#8598B4" id="drawer-sub">—</p>
         </div>
       </div>
-      <button aria-label="Fermer" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm flex-shrink-0" id="drawer-close">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
+      <div class="flex items-center gap-1 flex-shrink-0">
+        <button aria-label="Conducteur précédent" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-prev" title="Conducteur précédent"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+        <button aria-label="Conducteur suivant" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-next" title="Conducteur suivant"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+        <button aria-label="Fermer" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-close">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
     </div>
     <div id="drawer-chips" class="flex flex-wrap gap-2 mt-3"></div>
     <div id="drawer-gauge" class="flex flex-col items-center mt-2"></div>
@@ -351,11 +355,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260709n"></script>
-<script src="../assets/js/supabase-client.js?v=20260709n"></script>
-<script src="../assets/js/data.js?v=20260709n"></script>
-<script src="../assets/js/fleet-docs.js?v=20260709n"></script>
-<script src="../assets/js/app.js?v=20260709n"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260709o"></script>
+<script src="../assets/js/supabase-client.js?v=20260709o"></script>
+<script src="../assets/js/data.js?v=20260709o"></script>
+<script src="../assets/js/fleet-docs.js?v=20260709o"></script>
+<script src="../assets/js/app.js?v=20260709o"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -904,6 +908,18 @@
     const d = drivers.find(x => x.key === key);
     if (!d) return;
     currentDriverKey = key;
+    // Navigation précédent / suivant (suit l'ordre affiché dans la grille)
+    (function setupDrawerNav(){
+      const q = FP.norm(state.search).trim();
+      const liste = drivers.filter(x => !q || FP.norm(`${x.name} ${x.nom || ''} ${x.prenom || ''}`).includes(q));
+      const idx = liste.findIndex(x => x.key === key);
+      const prevK = idx > 0 ? liste[idx - 1].key : '';
+      const nextK = (idx >= 0 && idx < liste.length - 1) ? liste[idx + 1].key : '';
+      [['drawer-prev', prevK], ['drawer-next', nextK]].forEach(([bid, tk]) => {
+        const btn = $(bid); if (!btn) return;
+        btn.dataset.targetKey = tk; btn.style.opacity = tk ? '1' : '.3'; btn.style.pointerEvents = tk ? 'auto' : 'none';
+      });
+    })();
     const hdrColor = driverColor(d);
     const hdrGrp = driverGroupLabel(d);
     const avEl = $('drawer-avatar');
@@ -1064,6 +1080,7 @@
 
     $('drawer').classList.add('open');
     $('drawer-backdrop').classList.add('open');
+    (function(){ const dr = $('drawer'); dr.classList.remove('fiche-in'); void dr.offsetWidth; dr.classList.add('fiche-in'); })();
     lucide.createIcons();
   }
 
@@ -1205,6 +1222,8 @@
   $('bulk-delete').addEventListener('click', bulkDelete);
   $('bulk-clear').addEventListener('click', clearSelection);
   $('drawer-close').addEventListener('click', closeDrawer);
+  $('drawer-prev')?.addEventListener('click', () => { const k = $('drawer-prev').dataset.targetKey; if (k) openDrawer(k); });
+  $('drawer-next')?.addEventListener('click', () => { const k = $('drawer-next').dataset.targetKey; if (k) openDrawer(k); });
   $('drawer-backdrop').addEventListener('click', closeDrawer);
 
   // Visionneuse intégrée (aperçu Google Drive)
