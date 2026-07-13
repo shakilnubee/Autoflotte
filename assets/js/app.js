@@ -341,7 +341,9 @@ FP.tvsDetail = (v) => {
   const polluant = FP.tvsPolluant(carb, (v.dateMiseEnCirculation || v.dateImmat || '').slice(0, 4));
   if (/lectri|hydrog/i.test(carb)) return { applicable: true, elec: true, co2: 0, polluant: 0, total: 0 };
   const co2 = Number(v.co2);
-  if (!Number.isFinite(co2) || co2 <= 0) return { applicable: true, co2Manquant: true, co2: null, polluant, total: null };
+  // CO₂ inconnu : la taxe "polluants atmosphériques" reste due → on compte au moins le polluant
+  // (la part CO₂ reste inconnue, signalée par co2Manquant), au lieu de tout mettre à 0.
+  if (!Number.isFinite(co2) || co2 <= 0) return { applicable: true, co2Manquant: true, co2: null, polluant, total: polluant };
   const co2Tax = FP.tvsCo2(co2);
   return { applicable: true, co2: co2Tax, polluant, total: co2Tax + polluant };
 };
@@ -1397,8 +1399,10 @@ FP.buildAlertes = (data) => {
     // ⚠️ Aucune date de révision ET le véhicule a déjà parcouru au moins un intervalle complet
     // (ex. ≥ 15 000 km) → la révision est due (ou pas enregistrée). Alerte prioritaire.
     const _hasRev = v.derniereRevision && v.derniereRevision !== '—';
+    const _hasRevKm = Number(v.kmDernierReleve) > 0; // km à la dernière révision renseigné ?
     const _km = Number(v.km) || 0;
-    if (!_hasRev && _km >= r.intervalle.km) {
+    // Alerte seulement si AUCUNE info de révision (ni date ni km) — sinon revisionInfo sait calculer.
+    if (!_hasRev && !_hasRevKm && _km >= r.intervalle.km) {
       out.push({ niveau: 'danger', categorie: 'Révision',
         message: `Aucune date de révision · ${FP.num(_km)} km`,
         detail: `${veh} — aucune date de révision enregistrée alors que le véhicule a parcouru ${FP.num(_km)} km (préconisé tous les ${FP.num(r.intervalle.km)} km). Révision à faire, ou à saisir si déjà faite.`,

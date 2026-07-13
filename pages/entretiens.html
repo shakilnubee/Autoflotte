@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709s">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709t">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260709s"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260709t"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260709s">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260709t">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -233,10 +233,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260709s"></script>
-<script src="../assets/js/supabase-client.js?v=20260709s"></script>
-<script src="../assets/js/data.js?v=20260709s"></script>
-<script src="../assets/js/app.js?v=20260709s"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260709t"></script>
+<script src="../assets/js/supabase-client.js?v=20260709t"></script>
+<script src="../assets/js/data.js?v=20260709t"></script>
+<script src="../assets/js/app.js?v=20260709t"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -267,6 +267,9 @@
     });
   }
 
+  // Véhicule hors flotte (vendu / à vendre / hors service) → exclu des échéances CT (comme Suivi & alertes)
+  const horsFlotteCT = (v) => /vendu|vendre|hors\s*service/i.test(((v.statut || '') + ' ' + (v.etat || '')));
+
   function renderKPIs() {
     const rows = filtered();
     const total = rows.reduce((s,i) => s + (i.montantTTC || 0), 0);
@@ -277,6 +280,7 @@
     const today = new Date();
     let ctSoon = 0, ctLate = 0;
     (data.vehicules || []).forEach(v => {
+      if (horsFlotteCT(v)) return; // exclut vendus / à vendre / hors service (comme Suivi & alertes)
       if (!v.prochainCT || v.prochainCT === '—') return;
       const d = new Date(v.prochainCT);
       const diff = Math.ceil((d - today) / (1000*60*60*24));
@@ -290,7 +294,7 @@
   function renderCTList() {
     const today = new Date();
     const items = (data.vehicules || [])
-      .filter(v => v.prochainCT && v.prochainCT !== '—')
+      .filter(v => v.prochainCT && v.prochainCT !== '—' && !horsFlotteCT(v))
       .map(v => {
         const d = new Date(v.prochainCT);
         const diff = Math.ceil((d - today) / (1000*60*60*24));
@@ -317,7 +321,7 @@
       `;
     }).join('');
 
-    $('ct-summary').textContent = `${items.length} véhicule${items.length > 1 ? 's' : ''} le${items.length > 1 ? 's' : ''} plus urgent${items.length > 1 ? 's' : ''} / ${(data.vehicules || []).filter(v => v.prochainCT && v.prochainCT !== '—').length} avec CT planifié`;
+    $('ct-summary').textContent = `${items.length} véhicule${items.length > 1 ? 's' : ''} le${items.length > 1 ? 's' : ''} plus urgent${items.length > 1 ? 's' : ''} / ${(data.vehicules || []).filter(v => v.prochainCT && v.prochainCT !== '—' && !horsFlotteCT(v)).length} avec CT planifié`;
     lucide.createIcons();
   }
 

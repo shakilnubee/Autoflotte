@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709s">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709t">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260709s"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260709t"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260709s">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260709t">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -260,10 +260,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260709s"></script>
-<script src="../assets/js/supabase-client.js?v=20260709s"></script>
-<script src="../assets/js/data.js?v=20260709s"></script>
-<script src="../assets/js/app.js?v=20260709s"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260709t"></script>
+<script src="../assets/js/supabase-client.js?v=20260709t"></script>
+<script src="../assets/js/data.js?v=20260709t"></script>
+<script src="../assets/js/app.js?v=20260709t"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -284,8 +284,10 @@
   }
   function updateTvsKpi() {
     if (FP.TVS_ANNEE) $('kpi-tvs-annee').textContent = FP.TVS_ANNEE;
-    const totalTVS = (data.vehicules || []).reduce((s, v) => { const d = FP.tvsDetail(v); return s + (d.applicable && d.total != null ? d.total : 0); }, 0);
-    const nbSoumis = (data.vehicules || []).filter(v => { const d = FP.tvsDetail(v); return d.applicable && d.total != null; }).length;
+    // On exclut les véhicules vendus / hors service (comme le bilan CO₂ et la conformité).
+    const soumisVehs = (data.vehicules || []).filter(v => !/vendu|hors\s*service/i.test((v.statut || v.etat || '')));
+    const totalTVS = soumisVehs.reduce((s, v) => { const d = FP.tvsDetail(v); return s + (d.applicable && d.total != null ? d.total : 0); }, 0);
+    const nbSoumis = soumisVehs.filter(v => { const d = FP.tvsDetail(v); return d.applicable && d.total != null && !d.elec; }).length;
     $('kpi-tvs').textContent = FP.euro(totalTVS);
     $('kpi-tvs-sub').textContent = `${nbSoumis} véhicule${nbSoumis > 1 ? 's' : ''} soumis`;
   }
@@ -482,7 +484,9 @@
   }
 
   function render(annee) {
-    const fact = (annee === 'all') ? factures : factures.filter(f => (f.date || '').startsWith(annee));
+    let fact = (annee === 'all') ? factures : factures.filter(f => (f.date || '').startsWith(annee));
+    // Dédoublonnage par numéro de facture (comme la page Factures) → évite de gonfler les totaux/graphes/TCO.
+    { const _seen = new Set(); fact = fact.filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (_seen.has(k)) return false; _seen.add(k); return true; }); }
     $('periode-label').textContent = (annee === 'all') ? 'toutes années' : annee;
 
     // KPI : usage vs achat
@@ -548,13 +552,22 @@
     const findPrime = (immat) => { const k = normP(immat); for (const key in primes) { if (normP(key) === k) return primes[key]; } return null; };
     const normN = s => (s || '').toString().trim().toLowerCase();
     const amAll = (annee === 'all') ? (data.amendes || []) : (data.amendes || []).filter(a => (a.date || '').startsWith(annee));
+    const _seenDrv = new Set();
+    const _EXC_TCO = new Set(['cession', 'carburant', 'peage', 'ulys']); // vente = entrée d'argent ; carburant/péages = onglet Total Fleet
     tcoData = data.vehicules.map(v => {
       const fv = fact.filter(f => f.vehiculeImmat === v.immat);
-      const factTotal = fv.reduce((s, f) => s + (+f.montantTTC || 0), 0);
+      const factTotal = fv.filter(f => !_EXC_TCO.has((f.type || '').toLowerCase())).reduce((s, f) => s + (+f.montantTTC || 0), 0);
       const pr = findPrime(v.immat); const assur = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : 0;
       const tvsD = FP.tvsDetail(v); const tvs = (tvsD.applicable && tvsD.total != null) ? tvsD.total : 0;
-      const drv = normN(v.chauffeur);
-      const amendes = drv ? amAll.filter(a => normN(a.prenom) === drv).reduce((s, a) => s + (+a.montant || 0), 0) : 0;
+      // Amendes du conducteur (par PRÉNOM), comptées UNE seule fois même s'il a plusieurs véhicules,
+      // et au montant DÛ (majoré si l'amende est majorée).
+      const drv = FP.normPrenom(v.chauffeur);
+      let amendes = 0;
+      if (drv && !_seenDrv.has(drv)) {
+        amendes = amAll.filter(a => FP.normPrenom(a.prenom) === drv)
+          .reduce((s, a) => s + ((a.majoree && +a.montantMajore) ? +a.montantMajore : (+a.montant || 0)), 0);
+        _seenDrv.add(drv);
+      }
       const total = factTotal + assur + tvs + amendes;
       const achatF = fv.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
       return { id: v.id, immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, fact: factTotal, assur, tvs, amendes, total, perKm: v.km > 0 ? total / v.km : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
