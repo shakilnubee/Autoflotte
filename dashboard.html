@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260709c">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260709d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260709c"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260709d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260709c">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260709d">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -362,10 +362,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260709c"></script>
-<script src="assets/js/supabase-client.js?v=20260709c"></script>
-<script src="assets/js/data.js?v=20260709c"></script>
-<script src="assets/js/app.js?v=20260709c"></script>
+<script src="assets/js/vendor/supabase.js?v=20260709d"></script>
+<script src="assets/js/supabase-client.js?v=20260709d"></script>
+<script src="assets/js/data.js?v=20260709d"></script>
+<script src="assets/js/app.js?v=20260709d"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -986,9 +986,13 @@
     function vehSelect(id, selId) {
       const vehs = ((window.FP_DATA && window.FP_DATA.vehicules) || []).slice()
         .sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
-      const opts = ['<option value="">— Choisir un véhicule —</option>']
-        .concat(vehs.map(v => `<option value="${v.id}" ${selId === v.id ? 'selected' : ''}>${(v.immat || '?')} · ${(v.marque || '')} ${(v.modele || '')}</option>`)).join('');
-      return `<select id="${id}" class="field-input" style="width:100%">${opts}</select>`;
+      const sel = vehs.find(v => v.id === selId);
+      const listId = id + '-list';
+      // Champ de saisie + liste filtrable : on tape la plaque pour retrouver le véhicule vite.
+      // La valeur saisie = l'immatriculation (résolue en id du véhicule à l'enregistrement).
+      const opts = vehs.map(v => `<option value="${(v.immat || '?')}">${(v.immat || '?')} · ${(v.marque || '')} ${(v.modele || '')}</option>`).join('');
+      return `<input id="${id}" class="field-input" list="${listId}" autocomplete="off" placeholder="Tape la plaque… (ex. AB-123-CD)" value="${sel ? (sel.immat || '') : ''}" style="width:100%">
+        <datalist id="${listId}">${opts}</datalist>`;
     }
     function typeSelect(id, selType) {
       const opts = Object.keys(TYPE_LABELS).map(k => `<option value="${k}" ${selType === k ? 'selected' : ''}>${TYPE_LABELS[k]}</option>`).join('');
@@ -1117,7 +1121,10 @@
           r.idNumero = val('b-idnum-' + i);
           r.idExpiration = val('b-idexp-' + i);
         } else {
-          r.vehId = val('b-veh-' + i);
+          // Le champ véhicule contient une plaque saisie/choisie → on la résout en id de véhicule.
+          const _vehVal = (val('b-veh-' + i) || '').trim().toUpperCase();
+          const _vm = _vehVal ? (window.FP_DATA.vehicules || []).find(v => (v.immat || '').toUpperCase() === _vehVal) : null;
+          r.vehId = _vm ? _vm.id : '';
           r.date = val('b-date-' + i);
           r.km = parseInt(val('b-km-' + i), 10);
           r.amt = parseFloat(val('b-amt-' + i));

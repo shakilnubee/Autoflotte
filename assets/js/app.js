@@ -1392,9 +1392,20 @@ FP.buildAlertes = (data) => {
   (data.vehicules || []).forEach(v => {
     if (v.statut && v.statut !== 'actif') return; // on ignore vendus / à vendre / hors service
     const r = FP.revisionInfo(v);
-    if (!r.niveau) return;
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
     const tgt = 'vehicules.html?veh=' + v.id;
+    // ⚠️ Aucune date de révision ET le véhicule a déjà parcouru au moins un intervalle complet
+    // (ex. ≥ 15 000 km) → la révision est due (ou pas enregistrée). Alerte prioritaire.
+    const _hasRev = v.derniereRevision && v.derniereRevision !== '—';
+    const _km = Number(v.km) || 0;
+    if (!_hasRev && _km >= r.intervalle.km) {
+      out.push({ niveau: 'danger', categorie: 'Révision',
+        message: `Aucune date de révision · ${FP.num(_km)} km`,
+        detail: `${veh} — aucune date de révision enregistrée alors que le véhicule a parcouru ${FP.num(_km)} km (préconisé tous les ${FP.num(r.intervalle.km)} km). Révision à faire, ou à saisir si déjà faite.`,
+        sort: -100000, target: tgt, muteKey: 'rev|' + v.id + '|norev', vehLabel: veh });
+      return;
+    }
+    if (!r.niveau) return;
     const kmOverdue = r.kmRestant !== null && r.kmRestant <= 0;
     const dtOverdue = r.joursRestant !== null && r.joursRestant <= 0;
     let msg;
