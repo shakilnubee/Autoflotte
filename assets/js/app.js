@@ -1,4 +1,4 @@
-// Auto-flotte — helpers JS partagés
+// Parc Pilot — helpers JS partagés
 
 // Multi-société : si l'utilisateur connecté est un CLIENT (non super-admin), on le verrouille sur
 // SA société AVANT tout (clé de cache, filtres, étiquetage des saisies). On lit le profil mis en
@@ -566,7 +566,7 @@ FP.settings = {
       'depot':       { label: 'Dépôt',       color: '#3B82F6' },
       'non-classe':  { label: 'Non classé',  color: '#94A3B8' },
     },
-    societe: { nom: 'Auto-flotte', siret: '', adresse: '' },
+    societe: { nom: 'Parc Pilot', siret: '', adresse: '' },
     platformColor: '#111827', // couleur de base de l'interface (sidebar/titres/boutons foncés) — noir Parc Pilot
     sidebarLabels: {}, // ex: { 'vehicules.html': 'Mes voitures', 'amendes.html': 'PV' }
     customTexts: {}, // textes éditables sur les pages (titres, sous-titres) — ex: { 'amendes.subtitle': 'Mes PV' }

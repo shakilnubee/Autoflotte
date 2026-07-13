@@ -1,4 +1,4 @@
-// Auto-flotte — client Supabase (backend)
+// Parc Pilot — client Supabase (backend)
 // Le SDK officiel doit être chargé AVANT ce fichier via :
 //   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
