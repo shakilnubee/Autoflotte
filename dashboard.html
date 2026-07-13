@@ -430,11 +430,17 @@
     document.getElementById('details-label').textContent = open ? 'Masquer les indicateurs détaillés' : 'Voir les indicateurs détaillés';
   });
 
-  // Coût du mois courant : somme des factures TTC dont la date commence par YYYY-MM courant
+  // Coût du mois courant — MÊME règle que la page Factures :
+  // on EXCLUT les loyers de leasing (comptés dans Contrats), les sinistres,
+  // le carburant/péages (Total Fleet) et Ulys → on ne compte que les vraies factures.
+  const _cn = (s) => (s == null ? '' : s.toString()).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const isUlysF = (f) => _cn(f.type) === 'ulys' || /\bulys\b/.test(_cn(f.fournisseur));
+  const isTotalFleetF = (f) => { if (isUlysF(f)) return false; const t = _cn(f.type); if (t === 'carburant' || t === 'peage') return true; return /total\s*energies|totalenergies/.test(_cn(f.fournisseur)); };
+  const compteCout = (f) => f.type !== 'leasing' && f.type !== 'sinistre' && !isTotalFleetF(f) && !isUlysF(f);
   const today = new Date();
   const currentMonth = today.toISOString().slice(0, 7);
   const coutsMois = (data.factures || [])
-    .filter(f => (f.date || '').startsWith(currentMonth))
+    .filter(f => (f.date || '').startsWith(currentMonth) && compteCout(f))
     .reduce((s, f) => s + (f.montantTTC || 0), 0);
   document.getElementById('kpi-couts').textContent = FP.euro(coutsMois);
 
@@ -827,7 +833,7 @@
     document.getElementById('kpi-valeur').textContent = FP.euro(fa.reduce((s, v) => s + (v.valeurAchat || 0), 0));
     document.getElementById('kpi-entretien').textContent = fa.filter(v => v.statut === 'entretien').length;
     const cm = new Date().toISOString().slice(0, 7);
-    document.getElementById('kpi-couts').textContent = FP.euro((data.factures || []).filter(f => (f.date || '').startsWith(cm)).reduce((s, f) => s + (f.montantTTC || 0), 0));
+    document.getElementById('kpi-couts').textContent = FP.euro((data.factures || []).filter(f => (f.date || '').startsWith(cm) && compteCout(f)).reduce((s, f) => s + (f.montantTTC || 0), 0));
     if (typeof refreshAlertes === 'function') refreshAlertes();
     if (typeof renderSante === 'function') renderSante();
     if (typeof renderOnboarding === 'function') renderOnboarding();
