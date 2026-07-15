@@ -305,6 +305,22 @@
         <p class="text-xs mt-2" id="sync-status"></p>
         <div id="sync-diag" class="hidden mt-3 text-xs leading-relaxed rounded-lg p-3 border"></div>
       </div>
+
+      <div class="mt-5 pt-4 border-t border-slate-100">
+        <div class="field-label">Import en masse (CSV)</div>
+        <p class="text-sm text-slate-600 mb-3">Importe des <b>véhicules</b> ou <b>conducteurs</b> depuis un CSV (exporté d'Excel). 1ʳᵉ ligne = en-têtes. Les <b>doublons sont ignorés</b>. Teste d'abord avec quelques lignes.</p>
+        <div class="flex gap-2 flex-wrap items-center mb-2">
+          <select id="imp-type" class="field-input" style="width:auto"><option value="vehicules">Véhicules</option><option value="conducteurs">Conducteurs</option></select>
+          <input type="file" id="imp-file" accept=".csv,text/csv" class="text-sm">
+        </div>
+        <textarea id="imp-text" placeholder="…ou colle ici le contenu CSV" style="width:100%;height:90px;border:1px solid var(--fp-border);border-radius:8px;padding:8px;font-size:.82rem;font-family:monospace"></textarea>
+        <div class="flex gap-2 mt-2">
+          <button class="btn btn-outline text-sm" id="imp-analyze"><i data-lucide="search" class="w-4 h-4"></i> Analyser</button>
+          <button class="btn btn-dark text-sm" id="imp-run" disabled><i data-lucide="upload" class="w-4 h-4"></i> Importer</button>
+        </div>
+        <div id="imp-preview" class="text-sm mt-3"></div>
+        <p class="text-xs text-slate-400 mt-2">Colonnes reconnues — <b>Véhicules</b> : immatriculation, marque, modèle, catégorie, carburant, km, mise en circulation, propriétaire, statut. <b>Conducteurs</b> : nom, prénom (ou « conducteur »).</p>
+      </div>
     </div>
 
     <!-- Section Journal des modifications -->
@@ -761,6 +777,88 @@
   $('btn-export-all').addEventListener('click', exportAll);
   $('btn-import-all').addEventListener('click', importAll);
   $('btn-reset-all').addEventListener('click', resetAll);
+
+  // ---------- Import en masse CSV (véhicules / conducteurs) ----------
+  (function csvImport() {
+    const normH = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const VEH_COLS = [[/immat|plaque/, 'immat'], [/marque/, 'marque'], [/model/, 'modele'], [/categ/, 'categorie'], [/carbur|energie/, 'carburant'], [/kilom|^km$/, 'km'], [/circulation|mise en|1re|premiere/, 'dateMiseEnCirculation'], [/propri/, 'proprietaire'], [/statut|etat/, 'statut']];
+    const COND_COLS = [[/nom de famille|^nom$/, 'nom'], [/prenom|conducteur|^name$/, 'prenom']];
+    function parseCSV(text) {
+      text = String(text || '').replace(/\r\n?/g, '\n').replace(/^﻿/, '').trim();
+      if (!text) return [];
+      const nl = text.indexOf('\n'); const first = nl < 0 ? text : text.slice(0, nl);
+      const delim = (first.split(';').length > first.split(',').length) ? ';' : ',';
+      const rows = []; let row = [], cur = '', inQ = false;
+      for (let i = 0; i < text.length; i++) { const c = text[i];
+        if (inQ) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else inQ = false; } else cur += c; }
+        else { if (c === '"') inQ = true; else if (c === delim) { row.push(cur); cur = ''; } else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; } else cur += c; } }
+      row.push(cur); rows.push(row);
+      return rows.filter(r => r.some(x => String(x).trim() !== ''));
+    }
+    function mapField(header, cols) { const h = normH(header); for (const [re, f] of cols) if (re.test(h)) return f; return null; }
+    let pending = null; // { type, toAdd:[], dupes:int }
+    function analyze() {
+      const type = $('imp-type').value;
+      const text = $('imp-text').value;
+      const rows = parseCSV(text);
+      const box = $('imp-preview'); $('imp-run').disabled = true; pending = null;
+      if (rows.length < 2) { box.innerHTML = '<span class="text-red-600">CSV vide ou sans données (il faut une ligne d\'en-têtes + au moins 1 ligne).</span>'; return; }
+      const cols = (type === 'vehicules') ? VEH_COLS : COND_COLS;
+      const headers = rows[0].map(h => mapField(h, cols));
+      if (!headers.some(Boolean)) { box.innerHTML = '<span class="text-red-600">Aucune colonne reconnue. Vérifie les en-têtes (voir la liste ci-dessous).</span>'; return; }
+      const existing = (window.FP_DATA && FP_DATA[type]) ? FP_DATA[type].slice() : [];
+      const toAdd = []; let dupes = 0, invalid = 0;
+      for (let i = 1; i < rows.length; i++) {
+        const rec = {};
+        rows[i].forEach((val, j) => { const f = headers[j]; if (f && String(val).trim() !== '') rec[f] = String(val).trim(); });
+        let cand;
+        if (type === 'vehicules') {
+          if (!rec.immat) { invalid++; continue; }
+          rec.immat = rec.immat.toUpperCase().replace(/\s+/g, '');
+          if (rec.km != null) rec.km = parseInt(String(rec.km).replace(/\D/g, ''), 10) || 0;
+          cand = rec;
+        } else {
+          const prenom = rec.prenom || rec.nom; if (!prenom) { invalid++; continue; }
+          cand = { key: FP.normPrenom(prenom), name: rec.prenom || prenom, nom: rec.nom || null, prenom: rec.prenom || prenom, manuel: true };
+          if (!cand.key) { invalid++; continue; }
+        }
+        const isDupe = (FP.dupe && FP.dupe.find) ? FP.dupe.find(type, cand, existing.concat(toAdd)) : null;
+        if (isDupe) { dupes++; continue; }
+        toAdd.push(cand);
+      }
+      pending = { type, toAdd };
+      box.innerHTML = `<b>${toAdd.length}</b> ${type === 'vehicules' ? 'véhicule(s)' : 'conducteur(s)'} à ajouter · <span class="text-slate-500">${dupes} doublon(s) ignoré(s)${invalid ? ' · ' + invalid + ' ligne(s) sans identifiant' : ''}</span>` +
+        (toAdd.length ? `<div class="mt-2 text-xs text-slate-500">Ex. : ${toAdd.slice(0, 3).map(r => esc(type === 'vehicules' ? (r.immat + ' ' + (r.marque || '')) : (r.name + (r.nom ? ' ' + r.nom : '')))).join(' · ')}${toAdd.length > 3 ? '…' : ''}</div>` : '');
+      $('imp-run').disabled = toAdd.length === 0;
+    }
+    async function run() {
+      if (!pending || !pending.toAdd.length) return;
+      const { type, toAdd } = pending;
+      $('imp-run').disabled = true; $('imp-preview').innerHTML = 'Import en cours…';
+      let ok = 0, err = 0;
+      for (const rec of toAdd) {
+        try {
+          if (type === 'vehicules') {
+            const row = { id: 'V-IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), groupes: ['non-classe'], statut: rec.statut || 'actif', ...rec };
+            await FP.persist.insert('vehicules', row);
+            if (window.FP_DATA && FP_DATA.vehicules) FP_DATA.vehicules.push(row);
+          } else {
+            await FP.persist.insert('conducteurs', rec);
+            if (window.FP_DATA && FP_DATA.conducteurs) FP_DATA.conducteurs.push(rec);
+          }
+          ok++;
+        } catch (e) { err++; }
+      }
+      $('imp-preview').innerHTML = `<span class="text-emerald-600">✓ ${ok} ajouté(s)</span>${err ? ` · <span class="text-red-600">${err} échec(s)</span>` : ''}. Recharge la page Véhicules/Conducteurs pour les voir.`;
+      $('imp-text').value = ''; pending = null;
+      if (FP.toast) FP.toast(ok + ' ligne(s) importée(s) ✓');
+    }
+    const fileEl = $('imp-file');
+    if (fileEl) fileEl.addEventListener('change', e => { const f = e.target.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { $('imp-text').value = rd.result; analyze(); }; rd.readAsText(f); });
+    if ($('imp-analyze')) $('imp-analyze').addEventListener('click', analyze);
+    if ($('imp-run')) $('imp-run').addEventListener('click', run);
+  })();
 
   // === Historique : branchement boutons + raccourcis ===
   FP.history.renderAll = () => {
