@@ -1874,6 +1874,32 @@
       }
     } catch (e) { console.warn('[fiche alertes]', e); }
 
+    // Cartes carburant / badge télépéage + Notes datées — stockés par société dans les réglages.
+    const _st = FP.settings.get();
+    const _cc = (_st.vehCarteCarb || {})[v.id] || '', _fc = (_st.vehFournCarb || {})[v.id] || '', _bt = (_st.vehBadge || {})[v.id] || '';
+    const _notes = ((_st.vehNotes || {})[v.id]) || [];
+    const _inp = 'width:160px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
+    const notesListHTML = _notes.length
+      ? _notes.map((n, idx) => `<div class="flex justify-between items-start gap-2 py-1.5 border-b border-slate-100"><div><div class="text-xs text-slate-400">${FP.dateNum ? FP.dateNum((n.ts || '').slice(0, 10)) : (n.ts || '').slice(0, 10)}</div><div class="text-sm text-slate-700">${escapeHtml(n.text || '')}</div></div><button class="p-1 text-slate-300 hover:text-red-600" data-note-del="${idx}" title="Supprimer">✕</button></div>`).join('')
+      : '<p class="text-xs text-slate-400">Aucune note pour ce véhicule.</p>';
+    const infoNotesHTML = `
+      <div class="fp-panel">
+        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1 flex items-center gap-2"><i data-lucide="credit-card" class="w-4 h-4"></i> Carte carburant & télépéage</div>
+        <div class="text-sm space-y-2 mt-3">
+          <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Carte carburant (n°)</span><input class="veh-carte" data-k="vehCarteCarb" data-id="${v.id}" value="${escapeHtml(_cc)}" placeholder="—" style="${_inp}"></div>
+          <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Fournisseur carburant</span><input class="veh-carte" data-k="vehFournCarb" data-id="${v.id}" value="${escapeHtml(_fc)}" placeholder="ex. TotalEnergies" style="${_inp}"></div>
+          <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Badge télépéage (n°)</span><input class="veh-carte" data-k="vehBadge" data-id="${v.id}" value="${escapeHtml(_bt)}" placeholder="—" style="${_inp}"></div>
+        </div>
+      </div>
+      <div class="fp-panel">
+        <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1 flex items-center gap-2"><i data-lucide="sticky-note" class="w-4 h-4"></i> Notes / journal</div>
+        <div class="flex gap-2 mt-3">
+          <input id="veh-note-input" data-id="${v.id}" placeholder="Ajouter une note…" style="flex:1;border:1px solid var(--fp-border);border-radius:6px;padding:5px 9px;font-size:.85rem">
+          <button type="button" class="btn btn-outline text-sm" id="veh-note-add" data-id="${v.id}"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter</button>
+        </div>
+        <div class="mt-3">${notesListHTML}</div>
+      </div>`;
+
     $('drawer-body').innerHTML = `
       <div class="flex justify-between items-start">
         <div class="flex flex-wrap gap-1"><span data-df="statut" data-dt="select">${FP.statutBadge(v.statut)}</span> ${multiGroupePills(v)}</div>
@@ -1986,6 +2012,7 @@
 
       ${vehTimelineHTML(v)}
 
+      ${infoNotesHTML}
       ${carnetHTML}
       ${alertesHTML}
     `;
@@ -2874,6 +2901,33 @@
     if (Number.isFinite(val) && val > 0) s.vehMasse[m.dataset.id] = val; else delete s.vehMasse[m.dataset.id];
     FP.settings.save(s);
     if (drawerVehId) openDrawer(drawerVehId); // recalcule le badge stationnement Paris
+  });
+  // Carte carburant / fournisseur / badge télépéage (texte, réglages PAR SOCIÉTÉ)
+  $('drawer-body').addEventListener('change', (e) => {
+    const c = e.target.closest('input.veh-carte'); if (!c) return;
+    const k = c.dataset.k, id = c.dataset.id; if (!k || !id) return;
+    const s = FP.settings.get(); s[k] = s[k] || {};
+    const val = (c.value || '').trim();
+    if (val) s[k][id] = val; else delete s[k][id];
+    FP.settings.save(s);
+  });
+  // Notes / journal par véhicule (ajout + suppression)
+  $('drawer-body').addEventListener('click', (e) => {
+    const add = e.target.closest('#veh-note-add');
+    if (add) {
+      const inp = document.getElementById('veh-note-input'); const id = add.dataset.id;
+      const text = ((inp && inp.value) || '').trim(); if (!text || !id) return;
+      const s = FP.settings.get(); s.vehNotes = s.vehNotes || {};
+      s.vehNotes[id] = (s.vehNotes[id] || []).concat([{ ts: new Date().toISOString(), text }]);
+      FP.settings.save(s); if (drawerVehId) openDrawer(drawerVehId);
+      return;
+    }
+    const del = e.target.closest('[data-note-del]');
+    if (del && drawerVehId) {
+      const idx = parseInt(del.dataset.noteDel, 10);
+      const s = FP.settings.get(); const arr = (s.vehNotes && s.vehNotes[drawerVehId]) || [];
+      if (idx >= 0 && idx < arr.length) { arr.splice(idx, 1); s.vehNotes[drawerVehId] = arr; FP.settings.save(s); openDrawer(drawerVehId); }
+    }
   });
 
   // Budget entretien annuel par véhicule (réglages partagés) → met à jour la barre + l'alerte
