@@ -359,6 +359,21 @@
         </div>
       </div>
 
+      <!-- Widget : Véhicules empruntés en ce moment -->
+      <div class="dash-widget" data-widget="emprunts">
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Véhicules empruntés</span></div>
+        <div class="card p-6">
+          <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <div>
+              <h3 class="font-bold text-slate-900">🔑 Véhicules empruntés en ce moment</h3>
+              <p class="text-xs text-slate-500">Qui a un véhicule, non encore rendu</p>
+            </div>
+            <a href="pages/emprunts.html" class="text-xs font-semibold" style="color:var(--fp-accent)">Voir tout →</a>
+          </div>
+          <div id="emprunts-encours-list" class="text-sm text-slate-500">Chargement…</div>
+        </div>
+      </div>
+
     </div>
 
   </main>
@@ -407,6 +422,27 @@
       if (typeof refreshAlertes === 'function') refreshAlertes();
     }).catch(() => {});
   }
+
+  // Widget « Véhicules empruntés en ce moment » — les emprunts ne sont pas dans loadAll → requête dédiée.
+  (function empruntsEnCours(){
+    const box = document.getElementById('emprunts-encours-list'); if (!box) return;
+    if (!(FP.db && FP.db.select)) { box.textContent = 'Indisponible hors connexion.'; return; }
+    FP.db.select('emprunts').then(res => {
+      const rows = ((res && res.data) || []).filter(e => !e.dateRetour);
+      if (!rows.length) { box.innerHTML = '<span class="text-slate-500">Aucun véhicule emprunté actuellement.</span>'; return; }
+      const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+      const jours = d => { if (!d) return null; const ms = Date.now() - new Date(d).getTime(); return isFinite(ms) ? Math.max(0, Math.floor(ms / 86400000)) : null; };
+      rows.sort((a, b) => (a.dateEmprunt || '').localeCompare(b.dateEmprunt || '')); // les plus anciens (retards) en haut
+      box.innerHTML = rows.map(e => {
+        const j = jours(e.dateEmprunt); const retard = j != null && j > 2;
+        return `<a href="pages/emprunts.html" class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded px-1" style="text-decoration:none;color:inherit">
+          <span><b class="font-mono">${esc(e.vehicule || '—')}</b> <span class="text-slate-500">· ${esc(e.emprunteur || '—')}</span></span>
+          <span class="text-xs ${retard ? 'text-red-600 font-semibold' : 'text-slate-400'}">${j != null ? (retard ? '⚠️ ' : '') + 'depuis ' + j + ' j' : ''}</span>
+        </a>`;
+      }).join('');
+      if (window.lucide) lucide.createIcons();
+    }).catch(() => { box.textContent = 'Impossible de charger les emprunts.'; });
+  })();
 
   // Amendes restant à payer (statut « à payer ») — TOUTES années (l'argent dû reste dû, 2026 comme 2027).
   const amendesAPayer = (data.amendes || []).filter(a => {

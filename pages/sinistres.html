@@ -21,6 +21,11 @@
   .timeline-dot.success { background: var(--fp-ok); }
   .timeline-dot.info { background: var(--fp-primary-2); }
   .chart-wrap { position: relative; height: 240px; }
+  .sin-chip { padding: .4rem .9rem; border-radius: 9999px; font-size: .82rem; font-weight: 600; border: 1px solid var(--fp-border); background: #fff; color: var(--fp-muted); cursor: pointer; display: inline-flex; align-items: center; gap: .4rem; }
+  .sin-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .sin-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: #fff; }
+  .sin-chip .n { font-size: .72rem; font-weight: 800; background: rgba(0,0,0,.08); border-radius: 9999px; padding: 0 .4rem; }
+  .sin-chip.active .n { background: rgba(255,255,255,.22); }
   /* Drive sinistres : dossiers par véhicule + vignettes */
   .drive-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
   .drive-folder { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 16px 10px; border: 1px solid var(--fp-border); border-radius: 12px; background: linear-gradient(145deg, #fff, #f8fafc); cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s; }
@@ -213,6 +218,12 @@
     <!-- Liste -->
     <div>
       <h3 class="font-bold text-slate-900 mb-4">Sinistres</h3>
+      <!-- Filtres par suivi de remboursement : « En attente » d'abord pour voir ce qui reste à traiter -->
+      <div class="flex flex-wrap gap-2 mb-4" id="sin-filters">
+        <button type="button" class="sin-chip" data-remb="attente">En attente <span class="n" id="sin-n-attente">0</span></button>
+        <button type="button" class="sin-chip active" data-remb="all">Tous</button>
+        <button type="button" class="sin-chip" data-remb="regles">Réglés <span class="n" id="sin-n-regles">0</span></button>
+      </div>
       <div id="timeline" class="grid sm:grid-cols-2 gap-4"></div>
       <div id="sin-more" class="hidden pt-3 text-center"></div>
       <div id="empty-state" class="hidden text-center py-8">
@@ -238,7 +249,9 @@
 
   // Tous les sinistres = factures type=sinistre
   let sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
-  const state = { search: '', annee: 'all', vehicule: 'all' };
+  const state = { search: '', annee: 'all', vehicule: 'all', remb: 'all' };
+  const REGLES = ['rembourse', 'pec', 'refuse'];
+  const rembOf = (g) => { try { return (FP.settings.get().sinistreStatut || {})[g.key] || ''; } catch (e) { return ''; } };
 
   // Init filtres dynamiques — reconstruits aussi au chargement Supabase (sinon les nouvelles
   // années / nouveaux véhicules n'apparaissent pas dans les filtres).
@@ -350,7 +363,19 @@
   const SIN_LIMIT = 15;
   let sinExpanded = false;
   function renderTimeline() {
-    const groups = visibleGroups();
+    let groups = visibleGroups();
+    // Onglet de suivi : filtre par statut de remboursement
+    if (state.remb === 'attente') groups = groups.filter(g => rembOf(g) === 'attente');
+    else if (state.remb === 'regles') groups = groups.filter(g => REGLES.includes(rembOf(g)));
+    // TRI : « en attente » toujours EN HAUT, puis non suivis, puis réglés ; par date dans chaque groupe.
+    const prio = g => { const s = rembOf(g); if (s === 'attente') return 0; if (s === '') return 1; if (s === 'pec') return 2; return 3; };
+    groups = groups.slice().sort((a, b) => prio(a) - prio(b) || (b.rep.date || '').localeCompare(a.rep.date || ''));
+    // Compteurs + onglet actif
+    { const all = allGroups();
+      const na = $('sin-n-attente'); if (na) na.textContent = all.filter(g => rembOf(g) === 'attente').length;
+      const nr = $('sin-n-regles'); if (nr) nr.textContent = all.filter(g => REGLES.includes(rembOf(g))).length;
+      document.querySelectorAll('#sin-filters .sin-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.remb === state.remb));
+    }
     const tl = $('timeline');
     const empty = $('empty-state');
     const more = $('sin-more');
@@ -610,6 +635,7 @@
   }
 
   $('sin-more').addEventListener('click', e => { if (e.target.closest('#sin-toggle')) { sinExpanded = !sinExpanded; renderTimeline(); } });
+  { const sf = $('sin-filters'); if (sf) sf.addEventListener('click', e => { const b = e.target.closest('.sin-chip'); if (!b) return; state.remb = b.dataset.remb || 'all'; sinExpanded = false; renderTimeline(); }); }
   $('search').addEventListener('input', e => { state.search = e.target.value; sinExpanded = false; renderTimeline(); });
   $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; sinExpanded = false; renderTimeline(); });
   $('filter-vehicule').addEventListener('change', e => { state.vehicule = e.target.value; sinExpanded = false; renderTimeline(); });
