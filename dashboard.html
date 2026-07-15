@@ -149,12 +149,22 @@
         <div>
           <div class="fp-eyebrow" style="margin-bottom:.4rem">Parc Pilot · pilotage de flotte</div>
           <h1 class="text-2xl font-extrabold text-white" style="color:#fff" data-edit-key="dashboard.title">Tableau de bord</h1>
+          <p id="fp-greeting" class="text-sm mt-1" style="color:#C7D2E4;font-weight:600;min-height:1.25em"></p>
           <p class="text-sm mt-1" style="color:#8598B4" data-edit-key="dashboard.subtitle">Vue d'ensemble de votre flotte</p>
-          <div id="live-clock" class="fp-clock" role="timer" aria-live="off" title="Date et heure en temps réel">
-            <span class="fp-clock-dot" aria-hidden="true"></span>
-            <div class="fp-clock-main">
-              <div class="fp-clock-time"><span id="clk-hm">--:--</span><span id="clk-s" class="fp-clock-sec">:--</span></div>
-              <div id="clk-date" class="fp-clock-date">—</div>
+          <div class="fp-clockrow">
+            <div id="live-clock" class="fp-clock" role="timer" aria-live="off" title="Date et heure en temps réel">
+              <span class="fp-clock-dot" aria-hidden="true"></span>
+              <div class="fp-clock-main">
+                <div class="fp-clock-time"><span id="clk-hm">--:--</span><span id="clk-s" class="fp-clock-sec">:--</span></div>
+                <div id="clk-date" class="fp-clock-date">—</div>
+              </div>
+            </div>
+            <div id="fp-weather" class="fp-weather" hidden>
+              <span class="fp-weather-ico" aria-hidden="true"></span>
+              <div class="fp-weather-main">
+                <div class="fp-weather-temp"><span id="wx-temp">—</span></div>
+                <div class="fp-weather-sub"><span id="wx-label">Météo</span> · Île-de-France</div>
+              </div>
             </div>
           </div>
         </div>
@@ -1380,6 +1390,18 @@
   .fp-clock-sec { font-size:13px; font-weight:700; color:#78899F; font-variant-numeric:tabular-nums; }
   .fp-clock-date { margin-top:4px; color:#9FB0C9; font-size:11px; font-weight:600;
     text-transform:uppercase; letter-spacing:.85px; }
+  .fp-clockrow { display:flex; align-items:stretch; gap:10px; flex-wrap:wrap; margin-top:.65rem; }
+  .fp-clockrow .fp-clock { margin-top:0; }
+  .fp-weather { display:inline-flex; align-items:center; gap:11px; padding:9px 16px 9px 13px;
+    border-radius:14px; background:linear-gradient(135deg, rgba(255,255,255,.075), rgba(255,255,255,.025));
+    border:1px solid rgba(255,255,255,.10); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 8px 22px -12px rgba(0,0,0,.65); }
+  .fp-weather[hidden] { display:none; }
+  .fp-weather-ico { flex:none; display:inline-flex; color:#BFD3EE; }
+  .fp-weather-ico svg { width:26px; height:26px; }
+  .fp-weather-main { display:flex; flex-direction:column; line-height:1.02; }
+  .fp-weather-temp { color:#F1F5F9; font-weight:800; font-size:23px; letter-spacing:.3px; font-variant-numeric:tabular-nums; }
+  .fp-weather-sub { margin-top:4px; color:#9FB0C9; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; }
   @keyframes fp-clock-pulse {
     0%   { box-shadow:0 0 0 0 rgba(52,211,153,.5); }
     70%  { box-shadow:0 0 0 7px rgba(52,211,153,0); }
@@ -1404,6 +1426,76 @@
     }
     tick();
     setInterval(tick, 1000);
+  })();
+</script>
+<script>
+  // Salutation dynamique (selon l'heure + prénom du compte connecté).
+  (function () {
+    var el = document.getElementById('fp-greeting');
+    if (!el) return;
+    var h = new Date().getHours();
+    var mot = (h >= 5 && h < 18) ? 'Bonjour' : 'Bonsoir';
+    function prenomFromEmail(email) {
+      var local = (email || '').split('@')[0] || '';
+      var first = local.split(/[._-]/)[0] || '';
+      if (!first) return '';
+      return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+    }
+    function paint(nom) { el.textContent = mot + (nom ? ' ' + nom : '') + ' 👋'; }
+    paint('');
+    try {
+      FP.auth.getUser().then(function (u) {
+        if (!u) return;
+        var meta = u.user_metadata || {};
+        var nom = (meta.prenom || meta.first_name || (meta.full_name || meta.name || '').split(' ')[0] || prenomFromEmail(u.email) || '').trim();
+        paint(nom);
+      }).catch(function () {});
+    } catch (e) {}
+  })();
+
+  // Météo Île-de-France en temps réel (Open-Meteo — gratuit, sans clé API).
+  // Coordonnées Paris/Île-de-France par défaut (peut devenir un réglage par société plus tard).
+  (function () {
+    var box = document.getElementById('fp-weather');
+    if (!box) return;
+    var LAT = 48.8566, LON = 2.3522;
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON +
+      '&current=temperature_2m,weather_code,is_day&timezone=Europe%2FParis';
+    // Code météo WMO → { icône Lucide, libellé FR }
+    function wmo(code, day) {
+      var c = Number(code);
+      if (c === 0) return { i: day ? 'sun' : 'moon', t: 'Ciel dégagé' };
+      if (c === 1) return { i: day ? 'sun' : 'moon', t: 'Plutôt dégagé' };
+      if (c === 2) return { i: day ? 'cloud-sun' : 'cloud-moon', t: 'Partiellement nuageux' };
+      if (c === 3) return { i: 'cloud', t: 'Couvert' };
+      if (c === 45 || c === 48) return { i: 'cloud-fog', t: 'Brouillard' };
+      if (c >= 51 && c <= 57) return { i: 'cloud-drizzle', t: 'Bruine' };
+      if (c >= 61 && c <= 67) return { i: 'cloud-rain', t: 'Pluie' };
+      if (c >= 71 && c <= 77) return { i: 'cloud-snow', t: 'Neige' };
+      if (c >= 80 && c <= 82) return { i: 'cloud-rain', t: 'Averses' };
+      if (c === 85 || c === 86) return { i: 'cloud-snow', t: 'Averses de neige' };
+      if (c >= 95) return { i: 'cloud-lightning', t: 'Orage' };
+      return { i: 'cloud', t: 'Météo' };
+    }
+    function load() {
+      fetch(url, { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (d) {
+          var cur = d && d.current; if (!cur) return;
+          var m = wmo(cur.weather_code, cur.is_day !== 0);
+          var t = Math.round(cur.temperature_2m);
+          document.getElementById('wx-temp').textContent = t + '°';
+          document.getElementById('wx-label').textContent = m.t;
+          var ico = box.querySelector('.fp-weather-ico');
+          ico.innerHTML = '<i data-lucide="' + m.i + '"></i>';
+          box.setAttribute('title', m.t + ' · ' + t + '°C · Île-de-France');
+          box.hidden = false;
+          if (window.lucide && lucide.createIcons) lucide.createIcons();
+        })
+        .catch(function () { /* pas de réseau → on laisse la météo masquée, sans erreur visible */ });
+    }
+    load();
+    setInterval(load, 15 * 60 * 1000); // rafraîchit toutes les 15 min
   })();
 </script>
 </body>
