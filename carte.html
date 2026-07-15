@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<title>Fiche véhicule — Parc Pilot</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#0F1E3D; --muted:#64748B; --accent:#F97316; --line:#E7EBF0; }
+  * { box-sizing:border-box; font-family:'Inter',system-ui,sans-serif; }
+  body { margin:0; background:#F1F5F9; color:var(--ink); -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:520px; margin:0 auto; padding:1.1rem; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:1.1rem; box-shadow:0 20px 50px -30px rgba(15,30,61,.4); overflow:hidden; }
+  .head { background:linear-gradient(135deg,#0B1220,#1E293B); color:#fff; padding:1.3rem 1.4rem; position:relative; }
+  .head::after { content:''; position:absolute; left:0; right:0; bottom:0; height:3px; background:linear-gradient(90deg,var(--accent),#FB923C 45%,transparent); }
+  .eyebrow { font-size:.68rem; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:#8598B4; }
+  .logo { font-weight:900; font-style:italic; font-size:1.05rem; letter-spacing:-.02em; }
+  .logo .o { color:var(--accent); }
+  .plate { display:inline-flex; align-items:stretch; font-weight:800; letter-spacing:2px; color:#0b0b0b; background:#fff; border:2.5px solid #0b0b0b; border-radius:8px; overflow:hidden; line-height:1; margin-top:.9rem; box-shadow:0 6px 16px -8px rgba(0,0,0,.5); }
+  .plate .eu { background:#1B48C4; color:#fff; font-size:.6rem; font-weight:800; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:0 .5rem; }
+  .plate .eu::before { content:"★★★"; font-size:.45rem; color:#FFD24D; letter-spacing:-1px; }
+  .plate .num { padding:.5rem .8rem; font-size:1.5rem; white-space:nowrap; }
+  .title { font-size:1.5rem; font-weight:900; font-style:italic; letter-spacing:-.02em; margin:.9rem 0 .1rem; color:#fff; }
+  .sub { color:#8598B4; font-size:.95rem; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line); }
+  .cell { background:#fff; padding:1rem 1.2rem; }
+  .lbl { font-size:.66rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  .val { font-size:1.15rem; font-weight:800; margin-top:.2rem; }
+  .val.mono { font-variant-numeric:tabular-nums; }
+  .foot { padding:.9rem 1.4rem; color:var(--muted); font-size:.78rem; text-align:center; border-top:1px solid var(--line); }
+  .pill { display:inline-block; padding:.15rem .6rem; border-radius:9999px; font-size:.78rem; font-weight:700; }
+  .pill.ok { background:#DCFCE7; color:#14532D; }
+  .pill.other { background:#F1F5F9; color:#475569; }
+  .empty { text-align:center; padding:3rem 1.4rem; color:var(--muted); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" id="card">
+      <div class="empty">Chargement…</div>
+    </div>
+  </div>
+
+  <script src="assets/js/data.js?v=20260709v"></script>
+  <script>
+  (function () {
+    var params = new URLSearchParams(location.search);
+    var q = (params.get('v') || params.get('immat') || '').trim().toUpperCase().replace(/\s+/g, '');
+    var D = (window.FP_DATA && Array.isArray(window.FP_DATA.vehicules)) ? window.FP_DATA.vehicules : [];
+    var v = D.find(function (x) { return (x.immat || '').toUpperCase().replace(/\s+/g, '') === q; });
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+    function num(n) { n = Number(n); return isFinite(n) ? n.toLocaleString('fr-FR') : '—'; }
+    function dateFr(d) { if (!d || d === '—') return '—'; var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m ? (m[3] + '/' + m[2] + '/' + m[1]) : d; }
+
+    var card = document.getElementById('card');
+    if (!q || !v) {
+      card.innerHTML = '<div class="empty"><div style="font-size:2rem">🔍</div><p style="margin-top:.6rem"><b>Véhicule introuvable</b><br>' + (q ? ('Aucun véhicule « ' + esc(q) + ' ».') : 'QR code invalide.') + '</p></div>';
+      return;
+    }
+
+    var statutOk = (v.statut || '').toLowerCase() === 'actif';
+    var plateNum = esc(v.immat || '—');
+    // Uniquement des infos VÉHICULE non personnelles (aucun conducteur / VIN / amende / coût).
+    card.innerHTML =
+      '<div class="head">' +
+        '<div class="eyebrow">Fiche véhicule</div>' +
+        '<div class="plate"><span class="eu">F</span><span class="num">' + plateNum + '</span></div>' +
+        '<div class="title">' + esc(((v.marque || '') + ' ' + (v.modele || '')).trim() || 'Véhicule') + '</div>' +
+        '<div class="sub">' + esc(v.categorie || '') + (v.version ? ' · ' + esc(v.version) : '') + '</div>' +
+      '</div>' +
+      '<div class="grid">' +
+        cell('Carburant', esc(v.carburant || '—')) +
+        cell('Kilométrage', '<span class="mono">' + num(v.km) + '</span> km') +
+        cell('Prochain contrôle technique', dateFr(v.prochainCT)) +
+        cell('Mise en circulation', dateFr(v.dateMiseEnCirculation)) +
+      '</div>' +
+      '<div class="foot">' +
+        '<span class="pill ' + (statutOk ? 'ok' : 'other') + '">' + (statutOk ? '✓ En service' : esc(v.statut || '—')) + '</span>' +
+        '<div style="margin-top:.6rem">Véhicule géré via <b class="logo">Parc<span class="o">Pilot</span></b> — informations publiques.</div>' +
+      '</div>';
+
+    function cell(lbl, val) { return '<div class="cell"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div></div>'; }
+    document.title = plateNum + ' — Parc Pilot';
+  })();
+  </script>
+</body>
+</html>
