@@ -2595,6 +2595,9 @@ FP.detectDoc = function (rawText, vehicules) {
   // CO2 (g/km)
   let co2m = text.match(/CO2\s*[:\s]*(\d{1,3})/) || text.match(/\b(\d{1,3})\s*GR?\s*\/?\s*KM\b/);
   if (co2m) { const n = +co2m[1]; if (n >= 0 && n < 600) out.co2 = n; }
+  // Masse en ordre de marche (code G.1) — kg — sert au verdict stationnement Paris
+  const g1m = text.match(/\bG\s*[.,]?\s*1\b[^0-9]{0,14}(\d[\d .]{2,6})/) || text.match(/(?:MASSE|POIDS)[^0-9]{0,20}(\d[\d .]{2,6})\s*KG/);
+  if (g1m) { const n = parseInt(String(g1m[1]).replace(/[ .]/g, ''), 10); if (n >= 500 && n < 8000) out.masse = n; }
   // Puissance fiscale (CV)
   const cvm = text.match(/\b(\d{1,2})\s*CV\b/);
   if (cvm) { const n = +cvm[1]; if (n > 0 && n < 100) out.puissanceFiscale = n; }
