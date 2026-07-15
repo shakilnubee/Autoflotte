@@ -1767,6 +1767,76 @@ FP.rapportDirection = (data) => {
   w.document.write(html); w.document.close();
 };
 
+// ===== Rapport RSE / bilan carbone (imprimable / PDF) =====
+FP.rapportRSE = (data) => {
+  data = data || (window.FP_DATA || {});
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let soc = 'PXP'; try { soc = localStorage.getItem('fp_societe') || 'PXP'; if (soc === '__all__') soc = 'Toutes sociétés'; } catch (e) {}
+  const today = new Date().toLocaleDateString('fr-FR');
+  const KM_AN = 15000;
+  const eur = (n) => FP.euro ? FP.euro(n) : Math.round(n) + ' €';
+  const num = (n) => FP.num ? FP.num(n) : String(n);
+  const isElec = (v) => /lectri|hydrog/.test((v.carburant || '').toLowerCase());
+  const isHyb = (v) => /hybrid/.test((v.carburant || '').toLowerCase());
+
+  const vehs = (data.vehicules || []).filter(v => !(FP.estVendu ? FP.estVendu(v) : false));
+  const nbElec = vehs.filter(isElec).length, nbHyb = vehs.filter(isHyb).length;
+  const nbPropres = nbElec + nbHyb;
+  const pctPropre = vehs.length ? Math.round(nbPropres / vehs.length * 100) : 0;
+  let co2G = 0, nCo2 = 0; vehs.forEach(v => { if (isElec(v)) return; const c = Number(v.co2); if (Number.isFinite(c) && c > 0) { co2G += c * KM_AN; nCo2++; } });
+  const co2T = co2G / 1e6;
+  const co2Moy = nCo2 ? Math.round(co2G / nCo2 / KM_AN) : 0;
+
+  const parCarb = {}; vehs.forEach(v => { const c = (v.carburant || '—').toString().trim() || '—'; parCarb[c] = (parCarb[c] || 0) + 1; });
+  const carbRows = Object.entries(parCarb).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+    `<tr><td>${esc(k)}</td><td style="text-align:right">${n}</td><td style="text-align:right">${vehs.length ? Math.round(n / vehs.length * 100) : 0}%</td></tr>`).join('');
+  const topRows = vehs.filter(v => !isElec(v) && Number(v.co2) > 0).sort((a, b) => Number(b.co2) - Number(a.co2)).slice(0, 6).map(v =>
+    `<tr><td>${esc(v.immat)}</td><td>${esc(((v.marque || '') + ' ' + (v.modele || '')).trim())}</td><td style="text-align:right">${num(v.co2)} g/km</td><td style="text-align:right">${(Number(v.co2) * KM_AN / 1e6).toFixed(2)} t/an</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:12px">Aucun véhicule thermique avec CO₂ renseigné.</td></tr>';
+
+  const kpi = (l, v, s, c) => `<div class="kpi"><div class="kl">${esc(l)}</div><div class="kv" style="color:${c || '#0F1E3D'}">${v}</div>${s ? `<div class="ks">${esc(s)}</div>` : ''}</div>`;
+
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Rapport RSE — ${esc(soc)}</title>
+    <style>
+      *{box-sizing:border-box;font-family:Inter,system-ui,Arial,sans-serif}
+      body{margin:0;color:#0F1E3D;background:#fff;padding:28px;max-width:820px;margin:0 auto}
+      .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #F97316;padding-bottom:12px;margin-bottom:18px}
+      h1{font-size:22px;margin:0}.mut{color:#64748B;font-size:13px}
+      .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}
+      .kpi{border:1px solid #E7EBF0;border-radius:10px;padding:12px}
+      .kl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#64748B}
+      .kv{font-size:20px;font-weight:800;margin-top:4px}.ks{font-size:11px;color:#64748B}
+      .sec-t{font-weight:800;font-size:13px;margin:18px 0 8px;color:#0F1E3D}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th,td{padding:6px 8px;border-bottom:1px solid #EEF2F6;text-align:left}
+      th{color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:.06em}
+      .note{background:#F8FAFC;border:1px solid #E7EBF0;border-radius:10px;padding:12px;font-size:12px;line-height:1.6;margin-top:10px}
+      .foot{margin-top:22px;color:#94a3b8;font-size:11px;border-top:1px solid #EEF2F6;padding-top:10px}
+      @media print{body{padding:0}@page{size:A4;margin:14mm}}
+    </style></head><body>
+      <div class="top">
+        <div><h1>Rapport RSE — bilan carbone</h1><div class="mut">${esc(soc)} · ${esc(today)}</div></div>
+        <svg width="120" height="27" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic" fill="#0F1E3D">Parc</text><text x="86" y="26" font-size="20" font-weight="900" font-style="italic" fill="#F97316">Pilot</text></svg>
+      </div>
+      <div class="grid">
+        ${kpi('Parc actif', num(vehs.length), 'véhicules', '#0F1E3D')}
+        ${kpi('CO₂ estimé', co2T.toFixed(1) + ' t/an', 'base ' + num(KM_AN) + ' km/an', '#DC2626')}
+        ${kpi('Émission moyenne', num(co2Moy) + ' g/km', 'véhicules thermiques', '#0F1E3D')}
+        ${kpi('Flotte électrifiée', pctPropre + ' %', nbElec + ' élec. + ' + nbHyb + ' hybr.', '#047857')}
+      </div>
+      <div class="sec-t">Répartition par énergie</div>
+      <table><thead><tr><th>Énergie</th><th style="text-align:right">Véhicules</th><th style="text-align:right">Part</th></tr></thead><tbody>${carbRows}</tbody></table>
+      <div class="sec-t">Véhicules les plus émetteurs</div>
+      <table><thead><tr><th>Immat.</th><th>Modèle</th><th style="text-align:right">CO₂</th><th style="text-align:right">Estimé</th></tr></thead><tbody>${topRows}</tbody></table>
+      <div class="note"><b>Méthode :</b> émissions estimées sur ${num(KM_AN)} km/an et le CO₂ (carte grise, champ V.7) de chaque véhicule thermique ; les véhicules électriques/hydrogène sont comptés à 0 g/km à l'usage. <b>Loi LOM :</b> les flottes de plus de 100 véhicules ont une obligation croissante de véhicules à faibles émissions au renouvellement — la part électrifiée ci-dessus suit cette trajectoire.</div>
+      <div class="foot">Généré par Parc Pilot — gestion de flotte · ${esc(soc)} · ${esc(today)}. Estimations à but indicatif (RSE / reporting interne).</div>
+      <scr` + `ipt>setTimeout(function(){try{window.print()}catch(e){}},450)</scr` + `ipt>
+    </body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { alert('Autorise les fenêtres pop-up pour générer le rapport.'); return; }
+  w.document.write(html); w.document.close();
+};
+
 // Notification d'erreur visible (bandeau rouge en bas). Utilisée quand une
 // écriture en base échoue DÉFINITIVEMENT (rejet base : RLS, colonne, contrainte…),
 // pour ne jamais laisser croire à un faux « enregistré ».
