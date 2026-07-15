@@ -348,6 +348,14 @@ FP.tvsDetail = (v) => {
   return { applicable: true, co2: co2Tax, polluant, total: co2Tax + polluant };
 };
 
+// ===== Périmètres véhicules — UNE seule définition, réutilisée partout =====
+// estVendu = véhicule qui ne t'appartient plus (sorti du parc). Utilisé pour la
+// FLOTTE / le parc / la TVS (une voiture "à vendre" est encore possédée → comptée).
+FP.estVendu = (v) => { const s = ((v && v.statut) || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); return s === 'vendu' || s === 'vendue'; };
+// horsFlotte = plus à suivre au quotidien (vendu, à vendre, hors service, cédé, archivé, restitué).
+// Utilisé pour les ALERTES / échéances / CT (on n'alerte pas sur une voiture en cours de vente).
+FP.horsFlotte = (v) => ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 'cédé', 'cede', 'cédée', 'hors service', 'hors-service', 'hs', 'archive', 'archivé', 'archivée', 'restitué', 'restitue'].includes(((v && v.statut) || '').toString().toLowerCase().trim());
+
 // IMPORTANT — partage d'un SEUL objet FP.
 // supabase-client.js (chargé AVANT app.js) a déjà posé FP.supabase / FP.db / FP.auth
 // sur window.FP. Sans cette fusion, le `const FP` ci-dessus serait un objet DIFFÉRENT
@@ -1254,7 +1262,7 @@ FP.buildAlertes = (data) => {
   const today = new Date();
   const days = (d) => Math.ceil((new Date(d) - today) / (1000 * 60 * 60 * 24));
   // Véhicules sortis de la flotte active (vendus / à vendre / cédés…) : pas d'alertes pour eux.
-  const horsFlotte = (v) => ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 'cédé', 'cede', 'cédée', 'hors service', 'hs', 'archive', 'archivé', 'archivée', 'restitué', 'restitue'].includes(((v && v.statut) || '').toString().toLowerCase().trim());
+  const horsFlotte = FP.horsFlotte; // défini plus haut (source unique)
 
   // --- Contrôles techniques ---
   (data.vehicules || []).forEach(v => {
@@ -1599,7 +1607,7 @@ FP.rapportDirection = (data) => {
   const today = now.toLocaleDateString('fr-FR');
 
   const vehs = (data.vehicules || []);
-  const actifs = vehs.filter(v => !/vendu/i.test(v.statut || ''));
+  const actifs = vehs.filter(v => !FP.estVendu(v)); // parc possédé (hors vendus) — même règle que dashboard/écran/stats
   const kmTotal = actifs.reduce((s, v) => s + (Number(v.km) || 0), 0);
   const valeurParc = actifs.reduce((s, v) => s + (Number(v.valeurAchat) || Number(v.prix) || 0), 0);
 
