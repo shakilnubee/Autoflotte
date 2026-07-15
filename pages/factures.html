@@ -653,6 +653,15 @@
     opt.value = f; opt.textContent = f;
     $('filter-fournisseur').appendChild(opt);
   });
+  // Sélecteur d'année dynamique (2026, 2027, … + Toutes années) — comme Amendes / Entretiens.
+  function rebuildAnneeFilter() {
+    const sel = $('filter-annee'); if (!sel) return; const cur = sel.value || 'all';
+    const years = [...new Set(factures.map(f => getYear(f.date)).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
+    sel.innerHTML = '<option value="all">Toutes années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    sel.value = (years.includes(cur) || cur === 'all') ? cur : 'all';
+    state.annee = sel.value;
+  }
+  rebuildAnneeFilter();
 
   function filtered() {
     const q = FP.norm(state.search).trim();
@@ -1538,7 +1547,7 @@
   coutPeriode.render();
   document.addEventListener('fp:data-ready', () => coutPeriode.render());
   // Données Supabase arrivées (ou import) → on reconstruit la liste et on rafraîchit le tableau
-  document.addEventListener('fp:data-ready', () => { rebuildFactures(); renderKPIs(); renderTable(); renderCharts(); });
+  document.addEventListener('fp:data-ready', () => { rebuildFactures(); rebuildAnneeFilter(); renderKPIs(); renderTable(); renderCharts(); });
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });
 
   // Doublons : clic sur une ligne 🔎 → ouvre la facture concernée (drawer)

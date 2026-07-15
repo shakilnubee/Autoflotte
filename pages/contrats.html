@@ -706,8 +706,14 @@
   }
   function escC(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function addMonths(iso, n){ const d=new Date(iso); if(isNaN(d)) return null; d.setMonth(d.getMonth()+(+n||0)); return d; }
-  // TVS annuelle estimée : barème CO2 officiel (app.js) + 130 € polluants (hybride essence = catégorie 1)
-  function tvsEst(c){ const co2=Number(c.co2)||0; const elec=/électri|electri/i.test((c.modele||'')); return (FP.tvsCo2?FP.tvsCo2(co2):0) + (elec?0:130); }
+  // TVS annuelle estimée via le calcul CENTRAL (app.js) → même barème que fiche véhicule / stats / dashboard.
+  // Le carburant est déduit du modèle si absent (Hybrid / électrique / diesel CRDi…), sinon essence.
+  function tvsEst(c){
+    let carb = c.carburant || '';
+    if (!carb) { const m = (c.modele || ''); carb = /électri|electri/i.test(m) ? 'électrique' : /diesel|crdi|tdi|hdi|dci|bluehdi/i.test(m) ? 'diesel' : /hybrid/i.test(m) ? 'hybride' : 'essence'; }
+    const d = FP.tvsDetail ? FP.tvsDetail({ categorie: '', carburant: carb, co2: c.co2, dateMiseEnCirculation: '' }) : null;
+    return (d && d.total != null) ? d.total : 0;
+  }
   // Retrouve la plaque d'un contrat Localease via l'onglet Véhicules (conducteur + modèle)
   function autoImmatLoc(c){
     const norm = s => (s||'').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
