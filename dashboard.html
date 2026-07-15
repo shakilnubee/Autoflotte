@@ -150,7 +150,13 @@
           <div class="fp-eyebrow" style="margin-bottom:.4rem">Parc Pilot · pilotage de flotte</div>
           <h1 class="text-2xl font-extrabold text-white" style="color:#fff" data-edit-key="dashboard.title">Tableau de bord</h1>
           <p class="text-sm mt-1" style="color:#8598B4" data-edit-key="dashboard.subtitle">Vue d'ensemble de votre flotte</p>
-          <div id="live-clock" class="text-sm mt-1" style="color:#B9C6DC;font-weight:600;font-variant-numeric:tabular-nums" title="Date et heure en temps réel"></div>
+          <div id="live-clock" class="fp-clock" role="timer" aria-live="off" title="Date et heure en temps réel">
+            <span class="fp-clock-dot" aria-hidden="true"></span>
+            <div class="fp-clock-main">
+              <div class="fp-clock-time"><span id="clk-hm">--:--</span><span id="clk-s" class="fp-clock-sec">:--</span></div>
+              <div id="clk-date" class="fp-clock-date">—</div>
+            </div>
+          </div>
         </div>
         <div class="flex items-center gap-2.5 flex-wrap justify-end">
           <div class="relative" id="soc-switch">
@@ -1359,17 +1365,42 @@
     }
   })();
 </script>
+<style>
+  .fp-clock { display:inline-flex; align-items:center; gap:12px; margin-top:.65rem;
+    padding:9px 16px 9px 13px; border-radius:14px;
+    background:linear-gradient(135deg, rgba(255,255,255,.075), rgba(255,255,255,.025));
+    border:1px solid rgba(255,255,255,.10);
+    -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 8px 22px -12px rgba(0,0,0,.65); }
+  .fp-clock-dot { flex:none; width:9px; height:9px; border-radius:50%; background:#34D399;
+    box-shadow:0 0 0 0 rgba(52,211,153,.55); animation:fp-clock-pulse 2.2s ease-out infinite; }
+  .fp-clock-main { display:flex; flex-direction:column; line-height:1.02; }
+  .fp-clock-time { display:flex; align-items:baseline; gap:1px; color:#F1F5F9;
+    font-weight:800; font-size:23px; letter-spacing:.5px; font-variant-numeric:tabular-nums; }
+  .fp-clock-sec { font-size:13px; font-weight:700; color:#78899F; font-variant-numeric:tabular-nums; }
+  .fp-clock-date { margin-top:4px; color:#9FB0C9; font-size:11px; font-weight:600;
+    text-transform:uppercase; letter-spacing:.85px; }
+  @keyframes fp-clock-pulse {
+    0%   { box-shadow:0 0 0 0 rgba(52,211,153,.5); }
+    70%  { box-shadow:0 0 0 7px rgba(52,211,153,0); }
+    100% { box-shadow:0 0 0 0 rgba(52,211,153,0); } }
+  @media (prefers-reduced-motion: reduce) { .fp-clock-dot { animation:none; } }
+</style>
 <script>
   // Horloge date + heure en temps réel (mise à jour chaque seconde).
   (function () {
-    var el = document.getElementById('live-clock');
-    if (!el) return;
-    var cap = function (s) { return s.charAt(0).toUpperCase() + s.slice(1); };
+    var hm = document.getElementById('clk-hm');
+    var sec = document.getElementById('clk-s');
+    var dat = document.getElementById('clk-date');
+    if (!hm || !sec || !dat) return;
+    var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+    var last = '';
     function tick() {
       var d = new Date();
-      var jour = cap(d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
-      var heure = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      el.textContent = jour + ' · ' + heure;
+      hm.textContent = pad(d.getHours()) + ':' + pad(d.getMinutes());
+      sec.textContent = ':' + pad(d.getSeconds());
+      var jour = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      if (jour !== last) { dat.textContent = jour; last = jour; } // la date ne change qu'une fois/jour
     }
     tick();
     setInterval(tick, 1000);
