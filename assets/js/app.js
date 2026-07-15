@@ -1124,6 +1124,9 @@ FP.coutParPeriode = function (opts) {
 // Termes issus des contrats signés BPCE Car Lease (dossier Drive flotte).
 // Statique en code = partagé via git, durable, survit au chargement Supabase.
 // Pour un nouveau véhicule en leasing : ajouter une ligne (immat → forfait).
+// ⚠️ Forfaits leasing codés en dur = PROPRES À PXP (immatriculations PXP). Ils ne servent
+// de base QUE pour la société PXP (voir FP.leasingContrat) ; une autre société part de zéro
+// et saisit ses forfaits via l'éditeur (settings.leasingContrats).
 FP.LEASING_CONTRATS = {
   'HG-763-VP': { kmContrat: 75000,  dureeMois: 36, debut: '2025-11-25', kmSupp: 0.0707 }, // BYD Atto 3
   'HE-739-WP': { kmContrat: 150000, dureeMois: 36, debut: '2025-07-25', kmSupp: 0.0888 }, // Toyota C-HR
@@ -1175,7 +1178,8 @@ FP.resetLeasingOverride = (immat) => {
 // Renvoie null si on n'a pas au moins un forfait km et une date de début.
 FP.leasingContrat = (immat) => {
   const key = (immat || '').trim().toUpperCase(); if (!key) return null;
-  const base = FP.LEASING_CONTRATS[key] || null;
+  // Base PXP en dur → uniquement pour PXP. Les autres sociétés n'utilisent que leurs overrides.
+  const base = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? (FP.LEASING_CONTRATS[key] || null) : null;
   const ov = FP.getLeasingOverrides()[key] || null;
   if (!base && !ov) return null;
   const merged = { dureeMois: 36, kmSupp: null, ...(base || {}), ...(ov || {}) };
@@ -1636,7 +1640,9 @@ FP.rapportDirection = (data) => {
   const kmTotal = actifs.reduce((s, v) => s + (Number(v.km) || 0), 0);
   const valeurParc = actifs.reduce((s, v) => s + (Number(v.valeurAchat) || Number(v.prix) || 0), 0);
 
-  const facts = (data.factures || []);
+  // Factures dédoublonnées par numéro (comme Statistiques / Factures) → chiffres cohérents dans le rapport.
+  const _seenF = new Set();
+  const facts = (data.factures || []).filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (_seenF.has(k)) return false; _seenF.add(k); return true; });
   const coutMois = facts.filter(f => (f.date || '').slice(0, 7) === ym).reduce((s, f) => s + (+f.montantTTC || 0), 0);
   const cout12 = facts.filter(f => (f.date || '').slice(0, 7) >= y12).reduce((s, f) => s + (+f.montantTTC || 0), 0);
 
@@ -1651,7 +1657,7 @@ FP.rapportDirection = (data) => {
   const nbElec = actifs.filter(v => /lectri|hydrog|hybrid/.test((v.carburant || '').toLowerCase())).length;
 
   const am = (data.amendes || []);
-  const amTot = am.reduce((s, a) => s + (+a.montant || 0), 0);
+  const amTot = am.reduce((s, a) => s + ((a.majoree && +a.montantMajore) ? +a.montantMajore : (+a.montant || 0)), 0);
 
   const alerts = FP.buildAlertes ? FP.buildAlertes(data) : [];
   const ech = (FP.buildEcheances ? FP.buildEcheances(data) : []).filter(e => {

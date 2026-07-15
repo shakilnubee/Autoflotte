@@ -6,6 +6,7 @@
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
 <title>Fiche véhicule — Parc Pilot</title>
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#0F1E3D">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -40,52 +41,75 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="card" id="card">
-      <div class="empty">Chargement…</div>
-    </div>
+    <div class="card" id="card"><div class="empty">Chargement…</div></div>
   </div>
 
-  <script src="assets/js/data.js?v=20260709v"></script>
+  <script src="assets/js/data.js?v=20260709w"></script>
   <script>
   (function () {
     var params = new URLSearchParams(location.search);
     var q = (params.get('v') || params.get('immat') || '').trim().toUpperCase().replace(/\s+/g, '');
-    var D = (window.FP_DATA && Array.isArray(window.FP_DATA.vehicules)) ? window.FP_DATA.vehicules : [];
-    var v = D.find(function (x) { return (x.immat || '').toUpperCase().replace(/\s+/g, '') === q; });
+    var card = document.getElementById('card');
+    // Lecture publique Supabase (clé publiable, sans danger) — nécessite la vue « vehicules_public » côté base.
+    var SB_URL = 'https://tzjuptlzoywjeigmyfuj.supabase.co';
+    var SB_KEY = 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq';
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
     function num(n) { n = Number(n); return isFinite(n) ? n.toLocaleString('fr-FR') : '—'; }
     function dateFr(d) { if (!d || d === '—') return '—'; var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d); return m ? (m[3] + '/' + m[2] + '/' + m[1]) : d; }
 
-    var card = document.getElementById('card');
-    if (!q || !v) {
-      card.innerHTML = '<div class="empty"><div style="font-size:2rem">🔍</div><p style="margin-top:.6rem"><b>Véhicule introuvable</b><br>' + (q ? ('Aucun véhicule « ' + esc(q) + ' ».') : 'QR code invalide.') + '</p></div>';
-      return;
+    // 1) Source SNAPSHOT (data.js) — public, déjà anonymisé, dispo tout de suite.
+    function fromSnapshot() {
+      var D = (window.FP_DATA && Array.isArray(window.FP_DATA.vehicules)) ? window.FP_DATA.vehicules : [];
+      return D.find(function (x) { return (x.immat || '').toUpperCase().replace(/\s+/g, '') === q; }) || null;
+    }
+    // 2) Source TEMPS RÉEL (vue publique Supabase). Renvoie null si indisponible → repli snapshot.
+    function fromLive(cb) {
+      if (!q) { cb(null); return; }
+      var url = SB_URL + '/rest/v1/vehicules_public?immat=eq.' + encodeURIComponent(q) + '&select=*&limit=1';
+      fetch(url, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (rows) {
+          if (!rows || !rows.length) { cb(null); return; }
+          var v = rows[0];
+          cb({ immat: v.immat, marque: v.marque, modele: v.modele, categorie: v.categorie, carburant: v.carburant,
+               km: v.km, prochainCT: v.prochain_ct, dateMiseEnCirculation: v.date_mise_en_circulation,
+               statut: v.statut, version: v.version, _live: true });
+        })
+        .catch(function () { cb(null); });
     }
 
-    var statutOk = (v.statut || '').toLowerCase() === 'actif';
-    var plateNum = esc(v.immat || '—');
-    // Uniquement des infos VÉHICULE non personnelles (aucun conducteur / VIN / amende / coût).
-    card.innerHTML =
-      '<div class="head">' +
-        '<div class="eyebrow">Fiche véhicule</div>' +
-        '<div class="plate"><span class="eu">F</span><span class="num">' + plateNum + '</span></div>' +
-        '<div class="title">' + esc(((v.marque || '') + ' ' + (v.modele || '')).trim() || 'Véhicule') + '</div>' +
-        '<div class="sub">' + esc(v.categorie || '') + (v.version ? ' · ' + esc(v.version) : '') + '</div>' +
-      '</div>' +
-      '<div class="grid">' +
-        cell('Carburant', esc(v.carburant || '—')) +
-        cell('Kilométrage', '<span class="mono">' + num(v.km) + '</span> km') +
-        cell('Prochain contrôle technique', dateFr(v.prochainCT)) +
-        cell('Mise en circulation', dateFr(v.dateMiseEnCirculation)) +
-      '</div>' +
-      '<div class="foot">' +
-        '<span class="pill ' + (statutOk ? 'ok' : 'other') + '">' + (statutOk ? '✓ En service' : esc(v.statut || '—')) + '</span>' +
-        '<div style="margin-top:.6rem">Véhicule géré via <b class="logo">Parc<span class="o">Pilot</span></b> — informations publiques.</div>' +
-      '</div>';
-
     function cell(lbl, val) { return '<div class="cell"><div class="lbl">' + lbl + '</div><div class="val">' + val + '</div></div>'; }
-    document.title = plateNum + ' — Parc Pilot';
+
+    function render(v) {
+      if (!q || !v) {
+        card.innerHTML = '<div class="empty"><div style="font-size:2rem">🔍</div><p style="margin-top:.6rem"><b>Véhicule introuvable</b><br>' + (q ? ('Aucun véhicule « ' + esc(q) + ' ».') : 'QR code invalide.') + '</p></div>';
+        return;
+      }
+      var statutOk = (v.statut || '').toLowerCase() === 'actif';
+      var plateNum = esc(v.immat || '—');
+      card.innerHTML =
+        '<div class="head">' +
+          '<div class="eyebrow">Fiche véhicule</div>' +
+          '<div class="plate"><span class="eu">F</span><span class="num">' + plateNum + '</span></div>' +
+          '<div class="title">' + esc(((v.marque || '') + ' ' + (v.modele || '')).trim() || 'Véhicule') + '</div>' +
+          '<div class="sub">' + esc(v.categorie || '') + (v.version ? ' · ' + esc(v.version) : '') + '</div>' +
+        '</div>' +
+        '<div class="grid">' +
+          cell('Carburant', esc(v.carburant || '—')) +
+          cell('Kilométrage', '<span class="mono">' + num(v.km) + '</span> km') +
+          cell('Prochain contrôle technique', dateFr(v.prochainCT)) +
+          cell('Mise en circulation', dateFr(v.dateMiseEnCirculation)) +
+        '</div>' +
+        '<div class="foot">' +
+          '<span class="pill ' + (statutOk ? 'ok' : 'other') + '">' + (statutOk ? '✓ En service' : esc(v.statut || '—')) + '</span>' +
+          '<div style="margin-top:.6rem">Véhicule géré via <b class="logo">Parc<span class="o">Pilot</span></b> — ' + (v._live ? 'infos à jour.' : 'informations publiques.') + '</div>' +
+        '</div>';
+      document.title = plateNum + ' — Parc Pilot';
+    }
+
+    // Temps réel d'abord ; repli sur le snapshot public si la vue n'existe pas / hors-ligne.
+    fromLive(function (live) { render(live || fromSnapshot()); });
   })();
   </script>
 </body>
