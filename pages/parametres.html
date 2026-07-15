@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709u">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709v">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260709u"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260709v"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260709u">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260709v">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -223,10 +223,21 @@
     <!-- Section Société -->
     <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="societe">
       <div class="section-title">
-        <i data-lucide="building-2" class="w-5 h-5"></i> Informations société
+        <i data-lucide="building-2" class="w-5 h-5"></i> Sociétés
       </div>
-      <p class="text-sm text-slate-600 mb-4">Utilisé dans les en-têtes d'export et les futures factures générées.</p>
+      <p class="text-sm text-slate-600 mb-4">Gère tes sociétés (flottes) et les infos propres à chacune. Chaque société a ses propres véhicules, e-mails d'envoi et loueur.</p>
 
+      <!-- Bascule / création de société -->
+      <div class="p-4 rounded-lg border border-slate-200 mb-5" style="background:#F8FAFC">
+        <div class="field-label">Société active</div>
+        <div class="flex flex-wrap items-center gap-2 mt-1">
+          <select class="field-input" id="soc-switch" style="width:auto;min-width:180px"></select>
+          <button class="btn btn-dark text-sm" id="btn-new-societe"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle société</button>
+        </div>
+        <p class="text-xs text-slate-500 mt-2">Changer de société recharge la page avec ses données. À la création d'une nouvelle société, remplis ses infos ci-dessous.</p>
+      </div>
+
+      <p class="text-sm text-slate-600 mb-4">Utilisé dans les en-têtes d'export et les futures factures générées.</p>
       <div class="space-y-4">
         <div>
           <div class="field-label">Nom de la société</div>
@@ -243,6 +254,11 @@
           </div>
         </div>
       </div>
+
+      <!-- Profil société (e-mails d'envoi amendes, loueur…) — généré depuis FP.PROFIL_CHAMPS -->
+      <div class="section-title mt-6" style="font-size:.95rem"><i data-lucide="sliders-horizontal" class="w-4 h-4"></i> Envoi des amendes & leasing</div>
+      <p class="text-sm text-slate-600 mb-3">Ces infos sont <b>propres à cette société</b> (jamais partagées avec une autre).</p>
+      <div class="space-y-4" id="profil-form"></div>
 
       <div class="flex gap-2 mt-5">
         <button class="btn btn-dark text-sm" id="btn-save-societe"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
@@ -334,10 +350,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260709u"></script>
-<script src="../assets/js/supabase-client.js?v=20260709u"></script>
-<script src="../assets/js/data.js?v=20260709u"></script>
-<script src="../assets/js/app.js?v=20260709u"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260709v"></script>
+<script src="../assets/js/supabase-client.js?v=20260709v"></script>
+<script src="../assets/js/data.js?v=20260709v"></script>
+<script src="../assets/js/app.js?v=20260709v"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -583,11 +599,34 @@
   })();
 
   // ---------- Société ----------
+  // Sélecteur de société active + bouton "Nouvelle société"
+  function renderSocietesUI() {
+    const sel = $('soc-switch'); if (!sel) return;
+    const list = (FP.getSocietes ? FP.getSocietes() : ['PXP']);
+    const cur = (FP.activeSociete ? FP.activeSociete() : 'PXP');
+    sel.innerHTML = list.map(s => `<option value="${s.replace(/"/g,'&quot;')}"${s === cur ? ' selected' : ''}>${s}</option>`).join('');
+  }
+  // Formulaire du profil (champs générés depuis FP.PROFIL_CHAMPS)
+  function renderProfilForm() {
+    const box = $('profil-form'); if (!box) return;
+    const champs = (FP.PROFIL_CHAMPS || []);
+    const p = (function(){ try { return FP.settings.get().profil || {}; } catch(e){ return {}; } })();
+    const eff = (FP.societeProfil ? FP.societeProfil() : {}); // valeurs effectives (avec défauts PXP)
+    box.innerHTML = champs.map(c => `
+      <div>
+        <div class="field-label">${c.label}</div>
+        <input class="field-input" id="prof-${c.key}" type="${c.type === 'email' ? 'email' : 'text'}"
+               placeholder="${(c.ph || '').replace(/"/g,'&quot;')}"
+               value="${String(p[c.key] != null ? p[c.key] : (eff[c.key] || '')).replace(/"/g,'&quot;')}" />
+      </div>`).join('');
+  }
   function loadSociete() {
     const s = FP.settings.get().societe;
     $('f-societe-nom').value = s.nom || '';
     $('f-societe-siret').value = s.siret || '';
     $('f-societe-adresse').value = s.adresse || '';
+    renderSocietesUI();
+    renderProfilForm();
   }
 
   function saveSociete() {
@@ -598,8 +637,31 @@
       siret: $('f-societe-siret').value.trim(),
       adresse: $('f-societe-adresse').value.trim(),
     };
+    // Profil société (e-mails, loueur…)
+    const prof = { ...(current.profil || {}) };
+    (FP.PROFIL_CHAMPS || []).forEach(c => { const el = $('prof-' + c.key); if (el) prof[c.key] = el.value.trim(); });
+    current.profil = prof;
     FP.settings.save(current);
     showToast('Société enregistrée ✓');
+  }
+
+  // Bascule de société active (recharge la page pour charger ses données)
+  function switchSociete(name) {
+    if (!name || !FP.setActiveSociete) return;
+    FP.setActiveSociete(name);
+    location.reload();
+  }
+  // Création d'une nouvelle société → bascule dessus + focus sur le formulaire d'infos à remplir
+  function newSociete() {
+    const name = (prompt('Nom de la nouvelle société :') || '').trim();
+    if (!name) return;
+    if (FP.addSociete && FP.addSociete(name)) {
+      FP.setActiveSociete(name);
+      alert(`Société « ${name} » créée.\nRemplis ses infos (e-mails d'envoi des amendes, loueur…) puis Enregistre.`);
+      location.reload();
+    } else {
+      alert('Cette société existe déjà (ou nom invalide).');
+    }
   }
 
   // ---------- Export / Import / Reset ----------
@@ -676,6 +738,8 @@
     applyNavFromForm(false);
   });
   $('btn-save-societe').addEventListener('click', saveSociete);
+  { const sw = $('soc-switch'); if (sw) sw.addEventListener('change', e => switchSociete(e.target.value)); }
+  { const nb = $('btn-new-societe'); if (nb) nb.addEventListener('click', newSociete); }
   // La sauvegarde complète est réservée au super-admin : on masque le bloc pour un client.
   if (FP.isSuperAdmin && !FP.isSuperAdmin()) { const _bc = $('backup-card'); if (_bc) _bc.style.display = 'none'; }
   const _bkBtn = $('btn-backup');

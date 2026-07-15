@@ -9,11 +9,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709u">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709v">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260709u"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260709v"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260709u">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260709v">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -143,7 +143,7 @@
     <div class="card p-6 mb-6 contrat-section" data-section="leasing">
       <div class="section-title">
         <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
-        <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — BPCE Car Lease
+        <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — <span id="leasing-loueur-nom">BPCE Car Lease</span>
       </div>
       <p class="text-sm text-slate-600 mb-4">Véhicules sous contrat de leasing BPCE. Mensualités <b>théoriques</b> = mois écoulés depuis le début du contrat × mensualité fixe (médiane des factures). « X facturées » indique le nombre de factures réellement importées.</p>
 
@@ -277,10 +277,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260709u"></script>
-<script src="../assets/js/supabase-client.js?v=20260709u"></script>
-<script src="../assets/js/data.js?v=20260709u"></script>
-<script src="../assets/js/app.js?v=20260709u"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260709v"></script>
+<script src="../assets/js/supabase-client.js?v=20260709v"></script>
+<script src="../assets/js/data.js?v=20260709v"></script>
+<script src="../assets/js/app.js?v=20260709v"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -306,7 +306,7 @@
       if ((f.date || '') > leasingByVeh[k].lastDate) { leasingByVeh[k].lastDate = f.date || ''; leasingByVeh[k].lastFile = f; }
     });
     leasingImmats = new Set([
-      ...vehicules.filter(v => v.proprietaire === 'BPCE').map(v => v.immat),
+      ...vehicules.filter(v => { const p = (FP.societeProfil ? FP.societeProfil().proprietaireLeasing : 'BPCE') || ''; return p && v.proprietaire === p; }).map(v => v.immat),
       ...Object.keys(leasingByVeh),
     ]);
   }
@@ -330,6 +330,7 @@
   let leasingSearch = '';
 
   function renderKPIs() {
+    { const ln = document.getElementById('leasing-loueur-nom'); if (ln && FP.societeProfil) ln.textContent = FP.societeProfil().loueurNom || 'Leasing'; }
     $('kpi-assur').textContent = vehicules.length;
     $('kpi-assur-sub').textContent = assurPrime() ? FP.euro(assurPrime()) + ' /an' : 'sur SWISSLIFE';
 
@@ -561,7 +562,7 @@
         const l = FP.leasingInfo(v); const mens = mensualiteFixe(immat); const moisT = moisTheoriques(l);
         const nbMens = (moisT != null) ? moisT : agg.count;
         const totalTheo = (mens != null && moisT != null) ? mens * moisT : agg.total;
-        out.push({ section: 'Leasing', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: 'BPCE Car Lease', detail: `${nbMens} mensualités (théorique)`, cout: totalTheo });
+        out.push({ section: 'Leasing', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: (FP.societeProfil ? (FP.societeProfil().loueurNom || 'Leasing') : 'BPCE Car Lease'), detail: `${nbMens} mensualités (théorique)`, cout: totalTheo });
       });
       return out;
     },
@@ -691,16 +692,20 @@
     const before = list.length;
     list = list.filter(c => !(c.offre === '26AV048042' && c.conducteur === 'Nouveaux collaborateurs'));
     if (list.length !== before) changed = true;
-    // Ajoute les contrats par défaut manquants (clé = offre+conducteur), sans écraser ce qui est saisi
-    LOCALEASE_DEFAUT.forEach(def => {
-      if (!list.some(c => c.offre === def.offre && c.conducteur === def.conducteur)) { list.push({ ...def }); changed = true; }
-    });
-    // Backfill : applique la plaque du défaut sur un contrat déjà enregistré qui n'en a pas encore
-    LOCALEASE_DEFAUT.forEach(def => {
-      if (!def.immat) return;
-      const c = list.find(x => x.offre === def.offre && x.conducteur === def.conducteur);
-      if (c && !c.immat) { c.immat = def.immat; changed = true; }
-    });
+    // ⚠️ Les contrats Localease/Ayvens par défaut sont PROPRES À PXP → on ne les injecte QUE pour PXP.
+    // Une autre société démarre SANS contrat (elle saisit les siens).
+    if (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') {
+      // Ajoute les contrats par défaut manquants (clé = offre+conducteur), sans écraser ce qui est saisi
+      LOCALEASE_DEFAUT.forEach(def => {
+        if (!list.some(c => c.offre === def.offre && c.conducteur === def.conducteur)) { list.push({ ...def }); changed = true; }
+      });
+      // Backfill : applique la plaque du défaut sur un contrat déjà enregistré qui n'en a pas encore
+      LOCALEASE_DEFAUT.forEach(def => {
+        if (!def.immat) return;
+        const c = list.find(x => x.offre === def.offre && x.conducteur === def.conducteur);
+        if (c && !c.immat) { c.immat = def.immat; changed = true; }
+      });
+    }
     // Migration : un seul PDF (pdfUrl) -> liste de documents (docs[]) pour pouvoir en attacher plusieurs
     list.forEach(c => { if (!Array.isArray(c.docs)) { c.docs = c.pdfUrl ? [{ url: c.pdfUrl, name: 'Contrat' }] : []; changed = true; } });
     if (changed) { s.localeaseContrats = list; FP.settings.save(s); }

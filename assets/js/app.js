@@ -435,6 +435,27 @@ FP.addSociete = (name) => {
   try { localStorage.setItem(FP.SOCIETES_KEY, JSON.stringify(arr)); } catch (e) {}
   return true;
 };
+// Champs du profil société (rendu générique : le formulaire de Paramètres itère dessus).
+FP.PROFIL_CHAMPS = [
+  { key: 'mailExpediteur',     label: "E-mail d'envoi des amendes",       type: 'email', ph: 'ex. contact@masociete.fr' },
+  { key: 'mailCopie',          label: 'E-mails en copie (séparés par ,)', type: 'text',  ph: 'ex. compta@masociete.fr, direction@masociete.fr' },
+  { key: 'loueurNom',          label: 'Nom du loueur (leasing)',          type: 'text',  ph: 'ex. Arval, ALD, BPCE Car Lease…' },
+  { key: 'proprietaireLeasing',label: 'Étiquette « propriétaire » leasing dans les véhicules', type: 'text', ph: 'ex. BPCE (doit correspondre au champ propriétaire des véhicules en leasing)' },
+];
+// Profil de la société ACTIVE : valeurs saisies (settings.profil) par-dessus des valeurs par défaut.
+// ⚠️ PXP conserve ses valeurs historiques (rien ne change) ; une NOUVELLE société démarre vide → l'app propose de les remplir.
+FP.societeProfil = () => {
+  let p = {}; try { p = FP.settings.get().profil || {}; } catch (e) {}
+  const soc = (FP.activeSociete && FP.activeSociete()) || 'PXP';
+  const base = (soc === 'PXP')
+    ? { mailExpediteur: 'shakil.nubeebaccus@projectxparis.fr',
+        mailCopie: 'shakil.nubeebaccus@projectxparis.fr,mallaury.herembert@projectxparis.fr',
+        loueurNom: 'BPCE Car Lease', proprietaireLeasing: 'BPCE' }
+    : { mailExpediteur: '', mailCopie: '', loueurNom: 'Leasing', proprietaireLeasing: '' };
+  // Seules les valeurs NON vides saisies écrasent la base (une base PXP ne se vide pas par accident).
+  const over = Object.fromEntries(Object.entries(p).filter(([, v]) => v != null && String(v).trim() !== ''));
+  return { ...base, ...over };
+};
 // Le cache statique data.js ne contient que PXP : si une autre société est active,
 // on le vide au démarrage (les vraies données filtrées arriveront via Supabase),
 // sinon on verrait des données PXP sur une autre société.
@@ -602,6 +623,9 @@ FP.settings = {
     sinistreStatut: {}, // suivi remboursement sinistre { factureId: 'attente'|'rembourse'|'refuse' }
     permisMasque: {}, // permis intégré (FP_DOCS) masqué par l'utilisateur { conducteurKey: true }
     condDocs: {}, // documents perso d'un conducteur { conducteurKey: [ {id,type,label,url,date,createdAt} ] }
+    // Profil PROPRE À CHAQUE SOCIÉTÉ (rempli à la création d'une société) : e-mails d'envoi des amendes,
+    // nom du loueur leasing, etc. Vide par défaut ; PXP a des valeurs historiques (voir FP.societeProfil).
+    profil: {},
   },
   get() {
     try {
@@ -639,6 +663,7 @@ FP.settings = {
         alertesMasqueesInfo: (stored.alertesMasqueesInfo && typeof stored.alertesMasqueesInfo === 'object') ? stored.alertesMasqueesInfo : {},
         permisMasque: (stored.permisMasque && typeof stored.permisMasque === 'object') ? stored.permisMasque : {},
         condDocs: (stored.condDocs && typeof stored.condDocs === 'object') ? stored.condDocs : {},
+        profil: (stored.profil && typeof stored.profil === 'object') ? stored.profil : {},
       };
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
