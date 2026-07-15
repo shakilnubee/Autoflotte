@@ -620,7 +620,12 @@
 
   function sortRows(arr) {
     const dir = state.sortDir === 'asc' ? 1 : -1;
+    // PRIORITÉ (toujours, quel que soit le tri choisi) : « à payer » en haut, et les MAJORÉES d'abord.
+    const grpApayer = a => (a.statut === 'à payer' ? 0 : 1);
+    const grpMajore = a => (a.majoree && a.montantMajore ? 0 : 1);
     return arr.slice().sort((a, b) => {
+      let g = grpApayer(a) - grpApayer(b); if (g) return g;               // à payer avant le reste
+      if (grpApayer(a) === 0) { const m = grpMajore(a) - grpMajore(b); if (m) return m; } // majorées en tête des à payer
       let r;
       if (state.sortKey === 'prenom')       r = (a.prenom || '').localeCompare(b.prenom || '', 'fr', { sensitivity: 'base' });
       else if (state.sortKey === 'montant') r = (a.montant || 0) - (b.montant || 0);
