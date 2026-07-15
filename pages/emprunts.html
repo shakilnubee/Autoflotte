@@ -24,6 +24,11 @@
   .pill-encours { background: #FEF3C7; color: #78350F; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
   .pill-avenir { background: #E0E7FF; color: #3730A3; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
   .pill-rendu { background: #DCFCE7; color: #14532D; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
+  .emp-chip { padding: .4rem .9rem; border-radius: 9999px; font-size: .82rem; font-weight: 600; border: 1px solid var(--fp-border); background: #fff; color: var(--fp-muted); cursor: pointer; display: inline-flex; align-items: center; gap: .4rem; }
+  .emp-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .emp-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: #fff; }
+  .emp-chip .n { font-size: .72rem; font-weight: 800; background: rgba(0,0,0,.08); border-radius: 9999px; padding: 0 .4rem; }
+  .emp-chip.active .n { background: rgba(255,255,255,.22); }
   .pill-retard { background: #FEE2E2; color: #991B1B; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
   tr.is-retard { background: #FEF2F2; }
   /* Menu déroulant personnalisé (aux couleurs de la plateforme) */
@@ -151,6 +156,13 @@
         <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
         <input id="search" type="text" placeholder="Rechercher (nom, véhicule…)" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
       </div>
+    </div>
+
+    <!-- Filtres par statut : « En cours » d'abord pour voir qui a un véhicule -->
+    <div class="flex flex-wrap gap-2 mb-4" id="emp-filters">
+      <button type="button" class="emp-chip" data-statut="encours">En cours <span class="n" id="chip-n-encours">0</span></button>
+      <button type="button" class="emp-chip active" data-statut="all">Tous</button>
+      <button type="button" class="emp-chip" data-statut="rendus">Rendus <span class="n" id="chip-n-rendus">0</span></button>
     </div>
 
     <!-- Tableau -->
@@ -308,7 +320,7 @@
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
   const data = window.FP_DATA;
-  const state = { search: '', voirTout: false };
+  const state = { search: '', voirTout: false, statut: 'all' };
   const EMP_LIMIT = 15;
 
   // ---- Stockage : Supabase si dispo, sinon localStorage ----
@@ -429,9 +441,23 @@
 
   function render() {
     const q = FP.norm(state.search).trim();
-    const rows = cache.filter(e => !q || FP.norm(`${e.vehicule} ${e.emprunteur} ${e.renduPar||''}`).includes(q));
-    $('kpi-encours').textContent = cache.filter(e => !e.dateRetour).length;
+    let rows = cache.filter(e => !q || FP.norm(`${e.vehicule} ${e.emprunteur} ${e.renduPar||''}`).includes(q));
+    // Filtre par onglet de statut
+    if (state.statut === 'encours') rows = rows.filter(e => !e.dateRetour);
+    else if (state.statut === 'rendus') rows = rows.filter(e => !!e.dateRetour);
+    // TRI PAR STATUT : « En cours » toujours EN HAUT (les retards en premier), puis les rendus (plus récents d'abord)
+    rows.sort((a, b) => {
+      const ea = a.dateRetour ? 1 : 0, eb = b.dateRetour ? 1 : 0;
+      if (ea !== eb) return ea - eb;                                   // en cours (0) avant rendu (1)
+      if (!a.dateRetour && !b.dateRetour) return joursDepuis(b.dateEmprunt) - joursDepuis(a.dateEmprunt); // retards d'abord
+      return `${b.dateEmprunt||''} ${b.heureEmprunt||''}`.localeCompare(`${a.dateEmprunt||''} ${a.heureEmprunt||''}`); // rendus récents d'abord
+    });
+    const nEncours = cache.filter(e => !e.dateRetour).length;
+    $('kpi-encours').textContent = nEncours;
     $('kpi-total').textContent = cache.length;
+    { const c = $('chip-n-encours'); if (c) c.textContent = nEncours; }
+    { const c = $('chip-n-rendus'); if (c) c.textContent = cache.filter(e => !!e.dateRetour).length; }
+    document.querySelectorAll('#emp-filters .emp-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.statut === state.statut));
     // Alerte : véhicules non rendus depuis plus de 2 jours
     const retards = cache.filter(estEnRetard).sort((a, b) => joursDepuis(b.dateEmprunt) - joursDepuis(a.dateEmprunt));
     $('kpi-retard').textContent = retards.length;
@@ -719,6 +745,7 @@
 
   // ---- Wiring ----
   $('search').addEventListener('input', e => { state.search = e.target.value; render(); });
+  { const ef = $('emp-filters'); if (ef) ef.addEventListener('click', e => { const b = e.target.closest('.emp-chip'); if (!b) return; state.statut = b.dataset.statut || 'all'; state.voirTout = false; render(); }); }
   $('btn-new').addEventListener('click', openNew);
   // Ouverture auto du formulaire via ?new=1 (bouton « Ajouter un emprunt » du tableau de bord)
   if (new URLSearchParams(location.search).get('new')) setTimeout(openNew, 60);
