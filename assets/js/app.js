@@ -356,6 +356,25 @@ FP.estVendu = (v) => { const s = ((v && v.statut) || '').toString().toLowerCase(
 // Utilisé pour les ALERTES / échéances / CT (on n'alerte pas sur une voiture en cours de vente).
 FP.horsFlotte = (v) => ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 'cédé', 'cede', 'cédée', 'hors service', 'hors-service', 'hs', 'archive', 'archivé', 'archivée', 'restitué', 'restitue'].includes(((v && v.statut) || '').toString().toLowerCase().trim());
 
+// Masses en ORDRE DE MARCHE (champ G de la carte grise, en kg) — c'est le champ qu'utilise
+// la règle de stationnement de Paris (≤ 2 t), PAS le poids à vide G.1. Valeurs LUES DIRECTEMENT
+// dans les cartes grises Drive de la flotte. Sert de repli quand la masse n'a pas encore été
+// captée par un scan (verdict stationnement Paris / critère « lourd »). Clé = immat.
+// Donnée technique (pas de PII) → OK dans le code public. Un scan de carte grise reste
+// prioritaire : cette table n'est utilisée QUE si aucune masse n'est saisie (cf. vehMasse).
+FP.MASSE_CG = {
+  'GC-885-LB': 2395, 'GT-565-XR': 1885, 'GD-056-CR': 2040, 'GE-349-FZ': 2040, 'HG-763-VP': 1825,
+  'GR-745-LR': 1012, 'FF-304-GL': 2215, 'FF-777-XK': 2139, 'GP-795-YL': 1505, 'GW-075-EZ': 1505,
+  'GW-087-EZ': 1505, 'GW-173-JV': 1505, 'FJ-607-QH': 1505, 'FZ-301-YZ': 1505, 'GY-860-FG': 1815,
+  'GP-333-QJ': 1505, 'HH-464-LQ': 2015, 'GT-818-LC': 1710, 'HB-844-DE': 2015, 'HB-733-DE': 2015,
+  'GA-313-PK': 2990, 'FR-141-MP': 1760, 'GA-333-PZ': 1639, 'FS-224-PB': 1390, 'FZ-501-YZ': 1416,
+  'HH-458-LQ': 2015, 'GR-585-HP': 1358, 'GR-302-HP': 1358, 'HF-477-XW': 1650, 'HJ-804-VM': 2117,
+  'GH-994-AR': 1395, 'ET-095-LV': 1621, 'ED-160-TZ': 1758, 'FT-338-AJ': 1395, 'GE-948-WY': 1446,
+  'GR-019-ZG': 1358, 'GR-467-HP': 1358, 'HE-739-WP': 1505, 'GP-232-WF': 1505, 'HJ-285-FL': 1625,
+  'HJ-181-RN': 1782, 'HG-709-CH': 2015, 'HF-749-VD': 1265, 'HH-613-KE': 2015, 'GM-548-QA': 1395
+};
+FP.masseCG = (v) => { try { const k = (v && v.immat || '').toString().toUpperCase().trim(); const m = FP.MASSE_CG[k]; return Number.isFinite(m) ? m : null; } catch (e) { return null; } };
+
 // IMPORTANT — partage d'un SEUL objet FP.
 // supabase-client.js (chargé AVANT app.js) a déjà posé FP.supabase / FP.db / FP.auth
 // sur window.FP. Sans cette fusion, le `const FP` ci-dessus serait un objet DIFFÉRENT
@@ -2595,9 +2614,12 @@ FP.detectDoc = function (rawText, vehicules) {
   // CO2 (g/km)
   let co2m = text.match(/CO2\s*[:\s]*(\d{1,3})/) || text.match(/\b(\d{1,3})\s*GR?\s*\/?\s*KM\b/);
   if (co2m) { const n = +co2m[1]; if (n >= 0 && n < 600) out.co2 = n; }
-  // Masse en ordre de marche (code G.1) — kg — sert au verdict stationnement Paris
-  const g1m = text.match(/\bG\s*[.,]?\s*1\b[^0-9]{0,14}(\d[\d .]{2,6})/) || text.match(/(?:MASSE|POIDS)[^0-9]{0,20}(\d[\d .]{2,6})\s*KG/);
-  if (g1m) { const n = parseInt(String(g1m[1]).replace(/[ .]/g, ''), 10); if (n >= 500 && n < 8000) out.masse = n; }
+  // Masse en ORDRE DE MARCHE (champ G, PAS le poids à vide G.1) — kg — sert au verdict
+  // stationnement Paris (≤ 2 t). Sur la carte grise, le champ G est la valeur qui précède
+  // « G.1 » (les deux sont parfois séparés par « J M1 »). On ancre donc sur : G <valeur> … G.1.
+  let gm = text.match(/\bG\b[^0-9A-Za-z]{0,6}(\d[\d ]{2,5})[\s\S]{0,22}?G\s*[.,]?\s*1\b/);
+  if (!gm) gm = text.match(/MASSE\s+(?:EN\s+)?ORDRE\s+DE\s+MARCHE[^0-9]{0,20}(\d[\d .]{2,6})/);
+  if (gm) { const n = parseInt(String(gm[1]).replace(/[ .]/g, ''), 10); if (n >= 500 && n < 8000) out.masse = n; }
   // Puissance fiscale (CV)
   const cvm = text.match(/\b(\d{1,2})\s*CV\b/);
   if (cvm) { const n = +cvm[1]; if (n > 0 && n < 100) out.puissanceFiscale = n; }

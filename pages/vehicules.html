@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260709y">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260715a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260709y"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260715a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260709y">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260715a">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -704,12 +704,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260709y"></script>
-<script src="../assets/js/supabase-client.js?v=20260709y"></script>
-<script src="../assets/js/data.js?v=20260709y"></script>
-<script src="../assets/js/fleet-docs.js?v=20260709y"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260709y"></script>
-<script src="../assets/js/app.js?v=20260709y"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260715a"></script>
+<script src="../assets/js/supabase-client.js?v=20260715a"></script>
+<script src="../assets/js/data.js?v=20260715a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260715a"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260715a"></script>
+<script src="../assets/js/app.js?v=20260715a"></script>
 <script>
   lucide.createIcons();
 
@@ -1648,6 +1648,8 @@
   const KNOWN_MASS = { 'SEAL U': 2102, 'ATTO 3': 1750 };
   function vehMasse(v) {
     try { const m = (FP.settings.get().vehMasse || {})[v.id]; if (m != null && m !== '') return Number(m); } catch (e) {}
+    // Repli : masse lue directement dans la carte grise Drive (champ G.1), par immat.
+    try { const cg = FP.masseCG && FP.masseCG(v); if (cg != null) return cg; } catch (e) {}
     const mod = (v.modele || '').toUpperCase();
     for (const k in KNOWN_MASS) { if (mod.includes(k)) return KNOWN_MASS[k]; }
     return null;
@@ -3449,9 +3451,11 @@
     const co2 = (afterCode(lines, /\bV\s*[.,]?\s*7\b/) || '').match(/\d{1,3}/);
     if (co2) { const n = Number(co2[0]); if (n >= 0 && n < 600) out.co2 = n; }
 
-    // Masse en service / en ordre de marche (code G.1) — en kg (seuil stationnement Paris = 2 000 kg)
-    const g1 = (afterCode(lines, /\bG\s*[.,]?\s*1\b/) || '').replace(/[\s.]/g, '').match(/\d{3,5}/);
-    if (g1) { const n = Number(g1[0]); if (n >= 500 && n < 8000) out.masse = n; }
+    // Masse en ORDRE DE MARCHE (champ G, PAS le poids à vide G.1) — en kg (seuil stationnement
+    // Paris = 2 000 kg). Le champ G est la valeur qui précède « G.1 » (parfois séparés par « J M1 »).
+    let gMass = upper.match(/\bG\b[^0-9A-Za-z]{0,6}(\d[\d ]{2,5})[\s\S]{0,22}?G\s*[.,]?\s*1\b/);
+    if (!gMass) gMass = upper.match(/MASSE\s+(?:EN\s+)?ORDRE\s+DE\s+MARCHE[^0-9]{0,20}(\d[\d .]{2,6})/);
+    if (gMass) { const n = Number(String(gMass[1]).replace(/[\s.]/g, '')); if (n >= 500 && n < 8000) out.masse = n; }
 
     // Type d'énergie / carburant (code P.3) — codes officiels (ES, GO, EL, EH…)
     const en = (afterCode(lines, /\bP\s*[.,]?\s*3\b/) || '').toUpperCase();
