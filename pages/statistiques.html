@@ -534,10 +534,24 @@
     if (annee === 'all') months = buildLast12();
     else { months = []; for (let m = 0; m < 12; m++) months.push({ ym: `${annee}-${String(m + 1).padStart(2, '0')}`, label: new Date(+annee, m, 1).toLocaleDateString('fr-FR', { month: 'short' }) }); }
     const monthData = months.map(m => fact.filter(f => (f.date || '').startsWith(m.ym)).reduce((s, f) => s + (+f.montantTTC || 0), 0));
+    const datasets = [{ label: (annee === 'all' ? 'Dépenses' : annee), data: monthData, borderColor: '#F97316', backgroundColor: 'rgba(249,115,22,.15)', tension: .35, fill: true, pointRadius: 3 }];
+    let showLegend = false;
+    // Comparaison N vs N-1 : quand une année précise est choisie, on superpose l'année précédente (pointillés).
+    if (annee !== 'all' && /^\d{4}$/.test(annee)) {
+      const py = String(+annee - 1);
+      const seen = new Set();
+      const prevFact = (factures || []).filter(f => (f.date || '').startsWith(py))
+        .filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; });
+      const prevData = months.map((m, i) => { const pym = py + '-' + String(i + 1).padStart(2, '0'); return prevFact.filter(f => (f.date || '').startsWith(pym)).reduce((s, f) => s + (+f.montantTTC || 0), 0); });
+      if (prevData.some(x => x > 0)) {
+        datasets.push({ label: py, data: prevData, borderColor: '#94A3B8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .35, fill: false, pointRadius: 2 });
+        showLegend = true;
+      }
+    }
     charts.month = new Chart($('monthChart'), {
       type: 'line',
-      data: { labels: months.map(m => m.label), datasets: [{ data: monthData, borderColor: '#F97316', backgroundColor: 'rgba(249,115,22,.15)', tension: .35, fill: true, pointRadius: 3 }] },
-      options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => FP.euro(ctx.parsed.y) } } }, scales: { y: { ticks: { callback: v => v + ' €' } } }, maintainAspectRatio: false, responsive: true }
+      data: { labels: months.map(m => m.label), datasets },
+      options: { plugins: { legend: { display: showLegend, position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => ctx.dataset.label + ' : ' + FP.euro(ctx.parsed.y) } } }, scales: { y: { ticks: { callback: v => v + ' €' } } }, maintainAspectRatio: false, responsive: true }
     });
 
     // Par type
