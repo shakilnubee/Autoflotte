@@ -1242,13 +1242,18 @@
     if (!state.currentId) return;
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a) return;
+    // Justificatif FACULTATIF : on le propose, mais l'utilisateur peut ignorer cette étape.
+    if (!a.justifUrl) {
+      const wantJustif = confirm("Joindre une pièce justificative à la contestation ?\n\nOK = joindre un document · Annuler = contester sans justificatif.");
+      if (wantJustif) { justifIntent = 'contest'; $('justif-file').click(); return; }
+    }
     FP.history.commit();
     a.statut = 'contestée';
     const id = a.id;
     setJustifWatch(id, false); // une amende contestée n'a pas à avoir de justificatif de paiement
-    closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { statut: 'contestée' });
+    openDrawer(id);
   }
   // Liste (réglages) des amendes marquées payées SANS justificatif → sert à l'alerte.
   // On n'y inscrit que les amendes traitées À PARTIR DE MAINTENANT (les anciennes n'y figurent pas).
@@ -1296,6 +1301,20 @@
       setJustifWatch(id0, false); // une amende désignée n'a pas à être surveillée « payée sans justif »
       renderKPIs(); renderTable(); renderCharts();
       FP.persist.update('amendes', id0, { justifUrl: url, statut: 'désignée', commentaire: newComment });
+      openDrawer(id0);
+      return;
+    }
+    // --- Justificatif de CONTESTATION (facultatif) → statut « contestée » (jamais « payée ») ---
+    if (intent === 'contest') {
+      const id0 = a.id;
+      const mention = `Contestée le ${FP.date(new Date().toISOString().slice(0, 10))}`;
+      const prev = (a.commentaire || '').replace(/^Payée le [^\n]*\n?/i, '').replace(/^Conducteur désigné le [^\n]*\n?/i, '').replace(/^Contestée le [^\n]*\n?/i, '').trim();
+      const newComment = prev ? `${mention}\n${prev}` : mention;
+      FP.history.commit();
+      a.justifUrl = url; a.statut = 'contestée'; a.commentaire = newComment;
+      setJustifWatch(id0, false);
+      renderKPIs(); renderTable(); renderCharts();
+      FP.persist.update('amendes', id0, { justifUrl: url, statut: 'contestée', commentaire: newComment });
       openDrawer(id0);
       return;
     }
