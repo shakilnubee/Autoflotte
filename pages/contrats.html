@@ -151,12 +151,21 @@
     <div class="card p-6 mb-6 contrat-section" data-section="leasing">
       <div class="section-title">
         <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
-        <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — <span id="leasing-loueur-nom">BPCE Car Lease</span>
+        <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — <span id="leasing-loueur-nom">Leasing</span>
+        <button id="leasing-edit" type="button" class="text-xs font-semibold ml-2" style="color:var(--fp-accent)"><i data-lucide="pencil" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Modifier</button>
       </div>
-      <p class="text-sm text-slate-600 mb-4">Véhicules sous contrat de leasing BPCE. Mensualités <b>théoriques</b> = mois écoulés depuis le début du contrat × mensualité fixe (médiane des factures). « X facturées » indique le nombre de factures réellement importées.</p>
+      <p class="text-sm text-slate-600 mb-4">Véhicules sous contrat de leasing. Mensualités <b>théoriques</b> = mois écoulés depuis le début du contrat × mensualité fixe (médiane des factures). « X facturées » indique le nombre de factures réellement importées.</p>
+      <div id="leasing-config" class="hidden mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+        <div class="flex flex-wrap items-end gap-4">
+          <div><div class="field-label !mb-1">Nom du loueur</div><input id="leasing-nom-in" class="field-input" style="width:200px" placeholder="ex. BPCE Car Lease, Arval…" /></div>
+          <div><div class="field-label !mb-1">Étiquette « propriétaire » (véhicules en leasing)</div><input id="leasing-prop-in" class="field-input" style="width:220px" placeholder="ex. BPCE" /></div>
+          <button id="leasing-config-save" type="button" class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+        </div>
+        <p class="text-xs text-slate-400 mt-2">Les véhicules dont le champ « propriétaire » vaut cette étiquette sont considérés en leasing chez ce loueur.</p>
+      </div>
 
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        <div class="kpi"><div class="kpi-label">Véhicules BPCE</div><div class="kpi-value" id="kpi-bpce-nb">—</div></div>
+        <div class="kpi"><div class="kpi-label">Véhicules en leasing</div><div class="kpi-value" id="kpi-bpce-nb">—</div></div>
         <div class="kpi"><div class="kpi-label">Loyer mensuel total</div><div class="kpi-value" id="kpi-bpce-mens" style="color:var(--fp-primary)">—</div><div class="kpi-delta">mensualité fixe / mois</div></div>
         <div class="kpi"><div class="kpi-label">Engagement total</div><div class="kpi-value" id="kpi-bpce-total" style="color:var(--fp-primary)">—</div><div class="kpi-delta">mensualité × durée</div></div>
         <div class="kpi"><div class="kpi-label">Loyer moyen / mois</div><div class="kpi-value" id="kpi-bpce-moy" style="color:var(--fp-primary)">—</div></div>
@@ -888,6 +897,24 @@
       try { await FP.persist.update('vehicules', v.id, { assurance: label }); v.assurance = label; ok++; } catch (e) { console.warn(e); }
     }
     if (st) { st.textContent = `✓ ${ok}/${cibles.length} fiche(s) mises à jour.`; st.style.color = '#059669'; }
+  });
+
+  // --- Configuration du loueur de leasing (nom + étiquette propriétaire), par société ---
+  if ($('leasing-edit')) $('leasing-edit').addEventListener('click', () => {
+    const box = $('leasing-config'); if (!box) return;
+    const prof = (FP.societeProfil ? FP.societeProfil() : {});
+    if ($('leasing-nom-in')) $('leasing-nom-in').value = prof.loueurNom || '';
+    if ($('leasing-prop-in')) $('leasing-prop-in').value = prof.proprietaireLeasing || '';
+    box.classList.toggle('hidden');
+  });
+  if ($('leasing-config-save')) $('leasing-config-save').addEventListener('click', () => {
+    const s = FP.settings.get();
+    s.profil = (s.profil && typeof s.profil === 'object') ? s.profil : {};
+    s.profil.loueurNom = ($('leasing-nom-in').value || '').trim();
+    s.profil.proprietaireLeasing = ($('leasing-prop-in').value || '').trim();
+    FP.settings.save(s);
+    if ($('leasing-config')) $('leasing-config').classList.add('hidden');
+    renderKPIs(); renderLeasing(); if (typeof renderLocalease === 'function') renderLocalease();
   });
 
   // Rafraîchit quand Supabase a chargé (sinon on reste sur le cache data.js)
