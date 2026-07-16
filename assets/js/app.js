@@ -1024,10 +1024,21 @@ FP.REVISION_INTERVALS = {
 };
 FP.REVISION_DEFAUT = { km: 15000, mois: 12 };
 
-// Intervalle de révision : règle unique demandée → tous les 15 000 km OU tous les 12 mois
-// (au premier des deux atteint), pour tous les véhicules.
-FP.revisionIntervalle = (v) => ({ km: 15000, mois: 12 });
-// (ancien calcul par marque/carburant remplacé par la règle unique 15 000 km / 12 mois ci-dessus)
+// Réglages de notifications/seuils (modifiables dans Paramètres → Notifications).
+// Valeurs par défaut = comportement historique → rien ne change tant qu'on n'y touche pas.
+FP.notifCfg = () => {
+  const s = (FP.settings && FP.settings.get) ? (FP.settings.get() || {}) : {};
+  const n = (s.notif && typeof s.notif === 'object') ? s.notif : {};
+  const num = (v, def) => (Number(v) > 0 ? Number(v) : def);
+  return {
+    revKm:   num(n.revKm, 15000),   // intervalle de révision (km)
+    revMois: num(n.revMois, 12),    // intervalle de révision (mois)
+    ctJours: num(n.ctJours, 90),    // anticipation d'alerte du contrôle technique (jours)
+  };
+};
+// Intervalle de révision : par défaut tous les 15 000 km OU tous les 12 mois (au premier atteint),
+// réglable dans Paramètres → Notifications (FP.notifCfg).
+FP.revisionIntervalle = (v) => { const c = FP.notifCfg(); return { km: c.revKm, mois: c.revMois }; };
 
 // Échéance de révision : estimation par paliers de km (multiples de l'intervalle)
 // + échéance temporelle si la dernière révision est connue. Renvoie le niveau
@@ -1325,7 +1336,7 @@ FP.buildAlertes = (data) => {
     if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
     else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
     else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < 90)  out.push({ niveau: 'info',   categorie: 'Contrôle technique', message: `CT dans ~2 mois (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < FP.notifCfg().ctJours) out.push({ niveau: 'info', categorie: 'Contrôle technique', message: `CT à venir (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
 
   // --- Contrôle anti-pollution (utilitaires / camions diesel) ---
