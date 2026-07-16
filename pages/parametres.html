@@ -263,6 +263,18 @@
             <input class="field-input" id="f-societe-adresse" placeholder="290 rue de la Belle Étoile, 95700 Roissy-en-France" />
           </div>
         </div>
+        <div>
+          <div class="field-label">Logo de la société (optionnel)</div>
+          <div class="flex items-center gap-4 mt-1">
+            <div id="soc-logo-preview" style="width:64px;height:64px;border-radius:12px;border:1px solid var(--fp-border);background:#F8FAFC;display:flex;align-items:center;justify-content:center;overflow:hidden;color:#94A3B8;font-size:11px">Aucun</div>
+            <div class="flex flex-col gap-2">
+              <input type="file" id="soc-logo-file" accept="image/png,image/jpeg,image/svg+xml,image/webp" class="hidden" />
+              <button type="button" class="btn btn-outline text-sm" id="soc-logo-btn"><i data-lucide="upload" class="w-4 h-4"></i> Choisir un logo</button>
+              <button type="button" class="btn text-xs text-red-600 hover:bg-red-50 hidden" id="soc-logo-del" style="width:fit-content"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Retirer</button>
+            </div>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Affiché dans l'en-tête du tableau de bord. Carré conseillé (PNG/SVG). Propre à cette société.</p>
+        </div>
       </div>
 
       <!-- Profil société (e-mails d'envoi amendes, loueur…) — généré depuis FP.PROFIL_CHAMPS -->
@@ -425,6 +437,19 @@
       <div class="section-title" style="font-size:.95rem"><i data-lucide="users-round" class="w-4 h-4"></i> Utilisateurs & accès</div>
       <p class="text-sm text-slate-600">Inviter un collègue ou un client à accéder à la plateforme se fait pour l'instant depuis <b>Supabase → Authentication → Add user</b> (chaque utilisateur ne voit que les données de sa société grâce à la sécurité RLS).</p>
       <p class="text-xs text-slate-400 mt-2">💡 Je peux ajouter ici un vrai bouton « Inviter un utilisateur » (envoi d'un e-mail d'invitation) — ça demande un petit ajout côté serveur, comme pour les e-mails Resend. Dis-le-moi quand tu veux.</p>
+    </div>
+
+    <!-- Présentation & marketing (accès rapide) — onglet Compte -->
+    <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="compte">
+      <div class="section-title"><i data-lucide="sparkles" class="w-5 h-5"></i> Présentation &amp; marketing</div>
+      <p class="text-sm text-slate-600 mb-4">Tes supports pour présenter Parc Pilot (s'ouvrent dans un nouvel onglet).</p>
+      <div class="flex flex-wrap gap-2">
+        <a href="../brochure.html" target="_blank" rel="noopener" class="btn btn-outline text-sm"><i data-lucide="book-open" class="w-4 h-4"></i> Brochure</a>
+        <a href="../prix.html" target="_blank" rel="noopener" class="btn btn-outline text-sm"><i data-lucide="badge-euro" class="w-4 h-4"></i> Tarifs</a>
+        <a href="../demo.html" target="_blank" rel="noopener" class="btn btn-outline text-sm"><i data-lucide="play-circle" class="w-4 h-4"></i> Démo (voix off)</a>
+        <a href="../carte-visite.html" target="_blank" rel="noopener" class="btn btn-outline text-sm"><i data-lucide="contact" class="w-4 h-4"></i> Carte de visite</a>
+        <a href="../script-demo.html" target="_blank" rel="noopener" class="btn btn-outline text-sm"><i data-lucide="file-text" class="w-4 h-4"></i> Script vidéo</a>
+      </div>
     </div>
 
     <!-- Section Aperçu (rattachée à l'onglet Groupes) -->
@@ -1278,6 +1303,46 @@
         setR('Échec : ' + ((e && e.message) || 'réessaie') + ' — vérifie que Resend est configuré.', false);
       } finally { recapBtn.disabled = false; }
     });
+  })();
+
+  // ===== Logo de la société (upload → data URL redimensionnée, stockée dans profil, par société) =====
+  (function initLogo() {
+    const g = id => document.getElementById(id);
+    const prev = g('soc-logo-preview'), del = g('soc-logo-del'), btn = g('soc-logo-btn'), file = g('soc-logo-file');
+    if (!prev) return;
+    function paint() {
+      let url = ''; try { url = (FP.settings.get().profil || {}).logoDataUrl || ''; } catch (e) {}
+      if (url) { prev.innerHTML = '<img src="' + url + '" style="width:100%;height:100%;object-fit:contain">'; if (del) del.classList.remove('hidden'); }
+      else { prev.textContent = 'Aucun'; if (del) del.classList.add('hidden'); }
+    }
+    function save(url) {
+      const s = FP.settings.get(); s.profil = (s.profil && typeof s.profil === 'object') ? s.profil : {};
+      if (url) s.profil.logoDataUrl = url; else delete s.profil.logoDataUrl;
+      FP.settings.save(s); paint();
+    }
+    if (btn) btn.addEventListener('click', () => file && file.click());
+    if (del) del.addEventListener('click', () => save(''));
+    if (file) file.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        if (/^data:image\/svg/i.test(dataUrl)) { save(dataUrl); return; } // SVG → tel quel
+        const img = new Image();
+        img.onload = () => {
+          const max = 256; let w = img.width, h = img.height;
+          if (w > max || h > max) { const r = Math.min(max / w, max / h); w = Math.round(w * r); h = Math.round(h * r); }
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          try { c.getContext('2d').drawImage(img, 0, 0, w, h); save(c.toDataURL('image/png')); }
+          catch (er) { save(dataUrl); }
+        };
+        img.onerror = () => save(dataUrl);
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(f);
+      e.target.value = '';
+    });
+    paint();
   })();
 </script>
 </body>
