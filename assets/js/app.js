@@ -2647,6 +2647,13 @@ FP.detectDoc = function (rawText, vehicules) {
   let gm = text.match(/\bG\b[^0-9A-Za-z]{0,6}(\d[\d ]{2,5})[\s\S]{0,22}?G\s*[.,]?\s*1\b/);
   if (!gm) gm = text.match(/MASSE\s+(?:EN\s+)?ORDRE\s+DE\s+MARCHE[^0-9]{0,20}(\d[\d .]{2,6})/);
   if (gm) { const n = parseInt(String(gm[1]).replace(/[ .]/g, ''), 10); if (n >= 500 && n < 8000) out.masse = n; }
+  // Date de 1re mise en circulation (champ B) → AAAA-MM-JJ
+  const mkIso = (d, m, y) => y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+  const bm = text.match(/1(?:ERE|RE|E)?\s*IMMATRICULATION[\s\S]{0,28}?(\d\d?)[.\/-](\d\d?)[.\/-](\d{4})/);
+  if (bm && +bm[3] >= 1980 && +bm[3] <= 2100) out.dateMiseEnCirculation = mkIso(bm[1], bm[2], bm[3]);
+  // Prochain contrôle technique (champ X.1 « VISITE AVANT LE ») → AAAA-MM-JJ
+  const xm = text.match(/VISITE\s+AVANT\s+LE[^0-9]{0,10}(\d\d?)[.\/-](\d\d?)[.\/-](\d{4})/);
+  if (xm && +xm[3] >= 2000 && +xm[3] <= 2100) out.prochainCT = mkIso(xm[1], xm[2], xm[3]);
   // Puissance fiscale (CV)
   const cvm = text.match(/\b(\d{1,2})\s*CV\b/);
   if (cvm) { const n = +cvm[1]; if (n > 0 && n < 100) out.puissanceFiscale = n; }
