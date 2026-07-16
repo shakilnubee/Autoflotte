@@ -463,6 +463,9 @@
   }
   const DEFAULT_DATE_FROM = ''; // le filtrage par année se fait via le sélecteur (state.annee), pas par une date plancher
   const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false, selectedIds: new Set() };
+  // Intention du prochain justificatif joint : 'pay' → statut « payée » (preuve de paiement) ;
+  // 'designate' → statut « désignée » (preuve de désignation, exigée pour désigner).
+  let justifIntent = 'pay';
   const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
   const $ = (id) => document.getElementById(id);
 
@@ -1169,6 +1172,7 @@
     $('drawer').classList.add('open');
     $('drawer-backdrop').classList.add('open');
     (function(){ const dr = $('drawer'); dr.classList.remove('fiche-in'); void dr.offsetWidth; dr.classList.add('fiche-in'); })();
+    justifIntent = 'pay'; // à chaque ouverture, un justificatif joint = preuve de paiement par défaut
     // Bouton paiement : "Marquer payée" ou, si déjà payée, "Marquer non payée" (revenir en arrière)
     const payBtn = $('drawer-pay');
     if (a.statut === 'payée') {
@@ -1183,7 +1187,7 @@
     $('drawer-designer').style.display = (a.statut === 'désignée' || a.statut === 'payée') ? 'none' : '';
     { const cb = $('drawer-conteste'); if (cb) cb.style.display = (a.statut === 'contestée' || a.statut === 'payée') ? 'none' : ''; }
     // Boutons dynamiques du justificatif (re-rendus à chaque ouverture)
-    const jb = $('justif-btn'); if (jb) jb.onclick = () => $('justif-file').click();
+    const jb = $('justif-btn'); if (jb) jb.onclick = () => { justifIntent = 'pay'; $('justif-file').click(); };
     const ju = $('justif-unarchive'); if (ju) ju.onclick = unarchiveAmende;
     const ad = $('avis-del'); if (ad) ad.onclick = () => deleteAmDoc('avisUrl', "le scan de l'avis");
     const jd = $('justif-del'); if (jd) jd.onclick = () => deleteAmDoc('justifUrl', 'le justificatif');
@@ -1280,6 +1284,21 @@
     try { url = await FP.uploadScan(file, 'justificatifs', { name: a.numeroAvis ? 'justif-' + a.numeroAvis : '' }) || ''; }
     catch (e) { console.error(e); alert("Le justificatif n'a pas pu être envoyé. Réessaie."); return; }
     if (!url) { alert("Le justificatif n'a pas pu être envoyé. Réessaie."); return; }
+    const intent = justifIntent; justifIntent = 'pay'; // on consomme l'intention
+    // --- Justificatif de DÉSIGNATION → statut « désignée » (jamais « payée ») ---
+    if (intent === 'designate') {
+      const id0 = a.id;
+      const mention = `Conducteur désigné le ${FP.date(new Date().toISOString().slice(0, 10))}`;
+      const prev = (a.commentaire || '').replace(/^Payée le [^\n]*\n?/i, '').replace(/^Conducteur désigné le [^\n]*\n?/i, '').trim();
+      const newComment = prev ? `${mention}\n${prev}` : mention;
+      FP.history.commit();
+      a.justifUrl = url; a.statut = 'désignée'; a.commentaire = newComment;
+      setJustifWatch(id0, false); // une amende désignée n'a pas à être surveillée « payée sans justif »
+      renderKPIs(); renderTable(); renderCharts();
+      FP.persist.update('amendes', id0, { justifUrl: url, statut: 'désignée', commentaire: newComment });
+      openDrawer(id0);
+      return;
+    }
     // Cherche la date de paiement dans le justificatif (OCR), sinon date du jour
     let dpaie = null;
     try { dpaie = await extractDatePaiement(file); } catch (e) { console.warn('[justif] date non lue', e); }
@@ -1380,17 +1399,27 @@
     openDrawer(id);
   }
 
-  // Désignation du conducteur : l'amende n'est plus à la charge de l'entreprise
+  // Désignation du conducteur : l'amende n'est plus à la charge de l'entreprise.
+  // ⚠️ Un justificatif de désignation est OBLIGATOIRE : sans lui, on ne peut pas désigner.
   function markDesigne() {
     if (!state.currentId) return;
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a) return;
+    if (!a.justifUrl) {
+      // Pas encore de justificatif → on l'exige : ouverture du sélecteur de fichier.
+      // C'est l'upload (intent 'designate') qui passera l'amende en « désignée ».
+      justifIntent = 'designate';
+      alert("Pour marquer cette amende comme « Désignée », joignez d'abord le justificatif de désignation (le document prouvant que le conducteur a été désigné).");
+      $('justif-file').click();
+      return;
+    }
+    // Un justificatif est déjà présent → désignation possible.
     FP.history.commit();
     a.statut = 'désignée';
     const id = a.id;
-    closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { statut: 'désignée' });
+    openDrawer(id);
   }
   function deleteAmende() {
     if (!state.currentId) return;
