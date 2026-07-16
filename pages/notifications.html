@@ -115,10 +115,12 @@
     <div class="flex gap-1 border-b border-slate-200 mb-6">
       <button type="button" id="tab-alertes" style="padding:8px 16px;font-weight:700;font-size:14px;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">🔔 Alertes</button>
       <button type="button" id="tab-echeances" style="padding:8px 16px;font-weight:700;font-size:14px;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔄 Renouvellements</button>
+      <button type="button" id="tab-complet" style="padding:8px 16px;font-weight:700;font-size:14px;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📝 À compléter</button>
     </div>
 
     <div id="notif-cols" class="grid gap-6 md:grid-cols-2 xl:grid-cols-4"></div>
     <div id="suivi-echeances" class="hidden"></div>
+    <div id="suivi-complet" class="hidden"></div>
 
     <div id="notif-masquees" class="mt-8"></div>
 
@@ -250,26 +252,103 @@
     }).join('') + '</div>';
     lucide.createIcons();
   }
-  const tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances');
+  // ===== Sous-onglet « À compléter » : TOUTES les infos manquantes de la plateforme =====
+  const isEmptyV = (x) => x == null || String(x).trim() === '' || String(x).trim() === '—';
+  function vehMasseEff(v) { try { const s = (FP.settings.get().vehMasse || {})[v.id]; if (s != null && String(s).trim() !== '') return s; } catch (e) {} try { return FP.masseCG && FP.masseCG(v); } catch (e) {} return null; }
+  function leasingForfait(v) { try { const lo = (FP.getLeasingOverrides && FP.getLeasingOverrides()) || {}; const base = FP.LEASING_CONTRATS || {}; return lo[v.immat] || base[v.immat] || null; } catch (e) { return null; } }
+  function estLeasing(v) { try { const prof = FP.societeProfil ? FP.societeProfil() : {}; const p = String(v.proprietaire || '').trim().toLowerCase(); if (p && prof.proprietaireLeasing && p === String(prof.proprietaireLeasing).trim().toLowerCase()) return true; } catch (e) {} return !!leasingForfait(v); }
+
+  const VEH_FIELDS = [
+    { k: 'immat', label: 'Immatriculation' }, { k: 'marque', label: 'Marque' }, { k: 'modele', label: 'Modèle' },
+    { k: 'categorie', label: 'Catégorie' }, { k: 'carburant', label: 'Carburant' },
+    { k: 'dateMiseEnCirculation', label: 'Date de 1re immat.' },
+    { k: 'km', label: 'Kilométrage', empty: v => v.km == null || String(v.km).trim() === '' },
+    { k: 'prochainCT', label: 'Prochain CT' }, { k: 'proprietaire', label: 'Propriétaire' },
+    { k: 'puissanceFiscale', label: 'Puissance fiscale' }, { k: 'vin', label: 'N° de châssis (VIN)' },
+    { k: 'assurance', label: 'Assurance', val: v => v.assurance || (FP.assuranceLabel && FP.assuranceLabel()) },
+    { k: 'co2', label: 'CO₂', skip: v => /lectri|hydrog/i.test(v.carburant || '') },
+    { k: 'masse', label: 'Masse (carte grise)', val: v => vehMasseEff(v) },
+    { k: 'leasing', label: 'Forfait leasing (km/durée)', skip: v => !estLeasing(v), empty: v => { const f = leasingForfait(v); return !f || isEmptyV(f.kmContrat) || isEmptyV(f.dureeMois) || isEmptyV(f.debut); } },
+  ];
+  const COND_FIELDS = [
+    { k: 'nom', label: 'Nom' }, { k: 'prenom', label: 'Prénom' }, { k: 'dateNaissance', label: 'Date de naissance (âge)' },
+    { k: 'poste', label: 'Poste' }, { k: 'tel', label: 'Téléphone' }, { k: 'email', label: 'Email' }, { k: 'adresse', label: 'Adresse' },
+    { k: 'permisNumero', label: 'N° de permis' }, { k: 'permisExpiration', label: 'Expiration permis' },
+  ];
+  const AMENDE_FIELDS = [
+    { k: 'prenom', label: 'Conducteur à attribuer' }, { k: 'montant', label: 'Montant' },
+    { k: 'numeroAvis', label: "N° d'avis" }, { k: 'motif', label: 'Motif' }, { k: 'date', label: 'Date' },
+  ];
+  const missOf = (x, fields) => { const m = []; fields.forEach(f => { if (f.skip && f.skip(x)) return; const e = f.empty ? f.empty(x) : isEmptyV(f.val ? f.val(x) : x[f.k]); if (e) m.push(f.label); }); return m; };
+  const compItem = (nom, miss, target) => ({ nom, miss, target });
+  function sectionCompHTML(title, icon, items) {
+    const n = items.length;
+    const rows = items.map(it => `<a href="${esc(it.target)}" class="notif" style="text-decoration:none;align-items:flex-start">
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold text-slate-900">${esc(it.nom)}</div>
+          <div class="mt-1 flex flex-wrap gap-1">${it.miss.map(m => `<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:9999px">${esc(m)}</span>`).join('')}</div>
+        </div>
+        <span class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap">Compléter →</span>
+      </a>`).join('');
+    return `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="${icon}" class="w-5 h-5"></i> ${title} <span class="badge ${n ? 'badge-danger' : ''}" ${n ? '' : 'style="background:#E2E8F0;color:#475569"'}>${n}</span></h2>`
+      + (n ? `<div class="space-y-2" style="max-width:840px">${rows}</div>` : `<p class="text-sm text-emerald-600">✓ Rien à compléter ici.</p>`) + `</div>`;
+  }
+  function renderComplet() {
+    const box = document.getElementById('suivi-complet'); if (!box) return;
+    const actifs = (data.vehicules || []).filter(v => !(FP.estVendu && FP.estVendu(v)));
+    const vehItems = []; actifs.forEach(v => { const m = missOf(v, VEH_FIELDS); if (m.length) vehItems.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), m, `vehicules.html?veh=${encodeURIComponent(v.id)}`)); });
+    const conds = (data.conducteurs || []).filter(c => c && c.masque !== true && (c.manuel === true || !isEmptyV(c.nom) || !isEmptyV(c.prenom)));
+    const condItems = []; conds.forEach(c => { const m = missOf(c, COND_FIELDS); if (m.length) { const nom = [c.prenom, c.nom].filter(x => !isEmptyV(x)).join(' ') || c.name || c.key || 'Conducteur'; condItems.push(compItem(nom, m, `conducteurs.html?cond=${encodeURIComponent(c.key || '')}`)); } });
+    const amItems = []; (data.amendes || []).forEach(a => { const m = missOf(a, AMENDE_FIELDS); if (m.length) amItems.push(compItem(`${(a.motif || 'Amende')} · ${a.date ? FP.date(a.date) : 'date ?'}`, m, `amendes.html?amende=${encodeURIComponent(a.id || '')}`)); });
+    const facItems = []; (data.factures || []).forEach(f => { if (isEmptyV(f.montantTTC) && isEmptyV(f.montant)) facItems.push(compItem(`${f.fournisseur || f.description || 'Facture'} · ${f.vehiculeImmat || ''}`.trim(), ['Montant TTC'], `factures.html`)); });
+    const cfg = [];
+    try {
+      const prof = FP.societeProfil ? FP.societeProfil() : {}; const soc = (FP.settings.get().societe) || {};
+      if (FP.assuranceLabel && !FP.assuranceLabel()) cfg.push({ label: 'Assurance de la société non renseignée', target: 'contrats.html' });
+      if (isEmptyV(prof.proprietaireLeasing) && actifs.some(estLeasing)) cfg.push({ label: 'Loueur de leasing non configuré', target: 'contrats.html' });
+      if (isEmptyV(prof.mailExpediteur)) cfg.push({ label: "E-mail d'envoi des amendes non renseigné", target: 'parametres.html' });
+      if (isEmptyV(soc.siret)) cfg.push({ label: 'SIRET de la société manquant', target: 'parametres.html' });
+      if (isEmptyV(soc.adresse)) cfg.push({ label: 'Adresse de la société manquante', target: 'parametres.html' });
+    } catch (e) {}
+    const cfgHTML = cfg.length ? `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5"></i> Configuration société <span class="badge badge-danger">${cfg.length}</span></h2><div class="space-y-2" style="max-width:840px">`
+      + cfg.map(c => `<a href="${esc(c.target)}" class="notif" style="text-decoration:none"><div class="flex-1 min-w-0"><div class="font-semibold text-slate-900">${esc(c.label)}</div></div><span class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap">Compléter →</span></a>`).join('') + `</div></div>` : '';
+    const total = vehItems.length + condItems.length + amItems.length + facItems.length + cfg.length;
+    const intro = total ? `<p class="text-sm text-slate-500 mb-5">${total} élément(s) à compléter. Clique sur une ligne pour aller la remplir directement.</p>`
+      : `<p class="text-emerald-600 font-semibold mb-5">🎉 Tout est complet — aucune info manquante !</p>`;
+    box.innerHTML = intro + cfgHTML
+      + sectionCompHTML('Véhicules à compléter', 'car', vehItems)
+      + sectionCompHTML('Conducteurs à compléter', 'users', condItems)
+      + sectionCompHTML('Amendes à compléter', 'ticket', amItems)
+      + sectionCompHTML('Factures sans montant', 'receipt', facItems);
+    lucide.createIcons();
+  }
+
+  const tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet');
   function showTab(which) {
-    const alertes = which !== 'echeances';
-    document.getElementById('notif-cols').classList.toggle('hidden', !alertes);
-    document.getElementById('notif-masquees').classList.toggle('hidden', !alertes);
-    document.getElementById('suivi-echeances').classList.toggle('hidden', alertes);
-    tabA.style.borderBottomColor = alertes ? 'var(--fp-accent)' : 'transparent'; tabA.style.color = alertes ? 'var(--fp-primary)' : '#94A3B8';
-    tabE.style.borderBottomColor = !alertes ? 'var(--fp-accent)' : 'transparent'; tabE.style.color = !alertes ? 'var(--fp-primary)' : '#94A3B8';
-    if (!alertes) renderEcheances();
+    document.getElementById('notif-cols').classList.toggle('hidden', which !== 'alertes');
+    document.getElementById('notif-masquees').classList.toggle('hidden', which !== 'alertes');
+    document.getElementById('suivi-echeances').classList.toggle('hidden', which !== 'echeances');
+    document.getElementById('suivi-complet').classList.toggle('hidden', which !== 'complet');
+    [[tabA, 'alertes'], [tabE, 'echeances'], [tabC, 'complet']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
+    if (which === 'echeances') renderEcheances();
+    if (which === 'complet') renderComplet();
   }
   if (tabA) tabA.addEventListener('click', () => showTab('alertes'));
   if (tabE) tabE.addEventListener('click', () => showTab('echeances'));
+  if (tabC) tabC.addEventListener('click', () => showTab('complet'));
 
+  const isCompletVisible = () => !document.getElementById('suivi-complet').classList.contains('hidden');
   render();
-  document.addEventListener('fp:data-ready', () => { render(); if (!document.getElementById('suivi-echeances').classList.contains('hidden')) renderEcheances(); });
+  document.addEventListener('fp:data-ready', () => {
+    render();
+    if (!document.getElementById('suivi-echeances').classList.contains('hidden')) renderEcheances();
+    if (isCompletVisible()) renderComplet();
+  });
 
-  // Charge les conducteurs (table à part) pour générer les alertes "permis qui expire"
+  // Charge les conducteurs (table à part) → alertes "permis qui expire" + onglet « À compléter »
   if (window.FP && FP.db && FP.db.select) {
     FP.db.select('conducteurs').then(r => {
-      if (r && r.data) { data.conducteurs = r.data; render(); }
+      if (r && r.data) { data.conducteurs = r.data; render(); if (isCompletVisible()) renderComplet(); }
     }).catch(() => {});
   }
 </script>
