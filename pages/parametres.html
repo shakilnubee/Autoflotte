@@ -158,6 +158,7 @@
       <button class="set-tab" data-sec="societe"><i data-lucide="building-2"></i> Société</button>
       <button class="set-tab" data-sec="donnees"><i data-lucide="database"></i> Données</button>
       <button class="set-tab" data-sec="journal"><i data-lucide="history"></i> Journal</button>
+      <button class="set-tab" data-sec="compte"><i data-lucide="user-cog"></i> Compte</button>
     </div>
 
     <!-- Section Groupes -->
@@ -357,6 +358,36 @@
       </div>
       <p class="text-xs text-slate-400 mt-3" id="journal-count"></p>
       <p class="text-xs text-slate-400 mt-1">⚠️ Le journal est enregistré dans ce navigateur : il reflète les actions faites depuis ce poste. Pour un historique partagé entre tous les PC, il faudrait l'enregistrer dans Supabase (je peux le mettre en place).</p>
+    </div>
+
+    <!-- Section Compte & utilisateurs -->
+    <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="compte">
+      <div class="section-title">
+        <i data-lucide="user-cog" class="w-5 h-5"></i> Mon compte
+      </div>
+      <div class="mb-5 p-4 rounded-lg border border-slate-200" style="background:#F8FAFC">
+        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Connecté en tant que</div>
+        <div id="acct-email" class="font-semibold text-slate-800">…</div>
+      </div>
+
+      <div class="mb-2 font-semibold text-slate-800 text-sm">Changer mon mot de passe</div>
+      <div class="space-y-3" style="max-width:420px">
+        <input class="field-input" id="acct-pw1" type="password" autocomplete="new-password" placeholder="Nouveau mot de passe (min. 8 caractères)" />
+        <input class="field-input" id="acct-pw2" type="password" autocomplete="new-password" placeholder="Confirmer le nouveau mot de passe" />
+        <div class="flex items-center gap-3 flex-wrap">
+          <button class="btn btn-dark text-sm" id="btn-acct-pw"><i data-lucide="key-round" class="w-4 h-4"></i> Mettre à jour le mot de passe</button>
+          <span id="acct-pw-status" class="text-xs"></span>
+        </div>
+      </div>
+
+      <hr class="my-6 border-slate-200" />
+      <div class="mb-2 font-semibold text-slate-800 text-sm">Session</div>
+      <button class="btn btn-outline text-sm" id="btn-acct-logout"><i data-lucide="log-out" class="w-4 h-4"></i> Se déconnecter</button>
+
+      <hr class="my-6 border-slate-200" />
+      <div class="section-title" style="font-size:.95rem"><i data-lucide="users-round" class="w-4 h-4"></i> Utilisateurs & accès</div>
+      <p class="text-sm text-slate-600">Inviter un collègue ou un client à accéder à la plateforme se fait pour l'instant depuis <b>Supabase → Authentication → Add user</b> (chaque utilisateur ne voit que les données de sa société grâce à la sécurité RLS).</p>
+      <p class="text-xs text-slate-400 mt-2">💡 Je peux ajouter ici un vrai bouton « Inviter un utilisateur » (envoi d'un e-mail d'invitation) — ça demande un petit ajout côté serveur, comme pour les e-mails Resend. Dis-le-moi quand tu veux.</p>
     </div>
 
     <!-- Section Aperçu (rattachée à l'onglet Groupes) -->
@@ -1104,6 +1135,47 @@
   renderPreview();
   renderJournal();
   lucide.createIcons();
+
+  // ===== Onglet Compte : e-mail, mot de passe, déconnexion =====
+  (function initCompte() {
+    const emailEl = document.getElementById('acct-email');
+    // Affiche l'e-mail du compte connecté
+    (async () => {
+      try {
+        const u = (window.FP && FP.auth && FP.auth.getUser) ? await FP.auth.getUser() : null;
+        if (emailEl) emailEl.textContent = (u && u.email) ? u.email : 'Non connecté';
+      } catch (e) { if (emailEl) emailEl.textContent = '—'; }
+    })();
+
+    const pwBtn = document.getElementById('btn-acct-pw');
+    const st = document.getElementById('acct-pw-status');
+    const setSt = (msg, ok) => { if (st) { st.textContent = msg; st.style.color = ok ? '#059669' : '#DC2626'; } };
+    if (pwBtn) pwBtn.addEventListener('click', async () => {
+      const p1 = (document.getElementById('acct-pw1').value || '');
+      const p2 = (document.getElementById('acct-pw2').value || '');
+      if (p1.length < 8) return setSt('Le mot de passe doit faire au moins 8 caractères.', false);
+      if (p1 !== p2) return setSt('Les deux mots de passe ne correspondent pas.', false);
+      if (!(window.FP && FP.supabase && FP.supabase.auth)) return setSt('Connexion Supabase indisponible — recharge la page.', false);
+      pwBtn.disabled = true; setSt('Mise à jour…', true);
+      try {
+        const { error } = await FP.supabase.auth.updateUser({ password: p1 });
+        if (error) throw error;
+        document.getElementById('acct-pw1').value = '';
+        document.getElementById('acct-pw2').value = '';
+        setSt('✓ Mot de passe mis à jour.', true);
+      } catch (e) {
+        setSt('Échec : ' + ((e && e.message) || 'réessaie'), false);
+      } finally { pwBtn.disabled = false; }
+    });
+
+    const logoutBtn = document.getElementById('btn-acct-logout');
+    if (logoutBtn) logoutBtn.addEventListener('click', () => {
+      if (!confirm('Se déconnecter de Parc Pilot sur ce poste ?')) return;
+      try { if (window.FP && FP.auth && FP.auth.signOut) { FP.auth.signOut(); return; } } catch (e) {}
+      try { if (window.FP && FP.supabase) FP.supabase.auth.signOut(); } catch (e) {}
+      window.location.href = '../login.html';
+    });
+  })();
 </script>
 </body>
 </html>
