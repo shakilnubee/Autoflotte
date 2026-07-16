@@ -134,6 +134,7 @@ git push              # Netlify redéploie automatiquement
 - [ ] Phase 3 : activer les écritures Supabase pour les mutations (drawer, bulk actions)
 - [ ] Phase 4 : page "Espace salarié"
 - [ ] Acheter domaine personnalisé (.fr ou .com) via OVH/Gandi
+- [ ] 🎬 Enregistrer la **vidéo de démonstration** (.mp4) avec voix off — **à faire par Shakil, plus tard**. Tout est prêt : la démo auto-jouée est `demo.html`, et le **script imprimable** (mode d'emploi enregistrement écran + texte à lire) est `script-demo.html`.
 
 ## Pour Claude (nouvelle session)
 
