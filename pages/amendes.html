@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260716a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260716b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260716a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260716b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260716a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260716b">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -435,10 +435,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260716a"></script>
-<script src="../assets/js/supabase-client.js?v=20260716a"></script>
-<script src="../assets/js/data.js?v=20260716a"></script>
-<script src="../assets/js/app.js?v=20260716a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260716b"></script>
+<script src="../assets/js/supabase-client.js?v=20260716b"></script>
+<script src="../assets/js/data.js?v=20260716b"></script>
+<script src="../assets/js/app.js?v=20260716b"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -857,15 +857,26 @@
     const a = data.amendes.find(x => x.id === state.currentId);
     return (a && a.prenom && a.prenom.trim() && a.prenom.trim() !== '—') ? a.prenom.trim() : '';
   }
+  // Applique un modèle : remplace {prenom} par le prénom (ou rien, en nettoyant l'espace).
+  function appliquerModele(tpl, p) {
+    return String(tpl).replace(/ ?\{prenom\}/gi, p ? ' ' + p : '');
+  }
+  // Modèle de la société active (Paramètres → Société), sinon texte par défaut.
+  function modeleMail(cle, defaut) {
+    try { const prof = (window.FP && FP.societeProfil) ? FP.societeProfil() : {}; const v = prof[cle]; if (v && String(v).trim()) return String(v); } catch (e) {}
+    return defaut;
+  }
   // Email 1 — demande de paiement direct (pas de désignation nécessaire)
   function mailPaiement() {
     const p = prenomCourant();
-    ouvrirMail(`Bonjour${p ? ' ' + p : ''}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`);
+    const def = `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`;
+    ouvrirMail(appliquerModele(modeleMail('mailModelePaiement', def), p));
   }
   // Email 2 — demande de confirmation pour effectuer la désignation
   function mailDesignation() {
     const p = prenomCourant();
-    ouvrirMail(`Bonjour${p ? ' ' + p : ''},\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.`);
+    const def = `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.`;
+    ouvrirMail(appliquerModele(modeleMail('mailModeleDesignation', def), p));
   }
   // Relance courte
   function relanceEmail() {

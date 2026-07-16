@@ -460,6 +460,8 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailCopie',          label: 'E-mails en copie (séparés par ,)', type: 'text',  ph: 'ex. compta@masociete.fr, direction@masociete.fr' },
   { key: 'loueurNom',          label: 'Nom du loueur (leasing)',          type: 'text',  ph: 'ex. Arval, ALD, BPCE Car Lease…' },
   { key: 'proprietaireLeasing',label: 'Étiquette « propriétaire » leasing dans les véhicules', type: 'text', ph: 'ex. BPCE (doit correspondre au champ propriétaire des véhicules en leasing)' },
+  { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom. Laisse vide pour le texte par défaut.' },
+  { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}. Laisse vide pour le texte par défaut.' },
 ];
 // Profil de la société ACTIVE : valeurs saisies (settings.profil) par-dessus des valeurs par défaut.
 // ⚠️ PXP conserve ses valeurs historiques (rien ne change) ; une NOUVELLE société démarre vide → l'app propose de les remplir.
