@@ -375,6 +375,14 @@ FP.MASSE_CG = {
 };
 FP.masseCG = (v) => { try { const k = (v && v.immat || '').toString().toUpperCase().trim(); const m = FP.MASSE_CG[k]; return Number.isFinite(m) ? m : null; } catch (e) { return null; } };
 
+// Données lues dans les cartes grises Drive (par immat) pour PRÉ-REMPLIR les champs vides des fiches
+// via le bouton « Compléter depuis les cartes grises » (onglet À compléter). Champs NON personnels
+// uniquement (co2, puissance fiscale, dates, carburant) — ⚠️ JAMAIS le VIN (RGPD, repo public).
+// L'application se fait côté client (session connectée) sur les champs VIDES seulement.
+FP.CG_DATA = {
+  // rempli au fil des lectures de cartes grises — { 'AA-123-BC': { co2, puissanceFiscale, dateMiseEnCirculation, prochainCT, carburant } }
+};
+
 // IMPORTANT — partage d'un SEUL objet FP.
 // supabase-client.js (chargé AVANT app.js) a déjà posé FP.supabase / FP.db / FP.auth
 // sur window.FP. Sans cette fusion, le `const FP` ci-dessus serait un objet DIFFÉRENT

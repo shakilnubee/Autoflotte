@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260716g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260716h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260716g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260716h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260716g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260716h">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -127,10 +127,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260716g"></script>
-<script src="../assets/js/supabase-client.js?v=20260716g"></script>
-<script src="../assets/js/data.js?v=20260716g"></script>
-<script src="../assets/js/app.js?v=20260716g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260716h"></script>
+<script src="../assets/js/supabase-client.js?v=20260716h"></script>
+<script src="../assets/js/data.js?v=20260716h"></script>
+<script src="../assets/js/app.js?v=20260716h"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -293,6 +293,24 @@
     return `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="${icon}" class="w-5 h-5"></i> ${title} <span class="badge ${n ? 'badge-danger' : ''}" ${n ? '' : 'style="background:#E2E8F0;color:#475569"'}>${n}</span></h2>`
       + (n ? `<div class="space-y-2" style="max-width:840px">${rows}</div>` : `<p class="text-sm text-emerald-600">✓ Rien à compléter ici.</p>`) + `</div>`;
   }
+  // Champs remplissables depuis les cartes grises (données pré-extraites dans FP.CG_DATA, par immat).
+  const CG_APPLY_FIELDS = ['co2', 'puissanceFiscale', 'dateMiseEnCirculation', 'prochainCT', 'carburant'];
+  function cgApplicableCount() {
+    const cg = (window.FP && FP.CG_DATA) || {}; let n = 0;
+    (data.vehicules || []).forEach(v => { const d = cg[String(v.immat || '').toUpperCase()]; if (!d) return; CG_APPLY_FIELDS.forEach(k => { if (d[k] != null && d[k] !== '' && isEmptyV(v[k])) n++; }); });
+    return n;
+  }
+  function cgFillBanner() {
+    const n = cgApplicableCount();
+    if (!n) return '';
+    return `<div class="mb-5 p-4 rounded-lg" style="background:#FFF7ED;border:1px solid #FED7AA">
+      <div class="flex items-center justify-between gap-3 flex-wrap">
+        <div class="text-sm text-slate-700"><b>${n} info(s)</b> peuvent être remplies automatiquement depuis tes cartes grises.</div>
+        <button id="cg-fill-btn" class="btn btn-dark text-sm"><i data-lucide="wand-2" class="w-4 h-4"></i> Compléter depuis les cartes grises</button>
+      </div>
+      <p id="cg-fill-status" class="text-xs text-slate-500 mt-2"></p>
+    </div>`;
+  }
   function renderComplet() {
     const box = document.getElementById('suivi-complet'); if (!box) return;
     const actifs = (data.vehicules || []).filter(v => !(FP.estVendu && FP.estVendu(v)));
@@ -300,7 +318,6 @@
     const conds = (data.conducteurs || []).filter(c => c && c.masque !== true && (c.manuel === true || !isEmptyV(c.nom) || !isEmptyV(c.prenom)));
     const condItems = []; conds.forEach(c => { const m = missOf(c, COND_FIELDS); if (m.length) { const nom = [c.prenom, c.nom].filter(x => !isEmptyV(x)).join(' ') || c.name || c.key || 'Conducteur'; condItems.push(compItem(nom, m, `conducteurs.html?cond=${encodeURIComponent(c.key || '')}`)); } });
     const amItems = []; (data.amendes || []).forEach(a => { const m = missOf(a, AMENDE_FIELDS); if (m.length) amItems.push(compItem(`${(a.motif || 'Amende')} · ${a.date ? FP.date(a.date) : 'date ?'}`, m, `amendes.html?amende=${encodeURIComponent(a.id || '')}`)); });
-    const facItems = []; (data.factures || []).forEach(f => { if (isEmptyV(f.montantTTC) && isEmptyV(f.montant)) facItems.push(compItem(`${f.fournisseur || f.description || 'Facture'} · ${f.vehiculeImmat || ''}`.trim(), ['Montant TTC'], `factures.html`)); });
     const cfg = [];
     try {
       const prof = FP.societeProfil ? FP.societeProfil() : {}; const soc = (FP.settings.get().societe) || {};
@@ -312,14 +329,13 @@
     } catch (e) {}
     const cfgHTML = cfg.length ? `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5"></i> Configuration société <span class="badge badge-danger">${cfg.length}</span></h2><div class="space-y-2" style="max-width:840px">`
       + cfg.map(c => `<a href="${esc(c.target)}" class="notif" style="text-decoration:none"><div class="flex-1 min-w-0"><div class="font-semibold text-slate-900">${esc(c.label)}</div></div><span class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap">Compléter →</span></a>`).join('') + `</div></div>` : '';
-    const total = vehItems.length + condItems.length + amItems.length + facItems.length + cfg.length;
+    const total = vehItems.length + condItems.length + amItems.length + cfg.length;
     const intro = total ? `<p class="text-sm text-slate-500 mb-5">${total} élément(s) à compléter. Clique sur une ligne pour aller la remplir directement.</p>`
       : `<p class="text-emerald-600 font-semibold mb-5">🎉 Tout est complet — aucune info manquante !</p>`;
-    box.innerHTML = intro + cfgHTML
+    box.innerHTML = intro + cgFillBanner() + cfgHTML
       + sectionCompHTML('Véhicules à compléter', 'car', vehItems)
       + sectionCompHTML('Conducteurs à compléter', 'users', condItems)
-      + sectionCompHTML('Amendes à compléter', 'ticket', amItems)
-      + sectionCompHTML('Factures sans montant', 'receipt', facItems);
+      + sectionCompHTML('Amendes à compléter', 'ticket', amItems);
     lucide.createIcons();
   }
 
@@ -336,6 +352,25 @@
   if (tabA) tabA.addEventListener('click', () => showTab('alertes'));
   if (tabE) tabE.addEventListener('click', () => showTab('echeances'));
   if (tabC) tabC.addEventListener('click', () => showTab('complet'));
+
+  // Bouton « Compléter depuis les cartes grises » : remplit les champs VIDES depuis FP.CG_DATA.
+  document.getElementById('suivi-complet').addEventListener('click', async (e) => {
+    const b = e.target.closest('#cg-fill-btn'); if (!b) return;
+    const cg = (window.FP && FP.CG_DATA) || {};
+    const st = document.getElementById('cg-fill-status');
+    b.disabled = true; if (st) { st.textContent = 'Mise à jour…'; st.style.color = '#64748B'; }
+    let ok = 0, veh = 0;
+    for (const v of (data.vehicules || [])) {
+      const d = cg[String(v.immat || '').toUpperCase()]; if (!d) continue;
+      const patch = {};
+      CG_APPLY_FIELDS.forEach(k => { if (d[k] != null && d[k] !== '' && isEmptyV(v[k])) patch[k] = d[k]; });
+      if (Object.keys(patch).length) {
+        try { if (FP.persist && FP.persist.update) await FP.persist.update('vehicules', v.id, patch); Object.assign(v, patch); ok += Object.keys(patch).length; veh++; } catch (er) { console.warn(er); }
+      }
+    }
+    if (st) { st.textContent = `✓ ${ok} info(s) remplies sur ${veh} véhicule(s).`; st.style.color = '#059669'; }
+    renderComplet();
+  });
 
   const isCompletVisible = () => !document.getElementById('suivi-complet').classList.contains('hidden');
   render();
