@@ -463,6 +463,20 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom. Laisse vide pour le texte par défaut.' },
   { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}. Laisse vide pour le texte par défaut.' },
 ];
+// Contrat d'assurance de la société ACTIVE (assureur + n° de police), paramétrable dans Contrats.
+// Défaut PXP = SWISSLIFE (valeur historique) ; une nouvelle société démarre vide.
+FP.assuranceContrat = () => {
+  let c = {}; try { c = (FP.settings.get().assuranceContrat) || {}; } catch (e) {}
+  const soc = (FP.activeSociete && FP.activeSociete()) || 'PXP';
+  const base = (soc === 'PXP') ? { assureur: 'SWISSLIFE', police: '011165247/0599' } : { assureur: '', police: '' };
+  return {
+    assureur: (String(c.assureur || '').trim()) || base.assureur,
+    police: (String(c.police || '').trim()) || base.police,
+  };
+};
+// Libellé « ASSUREUR (police) » réutilisable (titre section, fiche véhicule…). Vide si non configuré.
+FP.assuranceLabel = () => { const c = FP.assuranceContrat(); return c.assureur ? (c.assureur + (c.police ? ' (' + c.police + ')' : '')) : ''; };
+
 // Profil de la société ACTIVE : valeurs saisies (settings.profil) par-dessus des valeurs par défaut.
 // ⚠️ PXP conserve ses valeurs historiques (rien ne change) ; une NOUVELLE société démarre vide → l'app propose de les remplir.
 FP.societeProfil = () => {

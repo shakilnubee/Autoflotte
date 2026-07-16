@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260716b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260716c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260716b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260716c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260716b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260716c">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -221,9 +221,19 @@
     <div class="card p-6 mb-6 contrat-section" data-section="assurance">
       <div class="section-title">
         <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
-        <i data-lucide="shield-check" class="w-5 h-5"></i> Assurance — SWISSLIFE (011165247/0599)
+        <i data-lucide="shield-check" class="w-5 h-5"></i> Assurance — <span id="assur-titre">—</span>
+        <button id="assur-edit" type="button" class="text-xs font-semibold ml-2" style="color:var(--fp-accent)"><i data-lucide="pencil" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Modifier</button>
       </div>
-      <p class="text-sm text-slate-600 mb-4">Police unique couvrant tous les véhicules de la flotte.</p>
+      <p class="text-sm text-slate-600 mb-4">Police couvrant les véhicules de la flotte. <span class="text-slate-400">Paramétrable par société.</span></p>
+      <div id="assur-config" class="hidden mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+        <div class="flex flex-wrap items-end gap-4">
+          <div><div class="field-label !mb-1">Assureur</div><input id="assur-assureur" class="field-input" style="width:200px" placeholder="ex. SWISSLIFE, AXA…" /></div>
+          <div><div class="field-label !mb-1">N° de police</div><input id="assur-police" class="field-input" style="width:200px" placeholder="ex. 011165247/0599" /></div>
+          <button id="assur-config-save" type="button" class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+          <button id="assur-apply" type="button" class="btn btn-outline text-sm" title="Écrire cet assureur dans la fiche de tous les véhicules actifs de la société"><i data-lucide="link" class="w-4 h-4"></i> Appliquer à la flotte</button>
+        </div>
+        <p id="assur-config-status" class="text-xs mt-2 text-slate-400">« Appliquer à la flotte » met à jour le champ Assurance dans la fiche de chaque véhicule actif de cette société.</p>
+      </div>
       <div class="flex flex-wrap items-end gap-6 mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
         <div>
           <div class="field-label !mb-1">Prime annuelle (flotte)</div>
@@ -285,10 +295,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260716b"></script>
-<script src="../assets/js/supabase-client.js?v=20260716b"></script>
-<script src="../assets/js/data.js?v=20260716b"></script>
-<script src="../assets/js/app.js?v=20260716b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260716c"></script>
+<script src="../assets/js/supabase-client.js?v=20260716c"></script>
+<script src="../assets/js/data.js?v=20260716c"></script>
+<script src="../assets/js/app.js?v=20260716c"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -376,6 +386,7 @@
   }
   function renderAssurInfo(){
     const prime = assurPrime(); const n = vehicules.length || 0;
+    const tt = $('assur-titre'); if (tt) tt.textContent = (FP.assuranceLabel && FP.assuranceLabel()) || '(à configurer)';
     const inp = $('assur-prime');
     if (inp && document.activeElement !== inp) inp.value = prime ? String(Math.round(prime)).replace('.', ',') : '';
     if ($('assur-mensuel')) $('assur-mensuel').textContent = prime ? FP.euro(prime/12) : '—';
@@ -851,6 +862,34 @@
     const s = FP.settings.get(); s.assurancePrimeAnnuelle = Number.isFinite(val) ? val : 0; FP.settings.save(s);
     renderAssurance(); renderKPIs();
   });
+  // --- Configuration du contrat d'assurance (assureur + n° de police), par société ---
+  if ($('assur-edit')) $('assur-edit').addEventListener('click', () => {
+    const box = $('assur-config'); if (!box) return;
+    const c = (FP.assuranceContrat ? FP.assuranceContrat() : { assureur: '', police: '' });
+    if ($('assur-assureur')) $('assur-assureur').value = c.assureur || '';
+    if ($('assur-police')) $('assur-police').value = c.police || '';
+    box.classList.toggle('hidden');
+  });
+  if ($('assur-config-save')) $('assur-config-save').addEventListener('click', () => {
+    const s = FP.settings.get();
+    s.assuranceContrat = { assureur: ($('assur-assureur').value || '').trim(), police: ($('assur-police').value || '').trim() };
+    FP.settings.save(s);
+    renderAssurInfo();
+    const st = $('assur-config-status'); if (st) { st.textContent = '✓ Assureur enregistré. Utilise « Appliquer à la flotte » pour mettre à jour les fiches véhicules.'; st.style.color = '#059669'; }
+  });
+  if ($('assur-apply')) $('assur-apply').addEventListener('click', async () => {
+    const label = (FP.assuranceLabel && FP.assuranceLabel()) || '';
+    if (!label) { alert("Renseigne d'abord l'assureur et enregistre."); return; }
+    const cibles = (vehicules || []).filter(v => !v.statut || v.statut === 'actif');
+    if (!confirm(`Écrire « ${label} » comme assurance dans la fiche de ${cibles.length} véhicule(s) actif(s) de cette société ?\n\n(Les valeurs actuelles seront remplacées.)`)) return;
+    const st = $('assur-config-status'); if (st) { st.textContent = 'Mise à jour…'; st.style.color = '#64748B'; }
+    let ok = 0;
+    for (const v of cibles) {
+      try { await FP.persist.update('vehicules', v.id, { assurance: label }); v.assurance = label; ok++; } catch (e) { console.warn(e); }
+    }
+    if (st) { st.textContent = `✓ ${ok}/${cibles.length} fiche(s) mises à jour.`; st.style.color = '#059669'; }
+  });
+
   // Rafraîchit quand Supabase a chargé (sinon on reste sur le cache data.js)
   // Import de l'état de parc (assurance)
   if ($('assur-import')) $('assur-import').addEventListener('click', () => { const inp = $('assur-import-file'); if (inp) { inp.value = ''; inp.click(); } });
