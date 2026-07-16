@@ -156,12 +156,14 @@
       </div>
       <p class="text-sm text-slate-600 mb-4">Véhicules sous contrat de leasing. Mensualités <b>théoriques</b> = mois écoulés depuis le début du contrat × mensualité fixe (médiane des factures). « X facturées » indique le nombre de factures réellement importées.</p>
       <div id="leasing-config" class="hidden mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-        <div class="flex flex-wrap items-end gap-4">
-          <div><div class="field-label !mb-1">Nom du loueur</div><input id="leasing-nom-in" class="field-input" style="width:200px" placeholder="ex. BPCE Car Lease, Arval…" /></div>
-          <div><div class="field-label !mb-1">Étiquette « propriétaire » (véhicules en leasing)</div><input id="leasing-prop-in" class="field-input" style="width:220px" placeholder="ex. BPCE" /></div>
+        <div class="font-semibold text-slate-800 text-sm mb-2">Loueurs de leasing de la société</div>
+        <div id="loueurs-rows" class="space-y-2"></div>
+        <div class="flex items-center gap-3 mt-3 flex-wrap">
+          <button id="loueur-add" type="button" class="btn btn-outline text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un loueur</button>
           <button id="leasing-config-save" type="button" class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+          <span id="leasing-config-status" class="text-xs"></span>
         </div>
-        <p class="text-xs text-slate-400 mt-2">Les véhicules dont le champ « propriétaire » vaut cette étiquette sont considérés en leasing chez ce loueur.</p>
+        <p class="text-xs text-slate-400 mt-2">« Étiquette propriétaire » = la valeur du champ <b>propriétaire</b> des véhicules de ce loueur (dans leur fiche). Chaque véhicule est rattaché au loueur dont l'étiquette correspond à son propriétaire.</p>
       </div>
 
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -185,6 +187,7 @@
               <th>Immat.</th>
               <th>Véhicule</th>
               <th>Chauffeur</th>
+              <th>Loueur</th>
               <th>Forfait km</th>
               <th>Km actuel</th>
               <th>Projection fin</th>
@@ -319,6 +322,26 @@
   // ⚠️ Reconstruit à CHAQUE chargement Supabase (fp:data-ready) — sinon les véhicules / factures
   // leasing importés restent invisibles (vehicules est une COPIE filtrée, pas une réf. vivante).
   let vehicules = [], leasingFactures = [], leasingByVeh = {}, leasingImmats = new Set();
+
+  // ===== Loueurs de leasing (multi-loueurs, par société) =====
+  // settings.loueurs = [{ nom, prop }] où `prop` = valeur du champ « propriétaire » des véhicules
+  // de ce loueur. Rétro-compatible : si vide, on dérive de l'ancien réglage unique (profil).
+  function getLoueurs() {
+    let list = [];
+    try { const s = FP.settings.get(); if (Array.isArray(s.loueurs)) list = s.loueurs; } catch (e) {}
+    list = (list || []).filter(l => l && (String(l.nom || '').trim() || String(l.prop || '').trim()));
+    if (list.length) return list;
+    const prof = (FP.societeProfil ? FP.societeProfil() : {});
+    if (prof.proprietaireLeasing || prof.loueurNom) return [{ nom: prof.loueurNom || 'Leasing', prop: prof.proprietaireLeasing || '' }];
+    return [];
+  }
+  function propsLeasing() { return getLoueurs().map(l => String(l.prop || '').trim().toLowerCase()).filter(Boolean); }
+  function loueurDeVeh(v) {
+    const p = String((v && v.proprietaire) || '').trim().toLowerCase();
+    const m = getLoueurs().find(l => String(l.prop || '').trim().toLowerCase() === p && p);
+    return m ? m.nom : ((v && v.proprietaire) || '<span class="text-slate-400">—</span>');
+  }
+
   function rebuildLeasingData() {
     vehicules = (data.vehicules || []).filter(estActif);
     leasingFactures = (data.factures || []).filter(f => f.type === 'leasing');
@@ -333,7 +356,7 @@
       if ((f.date || '') > leasingByVeh[k].lastDate) { leasingByVeh[k].lastDate = f.date || ''; leasingByVeh[k].lastFile = f; }
     });
     leasingImmats = new Set([
-      ...vehicules.filter(v => { const p = (FP.societeProfil ? FP.societeProfil().proprietaireLeasing : 'BPCE') || ''; return p && v.proprietaire === p; }).map(v => v.immat),
+      ...vehicules.filter(v => { const props = propsLeasing(); const p = String(v.proprietaire || '').trim().toLowerCase(); return p && props.includes(p); }).map(v => v.immat),
       ...Object.keys(leasingByVeh),
     ]);
   }
@@ -357,7 +380,7 @@
   let leasingSearch = '';
 
   function renderKPIs() {
-    { const ln = document.getElementById('leasing-loueur-nom'); if (ln && FP.societeProfil) ln.textContent = FP.societeProfil().loueurNom || 'Leasing'; }
+    { const ln = document.getElementById('leasing-loueur-nom'); if (ln) { const ls = getLoueurs(); ln.textContent = ls.length === 1 ? (ls[0].nom || 'Leasing') : (ls.length ? ls.length + ' loueurs' : 'Leasing'); } }
     $('kpi-assur').textContent = vehicules.length;
     $('kpi-assur-sub').textContent = assurPrime() ? FP.euro(assurPrime()) + ' /an' : 'sur SWISSLIFE';
 
@@ -535,6 +558,7 @@
         <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
         <td>${v.marque} ${v.modele}</td>
         <td>${FP.lienConducteur(v.chauffeur)}</td>
+        <td>${loueurDeVeh(v)}</td>
         <td>${l ? FP.num(l.kmContrat) + ' km' : '<span class="text-slate-400">—</span>'}</td>
         <td>${l ? FP.num(l.km) + ' km' : (v.km != null ? FP.num(v.km) + ' km' : '<span class="text-slate-400">—</span>')}</td>
         <td style="${projColor}">${l && l.projectionFin !== null ? '~' + FP.num(l.projectionFin) + ' km' : '<span class="text-slate-400">—</span>'}</td>
@@ -548,7 +572,7 @@
       </tr>`;
     }).join('');
 
-    $('leasing-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} sous leasing BPCE`;
+    { const nl = getLoueurs().length; $('leasing-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} en leasing` + (nl > 1 ? ` · ${nl} loueurs` : ''); }
 
     // KPIs en haut (même présentation que Localease)
     let mensTotal = 0, engagementTotal = 0, nbAvecLoyer = 0;
@@ -899,22 +923,40 @@
     if (st) { st.textContent = `✓ ${ok}/${cibles.length} fiche(s) mises à jour.`; st.style.color = '#059669'; }
   });
 
-  // --- Configuration du loueur de leasing (nom + étiquette propriétaire), par société ---
+  // --- Configuration MULTI-LOUEURS (liste { nom, prop }), par société ---
+  const loueurRowHTML = (nom, prop) => `<div class="flex items-center gap-2 flex-wrap" data-loueur-row>`
+    + `<input class="field-input" data-l-nom style="width:200px" placeholder="Nom du loueur (ex. Arval)" value="${String(nom || '').replace(/"/g, '&quot;')}" />`
+    + `<input class="field-input" data-l-prop style="width:180px" placeholder="Étiquette propriétaire (ex. ARVAL)" value="${String(prop || '').replace(/"/g, '&quot;')}" />`
+    + `<button type="button" class="btn btn-outline text-xs !px-2" data-l-del title="Retirer ce loueur"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button></div>`;
+  function renderLoueursRows() {
+    const box = $('loueurs-rows'); if (!box) return;
+    const list = getLoueurs();
+    box.innerHTML = (list.length ? list : [{ nom: '', prop: '' }]).map(l => loueurRowHTML(l.nom, l.prop)).join('');
+    lucide.createIcons();
+  }
   if ($('leasing-edit')) $('leasing-edit').addEventListener('click', () => {
     const box = $('leasing-config'); if (!box) return;
-    const prof = (FP.societeProfil ? FP.societeProfil() : {});
-    if ($('leasing-nom-in')) $('leasing-nom-in').value = prof.loueurNom || '';
-    if ($('leasing-prop-in')) $('leasing-prop-in').value = prof.proprietaireLeasing || '';
+    renderLoueursRows();
     box.classList.toggle('hidden');
   });
+  if ($('loueur-add')) $('loueur-add').addEventListener('click', () => {
+    const box = $('loueurs-rows'); if (!box) return;
+    box.insertAdjacentHTML('beforeend', loueurRowHTML('', ''));
+    lucide.createIcons();
+  });
+  if ($('loueurs-rows')) $('loueurs-rows').addEventListener('click', (e) => {
+    const del = e.target.closest('[data-l-del]'); if (!del) return;
+    const row = del.closest('[data-loueur-row]'); if (row) row.remove();
+  });
   if ($('leasing-config-save')) $('leasing-config-save').addEventListener('click', () => {
-    const s = FP.settings.get();
-    s.profil = (s.profil && typeof s.profil === 'object') ? s.profil : {};
-    s.profil.loueurNom = ($('leasing-nom-in').value || '').trim();
-    s.profil.proprietaireLeasing = ($('leasing-prop-in').value || '').trim();
-    FP.settings.save(s);
-    if ($('leasing-config')) $('leasing-config').classList.add('hidden');
-    renderKPIs(); renderLeasing(); if (typeof renderLocalease === 'function') renderLocalease();
+    const rows = Array.from(document.querySelectorAll('#loueurs-rows [data-loueur-row]'));
+    const list = rows.map(r => ({
+      nom: (r.querySelector('[data-l-nom]') ? r.querySelector('[data-l-nom]').value : '').trim(),
+      prop: (r.querySelector('[data-l-prop]') ? r.querySelector('[data-l-prop]').value : '').trim(),
+    })).filter(l => l.nom || l.prop);
+    const s = FP.settings.get(); s.loueurs = list; FP.settings.save(s);
+    const st = $('leasing-config-status'); if (st) { st.textContent = '✓ Loueurs enregistrés.'; st.style.color = '#059669'; }
+    rebuildLeasingData(); renderKPIs(); renderLeasing(); if (typeof renderLocalease === 'function') renderLocalease();
   });
 
   // Rafraîchit quand Supabase a chargé (sinon on reste sur le cache data.js)
