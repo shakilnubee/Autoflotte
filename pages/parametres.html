@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260717a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260717b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260717a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260717b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260717a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260717b">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -470,7 +470,7 @@
     </div>
 
     <!-- Présentation & marketing (accès rapide) — onglet Compte -->
-    <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="compte">
+    <div class="card p-6 mb-6 settings-section hidden-sec" data-sec="compte" id="marketing-card">
       <div class="section-title"><i data-lucide="sparkles" class="w-5 h-5"></i> Présentation &amp; marketing</div>
       <p class="text-sm text-slate-600 mb-4">Tes supports pour présenter Parc Pilot (s'ouvrent dans un nouvel onglet).</p>
       <div class="flex flex-wrap gap-2">
@@ -497,10 +497,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260717a"></script>
-<script src="../assets/js/supabase-client.js?v=20260717a"></script>
-<script src="../assets/js/data.js?v=20260717a"></script>
-<script src="../assets/js/app.js?v=20260717a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260717b"></script>
+<script src="../assets/js/supabase-client.js?v=20260717b"></script>
+<script src="../assets/js/data.js?v=20260717b"></script>
+<script src="../assets/js/app.js?v=20260717b"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1278,6 +1278,11 @@
     });
   })();
 
+  // Carte « Présentation & marketing » (brochure, tarifs, démo…) → CEO uniquement.
+  (function gateMarketing() {
+    if (window.FP && FP.isCEO && !FP.isCEO()) { const c = document.getElementById('marketing-card'); if (c) c.style.display = 'none'; }
+  })();
+
   // ===== Gestion des comptes / accès (CEO · Admin) via la fonction serveur manage-users =====
   (function initUsers() {
     const canManage = window.FP && FP.canManageUsers && FP.canManageUsers();
@@ -1327,19 +1332,30 @@
         sel.disabled = true;
       }
     }
+    function socOptions(selected) {
+      const list = (FP.getSocietes ? FP.getSocietes() : ['PXP']) || ['PXP'];
+      return `<option value="">Toutes les sociétés</option>` +
+        list.map(s => `<option value="${esc(s)}"${s === selected ? ' selected' : ''}>${esc(s)}</option>`).join('');
+    }
     function renderList(users) {
       if (!users || !users.length) { listEl.innerHTML = '<div class="text-sm text-slate-400">Aucun utilisateur pour l\'instant.</div>'; return; }
       const isCEO = callerAcces === 'ceo';
-      listEl.innerHTML = users.map(u => `
+      listEl.innerHTML = users.map(u => {
+        // CEO : peut choisir la société de chaque utilisateur (Toutes = CEO ; une société = Admin/Gestionnaire).
+        const socSelHtml = isCEO
+          ? `<select class="field-input text-sm" data-usoc style="width:180px"${(u.self || u.acces === 'ceo') ? ' disabled' : ''}>${socOptions(u.acces === 'ceo' ? '' : (u.societe || ''))}</select>`
+          : `<span class="text-xs text-slate-400" style="min-width:120px">${esc(u.societe || '—')}</span>`;
+        return `
         <div class="flex items-center gap-2 flex-wrap py-2 border-b border-slate-100" data-uid="${esc(u.id)}">
           <div style="min-width:200px;flex:1">
             <div class="font-semibold text-slate-800 text-sm">${esc(u.email || '—')}${u.self ? ' <span class="text-xs text-slate-400">(vous)</span>' : ''}</div>
-            <div class="text-xs text-slate-400">${esc(u.societe || 'Toutes les sociétés')}</div>
           </div>
           <select class="field-input text-sm" data-uacc style="width:150px"${u.self ? ' disabled title="Vous ne pouvez pas changer votre propre accès"' : ''}>${accesOptions(isCEO, u.acces)}</select>
+          ${socSelHtml}
           <button class="btn btn-outline text-xs" data-ureset title="Réinitialiser le mot de passe"><i data-lucide="key-round" class="w-4 h-4"></i></button>
           <button class="btn btn-outline text-xs" data-udel title="Supprimer le compte"${u.self ? ' disabled style="opacity:.4"' : ''}><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
-        </div>`).join('');
+        </div>`;
+      }).join('');
       if (window.lucide) lucide.createIcons();
     }
     async function load() {
@@ -1371,12 +1387,26 @@
 
     if (listEl) {
       listEl.addEventListener('change', async (e) => {
-        const sel = e.target.closest('[data-uacc]'); if (!sel) return;
-        const row = sel.closest('[data-uid]'); const id = row.getAttribute('data-uid');
-        sel.disabled = true;
-        const r = await call({ action: 'updateRole', id, acces: sel.value });
-        sel.disabled = false;
-        if (r.error) { alert('Modification refusée : ' + r.error); load(); }
+        if (!e.target.closest('[data-uacc]') && !e.target.closest('[data-usoc]')) return;
+        const row = e.target.closest('[data-uid]'); if (!row) return;
+        const id = row.getAttribute('data-uid');
+        const accSel = row.querySelector('[data-uacc]');
+        const socSel2 = row.querySelector('[data-usoc]');
+        const acces = accSel.value;
+        // Synchro CEO ⇄ société : CEO = Toutes (verrouillé) ; Admin/Gestionnaire = une société.
+        if (socSel2) {
+          if (acces === 'ceo') { socSel2.value = ''; socSel2.disabled = true; }
+          else {
+            socSel2.disabled = false;
+            if (!socSel2.value) { const opt = socSel2.querySelector('option[value]:not([value=""])'); socSel2.value = opt ? opt.value : ''; }
+          }
+        }
+        const societe = (acces === 'ceo') ? null : (socSel2 ? (socSel2.value || null) : undefined);
+        if (acces !== 'ceo' && socSel2 && !societe) { alert('Choisis une société pour ce niveau d\'accès.'); return; }
+        accSel.disabled = true; if (socSel2) socSel2.disabled = true;
+        const r = await call({ action: 'updateRole', id, acces, societe });
+        if (r.error) alert('Modification refusée : ' + r.error);
+        load();
       });
       listEl.addEventListener('click', async (e) => {
         const row = e.target.closest('[data-uid]'); if (!row) return;

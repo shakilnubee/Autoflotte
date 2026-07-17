@@ -461,6 +461,8 @@ FP.ROLE_LABELS = { ceo: 'CEO', admin: 'Admin', gestionnaire: 'Gestionnaire' };
 FP.canPersonnaliser = () => true;
 // Onglets réservés (retirés du menu pour les autres rôles) — Paramètres = config + comptes.
 FP.ADMIN_ONLY_NAV = ['parametres.html'];
+// Onglets réservés au CEO uniquement (supports de vente Parc Pilot) — cachés aux Admin & Gestionnaires.
+FP.CEO_ONLY_NAV = ['brochure.html', 'prix.html'];
 
 // === Multi-sociétés (vue admin) ===
 FP.activeSociete = () => { try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } };
@@ -3794,6 +3796,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.body.setAttribute('data-role', FP.role());
   if (!_isAdmin) {
     (FP.ADMIN_ONLY_NAV || []).forEach(key => {
+      document.querySelectorAll(`a[data-nav="${key}"]`).forEach(a => a.remove());
+    });
+  }
+  // Brochure / Tarifs : supports de vente Parc Pilot → visibles UNIQUEMENT par le CEO.
+  if (!FP.isCEO()) {
+    (FP.CEO_ONLY_NAV || []).forEach(key => {
       document.querySelectorAll(`a[data-nav="${key}"]`).forEach(a => a.remove());
     });
   }
