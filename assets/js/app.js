@@ -459,8 +459,10 @@ FP.roleLabel = () => ({ ceo: 'CEO', admin: 'Admin', gestionnaire: 'Gestionnaire'
 FP.ROLE_LABELS = { ceo: 'CEO', admin: 'Admin', gestionnaire: 'Gestionnaire' };
 // Personnalisation de l'apparence (renommer titres/colonnes/onglets) : autorisée admin + gestionnaire.
 FP.canPersonnaliser = () => true;
-// Onglets réservés (retirés du menu pour les autres rôles) — Paramètres = config + comptes.
-FP.ADMIN_ONLY_NAV = ['parametres.html'];
+// Onglets réservés (retirés du menu pour les autres rôles). Paramètres reste visible par TOUS
+// (le gestionnaire y accède pour ses réglages de base — couleur, mot de passe, notifications,
+// groupes) ; à l'intérieur, les sections sensibles (société, données, comptes) sont filtrées.
+FP.ADMIN_ONLY_NAV = [];
 // Onglets réservés au CEO uniquement (supports de vente Parc Pilot) — cachés aux Admin & Gestionnaires.
 FP.CEO_ONLY_NAV = ['brochure.html', 'prix.html'];
 

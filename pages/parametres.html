@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260717c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260717d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260717c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260717d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260717c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260717d">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -72,13 +72,10 @@
   var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
   var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
   if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; return; }
-  // Page Paramètres = config société + gestion des comptes → réservée CEO/Admin.
-  // Un gestionnaire est renvoyé au tableau de bord (il garde sa déconnexion dans la sidebar).
-  // Le rôle fait autorité via `profiles` (fp_profile en cache) ; repli sur les métadonnées du token.
-  var role = t.user && t.user.user_metadata && t.user.user_metadata.role;
-  var prof = null; try { prof = JSON.parse(localStorage.getItem('fp_profile') || 'null'); } catch (e) {}
-  var estGestionnaire = (role === 'gestionnaire') || (prof && prof.is_admin !== true && prof.role === 'gestionnaire');
-  if (estGestionnaire) { window.location.replace('../dashboard.html'); document.documentElement.style.display = 'none'; }
+  // Paramètres est accessible à TOUS les rôles (le gestionnaire y gère ses réglages de base :
+  // couleur, mot de passe, notifications, groupes). Les sections sensibles (société, données,
+  // comptes) sont masquées plus bas pour le gestionnaire (voir gateParamForGestionnaire).
+  // Seul le portail salarié (chauffeur) est renvoyé vers son espace (géré dans app.js).
 })();
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
@@ -497,10 +494,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260717c"></script>
-<script src="../assets/js/supabase-client.js?v=20260717c"></script>
-<script src="../assets/js/data.js?v=20260717c"></script>
-<script src="../assets/js/app.js?v=20260717c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260717d"></script>
+<script src="../assets/js/supabase-client.js?v=20260717d"></script>
+<script src="../assets/js/data.js?v=20260717d"></script>
+<script src="../assets/js/app.js?v=20260717d"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1290,13 +1287,24 @@
     });
   })();
 
+  // Gestionnaire : accès à Paramètres LIMITÉ aux réglages de base (Groupes, Affichage/couleur,
+  // Notifications, Compte). Les onglets sensibles (Société, Données, Journal) sont masqués.
+  (function gateParamForGestionnaire() {
+    if (!(window.FP && FP.canManageSociete)) return;
+    if (FP.canManageSociete()) return; // CEO / Admin : accès complet
+    const allowed = ['groupes', 'affichage', 'notifications', 'compte'];
+    document.querySelectorAll('#settings-tabs .set-tab').forEach(b => {
+      if (allowed.indexOf(b.getAttribute('data-sec')) === -1) b.style.display = 'none';
+    });
+    document.querySelectorAll('.settings-section').forEach(s => {
+      if (allowed.indexOf(s.getAttribute('data-sec')) === -1) s.style.display = 'none';
+    });
+  })();
+
   // ===== Gestion des comptes / accès (CEO · Admin) via la fonction serveur manage-users =====
   (function initUsers() {
     const canManage = window.FP && FP.canManageUsers && FP.canManageUsers();
-    if (!canManage) {
-      const d = document.getElementById('users-admin-denied'); if (d) d.style.display = 'block';
-      return;
-    }
+    if (!canManage) return; // gestionnaire : la section « Utilisateurs & accès » reste masquée
     const wrap = document.getElementById('users-admin'); if (wrap) wrap.style.display = 'block';
     const listEl = document.getElementById('users-list');
     const accesSel = document.getElementById('nu-acces');
