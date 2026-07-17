@@ -29,10 +29,12 @@
         const prof = (FP.societeProfil && FP.societeProfil()) || {};
         const exp = String(prof.mailExpediteur || '').trim();
         if (exp) {
+          // Nom d'expéditeur = nom de la société (Paramètres → Société), JAMAIS « Parc Pilot »
+          // (nom du produit). Si aucun nom de société propre → on n'affiche QUE l'adresse.
           let nom = ''; try { nom = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
-          if (!nom) { try { nom = (FP.activeSociete && FP.activeSociete()) || ''; } catch (e) {} }
-          nom = String(nom).replace(/[<>"]/g, '').trim() || 'Parc Pilot';
-          msg.from = `${nom} <${exp}>`;
+          nom = String(nom).replace(/[<>"]/g, '').trim();
+          if (/^parc\s*pilot$/i.test(nom)) nom = '';
+          msg.from = nom ? `${nom} <${exp}>` : exp;
         }
       } catch (e) {}
     }
