@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260716i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260717a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260716i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260717a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260716i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260717a">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -72,10 +72,13 @@
   var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
   var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
   if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; return; }
-  // Page Paramètres : un gestionnaire (rôle interne) est renvoyé au tableau de bord.
-  // Les clients (multi-société) y ont accès, mais la SAUVEGARDE complète leur est masquée (voir plus bas).
+  // Page Paramètres = config société + gestion des comptes → réservée CEO/Admin.
+  // Un gestionnaire est renvoyé au tableau de bord (il garde sa déconnexion dans la sidebar).
+  // Le rôle fait autorité via `profiles` (fp_profile en cache) ; repli sur les métadonnées du token.
   var role = t.user && t.user.user_metadata && t.user.user_metadata.role;
-  if (role === 'gestionnaire') { window.location.replace('../dashboard.html'); document.documentElement.style.display = 'none'; }
+  var prof = null; try { prof = JSON.parse(localStorage.getItem('fp_profile') || 'null'); } catch (e) {}
+  var estGestionnaire = (role === 'gestionnaire') || (prof && prof.is_admin !== true && prof.role === 'gestionnaire');
+  if (estGestionnaire) { window.location.replace('../dashboard.html'); document.documentElement.style.display = 'none'; }
 })();
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
@@ -433,9 +436,37 @@
       <button class="btn btn-outline text-sm" id="btn-acct-logout"><i data-lucide="log-out" class="w-4 h-4"></i> Se déconnecter</button>
 
       <hr class="my-6 border-slate-200" />
-      <div class="section-title" style="font-size:.95rem"><i data-lucide="users-round" class="w-4 h-4"></i> Utilisateurs & accès</div>
-      <p class="text-sm text-slate-600">Inviter un collègue ou un client à accéder à la plateforme se fait pour l'instant depuis <b>Supabase → Authentication → Add user</b> (chaque utilisateur ne voit que les données de sa société grâce à la sécurité RLS).</p>
-      <p class="text-xs text-slate-400 mt-2">💡 Je peux ajouter ici un vrai bouton « Inviter un utilisateur » (envoi d'un e-mail d'invitation) — ça demande un petit ajout côté serveur, comme pour les e-mails Resend. Dis-le-moi quand tu veux.</p>
+      <!-- Gestion des comptes (CEO / Admin uniquement) -->
+      <div id="users-admin" style="display:none">
+        <div class="section-title" style="font-size:.95rem"><i data-lucide="users-round" class="w-4 h-4"></i> Utilisateurs & accès</div>
+        <p class="text-sm text-slate-600 mb-1">Crée et gère les accès à la plateforme. Tout est appliqué automatiquement (aucune manipulation Supabase).</p>
+        <ul class="text-xs text-slate-500 mb-4" style="line-height:1.75;list-style:disc;padding-left:1.1rem">
+          <li><b>CEO</b> — toutes les sociétés, tous les droits.</li>
+          <li><b>Admin</b> — sa société : tous les droits + configuration + gestion des comptes.</li>
+          <li><b>Gestionnaire</b> — sa société : ajoute / modifie / supprime les données, mais pas la configuration ni les comptes.</li>
+        </ul>
+
+        <div id="users-list" class="mb-4"><div class="text-sm text-slate-400">Chargement…</div></div>
+
+        <div class="p-4 rounded-lg border border-slate-200" style="background:#F8FAFC">
+          <div class="mb-3 font-semibold text-slate-800 text-sm">Ajouter un utilisateur</div>
+          <div class="grid gap-3" style="grid-template-columns:repeat(2,minmax(0,1fr));max-width:640px">
+            <input class="field-input" id="nu-email" type="email" autocomplete="off" placeholder="E-mail du collègue / client" />
+            <input class="field-input" id="nu-pw" type="text" autocomplete="off" placeholder="Mot de passe initial (min. 8)" />
+            <select class="field-input" id="nu-acces" aria-label="Niveau d'accès"></select>
+            <select class="field-input" id="nu-societe" aria-label="Société"></select>
+          </div>
+          <div class="flex items-center gap-3 flex-wrap mt-3">
+            <button class="btn btn-dark text-sm" id="btn-nu-add"><i data-lucide="user-plus" class="w-4 h-4"></i> Créer le compte</button>
+            <span id="nu-status" class="text-xs"></span>
+          </div>
+          <p class="text-xs text-slate-400 mt-2">La personne se connecte ensuite sur la page de connexion habituelle avec cet e-mail et ce mot de passe (qu'elle pourra changer dans « Compte »).</p>
+        </div>
+      </div>
+      <div id="users-admin-denied" style="display:none">
+        <div class="section-title" style="font-size:.95rem"><i data-lucide="users-round" class="w-4 h-4"></i> Utilisateurs & accès</div>
+        <p class="text-sm text-slate-500">La gestion des comptes est réservée au CEO et aux administrateurs de la société.</p>
+      </div>
     </div>
 
     <!-- Présentation & marketing (accès rapide) — onglet Compte -->
@@ -466,10 +497,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260716i"></script>
-<script src="../assets/js/supabase-client.js?v=20260716i"></script>
-<script src="../assets/js/data.js?v=20260716i"></script>
-<script src="../assets/js/app.js?v=20260716i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260717a"></script>
+<script src="../assets/js/supabase-client.js?v=20260717a"></script>
+<script src="../assets/js/data.js?v=20260717a"></script>
+<script src="../assets/js/app.js?v=20260717a"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1207,7 +1238,13 @@
     (async () => {
       try {
         const u = (window.FP && FP.auth && FP.auth.getUser) ? await FP.auth.getUser() : null;
-        if (emailEl) emailEl.textContent = (u && u.email) ? u.email : 'Non connecté';
+        if (emailEl) {
+          const lbl = (window.FP && FP.roleLabel) ? FP.roleLabel() : '';
+          const soc = (window.FP && FP.profile && FP.profile.societe) ? FP.profile.societe : (FP.isCEO && FP.isCEO() ? 'Toutes les sociétés' : '');
+          emailEl.innerHTML = ((u && u.email) ? u.email.replace(/[<>&]/g, '') : 'Non connecté')
+            + (lbl ? ` <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#EEF2FF;color:#4338CA;font-size:.72rem;font-weight:700;vertical-align:1px">${lbl}</span>` : '')
+            + (soc ? `<div class="text-xs text-slate-400 font-normal" style="margin-top:2px">${soc.replace(/[<>&]/g, '')}</div>` : '');
+        }
       } catch (e) { if (emailEl) emailEl.textContent = '—'; }
     })();
 
@@ -1239,6 +1276,126 @@
       try { if (window.FP && FP.supabase) FP.supabase.auth.signOut(); } catch (e) {}
       window.location.href = '../login.html';
     });
+  })();
+
+  // ===== Gestion des comptes / accès (CEO · Admin) via la fonction serveur manage-users =====
+  (function initUsers() {
+    const canManage = window.FP && FP.canManageUsers && FP.canManageUsers();
+    if (!canManage) {
+      const d = document.getElementById('users-admin-denied'); if (d) d.style.display = 'block';
+      return;
+    }
+    const wrap = document.getElementById('users-admin'); if (wrap) wrap.style.display = 'block';
+    const listEl = document.getElementById('users-list');
+    const accesSel = document.getElementById('nu-acces');
+    const socSel = document.getElementById('nu-societe');
+    const statusEl = document.getElementById('nu-status');
+    const addBtn = document.getElementById('btn-nu-add');
+    const g = id => document.getElementById(id);
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    const setSt = (el, m, ok) => { if (el) { el.textContent = m; el.style.color = ok ? '#059669' : '#DC2626'; } };
+    const ACCES_LABEL = { ceo: 'CEO', admin: 'Admin', gestionnaire: 'Gestionnaire' };
+    let callerAcces = 'admin', mySociete = null;
+
+    // Appel de la fonction serveur ; extrait le message d'erreur même quand le HTTP n'est pas 2xx.
+    async function call(payload) {
+      if (!(window.FP && FP.supabase && FP.supabase.functions)) return { error: 'Connexion indisponible — recharge la page.' };
+      try {
+        const { data, error } = await FP.supabase.functions.invoke('manage-users', { body: payload });
+        if (error) {
+          let msg = (error && error.message) || 'Erreur serveur';
+          try { const ctx = error.context && (await error.context.json()); if (ctx && ctx.error) msg = ctx.error; } catch (e) {}
+          return { error: msg };
+        }
+        if (data && data.error) return { error: data.error };
+        return data || {};
+      } catch (e) { return { error: String((e && e.message) || e) }; }
+    }
+
+    function accesOptions(isCEO, selected) {
+      return (isCEO ? ['gestionnaire', 'admin', 'ceo'] : ['gestionnaire', 'admin'])
+        .map(a => `<option value="${a}"${a === selected ? ' selected' : ''}>${ACCES_LABEL[a]}</option>`).join('');
+    }
+    function fillSociete(sel, isCEO, selected) {
+      if (!sel) return;
+      if (isCEO) {
+        const list = (FP.getSocietes ? FP.getSocietes() : ['PXP']) || ['PXP'];
+        sel.innerHTML = list.map(s => `<option value="${esc(s)}"${s === selected ? ' selected' : ''}>${esc(s)}</option>`).join('');
+        sel.disabled = false;
+      } else {
+        sel.innerHTML = `<option value="${esc(mySociete || '')}">${esc(mySociete || '—')}</option>`;
+        sel.disabled = true;
+      }
+    }
+    function renderList(users) {
+      if (!users || !users.length) { listEl.innerHTML = '<div class="text-sm text-slate-400">Aucun utilisateur pour l\'instant.</div>'; return; }
+      const isCEO = callerAcces === 'ceo';
+      listEl.innerHTML = users.map(u => `
+        <div class="flex items-center gap-2 flex-wrap py-2 border-b border-slate-100" data-uid="${esc(u.id)}">
+          <div style="min-width:200px;flex:1">
+            <div class="font-semibold text-slate-800 text-sm">${esc(u.email || '—')}${u.self ? ' <span class="text-xs text-slate-400">(vous)</span>' : ''}</div>
+            <div class="text-xs text-slate-400">${esc(u.societe || 'Toutes les sociétés')}</div>
+          </div>
+          <select class="field-input text-sm" data-uacc style="width:150px"${u.self ? ' disabled title="Vous ne pouvez pas changer votre propre accès"' : ''}>${accesOptions(isCEO, u.acces)}</select>
+          <button class="btn btn-outline text-xs" data-ureset title="Réinitialiser le mot de passe"><i data-lucide="key-round" class="w-4 h-4"></i></button>
+          <button class="btn btn-outline text-xs" data-udel title="Supprimer le compte"${u.self ? ' disabled style="opacity:.4"' : ''}><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
+        </div>`).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+    async function load() {
+      const r = await call({ action: 'list' });
+      if (r.error) { listEl.innerHTML = `<div class="text-sm" style="color:#DC2626">${esc(r.error)}</div>`; return; }
+      callerAcces = r.callerAcces || 'admin'; mySociete = r.mySociete || null;
+      const isCEO = callerAcces === 'ceo';
+      accesSel.innerHTML = accesOptions(isCEO, 'gestionnaire');
+      fillSociete(socSel, isCEO, (FP.activeSociete ? FP.activeSociete() : null));
+      accesSel.onchange = () => { socSel.style.display = (accesSel.value === 'ceo') ? 'none' : ''; };
+      accesSel.onchange();
+      renderList(r.users || []);
+    }
+
+    if (addBtn) addBtn.addEventListener('click', async () => {
+      const email = (g('nu-email').value || '').trim();
+      const pw = (g('nu-pw').value || '');
+      const acces = accesSel.value;
+      const societe = (acces === 'ceo') ? null : socSel.value;
+      if (!email || pw.length < 8) return setSt(statusEl, 'E-mail et mot de passe (min. 8 caractères) requis.', false);
+      addBtn.disabled = true; setSt(statusEl, 'Création…', true);
+      const r = await call({ action: 'create', email, password: pw, acces, societe });
+      addBtn.disabled = false;
+      if (r.error) return setSt(statusEl, r.error, false);
+      setSt(statusEl, '✓ Compte créé.', true);
+      g('nu-email').value = ''; g('nu-pw').value = '';
+      load();
+    });
+
+    if (listEl) {
+      listEl.addEventListener('change', async (e) => {
+        const sel = e.target.closest('[data-uacc]'); if (!sel) return;
+        const row = sel.closest('[data-uid]'); const id = row.getAttribute('data-uid');
+        sel.disabled = true;
+        const r = await call({ action: 'updateRole', id, acces: sel.value });
+        sel.disabled = false;
+        if (r.error) { alert('Modification refusée : ' + r.error); load(); }
+      });
+      listEl.addEventListener('click', async (e) => {
+        const row = e.target.closest('[data-uid]'); if (!row) return;
+        const id = row.getAttribute('data-uid');
+        if (e.target.closest('[data-ureset]')) {
+          const pw = prompt('Nouveau mot de passe pour ce compte (min. 8 caractères) :');
+          if (pw == null) return;
+          if (pw.length < 8) return alert('Mot de passe trop court (min. 8 caractères).');
+          const r = await call({ action: 'resetPassword', id, password: pw });
+          alert(r.error ? ('Échec : ' + r.error) : '✓ Mot de passe réinitialisé.');
+        } else if (e.target.closest('[data-udel]')) {
+          if (!confirm('Supprimer définitivement ce compte ? La personne ne pourra plus se connecter. (Ses données de flotte ne sont pas supprimées.)')) return;
+          const r = await call({ action: 'delete', id });
+          if (r.error) alert('Suppression refusée : ' + r.error); else load();
+        }
+      });
+    }
+
+    load();
   })();
 
   // ===== Onglet Notifications : seuils réglables + récap e-mail =====

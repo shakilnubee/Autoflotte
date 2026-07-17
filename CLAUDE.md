@@ -89,6 +89,19 @@ fleet-app/
 - ⚠️ **JAMAIS** mettre la clé `sb_secret_...` dans le code client
 - Tables : `vehicules`, `amendes`, `factures` (mapping snake_case ↔ camelCase géré dans `FP.db`)
 - Auth : email/password, avec checkbox "Se souvenir de moi" (localStorage flag + sessionStorage marker)
+- ⚠️ **3 NIVEAUX D'ACCÈS — CEO / ADMIN / GESTIONNAIRE** (consigne explicite) : le rôle + la société
+  qui **font autorité** vivent dans la table `profiles` (`is_admin`, `role`, `societe`) — **jamais**
+  dans `user_metadata` (falsifiable). `FP.role()` (app.js) renvoie `ceo` (super-admin, toutes sociétés)
+  / `admin` (client, sa société : tout + config + comptes) / `gestionnaire` (sa société : ajoute/modifie/
+  **supprime** les données, mais **pas** la config société ni les comptes) / `chauffeur` (portail salarié).
+  Helpers : `FP.isCEO/isAdmin(=ceo||admin)/isGestionnaire/isSuperAdmin/canManageSociete/canManageUsers/roleLabel`.
+  - **Gestion des comptes** = **Paramètres → Compte → « Utilisateurs & accès »** (CEO/Admin only) → appelle
+    la fonction serveur **`manage-users`** (`supabase/functions/manage-users/index.ts`) qui garde la clé
+    `service_role` **côté serveur** et applique la portée (CEO=tout ; Admin=sa société, pas de CEO).
+    Plus besoin de Supabase pour créer/modifier/supprimer/réinitialiser un compte. Doc :
+    `supabase/COMPTES-CEO-ADMIN-GESTIONNAIRE.md` ; SQL : `supabase/roles-ceo-admin-gestionnaire.sql`.
+  - ⚠️ **RÈGLE** : tout nouveau bouton/écran qui touche à la **config société** doit être gardé par
+    `FP.canManageSociete()`, et toute gestion de **comptes** par `FP.canManageUsers()` (+ portée serveur).
 
 ## Conventions importantes
 

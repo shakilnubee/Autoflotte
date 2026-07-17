@@ -393,21 +393,39 @@ if (typeof window !== 'undefined') {
   window.FP = FP;                              // une référence unique, partagée par toutes les pages
 }
 
-// === Rôle utilisateur (gating visuel) ===
-// Lu de façon synchrone depuis les métadonnées Supabase stockées dans le token.
-// Rôles : 'admin' (par défaut, ex : le propriétaire) et 'gestionnaire'.
-// Pour créer un gestionnaire : Supabase → Auth → Add user → User Metadata { "role": "gestionnaire" }
+// === Rôle & droits utilisateur ===
+// 3 niveaux d'accès + le portail salarié :
+//   • 'ceo'          → super-admin (toi) : TOUTES les sociétés, tous les droits, gère les comptes.
+//   • 'admin'        → client (resp. flotte) : SA société uniquement, tous les droits + config + comptes de sa société.
+//   • 'gestionnaire' → SA société : ajoute/modifie/supprime les données, mais PAS la config société ni les comptes.
+//   • 'chauffeur'    → portail salarié (espace-salarie.html) — inchangé.
+// ⚠️ SÉCURITÉ : le rôle et la société qui FONT AUTORITÉ vivent dans la table `profiles`
+// (protégée par RLS — l'utilisateur ne peut PAS les modifier lui-même). Ce qui suit n'est
+// que l'affichage : le vrai verrou est côté base. Le rôle 'chauffeur' reste, lui, dans les
+// métadonnées du token (portail salarié, mécanisme existant).
 FP.SUPA_TOKEN_KEY = 'sb-tzjuptlzoywjeigmyfuj-auth-token';
+// Profil (société + is_admin + role) lu du cache, rafraîchi par supabase-client.js après login.
+FP.profile = (() => { try { return JSON.parse(localStorage.getItem('fp_profile') || 'null'); } catch (e) { return null; } })();
 FP.role = () => {
   try {
     const t = JSON.parse(localStorage.getItem(FP.SUPA_TOKEN_KEY) || 'null');
-    const r = t && t.user && t.user.user_metadata && t.user.user_metadata.role;
-    if (r === 'chauffeur' || r === 'salarie') return 'chauffeur';
-    return r === 'gestionnaire' ? 'gestionnaire' : 'admin';
+    const um = (t && t.user && t.user.user_metadata && t.user.user_metadata.role) || null;
+    if (um === 'chauffeur' || um === 'salarie') return 'chauffeur';   // portail salarié (métadonnées)
+    const p = FP.profile;                                            // source de vérité des droits (RLS)
+    if (p) {
+      if (p.is_admin === true) return 'ceo';
+      if (p.role === 'gestionnaire') return 'gestionnaire';
+      return 'admin';                                                // client (role 'admin' ou non défini)
+    }
+    if (um === 'gestionnaire') return 'gestionnaire';                // repli hors-ligne / très ancien compte
+    return 'admin';
   } catch { return 'admin'; }
 };
-FP.isAdmin = () => FP.role() === 'admin';
+FP.isCEO = () => FP.role() === 'ceo';
+FP.isGestionnaire = () => FP.role() === 'gestionnaire';
 FP.isChauffeur = () => FP.role() === 'chauffeur';
+// « Admin » au sens large = peut TOUT faire dans sa société (CEO ou Admin client), hors gestionnaire/salarié.
+FP.isAdmin = () => { const r = FP.role(); return r === 'ceo' || r === 'admin'; };
 // Plaque(s) du salarié — lues dans ses métadonnées Supabase { immat: 'XX-123-XX' } ou
 // { immats: ['A','B'] } (ou liste séparée par , / ;). Sert au filtrage AFFICHÉ du portail.
 FP.chauffeurImmats = () => {
@@ -429,15 +447,19 @@ FP.chauffeurImmats = () => {
     location.replace(base + 'espace-salarie.html');
   } catch (e) {}
 })();
-// Profil multi-société (société + super-admin) — lu du cache, rafraîchi par supabase-client.js.
-// is_admin = true → voit toutes les sociétés (sélecteur visible) ; sinon = client verrouillé.
-FP.profile = (() => { try { return JSON.parse(localStorage.getItem('fp_profile') || 'null'); } catch (e) { return null; } })();
-FP.isSuperAdmin = () => !FP.profile || FP.profile.is_admin !== false; // pas de profil = comportement admin (actuel)
-FP.roleLabel = () => FP.isAdmin() ? 'Admin' : 'Gestionnaire';
+// Voit/gère TOUTES les sociétés (sélecteur de société) → réservé au CEO (is_admin=true).
+// Repli si le profil n'est pas encore chargé : comportement admin actuel (sauf gestionnaire/salarié).
+FP.isSuperAdmin = () => { const p = FP.profile; if (p) return p.is_admin === true; return FP.role() !== 'gestionnaire' && FP.role() !== 'chauffeur'; };
+// Peut modifier la CONFIG de la société (Paramètres, contrats, e-mails) → CEO ou Admin client.
+FP.canManageSociete = () => FP.isAdmin();
+// Peut gérer les COMPTES/accès (créer, changer de rôle, supprimer) → CEO (tout) ou Admin (sa société).
+// La portée réelle (une seule société pour l'Admin) est appliquée CÔTÉ SERVEUR par la fonction manage-users.
+FP.canManageUsers = () => FP.isAdmin();
+FP.roleLabel = () => ({ ceo: 'CEO', admin: 'Admin', gestionnaire: 'Gestionnaire', chauffeur: 'Salarié' }[FP.role()] || 'Admin');
+FP.ROLE_LABELS = { ceo: 'CEO', admin: 'Admin', gestionnaire: 'Gestionnaire' };
 // Personnalisation de l'apparence (renommer titres/colonnes/onglets) : autorisée admin + gestionnaire.
-// Mettre `=> FP.isAdmin()` ici pour la réserver à l'admin.
 FP.canPersonnaliser = () => true;
-// Onglets réservés à l'admin (retirés du menu pour les autres rôles)
+// Onglets réservés (retirés du menu pour les autres rôles) — Paramètres = config + comptes.
 FP.ADMIN_ONLY_NAV = ['parametres.html'];
 
 // === Multi-sociétés (vue admin) ===

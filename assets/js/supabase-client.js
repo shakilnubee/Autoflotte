@@ -245,7 +245,7 @@
       const { data: { session } } = await client.auth.getSession();
       const u = session && session.user;
       if (u) {
-        const pr = await client.from('profiles').select('societe,is_admin').eq('id', u.id).maybeSingle();
+        const pr = await client.from('profiles').select('societe,is_admin,role').eq('id', u.id).maybeSingle();
         if (pr && pr.data) {
           FP.profile = pr.data;
           try { localStorage.setItem('fp_profile', JSON.stringify(pr.data)); } catch (e) {}
