@@ -333,6 +333,35 @@
   </div>
 </div>
 
+<!-- Modal : modifier les infos essentielles d'un conducteur -->
+<div class="modal-backdrop" id="edit-backdrop">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold">Modifier le conducteur</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="edit-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="edit-form" class="space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div><div class="field-label">Prénom</div><input class="field-input" id="e-prenom" placeholder="ex. Julie" /></div>
+        <div><div class="field-label">Nom</div><input class="field-input" id="e-nom" placeholder="ex. Martin" /></div>
+      </div>
+      <div><div class="field-label">Poste</div><input class="field-input" id="e-poste" placeholder="ex. Commercial" /></div>
+      <div class="pt-3 border-t border-slate-100">
+        <div class="field-label">N° de permis</div>
+        <input class="field-input" id="e-permisNumero" placeholder="ex. 12AB34567" />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><div class="field-label">Type de permis</div><input class="field-input" id="e-permisType" placeholder="ex. B" /></div>
+        <div><div class="field-label">Expiration du permis</div><input class="field-input" id="e-permisExpiration" type="date" /></div>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="edit-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Modal : renommer un conducteur -->
 <div class="modal-backdrop" id="rename-backdrop">
   <div class="modal p-6" style="max-width:420px">
@@ -1059,6 +1088,7 @@
 
     const blocDelete = `
       <div class="pt-2 border-t border-slate-100 space-y-2">
+        <button type="button" id="drawer-edit" data-key="${escapeHtml(d.key)}" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="pencil" class="w-4 h-4"></i> Modifier</button>
         <button type="button" id="drawer-pdf" data-key="${escapeHtml(d.key)}" class="btn btn-outline text-sm w-full justify-center"><i data-lucide="file-down" class="w-4 h-4"></i> Imprimer / Exporter la fiche PDF</button>
         <button type="button" id="drawer-delete" data-key="${escapeHtml(d.key)}" class="btn text-sm text-red-600 hover:bg-red-50 w-full justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer ce conducteur</button>
       </div>`;
@@ -1357,6 +1387,50 @@
     if (rbtn) renameDriver(rbtn.dataset.key);
     const pbtn = e.target.closest('#drawer-pdf');
     if (pbtn) exportCondPDF(pbtn.dataset.key);
+    const edbtn = e.target.closest('#drawer-edit');
+    if (edbtn) openEditModal(edbtn.dataset.key);
+  });
+
+  // ---------- Modifier les infos essentielles (bouton « Modifier » de la fiche) ----------
+  function openEditModal(key) {
+    const d = drivers.find(x => x.key === key);
+    if (!d) return;
+    $('e-prenom').value = d.prenom || '';
+    $('e-nom').value = d.nom || '';
+    $('e-poste').value = d.poste || '';
+    $('e-permisNumero').value = d.permisNumero || '';
+    $('e-permisType').value = d.permisType || '';
+    $('e-permisExpiration').value = d.permisExpiration ? String(d.permisExpiration).slice(0, 10) : '';
+    $('edit-backdrop').dataset.key = key;
+    $('edit-backdrop').classList.add('open');
+    setTimeout(() => { const el = $('e-prenom'); if (el) el.focus(); }, 60);
+  }
+  function closeEditModal() { $('edit-backdrop').classList.remove('open'); }
+  $('edit-close').addEventListener('click', closeEditModal);
+  $('edit-cancel').addEventListener('click', closeEditModal);
+  $('edit-backdrop').addEventListener('click', e => { if (e.target === $('edit-backdrop')) closeEditModal(); });
+  $('edit-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const key = $('edit-backdrop').dataset.key;
+    if (!key) return;
+    const v = id => ($(id).value || '').trim();
+    const patch = {
+      prenom: v('e-prenom') || null,
+      nom: v('e-nom') || null,
+      poste: v('e-poste') || null,
+      permisNumero: v('e-permisNumero') || null,
+      permisType: v('e-permisType') || null,
+      permisExpiration: v('e-permisExpiration') || null,
+    };
+    // Nom affiché : si prénom ET nom sont renseignés, on met à jour le titre « Prénom Nom »
+    // (la clé interne du conducteur, elle, ne change pas → aucun lien amende/véhicule cassé).
+    if (patch.prenom && patch.nom) patch.name = `${patch.prenom} ${patch.nom}`;
+    if (FP.history && FP.history.commit) FP.history.commit();
+    upsertCond(key, patch);
+    drivers = buildDrivers();
+    renderKPIs(); renderGrid();
+    closeEditModal();
+    if (currentDriverKey) openDrawer(currentDriverKey);
   });
 
   // ---------- Export PDF de la fiche conducteur ----------
