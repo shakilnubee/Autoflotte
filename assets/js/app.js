@@ -734,6 +734,19 @@ FP.settings = {
         condDocs: (stored.condDocs && typeof stored.condDocs === 'object') ? stored.condDocs : {},
         profil: (stored.profil && typeof stored.profil === 'object') ? stored.profil : {},
       };
+      // Isolation multi-sociétés : les libellés de groupes de PXP (Siège, Gov, International,
+      // Retail…) ne doivent PAS « fuiter » vers une autre société. Hors PXP, on part de libellés
+      // NEUTRES ; chaque client met ensuite les siens (qui écrasent, via le merge stored ci-dessous).
+      // Même principe que FP.societeProfil / FP.assuranceContrat (PXP = historique ; autres = vierge).
+      try {
+        const soc = (FP.activeSociete ? FP.activeSociete() : 'PXP');
+        if (soc !== 'PXP' && soc !== '__all__') {
+          const NEUTRE = { siege: 'Groupe 1', commerciaux: 'Groupe 2', gov: 'Groupe 3', pool: 'Groupe 4', retail: 'Groupe 5', depot: 'Groupe 6', 'a-vendre': 'À vendre', 'non-classe': 'Non classé' };
+          Object.keys(merged.groupes).forEach(k => { if (NEUTRE[k]) merged.groupes[k] = { ...merged.groupes[k], label: NEUTRE[k] }; });
+          // Nom de société : vierge (le client saisit le sien) au lieu du « Parc Pilot » par défaut.
+          if (!(stored.societe && String(stored.societe.nom || '').trim())) merged.societe = { ...merged.societe, nom: '' };
+        }
+      } catch (e) {}
       // Merge groupes par clé (label et color individuels)
       if (stored.groupes) {
         Object.keys(merged.groupes).forEach(k => {
