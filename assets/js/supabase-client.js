@@ -17,8 +17,25 @@
 
   // Envoi d'e-mail via l'Edge Function 'send-email' (la clé Resend reste SECRÈTE côté serveur).
   // Rejette si la fonction n'est pas (encore) déployée → l'appelant peut alors se replier sur Gmail.
-  // msg = { to, cc?, subject, html?, text?, replyTo? }
+  // msg = { to, cc?, subject, html?, text?, replyTo?, from? }
+  // ⚠️ Expéditeur PAR SOCIÉTÉ : si l'appelant ne fixe pas `from`, on envoie depuis l'adresse
+  // d'envoi configurée de la société active (FP.societeProfil().mailExpediteur), affichée
+  // « <Nom société> <adresse> ». Le destinataire reçoit donc le mail DE l'adresse de la société.
+  // (Resend n'accepte que les adresses d'un domaine vérifié → chaque société doit vérifier le sien.)
   FP.sendEmail = async (msg) => {
+    msg = msg || {};
+    if (!msg.from) {
+      try {
+        const prof = (FP.societeProfil && FP.societeProfil()) || {};
+        const exp = String(prof.mailExpediteur || '').trim();
+        if (exp) {
+          let nom = ''; try { nom = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
+          if (!nom) { try { nom = (FP.activeSociete && FP.activeSociete()) || ''; } catch (e) {} }
+          nom = String(nom).replace(/[<>"]/g, '').trim() || 'Parc Pilot';
+          msg.from = `${nom} <${exp}>`;
+        }
+      } catch (e) {}
+    }
     if (client.functions && typeof client.functions.invoke === 'function') {
       const { data, error } = await client.functions.invoke('send-email', { body: msg });
       if (error) throw error;

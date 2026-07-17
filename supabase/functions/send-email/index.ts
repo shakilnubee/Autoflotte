@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
   if (!key) {
     return json({ error: "RESEND_API_KEY absent — ajoute-le dans Supabase → Settings → Edge Functions → Secrets." }, 500);
   }
-  const from = Deno.env.get("EMAIL_FROM") || "Parc Pilot <onboarding@resend.dev>";
+  const envFrom = Deno.env.get("EMAIL_FROM") || "Parc Pilot <onboarding@resend.dev>";
 
   let msg: Record<string, unknown>;
   try {
@@ -44,6 +44,10 @@ Deno.serve(async (req) => {
   } catch {
     return json({ error: "Corps JSON invalide" }, 400);
   }
+
+  // Expéditeur : si le site fournit `from` (adresse de la société), on l'utilise ; sinon le
+  // secret EMAIL_FROM. ⚠️ Resend n'accepte que les adresses d'un domaine VÉRIFIÉ dans Resend.
+  const from = (msg.from && String(msg.from).trim()) ? String(msg.from).trim() : envFrom;
 
   const to = msg.to;
   const subject = msg.subject;
