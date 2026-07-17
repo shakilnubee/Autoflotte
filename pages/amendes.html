@@ -335,6 +335,7 @@
   </div>
   <div class="p-6 space-y-5" id="drawer-body"></div>
   <input type="file" id="justif-file" accept="image/*,application/pdf" class="hidden" />
+  <input type="file" id="piece-file" accept="image/*,application/pdf" class="hidden" />
   <div class="p-6 border-t border-slate-200 flex flex-wrap gap-2 sticky bottom-0 bg-white z-10" style="box-shadow:0 -6px 16px -10px rgba(15,30,61,.25)">
     <button class="btn btn-primary text-sm flex-1 justify-center" id="drawer-pay"><i data-lucide="check" class="w-4 h-4"></i> Marquer payée</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-designer" title="Conducteur désigné — l'amende n'est plus à votre charge"><i data-lucide="user-check" class="w-4 h-4"></i> Désigner</button>
@@ -459,6 +460,61 @@
       return `<img src="${url}" loading="lazy" style="${box}max-height:380px;object-fit:contain;cursor:zoom-in;display:block" title="Cliquer pour agrandir" onclick="window.open('${url}','_blank','noopener')">`;
     }
     return `<iframe src="${url}" loading="lazy" style="${box}height:420px" title="Aperçu du document"></iframe>`;
+  }
+  // === Documents multiples d'une amende (colonne `pieces` : [{id,label,url,date}]) ===
+  // Permet de joindre AUTANT de PDF/photos que nécessaire (avis initial, nouvel avis après
+  // désignation, justificatifs…) — s'ajoutent SANS remplacer l'avis/justificatif existants.
+  const PIECE_SUGGESTIONS = ['Avis initial', 'Avis après désignation', 'Justificatif de désignation', 'Preuve de paiement', 'Autre'];
+  function piecesSectionHTML(a) {
+    const list = Array.isArray(a.pieces) ? a.pieces : [];
+    const rows = list.map(p => {
+      const isPdf = /\.pdf(\?|#|$)/i.test(p.url || '');
+      return `<div class="flex items-center gap-2 py-2 border-b border-slate-100">
+        <i data-lucide="${isPdf ? 'file-text' : 'image'}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-semibold text-slate-800 truncate">${escAmende(p.label || 'Document')}</div>
+          ${p.date ? `<div class="text-xs text-slate-400">${FP.date(p.date)}</div>` : ''}
+        </div>
+        <a href="${escAmende(p.url || '')}" target="_blank" rel="noopener" class="ra-btn" title="Ouvrir"><i data-lucide="external-link" class="w-4 h-4"></i></a>
+        <button type="button" class="ra-btn" data-piece-del="${escAmende(p.id || '')}" title="Supprimer ce document"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
+      </div>`;
+    }).join('');
+    return `<div>
+      <div class="field-label">Documents${list.length ? ` (${list.length})` : ''}</div>
+      <p class="text-xs text-slate-400 mb-2">Ajoute autant de PDF/photos que nécessaire (avis initial, nouvel avis après désignation, justificatifs…). Ils s'ajoutent sans effacer l'avis ni le justificatif.</p>
+      ${rows || '<div class="text-xs text-slate-400 mb-2">Aucun document supplémentaire pour l\'instant.</div>'}
+      <button type="button" id="piece-add" class="btn btn-outline text-sm w-full justify-center mt-2"><i data-lucide="paperclip" class="w-4 h-4"></i> Ajouter un document</button>
+    </div>`;
+  }
+  async function addPiece(file) {
+    if (!file || !state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    let label = prompt('Nom du document ?\nSuggestions : ' + PIECE_SUGGESTIONS.join(' · '), 'Avis après désignation');
+    if (label === null) return; // annulé
+    label = (label || '').trim() || 'Document';
+    let url = '';
+    try { url = await FP.uploadScan(file, 'pieces', { name: a.numeroAvis ? 'piece-' + a.numeroAvis : 'piece' }) || ''; }
+    catch (e) { console.error(e); alert("Le document n'a pas pu être envoyé. Réessaie."); return; }
+    if (!url) { alert("Le document n'a pas pu être envoyé. Réessaie."); return; }
+    const list = Array.isArray(a.pieces) ? a.pieces.slice() : [];
+    if (list.some(p => p.url === url)) { openDrawer(a.id); return; } // anti-doublon (même fichier)
+    list.push({ id: 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), label, url, date: new Date().toISOString().slice(0, 10) });
+    FP.history.commit();
+    a.pieces = list;
+    FP.persist.update('amendes', a.id, { pieces: list });
+    openDrawer(a.id);
+  }
+  function deletePiece(pid) {
+    if (!state.currentId || !pid) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a || !Array.isArray(a.pieces)) return;
+    if (!confirm('Supprimer ce document de l\'amende ?')) return;
+    const list = a.pieces.filter(p => p.id !== pid);
+    FP.history.commit();
+    a.pieces = list;
+    FP.persist.update('amendes', a.id, { pieces: list });
+    openDrawer(a.id);
   }
   const DEFAULT_DATE_FROM = ''; // le filtrage par année se fait via le sélecteur (state.annee), pas par une date plancher
   const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false, selectedIds: new Set() };
@@ -1159,6 +1215,8 @@
         `}
       </div>
 
+      ${piecesSectionHTML(a)}
+
       <div>
         <div class="field-label">Envoyer un email au conducteur</div>
         <div class="grid gap-2">
@@ -1201,6 +1259,8 @@
     const ju = $('justif-unarchive'); if (ju) ju.onclick = unarchiveAmende;
     const ad = $('avis-del'); if (ad) ad.onclick = () => deleteAmDoc('avisUrl', "le scan de l'avis");
     const jd = $('justif-del'); if (jd) jd.onclick = () => deleteAmDoc('justifUrl', 'le justificatif');
+    const pAdd = $('piece-add'); if (pAdd) pAdd.onclick = () => $('piece-file').click();
+    document.querySelectorAll('#drawer [data-piece-del]').forEach(b => { b.onclick = () => deletePiece(b.getAttribute('data-piece-del')); });
     const mp = $('mail-paiement'); if (mp) mp.onclick = mailPaiement;
     const md = $('mail-designation'); if (md) md.onclick = mailDesignation;
     const tv = $('am-tel-val'); if (tv) tv.onclick = () => editAmField(tv, 'numeroTelepaiement', 'text');
@@ -2086,6 +2146,11 @@
   $('justif-file').addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
     if (file) attachJustif(file);
+    e.target.value = '';
+  });
+  $('piece-file').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) addPiece(file);
     e.target.value = '';
   });
   $('av-trigger').addEventListener('click', () => $('av-file').click());
