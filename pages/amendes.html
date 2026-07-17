@@ -467,24 +467,42 @@
   const PIECE_SUGGESTIONS = ['Avis initial', 'Avis après désignation', 'Justificatif de désignation', 'Preuve de paiement', 'Autre'];
   function piecesSectionHTML(a) {
     const list = Array.isArray(a.pieces) ? a.pieces : [];
+    const has = list.length > 0;
     const rows = list.map(p => {
       const isPdf = /\.pdf(\?|#|$)/i.test(p.url || '');
-      return `<div class="flex items-center gap-2 py-2 border-b border-slate-100">
-        <i data-lucide="${isPdf ? 'file-text' : 'image'}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
-        <div class="flex-1 min-w-0">
-          <div class="text-sm font-semibold text-slate-800 truncate">${escAmende(p.label || 'Document')}</div>
-          ${p.date ? `<div class="text-xs text-slate-400">${FP.date(p.date)}</div>` : ''}
+      return `<div style="border:1px solid var(--fp-border);border-radius:.6rem;background:#fff;margin-bottom:.5rem;overflow:hidden">
+        <div class="flex items-center gap-2 p-2.5">
+          <i data-lucide="${isPdf ? 'file-text' : 'image'}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold text-slate-800 truncate">${escAmende(p.label || 'Document')}</div>
+            ${p.date ? `<div class="text-xs text-slate-400">Ajouté le ${FP.date(p.date)}</div>` : ''}
+          </div>
+          <button type="button" class="btn btn-outline text-xs !px-2.5" data-piece-view="${escAmende(p.id || '')}" title="Aperçu"><i data-lucide="eye" class="w-4 h-4"></i> Voir</button>
+          <a href="${escAmende(p.url || '')}" target="_blank" rel="noopener" class="ra-btn" title="Ouvrir dans un onglet"><i data-lucide="external-link" class="w-4 h-4"></i></a>
+          <button type="button" class="ra-btn" data-piece-del="${escAmende(p.id || '')}" title="Supprimer ce document"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
         </div>
-        <a href="${escAmende(p.url || '')}" target="_blank" rel="noopener" class="ra-btn" title="Ouvrir"><i data-lucide="external-link" class="w-4 h-4"></i></a>
-        <button type="button" class="ra-btn" data-piece-del="${escAmende(p.id || '')}" title="Supprimer ce document"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
+        <div data-piece-prev="${escAmende(p.id || '')}" style="display:none;padding:0 .6rem .65rem"></div>
       </div>`;
     }).join('');
-    return `<div>
-      <div class="field-label">Documents${list.length ? ` (${list.length})` : ''}</div>
-      <p class="text-xs text-slate-400 mb-2">Ajoute autant de PDF/photos que nécessaire (avis initial, nouvel avis après désignation, justificatifs…). Ils s'ajoutent sans effacer l'avis ni le justificatif.</p>
+    // Section mise en ÉVIDENCE dès qu'il y a au moins un document (encadré ambré + compteur).
+    const wrap = has ? 'border:1.5px solid #FCD34D;background:#FFFBEB;border-radius:.75rem;padding:.9rem 1rem' : '';
+    return `<div style="${wrap}">
+      <div class="field-label" style="${has ? 'color:#B45309;display:flex;align-items:center;gap:6px' : ''}">
+        <i data-lucide="paperclip" class="w-4 h-4"></i> Documents${has ? ` · ${list.length}` : ''}
+      </div>
+      <p class="text-xs mb-2" style="color:${has ? '#B45309' : '#94A3B8'}">Avis initial, <b>nouvel avis après désignation</b>, justificatifs… Ajoute autant de PDF/photos que nécessaire (sans effacer l'avis ni le justificatif).</p>
       ${rows || '<div class="text-xs text-slate-400 mb-2">Aucun document supplémentaire pour l\'instant.</div>'}
-      <button type="button" id="piece-add" class="btn btn-outline text-sm w-full justify-center mt-2"><i data-lucide="paperclip" class="w-4 h-4"></i> Ajouter un document</button>
+      <button type="button" id="piece-add" class="btn btn-dark text-sm w-full justify-center mt-1"><i data-lucide="paperclip" class="w-4 h-4"></i> Ajouter un document</button>
     </div>`;
+  }
+  // Aperçu direct (« Voir ») d'un document joint, sous la ligne, sans quitter la fiche.
+  function togglePiecePreview(pid) {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
+    const p = (a.pieces || []).find(x => x.id === pid); if (!p) return;
+    const prev = document.querySelector('#drawer-body [data-piece-prev="' + pid + '"]'); if (!prev) return;
+    if (prev.dataset.loaded !== '1') { prev.innerHTML = scanPreview(p.url); prev.dataset.loaded = '1'; prev.style.display = 'block'; if (window.lucide) lucide.createIcons(); return; }
+    prev.style.display = (prev.style.display === 'none') ? 'block' : 'none';
   }
   async function addPiece(file) {
     if (!file || !state.currentId) return;
@@ -1261,6 +1279,7 @@
     const jd = $('justif-del'); if (jd) jd.onclick = () => deleteAmDoc('justifUrl', 'le justificatif');
     const pAdd = $('piece-add'); if (pAdd) pAdd.onclick = () => $('piece-file').click();
     document.querySelectorAll('#drawer [data-piece-del]').forEach(b => { b.onclick = () => deletePiece(b.getAttribute('data-piece-del')); });
+    document.querySelectorAll('#drawer [data-piece-view]').forEach(b => { b.onclick = () => togglePiecePreview(b.getAttribute('data-piece-view')); });
     const mp = $('mail-paiement'); if (mp) mp.onclick = mailPaiement;
     const md = $('mail-designation'); if (md) md.onclick = mailDesignation;
     const tv = $('am-tel-val'); if (tv) tv.onclick = () => editAmField(tv, 'numeroTelepaiement', 'text');

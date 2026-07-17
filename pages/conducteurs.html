@@ -340,20 +340,39 @@
       <h2 class="text-xl font-extrabold">Modifier le conducteur</h2>
       <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="edit-close"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
-    <form id="edit-form" class="space-y-4">
+    <form id="edit-form" class="space-y-4" style="max-height:70vh;overflow-y:auto">
+      <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Identité</div>
       <div class="grid grid-cols-2 gap-3">
         <div><div class="field-label">Prénom</div><input class="field-input" id="e-prenom" placeholder="ex. Julie" /></div>
         <div><div class="field-label">Nom</div><input class="field-input" id="e-nom" placeholder="ex. Martin" /></div>
       </div>
-      <div><div class="field-label">Poste</div><input class="field-input" id="e-poste" placeholder="ex. Commercial" /></div>
-      <div class="pt-3 border-t border-slate-100">
-        <div class="field-label">N° de permis</div>
-        <input class="field-input" id="e-permisNumero" placeholder="ex. 12AB34567" />
+      <div class="grid grid-cols-2 gap-3">
+        <div><div class="field-label">Date de naissance</div><input class="field-input" id="e-dateNaissance" type="date" /></div>
+        <div><div class="field-label">Poste</div><input class="field-input" id="e-poste" placeholder="ex. Commercial" /></div>
       </div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-slate-400 pt-2 border-t border-slate-100">Contact</div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><div class="field-label">Téléphone</div><input class="field-input" id="e-tel" type="tel" placeholder="06 12 34 56 78" /></div>
+        <div><div class="field-label">Email</div><input class="field-input" id="e-email" type="email" placeholder="prenom.nom@exemple.fr" /></div>
+      </div>
+      <div><div class="field-label">Adresse</div><input class="field-input" id="e-adresse" placeholder="Adresse postale" /></div>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-slate-400 pt-2 border-t border-slate-100">Permis de conduire</div>
+      <div><div class="field-label">N° de permis</div><input class="field-input" id="e-permisNumero" placeholder="ex. 12AB34567" /></div>
       <div class="grid grid-cols-2 gap-3">
         <div><div class="field-label">Type de permis</div><input class="field-input" id="e-permisType" placeholder="ex. B" /></div>
-        <div><div class="field-label">Expiration du permis</div><input class="field-input" id="e-permisExpiration" type="date" /></div>
+        <div><div class="field-label">Points restants (/12)</div><input class="field-input" id="e-points" type="number" min="0" max="12" step="1" placeholder="auto" /></div>
       </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><div class="field-label">Date d'obtention</div><input class="field-input" id="e-permisObtention" type="date" /></div>
+        <div><div class="field-label">Date d'expiration</div><input class="field-input" id="e-permisExpiration" type="date" /></div>
+      </div>
+      <p class="text-xs text-slate-400" style="margin-top:-.35rem">Points : laisse vide pour le calcul automatique (12 − points retirés par les amendes), ou saisis une valeur pour forcer.</p>
+
+      <div class="text-xs font-bold uppercase tracking-wider text-slate-400 pt-2 border-t border-slate-100">Note</div>
+      <div><textarea class="field-input" id="e-note" rows="2" placeholder="Remarque libre…"></textarea></div>
+
       <div class="flex gap-2 pt-2">
         <button type="button" class="btn btn-outline flex-1 justify-center" id="edit-cancel">Annuler</button>
         <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
@@ -714,6 +733,16 @@
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  // Points de permis RESTANTS (sur 12) : override MANUEL (réglages) s'il existe, sinon calcul
+  // automatique 12 − points retirés (somme des amendes). L'override est modifiable via « Modifier ».
+  function pointsManuelMap(){ return (FP.settings.get().pointsManuel) || {}; }
+  function pointsRestants(d){
+    const m = pointsManuelMap()[d.key];
+    if (m != null && m !== '') { const n = Number(m); if (!isNaN(n)) return Math.max(0, Math.min(12, Math.round(n))); }
+    const lost = (d.amendes || []).reduce((s, a) => s + (Number(a.points) || 0), 0);
+    return Math.max(0, 12 - lost);
+  }
+
   // Si on n'a pas déjà le dernier état serveur en cache, on retombe sur l'ancien store local.
   if (!condCache.length) seedCondCacheFromLS();
   let drivers = buildDrivers();
@@ -974,8 +1003,7 @@
       ? d.vehicules.map(v => `${escapeHtml(v.marque)} ${escapeHtml(v.modele)} <span class="font-mono text-slate-400">${escapeHtml(v.immat)}</span>`).join(' · ')
       : 'Aucun véhicule assigné';
     // Chips + GROSSE jauge de points de permis dans l'en-tête (comme l'artefact)
-    const hdrPts = d.amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
-    const hdrRest = Math.max(0, 12 - hdrPts);
+    const hdrRest = pointsRestants(d);
     const gCol = hdrRest >= 9 ? '#34d399' : hdrRest >= 6 ? '#fbbf24' : '#f87171';
     const permisOk = !d.permisExpiration || new Date(d.permisExpiration) > new Date();
     const hdrChips = [permisOk ? '<span class="fp-chip good">Permis valide</span>' : '<span class="fp-chip bad">Permis expiré</span>'];
@@ -1010,7 +1038,7 @@
 
     const accs = driverAccidents(d.vehicules.map(v => v.immat));
     // Points de permis restants (barème 12) — jauge compacte
-    const ptsRest = Math.max(0, 12 - nbPoints);
+    const ptsRest = pointsRestants(d);
     const ptsCol = ptsRest >= 9 ? '#10B981' : ptsRest >= 6 ? '#F59E0B' : '#EF4444';
     const stats = `<div class="space-y-2.5">
         <div class="grid grid-cols-2 gap-2.5">
@@ -1395,12 +1423,21 @@
   function openEditModal(key) {
     const d = drivers.find(x => x.key === key);
     if (!d) return;
+    const iso = v => v ? String(v).slice(0, 10) : '';
     $('e-prenom').value = d.prenom || '';
     $('e-nom').value = d.nom || '';
+    $('e-dateNaissance').value = iso(d.dateNaissance);
     $('e-poste').value = d.poste || '';
+    $('e-tel').value = d.tel || '';
+    $('e-email').value = d.email || '';
+    $('e-adresse').value = d.adresse || '';
     $('e-permisNumero').value = d.permisNumero || '';
     $('e-permisType').value = d.permisType || '';
-    $('e-permisExpiration').value = d.permisExpiration ? String(d.permisExpiration).slice(0, 10) : '';
+    $('e-permisObtention').value = iso(d.permisObtention);
+    $('e-permisExpiration').value = iso(d.permisExpiration);
+    $('e-note').value = d.note || '';
+    const pm = pointsManuelMap()[key];
+    $('e-points').value = (pm != null && pm !== '') ? pm : '';
     $('edit-backdrop').dataset.key = key;
     $('edit-backdrop').classList.add('open');
     setTimeout(() => { const el = $('e-prenom'); if (el) el.focus(); }, 60);
@@ -1417,16 +1454,28 @@
     const patch = {
       prenom: v('e-prenom') || null,
       nom: v('e-nom') || null,
+      dateNaissance: v('e-dateNaissance') || null,
       poste: v('e-poste') || null,
+      tel: v('e-tel') || null,
+      email: v('e-email') || null,
+      adresse: v('e-adresse') || null,
       permisNumero: v('e-permisNumero') || null,
       permisType: v('e-permisType') || null,
+      permisObtention: v('e-permisObtention') || null,
       permisExpiration: v('e-permisExpiration') || null,
+      note: v('e-note') || null,
     };
     // Nom affiché : si prénom ET nom sont renseignés, on met à jour le titre « Prénom Nom »
     // (la clé interne du conducteur, elle, ne change pas → aucun lien amende/véhicule cassé).
     if (patch.prenom && patch.nom) patch.name = `${patch.prenom} ${patch.nom}`;
     if (FP.history && FP.history.commit) FP.history.commit();
     upsertCond(key, patch);
+    // Points de permis : override manuel dans les réglages (vide = calcul automatique).
+    const pv = v('e-points');
+    const s = FP.settings.get(); s.pointsManuel = s.pointsManuel || {};
+    if (pv === '') delete s.pointsManuel[key];
+    else { const n = Math.max(0, Math.min(12, Math.round(Number(pv)))); if (!isNaN(n)) s.pointsManuel[key] = n; }
+    FP.settings.save(s);
     drivers = buildDrivers();
     renderKPIs(); renderGrid();
     closeEditModal();
