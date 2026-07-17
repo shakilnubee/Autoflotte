@@ -6,7 +6,7 @@
    • NAVIGATIONS HTML → NETWORK-FIRST (en ligne = toujours la version fraîche ; le cache ne
      sert qu'en secours hors-ligne). Évite toute « page périmée ».
    On NE touche PAS aux autres origines (Supabase, Google Fonts, CDN) : réseau direct. */
-const CACHE = 'parcpilot-v20260709c';
+const CACHE = 'parcpilot-v20260717d';
 
 self.addEventListener('install', () => { self.skipWaiting(); });
 
@@ -30,9 +30,11 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== self.location.origin) return; // Supabase / CDN / fonts : réseau direct
 
   if (isHtml(req)) {
-    // NETWORK-FIRST : fraîcheur d'abord, cache en secours hors-ligne
+    // NETWORK-FIRST + `cache: 'no-store'` : on court-circuite le cache HTTP du navigateur
+    // (GitHub Pages renvoie max-age=600 = 10 min) pour TOUJOURS obtenir la page fraîche en
+    // ligne → plus besoin de Ctrl+Maj+R après un déploiement. Le cache ne sert qu'hors-ligne.
     e.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-store' })
         .then((res) => {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
