@@ -466,6 +466,76 @@ FP.ADMIN_ONLY_NAV = [];
 // Onglets réservés au CEO uniquement (supports de vente Parc Pilot) — cachés aux Admin & Gestionnaires.
 FP.CEO_ONLY_NAV = ['brochure.html', 'prix.html'];
 
+// === Sélecteur CHERCHABLE (RÈGLE PROJET) =====================================
+// Tout choix de véhicule / conducteur / plaque DOIT être filtrable au clavier (taper pour
+// retrouver par plaque, nom, modèle…). FP.searchSelect(<select>) transforme un menu déroulant
+// en champ de recherche + liste déroulante, au style du site, SANS changer le reste du code :
+// la valeur choisie reste lisible via le <select> d'origine (.value) et l'événement 'change'.
+// Le menu est rendu en position:fixed (attaché au body) → jamais rogné par une modale.
+FP.searchSelect = function (select, opts) {
+  try {
+    if (!select || select.dataset.ssDone === '1') return;
+    select.dataset.ssDone = '1';
+    opts = opts || {};
+    const wrap = document.createElement('div');
+    wrap.style.position = 'relative';
+    select.parentNode.insertBefore(wrap, select);
+    wrap.appendChild(select);
+    select.style.display = 'none';
+    select.setAttribute('tabindex', '-1');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = select.className || 'field-input';
+    input.autocomplete = 'off';
+    input.setAttribute('role', 'combobox');
+    input.placeholder = opts.placeholder || 'Rechercher…';
+    wrap.appendChild(input);
+    const menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1px solid var(--fp-border,#E3E8F0);border-radius:.55rem;box-shadow:0 16px 40px -12px rgba(15,30,61,.3);max-height:260px;overflow:auto;display:none';
+    document.body.appendChild(menu);
+    const norm = s => (window.FP && FP.norm) ? FP.norm(s) : String(s || '').toLowerCase();
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const optionList = () => Array.from(select.options).map(o => ({ value: o.value, label: o.textContent }));
+    const labelFor = v => { const o = Array.from(select.options).find(o => o.value === v); return o ? o.textContent : ''; };
+    const sync = () => { input.value = labelFor(select.value); };
+    const place = () => { const r = input.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 3) + 'px'; menu.style.width = r.width + 'px'; };
+    let active = -1;
+    function open(q) {
+      const nq = norm(q); const all = optionList(); const none = all.find(o => o.value === '');
+      const items = all.filter(o => o.value !== '' && (!nq || norm(o.label).includes(nq)));
+      let html = '';
+      if (none) html += `<div class="fp-ss-it" data-v="" style="padding:.5rem .7rem;cursor:pointer;color:var(--fp-muted,#5A6577)">${esc(none.label)}</div>`;
+      html += items.map(o => `<div class="fp-ss-it" data-v="${esc(o.value)}" style="padding:.5rem .7rem;cursor:pointer">${esc(o.label)}</div>`).join('');
+      menu.innerHTML = html || `<div style="padding:.5rem .7rem;color:var(--fp-muted,#5A6577)">Aucun résultat</div>`;
+      place(); menu.style.display = 'block'; active = -1;
+    }
+    const close = () => { menu.style.display = 'none'; };
+    const choose = v => { select.value = v; select.dispatchEvent(new Event('input', { bubbles: true })); select.dispatchEvent(new Event('change', { bubbles: true })); sync(); close(); };
+    input.addEventListener('focus', () => { input.select(); open(''); });
+    input.addEventListener('input', () => open(input.value));
+    input.addEventListener('keydown', e => {
+      if (menu.style.display === 'none') { if (e.key === 'ArrowDown') open(input.value); return; }
+      const its = Array.from(menu.querySelectorAll('.fp-ss-it'));
+      if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active + 1, its.length - 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active - 1, 0); }
+      else if (e.key === 'Enter') { if (menu.style.display !== 'none') { e.preventDefault(); if (its[active]) choose(its[active].getAttribute('data-v')); } return; }
+      else if (e.key === 'Escape') { close(); return; }
+      else return;
+      its.forEach((el, i) => el.style.background = (i === active) ? 'var(--fp-bg,#EEF1F6)' : '');
+      if (its[active]) its[active].scrollIntoView({ block: 'nearest' });
+    });
+    menu.addEventListener('mousedown', e => { const it = e.target.closest('.fp-ss-it'); if (!it) return; e.preventDefault(); choose(it.getAttribute('data-v')); });
+    input.addEventListener('blur', () => setTimeout(() => { close(); sync(); }, 130));
+    window.addEventListener('scroll', () => { if (menu.style.display !== 'none') place(); }, true);
+    window.addEventListener('resize', () => { if (menu.style.display !== 'none') place(); });
+    // Resync l'affichage quand le <select> est repeuplé (options) OU quand sa valeur est
+    // changée par le code (émettre un 'change' après un `select.value = …` programmatique).
+    try { new MutationObserver(sync).observe(select, { childList: true }); } catch (e) {}
+    select.addEventListener('change', sync);
+    sync();
+  } catch (e) { /* en cas de souci, on garde le <select> natif */ }
+};
+
 // === Multi-sociétés (vue admin) ===
 FP.activeSociete = () => { try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } };
 FP.setActiveSociete = (s) => { try { localStorage.setItem('fp_societe', s || 'PXP'); } catch (e) {} };

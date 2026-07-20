@@ -123,6 +123,14 @@ fleet-app/
   - Si on change `data.js`/`app.js`, prévenir l'utilisateur qu'**un seul Ctrl+Maj+R** suffit puis navigation normale (sinon le re-téléchargement à chaque hard-refresh paraît lent).
   - ⚠️ **CACHE-BUSTING OBLIGATOIRE** : les pages chargent `app.js` / `supabase-client.js` / `data.js` avec un suffixe de version `?v=AAAAMMJJx` (ex. `?v=20260610a`). GitHub Pages met le JS en cache ~10 min → sans ce suffixe, après un déploiement le navigateur garde l'**ancien** JS, et surtout en **navigant d'un onglet à l'autre** chaque page recharge le JS périmé (un hard-refresh sur UNE page ne suffit pas). **À CHAQUE modif de `app.js`/`supabase-client.js`/`data.js`, BUMPER le `?v=` partout** (sed sur tous les `.html`). C'était la vraie cause du « flash qui revient malgré le fix ».
 
+0quater. ⚠️ **RECHERCHE AU CLAVIER — RÈGLE** (consigne explicite) : **tout** choix de véhicule /
+   conducteur / plaque / nom doit être **filtrable en tapant** (jamais un `<select>` déroulant nu
+   qu'on doit faire défiler). Helper global **`FP.searchSelect(<select>, {placeholder})`** (app.js) :
+   transforme un `<select>` en champ de recherche + liste déroulante (au style du site), en gardant
+   la valeur lisible via `.value` et l'événement `change`/`input` (menu en `position:fixed` → non
+   rogné par les modales). Déjà branché : tâches (véhicule), factures (di-veh + filtres), entretiens,
+   sinistres. ⚠️ **Tout NOUVEAU sélecteur de véhicule/conducteur DOIT passer par `FP.searchSelect`.**
+
 1. **Tailwind précompilé** — pour éviter le délai du CDN à chaque page, Tailwind est compilé en local dans `assets/css/tailwind.css` (les pages le chargent via `<link>`, plus de `cdn.tailwindcss.com`). ⚠️ Après toute modif de classes Tailwind dans le HTML/JS, REBUILD : `npx tailwindcss@3.4.17 -c tailwind.config.js -i assets/css/_tw-input.css -o assets/css/tailwind.css --minify` (sinon les nouvelles classes ne seront pas stylées). ⚠️ **`brochure.html` et `prix.html` utilisent désormais le Tailwind LOCAL** (ajoutés à `content` dans `tailwind.config.js`) → à inclure dans le REBUILD. Seule `logos.html` reste sur le CDN. Ces deux pages sont en **thème sombre « 21st »** via une classe `.sheet-dark` (styles inline, autonomes) ; dans `prix.html` l'**aide-mémoire interne** (`#sheet-interne`) reste volontairement CLAIR et `display:none` (jamais montré au client). Les PDF client sont dans `presentation/` (régénérables via Playwright `page.pdf()`).
 2. **Auth guard** synchrone dans le `<head>` de chaque page protégée (11 pages)
 3. **Personnalisation** : tout est éditable en double-cliquant (titres, sous-titres, colonnes, onglets sidebar)
