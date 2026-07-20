@@ -130,6 +130,13 @@ fleet-app/
    la valeur lisible via `.value` et l'événement `change`/`input` (menu en `position:fixed` → non
    rogné par les modales). Déjà branché : tâches (véhicule), factures (di-veh + filtres), entretiens,
    sinistres. ⚠️ **Tout NOUVEAU sélecteur de véhicule/conducteur DOIT passer par `FP.searchSelect`.**
+   - ⚠️ **CONDUCTEUR — choisir OU créer** (consigne explicite) : partout où on désigne un conducteur
+     (fiche amende, ajout amende, chauffeur véhicule, emprunts : emprunteur/rendu par/personne), on
+     DOIT pouvoir le **choisir dans la liste existante OU en créer un nouveau** en tapant son nom (la
+     plateforme détecte que c'est nouveau et demande ses infos). Helper global
+     **`FP.conducteurPicker(<input>, {onPick})`** (app.js) : combobox conducteurs + option « ➕ Créer »
+     → `FP.newConducteurModal` → `FP.conducteurs.create` (persisté, société auto-taggée, anti-doublon
+     `FP.conducteurs.find`). **Tout NOUVEAU champ conducteur/emprunteur DOIT passer par `FP.conducteurPicker`.**
 
 1. **Tailwind précompilé** — pour éviter le délai du CDN à chaque page, Tailwind est compilé en local dans `assets/css/tailwind.css` (les pages le chargent via `<link>`, plus de `cdn.tailwindcss.com`). ⚠️ Après toute modif de classes Tailwind dans le HTML/JS, REBUILD : `npx tailwindcss@3.4.17 -c tailwind.config.js -i assets/css/_tw-input.css -o assets/css/tailwind.css --minify` (sinon les nouvelles classes ne seront pas stylées). ⚠️ **`brochure.html` et `prix.html` utilisent désormais le Tailwind LOCAL** (ajoutés à `content` dans `tailwind.config.js`) → à inclure dans le REBUILD. Seule `logos.html` reste sur le CDN. Ces deux pages sont en **thème sombre « 21st »** via une classe `.sheet-dark` (styles inline, autonomes) ; dans `prix.html` l'**aide-mémoire interne** (`#sheet-interne`) reste volontairement CLAIR et `display:none` (jamais montré au client). Les PDF client sont dans `presentation/` (régénérables via Playwright `page.pdf()`).
 2. **Auth guard** synchrone dans le `<head>` de chaque page protégée (11 pages)
