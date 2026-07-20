@@ -40,7 +40,13 @@
     }
     if (client.functions && typeof client.functions.invoke === 'function') {
       const { data, error } = await client.functions.invoke('send-email', { body: msg });
-      if (error) throw error;
+      if (error) {
+        // Le message par défaut ("Edge Function returned a non-2xx status code") est générique :
+        // on va lire le VRAI message d'erreur renvoyé par la fonction (souvent une erreur Resend).
+        let m = (error && error.message) || 'Erreur d\'envoi';
+        try { const ctx = error.context && (await error.context.json()); if (ctx && ctx.error) m = ctx.error; } catch (e) {}
+        throw new Error(m);
+      }
       if (data && data.error) throw new Error(data.error);
       return data;
     }
