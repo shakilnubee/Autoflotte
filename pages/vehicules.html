@@ -3412,9 +3412,11 @@
       if (m) out.immat = `${m[1]} ${m[2]} ${m[3]}`;
     }
 
-    // VIN — 17 caractères (les lettres I, O, Q n'existent pas dans un VIN)
-    m = upper.match(/\b([A-HJ-NPR-Z0-9]{17})\b/);
-    if (m) out.vin = m[1];
+    // VIN (n° d'identification, champ E de la carte grise) — 17 caractères ; les lettres I, O, Q
+    // n'existent pas dans un VIN. L'OCR insère souvent des espaces DANS le VIN → on ancre d'abord
+    // sur le libellé « E » et on recolle les caractères ; sinon 1er bloc net de 17 caractères.
+    const vinFrom = (s) => { const t = String(s || '').toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, ''); const mm = t.match(/[A-HJ-NPR-Z0-9]{17}/); return mm ? mm[0] : ''; };
+    out.vin = vinFrom(afterCode(lines, /\bE\b/)) || (upper.match(/\b([A-HJ-NPR-Z0-9]{17})\b/) || [])[1] || '';
 
     // Marque (code D.1) et dénomination commerciale / modèle (code D.3)
     // On retire tout token type VIN (15-18 caractères) qui aurait débordé sur la ligne.
