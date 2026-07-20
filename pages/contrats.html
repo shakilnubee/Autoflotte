@@ -366,6 +366,20 @@
   }
   rebuildLeasingData();
 
+  // Suppression DÉFINITIVE d'un véhicule de toute la flotte (comme le bouton Supprimer de la
+  // fiche véhicule) : base + mémoire. Renvoie true si supprimé. ⚠️ irréversible.
+  function deleteVehiculeFlotte(immat) {
+    const v = (data.vehicules || []).find(x => x.immat === immat);
+    if (!v) { alert('Véhicule introuvable dans la flotte.'); return false; }
+    try { if (FP.db && FP.db.delete) FP.db.delete('vehicules', v.id); } catch (e) { console.warn('[del veh]', e); }
+    const idx = data.vehicules.findIndex(x => x.id === v.id); if (idx >= 0) data.vehicules.splice(idx, 1);
+    return true;
+  }
+  function refreshAllContrats() {
+    rebuildLeasingData(); renderKPIs(); renderLeasing(); renderAssurance();
+    if (typeof renderLocalease === 'function') renderLocalease();
+  }
+
   // Mensualité FIXE estimée = médiane des factures leasing importées (robuste à une 1re facture
   // gonflée par des frais de dossier). Les montants ne changent pas → médiane = vraie mensualité.
   function median(arr) {
@@ -648,12 +662,8 @@
     const del = e.target.closest('[data-del-lease]');
     if (del) {
       const immat = del.dataset.delLease;
-      if (!confirm(`Retirer « ${immat} » de la liste leasing ?\n\nLe véhicule et ses factures ne sont PAS supprimés — il n'apparaîtra simplement plus ici (réversible).`)) return;
-      const s = FP.settings.get(); s.leasingExclus = Array.isArray(s.leasingExclus) ? s.leasingExclus : [];
-      if (!s.leasingExclus.includes(immat)) s.leasingExclus.push(immat);
-      FP.settings.save(s);
-      rebuildLeasingData(); renderKPIs(); renderLeasing();
-      if (FP.toast) FP.toast(`« ${immat} » retiré du leasing`);
+      if (!confirm(`SUPPRIMER définitivement le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible : il disparaîtra partout (leasing, assurance, liste des véhicules…).`)) return;
+      if (deleteVehiculeFlotte(immat)) { refreshAllContrats(); if (FP.toast) FP.toast(`Véhicule « ${immat} » supprimé`); }
       return;
     }
     const btn = e.target.closest('[data-edit-lease]');
@@ -869,7 +879,7 @@
     const km=e.target.closest('[data-loc-km]'); if(km){ const i=+km.dataset.locKm; const u=prompt('Kilométrage actuel du véhicule :', list[i].kmActuel!=null?list[i].kmActuel:''); if(u==null)return; const n=parseInt(String(u).replace(/\D/g,''),10); list[i].kmActuel=Number.isFinite(n)?n:null; save(); return; }
     const im=e.target.closest('[data-loc-immat]'); if(im){ const i=+im.dataset.locImmat; const u=prompt('Immatriculation du véhicule :', list[i].immat||''); if(u==null)return; list[i].immat=u.trim().toUpperCase()||null; save(); return; }
     const dd=e.target.closest('[data-loc-doc-del]'); if(dd){ const [i,di]=dd.dataset.locDocDel.split(':').map(Number); if(Array.isArray(list[i].docs)){ list[i].docs.splice(di,1); list[i].pdfUrl=list[i].docs[0]?list[i].docs[0].url:null; save(); } return; }
-    const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; if(!confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${c.immat?' ('+c.immat+')':''} ?\n\nLe contrat est retiré de la liste (réversible en le ré-ajoutant).`)) return; list.splice(i,1); save(); if(FP.toast)FP.toast('Contrat Localease supprimé'); return; }
+    const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; const immat=c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):''); if(!confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${immat?' ('+immat+')':''} ?`)) return; list.splice(i,1); save(); if(immat && (data.vehicules||[]).some(x=>x.immat===immat)){ if(confirm(`Supprimer AUSSI le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible (leasing, assurance, liste véhicules…).`)){ if(deleteVehiculeFlotte(immat)) refreshAllContrats(); } } if(FP.toast)FP.toast('Contrat supprimé'); return; }
   });
   // Téléversement du PDF du contrat vers Supabase (bucket scans, comme les cartes grises)
   $('loc-upload-file').addEventListener('change', async (e)=>{
