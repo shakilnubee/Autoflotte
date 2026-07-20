@@ -210,8 +210,10 @@
       <div class="section-title">
         <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
         <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — Localease (Ayvens)
+        <button id="loc-recover-pdf" type="button" class="text-xs font-semibold ml-2" style="color:var(--fp-accent)"><i data-lucide="link" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Retrouver les PDF</button>
       </div>
       <p class="text-sm text-slate-600 mb-4">Contrats LLD <b>Localease / Ayvens</b> (distincts de BPCE) — pour comparer les loyers et accéder aux contrats.</p>
+      <div id="loc-recover-panel" class="hidden mb-4 p-4 rounded-lg" style="background:#FFFBEB;border:1px solid #FDE68A"></div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div class="kpi"><div class="kpi-label">Véhicules Localease</div><div class="kpi-value" id="kpi-loc-nb">—</div></div>
         <div class="kpi"><div class="kpi-label">Loyer mensuel total</div><div class="kpi-value" id="kpi-loc-mens" style="color:var(--fp-primary)">—</div><div class="kpi-delta">TTC / mois</div></div>
@@ -924,6 +926,54 @@
   });
   renderLocalease();
   renderKPIs(); // re-calcul des KPIs leasing MAINTENANT que Localease est défini (inclut ses loyers)
+
+  // === Récupération des PDF de contrats orphelins (fichiers encore dans le stockage mais dont
+  //     le lien avec le contrat a été perdu). On liste le dossier scans/contrats-leasing et on
+  //     laisse l'utilisateur ré-associer chaque PDF au bon contrat. ===
+  async function listContratPdfs() {
+    try {
+      const { data, error } = await FP.supabase.storage.from(FP.SCAN_BUCKET || 'scans').list('contrats-leasing', { limit: 300, sortBy: { column: 'name', order: 'asc' } });
+      if (error || !Array.isArray(data)) return [];
+      return data.filter(f => f && f.name && /\.pdf$/i.test(f.name)).map(f => ({
+        name: f.name,
+        url: FP.supabase.storage.from(FP.SCAN_BUCKET || 'scans').getPublicUrl('contrats-leasing/' + f.name).data.publicUrl,
+      }));
+    } catch (e) { console.warn('[listContratPdfs]', e); return []; }
+  }
+  function contratOptionsHtml() {
+    return getLocalease().map((c, i) => `<option value="${i}">${escC((c.conducteur || '?') + ' — ' + (c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '') || '?') + ' — ' + (c.marque || '') + ' ' + (c.modele || ''))}</option>`).join('');
+  }
+  if ($('loc-recover-pdf')) $('loc-recover-pdf').addEventListener('click', async () => {
+    const panel = $('loc-recover-panel'); if (!panel) return;
+    if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+    panel.innerHTML = '<div class="text-sm text-slate-500">Chargement des PDF du stockage…</div>';
+    const files = await listContratPdfs();
+    if (!files.length) { panel.innerHTML = '<div class="text-sm text-slate-500">Aucun PDF de contrat trouvé dans le stockage.</div>'; return; }
+    const opts = contratOptionsHtml();
+    panel.innerHTML = `<div class="text-sm font-semibold mb-2" style="color:#92400E">📎 ${files.length} PDF trouvé(s) dans le stockage. Ouvre chacun pour l'identifier, choisis le contrat correspondant, puis clique « Lier ».</div>`
+      + files.map((f, i) => `<div class="flex items-center gap-2 py-1.5" style="border-bottom:1px solid #FDE68A" data-rec="${i}">
+          <a href="${escC(f.url)}" target="_blank" rel="noopener" class="btn btn-outline text-xs" style="flex-shrink:0"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Ouvrir PDF ${i + 1}</a>
+          <select class="field-input text-sm" data-rec-sel style="flex:1;min-width:200px">${opts}</select>
+          <button type="button" class="btn btn-dark text-xs" data-rec-link="${i}" style="flex-shrink:0">Lier</button>
+        </div>`).join('');
+    panel.dataset.files = JSON.stringify(files);
+    if (window.lucide) lucide.createIcons();
+  });
+  if ($('loc-recover-panel')) $('loc-recover-panel').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-rec-link]'); if (!b) return;
+    let files = []; try { files = JSON.parse($('loc-recover-panel').dataset.files || '[]'); } catch (_) {}
+    const f = files[+b.dataset.recLink]; if (!f) return;
+    const row = b.closest('[data-rec]'); const sel = row.querySelector('[data-rec-sel]'); if (!sel) return;
+    const list = getLocalease(); const ci = +sel.value; if (!list[ci]) return;
+    if (!Array.isArray(list[ci].docs)) list[ci].docs = list[ci].pdfUrl ? [{ url: list[ci].pdfUrl, name: 'Contrat' }] : [];
+    if (list[ci].docs.some(d => d.url === f.url)) { alert('Ce PDF est déjà lié à ce contrat.'); return; }
+    list[ci].docs.push({ url: f.url, name: 'Contrat' });
+    list[ci].pdfUrl = list[ci].docs[0].url;
+    const s = FP.settings.get(); s.localeaseContrats = list; FP.settings.save(s); renderLocalease();
+    b.textContent = '✓ Lié'; b.disabled = true; b.classList.remove('btn-dark'); b.classList.add('btn-outline');
+    if (FP.toast) FP.toast('PDF relié au contrat ✓');
+  });
 
   // Saisie de la prime annuelle d'assurance (sauvegardée + synchronisée par société)
   if ($('assur-prime')) $('assur-prime').addEventListener('change', (e) => {
