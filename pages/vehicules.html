@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260717k">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260717l">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260717k"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260717l"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260717k">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260717l">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -703,12 +703,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260717k"></script>
-<script src="../assets/js/supabase-client.js?v=20260717k"></script>
-<script src="../assets/js/data.js?v=20260717k"></script>
-<script src="../assets/js/fleet-docs.js?v=20260717k"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260717k"></script>
-<script src="../assets/js/app.js?v=20260717k"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260717l"></script>
+<script src="../assets/js/supabase-client.js?v=20260717l"></script>
+<script src="../assets/js/data.js?v=20260717l"></script>
+<script src="../assets/js/fleet-docs.js?v=20260717l"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260717l"></script>
+<script src="../assets/js/app.js?v=20260717l"></script>
 <script>
   lucide.createIcons();
 
@@ -3473,11 +3473,33 @@
   async function handleCarteGrise(file){
     if (!file) return;
     try {
-      cgWorking('Lecture de la carte grise… (quelques secondes au 1er usage)');
-      // FP.ocr lit d'abord la couche texte du PDF (fiable), sinon bascule sur l'OCR image multilingue.
-      const rawText = await FP.ocr.fileToText(file);
-
-      const parsed = parseCarteGrise(rawText);
+      cgWorking('Lecture de la carte grise par l\'IA… (quelques secondes)');
+      let parsed = {};
+      // 1) IA (Claude, via scan-doc) — lecture directe de l'image/PDF, bien plus fiable, surtout le VIN.
+      try {
+        const ai = (window.FP && FP.scanIA) ? await FP.scanIA(file, 'carte-grise', FP.CG_SCAN_PROMPT) : null;
+        if (ai) {
+          const numOrU = v => (v != null && v !== '' && Number.isFinite(+v)) ? +v : undefined;
+          parsed = {
+            immat: ai.immat || '',
+            marque: ai.marque || '',
+            modele: ai.modele || '',
+            dateMiseEnCirculation: ai.dateMiseEnCirculation || '',
+            vin: ai.vin ? String(ai.vin).toUpperCase().replace(/[^A-Z0-9]/g, '') : '',
+            co2: numOrU(ai.co2),
+            puissanceFiscale: numOrU(ai.puissanceFiscale),
+            carburant: ai.carburant || '',
+            masse: numOrU(ai.masse),
+            categorie: ai.categorie || '',
+          };
+        }
+      } catch (e) { console.warn('[carte grise IA]', e); }
+      // 2) Lecteur LOCAL (couche texte du PDF + regex) — complète ce que l'IA n'a pas fourni.
+      try {
+        const rawText = await FP.ocr.fileToText(file);
+        const local = parseCarteGrise(rawText) || {};
+        for (const k in local) { const v = local[k]; if ((parsed[k] == null || parsed[k] === '') && v != null && v !== '') parsed[k] = v; }
+      } catch (e) { console.warn('[carte grise local]', e); }
       const filled = [];
       // On ne remplit que les champs vides : on n'écrase pas une saisie manuelle
       if (parsed.immat  && !$('f-immat').value)  { $('f-immat').value  = parsed.immat;  filled.push('immatriculation'); }
@@ -3486,6 +3508,11 @@
       if (parsed.dateMiseEnCirculation && !$('f-dmc').value) { $('f-dmc').value = parsed.dateMiseEnCirculation; filled.push('1ère immat.'); }
       if (parsed.vin    && !$('f-vin').value)    { $('f-vin').value    = parsed.vin;    filled.push('VIN'); }
       if (parsed.prochainCT && !$('f-ct').value) { $('f-ct').value = parsed.prochainCT; filled.push('prochain CT'); }
+      if (parsed.categorie && $('f-categorie')) {
+        const cg = String(parsed.categorie).toLowerCase();
+        const opt = Array.from($('f-categorie').options).find(o => o.value.toLowerCase() === cg || o.textContent.trim().toLowerCase() === cg);
+        if (opt && !$('f-categorie').value) { $('f-categorie').value = opt.value; filled.push('catégorie'); }
+      }
 
       // CO2 (V.7), puissance fiscale (P.6) et carburant (P.3) : pas de champ dans le
       // formulaire, on les conserve pour les écrire à l'enregistrement (utiles pour la TVS).

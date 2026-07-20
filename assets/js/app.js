@@ -2425,6 +2425,25 @@ FP.SCAN_PROMPT = [
   "Montants sans symbole euro ni separateur de milliers (ex 1466.48).",
 ].join("\n");
 
+// Prompt IA SPÉCIFIQUE carte grise (lecture directe de l'image/PDF via l'Edge Function scan-doc).
+// Bien plus fiable que le regex local, surtout pour le VIN (champ E) et le modèle (D.3).
+FP.CG_SCAN_PROMPT = [
+  "Lis attentivement cette CARTE GRISE (certificat d immatriculation francais). Redresse mentalement l image si elle est inclinee ou de travers.",
+  "Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour, avec ces cles (mets null si l info est absente ou illisible) :",
+  "docType : toujours 'carte-grise'.",
+  "immat : plaque, champ A, au format AB-123-CD.",
+  "dateMiseEnCirculation : date de 1re mise en circulation, champ B, format AAAA-MM-JJ (jour/mois/annee europeen).",
+  "marque : champ D.1 (ex HYUNDAI, RENAULT, PEUGEOT).",
+  "modele : denomination commerciale, champ D.3 (ex KONA, CLIO, 208).",
+  "vin : numero d identification du vehicule, champ E. EXACTEMENT 17 caracteres (lettres majuscules + chiffres, SANS espace). Les lettres I, O et Q n existent JAMAIS dans un VIN (ce sont des 1 ou des 0). Recopie chaque caractere avec le plus grand soin ; si tu n es pas certain d un caractere, relis plutot que de deviner.",
+  "puissanceFiscale : puissance fiscale en CV, champ P.6, entier.",
+  "carburant : type d energie, champ P.3. Renvoie le libelle clair : Essence (ES), Diesel (GO/gazole), Electrique (EL), Hybride (EE/HE/GL), GPL (GP), GNV (GN).",
+  "co2 : emissions de CO2 en g/km, champ V.7, entier.",
+  "masse : masse en ordre de marche en kg, champ G, entier (PAS la masse en charge G.1).",
+  "categorie : d apres le genre national J.1 et la carrosserie, renvoie une categorie SIMPLE parmi : Citadine, Berline, Break, SUV, Monospace, Utilitaire ; sinon null.",
+  "IMPORTANT : ne devine ni n invente aucune valeur ; un champ illisible = null. Dates au format europeen jour/mois/annee (ex 05.11.2021 = 2021-11-05).",
+].join("\n");
+
 // Lecture IA d'un document via l'Edge Function sécurisée « scan-doc » (Haiku).
 // Renvoie un objet de champs { date, fournisseur, numeroFacture, vehiculeImmat, km,
 // montantHT, montantTVA, montantTTC, description } ou null si indisponible/échec
