@@ -329,9 +329,17 @@
     let list = [];
     try { const s = FP.settings.get(); if (Array.isArray(s.loueurs)) list = s.loueurs; } catch (e) {}
     list = (list || []).filter(l => l && (String(l.nom || '').trim() || String(l.prop || '').trim()));
-    if (list.length) return list;
+    // Garantit TOUJOURS le loueur historique du profil (ex. BPCE) s'il n'est pas déjà couvert,
+    // pour qu'un véhicule dont le propriétaire = BPCE n'ait jamais l'air « hors leasing » à cause
+    // d'une config loueurs incomplète (étiquette propriétaire oubliée).
     const prof = (FP.societeProfil ? FP.societeProfil() : {});
-    if (prof.proprietaireLeasing || prof.loueurNom) return [{ nom: prof.loueurNom || 'Leasing', prop: prof.proprietaireLeasing || '' }];
+    const propProfil = String(prof.proprietaireLeasing || '').trim();
+    if (propProfil) {
+      const couvert = list.some(l => String(l.prop || '').trim().toLowerCase() === propProfil.toLowerCase());
+      if (!couvert) list = [...list, { nom: prof.loueurNom || 'Leasing', prop: propProfil }];
+    }
+    if (list.length) return list;
+    if (prof.loueurNom) return [{ nom: prof.loueurNom, prop: propProfil }];
     return [];
   }
   function propsLeasing() { return getLoueurs().map(l => String(l.prop || '').trim().toLowerCase()).filter(Boolean); }
