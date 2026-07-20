@@ -856,13 +856,14 @@
       const docs = Array.isArray(c.docs) ? c.docs : (c.pdfUrl ? [{ url: c.pdfUrl, name: 'Contrat' }] : []);
       const docsHtml = docs.map((d, di) => `<div class="flex items-center gap-1 justify-center" style="margin-bottom:2px;max-width:170px;margin-left:auto;margin-right:auto">
           <a href="${escC(d.url)}" target="_blank" rel="noopener" class="hover:underline" style="color:var(--fp-accent);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escC(d.name || 'Document')}"><i data-lucide="file-text" class="w-3 h-3 inline"></i> ${escC(d.name || 'Document')}</a>
+          <button type="button" data-loc-doc-assur="${i}:${di}" class="text-slate-300 hover:text-teal-600 flex-shrink-0" title="Déplacer vers l'Assurance de la fiche véhicule (mémo assurance)" style="font-size:12px;line-height:1">🛡</button>
           <button type="button" data-loc-doc-del="${i}:${di}" class="text-slate-300 hover:text-red-600 flex-shrink-0" title="Supprimer ce document" style="font-size:12px;line-height:1">✕</button>
         </div>`).join('');
       const lienCell = docsHtml
         + `<button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px;margin-top:2px" data-loc-up="${i}"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'Ajouter un doc' : '+ téléverser'}</button>`
         + ` <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px;margin-top:2px" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3 h-3 text-red-600"></i></button>`;
       return `<tr>
-        <td class="font-medium">${c.conducteur ? FP.lienConducteur(c.conducteur) : '—'}</td>
+        <td class="font-medium"><span class="cursor-pointer underline decoration-dotted" data-loc-cond="${i}" title="Affecter / changer le conducteur">${c.conducteur ? escC(c.conducteur) : '<span class="text-slate-400">+ affecter</span>'}</span></td>
         <td class="font-mono">${(() => { const auto = c.immat || autoImmatLoc(c); return auto
           ? `<span class="cursor-pointer underline decoration-dotted ${c.immat ? '' : 'text-slate-500'}" data-loc-immat="${i}" title="${c.immat ? 'Modifier la plaque' : 'Plaque liée automatiquement depuis la fiche véhicule — cliquer pour forcer'}">${escC(auto)}</span>`
           : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-immat="${i}">+ plaque</button>`; })()}</td>
@@ -884,7 +885,25 @@
     const up=e.target.closest('[data-loc-up]'); if(up){ _locUpIdx=+up.dataset.locUp; const inp=$('loc-upload-file'); inp.value=''; inp.click(); return; }
     const db=e.target.closest('[data-loc-debut]'); if(db){ const i=+db.dataset.locDebut; const u=prompt('Date de début / livraison (format AAAA-MM-JJ) :', list[i].debut||''); if(u==null)return; list[i].debut=u.trim()||null; save(); return; }
     const km=e.target.closest('[data-loc-km]'); if(km){ const i=+km.dataset.locKm; const u=prompt('Kilométrage actuel du véhicule :', list[i].kmActuel!=null?list[i].kmActuel:''); if(u==null)return; const n=parseInt(String(u).replace(/\D/g,''),10); list[i].kmActuel=Number.isFinite(n)?n:null; save(); return; }
-    const im=e.target.closest('[data-loc-immat]'); if(im){ const i=+im.dataset.locImmat; const u=prompt('Immatriculation du véhicule :', list[i].immat||''); if(u==null)return; list[i].immat=u.trim().toUpperCase()||null; save(); return; }
+    const im=e.target.closest('[data-loc-immat]'); if(im){ const i=+im.dataset.locImmat; const u=prompt('Immatriculation du véhicule :', list[i].immat||''); if(u==null)return; const plaque=u.trim().toUpperCase()||null; list[i].immat=plaque;
+      // Auto-affectation du conducteur depuis la fiche véhicule (si la plaque correspond et que le contrat n'a pas encore de conducteur).
+      if(plaque){ const v=(data.vehicules||[]).find(x=>String(x.immat||'').toUpperCase()===plaque); if(v && v.chauffeur && v.chauffeur!=='—' && !String(list[i].conducteur||'').trim()){ list[i].conducteur=v.chauffeur; } }
+      save(); return; }
+    const cd=e.target.closest('[data-loc-cond]'); if(cd){ const i=+cd.dataset.locCond; const td=cd.closest('td'); if(!td) return;
+      td.innerHTML=`<input class="field-input" style="font-size:12px;min-width:140px" id="loc-cond-edit" autocomplete="off" value="${escC(list[i].conducteur||'')}">`;
+      const inp=document.getElementById('loc-cond-edit'); if(!inp) return; inp.focus();
+      if(FP.conducteurPicker) FP.conducteurPicker(inp,{ onPick:(c)=>{ list[i].conducteur=(c&&(c.name||c.prenom))||inp.value.trim(); save(); } });
+      inp.addEventListener('blur',()=>setTimeout(()=>{ if(document.getElementById('loc-cond-edit')===inp){ list[i].conducteur=inp.value.trim()||null; save(); } },200));
+      return; }
+    const da=e.target.closest('[data-loc-doc-assur]'); if(da){ const [i,di]=da.dataset.locDocAssur.split(':').map(Number); const c=list[i]||{}; const immat=String(c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):'')||'').toUpperCase(); const doc=(c.docs||[])[di]; if(!doc) return;
+      if(!immat){ alert('Lie d\'abord la plaque du contrat (colonne Immatriculation) pour savoir sur quel véhicule ranger le mémo assurance.'); return; }
+      const v=(data.vehicules||[]).find(x=>String(x.immat||'').toUpperCase()===immat); if(!v){ alert('Aucun véhicule de la flotte avec la plaque '+immat+'.'); return; }
+      if(!confirm(`Déplacer « ${doc.name||'Document'} » vers l'Assurance de la fiche véhicule ${immat} ?`)) return;
+      const newDoc={ id:'D'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36), vehiculeId:v.id, type:'assurance', label:(doc.name&&/assur/i.test(doc.name))?doc.name:'Mémo assurance', url:doc.url, driveId:null };
+      try{ if(FP.persist&&FP.persist.insert) FP.persist.insert('documents', newDoc); }catch(err){ console.warn('[move assur]',err); }
+      c.docs.splice(di,1); c.pdfUrl=c.docs[0]?c.docs[0].url:null; save();
+      if(FP.toast)FP.toast(`Mémo assurance déplacé vers ${immat} ✓`); else alert(`Déplacé vers l'assurance du véhicule ${immat}.`);
+      return; }
     const dd=e.target.closest('[data-loc-doc-del]'); if(dd){ const [i,di]=dd.dataset.locDocDel.split(':').map(Number); if(Array.isArray(list[i].docs)){ list[i].docs.splice(di,1); list[i].pdfUrl=list[i].docs[0]?list[i].docs[0].url:null; save(); } return; }
     const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; const immat=c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):''); if(!confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${immat?' ('+immat+')':''} ?`)) return; list.splice(i,1); save(); if(immat && (data.vehicules||[]).some(x=>x.immat===immat)){ if(confirm(`Supprimer AUSSI le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible (leasing, assurance, liste véhicules…).`)){ if(deleteVehiculeFlotte(immat)) refreshAllContrats(); } } if(FP.toast)FP.toast('Contrat supprimé'); return; }
   });
