@@ -773,25 +773,14 @@
   ];
   function getLocalease(){
     const s = FP.settings.get();
-    let list = Array.isArray(s.localeaseContrats) ? s.localeaseContrats : [];
-    let changed = !Array.isArray(s.localeaseContrats);
-    // Migration : l'offre 26AV048042 couvre 2 véhicules → on retire l'ancienne ligne unique
-    const before = list.length;
-    list = list.filter(c => !(c.offre === '26AV048042' && c.conducteur === 'Nouveaux collaborateurs'));
-    if (list.length !== before) changed = true;
-    // ⚠️ Les contrats Localease/Ayvens par défaut sont PROPRES À PXP → on ne les injecte QUE pour PXP.
-    // Une autre société démarre SANS contrat (elle saisit les siens).
-    if (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') {
-      // Ajoute les contrats par défaut manquants (clé = offre+conducteur), sans écraser ce qui est saisi
-      LOCALEASE_DEFAUT.forEach(def => {
-        if (!list.some(c => c.offre === def.offre && c.conducteur === def.conducteur)) { list.push({ ...def }); changed = true; }
-      });
-      // Backfill : applique la plaque du défaut sur un contrat déjà enregistré qui n'en a pas encore
-      LOCALEASE_DEFAUT.forEach(def => {
-        if (!def.immat) return;
-        const c = list.find(x => x.offre === def.offre && x.conducteur === def.conducteur);
-        if (c && !c.immat) { c.immat = def.immat; changed = true; }
-      });
+    let changed = false;
+    // ⚠️ Les défauts ne sont semés QU'UNE SEULE FOIS (première ouverture, PXP uniquement). Ensuite la
+    // liste enregistrée FAIT AUTORITÉ → renommer un conducteur ne réinjecte plus la ligne d'origine
+    // (c'était la cause des doublons). Une autre société démarre sans contrat.
+    let list = Array.isArray(s.localeaseContrats) ? s.localeaseContrats : null;
+    if (list === null) {
+      list = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? LOCALEASE_DEFAUT.map(d => ({ ...d })) : [];
+      changed = true;
     }
     // Migration : un seul PDF (pdfUrl) -> liste de documents (docs[]) pour pouvoir en attacher plusieurs
     list.forEach(c => { if (!Array.isArray(c.docs)) { c.docs = c.pdfUrl ? [{ url: c.pdfUrl, name: 'Contrat' }] : []; changed = true; } });
@@ -890,8 +879,8 @@
       if(plaque){ const v=(data.vehicules||[]).find(x=>String(x.immat||'').toUpperCase()===plaque); if(v && v.chauffeur && v.chauffeur!=='—' && !String(list[i].conducteur||'').trim()){ list[i].conducteur=v.chauffeur; } }
       save(); return; }
     const cd=e.target.closest('[data-loc-cond]'); if(cd){ const i=+cd.dataset.locCond; const td=cd.closest('td'); if(!td) return;
-      td.innerHTML=`<input class="field-input" style="font-size:12px;min-width:140px" id="loc-cond-edit" autocomplete="off" value="${escC(list[i].conducteur||'')}">`;
-      const inp=document.getElementById('loc-cond-edit'); if(!inp) return; inp.focus();
+      td.innerHTML=`<input class="field-input" style="font-size:.9rem;padding:.4rem .6rem;width:100%;min-width:150px;border:1px solid var(--fp-accent);border-radius:.5rem" id="loc-cond-edit" autocomplete="off" placeholder="Rechercher ou créer…" value="${escC(list[i].conducteur||'')}">`;
+      const inp=document.getElementById('loc-cond-edit'); if(!inp) return; inp.focus(); inp.select();
       if(FP.conducteurPicker) FP.conducteurPicker(inp,{ onPick:(c)=>{ list[i].conducteur=(c&&(c.name||c.prenom))||inp.value.trim(); save(); } });
       inp.addEventListener('blur',()=>setTimeout(()=>{ if(document.getElementById('loc-cond-edit')===inp){ list[i].conducteur=inp.value.trim()||null; save(); } },200));
       return; }
