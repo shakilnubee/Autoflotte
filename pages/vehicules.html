@@ -3707,13 +3707,18 @@
     const st = $('doc-scan-status');
     const show = (msg, type) => { st.classList.remove('hidden'); const c = { working:'background:#F1F5F9;color:#475569;', ok:'background:#ECFDF5;color:#047857;', error:'background:#FEF2F2;color:#B91C1C;' }; st.setAttribute('style', c[type] || c.working); st.innerHTML = msg; };
     try {
-      show('<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Lecture du document…</span>', 'working');
-      const text = await FP.ocr.fileToText(file);
-      const det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
+      show('<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Lecture du document par l\'IA…</span>', 'working');
+      // IA (Claude) en priorité — bien plus fiable ; repli sur la lecture locale si indispo.
+      let det = null;
+      try { det = (window.FP && FP.scanIA) ? await FP.scanIA(file) : null; } catch (e) {}
+      if (!det) { try { const text = await FP.ocr.fileToText(file); det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []); } catch (e) {} }
+      det = det || {};
       const filled = [];
-      if (det.date && det.type === 'controle-technique' && !$('f-ct').value) { $('f-ct').value = det.date; filled.push('prochain CT'); }
+      const ctDate = det.controleTechniqueProchain || (det.type === 'controle-technique' ? det.date : '');
+      const immat = det.vehiculeImmat || det.immat;
+      if (ctDate && !$('f-ct').value) { $('f-ct').value = ctDate; filled.push('prochain CT'); }
       if (det.km && (!$('f-km').value || Number($('f-km').value) === 0)) { $('f-km').value = det.km; filled.push('kilométrage'); }
-      if (det.immat && !$('f-immat').value) { $('f-immat').value = det.immat; filled.push('immatriculation'); }
+      if (immat && !$('f-immat').value) { $('f-immat').value = immat; filled.push('immatriculation'); }
       if (filled.length) show('✓ Récupéré : ' + filled.join(', ') + '. Vérifie puis enregistre.', 'ok');
       else show("Lu, mais aucune info exploitable trouvée (CT, km…). Saisis à la main si besoin.", 'error');
     } catch (e) { console.error('[extra doc]', e); show("Impossible de lire ce document. Réessaie ou saisis à la main.", 'error'); }
