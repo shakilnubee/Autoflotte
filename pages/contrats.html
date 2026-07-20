@@ -358,6 +358,11 @@
       ...vehicules.filter(v => { const props = propsLeasing(); const p = String(v.proprietaire || '').trim().toLowerCase(); return p && props.includes(p); }).map(v => v.immat),
       ...Object.keys(leasingByVeh),
     ]);
+    // Véhicules RETIRÉS manuellement du leasing (par société) — non destructif, réversible.
+    try {
+      const ex = (FP.settings.get().leasingExclus) || [];
+      if (Array.isArray(ex) && ex.length) { const set = ex.map(x => String(x)); leasingImmats = new Set([...leasingImmats].filter(im => !set.includes(String(im)))); }
+    } catch (e) {}
   }
   rebuildLeasingData();
 
@@ -567,7 +572,10 @@
         <td class="font-semibold">${totalTheo > 0 ? FP.euroPrecis(totalTheo) : '<span class="text-slate-400">—</span>'}</td>
         <td>${moyMens != null && moyMens > 0 ? FP.euroPrecis(moyMens) : '<span class="text-slate-400">—</span>'}</td>
         <td>${agg.lastFile ? `<a href="https://drive.google.com/file/d/${agg.lastFile.fileId}/view" target="_blank" rel="noopener" class="text-xs hover:underline" style="color: var(--fp-accent)">${FP.date(agg.lastDate)} <i data-lucide="external-link" class="w-3 h-3 inline"></i></a>` : '<span class="text-slate-400">—</span>'}</td>
-        <td><button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}" title="Modifier le forfait du contrat"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button></td>
+        <td style="white-space:nowrap">
+          <button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}" title="Modifier le forfait du contrat"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+          <button type="button" class="btn btn-outline text-xs !px-2" data-del-lease="${v.immat}" title="Retirer ce véhicule du leasing"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>
+        </td>
       </tr>`;
     }).join('');
 
@@ -637,6 +645,17 @@
     const m = $('lease-modal'); m.classList.add('hidden'); m.classList.remove('flex'); leaseEditImmat = null;
   }
   $('tbody-leasing').addEventListener('click', e => {
+    const del = e.target.closest('[data-del-lease]');
+    if (del) {
+      const immat = del.dataset.delLease;
+      if (!confirm(`Retirer « ${immat} » de la liste leasing ?\n\nLe véhicule et ses factures ne sont PAS supprimés — il n'apparaîtra simplement plus ici (réversible).`)) return;
+      const s = FP.settings.get(); s.leasingExclus = Array.isArray(s.leasingExclus) ? s.leasingExclus : [];
+      if (!s.leasingExclus.includes(immat)) s.leasingExclus.push(immat);
+      FP.settings.save(s);
+      rebuildLeasingData(); renderKPIs(); renderLeasing();
+      if (FP.toast) FP.toast(`« ${immat} » retiré du leasing`);
+      return;
+    }
     const btn = e.target.closest('[data-edit-lease]');
     if (btn) openLeaseModal(btn.dataset.editLease);
   });
