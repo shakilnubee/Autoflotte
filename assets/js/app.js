@@ -536,6 +536,131 @@ FP.searchSelect = function (select, opts) {
   } catch (e) { /* en cas de souci, on garde le <select> natif */ }
 };
 
+// === Conducteurs — accès GLOBAL (liste / recherche / création depuis N'IMPORTE QUELLE page) ===
+// RÈGLE PROJET : partout où on désigne un conducteur, on doit pouvoir le CHOISIR dans la liste
+// existante OU en CRÉER un nouveau en tapant son nom (la plateforme demande alors ses infos).
+FP.conducteurs = {
+  list() { try { return (window.FP_DATA && Array.isArray(FP_DATA.conducteurs)) ? FP_DATA.conducteurs.filter(c => c && !c.masque) : []; } catch (e) { return []; } },
+  displayName(c) {
+    if (!c) return '';
+    const base = String(c.name || c.prenom || c.key || '').trim();
+    return (c.nom && !base.toLowerCase().includes(String(c.nom).toLowerCase())) ? (base + ' ' + c.nom).trim() : base;
+  },
+  find(name) {
+    const k = FP.normPrenom(name || ''); if (!k) return null;
+    return this.list().find(c => FP.normPrenom(c.name || c.prenom || c.key) === k) || null;
+  },
+  async create(info) {
+    info = info || {};
+    const name = String(info.name || ((info.prenom || '') + ' ' + (info.nom || ''))).trim() || String(info.prenom || '').trim();
+    if (!name) return null;
+    const key = FP.normPrenom(name);
+    const row = { key, name, prenom: info.prenom || null, nom: info.nom || null, tel: info.tel || null, email: info.email || null,
+      poste: info.poste || null, permisNumero: info.permisNumero || null, permisType: info.permisType || null, manuel: true };
+    try { if (FP.persist && FP.persist.upsert) await FP.persist.upsert('conducteurs', row); } catch (e) { console.warn('[FP.conducteurs.create]', e); }
+    try { window.FP_DATA = window.FP_DATA || {}; FP_DATA.conducteurs = FP_DATA.conducteurs || [];
+      const ex = FP_DATA.conducteurs.find(c => c.key === key); if (ex) Object.assign(ex, row); else FP_DATA.conducteurs.push(row); } catch (e) {}
+    return row;
+  }
+};
+
+// Modale « Nouveau conducteur » réutilisable → Promise<conductor|null>. Collecte les infos
+// essentielles puis crée le conducteur (FP.conducteurs.create). Injectée une fois dans le body.
+FP.newConducteurModal = function (prefillName) {
+  return new Promise(resolve => {
+    let ov = document.getElementById('fp-newcond-ov');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'fp-newcond-ov';
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,61,.5);display:none;align-items:center;justify-content:center;z-index:10001;padding:1rem';
+      ov.innerHTML = '<div style="background:#fff;border-radius:1rem;max-width:470px;width:100%;max-height:90vh;overflow:auto;padding:1.5rem">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h2 style="font-size:1.2rem;font-weight:800;color:var(--fp-primary)">Nouveau conducteur</h2>'
+        + '<button type="button" id="fp-nc-x" style="border:none;background:none;cursor:pointer;font-size:1.3rem;color:var(--fp-muted);line-height:1">✕</button></div>'
+        + '<p style="font-size:.8rem;color:var(--fp-muted);margin-bottom:1rem">Ce nom n\'existe pas encore — renseigne ses infos pour l\'enregistrer.</p>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:.7rem">'
+        + '<div><div class="field-label">Prénom</div><input class="field-input" id="fp-nc-prenom"></div>'
+        + '<div><div class="field-label">Nom</div><input class="field-input" id="fp-nc-nom"></div>'
+        + '<div><div class="field-label">Téléphone</div><input class="field-input" id="fp-nc-tel"></div>'
+        + '<div><div class="field-label">Email</div><input class="field-input" id="fp-nc-email" type="email"></div>'
+        + '<div style="grid-column:1/3"><div class="field-label">N° de permis</div><input class="field-input" id="fp-nc-permis"></div>'
+        + '</div>'
+        + '<div style="display:flex;gap:.5rem;margin-top:1.1rem"><button type="button" class="btn btn-outline" id="fp-nc-cancel" style="flex:1;justify-content:center">Annuler</button>'
+        + '<button type="button" class="btn btn-dark" id="fp-nc-save" style="flex:1;justify-content:center">Enregistrer</button></div></div>';
+      document.body.appendChild(ov);
+    }
+    const g = id => document.getElementById(id);
+    const parts = String(prefillName || '').trim().split(/\s+/).filter(Boolean);
+    g('fp-nc-prenom').value = parts.shift() || '';
+    g('fp-nc-nom').value = parts.join(' ');
+    g('fp-nc-tel').value = ''; g('fp-nc-email').value = ''; g('fp-nc-permis').value = '';
+    ov.style.display = 'flex';
+    setTimeout(() => g('fp-nc-prenom').focus(), 50);
+    const done = (r) => { ov.style.display = 'none'; g('fp-nc-save').onclick = g('fp-nc-cancel').onclick = g('fp-nc-x').onclick = null; resolve(r); };
+    g('fp-nc-cancel').onclick = () => done(null);
+    g('fp-nc-x').onclick = () => done(null);
+    g('fp-nc-save').onclick = () => {
+      const info = { prenom: g('fp-nc-prenom').value.trim(), nom: g('fp-nc-nom').value.trim(), tel: g('fp-nc-tel').value.trim(), email: g('fp-nc-email').value.trim(), permisNumero: g('fp-nc-permis').value.trim() };
+      if (!info.prenom && !info.nom) { alert('Indique au moins un prénom ou un nom.'); return; }
+      // Anti-doublon : si un conducteur du même nom existe déjà, on le réutilise.
+      const exist = FP.conducteurs.find((info.prenom + ' ' + info.nom).trim() || info.prenom);
+      if (exist) { done(exist); return; }
+      FP.conducteurs.create(info).then(c => done(c));
+    };
+  });
+};
+
+// Combobox CONDUCTEUR sur un <input> texte : tape pour filtrer les conducteurs existants,
+// ou choisis « ➕ Créer “X” » pour en enregistrer un nouveau (ouvre la modale d'infos).
+// opts : { onPick(conducteur, {isNew}) }. La valeur affichée dans l'input = le nom.
+FP.conducteurPicker = function (input, opts) {
+  try {
+    if (!input || input.dataset.cpDone === '1') return;
+    input.dataset.cpDone = '1';
+    opts = opts || {};
+    input.autocomplete = 'off';
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const norm = s => (FP.norm ? FP.norm(s) : String(s || '').toLowerCase());
+    const menu = document.createElement('div');
+    menu.style.cssText = 'position:fixed;z-index:10000;background:#fff;border:1px solid var(--fp-border,#E3E8F0);border-radius:.55rem;box-shadow:0 16px 40px -12px rgba(15,30,61,.3);max-height:260px;overflow:auto;display:none';
+    document.body.appendChild(menu);
+    const place = () => { const r = input.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 3) + 'px'; menu.style.width = r.width + 'px'; };
+    const close = () => { menu.style.display = 'none'; };
+    function pick(cond, isNew) { input.value = FP.conducteurs.displayName(cond); close(); if (opts.onPick) opts.onPick(cond, { isNew: !!isNew }); }
+    async function createFrom(name) {
+      const c = await FP.newConducteurModal(name);
+      if (c) pick(c, true); else input.focus();
+    }
+    function open(q) {
+      const nq = norm(q);
+      const list = FP.conducteurs.list().filter(c => !nq || norm(FP.conducteurs.displayName(c)).includes(nq)).slice(0, 40);
+      const exact = FP.conducteurs.find(q);
+      let html = list.map(c => `<div class="fp-cp-it" data-k="${esc(c.key)}" style="padding:.5rem .7rem;cursor:pointer">${esc(FP.conducteurs.displayName(c))}</div>`).join('');
+      if (q && q.trim() && !exact) {
+        html = `<div class="fp-cp-new" style="padding:.55rem .7rem;cursor:pointer;font-weight:700;color:var(--fp-accent,#F97316);border-bottom:1px solid var(--fp-border,#E3E8F0)">➕ Créer « ${esc(q.trim())} »</div>` + html;
+      }
+      menu.innerHTML = html || '<div style="padding:.5rem .7rem;color:var(--fp-muted,#5A6577)">Tape un nom pour créer un conducteur</div>';
+      place(); menu.style.display = 'block';
+    }
+    input.addEventListener('focus', () => open(input.value));
+    input.addEventListener('input', () => open(input.value));
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        // Entrée sur un nom qui n'existe pas → proposer la création.
+        const v = input.value.trim(); if (!v) return;
+        if (!FP.conducteurs.find(v)) { e.preventDefault(); close(); createFrom(v); }
+      } else if (e.key === 'Escape') { close(); }
+    });
+    menu.addEventListener('mousedown', e => {
+      const nw = e.target.closest('.fp-cp-new'); if (nw) { e.preventDefault(); const v = input.value.trim(); close(); createFrom(v); return; }
+      const it = e.target.closest('.fp-cp-it'); if (!it) return; e.preventDefault();
+      const c = FP.conducteurs.list().find(x => x.key === it.getAttribute('data-k')); if (c) pick(c, false);
+    });
+    input.addEventListener('blur', () => setTimeout(close, 150));
+    window.addEventListener('scroll', () => { if (menu.style.display !== 'none') place(); }, true);
+    window.addEventListener('resize', () => { if (menu.style.display !== 'none') place(); });
+  } catch (e) { /* en cas de souci, l'input reste un champ texte normal */ }
+};
+
 // === Multi-sociétés (vue admin) ===
 FP.activeSociete = () => { try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } };
 FP.setActiveSociete = (s) => { try { localStorage.setItem('fp_societe', s || 'PXP'); } catch (e) {} };

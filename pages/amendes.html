@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260717h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260717i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260717h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260717i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260717h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260717i">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -435,10 +435,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260717h"></script>
-<script src="../assets/js/supabase-client.js?v=20260717h"></script>
-<script src="../assets/js/data.js?v=20260717h"></script>
-<script src="../assets/js/app.js?v=20260717h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260717i"></script>
+<script src="../assets/js/supabase-client.js?v=20260717i"></script>
+<script src="../assets/js/data.js?v=20260717i"></script>
+<script src="../assets/js/app.js?v=20260717i"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1180,7 +1180,7 @@
       <div class="grid grid-cols-2 gap-3">
         <div>
           <div class="field-label">Conducteur</div>
-          <div id="am-prenom-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour modifier">${a.prenom || '<span class="text-slate-400">— ajouter</span>'}</div>
+          <input class="field-input" id="am-cond-input" value="${escAmende(a.prenom || '')}" placeholder="Rechercher ou créer…" autocomplete="off" style="font-size:.9rem" />
         </div>
         <div>
           <div class="field-label">Date de l'amende</div>
@@ -1300,7 +1300,22 @@
     const cv = $('am-cle-val'); if (cv) cv.onclick = () => editAmField(cv, 'cle', 'text');
     const mtv = $('am-montant-val'); if (mtv) mtv.onclick = () => editAmField(mtv, 'montant', 'number');
     const ptv = $('am-points-val'); if (ptv) ptv.onclick = () => editAmField(ptv, 'points', 'number');
-    const pnv = $('am-prenom-val'); if (pnv) pnv.onclick = () => editAmField(pnv, 'prenom', 'text');
+    // Conducteur : choisir dans la liste existante OU créer un nouveau en tapant le nom
+    // (la plateforme demande alors ses infos). Règle projet — FP.conducteurPicker.
+    if (FP.conducteurPicker && $('am-cond-input')) {
+      FP.conducteurPicker($('am-cond-input'), { onPick: (cond) => {
+        const nm = (cond && (cond.name || cond.prenom)) || (FP.conducteurs.displayName ? FP.conducteurs.displayName(cond) : '');
+        if (!nm) return;
+        if (FP.history && FP.history.commit) FP.history.commit();
+        a.prenom = nm;
+        FP.persist.update('amendes', a.id, { prenom: nm });
+        $('drawer-subtitle').textContent = `${a.prenom || '—'} · ${FP.date(a.date)}`;
+        renderKPIs(); renderTable();
+        if (FP.toast) FP.toast('Conducteur : ' + nm);
+      } });
+      // À la sortie du champ sans sélection, on réaffiche le conducteur enregistré.
+      $('am-cond-input').addEventListener('blur', () => setTimeout(() => { const el = $('am-cond-input'); if (el) el.value = a.prenom || ''; }, 200));
+    }
     const dtv = $('am-date-val'); if (dtv) dtv.onclick = () => editAmField(dtv, 'date', 'date');
     const mfv = $('am-motif-val'); if (mfv) mfv.onclick = () => editAmField(mfv, 'motif', 'text');
     const avv = $('am-avis-val'); if (avv) avv.onclick = () => editAmField(avv, 'numeroAvis', 'text');
