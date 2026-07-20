@@ -188,6 +188,31 @@
       <div id="drive-view"></div>
     </div>
 
+    <!-- Garages & concessionnaires (prise de RDV + recherche par localisation) -->
+    <div class="card p-5 mb-6">
+      <h3 class="font-bold text-slate-900 flex items-center gap-2 mb-3"><i data-lucide="wrench" class="w-4 h-4" style="color:var(--fp-accent)"></i> Garages &amp; concessionnaires <span class="text-xs font-normal text-slate-400">— prendre RDV pour une réparation</span></h3>
+      <div class="flex flex-wrap items-end gap-2 mb-4 p-3 rounded-lg" style="background:#F8FAFC;border:1px solid var(--fp-border)">
+        <div><div class="field-label">Chercher un garage près de…</div><input id="gar-loc" class="field-input" placeholder="Ville, code postal, adresse…" style="min-width:220px" autocomplete="off"></div>
+        <button id="gar-maps" type="button" class="btn btn-dark text-sm"><i data-lucide="map-pin" class="w-4 h-4"></i> Chercher sur Google Maps</button>
+        <span class="text-xs text-slate-400">Ouvre les garages autour de ce lieu.</span>
+      </div>
+      <div class="flex items-center gap-2 mb-2">
+        <input id="gar-search" class="field-input text-sm" placeholder="Filtrer mes garages (nom, ville…)" style="max-width:280px" autocomplete="off">
+        <span class="text-xs text-slate-400 ml-auto" id="gar-count"></span>
+      </div>
+      <div id="gar-list" class="mb-3"></div>
+      <div class="p-3 rounded-lg" style="background:#F8FAFC;border:1px solid var(--fp-border)">
+        <div class="text-sm font-semibold text-slate-800 mb-2">Ajouter un garage / concessionnaire</div>
+        <div class="grid gap-2" style="grid-template-columns:repeat(2,minmax(0,1fr));max-width:640px">
+          <input id="gar-nom" class="field-input text-sm" placeholder="Nom (ex. Hyundai Paris 15)" autocomplete="off">
+          <input id="gar-ville" class="field-input text-sm" placeholder="Localisation (ville / adresse)" autocomplete="off">
+          <input id="gar-tel" class="field-input text-sm" placeholder="Téléphone (optionnel)" autocomplete="off">
+          <input id="gar-rdv" class="field-input text-sm" placeholder="Lien pour prendre RDV (https://…)" autocomplete="off">
+        </div>
+        <button id="gar-add" type="button" class="btn btn-outline text-sm mt-2"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter</button>
+      </div>
+    </div>
+
     <!-- Coût par période -->
     <div class="card p-4 mb-6">
       <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
@@ -953,6 +978,42 @@
   });
   renderDrive();   // affiche les dossiers tout de suite (depuis les sinistres), sans attendre le chargement des fichiers
   loadSinDocs();   // puis récupère les fichiers déjà stockés et rafraîchit
+
+  // ---------- Garages & concessionnaires (annuaire perso + recherche Google Maps) ----------
+  (function initGarages(){
+    const $g = id => document.getElementById(id);
+    const escG = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    const urlG = u => { u = String(u || '').trim(); if (!u) return ''; if (!/^https?:\/\//i.test(u)) { if (/^[\w.-]+\.[a-z]{2,}/i.test(u)) u = 'https://' + u; else return ''; } return u; };
+    const getGarages = () => { try { const s = FP.settings.get(); return Array.isArray(s.garages) ? s.garages : []; } catch (e) { return []; } };
+    const saveGarages = list => { const s = FP.settings.get(); s.garages = list; FP.settings.save(s); };
+    let garSearch = '';
+    function renderGarages(){
+      const el = $g('gar-list'); if (!el) return;
+      const all = getGarages(); const q = FP.norm(garSearch).trim();
+      const cnt = $g('gar-count'); if (cnt) cnt.textContent = all.length ? `${all.length} garage(s)` : '';
+      if (!all.length) { el.innerHTML = '<div class="text-sm text-slate-400">Aucun garage enregistré. Ajoute-en un ci-dessous, ou cherche sur Google Maps.</div>'; return; }
+      const list = all.filter(g => !q || FP.norm(`${g.nom || ''} ${g.ville || ''}`).includes(q));
+      el.innerHTML = list.map(g => { const idx = all.indexOf(g); const rdv = urlG(g.rdv);
+        return `<div class="flex items-center gap-2 py-2 border-b border-slate-100">
+          <div class="flex-1 min-w-0"><div class="font-semibold text-slate-800 text-sm">${escG(g.nom || '—')}</div><div class="text-xs text-slate-500">${escG(g.ville || '')}${g.tel ? ' · ' + escG(g.tel) : ''}</div></div>
+          ${g.tel ? `<a href="tel:${escG(String(g.tel).replace(/\s+/g, ''))}" class="btn btn-outline text-xs">Appeler</a>` : ''}
+          ${rdv ? `<a href="${escG(rdv)}" target="_blank" rel="noopener" class="btn btn-dark text-xs"><i data-lucide="calendar-check" class="w-3.5 h-3.5"></i> Prendre RDV</a>` : ''}
+          <button type="button" class="btn btn-outline text-xs !px-2" data-gar-del="${idx}" title="Supprimer ce garage"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>
+        </div>`; }).join('') || '<div class="text-sm text-slate-400">Aucun résultat.</div>';
+      if (window.lucide) lucide.createIcons();
+    }
+    if ($g('gar-maps')) $g('gar-maps').addEventListener('click', () => { const loc = ($g('gar-loc').value || '').trim(); const query = encodeURIComponent('garage automobile' + (loc ? ' ' + loc : '')); window.open('https://www.google.com/maps/search/?api=1&query=' + query, '_blank', 'noopener'); });
+    if ($g('gar-search')) $g('gar-search').addEventListener('input', e => { garSearch = e.target.value; renderGarages(); });
+    if ($g('gar-add')) $g('gar-add').addEventListener('click', () => {
+      const g = { nom: ($g('gar-nom').value || '').trim(), ville: ($g('gar-ville').value || '').trim(), tel: ($g('gar-tel').value || '').trim(), rdv: ($g('gar-rdv').value || '').trim() };
+      if (!g.nom) { alert('Indique au moins le nom du garage.'); return; }
+      const list = getGarages(); list.push(g); saveGarages(list);
+      ['gar-nom', 'gar-ville', 'gar-tel', 'gar-rdv'].forEach(id => { const el = $g(id); if (el) el.value = ''; });
+      renderGarages(); if (FP.toast) FP.toast('Garage ajouté ✓');
+    });
+    if ($g('gar-list')) $g('gar-list').addEventListener('click', e => { const b = e.target.closest('[data-gar-del]'); if (!b) return; const i = +b.dataset.garDel; const list = getGarages(); if (!confirm(`Supprimer « ${(list[i] || {}).nom || ''} » ?`)) return; list.splice(i, 1); saveGarages(list); renderGarages(); });
+    renderGarages();
+  })();
 
   // ---------- Export CSV ----------
   FP.injectDataIO({
