@@ -2440,6 +2440,7 @@ FP.CG_SCAN_PROMPT = [
   "carburant : type d energie, champ P.3. Renvoie le libelle clair : Essence (ES), Diesel (GO/gazole), Electrique (EL), Hybride (EE/HE/GL), GPL (GP), GNV (GN).",
   "co2 : emissions de CO2 en g/km, champ V.7, entier.",
   "masse : masse en ordre de marche en kg, champ G, entier (PAS la masse en charge G.1).",
+  "prochainCT : date du prochain controle technique, champ X.1 (souvent ecrit 'X.1' ou 'Visite technique avant le' / 'Visite avant le' ou 'Date limite de validite'). Format AAAA-MM-JJ (date FUTURE). Si le champ X.1 est absent (vehicule neuf jamais controle), mets null.",
   "categorie : d apres le genre national J.1 et la carrosserie, renvoie une categorie SIMPLE parmi : Citadine, Berline, Break, SUV, Monospace, Utilitaire ; sinon null.",
   "IMPORTANT : ne devine ni n invente aucune valeur ; un champ illisible = null. Dates au format europeen jour/mois/annee (ex 05.11.2021 = 2021-11-05).",
 ].join("\n");
