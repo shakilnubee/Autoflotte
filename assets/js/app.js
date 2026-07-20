@@ -687,6 +687,7 @@ FP.addSociete = (name) => {
 FP.PROFIL_CHAMPS = [
   { key: 'mailExpediteur',     label: "E-mail d'envoi des amendes",       type: 'email', ph: 'ex. contact@masociete.fr' },
   { key: 'mailCopie',          label: 'E-mails en copie (séparés par ,)', type: 'text',  ph: 'ex. compta@masociete.fr, direction@masociete.fr' },
+  { key: 'mailDomaineEnvoi',   label: "Domaine d'envoi vérifié (Resend)", type: 'text',  ph: 'ex. resend.masociete.fr — le domaine validé dans Resend (le mail part de <ton adresse>@ce-domaine, réponse vers l’e-mail ci-dessus)' },
   { key: 'loueurNom',          label: 'Nom du loueur (leasing)',          type: 'text',  ph: 'ex. Arval, ALD, BPCE Car Lease…' },
   { key: 'proprietaireLeasing',label: 'Étiquette « propriétaire » leasing dans les véhicules', type: 'text', ph: 'ex. BPCE (doit correspondre au champ propriétaire des véhicules en leasing)' },
   { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom. Laisse vide pour le texte par défaut.' },
@@ -714,8 +715,9 @@ FP.societeProfil = () => {
   const base = (soc === 'PXP')
     ? { mailExpediteur: 'shakil.nubeebaccus@projectxparis.fr',
         mailCopie: 'shakil.nubeebaccus@projectxparis.fr,mallaury.herembert@projectxparis.fr',
+        mailDomaineEnvoi: 'resend.projectxparis.fr',
         loueurNom: 'BPCE Car Lease', proprietaireLeasing: 'BPCE' }
-    : { mailExpediteur: '', mailCopie: '', loueurNom: 'Leasing', proprietaireLeasing: '' };
+    : { mailExpediteur: '', mailCopie: '', mailDomaineEnvoi: '', loueurNom: 'Leasing', proprietaireLeasing: '' };
   // Seules les valeurs NON vides saisies écrasent la base (une base PXP ne se vide pas par accident).
   const over = Object.fromEntries(Object.entries(p).filter(([, v]) => v != null && String(v).trim() !== ''));
   return { ...base, ...over };

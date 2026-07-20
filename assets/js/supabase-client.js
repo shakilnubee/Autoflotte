@@ -24,20 +24,27 @@
   // (Resend n'accepte que les adresses d'un domaine vérifié → chaque société doit vérifier le sien.)
   FP.sendEmail = async (msg) => {
     msg = msg || {};
-    if (!msg.from) {
-      try {
-        const prof = (FP.societeProfil && FP.societeProfil()) || {};
-        const exp = String(prof.mailExpediteur || '').trim();
-        if (exp) {
-          // Nom d'expéditeur = nom de la société (Paramètres → Société), JAMAIS « Parc Pilot »
-          // (nom du produit). Si aucun nom de société propre → on n'affiche QUE l'adresse.
+    try {
+      const prof = (FP.societeProfil && FP.societeProfil()) || {};
+      const exp = String(prof.mailExpediteur || '').trim();
+      if (exp) {
+        // Réponses → la VRAIE adresse de la société (même quand on envoie via un domaine dédié).
+        if (!msg.replyTo) msg.replyTo = exp;
+        if (!msg.from) {
+          // Le FROM doit être sur le DOMAINE VÉRIFIÉ dans Resend. Si un domaine d'envoi est
+          // configuré (Paramètres → Société → « Domaine d'envoi vérifié »), on garde la même
+          // partie locale sur ce domaine (ex. shakil.nubeebaccus@resend.projectxparis.fr) →
+          // Resend accepte l'envoi, et la réponse part vers l'adresse réelle (reply-to).
+          const dom = String(prof.mailDomaineEnvoi || '').trim().replace(/^@/, '');
+          const fromAddr = dom ? (exp.split('@')[0] + '@' + dom) : exp;
+          // Nom d'expéditeur = nom de la société (Paramètres → Société), JAMAIS « Parc Pilot ».
           let nom = ''; try { nom = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
           nom = String(nom).replace(/[<>"]/g, '').trim();
           if (/^parc\s*pilot$/i.test(nom)) nom = '';
-          msg.from = nom ? `${nom} <${exp}>` : exp;
+          msg.from = nom ? `${nom} <${fromAddr}>` : fromAddr;
         }
-      } catch (e) {}
-    }
+      }
+    } catch (e) {}
     if (client.functions && typeof client.functions.invoke === 'function') {
       const { data, error } = await client.functions.invoke('send-email', { body: msg });
       if (error) {
