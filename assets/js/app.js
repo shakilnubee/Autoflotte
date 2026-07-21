@@ -1218,19 +1218,22 @@ FP.applyNavVisibility = () => {
 FP.NAV_ACCOUNT = ['guide.html', 'parametres.html', 'brochure.html', 'prix.html'];
 // Libellés des sections (éditables plus tard via réglages si besoin).
 FP.NAV_GROUP_LABELS = { workspace: 'Espace de travail', compte: 'Compte' };
-// Insère les intitulés de section (WORKSPACE / COMPTE) dans la sidebar, façon SaaS.
-// Idempotent (retire les anciens libellés avant de réinsérer) → sûr à ré-exécuter après
-// un changement d'ordre / de visibilité. Les liens « compte » étant déjà les derniers,
-// aucun lien ne « saute » : on ne fait qu'ajouter deux petits titres.
+// Range les onglets en 2 sections (Espace de travail / Compte) façon SaaS.
+// ⚠️ On PARTITIONNE réellement les liens (on les déplace dans leur groupe) — sinon un ordre
+// personnalisé (glisser-déposer) mélange les catégories ou colle les 2 titres en haut.
+// La catégorie d'un onglet est FIXE (FP.NAV_ACCOUNT) ; l'ordre DANS un groupe suit navOrder.
+// Idempotent : à ré-exécuter sans risque (retire les anciens titres d'abord). Doit être
+// appelé APRÈS applyNavOrder (dernier mot sur l'agencement du menu).
 FP.applyNavGroups = () => {
   document.querySelectorAll('aside nav').forEach(nav => {
     nav.querySelectorAll('.fp-nav-group').forEach(el => el.remove());
-    const links = Array.from(nav.querySelectorAll('a[data-nav]')).filter(a => a.style.display !== 'none');
+    const links = Array.from(nav.querySelectorAll('a[data-nav]'));
     if (!links.length) return;
-    const mkLabel = (txt) => { const d = document.createElement('div'); d.className = 'fp-nav-group'; d.textContent = txt; return d; };
-    nav.insertBefore(mkLabel(FP.NAV_GROUP_LABELS.workspace), links[0]);
-    const firstAccount = links.find(a => FP.NAV_ACCOUNT.includes(a.dataset.nav));
-    if (firstAccount) nav.insertBefore(mkLabel(FP.NAV_GROUP_LABELS.compte), firstAccount);
+    const ws = [], ac = [];
+    links.forEach(a => (FP.NAV_ACCOUNT.includes(a.dataset.nav) ? ac : ws).push(a));
+    const grp = (txt) => { const d = document.createElement('div'); d.className = 'fp-nav-group'; d.textContent = txt; return d; };
+    if (ws.length) { nav.appendChild(grp(FP.NAV_GROUP_LABELS.workspace)); ws.forEach(a => nav.appendChild(a)); }
+    if (ac.length) { nav.appendChild(grp(FP.NAV_GROUP_LABELS.compte)); ac.forEach(a => nav.appendChild(a)); }
   });
 };
 // Active le glisser-déposer des onglets directement dans le menu de gauche (toutes pages)
