@@ -1214,6 +1214,25 @@ FP.applyNavVisibility = () => {
     a.style.display = (set.has(k) && !FP.NAV_ALWAYS_VISIBLE.includes(k)) ? 'none' : '';
   });
 };
+// Onglets de la section « Compte » (bas de la sidebar) — le reste = « Espace de travail ».
+FP.NAV_ACCOUNT = ['guide.html', 'parametres.html', 'brochure.html', 'prix.html'];
+// Libellés des sections (éditables plus tard via réglages si besoin).
+FP.NAV_GROUP_LABELS = { workspace: 'Espace de travail', compte: 'Compte' };
+// Insère les intitulés de section (WORKSPACE / COMPTE) dans la sidebar, façon SaaS.
+// Idempotent (retire les anciens libellés avant de réinsérer) → sûr à ré-exécuter après
+// un changement d'ordre / de visibilité. Les liens « compte » étant déjà les derniers,
+// aucun lien ne « saute » : on ne fait qu'ajouter deux petits titres.
+FP.applyNavGroups = () => {
+  document.querySelectorAll('aside nav').forEach(nav => {
+    nav.querySelectorAll('.fp-nav-group').forEach(el => el.remove());
+    const links = Array.from(nav.querySelectorAll('a[data-nav]')).filter(a => a.style.display !== 'none');
+    if (!links.length) return;
+    const mkLabel = (txt) => { const d = document.createElement('div'); d.className = 'fp-nav-group'; d.textContent = txt; return d; };
+    nav.insertBefore(mkLabel(FP.NAV_GROUP_LABELS.workspace), links[0]);
+    const firstAccount = links.find(a => FP.NAV_ACCOUNT.includes(a.dataset.nav));
+    if (firstAccount) nav.insertBefore(mkLabel(FP.NAV_GROUP_LABELS.compte), firstAccount);
+  });
+};
 // Active le glisser-déposer des onglets directement dans le menu de gauche (toutes pages)
 FP.enableNavReorder = () => {
   document.querySelectorAll('aside nav').forEach(nav => {
@@ -1256,6 +1275,7 @@ FP.enableNavReorder = () => {
       clear();
       dragKey = null;
       FP.applyNavOrder();
+      FP.applyNavGroups();
     });
     nav.addEventListener('dragend', () => { clear(); dragKey = null; });
   });
@@ -4047,6 +4067,7 @@ document.addEventListener('DOMContentLoaded', () => {
   FP.applyCustomNavLabels();
   FP.applyNavOrder();
   FP.applyNavVisibility();
+  FP.applyNavGroups(); // intitulés de section (Espace de travail / Compte)
   if (_isAdmin) FP.enableNavReorder(); // glisser-déposer des onglets (admin only)
   // Appliquer les textes éditables custom (titres, sous-titres)
   FP.applyCustomTexts();
