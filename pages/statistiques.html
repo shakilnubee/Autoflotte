@@ -259,7 +259,7 @@
         <h3 class="font-bold text-slate-900">Coût total par véhicule (tout compris)</h3>
         <span id="tco-export-mount"></span>
       </div>
-      <p class="text-xs text-slate-400 px-6 pb-3">Factures (entretien, réparation, leasing, sinistre, achat) + assurance + TVS + amendes du conducteur. Assurance et TVS sont des montants <b>annuels</b> : pour comparer une année précise, choisis-la dans le filtre en haut.</p>
+      <p class="text-xs text-slate-400 px-6 pb-3">Factures d'usage (entretien, réparation, leasing, sinistre) + assurance + TVS + amendes du conducteur. <b>Hors prix d'achat du véhicule</b> (affiché à part dans « Prix d'acquisition » en haut). Assurance et TVS sont des montants <b>annuels</b> : pour comparer une année précise, choisis-la dans le filtre en haut.</p>
       <div class="scrollable">
         <table class="fp-table" id="tco-table">
           <thead></thead>
@@ -581,15 +581,17 @@
     });
     } // fin "if Chart chargé"
 
-    // TCO par véhicule (sur la période choisie) — TOUT ce que le véhicule coûte :
-    // factures (entretien/répa/leasing/sinistre/achat) + assurance + TVS + amendes du conducteur.
+    // TCO par véhicule (sur la période choisie) — le COÛT D'USAGE du véhicule :
+    // factures (entretien/répa/leasing/sinistre) + assurance + TVS + amendes du conducteur.
+    // ⚠️ Le PRIX D'ACHAT du véhicule est EXCLU du TCO (il est affiché à part dans le KPI
+    // « Prix d'acquisition » en haut de page) — le TCO reflète ce que le véhicule coûte à rouler.
     const primes = (FP.settings && FP.settings.get) ? (FP.settings.get().assurancePrimes || {}) : {};
     const normP = s => (s || '').toString().toUpperCase().replace(/\s/g, '');
     const findPrime = (immat) => { const k = normP(immat); for (const key in primes) { if (normP(key) === k) return primes[key]; } return null; };
     const normN = s => (s || '').toString().trim().toLowerCase();
     const amAll = (annee === 'all') ? (data.amendes || []) : (data.amendes || []).filter(a => (a.date || '').startsWith(annee));
     const _seenDrv = new Set();
-    const _EXC_TCO = new Set(['cession', 'carburant', 'peage', 'ulys']); // vente = entrée d'argent ; carburant/péages = onglet Total Fleet
+    const _EXC_TCO = new Set(['cession', 'carburant', 'peage', 'ulys', 'achat']); // vente = entrée d'argent ; carburant/péages = onglet Total Fleet ; achat = prix d'acquisition (affiché à part)
     tcoData = data.vehicules.map(v => {
       const fv = fact.filter(f => f.vehiculeImmat === v.immat);
       const factTotal = fv.filter(f => !_EXC_TCO.has((f.type || '').toLowerCase())).reduce((s, f) => s + (+f.montantTTC || 0), 0);
