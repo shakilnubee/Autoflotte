@@ -4049,6 +4049,26 @@ document.addEventListener('DOMContentLoaded', () => {
   // Injecter le bouton déconnexion en bas des sidebars
   FP.injectLogoutButton();
 
+  // === Menu hamburger mobile (sidebar en tiroir sur petit écran) ===
+  (function mobileNav() {
+    try {
+      if (document.querySelector('.fp-nav-toggle')) return;
+      const sb = document.querySelector('.fp-sidebar'); if (!sb) return;
+      const btn = document.createElement('button');
+      btn.className = 'fp-nav-toggle'; btn.type = 'button'; btn.setAttribute('aria-label', 'Ouvrir le menu');
+      btn.innerHTML = '<i data-lucide="menu"></i>';
+      const ov = document.createElement('div'); ov.className = 'fp-nav-overlay';
+      document.body.appendChild(btn); document.body.appendChild(ov);
+      const close = () => document.body.classList.remove('fp-nav-open');
+      btn.addEventListener('click', () => document.body.classList.toggle('fp-nav-open'));
+      ov.addEventListener('click', close);
+      // Refermer après un clic sur un lien de navigation
+      sb.addEventListener('click', (e) => { if (e.target.closest('a[data-nav], a[href]')) close(); });
+      window.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+      if (window.lucide) lucide.createIcons();
+    } catch (e) {}
+  })();
+
   // Listener pour la recherche globale (délégation)
   document.addEventListener('input', (e) => {
     const input = e.target.closest('.fp-search-input');
