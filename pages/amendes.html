@@ -22,6 +22,9 @@
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
 <link rel="stylesheet" href="../assets/css/styles.css?v=20260717n">
 <style>
+  .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+  .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
+  .kpi-link:active { transform: translateY(0); }
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
   .filter-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: white; }
@@ -170,22 +173,22 @@
 
     <!-- KPIs -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+      <div class="kpi kpi-link" id="kpi-card-total" title="Voir toutes les amendes"><div class="flex justify-between items-start gap-2"><div>
         <div class="kpi-label">Total amendes</div>
         <div class="kpi-value" id="kpi-total">—</div>
         <div class="kpi-delta" id="kpi-total-sub">—</div>
       </div><div class="kpi-ic"><i data-lucide="ticket"></i></div></div></div>
-      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+      <div class="kpi kpi-link" id="kpi-card-apayer" title="Voir les amendes à payer"><div class="flex justify-between items-start gap-2"><div>
         <div class="kpi-label">À payer</div>
         <div class="kpi-value" id="kpi-apayer" style="color: var(--fp-danger)">—</div>
         <div class="kpi-delta" id="kpi-apayer-montant" style="color: var(--fp-danger)">—</div>
       </div><div class="kpi-ic danger"><i data-lucide="alert-circle"></i></div></div></div>
-      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+      <div class="kpi kpi-link" id="kpi-card-payees" title="Voir les amendes payées"><div class="flex justify-between items-start gap-2"><div>
         <div class="kpi-label">Payées</div>
         <div class="kpi-value" id="kpi-payees" style="color: var(--fp-ok)">—</div>
         <div class="kpi-delta up" id="kpi-payees-montant">—</div>
       </div><div class="kpi-ic ok"><i data-lucide="check-circle-2"></i></div></div></div>
-      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+      <div class="kpi kpi-link" id="kpi-card-points" title="Voir les amendes avec retrait de points"><div class="flex justify-between items-start gap-2"><div>
         <div class="kpi-label">Points retirés</div>
         <div class="kpi-value" id="kpi-points" style="color: var(--fp-warn)">—</div>
         <div class="kpi-delta">cumul</div>
@@ -535,7 +538,7 @@
     openDrawer(a.id);
   }
   const DEFAULT_DATE_FROM = ''; // le filtrage par année se fait via le sélecteur (state.annee), pas par une date plancher
-  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false, selectedIds: new Set() };
+  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false, selectedIds: new Set(), onlyPoints: false };
   // Intention du prochain justificatif joint : 'pay' → statut « payée » (preuve de paiement) ;
   // 'designate' → statut « désignée » (preuve de désignation, exigée pour désigner).
   let justifIntent = 'pay';
@@ -658,6 +661,7 @@
       if (state.annee !== 'all' && anneeOf(a) !== state.annee) return false;
       // Filtre par statut (les payées restent visibles dans « Payées » / « Toutes »)
       if (state.statut !== 'all' && a.statut !== state.statut) return false;
+      if (state.onlyPoints && !((Number(a.points) || 0) > 0)) return false;
       if (state.motif !== 'all' && a.motif !== state.motif) return false;
       if (state.motifCat !== 'all' && categorize(a.motif) !== state.motifCat) return false;
       if (state.dateFrom && (a.date || '') < state.dateFrom) return false;
@@ -734,6 +738,7 @@
     if (state.motif !== 'all') actifs.push(state.motif);
     if (state.motifCat !== 'all') actifs.push((CAT_META[state.motifCat] || {}).label || state.motifCat);
     if (state.statut !== 'all') actifs.push(state.statut);
+    if (state.onlyPoints) actifs.push('avec retrait de points');
     if (state.dateFrom || state.dateTo) actifs.push(`${state.dateFrom ? FP.date(state.dateFrom) : '…'} → ${state.dateTo ? FP.date(state.dateTo) : '…'}`);
     $('sum-context').textContent = actifs.length ? '🔎 ' + actifs.join(' · ') : '';
 
@@ -2320,9 +2325,26 @@
       document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       state.statut = chip.dataset.value;
+      state.onlyPoints = false;
       renderTable();
     });
   });
+  // KPIs cliquables → filtrent le tableau sur la catégorie et défilent jusqu'à lui.
+  function applyKpiFilter(statut, onlyPoints) {
+    // On repart d'une vue propre (année en cours conservée) pour que le tableau
+    // corresponde EXACTEMENT au chiffre affiché sur la carte.
+    state.search = ''; state.motif = 'all'; state.motifCat = 'all';
+    state.dateFrom = DEFAULT_DATE_FROM; state.dateTo = '';
+    state.statut = statut; state.onlyPoints = !!onlyPoints;
+    $('search').value = ''; $('filter-motif').value = 'all';
+    $('filter-date-from').value = DEFAULT_DATE_FROM; $('filter-date-to').value = '';
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === statut));
+    renderTable(); renderCharts(); scrollToTable();
+  }
+  { const c = $('kpi-card-total');  if (c) c.addEventListener('click', () => applyKpiFilter('all', false)); }
+  { const c = $('kpi-card-apayer'); if (c) c.addEventListener('click', () => applyKpiFilter('à payer', false)); }
+  { const c = $('kpi-card-payees'); if (c) c.addEventListener('click', () => applyKpiFilter('payée', false)); }
+  { const c = $('kpi-card-points'); if (c) c.addEventListener('click', () => applyKpiFilter('all', true)); }
   $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderKPIs(); renderTable(); });
   $('filter-motif').addEventListener('change', e => { state.motif = e.target.value; renderTable(); });
   $('filter-date-from').addEventListener('change', e => { state.dateFrom = e.target.value; renderTable(); });
@@ -2335,7 +2357,7 @@
     renderTable();
   });
   $('reset-filters').addEventListener('click', () => {
-    Object.assign(state, { search: '', statut: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc' });
+    Object.assign(state, { search: '', statut: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', onlyPoints: false });
     $('search').value = ''; $('filter-motif').value = 'all'; $('filter-date-from').value = DEFAULT_DATE_FROM; $('filter-date-to').value = ''; $('sort-key').value = 'date';
     document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
     renderTable(); renderCharts();
