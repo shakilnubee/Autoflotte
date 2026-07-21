@@ -2457,7 +2457,7 @@ FP.SCAN_PROMPT = [
   "idNumero (numero de carte identite ou titre de sejour), idExpiration (AAAA-MM-JJ).",
   "personne : nom complet de la personne sur le document (permis, carte identite), sinon null.",
   "REGLES DATES : format europeen jour/mois/annee. Ex 11.03.2030 = 11 mars 2030 = 2030-03-11 (n inverse JAMAIS le jour et le mois). Convertis aussi les dates en lettres.",
-  "IMPORTANT : ne devine JAMAIS et n invente JAMAIS. Si tu ne lis pas clairement une valeur, surtout une date, mets null. Ne mets jamais la date du jour. Verifie chaque date avant de repondre.",
+  "IMPORTANT : remplis le MAXIMUM de champs. Une valeur PRESENTE sur le document doit TOUJOURS etre remplie, meme si elle est petite, penchee, de travers ou de qualite moyenne : fais l effort de la dechiffrer. Ne mets null QUE si l information est vraiment ABSENTE du document, ou totalement illisible (coupee, barbouillee, trop floue pour toute lecture serieuse). Distinction clef : 'difficile a lire mais presente' = tu la lis et tu la remplis ; 'absente ou illisible' = null. Tu ne dois JAMAIS INVENTER une valeur qui n est pas ecrite (surtout pas une date, un montant, un nom de conducteur) ni mettre la date du jour. Si tu hesites entre deux lectures possibles d une valeur PRESENTE, choisis la plus plausible plutot que de laisser vide. Verifie chaque date (jour/mois/annee) avant de repondre.",
   "Montants sans symbole euro ni separateur de milliers (ex 1466.48).",
 ].join("\n");
 
