@@ -1176,6 +1176,7 @@ FP.DEFAULT_NAV_LABELS = {
   'factures.html':     'Factures',
   'contrats.html':     'Contrats',
   'guide.html':        'Guide',
+  'aide.html':         'Aide',
   'parametres.html':   'Paramètres',
   'brochure.html':     'Brochure',
   'prix.html':         'Tarifs',
@@ -1221,7 +1222,7 @@ FP.applyNavVisibility = () => {
   });
 };
 // Onglets de la section « Compte » (bas de la sidebar) — le reste = « Espace de travail ».
-FP.NAV_ACCOUNT = ['guide.html', 'parametres.html', 'brochure.html', 'prix.html'];
+FP.NAV_ACCOUNT = ['guide.html', 'aide.html', 'parametres.html', 'brochure.html', 'prix.html'];
 // Libellés des sections (éditables plus tard via réglages si besoin).
 FP.NAV_GROUP_LABELS = { workspace: 'Espace de travail', compte: 'Compte' };
 // Range les onglets en 2 sections (Espace de travail / Compte) façon SaaS.
