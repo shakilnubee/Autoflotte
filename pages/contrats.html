@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260721c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260721d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260721c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260721d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260721c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260721d">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -314,10 +314,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260721c"></script>
-<script src="../assets/js/supabase-client.js?v=20260721c"></script>
-<script src="../assets/js/data.js?v=20260721c"></script>
-<script src="../assets/js/app.js?v=20260721c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260721d"></script>
+<script src="../assets/js/supabase-client.js?v=20260721d"></script>
+<script src="../assets/js/data.js?v=20260721d"></script>
+<script src="../assets/js/app.js?v=20260721d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -341,7 +341,9 @@
     // pour qu'un véhicule dont le propriétaire = BPCE n'ait jamais l'air « hors leasing » à cause
     // d'une config loueurs incomplète (étiquette propriétaire oubliée).
     const prof = (FP.societeProfil ? FP.societeProfil() : {});
-    const propProfil = String(prof.proprietaireLeasing || '').trim();
+    // « Nom du loueur » sert aussi d'étiquette « propriétaire » (champ propriétaire des véhicules) :
+    // plus besoin d'un 2e champ séparé. On garde proprietaireLeasing en priorité pour PXP (=BPCE).
+    const propProfil = String(prof.proprietaireLeasing || prof.loueurNom || '').trim();
     if (propProfil) {
       const couvert = list.some(l => String(l.prop || '').trim().toLowerCase() === propProfil.toLowerCase());
       if (!couvert) list = [...list, { nom: prof.loueurNom || 'Leasing', prop: propProfil }];
@@ -822,6 +824,13 @@
     return v ? (v.immat || '') : '';
   }
   function renderLocalease(){
+    // La section « Localease (Ayvens) » est SPÉCIFIQUE À PXP (contrats/PDF hardcodés PXP).
+    // Pour toute autre société, on masque entièrement cette zone : elle utilise le leasing
+    // générique (basé sur ses propres données), vierge tant qu'aucune donnée n'est saisie.
+    const estPXP = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP');
+    const sec = document.querySelector('[data-section="localease"]');
+    if (sec) sec.style.display = estPXP ? '' : 'none';
+    if (!estPXP) return;
     const list = getLocalease();
     const tbody = $('tbody-localease'); if (!tbody) return;
     const mensTotal = list.reduce((s,c)=>s+(Number(c.loyerTTC)||0),0);

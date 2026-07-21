@@ -683,15 +683,21 @@ FP.addSociete = (name) => {
   try { localStorage.setItem(FP.SOCIETES_KEY, JSON.stringify(arr)); } catch (e) {}
   return true;
 };
+// Modèles d'e-mail par défaut (amende) — source UNIQUE, réutilisée par amendes.html ET
+// pré-affichée dans Paramètres pour que l'utilisateur les voie et puisse les personnaliser.
+FP.MAIL_DEFAUT = {
+  paiement: `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`,
+  designation: `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.`,
+};
 // Champs du profil société (rendu générique : le formulaire de Paramètres itère dessus).
+// Un champ avec `default` est PRÉ-REMPLI avec ce texte quand la valeur est vide (l'utilisateur le voit).
 FP.PROFIL_CHAMPS = [
   { key: 'mailExpediteur',     label: "E-mail d'envoi des amendes",       type: 'email', ph: 'ex. contact@masociete.fr' },
   { key: 'mailCopie',          label: 'E-mails en copie (séparés par ,)', type: 'text',  ph: 'ex. compta@masociete.fr, direction@masociete.fr' },
   { key: 'mailDomaineEnvoi',   label: "Domaine d'envoi vérifié (Resend)", type: 'text',  ph: 'ex. resend.masociete.fr — le domaine validé dans Resend (le mail part de <ton adresse>@ce-domaine, réponse vers l’e-mail ci-dessus)' },
-  { key: 'loueurNom',          label: 'Nom du loueur (leasing)',          type: 'text',  ph: 'ex. Arval, ALD, BPCE Car Lease…' },
-  { key: 'proprietaireLeasing',label: 'Étiquette « propriétaire » leasing dans les véhicules', type: 'text', ph: 'ex. BPCE (doit correspondre au champ propriétaire des véhicules en leasing)' },
-  { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom. Laisse vide pour le texte par défaut.' },
-  { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}. Laisse vide pour le texte par défaut.' },
+  { key: 'loueurNom',          label: 'Nom du loueur (leasing)',          type: 'text',  ph: 'ex. Arval, Ayvens, BPCE Car Lease… (doit correspondre au « propriétaire » des véhicules en leasing)' },
+  { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom.', default: FP.MAIL_DEFAUT.paiement },
+  { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.designation },
 ];
 // Contrat d'assurance de la société ACTIVE (assureur + n° de police), paramétrable dans Contrats.
 // Défaut PXP = SWISSLIFE (valeur historique) ; une nouvelle société démarre vide.
@@ -717,7 +723,7 @@ FP.societeProfil = () => {
         mailCopie: 'shakil.nubeebaccus@projectxparis.fr,mallaury.herembert@projectxparis.fr',
         mailDomaineEnvoi: 'resend.projectxparis.fr',
         loueurNom: 'BPCE Car Lease', proprietaireLeasing: 'BPCE' }
-    : { mailExpediteur: '', mailCopie: '', mailDomaineEnvoi: '', loueurNom: 'Leasing', proprietaireLeasing: '' };
+    : { mailExpediteur: '', mailCopie: '', mailDomaineEnvoi: '', loueurNom: '', proprietaireLeasing: '' };
   // Seules les valeurs NON vides saisies écrasent la base (une base PXP ne se vide pas par accident).
   const over = Object.fromEntries(Object.entries(p).filter(([, v]) => v != null && String(v).trim() !== ''));
   return { ...base, ...over };
