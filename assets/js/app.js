@@ -1027,6 +1027,11 @@ FP.ignore = {
   clearPrefix(prefix) { try { const s = FP.settings.get(); s.ignores = s.ignores || {}; Object.keys(s.ignores).forEach(k => { if (k.indexOf(prefix) === 0) delete s.ignores[k]; }); FP.settings.save(s); } catch (e) {} },
   countPrefix(prefix) { return Object.keys(this._all()).filter(k => k.indexOf(prefix) === 0).length; },
 };
+// Un véhicule dont le CT (resp. l'assurance) a été marqué « ignoré » dans la conformité
+// (ex. véhicule étranger sans contrôle technique français) NE doit plus générer d'alerte
+// ni fausser les calculs. Clé partagée avec la page Statistiques ('conf:ct:<id>' / 'conf:assur:<id>').
+FP.ctIgnored    = (v) => !!(v && FP.ignore && FP.ignore.has('conf:ct:' + v.id));
+FP.assurIgnored = (v) => !!(v && FP.ignore && FP.ignore.has('conf:assur:' + v.id));
 
 // Sécurité : empêche « Retour arrière » de faire « page précédente » (et de perdre une saisie)
 // quand le focus n'est pas dans un champ éditable.
@@ -1524,7 +1529,7 @@ FP.santeVehicule = (v) => {
   if (st && st !== 'actif') return null; // seulement les véhicules en service
   let score = 100; const raisons = [];
   // Contrôle technique
-  const jCT = (v.prochainCT && v.prochainCT !== '—') ? FP.joursRestants(v.prochainCT) : null;
+  const jCT = (v.prochainCT && v.prochainCT !== '—' && !FP.ctIgnored(v)) ? FP.joursRestants(v.prochainCT) : null;
   if (jCT !== null && jCT !== undefined) {
     if (jCT < 0) { score -= 40; raisons.push(`CT dépassé (${-jCT} j)`); }
     else if (jCT < 30) { score -= 25; raisons.push(`CT dans ${jCT} j`); }
@@ -1586,6 +1591,7 @@ FP.buildAlertes = (data) => {
   // --- Contrôles techniques ---
   (data.vehicules || []).forEach(v => {
     if (horsFlotte(v)) return;
+    if (FP.ctIgnored(v)) return; // véhicule étranger / CT ignoré → pas d'alerte
     if (!v.prochainCT || v.prochainCT === '—') return;
     const d = new Date(v.prochainCT);
     if (isNaN(d)) return;
@@ -1877,7 +1883,7 @@ FP.buildEcheances = (data) => {
   (data.vehicules || []).forEach(v => {
     const veh = `${v.immat} · ${v.marque} ${v.modele}`;
     const tgt = 'vehicules.html?veh=' + v.id;
-    if (v.prochainCT && v.prochainCT !== '—') push(v.prochainCT, 'Contrôle technique', 'CT — ' + v.immat, veh, tgt);
+    if (v.prochainCT && v.prochainCT !== '—' && !FP.ctIgnored(v)) push(v.prochainCT, 'Contrôle technique', 'CT — ' + v.immat, veh, tgt);
     if (FP.concerneAntiPollution(v) && v.antiPollution && v.antiPollution !== '—') push(v.antiPollution, 'Anti-pollution', 'Anti-pollution — ' + v.immat, veh, tgt);
     // Fin de leasing (BPCE)
     const l = FP.leasingInfo && FP.leasingInfo(v);
@@ -3694,11 +3700,11 @@ FP.smartAnswers = (q) => {
   const MOIS = { janvier: '01', fevrier: '02', mars: '03', avril: '04', mai: '05', juin: '06', juillet: '07', aout: '08', septembre: '09', octobre: '10', novembre: '11', decembre: '12' };
   if (has('ct', 'controle', 'technique')) {
     if (has('expire', 'depasse', 'perime', 'perimee')) {
-      const l = vehs.filter(v => { const j = (v.prochainCT && v.prochainCT !== '—') ? FP.joursRestants(v.prochainCT) : null; return j !== null && j < 0; });
+      const l = vehs.filter(v => { if (FP.ctIgnored(v)) return false; const j = (v.prochainCT && v.prochainCT !== '—') ? FP.joursRestants(v.prochainCT) : null; return j !== null && j < 0; });
       out.push({ icon: '⚠️', label: `${l.length} CT dépassé${l.length > 1 ? 's' : ''}`, sub: l.slice(0, 4).map(v => v.immat).join(', ') || '—', url: pref + 'renouvellements.html' });
     } else {
       const mk = Object.keys(MOIS).find(m => raw.includes(m));
-      if (mk) { const mm = MOIS[mk]; const l = vehs.filter(v => v.prochainCT && v.prochainCT.slice(5, 7) === mm); out.push({ icon: '🛠️', label: `${l.length} CT en ${mk}`, sub: l.slice(0, 4).map(v => v.immat).join(', ') || 'aucun', url: pref + 'renouvellements.html' }); }
+      if (mk) { const mm = MOIS[mk]; const l = vehs.filter(v => !FP.ctIgnored(v) && v.prochainCT && v.prochainCT.slice(5, 7) === mm); out.push({ icon: '🛠️', label: `${l.length} CT en ${mk}`, sub: l.slice(0, 4).map(v => v.immat).join(', ') || 'aucun', url: pref + 'renouvellements.html' }); }
     }
   }
 

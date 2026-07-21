@@ -16,15 +16,19 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260717n">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260721a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260717n"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260721a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260717n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260721a">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
   .stat-card { background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; }
+  .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+  .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
+  .kpi-link:active { transform: translateY(0); }
+  .kpi-link.kpi-on { outline: 2px solid var(--fp-accent); outline-offset: 1px; }
 </style>
 <script>
 (function(){
@@ -203,9 +207,9 @@
         <div id="conf-donut" style="flex:0 0 auto"></div>
         <div class="flex-1" style="min-width:280px">
           <div class="grid grid-cols-3 gap-4 mb-3">
-            <div class="kpi"><div class="kpi-label">Véhicules en règle</div><div class="kpi-value" id="kpi-conf-ok" style="color:#16a34a">—</div><div class="kpi-delta" id="kpi-conf-sub">—</div></div>
-            <div class="kpi"><div class="kpi-label">CT à traiter</div><div class="kpi-value" id="kpi-conf-ct" style="color: var(--fp-danger)">—</div><div class="kpi-delta">dépassé / manquant</div></div>
-            <div class="kpi"><div class="kpi-label">Assurance manquante</div><div class="kpi-value" id="kpi-conf-assur" style="color: var(--fp-warn, #F59E0B)">—</div><div class="kpi-delta">non renseignée</div></div>
+            <div class="kpi kpi-link" id="conf-card-all" title="Voir tous les véhicules à régulariser"><div class="kpi-label">Véhicules en règle</div><div class="kpi-value" id="kpi-conf-ok" style="color:#16a34a">—</div><div class="kpi-delta" id="kpi-conf-sub">—</div></div>
+            <div class="kpi kpi-link" id="conf-card-ct" title="Voir les véhicules dont le CT est à traiter"><div class="kpi-label">CT à traiter</div><div class="kpi-value" id="kpi-conf-ct" style="color: var(--fp-danger)">—</div><div class="kpi-delta">dépassé / manquant</div></div>
+            <div class="kpi kpi-link" id="conf-card-assur" title="Voir les véhicules sans assurance renseignée"><div class="kpi-label">Assurance manquante</div><div class="kpi-value" id="kpi-conf-assur" style="color: var(--fp-warn, #F59E0B)">—</div><div class="kpi-delta">non renseignée</div></div>
           </div>
           <div id="conf-list" class="text-sm"></div>
         </div>
@@ -270,10 +274,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260717n"></script>
-<script src="../assets/js/supabase-client.js?v=20260717n"></script>
-<script src="../assets/js/data.js?v=20260717n"></script>
-<script src="../assets/js/app.js?v=20260717n"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260721a"></script>
+<script src="../assets/js/supabase-client.js?v=20260721a"></script>
+<script src="../assets/js/data.js?v=20260721a"></script>
+<script src="../assets/js/app.js?v=20260721a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -394,7 +398,7 @@
       const raisons = [];
       if (ctBad) { ctKO++; raisons.push(ctVal === null ? 'CT non renseigné' : 'CT dépassé'); }
       if (assurBad) { assurKO++; raisons.push('assurance manquante'); }
-      if (!ctBad && !assurBad) ok++; else nonConf.push({ v, raisons });
+      if (!ctBad && !assurBad) ok++; else nonConf.push({ v, raisons, ctBad, assurBad });
     });
     const pct = Math.round(ok / vs.length * 100);
     set('kpi-conf-ok', pct + ' %');
@@ -403,10 +407,16 @@
     set('kpi-conf-assur', String(assurKO));
     const donut = $('conf-donut');
     if (donut && FP.donutHTML) { donut.innerHTML = FP.donutHTML(pct, { size: 108, color: pct >= 90 ? '#16a34a' : (pct >= 70 ? '#F59E0B' : '#DC2626'), label: pct + '%' }); }
+    // Indicateur visuel de la carte active (filtre en cours)
+    ['all', 'ct', 'assur'].forEach(f => { const c = $('conf-card-' + f); if (c) c.classList.toggle('kpi-on', confFilter === f && f !== 'all'); });
     const list = $('conf-list');
     if (list) {
       const nbIgnores = IG.countPrefix('conf:');
-      const shown = confExpanded ? nonConf : nonConf.slice(0, 8);
+      const filtered = confFilter === 'ct' ? nonConf.filter(x => x.ctBad)
+        : confFilter === 'assur' ? nonConf.filter(x => x.assurBad)
+        : nonConf;
+      const shown = confExpanded ? filtered : filtered.slice(0, 8);
+      const filtLabel = confFilter === 'ct' ? 'CT à traiter' : (confFilter === 'assur' ? 'Assurance manquante' : 'À régulariser');
       const rows = shown.map(x => {
         const crits = [];
         if (x.raisons.some(r => r.indexOf('CT') === 0)) crits.push('ct');
@@ -416,24 +426,32 @@
              <span class="font-mono font-semibold text-slate-700">${(x.v.immat || '—')}</span>
              <span class="text-xs text-right" style="color:#b45309">${x.raisons.join(' · ')}</span>
            </a>
-           <button type="button" class="text-xs text-slate-400 hover:text-slate-700 flex-shrink-0" data-conf-ign="${encodeURIComponent(x.v.id)}" data-conf-crits="${crits.join(',')}" title="Ignorer (ne plus compter)">🙈 ignorer</button>
+           <button type="button" class="text-xs text-slate-400 hover:text-slate-700 flex-shrink-0" data-conf-ign="${encodeURIComponent(x.v.id)}" data-conf-crits="${crits.join(',')}" title="Ne plus compter ce véhicule (ex. véhicule étranger sans contrôle technique français) — retiré aussi des alertes">🙈 ignorer</button>
          </div>`;
       }).join('');
-      list.innerHTML = nonConf.length
-        ? '<div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">À régulariser</div>' + rows
-          + (nonConf.length > 8 ? `<button type="button" id="conf-toggle" class="text-xs mt-1" style="color:var(--fp-accent);background:none;border:none;cursor:pointer">${confExpanded ? '▲ Réduire' : '▼ Voir les ' + (nonConf.length - 8) + ' autre(s)'}</button>` : '')
+      const filtHdr = `<div class="flex items-center justify-between mb-1"><div class="text-xs font-bold text-slate-500 uppercase tracking-wide">${filtLabel}${confFilter !== 'all' ? ` · ${filtered.length}` : ''}</div>${confFilter !== 'all' ? '<button type="button" id="conf-filter-clear" class="text-xs" style="color:var(--fp-accent);background:none;border:none;cursor:pointer">✕ tout afficher</button>' : ''}</div>`;
+      list.innerHTML = filtered.length
+        ? filtHdr + rows
+          + (filtered.length > 8 ? `<button type="button" id="conf-toggle" class="text-xs mt-1" style="color:var(--fp-accent);background:none;border:none;cursor:pointer">${confExpanded ? '▲ Réduire' : '▼ Voir les ' + (filtered.length - 8) + ' autre(s)'}</button>` : '')
           + (nbIgnores ? `<div class="text-xs text-slate-400 mt-2">${nbIgnores} info(s) ignorée(s) · <button type="button" id="conf-restore" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline">tout réafficher</button></div>` : '')
-        : '<div class="text-sm text-emerald-600">✓ Toute la flotte en service est en règle.'
+        : filtHdr + '<div class="text-sm text-emerald-600">✓ ' + (confFilter === 'ct' ? 'Aucun CT à traiter.' : confFilter === 'assur' ? 'Aucune assurance manquante.' : 'Toute la flotte en service est en règle.')
           + (nbIgnores ? ` <button type="button" id="conf-restore" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline;font-size:12px">réafficher ${nbIgnores} ignorée(s)</button>` : '') + '</div>';
     }
   }
   let confExpanded = false;
+  let confFilter = 'all'; // 'all' | 'ct' | 'assur' — piloté par les cartes cliquables
   { const cl = $('conf-list'); if (cl) cl.addEventListener('click', (e) => {
       const ign = e.target.closest('[data-conf-ign]');
       if (ign && window.FP && FP.ignore) { e.preventDefault(); const id = decodeURIComponent(ign.dataset.confIgn); (ign.dataset.confCrits || '').split(',').filter(Boolean).forEach(c => FP.ignore.set('conf:' + c + ':' + id, true)); renderConformite(); return; }
       if (e.target.closest('#conf-toggle')) { confExpanded = !confExpanded; renderConformite(); return; }
+      if (e.target.closest('#conf-filter-clear')) { confFilter = 'all'; confExpanded = false; renderConformite(); return; }
       if (e.target.closest('#conf-restore') && window.FP && FP.ignore) { FP.ignore.clearPrefix('conf:'); confExpanded = false; renderConformite(); return; }
     }); }
+  // Cartes du bloc conformité cliquables → filtrent la liste « à régulariser » en dessous.
+  function setConfFilter(f) { confFilter = (confFilter === f && f !== 'all') ? 'all' : f; confExpanded = false; renderConformite(); const l = $('conf-list'); if (l) l.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  { const c = $('conf-card-all');   if (c) c.addEventListener('click', () => setConfFilter('all')); }
+  { const c = $('conf-card-ct');    if (c) c.addEventListener('click', () => setConfFilter('ct')); }
+  { const c = $('conf-card-assur'); if (c) c.addEventListener('click', () => setConfFilter('assur')); }
   rebuildAnneeFilter();
   updateTvsKpi();
   renderCO2();
