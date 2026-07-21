@@ -1226,21 +1226,25 @@ FP.NAV_ACCOUNT = ['guide.html', 'aide.html', 'parametres.html', 'brochure.html',
 // Libellés des sections (éditables plus tard via réglages si besoin).
 FP.NAV_GROUP_LABELS = { workspace: 'Espace de travail', compte: 'Compte' };
 // Range les onglets en 2 sections (Espace de travail / Compte) façon SaaS.
-// ⚠️ On PARTITIONNE réellement les liens (on les déplace dans leur groupe) — sinon un ordre
-// personnalisé (glisser-déposer) mélange les catégories ou colle les 2 titres en haut.
-// La catégorie d'un onglet est FIXE (FP.NAV_ACCOUNT) ; l'ordre DANS un groupe suit navOrder.
-// Idempotent : à ré-exécuter sans risque (retire les anciens titres d'abord). Doit être
-// appelé APRÈS applyNavOrder (dernier mot sur l'agencement du menu).
+// ⚠️ Robuste : on NE déplace PAS les liens dans le DOM (ça se faisait casser par le
+// ré-ordonnancement / le prefetch → les 2 titres finissaient collés en haut). On utilise
+// `order` (CSS, nav en flex-column) : Espace=order 0, liens workspace=1, Compte=2, liens
+// compte=3. L'ordre DANS un groupe suit l'ordre DOM (donc navOrder). La catégorie est FIXE
+// (FP.NAV_ACCOUNT). Un ré-ordonnancement du DOM ne peut plus casser l'affichage.
+// Idempotent (réutilise les mêmes 2 titres via data-grp) → sûr à ré-exécuter.
 FP.applyNavGroups = () => {
   document.querySelectorAll('aside nav').forEach(nav => {
-    nav.querySelectorAll('.fp-nav-group').forEach(el => el.remove());
     const links = Array.from(nav.querySelectorAll('a[data-nav]'));
     if (!links.length) return;
-    const ws = [], ac = [];
-    links.forEach(a => (FP.NAV_ACCOUNT.includes(a.dataset.nav) ? ac : ws).push(a));
-    const grp = (txt) => { const d = document.createElement('div'); d.className = 'fp-nav-group'; d.textContent = txt; return d; };
-    if (ws.length) { nav.appendChild(grp(FP.NAV_GROUP_LABELS.workspace)); ws.forEach(a => nav.appendChild(a)); }
-    if (ac.length) { nav.appendChild(grp(FP.NAV_GROUP_LABELS.compte)); ac.forEach(a => nav.appendChild(a)); }
+    let hasAc = false;
+    links.forEach(a => { const acc = FP.NAV_ACCOUNT.includes(a.dataset.nav); a.style.order = acc ? '3' : '1'; if (acc && a.style.display !== 'none') hasAc = true; });
+    const ensure = (key, txt, ord) => {
+      let d = nav.querySelector('.fp-nav-group[data-grp="' + key + '"]');
+      if (!d) { d = document.createElement('div'); d.className = 'fp-nav-group'; d.setAttribute('data-grp', key); nav.appendChild(d); }
+      d.textContent = txt; d.style.order = ord; return d;
+    };
+    ensure('ws', FP.NAV_GROUP_LABELS.workspace, '0');
+    ensure('ac', FP.NAV_GROUP_LABELS.compte, '2').style.display = hasAc ? '' : 'none';
   });
 };
 // Active le glisser-déposer des onglets directement dans le menu de gauche (toutes pages)
