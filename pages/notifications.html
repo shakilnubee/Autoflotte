@@ -278,17 +278,19 @@
     { k: 'prenom', label: 'Conducteur à attribuer' }, { k: 'montant', label: 'Montant' },
     { k: 'numeroAvis', label: "N° d'avis" }, { k: 'motif', label: 'Motif' }, { k: 'date', label: 'Date' },
   ];
-  const missOf = (x, fields) => { const m = []; fields.forEach(f => { if (f.skip && f.skip(x)) return; const e = f.empty ? f.empty(x) : isEmptyV(f.val ? f.val(x) : x[f.k]); if (e) m.push(f.label); }); return m; };
-  const compItem = (nom, miss, target) => ({ nom, miss, target });
+  // Renvoie les champs manquants sous forme [{k,label}]. Si ignPrefix est fourni, on saute
+  // les champs marqués « ignorés » (ex. véhicule étranger, moto sans CO₂/masse…) — persistant.
+  const missOf = (x, fields, ignPrefix) => { const m = []; fields.forEach(f => { if (f.skip && f.skip(x)) return; if (ignPrefix && window.FP && FP.ignore && FP.ignore.has(ignPrefix + f.k)) return; const e = f.empty ? f.empty(x) : isEmptyV(f.val ? f.val(x) : x[f.k]); if (e) m.push({ k: f.k, label: f.label }); }); return m; };
+  const compItem = (nom, miss, target, ignPrefix) => ({ nom, miss, target, ignPrefix: ignPrefix || '' });
   function sectionCompHTML(title, icon, items) {
     const n = items.length;
-    const rows = items.map(it => `<a href="${esc(it.target)}" class="notif" style="text-decoration:none;align-items:flex-start">
+    const rows = items.map(it => `<div class="notif" style="align-items:flex-start">
         <div class="flex-1 min-w-0">
-          <div class="font-semibold text-slate-900">${esc(it.nom)}</div>
-          <div class="mt-1 flex flex-wrap gap-1">${it.miss.map(m => `<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 8px;border-radius:9999px">${esc(m)}</span>`).join('')}</div>
+          <a href="${esc(it.target)}" class="font-semibold text-slate-900" style="text-decoration:none">${esc(it.nom)}</a>
+          <div class="mt-1 flex flex-wrap gap-1">${it.miss.map(m => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 4px 2px 8px;border-radius:9999px">${esc(m.label)}${it.ignPrefix ? `<button type="button" data-ign="${esc(it.ignPrefix + m.k)}" title="Ignorer — ne plus demander cette info (non concerné)" style="border:none;background:rgba(146,64,14,.15);color:#92400E;cursor:pointer;border-radius:9999px;width:16px;height:16px;line-height:1;font-size:10px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>` : ''}</span>`).join('')}</div>
         </div>
-        <span class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap">Compléter →</span>
-      </a>`).join('');
+        <a href="${esc(it.target)}" class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap;text-decoration:none">Compléter →</a>
+      </div>`).join('');
     return `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="${icon}" class="w-5 h-5"></i> ${title} <span class="badge ${n ? 'badge-danger' : ''}" ${n ? '' : 'style="background:#E2E8F0;color:#475569"'}>${n}</span></h2>`
       + (n ? `<div class="space-y-2" style="max-width:840px">${rows}</div>` : `<p class="text-sm text-emerald-600">✓ Rien à compléter ici.</p>`) + `</div>`;
   }
@@ -313,10 +315,10 @@
   function renderComplet() {
     const box = document.getElementById('suivi-complet'); if (!box) return;
     const actifs = (data.vehicules || []).filter(v => !(FP.estVendu && FP.estVendu(v)));
-    const vehItems = []; actifs.forEach(v => { const m = missOf(v, VEH_FIELDS); if (m.length) vehItems.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), m, `vehicules.html?veh=${encodeURIComponent(v.id)}`)); });
+    const vehItems = []; actifs.forEach(v => { const pfx = 'complet:veh:' + v.id + ':'; const m = missOf(v, VEH_FIELDS, pfx); if (m.length) vehItems.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), m, `vehicules.html?veh=${encodeURIComponent(v.id)}`, pfx)); });
     const conds = (data.conducteurs || []).filter(c => c && c.masque !== true && (c.manuel === true || !isEmptyV(c.nom) || !isEmptyV(c.prenom)));
-    const condItems = []; conds.forEach(c => { const m = missOf(c, COND_FIELDS); if (m.length) { const nom = [c.prenom, c.nom].filter(x => !isEmptyV(x)).join(' ') || c.name || c.key || 'Conducteur'; condItems.push(compItem(nom, m, `conducteurs.html?cond=${encodeURIComponent(c.key || '')}`)); } });
-    const amItems = []; (data.amendes || []).forEach(a => { const m = missOf(a, AMENDE_FIELDS); if (m.length) amItems.push(compItem(`${(a.motif || 'Amende')} · ${a.date ? FP.date(a.date) : 'date ?'}`, m, `amendes.html?amende=${encodeURIComponent(a.id || '')}`)); });
+    const condItems = []; conds.forEach(c => { const pfx = 'complet:cond:' + (c.key || '') + ':'; const m = missOf(c, COND_FIELDS, pfx); if (m.length) { const nom = [c.prenom, c.nom].filter(x => !isEmptyV(x)).join(' ') || c.name || c.key || 'Conducteur'; condItems.push(compItem(nom, m, `conducteurs.html?cond=${encodeURIComponent(c.key || '')}`, pfx)); } });
+    const amItems = []; (data.amendes || []).forEach(a => { const pfx = 'complet:am:' + (a.id || '') + ':'; const m = missOf(a, AMENDE_FIELDS, pfx); if (m.length) amItems.push(compItem(`${(a.motif || 'Amende')} · ${a.date ? FP.date(a.date) : 'date ?'}`, m, `amendes.html?amende=${encodeURIComponent(a.id || '')}`, pfx)); });
     const cfg = [];
     try {
       const prof = FP.societeProfil ? FP.societeProfil() : {}; const soc = (FP.settings.get().societe) || {};
@@ -331,10 +333,13 @@
     const total = vehItems.length + condItems.length + amItems.length + cfg.length;
     const intro = total ? `<p class="text-sm text-slate-500 mb-5">${total} élément(s) à compléter. Clique sur une ligne pour aller la remplir directement.</p>`
       : `<p class="text-emerald-600 font-semibold mb-5">🎉 Tout est complet — aucune info manquante !</p>`;
+    const nbIgn = (window.FP && FP.ignore && FP.ignore.countPrefix('complet:')) || 0;
+    const restoreHTML = nbIgn ? `<p class="text-xs text-slate-400 mt-4">${nbIgn} info(s) marquée(s) « non concerné » et masquée(s) · <button type="button" id="complet-restore" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline;font-size:12px">tout réafficher</button></p>` : '';
     box.innerHTML = intro + cgFillBanner() + cfgHTML
       + sectionCompHTML('Véhicules à compléter', 'car', vehItems)
       + sectionCompHTML('Conducteurs à compléter', 'users', condItems)
-      + sectionCompHTML('Amendes à compléter', 'ticket', amItems);
+      + sectionCompHTML('Amendes à compléter', 'ticket', amItems)
+      + restoreHTML;
     lucide.createIcons();
   }
 
@@ -354,6 +359,10 @@
 
   // Bouton « Compléter depuis les cartes grises » : remplit les champs VIDES depuis FP.CG_DATA.
   document.getElementById('suivi-complet').addEventListener('click', async (e) => {
+    // ✕ sur un tag → ignorer ce champ pour cet élément (persistant, par société)
+    const ign = e.target.closest('[data-ign]');
+    if (ign) { e.preventDefault(); e.stopPropagation(); if (window.FP && FP.ignore) { FP.ignore.set(ign.dataset.ign, true); renderComplet(); } return; }
+    if (e.target.closest('#complet-restore')) { e.preventDefault(); if (window.FP && FP.ignore) { FP.ignore.clearPrefix('complet:'); renderComplet(); } return; }
     const b = e.target.closest('#cg-fill-btn'); if (!b) return;
     const cg = (window.FP && FP.CG_DATA) || {};
     const st = document.getElementById('cg-fill-status');
