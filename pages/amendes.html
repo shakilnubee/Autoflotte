@@ -1439,19 +1439,43 @@
       openDrawer(id0);
       return;
     }
-    // Cherche la date de paiement dans le justificatif (OCR), sinon date du jour
-    let dpaie = null;
-    try { dpaie = await extractDatePaiement(file); } catch (e) { console.warn('[justif] date non lue', e); }
-    const mention = `Payée le ${FP.date(dpaie || new Date().toISOString().slice(0, 10))}`;
+    // Lit le justificatif via l'IA : date de paiement ET montant réellement payé
+    let dpaie = null, mpaye = null;
+    try { const info = await extractJustifInfo(file); dpaie = info.datePaiement; mpaye = info.montantPaye; }
+    catch (e) { console.warn('[justif] lecture', e); }
+
+    const patch = { justifUrl: url, statut: 'payée' };
+    // Montant réellement payé : si le justificatif indique un montant différent du montant
+    // enregistré (ex. réglé avant échéance → minoré), proposer de l'ajuster. On demande TOUJOURS
+    // confirmation (un montant ne doit jamais être modifié en silence sur une lecture automatique)
+    // et on conserve le montant initial dans le commentaire. Réversible via Ctrl+Z.
+    const majored = !!(a.majoree && a.montantMajore);
+    const base = majored ? Number(a.montantMajore) : (Number(a.montant) || 0);
+    let montantNote = '', mpayeOk = null;
+    if (mpaye != null && base && Math.abs(mpaye - base) >= 0.5) {
+      const moins = mpaye < base;
+      const q = `Le justificatif indique ${FP.euroPrecis(mpaye)} payé, au lieu de ${FP.euroPrecis(base)} enregistré`
+        + (moins ? ' (réglé avant échéance ?).' : '.')
+        + `\n\nMettre à jour le montant de l'amende à ${FP.euroPrecis(mpaye)} ?`;
+      if (confirm(q)) { mpayeOk = mpaye; montantNote = ` · réglée ${FP.euroPrecis(mpaye)} (initial ${FP.euroPrecis(base)})`; }
+    }
+
+    const mention = `Payée le ${FP.date(dpaie || new Date().toISOString().slice(0, 10))}${montantNote}`;
     // Préserve un éventuel commentaire existant, sans dupliquer la mention "Payée le …"
     const prev = (a.commentaire || '').replace(/^Payée le [^\n]*\n?/i, '').trim();
     const newComment = prev ? `${mention}\n${prev}` : mention;
+    patch.commentaire = newComment;
     FP.history.commit();
     a.justifUrl = url; a.statut = 'payée'; a.commentaire = newComment;
+    if (mpayeOk != null) {
+      if (majored) { a.montantMajore = mpayeOk; patch.montantMajore = mpayeOk; }
+      else { a.montant = mpayeOk; patch.montant = mpayeOk; }
+    }
     const id = a.id;
     setJustifWatch(id, false); // justificatif présent → plus d'alerte
     renderKPIs(); renderTable(); renderCharts();
-    FP.persist.update('amendes', id, { justifUrl: url, statut: 'payée', commentaire: newComment });
+    FP.persist.update('amendes', id, patch);
+    if (mpayeOk != null && FP.toast) FP.toast('💶 Montant ajusté à ' + FP.euroPrecis(mpayeOk));
     openDrawer(id); // rouvre la fiche à jour (lien + commentaire « Payée le … »)
   }
   // Lit le justificatif (PDF/image) et tente d'en extraire la date de paiement
@@ -1480,6 +1504,31 @@
     if (!m) return null;
     let y = m[3]; if (y.length === 2) y = '20' + y;
     return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  }
+  // Prompt IA pour un JUSTIFICATIF de paiement : date payée + montant réellement réglé.
+  const JUSTIF_PROMPT = [
+    "Ce document est un JUSTIFICATIF DE PAIEMENT d une amende / contravention (confirmation de telepaiement amendes.gouv/ANTAI, recu de carte bancaire, virement, ticket, capture d ecran).",
+    "Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour, avec ces cles (mets null si l info est absente ou illisible) :",
+    "datePaiement : la date a laquelle le paiement a ete effectue, format AAAA-MM-JJ (jour/mois/annee europeen). C est une date passee ou du jour, JAMAIS future.",
+    "montantPaye : le MONTANT REELLEMENT PAYE en euros, nombre a point decimal sans symbole ni separateur de milliers (ex 35.00). C est le montant debite / regle (libelle souvent 'Montant paye', 'Montant regle', 'Montant de la transaction', 'Total'). En cas de paiement rapide il est MINORE (plus petit que l amende forfaitaire). NE prends JAMAIS comme montant un numero d avis, de transaction, de carte, une reference, un code ou une date.",
+    "IMPORTANT : ne devine ni n invente rien ; une valeur illisible = null.",
+  ].join("\n");
+  // Lit un justificatif de paiement via l'IA (scan-doc) : { datePaiement, montantPaye }.
+  // Secours : OCR local pour la date si l'IA n'a rien renvoyé.
+  async function extractJustifInfo(file) {
+    let datePaiement = null, montantPaye = null;
+    try {
+      const ia = await FP.scanIA(file, 'justificatif', JUSTIF_PROMPT);
+      if (ia) {
+        if (ia.datePaiement) { const d = String(ia.datePaiement).slice(0, 10); if (/^\d{4}-\d{2}-\d{2}$/.test(d)) datePaiement = d; }
+        if (ia.montantPaye != null && ia.montantPaye !== '') {
+          const n = Number(String(ia.montantPaye).replace(',', '.').replace(/[^0-9.]/g, ''));
+          if (isFinite(n) && n > 0) montantPaye = Math.round(n * 100) / 100;
+        }
+      }
+    } catch (e) { console.warn('[justif] IA indisponible', e); }
+    if (!datePaiement) { try { datePaiement = await extractDatePaiement(file); } catch (_) {} }
+    return { datePaiement, montantPaye };
   }
   // Copie un texte dans le presse-papier + petit retour visuel sur le bouton
   function copierTexte(txt, btn) {
