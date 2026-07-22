@@ -2230,7 +2230,12 @@
     ];
     const CAT_LABELS = CATS.map(c => c.rx).join('|');
     function parseConso(raw){
-      const t = (raw || '').replace(SP, ' ');
+      // ⚠️ On COLLAPSE les espaces multiples en un seul : certaines factures TotalEnergies
+      // s'extraient avec plusieurs espaces (« Type véh.   03 ») → les regex à espace unique
+      // ne trouvaient plus AUCUNE carte (conso par conducteur vide). Le collapse rend la
+      // lecture robuste quel que soit l'espacement du PDF. (parseFac/parseReleve utilisent
+      // déjà \s+, seul ce détail par carte était rigide.)
+      const t = (raw || '').replace(SP, ' ').replace(/[ \t]+/g, ' ');
       const idx = t.indexOf('Votre Facture et son détail');
       const det = idx >= 0 ? t.slice(idx) : t;
       const supRe = new RegExp(
