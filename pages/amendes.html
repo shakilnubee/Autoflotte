@@ -542,7 +542,7 @@
     openDrawer(a.id);
   }
   const DEFAULT_DATE_FROM = ''; // le filtrage par année se fait via le sélecteur (state.annee), pas par une date plancher
-  const state = { search: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false, selectedIds: new Set(), onlyPoints: false };
+  const state = { search: '', conducteur: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false, selectedIds: new Set(), onlyPoints: false };
   // Intention du prochain justificatif joint : 'pay' → statut « payée » (preuve de paiement) ;
   // 'designate' → statut « désignée » (preuve de désignation, exigée pour désigner).
   let justifIntent = 'pay';
@@ -670,6 +670,9 @@
       if (state.motifCat !== 'all' && categorize(a.motif) !== state.motifCat) return false;
       if (state.dateFrom && (a.date || '') < state.dateFrom) return false;
       if (state.dateTo && (a.date || '') > state.dateTo) return false;
+      // Filtre STRICT par conducteur : sur le prénom RÉEL de l'amende (jamais le commentaire) —
+      // sinon un nom cité dans un commentaire d'une autre amende ressortirait à tort.
+      if (state.conducteur && FP.normPrenom(a.prenom) !== FP.normPrenom(state.conducteur)) return false;
       if (q && !(FP.norm(`${a.prenom} ${a.motif} ${a.numeroAvis} ${a.commentaire}`).includes(q))) return false;
       return true;
     });
@@ -738,6 +741,7 @@
     $('sum-points').textContent = sumPoints;
 
     const actifs = [];
+    if (state.conducteur) actifs.push('conducteur : ' + state.conducteur);
     if (state.search.trim()) actifs.push(`« ${state.search.trim()} »`);
     if (state.motif !== 'all') actifs.push(state.motif);
     if (state.motifCat !== 'all') actifs.push((CAT_META[state.motifCat] || {}).label || state.motifCat);
@@ -861,14 +865,15 @@
   }
   function setConducteurFilter(name) {
     const nm = (name || '').trim();
-    // Re-clic sur le même = on enlève le filtre
-    const same = !!nm && state.search.trim().toLowerCase() === nm.toLowerCase();
-    // On RÉINITIALISE les autres filtres (statut / année / motif / dates / points) pour être
-    // SÛR d'afficher toutes les amendes de la personne, puis on filtre sur son nom.
+    // Re-clic sur le même conducteur = on enlève le filtre
+    const same = !!nm && FP.normPrenom(state.conducteur) === FP.normPrenom(nm);
+    // Filtre STRICT par conducteur (sur le prénom de l'amende, PAS la recherche texte → un nom
+    // cité dans un commentaire ne ressort pas). On réinitialise les autres filtres pour être
+    // sûr d'afficher TOUTES ses amendes.
     state.statut = 'all'; state.motif = 'all'; state.motifCat = 'all'; state.onlyPoints = false;
-    state.dateFrom = DEFAULT_DATE_FROM; state.dateTo = '';
-    state.search = same ? '' : nm;
-    if ($('search')) $('search').value = state.search;
+    state.dateFrom = DEFAULT_DATE_FROM; state.dateTo = ''; state.search = '';
+    state.conducteur = same ? '' : nm;
+    if ($('search')) $('search').value = '';
     if ($('filter-motif')) $('filter-motif').value = 'all';
     if ($('filter-date-from')) $('filter-date-from').value = DEFAULT_DATE_FROM;
     if ($('filter-date-to')) $('filter-date-to').value = '';
@@ -2372,7 +2377,7 @@
     renderTable();
   });
   $('reset-filters').addEventListener('click', () => {
-    Object.assign(state, { search: '', statut: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', onlyPoints: false });
+    Object.assign(state, { search: '', conducteur: '', statut: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', onlyPoints: false });
     $('search').value = ''; $('filter-motif').value = 'all'; $('filter-date-from').value = DEFAULT_DATE_FROM; $('filter-date-to').value = ''; $('sort-key').value = 'date';
     document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
     renderTable(); renderCharts();
