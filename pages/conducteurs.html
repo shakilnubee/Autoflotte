@@ -1934,12 +1934,22 @@
     if (!raw) { _condParamDone = true; return; }
     const want = (FP.normPrenom ? FP.normPrenom(raw) : String(raw).trim().toLowerCase());
     // Correspondance souple : clé exacte, clé normalisée, ou nom normalisé (robuste au format)
-    const d = drivers.find(x => x.key === raw)
+    let d = drivers.find(x => x.key === raw)
           || drivers.find(x => x.key === want)
           || drivers.find(x => (FP.normPrenom ? FP.normPrenom(x.name) : '') === want);
+    // Pas de fiche existante ? On en FABRIQUE une à la volée à partir des amendes de cette
+    // personne — un prénom du podium peut ne pas avoir de véhicule ni de fiche de référence.
+    if (!d && want) {
+      const ams = (data.amendes || []).filter(a => (FP.normPrenom ? FP.normPrenom(a.prenom) : '') === want);
+      if (ams.length) {
+        const nom = (ams.find(a => a.prenom && a.prenom.trim()) || {}).prenom || raw;
+        d = { name: String(nom).trim(), key: want, vehicules: [], amendes: ams, _adhoc: true };
+        drivers.push(d);
+      }
+    }
     if (d) { _condParamDone = true; openDrawer(d.key); return; }
-    // Pas encore trouvé (données live en cours de chargement) → on reconstruit et on réessaie
-    // un court moment, sans dépendre uniquement de l'événement fp:data-ready.
+    // Rien encore (données live pas prêtes) → on reconstruit et on réessaie un court moment,
+    // sans dépendre uniquement de l'événement fp:data-ready.
     if (_condTries++ < 25) { try { drivers = buildDrivers(); } catch (e) {} setTimeout(openCondFromUrl, 300); }
   }
   openCondFromUrl();
