@@ -4130,6 +4130,34 @@ document.addEventListener('DOMContentLoaded', () => {
   // Injecter le bouton déconnexion en bas des sidebars
   FP.injectLogoutButton();
 
+  // Animations 3D au survol des bulles KPI (global — validé). La carte s'incline vers le
+  // curseur + reflet qui suit la souris. Ré-appliqué après un re-rendu de données
+  // (fp:data-ready) pour les cartes recréées. Respecte prefers-reduced-motion.
+  FP.enable3DTilt = () => {
+    try {
+      if (!window.matchMedia || !matchMedia('(prefers-reduced-motion: no-preference)').matches) return;
+      document.querySelectorAll('.kpi').forEach(card => {
+        if (!card.querySelector('.fp-glare')) { const g = document.createElement('span'); g.className = 'fp-glare'; card.appendChild(g); }
+        if (card.dataset.fpTilt) return; card.dataset.fpTilt = '1';
+        let raf = 0;
+        card.addEventListener('pointermove', (e) => {
+          if (e.pointerType === 'touch') return;
+          const r = card.getBoundingClientRect(); if (!r.width) return;
+          const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+          if (raf) cancelAnimationFrame(raf);
+          raf = requestAnimationFrame(() => {
+            const rx = (0.5 - py) * 8, ry = (px - 0.5) * 8;
+            card.style.transform = `perspective(720px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateY(-3px)`;
+            const g = card.querySelector('.fp-glare'); if (g) { g.style.setProperty('--gx', (px * 100).toFixed(1) + '%'); g.style.setProperty('--gy', (py * 100).toFixed(1) + '%'); }
+          });
+        });
+        card.addEventListener('pointerleave', () => { if (raf) cancelAnimationFrame(raf); card.style.transform = ''; });
+      });
+    } catch (e) { /* effet purement cosmétique */ }
+  };
+  FP.enable3DTilt();
+  window.addEventListener('fp:data-ready', () => { try { FP.enable3DTilt(); } catch (e) {} });
+
   // === Menu hamburger mobile (sidebar en tiroir sur petit écran) ===
   (function mobileNav() {
     try {
