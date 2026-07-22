@@ -57,6 +57,9 @@
   .fp-btn-sm:hover { background: rgba(20,184,166,.08); border-color: var(--fp-accent); }
   .drive-upload { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 150px; border: 2px dashed var(--fp-border); border-radius: 10px; background: #f8fafc; color: #64748b; cursor: pointer; font-size: 12px; font-weight: 600; }
   .drive-upload:hover { border-color: var(--fp-accent); color: var(--fp-primary); background: rgba(20,184,166,.06); }
+  .drive-file[draggable="true"] { cursor: grab; }
+  .drive-file.fp-dragging { opacity: .4; }
+  .drive-folder.fp-drop-hover, [data-drop-root].fp-drop-hover { outline: 2px dashed var(--fp-accent); outline-offset: 2px; background: rgba(20,184,166,.10); border-radius: 6px; }
   .drive-upload svg { width: 26px; height: 26px; }
 </style>
 <script>
@@ -869,8 +872,8 @@
       const allFiles = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl));
       const fileTile = d => {
         const u = escapeHtml(d.url || '');
-        return `<div class="drive-file">
-          <a href="${u}" target="_blank" rel="noopener" class="drive-file-preview">${isImg(d.url) ? `<img src="${u}" loading="lazy">` : `<i data-lucide="file-text"></i>`}</a>
+        return `<div class="drive-file" draggable="true" data-file-id="${escapeHtml(d.id)}" title="Glisser vers un sous-dossier pour ranger ce fichier">
+          <a href="${u}" target="_blank" rel="noopener" draggable="false" class="drive-file-preview">${isImg(d.url) ? `<img src="${u}" loading="lazy" draggable="false">` : `<i data-lucide="file-text"></i>`}</a>
           <div class="drive-file-name" title="${escapeHtml(d.label || '')}">${escapeHtml(d.label || 'fichier')}</div>
           <button type="button" class="drive-file-del" data-drive-del="${escapeHtml(d.id)}" title="Supprimer">✕</button>
         </div>`;
@@ -879,7 +882,7 @@
       const fileInput = '<input type="file" id="drive-file-input" accept="image/*,application/pdf" multiple class="hidden">';
       if (!driveSub){
         // Racine du dossier véhicule : sous-dossiers (années) + fichiers non classés
-        crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <b>${escapeHtml(pl)}</b>${vehLbl}`;
+        crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <b data-drop-root title="Déposer ici = ranger à la racine du dossier">${escapeHtml(pl)}</b>${vehLbl}`;
         const subs = getSubs(pl).slice().sort((a, b) => b.localeCompare(a)); // années récentes d'abord
         const subTiles = subs.map(name => {
           const n = allFiles.filter(d => docSub(d.id) === name).length;
@@ -897,7 +900,7 @@
           + fileInput;
       } else {
         // Dans un sous-dossier
-        crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <button type="button" id="drive-back-plate" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">${escapeHtml(pl)}</button>${vehLbl} › <b>${escapeHtml(driveSub)}</b>`;
+        crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <button type="button" id="drive-back-plate" data-drop-root class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit" title="Déposer ici = sortir du sous-dossier">${escapeHtml(pl)}</button>${vehLbl} › <b>${escapeHtml(driveSub)}</b>`;
         const files = allFiles.filter(d => docSub(d.id) === driveSub);
         view.innerHTML = '<div class="drive-grid">' + uploadTile + files.map(fileTile).join('') + '</div>' + fileInput;
       }
@@ -981,6 +984,30 @@
     if (e.target.closest('#drive-back')){ driveFolder = null; driveSub = null; renderDrive(); return; }
     if (e.target.closest('#drive-back-plate')){ driveSub = null; renderDrive(); return; }
   });
+  // --- Glisser-déposer : ranger un fichier dans un sous-dossier (ou le sortir vers la racine) ---
+  // On ne change QUE le sous-dossier (réglages `sinistreDocSub`), jamais le véhicule → aucun risque
+  // sur les données. Cibles de dépôt : un sous-dossier (data-sub) ou le fil d'Ariane racine (data-drop-root).
+  let dragFileId = null;
+  const dropTarget = (t) => t && (t.closest && (t.closest('[data-sub]') || t.closest('[data-drop-root]')));
+  $('drive-view').addEventListener('dragstart', (e) => {
+    const card = e.target.closest('[data-file-id]'); if (!card) return;
+    dragFileId = card.dataset.fileId; card.classList.add('fp-dragging');
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragFileId); } catch (_) {}
+  });
+  const clearDnd = () => { dragFileId = null; document.querySelectorAll('.fp-dragging,.fp-drop-hover').forEach(el => el.classList.remove('fp-dragging','fp-drop-hover')); };
+  $('drive-view').addEventListener('dragend', clearDnd);
+  const onOver = (e) => { if (!dragFileId) return; const t = dropTarget(e.target); if (!t) return; e.preventDefault(); try { e.dataTransfer.dropEffect = 'move'; } catch (_) {} t.classList.add('fp-drop-hover'); };
+  const onLeave = (e) => { const t = dropTarget(e.target); if (t) t.classList.remove('fp-drop-hover'); };
+  const onDrop = (e) => {
+    if (!dragFileId) return;
+    const t = dropTarget(e.target); if (!t) return;
+    e.preventDefault();
+    const sub = t.hasAttribute('data-drop-root') ? null : (t.dataset.sub || null);
+    const id = dragFileId;
+    if ((docSub(id) || null) !== (sub || null)) { setDocSub(id, sub); renderDrive(); if (FP.toast) FP.toast(sub ? ('Rangé dans « ' + sub + ' »') : 'Rangé à la racine du dossier'); }
+    clearDnd();
+  };
+  ['drive-view', 'drive-crumb'].forEach(id => { const el = $(id); if (!el) return; el.addEventListener('dragover', onOver); el.addEventListener('dragleave', onLeave); el.addEventListener('drop', onDrop); });
   renderDrive();   // affiche les dossiers tout de suite (depuis les sinistres), sans attendre le chargement des fichiers
   loadSinDocs();   // puis récupère les fichiers déjà stockés et rafraîchit
 
