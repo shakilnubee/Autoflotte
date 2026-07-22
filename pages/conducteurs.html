@@ -1927,35 +1927,44 @@
     },
   });
 
-  // Ouverture directe d'une fiche conducteur via l'URL (?cond=clé), ex : depuis une fiche véhicule
+  // Résout un conducteur par clé/nom normalisé ; s'il n'a pas de fiche, en FABRIQUE une à la
+  // volée depuis ses amendes (un prénom du podium peut ne pas avoir de véhicule ni de fiche).
+  // Pousse le résultat dans `drivers` pour qu'openDrawer(key) le trouve.
+  function resolveCondDriver(want) {
+    if (!want) return null;
+    let d = drivers.find(x => x.key === want)
+         || drivers.find(x => (FP.normPrenom ? FP.normPrenom(x.name) : '') === want);
+    if (!d) {
+      const ams = (data.amendes || []).filter(a => (FP.normPrenom ? FP.normPrenom(a.prenom) : '') === want);
+      if (ams.length) {
+        const nom = (ams.find(a => a.prenom && a.prenom.trim()) || {}).prenom || want;
+        d = { name: String(nom).trim(), key: want, vehicules: [], amendes: ams, _adhoc: true };
+        drivers.push(d);
+      }
+    }
+    return d || null;
+  }
+  // Ouverture directe d'une fiche conducteur via l'URL (?cond=clé), ex : podium amendes / fiche véhicule.
   function openCondFromUrl() {
     if (_condParamDone) return;
     const raw = new URLSearchParams(window.location.search).get('cond');
     if (!raw) { _condParamDone = true; return; }
     const want = (FP.normPrenom ? FP.normPrenom(raw) : String(raw).trim().toLowerCase());
-    // Correspondance souple : clé exacte, clé normalisée, ou nom normalisé (robuste au format)
-    let d = drivers.find(x => x.key === raw)
-          || drivers.find(x => x.key === want)
-          || drivers.find(x => (FP.normPrenom ? FP.normPrenom(x.name) : '') === want);
-    // Pas de fiche existante ? On en FABRIQUE une à la volée à partir des amendes de cette
-    // personne — un prénom du podium peut ne pas avoir de véhicule ni de fiche de référence.
-    if (!d && want) {
-      const ams = (data.amendes || []).filter(a => (FP.normPrenom ? FP.normPrenom(a.prenom) : '') === want);
-      if (ams.length) {
-        const nom = (ams.find(a => a.prenom && a.prenom.trim()) || {}).prenom || raw;
-        d = { name: String(nom).trim(), key: want, vehicules: [], amendes: ams, _adhoc: true };
-        drivers.push(d);
-      }
-    }
+    const d = resolveCondDriver(want);
     if (d) { _condParamDone = true; openDrawer(d.key); return; }
-    // Rien encore (données live pas prêtes) → on reconstruit et on réessaie un court moment,
-    // sans dépendre uniquement de l'événement fp:data-ready.
+    // Rien encore (données live pas prêtes) → on reconstruit et on réessaie un court moment.
     if (_condTries++ < 25) { try { drivers = buildDrivers(); } catch (e) {} setTimeout(openCondFromUrl, 300); }
   }
   openCondFromUrl();
 
-  // Rafraîchit quand les véhicules/amendes Supabase arrivent (les conducteurs en dérivent)
-  document.addEventListener('fp:data-ready', () => { if (suppressRender) return; drivers = buildDrivers(); renderKPIs(); renderGrid(); openCondFromUrl(); });
+  // Quand les véhicules/amendes Supabase arrivent : on reconstruit, ET si une fiche est ouverte
+  // via ?cond=, on la RÉOUVRE pour afficher les amendes live (sinon elle resterait vide).
+  document.addEventListener('fp:data-ready', () => {
+    if (suppressRender) return;
+    drivers = buildDrivers(); renderKPIs(); renderGrid();
+    if (currentDriverKey && $('drawer').classList.contains('open')) { resolveCondDriver(currentDriverKey); openDrawer(currentDriverKey); }
+    else openCondFromUrl();
+  });
 </script>
 </body>
 </html>
