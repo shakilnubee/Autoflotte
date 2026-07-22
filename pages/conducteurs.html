@@ -1868,7 +1868,7 @@
   // conducteurs). app.js a déjà réinjecté ces données depuis le cache `fp_data_cache` AVANT ce
   // script. Donc si ce cache existe, on affiche TOUT DE SUITE le bon nombre (visites suivantes =
   // 0 clignotement). Sinon on attend les vraies données pour faire UN SEUL rendu (jamais "43 → 46").
-  let _condParamDone = false; // (déclaré AVANT firstRender qui appelle openCondFromUrl → évite l'erreur de portée)
+  let _condParamDone = false, _condTries = 0; // (déclarés AVANT firstRender qui appelle openCondFromUrl → évite l'erreur de portée / TDZ)
   function firstRender() { drivers = buildDrivers(); renderKPIs(); renderGrid(); openCondFromUrl(); }
   // data.js (+ cache) contient véhicules, amendes ET conducteurs à jour → on affiche le bon
   // nombre TOUT DE SUITE. La requête live qui suit ne fait que confirmer (mêmes chiffres).
@@ -1930,9 +1930,17 @@
   // Ouverture directe d'une fiche conducteur via l'URL (?cond=clé), ex : depuis une fiche véhicule
   function openCondFromUrl() {
     if (_condParamDone) return;
-    const key = new URLSearchParams(window.location.search).get('cond');
-    if (!key) return;
-    if (drivers.find(d => d.key === key)) { _condParamDone = true; openDrawer(key); }
+    const raw = new URLSearchParams(window.location.search).get('cond');
+    if (!raw) { _condParamDone = true; return; }
+    const want = (FP.normPrenom ? FP.normPrenom(raw) : String(raw).trim().toLowerCase());
+    // Correspondance souple : clé exacte, clé normalisée, ou nom normalisé (robuste au format)
+    const d = drivers.find(x => x.key === raw)
+          || drivers.find(x => x.key === want)
+          || drivers.find(x => (FP.normPrenom ? FP.normPrenom(x.name) : '') === want);
+    if (d) { _condParamDone = true; openDrawer(d.key); return; }
+    // Pas encore trouvé (données live en cours de chargement) → on reconstruit et on réessaie
+    // un court moment, sans dépendre uniquement de l'événement fp:data-ready.
+    if (_condTries++ < 25) { try { drivers = buildDrivers(); } catch (e) {} setTimeout(openCondFromUrl, 300); }
   }
   openCondFromUrl();
 
