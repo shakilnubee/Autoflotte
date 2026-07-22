@@ -3597,7 +3597,7 @@ FP.injectLogoutButton = () => {
         cursor: pointer;
         transition: background .12s, color .12s;
       ">
-        <span style="font-size: .95rem">↪</span>
+        <span class="fp-user-av" style="width:26px;height:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"></span>
         <span class="fp-logout-label">Déconnexion</span>
         <span class="fp-user-email" style="margin-left: auto; font-size: .65rem; opacity: .5; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
       </button>
@@ -3614,7 +3614,7 @@ FP.injectLogoutButton = () => {
       if (FP.auth) FP.auth.signOut();
     });
 
-    // Afficher l'email de l'utilisateur connecté
+    // Afficher l'email + l'avatar de l'utilisateur connecté
     if (FP.auth) {
       FP.auth.getUser().then(user => {
         if (user && user.email) {
@@ -3623,9 +3623,20 @@ FP.injectLogoutButton = () => {
           const emailEl = div.querySelector('.fp-user-email');
           if (emailEl) emailEl.textContent = user.email;
         }
+        const url = user && user.user_metadata && user.user_metadata.avatar_url;
+        FP._avatarUrl = url || null;
+        FP.renderUserAvatar();
       });
     }
   });
+};
+// (Ré)affiche l'avatar dans la sidebar : photo si l'utilisateur en a choisi une, sinon initiales.
+FP.renderUserAvatar = () => {
+  const url = FP._avatarUrl, email = FP._userEmail || '';
+  const inner = url
+    ? `<img src="${String(url).replace(/"/g, '&quot;')}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover">`
+    : (FP.avatarHTML ? FP.avatarHTML(email, 26) : '');
+  document.querySelectorAll('.fp-user-av').forEach(el => { el.innerHTML = inner; });
 };
 
 FP.injectGlobalSearch = () => {

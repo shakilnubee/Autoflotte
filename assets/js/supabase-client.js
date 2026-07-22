@@ -87,6 +87,13 @@
       await client.auth.signOut();
       window.location.href = loginPath;
     },
+    /** Photo d'avatar de l'utilisateur (cosmétique) — stockée dans user_metadata.avatar_url.
+     *  (Pas un champ de sécurité → OK dans user_metadata, contrairement au rôle/société.) */
+    async updateAvatar(url) {
+      const { data, error } = await client.auth.updateUser({ data: { avatar_url: url || null } });
+      if (error) throw error;
+      return data && data.user;
+    },
     /** Force la présence d'une session, sinon redirige vers /login.html */
     async requireAuth() {
       const user = await this.getUser();
