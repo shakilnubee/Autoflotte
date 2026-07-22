@@ -1038,6 +1038,35 @@ FP.ignore = {
 // ni fausser les calculs. Clé partagée avec la page Statistiques ('conf:ct:<id>' / 'conf:assur:<id>').
 FP.ctIgnored    = (v) => !!(v && FP.ignore && FP.ignore.has('conf:ct:' + v.id));
 FP.assurIgnored = (v) => !!(v && FP.ignore && FP.ignore.has('conf:assur:' + v.id));
+// Véhicule vendu / supprimé → on ARCHIVE ses documents (dossier Sinistres « Drive ») dans un
+// sous-dossier « OUT » automatiquement : on crée le sous-dossier s'il manque et on y déplace
+// tous ses fichiers. Ne touche QUE le classement (settings.sinistreSous / sinistreDocSub),
+// jamais les fichiers ni le véhicule → sûr. Renvoie le nombre de fichiers archivés.
+FP.archiveVehicleDocs = async (immats) => {
+  try {
+    if (!(FP.db && FP.db.select && FP.settings)) return 0;
+    const normPl = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const pls = new Set((Array.isArray(immats) ? immats : [immats]).map(normPl).filter(Boolean));
+    if (!pls.size) return 0;
+    const r = await FP.db.select('documents');
+    if (!r || r.error) return 0;
+    const docs = (r.data || []).filter(d => d && d.type === 'sinistre-doc' && pls.has(normPl(d.vehiculeId)));
+    if (!docs.length) return 0;
+    // Une SEULE lecture/écriture des réglages (évite les écrasements quand on archive un lot).
+    const s = FP.settings.get();
+    s.sinistreSous = s.sinistreSous || {};
+    s.sinistreDocSub = s.sinistreDocSub || {};
+    pls.forEach(pl => {
+      if (!docs.some(d => normPl(d.vehiculeId) === pl)) return; // ce véhicule n'a pas de fichier
+      const subs = Array.isArray(s.sinistreSous[pl]) ? s.sinistreSous[pl].slice() : [];
+      if (!subs.some(x => String(x).toUpperCase() === 'OUT')) subs.push('OUT');
+      s.sinistreSous[pl] = subs;
+    });
+    docs.forEach(d => { s.sinistreDocSub[d.id] = 'OUT'; });
+    FP.settings.save(s);
+    return docs.length;
+  } catch (e) { console.warn('[archiveVehicleDocs]', e); return 0; }
+};
 
 // Sécurité : empêche « Retour arrière » de faire « page précédente » (et de perdre une saisie)
 // quand le focus n'est pas dans un champ éditable.

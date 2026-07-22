@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260721g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260721h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260721g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260721h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260721g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260721h">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -717,12 +717,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260721g"></script>
-<script src="../assets/js/supabase-client.js?v=20260721g"></script>
-<script src="../assets/js/data.js?v=20260721g"></script>
-<script src="../assets/js/fleet-docs.js?v=20260721g"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260721g"></script>
-<script src="../assets/js/app.js?v=20260721g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260721h"></script>
+<script src="../assets/js/supabase-client.js?v=20260721h"></script>
+<script src="../assets/js/data.js?v=20260721h"></script>
+<script src="../assets/js/fleet-docs.js?v=20260721h"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260721h"></script>
+<script src="../assets/js/app.js?v=20260721h"></script>
 <script>
   lucide.createIcons();
 
@@ -1570,11 +1570,14 @@
   function bulkSetStatut(statut) {
     if (!statut) return;
     FP.history.commit();
+    const soldImmats = [];
     state.selectedIds.forEach(id => {
       const v = data.vehicules.find(x => x.id === id);
-      if (v) { v.statut = statut; persistVehFields(v, 'statut'); } // enregistre le changement de statut
+      if (v) { v.statut = statut; persistVehFields(v, 'statut'); if (statut === 'vendu' && v.immat) soldImmats.push(v.immat); } // enregistre le changement de statut
     });
     renderTabBar(); renderTable(); renderKPIs();
+    // Vendu → archiver les documents (sous-dossier « OUT »)
+    if (soldImmats.length && FP.archiveVehicleDocs) FP.archiveVehicleDocs(soldImmats);
   }
 
   function bulkDelete() {
@@ -1583,6 +1586,8 @@
     if (!confirm(`Supprimer ${n} véhicule${n > 1 ? 's' : ''} ?`)) return;
     FP.history.commit();
     const removedIds = [...state.selectedIds];
+    // Archive les documents de chaque véhicule supprimé (sous-dossier « OUT » du dossier plaque)
+    if (FP.archiveVehicleDocs) { const ims = removedIds.map(id => { const v = data.vehicules.find(x => x.id === id); return v && v.immat; }).filter(Boolean); if (ims.length) FP.archiveVehicleDocs(ims); }
     data.vehicules = data.vehicules.filter(v => !state.selectedIds.has(v.id));
     state.selectedIds.clear();
     renderTable(); renderKPIs(); renderBulkBar();
@@ -2383,6 +2388,8 @@
       renderKPIs();
       renderTable();
       if (updated) persistVehicleUpsert(updated, false);
+      // Statut passé à « vendu » → archiver ses documents dans le sous-dossier « OUT » du dossier (plaque)
+      if (updated && updated.statut === 'vendu' && updated.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(updated.immat);
     } else {
       const newV = { id: nextVehId(), ...payload };
       // Anti-doublon : immatriculation déjà présente → on demande confirmation avant d'ajouter.
@@ -2402,6 +2409,8 @@
     if (!v) return;
     if (!confirm(`Supprimer le véhicule ${v.immat} (${v.marque} ${v.modele}) ?`)) return;
     FP.history.commit();
+    // Archive ses documents (sous-dossier « OUT » dans son dossier plaque) AVANT de le retirer.
+    if (v.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(v.immat);
     const removedId = state.editingId;
     data.vehicules = data.vehicules.filter(x => x.id !== removedId);
     state.editingId = null;
