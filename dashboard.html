@@ -76,6 +76,19 @@
   .kpi:hover .kpi-ic.warn { box-shadow: 0 12px 22px -8px rgba(217,119,6,.6), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(217,119,6,.18); }
   .kpi-ic.danger { background: linear-gradient(145deg, #fffafa 0%, #fdd9d9 55%, #fbc2c2 100%); border-color: rgba(185,28,28,.22); color: #b91c1c; box-shadow: 0 8px 16px -8px rgba(220,38,38,.5), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(220,38,38,.16); }
   .kpi:hover .kpi-ic.danger { box-shadow: 0 12px 22px -8px rgba(220,38,38,.6), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(220,38,38,.18); }
+  /* ===== Animations 3D au survol (ESSAI — dashboard uniquement, à valider) ===== */
+  @media (prefers-reduced-motion: no-preference) {
+    /* Bulles KPI : inclinaison 3D vers le curseur + reflet qui suit la souris */
+    main .kpi { position: relative; transform-style: preserve-3d; will-change: transform; transition: transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .18s ease; }
+    main .kpi:hover { box-shadow: 0 26px 46px -24px rgba(15,30,61,.5); z-index: 2; }
+    main .kpi .fp-glare { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .2s ease; background: radial-gradient(220px circle at var(--gx,50%) var(--gy,50%), rgba(255,255,255,.5), rgba(255,255,255,0) 60%); mix-blend-mode: soft-light; }
+    main .kpi:hover .fp-glare { opacity: 1; }
+    main .kpi .kpi-ic { transition: transform .18s cubic-bezier(.2,.8,.2,1); }
+    main .kpi:hover .kpi-ic { transform: translateZ(22px) scale(1.06); }
+    /* Onglets sidebar : petit relief 3D au survol */
+    .fp-sidebar nav a { transition: transform .16s cubic-bezier(.2,.8,.2,1), background .12s ease, box-shadow .16s ease; }
+    .fp-sidebar nav a:not(.active):hover { transform: translateX(5px) translateY(-1px); box-shadow: 0 10px 20px -12px rgba(0,0,0,.55); }
+  }
 </style>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}</script>
 </head>
@@ -1541,6 +1554,35 @@
     load();
     setInterval(load, 15 * 60 * 1000); // rafraîchit toutes les 15 min
   })();
+</script>
+<script>
+/* Animations 3D au survol des bulles KPI (ESSAI — dashboard uniquement).
+   La carte s'incline vers le curseur (effet de profondeur) + reflet qui suit la souris.
+   Respecte « prefers-reduced-motion ». */
+(function () {
+  try {
+    if (!window.matchMedia || !matchMedia('(prefers-reduced-motion: no-preference)').matches) return;
+    const MAX = 8; // degrés d'inclinaison max
+    document.querySelectorAll('main .kpi').forEach(card => {
+      if (card.querySelector('.fp-glare')) return;
+      const glare = document.createElement('span'); glare.className = 'fp-glare'; card.appendChild(glare);
+      let raf = 0;
+      card.addEventListener('pointermove', (e) => {
+        if (e.pointerType === 'touch') return; // pas d'effet au doigt (scroll)
+        const r = card.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+        if (raf) cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          const rx = (0.5 - py) * MAX, ry = (px - 0.5) * MAX;
+          card.style.transform = `perspective(720px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateY(-3px)`;
+          glare.style.setProperty('--gx', (px * 100).toFixed(1) + '%');
+          glare.style.setProperty('--gy', (py * 100).toFixed(1) + '%');
+        });
+      });
+      card.addEventListener('pointerleave', () => { if (raf) cancelAnimationFrame(raf); card.style.transform = ''; });
+    });
+  } catch (e) { /* effet purement cosmétique : on ignore toute erreur */ }
+})();
 </script>
 </body>
 </html>
