@@ -5,47 +5,68 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Avis de contravention — Parc Pilot</title>
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-<style>body{font-family:Inter,system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;color:#0F1E3D;background:#f8fafc}.box{text-align:center;padding:2rem;max-width:420px}</style>
+<style>
+  html,body{margin:0;height:100%;font-family:Inter,system-ui,sans-serif;color:#0F1E3D;background:#525659}
+  .center{display:flex;min-height:100vh;align-items:center;justify-content:center;background:#f8fafc}
+  .box{text-align:center;padding:2rem;max-width:440px}
+  .topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;background:#0B1220;color:#fff;font-size:14px}
+  .topbar .t{font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar .dl{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:9px;background:#F97316;color:#fff;font-weight:700;font-size:13px;text-decoration:none;border:none;cursor:pointer}
+  .topbar .dl:hover{filter:brightness(.95)}
+  .viewer{width:100%;height:calc(100vh - 44px);border:0;display:block;background:#525659}
+</style>
 <script src="assets/js/vendor/supabase.js"></script>
 <script>
-// Page de redirection : ouvre l'avis (PDF) stocké, sans exposer l'URL technique dans le mail.
-// Le bucket "scans" est PRIVÉ → on génère un lien SIGNÉ temporaire (le destinataire n'est pas
-// connecté). Seul le sous-dossier "avis/" est lisible par le rôle anon (voir SQL) ; les permis,
-// cartes grises et pièces d'identité restent privés.
-// Usage : avis.html?6014854136   (ou avis.html?f=avis-6014854136.pdf)
+// Ouvre l'avis (PDF) stocké — bucket "scans" PRIVÉ → lien SIGNÉ temporaire, régénéré à chaque
+// ouverture (jamais périmé). Le PDF est AFFICHÉ dans la page (cadre plein écran) : l'adresse
+// reste ".../avis.html?<n° d'avis>", le lien technique Supabase n'apparaît pas. Seul le
+// sous-dossier "avis/" est lisible par le rôle anon (voir SQL) ; le reste du stockage reste privé.
 (function () {
   function fail(msg) {
-    var b = document.getElementById('msg');
-    if (b) b.innerHTML = '<p style="font-weight:700">Impossible d\'ouvrir l\'avis</p>'
-      + '<p style="color:#64748b;font-size:.9rem">' + (msg || 'Lien invalide ou expiré. Contacte l\'expéditeur.') + '</p>';
+    document.body.innerHTML = '<div class="center"><div class="box">'
+      + '<p style="font-weight:700">Impossible d\'ouvrir l\'avis</p>'
+      + '<p style="color:#64748b;font-size:.9rem">' + (msg || 'Lien invalide ou expiré. Contacte l\'expéditeur.') + '</p></div></div>';
   }
   try {
     var q = new URLSearchParams(location.search);
     var raw = location.search.replace(/^\?/, '');
-    var f = '', d = q.get('d') || 'avis'; // sous-dossier du bucket "scans"
-    if (q.get('f')) {
-      f = q.get('f');                                  // repli : nom de fichier complet
-    } else if (raw && raw.indexOf('=') === -1) {
-      f = 'avis-' + decodeURIComponent(raw) + '.pdf';  // format court : ?6014854136 -> avis-6014854136.pdf
-    }
-    // Sécurité : un simple nom de fichier (pas de chemin / traversée). Seul "avis" est ouvert au public.
+    var f = '', num = '', d = q.get('d') || 'avis';
+    if (q.get('f')) { f = q.get('f'); var mm = f.match(/^avis-(.+)\.pdf$/i); num = mm ? mm[1] : ''; }
+    else if (raw && raw.indexOf('=') === -1) { num = decodeURIComponent(raw); f = 'avis-' + num + '.pdf'; }
+    // Sécurité : simple nom de fichier (pas de chemin) ; seul "avis" est ouvert au public.
     if (!f || /[\/\\]/.test(f) || f.indexOf('..') !== -1 || d !== 'avis') { fail(); return; }
+
     var SUPA = 'https://tzjuptlzoywjeigmyfuj.supabase.co';
     var KEY = 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq';
     var client = supabase.createClient(SUPA, KEY);
-    // Lien signé valable 1 h — régénéré à CHAQUE ouverture du lien e-mail (donc jamais périmé).
     client.storage.from('scans').createSignedUrl(d + '/' + f, 3600).then(function (res) {
-      if (res && res.data && res.data.signedUrl) location.replace(res.data.signedUrl);
-      else fail(res && res.error && res.error.message);
+      if (!res || !res.data || !res.data.signedUrl) { fail(res && res.error && res.error.message); return; }
+      var url = res.data.signedUrl;
+      if (num) document.title = 'Avis de contravention n° ' + num;
+      // Affiche le PDF dans la page (l'URL Supabase reste interne au cadre, pas dans la barre d'adresse).
+      var bar = document.createElement('div'); bar.className = 'topbar';
+      bar.innerHTML = '<span class="t">📄 Avis de contravention' + (num ? ' n° ' + num.replace(/[<>&"]/g, '') : '') + '</span>'
+        + '<button class="dl" id="dl">⬇ Télécharger</button>';
+      var frame = document.createElement('iframe'); frame.className = 'viewer'; frame.src = url;
+      document.body.innerHTML = ''; document.body.appendChild(bar); document.body.appendChild(frame);
+      // Téléchargement propre (nom = avis-<n°>.pdf), sans exposer le lien technique.
+      document.getElementById('dl').addEventListener('click', function () {
+        fetch(url).then(function (r) { return r.blob(); }).then(function (b) {
+          var a = document.createElement('a'); a.href = URL.createObjectURL(b);
+          a.download = (num ? 'avis-' + num : 'avis') + '.pdf';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+        }).catch(function () { window.open(url, '_blank', 'noopener'); });
+      });
     }).catch(function (e) { fail(e && e.message); });
   } catch (e) { fail(e && e.message); }
 })();
 </script>
 </head>
 <body>
-  <div class="box" id="msg">
+  <div class="center"><div class="box">
     <p style="font-weight:700">Ouverture de l'avis de contravention…</p>
-    <p style="color:#64748b;font-size:.9rem">Si rien ne se passe, vérifie le lien ou contacte l'expéditeur.</p>
-  </div>
+    <p style="color:#64748b;font-size:.9rem">Un instant…</p>
+  </div></div>
 </body>
 </html>
