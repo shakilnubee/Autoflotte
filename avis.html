@@ -5,11 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Avis de contravention — Parc Pilot</title>
 <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-<style>body{font-family:Inter,system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;color:#0F1E3D;background:#f8fafc}.box{text-align:center;padding:2rem}</style>
+<style>body{font-family:Inter,system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;color:#0F1E3D;background:#f8fafc}.box{text-align:center;padding:2rem;max-width:420px}</style>
+<script src="assets/js/vendor/supabase.js"></script>
 <script>
-// Page de redirection : ouvre l'avis (PDF/photo) stocké, sans exposer l'URL technique dans le mail.
-// Usage : avis.html?f=avis-6014854136.pdf  (eventuellement &d=avis pour le sous-dossier)
+// Page de redirection : ouvre l'avis (PDF) stocké, sans exposer l'URL technique dans le mail.
+// Le bucket "scans" est PRIVÉ → on génère un lien SIGNÉ temporaire (le destinataire n'est pas
+// connecté). Seul le sous-dossier "avis/" est lisible par le rôle anon (voir SQL) ; les permis,
+// cartes grises et pièces d'identité restent privés.
+// Usage : avis.html?6014854136   (ou avis.html?f=avis-6014854136.pdf)
 (function () {
+  function fail(msg) {
+    var b = document.getElementById('msg');
+    if (b) b.innerHTML = '<p style="font-weight:700">Impossible d\'ouvrir l\'avis</p>'
+      + '<p style="color:#64748b;font-size:.9rem">' + (msg || 'Lien invalide ou expiré. Contacte l\'expéditeur.') + '</p>';
+  }
   try {
     var q = new URLSearchParams(location.search);
     var raw = location.search.replace(/^\?/, '');
@@ -19,16 +28,22 @@
     } else if (raw && raw.indexOf('=') === -1) {
       f = 'avis-' + decodeURIComponent(raw) + '.pdf';  // format court : ?6014854136 -> avis-6014854136.pdf
     }
-    // Sécurité : un simple nom de fichier (pas de chemin / traversée)
-    if (!f || /[\/\\]/.test(f) || f.indexOf('..') !== -1 || !/^[a-z]+$/i.test(d)) return;
-    var base = 'https://tzjuptlzoywjeigmyfuj.supabase.co/storage/v1/object/public/scans/';
-    location.replace(base + d + '/' + f);
-  } catch (e) {}
+    // Sécurité : un simple nom de fichier (pas de chemin / traversée). Seul "avis" est ouvert au public.
+    if (!f || /[\/\\]/.test(f) || f.indexOf('..') !== -1 || d !== 'avis') { fail(); return; }
+    var SUPA = 'https://tzjuptlzoywjeigmyfuj.supabase.co';
+    var KEY = 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq';
+    var client = supabase.createClient(SUPA, KEY);
+    // Lien signé valable 1 h — régénéré à CHAQUE ouverture du lien e-mail (donc jamais périmé).
+    client.storage.from('scans').createSignedUrl(d + '/' + f, 3600).then(function (res) {
+      if (res && res.data && res.data.signedUrl) location.replace(res.data.signedUrl);
+      else fail(res && res.error && res.error.message);
+    }).catch(function (e) { fail(e && e.message); });
+  } catch (e) { fail(e && e.message); }
 })();
 </script>
 </head>
 <body>
-  <div class="box">
+  <div class="box" id="msg">
     <p style="font-weight:700">Ouverture de l'avis de contravention…</p>
     <p style="color:#64748b;font-size:.9rem">Si rien ne se passe, vérifie le lien ou contacte l'expéditeur.</p>
   </div>
