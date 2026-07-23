@@ -2878,8 +2878,8 @@ FP.dupe = {
       const ov = document.createElement('div');
       ov.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.55);backdrop-filter:blur(2px);padding:16px;';
       const box = document.createElement('div');
-      box.style.cssText = 'background:var(--card,#fff);color:var(--text,#0f172a);max-width:460px;width:100%;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35);padding:20px 22px;font-family:inherit;';
-      box.innerHTML = `<div style="font-size:16px;font-weight:700;margin-bottom:8px;">${title}</div><div style="font-size:13.5px;line-height:1.5;color:var(--muted,#475569);">${html}</div>`;
+      box.style.cssText = 'background:var(--fp-surface,#fff);color:var(--fp-text,#111A2B);max-width:460px;width:100%;border-radius:16px;box-shadow:var(--fp-shadow-lg,0 20px 60px rgba(0,0,0,.35));padding:20px 22px;font-family:inherit;';
+      box.innerHTML = `<div style="font-size:16px;font-weight:700;margin-bottom:8px;">${title}</div><div style="font-size:13.5px;line-height:1.5;color:var(--fp-muted,#5A6577);">${html}</div>`;
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:18px;';
       const done = (val) => { try { document.removeEventListener('keydown', onKey); } catch(e){} ov.remove(); resolve(val); };
@@ -2888,8 +2888,8 @@ FP.dupe = {
         btn.textContent = b.label;
         const base = 'padding:9px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:filter .15s;';
         const styles = {
-          primary: base + 'background:#4f46e5;color:#fff;',
-          neutral: base + 'background:transparent;color:var(--text,#0f172a);border-color:var(--border,#e2e8f0);',
+          primary: base + 'background:var(--fp-accent,#F97316);color:#fff;',
+          neutral: base + 'background:transparent;color:var(--fp-text,#111A2B);border-color:var(--fp-border,#E3E8F0);',
           danger:  base + 'background:transparent;color:#b91c1c;border-color:#fca5a5;',
         };
         btn.style.cssText = styles[b.kind || 'neutral'];
@@ -2899,6 +2899,8 @@ FP.dupe = {
         row.appendChild(btn);
       });
       box.appendChild(row); ov.appendChild(box); document.body.appendChild(ov);
+      // Accessibilité : focus sur le 1er bouton (l'action recommandée) → Entrée le déclenche.
+      try { const first = row.querySelector('button'); if (first) first.focus(); } catch (e) {}
       const onKey = (e) => { if (e.key === 'Escape') done('cancel'); };
       document.addEventListener('keydown', onKey);
       ov.addEventListener('click', e => { if (e.target === ov) done('cancel'); });
@@ -2916,8 +2918,8 @@ FP.dupe = {
     const extra = d.montantTTC != null ? ' · ' + FP.euro(d.montantTTC) : d.montant != null ? ' · ' + FP.euro(d.montant) : '';
     const canMerge = labels.length > 0;
     const fillLine = canMerge
-      ? `<div style="margin-top:12px;padding:10px 12px;background:rgba(79,70,229,.08);border-radius:10px;"><b>Fusionner</b> complétera les champs vides de l'existant :<br><span style="color:var(--text,#0f172a);font-weight:600;">${labels.join(', ')}</span></div>`
-      : `<div style="margin-top:12px;padding:10px 12px;background:rgba(148,163,184,.12);border-radius:10px;color:var(--muted,#475569);">Le document scanné n'apporte aucun champ manquant : rien à fusionner.</div>`;
+      ? `<div style="margin-top:12px;padding:10px 12px;background:rgba(249,115,22,.10);border-radius:10px;"><b>Fusionner</b> complétera les champs vides de l'existant :<br><span style="color:var(--fp-text,#111A2B);font-weight:600;">${labels.join(', ')}</span></div>`
+      : `<div style="margin-top:12px;padding:10px 12px;background:rgba(148,163,184,.12);border-radius:10px;color:var(--fp-muted,#5A6577);">Le document scanné n'apporte aucun champ manquant : rien à fusionner.</div>`;
     const buttons = [];
     if (canMerge) buttons.push({ label: '🔗 Fusionner avec l\'existant', value: 'merge', kind: 'primary' });
     buttons.push({ label: 'Ajouter quand même', value: 'add', kind: 'neutral' });
