@@ -2634,11 +2634,11 @@ FP.exportBackup = async function () {
 // réservé à l'utilisateur connecté. Si le bucket est resté public, le lien d'origine marche
 // quand même (repli) → aucun risque de coupure.
 FP.scanPath = (url) => { const m = String(url || '').match(/\/scans\/([^?]+)/); return m ? decodeURIComponent(m[1]) : null; };
-FP.signedScanUrl = async (url) => {
+FP.signedScanUrl = async (url, expires) => {
   try {
     const path = FP.scanPath(url);
     if (!path || !(FP.supabase && FP.supabase.storage)) return url;
-    const { data, error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).createSignedUrl(path, 180);
+    const { data, error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).createSignedUrl(path, expires || 180);
     return (error || !data || !data.signedUrl) ? url : data.signedUrl;
   } catch (e) { return url; }
 };
@@ -2658,6 +2658,43 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   FP.openScan(href);
 }, true);
+
+// === Images / iframes de documents privés : SIGNATURE AUTOMATIQUE ===
+// Le bucket "scans" peut être privé (RGPD) : tout <img>/<iframe>/<embed> qui pointe vers un
+// fichier stocké doit alors être servi via un lien SIGNÉ. On le fait AUTOMATIQUEMENT (comme le
+// clic sur les liens) grâce à un MutationObserver → aucune page à modifier, présentes et futures.
+// (Lien plus long, 1 h, car une image reste affichée un moment ; repli sur l'URL d'origine si le
+//  bucket est resté public → aucune coupure.)
+FP._signMedia = function (el) {
+  try {
+    const cur = el.getAttribute('src') || '';
+    if (!cur || !/\/scans\//.test(cur)) return;
+    if (el.dataset.scanSigned === '1') return;
+    el.dataset.scanSigned = '1';
+    if (/\/object\/sign\//.test(cur)) return; // déjà un lien signé
+    FP.signedScanUrl(cur, 3600).then(u => { if (u && u !== cur) el.setAttribute('src', u); });
+  } catch (e) {}
+};
+FP.hydrateScanMedia = function (root) {
+  const scope = (root && root.querySelectorAll) ? root : document;
+  try { scope.querySelectorAll('img[src*="/scans/"],iframe[src*="/scans/"],embed[src*="/scans/"]').forEach(FP._signMedia); } catch (e) {}
+};
+try {
+  const _isMedia = (n) => n && (n.tagName === 'IMG' || n.tagName === 'IFRAME' || n.tagName === 'EMBED');
+  const _mo = new MutationObserver((muts) => {
+    for (const m of muts) {
+      if (m.type === 'attributes' && _isMedia(m.target)) FP._signMedia(m.target);
+      if (m.addedNodes) m.addedNodes.forEach((n) => {
+        if (n.nodeType !== 1) return;
+        if (_isMedia(n)) FP._signMedia(n);
+        if (n.querySelectorAll) FP.hydrateScanMedia(n);
+      });
+    }
+  });
+  _mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['src'] });
+  if (document.readyState !== 'loading') FP.hydrateScanMedia(document);
+  else document.addEventListener('DOMContentLoaded', () => FP.hydrateScanMedia(document));
+} catch (e) {}
 
 // =====================================================================
 // === OCR partagé + détection automatique de document =================
