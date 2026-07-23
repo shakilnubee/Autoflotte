@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723h">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -442,10 +442,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723g"></script>
-<script src="../assets/js/supabase-client.js?v=20260723g"></script>
-<script src="../assets/js/data.js?v=20260723g"></script>
-<script src="../assets/js/app.js?v=20260723g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723h"></script>
+<script src="../assets/js/supabase-client.js?v=20260723h"></script>
+<script src="../assets/js/data.js?v=20260723h"></script>
+<script src="../assets/js/app.js?v=20260723h"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -463,10 +463,11 @@
   function scanPreview(url) {
     if (!url) return '';
     const box = 'width:100%;border:1px solid var(--fp-border);border-radius:.55rem;background:#f8fafc;';
+    const safe = encodeURI(url).replace(/'/g, '%27'); // sûr dans un attribut ET dans la chaîne JS de onclick
     if (/\.(jpe?g|png|webp|gif|bmp)(\?|#|$)/i.test(url)) {
-      return `<img src="${url}" loading="lazy" style="${box}max-height:380px;object-fit:contain;cursor:zoom-in;display:block" title="Cliquer pour agrandir" onclick="window.open('${url}','_blank','noopener')">`;
+      return `<img src="${safe}" loading="lazy" style="${box}max-height:380px;object-fit:contain;cursor:zoom-in;display:block" title="Cliquer pour agrandir" onclick="window.open('${safe}','_blank','noopener')">`;
     }
-    return `<iframe src="${url}" loading="lazy" style="${box}height:420px" title="Aperçu du document"></iframe>`;
+    return `<iframe src="${safe}" loading="lazy" style="${box}height:420px" title="Aperçu du document"></iframe>`;
   }
   // === Documents multiples d'une amende (colonne `pieces` : [{id,label,url,date}]) ===
   // Permet de joindre AUTANT de PDF/photos que nécessaire (avis initial, nouvel avis après
@@ -706,7 +707,7 @@
         : (a.montant ? FP.euroPrecis(a.montant) : '<span class="text-slate-400">—</span>') },
     { key: 'points',       label: 'Points',      defaultWidth: 80,  render: a => { const p = Number(a.points) || 0; return p > 0 ? `<span class="text-amber-600 font-bold">−${p}</span>` : '<span class="text-amber-500">●</span>'; } },
     { key: 'numeroAvis',   label: 'N° avis',     defaultWidth: 150, cellCls: 'font-mono text-xs text-slate-500', render: a => escAmende(a.numeroAvis || '—') },
-    { key: 'annee',        label: 'Année',       defaultWidth: 80,  render: a => a.annee || '—' },
+    { key: 'annee',        label: 'Année',       defaultWidth: 80,  render: a => escAmende(a.annee) || '—' },
     { key: 'commentaire',  label: 'Commentaire', defaultWidth: 200, render: a => a.commentaire ? `<span title="${escAmende(a.commentaire)}">${escAmende(a.commentaire.slice(0,30))}${a.commentaire.length > 30 ? '…' : ''}</span>` : '—' },
     { key: 'statut',       label: 'Statut',      defaultWidth: 110, render: a => statutBadge(a.statut) },
   ];
@@ -762,11 +763,11 @@
       });
       const entries = Object.entries(par).sort((a, b) => b[1].montant - a[1].montant);
       const legende = state.motif !== 'all' ? state.motif : (state.motifCat !== 'all' ? ((CAT_META[state.motifCat] || {}).label || state.motifCat) : null);
-      const titre = legende ? `Collaborateurs concernés par « ${legende} »` : 'Collaborateurs concernés';
+      const titre = legende ? `Collaborateurs concernés par « ${escAmende(legende)} »` : 'Collaborateurs concernés';
       drill.innerHTML = `<div class="text-sm font-bold text-slate-900 mb-2">${titre} — ${entries.length} conducteur(s)</div>
         <div class="flex flex-wrap gap-2">` + entries.map(([c, v]) => `
           <button type="button" class="drill-chip" data-cond="${c.replace(/"/g, '&quot;')}" style="display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .7rem;border-radius:9999px;border:1px solid var(--fp-border);background:white;font-size:.8rem;cursor:pointer">
-            <span class="font-semibold">${c}</span>
+            <span class="font-semibold">${escAmende(c)}</span>
             <span class="text-slate-500">${v.n} · ${FP.euro(v.montant)}${v.points ? ' · −' + v.points + 'pts' : ''}</span>
           </button>`).join('') + `</div>`;
       drill.classList.remove('hidden');
@@ -1051,7 +1052,7 @@
     $('podium').innerHTML = shown.map(([c, v], i) => `
       <button type="button" data-cond="${c.replace(/"/g, '&quot;')}" class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left">
         <span class="text-lg w-7 text-center flex-shrink-0">${medals[i] || `<span class="text-sm font-bold text-slate-400">${i + 1}</span>`}</span>
-        <span class="flex-1 font-semibold text-slate-800 truncate">${c}</span>
+        <span class="flex-1 font-semibold text-slate-800 truncate">${escAmende(c)}</span>
         <span class="flex items-center gap-1.5 flex-shrink-0">
           <span class="podium-tag" style="background:#EEF2F7;color:#475569" title="Nombre d'amendes">${v.n} amende${v.n > 1 ? 's' : ''}</span>
           <span class="podium-tag" style="background:#F3ECE3;color:var(--fp-primary)" title="Montant total">${FP.euro(v.montant)}</span>
@@ -1218,12 +1219,12 @@
 
       <div>
         <div class="field-label">Motif</div>
-        <div id="am-motif-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${a.motif || '<span class="text-slate-400">— ajouter</span>'}</div>
+        <div id="am-motif-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${escAmende(a.motif) || '<span class="text-slate-400">— ajouter</span>'}</div>
       </div>
 
       <div>
         <div class="field-label">Numéro d'avis</div>
-        <div id="am-avis-val" class="font-mono text-sm bg-slate-50 p-3 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${a.numeroAvis || '<span class="text-slate-400">— ajouter</span>'}</div>
+        <div id="am-avis-val" class="font-mono text-sm bg-slate-50 p-3 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${escAmende(a.numeroAvis) || '<span class="text-slate-400">— ajouter</span>'}</div>
       </div>
 
       <div>
@@ -1239,7 +1240,7 @@
           <div>
             <div class="text-xs text-slate-400 mb-0.5">Clé</div>
             <div class="flex items-center gap-1">
-              <div id="am-cle-val" class="flex-1 min-w-0 font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour saisir / modifier">${a.cle || '<span class="text-slate-400">— ajouter</span>'}</div>
+              <div id="am-cle-val" class="flex-1 min-w-0 font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour saisir / modifier">${escAmende(a.cle) || '<span class="text-slate-400">— ajouter</span>'}</div>
               ${a.cle ? `<button type="button" id="am-cle-copy" class="btn btn-outline !p-2 flex-shrink-0" title="Copier la clé"><i data-lucide="copy" class="w-4 h-4"></i></button>` : ''}
             </div>
           </div>
@@ -1251,7 +1252,7 @@
           <div class="field-label">Scan de l'avis</div>
           ${scanPreview(a.avisUrl)}
           <div class="flex gap-2 mt-2">
-            <a href="${a.avisUrl}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
+            <a href="${escAmende(a.avisUrl)}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
               <i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir en grand
             </a>
             <button type="button" id="avis-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le scan de l'avis"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
@@ -1263,7 +1264,7 @@
         ${a.justifUrl ? `
           ${scanPreview(a.justifUrl)}
           <div class="flex gap-2 mt-2">
-            <a href="${a.justifUrl}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
+            <a href="${escAmende(a.justifUrl)}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
               <i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir en grand
             </a>
             <button type="button" id="justif-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le justificatif"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
@@ -1287,7 +1288,7 @@
 
       <div>
         <div class="field-label">Année</div>
-        <div>${a.annee}</div>
+        <div>${escAmende(a.annee)}</div>
       </div>
 
       <div>
