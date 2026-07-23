@@ -933,6 +933,15 @@
     }
     // Version TEXTE (repli Gmail + partie texte de l'e-mail) : on garde l'URL brute.
     let fullBody = body + (lien ? `\n\n📎 Avis de contravention n° ${a.numeroAvis || '—'} :\n${lien}` : '');
+    // PIÈCE JOINTE : le PDF de l'avis, joint à l'e-mail (en plus du lien). Resend le télécharge
+    // via un lien SIGNÉ temporaire (bucket privé). Le nom du fichier reste propre.
+    let attachments;
+    if (a.avisUrl && window.FP && FP.signedScanUrl) {
+      try {
+        const signed = await FP.signedScanUrl(a.avisUrl, 3600);
+        if (signed) attachments = [{ filename: `avis-${a.numeroAvis || 'contravention'}.pdf`, path: signed }];
+      } catch (e) { console.warn('[avis pièce jointe]', e); }
+    }
     // 1) Envoi AUTOMATIQUE via la fonction Resend (si déployée) — un clic = envoyé.
     if (to && window.FP && FP.sendEmail) {
       // Version HTML : le lien s'affiche en CLIQUABLE avec un libellé (pas l'URL brute).
@@ -941,7 +950,7 @@
       if (lien) html += `<br><br>📎 <a href="${escH(lien)}">Voir l'avis de contravention${a.numeroAvis ? ' n° ' + escH(a.numeroAvis) : ''} (PDF)</a>`;
       try {
         if (FP.toast) FP.toast('Envoi de l\'e-mail…');
-        await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: fullBody, replyTo: EXPEDITEUR });
+        await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: fullBody, replyTo: EXPEDITEUR, attachments });
         if (FP.toast) FP.toast('✓ E-mail envoyé à ' + to); else alert('✓ E-mail envoyé à ' + to);
         return;
       } catch (e) {

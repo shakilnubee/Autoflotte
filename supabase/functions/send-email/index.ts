@@ -82,6 +82,19 @@ Deno.serve(async (req) => {
   if (msg.html) payload.html = String(msg.html);
   if (msg.text) payload.text = String(msg.text);
   if (msg.replyTo) payload.reply_to = String(msg.replyTo);
+  // Pièces jointes : chaque entrée = { filename, path } (URL distante que Resend télécharge)
+  // OU { filename, content } (contenu base64). On transmet tel quel à Resend.
+  if (Array.isArray(msg.attachments) && msg.attachments.length) {
+    payload.attachments = (msg.attachments as Array<Record<string, unknown>>)
+      .filter((a) => a && (a.path || a.content) && a.filename)
+      .map((a) => {
+        const o: Record<string, unknown> = { filename: String(a.filename) };
+        if (a.path) o.path = String(a.path);
+        if (a.content) o.content = String(a.content);
+        if (a.content_type) o.content_type = String(a.content_type);
+        return o;
+      });
+  }
 
   try {
     const r = await fetch("https://api.resend.com/emails", {
