@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260721k">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260721k"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260721k">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723a">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -416,11 +416,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260721k"></script>
-<script src="../assets/js/supabase-client.js?v=20260721k"></script>
-<script src="../assets/js/data.js?v=20260721k"></script>
-<script src="../assets/js/fleet-docs.js?v=20260721k"></script>
-<script src="../assets/js/app.js?v=20260721k"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723a"></script>
+<script src="../assets/js/supabase-client.js?v=20260723a"></script>
+<script src="../assets/js/data.js?v=20260723a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260723a"></script>
+<script src="../assets/js/app.js?v=20260723a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1574,13 +1574,40 @@
     const show = (msg, color) => { if (st) { st.classList.remove('hidden'); st.setAttribute('style', color); st.innerHTML = msg; } };
     if (!(FP.uploadScan && FP.supabase && FP.supabase.storage)) { alert('Stockage indisponible. Recharge la page et réessaie.'); return; }
     try {
+      // 1) Lecture IA du document (comme le scan carte grise d'un véhicule) — best effort.
+      let ia = null;
+      try { show('🔍 Lecture du document par IA…', 'background:#F1F5F9;color:#475569;'); ia = await scanCondDocIA(file); } catch (e2) { console.warn('[conddoc IA]', e2); }
+      // 2) Envoi du scan vers Supabase.
       show('☁️ Envoi du fichier en cours…', 'background:#F1F5F9;color:#475569;');
       const url = await FP.uploadScan(file, 'documents');
       if (!url) throw new Error('URL vide');
+      // 3) On complète le document (n° + date d'expiration) et la fiche conducteur avec ce que l'IA a lu,
+      //    sans jamais écraser une valeur déjà saisie.
       const t = COND_DOC_TYPES.find(x => x.key === meta.type);
-      const doc = { id: 'DC' + Date.now().toString(36), type: meta.type, label: meta.label || (t ? t.label : 'Document'), url, date: meta.date || null, numero: meta.numero || null, createdAt: new Date().toISOString() };
+      const numero = meta.numero || (ia && (ia.idNumero || ia.permisNumero)) || null;
+      const dExp   = meta.date   || (ia && (ia.idExpiration || ia.permisExpiration)) || null;
+      const doc = { id: 'DC' + Date.now().toString(36), type: meta.type, label: meta.label || (t ? t.label : 'Document'), url, date: dExp, numero, createdAt: new Date().toISOString() };
       condDocsSave(meta.key, [...condDocsGet(meta.key), doc]);
+      const lus = [];
+      if (ia) {
+        const cur = condRow(meta.key) || {};
+        const ch = {};
+        // Date de naissance (carte d'identité / titre de séjour / permis) — si vide et plausible.
+        if (ia.dateNaissance && !cur.dateNaissance && naissancePlausible(ia.dateNaissance)) { ch.dateNaissance = ia.dateNaissance; lus.push('date de naissance'); }
+        // Si le document est en fait un permis → on remplit aussi les champs permis manquants.
+        if (ia.permisNumero && !cur.permisNumero) { ch.permisNumero = ia.permisNumero; lus.push('n° de permis'); }
+        if (ia.permisType && !cur.permisType) { ch.permisType = ia.permisType; lus.push('type de permis'); }
+        if (ia.permisObtention && !cur.permisObtention) { ch.permisObtention = ia.permisObtention; lus.push("date d'obtention"); }
+        if (ia.permisExpiration && !cur.permisExpiration) { ch.permisExpiration = ia.permisExpiration; lus.push("date d'expiration"); }
+        if (numero) lus.push('n° du document');
+        if (Object.keys(ch).length) { ch.name = cur.name || (drivers.find(x => x.key === meta.key) || {}).name || meta.key; upsertCond(meta.key, ch); drivers = buildDrivers(); }
+      }
       openDrawer(currentDriverKey);
+      const st2 = $('conddoc-status');
+      if (st2) {
+        if (lus.length) { st2.classList.remove('hidden'); st2.setAttribute('style', 'background:#ECFDF5;color:#047857;'); st2.innerHTML = `✓ Document enregistré · lu automatiquement : <b>${[...new Set(lus)].join(', ')}</b>. Vérifie et corrige si besoin.`; }
+        else { st2.classList.remove('hidden'); st2.setAttribute('style', 'background:#FEF3C7;color:#92400E;'); st2.innerHTML = "✓ Document enregistré. Aucune info lisible automatiquement — complète à la main si besoin."; }
+      }
     } catch (err) {
       console.error('[conddoc upload]', err);
       show("Échec de l'envoi : " + (err.message || err), 'background:#FEF2F2;color:#B91C1C;');
@@ -1680,6 +1707,24 @@
   async function ocrPermis(file) {
     const cv = await srcToCanvas(file, 2.5);
     return ocrCanvas(killPink(cv, 125));
+  }
+  // Lecture MEILLEURE à l'upload : IA (Claude) en priorité — comme le scan carte grise d'un véhicule —
+  // puis repli sur l'OCR navigateur. Renvoie { type, numero, obtention, expiration, naissance }.
+  async function readPermisBest(file) {
+    if (window.FP && FP.scanIA) {
+      try {
+        const ia = await FP.scanIA(file, 'permis');
+        if (ia && (ia.permisNumero || ia.permisExpiration || ia.permisObtention || ia.permisType || ia.dateNaissance)) {
+          return { type: ia.permisType || '', numero: ia.permisNumero || '', obtention: ia.permisObtention || '', expiration: ia.permisExpiration || '', naissance: ia.dateNaissance || '' };
+        }
+      } catch (e) { console.warn('[permis IA upload]', e); }
+    }
+    try { return await ocrPermis(file); } catch (e) { console.warn('[ocrPermis]', e); return {}; }
+  }
+  // Scan IA générique d'un document perso (carte d'identité, titre de séjour…) → champs lus.
+  async function scanCondDocIA(file) {
+    if (!(window.FP && FP.scanIA)) return null;
+    try { return await FP.scanIA(file); } catch (e) { console.warn('[conddoc IA]', e); return null; }
   }
   // Relecture d'un scan déjà stocké (URL Supabase) : haute résolution + binarisation
   async function rereadPermisFromUrl(url) {
@@ -1827,7 +1872,7 @@
       const d = drivers.find(x => x.key === k);
       // 1) Lecture automatique (OCR) du permis — best effort
       let parsed = {};
-      try { show('🔍 Lecture du permis… (quelques secondes)', 'background:#F1F5F9;color:#475569;'); parsed = await ocrPermis(file); } catch (e2) { console.warn('[ocrPermis]', e2); }
+      try { show('🔍 Lecture du permis par IA… (quelques secondes)', 'background:#F1F5F9;color:#475569;'); parsed = await readPermisBest(file); } catch (e2) { console.warn('[readPermisBest]', e2); }
       // 2) Envoi du scan vers Supabase
       show('☁️ Envoi du fichier en cours…', 'background:#F1F5F9;color:#475569;');
       const url = await FP.uploadScan(file, 'permis');

@@ -2758,11 +2758,107 @@ FP.dupe = {
   _label(table){ return { factures:'Une facture', amendes:'Une amende', vehicules:'Un véhicule', conducteurs:'Un conducteur', emprunts:'Un emprunt' }[table] || 'Un élément'; },
   _tag(d){ return d.numeroFacture ? ' n° ' + d.numeroFacture : d.numeroAvis ? ' avis ' + d.numeroAvis : d.immat ? ' ' + d.immat : (d.name || d.prenom) ? ' ' + (d.name || d.prenom) : ''; },
   // Garde AVANT insertion : renvoie false si l'utilisateur refuse d'ajouter un doublon.
+  // (Version simple OK/Annuler — conservée pour les points d'ajout qui ne gèrent PAS la fusion.)
   confirmAdd(table, rec, list){
     const d = this.find(table, rec, list);
     if (!d) return true;
     const extra = d.montantTTC != null ? ' · ' + FP.euro(d.montantTTC) : d.montant != null ? ' · ' + FP.euro(d.montant) : '';
     return confirm(`⚠️ Doublon possible\n\n${this._label(table)} identique semble déjà exister (${this._tag(d).trim()}${extra}).\n\nL'ajouter quand même ?`);
+  },
+  // ---- FUSION ----
+  // Une valeur est « vide » (donc remplaçable par la fusion) si null/''/[] ou, pour les groupes,
+  // uniquement « non-classe ». On ne remplace JAMAIS une valeur déjà saisie par l'utilisateur.
+  _empty(k, v){
+    if (v == null || v === '') return true;
+    if (Array.isArray(v)) { if (v.length === 0) return true; if (k === 'groupes' && v.length === 1 && v[0] === 'non-classe') return true; return false; }
+    return false;
+  },
+  // Calcule les champs que la FUSION copierait depuis `rec` (nouveau/scanné) vers `existing`
+  // (existant) : présents dans rec, absents/vides dans existing. Renvoie { patch, labels[] }.
+  mergePatch(table, existing, rec){
+    const patch = {}; const labels = [];
+    if (!existing || !rec) return { patch, labels };
+    const LBL = {
+      immat:'Immatriculation', marque:'Marque', modele:'Modèle', vin:'VIN', co2:'CO₂', puissanceFiscale:'Puissance fiscale',
+      puissance:'Puissance', carburant:'Carburant', dateImmat:'1re immatriculation', prochainCT:'Prochain CT', controleTechniqueProchain:'Prochain CT',
+      km:'Kilométrage', couleur:'Couleur', proprietaire:'Propriétaire', statut:'Statut', groupes:'Groupes', pool:'Groupe',
+      numeroFacture:'N° facture', fournisseur:'Fournisseur', montantHT:'Montant HT', montantTVA:'TVA', montantTTC:'TTC', date:'Date', description:'Description',
+      numeroAvis:'N° avis', montant:'Montant', motif:'Motif', points:'Points', prenom:'Conducteur',
+      name:'Nom', nom:'Nom', tel:'Téléphone', email:'E-mail',
+    };
+    Object.keys(rec).forEach(k => {
+      if (k === 'id') return;
+      const nv = rec[k];
+      if (nv == null || nv === '' || (Array.isArray(nv) && nv.length === 0)) return;
+      if (k === 'groupes' && Array.isArray(nv) && nv.length === 1 && nv[0] === 'non-classe') return;
+      if (this._empty(k, existing[k])) { patch[k] = nv; labels.push(LBL[k] || k); }
+    });
+    return { patch, labels };
+  },
+  // Applique la fusion sur l'objet existant (mutation) et renvoie le patch appliqué.
+  applyMerge(table, existing, rec){
+    const { patch } = this.mergePatch(table, existing, rec);
+    Object.assign(existing, patch);
+    return patch;
+  },
+  // Petite modale à 3 choix (au style du site) → résout 'merge' | 'add' | 'cancel'.
+  _choiceModal({ title, html, buttons }){
+    return new Promise(resolve => {
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.55);backdrop-filter:blur(2px);padding:16px;';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:var(--card,#fff);color:var(--text,#0f172a);max-width:460px;width:100%;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35);padding:20px 22px;font-family:inherit;';
+      box.innerHTML = `<div style="font-size:16px;font-weight:700;margin-bottom:8px;">${title}</div><div style="font-size:13.5px;line-height:1.5;color:var(--muted,#475569);">${html}</div>`;
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:18px;';
+      const done = (val) => { try { document.removeEventListener('keydown', onKey); } catch(e){} ov.remove(); resolve(val); };
+      buttons.forEach(b => {
+        const btn = document.createElement('button');
+        btn.textContent = b.label;
+        const base = 'padding:9px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:filter .15s;';
+        const styles = {
+          primary: base + 'background:#4f46e5;color:#fff;',
+          neutral: base + 'background:transparent;color:var(--text,#0f172a);border-color:var(--border,#e2e8f0);',
+          danger:  base + 'background:transparent;color:#b91c1c;border-color:#fca5a5;',
+        };
+        btn.style.cssText = styles[b.kind || 'neutral'];
+        btn.onmouseenter = () => btn.style.filter = 'brightness(.94)';
+        btn.onmouseleave = () => btn.style.filter = '';
+        btn.onclick = () => done(b.value);
+        row.appendChild(btn);
+      });
+      box.appendChild(row); ov.appendChild(box); document.body.appendChild(ov);
+      const onKey = (e) => { if (e.key === 'Escape') done('cancel'); };
+      document.addEventListener('keydown', onKey);
+      ov.addEventListener('click', e => { if (e.target === ov) done('cancel'); });
+    });
+  },
+  // Garde AVANT insertion, AVEC option de FUSION. Renvoie une Promise :
+  //   { action:'add' }                        → pas de doublon, ou l'utilisateur ajoute quand même
+  //   { action:'merge', existing, patch }      → fusionner : `existing` a déjà reçu les champs manquants
+  //   { action:'cancel' }                      → annuler
+  // Utiliser là où on sait ré-enregistrer l'existant fusionné (véhicules notamment).
+  async guard(table, rec, list){
+    const d = this.find(table, rec, list);
+    if (!d) return { action: 'add' };
+    const { patch, labels } = this.mergePatch(table, d, rec);
+    const extra = d.montantTTC != null ? ' · ' + FP.euro(d.montantTTC) : d.montant != null ? ' · ' + FP.euro(d.montant) : '';
+    const canMerge = labels.length > 0;
+    const fillLine = canMerge
+      ? `<div style="margin-top:12px;padding:10px 12px;background:rgba(79,70,229,.08);border-radius:10px;"><b>Fusionner</b> complétera les champs vides de l'existant :<br><span style="color:var(--text,#0f172a);font-weight:600;">${labels.join(', ')}</span></div>`
+      : `<div style="margin-top:12px;padding:10px 12px;background:rgba(148,163,184,.12);border-radius:10px;color:var(--muted,#475569);">Le document scanné n'apporte aucun champ manquant : rien à fusionner.</div>`;
+    const buttons = [];
+    if (canMerge) buttons.push({ label: '🔗 Fusionner avec l\'existant', value: 'merge', kind: 'primary' });
+    buttons.push({ label: 'Ajouter quand même', value: 'add', kind: 'neutral' });
+    buttons.push({ label: 'Annuler', value: 'cancel', kind: 'danger' });
+    const choice = await this._choiceModal({
+      title: '⚠️ Doublon possible',
+      html: `${this._label(table)} identique semble déjà exister (<b>${this._tag(d).trim()}${extra}</b>).${fillLine}`,
+      buttons,
+    });
+    if (choice === 'merge') { Object.assign(d, patch); return { action: 'merge', existing: d, patch }; }
+    if (choice === 'add')   return { action: 'add' };
+    return { action: 'cancel' };
   },
 };
 

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260721k">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260721k"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260721k">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723a">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -717,12 +717,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260721k"></script>
-<script src="../assets/js/supabase-client.js?v=20260721k"></script>
-<script src="../assets/js/data.js?v=20260721k"></script>
-<script src="../assets/js/fleet-docs.js?v=20260721k"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260721k"></script>
-<script src="../assets/js/app.js?v=20260721k"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723a"></script>
+<script src="../assets/js/supabase-client.js?v=20260723a"></script>
+<script src="../assets/js/data.js?v=20260723a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260723a"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260723a"></script>
+<script src="../assets/js/app.js?v=20260723a"></script>
 <script>
   lucide.createIcons();
 
@@ -2392,8 +2392,21 @@
       if (updated && updated.statut === 'vendu' && updated.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(updated.immat);
     } else {
       const newV = { id: nextVehId(), ...payload };
-      // Anti-doublon : immatriculation déjà présente → on demande confirmation avant d'ajouter.
-      if (FP.dupe && !FP.dupe.confirmAdd('vehicules', newV, data.vehicules)) return;
+      // Anti-doublon : immatriculation déjà présente → on propose FUSION / ajout / annulation.
+      if (FP.dupe && FP.dupe.guard) {
+        const g = await FP.dupe.guard('vehicules', newV, data.vehicules);
+        if (g.action === 'cancel') return;
+        if (g.action === 'merge') {
+          // L'existant a déjà reçu les champs manquants (VIN, CO₂, CT, etc.) → on le ré-enregistre.
+          saveMasse(g.existing.id);
+          closeModal();
+          renderKPIs();
+          renderTable();
+          persistVehicleUpsert(g.existing, false);
+          return;
+        }
+        // action === 'add' → on continue et on ajoute un nouveau véhicule.
+      }
       data.vehicules.push(newV);
       saveMasse(newV.id);
       closeModal();
