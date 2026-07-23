@@ -2506,13 +2506,46 @@ FP.CG_SCAN_PROMPT = [
   "modele : denomination commerciale, champ D.3 (ex KONA, CLIO, 208).",
   "vin : numero d identification du vehicule, champ E. EXACTEMENT 17 caracteres (lettres majuscules + chiffres, SANS espace). Les lettres I, O et Q n existent JAMAIS dans un VIN (ce sont des 1 ou des 0). Recopie chaque caractere avec le plus grand soin ; si tu n es pas certain d un caractere, relis plutot que de deviner.",
   "puissanceFiscale : puissance fiscale en CV, champ P.6, entier.",
-  "carburant : type d energie, champ P.3. Renvoie le libelle clair : Essence (ES), Diesel (GO/gazole), Electrique (EL), Hybride (EE/HE/GL), GPL (GP), GNV (GN).",
+  "carburant : type d energie, champ P.3. Renvoie EXACTEMENT l un de ces libelles (jamais un autre) : 'Essence', 'Diesel', 'Electrique', 'Essence / Hybride', 'Diesel / Hybride', 'GPL', 'GNV', 'Superethanol E85', 'Hydrogene'. Correspondance des codes P.3 : ES = Essence ; GO ou gazole = Diesel ; EL = Electrique ; EE / EH / EM / EN (essence + electricite) = 'Essence / Hybride' ; GH / GL (gazole + electricite) = 'Diesel / Hybride' ; GP = GPL ; GN = GNV ; FE = 'Superethanol E85' ; toute mention hybride essence = 'Essence / Hybride'. IMPORTANT : deux vehicules de meme modele ont TOUJOURS le meme carburant.",
   "co2 : emissions de CO2 en g/km, champ V.7, entier.",
   "masse : masse en ordre de marche en kg, champ G, entier (PAS la masse en charge G.1).",
   "prochainCT : date du prochain controle technique, champ X.1 (souvent ecrit 'X.1' ou 'Visite technique avant le' / 'Visite avant le' ou 'Date limite de validite'). Format AAAA-MM-JJ (date FUTURE). Si le champ X.1 est absent (vehicule neuf jamais controle), mets null.",
   "categorie : d apres le genre national J.1 et la carrosserie, renvoie une categorie SIMPLE parmi : Citadine, Berline, Break, SUV, Monospace, Utilitaire ; sinon null.",
   "IMPORTANT : ne devine ni n invente aucune valeur ; un champ illisible = null. Dates au format europeen jour/mois/annee (ex 05.11.2021 = 2021-11-05).",
 ].join("\n");
+
+// ---- CARBURANT : libellés CANONIQUES + normaliseur central ----
+// Un seul jeu de libellés pour toute la plateforme, pour que deux véhicules identiques n'aient
+// JAMAIS deux libellés différents (ex. « Hybride » vs « Essence / Hybride »). Tout carburant
+// lu (IA, OCR, import CSV, saisie) DOIT passer par FP.normCarburant avant d'être enregistré.
+FP.CARBURANTS = ['Essence', 'Diesel', 'Électrique', 'Essence / Hybride', 'Diesel / Hybride', 'GPL', 'GNV', 'Superéthanol E85', 'Hydrogène'];
+FP.normCarburant = function (raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const u = s.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const tok = ' ' + u.replace(/[^A-Z0-9]+/g, ' ').trim() + ' '; // codes P.3 isolés (ex " EH ")
+  const code = re => re.test(tok);   // code P.3 en jeton isolé
+  const kw   = re => re.test(u);     // mot-clé n'importe où
+  if (kw(/HYDROG/)) return 'Hydrogène';
+  // Hybride diesel (gazole + électricité) — codes GH / GL
+  if (kw(/GAZOLE.?ELEC|DIESEL.?(HYBRID|ELEC)/) || code(/ GH | GL /)) return 'Diesel / Hybride';
+  // Hybride essence (essence + électricité) — codes EE/EH/EM/EN, ou mot « hybride »
+  if (kw(/HYBRID|HEV|PHEV|ESSENCE.?ELEC/) || code(/ EE | EH | EM | EN | EP /)) return 'Essence / Hybride';
+  // Électrique pur
+  if (kw(/ELECTRI/) || code(/ EL | BEV /)) return 'Électrique';
+  // Superéthanol / E85
+  if (kw(/ETHANOL|SUPERETH|E85/) || code(/ FE /)) return 'Superéthanol E85';
+  // GPL / GNV
+  if (kw(/GPL|LPG/) || code(/ GP /)) return 'GPL';
+  if (kw(/GNV|GAZ NATUREL|CNG/) || code(/ GN /)) return 'GNV';
+  // Diesel
+  if (kw(/DIESEL|GAZOLE|GASOIL/) || code(/ GO /)) return 'Diesel';
+  // Essence
+  if (kw(/ESSENCE|SANS PLOMB|SP95|SP98|PETROL/) || code(/ ES /)) return 'Essence';
+  // Repli : on garde la valeur (proprement capitalisée) plutôt que de perdre l'info.
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
 
 // Lecture IA d'un document via l'Edge Function sécurisée « scan-doc » (Haiku).
 // Renvoie un objet de champs { date, fournisseur, numeroFacture, vehiculeImmat, km,

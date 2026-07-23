@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723b">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -717,12 +717,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723a"></script>
-<script src="../assets/js/supabase-client.js?v=20260723a"></script>
-<script src="../assets/js/data.js?v=20260723a"></script>
-<script src="../assets/js/fleet-docs.js?v=20260723a"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260723a"></script>
-<script src="../assets/js/app.js?v=20260723a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723b"></script>
+<script src="../assets/js/supabase-client.js?v=20260723b"></script>
+<script src="../assets/js/data.js?v=20260723b"></script>
+<script src="../assets/js/fleet-docs.js?v=20260723b"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260723b"></script>
+<script src="../assets/js/app.js?v=20260723b"></script>
 <script>
   lucide.createIcons();
 
@@ -2627,6 +2627,20 @@
     if (type === 'bool') { FP.history.commit(); v[field] = !v[field]; commitVehField(v, field); return; }
     const cur = v[field] != null ? v[field] : '';
     let html;
+    // Carburant : liste canonique déroulante (jamais de saisie libre → pas d'incohérence entre véhicules).
+    if (field === 'carburant' && window.FP && FP.CARBURANTS) {
+      const curN = FP.normCarburant ? (FP.normCarburant(cur) || '') : cur;
+      const opts = ['', ...FP.CARBURANTS].map(o => `<option value="${o}" ${o === curN ? 'selected' : ''}>${o || '—'}</option>`).join('');
+      html = `<select class="cell-edit" style="width:100%;border:1px solid var(--fp-accent);border-radius:6px;padding:.25rem">${opts}</select>`;
+      td.innerHTML = html;
+      const sel = td.querySelector('.cell-edit'); sel.focus();
+      let d2 = false;
+      const commitSel = (save) => { if (d2) return; d2 = true; if (save) { FP.history.commit(); v[field] = sel.value || null; commitVehField(v, field); } else { renderTable(); if (drawerVehId && $('drawer').classList.contains('open')) openDrawer(drawerVehId); } };
+      sel.addEventListener('change', () => commitSel(true));
+      sel.addEventListener('blur', () => commitSel(true));
+      sel.addEventListener('keydown', ev => { if (ev.key === 'Escape') { ev.preventDefault(); commitSel(false); } });
+      return;
+    }
     if (type === 'select') {
       html = `<select class="cell-edit" style="width:100%;border:1px solid var(--fp-accent);border-radius:6px;padding:.25rem">${STATUT_OPTIONS.map(o => `<option value="${o}" ${o === cur ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
     } else {
@@ -3517,14 +3531,9 @@
     if (!gMass) gMass = upper.match(/MASSE\s+(?:EN\s+)?ORDRE\s+DE\s+MARCHE[^0-9]{0,20}(\d[\d .]{2,6})/);
     if (gMass) { const n = Number(String(gMass[1]).replace(/[\s.]/g, '')); if (n >= 500 && n < 8000) out.masse = n; }
 
-    // Type d'énergie / carburant (code P.3) — codes officiels (ES, GO, EL, EH…)
+    // Type d'énergie / carburant (code P.3) — libellé unifié via FP.normCarburant (codes ES, GO, EL, EH…)
     const en = (afterCode(lines, /\bP\s*[.,]?\s*3\b/) || '').toUpperCase();
-    if (en) {
-      if (/\bEL\b|ELEC/.test(en)) out.carburant = 'Électrique';
-      else if (/\bE[EHN]\b|HYBRID|HEV|PHEV/.test(en)) out.carburant = 'Essence / Hybride';
-      else if (/\bGO\b|GAZOLE|DIESEL/.test(en)) out.carburant = 'Diesel';
-      else if (/\bES\b|ESSENCE/.test(en)) out.carburant = 'Essence';
-    }
+    if (en && window.FP && FP.normCarburant) { const c = FP.normCarburant(en); if (c) out.carburant = c; }
 
     return out;
   }
@@ -3560,6 +3569,8 @@
         const local = parseCarteGrise(rawText) || {};
         for (const k in local) { const v = local[k]; if ((parsed[k] == null || parsed[k] === '') && v != null && v !== '') parsed[k] = v; }
       } catch (e) { console.warn('[carte grise local]', e); }
+      // Carburant : on UNIFORMISE le libellé (IA « Hybride » et OCR « Essence / Hybride » → même valeur).
+      if (parsed.carburant && FP.normCarburant) parsed.carburant = FP.normCarburant(parsed.carburant);
       const filled = [];
       // On ne remplit que les champs vides : on n'écrase pas une saisie manuelle
       if (parsed.immat  && !$('f-immat').value)  { $('f-immat').value  = parsed.immat;  filled.push('immatriculation'); }
@@ -3620,7 +3631,8 @@
 
   function renderBatchRows() {
     const tbody = $('cg-batch-tbody');
-    const carbs = ['', 'Essence', 'Diesel', 'Hybride', 'Électrique'];
+    const carbs = ['', ...(window.FP && FP.CARBURANTS ? FP.CARBURANTS : ['Essence', 'Diesel', 'Électrique', 'Essence / Hybride'])];
+    if (FP.normCarburant && p.carburant) p.carburant = FP.normCarburant(p.carburant);
     tbody.innerHTML = _cgBatch.map((row, i) => {
       const p = row.parsed || {};
       const esc = s => (s == null ? '' : String(s)).replace(/"/g, '&quot;');
@@ -3708,7 +3720,7 @@
         km: 0, statut: 'actif', chauffeur: '—', prochainCT: p.prochainCT || '—',
         dateMiseEnCirculation: p.dateMiseEnCirculation || '',
         vin: (p.vin || '').toUpperCase(),
-        carburant: p.carburant || null,
+        carburant: (FP.normCarburant ? FP.normCarburant(p.carburant) : p.carburant) || null,
         co2: num(p.co2),
         puissanceFiscale: num(p.puissanceFiscale),
         groupes: ['non-classe'],
