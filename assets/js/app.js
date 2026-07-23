@@ -2571,9 +2571,10 @@ FP.scanIA = async function (file, docType, promptOverride) {
     });
     const mediaType = f.type || (/\.pdf$/i.test(f.name || '') ? 'application/pdf' : 'image/jpeg');
     const payload = { fileBase64: b64, mediaType, docType: docType || 'facture', prompt: promptOverride || FP.SCAN_PROMPT };
-    // Le nom de l'Edge Function est sensible à la casse côté serveur. On essaie les
-    // variantes courantes pour que ça marche quelle que soit la façon dont elle a été créée.
-    const names = ['scan-doc', 'Scan-doc'];
+    // Le nom de l'Edge Function est sensible à la casse côté serveur. On essaie les variantes
+    // courantes (elle est déployée en « Scan-doc »). On teste EN PREMIER le nom qui a déjà marché
+    // dans la session (FP._scanFn) → plus d'appel 404 inutile à chaque scan.
+    const names = [...new Set([FP._scanFn, 'Scan-doc', 'scan-doc'].filter(Boolean))];
     for (const name of names) {
       try {
         const { data, error } = await FP.supabase.functions.invoke(name, { body: payload });
