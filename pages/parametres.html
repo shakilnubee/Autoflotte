@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723d">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -373,7 +373,7 @@
         </table>
       </div>
       <p class="text-xs text-slate-400 mt-3" id="journal-count"></p>
-      <p class="text-xs text-slate-400 mt-1">⚠️ Le journal est enregistré dans ce navigateur : il reflète les actions faites depuis ce poste. Pour un historique partagé entre tous les PC, il faudrait l'enregistrer dans Supabase (je peux le mettre en place).</p>
+      <p class="text-xs text-slate-400 mt-1">🔒 Historique <b>partagé</b> entre tous les postes (enregistré en base), isolé par société et inviolable : les entrées ne peuvent pas être modifiées, et seul un CEO/Admin peut vider le journal. En cas de coupure réseau, l'affichage retombe sur l'historique local de ce poste.</p>
     </div>
 
     <!-- Section Notifications & seuils -->
@@ -506,10 +506,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723c"></script>
-<script src="../assets/js/supabase-client.js?v=20260723c"></script>
-<script src="../assets/js/data.js?v=20260723c"></script>
-<script src="../assets/js/app.js?v=20260723c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723d"></script>
+<script src="../assets/js/supabase-client.js?v=20260723d"></script>
+<script src="../assets/js/data.js?v=20260723d"></script>
+<script src="../assets/js/app.js?v=20260723d"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1051,7 +1051,7 @@
   function renderJournal() {
     const q = FP.norm($('journal-search').value || '').trim();
     const type = $('journal-type').value;
-    const all = (FP.audit ? FP.audit.get() : []);
+    const all = (FP.audit ? FP.audit.list() : []);
     const rows = all.filter(e => {
       if (type !== 'all' && e.table !== type) return false;
       if (q && !(FP.norm(`${e.user} ${e.action} ${FP.audit.TABLE_LABEL[e.table] || e.table} ${e.label} ${e.champs || ''}`).includes(q))) return false;
@@ -1072,7 +1072,7 @@
   $('journal-type').addEventListener('change', renderJournal);
   $('btn-journal-clear').addEventListener('click', () => {
     if (!confirm('Vider tout le journal des modifications ? Cette action est irréversible.')) return;
-    FP.audit.clear(); renderJournal();
+    Promise.resolve(FP.audit.clear()).then(renderJournal);
   });
   $('btn-journal-export').addEventListener('click', () => {
     const cols = [
@@ -1083,9 +1083,11 @@
       { key: 'label', label: 'Élément' },
       { key: 'champs', label: 'Champs modifiés' },
     ];
-    FP.csv.download(`parc-pilot-journal-${new Date().toISOString().slice(0,10)}.csv`, cols, FP.audit.get());
+    FP.csv.download(`parc-pilot-journal-${new Date().toISOString().slice(0,10)}.csv`, cols, FP.audit.list());
   });
   document.addEventListener('fp:audit', renderJournal);
+  // Historique PARTAGÉ : on charge les entrées enregistrées en base (tous postes confondus).
+  if (FP.audit && FP.audit.loadRemote) { const _lr = () => FP.audit.loadRemote(); if (window.FP && FP.dbReady && FP.dbReady.then) FP.dbReady.then(_lr, _lr); else _lr(); }
 
   // ---------- Couleur de l'interface ----------
   const COLOR_PRESETS = [

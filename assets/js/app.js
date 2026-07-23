@@ -3204,17 +3204,61 @@ FP.detectDoc = function (rawText, vehicules) {
 // avec l'utilisateur connecté et l'horodatage. Stocké en localStorage.
 FP.audit = {
   KEY: 'auto_flotte_audit_log',
+  TABLE: 'audit_log',      // historique PARTAGÉ (Supabase) — cf. supabase/audit-log.sql
   MAX: 800,
+  _remote: null,           // cache mémoire de l'historique partagé (null = pas encore chargé)
   TABLE_LABEL: { vehicules: 'Véhicule', amendes: 'Amende', factures: 'Facture', conducteurs: 'Conducteur', emprunts: 'Emprunt', documents: 'Document' },
   get() { try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); } catch (e) { return []; } },
+  // Source AFFICHÉE : l'historique partagé s'il est chargé, sinon le cache local (hors-ligne).
+  list() { return Array.isArray(this._remote) ? this._remote : this.get(); },
   _save(arr) { try { localStorage.setItem(this.KEY, JSON.stringify(arr.slice(0, this.MAX))); } catch (e) {} },
   log(entry) {
-    const arr = this.get();
-    arr.unshift({ ts: new Date().toISOString(), user: FP._userEmail || (function () { try { return localStorage.getItem('auto_flotte_last_user'); } catch (e) { return null; } })() || 'inconnu', ...entry });
-    this._save(arr);
+    const full = { ts: new Date().toISOString(), user: FP._userEmail || (function () { try { return localStorage.getItem('auto_flotte_last_user'); } catch (e) { return null; } })() || 'inconnu', ...entry };
+    const arr = this.get(); arr.unshift(full); this._save(arr);
+    if (Array.isArray(this._remote)) this._remote.unshift(full);
+    try { document.dispatchEvent(new CustomEvent('fp:audit')); } catch (e) {}
+    this._remoteInsert(full); // fire-and-forget → historique partagé entre tous les postes
+  },
+  // Écriture dans Supabase EN DIRECT (client brut, PAS via FP.db pour éviter de se journaliser soi-même).
+  _remoteInsert(full) {
+    try {
+      if (!(FP.supabase && FP.supabase.from)) return;
+      let soc = (FP.activeSociete ? FP.activeSociete() : 'PXP') || 'PXP';
+      if (soc === '__all__') soc = 'PXP';
+      FP.supabase.from(this.TABLE).insert({
+        user_email: full.user || null,
+        action: full.action || null,
+        entity: full.table || null,
+        rec_id: (full.id != null && full.id !== '') ? String(full.id) : null,
+        label: full.label || null,
+        champs: full.champs || null,
+        societe: soc,
+      }).then(function () {}, function () {}); // silencieux : le local reste la source de secours
+    } catch (e) {}
+  },
+  // Charge l'historique partagé (filtré par la RLS selon la société) → alimente l'affichage.
+  async loadRemote(limit) {
+    try {
+      if (!(FP.supabase && FP.supabase.from)) return this.get();
+      const { data, error } = await FP.supabase.from(this.TABLE).select('*').order('ts', { ascending: false }).limit(limit || this.MAX);
+      if (error || !Array.isArray(data)) return this.get();
+      this._remote = data.map(r => ({ ts: r.ts, user: r.user_email, action: r.action, table: r.entity, id: r.rec_id, label: r.label, champs: r.champs, societe: r.societe }));
+      try { document.dispatchEvent(new CustomEvent('fp:audit')); } catch (e) {}
+      return this._remote;
+    } catch (e) { return this.get(); }
+  },
+  async clear() {
+    try { localStorage.removeItem(this.KEY); } catch (e) {}
+    // Efface aussi l'historique partagé de la société active (la RLS n'autorise que les admins/CEO).
+    try {
+      if (FP.supabase && FP.supabase.from) {
+        const soc = (FP.activeSociete ? FP.activeSociete() : 'PXP');
+        if (soc && soc !== '__all__') await FP.supabase.from(this.TABLE).delete().eq('societe', soc);
+      }
+    } catch (e) {}
+    if (Array.isArray(this._remote)) this._remote = [];
     try { document.dispatchEvent(new CustomEvent('fp:audit')); } catch (e) {}
   },
-  clear() { try { localStorage.removeItem(this.KEY); } catch (e) {} try { document.dispatchEvent(new CustomEvent('fp:audit')); } catch (e) {} },
   _describeRow(table, row) {
     if (!row) return '';
     if (table === 'vehicules') return `${row.immat || ''} ${row.marque || ''} ${row.modele || ''}`.trim();
