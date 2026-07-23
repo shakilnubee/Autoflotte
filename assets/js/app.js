@@ -735,11 +735,15 @@ FP.societeProfil = () => {
   try {
     const s = FP.activeSociete();
     if (s === 'PXP' || s === '__all__') return;
-    const d = window.FP_DATA; if (!d) return;
-    ['vehicules', 'amendes', 'factures', 'conducteurs'].forEach(k => {
+    const d = window.FP_DATA;
+    if (d) ['vehicules', 'amendes', 'factures', 'conducteurs'].forEach(k => {
       const arr = d[k]; if (!Array.isArray(arr)) return;
       for (let i = arr.length - 1; i >= 0; i--) { if (((arr[i] && arr[i].societe) || 'PXP') !== s) arr.splice(i, 1); }
     });
+    // FP_DOCS (permis intégrés par prénom + mémos assurance par plaque) = données PXP EN DUR
+    // (fleet-docs.js). Sans filtre, un conducteur d'une autre société portant le même prénom
+    // qu'un salarié PXP hériterait de son permis. → on les neutralise hors PXP.
+    if (window.FP_DOCS) window.FP_DOCS = { assurance: {}, permis: {} };
   } catch (e) {}
 })();
 
