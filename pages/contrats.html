@@ -868,9 +868,11 @@
         + ` <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px;margin-top:2px" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3 h-3 text-red-600"></i></button>`;
       return `<tr>
         <td class="font-medium"><span class="cursor-pointer underline decoration-dotted" data-loc-cond="${i}" title="Affecter / changer le conducteur">${c.conducteur ? escC(c.conducteur) : '<span class="text-slate-400">+ affecter</span>'}</span></td>
-        <td class="font-mono">${(() => { const auto = c.immat || autoImmatLoc(c); return auto
-          ? `<span class="cursor-pointer underline decoration-dotted ${c.immat ? '' : 'text-slate-500'}" data-loc-immat="${i}" title="${c.immat ? 'Modifier la plaque' : 'Plaque liée automatiquement depuis la fiche véhicule — cliquer pour forcer'}">${escC(auto)}</span>`
-          : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-immat="${i}">+ plaque</button>`; })()}</td>
+        <td class="font-mono">${(() => { const auto = c.immat || autoImmatLoc(c);
+          if (!auto) return `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-immat="${i}">+ plaque</button>`;
+          const inFleet = (data.vehicules || []).some(v => normPlaque(v.immat) === normPlaque(auto));
+          return `<span class="cursor-pointer underline decoration-dotted ${c.immat ? '' : 'text-slate-500'}" data-loc-immat="${i}" title="${c.immat ? 'Modifier la plaque' : 'Plaque liée automatiquement depuis la fiche véhicule — cliquer pour forcer'}">${escC(auto)}</span>`
+            + (inFleet ? '' : `<div><button type="button" class="btn btn-outline" style="padding:1px 7px;font-size:10.5px;margin-top:3px;color:var(--fp-accent);border-color:#FDBA74" data-loc-tofleet="${i}" title="Ce véhicule n'est pas dans la liste Véhicules — cliquer pour l'y ajouter">➕ flotte</button></div>`); })()}</td>
         <td>${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}<div class="text-xs text-slate-400">${c.dureeMois||'—'} mois</div></td>
         <td style="text-align:center">${finCell}</td>
         <td style="text-align:right">${kmCell}</td>
@@ -886,6 +888,25 @@
   $('tbody-localease').addEventListener('click', (e)=>{
     const list = getLocalease();
     const save = () => { const s=FP.settings.get(); s.localeaseContrats=list; FP.settings.save(s); renderLocalease(); };
+    // ➕ flotte : crée le VÉHICULE dans la liste Véhicules à partir du contrat leasing
+    // (un véhicule en leasing n'était enregistré que comme contrat, pas dans la table vehicules).
+    const tf=e.target.closest('[data-loc-tofleet]'); if(tf){
+      const i=+tf.dataset.locTofleet; const c=list[i]||{}; const immat=(c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):'')||'').trim();
+      if(!immat){ alert('Ajoute d\'abord une plaque à ce contrat.'); return; }
+      if((data.vehicules||[]).some(v=>normPlaque(v.immat)===normPlaque(immat))){ alert('Ce véhicule est déjà dans la flotte.'); renderLocalease(); return; }
+      if(!confirm(`Ajouter le véhicule « ${immat} »${c.marque||c.modele?` (${(c.marque||'')} ${(c.modele||'')})`.trim():''} à la liste des véhicules ?`)) return;
+      // id V-NNN suivant
+      let maxN=0; (data.vehicules||[]).forEach(v=>{ const m=String(v.id||'').match(/(\d+)/); if(m){ const n=+m[1]; if(n>maxN)maxN=n; } });
+      const id='V-'+String(maxN+1).padStart(3,'0');
+      const loueur=(FP.societeProfil&&FP.societeProfil().loueurNom)||'Ayvens';
+      const veh={ id, immat, marque:c.marque||'', modele:c.modele||'', categorie:'', carburant:'', km:(c.kmActuel!=null?c.kmActuel:0), statut:'actif', proprietaire:loueur, groupes:['non-classe'] };
+      if(c.co2!=null) veh.co2=c.co2;
+      data.vehicules.push(veh);
+      try{ if(FP.persist&&FP.persist.insert) FP.persist.insert('vehicules', veh); else if(FP.db&&FP.db.insert) FP.db.insert('vehicules', veh); }catch(err){ console.error('[tofleet]',err); }
+      rebuildLeasingData(); refreshAllContrats();
+      if(FP.toast)FP.toast(`✓ « ${immat} » ajouté à la flotte`); else alert(`Véhicule ${immat} ajouté à la liste Véhicules.`);
+      return;
+    }
     const up=e.target.closest('[data-loc-up]'); if(up){ _locUpIdx=+up.dataset.locUp; const inp=$('loc-upload-file'); inp.value=''; inp.click(); return; }
     const db=e.target.closest('[data-loc-debut]'); if(db){ const i=+db.dataset.locDebut; const u=prompt('Date de début / livraison (format AAAA-MM-JJ) :', list[i].debut||''); if(u==null)return; list[i].debut=u.trim()||null; save(); return; }
     const km=e.target.closest('[data-loc-km]'); if(km){ const i=+km.dataset.locKm; const u=prompt('Kilométrage actuel du véhicule :', list[i].kmActuel!=null?list[i].kmActuel:''); if(u==null)return; const n=parseInt(String(u).replace(/\D/g,''),10); list[i].kmActuel=Number.isFinite(n)?n:null; save(); return; }
