@@ -32,6 +32,21 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Méthode non autorisée" }, 405);
 
+  // ⚠️ SÉCURITÉ : seul un utilisateur CONNECTÉ peut envoyer un e-mail (sinon un tiers pourrait
+  // envoyer des mails « au nom de » la société). On valide le jeton auprès de Supabase.
+  // (SUPABASE_URL / SUPABASE_ANON_KEY sont injectés automatiquement dans les Edge Functions.)
+  {
+    const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    if (!token) return json({ error: "Non connecté." }, 401);
+    const SUPA = Deno.env.get("SUPABASE_URL"); const ANON = Deno.env.get("SUPABASE_ANON_KEY");
+    if (SUPA && ANON) {
+      try {
+        const u = await fetch(`${SUPA}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: ANON } });
+        if (!u.ok) return json({ error: "Session expirée — reconnecte-toi." }, 401);
+      } catch (_) { return json({ error: "Non autorisé." }, 401); }
+    }
+  }
+
   const key = Deno.env.get("RESEND_API_KEY");
   if (!key) {
     return json({ error: "RESEND_API_KEY absent — ajoute-le dans Supabase → Settings → Edge Functions → Secrets." }, 500);

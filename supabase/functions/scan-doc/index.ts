@@ -68,6 +68,19 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
   const auth = req.headers.get("Authorization") || "";
   if (!auth.startsWith("Bearer ")) return json({ error: "unauthorized" }, 401);
+  // ⚠️ SÉCURITÉ : on VALIDE réellement le jeton auprès de Supabase (pas juste la présence de
+  // « Bearer »), pour éviter qu'un tiers avec la clé publique appelle l'IA à tes frais.
+  // SUPABASE_URL / SUPABASE_ANON_KEY sont injectés automatiquement dans toute Edge Function.
+  {
+    const token = auth.replace(/^Bearer\s+/i, "").trim();
+    const SUPA = Deno.env.get("SUPABASE_URL"); const ANON = Deno.env.get("SUPABASE_ANON_KEY");
+    if (SUPA && ANON) {
+      try {
+        const u = await fetch(`${SUPA}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: ANON } });
+        if (!u.ok) return json({ error: "unauthorized" }, 401);
+      } catch (_) { return json({ error: "unauthorized" }, 401); }
+    }
+  }
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return json({ error: "ANTHROPIC_API_KEY manquante" }, 500);
   let payload;

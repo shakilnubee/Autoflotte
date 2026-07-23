@@ -4158,6 +4158,25 @@ document.addEventListener('DOMContentLoaded', () => {
   FP.enable3DTilt();
   window.addEventListener('fp:data-ready', () => { try { FP.enable3DTilt(); } catch (e) {} });
 
+  // Rappel de sauvegarde (anti-perte) : pour les responsables (CEO/admin), UNE fois par session,
+  // si aucune sauvegarde ou trop ancienne (> 30 jours) → petit rappel non bloquant vers Paramètres.
+  (function backupReminder() {
+    try {
+      if (!(FP.isAdmin && FP.isAdmin())) return;
+      if (sessionStorage.getItem('fp_backup_reminded') === '1') return;
+      let iso = ''; try { iso = localStorage.getItem('fp_last_backup') || ''; } catch (e) {}
+      const stale = !iso || (Date.now() - new Date(iso).getTime()) > 30 * 86400000;
+      if (!stale) return;
+      sessionStorage.setItem('fp_backup_reminded', '1');
+      setTimeout(() => {
+        if (!FP.toast) return;
+        FP.toast('💾 Pense à télécharger une sauvegarde de tes données', {
+          actionLabel: 'Sauvegarder', onAction: () => { location.href = (FP._pagePrefix ? FP._pagePrefix() : '') + 'parametres.html'; }
+        });
+      }, 2500);
+    } catch (e) {}
+  })();
+
   // === Menu hamburger mobile (sidebar en tiroir sur petit écran) ===
   (function mobileNav() {
     try {
