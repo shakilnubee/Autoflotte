@@ -157,7 +157,11 @@
         <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — <span id="leasing-loueur-nom">Leasing</span>
         <button id="leasing-edit" type="button" class="text-xs font-semibold ml-2" style="color:var(--fp-accent)"><i data-lucide="pencil" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Modifier</button>
       </div>
-      <p class="text-sm text-slate-600 mb-4">Véhicules sous contrat de leasing. Mensualités <b>théoriques</b> = mois écoulés depuis le début du contrat × mensualité fixe (médiane des factures). « X facturées » indique le nombre de factures réellement importées.</p>
+      <p class="text-sm text-slate-600 mb-3">Véhicules sous contrat de leasing. Mensualités <b>théoriques</b> = mois écoulés depuis le début du contrat × mensualité fixe (médiane des factures). « X facturées » indique le nombre de factures réellement importées.</p>
+      <div class="flex items-center gap-2 mb-4 flex-wrap">
+        <span class="text-xs font-semibold text-slate-500">Filtrer par loueur :</span>
+        <select id="leasing-loueur-filter" class="field-input !py-1 !text-sm" style="width:auto;min-width:180px"></select>
+      </div>
       <div id="leasing-config" class="hidden mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
         <div class="font-semibold text-slate-800 text-sm mb-2">Loueurs de leasing de la société</div>
         <div id="loueurs-rows" class="space-y-2"></div>
@@ -434,6 +438,29 @@
     const p = String((v && v.proprietaire) || '').trim().toLowerCase();
     const m = getLoueurs().find(l => String(l.prop || '').trim().toLowerCase() === p && p);
     return m ? m.nom : ((v && v.proprietaire) || '<span class="text-slate-400">—</span>');
+  }
+  // Nom de loueur EN CLAIR (sans HTML) pour un véhicule — sert au filtre par loueur.
+  function loueurNomOf(v) {
+    const p = String((v && v.proprietaire) || '').trim().toLowerCase();
+    const m = getLoueurs().find(l => String(l.prop || '').trim().toLowerCase() === p && p);
+    return m ? m.nom : String((v && v.proprietaire) || '').trim();
+  }
+  // ===== Filtre par loueur (partagé BPCE + Localease) =====
+  let leasingLoueurFilter = 'all';
+  const LOCALEASE_VAL = '__localease__';
+  function localeaseLabel(){ return (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? 'Localease (Ayvens)' : 'Leasing (LLD)'; }
+  function populateLeasingLoueurFilter(){
+    const sel = $('leasing-loueur-filter'); if (!sel) return;
+    const cur = leasingLoueurFilter;
+    const noms = [...new Set(getLoueurs().map(l => (l.nom || '').trim()).filter(Boolean))];
+    let hasLoc = false; try { hasLoc = getLocalease().length > 0 || (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP'); } catch (e) {}
+    let html = '<option value="all">Tous les loueurs</option>' + noms.map(n => `<option value="${escC(n)}">${escC(n)}</option>`).join('');
+    if (hasLoc) html += `<option value="${LOCALEASE_VAL}">${escC(localeaseLabel())}</option>`;
+    sel.innerHTML = html;
+    sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
+    leasingLoueurFilter = sel.value;
+    // Le filtre ne sert que s'il y a au moins 2 loueurs possibles.
+    sel.closest('div').style.display = (noms.length + (hasLoc ? 1 : 0)) > 1 ? '' : 'none';
   }
 
   function rebuildLeasingData() {
@@ -862,12 +889,18 @@
   }
 
   function renderLeasing() {
+    populateLeasingLoueurFilter();
+    // Filtre par loueur : si un loueur BPCE est choisi → on filtre ; si « Localease » est choisi
+    // → la section BPCE est masquée (seule la section Localease s'affiche).
+    const secLeasing = document.querySelector('[data-section="leasing"]');
+    if (secLeasing) secLeasing.style.display = (leasingLoueurFilter === LOCALEASE_VAL) ? 'none' : '';
     const q = FP.norm(leasingSearch).trim();
     const rows = [...leasingImmats]
       .map(immat => {
         const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
         return { v, agg: leasingByVeh[immat] || { count: 0, total: 0, lastDate: '', lastFile: null, amounts: [] } };
       })
+      .filter(({ v }) => leasingLoueurFilter === 'all' || leasingLoueurFilter === LOCALEASE_VAL || loueurNomOf(v) === leasingLoueurFilter)
       .filter(({ v }) => !q || FP.norm(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`).includes(q))
       .sort((a,b) => b.agg.total - a.agg.total);
 
@@ -1017,6 +1050,7 @@
   });
 
   $('search-leasing').addEventListener('input', e => { leasingSearch = e.target.value; renderLeasing(); });
+  if ($('leasing-loueur-filter')) $('leasing-loueur-filter').addEventListener('change', (e) => { leasingLoueurFilter = e.target.value; renderLeasing(); if (typeof renderLocalease === 'function') renderLocalease(); });
 
   // ---------- Réordonnancement des sections (glisser-déposer + mémorisation) ----------
   const SECTIONS_KEY = 'auto_flotte_contrat_sections_order';
@@ -1141,7 +1175,9 @@
     // « Leasing (LLD) » et liste vierge tant que rien n'est ajouté (isolé par société via localeaseContrats).
     const estPXP = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP');
     const sec = document.querySelector('[data-section="localease"]');
-    if (sec) sec.style.display = '';
+    // Filtre par loueur : masqué si un loueur BPCE précis est sélectionné (ni « Tous » ni « Localease »).
+    const hideByFilter = (leasingLoueurFilter !== 'all' && leasingLoueurFilter !== LOCALEASE_VAL);
+    if (sec) sec.style.display = hideByFilter ? 'none' : '';
     const tit = $('loc-title'); if (tit) tit.textContent = estPXP ? 'Leasing — Localease (Ayvens)' : 'Leasing (LLD)';
     const desc = $('loc-desc'); if (desc) desc.innerHTML = estPXP
       ? 'Contrats LLD <b>Localease / Ayvens</b> (distincts de BPCE) — pour comparer les loyers et accéder aux contrats.'
