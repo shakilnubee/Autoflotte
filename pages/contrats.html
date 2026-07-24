@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723j">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723k">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723j"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723k"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723j">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723k">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -143,7 +143,7 @@
       <div class="kpi">
         <div class="kpi-label">Coût annuel total</div>
         <div class="kpi-value" id="kpi-annuel" style="color: var(--fp-primary)">—</div>
-        <div class="kpi-delta">leasing + assurance</div>
+        <div class="kpi-delta">leasing + assurance + TVS</div>
       </div>
     </div>
 
@@ -346,10 +346,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723j"></script>
-<script src="../assets/js/supabase-client.js?v=20260723j"></script>
-<script src="../assets/js/data.js?v=20260723j"></script>
-<script src="../assets/js/app.js?v=20260723j"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723k"></script>
+<script src="../assets/js/supabase-client.js?v=20260723k"></script>
+<script src="../assets/js/data.js?v=20260723k"></script>
+<script src="../assets/js/app.js?v=20260723k"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -460,8 +460,11 @@
 
     $('kpi-leasing').textContent = leasingImmats.size + loc.length;
     $('kpi-mens-leasing').textContent = FP.euro(mensTotal);
-    $('kpi-annuel').textContent = FP.euro(mensTotal * 12 + assurPrime()); // leasing (BPCE + Localease) + prime assurance
+    // Coût annuel RÉEL = leasing (BPCE + Localease) + primes d'assurance + TVS annuelle de la flotte.
+    $('kpi-annuel').textContent = FP.euro(mensTotal * 12 + assurPrime() + fleetTVS());
   }
+  // TVS annuelle totale de la flotte (même barème central que Statistiques / fiche véhicule).
+  function fleetTVS(){ try { return (vehicules || []).reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0); } catch (e) { return 0; } }
 
   // Prime d'assurance annuelle de la flotte (un seul montant, saisi par l'utilisateur, sync par société)
   // Primes d'assurance PAR VÉHICULE (importées de l'état de parc), indexées par plaque
@@ -563,24 +566,52 @@
     el.setAttribute('style', 'padding:10px 12px;border-radius:10px;' + (c[kind] || c.working));
     el.innerHTML = msg;
   }
+  // Prompt IA : extrait TOUT le tableau (une prime par véhicule), robuste aux formats variés.
+  const ETAT_PARC_PROMPT = [
+    "Lis cet ETAT DE PARC d'assurance automobile : un tableau qui liste chaque vehicule et sa prime annuelle.",
+    "Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour :",
+    "{\"primes\":[{\"immat\":\"AB-123-CD\",\"ht\":123.45,\"ttc\":148.14}]}",
+    "immat : plaque francaise (format AB-123-CD). ht : prime annuelle HORS TAXES (nombre a point decimal). ttc : prime annuelle TTC.",
+    "S'il n'y a qu'un seul montant de prime par vehicule, mets-le dans ttc et laisse ht a null.",
+    "Inclure TOUTES les lignes de TOUTES les pages. Ne recopie QUE ce qui est ecrit : n'invente aucun vehicule ni aucun montant.",
+  ].join("\n");
+  const canonPlate = (p) => { const r = String(p == null ? '' : p).toUpperCase().replace(/[^A-Z0-9]/g, ''); return /^[A-Z]{2}[0-9]{3}[A-Z]{2}$/.test(r) ? r.slice(0, 2) + '-' + r.slice(2, 5) + '-' + r.slice(5) : String(p || '').toUpperCase(); };
+  const primeNumV = (v) => { const n = parseFloat(String(v == null ? '' : v).replace(/[\s€]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
   async function importEtatParc(file){
     if (!file) return;
     if (!(FP.settings && FP.settings.save)) { assurStatus('Connexion requise.', 'error'); return; }
-    assurStatus('🔍 Lecture de l\'état de parc…', 'working');
-    let text = '';
-    try { text = await FP.ocr.fileToText(file, 12); } catch (e) { console.warn('[etat-parc]', e); }
-    const prem = parseEtatParc(text);
+    assurStatus('🔍 Lecture de l\'état de parc par IA… (quelques secondes)', 'working');
+    const prem = {}; // { 'AB-123-CD': { ht, ttc } }
+    // 1) Lecture IA (fiable même si le format/les colonnes varient) → une prime par véhicule.
+    try {
+      if (FP.scanIA) {
+        const fields = await FP.scanIA(file, 'etat-parc', ETAT_PARC_PROMPT, { maxTokens: 8192 });
+        const arr = (fields && Array.isArray(fields.primes)) ? fields.primes : [];
+        arr.forEach(p => {
+          const plate = canonPlate(p && p.immat);
+          if (!/^[A-Z]{2}-[0-9]{3}-[A-Z]{2}$/.test(plate)) return;
+          const ttc = primeNumV(p.ttc), ht = primeNumV(p.ht);
+          if (ttc != null || ht != null) prem[plate] = { ht: ht, ttc: (ttc != null ? ttc : ht) };
+        });
+      }
+    } catch (e) { console.warn('[etat-parc IA]', e); }
+    // 2) Repli : lecture texte (couche PDF / OCR) + regex plaque → 2 montants.
+    if (!Object.keys(prem).length) {
+      let text = ''; try { text = await FP.ocr.fileToText(file, 12); } catch (e) { console.warn('[etat-parc ocr]', e); }
+      Object.assign(prem, parseEtatParc(text));
+    }
     const nb = Object.keys(prem).length;
-    if (!nb) { assurStatus('Aucune prime lue. Vérifie que c\'est bien l\'état de parc (PDF avec les colonnes « Prime annuelle HT / TTC »).', 'error'); return; }
+    if (!nb) { assurStatus('Aucune prime lue. Vérifie que c\'est bien un état de parc (liste des véhicules avec leur prime annuelle).', 'error'); return; }
+    // Enregistrement PAR SOCIÉTÉ (settings suffixés par société) → chaque flotte a ses propres primes.
     const s = FP.settings.get(); s.assurancePrimes = Object.assign(s.assurancePrimes || {}, prem); FP.settings.save(s);
-    // Bilan : combien de véhicules plateforme couverts, total, et plaques sans véhicule
+    // Bilan : véhicules de la plateforme couverts + total + plaques assurées sans véhicule ici.
     let couverts = 0, total = 0;
     vehicules.forEach(v => { const pr = vehPrime(v); if (pr) { couverts++; total += pr.ttc || 0; } });
     const platSet = new Set(vehicules.map(v => normPlaque(v.immat)));
     const sansVeh = Object.keys(prem).filter(p => !platSet.has(normPlaque(p)));
     renderKPIs(); renderAssurance();
-    assurStatus(`✓ <b>${nb} primes importées.</b> ${couverts} véhicule(s) de la plateforme couverts · total ≈ <b>${FP.euro(total)}/an</b>.`
-      + (sansVeh.length ? `<br><span class="text-amber-700">${sansVeh.length} plaque(s) assurée(s) sans véhicule sur la plateforme : ${sansVeh.join(', ')}.</span>` : ''), 'ok');
+    assurStatus(`✓ <b>${nb} primes importées</b> (une par véhicule). ${couverts} véhicule(s) de la flotte couverts · total ≈ <b>${FP.euro(total)}/an</b>.`
+      + (sansVeh.length ? `<br><span class="text-amber-700">${sansVeh.length} plaque(s) assurée(s) non présentes dans tes véhicules : ${sansVeh.join(', ')}.</span>` : ''), 'ok');
   }
 
   // ----- Ajouter UNE prime d'assurance (par véhicule) : dépôt du document + lecture auto -----

@@ -2556,7 +2556,8 @@ FP.normCarburant = function (raw) {
 // montantHT, montantTVA, montantTTC, description } ou null si indisponible/échec
 // (dans ce cas l'appelant retombe sur le lecteur local). La clé API reste côté
 // serveur : on n'envoie que le fichier + le type de document.
-FP.scanIA = async function (file, docType, promptOverride) {
+FP.scanIA = async function (file, docType, promptOverride, opts) {
+  opts = opts || {};
   try {
     if (!file || !(FP.supabase && FP.supabase.functions)) return null;
     // Les permis/CI sont souvent des PHOTOS lourdes : on les allège avant l'envoi
@@ -2575,6 +2576,9 @@ FP.scanIA = async function (file, docType, promptOverride) {
     });
     const mediaType = f.type || (/\.pdf$/i.test(f.name || '') ? 'application/pdf' : 'image/jpeg');
     const payload = { fileBase64: b64, mediaType, docType: docType || 'facture', prompt: promptOverride || FP.SCAN_PROMPT };
+    // Grandes extractions (tableaux : état de parc → une prime par véhicule) : autoriser plus de
+    // jetons en sortie pour ne pas tronquer le JSON (repli serveur = 1024 si non transmis).
+    if (opts.maxTokens) payload.maxTokens = opts.maxTokens;
     // Le nom de l'Edge Function est sensible à la casse côté serveur. On essaie les variantes
     // courantes (elle est déployée en « Scan-doc »). On teste EN PREMIER le nom qui a déjà marché
     // dans la session (FP._scanFn) → plus d'appel 404 inutile à chaque scan.

@@ -97,9 +97,14 @@ Deno.serve(async (req) => {
   const promptText = (typeof payload.prompt === "string" && payload.prompt.trim().length > 30)
     ? payload.prompt
     : buildPrompt();
+  // max_tokens : 1024 par défaut ; le site peut en demander plus (payload.maxTokens) pour les
+  // grandes extractions type tableau (état de parc → une prime par véhicule), plafonné à 8192.
+  let maxTok = 1024;
+  const reqTok = Number(payload.maxTokens);
+  if (Number.isFinite(reqTok) && reqTok > 1024) maxTok = Math.min(Math.floor(reqTok), 8192);
   const body = {
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: maxTok,
     messages: [{ role: "user", content: [fileBlock, { type: "text", text: promptText }] }],
   };
   let apiRes;
