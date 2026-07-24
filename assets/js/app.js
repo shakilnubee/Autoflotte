@@ -2701,6 +2701,67 @@ try {
   else document.addEventListener('DOMContentLoaded', () => FP.hydrateScanMedia(document));
 } catch (e) {}
 
+// === GLISSER-DÉPOSER GLOBAL de fichiers ==============================
+// Partout dans la plateforme : glisser un fichier sur une zone contenant un champ d'upload
+// (input[type=file]) le remplit et déclenche le traitement habituel (scan IA, etc.). Aucune
+// page à modifier : ça vaut pour tous les formulaires/modales, présents ET futurs.
+// Ne se déclenche QUE pour un vrai fichier venu du bureau (dataTransfer.files) → n'interfère
+// jamais avec les glisser-déposer internes (réorganisation de colonnes/lignes, déplacement de
+// documents entre dossiers, qui n'ont pas de « files »). Opt-out : attribut data-no-fp-drop.
+(function globalFileDrop() {
+  try {
+    let hi = null;
+    const setHi = (el) => { if (hi === el) return; if (hi) hi.classList.remove('fp-drop-hi'); hi = el; if (hi) hi.classList.add('fp-drop-hi'); };
+    // Champ fichier de la zone survolée : on remonte au 1er conteneur qui contient un input file.
+    function hitFor(target) {
+      for (let n = target; n && n.nodeType === 1 && n !== document.documentElement; n = n.parentElement) {
+        if (n.getAttribute && n.getAttribute('data-no-fp-drop') != null) return null;
+        let ins = null; try { ins = n.querySelectorAll('input[type="file"]:not([disabled])'); } catch (e) {}
+        if (ins && ins.length) return { input: ins[0], zone: n };
+      }
+      return null;
+    }
+    // Filtre les fichiers déposés selon l'attribut accept du champ (extension ou type MIME).
+    function allowed(input, fileList) {
+      const acc = (input.getAttribute('accept') || '').trim().toLowerCase();
+      const files = Array.from(fileList);
+      if (!acc) return files;
+      const types = acc.split(',').map(s => s.trim()).filter(Boolean);
+      return files.filter(f => types.some(t => {
+        if (t.startsWith('.')) return f.name.toLowerCase().endsWith(t);
+        if (t.endsWith('/*')) return (f.type || '').toLowerCase().startsWith(t.slice(0, -1));
+        return (f.type || '').toLowerCase() === t;
+      }));
+    }
+    const hasFiles = (e) => { try { return Array.from((e.dataTransfer && e.dataTransfer.types) || []).indexOf('Files') !== -1; } catch (_) { return false; } };
+    document.addEventListener('dragover', (e) => {
+      if (!hasFiles(e)) return;
+      const hit = hitFor(e.target);
+      if (!hit) { setHi(null); return; }
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'copy'; } catch (_) {}
+      setHi(hit.zone);
+    });
+    document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) setHi(null); });
+    window.addEventListener('dragend', () => setHi(null));
+    document.addEventListener('drop', (e) => {
+      if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) { setHi(null); return; }
+      const hit = hitFor(e.target);
+      setHi(null);
+      if (!hit) return;
+      const files = allowed(hit.input, e.dataTransfer.files);
+      e.preventDefault();
+      if (!files.length) { try { FP.toast && FP.toast("Ce type de fichier n'est pas accepté ici."); } catch (_) {} return; }
+      try {
+        const dt = new DataTransfer();
+        (hit.input.multiple ? files : [files[0]]).forEach(f => dt.items.add(f));
+        hit.input.files = dt.files;
+        hit.input.dispatchEvent(new Event('change', { bubbles: true }));
+      } catch (err) { console.warn('[drop fichier]', err); }
+    });
+  } catch (e) {}
+})();
+
 // =====================================================================
 // === OCR partagé + détection automatique de document =================
 // =====================================================================
