@@ -2518,6 +2518,34 @@ FP.CG_SCAN_PROMPT = [
   "IMPORTANT : ne devine ni n invente aucune valeur ; un champ illisible = null. Dates au format europeen jour/mois/annee (ex 05.11.2021 = 2021-11-05).",
 ].join("\n");
 
+// ---- ALERTE « INFOS MANQUANTES À L'IMPORT » (toute la plateforme) ----
+// Consigne : à chaque import (carte grise, facture, permis, état de parc…), si une info dont le
+// site a besoin n'a PAS pu être lue, on le signale TOUT DE SUITE à l'utilisateur (+ rappel dans
+// l'onglet Alertes → « À compléter »). Champs attendus par type de document :
+FP.IMPORT_FIELDS = {
+  'carte-grise': [ { k:'immat', l:'Immatriculation' }, { k:'marque', l:'Marque' }, { k:'modele', l:'Modèle' }, { k:'vin', l:'VIN' }, { k:'dateMiseEnCirculation', l:'1re mise en circulation' }, { k:'co2', l:'CO₂' }, { k:'puissanceFiscale', l:'Puissance fiscale' }, { k:'carburant', l:'Carburant' } ],
+  'facture':     [ { k:'date', l:'Date' }, { k:'fournisseur', l:'Fournisseur' }, { k:'montantTTC', l:'Montant TTC' } ],
+  'permis':      [ { k:'permisNumero', l:'N° de permis' }, { k:'permisType', l:'Catégories' }, { k:'permisObtention', l:"Date d'obtention" }, { k:'permisExpiration', l:"Date d'expiration" } ],
+  'amende':      [ { k:'numeroAvis', l:"N° d'avis" }, { k:'montant', l:'Montant' }, { k:'date', l:"Date de l'infraction" } ],
+  'leasing':     [ { k:'loyerTTC', l:'Loyer TTC/mois' }, { k:'dureeMois', l:'Durée' }, { k:'kmTotal', l:'Km total' } ],
+};
+FP.importMissing = function (docType, rec, extra) {
+  const defs = (FP.IMPORT_FIELDS[docType] || []).concat(Array.isArray(extra) ? extra : []);
+  const empty = v => v == null || v === '' || (Array.isArray(v) && !v.length);
+  return defs.filter(d => empty(rec ? rec[d.k] : null));
+};
+// Signale les infos manquantes après un import. Renvoie la liste des manquants (vide = tout est là).
+FP.importAlert = function (docType, rec, opts) {
+  opts = opts || {};
+  const miss = FP.importMissing(docType, rec, opts.extra);
+  if (!miss.length) return miss;
+  const labels = miss.map(m => m.l).join(', ');
+  const where = opts.where ? (' (à compléter dans ' + opts.where + ')') : ' — complète-les à la main.';
+  const msg = '⚠️ ' + (opts.prefix || 'Import') + ' : information(s) non lue(s) → ' + labels + where;
+  try { if (FP.toast) FP.toast(msg); else alert(msg.replace(/^⚠️ /, '')); } catch (e) { try { alert(labels); } catch (_) {} }
+  return miss;
+};
+
 // ---- CARBURANT : libellés CANONIQUES + normaliseur central ----
 // Un seul jeu de libellés pour toute la plateforme, pour que deux véhicules identiques n'aient
 // JAMAIS deux libellés différents (ex. « Hybride » vs « Essence / Hybride »). Tout carburant
