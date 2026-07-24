@@ -258,7 +258,8 @@
         </div>
         <div><div class="kpi-label">Par mois</div><div class="font-extrabold text-xl" id="assur-mensuel" style="color:var(--fp-primary)">—</div></div>
         <div><div class="kpi-label">Par véhicule / an</div><div class="font-extrabold text-xl" id="assur-parveh" style="color:var(--fp-primary)">—</div></div>
-        <div class="ml-auto">
+        <div class="ml-auto flex items-center gap-2">
+          <button id="assur-add-prime" type="button" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter une prime</button>
           <button id="assur-import" type="button" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Importer l'état de parc</button>
           <input type="file" id="assur-import-file" accept="application/pdf,image/*" class="hidden" />
         </div>
@@ -307,6 +308,39 @@
           <button id="lease-cancel" type="button" class="btn btn-outline text-sm">Annuler</button>
           <button id="lease-save" type="button" class="btn btn-dark text-sm">Enregistrer</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal : ajouter une prime d'assurance (par véhicule) -->
+  <div id="prime-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
+    <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-xl">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="text-lg font-extrabold">Ajouter une prime d'assurance</h3>
+        <button id="prime-close" type="button" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-4">Déposez le document de la prime (le montant est lu automatiquement) ou saisissez-le. Le total annuel des primes de la flotte est mis à jour.</p>
+      <div class="space-y-3">
+        <label class="block"><span class="text-sm font-medium text-slate-700">Véhicule</span>
+          <select id="prime-veh" class="field-input w-full mt-1" style="width:100%"></select></label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block"><span class="text-sm font-medium text-slate-700">Prime TTC (€/an)</span>
+            <input id="prime-ttc" type="text" inputmode="decimal" class="field-input w-full mt-1" placeholder="0"></label>
+          <label class="block"><span class="text-sm font-medium text-slate-700">Prime HT <span class="text-slate-400">(opt.)</span></span>
+            <input id="prime-ht" type="text" inputmode="decimal" class="field-input w-full mt-1" placeholder=""></label>
+        </div>
+        <div>
+          <span class="text-sm font-medium text-slate-700">Document <span class="text-slate-400">(facultatif)</span></span>
+          <div id="prime-drop" class="mt-1 p-3 rounded-lg border border-dashed text-sm text-slate-500 text-center cursor-pointer" style="border-color:var(--fp-border)">
+            <i data-lucide="upload" class="w-4 h-4 inline"></i> Glisser ou cliquer pour déposer (lecture auto du montant)
+            <input type="file" id="prime-file" accept="application/pdf,image/*" class="hidden" />
+          </div>
+          <div id="prime-doc-status" class="text-xs mt-1"></div>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-5">
+        <button id="prime-cancel" type="button" class="btn btn-outline text-sm">Annuler</button>
+        <button id="prime-save" type="button" class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Ajouter au total</button>
       </div>
     </div>
   </div>
@@ -547,6 +581,64 @@
     renderKPIs(); renderAssurance();
     assurStatus(`✓ <b>${nb} primes importées.</b> ${couverts} véhicule(s) de la plateforme couverts · total ≈ <b>${FP.euro(total)}/an</b>.`
       + (sansVeh.length ? `<br><span class="text-amber-700">${sansVeh.length} plaque(s) assurée(s) sans véhicule sur la plateforme : ${sansVeh.join(', ')}.</span>` : ''), 'ok');
+  }
+
+  // ----- Ajouter UNE prime d'assurance (par véhicule) : dépôt du document + lecture auto -----
+  const primeNum = str => { const n = parseFloat(String(str == null ? '' : str).replace(/[\s€]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
+  let _primeDoc = null; // { url, name } du document déposé
+  function openPrimeModal(){
+    _primeDoc = null;
+    const sel = $('prime-veh');
+    if (sel) {
+      sel.innerHTML = '<option value="">— choisir un véhicule —</option>' + vehicules
+        .slice().sort((a,b)=>(a.immat||'').localeCompare(b.immat||''))
+        .map(v => `<option value="${escC(v.immat || '')}">${escC(v.immat || '?')} — ${escC(v.marque || '')} ${escC(v.modele || '')}</option>`).join('');
+      if (window.FP && FP.searchSelect) { try { FP.searchSelect(sel, { placeholder: 'Rechercher un véhicule…' }); } catch (e) {} }
+    }
+    $('prime-ttc').value = ''; $('prime-ht').value = '';
+    const st = $('prime-doc-status'); if (st) { st.textContent = ''; st.className = 'text-xs mt-1'; }
+    const m = $('prime-modal'); m.classList.remove('hidden'); m.classList.add('flex');
+    if (window.lucide) lucide.createIcons();
+  }
+  function closePrimeModal(){ const m = $('prime-modal'); m.classList.add('hidden'); m.classList.remove('flex'); _primeDoc = null; }
+
+  async function primeFileSelected(file){
+    if (!file) return;
+    const st = $('prime-doc-status');
+    const show = (msg, col) => { if (st) { st.className = 'text-xs mt-1'; st.setAttribute('style', col || ''); st.innerHTML = msg; } };
+    try {
+      // 1) Lecture IA du montant (comme une facture) — best effort, avant l'envoi.
+      show('🔍 Lecture du montant…', 'color:#475569');
+      let ia = null; try { ia = (window.FP && FP.scanIA) ? await FP.scanIA(file) : null; } catch (e) { console.warn('[prime IA]', e); }
+      if (ia) {
+        if (ia.montantTTC != null && !primeNum($('prime-ttc').value)) $('prime-ttc').value = String(ia.montantTTC).replace('.', ',');
+        if (ia.montantHT != null && !primeNum($('prime-ht').value)) $('prime-ht').value = String(ia.montantHT).replace('.', ',');
+      }
+      // 2) Envoi du document dans le stockage.
+      show('☁️ Envoi du document…', 'color:#475569');
+      const url = (window.FP && FP.uploadScan) ? await FP.uploadScan(file, 'assurance') : '';
+      if (url) { _primeDoc = { url, name: file.name || 'prime-assurance.pdf' }; show('✓ Document déposé' + (ia && ia.montantTTC != null ? ' · montant lu automatiquement (vérifie).' : ' · saisis le montant.'), 'color:#047857'); }
+      else show('Document non enregistré (tu peux quand même saisir le montant).', 'color:#B45309');
+    } catch (e) { console.warn('[prime file]', e); show('Échec du dépôt : ' + (e.message || e), 'color:#B91C1C'); }
+  }
+
+  function savePrime(){
+    const immat = ($('prime-veh').value || '').trim();
+    const ttc = primeNum($('prime-ttc').value);
+    const ht = primeNum($('prime-ht').value);
+    if (!immat) { alert('Choisis un véhicule.'); return; }
+    if (!(ttc > 0)) { alert('Saisis la prime TTC (€/an).'); return; }
+    const s = FP.settings.get(); s.assurancePrimes = s.assurancePrimes || {};
+    const k = normPlaque(immat);
+    // Retrouve une éventuelle clé existante (même plaque) pour ne pas créer de doublon.
+    let existKey = null; for (const key in s.assurancePrimes) { if (normPlaque(key) === k) { existKey = key; break; } }
+    const rec = Object.assign({}, existKey ? s.assurancePrimes[existKey] : {}, { ht: ht != null ? ht : null, ttc });
+    if (_primeDoc && _primeDoc.url) { rec.docUrl = _primeDoc.url; rec.docName = _primeDoc.name; }
+    s.assurancePrimes[existKey || immat] = rec;
+    FP.settings.save(s);
+    closePrimeModal();
+    renderKPIs(); renderAssurance();
+    if (FP.toast) FP.toast('✓ Prime ajoutée — total mis à jour');
   }
 
   function renderLeasing() {
@@ -1100,6 +1192,14 @@
   // Import de l'état de parc (assurance)
   if ($('assur-import')) $('assur-import').addEventListener('click', () => { const inp = $('assur-import-file'); if (inp) { inp.value = ''; inp.click(); } });
   if ($('assur-import-file')) $('assur-import-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importEtatParc(f); });
+  // Ajouter une prime (par véhicule) : ouverture modale + dépôt de document + enregistrement
+  if ($('assur-add-prime')) $('assur-add-prime').addEventListener('click', openPrimeModal);
+  if ($('prime-close')) $('prime-close').addEventListener('click', closePrimeModal);
+  if ($('prime-cancel')) $('prime-cancel').addEventListener('click', closePrimeModal);
+  if ($('prime-modal')) $('prime-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closePrimeModal(); });
+  if ($('prime-drop')) $('prime-drop').addEventListener('click', () => { const inp = $('prime-file'); if (inp) { inp.value = ''; inp.click(); } });
+  if ($('prime-file')) $('prime-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) primeFileSelected(f); });
+  if ($('prime-save')) $('prime-save').addEventListener('click', savePrime);
   // Masquer / réafficher les véhicules « sans prime » que l'utilisateur sait normaux
   if ($('assur-missing')) $('assur-missing').addEventListener('click', (e) => {
     const sv = e.target.closest('[data-assur-prime-save]');
