@@ -262,6 +262,7 @@
         <div class="ml-auto flex items-center gap-2">
           <button id="assur-add-prime" type="button" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter une prime</button>
           <button id="assur-import" type="button" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Importer l'état de parc</button>
+          <button id="assur-export" type="button" class="btn btn-outline text-sm" title="Générer un état de parc propre (PDF) à partir de tes données"><i data-lucide="file-down" class="w-4 h-4"></i> Exporter l'état de parc</button>
           <input type="file" id="assur-import-file" accept="application/pdf,image/*" class="hidden" />
         </div>
       </div>
@@ -610,22 +611,26 @@
     el.setAttribute('style', 'padding:10px 12px;border-radius:10px;' + (c[kind] || c.working));
     el.innerHTML = msg;
   }
-  // Prompt IA : extrait TOUT le tableau (une prime par véhicule), robuste aux formats variés.
+  // Prompt IA : extrait TOUT le tableau (véhicule + prime), robuste aux formats variés. On lit aussi
+  // marque/modèle/VIN quand ils sont présents → pour RAPPROCHER avec la fiche véhicule.
   const ETAT_PARC_PROMPT = [
     "Lis cet ETAT DE PARC d'assurance automobile : un tableau qui liste chaque vehicule et sa prime annuelle.",
     "Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour :",
-    "{\"primes\":[{\"immat\":\"AB-123-CD\",\"ht\":123.45,\"ttc\":148.14}]}",
+    "{\"primes\":[{\"immat\":\"AB-123-CD\",\"ht\":123.45,\"ttc\":148.14,\"marque\":\"...\",\"modele\":\"...\",\"vin\":\"...\"}]}",
     "immat : plaque francaise (format AB-123-CD). ht : prime annuelle HORS TAXES (nombre a point decimal). ttc : prime annuelle TTC.",
+    "marque, modele : si le tableau les indique (sinon null). vin : le numero de serie / VIN (17 caracteres) s'il est present (sinon null).",
     "S'il n'y a qu'un seul montant de prime par vehicule, mets-le dans ttc et laisse ht a null.",
-    "Inclure TOUTES les lignes de TOUTES les pages. Ne recopie QUE ce qui est ecrit : n'invente aucun vehicule ni aucun montant.",
+    "Inclure TOUTES les lignes de TOUTES les pages. Ne recopie QUE ce qui est ecrit : n'invente aucun vehicule, aucun montant, aucun VIN.",
   ].join("\n");
   const canonPlate = (p) => { const r = String(p == null ? '' : p).toUpperCase().replace(/[^A-Z0-9]/g, ''); return /^[A-Z]{2}[0-9]{3}[A-Z]{2}$/.test(r) ? r.slice(0, 2) + '-' + r.slice(2, 5) + '-' + r.slice(5) : String(p || '').toUpperCase(); };
   const primeNumV = (v) => { const n = parseFloat(String(v == null ? '' : v).replace(/[\s€]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
+  const _n = s => String(s == null ? '' : s).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Z0-9]/g, '');
   async function importEtatParc(file){
     if (!file) return;
     if (!(FP.settings && FP.settings.save)) { assurStatus('Connexion requise.', 'error'); return; }
     assurStatus('🔍 Lecture de l\'état de parc par IA… (quelques secondes)', 'working');
-    const prem = {}; // { 'AB-123-CD': { ht, ttc } }
+    const prem = {};   // { 'AB-123-CD': { ht, ttc } }
+    const rows = {};   // { 'AB-123-CD': { marque, modele, vin } } → pour le rapprochement
     // 1) Lecture IA (fiable même si le format/les colonnes varient) → une prime par véhicule.
     try {
       if (FP.scanIA) {
@@ -636,6 +641,7 @@
           if (!/^[A-Z]{2}-[0-9]{3}-[A-Z]{2}$/.test(plate)) return;
           const ttc = primeNumV(p.ttc), ht = primeNumV(p.ht);
           if (ttc != null || ht != null) prem[plate] = { ht: ht, ttc: (ttc != null ? ttc : ht) };
+          rows[plate] = { marque: p.marque || '', modele: p.modele || '', vin: (p.vin || '').toString().toUpperCase().replace(/[^A-Z0-9]/g, '') };
         });
       }
     } catch (e) { console.warn('[etat-parc IA]', e); }
@@ -648,14 +654,88 @@
     if (!nb) { assurStatus('Aucune prime lue. Vérifie que c\'est bien un état de parc (liste des véhicules avec leur prime annuelle).', 'error'); return; }
     // Enregistrement PAR SOCIÉTÉ (settings suffixés par société) → chaque flotte a ses propres primes.
     const s = FP.settings.get(); s.assurancePrimes = Object.assign(s.assurancePrimes || {}, prem); FP.settings.save(s);
-    // Bilan : véhicules de la plateforme couverts + total + plaques assurées sans véhicule ici.
+    renderKPIs(); renderAssurance();
+    // ===== RAPPROCHEMENT fichier ↔ flotte =====
     let couverts = 0, total = 0;
     vehicules.forEach(v => { const pr = vehPrime(v); if (pr) { couverts++; total += pr.ttc || 0; } });
-    const platSet = new Set(vehicules.map(v => normPlaque(v.immat)));
-    const sansVeh = Object.keys(prem).filter(p => !platSet.has(normPlaque(p)));
-    renderKPIs(); renderAssurance();
-    assurStatus(`✓ <b>${nb} primes importées</b> (une par véhicule). ${couverts} véhicule(s) de la flotte couverts · total ≈ <b>${FP.euro(total)}/an</b>.`
-      + (sansVeh.length ? `<br><span class="text-amber-700">${sansVeh.length} plaque(s) assurée(s) non présentes dans tes véhicules : ${sansVeh.join(', ')}.</span>` : ''), 'ok');
+    const byPlate = {}; vehicules.forEach(v => { byPlate[normPlaque(v.immat)] = v; });
+    const docPlates = Object.keys(prem);
+    // (a) Dans le fichier mais ABSENT de la flotte → véhicule à créer
+    const absents = docPlates.filter(p => !byPlate[normPlaque(p)]);
+    // (b) Actifs dans la flotte mais ABSENTS du fichier → non assuré / à vérifier
+    const nonAssures = vehicules.filter(v => (!v.statut || v.statut === 'actif') && !prem[normPlaque(v.immat)] && !docPlates.some(p => normPlaque(p) === normPlaque(v.immat)));
+    // (c) Incohérences : marque/modèle/VIN du fichier ≠ fiche véhicule (uniquement si l'info est dans le fichier)
+    const ecarts = [];
+    docPlates.forEach(p => {
+      const v = byPlate[normPlaque(p)]; const r = rows[p]; if (!v || !r) return;
+      const diffs = [];
+      if (r.marque && v.marque && _n(r.marque) !== _n(v.marque)) diffs.push(`marque : fichier « ${escC(r.marque)} » ≠ fiche « ${escC(v.marque)} »`);
+      if (r.modele && v.modele && _n(r.modele) !== _n(v.modele) && !_n(v.modele).includes(_n(r.modele)) && !_n(r.modele).includes(_n(v.modele))) diffs.push(`modèle : fichier « ${escC(r.modele)} » ≠ fiche « ${escC(v.modele)} »`);
+      if (r.vin && v.vin && _n(r.vin) !== _n(v.vin)) diffs.push(`VIN : fichier « ${escC(r.vin)} » ≠ fiche « ${escC(v.vin)} »`);
+      if (diffs.length) ecarts.push({ v, diffs });
+    });
+    // ===== Rapport =====
+    let html = `✓ <b>${nb} primes importées</b> (une par véhicule). ${couverts} véhicule(s) couverts · total ≈ <b>${FP.euro(total)}/an</b>.`;
+    if (absents.length) html += `<details style="margin-top:8px"><summary style="cursor:pointer;color:#B45309;font-weight:600">⚠️ ${absents.length} véhicule(s) du fichier ABSENT(s) de ta flotte (à créer)</summary>`
+      + `<div style="margin-top:4px">${absents.map(p => `• <b>${escC(p)}</b>${rows[p] && (rows[p].marque || rows[p].modele) ? ' — ' + escC((rows[p].marque + ' ' + rows[p].modele).trim()) : ''} · ${prem[p] && prem[p].ttc != null ? FP.euro(prem[p].ttc) + '/an' : ''}`).join('<br>')}</div></details>`;
+    if (nonAssures.length) html += `<details style="margin-top:8px"><summary style="cursor:pointer;color:#B45309;font-weight:600">⚠️ ${nonAssures.length} véhicule(s) actif(s) de ta flotte ABSENT(s) du fichier (non assuré ?)</summary>`
+      + `<div style="margin-top:4px">${nonAssures.map(v => `• ${FP.lienVehicule(v.immat)} — ${escC((v.marque || '') + ' ' + (v.modele || ''))}`).join('<br>')}</div></details>`;
+    if (ecarts.length) html += `<details open style="margin-top:8px"><summary style="cursor:pointer;color:#B91C1C;font-weight:700">❗ ${ecarts.length} incohérence(s) fichier ↔ fiche véhicule (à vérifier)</summary>`
+      + `<div style="margin-top:4px">${ecarts.map(x => `• ${FP.lienVehicule(x.v.immat)}<br><span style="color:#B91C1C">${x.diffs.join('<br>')}</span>`).join('<hr style="border:none;border-top:1px solid #eee;margin:6px 0">')}</div></details>`;
+    if (!absents.length && !nonAssures.length && !ecarts.length) html += `<br><span style="color:#047857">✓ Tout concorde : chaque véhicule du fichier correspond à ta flotte.</span>`;
+    assurStatus(html, (absents.length || nonAssures.length || ecarts.length) ? 'working' : 'ok');
+    if (window.lucide) lucide.createIcons();
+  }
+
+  // ----- Exporter un ÉTAT DE PARC propre (PDF imprimable) à partir de nos données -----
+  function exportEtatParc(){
+    let nomSoc = ''; try { nomSoc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
+    if (!nomSoc || /^parc\s*pilot$/i.test(nomSoc)) nomSoc = (FP.activeSociete ? FP.activeSociete() : '') || 'Flotte';
+    const esc = s => escC(s == null ? '' : s);
+    const today = new Date().toLocaleDateString('fr-FR');
+    const list = vehicules.slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+    let totHT = 0, totTTC = 0, nbP = 0;
+    const rows = list.map((v, i) => {
+      const pr = vehPrime(v);
+      if (pr) { nbP++; if (pr.ht != null) totHT += pr.ht; if (pr.ttc != null) totTTC += pr.ttc; }
+      return `<tr>
+        <td class="n">${i + 1}</td>
+        <td class="im">${esc(v.immat || '—')}</td>
+        <td>${esc(((v.marque || '') + ' ' + (v.modele || '')).trim() || '—')}</td>
+        <td class="vin">${esc(v.vin || '—')}</td>
+        <td>${esc(v.chauffeur && v.chauffeur !== '—' ? v.chauffeur : '—')}</td>
+        <td>${v.dateMiseEnCirculation ? esc(FP.dateNum(v.dateMiseEnCirculation)) : '—'}</td>
+        <td>${esc(v.statut || '—')}</td>
+        <td class="e">${pr && pr.ht != null ? FP.euro(pr.ht) : '—'}</td>
+        <td class="e">${pr && pr.ttc != null ? FP.euro(pr.ttc) : '<span style="color:#b45309">à compléter</span>'}</td>
+      </tr>`;
+    }).join('');
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>État de parc — ${esc(nomSoc)}</title>
+      <style>
+        *{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;box-sizing:border-box}
+        body{margin:0;padding:28px 30px;color:#0f172a}
+        .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #F97316;padding-bottom:12px;margin-bottom:16px}
+        .hd h1{margin:0;font-size:20px} .hd .s{color:#64748b;font-size:12px;margin-top:3px}
+        .hd .r{text-align:right;font-size:12px;color:#64748b}
+        table{width:100%;border-collapse:collapse;font-size:11px}
+        th,td{border:1px solid #e2e8f0;padding:5px 7px;text-align:left;vertical-align:top}
+        th{background:#0B1220;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+        td.n{color:#94a3b8;text-align:right} td.im{font-family:monospace;font-weight:700} td.vin{font-family:monospace;font-size:9.5px}
+        td.e{text-align:right;white-space:nowrap} tr:nth-child(even) td{background:#f8fafc}
+        tfoot td{background:#FFF7ED;font-weight:800;border-top:2px solid #F97316}
+        .note{margin-top:10px;font-size:10px;color:#94a3b8}
+        @media print{@page{size:A4 landscape;margin:12mm} body{padding:0}}
+      </style></head><body>
+      <div class="hd"><div><h1>État de parc — assurance</h1><div class="s">${esc(nomSoc)} · ${list.length} véhicule(s) · ${nbP} prime(s) renseignée(s)</div></div>
+        <div class="r">Édité le ${today}<br>Parc Pilot</div></div>
+      <table><thead><tr><th>N°</th><th>Immatriculation</th><th>Marque / modèle</th><th>VIN</th><th>Conducteur</th><th>1re immat.</th><th>Statut</th><th style="text-align:right">Prime HT/an</th><th style="text-align:right">Prime TTC/an</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td colspan="7" style="text-align:right">TOTAL ANNUEL</td><td class="e">${FP.euro(totHT)}</td><td class="e">${FP.euro(totTTC)}</td></tr></tfoot></table>
+      <div class="note">Document généré depuis Parc Pilot. « à compléter » = prime non encore renseignée pour ce véhicule.</div>
+      <script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script>
+      </body></html>`;
+    const w = window.open('', '_blank'); if (!w) { alert('Autorise les fenêtres pop-up pour générer le PDF.'); return; }
+    w.document.write(html); w.document.close();
   }
 
   // ----- Ajouter UNE prime d'assurance (par véhicule) : dépôt du document + lecture auto -----
@@ -1340,6 +1420,7 @@
   if ($('assur-import-file')) $('assur-import-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) importEtatParc(f); });
   // Ajouter une prime (par véhicule) : ouverture modale + dépôt de document + enregistrement
   if ($('assur-add-prime')) $('assur-add-prime').addEventListener('click', openPrimeModal);
+  if ($('assur-export')) $('assur-export').addEventListener('click', exportEtatParc);
   if ($('prime-close')) $('prime-close').addEventListener('click', closePrimeModal);
   if ($('prime-cancel')) $('prime-cancel').addEventListener('click', closePrimeModal);
   if ($('prime-modal')) $('prime-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closePrimeModal(); });
