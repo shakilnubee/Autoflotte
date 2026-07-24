@@ -131,7 +131,7 @@
       <div class="kpi"><div class="flex justify-between items-start gap-2">
         <div><div class="kpi-label">Coût d'usage</div>
           <div class="kpi-value" id="kpi-usage" style="color: var(--fp-primary)">—</div>
-          <div class="kpi-delta">entretien, répa., leasing…</div></div>
+          <div class="kpi-delta">entretien, répa., leasing, carburant, péages…</div></div>
         <div class="kpi-ic"><i data-lucide="wrench"></i></div>
       </div></div>
       <div class="kpi"><div class="flex justify-between items-start gap-2">
@@ -163,7 +163,7 @@
     <!-- Classement coût au km -->
     <div class="card p-5 mb-6">
       <h3 class="font-bold text-slate-900 mb-1 flex items-center gap-2"><i data-lucide="gauge" class="w-4 h-4" style="color:#F97316"></i> Classement coût au km <span class="text-xs font-normal text-slate-400">(<span id="perkm-periode">toutes années</span>)</span></h3>
-      <p class="text-xs text-slate-400 mb-4">Coût total (factures + assurance + TVS + amendes) rapporté au kilométrage. Véhicules sans km exclus.</p>
+      <p class="text-xs text-slate-400 mb-4">Coût total (factures + carburant + péages + assurance + TVS + amendes) rapporté au kilométrage. Véhicules sans km exclus.</p>
       <div class="grid md:grid-cols-2 gap-6">
         <div>
           <div class="text-xs font-bold uppercase tracking-wide text-red-600 mb-2">🔺 Les plus chères au km</div>
@@ -267,7 +267,7 @@
         <h3 class="font-bold text-slate-900">Coût total par véhicule (tout compris)</h3>
         <span id="tco-export-mount"></span>
       </div>
-      <p class="text-xs text-slate-400 px-6 pb-3">Factures d'usage (entretien, réparation, leasing, sinistre) + assurance + TVS + amendes du conducteur. <b>Hors prix d'achat du véhicule</b> (affiché à part dans « Prix d'acquisition » en haut). Assurance et TVS sont des montants <b>annuels</b> : pour comparer une année précise, choisis-la dans le filtre en haut.</p>
+      <p class="text-xs text-slate-400 px-6 pb-3">Factures d'usage (entretien, réparation, leasing, sinistre, <b>carburant, péages</b>) + assurance + TVS + amendes du conducteur. <b>Hors prix d'achat du véhicule</b> (affiché à part dans « Prix d'acquisition » en haut). Assurance et TVS sont des montants <b>annuels</b> : pour comparer une année précise, choisis-la dans le filtre en haut.</p>
       <div class="scrollable">
         <table class="fp-table" id="tco-table">
           <thead></thead>
@@ -290,7 +290,7 @@
   const factures = data.factures || [];
 
   // Types qui comptent comme "coût d'usage" (PAS l'achat ni la cession)
-  const USAGE_TYPES = ['entretien', 'réparation', 'reparation', 'leasing', 'sinistre', 'autre'];
+  const USAGE_TYPES = ['entretien', 'réparation', 'reparation', 'leasing', 'sinistre', 'autre', 'carburant', 'peage', 'ulys'];
   const isUsage = (f) => USAGE_TYPES.includes((f.type || '').toLowerCase());
 
   // Années disponibles + KPI TVS — reconstruits aussi au chargement Supabase (sinon figés au cache)
@@ -616,7 +616,7 @@
     const normN = s => (s || '').toString().trim().toLowerCase();
     const amAll = (annee === 'all') ? (data.amendes || []) : (data.amendes || []).filter(a => (a.date || '').startsWith(annee));
     const _seenDrv = new Set();
-    const _EXC_TCO = new Set(['cession', 'carburant', 'peage', 'ulys', 'achat']); // vente = entrée d'argent ; carburant/péages = onglet Total Fleet ; achat = prix d'acquisition (affiché à part)
+    const _EXC_TCO = new Set(['cession', 'achat']); // exclus du TCO : vente = entrée d'argent ; achat = prix d'acquisition (affiché à part). Carburant/péages/Ulys = MAINTENANT comptés (vrai coût d'usage).
     tcoData = data.vehicules.map(v => {
       const fv = fact.filter(f => f.vehiculeImmat === v.immat);
       const factTotal = fv.filter(f => !_EXC_TCO.has((f.type || '').toLowerCase())).reduce((s, f) => s + (+f.montantTTC || 0), 0);
