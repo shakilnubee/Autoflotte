@@ -4549,6 +4549,141 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
 
 })();
 
+// ============================================================
+// FP.fiche — Générateur de fiche imprimable RÉUTILISABLE (PDF net via jsPDF + impression HTML).
+//   FP.fiche.open({ key, title, cols:[{id,label,def,align,mono,get(row)}], rows:[...] })
+// La modale (choix des colonnes) est injectée à la volée. Le PDF nécessite jsPDF + autotable
+// chargés sur la page (assets/js/vendor/jspdf*). L'impression HTML fonctionne partout.
+// ============================================================
+(function () {
+  const SPACE_RE = /[\u00A0\u2000-\u200B\u202F\u205F\u2060\u3000]/g;
+  const clean = (s) => String(s == null ? '' : s).replace(SPACE_RE, ' ').replace(/₂/g, '2');
+  const escH = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+  const LOGO = '<svg width="118" height="27" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic" fill="#fff">Parc</text><text x="86" y="26" font-size="20" font-weight="900" font-style="italic" fill="#F97316">Pilot</text></svg>';
+  let modal = null, cur = null;
+
+  function build() {
+    if (modal) return;
+    const el = document.createElement('div');
+    el.id = 'fp-fiche-ov';
+    el.style.cssText = 'display:none;position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.45);align-items:center;justify-content:center;padding:20px';
+    el.innerHTML = '<div style="background:#fff;border-radius:16px;padding:22px 24px;width:100%;max-width:480px;box-shadow:0 20px 50px rgba(15,23,42,.3);max-height:88vh;overflow:auto">'
+      + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px"><div>'
+      + '<h3 id="fp-fiche-h" style="font-size:18px;font-weight:800;margin:0;color:#0f172a">Fiche à imprimer</h3>'
+      + '<p style="font-size:13px;color:#64748b;margin:3px 0 0">Coche les colonnes — <b id="fp-fiche-scope" style="color:#f97316">0</b></p></div>'
+      + '<button id="fp-fiche-x" style="background:none;border:none;font-size:24px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button></div>'
+      + '<label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin:14px 0 4px">Titre de la fiche</label>'
+      + '<input id="fp-fiche-title" type="text" style="width:100%;border:1px solid #e2e8f0;border-radius:9px;padding:8px 11px;font-size:14px;color:#0f172a">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px"><span style="font-size:12px;font-weight:600;color:#64748b">Colonnes</span>'
+      + '<span style="font-size:12px"><button id="fp-fiche-all" style="background:none;border:none;color:#f97316;font-weight:600;cursor:pointer">Tout</button> · <button id="fp-fiche-none" style="background:none;border:none;color:#64748b;font-weight:600;cursor:pointer">Rien</button></span></div>'
+      + '<div id="fp-fiche-cols" style="display:grid;grid-template-columns:1fr 1fr;gap:5px 14px"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;flex-wrap:wrap">'
+      + '<button id="fp-fiche-cancel" class="btn btn-outline text-sm">Annuler</button>'
+      + '<button id="fp-fiche-print" class="btn btn-outline text-sm">Imprimer</button>'
+      + '<button id="fp-fiche-pdf" class="btn btn-dark text-sm">Télécharger le PDF</button></div></div>';
+    document.body.appendChild(el);
+    modal = el;
+    const close = () => { el.style.display = 'none'; };
+    el.querySelector('#fp-fiche-x').onclick = close;
+    el.querySelector('#fp-fiche-cancel').onclick = close;
+    el.addEventListener('click', e => { if (e.target === el) close(); });
+    el.querySelector('#fp-fiche-all').onclick = () => el.querySelectorAll('#fp-fiche-cols input').forEach(i => { i.checked = true; });
+    el.querySelector('#fp-fiche-none').onclick = () => el.querySelectorAll('#fp-fiche-cols input').forEach(i => { i.checked = false; });
+    el.querySelector('#fp-fiche-pdf').onclick = () => { if (genPDF()) close(); };
+    el.querySelector('#fp-fiche-print').onclick = () => { if (genPrint()) close(); };
+  }
+
+  function ctx() {
+    const ids = Array.from(modal.querySelectorAll('#fp-fiche-cols input:checked')).map(i => i.value);
+    if (!ids.length) { alert('Coche au moins une colonne.'); return null; }
+    try { const s = FP.settings.get(); s.ficheCols = s.ficheCols || {}; s.ficheCols[cur.key] = ids; FP.settings.save(s); } catch (e) {}
+    return {
+      cols: cur.cols.filter(c => ids.includes(c.id)),
+      title: (modal.querySelector('#fp-fiche-title').value || '').trim() || cur.title,
+      rows: cur.rows,
+      today: new Date().toLocaleDateString('fr-FR'),
+    };
+  }
+
+  function genPDF() {
+    const c = ctx(); if (!c) return false;
+    if (!window.jspdf || !window.jspdf.jsPDF) { alert('La librairie PDF n\'est pas chargée sur cette page.'); return false; }
+    const { cols, title, rows, today } = c;
+    const jsPDF = window.jspdf.jsPDF;
+    const doc = new jsPDF({ orientation: cols.length > 6 ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    doc.setFillColor(15, 30, 61); doc.rect(10, 10, pageW - 20, 15, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text(clean(title), 15, 18);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(210, 220, 235);
+    doc.text('Édité le ' + today + '  ·  ' + rows.length + ' ligne' + (rows.length > 1 ? 's' : ''), 15, 22.5);
+    doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(13); doc.setTextColor(255, 255, 255);
+    doc.text('Parc', pageW - 15 - doc.getTextWidth('Pilot') - doc.getTextWidth('Parc'), 19);
+    doc.setTextColor(249, 115, 22); doc.text('Pilot', pageW - 15 - doc.getTextWidth('Pilot'), 19);
+    const columnStyles = { 0: { halign: 'left', textColor: [148, 163, 184], cellWidth: 8 } };
+    cols.forEach((col, idx) => { columnStyles[idx + 1] = { halign: col.align === 'right' ? 'right' : 'left', font: col.mono ? 'courier' : 'helvetica' }; });
+    doc.autoTable({
+      head: [['#'].concat(cols.map(c2 => clean(c2.label)))],
+      body: rows.map((r, i) => [String(i + 1)].concat(cols.map(c2 => clean(c2.get(r))))),
+      startY: 30, margin: { top: 30, left: 10, right: 10 },
+      styles: { fontSize: 9, cellPadding: 2.4, textColor: [15, 30, 61], lineColor: [238, 242, 247], lineWidth: 0.1 },
+      headStyles: { fillColor: [241, 245, 249], textColor: [51, 65, 85], fontStyle: 'bold', fontSize: 8.5 },
+      alternateRowStyles: { fillColor: [250, 251, 252] }, columnStyles: columnStyles,
+      didDrawPage: (d) => {
+        doc.setFontSize(8); doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'normal');
+        doc.text('Parc Pilot — gestion de flotte', 10, doc.internal.pageSize.getHeight() - 6);
+        doc.text('Page ' + d.pageNumber, pageW - 10, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
+      },
+    });
+    const safe = clean(title).replace(/[^\wÀ-ÿ \-]+/g, '').trim().replace(/\s+/g, '-') || 'fiche';
+    doc.save(safe + '_' + today.split('/').reverse().join('-') + '.pdf');
+    return true;
+  }
+
+  function genPrint() {
+    const c = ctx(); if (!c) return false;
+    const { cols, title, rows, today } = c;
+    const thead = '<th class="num">#</th>' + cols.map(c2 => '<th class="' + (c2.align === 'right' ? 'r' : '') + '">' + escH(c2.label) + '</th>').join('');
+    const body = rows.map((r, i) => '<tr><td class="num">' + (i + 1) + '</td>' + cols.map(c2 => {
+      const cls = ((c2.align === 'right' ? 'r ' : '') + (c2.mono ? 'mono' : '')).trim();
+      return '<td' + (cls ? ' class="' + cls + '"' : '') + '>' + escH(c2.get(r)) + '</td>';
+    }).join('') + '</tr>').join('');
+    const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + escH(title) + '</title><style>'
+      + '@page{margin:12mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Roboto,Arial,Helvetica,sans-serif;color:#0F1E3D;margin:0;padding:26px;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+      + '.head{display:flex;align-items:center;justify-content:space-between;background:#0F1E3D;color:#fff;padding:16px 20px;border-radius:12px}.head h1{font-size:17px;margin:0;font-weight:800}.head .meta{font-size:11px;opacity:.85;margin-top:3px}'
+      + '.count{display:inline-block;margin:16px 0 10px;font-size:13px;font-weight:700;color:#475569}.count b{color:#F97316;font-size:16px}'
+      + 'table{width:100%;border-collapse:collapse;font-size:12px}thead th{background:#F1F5F9;color:#334155;padding:9px 10px;border-bottom:2px solid #cbd5e1;text-transform:uppercase;font-size:10px;letter-spacing:.03em;text-align:left;white-space:nowrap}thead th.r{text-align:right}'
+      + 'tbody td{padding:8px 10px;border-bottom:1px solid #eef2f7;vertical-align:top}tbody td.r{text-align:right;font-variant-numeric:tabular-nums}tbody td.mono{font-family:"Courier New",monospace;font-weight:700}tbody tr:nth-child(even) td{background:#fafbfc}'
+      + '.num{color:#94a3b8;width:26px}.foot{margin-top:16px;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between;border-top:1px solid #eef2f7;padding-top:10px}'
+      + '.noprint{margin-top:20px;padding:10px 18px;border:none;border-radius:8px;cursor:pointer;background:#F97316;color:#fff;font-weight:700;font-size:13px}@media print{.noprint{display:none}body{padding:0}}'
+      + '</style></head><body><div class="head"><div><h1>' + escH(title) + '</h1><div class="meta">Édité le ' + today + '</div></div><div>' + LOGO + '</div></div>'
+      + '<div class="count"><b>' + rows.length + '</b> ligne' + (rows.length > 1 ? 's' : '') + '</div>'
+      + '<table><thead><tr>' + thead + '</tr></thead><tbody>' + body + '</tbody></table>'
+      + '<div class="foot"><span>Parc Pilot — gestion de flotte</span><span>' + today + '</span></div>'
+      + '<button class="noprint" onclick="window.print()">Imprimer / Enregistrer en PDF</button>'
+      + '<scr' + 'ipt>setTimeout(function(){try{window.print()}catch(e){}},400)</scr' + 'ipt></body></html>';
+    const w = window.open('', '_blank');
+    if (!w) { alert('Autorise les fenêtres pop-up pour générer la fiche.'); return false; }
+    w.document.write(html); w.document.close();
+    return true;
+  }
+
+  FP.fiche = {
+    open(config) {
+      build();
+      cur = { key: config.key || 'fiche', cols: config.cols || [], rows: config.rows || [], title: config.title || 'Fiche' };
+      if (!cur.rows.length) { alert('Aucune ligne à imprimer (vérifie les filtres / la sélection).'); return; }
+      let saved; try { saved = (FP.settings.get().ficheCols || {})[cur.key]; } catch (e) {}
+      if (!saved || !saved.length) saved = cur.cols.filter(c => c.def).map(c => c.id);
+      modal.querySelector('#fp-fiche-cols').innerHTML = cur.cols.map(c =>
+        '<label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#334155;padding:4px 6px;border-radius:6px;cursor:pointer"><input type="checkbox" value="' + c.id + '"' + (saved.indexOf(c.id) >= 0 ? ' checked' : '') + ' style="width:15px;height:15px;accent-color:#f97316"> ' + escH(c.label) + '</label>').join('');
+      modal.querySelector('#fp-fiche-scope').textContent = cur.rows.length + ' ligne(s)';
+      modal.querySelector('#fp-fiche-h').textContent = cur.title;
+      modal.querySelector('#fp-fiche-title').value = cur.title;
+      modal.style.display = 'flex';
+    },
+  };
+})();
+
 // Toolbar Import/Export CSV retirée (remplacée par l'import de document sur Véhicules/Amendes).
 // Conservée en NO-OP : encore appelée par plusieurs pages (amendes, vehicules, factures…).
 FP.injectDataIO = () => {};
