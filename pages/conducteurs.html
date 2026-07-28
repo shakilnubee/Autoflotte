@@ -1487,77 +1487,125 @@
   });
 
   // ---------- Export PDF de la fiche conducteur ----------
-  function exportCondPDF(key) {
-    const d = drivers.find(x => x.key === key);
-    if (!d) return;
+  // Construit la fiche conducteur « à la sauce Parc Pilot » (HTML autonome, prêt à imprimer/PDF).
+  function condFicheHTML(d) {
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-    const row = (k, val) => `<tr><td style="color:#555;padding:3px 14px 3px 0;white-space:nowrap">${k}</td><td style="font-weight:600">${val || '—'}</td></tr>`;
+    const kv = (k, val) => `<div class="kv"><span class="k">${k}</span><span class="v">${(val != null && val !== '') ? val : '—'}</span></div>`;
     let ageNum = null;
     if (d.dateNaissance) { const a = Math.floor((Date.now() - new Date(d.dateNaissance)) / 31557600000); if (a > 0 && a < 120) ageNum = a; }
     const nbPoints = d.amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
     const totalPaye = d.amendes.filter(a => a.statut === 'payée').reduce((s, a) => s + (a.montant || 0), 0);
     const dus = d.amendes.filter(a => a.statut === 'à payer').reduce((s, a) => s + (a.montant || 0), 0);
     const accs = driverAccidents(d.vehicules.map(v => v.immat));
-    // Permis : champs renseignés sur la fiche (type / numéro / obtention / expiration)
-    const permisInfo = (d.permisType || d.permisNumero || d.permisObtention || d.permisExpiration)
-      ? `${row('Type', esc(d.permisType))}${row('Numéro', esc(d.permisNumero))}${row("Date d'obtention", d.permisObtention ? FP.date(d.permisObtention) : '')}${row("Date d'expiration", d.permisExpiration ? FP.date(d.permisExpiration) : '')}`
-      : '<tr><td colspan="2" style="color:#888">Aucune information de permis renseignée</td></tr>';
+    const hasPermis = (d.permisType || d.permisNumero || d.permisObtention || d.permisExpiration);
+    const permisCard = hasPermis
+      ? kv('Type', esc(d.permisType)) + kv('Numéro', esc(d.permisNumero)) + kv("Date d'obtention", d.permisObtention ? FP.date(d.permisObtention) : '') + kv("Date d'expiration", d.permisExpiration ? FP.date(d.permisExpiration) : '')
+      : '<div class="kv"><span class="k" style="color:#94a3b8">Aucune information de permis renseignée</span></div>';
     const vehRows = d.vehicules.length
-      ? d.vehicules.map(v => `<tr><td style="padding:3px 14px 3px 0;font-family:monospace">${esc(v.immat)}</td><td>${esc(v.marque)} ${esc(v.modele)}</td><td>${esc(v.statut || '')}</td><td style="text-align:right">${FP.num(v.km || 0)} km</td></tr>`).join('')
-      : '<tr><td colspan="4" style="color:#888">Aucun véhicule assigné</td></tr>';
+      ? d.vehicules.map(v => `<tr><td class="mono">${esc(v.immat)}</td><td>${esc(v.marque)} ${esc(v.modele)}</td><td>${esc(v.statut || '—')}</td><td class="r">${FP.num(v.km || 0)} km</td></tr>`).join('')
+      : '<tr><td colspan="4" style="color:#94a3b8">Aucun véhicule assigné</td></tr>';
     const amRows = d.amendes.length
-      ? d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(a => `<tr><td style="padding:3px 14px 3px 0;white-space:nowrap">${a.date ? FP.date(a.date) : '—'}</td><td>${esc(a.motif || '—')}</td><td style="text-align:center">${(Number(a.points) || 0) > 0 ? '−' + a.points : '—'}</td><td style="text-align:right">${a.montant ? FP.euroPrecis(a.montant) : '—'}</td><td>${a.statut === 'payée' ? 'Payée' : 'À payer'}</td></tr>`).join('')
-      : '<tr><td colspan="5" style="color:#888">Aucune amende ✓</td></tr>';
+      ? d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(a => `<tr><td>${a.date ? FP.date(a.date) : '—'}</td><td>${esc(a.motif || '—')}</td><td class="c">${(Number(a.points) || 0) > 0 ? '−' + a.points : '—'}</td><td class="r">${a.montant ? FP.euroPrecis(a.montant) : '—'}</td><td class="${a.statut === 'payée' ? 'pay' : 'due'}">${a.statut === 'payée' ? 'Payée' : 'À payer'}</td></tr>`).join('')
+      : '<tr><td colspan="5" style="color:#94a3b8">Aucune amende ✓</td></tr>';
     const fullName = d.nom ? `${d.name} ${d.nom}` : d.name;
-    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche ${esc(fullName)}</title>
-      <style>
-        body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:32px;font-size:13px}
-        h1{margin:0;font-size:22px} .sub{color:#64748b;margin:2px 0 16px}
-        h2{font-size:14px;border-bottom:1px solid #cbd5e1;padding-bottom:4px;margin:22px 0 8px}
-        table{border-collapse:collapse;width:100%} td{padding:3px 0;vertical-align:top}
-        .grid{display:flex;gap:40px} .grid>div{flex:1}
-        .lst td{border-bottom:1px solid #eee;padding:5px 10px 5px 0}
-        .lst th{text-align:left;color:#64748b;font-weight:600;border-bottom:1px solid #cbd5e1;padding:4px 10px 4px 0;font-size:11px}
-        .kpis{display:flex;gap:14px;margin:6px 0 4px}
-        .kpi{background:#f1f5f9;border-radius:8px;padding:8px 14px;text-align:center}
-        .kpi b{display:block;font-size:18px} .kpi span{font-size:11px;color:#64748b}
-        @media print{body{margin:12mm}}
-      </style></head><body onload="window.print()">
-      <h1>${esc(fullName)}</h1>
-      <div class="sub">${esc([d.poste, driverGroupLabel(d)].filter(Boolean).join(' · ') || 'Conducteur')}</div>
-      <div class="grid">
-        <div><h2>Identité</h2><table>
-          ${row('Nom', esc(d.nom))}
-          ${row('Prénom', esc(d.prenom))}
-          ${row('Date de naissance', d.dateNaissance ? FP.date(d.dateNaissance) + (ageNum ? ' (' + ageNum + ' ans)' : '') : '')}
-          ${row('Poste', esc(d.poste))}
-        </table></div>
-        <div><h2>Contact</h2><table>
-          ${row('Téléphone', esc(d.tel))}
-          ${row('Email', esc(d.email))}
-          ${row('Adresse', esc(d.adresse))}
-        </table></div>
+    const grp = driverGroupLabel(d);
+    const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche ${esc(fullName)}</title><style>
+      @page{size:A4;margin:0}*{box-sizing:border-box}
+      body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#0F1E3D;margin:0;padding:26px;font-size:12.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      .hd{position:relative;background:#0F1E3D;border-radius:14px;padding:20px 24px;color:#fff;overflow:hidden}
+      .hd::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:#F97316}
+      .hd .nm{font-size:24px;font-weight:800;margin:0;line-height:1.1}
+      .hd .po{color:#C7D2E6;font-size:13px;margin-top:4px}
+      .hd .grp{display:inline-block;margin-top:9px;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;background:#F97316;color:#fff;padding:3px 11px;border-radius:999px}
+      .hd .wm{position:absolute;right:22px;top:20px;text-align:right}
+      .hd .wm .b{font-weight:900;font-style:italic;font-size:18px}.hd .wm .b .o{color:#FB923C}
+      .hd .wm .t{font-size:8px;letter-spacing:1.6px;color:#8fa1bd;margin-top:3px}
+      .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:16px 0}
+      .stat{border:1px solid #e6ebf2;border-radius:11px;padding:11px 6px;text-align:center;background:#fbfcfe}
+      .stat b{display:block;font-size:20px;font-weight:800;line-height:1}
+      .stat span{font-size:9.5px;color:#64748b;text-transform:uppercase;letter-spacing:.03em;margin-top:6px;display:block}
+      .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+      .card{border:1px solid #e6ebf2;border-radius:12px;padding:14px 16px;break-inside:avoid}
+      .card h2{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#F97316;margin:0 0 9px;font-weight:700}
+      .kv{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid #f1f5f9}
+      .kv:last-child{border-bottom:0}.kv .k{color:#64748b}.kv .v{font-weight:600;text-align:right}
+      table{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
+      thead th{background:#0F1E3D;color:#fff;text-align:left;padding:7px 9px;font-size:9.5px;text-transform:uppercase;letter-spacing:.03em}
+      thead th.r{text-align:right}thead th.c{text-align:center}
+      tbody td{padding:6px 9px;border-bottom:1px solid #eef2f7}tbody td.r{text-align:right}tbody td.c{text-align:center}
+      tbody tr:nth-child(even){background:#f8fafc}
+      .mono{font-family:'Courier New',monospace;font-weight:700}.pay{color:#16a34a;font-weight:700}.due{color:#dc2626;font-weight:700}
+      .sec-h{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#334155;font-weight:700;margin:16px 0 6px}
+      .foot{margin-top:18px;border-top:1px solid #eef2f7;padding-top:10px;color:#94a3b8;font-size:10px;display:flex;justify-content:space-between}
+      @media print{body{padding:12mm}}
+    </style></head><body>
+      <div class="hd">
+        <div class="nm">${esc(fullName)}</div>
+        <div class="po">${esc(d.poste || 'Conducteur')}</div>
+        ${grp ? `<div class="grp">${esc(grp)}</div>` : ''}
+        <div class="wm"><div class="b">Parc<span class="o">Pilot</span></div><div class="t">FICHE CONDUCTEUR</div></div>
       </div>
-      <h2>Bilan</h2>
-      <div class="kpis">
-        <div class="kpi"><b>${d.amendes.length}</b><span>Amendes</span></div>
-        <div class="kpi"><b>${nbPoints}</b><span>Points perdus</span></div>
-        <div class="kpi"><b>${accs.length}</b><span>Accidents</span></div>
-        <div class="kpi"><b>${FP.euro(totalPaye)}</b><span>Payé</span></div>
-        <div class="kpi"><b>${FP.euro(dus)}</b><span>À payer</span></div>
+      <div class="stats">
+        <div class="stat"><b style="color:#0F1E3D">${d.amendes.length}</b><span>Amendes</span></div>
+        <div class="stat"><b style="color:${nbPoints > 0 ? '#dc2626' : '#16a34a'}">${nbPoints}</b><span>Points perdus</span></div>
+        <div class="stat"><b style="color:${accs.length > 0 ? '#f97316' : '#0F1E3D'}">${accs.length}</b><span>Accidents</span></div>
+        <div class="stat"><b style="color:#16a34a">${FP.euro(totalPaye)}</b><span>Payé</span></div>
+        <div class="stat"><b style="color:${dus > 0 ? '#dc2626' : '#0F1E3D'}">${FP.euro(dus)}</b><span>À payer</span></div>
       </div>
-      <h2>Permis de conduire</h2>
-      <table>${permisInfo}</table>
-      <h2>Véhicule(s) · ${d.vehicules.length}</h2>
-      <table class="lst"><tr><th>Plaque</th><th>Véhicule</th><th>Statut</th><th style="text-align:right">Km</th></tr>${vehRows}</table>
-      <h2>Amendes · ${d.amendes.length}</h2>
-      <table class="lst"><tr><th>Date</th><th>Motif</th><th style="text-align:center">Pts</th><th style="text-align:right">Montant</th><th>Statut</th></tr>${amRows}</table>
-      ${d.note ? `<h2>Note</h2><p>${esc(d.note)}</p>` : ''}
-      <div style="margin-top:24px;color:#94a3b8;font-size:11px">Parc Pilot — fiche générée le ${FP.date(new Date().toISOString())}</div>
-      </body></html>`;
-    const w = window.open('', '_blank');
-    if (!w) { alert('Autorise les fenêtres pop-up pour exporter le PDF.'); return; }
-    w.document.write(html); w.document.close();
+      <div class="cols">
+        <div class="card"><h2>Identité</h2>
+          ${kv('Nom', esc(d.nom))}${kv('Prénom', esc(d.prenom))}
+          ${kv('Date de naissance', d.dateNaissance ? FP.date(d.dateNaissance) + (ageNum ? ' (' + ageNum + ' ans)' : '') : '')}
+          ${kv('Poste', esc(d.poste))}
+        </div>
+        <div class="card"><h2>Contact</h2>
+          ${kv('Téléphone', esc(d.tel))}${kv('Email', esc(d.email))}${kv('Adresse', esc(d.adresse))}
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:6px"><h2>Permis de conduire</h2>${permisCard}</div>
+      <div class="sec-h">Véhicule(s) · ${d.vehicules.length}</div>
+      <table><thead><tr><th>Plaque</th><th>Véhicule</th><th>Statut</th><th class="r">Km</th></tr></thead><tbody>${vehRows}</tbody></table>
+      <div class="sec-h">Amendes · ${d.amendes.length}</div>
+      <table><thead><tr><th>Date</th><th>Motif</th><th class="c">Pts</th><th class="r">Montant</th><th>Statut</th></tr></thead><tbody>${amRows}</tbody></table>
+      ${d.note ? `<div class="card" style="margin-top:14px"><h2>Note</h2><div style="font-size:12.5px;color:#334155">${esc(d.note)}</div></div>` : ''}
+      <div class="foot"><span>Parc Pilot — gestion de flotte</span><span>Fiche générée le ${FP.date(new Date().toISOString())}</span></div>
+    </body></html>`;
+    return { html, name: fullName };
+  }
+
+  // Aperçu plein écran (iframe) avant impression / enregistrement PDF.
+  let _condPrev = null;
+  function ensureCondPrev() {
+    if (_condPrev) return;
+    const el = document.createElement('div');
+    el.id = 'cond-prev-ov';
+    el.style.cssText = 'display:none;position:fixed;inset:0;z-index:90;background:rgba(15,23,42,.6);align-items:center;justify-content:center;padding:16px';
+    el.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:940px;height:92vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.4);overflow:hidden">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-bottom:1px solid #eef2f7">'
+      + '<div id="cond-prev-title" style="font-weight:800;color:#0f172a;font-size:15px">Aperçu</div>'
+      + '<button id="cond-prev-x" style="background:none;border:none;font-size:24px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button></div>'
+      + '<iframe id="cond-prev-frame" title="Aperçu de la fiche conducteur" style="flex:1;border:0;width:100%;background:#525659"></iframe>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #eef2f7">'
+      + '<button id="cond-prev-close" class="btn btn-outline text-sm">Fermer</button>'
+      + '<button id="cond-prev-print" class="btn btn-dark text-sm"><i data-lucide="printer" class="w-4 h-4"></i> Imprimer / Enregistrer en PDF</button></div></div>';
+    document.body.appendChild(el);
+    _condPrev = el;
+    const close = () => { el.style.display = 'none'; el.querySelector('#cond-prev-frame').srcdoc = ''; };
+    el.querySelector('#cond-prev-x').onclick = close;
+    el.querySelector('#cond-prev-close').onclick = close;
+    el.addEventListener('click', e => { if (e.target === el) close(); });
+    el.querySelector('#cond-prev-print').onclick = () => { const f = el.querySelector('#cond-prev-frame'); try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { window.print(); } };
+  }
+
+  function exportCondPDF(key) {
+    const d = drivers.find(x => x.key === key);
+    if (!d) return;
+    ensureCondPrev();
+    const { html, name } = condFicheHTML(d);
+    _condPrev.querySelector('#cond-prev-title').textContent = 'Aperçu — ' + name;
+    _condPrev.querySelector('#cond-prev-frame').srcdoc = html;
+    _condPrev.style.display = 'flex';
+    if (window.lucide) try { lucide.createIcons(); } catch (e) {}
   }
 
   // Réception du fichier permis téléversé → Supabase Storage, puis enregistrement du lien
