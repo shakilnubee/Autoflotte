@@ -1366,6 +1366,8 @@ FP.notifCfg = () => {
     revKm:   num(n.revKm, 15000),   // intervalle de révision (km)
     revMois: num(n.revMois, 12),    // intervalle de révision (mois)
     ctJours: num(n.ctJours, 90),    // anticipation d'alerte du contrôle technique (jours)
+    revAlerteKm:   num(n.revAlerteKm, 1000),   // alerte révision quand il reste ≤ X km
+    revAlerteJours: num(n.revAlerteJours, 30), // alerte révision quand il reste ≤ X jours (avant l'échéance mois)
   };
 };
 // Intervalle de révision : par défaut tous les 15 000 km OU tous les 12 mois (au premier atteint),
@@ -1427,8 +1429,11 @@ FP.revisionInfo = (v) => {
     kmRestant = prochaineKm - km;
   }
 
-  const lvlKm = kmRestant === null ? null : (kmRestant <= 1000 ? 'danger' : kmRestant <= 3000 ? 'warn' : kmRestant <= 6000 ? 'info' : null);
-  const lvlDt = joursRestant === null ? null : (joursRestant <= 30 ? 'danger' : joursRestant <= 60 ? 'warn' : joursRestant <= 90 ? 'info' : null);
+  // Alerte SEULEMENT quand l'échéance est proche : dépassée = danger, sinon ≤ seuil = warn.
+  // Plus de niveau « info » (bleu) : on n'alerte pas des mois/milliers de km à l'avance.
+  const cfg = FP.notifCfg();
+  const lvlKm = kmRestant === null ? null : (kmRestant <= 0 ? 'danger' : kmRestant <= cfg.revAlerteKm ? 'warn' : null);
+  const lvlDt = joursRestant === null ? null : (joursRestant <= 0 ? 'danger' : joursRestant <= cfg.revAlerteJours ? 'warn' : null);
   const rank = { danger: 0, warn: 1, info: 2 };
   let niveau = null;
   [lvlKm, lvlDt].forEach(l => { if (l && (niveau === null || rank[l] < rank[niveau])) niveau = l; });

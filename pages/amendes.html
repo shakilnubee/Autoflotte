@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723s">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723t">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723s"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723t"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723s">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723t">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -273,6 +273,7 @@
     <div class="am-bulk-bar" id="am-bulk-bar">
       <span class="font-semibold text-sm"><span id="am-bulk-count">0</span> amende(s) sélectionnée(s)</span>
       <div class="flex items-center gap-1 flex-wrap" style="margin-left:auto">
+        <button type="button" class="am-bulk-btn" id="am-bulk-fiche"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Relevé PDF</button>
         <button type="button" class="am-bulk-btn" id="am-bulk-pay"><i data-lucide="check" class="w-3.5 h-3.5"></i> Marquer payées</button>
         <button type="button" class="am-bulk-btn" id="am-bulk-unpay"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Marquer non payées</button>
         <button type="button" class="am-bulk-btn danger" id="am-bulk-delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>
@@ -445,12 +446,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723s"></script>
-<script src="../assets/js/supabase-client.js?v=20260723s"></script>
-<script src="../assets/js/data.js?v=20260723s"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723s"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723s"></script>
-<script src="../assets/js/app.js?v=20260723s"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723t"></script>
+<script src="../assets/js/supabase-client.js?v=20260723t"></script>
+<script src="../assets/js/data.js?v=20260723t"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723t"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723t"></script>
+<script src="../assets/js/app.js?v=20260723t"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2543,14 +2544,13 @@
     period: { dateOf: a => a.date || '' },
     baseName: () => 'amendes-' + (state.annee === 'all' ? 'toutes' : state.annee),
   });
-  // Relevé PDF des amendes (respecte les filtres en cours : conducteur, année, statut…)
-  if ($('am-fiche-btn')) $('am-fiche-btn').addEventListener('click', () => {
+  // Relevé PDF des amendes — factorisé (bouton du haut = filtres en cours ; barre = sélection).
+  function openAmendesFiche(rows, title) {
     if (!(FP.fiche && FP.fiche.open)) return;
-    const rows = sortRows(filtered());
-    const suffix = state.conducteur ? ' — ' + state.conducteur : (state.annee !== 'all' ? ' ' + state.annee : '');
+    if (!rows.length) { if (FP.toast) FP.toast('Aucune amende à imprimer.'); return; }
     FP.fiche.open({
       key: 'amendes',
-      title: 'Relevé d\'amendes' + suffix,
+      title: title,
       rows: rows,
       cols: [
         { id: 'date',       label: 'Date',       def: true,  get: a => a.date ? FP.dateNum(a.date) : '—' },
@@ -2563,6 +2563,16 @@
         { id: 'numeroAvis', label: 'N° avis',    def: false, mono: true, get: a => a.numeroAvis || '—' },
       ],
     });
+  }
+  // Bouton du haut : relevé des amendes AFFICHÉES (filtres en cours).
+  if ($('am-fiche-btn')) $('am-fiche-btn').addEventListener('click', () => {
+    const suffix = state.conducteur ? ' — ' + state.conducteur : (state.annee !== 'all' ? ' ' + state.annee : '');
+    openAmendesFiche(sortRows(filtered()), 'Relevé d\'amendes' + suffix);
+  });
+  // Barre de sélection : relevé des amendes COCHÉES uniquement.
+  if ($('am-bulk-fiche')) $('am-bulk-fiche').addEventListener('click', () => {
+    const rows = sortRows(filtered().filter(a => state.selectedIds.has(a.id)));
+    openAmendesFiche(rows, 'Relevé d\'amendes (sélection)');
   });
   $('amende-close').addEventListener('click', closeAmendeModal);
   $('amende-cancel').addEventListener('click', closeAmendeModal);
