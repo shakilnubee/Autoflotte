@@ -4708,6 +4708,38 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
   };
 })();
 
+// Aperçu PDF générique (réutilisable par n'importe quelle page) : montre un doc jsPDF dans une
+// iframe, avec Télécharger (un clic) + Imprimer + Fermer. Usage : FP.pdfPreview(doc, 'fichier.pdf', 'sous-titre').
+FP.pdfPreview = function (doc, filename, subtitle) {
+  let ov = document.getElementById('fp-pdfprev-ov');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'fp-pdfprev-ov';
+    ov.style.cssText = 'display:none;position:fixed;inset:0;z-index:90;background:rgba(15,23,42,.6);align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:940px;height:92vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.4);overflow:hidden">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-bottom:1px solid #eef2f7">'
+      + '<div style="font-weight:800;color:#0f172a;font-size:15px">Aperçu <span id="fp-pdfprev-sub" style="color:#64748b;font-weight:500;font-size:13px"></span></div>'
+      + '<button id="fp-pdfprev-x" style="background:none;border:none;font-size:24px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button></div>'
+      + '<iframe id="fp-pdfprev-frame" title="Aperçu PDF" style="flex:1;border:0;width:100%;background:#525659"></iframe>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #eef2f7">'
+      + '<button id="fp-pdfprev-close" class="btn btn-outline text-sm">Fermer</button>'
+      + '<button id="fp-pdfprev-print" class="btn btn-outline text-sm"><i data-lucide="printer" class="w-4 h-4"></i> Imprimer</button>'
+      + '<button id="fp-pdfprev-dl" class="btn btn-dark text-sm"><i data-lucide="download" class="w-4 h-4"></i> Télécharger le PDF</button></div></div>';
+    document.body.appendChild(ov);
+    const close = () => { ov.style.display = 'none'; const f = ov.querySelector('#fp-pdfprev-frame'); try { if (f.src && f.src.indexOf('blob:') === 0) URL.revokeObjectURL(f.src); } catch (e) {} f.src = 'about:blank'; };
+    ov.querySelector('#fp-pdfprev-x').onclick = close;
+    ov.querySelector('#fp-pdfprev-close').onclick = close;
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    ov.querySelector('#fp-pdfprev-dl').onclick = () => { if (ov._doc) ov._doc.save(ov._name || 'document.pdf'); };
+    ov.querySelector('#fp-pdfprev-print').onclick = () => { const f = ov.querySelector('#fp-pdfprev-frame'); try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { if (f.src) window.open(f.src); } };
+  }
+  ov._doc = doc; ov._name = filename || 'document.pdf';
+  ov.querySelector('#fp-pdfprev-sub').textContent = subtitle || '';
+  ov.querySelector('#fp-pdfprev-frame').src = doc.output('bloburl');
+  ov.style.display = 'flex';
+  if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+};
+
 // Toolbar Import/Export CSV retirée (remplacée par l'import de document sur Véhicules/Amendes).
 // Conservée en NO-OP : encore appelée par plusieurs pages (amendes, vehicules, factures…).
 FP.injectDataIO = () => {};
