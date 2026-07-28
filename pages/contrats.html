@@ -167,6 +167,7 @@
         <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
         <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — <span id="leasing-loueur-nom">Leasing</span>
         <button id="leasing-import-btn" type="button" class="btn btn-outline text-xs ml-2" style="padding:3px 10px"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Importer les loyers (facture)</button>
+        <button id="leasing-restit-btn" type="button" class="btn btn-outline text-xs ml-1" style="padding:3px 10px" title="Dossier de restitution (PDF) : km, dépassement projeté et pénalité estimée"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Fiche restitution</button>
         <input id="leasing-import-file" type="file" accept="application/pdf" class="hidden">
       </div>
       <p class="text-sm text-slate-600 mb-4">Contrats de leasing — loyers mensuels, échéances et documents. <b>Total versé</b> = loyer exact × mois écoulés.</p>
@@ -452,6 +453,8 @@
 <script src="../assets/js/vendor/supabase.js?v=20260723u"></script>
 <script src="../assets/js/supabase-client.js?v=20260723u"></script>
 <script src="../assets/js/data.js?v=20260723u"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723u"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723u"></script>
 <script src="../assets/js/app.js?v=20260723u"></script>
 <script>
   lucide.createIcons();
@@ -1196,6 +1199,30 @@
   function openLeasImport() { const m = $('leasimport-modal'); m.classList.remove('hidden'); m.classList.add('flex'); liParsed = []; $('leasimport-preview').innerHTML = ''; $('leasimport-apply').disabled = true; liStatus('Choisis le PDF de la facture mensuelle du loueur…'); $('leasing-import-file').value = ''; $('leasing-import-file').click(); }
   function closeLeasImport() { const m = $('leasimport-modal'); m.classList.add('hidden'); m.classList.remove('flex'); }
   if ($('leasing-import-btn')) $('leasing-import-btn').addEventListener('click', openLeasImport);
+  // Dossier de restitution leasing (PDF) : km, dépassement projeté et pénalité estimée par véhicule.
+  if ($('leasing-restit-btn')) $('leasing-restit-btn').addEventListener('click', () => {
+    if (!(FP.fiche && FP.fiche.open)) return;
+    const list = [...leasingImmats].map(immat => vehicules.find(x => x.immat === immat)).filter(Boolean)
+      .sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+    if (!list.length) { if (FP.toast) FP.toast('Aucun véhicule en leasing.'); return; }
+    const info = v => (FP.leasingInfo ? FP.leasingInfo(v) : null);
+    FP.fiche.open({
+      key: 'restitution',
+      title: 'Dossier de restitution — leasing',
+      rows: list,
+      cols: [
+        { id: 'immat',     label: 'Immat.',          def: true,  mono: true, get: v => v.immat || '—' },
+        { id: 'modele',    label: 'Véhicule',        def: true,  get: v => ((v.marque || '') + ' ' + (v.modele || '')).trim() || '—' },
+        { id: 'chauffeur', label: 'Conducteur',      def: false, get: v => (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '—' },
+        { id: 'km',        label: 'Km actuel',       def: true,  align: 'right', get: v => { const l = info(v); const km = (l && l.km != null) ? l.km : v.km; return km != null ? FP.num(km) + ' km' : '—'; } },
+        { id: 'kmContrat', label: 'Km contractuel',  def: true,  align: 'right', get: v => { const l = info(v); return l ? FP.num(l.kmContrat) + ' km' : '—'; } },
+        { id: 'proj',      label: 'Projection fin',  def: true,  align: 'right', get: v => { const l = info(v); return (l && l.projectionFin != null) ? FP.num(l.projectionFin) + ' km' : '—'; } },
+        { id: 'depass',    label: 'Dépassement',     def: true,  align: 'right', get: v => { const l = info(v); return (l && l.depassementProjete > 0) ? '+' + FP.num(l.depassementProjete) + ' km' : '—'; }, tint: val => /\+/.test(val) ? [220, 38, 38] : null },
+        { id: 'penalite',  label: 'Pénalité est.',   def: true,  align: 'right', get: v => { const l = info(v); return (l && l.kmSupp && l.depassementProjete > 0) ? FP.euro(Math.round(l.depassementProjete * l.kmSupp)) : '—'; }, tint: val => /€/.test(val) ? [220, 38, 38] : null },
+        { id: 'fin',       label: 'Fin de contrat',  def: true,  align: 'left', get: v => { const l = info(v); return (l && l.finContrat && !isNaN(l.finContrat)) ? FP.date(l.finContrat.toISOString()) : '—'; } },
+      ],
+    });
+  });
   if ($('loc-import-btn')) $('loc-import-btn').addEventListener('click', openLeasImport);   // même import, section Ayvens
   if ($('leasimport-cancel')) $('leasimport-cancel').addEventListener('click', closeLeasImport);
   if ($('leasimport-modal')) $('leasimport-modal').addEventListener('click', e => { if (e.target.id === 'leasimport-modal') closeLeasImport(); });

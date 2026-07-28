@@ -133,6 +133,8 @@
 <script src="../assets/js/vendor/supabase.js?v=20260723u"></script>
 <script src="../assets/js/supabase-client.js?v=20260723u"></script>
 <script src="../assets/js/data.js?v=20260723u"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723u"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723u"></script>
 <script src="../assets/js/app.js?v=20260723u"></script>
 <script>
   lucide.createIcons();
@@ -241,7 +243,8 @@
     const ech = (FP.buildEcheances ? FP.buildEcheances(data) : []);
     if (!ech.length) { box.innerHTML = '<p class="text-sm text-slate-400">Aucune échéance à venir ✓</p>'; return; }
     const col = { danger: '#DC2626', warn: '#F59E0B', info: '#0e7490' };
-    box.innerHTML = '<div class="space-y-2" style="max-width:780px">' + ech.map(e => {
+    box.innerHTML = '<div class="flex justify-end mb-3" style="max-width:780px"><button id="ech-fiche-btn" class="btn btn-outline text-sm"><i data-lucide="file-text" class="w-4 h-4"></i> Télécharger l\'échéancier (PDF)</button></div>'
+      + '<div class="space-y-2" style="max-width:780px">' + ech.map(e => {
       const c = col[e.niveau] || '#94a3b8';
       return `<a href="${esc(e.target || '#')}" class="notif lvl-${e.niveau}" style="text-decoration:none">
         <span style="width:9px;height:9px;border-radius:50%;background:${c};flex-shrink:0;margin-top:6px"></span>
@@ -253,6 +256,23 @@
         <div class="text-sm font-semibold self-center" style="color:${c};white-space:nowrap">${FP.dateNum ? FP.dateNum(e.date) : e.date}</div>
       </a>`;
     }).join('') + '</div>';
+    const b = document.getElementById('ech-fiche-btn');
+    if (b) b.addEventListener('click', () => {
+      if (!(FP.fiche && FP.fiche.open)) return;
+      const rows = ech.slice().sort((a, b2) => (a.date || '').localeCompare(b2.date || ''));
+      FP.fiche.open({
+        key: 'echeances',
+        title: 'Échéancier des obligations',
+        rows: rows,
+        cols: [
+          { id: 'date',      label: 'Échéance', def: true, get: e => FP.dateNum ? FP.dateNum(e.date) : e.date },
+          { id: 'categorie', label: 'Type',     def: true, get: e => e.categorie || '—' },
+          { id: 'label',     label: 'Objet',    def: true, get: e => e.label || '—' },
+          { id: 'detail',    label: 'Détail',   def: false, get: e => e.detail || '—' },
+          { id: 'delai',     label: 'Délai',    def: true, get: e => { const diff = Math.ceil((new Date(e.date) - new Date()) / 86400000); return diff < 0 ? 'en retard (' + (-diff) + 'j)' : ('dans ' + diff + ' j'); }, tint: v => /retard/i.test(v) ? [220, 38, 38] : null },
+        ],
+      });
+    });
     lucide.createIcons();
   }
   // ===== Sous-onglet « À compléter » : TOUTES les infos manquantes de la plateforme =====
