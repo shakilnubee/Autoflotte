@@ -1639,7 +1639,7 @@ FP.leasingContrat = (immat) => {
   const base = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? (FP.LEASING_CONTRATS[key] || null) : null;
   const ov = FP.getLeasingOverrides()[key] || null;
   if (!base && !ov) return null;
-  const merged = { dureeMois: 36, kmSupp: null, ...(base || {}), ...(ov || {}) };
+  const merged = { dureeMois: 36, kmSupp: null, kmTolerance: null, ...(base || {}), ...(ov || {}) };
   if (!merged.kmContrat || !merged.debut) return null;
   return merged;
 };
@@ -1667,7 +1667,7 @@ FP.leasingInfo = (v) => {
     else if (ratio >= 0.98) niveau = 'warn';
     else if (ratio >= 0.90) niveau = 'info';
   }
-  return { kmContrat: c.kmContrat, dureeMois: c.dureeMois, kmSupp: c.kmSupp, debut, finContrat,
+  return { kmContrat: c.kmContrat, dureeMois: c.dureeMois, kmSupp: c.kmSupp, kmTolerance: c.kmTolerance, debut, finContrat,
            moisEcoules, km, kmParMoisAutorise, kmAutoriseAJour, kmParMoisReel,
            projectionFin, ratio, ecartAJour, depassementProjete, niveau,
            loyer: (c.loyer != null ? Number(c.loyer) : null), avenants: Array.isArray(c.avenants) ? c.avenants : [] };
