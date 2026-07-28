@@ -4490,6 +4490,8 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
         <div class="fp-exp-sec">Vue actuelle</div>
         <button type="button" class="fp-exp-it" data-exp="xlsx"><i data-lucide="sheet" class="w-4 h-4" style="color:#16a34a"></i> Excel (.xlsx)</button>
         <button type="button" class="fp-exp-it" data-exp="csv"><i data-lucide="file-text" class="w-4 h-4" style="color:#64748b"></i> CSV</button>
+        <div class="fp-exp-div"></div>
+        <button type="button" class="fp-exp-it" data-exp="mail"><i data-lucide="mail" class="w-4 h-4" style="color:#2563eb"></i> Envoyer par mail…</button>
         ${hasPeriod ? `<div class="fp-exp-div"></div>
         <div class="fp-exp-sec">Par période</div>
         <div class="fp-exp-dates"><label>Du <input type="date" class="fp-exp-from"></label><label>Au <input type="date" class="fp-exp-to"></label></div>
@@ -4519,6 +4521,26 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       }
       menu.classList.add('hidden');
       if (!rows.length) { if (FP.toast) FP.toast('Aucune ligne à exporter (vérifie les filtres / la période).'); return; }
+      // Envoi par mail : un site statique ne peut pas JOINDRE un fichier tout seul (pas de serveur
+      // mail). On télécharge le CSV puis on ouvre le client mail pré-rempli — l'utilisateur joint le
+      // fichier (qui vient d'être téléchargé) et envoie. Fonctionne partout, sans backend.
+      if (kind === 'mail') {
+        const last = (function () { try { return localStorage.getItem('fp_export_mail') || ''; } catch (e) { return ''; } })();
+        const to = prompt('Envoyer l\'export à quelle adresse e-mail ?', last);
+        if (to == null || !to.trim()) return;
+        const addr = to.trim();
+        try { localStorage.setItem('fp_export_mail', addr); } catch (e) {}
+        const fname = nameOf() + suffix + '.csv';
+        FP.exportRows(nameOf() + suffix, opts.columns, rows, 'csv', { total: opts.total, sheetName: opts.sheetName });
+        const subject = encodeURIComponent('Export ' + (opts.sheetName || nameOf()) + ' — ' + rows.length + ' ligne(s)');
+        const body = encodeURIComponent(
+          'Bonjour,\n\nVeuillez trouver l\'export « ' + fname + ' » (' + rows.length + ' ligne(s)).\n\n' +
+          '⚠️ Le fichier vient d\'être téléchargé sur cet ordinateur : merci de le JOINDRE à cet e-mail avant l\'envoi.\n\n' +
+          'Cordialement,');
+        window.location.href = 'mailto:' + encodeURIComponent(addr) + '?subject=' + subject + '&body=' + body;
+        if (FP.toast) FP.toast('Fichier téléchargé — joins-le à l\'e-mail qui vient de s\'ouvrir.');
+        return;
+      }
       FP.exportRows(nameOf() + suffix, opts.columns, rows, kind, { total: opts.total, sheetName: opts.sheetName });
       if (FP.toast) FP.toast(`${rows.length} ligne(s) exportée(s) en ${kind === 'csv' ? 'CSV' : 'Excel'}`);
     });

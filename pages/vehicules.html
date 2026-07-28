@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723p">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723q">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723p"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723q"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723p">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723q">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -455,9 +455,10 @@
           <div class="text-xs"><button id="fiche-all" class="font-semibold" style="color:var(--fp-accent)">Tout</button> · <button id="fiche-none" class="font-semibold text-slate-500">Rien</button></div>
         </div>
         <div id="fiche-cols" class="fiche-grid"></div>
-        <div class="flex justify-end gap-2 mt-5">
+        <div class="flex justify-end gap-2 mt-5 flex-wrap">
           <button id="fiche-cancel" class="btn btn-outline text-sm">Annuler</button>
-          <button id="fiche-go" class="btn btn-dark text-sm"><i data-lucide="printer" class="w-4 h-4"></i> Générer la fiche</button>
+          <button id="fiche-print" class="btn btn-outline text-sm"><i data-lucide="printer" class="w-4 h-4"></i> Imprimer</button>
+          <button id="fiche-pdf" class="btn btn-dark text-sm"><i data-lucide="download" class="w-4 h-4"></i> Télécharger le PDF</button>
         </div>
       </div>
     </div>
@@ -750,12 +751,14 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723p"></script>
-<script src="../assets/js/supabase-client.js?v=20260723p"></script>
-<script src="../assets/js/data.js?v=20260723p"></script>
-<script src="../assets/js/fleet-docs.js?v=20260723p"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260723p"></script>
-<script src="../assets/js/app.js?v=20260723p"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723q"></script>
+<script src="../assets/js/supabase-client.js?v=20260723q"></script>
+<script src="../assets/js/data.js?v=20260723q"></script>
+<script src="../assets/js/fleet-docs.js?v=20260723q"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260723q"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723q"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723q"></script>
+<script src="../assets/js/app.js?v=20260723q"></script>
 <script>
   lucide.createIcons();
 
@@ -2801,6 +2804,61 @@
     closeFicheModal();
   }
 
+  // Contexte commun aux 2 sorties (impression HTML / PDF direct) : colonnes cochées + liste + titre.
+  function ficheContext() {
+    const chosen = Array.from(document.querySelectorAll('#fiche-cols input:checked')).map(i => i.value);
+    if (!chosen.length) { alert('Coche au moins une colonne.'); return null; }
+    const s = FP.settings.get(); s.ficheCols = chosen; FP.settings.save(s);
+    return {
+      cols: FICHE_COLS.filter(c => chosen.includes(c.id)),
+      list: _ficheList,
+      label: ($('fiche-titre').value || '').trim() || _ficheLabel,
+      today: new Date().toLocaleDateString('fr-FR'),
+    };
+  }
+
+  // Téléchargement PDF direct (un clic → fichier .pdf), texte net et sélectionnable, via jsPDF.
+  function downloadFichePDF() {
+    const ctx = ficheContext(); if (!ctx) return;
+    if (!window.jspdf || !window.jspdf.jsPDF) { alert('La librairie PDF n\'est pas encore chargée — réessaie dans un instant.'); return; }
+    const { cols, list, label, today } = ctx;
+    const jsPDF = window.jspdf.jsPDF;
+    const landscape = cols.length > 6;
+    const doc = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    // En-tête sombre + titre + "Parc Pilot"
+    doc.setFillColor(15, 30, 61); doc.rect(10, 10, pageW - 20, 15, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text(String(label), 15, 18);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(210, 220, 235);
+    doc.text('Édité le ' + today + '  ·  ' + list.length + ' véhicule' + (list.length > 1 ? 's' : ''), 15, 22.5);
+    doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(13);
+    doc.setTextColor(255, 255, 255); doc.text('Parc', pageW - 15 - doc.getTextWidth('Pilot') - doc.getTextWidth('Parc'), 19);
+    doc.setTextColor(249, 115, 22); doc.text('Pilot', pageW - 15 - doc.getTextWidth('Pilot'), 19);
+    // Styles de colonnes (alignement + monospace)
+    const columnStyles = { 0: { halign: 'left', textColor: [148, 163, 184], cellWidth: 8 } };
+    cols.forEach((c, idx) => { columnStyles[idx + 1] = { halign: c.align === 'right' ? 'right' : 'left', font: c.mono ? 'courier' : 'helvetica' }; });
+    doc.autoTable({
+      head: [['#'].concat(cols.map(c => c.label))],
+      body: list.map((v, i) => [String(i + 1)].concat(cols.map(c => String(c.get(v))))),
+      startY: 30,
+      margin: { top: 30, left: 10, right: 10 },
+      styles: { fontSize: 9, cellPadding: 2.4, textColor: [15, 30, 61], lineColor: [238, 242, 247], lineWidth: 0.1 },
+      headStyles: { fillColor: [241, 245, 249], textColor: [51, 65, 85], fontStyle: 'bold', fontSize: 8.5 },
+      alternateRowStyles: { fillColor: [250, 251, 252] },
+      columnStyles: columnStyles,
+      didDrawPage: (d) => {
+        doc.setFontSize(8); doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'normal');
+        doc.text('Parc Pilot — gestion de flotte', 10, doc.internal.pageSize.getHeight() - 6);
+        doc.text('Page ' + d.pageNumber, pageW - 10, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
+      },
+    });
+    const safe = String(label).replace(/[^\wÀ-ÿ \-]+/g, '').trim().replace(/\s+/g, '-') || 'vehicules';
+    const stamp = today.split('/').reverse().join('-');
+    doc.save(safe + '_' + stamp + '.pdf');
+    closeFicheModal();
+  }
+
   // « Télécharger la fiche » = groupe/filtre courant · « Fiche PDF » (barre) = sélection
   { const b = $('btn-fiche-groupe'); if (b) b.addEventListener('click', () => {
       const grp = state.groupe;
@@ -2815,7 +2873,8 @@
     }); }
   { const c = $('fiche-close');  if (c) c.addEventListener('click', closeFicheModal); }
   { const c = $('fiche-cancel'); if (c) c.addEventListener('click', closeFicheModal); }
-  { const g = $('fiche-go');     if (g) g.addEventListener('click', generateFiche); }
+  { const g = $('fiche-print');  if (g) g.addEventListener('click', generateFiche); }
+  { const g = $('fiche-pdf');    if (g) g.addEventListener('click', downloadFichePDF); }
   { const a = $('fiche-all');    if (a) a.addEventListener('click', () => document.querySelectorAll('#fiche-cols input').forEach(i => i.checked = true)); }
   { const n = $('fiche-none');   if (n) n.addEventListener('click', () => document.querySelectorAll('#fiche-cols input').forEach(i => i.checked = false)); }
   { const ov = $('fiche-modal'); if (ov) ov.addEventListener('click', e => { if (e.target === ov) closeFicheModal(); }); }
