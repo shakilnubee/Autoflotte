@@ -403,8 +403,12 @@
           <label class="block"><span class="text-sm font-medium text-slate-700">Km total</span>
             <input id="locadd-km" type="number" min="0" step="1000" class="field-input w-full mt-1" placeholder="60000"></label>
         </div>
-        <label class="block"><span class="text-sm font-medium text-slate-700">N° d'offre <span class="text-slate-400">(opt.)</span></span>
-          <input id="locadd-offre" type="text" class="field-input w-full mt-1" placeholder=""></label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block"><span class="text-sm font-medium text-slate-700">N° d'offre <span class="text-slate-400">(opt.)</span></span>
+            <input id="locadd-offre" type="text" class="field-input w-full mt-1" placeholder=""></label>
+          <label class="block"><span class="text-sm font-medium text-slate-700">Coût du km sup. €/km <span class="text-slate-400">(opt.)</span></span>
+            <input id="locadd-kmsupp" type="text" inputmode="decimal" class="field-input w-full mt-1" placeholder="ex. 0,099"></label>
+        </div>
         <div>
           <span class="text-sm font-medium text-slate-700">Contrat <span class="text-slate-400">(facultatif)</span></span>
           <div id="locadd-drop" class="mt-1 p-3 rounded-lg border border-dashed text-sm text-slate-500 text-center cursor-pointer" style="border-color:var(--fp-border)">
@@ -538,7 +542,7 @@
   function mensualiteFixe(immat) { const a = leasingByVeh[immat]; return a ? median(a.amounts) : null; }
   // Détail des frais de pénalité de dépassement km : km projetés hors forfait × coût du km sup.
   // Affiché sous le badge « Risque de dépassement / À surveiller ». Renvoie '' si pas de dépassement.
-  function penaltyHtml(overKm, kmSupp) {
+  function penaltyHtml(overKm, kmSupp, editAttr) {
     if (!(overKm > 0)) return '';
     const kmR = Math.round(overKm);
     const rate = (kmSupp != null && kmSupp !== '') ? Number(kmSupp) : null;
@@ -546,7 +550,8 @@
       const rateStr = String(rate).replace('.', ',');
       return `<div class="text-xs mt-1" style="color:#B91C1C">Pénalité estimée : ${FP.num(kmR)} km × ${rateStr} €/km = <b>${FP.euro(kmR * rate)}</b></div>`;
     }
-    return `<div class="text-xs mt-1 text-slate-500">≈ ${FP.num(kmR)} km hors forfait — <span style="color:#B45309">coût du km sup. non renseigné</span> (à saisir dans le forfait)</div>`;
+    const link = editAttr ? ` <button type="button" ${editAttr} class="underline decoration-dotted" style="color:var(--fp-accent)">renseigner le €/km</button>` : ' (à saisir dans le forfait)';
+    return `<div class="text-xs mt-1 text-slate-500">≈ ${FP.num(kmR)} km hors forfait — <span style="color:#B45309">coût du km sup. non renseigné</span>${link}</div>`;
   }
   // Nb de mensualités THÉORIQUES = mois écoulés depuis le début du contrat (plafonné à la durée).
   function moisTheoriques(l) {
@@ -964,11 +969,11 @@
       if (diff < 180)      return `<span style="color:var(--fp-warn);font-weight:600">${ds}</span><br><span class="text-xs" style="color:var(--fp-warn)">~${Math.round(diff / 30)} mois</span>`;
       return `${ds}<br><span class="text-xs text-slate-400">dans ~${Math.round(diff / 30)} mois</span>`;
     };
-    const statutKm = (l) => {
+    const statutKm = (l, immat) => {
       if (!l) return '<span class="text-slate-400 text-xs">contrat non renseigné</span>';
       if (l.projectionFin === null) return '<span class="badge" style="background:#E0E7FF;color:#3730A3">contrat récent</span>';
       const pct = Math.round(l.ratio * 100);
-      const pen = (l.niveau === 'danger' || l.niveau === 'warn') ? penaltyHtml(l.depassementProjete, l.kmSupp) : '';
+      const pen = (l.niveau === 'danger' || l.niveau === 'warn') ? penaltyHtml(l.depassementProjete, l.kmSupp, immat ? `data-edit-lease="${immat}"` : '') : '';
       if (l.niveau === 'danger') return `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${pen}`;
       if (l.niveau === 'warn')   return `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${pen}`;
       return `<span class="badge badge-ok">OK (${pct}%)</span>`;
@@ -996,7 +1001,7 @@
         <td>${l ? FP.num(l.kmContrat) + ' km' : '<span class="text-slate-400">—</span>'}</td>
         <td>${l ? FP.num(l.km) + ' km' : (v.km != null ? FP.num(v.km) + ' km' : '<span class="text-slate-400">—</span>')}</td>
         <td style="${projColor}">${l && l.projectionFin !== null ? '~' + FP.num(l.projectionFin) + ' km' : '<span class="text-slate-400">—</span>'}</td>
-        <td>${statutKm(l)}</td>
+        <td>${statutKm(l, v.immat)}</td>
         <td>${l && l.debut ? FP.dateNum(l.debut) : '<span class="text-slate-400">—</span>'}</td>
         <td>${finContratCell(l)}</td>
         <td class="font-semibold">${totalTheo > 0 ? FP.euroPrecis(totalTheo) : '<span class="text-slate-400">—</span>'}</td>
@@ -1277,7 +1282,8 @@
     "co2 : les grammes de CO2 par km (ex 126).",
     "malus : le malus ecologique en euros TTC s'il est present (ex 1130), sinon 0.",
     "offre : le numero d'offre (souvent 'Offre N°', ex 26AV048026).",
-    "conducteur : le prenom ou nom du conducteur/societe s'il est indique."
+    "conducteur : le prenom ou nom du conducteur/societe s'il est indique.",
+    "kmSupp : le cout du kilometre supplementaire en euros/km s'il est indique (ex 0.099), sinon null."
   ];
   const LOCALEASE_DEFAUT = [
     { conducteur:'Mégane', marque:'Hyundai', modele:'Kona Hybrid 138',   dureeMois:25, kmTotal:40000, loyerTTC:263.62, offre:'26AV048044', co2:104 },
@@ -1380,7 +1386,7 @@
       let statutCell = '<span class="text-slate-400 text-xs">contrat non renseigné</span>';
       if (ratio != null){ const pct = Math.round(ratio*100);
         const over = (proj != null && c.kmTotal) ? proj - c.kmTotal : null;
-        const pen = (ratio > 0.9 && over > 0) ? penaltyHtml(over, c.kmSupp) : '';
+        const pen = (ratio > 0.9 && over > 0) ? penaltyHtml(over, c.kmSupp, `data-loc-kmsupp="${i}"`) : '';
         statutCell = ratio > 1 ? `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${pen}` : ratio > 0.9 ? `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${pen}` : `<span class="badge badge-ok">OK (${pct}%)</span>`; }
       else if (c.kmTotal && kmAct != null){ statutCell = `<span class="badge badge-ok">OK (${Math.round(kmAct/c.kmTotal*100)}%)</span>`; }
       // Début (éditable) et Fin (calculée = début + durée).
@@ -1457,7 +1463,7 @@
       const def = (leasingLoueurFilter && leasingLoueurFilter !== 'all') ? leasingLoueurFilter : LOCALEASE_VAL;
       lsel.value = [...lsel.options].some(o => o.value === def) ? def : (lsel.options[0] ? lsel.options[0].value : LOCALEASE_VAL);
     }
-    ['locadd-cond','locadd-modele','locadd-loyer','locadd-duree','locadd-km','locadd-offre'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+    ['locadd-cond','locadd-modele','locadd-loyer','locadd-duree','locadd-km','locadd-offre','locadd-kmsupp'].forEach(id => { const el = $(id); if (el) el.value = ''; });
     const st = $('locadd-status'); if (st) { st.innerHTML = ''; st.setAttribute('style', ''); }
     const m = $('locadd-modal'); m.classList.remove('hidden'); m.classList.add('flex');
     if (window.lucide) lucide.createIcons();
@@ -1477,6 +1483,7 @@
         if (locNum(f.dureeMois) != null && !$('locadd-duree').value) $('locadd-duree').value = Math.round(locNum(f.dureeMois));
         if (locNum(f.kmTotal) != null && !$('locadd-km').value) $('locadd-km').value = Math.round(locNum(f.kmTotal));
         if (f.offre && !$('locadd-offre').value) $('locadd-offre').value = String(f.offre).trim();
+        if (locNum(f.kmSupp) != null && locNum(f.kmSupp) > 0 && !$('locadd-kmsupp').value) $('locadd-kmsupp').value = String(locNum(f.kmSupp)).replace('.', ',');
         if (f.conducteur && !$('locadd-cond').value) $('locadd-cond').value = String(f.conducteur).trim();
       }
       show('☁️ Envoi du contrat…', 'color:#475569');
@@ -1500,6 +1507,7 @@
       loyerTTC: loyer, dureeMois: parseInt($('locadd-duree').value, 10) || null, kmTotal: parseInt($('locadd-km').value, 10) || null,
       offre: ($('locadd-offre').value || '').trim(), docs: _locAddDoc ? [{ url: _locAddDoc.url, name: _locAddDoc.name }] : [],
     };
+    { const ks = locNum($('locadd-kmsupp').value); if (ks != null && ks > 0) rec.kmSupp = ks; }
     if (_locAddScan) { const c = locNum(_locAddScan.co2); if (c != null) rec.co2 = Math.round(c); const ml = locNum(_locAddScan.malus); if (ml != null && ml > 0) rec.malus = ml; }
     const s = FP.settings.get(); const list = getLocalease(); list.push(rec); s.localeaseContrats = list; FP.settings.save(s);
     closeLocAddModal(); renderLocalease(); renderKPIs();
@@ -1540,6 +1548,7 @@
     const up=e.target.closest('[data-loc-up]'); if(up){ _locUpIdx=+up.dataset.locUp; const inp=$('loc-upload-file'); inp.value=''; inp.click(); return; }
     const db=e.target.closest('[data-loc-debut]'); if(db){ const i=+db.dataset.locDebut; const u=prompt('Date de début / livraison (format AAAA-MM-JJ) :', list[i].debut||''); if(u==null)return; list[i].debut=u.trim()||null; save(); return; }
     const km=e.target.closest('[data-loc-km]'); if(km){ const i=+km.dataset.locKm; const u=prompt('Kilométrage actuel du véhicule :', list[i].kmActuel!=null?list[i].kmActuel:''); if(u==null)return; const n=parseInt(String(u).replace(/\D/g,''),10); list[i].kmActuel=Number.isFinite(n)?n:null; save(); return; }
+    const ks=e.target.closest('[data-loc-kmsupp]'); if(ks){ const i=+ks.dataset.locKmsupp; const u=prompt('Coût du km supplémentaire (€/km) — ex. 0,099 :', list[i].kmSupp!=null?String(list[i].kmSupp).replace('.',','):''); if(u==null)return; const n=parseFloat(String(u).replace(/[\s€]/g,'').replace(',','.')); list[i].kmSupp=Number.isFinite(n)&&n>0?n:null; save(); return; }
     const im=e.target.closest('[data-loc-immat]'); if(im){ const i=+im.dataset.locImmat; const u=prompt('Immatriculation du véhicule :', list[i].immat||''); if(u==null)return; const plaque=u.trim().toUpperCase()||null; list[i].immat=plaque;
       // Auto-affectation du conducteur depuis la fiche véhicule (si la plaque correspond et que le contrat n'a pas encore de conducteur).
       if(plaque){ const v=(data.vehicules||[]).find(x=>String(x.immat||'').toUpperCase()===plaque); if(v && v.chauffeur && v.chauffeur!=='—' && !String(list[i].conducteur||'').trim()){ list[i].conducteur=v.chauffeur; } }
