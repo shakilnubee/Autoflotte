@@ -4652,9 +4652,23 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     };
     const columnStyles = { 0: { halign: 'left', textColor: [148, 163, 184], cellWidth: 8 } };
     cols.forEach((col, idx) => { columnStyles[idx + 1] = { halign: col.align === 'right' ? 'right' : 'left', font: col.mono ? 'courier' : 'helvetica' }; });
+    // Ligne de total (si au moins une colonne a une fonction `sum`) → pied de tableau « TOTAL ».
+    let foot = null;
+    if (cols.some(c => typeof c.sum === 'function')) {
+      const footRow = ['TOTAL'];
+      cols.forEach(c => {
+        if (typeof c.sum === 'function') {
+          const t = rows.reduce((s, r) => { const n = Number(c.sum(r)); return s + (isFinite(n) ? n : 0); }, 0);
+          footRow.push(clean(c.fmt ? c.fmt(t) : FP.euro(t)));
+        } else footRow.push('');
+      });
+      foot = [footRow];
+    }
     doc.autoTable({
       head: [['#'].concat(cols.map(c2 => clean(c2.label)))],
       body: rows.map((r, i) => [String(i + 1)].concat(cols.map(c2 => clean(c2.get(r))))),
+      foot: foot || undefined,
+      footStyles: { fillColor: [241, 245, 249], textColor: [15, 30, 61], fontStyle: 'bold', fontSize: 9, lineColor: [203, 213, 225], lineWidth: 0.1 },
       startY: 36, margin: { top: 36, left: 10, right: 10 }, theme: 'grid',
       styles: { fontSize: 9, cellPadding: { top: 2.6, right: 3, bottom: 2.6, left: 3 }, textColor: [30, 41, 59], lineColor: [233, 238, 245], lineWidth: 0.1, valign: 'middle' },
       headStyles: { fillColor: [15, 30, 61], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: [15, 30, 61], lineWidth: 0, cellPadding: { top: 3, right: 3, bottom: 3, left: 3 } },

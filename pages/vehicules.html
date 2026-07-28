@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723u">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723v">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723u"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723v"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723u">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723v">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -518,6 +518,7 @@
   <div class="p-6 border-t border-slate-200 flex flex-wrap gap-2 sticky bottom-0 bg-white z-10" style="box-shadow:0 -6px 16px -10px rgba(15,30,61,.25)">
     <button class="btn btn-outline text-sm flex-1 justify-center" id="drawer-edit"><i data-lucide="pencil" class="w-4 h-4"></i> Modifier</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-pdf" title="Exporter la fiche en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> PDF</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-vente" title="Dossier de vente (PDF) à montrer à un acheteur : photo, caractéristiques, prix, CT, entretien"><i data-lucide="tag" class="w-4 h-4"></i> Vente</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-qr" title="QR code à coller dans la boîte à gants (ouvre la fiche du véhicule)"><i data-lucide="qr-code" class="w-4 h-4"></i> QR</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
@@ -751,14 +752,14 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723u"></script>
-<script src="../assets/js/supabase-client.js?v=20260723u"></script>
-<script src="../assets/js/data.js?v=20260723u"></script>
-<script src="../assets/js/fleet-docs.js?v=20260723u"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260723u"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723u"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723u"></script>
-<script src="../assets/js/app.js?v=20260723u"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723v"></script>
+<script src="../assets/js/supabase-client.js?v=20260723v"></script>
+<script src="../assets/js/data.js?v=20260723v"></script>
+<script src="../assets/js/fleet-docs.js?v=20260723v"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260723v"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723v"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723v"></script>
+<script src="../assets/js/app.js?v=20260723v"></script>
 <script>
   lucide.createIcons();
 
@@ -3498,6 +3499,100 @@
     w.document.close();
   }
   $('drawer-pdf').addEventListener('click', exportFichePDF);
+
+  // Charge une image (Supabase/Drive) en dataURL pour l'intégrer au PDF (best-effort, CORS).
+  function loadImgDataURL(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image(); img.crossOrigin = 'anonymous';
+      img.onload = () => { try { const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0); resolve({ data: c.toDataURL('image/jpeg', 0.85), w: img.naturalWidth, h: img.naturalHeight }); } catch (e) { reject(e); } };
+      img.onerror = reject; img.src = url;
+    });
+  }
+
+  // Dossier de vente (PDF vectoriel) : photo + caractéristiques + prix + CT + historique entretien.
+  async function exportVentePDF() {
+    const v = data.vehicules.find(x => x.id === state.editingId);
+    if (!v) return;
+    if (!(window.jspdf && window.jspdf.jsPDF) || !FP.pdfPreview) { alert('La librairie PDF n\'est pas encore chargée — réessaie.'); return; }
+    const jsPDF = window.jspdf.jsPDF;
+    const clean = s => String(s == null ? '' : s).replace(/[\u00A0\u2000-\u200B\u202F\u205F\u2060\u3000]/g, ' ').replace(/\u2082/g, '2');
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const W = doc.internal.pageSize.getWidth();
+    const modele = ((v.marque || '') + ' ' + (v.modele || '')).trim() || 'Véhicule';
+    // En-tête
+    doc.setFillColor(15, 30, 61); doc.roundedRect(12, 12, W - 24, 24, 3, 3, 'F');
+    doc.setFillColor(249, 115, 22); doc.rect(12, 15, 2.4, 18, 'F');
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.text(clean(modele), 18, 22);
+    doc.setFont('courier', 'bold'); doc.setFontSize(11); doc.setTextColor(199, 210, 230); doc.text(clean(v.immat || ''), 18, 29);
+    doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(14);
+    const pw = doc.getTextWidth('Pilot'), rw = doc.getTextWidth('Parc');
+    doc.setTextColor(255, 255, 255); doc.text('Parc', W - 16 - pw - rw, 21);
+    doc.setTextColor(249, 115, 22); doc.text('Pilot', W - 16 - pw, 21);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(148, 163, 184);
+    const tt = 'DOSSIER DE VENTE'; doc.text(tt, W - 16 - doc.getTextWidth(tt), 26);
+    let cy = 44;
+    // Prix (si renseigné)
+    if (v.prixVente) {
+      doc.setFillColor(255, 247, 237); doc.roundedRect(12, cy - 6, W - 24, 12, 2, 2, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(234, 88, 12);
+      doc.text('Prix de vente : ' + clean(FP.euro(v.prixVente)), 16, cy + 2);
+      cy += 12;
+    }
+    // Photo (best-effort)
+    if (v.photoUrl) {
+      try {
+        const im = await loadImgDataURL(v.photoUrl);
+        const maxW = W - 24, maxH = 62; let dw = maxW, dh = dw * (im.h / im.w);
+        if (dh > maxH) { dh = maxH; dw = dh * (im.w / im.h); }
+        doc.addImage(im.data, 'JPEG', 12 + (maxW - dw) / 2, cy, dw, dh, undefined, 'FAST');
+        cy += dh + 6;
+      } catch (e) { /* pas de photo → on continue */ }
+    }
+    // Caractéristiques (2 colonnes de kv)
+    const specs = [
+      ['Mise en circulation', v.dateMiseEnCirculation ? FP.dateNum(v.dateMiseEnCirculation) : '—'],
+      ['Kilométrage', v.km != null ? clean(FP.num(v.km)) + ' km' : '—'],
+      ['Carburant', clean(v.carburant || '—')],
+      ['Boîte de vitesses', clean(v.boite || '—')],
+      ['Couleur', clean(v.couleur || '—')],
+      ['Puissance fiscale', (v.puissanceFiscale != null && v.puissanceFiscale !== '') ? clean(FP.num(v.puissanceFiscale)) + ' CV' : '—'],
+      ['CO2', (v.co2 != null && v.co2 !== '') ? clean(FP.num(v.co2)) + ' g/km' : '—'],
+      ['Prochain contrôle technique', (v.prochainCT && v.prochainCT !== '—') ? FP.dateNum(v.prochainCT) : '—'],
+      ['N° de série (VIN)', clean(v.vin || '—')],
+    ];
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(249, 115, 22); doc.text('CARACTÉRISTIQUES', 12, cy); cy += 2;
+    const kvOpts = { theme: 'plain', styles: { fontSize: 9.5, cellPadding: 1.6, textColor: [30, 41, 59] }, columnStyles: { 0: { textColor: [100, 116, 139], cellWidth: 42 }, 1: { fontStyle: 'bold' } } };
+    const half = Math.ceil(specs.length / 2);
+    doc.autoTable(Object.assign({}, kvOpts, { startY: cy, margin: { left: 12, right: W / 2 + 2 }, body: specs.slice(0, half) }));
+    const fy1 = doc.lastAutoTable.finalY;
+    doc.autoTable(Object.assign({}, kvOpts, { startY: cy, margin: { left: W / 2 + 2, right: 12 }, body: specs.slice(half) }));
+    cy = Math.max(fy1, doc.lastAutoTable.finalY) + 8;
+    // Historique entretien (factures d'entretien/réparation/révision/pneus)
+    const CT = ['entretien', 'réparation', 'reparation', 'révision', 'revision', 'pneus'];
+    const hist = (data.factures || []).filter(f => f.vehiculeImmat === v.immat && CT.includes((f.type || '').toLowerCase()))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    if (hist.length) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(51, 65, 85); doc.text('HISTORIQUE D\'ENTRETIEN · ' + hist.length, 12, cy); cy += 3;
+      doc.autoTable({
+        startY: cy, margin: { left: 12, right: 12 },
+        head: [['Date', 'Type', 'Prestation', 'Km', 'Montant']],
+        body: hist.map(f => [f.date ? FP.dateNum(f.date) : '—', clean(f.type || '—'), clean(f.description || f.fournisseur || '—'), f.km ? clean(FP.num(f.km)) + ' km' : '—', f.montantTTC ? clean(FP.euro(f.montantTTC)) : '—']),
+        styles: { fontSize: 9, cellPadding: 2.2, textColor: [30, 41, 59], lineColor: [233, 238, 245], lineWidth: 0.1 },
+        headStyles: { fillColor: [15, 30, 61], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' } },
+      });
+      cy = doc.lastAutoTable.finalY;
+    }
+    // Pied
+    const h = doc.internal.pageSize.getHeight();
+    doc.setDrawColor(233, 238, 245); doc.line(12, h - 12, W - 12, h - 12);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(148, 163, 184);
+    doc.text('Parc Pilot — document non contractuel, édité le ' + new Date().toLocaleDateString('fr-FR'), 12, h - 7);
+    const safe = clean(modele + ' ' + (v.immat || '')).replace(/[^\wÀ-ÿ \-]+/g, '').trim().replace(/\s+/g, '-') || 'vehicule';
+    FP.pdfPreview(doc, 'Vente_' + safe + '.pdf', '· ' + modele + ' ' + (v.immat || ''));
+  }
+  if ($('drawer-vente')) $('drawer-vente').addEventListener('click', () => { exportVentePDF().catch(e => { console.error(e); alert('Impossible de générer le dossier de vente.'); }); });
 
   // ---------- QR code véhicule (ouvre la fiche live ; à coller dans la boîte à gants) ----------
   // Page PUBLIQUE (sans connexion) : n'affiche que des infos véhicule non personnelles (voir carte.html).
