@@ -2067,6 +2067,8 @@
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Technique</div>
         <div class="text-sm space-y-1.5 mt-3">
           <div class="flex justify-between"><span class="text-slate-600">Version / finition</span><span class="font-medium text-right" data-df="version" data-dt="text">${v.version ? escapeHtml(v.version) : '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between"><span class="text-slate-600">Couleur</span><span class="font-medium text-right" data-df="couleur" data-dt="text">${v.couleur ? escapeHtml(v.couleur) : '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between"><span class="text-slate-600">Boîte de vitesses</span><span class="font-medium text-right" data-df="boite" data-dt="select">${v.boite ? escapeHtml(v.boite) : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between items-center gap-2"><span class="text-slate-600">VIN <span class="text-slate-400 text-xs">(E)</span></span><span class="inline-flex items-center gap-1.5"><span class="font-mono text-xs" data-df="vin" data-dt="text">${v.vin ? escapeHtml(v.vin) : '<span class="text-slate-400">—</span>'}</span>${v.vin ? `<button type="button" class="copy-mini" data-copy-val="${escapeHtml(v.vin)}" title="Copier le VIN"><i data-lucide="copy" class="w-3.5 h-3.5"></i></button>` : ''}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">CO₂ <span class="text-slate-400 text-xs">(V.7)</span></span><span class="font-medium" data-df="co2" data-dt="number">${(v.co2 != null && v.co2 !== '') ? FP.num(v.co2) + ' g/km' : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Puissance fiscale <span class="text-slate-400 text-xs">(P.6)</span></span><span class="font-medium" data-df="puissanceFiscale" data-dt="number">${(v.puissanceFiscale != null && v.puissanceFiscale !== '') ? FP.num(v.puissanceFiscale) + ' CV' : '<span class="text-slate-400">—</span>'}</span></div>
@@ -2677,6 +2679,18 @@
       sel.addEventListener('keydown', ev => { if (ev.key === 'Escape') { ev.preventDefault(); commitSel(false); } });
       return;
     }
+    // Boîte de vitesses : choix Manuelle / Automatique (jamais de saisie libre).
+    if (field === 'boite') {
+      const opts = ['', 'Manuelle', 'Automatique'].map(o => `<option value="${o}" ${o === cur ? 'selected' : ''}>${o || '—'}</option>`).join('');
+      td.innerHTML = `<select class="cell-edit" style="width:100%;border:1px solid var(--fp-accent);border-radius:6px;padding:.25rem">${opts}</select>`;
+      const sel = td.querySelector('.cell-edit'); sel.focus();
+      let dB = false;
+      const commitSel = (save) => { if (dB) return; dB = true; if (save) { FP.history.commit(); v[field] = sel.value || null; commitVehField(v, field); } else { renderTable(); if (drawerVehId && $('drawer').classList.contains('open')) openDrawer(drawerVehId); } };
+      sel.addEventListener('change', () => commitSel(true));
+      sel.addEventListener('blur', () => commitSel(true));
+      sel.addEventListener('keydown', ev => { if (ev.key === 'Escape') { ev.preventDefault(); commitSel(false); } });
+      return;
+    }
     if (type === 'select') {
       html = `<select class="cell-edit" style="width:100%;border:1px solid var(--fp-accent);border-radius:6px;padding:.25rem">${STATUT_OPTIONS.map(o => `<option value="${o}" ${o === cur ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
     } else {
@@ -2724,9 +2738,12 @@
     { id:'dateDernierCT',   label:'Dernier CT',      def:false, align:'left',  get:v=>v.dateDernierCT?FP.dateNum(v.dateDernierCT):'—' },
     { id:'statut',          label:'Statut',          def:false, align:'left',  get:v=>v.statut||'—' },
     { id:'chauffeur',       label:'Conducteur',      def:false, align:'left',  get:v=>(v.chauffeur&&v.chauffeur!=='—')?v.chauffeur:'—' },
+    { id:'couleur',         label:'Couleur',         def:false, align:'left',  get:v=>v.couleur||'—' },
+    { id:'boite',           label:'Boîte',           def:false, align:'left',  get:v=>v.boite||'—' },
     { id:'vin',             label:'VIN',             def:false, align:'left',  mono:true, get:v=>v.vin||'—' },
     { id:'proprietaire',    label:'Propriétaire',    def:false, align:'left',  get:v=>v.proprietaire||'—' },
-    { id:'valeurAchat',     label:'Valeur',          def:false, align:'right', get:v=>v.valeurAchat?FP.euro(v.valeurAchat):'—' },
+    { id:'valeurAchat',     label:'Valeur d\'achat', def:false, align:'right', get:v=>v.valeurAchat?FP.euro(v.valeurAchat):'—' },
+    { id:'prixVente',       label:'Prix de vente',   def:false, align:'right', get:v=>v.prixVente?FP.euro(v.prixVente):'—' },
   ];
 
   let _ficheList = [], _ficheLabel = '';
@@ -2897,6 +2914,10 @@
       { label: 'Prochain CT',     value: v => v.prochainCT || '' },
       { label: 'Mise en circ.',   value: v => v.dateMiseEnCirculation || '' },
       { label: 'Carburant',       value: v => v.carburant || '' },
+      { label: 'Couleur',         value: v => v.couleur || '' },
+      { label: 'Boîte',           value: v => v.boite || '' },
+      { label: "Valeur d'achat",  value: v => { const n = Number(v.valeurAchat); return isNaN(n) ? null : n; }, number: true, noTotal: true },
+      { label: 'Prix de vente',   value: v => { const n = Number(v.prixVente); return isNaN(n) ? null : n; }, number: true, noTotal: true },
       { label: 'Propriétaire',    value: v => v.proprietaire || '' },
       { label: 'Groupes',         value: v => (FP.vehGroupes(v) || []).map(k => FP.groupeLabel(k)).join(', ') },
     ],
