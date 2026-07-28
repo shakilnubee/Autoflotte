@@ -536,6 +536,18 @@
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
   }
   function mensualiteFixe(immat) { const a = leasingByVeh[immat]; return a ? median(a.amounts) : null; }
+  // Détail des frais de pénalité de dépassement km : km projetés hors forfait × coût du km sup.
+  // Affiché sous le badge « Risque de dépassement / À surveiller ». Renvoie '' si pas de dépassement.
+  function penaltyHtml(overKm, kmSupp) {
+    if (!(overKm > 0)) return '';
+    const kmR = Math.round(overKm);
+    const rate = (kmSupp != null && kmSupp !== '') ? Number(kmSupp) : null;
+    if (rate != null && rate > 0) {
+      const rateStr = String(rate).replace('.', ',');
+      return `<div class="text-xs mt-1" style="color:#B91C1C">Pénalité estimée : ${FP.num(kmR)} km × ${rateStr} €/km = <b>${FP.euro(kmR * rate)}</b></div>`;
+    }
+    return `<div class="text-xs mt-1 text-slate-500">≈ ${FP.num(kmR)} km hors forfait — <span style="color:#B45309">coût du km sup. non renseigné</span> (à saisir dans le forfait)</div>`;
+  }
   // Nb de mensualités THÉORIQUES = mois écoulés depuis le début du contrat (plafonné à la durée).
   function moisTheoriques(l) {
     if (!l || !l.debut || isNaN(l.debut)) return null;
@@ -956,8 +968,9 @@
       if (!l) return '<span class="text-slate-400 text-xs">contrat non renseigné</span>';
       if (l.projectionFin === null) return '<span class="badge" style="background:#E0E7FF;color:#3730A3">contrat récent</span>';
       const pct = Math.round(l.ratio * 100);
-      if (l.niveau === 'danger') return `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>`;
-      if (l.niveau === 'warn')   return `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>`;
+      const pen = (l.niveau === 'danger' || l.niveau === 'warn') ? penaltyHtml(l.depassementProjete, l.kmSupp) : '';
+      if (l.niveau === 'danger') return `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${pen}`;
+      if (l.niveau === 'warn')   return `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${pen}`;
       return `<span class="badge badge-ok">OK (${pct}%)</span>`;
     };
     const tbody = $('tbody-leasing');
@@ -1365,7 +1378,10 @@
       const proj = (rate != null && dur) ? Math.round(rate * dur) : null;
       const ratio = (proj != null && c.kmTotal) ? proj / c.kmTotal : null;
       let statutCell = '<span class="text-slate-400 text-xs">contrat non renseigné</span>';
-      if (ratio != null){ const pct = Math.round(ratio*100); statutCell = ratio > 1 ? `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>` : ratio > 0.9 ? `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>` : `<span class="badge badge-ok">OK (${pct}%)</span>`; }
+      if (ratio != null){ const pct = Math.round(ratio*100);
+        const over = (proj != null && c.kmTotal) ? proj - c.kmTotal : null;
+        const pen = (ratio > 0.9 && over > 0) ? penaltyHtml(over, c.kmSupp) : '';
+        statutCell = ratio > 1 ? `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${pen}` : ratio > 0.9 ? `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${pen}` : `<span class="badge badge-ok">OK (${pct}%)</span>`; }
       else if (c.kmTotal && kmAct != null){ statutCell = `<span class="badge badge-ok">OK (${Math.round(kmAct/c.kmTotal*100)}%)</span>`; }
       // Début (éditable) et Fin (calculée = début + durée).
       const debutCell = effDebut
