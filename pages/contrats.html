@@ -199,6 +199,7 @@
               <th>Km actuel</th>
               <th>Projection fin</th>
               <th>Statut km</th>
+              <th>Début de contrat</th>
               <th>Fin de contrat</th>
               <th>Mensualités payées</th>
               <th>Total versé</th>
@@ -231,7 +232,7 @@
       </div>
       <div class="scrollable">
         <table class="fp-table">
-          <thead><tr><th>Conducteur</th><th>Loueur</th><th>Immatriculation</th><th>Véhicule</th><th style="text-align:center">Fin de contrat</th><th style="text-align:right">Km (reste)</th><th style="text-align:right">Loyer TTC/mois</th><th style="text-align:right">TVS/an</th><th>Offre</th><th style="text-align:center">Contrat</th></tr></thead>
+          <thead><tr><th>Immat.</th><th>Véhicule</th><th>Chauffeur</th><th>Loueur</th><th>Forfait km</th><th>Km actuel</th><th>Projection fin</th><th>Statut km</th><th>Début de contrat</th><th>Fin de contrat</th><th>Mensualités payées</th><th>Total versé</th><th>Moy. mensuelle</th><th>Dernière facture</th><th>Contrat</th></tr></thead>
           <tbody id="tbody-localease"></tbody>
         </table>
       </div>
@@ -943,6 +944,7 @@
         <td>${l ? FP.num(l.km) + ' km' : (v.km != null ? FP.num(v.km) + ' km' : '<span class="text-slate-400">—</span>')}</td>
         <td style="${projColor}">${l && l.projectionFin !== null ? '~' + FP.num(l.projectionFin) + ' km' : '<span class="text-slate-400">—</span>'}</td>
         <td>${statutKm(l)}</td>
+        <td>${l && l.debut ? FP.dateNum(l.debut) : '<span class="text-slate-400">—</span>'}</td>
         <td>${finContratCell(l)}</td>
         <td>${nbMens}${(moisT != null && agg.count !== moisT) ? `<br><span class="text-xs text-slate-400">${agg.count} facturée${agg.count > 1 ? 's' : ''}</span>` : ''}</td>
         <td class="font-semibold">${totalTheo > 0 ? FP.euroPrecis(totalTheo) : '<span class="text-slate-400">—</span>'}</td>
@@ -1199,23 +1201,28 @@
     $('kpi-loc-total').textContent = FP.euro(engTotal);
     $('kpi-loc-moy').textContent   = matched.length ? FP.euro(mensTotal/matched.length) : '—';
     tbody.innerHTML = matched.map(({ c, i })=>{
-      // Fin de contrat (date de début éditable → fin = début + durée)
-      let finCell = `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-debut="${i}">+ début</button>`;
-      if (c.debut){
-        const fin = addMonths(c.debut, c.dureeMois);
-        if (fin){
-          const j = Math.round((fin - new Date())/86400000);
-          const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`);
-          finCell = `<span class="cursor-pointer underline decoration-dotted" data-loc-debut="${i}" title="Modifier la date de début">${FP.dateNum(fin.toISOString().slice(0,10))}</span><div>${badge}</div>`;
-        }
-      }
-      // Km : forfait + reste (km actuel éditable)
-      let kmCell = c.kmTotal ? FP.num(c.kmTotal) : '—';
-      if (c.kmTotal && c.kmActuel!=null){
-        const reste = c.kmTotal - c.kmActuel;
-        kmCell += reste<0 ? `<div style="color:#B91C1C;font-weight:700">dépassé ${FP.num(-reste)}</div>` : (reste<5000 ? `<div style="color:#B45309;font-weight:700">reste ${FP.num(reste)}</div>` : `<div class="text-xs text-slate-500">reste ${FP.num(reste)}</div>`);
-      }
-      kmCell += ` <button type="button" data-loc-km="${i}" class="text-xs underline decoration-dotted text-slate-500">${c.kmActuel!=null?'maj':'+ km'}</button>`;
+      const dur = Number(c.dureeMois) || 0;
+      const kmAct = (c.kmActuel != null && c.kmActuel !== '') ? Number(c.kmActuel) : null;
+      // Mois écoulés depuis le début (théorique), plafonné à la durée du contrat.
+      let moisEcoules = null;
+      if (c.debut){ const d = new Date(c.debut); if (!isNaN(d)){ const now = new Date(); let m = (now.getFullYear()-d.getFullYear())*12 + (now.getMonth()-d.getMonth()); if (now.getDate() < d.getDate()) m--; moisEcoules = Math.max(0, dur ? Math.min(m, dur) : m); } }
+      // Projection km en fin de contrat (extrapolation linéaire) + statut, comme BPCE.
+      const rate = (kmAct != null && moisEcoules && moisEcoules > 0) ? kmAct / moisEcoules : null;
+      const proj = (rate != null && dur) ? Math.round(rate * dur) : null;
+      const ratio = (proj != null && c.kmTotal) ? proj / c.kmTotal : null;
+      let statutCell = '<span class="text-slate-400 text-xs">contrat non renseigné</span>';
+      if (ratio != null){ const pct = Math.round(ratio*100); statutCell = ratio > 1 ? `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>` : ratio > 0.9 ? `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>` : `<span class="badge badge-ok">OK (${pct}%)</span>`; }
+      else if (c.kmTotal && kmAct != null){ statutCell = `<span class="badge badge-ok">OK (${Math.round(kmAct/c.kmTotal*100)}%)</span>`; }
+      // Début (éditable) et Fin (calculée = début + durée).
+      const debutCell = c.debut ? `<span class="cursor-pointer underline decoration-dotted" data-loc-debut="${i}" title="Modifier la date de début">${FP.dateNum(c.debut)}</span>` : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-debut="${i}">+ début</button>`;
+      let finCell = '<span class="text-slate-400">—</span>';
+      if (c.debut){ const fin = addMonths(c.debut, c.dureeMois); if (fin){ const j = Math.round((fin - new Date())/86400000); const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`); finCell = `${FP.dateNum(fin.toISOString().slice(0,10))}<div>${badge}</div>`; } }
+      // Km actuel (éditable) + reste.
+      let kmActCell = (kmAct != null ? FP.num(kmAct) + ' km' : '<span class="text-slate-400">—</span>');
+      if (c.kmTotal && kmAct != null){ const reste = c.kmTotal - kmAct; kmActCell += reste<0 ? `<div style="color:#B91C1C;font-weight:700">dépassé ${FP.num(-reste)}</div>` : (reste<5000 ? `<div style="color:#B45309;font-weight:700">reste ${FP.num(reste)}</div>` : `<div class="text-xs text-slate-500">reste ${FP.num(reste)}</div>`); }
+      kmActCell += ` <button type="button" data-loc-km="${i}" class="text-xs underline decoration-dotted text-slate-500">${kmAct!=null?'maj':'+ km'}</button>`;
+      const mensPayees = (moisEcoules != null) ? `${moisEcoules}${dur?`<span class="text-xs text-slate-400"> / ${dur}</span>`:''}` : '<span class="text-slate-400">—</span>';
+      const totalVerse = (c.loyerTTC && moisEcoules) ? c.loyerTTC * moisEcoules : null;
       const docs = Array.isArray(c.docs) ? c.docs : (c.pdfUrl ? [{ url: c.pdfUrl, name: 'Contrat' }] : []);
       const docsHtml = docs.map((d, di) => `<div class="flex items-center gap-1 justify-center" style="margin-bottom:2px;max-width:170px;margin-left:auto;margin-right:auto">
           <a href="${escC(d.url)}" target="_blank" rel="noopener" class="hover:underline" style="color:var(--fp-accent);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escC(d.name || 'Document')}"><i data-lucide="file-text" class="w-3 h-3 inline"></i> ${escC(d.name || 'Document')}</a>
@@ -1225,21 +1232,28 @@
       const lienCell = docsHtml
         + `<button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px;margin-top:2px" data-loc-up="${i}"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'Ajouter un doc' : '+ téléverser'}</button>`
         + ` <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px;margin-top:2px" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3 h-3 text-red-600"></i></button>`;
+      const immatCell = (() => { const auto = c.immat || autoImmatLoc(c);
+        if (!auto) return `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-immat="${i}">+ plaque</button>`;
+        const inFleet = (data.vehicules || []).some(v => normPlaque(v.immat) === normPlaque(auto));
+        return `<span class="cursor-pointer underline decoration-dotted ${c.immat ? '' : 'text-slate-500'}" data-loc-immat="${i}" title="${c.immat ? 'Modifier la plaque' : 'Plaque liée automatiquement depuis la fiche véhicule — cliquer pour forcer'}">${escC(auto)}</span>`
+          + (inFleet ? '' : `<div><button type="button" class="btn btn-outline" style="padding:1px 7px;font-size:10.5px;margin-top:3px;color:var(--fp-accent);border-color:#FDBA74" data-loc-tofleet="${i}" title="Ce véhicule n'est pas dans la liste Véhicules — cliquer pour l'y ajouter">➕ flotte</button></div>`); })();
+      // Colonnes IDENTIQUES à BPCE (+ Début de contrat) :
       return `<tr>
+        <td class="font-mono">${immatCell}</td>
+        <td>${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}${c.offre?`<div class="text-xs text-slate-400">offre ${escC(c.offre)}</div>`:''}</td>
         <td class="font-medium"><span class="cursor-pointer underline decoration-dotted" data-loc-cond="${i}" title="Affecter / changer le conducteur">${c.conducteur ? escC(c.conducteur) : '<span class="text-slate-400">+ affecter</span>'}</span></td>
         <td class="text-sm text-slate-600">${escC((c.loueur || '').toString().trim() || localeaseLabel())}</td>
-        <td class="font-mono">${(() => { const auto = c.immat || autoImmatLoc(c);
-          if (!auto) return `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-immat="${i}">+ plaque</button>`;
-          const inFleet = (data.vehicules || []).some(v => normPlaque(v.immat) === normPlaque(auto));
-          return `<span class="cursor-pointer underline decoration-dotted ${c.immat ? '' : 'text-slate-500'}" data-loc-immat="${i}" title="${c.immat ? 'Modifier la plaque' : 'Plaque liée automatiquement depuis la fiche véhicule — cliquer pour forcer'}">${escC(auto)}</span>`
-            + (inFleet ? '' : `<div><button type="button" class="btn btn-outline" style="padding:1px 7px;font-size:10.5px;margin-top:3px;color:var(--fp-accent);border-color:#FDBA74" data-loc-tofleet="${i}" title="Ce véhicule n'est pas dans la liste Véhicules — cliquer pour l'y ajouter">➕ flotte</button></div>`); })()}</td>
-        <td>${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}<div class="text-xs text-slate-400">${c.dureeMois||'—'} mois</div></td>
+        <td>${c.kmTotal ? FP.num(c.kmTotal) + ' km' : '<span class="text-slate-400">—</span>'}</td>
+        <td style="text-align:right">${kmActCell}</td>
+        <td style="text-align:right">${proj != null ? '~' + FP.num(proj) + ' km' : '<span class="text-slate-400">—</span>'}</td>
+        <td>${statutCell}</td>
+        <td style="text-align:center">${debutCell}</td>
         <td style="text-align:center">${finCell}</td>
-        <td style="text-align:right">${kmCell}</td>
-        <td style="text-align:right;font-weight:700">${FP.euro(c.loyerTTC)}</td>
-        <td style="text-align:right">${FP.euro(tvsEst(c))}</td>
-        <td style="font-family:monospace;font-size:12px">${escC(c.offre||'')}</td>
-        <td style="text-align:center">${lienCell}</td>
+        <td>${mensPayees}</td>
+        <td class="font-semibold" style="text-align:right">${totalVerse != null ? FP.euroPrecis(totalVerse) : '<span class="text-slate-400">—</span>'}</td>
+        <td style="text-align:right">${c.loyerTTC ? FP.euroPrecis(c.loyerTTC) : '<span class="text-slate-400">—</span>'}</td>
+        <td style="text-align:center">${docsHtml || '<span class="text-slate-400">—</span>'}</td>
+        <td style="text-align:center;white-space:nowrap"><button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px" data-loc-up="${i}" title="Ajouter / téléverser un document"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'doc' : '+ doc'}</button> <button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button></td>
       </tr>`;
     }).join('');
     if (window.lucide) lucide.createIcons();
