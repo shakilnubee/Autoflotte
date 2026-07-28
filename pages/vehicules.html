@@ -2298,7 +2298,10 @@
       // écraser des modifs faites entre-temps (autre poste / autre champ).
       const full = vehToDb(v);
       const patch = {};
-      fields.forEach(f => { if (f in full) patch[f] = full[f]; });
+      // Inclure TOUT champ édité — même hors du mapping "complet" vehToDb (ex. couleur, boite,
+      // prixVente). Sinon le patch est vide, l'update "réussit" à vide, l'override local est
+      // effacé à tort, et la valeur saisie disparaît au rechargement.
+      fields.forEach(f => { patch[f] = (f in full) ? full[f] : (v[f] === undefined ? null : v[f]); });
       let ok = false;
       try {
         const res = await FP.db.update('vehicules', v.id, patch);
