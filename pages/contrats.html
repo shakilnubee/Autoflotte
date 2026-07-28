@@ -157,10 +157,12 @@
         <i data-lucide="banknote" class="w-5 h-5"></i> Leasing — <span id="leasing-loueur-nom">Leasing</span>
         <button id="leasing-edit" type="button" class="text-xs font-semibold ml-2" style="color:var(--fp-accent)"><i data-lucide="pencil" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Modifier</button>
       </div>
-      <p class="text-sm text-slate-600 mb-3">Véhicules sous contrat de leasing. Mensualités <b>théoriques</b> = mois écoulés depuis le début du contrat × mensualité fixe (médiane des factures). « X facturées » indique le nombre de factures réellement importées.</p>
+      <p class="text-sm text-slate-600 mb-3">Véhicules sous contrat de leasing. <b>Total versé</b> = loyer <b>exact</b> de l'offre × mois écoulés (prorata au jour). Le loyer exact se saisit par véhicule (« Modifier le forfait ») ou s'importe d'un coup depuis la facture mensuelle du loueur.</p>
       <div class="flex items-center gap-2 mb-4 flex-wrap">
         <span class="text-xs font-semibold text-slate-500">Filtrer par loueur :</span>
         <select id="leasing-loueur-filter" class="field-input !py-1 !text-sm" style="width:auto;min-width:180px"></select>
+        <button id="leasing-import-btn" type="button" class="btn btn-outline text-sm ml-auto"><i data-lucide="file-down" class="w-4 h-4"></i> Importer les loyers (facture BPCE)</button>
+        <input id="leasing-import-file" type="file" accept="application/pdf" class="hidden">
       </div>
       <div id="leasing-config" class="hidden mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
         <div class="font-semibold text-slate-800 text-sm mb-2">Loueurs de leasing de la société</div>
@@ -292,6 +294,20 @@
     </div>
 
   </main>
+
+  <!-- Modal import loyers depuis facture mensuelle du loueur -->
+  <div id="leasimport-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
+    <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-xl">
+      <h3 class="text-lg font-extrabold mb-1">Importer les loyers exacts</h3>
+      <p class="text-sm text-slate-500 mb-3">Chaque loyer est lu <b>tel quel</b> sur la facture (aucune moyenne). Vérifie puis applique.</p>
+      <div id="leasimport-status" class="text-sm mb-3"></div>
+      <div id="leasimport-preview" class="max-h-72 overflow-auto"></div>
+      <div class="flex justify-end items-center gap-2 mt-5">
+        <button id="leasimport-cancel" type="button" class="btn btn-outline text-sm">Annuler</button>
+        <button id="leasimport-apply" type="button" class="btn btn-dark text-sm" disabled>Appliquer les loyers</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal édition contrat leasing -->
   <div id="lease-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
@@ -1084,6 +1100,88 @@
   });
   if ($('lease-avenant-add')) $('lease-avenant-add').addEventListener('click', () => { $('lease-avenants').insertAdjacentHTML('beforeend', avenantRowHTML('', '')); });
   if ($('lease-avenants')) $('lease-avenants').addEventListener('click', (e) => { const d = e.target.closest('[data-av-del]'); if (d) { const r = d.closest('[data-avenant-row]'); if (r) r.remove(); } });
+
+  // ---------- Import des loyers EXACTS depuis la facture mensuelle du loueur (BPCE…) ----------
+  // On lit chaque ligne de la facture (immat + montant TTC) et on remplit le loyer exact de chaque
+  // véhicule. Aucune moyenne : le montant est celui imprimé sur la facture.
+  const LI_PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+  const LI_WORKER = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  function liLoadScript(src) {
+    return new Promise((res, rej) => {
+      const ex = document.querySelector(`script[data-lazy="${src}"]`);
+      if (ex) { if (ex.dataset.loaded === '1') return res(); ex.addEventListener('load', res); ex.addEventListener('error', () => rej(new Error('load'))); return; }
+      const s = document.createElement('script'); s.src = src; s.dataset.lazy = src;
+      s.onload = () => { s.dataset.loaded = '1'; res(); }; s.onerror = () => rej(new Error('load')); document.head.appendChild(s);
+    });
+  }
+  const parseFR = (s) => Number(String(s).replace(/[\s .]/g, '').replace(',', '.'));
+  function parseLeasingInvoice(text) {
+    const rows = []; const re = /([A-Z]{2}-\d{3}-[A-Z]{2})([\s\S]*?)(?:Conducteur|Total Facture|$)/g; let m;
+    while ((m = re.exec(text))) {
+      const immat = m[1].toUpperCase();
+      const nums = (m[2].match(/\d{1,3}(?:[\s .]\d{3})*,\d{2}/g) || []).map(parseFR).filter(n => n > 0);
+      if (!nums.length) continue;
+      const ttc = nums[nums.length - 1];                        // dernière colonne = Montant TTC
+      const totalHT = nums.length >= 2 ? nums[nums.length - 2] : null;
+      rows.push({ immat, ttc, totalHT });
+    }
+    // Dédoublonne (garde la 1re occurrence par immat).
+    const seen = new Set(); return rows.filter(r => (seen.has(r.immat) ? false : (seen.add(r.immat), true)));
+  }
+  let liParsed = [];
+  function liStatus(msg, cls) { const el = $('leasimport-status'); el.className = 'text-sm mb-3 ' + (cls || 'text-slate-600'); el.innerHTML = msg; }
+  function openLeasImport() { const m = $('leasimport-modal'); m.classList.remove('hidden'); m.classList.add('flex'); liParsed = []; $('leasimport-preview').innerHTML = ''; $('leasimport-apply').disabled = true; liStatus('Choisis le PDF de la facture mensuelle du loueur…'); $('leasing-import-file').value = ''; $('leasing-import-file').click(); }
+  function closeLeasImport() { const m = $('leasimport-modal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+  if ($('leasing-import-btn')) $('leasing-import-btn').addEventListener('click', openLeasImport);
+  if ($('leasimport-cancel')) $('leasimport-cancel').addEventListener('click', closeLeasImport);
+  if ($('leasimport-modal')) $('leasimport-modal').addEventListener('click', e => { if (e.target.id === 'leasimport-modal') closeLeasImport(); });
+  if ($('leasing-import-file')) $('leasing-import-file').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    const m = $('leasimport-modal'); m.classList.remove('hidden'); m.classList.add('flex');
+    try {
+      liStatus('<span class="inline-flex items-center gap-2">⏳ Lecture de la facture…</span>');
+      await liLoadScript(LI_PDFJS); window.pdfjsLib.GlobalWorkerOptions.workerSrc = LI_WORKER;
+      const buf = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+      // On reconstruit les lignes par POSITION (y décroissant puis x croissant) — l'ordre du flux
+      // pdf.js mélange sinon les colonnes (montants faux). Cf. méthode Ulys (CLAUDE.md).
+      let text = ''; const n = Math.min(pdf.numPages, 8);
+      for (let p = 1; p <= n; p++) {
+        const pg = await pdf.getPage(p); const c = await pg.getTextContent();
+        const items = c.items.filter(it => it.str && it.str.trim() !== '').map(it => ({ s: it.str, x: it.transform[4], y: it.transform[5] }));
+        items.sort((a, b) => (Math.abs(b.y - a.y) > 3 ? b.y - a.y : a.x - b.x));
+        const lines = []; let cur = null;
+        items.forEach(it => { if (cur && Math.abs(it.y - cur.y) <= 3) cur.parts.push(it); else { cur = { y: it.y, parts: [it] }; lines.push(cur); } });
+        text += lines.map(l => l.parts.sort((a, b) => a.x - b.x).map(pp => pp.s).join(' ')).join('\n') + '\n';
+      }
+      const rows = parseLeasingInvoice(text);
+      if (!rows.length) { liStatus('❌ Aucune ligne de véhicule reconnue dans ce PDF (format inattendu). Saisis le loyer à la main via « Modifier le forfait ».', 'text-red-600'); return; }
+      liParsed = rows.map(r => {
+        const v = vehicules.find(x => (x.immat || '').toUpperCase() === r.immat);
+        const inFleet = !!v || !!FP.LEASING_CONTRATS[r.immat];
+        const coherent = (r.totalHT == null) || Math.abs(r.ttc - r.totalHT * 1.2) <= 0.05 * r.ttc;
+        return { ...r, inFleet, label: v ? `${v.marque || ''} ${v.modele || ''}`.trim() : '', coherent };
+      });
+      const trouve = liParsed.filter(r => r.inFleet);
+      const totalTTC = liParsed.reduce((s, r) => s + r.ttc, 0);
+      $('leasimport-preview').innerHTML = `<table class="w-full text-sm"><thead><tr class="text-left text-slate-500 border-b">
+          <th class="py-1">Immat</th><th>Véhicule</th><th class="text-right">Loyer TTC/mois</th><th></th></tr></thead><tbody>${
+        liParsed.map(r => `<tr class="border-b border-slate-100${r.inFleet ? '' : ' opacity-50'}">
+          <td class="py-1.5 font-semibold">${r.immat}</td>
+          <td class="text-slate-500">${r.label || (r.inFleet ? '' : '<span class="text-amber-600">hors flotte</span>')}</td>
+          <td class="text-right font-semibold">${FP.euroPrecis ? FP.euroPrecis(r.ttc) : r.ttc.toFixed(2) + ' €'}</td>
+          <td class="text-right">${r.inFleet ? (r.coherent ? '✅' : '<span title="HT×1,20 ≠ TTC">⚠️</span>') : '—'}</td></tr>`).join('')
+      }</tbody><tfoot><tr class="font-semibold"><td class="pt-2" colspan="2">Total (${trouve.length} véhicule(s))</td><td class="text-right pt-2">${FP.euroPrecis ? FP.euroPrecis(totalTTC) : totalTTC.toFixed(2)}</td><td></td></tr></tfoot></table>`;
+      liStatus(`✅ ${trouve.length} loyer(s) exact(s) lus. Vérifie puis clique « Appliquer ».`, 'text-emerald-700');
+      $('leasimport-apply').disabled = trouve.length === 0;
+    } catch (err) { liStatus('❌ Impossible de lire ce PDF : ' + (err && err.message ? err.message : err), 'text-red-600'); }
+  });
+  if ($('leasimport-apply')) $('leasimport-apply').addEventListener('click', () => {
+    const toApply = liParsed.filter(r => r.inFleet); if (!toApply.length) return;
+    toApply.forEach(r => FP.saveLeasingOverride(r.immat, { loyer: r.ttc }));
+    closeLeasImport(); renderKPIs(); renderLeasing();
+    if (FP.toast) FP.toast(`${toApply.length} loyer(s) exact(s) importé(s)`);
+  });
   $('lease-reset').addEventListener('click', () => {
     if (!leaseEditImmat) return;
     if (!FP.LEASING_CONTRATS[(leaseEditImmat || '').toUpperCase()]) {
