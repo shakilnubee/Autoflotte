@@ -1574,7 +1574,46 @@ FP.leasingInfo = (v) => {
   }
   return { kmContrat: c.kmContrat, dureeMois: c.dureeMois, kmSupp: c.kmSupp, debut, finContrat,
            moisEcoules, km, kmParMoisAutorise, kmAutoriseAJour, kmParMoisReel,
-           projectionFin, ratio, ecartAJour, depassementProjete, niveau };
+           projectionFin, ratio, ecartAJour, depassementProjete, niveau,
+           loyer: (c.loyer != null ? Number(c.loyer) : null), avenants: Array.isArray(c.avenants) ? c.avenants : [] };
+};
+
+// ===== LOYERS DE LEASING basés sur l'OFFRE (fixe) + AVENANTS (prorata) =====
+// Le loyer d'un contrat vient de l'OFFRE (montant fixe), PAS des factures. Un avenant
+// { date, loyer } change le loyer à partir de sa date → le total est recalculé au prorata.
+// `c` accepte { debut, dureeMois, loyer, avenants:[{date,loyer}] } (loyer = TTC/mois).
+FP.leasingLoyerAt = (c, when) => {
+  if (!c) return null;
+  let loyer = (c.loyer != null && c.loyer !== '') ? Number(c.loyer) : null;
+  const w = when ? new Date(when) : new Date();
+  if (Array.isArray(c.avenants)) {
+    c.avenants.filter(a => a && a.loyer != null && a.loyer !== '' && a.date)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .forEach(a => { if (new Date(a.date) <= w) loyer = Number(a.loyer); });
+  }
+  return Number.isFinite(loyer) ? loyer : null;
+};
+// Loyer courant (aujourd'hui).
+FP.leasingLoyerCourant = (c) => FP.leasingLoyerAt(c, new Date());
+// Total réellement dû depuis le début : somme des loyers mois par mois (bascule aux dates
+// d'avenant), + PRORATA au jour du mois en cours. Renvoie null si aucun loyer d'offre connu.
+FP.leasingTotalVerse = (c, upto) => {
+  if (!c || !c.debut) return null;
+  const hasLoyer = (c.loyer != null && c.loyer !== '') || (Array.isArray(c.avenants) && c.avenants.some(a => a && a.loyer != null && a.loyer !== ''));
+  if (!hasLoyer) return null;
+  const start = new Date(c.debut); if (isNaN(start)) return null;
+  const end = new Date(start); end.setMonth(end.getMonth() + (Number(c.dureeMois) || 0));
+  const now = upto ? new Date(upto) : new Date();
+  const stop = now < end ? now : end;
+  if (stop <= start) return 0;
+  let total = 0, cur = new Date(start), guard = 0;
+  while (guard++ < 600) {
+    const next = new Date(cur); next.setMonth(next.getMonth() + 1);
+    const loyer = FP.leasingLoyerAt(c, cur) || 0;
+    if (next <= stop) { total += loyer; cur = next; }
+    else { const dInMonth = (next - cur) / 86400000, dDone = Math.max(0, (stop - cur) / 86400000); total += loyer * Math.min(1, dDone / dInMonth); break; }
+  }
+  return Math.round(total * 100) / 100;
 };
 
 // Véhicule concerné par le contrôle anti-pollution (utilitaires + camions/engins

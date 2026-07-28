@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723m">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723m"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723m">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -299,6 +299,8 @@
       <h3 class="text-lg font-extrabold mb-1">Forfait du contrat leasing</h3>
       <p class="text-sm text-slate-500 mb-4" id="lease-modal-veh"></p>
       <div class="space-y-3">
+        <label class="block"><span class="text-sm font-medium text-slate-700">Loyer de base — offre (TTC/mois)</span>
+          <input id="lease-loyer" type="number" min="0" step="0.01" class="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500" placeholder="ex. 587.03"></label>
         <label class="block"><span class="text-sm font-medium text-slate-700">Forfait kilométrique total (km)</span>
           <input id="lease-km" type="number" min="0" step="1000" class="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500" placeholder="ex. 60000"></label>
         <label class="block"><span class="text-sm font-medium text-slate-700">Durée du contrat (mois)</span>
@@ -307,6 +309,12 @@
           <input id="lease-debut" type="date" class="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500"></label>
         <label class="block"><span class="text-sm font-medium text-slate-700">Coût du km supplémentaire (€/km) <span class="text-slate-400">— optionnel</span></span>
           <input id="lease-kmsupp" type="number" min="0" step="0.001" class="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500" placeholder="ex. 0.099"></label>
+        <div>
+          <div class="flex items-center justify-between"><span class="text-sm font-medium text-slate-700">Avenants (changement de loyer)</span>
+            <button id="lease-avenant-add" type="button" class="text-xs font-semibold" style="color:var(--fp-accent)">+ Ajouter un avenant</button></div>
+          <div id="lease-avenants" class="space-y-2 mt-2"></div>
+          <p class="text-xs text-slate-400 mt-1">À partir de la date de l'avenant, le nouveau loyer s'applique — le total est recalculé au <b>prorata</b>.</p>
+        </div>
       </div>
       <div class="flex justify-between items-center mt-5">
         <button id="lease-reset" type="button" class="text-xs text-slate-500 hover:text-red-600">↺ Contrat d'origine</button>
@@ -397,10 +405,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723l"></script>
-<script src="../assets/js/supabase-client.js?v=20260723l"></script>
-<script src="../assets/js/data.js?v=20260723l"></script>
-<script src="../assets/js/app.js?v=20260723l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723m"></script>
+<script src="../assets/js/supabase-client.js?v=20260723m"></script>
+<script src="../assets/js/data.js?v=20260723m"></script>
+<script src="../assets/js/app.js?v=20260723m"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -527,9 +535,15 @@
 
     // Leasing = BPCE (factures) + Localease/Ayvens (contrats LLD) — sinon le total sous-estime le coût réel.
     let mensTotal = 0;
-    leasingImmats.forEach(immat => { const moy = mensualiteFixe(immat); if (moy > 0) mensTotal += moy; });
+    // Loyer mensuel BPCE = loyer de l'OFFRE (fixe, + avenant courant) si saisi, sinon repli médiane factures.
+    leasingImmats.forEach(immat => {
+      const cR = (FP.leasingContrat) ? FP.leasingContrat(immat) : null;
+      const off = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cR) : null;
+      const moy = (off != null) ? off : mensualiteFixe(immat);
+      if (moy > 0) mensTotal += moy;
+    });
     let loc = []; try { loc = getLocalease(); } catch (e) { loc = []; } // getLocalease défini plus bas → TDZ possible au 1er appel
-    const locMens = loc.reduce((s, c) => s + (+c.loyerTTC || 0), 0);
+    const locMens = loc.reduce((s, c) => { const off = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant({ loyer: c.loyerTTC, avenants: c.avenants }) : null; return s + (off != null ? off : (+c.loyerTTC || 0)); }, 0);
     mensTotal += locMens;
 
     $('kpi-leasing').textContent = leasingImmats.size + loc.length;
@@ -928,11 +942,15 @@
       const l = FP.leasingInfo(v);
       const projColor = l && l.niveau === 'danger' ? 'color:var(--fp-danger);font-weight:700' : l && l.niveau === 'warn' ? 'color:var(--fp-warn);font-weight:600' : '';
       // Théorique : mois écoulés × mensualité fixe (les montants ne changent pas).
-      const mens = mensualiteFixe(v.immat);                         // mensualité fixe (médiane des factures)
-      const moisT = moisTheoriques(l);                              // nb de mensualités théoriques
-      const nbMens = (moisT != null) ? moisT : agg.count;
-      const totalTheo = (mens != null && moisT != null) ? mens * moisT : agg.total;
-      const moyMens = (mens != null) ? mens : (agg.count > 0 ? agg.total / agg.count : null);
+      // Loyer basé sur l'OFFRE (fixe) + avenants ; repli sur la médiane des factures si aucun
+      // loyer d'offre n'est encore saisi (pour ne rien casser en attendant la saisie).
+      const cRaw = (window.FP && FP.leasingContrat) ? FP.leasingContrat(v.immat) : null;
+      const offerLoyer = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cRaw) : null;
+      const mens = mensualiteFixe(v.immat);                         // (repli) mensualité médiane des factures
+      const moisT = moisTheoriques(l);
+      const totalOffre = (offerLoyer != null && FP.leasingTotalVerse) ? FP.leasingTotalVerse(cRaw) : null;
+      const totalTheo = (totalOffre != null) ? totalOffre : ((mens != null && moisT != null) ? mens * moisT : agg.total);
+      const moyMens = (offerLoyer != null) ? offerLoyer : ((mens != null) ? mens : (agg.count > 0 ? agg.total / agg.count : null));
       return `
       <tr>
         <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
@@ -1015,7 +1033,27 @@
     $('lease-duree').value = c.dureeMois || 36;
     $('lease-debut').value = debutStr;
     $('lease-kmsupp').value = (c.kmSupp != null) ? c.kmSupp : '';
+    $('lease-loyer').value = (c.loyer != null && c.loyer !== '') ? c.loyer : '';
+    renderAvenantRows(Array.isArray(c.avenants) ? c.avenants : []);
     const m = $('lease-modal'); m.classList.remove('hidden'); m.classList.add('flex');
+  }
+  function avenantRowHTML(date, loyer) {
+    return `<div class="flex items-center gap-2" data-avenant-row>
+      <input type="date" data-av-date value="${date || ''}" class="border border-slate-200 rounded-lg px-2 py-1.5 text-sm">
+      <input type="number" min="0" step="0.01" data-av-loyer value="${(loyer != null && loyer !== '') ? loyer : ''}" placeholder="Nouveau loyer TTC/mois" class="flex-1 border border-slate-200 rounded-lg px-2 py-1.5 text-sm">
+      <button type="button" data-av-del title="Supprimer cet avenant" class="text-slate-400 hover:text-red-600 text-xl leading-none px-1">&times;</button>
+    </div>`;
+  }
+  function renderAvenantRows(list) {
+    const box = $('lease-avenants'); if (!box) return;
+    box.innerHTML = (list || []).map(a => avenantRowHTML(a && a.date, a && a.loyer)).join('');
+  }
+  function collectAvenants() {
+    return Array.from(document.querySelectorAll('#lease-avenants [data-avenant-row]')).map(r => {
+      const d = r.querySelector('[data-av-date]'); const l = r.querySelector('[data-av-loyer]');
+      const date = d ? d.value : ''; const loyer = (l && l.value !== '') ? parseFloat(l.value) : null;
+      return (date && loyer != null && !isNaN(loyer)) ? { date, loyer } : null;
+    }).filter(Boolean);
   }
   function closeLeaseModal() {
     const m = $('lease-modal'); m.classList.add('hidden'); m.classList.remove('flex'); leaseEditImmat = null;
@@ -1039,10 +1077,13 @@
     const duree = parseInt($('lease-duree').value, 10) || 36;
     const debut = $('lease-debut').value;
     const kmsupp = $('lease-kmsupp').value !== '' ? parseFloat($('lease-kmsupp').value) : null;
+    const loyer = $('lease-loyer').value !== '' ? parseFloat($('lease-loyer').value) : null;
     if (!km || !debut) { alert('Renseigne au moins le forfait km et la date de début.'); return; }
-    FP.saveLeasingOverride(leaseEditImmat, { kmContrat: km, dureeMois: duree, debut, kmSupp: kmsupp });
+    FP.saveLeasingOverride(leaseEditImmat, { kmContrat: km, dureeMois: duree, debut, kmSupp: kmsupp, loyer: (loyer != null && !isNaN(loyer)) ? loyer : null, avenants: collectAvenants() });
     closeLeaseModal(); renderKPIs(); renderLeasing();
   });
+  if ($('lease-avenant-add')) $('lease-avenant-add').addEventListener('click', () => { $('lease-avenants').insertAdjacentHTML('beforeend', avenantRowHTML('', '')); });
+  if ($('lease-avenants')) $('lease-avenants').addEventListener('click', (e) => { const d = e.target.closest('[data-av-del]'); if (d) { const r = d.closest('[data-avenant-row]'); if (r) r.remove(); } });
   $('lease-reset').addEventListener('click', () => {
     if (!leaseEditImmat) return;
     if (!FP.LEASING_CONTRATS[(leaseEditImmat || '').toUpperCase()]) {
@@ -1220,7 +1261,10 @@
       if (c.kmTotal && kmAct != null){ const reste = c.kmTotal - kmAct; kmActCell += reste<0 ? `<div style="color:#B91C1C;font-weight:700">dépassé ${FP.num(-reste)}</div>` : (reste<5000 ? `<div style="color:#B45309;font-weight:700">reste ${FP.num(reste)}</div>` : `<div class="text-xs text-slate-500">reste ${FP.num(reste)}</div>`); }
       kmActCell += ` <button type="button" data-loc-km="${i}" class="text-xs underline decoration-dotted text-slate-500">${kmAct!=null?'maj':'+ km'}</button>`;
       const mensPayees = (moisEcoules != null) ? `${moisEcoules}${dur?`<span class="text-xs text-slate-400"> / ${dur}</span>`:''}` : '<span class="text-slate-400">—</span>';
-      const totalVerse = (c.loyerTTC && moisEcoules) ? c.loyerTTC * moisEcoules : null;
+      // Total & loyer courant via le MÊME moteur que BPCE (offre + avenants + prorata au jour).
+      const cNorm = { debut: c.debut, dureeMois: c.dureeMois, loyer: c.loyerTTC, avenants: c.avenants };
+      const loyerCourant = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cNorm) : (c.loyerTTC || null);
+      const totalVerse = (FP.leasingTotalVerse) ? FP.leasingTotalVerse(cNorm) : ((c.loyerTTC && moisEcoules) ? c.loyerTTC * moisEcoules : null);
       const docs = Array.isArray(c.docs) ? c.docs : (c.pdfUrl ? [{ url: c.pdfUrl, name: 'Contrat' }] : []);
       const docsHtml = docs.map((d, di) => `<div class="flex items-center gap-1 justify-center" style="margin-bottom:2px;max-width:170px;margin-left:auto;margin-right:auto">
           <a href="${escC(d.url)}" target="_blank" rel="noopener" class="hover:underline" style="color:var(--fp-accent);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escC(d.name || 'Document')}"><i data-lucide="file-text" class="w-3 h-3 inline"></i> ${escC(d.name || 'Document')}</a>
@@ -1248,7 +1292,7 @@
         <td style="text-align:center">${debutCell}</td>
         <td style="text-align:center">${finCell}</td>
         <td class="font-semibold" style="text-align:right">${totalVerse != null ? FP.euroPrecis(totalVerse) : '<span class="text-slate-400">—</span>'}</td>
-        <td style="text-align:right">${c.loyerTTC ? FP.euroPrecis(c.loyerTTC) : '<span class="text-slate-400">—</span>'}</td>
+        <td style="text-align:right">${loyerCourant != null ? FP.euroPrecis(loyerCourant) : '<span class="text-slate-400">—</span>'}</td>
         <td style="text-align:right">${FP.euro(tvsEst(c))}</td>
         <td style="text-align:center;white-space:nowrap">${docsHtml}<button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px" data-loc-up="${i}" title="Ajouter / téléverser un document"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'doc' : '+ doc'}</button> <button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button></td>
       </tr>`;
