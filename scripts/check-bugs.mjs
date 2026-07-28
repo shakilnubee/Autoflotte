@@ -8,6 +8,7 @@
 //   2. Cohérence du cache-busting : un seul ?v= partout
 //   3. Liens/assets internes cassés (href/src vers un fichier absent)
 //   4. RGPD : aucune donnée personnelle dans data.js (repo public)
+//   5. Anti « contrôle piégé » : pas de masquage d'ancêtre via .closest().style.display
 // Sort en code 1 si un problème est trouvé (→ bloque le déploiement).
 // ============================================================
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
@@ -72,6 +73,19 @@ if (existsSync(dataPath)) {
   const re = /"(email|adresse|dateNaissance|tel|nom|prenom|name|poste|permisNumero|permisUrl|permisFileId|chauffeur|vin)"\s*:\s*"[^"]+"/g;
   const hits = (d.match(re) || []).filter(s => !/:\s*""/.test(s));
   if (hits.length) errors.push(`RGPD : ${hits.length} champ(s) personnel(s) NON vidé(s) dans data.js (ex. ${hits[0].slice(0, 60)}…). Strippe l'identité avant commit.`);
+}
+
+// 5) Anti « contrôle piégé » : ne jamais masquer un conteneur ANCÊTRE via .closest(...).style.display
+//    Bug historique : un <select> « Filtrer par loueur » masquait la carte qui le contenait
+//    (sel.closest('div').style.display='none') → le filtre disparaissait avec la carte, plus moyen
+//    de revenir. RÈGLE : masquer un wrapper DÉDIÉ (document.getElementById('...-wrap')), jamais
+//    l'ancêtre trouvé par closest() qui embarque le contrôle lui-même.
+const TRAP = /\.closest\([^)]*\)\s*\.style\.display\s*=/;
+for (const h of htmlFiles()) {
+  const lines = readFileSync(h, 'utf8').split('\n');
+  lines.forEach((ln, i) => {
+    if (TRAP.test(ln)) errors.push(`Contrôle potentiellement piégé dans ${h.replace(ROOT + '/', '')}:${i + 1} : masquage d'un ancêtre via .closest(...).style.display — le contrôle serait caché avec son conteneur. Masque un wrapper dédié (getElementById), pas l'ancêtre.`);
+  });
 }
 
 // -- rapport --
