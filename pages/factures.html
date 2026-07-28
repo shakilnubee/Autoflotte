@@ -156,6 +156,7 @@
       <div class="flex items-center gap-3">
         <span data-data-io></span>
         <span id="fa-export-mount"></span>
+        <button class="btn btn-outline text-sm" id="fa-fiche-btn" title="Relevé de dépenses (PDF) des factures affichées"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
         <span id="fa-recap-mount"></span>
         <button class="btn btn-dark text-sm" id="btn-import-facture"><i data-lucide="file-up" class="w-4 h-4"></i> Importer une facture</button>
       </div>
@@ -610,6 +611,8 @@
 <script src="../assets/js/vendor/supabase.js?v=20260723u"></script>
 <script src="../assets/js/supabase-client.js?v=20260723u"></script>
 <script src="../assets/js/data.js?v=20260723u"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723u"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723u"></script>
 <script src="../assets/js/app.js?v=20260723u"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
@@ -1381,6 +1384,29 @@
       getRows: () => filtered().slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')),
       period: { dateOf: r => r.date || '' },
       baseName: () => 'factures-comptable-' + (state.mois !== 'all' ? state.mois : (state.annee !== 'all' ? state.annee : 'tout')),
+    });
+    // Relevé de dépenses PDF (aperçu + téléchargement) — factures affichées (filtres en cours).
+    if (document.getElementById('fa-fiche-btn')) document.getElementById('fa-fiche-btn').addEventListener('click', () => {
+      if (!(FP.fiche && FP.fiche.open)) return;
+      const rows = filtered().slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const per = state.mois !== 'all' ? state.mois : (state.annee !== 'all' ? state.annee : '');
+      FP.fiche.open({
+        key: 'factures',
+        title: 'Relevé de dépenses' + (per ? ' — ' + per : ''),
+        rows: rows,
+        cols: [
+          { id: 'date',          label: 'Date',        def: true,  get: f => f.date ? FP.dateNum(f.date) : '—' },
+          { id: 'vehiculeImmat', label: 'Véhicule',    def: true,  mono: true, get: f => f.vehiculeImmat || '—' },
+          { id: 'fournisseur',   label: 'Fournisseur', def: true,  get: f => f.fournisseur || '—' },
+          { id: 'type',          label: 'Type',        def: false, get: f => f.type || '—' },
+          { id: 'description',   label: 'Description',  def: false, get: f => f.description || '—' },
+          { id: 'numeroFacture', label: 'N° facture',  def: false, mono: true, get: f => f.numeroFacture || '—' },
+          { id: 'montantHT',     label: 'HT',          def: false, align: 'right', get: f => (f.montantHT != null && f.montantHT !== '') ? FP.euro(f.montantHT) : '—' },
+          { id: 'montantTVA',    label: 'TVA',         def: false, align: 'right', get: f => (f.montantTVA != null && f.montantTVA !== '') ? FP.euro(f.montantTVA) : '—' },
+          { id: 'montantTTC',    label: 'TTC',         def: true,  align: 'right', get: f => (f.montantTTC != null && f.montantTTC !== '') ? FP.euro(f.montantTTC) : '—' },
+          { id: 'km',            label: 'Km',          def: false, align: 'right', get: f => f.km ? FP.num(f.km) + ' km' : '—' },
+        ],
+      });
     });
     // Récap comptable PAR POSTE (ventilation HT/TVA/TTC par catégorie) — sur la vue filtrée en cours.
     FP.makeExportMenu({
