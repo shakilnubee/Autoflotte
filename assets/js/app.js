@@ -4560,17 +4560,18 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
   const clean = (s) => String(s == null ? '' : s).replace(SPACE_RE, ' ').replace(/₂/g, '2');
   const escH = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
   const LOGO = '<svg width="118" height="27" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic" fill="#fff">Parc</text><text x="86" y="26" font-size="20" font-weight="900" font-style="italic" fill="#F97316">Pilot</text></svg>';
-  let modal = null, cur = null;
+  let modal = null, prev = null, cur = null, curDoc = null, curName = '';
 
   function build() {
     if (modal) return;
+    // --- Modale 1 : choix des colonnes ---
     const el = document.createElement('div');
     el.id = 'fp-fiche-ov';
     el.style.cssText = 'display:none;position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.45);align-items:center;justify-content:center;padding:20px';
     el.innerHTML = '<div style="background:#fff;border-radius:16px;padding:22px 24px;width:100%;max-width:480px;box-shadow:0 20px 50px rgba(15,23,42,.3);max-height:88vh;overflow:auto">'
       + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px"><div>'
       + '<h3 id="fp-fiche-h" style="font-size:18px;font-weight:800;margin:0;color:#0f172a">Fiche à imprimer</h3>'
-      + '<p style="font-size:13px;color:#64748b;margin:3px 0 0">Coche les colonnes — <b id="fp-fiche-scope" style="color:#f97316">0</b></p></div>'
+      + '<p style="font-size:13px;color:#64748b;margin:3px 0 0">Choisis les colonnes — <b id="fp-fiche-scope" style="color:#f97316">0</b></p></div>'
       + '<button id="fp-fiche-x" style="background:none;border:none;font-size:24px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button></div>'
       + '<label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin:14px 0 4px">Titre de la fiche</label>'
       + '<input id="fp-fiche-title" type="text" style="width:100%;border:1px solid #e2e8f0;border-radius:9px;padding:8px 11px;font-size:14px;color:#0f172a">'
@@ -4579,8 +4580,7 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       + '<div id="fp-fiche-cols" style="display:grid;grid-template-columns:1fr 1fr;gap:5px 14px"></div>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;flex-wrap:wrap">'
       + '<button id="fp-fiche-cancel" class="btn btn-outline text-sm">Annuler</button>'
-      + '<button id="fp-fiche-print" class="btn btn-outline text-sm">Imprimer</button>'
-      + '<button id="fp-fiche-pdf" class="btn btn-dark text-sm">Télécharger le PDF</button></div></div>';
+      + '<button id="fp-fiche-apercu" class="btn btn-dark text-sm"><i data-lucide="eye" class="w-4 h-4"></i> Aperçu</button></div></div>';
     document.body.appendChild(el);
     modal = el;
     const close = () => { el.style.display = 'none'; };
@@ -4589,13 +4589,34 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     el.addEventListener('click', e => { if (e.target === el) close(); });
     el.querySelector('#fp-fiche-all').onclick = () => el.querySelectorAll('#fp-fiche-cols input').forEach(i => { i.checked = true; });
     el.querySelector('#fp-fiche-none').onclick = () => el.querySelectorAll('#fp-fiche-cols input').forEach(i => { i.checked = false; });
-    el.querySelector('#fp-fiche-pdf').onclick = () => { if (genPDF()) close(); };
-    el.querySelector('#fp-fiche-print').onclick = () => { if (genPrint()) close(); };
+    el.querySelector('#fp-fiche-apercu').onclick = openPreview;
+
+    // --- Modale 2 : aperçu PDF plein écran ---
+    const pv = document.createElement('div');
+    pv.id = 'fp-fiche-prev';
+    pv.style.cssText = 'display:none;position:fixed;inset:0;z-index:81;background:rgba(15,23,42,.6);align-items:center;justify-content:center;padding:16px';
+    pv.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:940px;height:92vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.4);overflow:hidden">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-bottom:1px solid #eef2f7">'
+      + '<div style="font-weight:800;color:#0f172a;font-size:15px">Aperçu <span id="fp-prev-sub" style="color:#64748b;font-weight:500;font-size:13px"></span></div>'
+      + '<button id="fp-prev-x" style="background:none;border:none;font-size:24px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button></div>'
+      + '<iframe id="fp-prev-frame" title="Aperçu de la fiche" style="flex:1;border:0;width:100%;background:#525659"></iframe>'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 18px;border-top:1px solid #eef2f7;flex-wrap:wrap">'
+      + '<button id="fp-prev-back" class="btn btn-outline text-sm">← Modifier les colonnes</button>'
+      + '<div style="display:flex;gap:8px"><button id="fp-prev-print" class="btn btn-outline text-sm"><i data-lucide="printer" class="w-4 h-4"></i> Imprimer</button>'
+      + '<button id="fp-prev-dl" class="btn btn-dark text-sm"><i data-lucide="download" class="w-4 h-4"></i> Télécharger le PDF</button></div></div></div>';
+    document.body.appendChild(pv);
+    prev = pv;
+    const pClose = () => { pv.style.display = 'none'; const f = pv.querySelector('#fp-prev-frame'); try { if (f.src && f.src.indexOf('blob:') === 0) URL.revokeObjectURL(f.src); } catch (e) {} f.src = 'about:blank'; };
+    pv.querySelector('#fp-prev-x').onclick = pClose;
+    pv.addEventListener('click', e => { if (e.target === pv) pClose(); });
+    pv.querySelector('#fp-prev-back').onclick = () => { pClose(); modal.style.display = 'flex'; };
+    pv.querySelector('#fp-prev-dl').onclick = () => { if (curDoc) curDoc.save(curName); };
+    pv.querySelector('#fp-prev-print').onclick = () => { const f = pv.querySelector('#fp-prev-frame'); try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { if (f.src) window.open(f.src); } };
   }
 
   function ctx() {
     const ids = Array.from(modal.querySelectorAll('#fp-fiche-cols input:checked')).map(i => i.value);
-    if (!ids.length) { alert('Coche au moins une colonne.'); return null; }
+    if (!ids.length) { alert('Choisis au moins une colonne.'); return null; }
     try { const s = FP.settings.get(); s.ficheCols = s.ficheCols || {}; s.ficheCols[cur.key] = ids; FP.settings.save(s); } catch (e) {}
     return {
       cols: cur.cols.filter(c => ids.includes(c.id)),
@@ -4605,66 +4626,63 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     };
   }
 
-  function genPDF() {
-    const c = ctx(); if (!c) return false;
-    if (!window.jspdf || !window.jspdf.jsPDF) { alert('La librairie PDF n\'est pas chargée sur cette page.'); return false; }
+  // Construit le PDF « à la sauce Parc Pilot » (bandeau arrondi, logo, accent, statuts colorés).
+  function makeDoc(c) {
     const { cols, title, rows, today } = c;
     const jsPDF = window.jspdf.jsPDF;
     const doc = new jsPDF({ orientation: cols.length > 6 ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
     const pageW = doc.internal.pageSize.getWidth();
-    doc.setFillColor(15, 30, 61); doc.rect(10, 10, pageW - 20, 15, 'F');
-    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text(clean(title), 15, 18);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(210, 220, 235);
-    doc.text('Édité le ' + today + '  ·  ' + rows.length + ' ligne' + (rows.length > 1 ? 's' : ''), 15, 22.5);
-    doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(13); doc.setTextColor(255, 255, 255);
-    doc.text('Parc', pageW - 15 - doc.getTextWidth('Pilot') - doc.getTextWidth('Parc'), 19);
-    doc.setTextColor(249, 115, 22); doc.text('Pilot', pageW - 15 - doc.getTextWidth('Pilot'), 19);
+    const drawHeader = () => {
+      doc.setFillColor(15, 30, 61); doc.roundedRect(10, 10, pageW - 20, 20, 3, 3, 'F');
+      doc.setFillColor(249, 115, 22); doc.rect(10, 12, 2.4, 16, 'F');       // accent orange à gauche
+      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.text(clean(title), 16, 20);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(199, 210, 230);
+      doc.text('Édité le ' + today + '   ·   ' + rows.length + ' ligne' + (rows.length > 1 ? 's' : ''), 16, 26);
+      doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(14);
+      const pw = doc.getTextWidth('Pilot'), rw = doc.getTextWidth('Parc');
+      doc.setTextColor(255, 255, 255); doc.text('Parc', pageW - 16 - pw - rw, 19);
+      doc.setTextColor(249, 115, 22); doc.text('Pilot', pageW - 16 - pw, 19);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(148, 163, 184);
+      const g = 'GESTION DE FLOTTE'; doc.text(g, pageW - 16 - doc.getTextWidth(g), 24);
+    };
     const columnStyles = { 0: { halign: 'left', textColor: [148, 163, 184], cellWidth: 8 } };
     cols.forEach((col, idx) => { columnStyles[idx + 1] = { halign: col.align === 'right' ? 'right' : 'left', font: col.mono ? 'courier' : 'helvetica' }; });
     doc.autoTable({
       head: [['#'].concat(cols.map(c2 => clean(c2.label)))],
       body: rows.map((r, i) => [String(i + 1)].concat(cols.map(c2 => clean(c2.get(r))))),
-      startY: 30, margin: { top: 30, left: 10, right: 10 },
-      styles: { fontSize: 9, cellPadding: 2.4, textColor: [15, 30, 61], lineColor: [238, 242, 247], lineWidth: 0.1 },
-      headStyles: { fillColor: [241, 245, 249], textColor: [51, 65, 85], fontStyle: 'bold', fontSize: 8.5 },
-      alternateRowStyles: { fillColor: [250, 251, 252] }, columnStyles: columnStyles,
+      startY: 36, margin: { top: 36, left: 10, right: 10 }, theme: 'grid',
+      styles: { fontSize: 9, cellPadding: { top: 2.6, right: 3, bottom: 2.6, left: 3 }, textColor: [30, 41, 59], lineColor: [233, 238, 245], lineWidth: 0.1, valign: 'middle' },
+      headStyles: { fillColor: [15, 30, 61], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: [15, 30, 61], lineWidth: 0, cellPadding: { top: 3, right: 3, bottom: 3, left: 3 } },
+      alternateRowStyles: { fillColor: [247, 249, 252] },
+      columnStyles: columnStyles,
+      didParseCell: (data) => {
+        if (data.section !== 'body' || data.column.index === 0) return;
+        const col = cols[data.column.index - 1];
+        if (col && col.tint) { const t = col.tint(String(data.cell.raw || '')); if (t) { data.cell.styles.textColor = t; data.cell.styles.fontStyle = 'bold'; } }
+      },
       didDrawPage: (d) => {
-        doc.setFontSize(8); doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'normal');
-        doc.text('Parc Pilot — gestion de flotte', 10, doc.internal.pageSize.getHeight() - 6);
-        doc.text('Page ' + d.pageNumber, pageW - 10, doc.internal.pageSize.getHeight() - 6, { align: 'right' });
+        drawHeader();
+        const h = doc.internal.pageSize.getHeight();
+        doc.setDrawColor(233, 238, 245); doc.line(10, h - 9, pageW - 10, h - 9);
+        doc.setFontSize(7.5); doc.setTextColor(148, 163, 184); doc.setFont('helvetica', 'normal');
+        doc.text('Parc Pilot — gestion de flotte', 10, h - 5);
+        doc.text('Page ' + d.pageNumber, pageW - 10, h - 5, { align: 'right' });
       },
     });
     const safe = clean(title).replace(/[^\wÀ-ÿ \-]+/g, '').trim().replace(/\s+/g, '-') || 'fiche';
-    doc.save(safe + '_' + today.split('/').reverse().join('-') + '.pdf');
-    return true;
+    return { doc: doc, filename: safe + '_' + today.split('/').reverse().join('-') + '.pdf' };
   }
 
-  function genPrint() {
-    const c = ctx(); if (!c) return false;
-    const { cols, title, rows, today } = c;
-    const thead = '<th class="num">#</th>' + cols.map(c2 => '<th class="' + (c2.align === 'right' ? 'r' : '') + '">' + escH(c2.label) + '</th>').join('');
-    const body = rows.map((r, i) => '<tr><td class="num">' + (i + 1) + '</td>' + cols.map(c2 => {
-      const cls = ((c2.align === 'right' ? 'r ' : '') + (c2.mono ? 'mono' : '')).trim();
-      return '<td' + (cls ? ' class="' + cls + '"' : '') + '>' + escH(c2.get(r)) + '</td>';
-    }).join('') + '</tr>').join('');
-    const html = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>' + escH(title) + '</title><style>'
-      + '@page{margin:12mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Roboto,Arial,Helvetica,sans-serif;color:#0F1E3D;margin:0;padding:26px;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
-      + '.head{display:flex;align-items:center;justify-content:space-between;background:#0F1E3D;color:#fff;padding:16px 20px;border-radius:12px}.head h1{font-size:17px;margin:0;font-weight:800}.head .meta{font-size:11px;opacity:.85;margin-top:3px}'
-      + '.count{display:inline-block;margin:16px 0 10px;font-size:13px;font-weight:700;color:#475569}.count b{color:#F97316;font-size:16px}'
-      + 'table{width:100%;border-collapse:collapse;font-size:12px}thead th{background:#F1F5F9;color:#334155;padding:9px 10px;border-bottom:2px solid #cbd5e1;text-transform:uppercase;font-size:10px;letter-spacing:.03em;text-align:left;white-space:nowrap}thead th.r{text-align:right}'
-      + 'tbody td{padding:8px 10px;border-bottom:1px solid #eef2f7;vertical-align:top}tbody td.r{text-align:right;font-variant-numeric:tabular-nums}tbody td.mono{font-family:"Courier New",monospace;font-weight:700}tbody tr:nth-child(even) td{background:#fafbfc}'
-      + '.num{color:#94a3b8;width:26px}.foot{margin-top:16px;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between;border-top:1px solid #eef2f7;padding-top:10px}'
-      + '.noprint{margin-top:20px;padding:10px 18px;border:none;border-radius:8px;cursor:pointer;background:#F97316;color:#fff;font-weight:700;font-size:13px}@media print{.noprint{display:none}body{padding:0}}'
-      + '</style></head><body><div class="head"><div><h1>' + escH(title) + '</h1><div class="meta">Édité le ' + today + '</div></div><div>' + LOGO + '</div></div>'
-      + '<div class="count"><b>' + rows.length + '</b> ligne' + (rows.length > 1 ? 's' : '') + '</div>'
-      + '<table><thead><tr>' + thead + '</tr></thead><tbody>' + body + '</tbody></table>'
-      + '<div class="foot"><span>Parc Pilot — gestion de flotte</span><span>' + today + '</span></div>'
-      + '<button class="noprint" onclick="window.print()">Imprimer / Enregistrer en PDF</button>'
-      + '<scr' + 'ipt>setTimeout(function(){try{window.print()}catch(e){}},400)</scr' + 'ipt></body></html>';
-    const w = window.open('', '_blank');
-    if (!w) { alert('Autorise les fenêtres pop-up pour générer la fiche.'); return false; }
-    w.document.write(html); w.document.close();
-    return true;
+  function openPreview() {
+    const c = ctx(); if (!c) return;
+    if (!window.jspdf || !window.jspdf.jsPDF) { alert('La librairie PDF n\'est pas chargée sur cette page.'); return; }
+    const made = makeDoc(c);
+    curDoc = made.doc; curName = made.filename;
+    const url = curDoc.output('bloburl');
+    prev.querySelector('#fp-prev-frame').src = url;
+    prev.querySelector('#fp-prev-sub').textContent = '· ' + c.rows.length + ' ligne(s)';
+    modal.style.display = 'none';
+    prev.style.display = 'flex';
   }
 
   FP.fiche = {
@@ -4680,6 +4698,7 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       modal.querySelector('#fp-fiche-h').textContent = cur.title;
       modal.querySelector('#fp-fiche-title').value = cur.title;
       modal.style.display = 'flex';
+      if (window.lucide) try { lucide.createIcons(); } catch (e) {}
     },
   };
 })();
