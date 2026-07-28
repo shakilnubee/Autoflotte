@@ -1536,6 +1536,101 @@ FP.resetLeasingOverride = (immat) => {
   const obj = FP.settings.get();
   if (obj.leasingContrats && obj.leasingContrats[key]) { delete obj.leasingContrats[key]; FP.settings.save(obj); }
 };
+
+// ===== NOTES DE ZONE (globales, réutilisables sur n'importe quelle page/onglet/zone) =====
+// Pose un bouton « 📝 Notes » sur tout élément portant l'attribut data-fp-note="<clé unique>"
+// (+ data-fp-note-label="Titre lisible" optionnel). Clic → modale de lecture/édition. Le texte est
+// stocké par SOCIÉTÉ (FP.settings.zoneNotes[clé]) → partagé sur tous les postes, isolé par société.
+// ⚠️ Mécanisme GLOBAL : pour ajouter des notes à une nouvelle zone, il suffit d'ajouter l'attribut.
+FP.notes = {
+  _all() { try { const z = FP.settings.get().zoneNotes; return (z && typeof z === 'object') ? z : {}; } catch (e) { return {}; } },
+  get(key) { const r = this._all()[key]; return (r && typeof r === 'object' && r.text) ? String(r.text) : (typeof r === 'string' ? r : ''); },
+  info(key) { const r = this._all()[key]; return (r && typeof r === 'object') ? r : (typeof r === 'string' ? { text: r } : null); },
+  has(key) { return !!this.get(key).trim(); },
+  set(key, text) {
+    try {
+      const o = FP.settings.get(); const z = (o.zoneNotes && typeof o.zoneNotes === 'object') ? o.zoneNotes : {};
+      const t = String(text == null ? '' : text).trim();
+      if (t) z[key] = { text: t, updatedAt: new Date().toISOString() }; else delete z[key];
+      o.zoneNotes = z; FP.settings.save(o);
+    } catch (e) { console.warn('[notes.set]', e); }
+  },
+  _esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); },
+  buttonHTML(key, label) {
+    const has = this.has(key);
+    return `<button type="button" data-fp-note-open="${this._esc(key)}" data-fp-note-label="${this._esc(label || '')}" title="Notes / infos sur cette zone" `
+      + `style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:9999px;border:1px solid ${has ? 'var(--fp-accent,#F97316)' : 'var(--fp-border,#E2E8F0)'};background:${has ? 'rgba(249,115,22,.10)' : '#fff'};color:${has ? 'var(--fp-accent,#F97316)' : '#64748B'};cursor:pointer;vertical-align:middle">`
+      + `📝 <span>${has ? 'Note' : 'Notes'}</span>${has ? '<span style="width:6px;height:6px;border-radius:50%;background:var(--fp-accent,#F97316);display:inline-block"></span>' : ''}</button>`;
+  },
+  decorate(root) {
+    (root || document).querySelectorAll('[data-fp-note]').forEach(el => {
+      const key = el.getAttribute('data-fp-note'); if (!key) return;
+      // Bouton posé une seule fois par zone ; on rafraîchit son état (note présente ou non).
+      let btnWrap = el.querySelector(':scope > .fp-note-anchor');
+      const label = el.getAttribute('data-fp-note-label') || '';
+      if (!btnWrap) { btnWrap = document.createElement('span'); btnWrap.className = 'fp-note-anchor'; btnWrap.style.marginLeft = '8px'; el.appendChild(btnWrap); }
+      btnWrap.innerHTML = this.buttonHTML(key, label);
+    });
+  },
+  open(key, label) {
+    const info = this.info(key); const cur = info ? info.text : '';
+    let m = document.getElementById('fp-note-modal');
+    if (!m) {
+      m = document.createElement('div'); m.id = 'fp-note-modal';
+      m.style.cssText = 'position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(15,23,42,.45)';
+      m.innerHTML = `<div style="background:#fff;border-radius:14px;padding:20px;width:100%;max-width:520px;margin:0 16px;box-shadow:0 24px 70px rgba(0,0,0,.35)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px">
+          <h3 id="fp-note-title" style="font-size:1.05rem;font-weight:800;margin:0">Notes</h3>
+          <button type="button" id="fp-note-x" style="border:none;background:none;font-size:26px;line-height:1;color:#94A3B8;cursor:pointer">&times;</button>
+        </div>
+        <p id="fp-note-sub" style="font-size:12px;color:#94A3B8;margin:0 0 10px"></p>
+        <textarea id="fp-note-text" rows="8" placeholder="Écris ici tes notes / infos sur cette zone…" style="width:100%;border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical;outline:none"></textarea>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:14px">
+          <button type="button" id="fp-note-del" style="font-size:12px;color:#94A3B8;background:none;border:none;cursor:pointer">🗑 Effacer</button>
+          <div style="display:flex;gap:8px">
+            <button type="button" id="fp-note-cancel" class="btn btn-outline" style="font-size:13px;padding:6px 14px;border-radius:8px;border:1px solid #E2E8F0;background:#fff;cursor:pointer">Fermer</button>
+            <button type="button" id="fp-note-save" class="btn btn-dark" style="font-size:13px;padding:6px 16px;border-radius:8px;border:none;background:var(--fp-primary,#111827);color:#fff;cursor:pointer">Enregistrer</button>
+          </div>
+        </div></div>`;
+      document.body.appendChild(m);
+      const close = () => { m.style.display = 'none'; };
+      m.addEventListener('click', e => { if (e.target === m) close(); });
+      m.querySelector('#fp-note-x').addEventListener('click', close);
+      m.querySelector('#fp-note-cancel').addEventListener('click', close);
+      m.querySelector('#fp-note-save').addEventListener('click', () => {
+        this.set(m.dataset.key, m.querySelector('#fp-note-text').value);
+        close(); this.decorate(document);
+        if (FP.toast) FP.toast('Note enregistrée'); if (typeof m._after === 'function') m._after();
+      });
+      m.querySelector('#fp-note-del').addEventListener('click', () => {
+        if (!confirm('Effacer cette note ?')) return;
+        this.set(m.dataset.key, ''); m.querySelector('#fp-note-text').value = '';
+        close(); this.decorate(document); if (FP.toast) FP.toast('Note effacée');
+      });
+    }
+    m.dataset.key = key;
+    m.querySelector('#fp-note-title').textContent = label ? ('Notes — ' + label) : 'Notes';
+    const upd = info && info.updatedAt ? new Date(info.updatedAt) : null;
+    m.querySelector('#fp-note-sub').textContent = upd && !isNaN(upd) ? ('Dernière modif. ' + upd.toLocaleDateString('fr-FR') + ' à ' + upd.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })) : 'Aucune note pour l’instant.';
+    m.querySelector('#fp-note-text').value = cur;
+    m.style.display = 'flex';
+    setTimeout(() => { try { m.querySelector('#fp-note-text').focus(); } catch (e) {} }, 30);
+  },
+  init() {
+    if (this._wired) { this.decorate(document); return; }
+    this._wired = true;
+    document.addEventListener('click', e => {
+      const b = e.target.closest('[data-fp-note-open]'); if (!b) return;
+      e.preventDefault(); e.stopPropagation();
+      this.open(b.getAttribute('data-fp-note-open'), b.getAttribute('data-fp-note-label') || '');
+    });
+    this.decorate(document);
+    // Redécoration après un rendu de données (certaines zones apparaissent après le chargement).
+    document.addEventListener('fp:data-ready', () => { try { this.decorate(document); } catch (e) {} });
+  }
+};
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => FP.notes.init());
+else FP.notes.init();
 // Contrat effectif d'un véhicule = défaut (Drive) fusionné avec l'override.
 // Renvoie null si on n'a pas au moins un forfait km et une date de début.
 FP.leasingContrat = (immat) => {
