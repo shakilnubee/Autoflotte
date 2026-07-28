@@ -2838,9 +2838,13 @@
     // Styles de colonnes (alignement + monospace)
     const columnStyles = { 0: { halign: 'left', textColor: [148, 163, 184], cellWidth: 8 } };
     cols.forEach((c, idx) => { columnStyles[idx + 1] = { halign: c.align === 'right' ? 'right' : 'left', font: c.mono ? 'courier' : 'helvetica' }; });
+    // jsPDF (Helvetica/WinAnsi) ne connaît pas l'espace fine insécable (U+202F) du séparateur de
+    // milliers fr-FR → elle sort en « / ». On remplace ces espaces spéciales par une espace normale
+    // (et l'indice ₂ de CO₂ par « 2 ») uniquement pour le PDF.
+    const clean = (s) => String(s == null ? '' : s).replace(/[\u00A0\u2000-\u200B\u202F\u205F\u2060\u3000]/g, ' ').replace(/\u2082/g, '2');
     doc.autoTable({
-      head: [['#'].concat(cols.map(c => c.label))],
-      body: list.map((v, i) => [String(i + 1)].concat(cols.map(c => String(c.get(v))))),
+      head: [['#'].concat(cols.map(c => clean(c.label)))],
+      body: list.map((v, i) => [String(i + 1)].concat(cols.map(c => clean(c.get(v))))),
       startY: 30,
       margin: { top: 30, left: 10, right: 10 },
       styles: { fontSize: 9, cellPadding: 2.4, textColor: [15, 30, 61], lineColor: [238, 242, 247], lineWidth: 0.1 },
