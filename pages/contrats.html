@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723p">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723p"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723p">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -161,6 +161,7 @@
       <div class="flex items-center gap-2 mb-4 flex-wrap">
         <span class="text-xs font-semibold text-slate-500">Filtrer par loueur :</span>
         <select id="leasing-loueur-filter" class="field-input !py-1 !text-sm" style="width:auto;min-width:180px"></select>
+        <button id="loueur-add-quick" type="button" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un loueur</button>
         <button id="leasing-import-btn" type="button" class="btn btn-outline text-sm ml-auto"><i data-lucide="file-down" class="w-4 h-4"></i> Importer les loyers (facture du loueur)</button>
         <input id="leasing-import-file" type="file" accept="application/pdf" class="hidden">
       </div>
@@ -175,6 +176,7 @@
         <p class="text-xs text-slate-400 mt-2">« Étiquette propriétaire » = la valeur du champ <b>propriétaire</b> des véhicules de ce loueur (dans leur fiche). Chaque véhicule est rattaché au loueur dont l'étiquette correspond à son propriétaire.</p>
       </div>
 
+      <div id="leasing-bpce-body">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div class="kpi"><div class="kpi-label">Véhicules en leasing</div><div class="kpi-value" id="kpi-bpce-nb">—</div></div>
         <div class="kpi"><div class="kpi-label">Loyer mensuel total</div><div class="kpi-value" id="kpi-bpce-mens" style="color:var(--fp-primary)">—</div><div class="kpi-delta">mensualité fixe / mois</div></div>
@@ -213,6 +215,8 @@
         </table>
       </div>
       <p class="text-xs text-slate-500 mt-3" id="leasing-count"></p>
+      </div>
+      <p id="leasing-bpce-masque" class="text-sm text-slate-400 hidden">Section masquée par le filtre. Choisis <b>« Tous les loueurs »</b> ci-dessus pour la réafficher.</p>
     </div>
 
     <!-- Section Leasing Localease (Ayvens) — séparée de BPCE -->
@@ -432,10 +436,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723o"></script>
-<script src="../assets/js/supabase-client.js?v=20260723o"></script>
-<script src="../assets/js/data.js?v=20260723o"></script>
-<script src="../assets/js/app.js?v=20260723o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723p"></script>
+<script src="../assets/js/supabase-client.js?v=20260723p"></script>
+<script src="../assets/js/data.js?v=20260723p"></script>
+<script src="../assets/js/app.js?v=20260723p"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -960,8 +964,11 @@
     populateLeasingLoueurFilter();
     // Filtre par loueur : si un loueur BPCE est choisi → on filtre ; si « Localease » est choisi
     // → la section BPCE est masquée (seule la section Localease s'affiche).
-    const secLeasing = document.querySelector('[data-section="leasing"]');
-    if (secLeasing) secLeasing.style.display = (leasingLoueurFilter === LOCALEASE_VAL) ? 'none' : '';
+    // Filtre « Ayvens » : on masque seulement le CORPS de la carte BPCE (pas la carte entière),
+    // sinon le menu déroulant du filtre disparaît avec elle → impossible de revenir en arrière.
+    const hideBpce = (leasingLoueurFilter === LOCALEASE_VAL);
+    { const body = $('leasing-bpce-body'); if (body) body.style.display = hideBpce ? 'none' : ''; }
+    { const msg = $('leasing-bpce-masque'); if (msg) msg.classList.toggle('hidden', !hideBpce); }
     const q = FP.norm(leasingSearch).trim();
     const rows = [...leasingImmats]
       .map(immat => {
@@ -1725,7 +1732,7 @@
   // disparaissent ; en plus, la base refuse l'écriture de config pour un gestionnaire si le
   // durcissement RLS est activé).
   if (window.FP && FP.canManageSociete && !FP.canManageSociete()) {
-    ['leasing-edit', 'assur-edit'].forEach(id => { const b = $(id); if (b) b.style.display = 'none'; });
+    ['leasing-edit', 'assur-edit', 'loueur-add-quick'].forEach(id => { const b = $(id); if (b) b.style.display = 'none'; });
   }
   if ($('leasing-edit')) $('leasing-edit').addEventListener('click', () => {
     const box = $('leasing-config'); if (!box) return;
@@ -1736,6 +1743,12 @@
     const box = $('loueurs-rows'); if (!box) return;
     box.insertAdjacentHTML('beforeend', loueurRowHTML('', ''));
     lucide.createIcons();
+  });
+  // Bouton rapide (barre du haut) : ouvre la config loueurs + ajoute directement une ligne vierge.
+  if ($('loueur-add-quick')) $('loueur-add-quick').addEventListener('click', () => {
+    const cfg = $('leasing-config'); if (cfg) { renderLoueursRows(); cfg.classList.remove('hidden'); }
+    const box = $('loueurs-rows'); if (box) { box.insertAdjacentHTML('beforeend', loueurRowHTML('', '')); lucide.createIcons(); }
+    if (cfg) cfg.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
   if ($('loueurs-rows')) $('loueurs-rows').addEventListener('click', (e) => {
     const del = e.target.closest('[data-l-del]'); if (!del) return;
