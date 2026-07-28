@@ -1350,9 +1350,16 @@
     tbody.innerHTML = matched.map(({ c, i })=>{
       const dur = Number(c.dureeMois) || 0;
       const kmAct = (c.kmActuel != null && c.kmActuel !== '') ? Number(c.kmActuel) : null;
+      // Lien AUTO avec l'onglet Véhicules (par prénom/plaque via autoImmatLoc) → on récupère le
+      // véhicule lié. Si la date de début n'est pas saisie, on prend sa date de MISE EN CIRCULATION
+      // (carte grise) comme début de contrat → Fin + Total versé se calculent tout seuls.
+      const autoImmat = c.immat || autoImmatLoc(c);
+      const linkedV = autoImmat ? (data.vehicules || []).find(v => normPlaque(v.immat) === normPlaque(autoImmat)) : null;
+      const debutSource = c.debut ? 'saisie' : ((linkedV && linkedV.dateMiseEnCirculation) ? 'mec' : null);
+      const effDebut = c.debut || (linkedV && linkedV.dateMiseEnCirculation) || '';
       // Mois écoulés depuis le début (théorique), plafonné à la durée du contrat.
       let moisEcoules = null;
-      if (c.debut){ const d = new Date(c.debut); if (!isNaN(d)){ const now = new Date(); let m = (now.getFullYear()-d.getFullYear())*12 + (now.getMonth()-d.getMonth()); if (now.getDate() < d.getDate()) m--; moisEcoules = Math.max(0, dur ? Math.min(m, dur) : m); } }
+      if (effDebut){ const d = new Date(effDebut); if (!isNaN(d)){ const now = new Date(); let m = (now.getFullYear()-d.getFullYear())*12 + (now.getMonth()-d.getMonth()); if (now.getDate() < d.getDate()) m--; moisEcoules = Math.max(0, dur ? Math.min(m, dur) : m); } }
       // Projection km en fin de contrat (extrapolation linéaire) + statut, comme BPCE.
       const rate = (kmAct != null && moisEcoules && moisEcoules > 0) ? kmAct / moisEcoules : null;
       const proj = (rate != null && dur) ? Math.round(rate * dur) : null;
@@ -1361,9 +1368,11 @@
       if (ratio != null){ const pct = Math.round(ratio*100); statutCell = ratio > 1 ? `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>` : ratio > 0.9 ? `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>` : `<span class="badge badge-ok">OK (${pct}%)</span>`; }
       else if (c.kmTotal && kmAct != null){ statutCell = `<span class="badge badge-ok">OK (${Math.round(kmAct/c.kmTotal*100)}%)</span>`; }
       // Début (éditable) et Fin (calculée = début + durée).
-      const debutCell = c.debut ? `<span class="cursor-pointer underline decoration-dotted" data-loc-debut="${i}" title="Modifier la date de début">${FP.dateNum(c.debut)}</span>` : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-debut="${i}">+ début</button>`;
+      const debutCell = effDebut
+        ? `<span class="cursor-pointer underline decoration-dotted" data-loc-debut="${i}" title="${debutSource === 'mec' ? 'Date de mise en circulation (carte grise) du véhicule lié — cliquer pour saisir la vraie date de début' : 'Modifier la date de début'}">${FP.dateNum(effDebut)}${debutSource === 'mec' ? ' <span class="text-xs text-slate-400">(MEC)</span>' : ''}</span>`
+        : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-debut="${i}">+ début</button>`;
       let finCell = '<span class="text-slate-400">—</span>';
-      if (c.debut){ const fin = addMonths(c.debut, c.dureeMois); if (fin){ const j = Math.round((fin - new Date())/86400000); const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`); finCell = `${FP.dateNum(fin.toISOString().slice(0,10))}<div>${badge}</div>`; } }
+      if (effDebut){ const fin = addMonths(effDebut, c.dureeMois); if (fin){ const j = Math.round((fin - new Date())/86400000); const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`); finCell = `${FP.dateNum(fin.toISOString().slice(0,10))}<div>${badge}</div>`; } }
       // Km actuel (éditable) + reste.
       let kmActCell = (kmAct != null ? FP.num(kmAct) + ' km' : '<span class="text-slate-400">—</span>');
       if (c.kmTotal && kmAct != null){ const reste = c.kmTotal - kmAct; kmActCell += reste<0 ? `<div style="color:#B91C1C;font-weight:700">dépassé ${FP.num(-reste)}</div>` : (reste<5000 ? `<div style="color:#B45309;font-weight:700">reste ${FP.num(reste)}</div>` : `<div class="text-xs text-slate-500">reste ${FP.num(reste)}</div>`); }
@@ -1371,10 +1380,11 @@
       const mensPayees = (moisEcoules != null) ? `${moisEcoules}${dur?`<span class="text-xs text-slate-400"> / ${dur}</span>`:''}` : '<span class="text-slate-400">—</span>';
       // Total & loyer courant via le MÊME moteur que BPCE (offre + avenants + prorata au jour).
       // Un loyer importé depuis une facture (override par immat) prime sur le loyerTTC du contrat.
-      const _ik = (c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '') || '').toUpperCase();
+      // Début = date saisie sinon date de mise en circulation du véhicule lié (effDebut).
+      const _ik = (autoImmat || '').toUpperCase();
       const _ovL = (_ik && FP.getLeasingOverrides) ? (FP.getLeasingOverrides()[_ik] || {}).loyer : null;
       const _baseLoyer = (_ovL != null && _ovL !== '') ? Number(_ovL) : c.loyerTTC;
-      const cNorm = { debut: c.debut, dureeMois: c.dureeMois, loyer: _baseLoyer, avenants: c.avenants };
+      const cNorm = { debut: effDebut, dureeMois: c.dureeMois, loyer: _baseLoyer, avenants: c.avenants };
       const loyerCourant = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cNorm) : (c.loyerTTC || null);
       const totalVerse = (FP.leasingTotalVerse) ? FP.leasingTotalVerse(cNorm) : ((c.loyerTTC && moisEcoules) ? c.loyerTTC * moisEcoules : null);
       const docs = Array.isArray(c.docs) ? c.docs : (c.pdfUrl ? [{ url: c.pdfUrl, name: 'Contrat' }] : []);
