@@ -839,9 +839,11 @@
     // ===== RAPPROCHEMENT fichier ↔ flotte =====
     let couverts = 0, total = 0;
     vehicules.forEach(v => { const pr = vehPrime(v); if (pr) { couverts++; total += pr.ttc || 0; } });
-    const byPlate = {}; vehicules.forEach(v => { byPlate[normPlaque(v.immat)] = v; });
+    // Rapprochement PAR PLAQUE sur TOUTE la flotte (y compris véhicules à vendre / non « actif »),
+    // sinon un véhicule bien enregistré mais non actif ressort à tort comme « absent / à créer ».
+    const byPlate = {}; (data.vehicules || []).forEach(v => { byPlate[normPlaque(v.immat)] = v; });
     const docPlates = Object.keys(prem);
-    // (a) Dans le fichier mais ABSENT de la flotte → véhicule à créer
+    // (a) Dans le fichier mais ABSENT de la flotte → véhicule à créer (plaque inconnue)
     const absents = docPlates.filter(p => !byPlate[normPlaque(p)]);
     // (b) Actifs dans la flotte mais ABSENTS du fichier → non assuré / à vérifier
     const nonAssures = vehicules.filter(v => (!v.statut || v.statut === 'actif') && !prem[normPlaque(v.immat)] && !docPlates.some(p => normPlaque(p) === normPlaque(v.immat)));
@@ -849,9 +851,9 @@
     const ecarts = [];
     docPlates.forEach(p => {
       const v = byPlate[normPlaque(p)]; const r = rows[p]; if (!v || !r) return;
+      // La plaque fait foi : on n'alerte PAS sur les libellés marque/modèle (« MERCEDES » vs
+      // « MERCEDES BENZ », niveaux de finition…) — seul un vrai écart de VIN est remonté.
       const diffs = [];
-      if (r.marque && v.marque && _n(r.marque) !== _n(v.marque)) diffs.push(`marque : fichier « ${escC(r.marque)} » ≠ fiche « ${escC(v.marque)} »`);
-      if (r.modele && v.modele && _n(r.modele) !== _n(v.modele) && !_n(v.modele).includes(_n(r.modele)) && !_n(r.modele).includes(_n(v.modele))) diffs.push(`modèle : fichier « ${escC(r.modele)} » ≠ fiche « ${escC(v.modele)} »`);
       if (r.vin && v.vin && _n(r.vin) !== _n(v.vin)) diffs.push(`VIN : fichier « ${escC(r.vin)} » ≠ fiche « ${escC(v.vin)} »`);
       if (diffs.length) ecarts.push({ v, diffs });
     });
