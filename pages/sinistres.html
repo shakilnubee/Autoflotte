@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723w">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723x">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723w"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723x"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723w">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723x">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -272,6 +272,13 @@
         <select id="filter-vehicule" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
           <option value="all">Tous véhicules</option>
         </select>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="text-slate-500">Période :</span>
+          <input id="filter-from" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Du">
+          <span class="text-slate-400">→</span>
+          <input id="filter-to" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Au">
+          <button id="filter-period-clear" type="button" class="hidden text-xs text-slate-400 hover:text-slate-700" title="Effacer la période">✕</button>
+        </div>
       </div>
     </div>
 
@@ -296,12 +303,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723w"></script>
-<script src="../assets/js/supabase-client.js?v=20260723w"></script>
-<script src="../assets/js/data.js?v=20260723w"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723w"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723w"></script>
-<script src="../assets/js/app.js?v=20260723w"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723x"></script>
+<script src="../assets/js/supabase-client.js?v=20260723x"></script>
+<script src="../assets/js/data.js?v=20260723x"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723x"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723x"></script>
+<script src="../assets/js/app.js?v=20260723x"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -311,7 +318,7 @@
 
   // Tous les sinistres = factures type=sinistre
   let sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
-  const state = { search: '', annee: 'all', vehicule: 'all', remb: 'all' };
+  const state = { search: '', annee: 'all', vehicule: 'all', remb: 'all', dateFrom: '', dateTo: '' };
   const REGLES = ['rembourse', 'pec', 'refuse'];
   const rembOf = (g) => { try { return (FP.settings.get().sinistreStatut || {})[g.key] || ''; } catch (e) { return ''; } };
 
@@ -333,6 +340,8 @@
   function matchFilter(s) {
     const q = FP.norm(state.search).trim();
     if (state.annee !== 'all' && !(s.date || '').startsWith(state.annee)) return false;
+    if (state.dateFrom && (s.date || '') < state.dateFrom) return false;
+    if (state.dateTo && (s.date || '') > state.dateTo) return false;
     if (state.vehicule !== 'all' && s.vehiculeImmat !== state.vehicule) return false;
     if (q && !(FP.norm(`${s.vehiculeImmat} ${s.description} ${s.fournisseur}`).includes(q))) return false;
     return true;
@@ -752,6 +761,10 @@
   $('search').addEventListener('input', e => { state.search = e.target.value; sinExpanded = false; renderTimeline(); });
   $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; sinExpanded = false; renderTimeline(); });
   $('filter-vehicule').addEventListener('change', e => { state.vehicule = e.target.value; sinExpanded = false; renderTimeline(); });
+  function syncPeriodClear() { const b = $('filter-period-clear'); if (b) b.classList.toggle('hidden', !(state.dateFrom || state.dateTo)); }
+  $('filter-from').addEventListener('change', e => { state.dateFrom = e.target.value; sinExpanded = false; syncPeriodClear(); refreshAll(); });
+  $('filter-to').addEventListener('change', e => { state.dateTo = e.target.value; sinExpanded = false; syncPeriodClear(); refreshAll(); });
+  $('filter-period-clear').addEventListener('click', () => { state.dateFrom = ''; state.dateTo = ''; $('filter-from').value = ''; $('filter-to').value = ''; sinExpanded = false; syncPeriodClear(); refreshAll(); });
   // Filtre véhicule CHERCHABLE (taper plaque / marque / modèle) — règle projet.
   if (FP.searchSelect) FP.searchSelect($('filter-vehicule'), { placeholder: 'Rechercher un véhicule…' });
 

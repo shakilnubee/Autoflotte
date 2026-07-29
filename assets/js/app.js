@@ -3032,16 +3032,13 @@ FP.dupe = {
         }) || null;
       }
       case 'amendes': {
-        // Même n° d'avis (+ montant si dispo), sinon prénom + date + montant.
-        const av = n(rec.numeroAvis), mt = this._num(rec.montant), pre = n(rec.prenom), date = rec.date || null;
-        return list.find(a => {
-          if (!notSelf(a)) return false;
-          if (av && av.length >= 4 && n(a.numeroAvis) === av){
-            if (mt != null && a.montant != null) return this._amtEq(a.montant, mt);
-            return true;
-          }
-          return pre && date && mt != null && n(a.prenom) === pre && this._same(a.date, date) && this._amtEq(a.montant, mt);
-        }) || null;
+        // Doublon d'amende = UNIQUEMENT même n° d'avis (clé unique). On ne flague JAMAIS sur
+        // prénom+date+montant : deux amendes distinctes du même conducteur (même jour/montant) sont
+        // légitimes (ex. 2 stationnements) — c'était la cause des faux doublons.
+        const av = n(rec.numeroAvis), mt = this._num(rec.montant);
+        if (!(av && av.length >= 4)) return null;
+        return list.find(a => notSelf(a) && n(a.numeroAvis) === av
+          && (mt == null || a.montant == null || this._amtEq(a.montant, mt))) || null;
       }
       case 'vehicules': {
         const im = n(rec.immat); if (!im) return null;

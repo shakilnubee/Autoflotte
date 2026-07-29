@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723w">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723x">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723w"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723x"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723w">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723x">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -446,12 +446,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723w"></script>
-<script src="../assets/js/supabase-client.js?v=20260723w"></script>
-<script src="../assets/js/data.js?v=20260723w"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723w"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723w"></script>
-<script src="../assets/js/app.js?v=20260723w"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723x"></script>
+<script src="../assets/js/supabase-client.js?v=20260723x"></script>
+<script src="../assets/js/data.js?v=20260723x"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723x"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723x"></script>
+<script src="../assets/js/app.js?v=20260723x"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1757,15 +1757,12 @@
   // Cherche un doublon d'amende selon les valeurs saisies (n° d'avis, ou conducteur + date + montant)
   function findDoublon(prenom, date, montant, numAvis) {
     const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
-    // Un n° d'avis est une CLE UNIQUE : s'il est renseigne, on ne compare QUE par n° d'avis
-    // (sinon 2 amendes differentes du meme conducteur, meme jour, meme montant seraient vues
-    //  comme doublons a tort — cas typique de 2 FPS pour la meme personne le meme jour).
-    if (numAvis && norm(numAvis)) {
+    // Un doublon d'amende n'existe QUE si le N° D'AVIS (clé unique) est identique.
+    // On ne flague JAMAIS sur prénom+date+montant : deux amendes distinctes du même conducteur,
+    // même jour et même montant (ex. 2 stationnements) sont LÉGITIMES — les traiter en doublon
+    // était la cause des fausses alertes « à chaque ajout ».
+    if (numAvis && norm(numAvis).length >= 4) {
       return data.amendes.find(a => norm(a.numeroAvis) && norm(a.numeroAvis) === norm(numAvis)) || null;
-    }
-    // Pas de n° d'avis (saisie manuelle incomplete) : repli sur conducteur + date + montant.
-    if (prenom && date) {
-      return data.amendes.find(a => norm(a.prenom) === norm(prenom) && a.date === date && Number(a.montant) === Number(montant)) || null;
     }
     return null;
   }
@@ -1906,11 +1903,13 @@
     // Même conducteur + même motif mais montant plus élevé → probablement une majoration
     const motifSaisi = $('am-motif').value.trim();
     let majProbable = null;
-    if (!doublon) majProbable = data.amendes.find(a => !a.majoree && norm(a.prenom) === norm(prenom)
-      && norm(a.motif) === norm(motifSaisi) && Number(a.montant) > 0 && montant > Number(a.montant)
-      // PAS une majoration si la nouvelle amende a un n° d'avis PROPRE et DIFFERENT de l'existante :
-      // deux n° d'avis distincts = deux amendes differentes (ex. 2 FPS), pas une majoration.
-      && (!numAvis || !a.numeroAvis || norm(a.numeroAvis) === norm(numAvis)));
+    // Suggérer une majoration UNIQUEMENT si le n° d'avis est le MÊME qu'une amende existante et que
+    // le nouveau montant est plus élevé (une majoration porte le même n° d'avis). Sans n° d'avis
+    // identique, on ne suggère rien → plus de fausse alerte « majoration » à chaque 2e amende.
+    if (!doublon && numAvis && norm(numAvis).length >= 4) {
+      majProbable = data.amendes.find(a => !a.majoree && a.numeroAvis && norm(a.numeroAvis) === norm(numAvis)
+        && Number(a.montant) > 0 && montant > Number(a.montant)) || null;
+    }
     if (majProbable) {
       const lien = confirm(`💡 Cela ressemble à une MAJORATION d'une amende déjà enregistrée :\n\n`
         + `• ${majProbable.prenom || '?'} — ${FP.date(majProbable.date)}\n`
