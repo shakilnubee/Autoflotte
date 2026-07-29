@@ -2852,6 +2852,9 @@ FP.uploadScan = async function (file, folder, opts) {
 // Récupère chaque table en direct (l'admin voit tout via la RLS) + les réglages, et télécharge
 // un fichier daté. À garder précieusement (Drive, disque…). Réimportable si besoin.
 FP.exportBackup = async function () {
+  // ⚠️ Sauvegarde complète RÉSERVÉE AU CEO (consigne explicite) — verrou côté fonction,
+  // en plus du masquage de l'interface. Personne d'autre ne peut sauvegarder les données.
+  if (!(FP.isCEO && FP.isCEO())) { alert('La sauvegarde complète est réservée au CEO.'); return; }
   if (!(FP.supabase && FP.db)) { alert('Connexion requise pour exporter.'); return; }
   // Toutes les tables de données (RLS → seules les lignes de ta/tes société(s) sont renvoyées).
   const tables = ['vehicules', 'amendes', 'factures', 'conducteurs', 'documents', 'emprunts', 'total_conso', 'ulys_conso', 'app_settings'];
