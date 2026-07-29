@@ -36,6 +36,23 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
 - ⚠️ **Stockage autonomie/version** : côté DB, l'autonomie est dans la colonne `note_pneus`
   (mapping `note_pneus`↔`autonomie`) et la version dans `type_pneus` (↔`version`). Écrire
   l'autonomie dans `note_pneus`, PAS dans la colonne `autonomie` (ignorée par l'app).
+- ⚠️⚠️ **STATIONNEMENT GRATUIT PARIS — RÈGLE OFFICIELLE À NE PLUS SE TROMPER** (consigne explicite,
+  source = **paris.fr uniquement**, jamais de blog/forum ; cf. `parkingParis()` dans `pages/vehicules.html`) :
+  - **Ne JAMAIS conclure sur la seule motorisation** (électrique/hybride/thermique). Toujours croiser
+    les critères OFFICIELS de la Ville de Paris et **ne jamais faire d'hypothèse** : si la carte grise
+    ne permet pas de trancher, afficher **« À vérifier »** (jamais « Gratuit » ou « Payant » présumé).
+  - **Gratuité de surface = véhicules basse émission (VBE) LÉGERS** répondant à TOUS ces critères :
+    (1) **catégorie** M1, N1, L4, L6 ou L7 (Code de la route R.311-1) ;
+    (2) **énergie + taux de CO₂** figurant dans le **tableau d'éligibilité VBE** de paris.fr
+    (électrique/hydrogène OK ; hybride rechargeable sous seuil CO₂) ;
+    (3) **masse en service = champ G de la carte grise ≤ 2 000 kg** (PAS le PTAC, PAS G.1) ;
+    (4) **PTAC < 3 500 kg**. Au-dessus de 2 t (champ G) → « lourd » = **payant** (ex. BYD Seal U DM-i ≈ 2102 kg → PAYANT).
+  - **Immatriculé en FRANCE** : gratuité **automatique via le SIV depuis le 01/10/2024** (aucune démarche).
+  - **⚠️ Immatriculé à l'ÉTRANGER (hors SIV)** : gratuité **NON automatique** → **démarche OBLIGATOIRE par
+    courrier** à la Ville (certificat d'immat. étranger + COC traduit) ; 2 droits gratuits valables 5 ans.
+    Donc un VBE étranger éligible = afficher **« Gratuit sous réserve de démarche »**, JAMAIS « Gratuit » sec.
+  - Niveau de confiance à garder en tête : Très élevée / Élevée / Moyenne — et dire ce qui manque si doute.
+  - Sources : https://www.paris.fr/pages/les-autres-offres-de-stationnement-2355 (+ service-public.fr si besoin).
 - ⚠️ **Factures Ulys (péages VINCI) — MÉTHODE DE LECTURE À CONSERVER** (validée par l'utilisateur) :
   ces PDF ont une couche texte, mais la lecture standard (fragments collés par espaces) **mélange
   les colonnes** → montants aberrants et mauvais prénoms. Il faut **reconstruire les lignes en

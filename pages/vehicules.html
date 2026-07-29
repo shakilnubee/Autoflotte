@@ -1743,10 +1743,18 @@
     }
     if (!motorOk) return { ok: false, txt: 'Payant à Paris', detail: `Motorisation ${motorTxt || 'thermique'} — pas de gratuité de stationnement à Paris.` };
 
-    // 2) Condition de poids (lue sur la carte grise, champ G) — non affichée en tonnes
-    if (masse != null && masse > 2000) return { ok: false, txt: 'Payant à Paris', detail: `${motorTxt}, mais véhicule considéré « lourd » d'après la carte grise → tarif visiteur à Paris.` };
-    if (masse != null && masse <= 2000) return { ok: true, txt: 'Gratuit à Paris', detail: `${motorTxt} — éligible à la gratuité de stationnement de surface à Paris.` };
-    return { ok: null, txt: 'À vérifier', detail: `${motorTxt} — renseigne la masse (champ G de la carte grise) dans la fiche pour trancher.` };
+    // 2) Condition de poids (champ G = masse en service de la carte grise, seuil officiel 2 000 kg)
+    if (masse != null && masse > 2000) return { ok: false, txt: 'Payant à Paris', detail: `${motorTxt}, mais masse en service (champ G) > 2 000 kg → « lourd » = tarif visiteur (payant) à Paris.` };
+    if (masse != null && masse <= 2000) {
+      // 3) SIV : gratuité AUTOMATIQUE seulement pour les immat. FRANÇAISES. Les véhicules étrangers
+      //    (hors SIV) sont éligibles mais nécessitent une démarche par courrier à la Ville de Paris.
+      const norm = (v.immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const frSIV = /^[A-Z]{2}\d{3}[A-Z]{2}$/.test(norm);       // AA-123-AA (depuis 2009)
+      const frOld = /^\d{1,4}[A-Z]{2,3}\d{2}$/.test(norm);      // 123 ABC 75 (ancien)
+      if (!(frSIV || frOld)) return { ok: 'cond', txt: 'Gratuit sous démarche', detail: `${motorTxt} — éligible, MAIS véhicule hors SIV (immatriculation non française) : gratuité NON automatique → démarche OBLIGATOIRE par courrier à la Ville de Paris (certificat d'immat. étranger + COC traduit ; 2 droits gratuits valables 5 ans).` };
+      return { ok: true, txt: 'Gratuit à Paris', detail: `${motorTxt} — éligible ; gratuité automatique via le SIV (immat. française) depuis le 01/10/2024.` };
+    }
+    return { ok: null, txt: 'À vérifier', detail: `${motorTxt} — renseigne la masse en service (champ G de la carte grise) dans la fiche pour trancher (seuil 2 000 kg).` };
   }
   function parkingBadge(v) {
     const p = parkingParis(v);
