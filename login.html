@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260724c">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260724d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260724c"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260724d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260724c">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260724d">
 <style>
   body {
     background:
@@ -66,10 +66,6 @@
         <input type="checkbox" id="remember-me" checked class="w-4 h-4 accent-teal-600" />
         <span>Se souvenir de moi (rester connecté)</span>
       </label>
-      <label class="flex items-center gap-2 mb-5 cursor-pointer text-sm text-slate-600">
-        <input type="checkbox" id="remember-pwd" class="w-4 h-4 accent-teal-600" />
-        <span>Retenir mon mot de passe sur cet appareil</span>
-      </label>
       <button type="submit" class="btn btn-dark w-full justify-center" id="btn-login">
         <i data-lucide="log-in" class="w-4 h-4"></i> Se connecter
       </button>
@@ -80,15 +76,16 @@
     </p>
   </div>
 
-  <script src="assets/js/vendor/supabase.js?v=20260724c"></script>
+  <script src="assets/js/vendor/supabase.js?v=20260724d"></script>
   <script>
     const SUPABASE_URL = 'https://tzjuptlzoywjeigmyfuj.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq';
     const client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // Petit (dé)brouillage pour ne pas stocker le mot de passe en clair évident
-    const enc = (s) => { try { return btoa(unescape(encodeURIComponent(s))); } catch { return ''; } };
-    const dec = (s) => { try { return decodeURIComponent(escape(atob(s))); } catch { return ''; } };
+    // ⚠️ SÉCURITÉ : on ne stocke JAMAIS le mot de passe (même « brouillé » en base64, c'est
+    // réversible et exfiltrable). La persistance de connexion passe par la SESSION Supabase
+    // (« Se souvenir de moi »), révocable et expirable. On purge toute valeur héritée.
+    try { localStorage.removeItem('fp_remember_pwd'); } catch (e) {}
 
     // Pré-remplir l'email si "Se souvenir de moi" était activé la dernière fois
     const savedEmail = localStorage.getItem('fp_remember_email');
@@ -96,12 +93,6 @@
     if (savedEmail && savedRemember) {
       document.getElementById('email').value = savedEmail;
       document.getElementById('remember-me').checked = true;
-    }
-    // Pré-remplir le mot de passe s'il a été retenu sur cet appareil
-    const savedPwd = localStorage.getItem('fp_remember_pwd');
-    if (savedPwd) {
-      document.getElementById('password').value = dec(savedPwd);
-      document.getElementById('remember-pwd').checked = true;
     }
 
     // Lien "Mot de passe oublié ?" → envoie un email de réinitialisation
@@ -161,12 +152,6 @@
       } else {
         localStorage.setItem('fp_remember_me', '0');
         localStorage.removeItem('fp_remember_email');
-      }
-      // Retenir (ou oublier) le mot de passe sur cet appareil
-      if (document.getElementById('remember-pwd').checked) {
-        localStorage.setItem('fp_remember_pwd', enc(password));
-      } else {
-        localStorage.removeItem('fp_remember_pwd');
       }
       // Marqueur de session active (sera vidé à la fermeture du browser)
       sessionStorage.setItem('fp_session_alive', '1');

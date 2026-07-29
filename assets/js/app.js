@@ -1084,6 +1084,8 @@ FP.archiveVehicleDocs = async (immats) => {
 // quand le focus n'est pas dans un champ éditable.
 // Normalisation pour la recherche : minuscules + SANS accents (taper « jeremy » trouve « Jérémy »).
 FP.norm = (s) => (s == null ? '' : s.toString()).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Échappement HTML — À UTILISER pour toute donnée saisie/OCR injectée en innerHTML (anti-XSS).
+FP.esc = (s) => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 (function guardBackspace() {
   // Empêche la touche « Retour arrière » de déclencher « page précédente » du navigateur

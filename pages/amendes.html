@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260724c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260724d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260724c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260724d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260724c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260724d">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -446,12 +446,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260724c"></script>
-<script src="../assets/js/supabase-client.js?v=20260724c"></script>
-<script src="../assets/js/data.js?v=20260724c"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260724c"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260724c"></script>
-<script src="../assets/js/app.js?v=20260724c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260724d"></script>
+<script src="../assets/js/supabase-client.js?v=20260724d"></script>
+<script src="../assets/js/data.js?v=20260724d"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260724d"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260724d"></script>
+<script src="../assets/js/app.js?v=20260724d"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -765,7 +765,7 @@
       rows.forEach(a => {
         const c = (a.prenom || '—').trim() || '—';
         if (!par[c]) par[c] = { n: 0, montant: 0, points: 0 };
-        par[c].n++; par[c].montant += (a.montant || 0); par[c].points += (Number(a.points) || 0);
+        par[c].n++; par[c].montant += montantDu(a); par[c].points += (Number(a.points) || 0);
       });
       const entries = Object.entries(par).sort((a, b) => b[1].montant - a[1].montant);
       const legende = state.motif !== 'all' ? state.motif : (state.motifCat !== 'all' ? ((CAT_META[state.motifCat] || {}).label || state.motifCat) : null);
@@ -1060,7 +1060,7 @@
   function renderPodium() {
     const amendes2026 = data.amendes.filter(a => anneeOf(a) === '2026');
     const agg = {};
-    amendes2026.forEach(a => { const c = (a.prenom || '—').trim() || '—'; if (!agg[c]) agg[c] = { n: 0, montant: 0, points: 0 }; agg[c].n++; agg[c].montant += (a.montant || 0); agg[c].points += (Number(a.points) || 0); });
+    amendes2026.forEach(a => { const c = (a.prenom || '—').trim() || '—'; if (!agg[c]) agg[c] = { n: 0, montant: 0, points: 0 }; agg[c].n++; agg[c].montant += montantDu(a); agg[c].points += (Number(a.points) || 0); });
     const all = Object.entries(agg).sort((a, b) => b[1].n - a[1].n || b[1].montant - a[1].montant);
     const shown = podiumExpanded ? all : all.slice(0, 5);
     const medals = ['🥇', '🥈', '🥉'];
@@ -1089,7 +1089,7 @@
     const overdue = amendes2026.filter(a => a.statut === 'à payer' && a.date && ((today - new Date(a.date)) / 86400000) > 30);
     const banner = $('delai-banner');
     if (overdue.length) {
-      const tot = overdue.reduce((s, a) => s + (a.montant || 0), 0);
+      const tot = overdue.reduce((s, a) => s + montantDu(a), 0);
       banner.innerHTML = `<i data-lucide="alarm-clock" class="w-5 h-5" style="color:#DC2626"></i>
         <div class="text-sm" style="color:#7F1D1D"><span class="font-bold">${overdue.length} amende(s)</span> à payer depuis plus de 30 jours (${FP.euro(tot)}) — risque de majoration.</div>
         <button id="delai-voir" class="btn btn-outline text-xs ml-auto" style="border-color:#FCA5A5;color:#991B1B">Voir</button>`;
@@ -1100,7 +1100,7 @@
 
     // --- Mini-stats par type ---
     const catCount = {};
-    amendes2026.forEach(a => { const c = categorize(a.motif); if (!catCount[c]) catCount[c] = { n: 0, montant: 0 }; catCount[c].n++; catCount[c].montant += (a.montant || 0); });
+    amendes2026.forEach(a => { const c = categorize(a.motif); if (!catCount[c]) catCount[c] = { n: 0, montant: 0 }; catCount[c].n++; catCount[c].montant += montantDu(a); });
     const total = amendes2026.length || 1;
     $('type-stats').innerHTML = Object.keys(CAT_META).filter(c => catCount[c]).sort((a, b) => catCount[b].n - catCount[a].n).map(c => {
       const meta = CAT_META[c]; const v = catCount[c]; const pct = Math.round(v.n / total * 100);
@@ -1116,7 +1116,7 @@
 
     // --- Évolution mensuelle ---
     const mois = Array(12).fill(0); const moisMontant = Array(12).fill(0);
-    amendes2026.forEach(a => { const m = parseInt((a.date || '').slice(5, 7), 10) - 1; if (m >= 0 && m < 12) { mois[m]++; moisMontant[m] += (a.montant || 0); } });
+    amendes2026.forEach(a => { const m = parseInt((a.date || '').slice(5, 7), 10) - 1; if (m >= 0 && m < 12) { mois[m]++; moisMontant[m] += montantDu(a); } });
     const moisLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
     if ($('moisChart')) {
       if (moisChart) moisChart.destroy();

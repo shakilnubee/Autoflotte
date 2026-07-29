@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260724c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260724d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260724c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260724d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260724c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260724d">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -450,12 +450,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260724c"></script>
-<script src="../assets/js/supabase-client.js?v=20260724c"></script>
-<script src="../assets/js/data.js?v=20260724c"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260724c"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260724c"></script>
-<script src="../assets/js/app.js?v=20260724c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260724d"></script>
+<script src="../assets/js/supabase-client.js?v=20260724d"></script>
+<script src="../assets/js/data.js?v=20260724d"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260724d"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260724d"></script>
+<script src="../assets/js/app.js?v=20260724d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -464,6 +464,10 @@
   // Labels des groupes fournis par FP.groupeLabel (configurables via /pages/parametres.html)
   const VEH_INACTIFS = ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 'cédé', 'cede', 'cédée', 'hors service', 'hs', 'archive', 'archivé', 'archivée', 'restitué', 'restitue'];
   const estActif = v => !VEH_INACTIFS.includes((v && v.statut || '').toString().toLowerCase().trim());
+  // Parc POSSÉDÉ (pour TVS + assurance) = tout sauf vendu/vendue — MÊME règle que Statistiques et
+  // le dashboard (FP.estVendu). ⚠️ « à vendre » est encore possédé → toujours assuré et taxé (TVS),
+  // donc COMPTÉ. (Le reste de la page — leasing — garde estActif : pas de loyer sur un véhicule sorti.)
+  const owned = () => (data.vehicules || []).filter(v => (FP.estVendu ? !FP.estVendu(v) : true));
   // ⚠️ Reconstruit à CHAQUE chargement Supabase (fp:data-ready) — sinon les véhicules / factures
   // leasing importés restent invisibles (vehicules est une COPIE filtrée, pas une réf. vivante).
   let vehicules = [], leasingFactures = [], leasingByVeh = {}, leasingImmats = new Set();
@@ -625,7 +629,7 @@
     $('kpi-annuel').textContent = FP.euro(mensTotal * 12 + assurPrime() + fleetTVS());
   }
   // TVS annuelle totale de la flotte (même barème central que Statistiques / fiche véhicule).
-  function fleetTVS(){ try { return (vehicules || []).reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0); } catch (e) { return 0; } }
+  function fleetTVS(){ try { return owned().reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0); } catch (e) { return 0; } }
 
   // Prime d'assurance annuelle de la flotte (un seul montant, saisi par l'utilisateur, sync par société)
   // Primes d'assurance PAR VÉHICULE (importées de l'état de parc), indexées par plaque
@@ -641,14 +645,14 @@
   function assurPrime(){
     const p = assurPrimes();
     if (Object.keys(p).length) {
-      let t = 0; vehicules.forEach(v => { const pr = vehPrime(v); if (pr && Number.isFinite(pr.ttc)) t += pr.ttc; });
+      let t = 0; owned().forEach(v => { const pr = vehPrime(v); if (pr && Number.isFinite(pr.ttc)) t += pr.ttc; });
       if (t > 0) return t;
     }
     const s = (FP.settings && FP.settings.get) ? FP.settings.get() : {};
     const n = Number(s.assurancePrimeAnnuelle); return Number.isFinite(n) ? n : 0;
   }
   function renderAssurInfo(){
-    const prime = assurPrime(); const n = vehicules.length || 0;
+    const prime = assurPrime(); const n = owned().length || 0;
     const tt = $('assur-titre'); if (tt) tt.textContent = (FP.assuranceLabel && FP.assuranceLabel()) || '(à configurer)';
     const inp = $('assur-prime');
     if (inp && document.activeElement !== inp) inp.value = prime ? String(Math.round(prime)).replace('.', ',') : '';
@@ -656,7 +660,7 @@
     if ($('assur-parveh'))  $('assur-parveh').textContent  = (prime && n) ? FP.euro(prime/n) : '—';
   }
   function renderAssurance() {
-    const prime = assurPrime(); const n = vehicules.length || 0;
+    const prime = assurPrime(); const n = owned().length || 0;
     const hasPerVeh = Object.keys(assurPrimes()).length > 0;
     const parVeh = (prime && n) ? prime / n : 0;
     const tbody = $('tbody-assurance');
@@ -669,7 +673,7 @@
       return `
       <tr>
         <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
-        <td>${v.marque} ${v.modele}</td>
+        <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}</td>
         <td>${FP.lienConducteur(v.chauffeur)}</td>
         <td><div class="flex flex-wrap gap-1">${FP.vehGroupes(v).map(k => `<span class="groupe-pill gp-${k}"><span class="dot"></span>${FP.groupeLabel(k)}</span>`).join('')}</div></td>
         <td><span class="badge ${pr ? 'badge-ok' : (hasPerVeh ? 'badge-warn' : 'badge-ok')}">${pr ? 'Couvert' : (hasPerVeh ? 'Prime manquante' : 'Couvert')}</span></td>
@@ -1035,7 +1039,7 @@
       return `
       <tr>
         <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
-        <td>${v.marque} ${v.modele}</td>
+        <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}</td>
         <td>${FP.lienConducteur(v.chauffeur)}</td>
         <td>${loueurDeVeh(v)}</td>
         <td>${l ? FP.num(l.kmContrat) + ' km' : '<span class="text-slate-400">—</span>'}</td>

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260724c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260724d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260724c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260724d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260724c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260724d">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -416,13 +416,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260724c"></script>
-<script src="../assets/js/supabase-client.js?v=20260724c"></script>
-<script src="../assets/js/data.js?v=20260724c"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260724c"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260724c"></script>
-<script src="../assets/js/fleet-docs.js?v=20260724c"></script>
-<script src="../assets/js/app.js?v=20260724c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260724d"></script>
+<script src="../assets/js/supabase-client.js?v=20260724d"></script>
+<script src="../assets/js/data.js?v=20260724d"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260724d"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260724d"></script>
+<script src="../assets/js/fleet-docs.js?v=20260724d"></script>
+<script src="../assets/js/app.js?v=20260724d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -507,6 +507,9 @@
 
   // --- Fallback localStorage (si Supabase indisponible) ---
   function persistCondToLS() {
+    // Le store local legacy (COND_KEY/PERMIS_KEY, non suffixés) est réservé à PXP : une autre
+    // société ne doit PAS y écrire (sinon ses conducteurs polluent la clé partagée hors-ligne).
+    if ((window.FP && FP.activeSociete ? FP.activeSociete() : 'PXP') !== 'PXP') return;
     const store = { manuels: condCache.filter(r => r.manuel).map(pickFiche), masques: condCache.filter(r => r.masque).map(r => r.key) };
     const permis = {}; condCache.forEach(r => { if (r.permisUrl) permis[r.key] = { url: r.permisUrl, fileId: r.permisFileId }; });
     localStorage.setItem(COND_KEY, JSON.stringify(store));
@@ -548,7 +551,12 @@
         // Fusionne les fiches saisies localement (hors-ligne) SANS écraser les valeurs du serveur,
         // puis renvoie au serveur ce qui manquait → reprise automatique entre postes.
         try {
-          const store = JSON.parse(localStorage.getItem(COND_KEY) || '{}');
+          // ⚠️ ISOLATION MULTI-SOCIÉTÉS : les fiches locales legacy (COND_KEY, clé NON suffixée)
+          // contiennent UNIQUEMENT les données PXP d'origine (avec PII : permis, adresse, tél…).
+          // Ne JAMAIS les fusionner/réécrire sur une AUTRE société (sinon un salarié PXP au même
+          // prénom qu'un conducteur de la société B verrait ses infos copiées dans la table B).
+          const _soc = (window.FP && FP.activeSociete) ? FP.activeSociete() : 'PXP';
+          const store = _soc === 'PXP' ? JSON.parse(localStorage.getItem(COND_KEY) || '{}') : {};
           const byKey = {}; condCache.forEach(row => { byKey[row.key] = row; });
           const fiche = ['name', 'nom', 'prenom', 'poste', 'dateNaissance', 'adresse', 'tel', 'email', 'note',
                          'permisType', 'permisNumero', 'permisObtention', 'permisExpiration'];

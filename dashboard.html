@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260724c">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260724d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260724c"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260724d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260724c">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260724d">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -449,10 +449,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260724c"></script>
-<script src="assets/js/supabase-client.js?v=20260724c"></script>
-<script src="assets/js/data.js?v=20260724c"></script>
-<script src="assets/js/app.js?v=20260724c"></script>
+<script src="assets/js/vendor/supabase.js?v=20260724d"></script>
+<script src="assets/js/supabase-client.js?v=20260724d"></script>
+<script src="assets/js/data.js?v=20260724d"></script>
+<script src="assets/js/app.js?v=20260724d"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -462,7 +462,7 @@
   // === KPIs ===
   // Flotte = hors véhicules VENDUS (archivés) → même règle que la page Véhicules
   // (sinon le total « flotte » du dashboard dépasse celui de la page Véhicules).
-  const flotteActive = data.vehicules.filter(v => v.statut !== 'vendu');
+  const flotteActive = data.vehicules.filter(v => !FP.estVendu(v));
   document.getElementById('kpi-vehicules').textContent = flotteActive.length;
 
   // Nombre de conducteurs — conducteurs enregistrés (avec véhicule attribué)
@@ -543,7 +543,10 @@
   const _cn = (s) => (s == null ? '' : s.toString()).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
   const isUlysF = (f) => _cn(f.type) === 'ulys' || /\bulys\b/.test(_cn(f.fournisseur));
   const isTotalFleetF = (f) => { if (isUlysF(f)) return false; const t = _cn(f.type); if (t === 'carburant' || t === 'peage') return true; return /total\s*energies|totalenergies/.test(_cn(f.fournisseur)); };
-  const compteCout = (f) => f.type !== 'leasing' && f.type !== 'sinistre';
+  // Coût d'EXPLOITATION : on exclut leasing et sinistre, MAIS AUSSI l'achat d'un véhicule
+  // (investissement, pas une charge du mois) et la cession (argent qui RENTRE) — cohérent avec
+  // le TCO de Statistiques (_EXC_TCO = {cession, achat}). Sinon un achat à 28 000 € gonflait le mois.
+  const compteCout = (f) => { const t = _cn(f.type); return t !== 'leasing' && t !== 'sinistre' && t !== 'achat' && t !== 'cession'; };
   const today = new Date();
   const currentMonth = today.toISOString().slice(0, 7);
   const coutsMois = (data.factures || [])
@@ -556,7 +559,7 @@
     const spark = document.getElementById('kpi-couts-spark'); if (!spark || !FP.sparklineHTML) return;
     const months = [];
     for (let i = 5; i >= 0; i--) { const d = new Date(today.getFullYear(), today.getMonth() - i, 1); months.push(d.toISOString().slice(0, 7)); }
-    const série = months.map(ym => (data.factures || []).filter(f => (f.date || '').startsWith(ym)).reduce((s, f) => s + (f.montantTTC || 0), 0));
+    const série = months.map(ym => (data.factures || []).filter(f => (f.date || '').startsWith(ym) && compteCout(f)).reduce((s, f) => s + (f.montantTTC || 0), 0));
     if (série.some(v => v > 0)) spark.innerHTML = FP.sparklineHTML(série, { width: 110, height: 26, color: '#0e7490' });
   })();
 
@@ -700,11 +703,12 @@
   const vehTbody = document.getElementById('vehicules-tbody');
   let vehExpanded = false;
   function rowHtml(v) {
+    const E = FP.esc;
     return `
-    <tr class="cursor-pointer hover:bg-slate-50 transition-colors" data-veh="${v.id}" title="Voir la fiche de ${v.immat}">
-      <td class="font-mono font-semibold">${v.immat}</td>
-      <td>${v.marque} ${v.modele}</td>
-      <td>${v.chauffeur}</td>
+    <tr class="cursor-pointer hover:bg-slate-50 transition-colors" data-veh="${E(v.id)}" title="Voir la fiche de ${E(v.immat)}">
+      <td class="font-mono font-semibold">${E(v.immat)}</td>
+      <td>${E(v.marque)} ${E(v.modele)}</td>
+      <td>${E(v.chauffeur)}</td>
       <td>${FP.num(v.km)} km</td>
       <td>${FP.statutBadge(v.statut)}</td>
     </tr>`;
@@ -741,9 +745,12 @@
     return out;
   }
   const months = buildLast6Months();
+  // Même périmètre que le KPI « Coût du mois » (coût d'exploitation) : on exclut
+  // leasing / sinistre / achat / cession pour que le graphe colle au chiffre affiché.
+  const _excCout = (f) => { const t = String(f.type || '').toLowerCase(); return t !== 'leasing' && t !== 'sinistre' && t !== 'achat' && t !== 'cession'; };
   const monthlyTotals = months.map(m =>
     (data.factures || [])
-      .filter(f => (f.date || '').startsWith(m.ym))
+      .filter(f => (f.date || '').startsWith(m.ym) && _excCout(f))
       .reduce((s, f) => s + (f.montantTTC || 0), 0)
   );
 
@@ -824,7 +831,7 @@
     (data.amendes || []).filter(a => a.annee === '2026').forEach(a => {
       const k = key(a.prenom); if (!k || NP.has(k)) return;
       byDriver[k] = byDriver[k] || { nom: (a.prenom || '').trim(), n: 0, montant: 0, points: 0 };
-      byDriver[k].n++; byDriver[k].montant += (a.montant || 0); byDriver[k].points += (Number(a.points) || 0);
+      byDriver[k].n++; byDriver[k].montant += ((a.majoree && a.montantMajore) ? Number(a.montantMajore) : (Number(a.montant) || 0)); byDriver[k].points += (Number(a.points) || 0);
     });
     const all = Object.values(byDriver).sort((a, b) => b.n - a.n || b.montant - a.montant);
     const medals = ['🥇', '🥈', '🥉'];
@@ -929,7 +936,7 @@
   document.addEventListener('fp:data-ready', () => {
     // ⚠️ MÊMES règles que le 1er rendu (sinon le live ré-affiche l'ancien comptage) :
     // flotte = hors vendus ; amendes à payer = 2026 ; km/valeur sur la flotte active.
-    const fa = (data.vehicules || []).filter(v => v.statut !== 'vendu');
+    const fa = (data.vehicules || []).filter(v => !FP.estVendu(v));
     document.getElementById('kpi-vehicules').textContent = fa.length;
     const ap = (data.amendes || []).filter(a => {
       const s = (a.statut || '').trim().toLowerCase();
