@@ -62,6 +62,17 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
   s'applique que si la date limite est **dépassée**, et c'est l'**app** (qui connaît la date du jour)
   qui le détermine, pas l'IA. En cas de doute : prendre le **plus petit**, jamais le plus gros.
   Ne jamais confondre le montant avec un n° d'avis / télépaiement / téléphone / année / code postal.
+  - ⚠️ **PIÈGE `Math.max` — NE JAMAIS prendre le montant via `Math.max(...)` de tous les nombres**
+    (bug réel : un avis normal affichait **1875 €** — une référence parasite ramassée par le max).
+    Le montant vient des **3 montants officiels lus par l'IA**, jamais du plus grand nombre trouvé
+    sur la page. Le repli OCR prend le **plus petit** des montants de la grille (`Math.min`), pas le max.
+  - ⚠️ **PIÈGE « faux avis de majoration »** : NE PAS détecter une majoration sur la mention
+    « amende forfaitaire majorée » — elle figure dans la **grille des 3 tarifs de TOUT avis normal**.
+    Un **vrai** avis de majoration a un **titre dédié** (« AVIS DE MAJORATION ») : ne matcher que
+    `/avis de majoration/i` (cf. `parseAvis`, `pages/amendes.html`). Sinon chaque avis ré-importé est
+    pris à tort pour une majoration et le montant devient aberrant.
+  - ⚠️ **Ré-import d'un avis déjà enregistré** = **doublon** (bandeau normal via `FP.dupe`/`checkDoublonLive`),
+    PAS une majoration. Le champ Montant doit alors afficher le **minoré**, pas un montant inventé.
 - ⚠️ **Factures Ulys (péages VINCI) — MÉTHODE DE LECTURE À CONSERVER** (validée par l'utilisateur) :
   ces PDF ont une couche texte, mais la lecture standard (fragments collés par espaces) **mélange
   les colonnes** → montants aberrants et mauvais prénoms. Il faut **reconstruire les lignes en
