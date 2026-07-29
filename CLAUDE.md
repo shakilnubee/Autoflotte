@@ -53,6 +53,15 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
     Donc un VBE étranger éligible = afficher **« Gratuit sous réserve de démarche »**, JAMAIS « Gratuit » sec.
   - Niveau de confiance à garder en tête : Très élevée / Élevée / Moyenne — et dire ce qui manque si doute.
   - Sources : https://www.paris.fr/pages/les-autres-offres-de-stationnement-2355 (+ service-public.fr si besoin).
+- ⚠️⚠️ **AMENDES / AVIS ANTAI — LES 3 MONTANTS, NE JAMAIS PRENDRE LE MAJORÉ PAR DÉFAUT** (consigne
+  explicite, régression récurrente) : un avis a **3 montants** — **minoré** (paiement rapide, le +
+  petit, ex 45), **forfaitaire** (ex 68), **majoré** (le + gros, ex 180). Le scan (prompt
+  `FP.SCAN_PROMPT`, app.js) doit les extraire **séparément** (`montantMinore`, `montantForfaitaire`,
+  `montantMajore`) + les **dates limites** (`dateLimiteMinore`, `dateLimiteForfaitaire`), et mettre
+  dans `montantTTC` **le minoré (sinon le forfaitaire)** — **JAMAIS le majoré**. Le majoré ne
+  s'applique que si la date limite est **dépassée**, et c'est l'**app** (qui connaît la date du jour)
+  qui le détermine, pas l'IA. En cas de doute : prendre le **plus petit**, jamais le plus gros.
+  Ne jamais confondre le montant avec un n° d'avis / télépaiement / téléphone / année / code postal.
 - ⚠️ **Factures Ulys (péages VINCI) — MÉTHODE DE LECTURE À CONSERVER** (validée par l'utilisateur) :
   ces PDF ont une couche texte, mais la lecture standard (fragments collés par espaces) **mélange
   les colonnes** → montants aberrants et mauvais prénoms. Il faut **reconstruire les lignes en

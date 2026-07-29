@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723v">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260723w">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260723v"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260723w"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260723v">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260723w">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -156,7 +156,7 @@
     <div id="sin-facture-status" class="hidden mb-6 text-sm rounded-lg px-4 py-3"></div>
 
     <!-- KPIs -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
       <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
         <div class="kpi-label">Total sinistres</div>
         <div class="kpi-value" id="kpi-total">—</div>
@@ -166,9 +166,19 @@
         <div class="kpi-value" id="kpi-cout" style="color: var(--fp-danger)">—</div>
       </div><div class="kpi-ic danger"><i data-lucide="euro"></i></div></div></div>
       <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Reste à charge</div>
+        <div class="kpi-value" id="kpi-reste" style="color: var(--fp-danger)">—</div>
+        <div class="kpi-delta">coût − remboursé</div>
+      </div><div class="kpi-ic danger"><i data-lucide="hand-coins"></i></div></div></div>
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
         <div class="kpi-label">Véhicules concernés</div>
         <div class="kpi-value" id="kpi-vehicules">—</div>
       </div><div class="kpi-ic"><i data-lucide="car"></i></div></div></div>
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Sinistres responsables</div>
+        <div class="kpi-value" id="kpi-resp" style="color: var(--fp-warn)">—</div>
+        <div class="kpi-delta">conducteur en tort</div>
+      </div><div class="kpi-ic warn"><i data-lucide="user-round-x"></i></div></div></div>
       <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
         <div class="kpi-label">Cette année</div>
         <div class="kpi-value" id="kpi-annee" style="color: var(--fp-warn)">—</div>
@@ -193,6 +203,7 @@
         <span class="text-xs font-normal text-slate-400">— classés par sinistres responsables puis nombre d'accidents</span></h3>
       <p class="text-xs text-slate-400 mb-3">Le conducteur d'un sinistre = le chauffeur actuel du véhicule concerné. Renseigne la « Responsabilité » dans le dossier assurance de chaque incident pour affiner.</p>
       <div id="sin-risque"></div>
+      <datalist id="sin-cond-list"></datalist>
     </div>
 
     <!-- Photos & documents des sinistres (façon Drive) -->
@@ -285,12 +296,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260723v"></script>
-<script src="../assets/js/supabase-client.js?v=20260723v"></script>
-<script src="../assets/js/data.js?v=20260723v"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723v"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723v"></script>
-<script src="../assets/js/app.js?v=20260723v"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260723w"></script>
+<script src="../assets/js/supabase-client.js?v=20260723w"></script>
+<script src="../assets/js/data.js?v=20260723w"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260723w"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260723w"></script>
+<script src="../assets/js/app.js?v=20260723w"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -366,11 +377,17 @@
 
   function renderKPIs() {
     const groups = allGroups();
+    const doss = FP.settings.get().sinistreAssurance || {};
     $('kpi-total').textContent = groups.length;
     $('kpi-cout').textContent = FP.euro(groups.reduce((s, g) => s + g.cost, 0));
     $('kpi-vehicules').textContent = new Set(sinistres.map(s => s.vehiculeImmat).filter(Boolean)).size;
     const cy = new Date().getFullYear().toString();
     $('kpi-annee').textContent = groups.filter(g => (g.rep.date || '').startsWith(cy)).length;
+    // Reste à charge total = Σ (coût incident − remboursé) ; et nb de sinistres responsables.
+    const reste = groups.reduce((s, g) => s + Math.max(0, (g.cost || 0) - (Number((doss[g.key] || {}).rembourse) || 0)), 0);
+    const resp = groups.filter(g => (doss[g.key] || {}).resp === 'responsable').length;
+    if ($('kpi-reste')) $('kpi-reste').textContent = FP.euro(reste);
+    if ($('kpi-resp')) $('kpi-resp').textContent = resp;
   }
 
   // Suivi du remboursement (stocké dans les réglages partagés)
@@ -453,9 +470,11 @@
         const dv = (FP.settings.get().sinistreAssurance || {})[g.key] || {};
         const respOpts = [['', '—'], ['responsable', 'Responsable'], ['non-responsable', 'Non responsable'], ['partagee', 'Partagée'], ['en-cours', 'En cours']];
         const reste = (g.cost || 0) - (Number(dv.rembourse) || 0);
+        const vehCh = (veh && veh.chauffeur && veh.chauffeur !== '—') ? veh.chauffeur : '';
         const dossierPanel = `
           <details class="mt-2">
             <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#475569;list-style:none" class="inline-flex items-center gap-1"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Dossier assurance</summary>
+            <label class="text-xs text-slate-500" style="display:block;margin-top:8px">Conducteur au moment du sinistre <span class="text-slate-400">(figé, sinon = chauffeur actuel)</span><input class="sin-doss" data-key="${g.key}" data-k="conducteur" type="text" list="sin-cond-list" value="${escapeHtml(dv.conducteur || '')}" placeholder="${escapeHtml(vehCh || '—')}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
             <div class="grid grid-cols-3 gap-2 mt-2">
               <label class="text-xs text-slate-500">Franchise (€)<input class="sin-doss" data-key="${g.key}" data-k="franchise" type="number" value="${dv.franchise ?? ''}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
               <label class="text-xs text-slate-500">Remboursé (€)<input class="sin-doss" data-key="${g.key}" data-k="rembourse" type="number" value="${dv.rembourse ?? ''}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
@@ -524,7 +543,9 @@
     groups.forEach(g => {
       const immat = g.rep && g.rep.vehiculeImmat;
       const veh = (data.vehicules || []).find(v => v.immat === immat);
-      const cond = (veh && veh.chauffeur && veh.chauffeur !== '—') ? veh.chauffeur : null;
+      // Conducteur FIGÉ sur l'incident (dossier assurance) sinon chauffeur actuel du véhicule.
+      const frozen = ((doss[g.key] || {}).conducteur || '').trim();
+      const cond = frozen || (veh && veh.chauffeur && veh.chauffeur !== '—' ? veh.chauffeur : '') || null;
       if (!cond) return;
       const r = byCond[cond] || (byCond[cond] = { nb: 0, resp: 0, cost: 0 });
       r.nb++; r.cost += g.cost || 0;
@@ -546,6 +567,14 @@
           <td><span class="badge" style="background:${lvl[0]};color:${lvl[1]}">${lvl[2]}</span></td>
         </tr>`;
       }).join('') + '</tbody></table></div>';
+    // Autocomplétion du champ conducteur (noms connus : conducteurs + chauffeurs des véhicules).
+    const dl = $('sin-cond-list');
+    if (dl) {
+      const names = new Set();
+      (data.conducteurs || []).forEach(c => { const n = ([c.prenom || c.name, c.nom].filter(Boolean).join(' ')).trim() || c.name; if (n) names.add(n); });
+      (data.vehicules || []).forEach(v => { if (v.chauffeur && v.chauffeur !== '—') names.add(v.chauffeur); });
+      dl.innerHTML = [...names].sort().map(n => `<option value="${escapeHtml(n)}">`).join('');
+    }
     if (window.lucide) try { lucide.createIcons(); } catch (e) {}
   }
   function refreshAll() { renderKPIs(); renderTimeline(); renderCharts(); renderConducteursRisque(); coutPeriode.render(); }
@@ -1124,8 +1153,10 @@
       cols: [
         { id: 'date',          label: 'Date',        def: true,  get: s => s.date ? FP.dateNum(s.date) : '—' },
         { id: 'vehiculeImmat', label: 'Véhicule',    def: true,  mono: true, get: s => s.vehiculeImmat || '—' },
+        { id: 'conducteur',    label: 'Conducteur',  def: true,  get: s => { const d = (FP.settings.get().sinistreAssurance || {})[groupKeyOf(s.id)] || {}; if ((d.conducteur || '').trim()) return d.conducteur.trim(); const v = (data.vehicules || []).find(x => x.immat === s.vehiculeImmat); return (v && v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '—'; } },
         { id: 'fournisseur',   label: 'Garage',      def: true,  get: s => s.fournisseur || '—' },
-        { id: 'description',   label: 'Description', def: true,  get: s => s.description || '—' },
+        { id: 'description',   label: 'Description', def: false, get: s => s.description || '—' },
+        { id: 'resp',          label: 'Responsabilité', def: true, get: s => { const r = ((FP.settings.get().sinistreAssurance || {})[groupKeyOf(s.id)] || {}).resp; return r ? ({ 'responsable': 'Responsable', 'non-responsable': 'Non responsable', 'partagee': 'Partagée', 'en-cours': 'En cours' }[r] || r) : '—'; }, tint: v => (/responsable/i.test(v) && !/non/i.test(v)) ? [185, 28, 28] : null },
         { id: 'numeroFacture', label: 'N° facture',  def: false, mono: true, get: s => s.numeroFacture || '—' },
         { id: 'montantTTC',    label: 'Montant TTC', def: true,  align: 'right', get: s => (s.montantTTC != null && s.montantTTC !== '') ? FP.euroPrecis(s.montantTTC) : '—', sum: s => s.montantTTC, fmt: FP.euroPrecis },
       ],
