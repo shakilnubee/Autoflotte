@@ -26,6 +26,11 @@
   .seg button{flex:1;padding:8px;border:1px solid var(--line);background:#fff;border-radius:9px;font-size:13px;font-weight:600;color:#475569;cursor:pointer}
   .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
   .hint{font-size:11px;color:var(--muted);margin-top:4px}
+  .miss{border-color:#ef4444 !important;background:#fff5f5}
+  .need{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px 12px;margin:0 0 14px;font-size:12.5px;color:#9a3412}
+  .need b{color:#7c2d12}
+  .need.ok{background:#ecfdf5;border-color:#a7f3d0;color:#047857}
+  .from-devis{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:8px 12px;margin:0 0 12px;font-size:12px;color:#1e40af}
   .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
   .btn{flex:1;min-width:120px;padding:11px;border-radius:10px;border:none;font-weight:700;font-size:14px;cursor:pointer}
   .btn-print{background:var(--ink);color:#fff}
@@ -75,6 +80,9 @@
   <div class="noprint">
     <h1>Générateur de contrat</h1>
     <p class="sub">Parc Pilot — outil interne. Remplis, puis « Imprimer / PDF » ou « Envoyer pour signature ».</p>
+
+    <div id="from-devis" class="from-devis" style="display:none">✅ Infos reprises du devis. Complète seulement les champs surlignés ci-dessous.</div>
+    <div id="need" class="need"></div>
 
     <div class="panel">
       <h2>Prestataire (vous)</h2>
@@ -390,6 +398,53 @@ function segWire(segId, key){
   });
 }
 
+// -- Pré-remplissage depuis le devis (passerelle localStorage) --
+var fromDevis = false;
+(function prefillFromDevis(){
+  var raw; try { raw = localStorage.getItem('pp_devis_to_contrat'); } catch(e){ return; }
+  if (!raw) return;
+  var d; try { d = JSON.parse(raw); } catch(e){ return; }
+  try { localStorage.removeItem('pp_devis_to_contrat'); } catch(e){}
+  fromDevis = true;
+  var map = { 'f-soc':d.soc, 'f-forme':d.forme, 'f-siren':d.siren, 'f-adr':d.adr,
+              'f-rep':d.rep, 'f-qual':d.qual, 'f-mail':d.mail, 'f-veh':d.veh, 'f-socn':d.socn };
+  Object.keys(map).forEach(function(id){ if (map[id]!=null && map[id]!=='' && $(id)) $(id).value = map[id]; });
+  if (d.mensuel!=null && $('f-mensuel')) $('f-mensuel').value = d.mensuel;
+  if (d.mes!=null && $('f-mes')) $('f-mes').value = d.mes;
+  if (d.duree!=null && $('f-duree')) $('f-duree').value = d.duree;
+  if (d.formule){
+    state.formule = d.formule;
+    document.querySelectorAll('#seg-formule button').forEach(function(b){
+      b.classList.toggle('on', b.getAttribute('data-formule') === d.formule);
+    });
+  }
+  var fd = $('from-devis'); if (fd) fd.style.display = 'block';
+})();
+
+// -- Champs à compléter (surlignés) : requis pour un contrat valable --
+var REQUIS = [
+  ['f-num','N° de contrat'], ['f-debut','Date de début'],
+  ['f-p-siren','SIREN du prestataire'], ['f-p-adr','Adresse du prestataire'],
+  ['f-siren','SIREN du client'], ['f-adr','Adresse du client'], ['f-rep','Représentant du client']
+];
+function updateNeed(){
+  var manquants = [];
+  REQUIS.forEach(function(r){
+    var el = $(r[0]); if (!el) return;
+    var vide = !(el.value||'').trim();
+    el.classList.toggle('miss', vide);
+    if (vide) manquants.push(r[1]);
+  });
+  var box = $('need'); if (!box) return;
+  if (manquants.length){
+    box.className = 'need';
+    box.innerHTML = '<b>À compléter (' + manquants.length + ') :</b> ' + manquants.join(' · ') + '.';
+  } else {
+    box.className = 'need ok';
+    box.innerHTML = '✅ Toutes les mentions obligatoires sont remplies. Vous pouvez générer le PDF.';
+  }
+}
+
 function render(){
   var deleg = state.formule === 'delegue';
   var nb = Math.max(1, parseInt(val('f-veh'),10) || 1);
@@ -498,6 +553,8 @@ function render(){
 
   // -- Pied --
   $('o-foot').textContent = pNom + ' — Parc Pilot · Contrat ' + (val('f-num')||'') + ' · TVA non applicable art. 293 B du CGI';
+
+  updateNeed();
 }
 
 // Envoyer pour signature (prépare l'email — le PDF est à joindre manuellement)

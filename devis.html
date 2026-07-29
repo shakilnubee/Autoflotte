@@ -79,11 +79,20 @@
       <label>Société</label>
       <input id="f-soc" placeholder="Ex. Transports Dupont">
       <div class="row">
-        <div><label>Contact</label><input id="f-contact" placeholder="Prénom Nom"></div>
+        <div><label>Forme juridique</label><input id="f-forme" placeholder="SAS, SARL…"></div>
+        <div><label>SIREN / SIRET</label><input id="f-siren" placeholder="123 456 789"></div>
+      </div>
+      <label>Adresse (siège)</label>
+      <input id="f-adr" placeholder="Adresse du siège social">
+      <div class="row">
+        <div><label>Représentant</label><input id="f-contact" placeholder="Prénom Nom"></div>
+        <div><label>Qualité</label><input id="f-qual" placeholder="Gérant, Président…"></div>
+      </div>
+      <div class="row">
+        <div><label>Email / téléphone</label><input id="f-mail" placeholder="contact@societe.fr"></div>
         <div><label>N° devis</label><input id="f-num" placeholder="2026-001"></div>
       </div>
-      <label>Email / téléphone</label>
-      <input id="f-mail" placeholder="contact@societe.fr">
+      <p class="hint">💡 Ces infos serviront aussi à générer le contrat (bouton en bas).</p>
 
       <h2 style="margin-top:20px">Périmètre</h2>
       <div class="row">
@@ -119,6 +128,10 @@
         <button class="btn btn-print" onclick="window.print()">Imprimer / PDF</button>
         <button class="btn btn-ghost" onclick="location.reload()">Réinitialiser</button>
       </div>
+      <div class="actions">
+        <button class="btn" id="btn-contrat" style="background:#f97316;color:#fff">Générer le contrat →</button>
+      </div>
+      <p class="hint">Reprend toutes les infos de ce devis dans le contrat. Il ne restera qu'à compléter le n° de contrat, la date de début et quelques mentions légales.</p>
     </div>
   </div>
 
@@ -301,6 +314,9 @@ function render(){
   $('formule-hint').textContent = state.formule==='delegue'
     ? (nb+' véh. → '+euro0(Math.max(DELEGUE_PLANCHER,DELEGUE_PAR_VEH*nb))+'/mois')
     : (nb+' véh. → palier '+(p2.parVeh?'Enterprise':p2.nom));
+
+  // -- Mémorise les montants calculés pour passer au générateur de contrat --
+  window.__devisCalc = { mensuel: loyerMensuel, mesAmount: (mesOfferte ? 0 : MES_PRIX) };
 }
 
 function esc(s){ return String(s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
@@ -328,6 +344,23 @@ function bindSeg(segId, key){
 bindSeg('seg-formule','formule');
 bindSeg('seg-engage','engage');
 bindSeg('seg-mes','mes');
+
+// -- Passerelle vers le générateur de contrat : on transmet toutes les infos saisies --
+function dval(id){ var el=$(id); return el ? (el.value||'').trim() : ''; }
+$('btn-contrat').addEventListener('click', function(){
+  var calc = window.__devisCalc || { mensuel:0, mesAmount:0 };
+  var payload = {
+    soc: dval('f-soc'), forme: dval('f-forme'), siren: dval('f-siren'), adr: dval('f-adr'),
+    rep: dval('f-contact'), qual: dval('f-qual'), mail: dval('f-mail'),
+    veh: dval('f-veh'), socn: dval('f-socn'),
+    formule: state.formule,
+    mensuel: Math.round(calc.mensuel || 0),
+    mes: Math.round(calc.mesAmount || 0),
+    duree: (state.engage === 'annuel') ? 12 : 1
+  };
+  try { localStorage.setItem('pp_devis_to_contrat', JSON.stringify(payload)); } catch(e){}
+  window.location.href = 'contrat.html';
+});
 
 render();
 </script>
