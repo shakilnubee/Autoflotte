@@ -187,6 +187,14 @@
       </div>
     </div>
 
+    <!-- Conducteurs à risque (par nombre de sinistres + responsabilité) -->
+    <div class="card p-6 mb-6">
+      <h3 class="font-bold text-slate-900 flex items-center gap-2 mb-1"><i data-lucide="user-round-x" class="w-4 h-4" style="color:var(--fp-danger)"></i> Conducteurs à risque
+        <span class="text-xs font-normal text-slate-400">— classés par sinistres responsables puis nombre d'accidents</span></h3>
+      <p class="text-xs text-slate-400 mb-3">Le conducteur d'un sinistre = le chauffeur actuel du véhicule concerné. Renseigne la « Responsabilité » dans le dossier assurance de chaque incident pour affiner.</p>
+      <div id="sin-risque"></div>
+    </div>
+
     <!-- Photos & documents des sinistres (façon Drive) -->
     <div class="card p-5 mb-6">
       <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
@@ -507,7 +515,40 @@
     lucide.createIcons();
   }
 
-  function refreshAll() { renderKPIs(); renderTimeline(); renderCharts(); coutPeriode.render(); }
+  // Conducteurs à risque : agrégation par chauffeur (via le véhicule du sinistre) sur les INCIDENTS.
+  function renderConducteursRisque() {
+    const box = $('sin-risque'); if (!box) return;
+    const groups = allGroups();
+    const doss = FP.settings.get().sinistreAssurance || {};
+    const byCond = {};
+    groups.forEach(g => {
+      const immat = g.rep && g.rep.vehiculeImmat;
+      const veh = (data.vehicules || []).find(v => v.immat === immat);
+      const cond = (veh && veh.chauffeur && veh.chauffeur !== '—') ? veh.chauffeur : null;
+      if (!cond) return;
+      const r = byCond[cond] || (byCond[cond] = { nb: 0, resp: 0, cost: 0 });
+      r.nb++; r.cost += g.cost || 0;
+      if ((doss[g.key] || {}).resp === 'responsable') r.resp++;
+    });
+    const rows = Object.keys(byCond).map(c => ({ cond: c, ...byCond[c] }))
+      .sort((a, b) => b.resp - a.resp || b.nb - a.nb || b.cost - a.cost);
+    if (!rows.length) { box.innerHTML = '<p class="text-sm text-slate-400">Aucun sinistre attribué à un conducteur pour l\'instant (renseigne un chauffeur sur les véhicules concernés).</p>'; return; }
+    box.innerHTML = '<div class="scrollable"><table class="fp-table"><thead><tr><th>Conducteur</th><th style="text-align:right">Sinistres</th><th style="text-align:right">Responsable</th><th style="text-align:right">Coût total</th><th>Niveau</th></tr></thead><tbody>'
+      + rows.map(r => {
+        const lvl = (r.resp >= 2 || r.nb >= 3) ? ['#FEE2E2', '#B91C1C', '⚠️ Risque élevé']
+          : (r.resp >= 1 || r.nb >= 2) ? ['#FEF3C7', '#92400E', 'À surveiller']
+          : ['#DCFCE7', '#166534', 'OK'];
+        return `<tr>
+          <td class="font-semibold">${FP.lienConducteur ? FP.lienConducteur(r.cond) : escapeHtml(r.cond)}</td>
+          <td style="text-align:right">${r.nb}</td>
+          <td style="text-align:right${r.resp ? ';color:#B91C1C;font-weight:700' : ''}">${r.resp || '—'}</td>
+          <td style="text-align:right">${r.cost ? FP.euroPrecis(r.cost) : '—'}</td>
+          <td><span class="badge" style="background:${lvl[0]};color:${lvl[1]}">${lvl[2]}</span></td>
+        </tr>`;
+      }).join('') + '</tbody></table></div>';
+    if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+  }
+  function refreshAll() { renderKPIs(); renderTimeline(); renderCharts(); renderConducteursRisque(); coutPeriode.render(); }
 
   // Rattache un sinistre (memberId) à l'incident de clé groupKey
   function associate(groupKey, memberId) {
@@ -587,7 +628,7 @@
       if (fld === 'franchise' || fld === 'rembourse') { val = (val === '' ? null : parseFloat(String(val).replace(',', '.'))); }
       if (val === '' || val == null) delete o[fld]; else o[fld] = val;
       if (!Object.keys(o).length) delete s.sinistreAssurance[key];
-      FP.settings.save(s); renderTimeline(); return;
+      FP.settings.save(s); renderTimeline(); if (fld === 'resp') renderConducteursRisque(); return;
     }
   });
 
@@ -726,6 +767,7 @@
   renderKPIs();
   renderTimeline();
   renderCharts();
+  renderConducteursRisque();
   // Chart.js est en defer : s'il n'est pas encore là à l'init, on rend les graphiques dès qu'il l'est.
   if (typeof Chart === 'undefined') document.addEventListener('DOMContentLoaded', renderCharts);
   const coutPeriode = FP.coutParPeriode({
