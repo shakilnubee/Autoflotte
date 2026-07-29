@@ -411,7 +411,8 @@
           <option>Utilitaire</option>
         </select>
 
-        <button id="btn-fiche-groupe" class="btn btn-outline text-sm ml-auto" title="Télécharger la liste des véhicules du groupe affiché (ou Tous) en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> Télécharger la fiche</button>
+        <button id="btn-completer-cg" class="btn btn-outline text-sm ml-auto" title="Lire les cartes grises déjà stockées et remplir automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates)"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Compléter depuis les cartes grises</button>
+        <button id="btn-fiche-groupe" class="btn btn-outline text-sm" title="Télécharger la liste des véhicules du groupe affiché (ou Tous) en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> Télécharger la fiche</button>
       </div>
     </div>
 
@@ -2896,6 +2897,58 @@
   }
 
   // « Télécharger la fiche » = groupe/filtre courant · « Fiche PDF » (barre) = sélection
+  // ===== Complétion automatique en lot depuis les cartes grises DÉJÀ stockées =====
+  // Récupère chaque carte grise (Supabase Storage), la relit (IA scan-doc + OCR local) et remplit
+  // UNIQUEMENT les champs vides (jamais d'écrasement). Les CG hébergées sur Google Drive ne sont
+  // pas lisibles par le site (à re-scanner à la main).
+  async function completerDepuisCG() {
+    const num = x => (x != null && x !== '' && Number.isFinite(+x)) ? +x : undefined;
+    const isFetchable = u => typeof u === 'string' && /^https?:\/\//i.test(u) && !/drive\.google\.com/i.test(u);
+    const noMasse = v => { try { return !((FP.settings.get().vehMasse || {})[v.id]); } catch (e) { return true; } };
+    const missing = v => !v.carburant || v.co2 == null || v.co2 === '' || v.puissanceFiscale == null || v.puissanceFiscale === '' || !v.dateMiseEnCirculation || !v.vin || noMasse(v);
+    const all = (data.vehicules || []).filter(v => v.statut !== 'vendu');
+    const targets = all.filter(v => isFetchable(v.cgUrl) && missing(v));
+    const onDrive = all.filter(v => v.cgUrl && !isFetchable(v.cgUrl) && missing(v));
+    if (!targets.length) {
+      alert('Rien à compléter automatiquement.'
+        + (onDrive.length ? `\n\n${onDrive.length} véhicule(s) ont leur carte grise sur Google Drive (non lisible par le site) → à re-scanner via « Scanner un document ».` : ''));
+      return;
+    }
+    if (!confirm(`Lire ${targets.length} carte(s) grise(s) stockée(s) et compléter automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates) ?\n\nSeuls les champs VIDES sont remplis — aucune donnée existante n'est écrasée.`)) return;
+    const btn = $('btn-completer-cg'); const lbl = btn ? btn.innerHTML : '';
+    if (btn) btn.disabled = true;
+    let done = 0, fail = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const v = targets[i];
+      if (btn) btn.textContent = `Lecture ${i + 1}/${targets.length}…`;
+      try {
+        const resp = await fetch(v.cgUrl); if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const blob = await resp.blob();
+        const file = new File([blob], 'cg.' + ((blob.type || '').includes('pdf') ? 'pdf' : 'jpg'), { type: blob.type || 'application/octet-stream' });
+        let p = {};
+        try { const ai = FP.scanIA ? await FP.scanIA(file, 'carte-grise', FP.CG_SCAN_PROMPT) : null; if (ai) p = { marque: ai.marque || '', modele: ai.modele || '', dateMiseEnCirculation: ai.dateMiseEnCirculation || '', prochainCT: ai.prochainCT || '', vin: ai.vin ? String(ai.vin).toUpperCase().replace(/[^A-Z0-9]/g, '') : '', co2: num(ai.co2), puissanceFiscale: num(ai.puissanceFiscale), carburant: ai.carburant || '', masse: num(ai.masse), categorie: ai.categorie || '' }; } catch (e) {}
+        try { const txt = await FP.ocr.fileToText(file); const loc = parseCarteGrise(txt) || {}; for (const k in loc) { if ((p[k] == null || p[k] === '') && loc[k] != null && loc[k] !== '') p[k] = loc[k]; } } catch (e) {}
+        if (p.carburant && FP.normCarburant) p.carburant = FP.normCarburant(p.carburant);
+        const upd = {};
+        const setIf = (k, val) => { if (val != null && val !== '' && (v[k] == null || v[k] === '')) { v[k] = val; upd[k] = val; } };
+        ['marque', 'modele', 'dateMiseEnCirculation', 'prochainCT', 'vin', 'carburant', 'categorie'].forEach(k => setIf(k, p[k]));
+        if (Number.isFinite(p.co2) && (v.co2 == null || v.co2 === '')) { v.co2 = p.co2; upd.co2 = p.co2; }
+        if (Number.isFinite(p.puissanceFiscale) && (v.puissanceFiscale == null || v.puissanceFiscale === '')) { v.puissanceFiscale = p.puissanceFiscale; upd.puissanceFiscale = p.puissanceFiscale; }
+        const keys = Object.keys(upd);
+        if (keys.length) await persistVehFields(v, keys);
+        if (Number.isFinite(p.masse)) { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; if (!s.vehMasse[v.id]) { s.vehMasse[v.id] = p.masse; FP.settings.save(s); } }
+        if (keys.length || Number.isFinite(p.masse)) done++;
+      } catch (e) { console.warn('[completerCG]', v.immat, e); fail++; }
+      await new Promise(r => setTimeout(r, 250));
+    }
+    if (btn) { btn.disabled = false; btn.innerHTML = lbl; }
+    renderTable(); renderKPIs();
+    alert(`✓ ${done} véhicule(s) complété(s) depuis leur carte grise.`
+      + (fail ? `\n${fail} carte(s) grise(s) illisible(s) ou en erreur.` : '')
+      + (onDrive.length ? `\n${onDrive.length} sur Google Drive (non lisibles par le site) → à re-scanner à la main.` : ''));
+  }
+  { const b = $('btn-completer-cg'); if (b) b.addEventListener('click', () => { completerDepuisCG().catch(e => { console.error(e); alert('Erreur pendant la complétion.'); const btn = $('btn-completer-cg'); if (btn) btn.disabled = false; }); }); }
+
   { const b = $('btn-fiche-groupe'); if (b) b.addEventListener('click', () => {
       // Si des véhicules sont COCHÉS → la fiche ne prend QUE ceux-là (priorité à la sélection).
       const sel = data.vehicules.filter(v => state.selectedIds.has(v.id));
