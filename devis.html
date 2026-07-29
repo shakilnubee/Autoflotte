@@ -125,11 +125,12 @@
       <input id="f-remise" type="number" min="0" max="100" value="0">
 
       <div class="actions">
-        <button class="btn btn-print" onclick="window.print()">Imprimer / PDF</button>
+        <button class="btn" id="btn-dl" style="background:#f97316;color:#fff">⬇ Télécharger le PDF</button>
+        <button class="btn btn-print" onclick="window.print()">Imprimer</button>
         <button class="btn btn-ghost" onclick="location.reload()">Réinitialiser</button>
       </div>
       <div class="actions">
-        <button class="btn" id="btn-contrat" style="background:#f97316;color:#fff">Générer le contrat →</button>
+        <button class="btn" id="btn-contrat" style="background:#0f172a;color:#fff">Générer le contrat →</button>
       </div>
       <p class="hint">Reprend toutes les infos de ce devis dans le contrat. Il ne restera qu'à compléter le n° de contrat, la date de début et quelques mentions légales.</p>
     </div>
@@ -344,6 +345,25 @@ function bindSeg(segId, key){
 bindSeg('seg-formule','formule');
 bindSeg('seg-engage','engage');
 bindSeg('seg-mes','mes');
+
+// -- Téléchargement PDF en un clic (html2pdf, chargé à la demande) --
+function loadScript(src){ return new Promise(function(res,rej){ if(window.html2pdf) return res(); var s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+function safeName(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w-]+/g,'_').replace(/^_+|_+$/g,''); }
+$('btn-dl').addEventListener('click', function(){
+  var btn = $('btn-dl'), old = btn.textContent; btn.textContent = 'Génération…'; btn.disabled = true;
+  var num = ($('f-num').value||'').trim(), soc = ($('f-soc').value||'').trim();
+  var name = 'Devis' + (num ? '-'+safeName(num) : '') + (soc ? '-'+safeName(soc) : '') + '.pdf';
+  loadScript('https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js').then(function(){
+    return html2pdf().set({
+      margin: [10,10,12,10], filename: name,
+      image: { type:'jpeg', quality:0.98 },
+      html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff' },
+      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+      pagebreak: { mode:['css','legacy'] }
+    }).from(document.getElementById('doc')).save();
+  }).catch(function(){ alert("Impossible de générer le PDF (connexion internet requise). Utilise « Imprimer » puis « Enregistrer en PDF »."); })
+    .then(function(){ btn.textContent = old; btn.disabled = false; });
+});
 
 // -- Passerelle vers le générateur de contrat : on transmet toutes les infos saisies --
 function dval(id){ var el=$(id); return el ? (el.value||'').trim() : ''; }

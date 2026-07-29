@@ -132,9 +132,10 @@
         <div><label>Nb de sociétés</label><input id="f-socn" type="number" min="1" value="1"></div>
       </div>
       <div class="row">
-        <div><label>Montant mensuel (€)</label><input id="f-mensuel" type="number" min="0" value="180"></div>
-        <div><label>Mise en service (€)</label><input id="f-mes" type="number" min="0" value="0"></div>
+        <div><label>Montant mensuel (€)</label><input id="f-mensuel" type="number" min="0"></div>
+        <div><label>Mise en service (€)</label><input id="f-mes" type="number" min="0"></div>
       </div>
+      <p class="hint">💡 Calculé automatiquement selon le nombre de véhicules et la formule (comme le devis) — modifiable à la main si besoin.</p>
       <div class="row">
         <div><label>Durée d'engagement (mois)</label><input id="f-duree" type="number" min="1" value="12"></div>
         <div><label>Préavis résiliation (mois)</label><input id="f-preavis" type="number" min="0" value="2"></div>
@@ -148,8 +149,11 @@
       <input id="f-debut" type="date">
 
       <div class="actions">
-        <button class="btn btn-print" onclick="window.print()">Imprimer / PDF</button>
-        <button class="btn btn-mail" id="btn-mail">Envoyer pour signature</button>
+        <button class="btn btn-mail" id="btn-dl">⬇ Télécharger le PDF</button>
+        <button class="btn btn-print" onclick="window.print()">Imprimer</button>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost" id="btn-mail">Envoyer pour signature</button>
         <button class="btn btn-ghost" onclick="location.reload()">Réinitialiser</button>
       </div>
       <p class="hint">💡 Signature à valeur juridique renforcée : passez le PDF par un tiers agréé (Yousign 🇫🇷, DocuSign). « Envoyer pour signature » prépare l'email au client — joignez-y le PDF généré.</p>
@@ -426,6 +430,15 @@ function val(id){ return ($(id).value || '').trim(); }
 function dateFr(iso){ if(!iso) return '—'; var p=iso.split('-'); return p.length===3? p[2]+'/'+p[1]+'/'+p[0] : iso; }
 function todayFr(){ var d=new Date(); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
 
+// ===== Grille tarifaire (identique au devis) — calcul auto du prix =====
+var PRICING = { paliers:[{max:10,mois:49},{max:30,mois:99},{max:60,mois:189}], entVeh:2.90, delegVeh:15, delegMin:150, mes:149 };
+var priceTouched = { mensuel:false, mes:false };
+function calcMensuel(nb, formule){
+  if (formule === 'delegue') return Math.max(PRICING.delegMin, PRICING.delegVeh * nb);
+  for (var i=0;i<PRICING.paliers.length;i++){ if (nb <= PRICING.paliers[i].max) return PRICING.paliers[i].mois; }
+  return Math.round(PRICING.entVeh * nb); // > 60 véhicules : au véhicule
+}
+
 function segWire(segId, key){
   document.querySelectorAll('#'+segId+' button').forEach(function(b){
     b.addEventListener('click', function(){
@@ -488,9 +501,13 @@ function render(){
   var deleg = state.formule === 'delegue';
   var nb = Math.max(1, parseInt(val('f-veh'),10) || 1);
   var socn = Math.max(1, parseInt(val('f-socn'),10) || 1);
+  var duree = Math.max(1, parseInt(val('f-duree'),10) || 12);
+  // Calcul AUTOMATIQUE du prix selon la flotte + la formule (comme le devis),
+  // tant que l'utilisateur n'a pas saisi un montant à la main.
+  if (!priceTouched.mensuel) $('f-mensuel').value = calcMensuel(nb, state.formule);
+  if (!priceTouched.mes) $('f-mes').value = (duree >= 12) ? 0 : PRICING.mes;
   var mensuel = Math.max(0, parseFloat(val('f-mensuel')) || 0);
   var mes = Math.max(0, parseFloat(val('f-mes')) || 0);
-  var duree = Math.max(1, parseInt(val('f-duree'),10) || 12);
   var preavis = Math.max(0, parseInt(val('f-preavis'),10) || 0);
   var recTacite = state.recond === 'tacite';
 
@@ -596,6 +613,24 @@ function render(){
   updateNeed();
 }
 
+// -- Téléchargement PDF en un clic (html2pdf, chargé à la demande) --
+function loadScript(src){ return new Promise(function(res,rej){ if(window.html2pdf) return res(); var s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+function safeName(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w-]+/g,'_').replace(/^_+|_+$/g,''); }
+$('btn-dl').addEventListener('click', function(){
+  var btn = $('btn-dl'), old = btn.textContent; btn.textContent = 'Génération…'; btn.disabled = true;
+  var name = 'Contrat' + (val('f-num') ? '-'+safeName(val('f-num')) : '') + (val('f-soc') ? '-'+safeName(val('f-soc')) : '') + '.pdf';
+  loadScript('https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js').then(function(){
+    return html2pdf().set({
+      margin: [10,10,12,10], filename: name,
+      image: { type:'jpeg', quality:0.98 },
+      html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff' },
+      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+      pagebreak: { mode:['css','legacy'] }
+    }).from($('doc')).save();
+  }).catch(function(){ alert("Impossible de générer le PDF (connexion internet requise). Utilise « Imprimer » puis « Enregistrer en PDF »."); })
+    .then(function(){ btn.textContent = old; btn.disabled = false; });
+});
+
 // Envoyer pour signature (prépare l'email — le PDF est à joindre manuellement)
 $('btn-mail').addEventListener('click', function(){
   var to = val('f-mail');
@@ -613,8 +648,11 @@ $('btn-mail').addEventListener('click', function(){
 // Écouteurs
 ['f-p-nom','f-p-statut','f-p-siren','f-p-adr','f-p-rep','f-p-mail','f-p-tel',
  'f-soc','f-forme','f-siren','f-adr','f-rep','f-qual','f-mail',
- 'f-num','f-lieu','f-veh','f-socn','f-mensuel','f-mes','f-duree','f-preavis','f-debut'
+ 'f-num','f-lieu','f-veh','f-socn','f-duree','f-preavis','f-debut'
 ].forEach(function(id){ var el=$(id); if(el){ el.addEventListener('input', render); el.addEventListener('change', render); } });
+// Prix / mise en service : saisie manuelle = on ne recalcule plus automatiquement.
+$('f-mensuel').addEventListener('input', function(){ priceTouched.mensuel = (val('f-mensuel') !== ''); render(); });
+$('f-mes').addEventListener('input', function(){ priceTouched.mes = (val('f-mes') !== ''); render(); });
 segWire('seg-formule','formule');
 segWire('seg-recond','recond');
 
