@@ -2853,11 +2853,12 @@ FP.uploadScan = async function (file, folder, opts) {
 // un fichier daté. À garder précieusement (Drive, disque…). Réimportable si besoin.
 FP.exportBackup = async function () {
   if (!(FP.supabase && FP.db)) { alert('Connexion requise pour exporter.'); return; }
-  const tables = ['vehicules', 'amendes', 'factures', 'conducteurs', 'documents', 'emprunts'];
-  const out = { app: 'Parc Pilot', exportedAt: new Date().toISOString() };
+  // Toutes les tables de données (RLS → seules les lignes de ta/tes société(s) sont renvoyées).
+  const tables = ['vehicules', 'amendes', 'factures', 'conducteurs', 'documents', 'emprunts', 'total_conso', 'ulys_conso', 'app_settings'];
+  const out = { app: 'Parc Pilot', type: 'sauvegarde-complete', exportedAt: new Date().toISOString(), counts: {} };
   for (const t of tables) {
-    try { const r = await FP.supabase.from(t).select('*'); out[t] = (r && r.data) || []; }
-    catch (e) { out[t] = []; }
+    try { const r = await FP.supabase.from(t).select('*'); out[t] = (r && r.data) || []; out.counts[t] = out[t].length; }
+    catch (e) { out[t] = []; out.counts[t] = 0; }
   }
   try { out.reglages = FP.settings.get(); } catch (e) {}
   const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
