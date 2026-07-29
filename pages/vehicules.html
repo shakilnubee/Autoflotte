@@ -2906,12 +2906,22 @@
     const isFetchable = u => typeof u === 'string' && /^https?:\/\//i.test(u) && !/drive\.google\.com/i.test(u);
     const noMasse = v => { try { return !((FP.settings.get().vehMasse || {})[v.id]); } catch (e) { return true; } };
     const missing = v => !v.carburant || v.co2 == null || v.co2 === '' || v.puissanceFiscale == null || v.puissanceFiscale === '' || !v.dateMiseEnCirculation || !v.vin || noMasse(v);
+    // Source de la carte grise : champ cgUrl OU table documents (type carte-grise, par immat).
+    const normP = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const cgUrlFor = (v) => {
+      if (v.cgUrl) return v.cgUrl;
+      const rows = (typeof docsCache !== 'undefined' && Array.isArray(docsCache) ? docsCache : [])
+        .filter(d => d && d.type === 'carte-grise' && d.url && normP(d.vehiculeId) === normP(v.immat));
+      const good = rows.find(d => isFetchable(d.url));
+      return good ? good.url : (rows[0] ? rows[0].url : null);
+    };
     const all = (data.vehicules || []).filter(v => v.statut !== 'vendu');
-    const targets = all.filter(v => isFetchable(v.cgUrl) && missing(v));
-    const onDrive = all.filter(v => v.cgUrl && !isFetchable(v.cgUrl) && missing(v));
+    const withCG = all.map(v => ({ v, url: cgUrlFor(v) })).filter(x => x.url && missing(x.v));
+    const targets = withCG.filter(x => isFetchable(x.url));
+    const onDrive = withCG.filter(x => !isFetchable(x.url));
     if (!targets.length) {
-      alert('Rien à compléter automatiquement.'
-        + (onDrive.length ? `\n\n${onDrive.length} véhicule(s) ont leur carte grise sur Google Drive (non lisible par le site) → à re-scanner via « Scanner un document ».` : ''));
+      alert('Rien à compléter automatiquement (aucune carte grise récupérable avec des champs manquants).'
+        + (onDrive.length ? `\n\n${onDrive.length} véhicule(s) ont leur carte grise sur Google Drive → non lisible par le site sans connexion Google. À re-scanner via « Scanner un document » (le scan remplit alors les champs tout seul).` : ''));
       return;
     }
     if (!confirm(`Lire ${targets.length} carte(s) grise(s) stockée(s) et compléter automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates) ?\n\nSeuls les champs VIDES sont remplis — aucune donnée existante n'est écrasée.`)) return;
@@ -2919,10 +2929,10 @@
     if (btn) btn.disabled = true;
     let done = 0, fail = 0;
     for (let i = 0; i < targets.length; i++) {
-      const v = targets[i];
+      const v = targets[i].v;
       if (btn) btn.textContent = `Lecture ${i + 1}/${targets.length}…`;
       try {
-        const resp = await fetch(v.cgUrl); if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const resp = await fetch(targets[i].url); if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const blob = await resp.blob();
         const file = new File([blob], 'cg.' + ((blob.type || '').includes('pdf') ? 'pdf' : 'jpg'), { type: blob.type || 'application/octet-stream' });
         let p = {};
