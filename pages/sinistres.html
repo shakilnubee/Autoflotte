@@ -155,6 +155,27 @@
     </div>
     <div id="sin-facture-status" class="hidden mb-6 text-sm rounded-lg px-4 py-3"></div>
 
+    <!-- Sélecteur de PÉRIODE (pilote TOUTE la page : indicateurs, graphes, liste) -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="calendar-range" class="w-4 h-4" style="color:var(--fp-accent)"></i> Période</span>
+        <div class="flex items-center gap-1" id="per-presets">
+          <button type="button" class="per-preset btn btn-outline text-xs" data-preset="all">Tout</button>
+          <button type="button" class="per-preset btn btn-outline text-xs" data-preset="cy">Cette année</button>
+          <button type="button" class="per-preset btn btn-outline text-xs" data-preset="ly">Année dernière</button>
+        </div>
+        <span class="text-slate-300">|</span>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="text-slate-500">Du</span>
+          <input id="filter-from" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Du">
+          <span class="text-slate-500">au</span>
+          <input id="filter-to" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Au">
+          <button id="filter-period-clear" type="button" class="hidden text-xs text-slate-400 hover:text-slate-700" title="Effacer la période">✕ Effacer</button>
+        </div>
+        <span id="per-label" class="text-xs text-slate-400 ml-auto"></span>
+      </div>
+    </div>
+
     <!-- KPIs -->
     <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
       <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
@@ -180,7 +201,7 @@
         <div class="kpi-delta">conducteur en tort</div>
       </div><div class="kpi-ic warn"><i data-lucide="user-round-x"></i></div></div></div>
       <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
-        <div class="kpi-label">Cette année</div>
+        <div class="kpi-label" id="kpi-annee-label">Cette année</div>
         <div class="kpi-value" id="kpi-annee" style="color: var(--fp-warn)">—</div>
       </div><div class="kpi-ic warn"><i data-lucide="calendar"></i></div></div></div>
     </div>
@@ -272,13 +293,6 @@
         <select id="filter-vehicule" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
           <option value="all">Tous véhicules</option>
         </select>
-        <div class="flex items-center gap-2 text-sm">
-          <span class="text-slate-500">Période :</span>
-          <input id="filter-from" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Du">
-          <span class="text-slate-400">→</span>
-          <input id="filter-to" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Au">
-          <button id="filter-period-clear" type="button" class="hidden text-xs text-slate-400 hover:text-slate-700" title="Effacer la période">✕</button>
-        </div>
       </div>
     </div>
 
@@ -384,14 +398,25 @@
   }
   const allGroups = () => buildGroups(sinistres);
 
+  // Y a-t-il une période active (année, ou plage du/au) ?
+  function periodActive() { return state.annee !== 'all' || !!state.dateFrom || !!state.dateTo; }
   function renderKPIs() {
-    const groups = allGroups();
+    // Les indicateurs suivent la PÉRIODE choisie (sinon = tout l'historique).
+    const groups = visibleGroups();
     const doss = FP.settings.get().sinistreAssurance || {};
     $('kpi-total').textContent = groups.length;
     $('kpi-cout').textContent = FP.euro(groups.reduce((s, g) => s + g.cost, 0));
-    $('kpi-vehicules').textContent = new Set(sinistres.map(s => s.vehiculeImmat).filter(Boolean)).size;
+    $('kpi-vehicules').textContent = new Set(groups.map(g => g.rep.vehiculeImmat).filter(Boolean)).size;
+    // La carte « Cette année » devient « Sur la période » quand une période est choisie.
     const cy = new Date().getFullYear().toString();
-    $('kpi-annee').textContent = groups.filter(g => (g.rep.date || '').startsWith(cy)).length;
+    const anneeLbl = $('kpi-annee-label');
+    if (periodActive()) {
+      if (anneeLbl) anneeLbl.textContent = 'Sur la période';
+      $('kpi-annee').textContent = groups.length;
+    } else {
+      if (anneeLbl) anneeLbl.textContent = 'Cette année';
+      $('kpi-annee').textContent = groups.filter(g => (g.rep.date || '').startsWith(cy)).length;
+    }
     // Reste à charge total = Σ (coût incident − remboursé) ; et nb de sinistres responsables.
     const reste = groups.reduce((s, g) => s + Math.max(0, (g.cost || 0) - (Number((doss[g.key] || {}).rembourse) || 0)), 0);
     const resp = groups.filter(g => (doss[g.key] || {}).resp === 'responsable').length;
@@ -759,12 +784,42 @@
   $('sin-more').addEventListener('click', e => { if (e.target.closest('#sin-toggle')) { sinExpanded = !sinExpanded; renderTimeline(); } });
   { const sf = $('sin-filters'); if (sf) sf.addEventListener('click', e => { const b = e.target.closest('.sin-chip'); if (!b) return; state.remb = b.dataset.remb || 'all'; sinExpanded = false; renderTimeline(); }); }
   $('search').addEventListener('input', e => { state.search = e.target.value; sinExpanded = false; renderTimeline(); });
-  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; sinExpanded = false; renderTimeline(); });
+  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; sinExpanded = false; refreshAll(); });
   $('filter-vehicule').addEventListener('change', e => { state.vehicule = e.target.value; sinExpanded = false; renderTimeline(); });
-  function syncPeriodClear() { const b = $('filter-period-clear'); if (b) b.classList.toggle('hidden', !(state.dateFrom || state.dateTo)); }
-  $('filter-from').addEventListener('change', e => { state.dateFrom = e.target.value; sinExpanded = false; syncPeriodClear(); refreshAll(); });
-  $('filter-to').addEventListener('change', e => { state.dateTo = e.target.value; sinExpanded = false; syncPeriodClear(); refreshAll(); });
-  $('filter-period-clear').addEventListener('click', () => { state.dateFrom = ''; state.dateTo = ''; $('filter-from').value = ''; $('filter-to').value = ''; sinExpanded = false; syncPeriodClear(); refreshAll(); });
+
+  // ---------- Sélecteur de PÉRIODE (pilote toute la page) ----------
+  function fmtFr(d) { const p = (d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : (d || ''); }
+  function syncPeriodUI() {
+    const b = $('filter-period-clear'); if (b) b.classList.toggle('hidden', !(state.dateFrom || state.dateTo));
+    const lbl = $('per-label');
+    if (lbl) {
+      if (state.dateFrom || state.dateTo) lbl.textContent = `Affichage : du ${fmtFr(state.dateFrom) || '…'} au ${fmtFr(state.dateTo) || '…'}`;
+      else if (state.annee !== 'all') lbl.textContent = `Affichage : année ${state.annee}`;
+      else lbl.textContent = 'Affichage : tout l\'historique';
+    }
+    // Surligne le preset actif
+    document.querySelectorAll('.per-preset').forEach(btn => {
+      const cy = String(new Date().getFullYear()), ly = String(new Date().getFullYear() - 1);
+      const on = (btn.dataset.preset === 'all' && !periodActive())
+        || (btn.dataset.preset === 'cy' && !state.dateFrom && !state.dateTo && state.annee === cy)
+        || (btn.dataset.preset === 'ly' && !state.dateFrom && !state.dateTo && state.annee === ly);
+      btn.classList.toggle('btn-dark', on);
+      btn.classList.toggle('btn-outline', !on);
+    });
+  }
+  $('filter-from').addEventListener('change', e => { state.dateFrom = e.target.value; state.annee = 'all'; $('filter-annee').value = 'all'; sinExpanded = false; syncPeriodUI(); refreshAll(); });
+  $('filter-to').addEventListener('change', e => { state.dateTo = e.target.value; state.annee = 'all'; $('filter-annee').value = 'all'; sinExpanded = false; syncPeriodUI(); refreshAll(); });
+  $('filter-period-clear').addEventListener('click', () => { state.dateFrom = ''; state.dateTo = ''; $('filter-from').value = ''; $('filter-to').value = ''; sinExpanded = false; syncPeriodUI(); refreshAll(); });
+  $('per-presets').addEventListener('click', (e) => {
+    const b = e.target.closest('.per-preset'); if (!b) return;
+    state.dateFrom = ''; state.dateTo = ''; $('filter-from').value = ''; $('filter-to').value = '';
+    const p = b.dataset.preset;
+    if (p === 'all') state.annee = 'all';
+    else if (p === 'cy') state.annee = String(new Date().getFullYear());
+    else if (p === 'ly') state.annee = String(new Date().getFullYear() - 1);
+    $('filter-annee').value = state.annee;
+    sinExpanded = false; syncPeriodUI(); refreshAll();
+  });
   // Filtre véhicule CHERCHABLE (taper plaque / marque / modèle) — règle projet.
   if (FP.searchSelect) FP.searchSelect($('filter-vehicule'), { placeholder: 'Rechercher un véhicule…' });
 
@@ -810,6 +865,7 @@
   renderTimeline();
   renderCharts();
   renderConducteursRisque();
+  syncPeriodUI();
   // Chart.js est en defer : s'il n'est pas encore là à l'init, on rend les graphiques dès qu'il l'est.
   if (typeof Chart === 'undefined') document.addEventListener('DOMContentLoaded', renderCharts);
   const coutPeriode = FP.coutParPeriode({
