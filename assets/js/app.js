@@ -466,6 +466,14 @@ FP.ADMIN_ONLY_NAV = [];
 // Onglets réservés au CEO uniquement (supports de vente Parc Pilot) — cachés aux Admin & Gestionnaires.
 FP.CEO_ONLY_NAV = ['brochure.html', 'prix.html'];
 
+// === Onglet privé « JIS » — RÉSERVÉ AU PROPRIÉTAIRE (Shakil), gating par e-mail ================
+// Regroupe les supports commerciaux internes (brochure, tarifs, carte de visite, argumentaire,
+// générateurs de devis/contrat). Visible UNIQUEMENT si l'e-mail de connexion est dans la liste.
+// ⚠️ Consigne explicite : personne d'autre ne doit y avoir accès.
+FP.userEmail = (() => { try { return (localStorage.getItem('fp_email') || '').trim().toLowerCase(); } catch (e) { return ''; } })();
+FP.JIS_OWNERS = ['shakil.nubeebaccus@projectxparis.fr', 'jis.nubee@gmail.com'];
+FP.isJisOwner = () => FP.JIS_OWNERS.indexOf((FP.userEmail || '').trim().toLowerCase()) !== -1;
+
 // === Sélecteur CHERCHABLE (RÈGLE PROJET) =====================================
 // Tout choix de véhicule / conducteur / plaque DOIT être filtrable au clavier (taper pour
 // retrouver par plaque, nom, modèle…). FP.searchSelect(<select>) transforme un menu déroulant
@@ -1118,6 +1126,9 @@ FP.normalizeVehicleNames = () => {
 };
 FP.normalizeVehicleNames(); // données locales (data.js déjà chargé)
 document.addEventListener('fp:data-ready', FP.normalizeVehicleNames); // après chargement Supabase
+// L'e-mail de connexion est connu après le chargement Supabase → (re)construit l'onglet privé JIS
+// (utile au 1er login, quand l'e-mail n'était pas encore en cache lors du 1er rendu).
+document.addEventListener('fp:data-ready', () => { try { FP.userEmail = (localStorage.getItem('fp_email') || '').trim().toLowerCase(); FP.buildJisMenu(); } catch (e) {} });
 
 // Normalisation d'un prénom (1er mot, minuscules, accents conservés) — partagé
 FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
@@ -1279,6 +1290,53 @@ FP.applyNavGroups = () => {
     ensure('ws', FP.NAV_GROUP_LABELS.workspace, '0');
     ensure('ac', FP.NAV_GROUP_LABELS.compte, '2').style.display = hasAc ? '' : 'none';
   });
+};
+
+// Sous-onglets de l'onglet privé « JIS » (tous des pages autonomes → nouvel onglet).
+FP.JIS_PAGES = [
+  { file: 'brochure.html',     label: 'Brochure',              icon: 'sparkles' },
+  { file: 'prix.html',         label: 'Tarifs',                icon: 'badge-euro' },
+  { file: 'carte-visite.html', label: 'Carte de visite',       icon: 'contact' },
+  { file: 'argumentaire.html', label: 'Argumentaire',          icon: 'megaphone' },
+  { file: 'devis.html',        label: 'Générateur de devis',   icon: 'file-text' },
+  { file: 'contrat.html',      label: 'Générateur de contrat', icon: 'file-signature' },
+];
+// Construit le menu déroulant « JIS » en bas de la sidebar, UNIQUEMENT pour le propriétaire.
+// Idempotent (réutilise le même groupe). Retire toujours les liens plats Brochure/Tarifs
+// (ils passent sous JIS) → un client ne les voit jamais.
+FP.buildJisMenu = () => {
+  const pfx = /\/pages\//.test(location.pathname) ? '../' : '';
+  const cur = (location.pathname.split('/').pop() || '');
+  document.querySelectorAll('aside nav').forEach(nav => {
+    nav.querySelectorAll('a[data-nav="brochure.html"], a[data-nav="prix.html"]').forEach(a => a.remove());
+    if (!FP.isJisOwner()) { const old = nav.querySelector('.fp-jis-group'); if (old) old.remove(); return; }
+    if (nav.querySelector('.fp-jis-group')) return; // déjà construit
+    let open = false; try { open = localStorage.getItem('fp_jis_open') === '1'; } catch (e) {}
+    if (FP.JIS_PAGES.some(p => p.file === cur)) open = true; // on est sur une page JIS → ouvert
+    const grp = document.createElement('div');
+    grp.className = 'fp-jis-group';
+    grp.style.order = '3';
+    const subLinks = FP.JIS_PAGES.map(p =>
+      `<a href="${pfx}${p.file}" target="_blank" rel="noopener" class="fp-jis-link${cur === p.file ? ' active' : ''}" style="padding-left:2.4rem;font-size:.86rem"><i data-lucide="${p.icon}"></i> ${FP.esc ? FP.esc(p.label) : p.label}</a>`
+    ).join('');
+    grp.innerHTML =
+      `<a href="#" class="fp-jis-toggle" style="display:flex;align-items:center;gap:.55rem" title="Espace privé JIS (CEO)">`
+      + `<i data-lucide="crown"></i><span style="font-weight:700">JIS</span>`
+      + `<span class="fp-jis-chev" style="margin-left:auto;transition:transform .2s;transform:rotate(${open ? 0 : -90}deg);font-size:.7rem;opacity:.6">▼</span></a>`
+      + `<div class="fp-jis-sub" style="display:${open ? 'block' : 'none'}">${subLinks}</div>`;
+    nav.appendChild(grp);
+    const toggle = grp.querySelector('.fp-jis-toggle');
+    const sub = grp.querySelector('.fp-jis-sub');
+    const chev = grp.querySelector('.fp-jis-chev');
+    toggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      const willOpen = sub.style.display === 'none';
+      sub.style.display = willOpen ? 'block' : 'none';
+      chev.style.transform = 'rotate(' + (willOpen ? 0 : -90) + 'deg)';
+      try { localStorage.setItem('fp_jis_open', willOpen ? '1' : '0'); } catch (e) {}
+    });
+  });
+  if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
 };
 // Active le glisser-déposer des onglets directement dans le menu de gauche (toutes pages)
 FP.enableNavReorder = () => {
@@ -4792,6 +4850,7 @@ document.addEventListener('DOMContentLoaded', () => {
   FP.applyNavOrder();
   FP.applyNavVisibility();
   FP.applyNavGroups(); // intitulés de section (Espace de travail / Compte)
+  FP.buildJisMenu();   // onglet privé « JIS » (propriétaire uniquement)
   if (_isAdmin) FP.enableNavReorder(); // glisser-déposer des onglets (admin only)
   // Appliquer les textes éditables custom (titres, sous-titres)
   FP.applyCustomTexts();

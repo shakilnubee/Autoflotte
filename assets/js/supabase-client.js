@@ -284,6 +284,8 @@
       const { data: { session } } = await client.auth.getSession();
       const u = session && session.user;
       if (u) {
+        // Mémorise l'e-mail de connexion (sert au gating de l'onglet privé « JIS », CEO only).
+        try { const em = String(u.email || '').toLowerCase(); localStorage.setItem('fp_email', em); FP.userEmail = em; } catch (e) {}
         const pr = await client.from('profiles').select('societe,is_admin,role').eq('id', u.id).maybeSingle();
         if (pr && pr.data) {
           FP.profile = pr.data;
