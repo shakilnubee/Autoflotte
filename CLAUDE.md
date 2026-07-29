@@ -179,6 +179,14 @@ fleet-app/
 
 1. **Tailwind précompilé** — pour éviter le délai du CDN à chaque page, Tailwind est compilé en local dans `assets/css/tailwind.css` (les pages le chargent via `<link>`, plus de `cdn.tailwindcss.com`). ⚠️ Après toute modif de classes Tailwind dans le HTML/JS, REBUILD : `npx tailwindcss@3.4.17 -c tailwind.config.js -i assets/css/_tw-input.css -o assets/css/tailwind.css --minify` (sinon les nouvelles classes ne seront pas stylées). ⚠️ **`brochure.html` et `prix.html` utilisent désormais le Tailwind LOCAL** (ajoutés à `content` dans `tailwind.config.js`) → à inclure dans le REBUILD. Seule `logos.html` reste sur le CDN. Ces deux pages sont en **thème sombre « 21st »** via une classe `.sheet-dark` (styles inline, autonomes) ; dans `prix.html` l'**aide-mémoire interne** (`#sheet-interne`) reste volontairement CLAIR et `display:none` (jamais montré au client). Les PDF client sont dans `presentation/` (régénérables via Playwright `page.pdf()`).
 2. **Auth guard** synchrone dans le `<head>` de chaque page protégée (11 pages)
+2bis. ⚠️ **ANTI-XSS — RÈGLE (audit sécurité)** : toute donnée **saisie ou lue par OCR/IA**
+   (marque, modèle, chauffeur, description, fournisseur, n° facture, immatriculation, prénom…)
+   injectée dans un `innerHTML` / template `${}` DOIT être échappée via **`FP.esc()`** (app.js).
+   Une charge stockée (`<img onerror=…>`) sinon s'exécute dans le navigateur du CEO (qui voit
+   toutes les sociétés) → exfiltration du jeton de session `localStorage`. Les helpers
+   `FP.lienVehicule/lienConducteur/escAmende` échappent déjà ; tout NOUVEAU rendu de donnée
+   utilisateur passe par `FP.esc`. ⚠️ **JAMAIS stocker de mot de passe** côté client (même
+   base64 = réversible) — la persistance = session Supabase (« Se souvenir de moi »).
 3. **Personnalisation** : tout est éditable en double-cliquant (titres, sous-titres, colonnes, onglets sidebar)
 4. **Drag & drop** : colonnes et lignes réorganisables avec HTML5 Drag API
 5. **Undo/Redo** : Ctrl+Z / Ctrl+Y via `FP.history`
