@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parc Pilot — Générateur de contrat</title>
+<style>
+  :root{
+    --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --bg:#f1f5f9;
+    --accent:#f97316; --accent2:#f97316; --ok:#16a34a; --card:#fff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px;display:grid;grid-template-columns:360px 1fr;gap:22px;align-items:start}
+  h1{font-size:20px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+  /* --- Formulaire --- */
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;position:sticky;top:22px}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0 0 12px}
+  label{display:block;font-size:12px;font-weight:600;color:#334155;margin:12px 0 4px}
+  input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;color:var(--ink);background:#fff;font-family:inherit}
+  textarea{min-height:64px;resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .seg{display:flex;gap:6px;margin-top:4px}
+  .seg button{flex:1;padding:8px;border:1px solid var(--line);background:#fff;border-radius:9px;font-size:13px;font-weight:600;color:#475569;cursor:pointer}
+  .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .hint{font-size:11px;color:var(--muted);margin-top:4px}
+  .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .btn{flex:1;min-width:120px;padding:11px;border-radius:10px;border:none;font-weight:700;font-size:14px;cursor:pointer}
+  .btn-print{background:var(--ink);color:#fff}
+  .btn-mail{background:var(--accent);color:#fff}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:#334155}
+  /* --- Contrat (aperçu = document imprimable) --- */
+  .doc{background:#fff;border:1px solid var(--line);border-radius:14px;padding:44px 48px;box-shadow:0 1px 3px rgba(15,23,42,.06);font-size:12.5px;line-height:1.6;color:#1e293b}
+  .doc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:22px}
+  .brand{font-size:24px;font-weight:900;letter-spacing:-.02em}
+  .brand span{color:var(--accent)}
+  .brand-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .meta{text-align:right;font-size:12px;color:#334155;line-height:1.7}
+  .meta b{color:var(--ink)}
+  .doc h2.title{text-align:center;font-size:17px;font-weight:900;letter-spacing:.01em;margin:6px 0 4px;color:var(--ink)}
+  .doc .stitle{text-align:center;font-size:12px;color:var(--muted);margin:0 0 20px}
+  .parties{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin:18px 0 8px;font-size:12.5px}
+  .parties .box{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fafbfc}
+  .parties .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);font-weight:800;margin-bottom:4px}
+  .art{margin-top:16px}
+  .art h3{font-size:13px;font-weight:800;color:var(--ink);margin:0 0 5px;border-bottom:1px solid var(--line);padding-bottom:3px}
+  .art p{margin:5px 0}
+  .art ul{margin:5px 0;padding-left:20px}
+  .art li{margin:2px 0}
+  .highlight{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 12px;margin:8px 0}
+  .sign{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:26px;font-size:12px;page-break-inside:avoid}
+  .sign .box{border:1px dashed #cbd5e1;border-radius:10px;padding:14px;min-height:110px}
+  .sign .k{font-weight:800;margin-bottom:2px}
+  .sign .mention{font-size:10.5px;color:var(--muted);margin-top:2px}
+  .annexe{margin-top:28px;border-top:3px double var(--line);padding-top:18px;page-break-before:always}
+  .annexe h2.title{margin-top:0}
+  .small{font-size:11px;color:#475569}
+  .foot{margin-top:24px;border-top:1px solid var(--line);padding-top:10px;font-size:10px;color:var(--muted);text-align:center}
+  @media print{
+    body{background:#fff}
+    .wrap{display:block;max-width:none;padding:0}
+    .noprint{display:none!important}
+    .doc{border:none;box-shadow:none;border-radius:0;padding:0}
+    .art,.sign,.parties .box{page-break-inside:avoid}
+  }
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}.panel{position:static}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ================= FORMULAIRE (non imprimé) ================= -->
+  <div class="noprint">
+    <h1>Générateur de contrat</h1>
+    <p class="sub">Parc Pilot — outil interne. Remplis, puis « Imprimer / PDF » ou « Envoyer pour signature ».</p>
+
+    <div class="panel">
+      <h2>Prestataire (vous)</h2>
+      <label>Dénomination</label>
+      <input id="f-p-nom" value="JIS OFFICE PARTNER">
+      <div class="row">
+        <div><label>Statut</label><input id="f-p-statut" value="Auto-entrepreneur"></div>
+        <div><label>SIREN / SIRET</label><input id="f-p-siren" placeholder="À compléter"></div>
+      </div>
+      <label>Adresse</label>
+      <input id="f-p-adr" placeholder="Adresse de l'entreprise">
+      <div class="row">
+        <div><label>Représentant</label><input id="f-p-rep" value="Shakil Nubeebaccus"></div>
+        <div><label>Email</label><input id="f-p-mail" value="jis.nubee@gmail.com"></div>
+      </div>
+      <label>Téléphone</label>
+      <input id="f-p-tel" value="06 61 77 97 53">
+
+      <h2 style="margin-top:20px">Client</h2>
+      <label>Société</label>
+      <input id="f-soc" placeholder="Ex. Transports Dupont">
+      <div class="row">
+        <div><label>Forme juridique</label><input id="f-forme" placeholder="SAS, SARL…"></div>
+        <div><label>SIREN / SIRET</label><input id="f-siren" placeholder="123 456 789"></div>
+      </div>
+      <label>Adresse (siège)</label>
+      <input id="f-adr" placeholder="Adresse du siège social">
+      <div class="row">
+        <div><label>Représentant</label><input id="f-rep" placeholder="Prénom Nom"></div>
+        <div><label>Qualité</label><input id="f-qual" placeholder="Gérant, Président…"></div>
+      </div>
+      <label>Email de signature</label>
+      <input id="f-mail" placeholder="contact@societe.fr">
+
+      <h2 style="margin-top:20px">Contrat</h2>
+      <div class="row">
+        <div><label>N° de contrat</label><input id="f-num" placeholder="2026-001"></div>
+        <div><label>Fait à</label><input id="f-lieu" placeholder="Ville"></div>
+      </div>
+      <label>Prestation</label>
+      <div class="seg" id="seg-formule">
+        <button data-formule="delegue" class="on">Gestion déléguée</button>
+        <button data-formule="logiciel">Logiciel seul</button>
+      </div>
+      <div class="row">
+        <div><label>Nb de véhicules</label><input id="f-veh" type="number" min="1" value="12"></div>
+        <div><label>Nb de sociétés</label><input id="f-socn" type="number" min="1" value="1"></div>
+      </div>
+      <div class="row">
+        <div><label>Montant mensuel (€)</label><input id="f-mensuel" type="number" min="0" value="180"></div>
+        <div><label>Mise en service (€)</label><input id="f-mes" type="number" min="0" value="0"></div>
+      </div>
+      <div class="row">
+        <div><label>Durée d'engagement (mois)</label><input id="f-duree" type="number" min="1" value="12"></div>
+        <div><label>Préavis résiliation (mois)</label><input id="f-preavis" type="number" min="0" value="2"></div>
+      </div>
+      <label>Reconduction</label>
+      <div class="seg" id="seg-recond">
+        <button data-recond="tacite" class="on">Tacite (12 mois)</button>
+        <button data-recond="expresse">Expresse</button>
+      </div>
+      <label>Date de début</label>
+      <input id="f-debut" type="date">
+
+      <div class="actions">
+        <button class="btn btn-print" onclick="window.print()">Imprimer / PDF</button>
+        <button class="btn btn-mail" id="btn-mail">Envoyer pour signature</button>
+        <button class="btn btn-ghost" onclick="location.reload()">Réinitialiser</button>
+      </div>
+      <p class="hint">💡 Signature à valeur juridique renforcée : passez le PDF par un tiers agréé (Yousign 🇫🇷, DocuSign). « Envoyer pour signature » prépare l'email au client — joignez-y le PDF généré.</p>
+    </div>
+  </div>
+
+  <!-- ================= DOCUMENT CONTRAT (imprimé) ================= -->
+  <div class="doc" id="doc">
+    <div class="doc-head">
+      <div>
+        <div class="brand">Parc<span>Pilot</span></div>
+        <div class="brand-sub">Gestion de flotte automobile</div>
+      </div>
+      <div class="meta">
+        <div style="font-size:15px;font-weight:800;color:var(--ink)">CONTRAT</div>
+        <div>N° <b id="o-num">—</b></div>
+        <div>Date : <b id="o-date">—</b></div>
+      </div>
+    </div>
+
+    <h2 class="title" id="o-titre">CONTRAT DE PRESTATION DE GESTION DÉLÉGUÉE DE FLOTTE</h2>
+    <p class="stitle">Entre les soussignés</p>
+
+    <div class="parties">
+      <div class="box">
+        <div class="k">Le Prestataire</div>
+        <div id="o-prest">—</div>
+      </div>
+      <div class="box">
+        <div class="k">Le Client</div>
+        <div id="o-client">—</div>
+      </div>
+    </div>
+    <p class="small">Ci-après désignés ensemble « les Parties ». Il a été convenu ce qui suit.</p>
+
+    <div class="art">
+      <h3>Article 1 — Objet du contrat</h3>
+      <p id="o-objet">—</p>
+    </div>
+
+    <div class="art">
+      <h3>Article 2 — Périmètre et prestations</h3>
+      <p id="o-perimetre">—</p>
+      <div id="o-prestations"></div>
+    </div>
+
+    <div class="art">
+      <h3>Article 3 — Durée, engagement et reconduction</h3>
+      <p id="o-duree">—</p>
+    </div>
+
+    <div class="art">
+      <h3>Article 4 — Prix, facturation et paiement</h3>
+      <p id="o-prix">—</p>
+      <p class="small">TVA non applicable — art. 293 B du CGI (franchise en base de TVA). Les montants indiqués sont nets de taxe.</p>
+      <p>En cas de retard de paiement, des pénalités égales à trois fois le taux d'intérêt légal seront exigibles de plein droit, ainsi qu'une indemnité forfaitaire de recouvrement de 40 € (art. L.441-10 et D.441-5 du Code de commerce), sans mise en demeure préalable.</p>
+    </div>
+
+    <div class="art">
+      <h3>Article 5 — Obligations du Prestataire</h3>
+      <ul>
+        <li>Exécuter les prestations avec diligence, dans le respect des règles de l'art (obligation de moyens).</li>
+        <li>Tenir à jour les données de la flotte sur la plateforme Parc Pilot et informer le Client des échéances (amendes, contrôles techniques, entretiens, contrats).</li>
+        <li>Rendre compte régulièrement de son activité (reporting) et rester joignable aux coordonnées indiquées.</li>
+        <li>Respecter la confidentialité et la réglementation sur les données personnelles (Annexe 2).</li>
+      </ul>
+    </div>
+
+    <div class="art">
+      <h3>Article 6 — Obligations du Client</h3>
+      <ul>
+        <li>Transmettre en temps utile les documents et informations nécessaires (cartes grises, contrats de leasing, avis, coordonnées des conducteurs…).</li>
+        <li>Régler les factures aux échéances convenues.</li>
+        <li>Rester seul responsable du paiement effectif des amendes, loyers et taxes dus aux tiers ; le Prestataire assure le suivi et l'alerte, non le règlement à la place du Client sauf mandat écrit distinct.</li>
+        <li>Désigner un interlocuteur unique pour la relation.</li>
+      </ul>
+    </div>
+
+    <div class="art">
+      <h3>Article 7 — Responsabilité</h3>
+      <p>Le Prestataire est tenu d'une obligation de moyens. Sa responsabilité ne saurait être engagée pour les conséquences d'informations erronées ou transmises tardivement par le Client, ni pour les décisions relevant du Client. En tout état de cause, la responsabilité du Prestataire, toutes causes confondues, est plafonnée au montant total facturé au Client au cours des douze (12) derniers mois. Sont exclus les dommages indirects.</p>
+    </div>
+
+    <div class="art">
+      <h3>Article 8 — Confidentialité</h3>
+      <p>Chaque Partie s'engage à conserver confidentielles les informations échangées dans le cadre du présent contrat, pendant toute sa durée et deux (2) ans après son terme.</p>
+    </div>
+
+    <div class="art">
+      <h3>Article 9 — Protection des données personnelles (RGPD)</h3>
+      <p>Dans le cadre des prestations, le Prestataire traite des données à caractère personnel (notamment celles des conducteurs) pour le compte du Client. Le Prestataire agit en qualité de <b>sous-traitant</b> au sens de l'article 28 du RGPD, le Client étant le <b>responsable de traitement</b>. Les conditions de ce traitement sont définies à l'<b>Annexe 2</b>, qui fait partie intégrante du présent contrat.</p>
+    </div>
+
+    <div class="art">
+      <h3>Article 10 — Résiliation</h3>
+      <p>En cas de manquement grave de l'une des Parties à ses obligations, non réparé dans les trente (30) jours suivant une mise en demeure restée sans effet, l'autre Partie pourra résilier le contrat de plein droit, sans préjudice de dommages-intérêts. La résiliation à l'échéance s'effectue selon les modalités de l'article 3.</p>
+    </div>
+
+    <div class="art">
+      <h3>Article 11 — Force majeure</h3>
+      <p>Aucune Partie ne pourra être tenue responsable d'un manquement dû à un cas de force majeure au sens de l'article 1218 du Code civil.</p>
+    </div>
+
+    <div class="art">
+      <h3>Article 12 — Droit applicable et litiges</h3>
+      <p>Le présent contrat est soumis au droit français. En cas de litige, les Parties rechercheront une solution amiable avant toute action. À défaut d'accord, le litige sera porté devant les tribunaux compétents du ressort du siège du Prestataire.</p>
+    </div>
+
+    <div class="sign">
+      <div class="box">
+        <div class="k">Le Client</div>
+        <div class="mention" id="o-sign-client">—</div>
+        <div class="mention">Mention manuscrite « Lu et approuvé, bon pour accord », date, signature et cachet.</div>
+      </div>
+      <div class="box">
+        <div class="k">Le Prestataire</div>
+        <div class="mention" id="o-sign-prest">JIS OFFICE PARTNER</div>
+        <div class="mention">Date et signature.</div>
+      </div>
+    </div>
+
+    <!-- ============ ANNEXE 1 : CGV ============ -->
+    <div class="annexe">
+      <h2 class="title">ANNEXE 1 — Conditions Générales de Vente</h2>
+      <div class="art">
+        <h3>1. Champ d'application</h3>
+        <p>Les présentes CGV régissent les prestations fournies par <b id="o-cgv-nom">JIS OFFICE PARTNER</b> (le « Prestataire »), exploitant le service <b>Parc Pilot</b>, à ses clients professionnels. Elles constituent le socle de la relation commerciale (art. L.441-1 du Code de commerce) et prévalent sur tout document du Client, sauf accord écrit contraire.</p>
+      </div>
+      <div class="art">
+        <h3>2. Commande</h3>
+        <p>La prestation est réputée conclue à la signature du contrat ou du devis portant la mention « bon pour accord ».</p>
+      </div>
+      <div class="art">
+        <h3>3. Prix et TVA</h3>
+        <p>Les prix sont exprimés en euros, nets de taxe. <b>TVA non applicable, art. 293 B du CGI.</b> Le Prestataire se réserve le droit de réviser ses tarifs une fois par an ; toute révision est notifiée au moins un (1) mois à l'avance et ne s'applique pas à la période d'engagement en cours.</p>
+      </div>
+      <div class="art">
+        <h3>4. Facturation et paiement</h3>
+        <p>Les prestations récurrentes sont facturées selon la périodicité convenue. Paiement à réception, sauf mention contraire. Retard : pénalités de trois fois le taux légal + indemnité forfaitaire de 40 € (art. L.441-10 C. com.).</p>
+      </div>
+      <div class="art">
+        <h3>5. Durée, résiliation</h3>
+        <p>Selon les articles 3 et 10 du contrat. À défaut de contrat spécifique, l'engagement est mensuel, résiliable avec un préavis d'un (1) mois.</p>
+      </div>
+      <div class="art">
+        <h3>6. Responsabilité — obligation de moyens</h3>
+        <p>Le Prestataire fournit une prestation de suivi et d'assistance à la gestion de flotte. Il n'est pas l'employeur des conducteurs, ni le propriétaire des véhicules, ni redevable des amendes, loyers ou taxes, qui restent à la charge du Client.</p>
+      </div>
+      <div class="art">
+        <h3>7. Propriété intellectuelle</h3>
+        <p>La plateforme Parc Pilot, son code et ses contenus restent la propriété exclusive du Prestataire. Le Client bénéficie d'un droit d'usage non exclusif et non cessible pendant la durée du contrat.</p>
+      </div>
+      <div class="art">
+        <h3>8. Données</h3>
+        <p>Le traitement des données personnelles est régi par l'Annexe 2 (RGPD). Les données du Client lui restent acquises et lui sont restituées ou supprimées en fin de contrat, à sa demande.</p>
+      </div>
+      <div class="art">
+        <h3>9. Droit applicable</h3>
+        <p>Droit français. Tribunaux compétents : ressort du siège du Prestataire.</p>
+      </div>
+    </div>
+
+    <!-- ============ ANNEXE 2 : RGPD ============ -->
+    <div class="annexe">
+      <h2 class="title">ANNEXE 2 — Traitement des données personnelles (art. 28 RGPD)</h2>
+      <p class="small">Accord de sous-traitance conclu entre le Client (<b>responsable de traitement</b>) et le Prestataire (<b>sous-traitant</b>), conformément à l'article 28 du Règlement (UE) 2016/679 (RGPD).</p>
+      <div class="art">
+        <h3>1. Objet et nature du traitement</h3>
+        <p>Le Prestataire traite des données personnelles pour le seul compte du Client, aux fins de la gestion de la flotte : suivi des véhicules, des conducteurs, des amendes, désignations, entretiens, contrats et échéances.</p>
+      </div>
+      <div class="art">
+        <h3>2. Catégories de données et de personnes</h3>
+        <p><b>Personnes concernées :</b> conducteurs / salariés du Client. <b>Données :</b> identité (nom, prénom), coordonnées, plaque et véhicule attribué, informations de permis de conduire, données d'infractions/amendes strictement nécessaires à la désignation.</p>
+      </div>
+      <div class="art">
+        <h3>3. Obligations du sous-traitant</h3>
+        <ul>
+          <li>Ne traiter les données que sur instruction documentée du Client et pour les seules finalités ci-dessus.</li>
+          <li>Garantir la confidentialité (personnes autorisées, engagement de confidentialité).</li>
+          <li>Mettre en œuvre des mesures de sécurité appropriées (hébergement européen, contrôle d'accès, chiffrement des accès, isolation par société).</li>
+          <li>N'avoir recours à un sous-traitant ultérieur (ex. hébergeur) qu'avec information du Client et garanties équivalentes.</li>
+          <li>Aider le Client à répondre aux demandes d'exercice des droits (accès, rectification, effacement…).</li>
+          <li>Notifier au Client toute violation de données dans les meilleurs délais.</li>
+          <li>Au terme du contrat, supprimer ou restituer les données, au choix du Client, et détruire les copies.</li>
+        </ul>
+      </div>
+      <div class="art">
+        <h3>4. Hébergement et localisation</h3>
+        <p>Les données sont hébergées au sein de l'Union européenne (infrastructure Supabase / PostgreSQL). Aucun transfert hors UE n'est effectué sans garanties appropriées.</p>
+      </div>
+      <div class="art">
+        <h3>5. Durée</h3>
+        <p>Le présent accord s'applique pendant toute la durée du contrat principal. Les données sont conservées le temps strictement nécessaire, puis supprimées ou restituées.</p>
+      </div>
+      <div class="highlight small">
+        Cette annexe couvre l'essentiel de l'article 28 RGPD. Pour un traitement de données sensibles ou à grande échelle, faites-la vérifier une fois par un professionnel (avocat / DPO).
+      </div>
+    </div>
+
+    <div class="foot" id="o-foot">JIS OFFICE PARTNER — Parc Pilot · Contrat de prestation de services · Page générée automatiquement</div>
+  </div>
+
+</div>
+
+<script>
+var state = { formule:'delegue', recond:'tacite' };
+function $(id){ return document.getElementById(id); }
+function euro0(n){ return Math.round(n).toLocaleString('fr-FR') + ' €'; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+function val(id){ return ($(id).value || '').trim(); }
+function dateFr(iso){ if(!iso) return '—'; var p=iso.split('-'); return p.length===3? p[2]+'/'+p[1]+'/'+p[0] : iso; }
+function todayFr(){ var d=new Date(); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
+
+function segWire(segId, key){
+  document.querySelectorAll('#'+segId+' button').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('#'+segId+' button').forEach(function(x){x.classList.remove('on');});
+      b.classList.add('on');
+      state[key] = b.getAttribute('data-'+key);
+      render();
+    });
+  });
+}
+
+function render(){
+  var deleg = state.formule === 'delegue';
+  var nb = Math.max(1, parseInt(val('f-veh'),10) || 1);
+  var socn = Math.max(1, parseInt(val('f-socn'),10) || 1);
+  var mensuel = Math.max(0, parseFloat(val('f-mensuel')) || 0);
+  var mes = Math.max(0, parseFloat(val('f-mes')) || 0);
+  var duree = Math.max(1, parseInt(val('f-duree'),10) || 12);
+  var preavis = Math.max(0, parseInt(val('f-preavis'),10) || 0);
+  var recTacite = state.recond === 'tacite';
+
+  // -- En-tête --
+  $('o-num').textContent = val('f-num') || '—';
+  $('o-date').textContent = todayFr();
+  $('o-titre').textContent = deleg ? 'CONTRAT DE PRESTATION DE GESTION DÉLÉGUÉE DE FLOTTE'
+                                   : 'CONTRAT D\'ABONNEMENT AU LOGICIEL PARC PILOT';
+
+  // -- Prestataire --
+  var pNom = val('f-p-nom') || 'JIS OFFICE PARTNER';
+  var prestHtml = '<b>'+esc(pNom)+'</b>'
+    + (val('f-p-statut') ? '<br>'+esc(val('f-p-statut')) : '')
+    + (val('f-p-siren') ? '<br>SIREN/SIRET : '+esc(val('f-p-siren')) : '')
+    + (val('f-p-adr') ? '<br>'+esc(val('f-p-adr')) : '')
+    + (val('f-p-rep') ? '<br>Représenté par '+esc(val('f-p-rep')) : '')
+    + '<br>'+esc(val('f-p-mail')||'')+ (val('f-p-tel')?' · '+esc(val('f-p-tel')):'');
+  $('o-prest').innerHTML = prestHtml;
+  $('o-cgv-nom').textContent = pNom;
+  $('o-sign-prest').textContent = pNom;
+
+  // -- Client --
+  var cNom = val('f-soc') || '[Société]';
+  var clientHtml = '<b>'+esc(cNom)+'</b>'
+    + (val('f-forme') ? ' ('+esc(val('f-forme'))+')' : '')
+    + (val('f-siren') ? '<br>SIREN/SIRET : '+esc(val('f-siren')) : '')
+    + (val('f-adr') ? '<br>'+esc(val('f-adr')) : '')
+    + ((val('f-rep')||val('f-qual')) ? '<br>Représenté par '+esc(val('f-rep'))+(val('f-qual')?', '+esc(val('f-qual')):'') : '')
+    + (val('f-mail') ? '<br>'+esc(val('f-mail')) : '');
+  $('o-client').innerHTML = clientHtml;
+  $('o-sign-client').textContent = cNom + (val('f-rep')?' — '+val('f-rep'):'');
+
+  // -- Article 1 : Objet --
+  $('o-objet').innerHTML = deleg
+    ? 'Le Client confie au Prestataire la <b>gestion déléguée de sa flotte automobile</b>, réalisée au moyen de la plateforme Parc Pilot, dans les conditions définies ci-après.'
+    : 'Le Prestataire met à disposition du Client un <b>droit d\'accès au logiciel Parc Pilot</b> de gestion de flotte, dans les conditions définies ci-après.';
+
+  // -- Article 2 : Périmètre --
+  $('o-perimetre').innerHTML = 'Le présent contrat porte sur <b>'+nb+' véhicule'+(nb>1?'s':'')+'</b>'
+    + (socn>1 ? ' répartis sur <b>'+socn+' sociétés</b>' : '')
+    + '. Les prestations comprennent :';
+  $('o-prestations').innerHTML = deleg
+    ? '<ul>'
+      + '<li>Accès complet à la plateforme Parc Pilot (logiciel inclus).</li>'
+      + '<li>Suivi et traitement des amendes et désignations de conducteurs.</li>'
+      + '<li>Suivi des entretiens, contrôles techniques et échéances.</li>'
+      + '<li>Suivi des contrats, leasings et assurances.</li>'
+      + '<li>Relances des conducteurs et alertes d\'échéances.</li>'
+      + '<li>Reporting régulier au Client.</li>'
+      + '</ul>'
+    : '<ul>'
+      + '<li>Accès complet à la plateforme Parc Pilot, multi-postes.</li>'
+      + '<li>Lecture automatique des documents (cartes grises, amendes, factures).</li>'
+      + (socn>1 ? '<li>Gestion multi-sociétés.</li>' : '')
+      + '<li>Mises à jour et support.</li>'
+      + '</ul>';
+
+  // -- Article 3 : Durée --
+  var debut = val('f-debut') ? dateFr(val('f-debut')) : '[date de début]';
+  $('o-duree').innerHTML = 'Le contrat prend effet le <b>'+debut+'</b> pour une durée d\'engagement initiale de <b>'+duree+' mois</b>. '
+    + (recTacite
+        ? 'À son terme, il est <b>reconduit tacitement</b> par périodes successives de douze (12) mois, sauf résiliation par l\'une des Parties notifiée par écrit (lettre recommandée ou email avec accusé) en respectant un préavis de <b>'+preavis+' mois</b> avant l\'échéance.'
+        : 'À son terme, il pourra être renouvelé par <b>accord exprès écrit</b> des Parties. À défaut, il prend fin automatiquement. Résiliation anticipée avec préavis de <b>'+preavis+' mois</b>.');
+
+  // -- Article 4 : Prix --
+  var prixHtml = 'En contrepartie, le Client verse une redevance de <b>'+euro0(mensuel)+' par mois</b>'
+    + (deleg && nb ? ' (soit environ '+euro0(nb? (mensuel/nb):0)+'/véhicule/mois)' : '') + '.';
+  if (mes > 0) prixHtml += ' Des <b>frais de mise en service de '+euro0(mes)+'</b> (import des données et prise en main) sont facturés une seule fois au démarrage.';
+  else prixHtml += ' La mise en service (import des données et prise en main) est <b>offerte</b>.';
+  var annuel = mensuel*12;
+  prixHtml += ' Soit un montant annuel indicatif de <b>'+euro0(annuel)+'</b>' + (mes>0?' (hors mise en service)':'') + '.';
+  $('o-prix').innerHTML = prixHtml;
+
+  // -- Pied --
+  $('o-foot').textContent = pNom + ' — Parc Pilot · Contrat ' + (val('f-num')||'') + ' · TVA non applicable art. 293 B du CGI';
+}
+
+// Envoyer pour signature (prépare l'email — le PDF est à joindre manuellement)
+$('btn-mail').addEventListener('click', function(){
+  var to = val('f-mail');
+  var cNom = val('f-soc') || 'votre société';
+  var pNom = val('f-p-nom') || 'JIS OFFICE PARTNER';
+  var sujet = 'Contrat ' + (val('f-num')?val('f-num')+' ':'') + '— ' + pNom + ' / ' + cNom;
+  var corps = 'Bonjour,\n\n'
+    + 'Veuillez trouver ci-joint le contrat de prestation pour ' + cNom + '.\n\n'
+    + 'Merci de le retourner signé (mention « Lu et approuvé, bon pour accord », date, signature et cachet).\n\n'
+    + 'Pour une signature électronique, je peux vous l\'envoyer via un service de signature en ligne — dites-moi.\n\n'
+    + 'Cordialement,\n' + (val('f-p-rep')||'') + '\n' + pNom + '\n' + (val('f-p-mail')||'') + (val('f-p-tel')?' · '+val('f-p-tel'):'');
+  window.location.href = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(sujet) + '&body=' + encodeURIComponent(corps);
+});
+
+// Écouteurs
+['f-p-nom','f-p-statut','f-p-siren','f-p-adr','f-p-rep','f-p-mail','f-p-tel',
+ 'f-soc','f-forme','f-siren','f-adr','f-rep','f-qual','f-mail',
+ 'f-num','f-lieu','f-veh','f-socn','f-mensuel','f-mes','f-duree','f-preavis','f-debut'
+].forEach(function(id){ var el=$(id); if(el){ el.addEventListener('input', render); el.addEventListener('change', render); } });
+segWire('seg-formule','formule');
+segWire('seg-recond','recond');
+
+render();
+</script>
+</body>
+</html>
