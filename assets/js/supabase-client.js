@@ -302,11 +302,15 @@
       // Signature LÉGÈRE des champs affichés : si les données live sont IDENTIQUES à ce qui est
       // déjà affiché (data.js régénéré à jour), on évite le re-rendu inutile (« grisaille » /
       // page qui se remet). On ne ré-émet 'fp:data-ready' que si quelque chose a réellement changé.
+      // ⚠️ La signature doit couvrir TOUS les champs AFFICHÉS quelque part, sinon modifier un
+      // champe hors-liste (ex. valeurAchat, marque, fournisseur, montantHT/TVA…) ne déclenche
+      // pas 'fp:data-ready' et l'écran reste sur l'ancienne valeur. On liste large.
       const sig = (d) => {
         const f = (arr, ks) => (arr || []).map(x => ks.map(k => (x[k] ?? '')).join('|')).join(';');
-        return f(d.vehicules, ['id','km','statut','chauffeur','prochainCT','derniereRevision','proprietaire'])
-             + '#' + f(d.amendes, ['id','statut','montant','montantTTC','points','date','prenom'])
-             + '#' + f(d.factures, ['id','montantTTC','type','date','vehiculeImmat']);
+        return f(d.vehicules, ['id','immat','marque','modele','version','km','statut','chauffeur','prochainCT','dateDernierCT','derniereRevision','proprietaire','carburant','co2','puissanceFiscale','dateMiseEnCirculation','valeurAchat','prix','assurance','vin','couleur','boite','prixVente'])
+             + '#' + f(d.amendes, ['id','statut','montant','montantTTC','montantMajore','majoree','points','date','prenom','motif','numeroAvis'])
+             + '#' + f(d.factures, ['id','montantHT','montantTVA','montantTTC','type','date','vehiculeImmat','fournisseur','numeroFacture','km'])
+             + '#' + f(d.conducteurs, ['key','nom','prenom','dateNaissance','poste','tel','email','adresse','permisNumero','permisExpiration','permisObtention']);
       };
       const sigBefore = sig(window.FP_DATA);
       const sigAfter  = sig(data);
