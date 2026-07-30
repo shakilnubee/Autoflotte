@@ -2322,10 +2322,11 @@ FP.rapportDirection = (data) => {
   // Coût du mois = coût d'EXPLOITATION (hors leasing/sinistre/achat/cession) — MÊME règle que le
   // dashboard et l'écran mural, sinon le rapport annonçait un montant gonflé par un achat de véhicule.
   const coutMois = facts.filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0);
-  const cout12 = facts.filter(f => (f.date || '').slice(0, 7) >= y12).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+  // 12 mois glissants = coût d'EXPLOITATION (même filtre que coutMois) — sinon gonflé par un achat de véhicule/sinistre.
+  const cout12 = facts.filter(f => (f.date || '').slice(0, 7) >= y12 && FP.coutFactureExploit(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0);
 
   const byVeh = {};
-  facts.filter(f => (f.date || '').slice(0, 7) >= y12).forEach(f => { const k = f.vehiculeImmat || '—'; byVeh[k] = (byVeh[k] || 0) + (+f.montantTTC || 0); });
+  facts.filter(f => (f.date || '').slice(0, 7) >= y12 && FP.coutFactureExploit(f)).forEach(f => { const k = f.vehiculeImmat || '—'; byVeh[k] = (byVeh[k] || 0) + (+f.montantTTC || 0); });
   const topCouts = Object.entries(byVeh).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const topMax = topCouts.length ? topCouts[0][1] : 0;
 
@@ -2335,7 +2336,7 @@ FP.rapportDirection = (data) => {
   const nbElec = actifs.filter(v => /lectri|hydrog|hybrid/.test((v.carburant || '').toLowerCase())).length;
 
   const am = (data.amendes || []);
-  const amTot = am.reduce((s, a) => s + ((a.majoree && +a.montantMajore) ? +a.montantMajore : (+a.montant || 0)), 0);
+  const amTot = am.reduce((s, a) => s + FP.montantDu(a), 0); // source unique (majoré + montant réellement payé)
 
   const alerts = FP.buildAlertes ? FP.buildAlertes(data) : [];
   const ech = (FP.buildEcheances ? FP.buildEcheances(data) : []).filter(e => {
