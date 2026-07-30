@@ -1,0 +1,45 @@
+name: Audit hebdomadaire (contrôles automatiques)
+
+# Tourne chaque vendredi ~10h (Paris) sur l'infra GitHub — indépendant de Claude.
+# ⚠️ GitHub Actions est en UTC : 08:05 UTC ≈ 10:05 Paris en été (CEST), 09:05 en hiver.
+# Peut aussi être lancé à la main (onglet Actions → Run workflow).
+on:
+  schedule:
+    - cron: '5 8 * * 5'
+  workflow_dispatch:
+
+jobs:
+  controles:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Contrôles projet (syntaxe JS, cache ?v=, liens internes, RGPD data.js)
+        run: node scripts/check-bugs.mjs .
+
+      - name: RGPD — aucune donnée personnelle dans data.js (doit être 0)
+        run: |
+          COUNT=$(grep -oE '"(email|adresse|dateNaissance|tel|nom|prenom|name|poste|permisNumero|permisUrl|permisFileId|chauffeur|vin)":"[^"]+"' assets/js/data.js | grep -vE '":""' | wc -l | tr -d ' ')
+          echo "PII trouvées dans data.js : $COUNT (doit être 0)"
+          if [ "$COUNT" != "0" ]; then echo "::error::Fuite RGPD : $COUNT champ(s) personnel(s) dans data.js (repo public)"; exit 1; fi
+
+      - name: Cohérence du cache-busting (?v= identique partout + sw.js)
+        run: |
+          TOKENS=$(grep -rhoE '\?v=20[0-9]{6}[a-z]' --include='*.html' . | sort -u | wc -l | tr -d ' ')
+          echo "Nombre de versions ?v= distinctes : $TOKENS (doit être 1)"
+          if [ "$TOKENS" -gt 1 ]; then echo "::error::Versions ?v= incohérentes entre les pages"; grep -rhoE '\?v=20[0-9]{6}[a-z]' --include='*.html' . | sort | uniq -c; exit 1; fi
+
+      - name: Vérif syntaxe des scripts JS partagés
+        run: |
+          node --check assets/js/app.js
+          node --check assets/js/supabase-client.js
+
+      - name: Résumé
+        if: success()
+        run: echo "✅ Audit hebdomadaire : tous les contrôles automatiques passent."
