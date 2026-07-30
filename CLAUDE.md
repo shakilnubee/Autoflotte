@@ -209,6 +209,12 @@ fleet-app/
 5. **Undo/Redo** : Ctrl+Z / Ctrl+Y via `FP.history`
 6. **Localisation** : tout en français, formats `FP.euro()`, `FP.date()`, `FP.num()`
 7. **Pas de sticky columns** (testé puis retiré sur demande utilisateur)
+8. ⚠️ **TÉLÉCHARGER EN 1 CLIC — RÈGLE PERMANENTE** (consigne explicite) : partout où il y a un
+   « Imprimer » / « PDF », TOUJOURS ajouter EN PLUS un bouton **« Télécharger en PDF »** bien visible
+   qui produit un **vrai fichier en un clic** (via **jsPDF**, `assets/js/vendor/jspdf.umd.min.js` — pas
+   seulement `window.print()` qui n'ouvre que la boîte d'impression). Repli `window.print()` si jsPDF
+   indispo. Ex. de référence : le bouton `#kc-dl` de `kit-commercial.html` (parcourt le DOM et rend en
+   texte jsPDF). Ne JAMAIS livrer une page imprimable sans son téléchargement direct.
 
 ## Workflow Git
 

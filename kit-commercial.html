@@ -40,7 +40,10 @@
   <div class="kc-wrap">
     <div class="flex items-center justify-between gap-3 mb-3 flex-wrap kc-noprint">
       <a href="dashboard.html" class="text-sm font-semibold" style="color:var(--fp-accent)"><i data-lucide="arrow-left" class="w-4 h-4 inline"></i> Tableau de bord</a>
-      <button onclick="window.print()" class="btn btn-outline text-sm"><i data-lucide="printer" class="w-4 h-4"></i> Imprimer / PDF</button>
+      <div class="flex gap-2">
+        <button id="kc-dl" class="btn btn-dark text-sm"><i data-lucide="download" class="w-4 h-4"></i> Télécharger en PDF</button>
+        <button onclick="window.print()" class="btn btn-outline text-sm"><i data-lucide="printer" class="w-4 h-4"></i> Imprimer</button>
+      </div>
     </div>
 
     <h1 class="text-2xl font-extrabold mb-1" style="color:var(--fp-primary)">🎯 Kit commercial — Conquérir un client</h1>
@@ -149,6 +152,47 @@
 
     <p class="text-center text-xs text-slate-400 mb-4">Kit interne JIS — usage commercial. Bonne chasse 🎯</p>
   </div>
-  <script>if(window.lucide)lucide.createIcons();</script>
+  <script src="assets/js/vendor/jspdf.umd.min.js?v=20260730i"></script>
+  <script>
+  if(window.lucide)lucide.createIcons();
+  // Téléchargement PDF EN UN CLIC (vrai fichier, sans passer par la boîte d'impression).
+  document.getElementById('kc-dl').addEventListener('click', function(){
+    try {
+      const { jsPDF } = window.jspdf || {};
+      if (!jsPDF) return window.print();
+      const doc = new jsPDF({ unit:'pt', format:'a4' });
+      const M = 42, W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), maxW = W - M*2;
+      let y = M;
+      const clean = s => String(s || '').replace(/\s+/g, ' ').trim();
+      function line(str, size, style, color, indent){
+        str = clean(str); if (!str) return;
+        indent = indent || 0;
+        doc.setFont('helvetica', style || 'normal'); doc.setFontSize(size); doc.setTextColor(color || '#1e293b');
+        doc.splitTextToSize(str, maxW - indent).forEach(function(ln){
+          if (y > H - M) { doc.addPage(); y = M; }
+          doc.text(ln, M + indent, y); y += size * 1.28;
+        });
+      }
+      const gap = h => { y += h; if (y > H - M) { doc.addPage(); y = M; } };
+      line('Kit commercial — Parc Pilot', 18, 'bold', '#0F1E3D'); gap(3);
+      line('Découverte du besoin · Audit du prospect · Démo qui convainc', 10, 'normal', '#64748b'); gap(10);
+      document.querySelectorAll('.kc-card').forEach(function(card){
+        gap(10);
+        const h = card.querySelector('.kc-h'); if (h) { line(h.innerText, 13, 'bold', '#0F1E3D'); gap(2); }
+        const sub = card.querySelector('.kc-sub'); if (sub) { line(sub.innerText, 9, 'italic', '#64748b'); gap(3); }
+        card.querySelectorAll('.kc-theme, .kc-q, .kc-row, .kc-demo, .kc-obj').forEach(function(el){
+          const t = el.innerText; if (!clean(t)) return;
+          if (el.classList.contains('kc-theme')) { gap(4); line(t, 10, 'bold', '#0e7490'); }
+          else if (el.classList.contains('kc-q')) line('•  ' + t, 10, 'normal', '#1e293b', 10);
+          else if (el.classList.contains('kc-demo')) line('▸  ' + t, 10, 'normal', '#9a3412', 10);
+          else if (el.classList.contains('kc-obj')) line('!  ' + t, 10, 'normal', '#334155', 10);
+          else line('–  ' + t, 10, 'normal', '#1e293b', 10);
+          gap(2);
+        });
+      });
+      doc.save('Kit-commercial-Parc-Pilot.pdf');
+    } catch (e) { console.error(e); window.print(); }
+  });
+  </script>
 </body>
 </html>
