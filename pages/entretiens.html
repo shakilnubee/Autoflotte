@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260724f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260730a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260724f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260730a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260724f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260730a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -127,33 +127,92 @@
           <h2 class="text-lg font-extrabold">Contacter un garage</h2>
           <button aria-label="Fermer" type="button" class="p-2 hover:bg-slate-100 rounded-lg" onclick="document.getElementById('garage-modal').classList.remove('open')"><i data-lucide="x" class="w-5 h-5"></i></button>
         </div>
-        <p class="text-xs text-slate-500 mb-4">Choisis un garage dans la liste pour le contacter.</p>
-        <div class="space-y-3" id="garage-list" data-pxp-garage>
-          <!-- Garage : Car World Consulting France (spécifique PXP — masqué pour les autres sociétés) -->
-          <div class="rounded-xl border border-slate-200 p-4">
-            <div class="space-y-2 text-sm">
-              <div class="font-bold text-base">CAR WORLD CONSULTING FRANCE <span class="text-slate-400 font-normal">(CWCF)</span></div>
-              <div class="flex items-start gap-2"><i data-lucide="map-pin" class="w-4 h-4 mt-0.5 text-slate-400"></i><div>13 Villa des Sorbiers<br>95500 Gonesse — France</div></div>
-              <a href="mailto:carworldconsultingfrance@gmail.com" class="flex items-center gap-2 hover:underline" style="color:var(--fp-accent)"><i data-lucide="mail" class="w-4 h-4"></i> carworldconsultingfrance@gmail.com</a>
-              <a href="tel:+33744979690" class="flex items-center gap-2 hover:underline" style="color:var(--fp-accent)"><i data-lucide="phone" class="w-4 h-4"></i> +33 7 44 97 96 90</a>
-            </div>
-            <div class="flex gap-2 mt-4">
-              <a href="mailto:carworldconsultingfrance@gmail.com" class="btn btn-dark flex-1 justify-center text-sm"><i data-lucide="mail" class="w-4 h-4"></i> Envoyer un email</a>
-              <a href="tel:+33744979690" class="btn btn-outline flex-1 justify-center text-sm"><i data-lucide="phone" class="w-4 h-4"></i> Appeler</a>
-            </div>
+        <p class="text-xs text-slate-500 mb-4">Choisis un garage / prestataire pour le contacter.</p>
+        <!-- Liste des garages/prestataires PROPRES À LA SOCIÉTÉ (FP.getPrestataires, stockée par société). -->
+        <div class="space-y-3" id="garage-list"></div>
+        <button type="button" id="presta-add-btn" class="btn btn-outline w-full justify-center text-sm mt-3" style="display:none"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un garage / prestataire</button>
+        <!-- Formulaire ajout/édition (admin/CEO seulement) -->
+        <div id="presta-form" class="rounded-xl border border-slate-200 p-4 mt-3" style="display:none">
+          <input type="hidden" id="presta-id">
+          <div class="space-y-3">
+            <div><div class="field-label">Nom *</div><input class="field-input" id="presta-nom" placeholder="ex. Garage Dupont" autocomplete="off"></div>
+            <div><div class="field-label">Adresse</div><input class="field-input" id="presta-adresse" placeholder="ex. 12 rue des Fleurs, 75000 Paris" autocomplete="off"></div>
+            <div><div class="field-label">E-mail</div><input class="field-input" id="presta-email" type="email" placeholder="ex. contact@garage.fr" autocomplete="off"></div>
+            <div><div class="field-label">Téléphone</div><input class="field-input" id="presta-tel" placeholder="ex. 01 23 45 67 89" autocomplete="off"></div>
+          </div>
+          <div class="flex gap-2 mt-4">
+            <button type="button" id="presta-save" class="btn btn-dark flex-1 justify-center text-sm">Enregistrer</button>
+            <button type="button" id="presta-cancel" class="btn btn-outline flex-1 justify-center text-sm">Annuler</button>
           </div>
         </div>
       </div>
     </div>
 
     <script>
-      // Le garage codé en dur (CWCF) appartient à PXP → masqué pour toute autre société.
-      document.addEventListener('DOMContentLoaded', function(){
-        try {
-          var soc = (window.FP && FP.activeSociete) ? FP.activeSociete() : (localStorage.getItem('fp_societe') || 'PXP');
-          if (soc !== 'PXP') { var el = document.getElementById('garage-list'); if (el) el.innerHTML = '<div class="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">Aucun garage enregistré pour votre société pour le moment.</div>'; }
-        } catch (e) {}
-      });
+      // Garages/prestataires PAR SOCIÉTÉ (plus de garage codé en dur) : lecture pour tous,
+      // ajout/modif/suppression réservés CEO/Admin (FP.canManageSociete). Stocké dans app_settings.
+      (function(){
+        function esc(s){ return (window.FP && FP.esc) ? FP.esc(s) : String(s == null ? '' : s); }
+        function canEdit(){ try { return !!(window.FP && FP.canManageSociete && FP.canManageSociete()); } catch (e) { return false; } }
+        function telHref(t){ return 'tel:' + String(t || '').replace(/[^\d+]/g, ''); }
+        function render(){
+          var el = document.getElementById('garage-list'); if (!el) return;
+          var list = []; try { list = (window.FP && FP.getPrestataires) ? FP.getPrestataires() : []; } catch (e) { list = []; }
+          if (!list.length) {
+            el.innerHTML = '<div class="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">Aucun garage enregistré pour votre société pour le moment.' + (canEdit() ? ' Ajoutez-en un ci-dessous.' : '') + '</div>';
+          } else {
+            el.innerHTML = list.map(function(p){
+              var adr = p.adresse ? '<div class="flex items-start gap-2"><i data-lucide="map-pin" class="w-4 h-4 mt-0.5 text-slate-400"></i><div>' + esc(p.adresse) + '</div></div>' : '';
+              var mail = p.email ? '<a href="mailto:' + esc(p.email) + '" class="flex items-center gap-2 hover:underline" style="color:var(--fp-accent)"><i data-lucide="mail" class="w-4 h-4"></i> ' + esc(p.email) + '</a>' : '';
+              var tel = p.tel ? '<a href="' + esc(telHref(p.tel)) + '" class="flex items-center gap-2 hover:underline" style="color:var(--fp-accent)"><i data-lucide="phone" class="w-4 h-4"></i> ' + esc(p.tel) + '</a>' : '';
+              var acts = '';
+              if (p.email) acts += '<a href="mailto:' + esc(p.email) + '" class="btn btn-dark flex-1 justify-center text-sm"><i data-lucide="mail" class="w-4 h-4"></i> Envoyer un email</a>';
+              if (p.tel) acts += '<a href="' + esc(telHref(p.tel)) + '" class="btn btn-outline flex-1 justify-center text-sm"><i data-lucide="phone" class="w-4 h-4"></i> Appeler</a>';
+              var admin = canEdit() ? '<div class="flex gap-3 mt-3 pt-3 border-t border-slate-100"><button type="button" class="text-xs font-semibold hover:underline" style="color:var(--fp-accent)" data-presta-edit="' + esc(p.id) + '">Modifier</button><button type="button" class="text-xs font-semibold hover:underline" style="color:#ef4444" data-presta-del="' + esc(p.id) + '">Supprimer</button></div>' : '';
+              return '<div class="rounded-xl border border-slate-200 p-4">'
+                + '<div class="space-y-2 text-sm"><div class="font-bold text-base">' + esc(p.nom) + (p.sigle ? ' <span class="text-slate-400 font-normal">(' + esc(p.sigle) + ')</span>' : '') + '</div>' + adr + mail + tel + '</div>'
+                + (acts ? '<div class="flex gap-2 mt-4">' + acts + '</div>' : '')
+                + admin
+                + '</div>';
+            }).join('');
+          }
+          var addBtn = document.getElementById('presta-add-btn'); if (addBtn) addBtn.style.display = canEdit() ? '' : 'none';
+          if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
+        }
+        function openForm(p){
+          document.getElementById('presta-id').value = (p && p.id) || '';
+          document.getElementById('presta-nom').value = (p && p.nom) || '';
+          document.getElementById('presta-adresse').value = (p && p.adresse) || '';
+          document.getElementById('presta-email').value = (p && p.email) || '';
+          document.getElementById('presta-tel').value = (p && p.tel) || '';
+          document.getElementById('presta-form').style.display = '';
+        }
+        function closeForm(){ document.getElementById('presta-form').style.display = 'none'; }
+        document.addEventListener('DOMContentLoaded', function(){
+          render();
+          var addBtn = document.getElementById('presta-add-btn'); if (addBtn) addBtn.addEventListener('click', function(){ openForm(null); });
+          var cancel = document.getElementById('presta-cancel'); if (cancel) cancel.addEventListener('click', closeForm);
+          var save = document.getElementById('presta-save'); if (save) save.addEventListener('click', function(){
+            var nom = (document.getElementById('presta-nom').value || '').trim();
+            if (!nom) { alert('Le nom du garage / prestataire est obligatoire.'); return; }
+            var rec = { id: document.getElementById('presta-id').value || '', nom: nom,
+              adresse: (document.getElementById('presta-adresse').value || '').trim(),
+              email: (document.getElementById('presta-email').value || '').trim(),
+              tel: (document.getElementById('presta-tel').value || '').trim() };
+            try { if (window.FP && FP.savePrestataire) FP.savePrestataire(rec); } catch (e) {}
+            closeForm(); render();
+          });
+          var listEl = document.getElementById('garage-list');
+          if (listEl) listEl.addEventListener('click', function(e){
+            var ed = e.target.closest && e.target.closest('[data-presta-edit]');
+            var dl = e.target.closest && e.target.closest('[data-presta-del]');
+            if (ed) { var id = ed.getAttribute('data-presta-edit'); var l = FP.getPrestataires(); openForm(l.find(function(x){ return x.id === id; })); }
+            if (dl) { var id2 = dl.getAttribute('data-presta-del'); if (confirm('Supprimer ce garage / prestataire ?')) { try { FP.deletePrestataire(id2); } catch (e) {} render(); } }
+          });
+          // Re-render si les réglages arrivent du serveur après le 1er affichage (autre poste).
+          window.addEventListener('fp:data-ready', render);
+        });
+      })();
     </script>
 
     <!-- KPIs -->
@@ -256,10 +315,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260724f"></script>
-<script src="../assets/js/supabase-client.js?v=20260724f"></script>
-<script src="../assets/js/data.js?v=20260724f"></script>
-<script src="../assets/js/app.js?v=20260724f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260730a"></script>
+<script src="../assets/js/supabase-client.js?v=20260730a"></script>
+<script src="../assets/js/data.js?v=20260730a"></script>
+<script src="../assets/js/app.js?v=20260730a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();

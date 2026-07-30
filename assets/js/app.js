@@ -920,6 +920,7 @@ FP.settings = {
     sinistreStatut: {}, // suivi remboursement sinistre { factureId: 'attente'|'rembourse'|'refuse' }
     permisMasque: {}, // permis intégré (FP_DOCS) masqué par l'utilisateur { conducteurKey: true }
     condDocs: {}, // documents perso d'un conducteur { conducteurKey: [ {id,type,label,url,date,createdAt} ] }
+    prestataires: undefined, // garages / prestataires PROPRES À CHAQUE SOCIÉTÉ [ {id,nom,adresse,email,tel} ] — semé une fois (PXP hérite de son garage historique, autres = vide). undefined = jamais initialisé (déclenche le semis)
     // Profil PROPRE À CHAQUE SOCIÉTÉ (rempli à la création d'une société) : e-mails d'envoi des amendes,
     // nom du loueur leasing, etc. Vide par défaut ; PXP a des valeurs historiques (voir FP.societeProfil).
     profil: {},
@@ -1618,6 +1619,44 @@ FP.resetLeasingOverride = (immat) => {
   const key = (immat || '').trim().toUpperCase(); if (!FP.settings) return;
   const obj = FP.settings.get();
   if (obj.leasingContrats && obj.leasingContrats[key]) { delete obj.leasingContrats[key]; FP.settings.save(obj); }
+};
+
+// ===== GARAGES / PRESTATAIRES (par société, partagés entre postes via app_settings) =====
+// Chaque société gère SA propre liste de garages/prestataires (page Entretiens → « Contacter un
+// garage »). Rien n'est codé en dur : PXP hérite UNE FOIS de son garage historique (CWCF), toute
+// autre société part d'une liste vide et ajoute les siens. Même logique que le leasing (semis unique
+// pour PXP, sinon []), pour ne jamais faire hériter une nouvelle société des prestataires de PXP.
+FP.PRESTATAIRE_DEFAUT_PXP = [
+  { id: 'cwcf', nom: 'CAR WORLD CONSULTING FRANCE', sigle: 'CWCF', adresse: '13 Villa des Sorbiers, 95500 Gonesse — France', email: 'carworldconsultingfrance@gmail.com', tel: '+33 7 44 97 96 90' },
+];
+FP.getPrestataires = () => {
+  if (!FP.settings) return [];
+  const obj = FP.settings.get();
+  // undefined = jamais initialisé pour cette société → semis unique (PXP = garage historique ; autres = vide).
+  if (!Array.isArray(obj.prestataires)) {
+    const estPXP = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP');
+    const seed = estPXP ? FP.PRESTATAIRE_DEFAUT_PXP.map(d => ({ ...d })) : [];
+    obj.prestataires = seed; FP.settings.save(obj);
+    return seed.map(d => ({ ...d }));
+  }
+  return obj.prestataires.map(d => ({ ...d }));
+};
+FP.savePrestataire = (rec) => {
+  if (!FP.settings || !rec) return null;
+  const obj = FP.settings.get();
+  const list = Array.isArray(obj.prestataires) ? obj.prestataires.slice() : [];
+  if (!rec.id) rec.id = 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1000);
+  const i = list.findIndex(p => p && p.id === rec.id);
+  if (i >= 0) list[i] = { ...list[i], ...rec }; else list.push(rec);
+  obj.prestataires = list;
+  FP.settings.save(obj); // -> localStorage + app_settings (partagé sur tous les PC, isolé par société)
+  return rec;
+};
+FP.deletePrestataire = (id) => {
+  if (!FP.settings || !id) return;
+  const obj = FP.settings.get();
+  obj.prestataires = (Array.isArray(obj.prestataires) ? obj.prestataires : []).filter(p => p && p.id !== id);
+  FP.settings.save(obj);
 };
 
 // ===== NOTES DE ZONE (globales, réutilisables sur n'importe quelle page/onglet/zone) =====
