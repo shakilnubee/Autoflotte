@@ -40,17 +40,17 @@
 <body>
 <div class="wrap">
   <h1>Logos &amp; marque</h1>
-  <p class="sub">Kit de marque Parc Pilot — usage interne JIS OFFICE PARTNER. Télécharge le logo en SVG (qualité parfaite, redimensionnable) ou copie une couleur.</p>
+  <p class="sub">Kit de marque Parc Pilot — usage interne JIS OFFICE PARTNER. Télécharge le logo en SVG (qualité parfaite, redimensionnable) ou en PDF, ou copie une couleur.</p>
 
   <h2>Logo principal</h2>
   <div class="grid">
     <div class="card">
       <div class="canvas dark" id="cv-dark"></div>
-      <div class="foot"><span>Sur fond sombre</span><button class="btn btn-accent" data-dl="dark">⬇ SVG</button></div>
+      <div class="foot"><span>Sur fond sombre</span><span style="display:flex;gap:8px"><button class="btn btn-accent" data-dl="dark">⬇ SVG</button><button class="btn" data-dlpdf="dark">⬇ PDF</button></span></div>
     </div>
     <div class="card">
       <div class="canvas light" id="cv-light"></div>
-      <div class="foot"><span>Sur fond clair</span><button class="btn btn-accent" data-dl="light">⬇ SVG</button></div>
+      <div class="foot"><span>Sur fond clair</span><span style="display:flex;gap:8px"><button class="btn btn-accent" data-dl="light">⬇ SVG</button><button class="btn" data-dlpdf="light">⬇ PDF</button></span></div>
     </div>
   </div>
 
@@ -58,11 +58,11 @@
   <div class="grid">
     <div class="card">
       <div class="canvas mono-d" id="cv-monod"></div>
-      <div class="foot"><span>Noir — pour fax, tampon, doc N&amp;B</span><button class="btn" data-dl="monod">⬇ SVG</button></div>
+      <div class="foot"><span>Noir — pour fax, tampon, doc N&amp;B</span><span style="display:flex;gap:8px"><button class="btn" data-dl="monod">⬇ SVG</button><button class="btn" data-dlpdf="monod">⬇ PDF</button></span></div>
     </div>
     <div class="card">
       <div class="canvas mono-l" id="cv-monol"></div>
-      <div class="foot"><span>Blanc — sur aplat de couleur</span><button class="btn" data-dl="monol">⬇ SVG</button></div>
+      <div class="foot"><span>Blanc — sur aplat de couleur</span><span style="display:flex;gap:8px"><button class="btn" data-dl="monol">⬇ SVG</button><button class="btn" data-dlpdf="monol">⬇ PDF</button></span></div>
     </div>
   </div>
 
@@ -70,11 +70,11 @@
   <div class="grid">
     <div class="card">
       <div class="canvas light" id="cv-icon"></div>
-      <div class="foot"><span>Favicon / app / avatar</span><button class="btn" data-dl="icon">⬇ SVG</button></div>
+      <div class="foot"><span>Favicon / app / avatar</span><span style="display:flex;gap:8px"><button class="btn" data-dl="icon">⬇ SVG</button><button class="btn" data-dlpdf="icon">⬇ PDF</button></span></div>
     </div>
     <div class="card">
       <div class="canvas dark" id="cv-icond"></div>
-      <div class="foot"><span>Icône sur fond sombre</span><button class="btn" data-dl="icond">⬇ SVG</button></div>
+      <div class="foot"><span>Icône sur fond sombre</span><span style="display:flex;gap:8px"><button class="btn" data-dl="icond">⬇ SVG</button><button class="btn" data-dlpdf="icond">⬇ PDF</button></span></div>
     </div>
   </div>
 
@@ -88,6 +88,7 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script>
 // Génère le SVG du logo selon la variante (couleurs paramétrables) — pour affichage ET téléchargement.
 function logoSVG(opt){
@@ -135,6 +136,48 @@ document.querySelectorAll('[data-dl]').forEach(function(b){
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
     toast('Logo téléchargé (SVG)');
+  });
+});
+
+// ---- Téléchargement PDF (logo rendu en haute résolution sur le bon fond) ----
+// Fond de chaque variante (sinon un logo blanc serait invisible sur PDF blanc).
+var BG = { dark:'#080b12', light:'#ffffff', monod:'#ffffff', monol:'#f97316', icon:'#ffffff', icond:'#080b12' };
+
+function svgToPng(svg, bg, scale){
+  return new Promise(function(resolve, reject){
+    var m = svg.match(/width="(\d+)"[\s\S]*?height="(\d+)"/);
+    var w = parseInt(m[1],10), h = parseInt(m[2],10);
+    var img = new Image();
+    img.onload = function(){
+      var cv = document.createElement('canvas');
+      cv.width = w*scale; cv.height = h*scale;
+      var ctx = cv.getContext('2d');
+      ctx.fillStyle = bg || '#ffffff'; ctx.fillRect(0,0,cv.width,cv.height); // fond opaque = rendu fiable
+      ctx.setTransform(scale,0,0,scale,0,0);
+      ctx.drawImage(img,0,0,w,h);
+      resolve({ url: cv.toDataURL('image/png'), w:w, h:h });
+    };
+    img.onerror = function(){ reject(new Error('img')); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+}
+
+document.querySelectorAll('[data-dlpdf]').forEach(function(b){
+  b.addEventListener('click', function(){
+    if (!(window.jspdf && window.jspdf.jsPDF)) { toast('PDF indisponible (hors ligne ?)'); return; }
+    var key = b.getAttribute('data-dlpdf');
+    var svg = logoSVG(VARIANTS[key]);
+    var ready = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+    ready.then(function(){ return svgToPng(svg, BG[key], 4); }).then(function(r){
+      var f = 0.30;                      // px -> mm (taille physique lisible)
+      var lw = r.w*f, lh = r.h*f, pad = 6;
+      var pw = lw + pad*2, ph = lh + pad*2;
+      var doc = new window.jspdf.jsPDF({ unit:'mm', format:[pw, ph] });
+      doc.setFillColor(BG[key] || '#ffffff'); doc.rect(0,0,pw,ph,'F'); // fond de page = fond de la variante
+      doc.addImage(r.url, 'PNG', pad, pad, lw, lh);
+      doc.save('parc-pilot-logo-' + key + '.pdf');
+      toast('Logo téléchargé (PDF)');
+    }).catch(function(){ toast('Erreur PDF'); });
   });
 });
 
