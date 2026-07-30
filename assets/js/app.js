@@ -1346,6 +1346,7 @@ FP.applyNavGroups = () => {
 // Sous-onglets de l'onglet privé « JIS » (tous des pages autonomes → nouvel onglet).
 FP.JIS_PAGES = [
   { file: 'prospects.html',    label: 'Prospects',             icon: 'user-plus' },
+  { file: 'kit-commercial.html', label: 'Kit commercial',      icon: 'target' },
   { file: 'brochure.html',     label: 'Brochure',              icon: 'sparkles' },
   { file: 'prix.html',         label: 'Tarifs',                icon: 'badge-euro' },
   { file: 'carte-visite.html', label: 'Carte de visite',       icon: 'contact' },
