@@ -139,6 +139,16 @@ fleet-app/
     `supabase/COMPTES-CEO-ADMIN-GESTIONNAIRE.md` ; SQL : `supabase/roles-ceo-admin-gestionnaire.sql`.
   - ⚠️ **RÈGLE** : tout nouveau bouton/écran qui touche à la **config société** doit être gardé par
     `FP.canManageSociete()`, et toute gestion de **comptes** par `FP.canManageUsers()` (+ portée serveur).
+  - ✅ **Durcissement appliqué (2026-07-30)** : l'ÉCRITURE de `app_settings` est réservée CEO/Admin côté
+    base (policies `app_settings_read`/`app_settings_write`, `fp_role() <> 'gestionnaire'` — cf.
+    `supabase/durcissement-config-gestionnaire.sql`). Un gestionnaire lit mais ne modifie plus la config.
+  - ⚠️ **ESPACE SALARIÉ (chauffeur) — SÉCURITÉ SERVEUR À CONSTRUIRE AVANT ACTIVATION** (audit sécu, finding
+    ÉLEVÉ) : aujourd'hui le rôle `chauffeur` et sa/ses plaque(s) vivent dans `user_metadata` (**falsifiable**)
+    et les policies RLS isolent seulement par **société** → un compte chauffeur aurait accès (lecture ET
+    écriture) à TOUTES les données de sa société (dont PII : permis, adresses). **DORMANT tant qu'aucun compte
+    chauffeur n'existe.** Avant d'activer l'espace salarié : (1) stocker `role='chauffeur'` + plaques dans
+    `profiles` (source de confiance, écrite par `manage-users` seulement) + étendre `fp_role()` ; (2) policies
+    RLS **lecture seule scopées à la/les plaque(s)** du salarié. **NE PAS créer de compte salarié avant.**
 
 ## Conventions importantes
 
