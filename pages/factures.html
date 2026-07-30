@@ -1747,6 +1747,7 @@
 
     // ===== Vue « Drive » (dossiers par véhicule → tuiles) + expiration & rappel (#22) =====
     let driveFolder = null;   // vehiculeId du dossier ouvert
+    let driveYear = null;     // année ouverte à l'intérieur d'un dossier véhicule
     let docView = 'drive';    // 'drive' | 'list'
     const getExp = id => { try { return ((FP.settings.get().docExpire) || {})[id] || ''; } catch (e) { return ''; } };
     const setExp = (id, val) => { try { const s = FP.settings.get(); s.docExpire = s.docExpire || {}; if (val) s.docExpire[id] = val; else delete s.docExpire[id]; FP.settings.save(s); } catch (e) {} };
@@ -1761,52 +1762,104 @@
     const docUrl = d => d.url || (d.driveId ? ('https://drive.google.com/file/d/' + d.driveId + '/view') : '');
     const isImgU = u => /\.(jpe?g|png|gif|webp|heic|bmp)(\?|$)/i.test(u || '');
 
+    // Dossiers = 3 niveaux : véhicules → années (2025, 2026…) → documents + factures de l'année.
+    // Documents (table documents, clé vehiculeId) ET factures importées (table factures, clé
+    // vehiculeImmat) sont regroupés dans le MÊME dossier véhicule, puis rangés par année.
+    const GRID = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px';
+    const yearOf = s => { const m = String(s == null ? '' : s).match(/(20\d{2})/); return m ? m[1] : ''; };
+    const docYear = d => yearOf(d.date) || yearOf(ts(d)) || 'Sans date';
+    const factYear = f => yearOf(f.date) || 'Sans date';
+    const factUrl = f => f.url || (f.fileId ? ('https://drive.google.com/file/d/' + f.fileId + '/view') : '');
+    // Regroupe { vehiculeId: { docs:[], facts:[] } }
+    function driveGroups() {
+      const vehs = window.FP_DATA.vehicules || [];
+      const vidByImmat = {}; vehs.forEach(v => { if (v.immat) vidByImmat[String(v.immat).toUpperCase()] = v.id; });
+      const byVeh = {};
+      (docs || []).forEach(d => { const vid = d.vehiculeId; if (!vid) return; (byVeh[vid] = byVeh[vid] || { docs: [], facts: [] }).docs.push(d); });
+      ((window.FP_DATA.factures) || []).forEach(f => { const vid = vidByImmat[String(f.vehiculeImmat || '').toUpperCase()]; if (!vid) return; (byVeh[vid] = byVeh[vid] || { docs: [], facts: [] }).facts.push(f); });
+      return byVeh;
+    }
+    function docTile(d, DL) {
+      const u = docUrl(d);
+      const prev = u ? (isImgU(u) ? `<img src="${escapeHtml(u)}" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : `<i data-lucide="file-text" style="width:30px;height:30px;color:#64748b"></i>`) : `<i data-lucide="file" style="width:30px;height:30px;color:#cbd5e1"></i>`;
+      return `<div style="position:relative;border:1px solid var(--fp-border);border-radius:12px;overflow:hidden;background:#fff">
+        <a href="${escapeHtml(u) || '#'}" ${u ? 'target="_blank" rel="noopener"' : ''} style="display:flex;align-items:center;justify-content:center;height:100px;background:#f1f5f9">${prev}</a>
+        <button type="button" data-doc-del="${escapeHtml(d.id)}" title="Supprimer" style="position:absolute;top:4px;right:4px;background:rgba(15,30,61,.72);color:#fff;border:none;border-radius:6px;width:22px;height:22px;cursor:pointer">✕</button>
+        <div style="padding:8px">
+          <div style="font-size:11px;font-weight:700;color:var(--fp-accent);text-transform:uppercase">${escapeHtml(DL[d.type] || d.type || 'Document')}</div>
+          <input class="doc-rename" data-id="${escapeHtml(d.id)}" value="${escapeHtml(d.label || '')}" placeholder="Renommer…" title="Cliquer pour renommer" style="width:100%;font-size:12px;color:#334155;border:1px solid transparent;border-radius:6px;padding:2px 5px;background:transparent">
+          <select class="doc-type-tile" data-id="${escapeHtml(d.id)}" title="Type de document" style="width:100%;margin-top:4px;font-size:11px;color:#64748b;border:1px solid var(--fp-border);border-radius:6px;padding:2px 4px;background:#fff">${Object.keys(DL).map(t => `<option value="${t}" ${d.type === t ? 'selected' : ''}>${escapeHtml(DL[t])}</option>`).join('')}</select>
+          <div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <label style="font-size:10px;color:#94a3b8">Expire</label>
+            <input type="date" class="doc-exp" data-id="${escapeHtml(d.id)}" value="${escapeHtml(getExp(d.id))}" style="border:1px solid var(--fp-border);border-radius:6px;padding:1px 4px;font-size:11px">
+          </div>
+          <div style="margin-top:3px">${expBadge(d.id)}</div>
+        </div>
+      </div>`;
+    }
+    // Facture importée : tuile en LECTURE SEULE (la gestion se fait dans l'onglet Factures).
+    function factTile(f) {
+      const u = factUrl(f);
+      const label = [f.fournisseur || 'Facture', (f.montantTTC != null ? FP.euroPrecis(f.montantTTC) : '')].filter(Boolean).join(' · ');
+      const sub = [f.date ? FP.date(f.date) : '', f.numeroFacture ? ('n° ' + f.numeroFacture) : ''].filter(Boolean).join(' · ');
+      return `<div style="position:relative;border:1px solid var(--fp-border);border-radius:12px;overflow:hidden;background:#fff">
+        <a href="${escapeHtml(u) || '#'}" ${u ? 'target="_blank" rel="noopener"' : ''} style="display:flex;align-items:center;justify-content:center;height:100px;background:#ecfeff"><i data-lucide="receipt" style="width:30px;height:30px;color:#0e7490"></i></a>
+        <div style="padding:8px">
+          <div style="font-size:11px;font-weight:700;color:#0e7490;text-transform:uppercase">Facture</div>
+          <div style="font-size:12px;color:#334155;font-weight:600;line-height:1.25">${escapeHtml(label)}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px">${escapeHtml(sub)}</div>
+        </div>
+      </div>`;
+    }
     function renderDrive() {
       const box = $('doc-drive'); if (!box || !docs) return;
       const DL = docLabels();
       const q = ($('doc-search').value || '').toLowerCase();
+      const byVeh = driveGroups();
       if (!driveFolder) {
-        const byVeh = {};
-        docs.forEach(d => { (byVeh[d.vehiculeId] = byVeh[d.vehiculeId] || []).push(d); });
-        let entries = Object.entries(byVeh).map(([vid, arr]) => ({ vid, arr, veh: vehById(vid), immat: vehImmat(vid) }));
+        // Niveau 1 : un dossier par véhicule (documents + factures)
+        let entries = Object.entries(byVeh).map(([vid, o]) => ({ vid, o, veh: vehById(vid), immat: vehImmat(vid), n: o.docs.length + o.facts.length }));
         if (q) entries = entries.filter(e => (e.immat + ' ' + (e.veh ? (e.veh.marque + ' ' + e.veh.modele) : '')).toLowerCase().includes(q));
         entries.sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
-        if (!entries.length) { box.innerHTML = '<div class="card p-8 text-center text-slate-400 text-sm">Aucun document. Utilise « Importer un document » pour commencer.</div>'; return; }
-        box.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px">' + entries.map(e => {
-          const soon = e.arr.some(d => { const dd = getExp(d.id); return dd && (new Date(dd) - new Date()) / 86400000 < 30 && new Date(dd) >= new Date(); });
-          const expired = e.arr.some(d => { const dd = getExp(d.id); return dd && new Date(dd) < new Date(); });
+        if (!entries.length) { box.innerHTML = '<div class="card p-8 text-center text-slate-400 text-sm">Aucun document. Utilise « Importer un document » ou « Importer une facture » pour commencer.</div>'; return; }
+        box.innerHTML = `<div style="${GRID}">` + entries.map(e => {
+          const soon = e.o.docs.some(d => { const dd = getExp(d.id); return dd && (new Date(dd) - new Date()) / 86400000 < 30 && new Date(dd) >= new Date(); });
+          const expired = e.o.docs.some(d => { const dd = getExp(d.id); return dd && new Date(dd) < new Date(); });
           const dot = expired ? '#DC2626' : (soon ? '#F59E0B' : '');
           return `<button type="button" data-folder="${escapeHtml(e.vid)}" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:16px 10px;border:1px solid var(--fp-border);border-radius:12px;background:#fff;cursor:pointer">
             ${dot ? `<span style="position:absolute;top:8px;right:8px;width:9px;height:9px;border-radius:50%;background:${dot}"></span>` : ''}
             <i data-lucide="folder" style="width:40px;height:40px;color:#F59E0B"></i>
             <div style="font-family:monospace;font-weight:800;color:#0f1e3d">${escapeHtml(e.immat)}</div>
             <div style="font-size:11px;color:#64748b">${e.veh ? escapeHtml(e.veh.marque + ' ' + e.veh.modele) : '—'}</div>
-            <div style="font-size:11px;color:#94a3b8">${e.arr.length} doc${e.arr.length > 1 ? 's' : ''}</div>
+            <div style="font-size:11px;color:#94a3b8">${e.n} doc${e.n > 1 ? 's' : ''}</div>
           </button>`;
         }).join('') + '</div>';
-      } else {
+      } else if (!driveYear) {
+        // Niveau 2 : sous-dossiers par ANNÉE (créés au fil des documents/factures)
+        const o = byVeh[driveFolder] || { docs: [], facts: [] };
         const veh = vehById(driveFolder), immat = vehImmat(driveFolder);
-        const arr = docs.filter(d => d.vehiculeId === driveFolder).sort((a, b) => ts(b).localeCompare(ts(a)));
-        const tiles = arr.map(d => {
-          const u = docUrl(d);
-          const prev = u ? (isImgU(u) ? `<img src="${escapeHtml(u)}" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : `<i data-lucide="file-text" style="width:30px;height:30px;color:#64748b"></i>`) : `<i data-lucide="file" style="width:30px;height:30px;color:#cbd5e1"></i>`;
-          return `<div style="position:relative;border:1px solid var(--fp-border);border-radius:12px;overflow:hidden;background:#fff">
-            <a href="${escapeHtml(u) || '#'}" ${u ? 'target="_blank" rel="noopener"' : ''} style="display:flex;align-items:center;justify-content:center;height:100px;background:#f1f5f9">${prev}</a>
-            <button type="button" data-doc-del="${escapeHtml(d.id)}" title="Supprimer" style="position:absolute;top:4px;right:4px;background:rgba(15,30,61,.72);color:#fff;border:none;border-radius:6px;width:22px;height:22px;cursor:pointer">✕</button>
-            <div style="padding:8px">
-              <div style="font-size:11px;font-weight:700;color:var(--fp-accent);text-transform:uppercase">${escapeHtml(DL[d.type] || d.type || 'Document')}</div>
-              <input class="doc-rename" data-id="${escapeHtml(d.id)}" value="${escapeHtml(d.label || '')}" placeholder="Renommer…" title="Cliquer pour renommer" style="width:100%;font-size:12px;color:#334155;border:1px solid transparent;border-radius:6px;padding:2px 5px;background:transparent">
-              <select class="doc-type-tile" data-id="${escapeHtml(d.id)}" title="Type de document" style="width:100%;margin-top:4px;font-size:11px;color:#64748b;border:1px solid var(--fp-border);border-radius:6px;padding:2px 4px;background:#fff">${Object.keys(DL).map(t => `<option value="${t}" ${d.type === t ? 'selected' : ''}>${escapeHtml(DL[t])}</option>`).join('')}</select>
-              <div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <label style="font-size:10px;color:#94a3b8">Expire</label>
-                <input type="date" class="doc-exp" data-id="${escapeHtml(d.id)}" value="${escapeHtml(getExp(d.id))}" style="border:1px solid var(--fp-border);border-radius:6px;padding:1px 4px;font-size:11px">
-              </div>
-              <div style="margin-top:3px">${expBadge(d.id)}</div>
-            </div>
-          </div>`;
-        }).join('');
-        box.innerHTML = `<div style="margin-bottom:12px"><button type="button" id="doc-drive-back" class="btn btn-outline text-sm"><i data-lucide="arrow-left" class="w-4 h-4"></i> Tous les dossiers</button> <span style="margin-left:8px;font-weight:700;font-family:monospace">${escapeHtml(immat)}</span> <span style="color:#64748b">${veh ? escapeHtml('· ' + veh.marque + ' ' + veh.modele) : ''}</span></div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px">${tiles || '<div class="text-sm text-slate-400">Aucun document.</div>'}</div>`;
+        const byYear = {};
+        o.docs.forEach(d => { const y = docYear(d); byYear[y] = (byYear[y] || 0) + 1; });
+        o.facts.forEach(f => { const y = factYear(f); byYear[y] = (byYear[y] || 0) + 1; });
+        const years = Object.keys(byYear).sort((a, b) => ((a === 'Sans date') - (b === 'Sans date')) || b.localeCompare(a));
+        const head = `<div style="margin-bottom:12px"><button type="button" id="doc-drive-back" class="btn btn-outline text-sm"><i data-lucide="arrow-left" class="w-4 h-4"></i> Tous les dossiers</button> <span style="margin-left:8px;font-weight:700;font-family:monospace">${escapeHtml(immat)}</span> <span style="color:#64748b">${veh ? escapeHtml('· ' + veh.marque + ' ' + veh.modele) : ''}</span></div>`;
+        box.innerHTML = head + (years.length ? `<div style="${GRID}">` + years.map(y => {
+          const n = byYear[y];
+          return `<button type="button" data-year="${escapeHtml(y)}" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:16px 10px;border:1px solid var(--fp-border);border-radius:12px;background:#fff;cursor:pointer">
+            <i data-lucide="folder" style="width:40px;height:40px;color:#F59E0B"></i>
+            <div style="font-weight:800;color:#0f1e3d">${escapeHtml(y)}</div>
+            <div style="font-size:11px;color:#94a3b8">${n} doc${n > 1 ? 's' : ''}</div>
+          </button>`;
+        }).join('') + '</div>' : '<div class="text-sm text-slate-400">Aucun document.</div>');
+      } else {
+        // Niveau 3 : documents + factures de l'année choisie
+        const o = byVeh[driveFolder] || { docs: [], facts: [] };
+        const veh = vehById(driveFolder), immat = vehImmat(driveFolder);
+        const dY = o.docs.filter(d => docYear(d) === driveYear).sort((a, b) => ts(b).localeCompare(ts(a)));
+        const fY = o.facts.filter(f => factYear(f) === driveYear).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+        const tiles = dY.map(d => docTile(d, DL)).join('') + fY.map(factTile).join('');
+        const head = `<div style="margin-bottom:12px"><button type="button" id="doc-drive-back" class="btn btn-outline text-sm"><i data-lucide="arrow-left" class="w-4 h-4"></i> ${escapeHtml(immat)}</button> <span style="margin-left:8px;font-weight:800">${escapeHtml(driveYear)}</span> <span style="color:#64748b">${veh ? escapeHtml('· ' + veh.marque + ' ' + veh.modele) : ''}</span></div>`;
+        box.innerHTML = head + `<div style="${GRID}">${tiles || '<div class="text-sm text-slate-400">Aucun document.</div>'}</div>`;
       }
       if (window.lucide) lucide.createIcons();
     }
@@ -1820,8 +1873,9 @@
       renderDocuments();
     });
     $('doc-drive').addEventListener('click', e => {
-      const f = e.target.closest('[data-folder]'); if (f) { driveFolder = f.dataset.folder; renderDrive(); return; }
-      if (e.target.closest('#doc-drive-back')) { driveFolder = null; renderDrive(); return; }
+      const f = e.target.closest('[data-folder]'); if (f) { driveFolder = f.dataset.folder; driveYear = null; renderDrive(); return; }
+      const y = e.target.closest('[data-year]'); if (y) { driveYear = y.dataset.year; renderDrive(); return; }
+      if (e.target.closest('#doc-drive-back')) { if (driveYear) driveYear = null; else driveFolder = null; renderDrive(); return; }
       const del = e.target.closest('[data-doc-del]'); if (del && confirm('Supprimer définitivement ce document ?')) { const id = del.dataset.docDel; if (FP.persist) FP.persist.delete('documents', id); docs = docs.filter(x => x.id !== id); renderDrive(); }
     });
     $('doc-drive').addEventListener('change', e => {
