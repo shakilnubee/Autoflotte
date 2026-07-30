@@ -395,6 +395,12 @@ FP.anneeAmende = (a) => { if (!a) return ''; const y = a.annee; if (y != null &&
 // pas une charge d'exploitation). À utiliser PARTOUT (dashboard, écran mural, rapport direction)
 // pour que « Coût du mois » affiche le même chiffre. `exclureType` réutilisable seul.
 FP.coutFactureExploit = (f) => { const t = String((f && f.type) || '').toLowerCase(); return t !== 'leasing' && t !== 'sinistre' && t !== 'achat' && t !== 'cession'; };
+// Détection carburant / péages — UNE seule règle partagée (dashboard, factures, statistiques) :
+// par TYPE (carburant/peage/ulys) OU par FOURNISSEUR (Ulys, TotalEnergies). Avant, un carburant
+// sans type mais avec le bon fournisseur était compté à un endroit et pas à l'autre.
+FP.estUlys = (f) => { const n = s => String(s || '').toLowerCase(); return n(f && f.type) === 'ulys' || /\bulys\b/.test(n(f && f.fournisseur)); };
+FP.estTotalFleet = (f) => { if (FP.estUlys(f)) return false; const n = s => String(s || '').toLowerCase(); const t = n(f && f.type); if (t === 'carburant' || t === 'peage') return true; return /total\s*energies|totalenergies/.test(n(f && f.fournisseur)); };
+FP.estCarburantPeage = (f) => FP.estUlys(f) || FP.estTotalFleet(f);
 FP.coutMois = (data, ym) => (((data && data.factures) || []).filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0));
 
 // Masses en ORDRE DE MARCHE (champ G de la carte grise, en kg) — c'est le champ qu'utilise
