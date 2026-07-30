@@ -7,7 +7,7 @@
 - **Propriétaire** : Shakil Nubeebaccus
 - **Stack** : HTML/CSS/JS statique + Tailwind précompilé en local (`assets/css/tailwind.css`, voir Conventions)
 - **Backend** : Supabase (PostgreSQL + Auth)
-- **Hosting** : ✅ **GitHub Pages** (auto-déploiement depuis la branche `main`) → **https://shakilnubee.github.io/Autoflotte/**
+- **Hosting** : ✅ **GitHub Pages** (auto-déploiement depuis la branche `main`) → **domaine principal : https://parc-pilot.fr/** (GoDaddy, HTTPS forcé ; `www` redirige vers l'apex). L'ancienne URL **https://shakilnubee.github.io/Autoflotte/** redirige désormais vers `parc-pilot.fr`. ⚠️ Le fichier **`CNAME`** (racine du repo = `parc-pilot.fr`) NE DOIT PAS être supprimé, sinon le domaine se débranche. Les liens publics en dur (QR véhicules `carte.html`, e-mails d'amende `avis.html`, carte de visite `brochure.html`) pointent sur `parc-pilot.fr`.
   - ⚠️ Netlify (auto-flotte.netlify.app) = EN PAUSE (quota dépassé) — ne plus utiliser. Vercel (autoflotte.vercel.app) = version périmée — ne plus utiliser.
   - **Règle** : chaque modif de code DOIT être mergée + poussée sur `main` (GitHub Pages publie tout seul en ~1-2 min). Toujours VÉRIFIER après push que le site live reflète bien le changement.
   - Les **données** (Supabase) sont en temps réel sur tous les postes, sans déploiement.
