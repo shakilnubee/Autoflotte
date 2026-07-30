@@ -1686,13 +1686,26 @@ FP.PRESTATAIRE_DEFAUT_PXP = [
 ];
 FP.getPrestataires = () => {
   if (!FP.settings) return [];
-  const obj = FP.settings.get();
-  // undefined = jamais initialisé pour cette société → semis unique (PXP = garage historique ; autres = vide).
+  let obj = FP.settings.get();
+  // 1) Semis unique si jamais initialisé (PXP = garage historique ; autres sociétés = vide).
   if (!Array.isArray(obj.prestataires)) {
     const estPXP = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP');
-    const seed = estPXP ? FP.PRESTATAIRE_DEFAUT_PXP.map(d => ({ ...d })) : [];
-    obj.prestataires = seed; FP.settings.save(obj);
-    return seed.map(d => ({ ...d }));
+    obj.prestataires = estPXP ? FP.PRESTATAIRE_DEFAUT_PXP.map(d => ({ ...d })) : [];
+    FP.settings.save(obj); obj = FP.settings.get();
+  }
+  // 2) Migration de l'ANCIEN annuaire garages (page Sinistres, settings.garages) vers le
+  //    référentiel UNIQUE prestataires → une seule liste partagée Entretiens + Sinistres.
+  if (Array.isArray(obj.garages) && obj.garages.length) {
+    const list = obj.prestataires.slice();
+    const key = s => String(s || '').trim().toLowerCase();
+    const seen = new Set(list.map(p => key(p.nom)));
+    obj.garages.forEach(g => {
+      if (!g || !g.nom || seen.has(key(g.nom))) return;
+      seen.add(key(g.nom));
+      list.push({ id: 'g' + Date.now().toString(36) + Math.floor(Math.random() * 1000), nom: g.nom, ville: g.ville || '', tel: g.tel || '', rdv: g.rdv || '', adresse: '', email: '' });
+    });
+    obj.prestataires = list; delete obj.garages;
+    FP.settings.save(obj); obj = FP.settings.get();
   }
   return obj.prestataires.map(d => ({ ...d }));
 };
