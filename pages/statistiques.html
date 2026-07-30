@@ -627,7 +627,14 @@
     const _assurRepli = (!_hasPerVehPrime && _primeFlotte > 0) ? (_primeFlotte / _nbOwned) : 0;
     tcoData = data.vehicules.map(v => {
       const fv = fact.filter(f => f.vehiculeImmat === v.immat);
-      const factTotal = fv.filter(f => !_EXC_TCO.has((f.type || '').toLowerCase())).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+      // Leasing : le loyer fait foi via l'OFFRE (Contrats), les factures 'leasing' ne sont qu'une preuve.
+      // Si l'offre a un loyer connu → on EXCLUT ses factures 'leasing' (sinon double compte) et on ajoute
+      // le coût de l'offre : cumulé (leasingTotalVerse) en « toutes années », loyer courant×12 sur une année.
+      const _leasC = FP.leasingContrat ? FP.leasingContrat(v.immat) : null;
+      const _loyerMois = (_leasC && FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(_leasC) : null;
+      const _hasOffer = _loyerMois != null;
+      const _leasing = _hasOffer ? ((annee === 'all') ? (FP.leasingTotalVerse(_leasC) || 0) : (_loyerMois * 12)) : 0;
+      const factTotal = fv.filter(f => { const t = (f.type || '').toLowerCase(); if (_EXC_TCO.has(t)) return false; if (t === 'leasing' && _hasOffer) return false; return true; }).reduce((s, f) => s + (+f.montantTTC || 0), 0) + _leasing;
       const pr = findPrime(v.immat); const assur = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : (FP.estVendu(v) ? 0 : _assurRepli);
       const tvsD = FP.tvsDetail(v); const tvs = (tvsD.applicable && tvsD.total != null) ? tvsD.total : 0;
       // Amendes du conducteur (par PRÉNOM), comptées UNE seule fois même s'il a plusieurs véhicules,
@@ -687,7 +694,7 @@
     { key: 'immat',     label: 'Immat.',       defaultWidth: 110, cellCls: 'font-mono font-semibold', render: t => t.immat ? FP.lienVehicule(t.immat) : '—' },
     { key: 'modele',    label: 'Modèle',       defaultWidth: 190, render: t => FP.esc(t.modele || '—') },
     { key: 'km',        label: 'Km',           defaultWidth: 100, render: t => FP.num(t.km) + ' km' },
-    { key: 'fact',      label: 'Factures',     defaultWidth: 120, render: t => t.fact ? FP.euro(t.fact) : '<span class="text-slate-400">—</span>' },
+    { key: 'fact',      label: 'Factures & leasing', defaultWidth: 140, render: t => t.fact ? FP.euro(t.fact) : '<span class="text-slate-400">—</span>' },
     { key: 'assur',     label: 'Assurance/an', defaultWidth: 120, render: t => t.assur ? FP.euro(t.assur) : '<span class="text-slate-400">—</span>' },
     { key: 'tvs',       label: 'TVS/an',       defaultWidth: 110, render: t => t.tvs ? FP.euro(t.tvs) : '<span class="text-slate-400">—</span>' },
     { key: 'amendes',   label: 'Amendes',      defaultWidth: 110, render: t => t.amendes ? FP.euro(t.amendes) : '<span class="text-slate-400">—</span>' },
@@ -739,7 +746,7 @@
       { label: 'Immatriculation', value: t => t.immat || '' },
       { label: 'Modèle',          value: t => t.modele || '' },
       { label: 'Km',              value: t => { const n = Number(t.km); return isNaN(n) ? null : n; }, number: true, noTotal: true },
-      { label: 'Factures TTC (€)',value: t => Number(t.fact) || 0, number: true },
+      { label: 'Factures & leasing (€)',value: t => Number(t.fact) || 0, number: true },
       { label: 'Assurance/an (€)',value: t => Number(t.assur) || 0, number: true },
       { label: 'TVS/an (€)',      value: t => Number(t.tvs) || 0, number: true },
       { label: 'Amendes (€)',     value: t => Number(t.amendes) || 0, number: true },
