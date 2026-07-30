@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260730a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260730b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260730a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260730b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260730a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260730b">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -446,12 +446,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260730a"></script>
-<script src="../assets/js/supabase-client.js?v=20260730a"></script>
-<script src="../assets/js/data.js?v=20260730a"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260730a"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260730a"></script>
-<script src="../assets/js/app.js?v=20260730a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260730b"></script>
+<script src="../assets/js/supabase-client.js?v=20260730b"></script>
+<script src="../assets/js/data.js?v=20260730b"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260730b"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260730b"></script>
+<script src="../assets/js/app.js?v=20260730b"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1197,11 +1197,12 @@
 
     $('drawer-body').innerHTML = `
       <div style="text-align:center; padding:.2rem 0 .5rem">
-        <div class="kpi-label" style="color:var(--fp-faint)">${a.majoree && a.montantMajore ? 'Montant majoré (dû)' : 'Montant à payer'}</div>
-        <div style="font-style:italic; font-weight:900; font-size:clamp(2.3rem,8vw,3rem); letter-spacing:-1.5px; line-height:1; margin-top:.3rem; color:${a.majoree && a.montantMajore ? '#B91C1C' : 'var(--fp-text)'}">
-          <span id="am-montant-val" class="cursor-pointer hover:underline" title="Cliquer pour modifier le montant">${montantDu(a) ? FP.euroPrecis(montantDu(a)) : '— €'}</span>
+        <div class="kpi-label" style="color:var(--fp-faint)">${a.statut === 'payée' ? 'Montant payé' : (a.majoree && a.montantMajore ? 'Montant majoré (dû)' : 'Montant à payer')}</div>
+        <div style="font-style:italic; font-weight:900; font-size:clamp(2.3rem,8vw,3rem); letter-spacing:-1.5px; line-height:1; margin-top:.3rem; color:${a.statut === 'payée' ? '#15803D' : (a.majoree && a.montantMajore ? '#B91C1C' : 'var(--fp-text)')}">
+          <span id="am-montant-val" class="cursor-pointer hover:underline" title="${a.statut === 'payée' ? 'Cliquer pour ajuster le montant réellement payé' : 'Cliquer pour modifier le montant'}">${montantDu(a) ? FP.euroPrecis(montantDu(a)) : '— €'}</span>
         </div>
         ${a.majoree && a.montantMajore ? `<div class="text-xs text-slate-400 mt-1">Initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}${a.dateMajoration ? ' · majorée le ' + FP.date(a.dateMajoration) : ''}</div>` : ''}
+        ${a.statut === 'payée' ? (() => { const bareme = (a.majoree && a.montantMajore != null && a.montantMajore !== '') ? Number(a.montantMajore) : (Number(a.montant) || 0); const ecart = FP.getAmendeMontantPaye ? FP.getAmendeMontantPaye(a.id) : null; return `<div class="text-xs text-slate-400 mt-1">Montant réellement payé · cliquez pour ajuster${(ecart != null && ecart !== bareme) ? ` (barème : ${FP.euroPrecis(bareme)})` : ''}</div>`; })() : ''}
         <div class="flex justify-center items-center gap-2 mt-3 flex-wrap">
           ${statutBadge(a.statut)}
           ${motifPill(a.motif)}
@@ -1342,7 +1343,7 @@
     const md = $('mail-designation'); if (md) md.onclick = mailDesignation;
     const tv = $('am-tel-val'); if (tv) tv.onclick = () => editAmField(tv, 'numeroTelepaiement', 'text');
     const cv = $('am-cle-val'); if (cv) cv.onclick = () => editAmField(cv, 'cle', 'text');
-    const mtv = $('am-montant-val'); if (mtv) mtv.onclick = () => editAmField(mtv, 'montant', 'number');
+    const mtv = $('am-montant-val'); if (mtv) mtv.onclick = () => (a.statut === 'payée') ? editPaidAmount(a) : editAmField(mtv, 'montant', 'number');
     const ptv = $('am-points-val'); if (ptv) ptv.onclick = () => editAmField(ptv, 'points', 'number');
     // Conducteur : choisir dans la liste existante OU créer un nouveau en tapant le nom
     // (la plateforme demande alors ses infos). Règle projet — FP.conducteurPicker.
@@ -1437,10 +1438,29 @@
     a.statut = 'à payer'; a.archived = false;
     const id = a.id;
     setJustifWatch(id, false);
+    if (FP.setAmendeMontantPaye) FP.setAmendeMontantPaye(id, null); // l'amende n'est plus payée → on efface le montant payé saisi
     closeDrawer();
     renderKPIs(); renderTable(); renderCharts();
     FP.persist.update('amendes', id, { statut: 'à payer', archived: false });
     if (FP.toast) FP.toast('↺ Amende remise en « à payer »', { actionLabel: 'Annuler', onAction: () => { state.currentId = id; markPaid(); } });
+  }
+  // Ajuster le montant RÉELLEMENT payé d'une amende payée (remise, arrangement, majoration…).
+  // Stocké dans les réglages par société (pas en base) et pris en compte partout via FP.montantDu.
+  function editPaidAmount(a) {
+    if (!a) return;
+    const cur = FP.getAmendeMontantPaye ? FP.getAmendeMontantPaye(a.id) : null;
+    const bareme = montantDu(a);
+    const defVal = (cur != null ? cur : bareme);
+    const raw = prompt('Montant réellement payé (€) :\n\n(Laisse vide pour revenir au montant du barème.)', defVal ? String(defVal).replace('.', ',') : '');
+    if (raw === null) return; // annulé
+    const clean = String(raw).trim().replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+    const val = clean === '' ? null : parseFloat(clean);
+    if (clean !== '' && (isNaN(val) || val < 0)) { alert('Montant invalide.'); return; }
+    FP.history.commit();
+    FP.setAmendeMontantPaye(a.id, val);
+    renderKPIs(); renderTable(); renderCharts();
+    openDrawer(a.id);
+    if (FP.toast) FP.toast(val == null ? '↺ Montant remis au barème' : '💶 Montant payé : ' + FP.euroPrecis(val));
   }
   // Justificatif de paiement : joindre un fichier => payée + archivée
   async function attachJustif(file) {
@@ -1728,7 +1748,8 @@
   // ---------- Majoration : rattacher une majoration à l'amende d'origine ----------
   // (escAmende est défini tout en haut du script — utilisé dès l'init.)
   // Montant réellement dû : si l'amende a été majorée, c'est le montant majoré
-  function montantDu(a) { return (a && a.majoree && a.montantMajore) ? Number(a.montantMajore) : (Number(a && a.montant) || 0); }
+  // Source UNIQUE : on délègue à FP.montantDu (majoré si majorée, montant réellement payé si saisi, sinon montant).
+  function montantDu(a) { return FP.montantDu ? FP.montantDu(a) : ((a && a.majoree && a.montantMajore) ? Number(a.montantMajore) : (Number(a && a.montant) || 0)); }
   function amendeLabel(a) {
     return `${a.prenom || '?'} · ${FP.date(a.date)} · ${a.motif || '—'} · ${a.montant ? FP.euroPrecis(a.montant) : '—'}${a.numeroAvis ? ' · n°' + a.numeroAvis : ''}`;
   }
@@ -2444,7 +2465,7 @@
   function bulkStatut(st) {
     const ids = [...state.selectedIds]; if (!ids.length) return;
     FP.history.commit();
-    ids.forEach(id => { const a = data.amendes.find(x => x.id === id); if (!a) return; a.statut = st; if (st === 'à payer') a.archived = false; FP.persist.update('amendes', id, st === 'à payer' ? { statut: 'à payer', archived: false } : { statut: 'payée' }); });
+    ids.forEach(id => { const a = data.amendes.find(x => x.id === id); if (!a) return; a.statut = st; if (st === 'à payer') { a.archived = false; if (FP.setAmendeMontantPaye) FP.setAmendeMontantPaye(id, null); } FP.persist.update('amendes', id, st === 'à payer' ? { statut: 'à payer', archived: false } : { statut: 'payée' }); });
     const n = ids.length; state.selectedIds.clear();
     renderKPIs(); renderTable(); renderCharts();
     if (FP.toast) FP.toast(`✓ ${n} amende(s) → ${st === 'payée' ? 'payées' : 'à payer'}`);

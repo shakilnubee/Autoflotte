@@ -358,7 +358,35 @@ FP.horsFlotte = (v) => ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 
 // ⚠️ HELPER CANONIQUE — montant RÉELLEMENT DÛ d'une amende : le majoré si elle est majorée,
 // sinon le montant initial. À UTILISER PARTOUT (sommes, podiums, KPI, alertes, exports) pour
 // que tous les écrans affichent le même montant (règle « une seule source de vérité », CLAUDE.md).
-FP.montantDu = (a) => (a && a.majoree && a.montantMajore != null && a.montantMajore !== '') ? Number(a.montantMajore) : (Number(a && a.montant) || 0);
+// Montant qui fait foi pour TOUS les totaux/KPI (source unique — cf. règle « une seule source de vérité ») :
+//  1) si l'amende est PAYÉE et qu'un montant réellement payé a été saisi (remise/arrangement) → ce montant ;
+//  2) sinon, le majoré si l'amende est majorée ;
+//  3) sinon, le montant normal (minoré/forfaitaire).
+// Le montant payé est stocké dans les réglages PAR SOCIÉTÉ (app_settings.amendeMontantPaye), pas en base
+// (aucune colonne DB à créer). On ne lit les réglages que pour les amendes payées (pas dans toutes les boucles).
+FP.montantDu = (a) => {
+  if (!a) return 0;
+  if (a.statut === 'payée' && a.id != null && FP.settings) {
+    try {
+      const ov = FP.settings.get().amendeMontantPaye;
+      if (ov && ov[a.id] != null && ov[a.id] !== '') return Number(ov[a.id]) || 0;
+    } catch (e) {}
+  }
+  return (a.majoree && a.montantMajore != null && a.montantMajore !== '') ? Number(a.montantMajore) : (Number(a.montant) || 0);
+};
+// Enregistre (ou efface si val vide) le montant réellement payé d'une amende — réglages par société, partagé entre postes.
+FP.setAmendeMontantPaye = (id, val) => {
+  if (!FP.settings || id == null) return;
+  const s = FP.settings.get();
+  const map = (s.amendeMontantPaye && typeof s.amendeMontantPaye === 'object') ? s.amendeMontantPaye : {};
+  if (val == null || val === '' || isNaN(Number(val))) delete map[id];
+  else map[id] = Number(val);
+  s.amendeMontantPaye = map;
+  FP.settings.save(s);
+};
+FP.getAmendeMontantPaye = (id) => {
+  try { const m = FP.settings.get().amendeMontantPaye; return (m && m[id] != null && m[id] !== '') ? Number(m[id]) : null; } catch (e) { return null; }
+};
 // ⚠️ HELPER CANONIQUE — année d'une amende (peut revenir en NOMBRE depuis Supabase) : on force
 // en chaîne, avec repli sur l'année de la date. Évite les filtres `annee === '2026'` qui ratent le nombre.
 FP.anneeAmende = (a) => { if (!a) return ''; const y = a.annee; if (y != null && String(y).trim() !== '') return String(y).trim(); return String(a.date || '').slice(0, 4); };
