@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<title>Prospects — Parc Pilot</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260730e">
+<script>window.lucide={createIcons:function(){}};</script>
+<script defer src="assets/js/lucide.min.js?v=20260730e"></script>
+<link rel="stylesheet" href="assets/css/styles.css?v=20260730e">
+<script>
+// Auth guard : page réservée à un utilisateur connecté (le propriétaire JIS).
+(function(){
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace('login.html'); document.documentElement.style.display = 'none'; }
+})();
+</script>
+<style>
+  body { background:#F4F6FA; }
+  .p-card { background:#fff; border:1px solid var(--fp-border); border-radius:.8rem; padding:1.1rem 1.2rem; }
+  .p-card.nouveau { border-left:4px solid var(--fp-accent); }
+  .p-card.traite { opacity:.72; }
+  .badge-n { background:#EF4444;color:#fff;font-size:.7rem;font-weight:800;padding:.1rem .5rem;border-radius:999px }
+</style>
+</head>
+<body>
+  <div class="max-w-3xl mx-auto p-6 md:p-10">
+    <div class="flex items-center justify-between gap-3 mb-2 flex-wrap">
+      <a href="dashboard.html" class="text-sm font-semibold" style="color:var(--fp-accent)"><i data-lucide="arrow-left" class="w-4 h-4 inline"></i> Tableau de bord</a>
+    </div>
+    <h1 class="text-2xl font-extrabold" style="color:var(--fp-primary)">👑 Prospects</h1>
+    <p class="text-slate-500 text-sm mt-1" id="p-sub">Les personnes intéressées qui ont rempli le formulaire de la page de connexion.</p>
+
+    <div class="flex items-center gap-2 mt-5 mb-4" id="p-filters">
+      <button class="filter-chip active" data-f="all">Tous</button>
+      <button class="filter-chip" data-f="nouveau">Nouveaux</button>
+      <button class="filter-chip" data-f="traite">Traités</button>
+    </div>
+
+    <div id="p-list" class="space-y-3"><div class="text-sm text-slate-400">Chargement…</div></div>
+  </div>
+
+  <script src="assets/js/vendor/supabase.js?v=20260730e"></script>
+  <script>
+  (function(){
+    const OWNERS = ['shakil.nubeebaccus@projectxparis.fr','jis.nubee@gmail.com'];
+    const client = supabase.createClient('https://tzjuptlzoywjeigmyfuj.supabase.co', 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq');
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const fmt = d => { try { return new Date(d).toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); } catch(e){ return ''; } };
+    let all = [], filter = 'all';
+
+    (async () => {
+      const { data: { session } } = await client.auth.getSession();
+      const email = session && session.user && (session.user.email || '').toLowerCase();
+      if (!email) { window.location.replace('login.html'); return; }
+      if (OWNERS.indexOf(email) === -1) {
+        $('p-list').innerHTML = '<div class="p-card">Accès réservé au propriétaire de la plateforme.</div>';
+        $('p-sub').textContent = '';
+        if (window.lucide) lucide.createIcons();
+        return;
+      }
+      $('p-filters').querySelectorAll('[data-f]').forEach(b => b.addEventListener('click', () => {
+        filter = b.dataset.f;
+        $('p-filters').querySelectorAll('[data-f]').forEach(x => x.classList.toggle('active', x === b));
+        render();
+      }));
+      $('p-list').addEventListener('click', onClick);
+      load();
+    })();
+
+    async function load(){
+      const { data, error } = await client.from('prospects').select('*').order('created_at', { ascending: false });
+      if (error) {
+        $('p-list').innerHTML = /does not exist|schema cache/i.test(error.message || '')
+          ? '<div class="p-card">La table « prospects » n\'est pas encore créée. Colle le SQL de <code>supabase/prospects.sql</code> dans Supabase (une seule fois), puis recharge.</div>'
+          : ('<div class="p-card">Erreur : ' + esc(error.message) + '</div>');
+        if (window.lucide) lucide.createIcons();
+        return;
+      }
+      all = data || []; render();
+    }
+    function render(){
+      const list = all.filter(p => filter === 'all' ? true : (p.statut || 'nouveau') === filter);
+      const nNew = all.filter(p => (p.statut || 'nouveau') === 'nouveau').length;
+      $('p-sub').innerHTML = all.length ? (nNew ? `<span class="badge-n">${nNew}</span> nouveau(x) prospect(s) à recontacter.` : 'Tous les prospects ont été traités 🎉') : 'Aucun prospect pour le moment.';
+      if (!list.length) { $('p-list').innerHTML = '<div class="text-sm text-slate-400">Aucun prospect dans cette catégorie.</div>'; return; }
+      $('p-list').innerHTML = list.map(card).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+    function card(p){
+      const st = p.statut || 'nouveau';
+      const tel = p.tel ? String(p.tel).replace(/\s/g,'') : '';
+      return `<div class="p-card ${st}" data-id="${esc(p.id)}">
+        <div class="flex items-start justify-between gap-2 flex-wrap">
+          <div>
+            <div class="font-bold text-slate-900">${esc(p.nom || '—')} ${st==='nouveau' ? '<span class="badge-n" style="vertical-align:middle">nouveau</span>' : ''}</div>
+            <div class="text-sm text-slate-500 mt-0.5">${esc(p.societe || '')}${p.societe ? ' · ' : ''}${fmt(p.created_at)}</div>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-3 mt-2 text-sm">
+          ${p.email ? `<a href="mailto:${esc(p.email)}" class="inline-flex items-center gap-1 hover:underline" style="color:var(--fp-accent)"><i data-lucide="mail" class="w-4 h-4"></i> ${esc(p.email)}</a>` : ''}
+          ${p.tel ? `<a href="tel:${esc(tel)}" class="inline-flex items-center gap-1 hover:underline" style="color:var(--fp-accent)"><i data-lucide="phone" class="w-4 h-4"></i> ${esc(p.tel)}</a>` : ''}
+        </div>
+        ${p.message ? `<div class="text-sm text-slate-700 mt-2 p-2.5 rounded-lg" style="background:#F8FAFC">${esc(p.message)}</div>` : ''}
+        <div class="flex gap-2 mt-3">
+          ${st === 'nouveau'
+            ? `<button class="btn btn-outline text-sm" data-act="traite"><i data-lucide="check" class="w-4 h-4"></i> Marquer traité</button>`
+            : `<button class="btn btn-outline text-sm" data-act="rouvrir"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Rouvrir</button>`}
+          <button class="btn text-sm text-red-600 hover:bg-red-50" data-act="del"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer</button>
+        </div>
+      </div>`;
+    }
+    async function onClick(e){
+      const btn = e.target.closest('[data-act]'); if (!btn) return;
+      const card = btn.closest('[data-id]'); const id = card && card.getAttribute('data-id'); if (!id) return;
+      const act = btn.getAttribute('data-act');
+      if (act === 'del') {
+        if (!confirm('Supprimer ce prospect ?')) return;
+        const { error } = await client.from('prospects').delete().eq('id', id);
+        if (error) { alert('Erreur : ' + error.message); return; }
+        all = all.filter(p => p.id !== id); render(); return;
+      }
+      const statut = act === 'traite' ? 'traite' : 'nouveau';
+      const { error } = await client.from('prospects').update({ statut }).eq('id', id);
+      if (error) { alert('Erreur : ' + error.message); return; }
+      const p = all.find(x => x.id === id); if (p) p.statut = statut; render();
+    }
+  })();
+  </script>
+</body>
+</html>

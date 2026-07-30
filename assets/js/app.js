@@ -1339,6 +1339,7 @@ FP.applyNavGroups = () => {
 
 // Sous-onglets de l'onglet privé « JIS » (tous des pages autonomes → nouvel onglet).
 FP.JIS_PAGES = [
+  { file: 'prospects.html',    label: 'Prospects',             icon: 'user-plus' },
   { file: 'brochure.html',     label: 'Brochure',              icon: 'sparkles' },
   { file: 'prix.html',         label: 'Tarifs',                icon: 'badge-euro' },
   { file: 'carte-visite.html', label: 'Carte de visite',       icon: 'contact' },
@@ -1386,7 +1387,33 @@ FP.buildJisMenu = () => {
     });
   });
   if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
+  if (FP.refreshProspectsBadge) FP.refreshProspectsBadge();
 };
+// Alerte prospects : badge rouge (nb de nouveaux prospects) sur l'entête « JIS » du menu.
+// Réservé au propriétaire JIS ; silencieux si la table prospects n'existe pas encore.
+FP.refreshProspectsBadge = async () => {
+  try {
+    if (!FP.isJisOwner || !FP.isJisOwner() || !FP.supabase) return;
+    const r = await FP.supabase.from('prospects').select('id', { count: 'exact', head: true }).eq('statut', 'nouveau');
+    if (r.error) return; // table absente → pas de badge
+    const count = r.count || 0;
+    document.querySelectorAll('.fp-jis-toggle').forEach(t => {
+      let b = t.querySelector('.fp-jis-prospect-badge');
+      if (!count) { if (b) b.remove(); return; }
+      if (!b) {
+        b = document.createElement('span');
+        b.className = 'fp-jis-prospect-badge';
+        b.title = count + ' nouveau(x) prospect(s)';
+        b.style.cssText = 'background:#EF4444;color:#fff;font-size:.66rem;font-weight:800;min-width:1.1rem;text-align:center;padding:.05rem .35rem;border-radius:999px;margin-left:.4rem';
+        const chev = t.querySelector('.fp-jis-chev');
+        if (chev) t.insertBefore(b, chev); else t.appendChild(b);
+      }
+      b.textContent = count;
+    });
+  } catch (e) {}
+};
+// Rafraîchit le badge quand les données Supabase sont prêtes (le menu peut être bâti avant).
+try { window.addEventListener('fp:data-ready', () => { if (FP.refreshProspectsBadge) FP.refreshProspectsBadge(); }); } catch (e) {}
 // Active le glisser-déposer des onglets directement dans le menu de gauche (toutes pages)
 FP.enableNavReorder = () => {
   document.querySelectorAll('aside nav').forEach(nav => {
