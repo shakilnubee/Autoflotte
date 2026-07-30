@@ -70,6 +70,23 @@ publique (index/brochure/prix), donc visible à tort par une autre société ou 
 prospect. Distinguer les valeurs légitimes (bases PXP gardées par `soc === 'PXP'`,
 contact public `jis.nubee@gmail.com`, démos fictives).
 
+## 12. Éparpillement / regroupement (doublons de saisie & de stockage)
+Une MÊME notion saisie ou stockée à plusieurs endroits, qui perd l'utilisateur ou
+fait diverger les données. Chercher par domaine : **contacts/tiers** (deux annuaires
+de garages `settings.prestataires` (Entretiens) vs `settings.garages` (Sinistres) ;
+loueur en `settings.profil.loueurNom` vs `settings.loueurs[]` ; assureur éditable
+dans Contrats ET Paramètres ; fournisseurs = texte libre re-saisi au lieu d'un
+référentiel) ; **config société** éditable hors Paramètres (loueurs & primes
+d'assurance dans Contrats alors que l'assureur+police sont dans Paramètres) ;
+**documents/fichiers** (plusieurs portes d'entrée : scanner dashboard, « Importer un
+document/facture », fiche véhicule, état des lieux — vérifier qu'elles atterrissent
+dans la même table) ; **notes libres** réparties entre `settings.*` (vehNotes,
+zoneNotes, inspections[].note, taches[].note) et colonnes DB (amendes.commentaire,
+conducteurs.note…). Reco type : UNE source par clé, UN écran d'édition (dupliquer
+l'UI en gardant la même fonction de save), référentiel commun pour les garages.
+⚠️ NE PAS sortir les champs MÉTIER de leur logique (n° de police d'assurance,
+`prop` du loueur qui sert à détecter le leasing) sous prétexte de regrouper.
+
 ---
 
 *Historique : batterie constituée les 2026-07-30 après plusieurs incohérences

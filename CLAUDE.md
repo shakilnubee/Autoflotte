@@ -240,7 +240,7 @@ Si tu reprends ce projet :
 - Avant de modifier `data.js` : c'est un gros fichier, utilise Edit avec contexte précis
 - Pour toute modif déployée : `git add` → `git commit` → `git push` (Netlify redéploie tout seul)
 - ⚠️ **AUDITS À LA DEMANDE** : quand l'utilisateur dit **« fais l'audit »** (ou « lance les
-  audits »), lancer **en parallèle** les 11 auditeurs documentés dans **`docs/AUDITS.md`**
+  audits »), lancer **en parallèle** les 12 auditeurs documentés dans **`docs/AUDITS.md`**
   (un Agent par domaine, sortie = findings vérifiés `fichier:ligne`+gravité, NE PAS modifier),
   puis vérifier chaque trouvaille dans le code réel et corriger les vraies + rapport priorisé.
   Il n'y a **plus d'audit automatique** (GitHub Action retirée à sa demande) : c'est LUI qui les
