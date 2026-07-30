@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260730b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260730c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260730b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260730c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260730b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260730c">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -250,6 +250,20 @@
         <p class="text-xs text-slate-500 mt-2">Changer de société recharge la page avec ses données. À la création d'une nouvelle société, remplis ses infos ci-dessous.</p>
       </div>
 
+      <!-- Bandeau d'onboarding : affiché juste après la création d'une nouvelle société -->
+      <div id="onboard-welcome" class="p-4 rounded-lg mb-5" style="display:none;background:#EFF6FF;border:1px solid #BFDBFE">
+        <div class="font-extrabold text-base" style="color:#1E3A8A">👋 Bienvenue — configurez « <span id="onboard-soc-name"></span> »</div>
+        <p class="text-sm mt-1" style="color:#1E40AF">Renseignez ci-dessous les infos <b>propres à ce client</b>. Rien n'est partagé avec une autre société. Les indispensables :</p>
+        <ul class="text-sm mt-2 space-y-1" style="color:#1E40AF;list-style:disc;padding-left:1.2rem">
+          <li><b>Infos société</b> : nom, SIRET, adresse (en-têtes d'export).</li>
+          <li><b>Envoi des amendes</b> : e-mail d'expédition + <b>domaine vérifié Resend</b> (sans lui, l'envoi d'e-mails ne marche pas).</li>
+          <li><b>Leasing</b> : nom du loueur (+ propriétaire des véhicules loués) — laissez vide si pas de leasing.</li>
+          <li><b>Assurance</b> : assureur + n° de police.</li>
+          <li><b>Garages / prestataires</b> : à ajouter dans <b>Entretiens → Contacter un garage</b>.</li>
+        </ul>
+        <p class="text-xs mt-2" style="color:#3B82F6">Ce qui reste à compléter s'affichera aussi dans <b>Suivi &amp; alertes → À compléter</b>.</p>
+      </div>
+
       <p class="text-sm text-slate-600 mb-4">Utilisé dans les en-têtes d'export et les futures factures générées.</p>
       <div class="space-y-4">
         <div>
@@ -284,6 +298,14 @@
       <div class="section-title mt-6" style="font-size:.95rem"><i data-lucide="sliders-horizontal" class="w-4 h-4"></i> Envoi des amendes & leasing</div>
       <p class="text-sm text-slate-600 mb-3">Ces infos sont <b>propres à cette société</b> (jamais partagées avec une autre).</p>
       <div class="space-y-4" id="profil-form"></div>
+
+      <!-- Assurance de la flotte — regroupée ici (avant, il fallait aller dans Contrats) -->
+      <div class="section-title mt-6" style="font-size:.95rem"><i data-lucide="shield" class="w-4 h-4"></i> Assurance de la flotte</div>
+      <p class="text-sm text-slate-600 mb-3">Assureur + n° de police <b>propres à cette société</b> (affichés sur les fiches véhicules et les alertes).</p>
+      <div class="grid grid-cols-2 gap-4">
+        <div><div class="field-label">Assureur</div><input class="field-input" id="f-assur-assureur" placeholder="ex. AXA, Generali, SwissLife…" /></div>
+        <div><div class="field-label">N° de police</div><input class="field-input" id="f-assur-police" placeholder="ex. 0123456789" /></div>
+      </div>
 
       <div class="flex gap-2 mt-5">
         <button class="btn btn-dark text-sm" id="btn-save-societe"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
@@ -514,10 +536,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260730b"></script>
-<script src="../assets/js/supabase-client.js?v=20260730b"></script>
-<script src="../assets/js/data.js?v=20260730b"></script>
-<script src="../assets/js/app.js?v=20260730b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260730c"></script>
+<script src="../assets/js/supabase-client.js?v=20260730c"></script>
+<script src="../assets/js/data.js?v=20260730c"></script>
+<script src="../assets/js/app.js?v=20260730c"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -795,6 +817,10 @@
     $('f-societe-nom').value = s.nom || '';
     $('f-societe-siret').value = s.siret || '';
     $('f-societe-adresse').value = s.adresse || '';
+    // Assurance (regroupée ici) — valeurs effectives (défaut PXP historique, sinon vide).
+    const assur = (FP.assuranceContrat ? FP.assuranceContrat() : { assureur: '', police: '' });
+    if ($('f-assur-assureur')) $('f-assur-assureur').value = assur.assureur || '';
+    if ($('f-assur-police')) $('f-assur-police').value = assur.police || '';
     renderSocietesUI();
     renderProfilForm();
   }
@@ -811,7 +837,16 @@
     const prof = { ...(current.profil || {}) };
     (FP.PROFIL_CHAMPS || []).forEach(c => { const el = $('prof-' + c.key); if (el) prof[c.key] = el.value.trim(); });
     current.profil = prof;
+    // Assurance (même stockage que la page Contrats → settings.assuranceContrat, source unique).
+    if ($('f-assur-assureur') || $('f-assur-police')) {
+      current.assuranceContrat = {
+        ...(current.assuranceContrat || {}),
+        assureur: $('f-assur-assureur') ? $('f-assur-assureur').value.trim() : ((current.assuranceContrat || {}).assureur || ''),
+        police: $('f-assur-police') ? $('f-assur-police').value.trim() : ((current.assuranceContrat || {}).police || ''),
+      };
+    }
     FP.settings.save(current);
+    const wel = $('onboard-welcome'); if (wel) wel.style.display = 'none'; // onboarding terminé
     showToast('Société enregistrée ✓');
   }
 
@@ -827,11 +862,23 @@
     if (!name) return;
     if (FP.addSociete && FP.addSociete(name)) {
       FP.setActiveSociete(name);
-      alert(`Société « ${name} » créée.\nRemplis ses infos (e-mails d'envoi des amendes, loueur…) puis Enregistre.`);
+      try { localStorage.setItem('fp_onboard_new', name); } catch (e) {} // → bandeau de bienvenue après reload
       location.reload();
     } else {
       alert('Cette société existe déjà (ou nom invalide).');
     }
+  }
+  // Après création d'une société : ouvre l'onglet « Société », affiche le bandeau de bienvenue et défile dessus.
+  function checkOnboard() {
+    let flag = null; try { flag = localStorage.getItem('fp_onboard_new'); } catch (e) {}
+    if (!flag) return;
+    try { localStorage.removeItem('fp_onboard_new'); } catch (e) {}
+    const cur = (FP.activeSociete ? FP.activeSociete() : 'PXP');
+    if (flag !== cur) return; // société changée entre-temps
+    const tab = document.querySelector('#settings-tabs .set-tab[data-sec="societe"]');
+    if (tab) tab.click();
+    const nameEl = $('onboard-soc-name'); if (nameEl) nameEl.textContent = cur;
+    const wel = $('onboard-welcome'); if (wel) { wel.style.display = ''; wel.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   }
 
   // ---------- Export / Import / Reset ----------
@@ -1274,6 +1321,7 @@
   renderPreview();
   renderJournal();
   lucide.createIcons();
+  checkOnboard(); // bandeau de bienvenue si on vient de créer une société
 
   // ===== Onglet Compte : e-mail, mot de passe, déconnexion =====
   (function initCompte() {
