@@ -1356,7 +1356,6 @@ FP.JIS_PAGES = [
   { file: 'contrat-modele.html', label: 'Contrat modèle',      icon: 'file-check' },
   { file: 'logos.html',        label: 'Logos & marque',        icon: 'palette' },
   { file: 'demo.html',         label: 'Présentation (démo)',   icon: 'presentation' },
-  { file: 'presentation/Parc-Pilot-Tarifs.pdf',       label: 'Tarifs (PDF)',       icon: 'file-down' },
 ];
 // Construit le menu déroulant « JIS » en bas de la sidebar, UNIQUEMENT pour le propriétaire.
 // Idempotent (réutilise le même groupe). Retire toujours les liens plats Brochure/Tarifs
