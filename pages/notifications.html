@@ -278,7 +278,10 @@
   // ===== Sous-onglet « À compléter » : TOUTES les infos manquantes de la plateforme =====
   const isEmptyV = (x) => x == null || String(x).trim() === '' || String(x).trim() === '—';
   function vehMasseEff(v) { try { const s = (FP.settings.get().vehMasse || {})[v.id]; if (s != null && String(s).trim() !== '') return s; } catch (e) {} try { return FP.masseCG && FP.masseCG(v); } catch (e) {} return null; }
-  function leasingForfait(v) { try { const lo = (FP.getLeasingOverrides && FP.getLeasingOverrides()) || {}; const base = FP.LEASING_CONTRATS || {}; return lo[v.immat] || base[v.immat] || null; } catch (e) { return null; } }
+  // ⚠️ MÊME source que la fiche véhicule (FP.leasingContrat : normalise la plaque en MAJUSCULES
+  // + fusionne base PXP et overrides saisis). Avant, une recherche brute base[v.immat] ratait les
+  // véhicules dont la plaque/clé différait → le forfait était réclamé à tort alors que la fiche l'affichait.
+  function leasingForfait(v) { try { return (FP.leasingContrat ? FP.leasingContrat(v && v.immat) : null); } catch (e) { return null; } }
   function estLeasing(v) { try { const prof = FP.societeProfil ? FP.societeProfil() : {}; const p = String(v.proprietaire || '').trim().toLowerCase(); const etiq = String(prof.proprietaireLeasing || prof.loueurNom || '').trim().toLowerCase(); if (p && etiq && p === etiq) return true; } catch (e) {} return !!leasingForfait(v); }
 
   const VEH_FIELDS = [
@@ -291,7 +294,7 @@
     { k: 'assurance', label: 'Assurance', val: v => v.assurance || (FP.assuranceLabel && FP.assuranceLabel()) },
     { k: 'co2', label: 'CO₂', skip: v => /lectri|hydrog/i.test(v.carburant || '') },
     { k: 'masse', label: 'Masse (carte grise)', val: v => vehMasseEff(v) },
-    { k: 'leasing', label: 'Forfait leasing (km/durée)', skip: v => !estLeasing(v), empty: v => { const f = leasingForfait(v); return !!f && (isEmptyV(f.kmContrat) || isEmptyV(f.dureeMois)); } },
+    { k: 'leasing', label: 'Forfait leasing (km/durée)', skip: v => !estLeasing(v), empty: v => !leasingForfait(v) },
   ];
   const COND_FIELDS = [
     { k: 'nom', label: 'Nom' }, { k: 'prenom', label: 'Prénom' }, { k: 'dateNaissance', label: 'Date de naissance (âge)' },
