@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260724d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260724e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260724d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260724e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260724d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260724e">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -753,14 +753,14 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260724d"></script>
-<script src="../assets/js/supabase-client.js?v=20260724d"></script>
-<script src="../assets/js/data.js?v=20260724d"></script>
-<script src="../assets/js/fleet-docs.js?v=20260724d"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260724d"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260724d"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260724d"></script>
-<script src="../assets/js/app.js?v=20260724d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260724e"></script>
+<script src="../assets/js/supabase-client.js?v=20260724e"></script>
+<script src="../assets/js/data.js?v=20260724e"></script>
+<script src="../assets/js/fleet-docs.js?v=20260724e"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260724e"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260724e"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260724e"></script>
+<script src="../assets/js/app.js?v=20260724e"></script>
 <script>
   lucide.createIcons();
 
@@ -1426,7 +1426,7 @@
   function renderKPIs() {
     // KPIs : sur le scope filtré (onglet groupe actif)
     // Flotte ACTIVE = hors véhicules vendus (archivés ; consultables via le filtre "Vendus")
-    const active = data.vehicules.filter(v => v.statut !== 'vendu');
+    const active = data.vehicules.filter(v => !FP.estVendu(v));
     const scope = state.groupe === 'all'
       ? active
       : active.filter(v => FP.vehGroupes(v).includes(state.groupe));
@@ -1450,7 +1450,7 @@
     const filteredList = data.vehicules.filter(v => {
       if (state.groupe !== 'all' && !FP.vehGroupes(v).includes(state.groupe)) return false;
       // Véhicules VENDUS masqués par défaut (archivés) ; visibles seulement via le filtre "Vendus"
-      if (state.statut === 'all') { if (v.statut === 'vendu') return false; }
+      if (state.statut === 'all') { if (FP.estVendu(v)) return false; }
       else if (v.statut !== state.statut) return false;
       if (state.categorie !== 'all' && v.categorie !== state.categorie) return false;
       if (q && !(FP.norm(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`).includes(q))) return false;
@@ -1535,7 +1535,7 @@
     if (state.statut === 'vendu') {
       $('result-count').innerHTML = `🗄️ <b>Archive — véhicules vendus</b> · ${rows.length} véhicule${rows.length > 1 ? 's' : ''}. <span class="text-slate-400">Fiches, documents et cartes grises conservés : ouvre une fiche pour tout consulter.</span>`;
     } else {
-      $('result-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} affiché${rows.length > 1 ? 's' : ''} sur ${data.vehicules.filter(v => v.statut !== 'vendu').length}`;
+      $('result-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} affiché${rows.length > 1 ? 's' : ''} sur ${data.vehicules.filter(v => !FP.estVendu(v)).length}`;
     }
     // Lien vers le pipeline de vente : visible seulement sur le filtre « À vendre »
     { const pv = $('a-vendre-pipeline'); if (pv) pv.style.display = (state.statut === 'à vendre') ? '' : 'none'; }
@@ -2908,7 +2908,7 @@
       const good = rows.find(d => isFetchable(d.url));
       return good ? good.url : (rows[0] ? rows[0].url : null);
     };
-    const all = (data.vehicules || []).filter(v => v.statut !== 'vendu');
+    const all = (data.vehicules || []).filter(v => !FP.estVendu(v));
     const withCG = all.map(v => ({ v, url: cgUrlFor(v) })).filter(x => x.url && missing(x.v));
     const targets = withCG.filter(x => isFetchable(x.url));
     const onDrive = withCG.filter(x => !isFetchable(x.url));
@@ -2958,7 +2958,7 @@
       if (sel.length) { openFicheModal(sel, 'Véhicules sélectionnés'); return; }
       const grp = state.groupe;
       const label = grp === 'all' ? 'Liste des véhicules' : ('Véhicules — ' + FP.groupeLabel(grp));
-      const list = data.vehicules.filter(v => grp === 'all' ? v.statut !== 'vendu' : FP.vehGroupes(v).includes(grp));
+      const list = data.vehicules.filter(v => grp === 'all' ? !FP.estVendu(v) : FP.vehGroupes(v).includes(grp));
       openFicheModal(list, label);
     }); }
   { const b = $('bulk-fiche'); if (b) b.addEventListener('click', () => {

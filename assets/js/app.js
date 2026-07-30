@@ -355,6 +355,19 @@ FP.estVendu = (v) => { const s = ((v && v.statut) || '').toString().toLowerCase(
 // horsFlotte = plus à suivre au quotidien (vendu, à vendre, hors service, cédé, archivé, restitué).
 // Utilisé pour les ALERTES / échéances / CT (on n'alerte pas sur une voiture en cours de vente).
 FP.horsFlotte = (v) => ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 'cédé', 'cede', 'cédée', 'hors service', 'hors-service', 'hs', 'archive', 'archivé', 'archivée', 'restitué', 'restitue'].includes(((v && v.statut) || '').toString().toLowerCase().trim());
+// ⚠️ HELPER CANONIQUE — montant RÉELLEMENT DÛ d'une amende : le majoré si elle est majorée,
+// sinon le montant initial. À UTILISER PARTOUT (sommes, podiums, KPI, alertes, exports) pour
+// que tous les écrans affichent le même montant (règle « une seule source de vérité », CLAUDE.md).
+FP.montantDu = (a) => (a && a.majoree && a.montantMajore != null && a.montantMajore !== '') ? Number(a.montantMajore) : (Number(a && a.montant) || 0);
+// ⚠️ HELPER CANONIQUE — année d'une amende (peut revenir en NOMBRE depuis Supabase) : on force
+// en chaîne, avec repli sur l'année de la date. Évite les filtres `annee === '2026'` qui ratent le nombre.
+FP.anneeAmende = (a) => { if (!a) return ''; const y = a.annee; if (y != null && String(y).trim() !== '') return String(y).trim(); return String(a.date || '').slice(0, 4); };
+// ⚠️ HELPER CANONIQUE — coût d'EXPLOITATION d'un mois (AAAA-MM) : somme des factures TTC en
+// EXCLUANT leasing / sinistre / achat de véhicule / cession (investissement ou argent entrant,
+// pas une charge d'exploitation). À utiliser PARTOUT (dashboard, écran mural, rapport direction)
+// pour que « Coût du mois » affiche le même chiffre. `exclureType` réutilisable seul.
+FP.coutFactureExploit = (f) => { const t = String((f && f.type) || '').toLowerCase(); return t !== 'leasing' && t !== 'sinistre' && t !== 'achat' && t !== 'cession'; };
+FP.coutMois = (data, ym) => (((data && data.factures) || []).filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0));
 
 // Masses en ORDRE DE MARCHE (champ G de la carte grise, en kg) — c'est le champ qu'utilise
 // la règle de stationnement de Paris (≤ 2 t), PAS le poids à vide G.1. Valeurs LUES DIRECTEMENT
@@ -1895,7 +1908,7 @@ FP.buildAlertes = (data) => {
   // --- Amendes à payer ---
   const amAPayer = (data.amendes || []).filter(a => a.statut === 'à payer');
   if (amAPayer.length > 0) {
-    const totalDu = amAPayer.reduce((s, a) => s + (a.montant || 0), 0);
+    const totalDu = amAPayer.reduce((s, a) => s + FP.montantDu(a), 0);
     out.push({
       niveau: totalDu > 500 ? 'warn' : 'info',
       categorie: 'Amendes',
@@ -2139,11 +2152,12 @@ FP.buildEcheances = (data) => {
   const out = [];
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const iso = (d) => { const x = new Date(d); return isNaN(x) ? null : x.toISOString().slice(0, 10); };
+  // Barème ALIGNÉ sur buildAlertes (< 30 danger, < 60 warn, sinon info) pour qu'une MÊME
+  // échéance ait la même couleur/gravité dans « Alertes » et dans « Renouvellements »/calendrier.
   const niv = (dateStr) => {
     const diff = Math.ceil((new Date(dateStr) - today) / 86400000);
-    if (diff < 0) return 'danger';
     if (diff < 30) return 'danger';
-    if (diff < 90) return 'warn';
+    if (diff < 60) return 'warn';
     return 'info';
   };
   const push = (dateStr, categorie, label, detail, target) => {
@@ -2152,6 +2166,7 @@ FP.buildEcheances = (data) => {
   };
 
   (data.vehicules || []).forEach(v => {
+    if (FP.horsFlotte && FP.horsFlotte(v)) return; // même règle que les alertes : pas d'échéance sur un véhicule sorti (vendu / à vendre…)
     const veh = `${v.immat} · ${v.marque} ${v.modele}`;
     const tgt = 'vehicules.html?veh=' + v.id;
     if (v.prochainCT && v.prochainCT !== '—' && !FP.ctIgnored(v)) push(v.prochainCT, 'Contrôle technique', 'CT — ' + v.immat, veh, tgt);
@@ -2210,7 +2225,9 @@ FP.rapportDirection = (data) => {
   // Factures dédoublonnées par numéro (comme Statistiques / Factures) → chiffres cohérents dans le rapport.
   const _seenF = new Set();
   const facts = (data.factures || []).filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (_seenF.has(k)) return false; _seenF.add(k); return true; });
-  const coutMois = facts.filter(f => (f.date || '').slice(0, 7) === ym).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+  // Coût du mois = coût d'EXPLOITATION (hors leasing/sinistre/achat/cession) — MÊME règle que le
+  // dashboard et l'écran mural, sinon le rapport annonçait un montant gonflé par un achat de véhicule.
+  const coutMois = facts.filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0);
   const cout12 = facts.filter(f => (f.date || '').slice(0, 7) >= y12).reduce((s, f) => s + (+f.montantTTC || 0), 0);
 
   const byVeh = {};
