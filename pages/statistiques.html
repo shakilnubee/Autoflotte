@@ -633,7 +633,10 @@
       }
       const total = factTotal + assur + tvs + amendes;
       const achatF = fv.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-      return { id: v.id, immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, fact: factTotal, assur, tvs, amendes, total, perKm: v.km > 0 ? total / v.km : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
+      // €/km : n'a de sens que sur TOUTE la vie du véhicule (coût cumulé ÷ km compteur cumulé).
+      // Filtré sur une seule année, on diviserait un coût d'un an par le km à vie → chiffre faux.
+      // → on ne le calcule QUE pour « toutes années » ; sinon 0 (affiché « — »).
+      return { id: v.id, immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, fact: factTotal, assur, tvs, amendes, total, perKm: (annee === 'all' && v.km > 0) ? total / v.km : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
     }).sort((a, b) => b.total - a.total);
     renderTcoTable();
     renderPodiumPerKm(annee);
@@ -642,6 +645,11 @@
   // === Podium coût au km (les plus chères / les moins chères) ===
   function renderPodiumPerKm(annee) {
     $('perkm-periode').textContent = (annee === 'all') ? 'toutes années' : annee;
+    // Le coût au km est une mesure « à vie » → indisponible sur une année précise.
+    if (annee !== 'all') {
+      const note = '<p class="text-sm text-slate-400 py-2">Le coût au km se calcule sur toute la vie du véhicule. Sélectionne « toutes années » pour le voir.</p>';
+      $('podium-chers').innerHTML = note; $('podium-eco').innerHTML = note; return;
+    }
     const ranked = tcoData.filter(t => t.perKm > 0 && t.km > 0);
     const chers = ranked.slice().sort((a, b) => b.perKm - a.perKm).slice(0, 3);
     const eco   = ranked.slice().sort((a, b) => a.perKm - b.perKm).slice(0, 3);
