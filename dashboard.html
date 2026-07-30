@@ -745,34 +745,26 @@
     return out;
   }
   const months = buildLast6Months();
-  // Même périmètre que le KPI « Coût du mois » (coût d'exploitation) : on exclut
-  // leasing / sinistre / achat / cession pour que le graphe colle au chiffre affiché.
   const _excCout = (f) => { const t = String(f.type || '').toLowerCase(); return t !== 'leasing' && t !== 'sinistre' && t !== 'achat' && t !== 'cession'; };
-  const monthlyTotals = months.map(m =>
-    (data.factures || [])
-      .filter(f => (f.date || '').startsWith(m.ym) && _excCout(f))
-      .reduce((s, f) => s + (f.montantTTC || 0), 0)
-  );
-
-  // Sous-titre tendance : variation entre 1er et dernier mois
-  const first = monthlyTotals[0], last = monthlyTotals[monthlyTotals.length - 1];
-  const deltaPct = first > 0 ? Math.round(((last - first) / first) * 100) : 0;
-  const deltaEl = document.querySelector('.kpi-delta.up, .kpi-delta.down');
-  if (deltaEl) {
-    const arrow = deltaPct < 0 ? '↓' : '↑';
-    const cls = deltaPct < 0 ? 'kpi-delta down' : 'kpi-delta up';
-    deltaEl.className = cls;
-    deltaEl.textContent = `${arrow} ${Math.abs(deltaPct)}% vs ${months[0].label}`;
-  }
+  let _chCosts = null, _chGroupes = null; // instances Chart.js — détruites avant chaque re-dessin (fp:data-ready)
 
   // Graphiques regroupés : Chart.js est chargé en différé → on dessine dès qu'il est prêt,
   // sans bloquer l'affichage des KPIs (→ navigation fluide, pas de gris).
+  // ⚠️ Recalcule les données à CHAQUE appel + détruit l'ancien graphe → suit les données en direct.
   function drawDashCharts() {
+  const monthlyTotals = months.map(m => (data.factures || []).filter(f => (f.date || '').startsWith(m.ym) && _excCout(f)).reduce((s, f) => s + (f.montantTTC || 0), 0));
+  { // sous-titre tendance (variation 1er → dernier mois)
+    const first = monthlyTotals[0], last = monthlyTotals[monthlyTotals.length - 1];
+    const deltaPct = first > 0 ? Math.round(((last - first) / first) * 100) : 0;
+    const deltaEl = document.querySelector('.kpi-delta.up, .kpi-delta.down');
+    if (deltaEl) { deltaEl.className = deltaPct < 0 ? 'kpi-delta down' : 'kpi-delta up'; deltaEl.textContent = `${deltaPct < 0 ? '↓' : '↑'} ${Math.abs(deltaPct)}% vs ${months[0].label}`; }
+  }
+  if (_chCosts) { try { _chCosts.destroy(); } catch (e) {} }
   const ctx1 = document.getElementById('costsChart').getContext('2d');
   const g1 = ctx1.createLinearGradient(0, 0, 0, 280);
   g1.addColorStop(0, 'rgba(249,115,22,0.35)');
   g1.addColorStop(1, 'rgba(249,115,22,0)');
-  new Chart(ctx1, {
+  _chCosts = new Chart(ctx1, {
     type: 'line',
     data: {
       labels: months.map(m => m.label),
@@ -802,9 +794,10 @@
     const labels = [], values = [], colors = [], shownKeys = [];
     keys.forEach((k, i) => { if (counts[i] > 0) { labels.push(FP.groupeLabel(k)); values.push(counts[i]); colors.push(FP.groupeColor(k)); shownKeys.push(k); } });
     const el = document.getElementById('groupesChart');
+    if (_chGroupes) { try { _chGroupes.destroy(); } catch (e) {} }
     if (el && values.length) {
       const goToGroupe = (idx) => { if (idx != null && shownKeys[idx]) window.location.href = `pages/vehicules.html?groupe=${encodeURIComponent(shownKeys[idx])}`; };
-      new Chart(el.getContext('2d'), {
+      _chGroupes = new Chart(el.getContext('2d'), {
         type: 'doughnut',
         data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
         options: {
@@ -823,36 +816,33 @@
   if (typeof Chart !== 'undefined') drawDashCharts();
   else window.addEventListener('DOMContentLoaded', drawDashCharts);
 
-  // === Podium conducteurs — amendes 2026 ===
-  (function () {
-    const NP = new Set(['siege', 'depot', 'navette', 'vendu', 'x', 'fenwick', '']);
-    const key = s => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
+  // === Podium conducteurs — amendes 2026 (recalculable pour le rafraîchissement live) ===
+  const NP_POD = new Set(['siege', 'depot', 'navette', 'vendu', 'x', 'fenwick', '']);
+  const _podKey = s => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
+  let _podExpanded = false;
+  const _podBox = document.getElementById('dash-podium');
+  const _podBtn = document.getElementById('dash-podium-toggle');
+  const _podEuro = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+  function renderPodiumDash() {
     const byDriver = {};
     (data.amendes || []).filter(a => FP.anneeAmende(a) === '2026').forEach(a => {
-      const k = key(a.prenom); if (!k || NP.has(k)) return;
+      const k = _podKey(a.prenom); if (!k || NP_POD.has(k)) return;
       byDriver[k] = byDriver[k] || { nom: (a.prenom || '').trim(), n: 0, montant: 0, points: 0 };
-      byDriver[k].n++; byDriver[k].montant += ((a.majoree && a.montantMajore) ? Number(a.montantMajore) : (Number(a.montant) || 0)); byDriver[k].points += (Number(a.points) || 0);
+      byDriver[k].n++; byDriver[k].montant += FP.montantDu(a); byDriver[k].points += (Number(a.points) || 0);
     });
     const all = Object.values(byDriver).sort((a, b) => b.n - a.n || b.montant - a.montant);
     const medals = ['🥇', '🥈', '🥉'];
-    let expanded = false;
-    const box = document.getElementById('dash-podium');
-    const btn = document.getElementById('dash-podium-toggle');
-    const euro = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
-    function render() {
-      const shown = expanded ? all : all.slice(0, 5);
-      box.innerHTML = shown.map((d, i) => `
-        <a href="pages/amendes.html?conducteur=${encodeURIComponent(d.nom)}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50" title="Voir les amendes de ${d.nom}">
+    const shown = _podExpanded ? all : all.slice(0, 5);
+    if (_podBox) _podBox.innerHTML = shown.map((d, i) => `
+        <a href="pages/amendes.html?conducteur=${encodeURIComponent(d.nom)}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50" title="Voir les amendes de ${FP.esc(d.nom)}">
           <span class="text-lg w-7 text-center flex-shrink-0">${medals[i] || `<span class="text-sm font-bold text-slate-400">${i + 1}</span>`}</span>
-          <span class="flex-1 font-semibold text-slate-800 truncate">${d.nom}</span>
-          <span class="text-sm text-slate-500 flex-shrink-0">${d.n} · ${euro(d.montant)}${d.points ? ' · −' + d.points + 'pts' : ''}</span>
+          <span class="flex-1 font-semibold text-slate-800 truncate">${FP.esc(d.nom)}</span>
+          <span class="text-sm text-slate-500 flex-shrink-0">${d.n} · ${_podEuro(d.montant)}${d.points ? ' · −' + d.points + 'pts' : ''}</span>
         </a>`).join('') || '<p class="text-sm text-slate-400">Aucune amende 2026.</p>';
-      if (all.length <= 5) { btn.style.display = 'none'; }
-      else { btn.textContent = expanded ? 'Voir moins' : `Voir tout (${all.length})`; }
-    }
-    if (btn) btn.addEventListener('click', () => { expanded = !expanded; render(); });
-    render();
-  })();
+    if (_podBtn) { if (all.length <= 5) _podBtn.style.display = 'none'; else { _podBtn.style.display = ''; _podBtn.textContent = _podExpanded ? 'Voir moins' : `Voir tout (${all.length})`; } }
+  }
+  if (_podBtn) _podBtn.addEventListener('click', () => { _podExpanded = !_podExpanded; renderPodiumDash(); });
+  renderPodiumDash();
 
   // === Widgets déplaçables (glisser-déposer + mémorisation) ===
   (function () {
@@ -950,6 +940,11 @@
     document.getElementById('kpi-entretien').textContent = fa.filter(v => v.statut === 'entretien').length;
     const cm = new Date().toISOString().slice(0, 7);
     document.getElementById('kpi-couts').textContent = FP.euro((data.factures || []).filter(f => (f.date || '').startsWith(cm) && compteCout(f)).reduce((s, f) => s + (f.montantTTC || 0), 0));
+    // Re-dessine aussi les GRAPHES, la liste véhicules et le podium (sinon ils restaient figés
+    // après un ajout de facture ou une modif d'un autre poste jusqu'à un rechargement manuel).
+    if (typeof drawDashCharts === 'function' && typeof Chart !== 'undefined') { try { drawDashCharts(); } catch (e) {} }
+    if (typeof renderVehicules === 'function') { try { renderVehicules(); } catch (e) {} }
+    if (typeof renderPodiumDash === 'function') { try { renderPodiumDash(); } catch (e) {} }
     if (typeof refreshAlertes === 'function') refreshAlertes();
     if (typeof renderSante === 'function') renderSante();
     if (typeof renderOnboarding === 'function') renderOnboarding();

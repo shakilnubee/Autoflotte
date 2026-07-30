@@ -763,17 +763,17 @@
     if (groupByConducteur && rows.length) {
       const par = {};
       rows.forEach(a => {
-        const c = (a.prenom || '—').trim() || '—';
-        if (!par[c]) par[c] = { n: 0, montant: 0, points: 0 };
-        par[c].n++; par[c].montant += montantDu(a); par[c].points += (Number(a.points) || 0);
+        const k = FP.normPrenom(a.prenom) || '—';   // regroupe Jean / JEAN / Jean Dupont (comme le dashboard)
+        if (!par[k]) par[k] = { label: (a.prenom || '—').trim() || '—', n: 0, montant: 0, points: 0 };
+        par[k].n++; par[k].montant += montantDu(a); par[k].points += (Number(a.points) || 0);
       });
       const entries = Object.entries(par).sort((a, b) => b[1].montant - a[1].montant);
       const legende = state.motif !== 'all' ? state.motif : (state.motifCat !== 'all' ? ((CAT_META[state.motifCat] || {}).label || state.motifCat) : null);
       const titre = legende ? `Collaborateurs concernés par « ${escAmende(legende)} »` : 'Collaborateurs concernés';
       drill.innerHTML = `<div class="text-sm font-bold text-slate-900 mb-2">${titre} — ${entries.length} conducteur(s)</div>
-        <div class="flex flex-wrap gap-2">` + entries.map(([c, v]) => `
-          <button type="button" class="drill-chip" data-cond="${c.replace(/"/g, '&quot;')}" style="display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .7rem;border-radius:9999px;border:1px solid var(--fp-border);background:white;font-size:.8rem;cursor:pointer">
-            <span class="font-semibold">${escAmende(c)}</span>
+        <div class="flex flex-wrap gap-2">` + entries.map(([k, v]) => `
+          <button type="button" class="drill-chip" data-cond="${(v.label || k).replace(/"/g, '&quot;')}" style="display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .7rem;border-radius:9999px;border:1px solid var(--fp-border);background:white;font-size:.8rem;cursor:pointer">
+            <span class="font-semibold">${escAmende(v.label || k)}</span>
             <span class="text-slate-500">${v.n} · ${FP.euro(v.montant)}${v.points ? ' · −' + v.points + 'pts' : ''}</span>
           </button>`).join('') + `</div>`;
       drill.classList.remove('hidden');
@@ -1060,14 +1060,14 @@
   function renderPodium() {
     const amendes2026 = data.amendes.filter(a => anneeOf(a) === '2026');
     const agg = {};
-    amendes2026.forEach(a => { const c = (a.prenom || '—').trim() || '—'; if (!agg[c]) agg[c] = { n: 0, montant: 0, points: 0 }; agg[c].n++; agg[c].montant += montantDu(a); agg[c].points += (Number(a.points) || 0); });
+    amendes2026.forEach(a => { const k = FP.normPrenom(a.prenom) || '—'; if (!agg[k]) agg[k] = { label: (a.prenom || '—').trim() || '—', n: 0, montant: 0, points: 0 }; agg[k].n++; agg[k].montant += montantDu(a); agg[k].points += (Number(a.points) || 0); });
     const all = Object.entries(agg).sort((a, b) => b[1].n - a[1].n || b[1].montant - a[1].montant);
     const shown = podiumExpanded ? all : all.slice(0, 5);
     const medals = ['🥇', '🥈', '🥉'];
-    $('podium').innerHTML = shown.map(([c, v], i) => `
-      <button type="button" data-cond="${c.replace(/"/g, '&quot;')}" class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left">
+    $('podium').innerHTML = shown.map(([k, v], i) => `
+      <button type="button" data-cond="${(v.label || k).replace(/"/g, '&quot;')}" class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left">
         <span class="text-lg w-7 text-center flex-shrink-0">${medals[i] || `<span class="text-sm font-bold text-slate-400">${i + 1}</span>`}</span>
-        <span class="flex-1 font-semibold text-slate-800 truncate">${escAmende(c)}</span>
+        <span class="flex-1 font-semibold text-slate-800 truncate">${escAmende(v.label || k)}</span>
         <span class="flex items-center gap-1.5 flex-shrink-0">
           <span class="podium-tag" style="background:#EEF2F7;color:#475569" title="Nombre d'amendes">${v.n} amende${v.n > 1 ? 's' : ''}</span>
           <span class="podium-tag" style="background:#F3ECE3;color:var(--fp-primary)" title="Montant total">${FP.euro(v.montant)}</span>
