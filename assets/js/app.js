@@ -391,6 +391,23 @@ FP.setAmendeMontantPaye = (id, val) => {
 FP.getAmendeMontantPaye = (id) => {
   try { const m = FP.settings.get().amendeMontantPaye; return (m && m[id] != null && m[id] !== '') ? Number(m[id]) : null; } catch (e) { return null; }
 };
+// Détail des 3 montants officiels d'un avis (minoré / forfaitaire / majoré) + les 2 dates limites,
+// lus par l'IA au scan. Stockés PAR SOCIÉTÉ dans les réglages (app_settings.amendeMontants[id]) —
+// AUCUNE colonne DB à créer. On ne change PAS le montant qui fait foi (FP.montantDu) : c'est juste
+// pour ne pas PERDRE la ventilation lue et pouvoir l'afficher / l'exploiter plus tard.
+FP.setAmendeMontants = (id, o) => {
+  if (!FP.settings || id == null) return;
+  const s = FP.settings.get();
+  const map = (s.amendeMontants && typeof s.amendeMontants === 'object') ? s.amendeMontants : {};
+  const clean = {};
+  ['montantMinore', 'montantForfaitaire', 'montantMajore', 'dateLimiteMinore', 'dateLimiteForfaitaire'].forEach(k => {
+    const v = o && o[k]; if (v != null && v !== '') clean[k] = v;
+  });
+  if (Object.keys(clean).length) { map[id] = clean; s.amendeMontants = map; FP.settings.save(s); }
+};
+FP.getAmendeMontants = (id) => {
+  try { const m = FP.settings.get().amendeMontants; return (m && m[id]) ? m[id] : null; } catch (e) { return null; }
+};
 // ⚠️ HELPER CANONIQUE — année d'une amende (peut revenir en NOMBRE depuis Supabase) : on force
 // en chaîne, avec repli sur l'année de la date. Évite les filtres `annee === '2026'` qui ratent le nombre.
 FP.anneeAmende = (a) => { if (!a) return ''; const y = a.annee; if (y != null && String(y).trim() !== '') return String(y).trim(); return String(a.date || '').slice(0, 4); };
@@ -3032,6 +3049,29 @@ FP.normCarburant = function (raw) {
 // montantHT, montantTVA, montantTTC, description } ou null si indisponible/échec
 // (dans ce cas l'appelant retombe sur le lecteur local). La clé API reste côté
 // serveur : on n'envoie que le fichier + le type de document.
+// Prompt IA pour lire un CONSTAT AMIABLE (ou courrier d'assurance) et PROPOSER la responsabilité de
+// NOTRE véhicule. On injecte la plaque de l'incident pour que l'IA sache lequel des 2 véhicules est le
+// nôtre. L'IA PROPOSE seulement — l'utilisateur confirme (jamais d'enregistrement automatique).
+FP.constatPrompt = function (plaque) {
+  const p = (plaque ? String(plaque) : '').trim() || '(plaque inconnue)';
+  return [
+    'Tu analyses un CONSTAT AMIABLE d\'accident automobile (ou un courrier d\'assurance) pour déterminer',
+    'la RESPONSABILITÉ de NOTRE véhicule, dont la plaque d\'immatriculation est « ' + p + ' ».',
+    'Un constat oppose deux véhicules (A et B). Repère lequel est le NÔTRE grâce à cette plaque (tolère',
+    'espaces/tirets/casse). D\'après les cases cochées, le croquis, les circonstances et les déclarations,',
+    'détermine si NOTRE conducteur est en tort.',
+    'Réponds UNIQUEMENT en JSON strict, sans texte autour :',
+    '{',
+    '  "responsabilite": "responsable" | "non-responsable" | "partagee" | "inconnu",',
+    '  "justification": "<une phrase courte en français, ce qui te fait conclure>",',
+    '  "autrePlaque": "<plaque de l\'autre véhicule si lisible, sinon chaîne vide>"',
+    '}',
+    'Définitions : "responsable" = NOTRE véhicule est en tort ; "non-responsable" = l\'AUTRE véhicule',
+    'est en tort ; "partagee" = torts partagés. Mets "inconnu" si le document ne permet pas de trancher',
+    '(illisible, plaque absente, ce n\'est pas un constat). En cas de doute, réponds "inconnu" —',
+    'ne DEVINE JAMAIS une responsabilité que le document n\'établit pas clairement.',
+  ].join('\n');
+};
 FP.scanIA = async function (file, docType, promptOverride, opts) {
   opts = opts || {};
   try {

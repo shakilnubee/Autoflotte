@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731c">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -447,12 +447,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731b"></script>
-<script src="../assets/js/supabase-client.js?v=20260731b"></script>
-<script src="../assets/js/data.js?v=20260731b"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731b"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731b"></script>
-<script src="../assets/js/app.js?v=20260731b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731c"></script>
+<script src="../assets/js/supabase-client.js?v=20260731c"></script>
+<script src="../assets/js/data.js?v=20260731c"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731c"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731c"></script>
+<script src="../assets/js/app.js?v=20260731c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1203,6 +1203,7 @@
           <span id="am-montant-val" class="cursor-pointer hover:underline" title="${a.statut === 'payée' ? 'Cliquer pour ajuster le montant réellement payé' : 'Cliquer pour modifier le montant'}">${montantDu(a) ? FP.euroPrecis(montantDu(a)) : '— €'}</span>
         </div>
         ${a.majoree && a.montantMajore ? `<div class="text-xs text-slate-400 mt-1">Initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}${a.dateMajoration ? ' · majorée le ' + FP.date(a.dateMajoration) : ''}</div>` : ''}
+        ${(() => { const bd = FP.getAmendeMontants ? FP.getAmendeMontants(a.id) : null; if (!bd) return ''; const p = []; if (bd.montantMinore) p.push('minoré ' + FP.euroPrecis(bd.montantMinore)); if (bd.montantForfaitaire) p.push('forfaitaire ' + FP.euroPrecis(bd.montantForfaitaire)); if (bd.montantMajore) p.push('majoré ' + FP.euroPrecis(bd.montantMajore)); if (!p.length) return ''; const dl = bd.dateLimiteForfaitaire ? ' · limite ' + FP.date(bd.dateLimiteForfaitaire) : (bd.dateLimiteMinore ? ' · limite minoré ' + FP.date(bd.dateLimiteMinore) : ''); return `<div class="text-xs text-slate-400 mt-1" title="Les 3 tarifs officiels lus sur l'avis par l'IA">3 tarifs lus : ${p.join(' · ')}${dl}</div>`; })()}
         ${a.statut === 'payée' ? (() => { const bareme = (a.majoree && a.montantMajore != null && a.montantMajore !== '') ? Number(a.montantMajore) : (Number(a.montant) || 0); const ecart = FP.getAmendeMontantPaye ? FP.getAmendeMontantPaye(a.id) : null; return `<div class="text-xs text-slate-400 mt-1">Montant réellement payé · cliquez pour ajuster${(ecart != null && ecart !== bareme) ? ` (barème : ${FP.euroPrecis(bareme)})` : ''}</div>`; })() : ''}
         <div class="flex justify-center items-center gap-2 mt-3 flex-wrap">
           ${statutBadge(a.statut)}
@@ -1805,6 +1806,7 @@
 
   // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
   let _avisFile = null; // scan de l'avis sélectionné, envoyé au stockage à l'enregistrement
+  let _scanBreakdown = null; // détail des 3 montants + dates limites lus par l'IA (persisté après insert)
   // #4 — Import MULTIPLE : file d'attente d'avis. On enchaîne le formulaire avis par avis.
   let _avisQueue = [];
   let _avisQueueTotal = 0;
@@ -1978,6 +1980,8 @@
     renderKPIs(); renderTable(); renderCharts();
     const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
     FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: newA.numeroAvis || null, commentaire: newA.commentaire || null, avisUrl: avisUrl || null });
+    // Persiste la ventilation des 3 montants + dates limites lue par l'IA (réglages société, pas de colonne DB).
+    if (_scanBreakdown && FP.setAmendeMontants) { FP.setAmendeMontants(newA.id, _scanBreakdown); _scanBreakdown = null; }
     // #4 : import multiple en cours -> on enchaîne sur l'avis suivant (sans l'écran e-mail par avis)
     if (_avisQueueTotal > 1) {
       const fait = _avisQueueTotal - _avisQueue.length;
@@ -2251,6 +2255,14 @@
           if (ia.montantMinore != null) parsed.montantMinore = ia.montantMinore;
           if (ia.montantForfaitaire != null) parsed.montantForfaitaire = ia.montantForfaitaire;
           if (ia.montantMajore != null) parsed.montantMajore = ia.montantMajore;
+          if (ia.dateLimiteMinore) parsed.dateLimiteMinore = ia.dateLimiteMinore;
+          if (ia.dateLimiteForfaitaire) parsed.dateLimiteForfaitaire = ia.dateLimiteForfaitaire;
+          // Mémorise la ventilation lue par l'IA pour la PERSISTER après l'insertion (réglages société,
+          // sans colonne DB). Ne change PAS le montant qui fait foi — c'est juste pour ne rien perdre.
+          _scanBreakdown = {
+            montantMinore: ia.montantMinore, montantForfaitaire: ia.montantForfaitaire, montantMajore: ia.montantMajore,
+            dateLimiteMinore: ia.dateLimiteMinore, dateLimiteForfaitaire: ia.dateLimiteForfaitaire,
+          };
           // Montant À PAYER = montantTTC de l'IA (= le MINORÉ, sinon le forfaitaire) — JAMAIS le
           // majoré : c'est l'appli qui décidera de la majoration selon la date. Vaut aussi pour un
           // ré-import d'un avis déjà enregistré (sinon on affichait un montant aberrant type 1875).

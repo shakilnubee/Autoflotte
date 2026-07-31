@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731c">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -328,12 +328,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731b"></script>
-<script src="../assets/js/supabase-client.js?v=20260731b"></script>
-<script src="../assets/js/data.js?v=20260731b"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731b"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731b"></script>
-<script src="../assets/js/app.js?v=20260731b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731c"></script>
+<script src="../assets/js/supabase-client.js?v=20260731c"></script>
+<script src="../assets/js/data.js?v=20260731c"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731c"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731c"></script>
+<script src="../assets/js/app.js?v=20260731c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -557,6 +557,11 @@
               <label class="text-xs text-slate-500">Remboursé (€)<input class="sin-doss" data-key="${g.key}" data-k="rembourse" type="number" value="${dv.rembourse ?? ''}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
               <label class="text-xs text-slate-500">Responsabilité<select class="sin-doss" data-key="${g.key}" data-k="resp" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px">${respOpts.map(([v, l]) => `<option value="${v}" ${dv.resp === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
             </div>
+            <div class="mt-2">
+              <button type="button" class="sin-constat-btn" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" style="display:inline-flex;align-items:center;gap:.3rem;font-size:12px;font-weight:600;color:var(--fp-accent);background:#fff;border:1px solid var(--fp-border);border-radius:8px;padding:4px 8px;cursor:pointer" title="Déposer le constat amiable : l'IA lit qui est en tort et te le propose (tu confirmes)"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i> Lire le constat (IA)</button>
+              <input type="file" class="sin-constat-file hidden" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" accept="image/*,application/pdf,.pdf">
+              <div class="sin-constat-status text-xs mt-1" data-key="${g.key}"></div>
+            </div>
             ${g.cost ? `<div class="text-xs text-slate-500 mt-2">Coût ${FP.euroPrecis(g.cost)}${Number(dv.rembourse) ? ` · remboursé ${FP.euroPrecis(dv.rembourse)}` : ''} → <b style="color:${reste > 0 ? '#b45309' : '#047857'}">reste à charge ${FP.euroPrecis(Math.max(0, reste))}</b></div>` : ''}
           </details>`;
         // Candidats à associer : autres sinistres du même véhicule pas déjà dans cet incident
@@ -736,10 +741,50 @@
       if (!Object.keys(o).length) delete s.sinistreAssurance[key];
       FP.settings.save(s); renderTimeline(); if (fld === 'resp') renderConducteursRisque(); return;
     }
+    // Constat amiable déposé → l'IA lit et PROPOSE la responsabilité (l'utilisateur confirme).
+    const cf = e.target.closest('.sin-constat-file');
+    if (cf) { handleConstatScan(cf); return; }
   });
+
+  // Lecture IA d'un constat : propose la responsabilité de NOTRE véhicule (jamais enregistré sans confirmation).
+  async function handleConstatScan(input) {
+    const key = input.dataset.key, immat = input.dataset.immat || '';
+    const file = (input.files || [])[0]; input.value = '';
+    if (!file) return;
+    const statusEl = $('timeline').querySelector(`.sin-constat-status[data-key="${key}"]`);
+    const setSt = (html, color) => { if (statusEl) { statusEl.innerHTML = html; statusEl.style.color = color || '#475569'; if (window.lucide) lucide.createIcons(); } };
+    if (!(window.FP && FP.scanIA && FP.constatPrompt)) { setSt('⚠️ Connexion requise pour lire le constat.', '#B91C1C'); return; }
+    setSt('⏳ Lecture du constat par l\'IA…');
+    let res = null;
+    try { res = await FP.scanIA(file, 'constat', FP.constatPrompt(immat)); } catch (_) {}
+    if (!res || !res.responsabilite) { setSt('⚠️ Lecture impossible. Renseigne la responsabilité à la main.', '#B45309'); return; }
+    const norm = String(res.responsabilite).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const map = { 'responsable': 'responsable', 'non-responsable': 'non-responsable', 'non responsable': 'non-responsable', 'partagee': 'partagee' };
+    const val = map[norm] || '';
+    const labels = { 'responsable': 'Responsable (nous en tort)', 'non-responsable': 'Non responsable', 'partagee': 'Partagée' };
+    const just = res.justification ? ' — ' + FP.esc(res.justification) : '';
+    if (!val) { setSt('🤷 L\'IA n\'a pas pu trancher' + just + '. Renseigne la responsabilité à la main.', '#B45309'); return; }
+    // Pré-remplit le menu Responsabilité SANS enregistrer, puis propose une confirmation.
+    const sel = $('timeline').querySelector(`.sin-doss[data-k="resp"][data-key="${key}"]`);
+    if (sel) sel.value = val;
+    setSt(`🔍 <b>IA propose : ${labels[val]}</b>${just}. <button type="button" class="sin-constat-ok" data-key="${key}" data-val="${val}" style="margin-left:4px;font-size:11px;font-weight:700;color:#fff;background:#047857;border:none;border-radius:6px;padding:2px 8px;cursor:pointer">✓ Enregistrer</button> <span style="color:#94A3B8">ou corrige le menu ci-dessus.</span>`, '#0F766E');
+  }
 
   // Clics : associer / détacher / supprimer
   $('timeline').addEventListener('click', (e) => {
+    // Constat IA : bouton « Lire le constat » → ouvre le sélecteur de fichier
+    const cbtn = e.target.closest('.sin-constat-btn');
+    if (cbtn) { const inp = cbtn.parentElement && cbtn.parentElement.querySelector('.sin-constat-file'); if (inp) inp.click(); return; }
+    // Constat IA : « ✓ Enregistrer » → sauve la responsabilité proposée + met à jour KPI/podium
+    const cok = e.target.closest('.sin-constat-ok');
+    if (cok) {
+      const key = cok.dataset.key, val = cok.dataset.val;
+      const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
+      const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
+      if (val) o.resp = val; else delete o.resp;
+      if (!Object.keys(o).length) delete s.sinistreAssurance[key];
+      FP.settings.save(s); renderKPIs(); renderConducteursRisque(); renderTimeline(); return;
+    }
     const assoc = e.target.closest('[data-sin-assoc]');
     if (assoc) { const p = $('timeline').querySelector(`[data-assoc-panel="${assoc.dataset.sinAssoc}"]`); if (p) p.classList.toggle('hidden'); return; }
 
