@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731i">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -248,6 +248,7 @@
         <div class="flex flex-wrap items-center gap-2 mt-1">
           <select class="field-input" id="soc-switch" style="width:auto;min-width:180px"></select>
           <button class="btn btn-dark text-sm" id="btn-new-societe"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle société</button>
+          <button class="btn text-sm text-red-600 hover:bg-red-50 hidden" id="btn-del-societe" title="Réservé au CEO — retire une société cliente de la liste"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer une société</button>
         </div>
         <p class="text-xs text-slate-500 mt-2">Changer de société recharge la page avec ses données. À la création d'une nouvelle société, remplis ses infos ci-dessous.</p>
       </div>
@@ -561,10 +562,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731h"></script>
-<script src="../assets/js/supabase-client.js?v=20260731h"></script>
-<script src="../assets/js/data.js?v=20260731h"></script>
-<script src="../assets/js/app.js?v=20260731h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731i"></script>
+<script src="../assets/js/supabase-client.js?v=20260731i"></script>
+<script src="../assets/js/data.js?v=20260731i"></script>
+<script src="../assets/js/app.js?v=20260731i"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -816,6 +817,23 @@
     const list = (FP.getSocietes ? FP.getSocietes() : ['PXP']);
     const cur = (FP.activeSociete ? FP.activeSociete() : 'PXP');
     sel.innerHTML = list.map(s => `<option value="${s.replace(/"/g,'&quot;')}"${s === cur ? ' selected' : ''}>${s}</option>`).join('');
+    // Bouton « Supprimer une société » : visible UNIQUEMENT pour le CEO.
+    const db = $('btn-del-societe'); if (db) db.classList.toggle('hidden', !(FP.isCEO && FP.isCEO()));
+  }
+  // Suppression d'une société (CEO) — retire du registre, ne touche PAS aux données déjà en base.
+  function deleteSociete() {
+    if (!(FP.isCEO && FP.isCEO())) { alert('Action réservée au CEO.'); return; }
+    const list = (FP.getSocietes ? FP.getSocietes() : ['PXP']).filter(s => String(s).toLowerCase() !== 'pxp');
+    if (!list.length) { alert('Aucune société cliente à supprimer (seule « PXP » existe).'); return; }
+    const name = (prompt('Quelle société retirer de la liste ?\n\n• ' + list.join('\n• ') + '\n\nTape son nom exact :') || '').trim();
+    if (!name) return;
+    const match = list.find(s => String(s).toLowerCase() === name.toLowerCase());
+    if (!match) { alert('Société « ' + name + ' » introuvable dans la liste.'); return; }
+    if (!confirm('Supprimer « ' + match + ' » de la liste ?\n\n⚠️ La société disparaît du sélecteur et de la Facturation.\nLes données déjà enregistrées (véhicules, amendes…) NE sont PAS effacées de la base : elles restent isolées et simplement inaccessibles depuis la liste.\n\nContinuer ?')) return;
+    const cur = (FP.activeSociete ? FP.activeSociete() : 'PXP');
+    if (String(cur).toLowerCase() === match.toLowerCase() && FP.setActiveSociete) FP.setActiveSociete('PXP');
+    if (FP.removeSociete && FP.removeSociete(match)) location.reload();
+    else alert('Suppression impossible (« PXP » est protégée).');
   }
   // Formulaire du profil (champs générés depuis FP.PROFIL_CHAMPS)
   function renderProfilForm() {
@@ -1017,6 +1035,7 @@
   $('btn-save-societe').addEventListener('click', saveSociete);
   { const sw = $('soc-switch'); if (sw) sw.addEventListener('change', e => switchSociete(e.target.value)); }
   { const nb = $('btn-new-societe'); if (nb) nb.addEventListener('click', newSociete); }
+  { const db = $('btn-del-societe'); if (db) db.addEventListener('click', deleteSociete); }
   // Réservé au CEO (super-admin) : sauvegarde complète + bascule/création de société (multi-flotte).
   // Un Admin gère les INFOS de SA société (plus bas), mais ne change pas de société ni n'en crée.
   if (FP.isSuperAdmin && !FP.isSuperAdmin()) {

@@ -835,6 +835,18 @@ FP.addSociete = (name) => {
   try { localStorage.setItem(FP.SOCIETES_KEY, JSON.stringify(arr)); } catch (e) {}
   return true;
 };
+// Retire une société de la LISTE (registre) — CEO only côté UI. La maison « PXP » est protégée.
+// ⚠️ Ne supprime PAS les données (véhicules/amendes…) déjà en base : elles restent isolées par RLS,
+// juste plus sélectionnables. On nettoie le registre local (SOCIETES_KEY) + la config partagée.
+FP.removeSociete = (name) => {
+  name = (name || '').trim();
+  if (!name || name.toLowerCase() === 'pxp') return false;
+  let arr = FP.getSocietes().filter(x => String(x).toLowerCase() !== name.toLowerCase());
+  if (!arr.includes('PXP')) arr.unshift('PXP');
+  try { localStorage.setItem(FP.SOCIETES_KEY, JSON.stringify(arr)); } catch (e) {}
+  try { const s = FP.settings.get(); if (Array.isArray(s.societes)) { s.societes = s.societes.filter(x => String(x).toLowerCase() !== name.toLowerCase()); if (!s.societes.includes('PXP')) s.societes.unshift('PXP'); FP.settings.save(s); } } catch (e) {}
+  return true;
+};
 // Modèles d'e-mail par défaut (amende) — source UNIQUE, réutilisée par amendes.html ET
 // pré-affichée dans Paramètres pour que l'utilisateur les voie et puisse les personnaliser.
 FP.MAIL_DEFAUT = {
