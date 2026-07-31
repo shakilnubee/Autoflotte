@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731m">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731m"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731m">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -448,12 +448,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731l"></script>
-<script src="../assets/js/supabase-client.js?v=20260731l"></script>
-<script src="../assets/js/data.js?v=20260731l"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731l"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731l"></script>
-<script src="../assets/js/app.js?v=20260731l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731m"></script>
+<script src="../assets/js/supabase-client.js?v=20260731m"></script>
+<script src="../assets/js/data.js?v=20260731m"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731m"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731m"></script>
+<script src="../assets/js/app.js?v=20260731m"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -524,7 +524,7 @@
     if (!file || !state.currentId) return;
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a) return;
-    let label = prompt('Nom du document ?\nSuggestions : ' + PIECE_SUGGESTIONS.join(' · '), 'Avis après désignation');
+    let label = await FP.prompt('Nom du document ?\nSuggestions : ' + PIECE_SUGGESTIONS.join(' · '), 'Avis après désignation');
     if (label === null) return; // annulé
     label = (label || '').trim() || 'Document';
     let url = '';
@@ -539,11 +539,11 @@
     FP.persist.update('amendes', a.id, { pieces: list });
     openDrawer(a.id);
   }
-  function deletePiece(pid) {
+  async function deletePiece(pid) {
     if (!state.currentId || !pid) return;
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a || !Array.isArray(a.pieces)) return;
-    if (!confirm('Supprimer ce document de l\'amende ?')) return;
+    if (!await FP.confirm('Supprimer ce document de l\'amende ?')) return;
     const list = a.pieces.filter(p => p.id !== pid);
     FP.history.commit();
     a.pieces = list;
@@ -966,7 +966,7 @@
         console.warn('[sendEmail] échec → repli Gmail', e);
         // On explique POURQUOI l'envoi auto a échoué (au lieu d'ouvrir Gmail en silence),
         // puis on propose quand même le repli Gmail.
-        const goGmail = confirm("L'envoi automatique par e-mail a échoué :\n\n" + em
+        const goGmail = await FP.confirm("L'envoi automatique par e-mail a échoué :\n\n" + em
           + "\n\n(Souvent : le domaine de l'adresse d'envoi n'est pas encore « Verified » dans Resend.)\n\n"
           + "OK = ouvrir Gmail pour envoyer à la main · Annuler = ne rien faire.");
         if (!goGmail) return;
@@ -975,7 +975,7 @@
     }
     // Pas d'adresse pour le destinataire → l'envoi AUTOMATIQUE est impossible (rien tenté côté Resend).
     if (!to) {
-      const go = confirm("Ce conducteur n'a pas d'e-mail enregistré → l'envoi automatique est impossible.\n\n"
+      const go = await FP.confirm("Ce conducteur n'a pas d'e-mail enregistré → l'envoi automatique est impossible.\n\n"
         + "Ajoute son adresse dans sa fiche (Conducteurs → Modifier → Email) pour envoyer en un clic.\n\n"
         + "OK = ouvrir Gmail pour l'envoyer à la main · Annuler = ne rien faire.");
       if (!go) return;
@@ -1404,13 +1404,13 @@
     if (FP.toast) FP.toast('✓ Amende marquée payée', { actionLabel: 'Annuler', onAction: () => { state.currentId = id; markUnpaid(); } });
   }
   // Marque une amende comme CONTESTÉE
-  function markConteste() {
+  async function markConteste() {
     if (!state.currentId) return;
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a) return;
     // Justificatif FACULTATIF : on le propose, mais l'utilisateur peut ignorer cette étape.
     if (!a.justifUrl) {
-      const wantJustif = confirm("Joindre une pièce justificative à la contestation ?\n\nOK = joindre un document · Annuler = contester sans justificatif.");
+      const wantJustif = await FP.confirm("Joindre une pièce justificative à la contestation ?\n\nOK = joindre un document · Annuler = contester sans justificatif.");
       if (wantJustif) { justifIntent = 'contest'; $('justif-file').click(); return; }
     }
     FP.history.commit();
@@ -1449,12 +1449,12 @@
   }
   // Ajuster le montant RÉELLEMENT payé d'une amende payée (remise, arrangement, majoration…).
   // Stocké dans les réglages par société (pas en base) et pris en compte partout via FP.montantDu.
-  function editPaidAmount(a) {
+  async function editPaidAmount(a) {
     if (!a) return;
     const cur = FP.getAmendeMontantPaye ? FP.getAmendeMontantPaye(a.id) : null;
     const bareme = montantDu(a);
     const defVal = (cur != null ? cur : bareme);
-    const raw = prompt('Montant réellement payé (€) :\n\n(Laisse vide pour revenir au montant du barème.)', defVal ? String(defVal).replace('.', ',') : '');
+    const raw = await FP.prompt('Montant réellement payé (€) :\n\n(Laisse vide pour revenir au montant du barème.)', defVal ? String(defVal).replace('.', ',') : '');
     if (raw === null) return; // annulé
     const clean = String(raw).trim().replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
     const val = clean === '' ? null : parseFloat(clean);
@@ -1521,7 +1521,7 @@
       const q = `Le justificatif indique ${FP.euroPrecis(mpaye)} payé, au lieu de ${FP.euroPrecis(base)} enregistré`
         + (moins ? ' (réglé avant échéance ?).' : '.')
         + `\n\nMettre à jour le montant de l'amende à ${FP.euroPrecis(mpaye)} ?`;
-      if (confirm(q)) { mpayeOk = mpaye; montantNote = ` · réglée ${FP.euroPrecis(mpaye)} (initial ${FP.euroPrecis(base)})`; }
+      if (await FP.confirm(q)) { mpayeOk = mpaye; montantNote = ` · réglée ${FP.euroPrecis(mpaye)} (initial ${FP.euroPrecis(base)})`; }
     }
 
     const mention = `Payée le ${FP.date(dpaie || new Date().toISOString().slice(0, 10))}${montantNote}`;
@@ -1629,10 +1629,10 @@
     });
   }
   // Supprime un document de l'amende (scan d'avis / justificatif) : on enlève le lien
-  function deleteAmDoc(field, label) {
+  async function deleteAmDoc(field, label) {
     if (!state.currentId) return;
     const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
-    if (!confirm(`Supprimer ${label} de cette amende ?`)) return;
+    if (!await FP.confirm(`Supprimer ${label} de cette amende ?`)) return;
     FP.history.commit();
     a[field] = null;
     const id = a.id;
@@ -1674,11 +1674,11 @@
     FP.persist.update('amendes', id, { statut: 'désignée' });
     openDrawer(id);
   }
-  function deleteAmende() {
+  async function deleteAmende() {
     if (!state.currentId) return;
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a) return;
-    if (!confirm(`Supprimer cette amende (${a.id}) ?`)) return;
+    if (!await FP.confirm(`Supprimer cette amende (${a.id}) ?`)) return;
     FP.history.commit();
     const id = a.id;
     data.amendes = data.amendes.filter(x => x.id !== id);
@@ -1936,7 +1936,7 @@
         && Number(a.montant) > 0 && montant > Number(a.montant)) || null;
     }
     if (majProbable) {
-      const lien = confirm(`💡 Cela ressemble à une MAJORATION d'une amende déjà enregistrée :\n\n`
+      const lien = await FP.confirm(`💡 Cela ressemble à une MAJORATION d'une amende déjà enregistrée :\n\n`
         + `• ${majProbable.prenom || '?'} — ${FP.date(majProbable.date)}\n`
         + `• ${majProbable.motif || '—'} — ${majProbable.montant ? FP.euroPrecis(majProbable.montant) : '—'}\n\n`
         + `OK = la rattacher comme majoration (${FP.euroPrecis(montant)})\n`
@@ -1944,7 +1944,7 @@
       if (lien) { lierMajoration(majProbable, montant, date, numAvis); return; }
     }
     if (doublon) {
-      const ok = confirm(`⚠️ Doublon possible : une amende très similaire existe déjà\n\n`
+      const ok = await FP.confirm(`⚠️ Doublon possible : une amende très similaire existe déjà\n\n`
         + `• ${doublon.prenom || '?'} — ${FP.date(doublon.date)}\n`
         + `• ${doublon.motif || '—'} — ${doublon.montant ? FP.euroPrecis(doublon.montant) : '—'}\n`
         + (doublon.numeroAvis ? `• N° d'avis : ${doublon.numeroAvis}\n` : '')
@@ -1973,7 +1973,7 @@
       statut: $('am-statut').value || 'à payer', commentaire: etrangere ? 'Amende étrangère' : '', avisUrl
     };
     // Anti-doublon : même n° d'avis (+ montant), ou même prénom + date + montant.
-    if (FP.dupe && !FP.dupe.confirmAdd('amendes', newA, data.amendes)) return;
+    if (FP.dupe && !(await FP.dupe.confirmAdd('amendes', newA, data.amendes))) return;
     FP.history.commit();
     data.amendes.push(newA);
     if (newA.statut === 'payée') setJustifWatch(newA.id, true); // payée sans justificatif dès la création → à surveiller
@@ -2486,9 +2486,9 @@
   }
   $('am-bulk-pay').addEventListener('click', () => bulkStatut('payée'));
   $('am-bulk-unpay').addEventListener('click', () => bulkStatut('à payer'));
-  $('am-bulk-delete').addEventListener('click', () => {
+  $('am-bulk-delete').addEventListener('click', async () => {
     const ids = [...state.selectedIds]; if (!ids.length) return;
-    if (!confirm(`Supprimer ${ids.length} amende(s) ? (annulable avec Ctrl+Z)`)) return;
+    if (!await FP.confirm(`Supprimer ${ids.length} amende(s) ? (annulable avec Ctrl+Z)`)) return;
     FP.history.commit();
     ids.forEach(id => { const i = data.amendes.findIndex(x => x.id === id); if (i >= 0) data.amendes.splice(i, 1); FP.persist.delete('amendes', id); });
     const n = ids.length; state.selectedIds.clear();

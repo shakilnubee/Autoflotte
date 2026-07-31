@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731m">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731m"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731m">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -325,10 +325,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731l"></script>
-<script src="../assets/js/supabase-client.js?v=20260731l"></script>
-<script src="../assets/js/data.js?v=20260731l"></script>
-<script src="../assets/js/app.js?v=20260731l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731m"></script>
+<script src="../assets/js/supabase-client.js?v=20260731m"></script>
+<script src="../assets/js/data.js?v=20260731m"></script>
+<script src="../assets/js/app.js?v=20260731m"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -540,7 +540,7 @@
     $('f-heure').value = e.heureEmprunt || '';
     $('modal-new').classList.add('open');
   }
-  function addEmprunt(e) {
+  async function addEmprunt(e) {
     e.preventDefault();
     const immat = resolveImmat($('f-vehicule').value);
     const emprunteur = $('f-emprunteur').value.trim();
@@ -567,7 +567,7 @@
       dateRetour: null, heureRetour: '', renduPar: '',
     };
     // Anti-doublon : même véhicule + même emprunteur + même date d'emprunt.
-    if (FP.dupe && !FP.dupe.confirmAdd('emprunts', obj, cache)) return;
+    if (FP.dupe && !(await FP.dupe.confirmAdd('emprunts', obj, cache))) return;
     cache.unshift(obj);
     $('modal-new').classList.remove('open');
     render();
@@ -623,8 +623,8 @@
     if (dbOn()) FP.persist.upsert('emprunts', e); lsSet();
   }
 
-  function delEmprunt(id) {
-    if (!confirm('Supprimer cet emprunt ?')) return;
+  async function delEmprunt(id) {
+    if (!(await FP.confirm('Supprimer cet emprunt ?'))) return;
     cache = cache.filter(x => x.id !== id);
     render();
     if (dbOn()) FP.persist.delete('emprunts', id); lsSet();
@@ -734,13 +734,13 @@
     renderResas();
     if (FP.toast) FP.toast('Réservation enregistrée');
   }
-  function delResa(id) {
-    if (!confirm('Supprimer cette réservation ?')) return;
+  async function delResa(id) {
+    if (!(await FP.confirm('Supprimer cette réservation ?'))) return;
     saveResas(getResas().filter(x => x.id !== id));
     renderResas();
   }
   // Transforme une réservation en emprunt réel (le véhicule est pris maintenant)
-  function startEmpruntFromResa(id) {
+  async function startEmpruntFromResa(id) {
     const r = getResas().find(x => x.id === id); if (!r) return;
     const now = new Date();
     const obj = {
@@ -750,7 +750,7 @@
       dateRetour: null, heureRetour: '', renduPar: '',
     };
     // Anti-doublon : même véhicule + même emprunteur + même date d'emprunt (cf. ajout manuel).
-    if (FP.dupe && !FP.dupe.confirmAdd('emprunts', obj, cache)) return;
+    if (FP.dupe && !(await FP.dupe.confirmAdd('emprunts', obj, cache))) return;
     cache.unshift(obj);
     if (dbOn()) FP.persist.insert('emprunts', obj); lsSet();
     saveResas(getResas().filter(x => x.id !== id));

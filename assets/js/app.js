@@ -2015,8 +2015,8 @@ FP.notes = {
         close(); this.decorate(document);
         if (FP.toast) FP.toast('Note enregistrée'); if (typeof m._after === 'function') m._after();
       });
-      m.querySelector('#fp-note-del').addEventListener('click', () => {
-        if (!confirm('Effacer cette note ?')) return;
+      m.querySelector('#fp-note-del').addEventListener('click', async () => {
+        if (!await FP.confirm('Effacer cette note ?')) return;
         this.set(m.dataset.key, ''); m.querySelector('#fp-note-text').value = '';
         close(); this.decorate(document); if (FP.toast) FP.toast('Note effacée');
       });
@@ -2791,6 +2791,119 @@ FP.toast = (msg, opts) => {
   return el;
 };
 
+// ── Fenêtres modales « à la sauce Parc Pilot » — remplacent les pop-ups natives ──
+// alert()/confirm()/prompt() du navigateur (moches, hors charte). Promesse en retour :
+//   await FP.confirm('Supprimer ?')  → true/false   ·   await FP.prompt('Nom ?', 'défaut') → texte/null
+//   FP.alert('Fait !')  (et window.alert est remplacé en drop-in, aucun changement d'appel requis).
+FP.dialog = function (opts) {
+  opts = opts || {};
+  const type = opts.type || 'confirm';                 // 'confirm' | 'alert' | 'prompt'
+  const danger = !!opts.danger;
+  const msg = opts.message == null ? '' : String(opts.message);
+  const title = opts.title != null ? opts.title
+    : (type === 'alert' ? 'Information' : (type === 'prompt' ? 'Saisie' : 'Confirmation'));
+  const okText = opts.okText || (type === 'alert' ? 'OK' : (danger ? 'Supprimer' : 'Confirmer'));
+  const cancelText = opts.cancelText || 'Annuler';
+
+  if (!document.getElementById('fp-dlg-style')) {
+    const st = document.createElement('style'); st.id = 'fp-dlg-style';
+    st.textContent = [
+      '.fp-dlg-backdrop{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:1.25rem;',
+      'background:rgba(11,18,32,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);animation:fp-dlg-fade .16s ease}',
+      '.fp-dlg-card{width:100%;max-width:430px;background:#fff;border:1px solid var(--fp-border,#E3E8F0);border-radius:16px;',
+      'box-shadow:0 30px 70px -20px rgba(11,18,32,.5);padding:1.4rem 1.4rem 1.15rem;animation:fp-dlg-pop .22s cubic-bezier(.16,1,.3,1)}',
+      '.fp-dlg-top{display:flex;gap:.85rem;align-items:flex-start}',
+      '.fp-dlg-icon{flex:none;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(249,115,22,.12);color:var(--fp-accent,#F97316)}',
+      '.fp-dlg-icon.danger{background:rgba(239,68,68,.12);color:var(--fp-danger,#EF4444)}',
+      '.fp-dlg-icon svg{width:22px;height:22px}',
+      '.fp-dlg-body{flex:1;min-width:0}',
+      '.fp-dlg-title{font-weight:800;font-size:1.08rem;color:var(--fp-primary,#0B1220);margin-bottom:.2rem;line-height:1.25}',
+      '.fp-dlg-msg{font-size:.92rem;color:#475569;line-height:1.5;white-space:pre-line;word-wrap:break-word}',
+      '.fp-dlg-input{width:100%;margin-top:.9rem;padding:.6rem .75rem;border:1px solid var(--fp-border,#E3E8F0);border-radius:9px;font-size:.95rem;color:var(--fp-primary,#0B1220);font-family:inherit}',
+      '.fp-dlg-input:focus{outline:none;border-color:var(--fp-accent,#F97316);box-shadow:0 0 0 3px rgba(249,115,22,.15)}',
+      '.fp-dlg-actions{display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.25rem;flex-wrap:wrap}',
+      '.fp-dlg-btn{border:none;border-radius:9px;padding:.6rem 1.1rem;font-weight:700;font-size:.9rem;cursor:pointer;font-family:inherit;transition:transform .12s,filter .15s,background .15s}',
+      '.fp-dlg-btn:active{transform:translateY(1px)}',
+      '.fp-dlg-cancel{background:#EEF1F6;color:var(--fp-primary,#0B1220)}',
+      '.fp-dlg-cancel:hover{background:#E3E8F0}',
+      '.fp-dlg-ok{background:var(--fp-accent,#F97316);color:#fff;box-shadow:0 10px 22px -10px rgba(249,115,22,.7)}',
+      '.fp-dlg-ok:hover{filter:brightness(1.05)}',
+      '.fp-dlg-ok.danger{background:var(--fp-danger,#EF4444);box-shadow:0 10px 22px -10px rgba(239,68,68,.7)}',
+      '@keyframes fp-dlg-fade{from{opacity:0}to{opacity:1}}',
+      '@keyframes fp-dlg-pop{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}',
+      '@media (prefers-reduced-motion:reduce){.fp-dlg-backdrop,.fp-dlg-card{animation:none}}'
+    ].join('');
+    document.head.appendChild(st);
+  }
+
+  return new Promise((resolve) => {
+    const iconName = danger ? 'trash-2' : (type === 'alert' ? 'info' : (type === 'prompt' ? 'pencil' : 'help-circle'));
+    const back = document.createElement('div'); back.className = 'fp-dlg-backdrop';
+    const card = document.createElement('div'); card.className = 'fp-dlg-card';
+    card.setAttribute('role', 'dialog'); card.setAttribute('aria-modal', 'true');
+
+    const top = document.createElement('div'); top.className = 'fp-dlg-top';
+    const ic = document.createElement('div'); ic.className = 'fp-dlg-icon' + (danger ? ' danger' : '');
+    ic.innerHTML = '<i data-lucide="' + iconName + '"></i>';
+    const body = document.createElement('div'); body.className = 'fp-dlg-body';
+    if (title) { const t = document.createElement('div'); t.className = 'fp-dlg-title'; t.textContent = title; body.appendChild(t); }
+    const m = document.createElement('div'); m.className = 'fp-dlg-msg'; m.textContent = msg; body.appendChild(m);
+    let input = null;
+    if (type === 'prompt') {
+      input = document.createElement('input'); input.className = 'fp-dlg-input'; input.type = 'text';
+      input.value = opts.defaultValue != null ? String(opts.defaultValue) : '';
+      if (opts.placeholder) input.placeholder = opts.placeholder;
+      body.appendChild(input);
+    }
+    top.appendChild(ic); top.appendChild(body); card.appendChild(top);
+
+    const actions = document.createElement('div'); actions.className = 'fp-dlg-actions';
+    let cancelBtn = null;
+    if (type !== 'alert') {
+      cancelBtn = document.createElement('button');
+      cancelBtn.className = 'fp-dlg-btn fp-dlg-cancel'; cancelBtn.textContent = cancelText;
+      actions.appendChild(cancelBtn);
+    }
+    const okBtn = document.createElement('button');
+    okBtn.className = 'fp-dlg-btn fp-dlg-ok' + (danger ? ' danger' : ''); okBtn.textContent = okText;
+    actions.appendChild(okBtn);
+    card.appendChild(actions);
+    back.appendChild(card);
+    document.body.appendChild(back);
+    try { if (window.lucide && lucide.createIcons) lucide.createIcons(); } catch (e) {}
+
+    const prevFocus = document.activeElement;
+    const cleanup = () => {
+      document.removeEventListener('keydown', onKey, true);
+      back.style.opacity = '0'; back.style.transition = 'opacity .15s';
+      setTimeout(() => { try { back.remove(); } catch (e) {} }, 150);
+      try { if (prevFocus && prevFocus.focus) prevFocus.focus(); } catch (e) {}
+    };
+    const done = (val) => { cleanup(); resolve(val); };
+    const onOk = () => done(type === 'prompt' ? (input ? input.value : '') : true);
+    const onCancel = () => done(type === 'prompt' ? null : (type === 'alert' ? undefined : false));
+    okBtn.addEventListener('click', onOk);
+    if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
+    back.addEventListener('click', (e) => { if (e.target === back) onCancel(); });
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+      else if (e.key === 'Enter' && (type === 'alert' || type === 'prompt' || e.target !== cancelBtn)) { e.preventDefault(); onOk(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    setTimeout(() => { try { (input || okBtn).focus(); } catch (e) {} }, 40);
+  });
+};
+// Confirmation : détecte automatiquement les suppressions → bouton rouge « Supprimer ».
+FP.confirm = (message, opts) => {
+  opts = opts || {};
+  const auto = /supprim|effacer|d[ée]finit|irr[ée]vers|retirer|vider/i.test(String(message == null ? '' : message));
+  return FP.dialog(Object.assign({ type: 'confirm', message, danger: auto }, opts));
+};
+FP.alert  = (message, opts) => FP.dialog(Object.assign({ type: 'alert',  message: message }, opts || {}));
+FP.prompt = (message, defaultValue, opts) => FP.dialog(Object.assign({ type: 'prompt', message: message, defaultValue: defaultValue }, opts || {}));
+// Remplace la pop-up native alert() par la version stylée (DROP-IN : aucun appel à changer).
+try { window.alert = function (m) { FP.alert(m); }; } catch (e) {}
+
 // Avatar « initiales colorées » réutilisable (couleur stable dérivée du nom).
 FP.initiales = (name) => {
   const parts = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean);
@@ -2929,14 +3042,15 @@ FP._ensureSyncBadge = function () {
   b.id = 'fp-sync-badge';
   b.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:9999;font-size:12px;font-weight:700;padding:7px 13px;border-radius:9999px;box-shadow:0 6px 18px rgba(0,0,0,.18);cursor:pointer;display:none;align-items:center;gap:6px;';
   b.title = 'Cliquer pour renvoyer les modifications en attente';
-  b.addEventListener('click', () => {
+  b.addEventListener('click', async () => {
     const echecs = FP.persist.failedCount();
     if (echecs > 0) {
       const detail = FP.persist._resumeEchecs();
-      const ok = confirm(
+      const ok = await FP.confirm(
         `${echecs} modification(s) n'ont PAS pu être enregistrées dans la base :\n\n${detail}\n\n`
         + `Ce sont souvent des erreurs de structure (colonne manquante) qui ne se résoudront pas toutes seules.\n\n`
-        + `• OK = réessayer maintenant\n• Annuler = abandonner ces modifications`
+        + `• OK = réessayer maintenant\n• Annuler = abandonner ces modifications`,
+        { okText: 'Réessayer', cancelText: 'Abandonner' }
       );
       if (ok) FP.persist.flush({ force: true });
       else { FP.persist._abandonnerEchecs(); if (FP._syncBadge) FP._syncBadge(); }
@@ -3505,11 +3619,11 @@ FP.dupe = {
   _tag(d){ return d.numeroFacture ? ' n° ' + d.numeroFacture : d.numeroAvis ? ' avis ' + d.numeroAvis : d.immat ? ' ' + d.immat : (d.name || d.prenom) ? ' ' + (d.name || d.prenom) : ''; },
   // Garde AVANT insertion : renvoie false si l'utilisateur refuse d'ajouter un doublon.
   // (Version simple OK/Annuler — conservée pour les points d'ajout qui ne gèrent PAS la fusion.)
-  confirmAdd(table, rec, list){
+  async confirmAdd(table, rec, list){
     const d = this.find(table, rec, list);
     if (!d) return true;
     const extra = d.montantTTC != null ? ' · ' + FP.euro(d.montantTTC) : d.montant != null ? ' · ' + FP.euro(d.montant) : '';
-    return confirm(`⚠️ Doublon possible\n\n${this._label(table)} identique semble déjà exister (${this._tag(d).trim()}${extra}).\n\nL'ajouter quand même ?`);
+    return await FP.confirm(`⚠️ Doublon possible\n\n${this._label(table)} identique semble déjà exister (${this._tag(d).trim()}${extra}).\n\nL'ajouter quand même ?`, { okText: 'Ajouter quand même', cancelText: 'Annuler', danger: false });
   },
   // ---- FUSION ----
   // Une valeur est « vide » (donc remplaçable par la fusion) si null/''/[] ou, pour les groupes,
@@ -4996,7 +5110,7 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     const menu = wrap.querySelector('.fp-export-menu');
     const btn = wrap.querySelector('.fp-export-btn');
     btn.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); });
-    menu.addEventListener('click', (e) => {
+    menu.addEventListener('click', async (e) => {
       const it = e.target.closest('[data-exp]'); if (!it) return;
       const kind = it.dataset.exp;
       let rows = (opts.getRows() || []).slice();
@@ -5019,7 +5133,7 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       // fichier (qui vient d'être téléchargé) et envoie. Fonctionne partout, sans backend.
       if (kind === 'mail') {
         const last = (function () { try { return localStorage.getItem('fp_export_mail') || ''; } catch (e) { return ''; } })();
-        const to = prompt('Envoyer l\'export à quelle adresse e-mail ?', last);
+        const to = await FP.prompt('Envoyer l\'export à quelle adresse e-mail ?', last);
         if (to == null || !to.trim()) return;
         const addr = to.trim();
         try { localStorage.setItem('fp_export_mail', addr); } catch (e) {}

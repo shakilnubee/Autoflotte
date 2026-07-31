@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731m">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731m"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731m">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -562,10 +562,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731l"></script>
-<script src="../assets/js/supabase-client.js?v=20260731l"></script>
-<script src="../assets/js/data.js?v=20260731l"></script>
-<script src="../assets/js/app.js?v=20260731l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731m"></script>
+<script src="../assets/js/supabase-client.js?v=20260731m"></script>
+<script src="../assets/js/data.js?v=20260731m"></script>
+<script src="../assets/js/app.js?v=20260731m"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -639,8 +639,8 @@
     showToast('Groupes enregistrés ✓');
   }
 
-  function resetGroupes() {
-    if (!confirm('Réinitialiser les groupes (noms, couleurs, ordre, masquage) aux valeurs par défaut ?')) return;
+  async function resetGroupes() {
+    if (!await FP.confirm('Réinitialiser les groupes (noms, couleurs, ordre, masquage) aux valeurs par défaut ?')) return;
     FP.history.commit();
     const current = FP.settings.get();
     FP.settings.save({ ...current, groupes: JSON.parse(JSON.stringify(FP.settings.defaults.groupes)), groupeOrder: [], groupesHidden: [] });
@@ -763,8 +763,8 @@
   }
   function saveNavLabels() { applyNavFromForm(true); }
 
-  function resetNavLabels() {
-    if (!confirm('Réinitialiser les noms, l\'ordre ET la visibilité des onglets aux valeurs par défaut ?')) return;
+  async function resetNavLabels() {
+    if (!await FP.confirm('Réinitialiser les noms, l\'ordre ET la visibilité des onglets aux valeurs par défaut ?')) return;
     FP.history.commit();
     const current = FP.settings.get();
     current.sidebarLabels = {};
@@ -836,12 +836,12 @@
     } catch (e) {}
     const list = [...set].filter(s => s && String(s).trim().toLowerCase() !== 'pxp');
     if (!list.length) { alert('Aucune société cliente à supprimer (seule « PXP » existe).'); return; }
-    const name = (prompt('Quelle société supprimer COMPLÈTEMENT (société + ses comptes) ?\n\n• ' + list.join('\n• ') + '\n\nTape son nom exact :') || '').trim();
+    const name = (await FP.prompt('Quelle société supprimer COMPLÈTEMENT (société + ses comptes) ?\n\n• ' + list.join('\n• ') + '\n\nTape son nom exact :') || '').trim();
     if (!name) return;
     const match = list.find(s => String(s).trim().toLowerCase() === name.trim().toLowerCase());
     if (!match) { alert('Société « ' + name + ' » introuvable.'); return; }
     const accs = users.filter(u => String(u.societe || '').trim().toLowerCase() === match.toLowerCase() && !u.self && u.acces !== 'ceo');
-    if (!confirm('Supprimer « ' + match + ' » ?\n\n• Retirée du sélecteur et de la Facturation.\n• ' + accs.length + ' compte(s) associé(s) supprimé(s).\n• Les données déjà en base (véhicules, amendes…) ne sont PAS effacées (isolées, inaccessibles).\n\nContinuer ?')) return;
+    if (!await FP.confirm('Supprimer « ' + match + ' » ?\n\n• Retirée du sélecteur et de la Facturation.\n• ' + accs.length + ' compte(s) associé(s) supprimé(s).\n• Les données déjà en base (véhicules, amendes…) ne sont PAS effacées (isolées, inaccessibles).\n\nContinuer ?')) return;
     const cur = (FP.activeSociete ? FP.activeSociete() : 'PXP');
     if (String(cur).toLowerCase() === match.toLowerCase() && FP.setActiveSociete) FP.setActiveSociete('PXP');
     if (FP.removeSociete) FP.removeSociete(match);
@@ -916,10 +916,10 @@
     location.reload();
   }
   // Création d'une nouvelle société → ASSISTANT « Nouveau client » (société + compte admin en une fois).
-  function newSociete() {
+  async function newSociete() {
     const m = document.getElementById('nc-modal');
     if (!m) { // repli si le modal n'est pas là
-      const name = (prompt('Nom de la nouvelle société :') || '').trim();
+      const name = (await FP.prompt('Nom de la nouvelle société :') || '').trim();
       if (!name) return;
       if (FP.addSociete && FP.addSociete(name)) { FP.setActiveSociete(name); try { localStorage.setItem('fp_onboard_new', name); } catch (e) {} location.reload(); }
       else alert('Cette société existe déjà (ou nom invalide).');
@@ -1007,8 +1007,8 @@
     };
     reader.readAsText(file);
   });
-  function resetAll() {
-    if (!confirm('Tout réinitialiser ? (groupes, couleurs, société)')) return;
+  async function resetAll() {
+    if (!await FP.confirm('Tout réinitialiser ? (groupes, couleurs, société)')) return;
     FP.history.commit();
     FP.settings.reset();
     renderGroupesForm();
@@ -1224,8 +1224,8 @@
   }
   $('journal-search').addEventListener('input', renderJournal);
   $('journal-type').addEventListener('change', renderJournal);
-  $('btn-journal-clear').addEventListener('click', () => {
-    if (!confirm('Vider tout le journal des modifications ? Cette action est irréversible.')) return;
+  $('btn-journal-clear').addEventListener('click', async () => {
+    if (!await FP.confirm('Vider tout le journal des modifications ? Cette action est irréversible.')) return;
     Promise.resolve(FP.audit.clear()).then(renderJournal);
   });
   $('btn-journal-export').addEventListener('click', () => {
@@ -1468,7 +1468,7 @@
         finally { pick.disabled = false; }
       });
       if (rm) rm.addEventListener('click', async () => {
-        if (!confirm('Retirer ta photo de profil ?')) return;
+        if (!await FP.confirm('Retirer ta photo de profil ?')) return;
         try { await FP.auth.updateAvatar(null); curUrl = null; FP._avatarUrl = null; if (FP.renderUserAvatar) FP.renderUserAvatar(); paint(); setA('Photo retirée.', true); }
         catch (err) { setA('Échec : ' + ((err && err.message) || 'réessaie'), false); }
       });
@@ -1496,8 +1496,8 @@
     });
 
     const logoutBtn = document.getElementById('btn-acct-logout');
-    if (logoutBtn) logoutBtn.addEventListener('click', () => {
-      if (!confirm('Se déconnecter de Parc Pilot sur ce poste ?')) return;
+    if (logoutBtn) logoutBtn.addEventListener('click', async () => {
+      if (!await FP.confirm('Se déconnecter de Parc Pilot sur ce poste ?')) return;
       try { if (window.FP && FP.auth && FP.auth.signOut) { FP.auth.signOut(); return; } } catch (e) {}
       try { if (window.FP && FP.supabase) FP.supabase.auth.signOut(); } catch (e) {}
       window.location.href = '../login.html';
@@ -1662,13 +1662,13 @@
         const row = e.target.closest('[data-uid]'); if (!row) return;
         const id = row.getAttribute('data-uid');
         if (e.target.closest('[data-ureset]')) {
-          const pw = prompt('Nouveau mot de passe pour ce compte (min. 8 caractères) :');
+          const pw = await FP.prompt('Nouveau mot de passe pour ce compte (min. 8 caractères) :');
           if (pw == null) return;
           if (pw.length < 8) return alert('Mot de passe trop court (min. 8 caractères).');
           const r = await call({ action: 'resetPassword', id, password: pw });
           alert(r.error ? ('Échec : ' + r.error) : '✓ Mot de passe réinitialisé.');
         } else if (e.target.closest('[data-udel]')) {
-          if (!confirm('Supprimer définitivement ce compte ? La personne ne pourra plus se connecter. (Ses données de flotte ne sont pas supprimées.)')) return;
+          if (!await FP.confirm('Supprimer définitivement ce compte ? La personne ne pourra plus se connecter. (Ses données de flotte ne sont pas supprimées.)')) return;
           const r = await call({ action: 'delete', id });
           if (r.error) alert('Suppression refusée : ' + r.error); else load();
         }

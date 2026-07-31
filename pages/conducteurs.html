@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731m">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731m"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731m">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -480,13 +480,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731l"></script>
-<script src="../assets/js/supabase-client.js?v=20260731l"></script>
-<script src="../assets/js/data.js?v=20260731l"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731l"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731l"></script>
-<script src="../assets/js/fleet-docs.js?v=20260731l"></script>
-<script src="../assets/js/app.js?v=20260731l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731m"></script>
+<script src="../assets/js/supabase-client.js?v=20260731m"></script>
+<script src="../assets/js/data.js?v=20260731m"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731m"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731m"></script>
+<script src="../assets/js/fleet-docs.js?v=20260731m"></script>
+<script src="../assets/js/app.js?v=20260731m"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1045,13 +1045,13 @@
     renderGrid();
   }
 
-  function bulkDelete() {
+  async function bulkDelete() {
     const items = [...state.selected].map(k => drivers.find(d => d.key === k)).filter(Boolean);
     if (items.length === 0) return;
     const linked = items.filter(d => d.vehicules.length + d.amendes.length > 0);
     let msg = `Supprimer ${items.length} conducteur${items.length > 1 ? 's' : ''} ?`;
     if (linked.length) msg += `\n\n${linked.length} d'entre eux ${linked.length > 1 ? 'sont liés' : 'est lié'} à des véhicules/amendes : ils seront retirés de la liste (les véhicules et amendes ne sont PAS supprimés).`;
-    if (!confirm(msg)) return;
+    if (!(await FP.confirm(msg))) return;
     items.forEach(d => {
       if (d.vehicules.length + d.amendes.length > 0) upsertCond(d.key, { masque: true, manuel: false, name: condRow(d.key) ? condRow(d.key).name : d.name });
       else deleteCondRow(d.key);
@@ -1265,15 +1265,15 @@
     return n;
   }
 
-  function deleteDriver(key) {
+  async function deleteDriver(key) {
     const d = drivers.find(x => x.key === key);
     if (!d) return;
     const linked = d.vehicules.length + d.amendes.length;
     if (linked === 0) {
-      if (!confirm(`Supprimer le conducteur « ${d.name} » ?`)) return;
+      if (!(await FP.confirm(`Supprimer le conducteur « ${d.name} » ?`))) return;
       deleteCondRow(key);
     } else {
-      if (!confirm(`« ${d.name} » est lié à ${d.vehicules.length} véhicule(s) et ${d.amendes.length} amende(s).\n\nLe retirer de la liste des conducteurs et de son/ses véhicule(s) ?\n(Les véhicules et amendes ne sont PAS supprimés, juste désassociés.)`)) return;
+      if (!(await FP.confirm(`« ${d.name} » est lié à ${d.vehicules.length} véhicule(s) et ${d.amendes.length} amende(s).\n\nLe retirer de la liste des conducteurs et de son/ses véhicule(s) ?\n(Les véhicules et amendes ne sont PAS supprimés, juste désassociés.)`))) return;
       upsertCond(key, { masque: true, manuel: false, name: (condRow(key) && condRow(key).name) || d.name });
     }
     unassignVehiclesOf(key); // ← retire le conducteur de son/ses véhicule(s)
@@ -1454,7 +1454,7 @@
   });
 
   // Édition par double-clic (nom, prénom, date de naissance, adresse, téléphone, email, note)
-  function editCondField(row) {
+  async function editCondField(row) {
     const key = currentDriverKey; if (!key) return;
     const d = drivers.find(x => x.key === key);
     const field = row.dataset.cf;
@@ -1473,7 +1473,7 @@
     if (FP.cellEditor) {
       FP.cellEditor(valEl, cur, type, { onSave: apply, onCancel: () => openDrawer(currentDriverKey) });
     } else { // repli si l'ancien code est encore en cache
-      const nv = prompt('Modifier :', typeof cur === 'string' ? cur : '');
+      const nv = await FP.prompt('Modifier :', typeof cur === 'string' ? cur : '');
       if (nv !== null) apply(nv.trim());
     }
   }

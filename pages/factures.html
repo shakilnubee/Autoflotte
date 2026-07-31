@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731m">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731m"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731m">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -610,12 +610,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731l"></script>
-<script src="../assets/js/supabase-client.js?v=20260731l"></script>
-<script src="../assets/js/data.js?v=20260731l"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731l"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731l"></script>
-<script src="../assets/js/app.js?v=20260731l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731m"></script>
+<script src="../assets/js/supabase-client.js?v=20260731m"></script>
+<script src="../assets/js/data.js?v=20260731m"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731m"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731m"></script>
+<script src="../assets/js/app.js?v=20260731m"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1000,11 +1000,11 @@
     });
   }
 
-  function deleteFacture() {
+  async function deleteFacture() {
     const f = factures.find(x => x.fileId === state.currentId);
     if (!f) return;
     const label = f.numeroFacture || f.description || 'cette facture';
-    if (!confirm(`Supprimer « ${label} » ?\n\nLa facture est retirée définitivement de la base.`)) return;
+    if (!(await FP.confirm(`Supprimer « ${label} » ?\n\nLa facture est retirée définitivement de la base.`))) return;
     if (FP.history && FP.history.commit) FP.history.commit();
     const rm = (arr) => { const i = arr.findIndex(x => x.id === f.id); if (i >= 0) arr.splice(i, 1); };
     rm(data.factures); rm(factures);
@@ -1290,7 +1290,7 @@
     // saisie/édition MANUELLE : on ne valide jamais des montants incohérents en silence (cf. CLAUDE.md).
     const _ht = num($('fa-ht').value), _tva = num($('fa-tva').value);
     if (_ht != null && _tva != null && Math.abs((_ht + _tva) - ttc) > 0.02) {
-      const ok = confirm(`⚠️ Montants incohérents :\nHT ${_ht.toFixed(2)} € + TVA ${_tva.toFixed(2)} € = ${(_ht + _tva).toFixed(2)} €\n≠ TTC ${ttc.toFixed(2)} €\n\nEnregistrer quand même ?`);
+      const ok = await FP.confirm(`⚠️ Montants incohérents :\nHT ${_ht.toFixed(2)} € + TVA ${_tva.toFixed(2)} € = ${(_ht + _tva).toFixed(2)} €\n≠ TTC ${ttc.toFixed(2)} €\n\nEnregistrer quand même ?`);
       if (!ok) { $('fa-ht').focus(); faStatus('Vérifiez HT / TVA / TTC (l\'écart doit être ≤ 2 cts).', 'error'); return; }
     }
     const date = $('fa-date').value || new Date().toISOString().slice(0,10);
@@ -1317,7 +1317,7 @@
       fileName,
     };
     // Anti-doublon : ne pas ajouter deux fois la même facture (n° + montant, ou fournisseur+TTC+date).
-    if (FP.dupe && !FP.dupe.confirmAdd('factures', newF, data.factures)) return;
+    if (FP.dupe && !(await FP.dupe.confirmAdd('factures', newF, data.factures))) return;
     if (FP.history && FP.history.commit) FP.history.commit();
     data.factures.push(newF);
     if (newF.type !== 'leasing') factures.push(newF); // `factures` = vue de cette page (hors leasing)
@@ -1890,11 +1890,11 @@
       const lbl = $('doc-view-label'); if (lbl) lbl.textContent = (docView === 'drive') ? 'Vue liste' : 'Vue dossiers';
       renderDocuments();
     });
-    $('doc-drive').addEventListener('click', e => {
+    $('doc-drive').addEventListener('click', async e => {
       const f = e.target.closest('[data-folder]'); if (f) { driveFolder = f.dataset.folder; driveYear = null; renderDrive(); return; }
       const y = e.target.closest('[data-year]'); if (y) { driveYear = y.dataset.year; renderDrive(); return; }
       if (e.target.closest('#doc-drive-back')) { if (driveYear) driveYear = null; else driveFolder = null; renderDrive(); return; }
-      const del = e.target.closest('[data-doc-del]'); if (del && confirm('Supprimer définitivement ce document ?')) { const id = del.dataset.docDel; if (FP.persist) FP.persist.delete('documents', id); docs = docs.filter(x => x.id !== id); renderDrive(); }
+      const del = e.target.closest('[data-doc-del]'); if (del && await FP.confirm('Supprimer définitivement ce document ?')) { const id = del.dataset.docDel; if (FP.persist) FP.persist.delete('documents', id); docs = docs.filter(x => x.id !== id); renderDrive(); }
     });
     $('doc-drive').addEventListener('change', e => {
       const exp = e.target.closest('.doc-exp'); if (exp) { setExp(exp.dataset.id, exp.value); renderDrive(); return; }
@@ -1903,7 +1903,7 @@
     });
 
     // Édition véhicule / type / statut directement dans la liste
-    $('doc-tbody').addEventListener('change', e => {
+    $('doc-tbody').addEventListener('change', async e => {
       const sel = e.target;
       const id = sel.dataset && sel.dataset.id;
       if (!id) return;
@@ -1915,7 +1915,7 @@
         renderDocs();
       } else if (sel.classList.contains('doc-type')) {
         if (sel.value === '__new__') {
-          const name = (prompt('Nom du nouveau type de document :') || '').trim();
+          const name = (await FP.prompt('Nom du nouveau type de document :') || '').trim();
           if (!name) { renderDocs(); return; }
           let key = 'custom-' + name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,30);
           if (key === 'custom-') key = 'custom-' + Date.now().toString(36);
@@ -1943,9 +1943,9 @@
       }
     });
 
-    $('doc-tbody').addEventListener('click', e => {
+    $('doc-tbody').addEventListener('click', async e => {
       const del = e.target.closest('[data-doc-del]');
-      if (del && confirm('Supprimer définitivement ce document ?')) {
+      if (del && await FP.confirm('Supprimer définitivement ce document ?')) {
         const id = del.dataset.docDel;
         if (FP.persist) FP.persist.delete('documents', id);
         docs = docs.filter(x => x.id !== id);
@@ -2120,7 +2120,7 @@
       const liees = (conso || []).filter(c => String(c.id).split('-').pop() === num);
       const msg = `Supprimer la facture ${num || f.id} (${f.montantTTC != null ? FP.euro(f.montantTTC) : '—'}) ?`
         + (liees.length ? `\n\n${liees.length} ligne(s) de consommation liée(s) seront aussi retirées du cumul.` : '');
-      if (!confirm(msg)) return;
+      if (!(await FP.confirm(msg))) return;
       // 1) la facture
       const idx = (window.FP_DATA.factures || []).findIndex(x => x.id === f.id);
       if (idx >= 0) window.FP_DATA.factures.splice(idx, 1);
@@ -2868,7 +2868,7 @@
     }
 
     async function deleteUlsFacture(f){
-      if (!confirm(`Supprimer la facture ${f.numeroFacture || f.id} (${f.montantTTC != null ? FP.euro(f.montantTTC) : '—'}) ?`)) return;
+      if (!(await FP.confirm(`Supprimer la facture ${f.numeroFacture || f.id} (${f.montantTTC != null ? FP.euro(f.montantTTC) : '—'}) ?`))) return;
       const idx = (window.FP_DATA.factures || []).findIndex(x => x.id === f.id);
       if (idx >= 0) window.FP_DATA.factures.splice(idx, 1);
       try { await FP.persist.delete('factures', f.id); } catch (e) { console.error('[uls-del]', e); }
@@ -2990,11 +2990,11 @@
     }
     $('fn-search').addEventListener('input', (e) => { fnSearch = e.target.value; render(); });
     $('fn-sort').addEventListener('change', (e) => { fnSort = e.target.value; render(); });
-    $('fn-tbody').addEventListener('click', (e) => {
+    $('fn-tbody').addEventListener('click', async (e) => {
       const rn = e.target.closest('[data-fn-rename]');
-      if (rn){ const old = rn.dataset.fnRename; const nn = prompt(`Renommer / fusionner « ${old} » en :`, old); if (nn != null && nn.trim() && nn.trim() !== old){ const k = applyRename(old, nn); alert(`${k} facture(s) mises à jour.`); } return; }
+      if (rn){ const old = rn.dataset.fnRename; const nn = await FP.prompt(`Renommer / fusionner « ${old} » en :`, old); if (nn != null && nn.trim() && nn.trim() !== old){ const k = applyRename(old, nn); alert(`${k} facture(s) mises à jour.`); } return; }
       const dl = e.target.closest('[data-fn-del]');
-      if (dl){ const old = dl.dataset.fnDel; if (confirm(`Retirer le fournisseur « ${old} » de ses factures ?\n(Les factures restent, sans fournisseur.)`)){ applyRename(old, ''); } }
+      if (dl){ const old = dl.dataset.fnDel; if (await FP.confirm(`Retirer le fournisseur « ${old} » de ses factures ?\n(Les factures restent, sans fournisseur.)`)){ applyRename(old, ''); } }
     });
     window.renderFournisseurs = render;
     document.addEventListener('fp:data-ready', () => { if (!$('view-fourn').classList.contains('hidden')) render(); });
