@@ -33,7 +33,14 @@
   .kc-obj { background:#F8FAFC; border:1px solid var(--fp-border); border-radius:.6rem; padding:.7rem .9rem; margin:.5rem 0; }
   .kc-obj b { color:#b91c1c; }
   .pill { display:inline-block; background:#ECFEFF; color:#0e7490; font-weight:700; font-size:.72rem; padding:.1rem .5rem; border-radius:999px; margin-left:.35rem; }
-  @media print { .kc-noprint { display:none !important; } body { background:#fff; } .kc-card { break-inside: avoid; border-color:#ddd; } }
+  @media print {
+    .kc-noprint { display:none !important; }
+    html, body { background:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .kc-card { break-inside:auto; border-color:#e2e8f0; box-shadow:none; margin-bottom:.7rem; }
+    .kc-h, .kc-theme { break-after:avoid; }
+    .kc-q, .kc-row, .kc-demo, .kc-obj { break-inside:avoid; }
+    @page { size:A4; margin:12mm; }
+  }
 </style>
 </head>
 <body>
@@ -155,41 +162,80 @@
   <script src="assets/js/vendor/jspdf.umd.min.js?v=20260730k"></script>
   <script>
   if(window.lucide)lucide.createIcons();
-  // Téléchargement PDF EN UN CLIC (vrai fichier, sans passer par la boîte d'impression).
+  // Téléchargement PDF EN UN CLIC — rendu BRANDÉ Parc Pilot (bandeau navy + logo, couleurs, encadrés).
   document.getElementById('kc-dl').addEventListener('click', function(){
     try {
       const { jsPDF } = window.jspdf || {};
       if (!jsPDF) return window.print();
       const doc = new jsPDF({ unit:'pt', format:'a4' });
-      const M = 42, W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), maxW = W - M*2;
-      let y = M;
-      const clean = s => String(s || '').replace(/\s+/g, ' ').trim();
-      function line(str, size, style, color, indent){
-        str = clean(str); if (!str) return;
-        indent = indent || 0;
-        doc.setFont('helvetica', style || 'normal'); doc.setFontSize(size); doc.setTextColor(color || '#1e293b');
-        doc.splitTextToSize(str, maxW - indent).forEach(function(ln){
-          if (y > H - M) { doc.addPage(); y = M; }
-          doc.text(ln, M + indent, y); y += size * 1.28;
-        });
+      const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+      const M = 46, maxW = W - M*2, BOT = H - 46;
+      // Palette Parc Pilot
+      const NAVY=[15,30,61], INK=[30,41,59], ORANGE=[249,115,22], ORANGE2=[251,146,60], TEAL=[14,116,144], MUTED=[100,116,139], DEMOBG=[255,247,237], OBJBG=[248,250,252], LINE=[228,234,243];
+      const C = c => doc.setTextColor(c[0],c[1],c[2]);
+      const F = c => doc.setFillColor(c[0],c[1],c[2]);
+      const D = c => doc.setDrawColor(c[0],c[1],c[2]);
+      const san = s => String(s==null?'':s)
+        .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2190}-\u{21FF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{2705}\u{2714}]/gu,'')
+        .replace(/→/g,'->').replace(/[‘’]/g,"'").replace(/[“”]/g,'"')
+        .replace(/\s+/g,' ').trim();
+      let y = 0;
+      function ensure(sp){ if (y + sp > BOT){ doc.addPage(); y = M; } }
+      function text(str, x, size, style, color, wmax){
+        str = san(str); if(!str) return;
+        doc.setFont('helvetica', style||'normal'); doc.setFontSize(size); C(color||INK);
+        doc.splitTextToSize(str, wmax||(W - x - M)).forEach(function(ln){ ensure(size*1.35); doc.text(ln, x, y); y += size*1.35; });
       }
-      const gap = h => { y += h; if (y > H - M) { doc.addPage(); y = M; } };
-      line('Kit commercial — Parc Pilot', 18, 'bold', '#0F1E3D'); gap(3);
-      line('Découverte du besoin · Audit du prospect · Démo qui convainc', 10, 'normal', '#64748b'); gap(10);
+      function box(str, bg, bar, txt){
+        str = san(str); if(!str) return;
+        doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+        const lines = doc.splitTextToSize(str, maxW - 22);
+        const bh = lines.length*12 + 13;
+        ensure(bh + 5);
+        F(bg); doc.roundedRect(M, y-2, maxW, bh, 4, 4, 'F');
+        F(bar); doc.rect(M, y-2, 3.5, bh, 'F');
+        C(txt); let ty = y + 10; lines.forEach(function(ln){ doc.text(ln, M+13, ty); ty += 12; });
+        y += bh + 3;
+      }
+      // ===== Bandeau d'en-tête (page 1) =====
+      F(NAVY); doc.rect(0,0,W,108,'F');
+      D(ORANGE2); doc.setLineWidth(2.4); doc.line(M,34,M+22,34);
+      D(ORANGE);  doc.line(M-2,42,M+26,42);
+      D(ORANGE2); doc.line(M+4,50,M+20,50);
+      doc.setFont('helvetica','bolditalic'); doc.setFontSize(18);
+      C([255,255,255]); doc.text('Parc', M+34, 47);
+      C(ORANGE); doc.text('Pilot', M+34+doc.getTextWidth('Parc'), 47);
+      doc.setFont('helvetica','bold'); doc.setFontSize(20); C([255,255,255]);
+      doc.text('Kit commercial · Conquérir un client', M, 84);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9.5); C([176,192,216]);
+      doc.text('Comprendre le besoin · Chiffrer la douleur · Faire la démo qui déclenche le « oui »', M, 99);
+      y = 108 + 28;
+      // ===== Contenu =====
       document.querySelectorAll('.kc-card').forEach(function(card){
-        gap(10);
-        const h = card.querySelector('.kc-h'); if (h) { line(h.innerText, 13, 'bold', '#0F1E3D'); gap(2); }
-        const sub = card.querySelector('.kc-sub'); if (sub) { line(sub.innerText, 9, 'italic', '#64748b'); gap(3); }
+        ensure(40);
+        const h = card.querySelector('.kc-h');
+        if (h){ ensure(22); F(ORANGE); doc.roundedRect(M, y-11, 4.5, 15, 1.5,1.5,'F'); text(h.innerText, M+13, 13.5, 'bold', NAVY); y += 3; }
+        const sub = card.querySelector('.kc-sub'); if (sub){ text(sub.innerText, M, 9.5, 'italic', MUTED); y += 3; }
         card.querySelectorAll('.kc-theme, .kc-q, .kc-row, .kc-demo, .kc-obj').forEach(function(el){
-          const t = el.innerText; if (!clean(t)) return;
-          if (el.classList.contains('kc-theme')) { gap(4); line(t, 10, 'bold', '#0e7490'); }
-          else if (el.classList.contains('kc-q')) line('•  ' + t, 10, 'normal', '#1e293b', 10);
-          else if (el.classList.contains('kc-demo')) line('▸  ' + t, 10, 'normal', '#9a3412', 10);
-          else if (el.classList.contains('kc-obj')) line('!  ' + t, 10, 'normal', '#334155', 10);
-          else line('–  ' + t, 10, 'normal', '#1e293b', 10);
-          gap(2);
+          if (!san(el.innerText)) return;
+          if (el.classList.contains('kc-theme')){ y += 7; ensure(15); text(el.innerText, M, 8.8, 'bold', TEAL); y += 1; }
+          else if (el.classList.contains('kc-demo')) box(el.innerText, DEMOBG, ORANGE, [124,45,18]);
+          else if (el.classList.contains('kc-obj')) box(el.innerText, OBJBG, [148,163,184], INK);
+          else if (el.classList.contains('kc-q')){ ensure(14); F(ORANGE); doc.circle(M+4.5, y-3, 1.7, 'F'); text(el.innerText, M+15, 10, 'normal', INK, maxW-15); }
+          else { ensure(14); F(NAVY); doc.circle(M+4.5, y-3, 1.7, 'F'); text(el.innerText, M+15, 10, 'normal', INK, maxW-15); }
+          y += 4;
         });
+        y += 8; ensure(6); D(LINE); doc.setLineWidth(0.6); doc.line(M, y, W-M, y); y += 12;
       });
+      // ===== Pieds de page =====
+      const n = doc.getNumberOfPages();
+      for (let i=1;i<=n;i++){
+        doc.setPage(i);
+        D(LINE); doc.setLineWidth(0.5); doc.line(M, H-34, W-M, H-34);
+        doc.setFont('helvetica','normal'); doc.setFontSize(8); C(MUTED);
+        doc.text('Parc Pilot  -  JIS Office Partner  -  Kit commercial (usage interne)', M, H-22);
+        doc.text(i + ' / ' + n, W-M, H-22, { align:'right' });
+      }
       doc.save('Kit-commercial-Parc-Pilot.pdf');
     } catch (e) { console.error(e); window.print(); }
   });
