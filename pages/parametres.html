@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731h">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -264,6 +264,29 @@
           <li><b>Garages / prestataires</b> : à ajouter dans <b>Entretiens → Contacter un garage</b>.</li>
         </ul>
         <p class="text-xs mt-2" style="color:#3B82F6">Ce qui reste à compléter s'affichera aussi dans <b>Suivi &amp; alertes → À compléter</b>.</p>
+      </div>
+
+      <!-- Assistant « Nouveau client » (société + compte admin en une fois) — CEO -->
+      <div id="nc-modal" style="position:fixed;inset:0;background:rgba(15,30,61,.5);display:none;align-items:center;justify-content:center;z-index:80;padding:1rem">
+        <div style="background:#fff;border-radius:1rem;max-width:480px;width:100%;max-height:90vh;overflow:auto;padding:1.2rem 1.3rem" onclick="event.stopPropagation()">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold text-slate-900 text-lg flex items-center gap-2"><i data-lucide="building-2" class="w-5 h-5" style="color:var(--fp-accent)"></i> Nouveau client</h3>
+            <button id="nc-close" type="button" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+          </div>
+          <p class="text-sm text-slate-600 mb-3">Crée la <b>société</b> et son <b>compte admin</b> d'un coup. L'admin pourra ensuite tout configurer (e-mails d'amende, loueurs, assurance…).</p>
+          <div class="space-y-3">
+            <div><div class="field-label">Nom de la société *</div><input class="field-input" id="nc-nom" placeholder="Ex. Transports Martin"></div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><div class="field-label">E-mail de l'admin *</div><input class="field-input" id="nc-email" type="email" placeholder="admin@client.fr"></div>
+              <div><div class="field-label">Mot de passe temporaire *</div><input class="field-input" id="nc-pw" type="text" placeholder="8 caractères min."></div>
+            </div>
+            <div id="nc-status" class="text-xs"></div>
+          </div>
+          <div class="flex gap-2 pt-4">
+            <button type="button" class="btn btn-outline flex-1 justify-center" id="nc-cancel">Annuler</button>
+            <button type="button" class="btn btn-dark flex-1 justify-center" id="nc-ok"><i data-lucide="check" class="w-4 h-4"></i> Créer le client</button>
+          </div>
+        </div>
       </div>
 
       <p class="text-sm text-slate-600 mb-4">Utilisé dans les en-têtes d'export et les futures factures générées.</p>
@@ -538,10 +561,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731g"></script>
-<script src="../assets/js/supabase-client.js?v=20260731g"></script>
-<script src="../assets/js/data.js?v=20260731g"></script>
-<script src="../assets/js/app.js?v=20260731g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731h"></script>
+<script src="../assets/js/supabase-client.js?v=20260731h"></script>
+<script src="../assets/js/data.js?v=20260731h"></script>
+<script src="../assets/js/app.js?v=20260731h"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -858,18 +881,53 @@
     FP.setActiveSociete(name);
     location.reload();
   }
-  // Création d'une nouvelle société → bascule dessus + focus sur le formulaire d'infos à remplir
+  // Création d'une nouvelle société → ASSISTANT « Nouveau client » (société + compte admin en une fois).
   function newSociete() {
-    const name = (prompt('Nom de la nouvelle société :') || '').trim();
-    if (!name) return;
-    if (FP.addSociete && FP.addSociete(name)) {
-      FP.setActiveSociete(name);
-      try { localStorage.setItem('fp_onboard_new', name); } catch (e) {} // → bandeau de bienvenue après reload
-      location.reload();
-    } else {
-      alert('Cette société existe déjà (ou nom invalide).');
+    const m = document.getElementById('nc-modal');
+    if (!m) { // repli si le modal n'est pas là
+      const name = (prompt('Nom de la nouvelle société :') || '').trim();
+      if (!name) return;
+      if (FP.addSociete && FP.addSociete(name)) { FP.setActiveSociete(name); try { localStorage.setItem('fp_onboard_new', name); } catch (e) {} location.reload(); }
+      else alert('Cette société existe déjà (ou nom invalide).');
+      return;
     }
+    ['nc-nom', 'nc-email', 'nc-pw'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    const st = document.getElementById('nc-status'); if (st) st.textContent = '';
+    m.style.display = 'flex';
+    const n = document.getElementById('nc-nom'); if (n) n.focus();
+    if (window.lucide) lucide.createIcons();
   }
+  // Assistant « Nouveau client » : crée la société + le compte admin, puis bascule → bandeau d'onboarding.
+  (function ncWizard(){
+    const m = document.getElementById('nc-modal'); if (!m) return;
+    const g = id => document.getElementById(id);
+    const close = () => { m.style.display = 'none'; };
+    const setSt = (msg, ok) => { const el = g('nc-status'); if (el) { el.textContent = msg || ''; el.style.color = ok ? '#059669' : '#DC2626'; } };
+    if (g('nc-close')) g('nc-close').addEventListener('click', close);
+    if (g('nc-cancel')) g('nc-cancel').addEventListener('click', close);
+    m.addEventListener('click', e => { if (e.target === m) close(); });
+    if (g('nc-ok')) g('nc-ok').addEventListener('click', async () => {
+      const name = (g('nc-nom').value || '').trim();
+      const email = (g('nc-email').value || '').trim();
+      const pw = (g('nc-pw').value || '').trim();
+      if (!name) { setSt('Indique le nom de la société.'); return; }
+      if (!email || !/@/.test(email)) { setSt('E-mail admin invalide.'); return; }
+      if (pw.length < 8) { setSt('Mot de passe : 8 caractères minimum.'); return; }
+      if (!FP.addSociete) { setSt('Fonction indisponible.'); return; }
+      setSt('⏳ Création en cours…', true);
+      if (!FP.addSociete(name)) { setSt('Cette société existe déjà (ou nom invalide).'); return; }
+      let acctErr = null;
+      try {
+        const { data, error } = await FP.supabase.functions.invoke('manage-users', { body: { action: 'create', email, password: pw, acces: 'admin', societe: name } });
+        if (error) { let msg = (error && error.message) || 'Erreur'; try { const ctx = error.context && (await error.context.json()); if (ctx && ctx.error) msg = ctx.error; } catch (_) {} acctErr = msg; }
+        else if (data && data.error) acctErr = data.error;
+      } catch (e) { acctErr = String((e && e.message) || e); }
+      try { localStorage.setItem('fp_onboard_new', name); } catch (e) {}
+      if (acctErr) alert('Société « ' + name + ' » créée, mais le compte admin n\'a pas pu être créé :\n' + acctErr + '\n\nTu pourras le créer dans « Utilisateurs & accès ».');
+      if (FP.setActiveSociete) FP.setActiveSociete(name);
+      location.reload();
+    });
+  })();
   // Après création d'une société : ouvre l'onglet « Société », affiche le bandeau de bienvenue et défile dessus.
   function checkOnboard() {
     let flag = null; try { flag = localStorage.getItem('fp_onboard_new'); } catch (e) {}
