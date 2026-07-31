@@ -510,18 +510,26 @@
   var ctx=c.getContext('2d'), W,H,pts=[], DPR=Math.min(2,window.devicePixelRatio||1);
   function size(){ W=c.width=innerWidth*DPR; H=c.height=innerHeight*DPR; c.style.width=innerWidth+'px'; c.style.height=innerHeight+'px'; }
   size(); addEventListener('resize', size);
-  var N=Math.round(Math.min(64, innerWidth/22));
-  for(var i=0;i<N;i++) pts.push({ x:Math.random()*W, y:Math.random()*H, vx:(Math.random()-.5)*.22*DPR, vy:(-.12-Math.random()*.35)*DPR, r:(Math.random()*1.5+.6)*DPR, o:Math.random()*.45+.2 });
+  var N=Math.round(Math.min(95, innerWidth/15));
+  for(var i=0;i<N;i++) pts.push({ x:Math.random()*W, y:Math.random()*H, vx:(Math.random()-.5)*.28*DPR, vy:(-.14-Math.random()*.4)*DPR, r:(Math.random()*2+1)*DPR, o:Math.random()*.45+.45 });
   var mx=-1e5,my=-1e5; addEventListener('mousemove',function(e){ mx=e.clientX*DPR; my=e.clientY*DPR; });
+  var LINK2=(122*DPR)*(122*DPR), CUR2=(155*DPR)*(155*DPR);
   function tick(){
     ctx.clearRect(0,0,W,H);
+    // liens entre particules proches (constellation)
+    for(var i=0;i<pts.length;i++){ for(var j=i+1;j<pts.length;j++){
+      var a=pts[i],b=pts[j],dx=a.x-b.x,dy=a.y-b.y,d=dx*dx+dy*dy;
+      if(d<LINK2){ ctx.strokeStyle='rgba(148,175,214,'+((1-d/LINK2)*.24)+')'; ctx.lineWidth=DPR; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); }
+    }}
     for(var i=0;i<pts.length;i++){
       var p=pts[i]; p.x+=p.vx; p.y+=p.vy;
       if(p.y<-10){p.y=H+10;p.x=Math.random()*W} if(p.x<-10)p.x=W+10; if(p.x>W+10)p.x=-10;
-      var dx=p.x-mx, dy=p.y-my, d=dx*dx+dy*dy, R=(130*DPR)*(130*DPR);
-      if(d<R){ var a=(1-d/R)*.45; ctx.strokeStyle='rgba(249,115,22,'+a+')'; ctx.lineWidth=DPR; ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(mx,my); ctx.stroke(); }
+      var dx=p.x-mx, dy=p.y-my, d=dx*dx+dy*dy;
+      if(d<CUR2){ ctx.strokeStyle='rgba(249,115,22,'+((1-d/CUR2)*.65)+')'; ctx.lineWidth=1.4*DPR; ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(mx,my); ctx.stroke(); }
+      var col=(i%3===0?'56,189,248':'251,146,60');
       ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.283);
-      ctx.fillStyle=(i%3===0?'rgba(56,189,248,':'rgba(251,146,60,')+p.o+')'; ctx.fill();
+      ctx.shadowColor='rgba('+col+',.95)'; ctx.shadowBlur=7*DPR;
+      ctx.fillStyle='rgba('+col+','+p.o+')'; ctx.fill(); ctx.shadowBlur=0;
     }
     requestAnimationFrame(tick);
   }
