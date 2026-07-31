@@ -310,21 +310,47 @@
 <div class="modal-backdrop" id="modal-backdrop">
   <div class="modal p-6">
     <div class="flex justify-between items-center mb-5">
-      <h2 class="text-xl font-extrabold">Nouveau conducteur</h2>
+      <h2 class="text-xl font-extrabold flex items-center gap-2"><i data-lucide="user-plus" class="w-5 h-5" style="color:var(--fp-accent)"></i> Arrivée d'un salarié</h2>
       <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="modal-close"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
-    <form id="driver-form" class="space-y-4">
+    <form id="driver-form" class="space-y-4" style="max-height:72vh;overflow-y:auto">
       <div>
         <div class="field-label">Nom complet *</div>
         <input class="field-input" id="f-name" placeholder="Prénom Nom" required />
       </div>
-      <div>
-        <div class="field-label">Téléphone</div>
-        <input class="field-input" id="f-tel" type="tel" placeholder="06 12 34 56 78" />
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <div class="field-label">Poste <span class="text-slate-400 normal-case font-normal">(optionnel)</span></div>
+          <input class="field-input" id="f-poste" placeholder="Commercial…" />
+        </div>
+        <div>
+          <div class="field-label">Date d'arrivée</div>
+          <input class="field-input" id="f-arrivee" type="date" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <div class="field-label">Téléphone</div>
+          <input class="field-input" id="f-tel" type="tel" placeholder="06 12 34 56 78" />
+        </div>
+        <div>
+          <div class="field-label">Email</div>
+          <input class="field-input" id="f-email" type="email" placeholder="prenom.nom@exemple.fr" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <div class="field-label">Permis n° <span class="text-slate-400 normal-case font-normal">(optionnel)</span></div>
+          <input class="field-input" id="f-permis-num" placeholder="12AB34567" />
+        </div>
+        <div>
+          <div class="field-label">Permis — expiration</div>
+          <input class="field-input" id="f-permis-exp" type="date" />
+        </div>
       </div>
       <div>
-        <div class="field-label">Email</div>
-        <input class="field-input" id="f-email" type="email" placeholder="prenom.nom@exemple.fr" />
+        <div class="field-label">Véhicule à attribuer <span class="text-slate-400 normal-case font-normal">(optionnel)</span></div>
+        <select class="field-input" id="f-vehicule"><option value="">— aucun pour l'instant —</option></select>
       </div>
       <div>
         <div class="field-label">Note <span class="text-slate-400 normal-case font-normal">(optionnel)</span></div>
@@ -332,7 +358,7 @@
       </div>
       <div class="flex gap-2 pt-2">
         <button type="button" class="btn btn-outline flex-1 justify-center" id="modal-cancel">Annuler</button>
-        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer l'arrivée</button>
       </div>
     </form>
   </div>
@@ -420,6 +446,21 @@
     <div class="flex gap-2 pt-4">
       <button type="button" class="btn btn-outline flex-1 justify-center" id="sortie-cancel">Annuler</button>
       <button type="button" class="btn flex-1 justify-center" style="background:#9A3412;color:#fff" id="sortie-confirm"><i data-lucide="check" class="w-4 h-4"></i> Confirmer le départ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Checklist d'arrivée (affichée après création) -->
+<div class="modal-backdrop" id="onboard-backdrop">
+  <div class="modal p-6" style="max-width:460px">
+    <div class="flex justify-between items-center mb-2">
+      <h2 class="text-xl font-extrabold flex items-center gap-2"><i data-lucide="party-popper" class="w-5 h-5" style="color:#059669"></i> Arrivée enregistrée</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="onboard-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm text-slate-600 mb-3"><b id="onboard-name">—</b> est ajouté(e). Checklist d'arrivée :</p>
+    <div id="onboard-checklist" class="text-sm space-y-1.5"></div>
+    <div class="flex gap-2 pt-4">
+      <button type="button" class="btn btn-dark flex-1 justify-center" id="onboard-ok"><i data-lucide="check" class="w-4 h-4"></i> C'est noté</button>
     </div>
   </div>
 </div>
@@ -1281,9 +1322,21 @@
   $('rename-backdrop').addEventListener('click', e => { if (e.target === $('rename-backdrop')) $('rename-backdrop').classList.remove('open'); });
   $('rename-input').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); applyRename(); } });
 
-  // ---------- Modal nouveau conducteur ----------
+  // ---------- Modal « Arrivée d'un salarié » (onboarding) ----------
   function openModal() {
     $('driver-form').reset();
+    // Peuple la liste des véhicules à attribuer (non vendus), en signalant ceux déjà pris.
+    const sel = $('f-vehicule');
+    if (sel) {
+      const vehs = ((window.FP_DATA && FP_DATA.vehicules) || []).filter(v => !(FP.estVendu && FP.estVendu(v)))
+        .slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+      sel.innerHTML = '<option value="">— aucun pour l\'instant —</option>' + vehs.map(v => {
+        const pris = (v.chauffeur && v.chauffeur !== '—') ? ` · pris par ${v.chauffeur}` : ' · libre';
+        return `<option value="${escapeHtml(v.id)}">${escapeHtml(v.immat || '?')} — ${escapeHtml((v.marque || '') + ' ' + (v.modele || ''))}${escapeHtml(pris)}</option>`;
+      }).join('');
+      if (FP.searchSelect) FP.searchSelect(sel, { placeholder: 'Rechercher un véhicule…' });
+    }
+    const da = $('f-arrivee'); if (da && !da.value) da.value = new Date().toISOString().slice(0, 10);
     $('modal-backdrop').classList.add('open');
     $('f-name').focus();
   }
@@ -1294,21 +1347,54 @@
     const name = $('f-name').value.trim();
     if (!name) { alert('Le nom est obligatoire.'); return; }
     const key = normPrenom(name);
-    // Ajoute (ou réaffiche) le conducteur, masque levé
+    // 1) Crée (ou réaffiche) le conducteur avec ses infos d'arrivée, masque levé.
     upsertCond(key, {
       name,
+      poste: $('f-poste') ? $('f-poste').value.trim() : '',
       tel: $('f-tel').value.trim(),
       email: $('f-email').value.trim(),
+      permisNumero: $('f-permis-num') ? $('f-permis-num').value.trim() : '',
+      permisExpiration: ($('f-permis-exp') && $('f-permis-exp').value) || '',
       note: $('f-note').value.trim(),
       manuel: true,
       masque: false,
     });
+    // 2) Date d'arrivée (réglages société, pas de colonne DB).
+    const arrivee = ($('f-arrivee') && $('f-arrivee').value) || '';
+    if (arrivee) { try { const s = FP.settings.get(); s.condArrivee = (s.condArrivee && typeof s.condArrivee === 'object') ? s.condArrivee : {}; s.condArrivee[key] = arrivee; FP.settings.save(s); } catch (e) {} }
+    // 3) Attribution d'un véhicule (met à jour son chauffeur).
+    let vehLabel = '';
+    const vid = $('f-vehicule') ? $('f-vehicule').value : '';
+    if (vid) {
+      const v = ((window.FP_DATA && FP_DATA.vehicules) || []).find(x => String(x.id) === String(vid));
+      if (v) { v.chauffeur = name; vehLabel = v.immat || ''; if (FP.persist && FP.persist.available()) FP.persist.update('vehicules', v.id, { chauffeur: name }); }
+    }
     drivers = buildDrivers();
     closeModal();
     renderKPIs();
     renderGrid();
-    openDrawer(key);
+    // 4) Checklist d'arrivée (ce qui reste à faire).
+    showOnboardChecklist(key, name, { vehLabel, permis: !!($('f-permis-num') && $('f-permis-num').value.trim()) });
   }
+  function showOnboardChecklist(key, name, o) {
+    o = o || {};
+    if ($('onboard-name')) $('onboard-name').textContent = name;
+    const items = [];
+    items.push('✅ Fiche conducteur créée.');
+    items.push(o.vehLabel ? `✅ Véhicule <b>${escapeHtml(o.vehLabel)}</b> attribué.` : '⬜ <b>Attribuer un véhicule</b> (aucun pour l\'instant).');
+    items.push(o.permis ? '✅ Permis renseigné.' : '⬜ <b>Renseigner / vérifier le permis</b> (n°, date d\'expiration, copie).');
+    items.push('⬜ Commander la <b>carte carburant</b>.');
+    items.push('⬜ Commander / activer le <b>badge télépéage</b>.');
+    items.push('⬜ Faire signer l\'<b>autorisation de conduire</b> un véhicule de société.');
+    if ($('onboard-checklist')) $('onboard-checklist').innerHTML = items.map(t => `<div>${t}</div>`).join('');
+    const drawerKey = key;
+    const okBtn = $('onboard-ok');
+    if (okBtn) okBtn.onclick = () => { $('onboard-backdrop').classList.remove('open'); openDrawer(drawerKey); };
+    $('onboard-backdrop').classList.add('open');
+    if (window.lucide) lucide.createIcons();
+  }
+  $('onboard-close')?.addEventListener('click', () => $('onboard-backdrop').classList.remove('open'));
+  $('onboard-backdrop')?.addEventListener('click', e => { if (e.target === $('onboard-backdrop')) $('onboard-backdrop').classList.remove('open'); });
 
   $('search').addEventListener('input', e => { state.search = e.target.value; renderGrid(); });
   // Bouton « Réinitialiser » : vide la recherche.
