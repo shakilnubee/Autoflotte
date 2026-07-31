@@ -3020,6 +3020,33 @@ FP.emptyState = function (el, opts) {
   return node;
 };
 
+// ── Piège de focus (focus-trap) global — garde la tabulation DANS la fenêtre ouverte ──
+// Couvre toutes les modales/tiroirs du site (.modal-backdrop / .drawer-backdrop) + les dialogues
+// stylés (.fp-dlg-backdrop) et la modale prospect de l'accueil (#pp-backdrop). Aucune modif par page.
+(function () {
+  const MODAL_SEL = '.modal-backdrop, .drawer-backdrop, .fp-dlg-backdrop, #pp-backdrop, #prospect-backdrop';
+  const FOCUS_SEL = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  const visible = (el) => {
+    if (!el) return false;
+    const st = getComputedStyle(el);
+    if (st.display === 'none' || st.visibility === 'hidden' || parseFloat(st.opacity || '1') === 0) return false;
+    return el.getClientRects().length > 0;
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab') return;
+    const open = Array.from(document.querySelectorAll(MODAL_SEL)).filter(visible);
+    if (!open.length) return;
+    const modal = open[open.length - 1]; // la dernière ouverte = au-dessus
+    const list = Array.from(modal.querySelectorAll(FOCUS_SEL)).filter(visible);
+    if (!list.length) return;
+    const first = list[0], last = list[list.length - 1];
+    const active = document.activeElement;
+    if (!modal.contains(active)) { e.preventDefault(); first.focus(); return; }
+    if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+  }, true);
+})();
+
 // Avatar « initiales colorées » réutilisable (couleur stable dérivée du nom).
 FP.initiales = (name) => {
   const parts = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean);
