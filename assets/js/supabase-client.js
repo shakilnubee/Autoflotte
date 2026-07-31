@@ -84,8 +84,11 @@
       return session;
     },
     async signOut() {
-      await client.auth.signOut();
-      window.location.href = loginPath;
+      try { if (window.FP && typeof FP.warp === 'function') FP.warp('Déconnexion'); } catch (e) {}
+      var t0 = Date.now();
+      try { await client.auth.signOut(); } catch (e) {}
+      var wait = Math.max(0, 1500 - (Date.now() - t0));   // laisser l'animation tourner ≥ 1,5 s
+      setTimeout(function () { window.location.href = loginPath; }, wait);
     },
     /** Photo d'avatar de l'utilisateur (cosmétique) — stockée dans user_metadata.avatar_url.
      *  (Pas un champ de sécurité → OK dans user_metadata, contrairement au rôle/société.) */

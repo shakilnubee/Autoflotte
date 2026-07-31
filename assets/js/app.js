@@ -4445,6 +4445,55 @@ FP.makeColumnEditor = (config) => {
   return { rerender, getVisibleColumns: getVisible, getLabel, getColumn };
 };
 
+// === Écran de transition « hyperspace » (réutilisable : déconnexion, etc.) ===
+// Crée un overlay plein écran autonome (CSS + DOM + animation) au-dessus de la page.
+FP.warp = function (caption) {
+  try {
+    if (document.getElementById('fp-warp')) return;
+    if (!document.getElementById('fp-warp-css')) {
+      var st = document.createElement('style'); st.id = 'fp-warp-css';
+      st.textContent =
+        '#fp-warp{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#05070D;background-image:radial-gradient(circle at 50% 50%,#0A1428 0%,#05070D 72%);opacity:0;transition:opacity .4s ease}'
+      + '#fp-warp.on{opacity:1}'
+      + '#fp-warp canvas{position:absolute;inset:0;width:100%;height:100%}'
+      + '#fp-warp .wc{position:relative;z-index:3;display:flex;flex-direction:column;align-items:center;gap:22px;animation:fpWarpIn 1s cubic-bezier(.16,1,.3,1) both}'
+      + '#fp-warp .wl{filter:drop-shadow(0 0 36px rgba(249,115,22,.6))}'
+      + '#fp-warp .wt{font-family:"Space Mono",ui-monospace,monospace;letter-spacing:.34em;text-transform:uppercase;font-size:13px;color:#EAF1FB;padding-left:.34em;animation:fpWarpBlink 1.6s ease-in-out infinite}'
+      + '#fp-warp .wt b{color:#FB923C}'
+      + '#fp-warp .hb{position:absolute;width:48px;height:48px;z-index:2}'
+      + '#fp-warp .hb::before,#fp-warp .hb::after{content:"";position:absolute;background:rgba(249,115,22,.6)}'
+      + '#fp-warp .hb::before{width:100%;height:2px}#fp-warp .hb::after{width:2px;height:100%}'
+      + '#fp-warp .hb.tl{top:26px;left:26px}#fp-warp .hb.tr{top:26px;right:26px}#fp-warp .hb.bl{bottom:26px;left:26px}#fp-warp .hb.br{bottom:26px;right:26px}'
+      + '#fp-warp .hb.tr::before,#fp-warp .hb.tr::after{right:0}#fp-warp .hb.bl::before{bottom:0}#fp-warp .hb.br::before,#fp-warp .hb.br::after{right:0}#fp-warp .hb.br::before{bottom:0}'
+      + '@keyframes fpWarpBlink{50%{opacity:.4}}@keyframes fpWarpIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}';
+      document.head.appendChild(st);
+    }
+    var ov = document.createElement('div'); ov.id = 'fp-warp'; ov.setAttribute('aria-hidden', 'true');
+    ov.innerHTML =
+      '<canvas></canvas>'
+    + '<div class="hb tl"></div><div class="hb tr"></div><div class="hb bl"></div><div class="hb br"></div>'
+    + '<div class="wc"><svg class="wl" width="320" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic"><tspan fill="#EAF1FB">Parc</tspan><tspan fill="#F97316">Pilot</tspan></text></svg>'
+    + '<div class="wt">' + (FP.esc ? FP.esc(caption || 'Chargement') : (caption || 'Chargement')) + '<b>…</b></div></div>';
+    document.body.appendChild(ov);
+    requestAnimationFrame(function () { ov.classList.add('on'); });
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var cv = ov.querySelector('canvas'), ctx = cv.getContext('2d'), DPR = Math.min(2, window.devicePixelRatio || 1), W, H, cx, cy, MAX, stt = [];
+    W = cv.width = innerWidth * DPR; H = cv.height = innerHeight * DPR; cv.style.width = innerWidth + 'px'; cv.style.height = innerHeight + 'px'; cx = W / 2; cy = H / 2; MAX = Math.hypot(W, H) / 2;
+    function star() { return { a: Math.random() * 6.283, r: Math.random() * 30 * DPR + 6, pr: 0, sp: Math.random() * 0.032 + 0.016, col: Math.random() < 0.7 ? '251,146,60' : '56,189,248' }; }
+    for (var i = 0; i < 280; i++) { var s = star(); s.r = Math.random() * MAX; stt.push(s); }
+    (function loop() {
+      ctx.fillStyle = 'rgba(5,7,13,.32)'; ctx.fillRect(0, 0, W, H);
+      for (var i = 0; i < stt.length; i++) {
+        var s = stt[i]; s.pr = s.r; s.r *= (1 + s.sp); s.r += 1.4 * DPR;
+        var ca = Math.cos(s.a), sa = Math.sin(s.a), x = cx + ca * s.r, y = cy + sa * s.r, px = cx + ca * s.pr, py = cy + sa * s.pr, f = Math.min(1, s.r / MAX), al = f * f * 1.05;
+        if (al >= 0.02) { ctx.strokeStyle = 'rgba(' + s.col + ',' + Math.min(1, al) + ')'; ctx.lineWidth = (0.4 + f * 2.8) * DPR; ctx.lineCap = 'round'; ctx.shadowColor = 'rgba(' + s.col + ',.7)'; ctx.shadowBlur = 7 * DPR; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke(); }
+        if (s.r > MAX) stt[i] = star();
+      }
+      ctx.shadowBlur = 0; ov._raf = requestAnimationFrame(loop);
+    })();
+  } catch (e) {}
+};
+
 // === Recherche globale (injectée automatiquement dans toutes les sidebars) ===
 // === Bouton Déconnexion (injecté en bas des sidebars) ===
 FP.injectLogoutButton = () => {
