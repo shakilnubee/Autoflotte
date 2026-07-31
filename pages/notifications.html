@@ -321,17 +321,36 @@
   // les champs marqués « ignorés » (ex. véhicule étranger, moto sans CO₂/masse…) — persistant.
   const missOf = (x, fields, ignPrefix) => { const m = []; fields.forEach(f => { if (f.skip && f.skip(x)) return; if (ignPrefix && window.FP && FP.ignore && FP.ignore.has(ignPrefix + f.k)) return; const e = f.empty ? f.empty(x) : isEmptyV(f.val ? f.val(x) : x[f.k]); if (e) m.push({ k: f.k, label: f.label }); }); return m; };
   const compItem = (nom, miss, target, ignPrefix) => ({ nom, miss, target, ignPrefix: ignPrefix || '' });
-  function sectionCompHTML(title, icon, items) {
-    const n = items.length;
-    const rows = items.map(it => `<div class="notif" style="align-items:flex-start">
+  const LIMIT_COMP = 10;   // au-delà, on replie la section (bouton « Voir tout »)
+  function rowCompHTML(it) {
+    return `<div class="notif" style="align-items:flex-start">
         <div class="flex-1 min-w-0">
           <a href="${esc(it.target)}" class="font-semibold text-slate-900" style="text-decoration:none">${esc(it.nom)}</a>
           <div class="mt-1 flex flex-wrap gap-1">${it.miss.map(m => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 4px 2px 8px;border-radius:9999px">${esc(m.label)}${it.ignPrefix ? `<button type="button" data-ign="${esc(it.ignPrefix + m.k)}" title="Ignorer — ne plus demander cette info (non concerné)" style="border:none;background:rgba(146,64,14,.15);color:#92400E;cursor:pointer;border-radius:9999px;width:16px;height:16px;line-height:1;font-size:10px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>` : ''}</span>`).join('')}</div>
         </div>
         <a href="${esc(it.target)}" class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap;text-decoration:none">Compléter →</a>
-      </div>`).join('');
+      </div>`;
+  }
+  function sectionCompHTML(title, icon, items) {
+    const n = items.length;
+    let body;
+    if (!n) {
+      body = `<p class="text-sm text-emerald-600">✓ Rien à compléter ici.</p>`;
+    } else if (n <= LIMIT_COMP) {
+      body = `<div class="space-y-2" style="max-width:840px">${items.map(rowCompHTML).join('')}</div>`;
+    } else {
+      // Trop long → n'affiche que les 10 premiers, le reste sous « Voir tout ».
+      const shown = items.slice(0, LIMIT_COMP).map(rowCompHTML).join('');
+      const rest = items.slice(LIMIT_COMP).map(rowCompHTML).join('');
+      const reste = n - LIMIT_COMP;
+      const lbl = `Voir tout (${reste} de plus) ↓`;
+      body = `<div class="space-y-2" style="max-width:840px">${shown}`
+        + `<div class="comp-more space-y-2" hidden>${rest}</div>`
+        + `<button type="button" class="comp-voirtout" data-voirtout="${esc(lbl)}" style="margin-top:.6rem;display:inline-flex;align-items:center;gap:6px;background:#F1F5F9;color:#334155;border:1px solid var(--fp-border);border-radius:9px;padding:.5rem .9rem;font-size:.85rem;font-weight:700;cursor:pointer">${lbl}</button>`
+        + `</div>`;
+    }
     return `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="${icon}" class="w-5 h-5"></i> ${title} <span class="badge ${n ? 'badge-danger' : ''}" ${n ? '' : 'style="background:#E2E8F0;color:#475569"'}>${n}</span></h2>`
-      + (n ? `<div class="space-y-2" style="max-width:840px">${rows}</div>` : `<p class="text-sm text-emerald-600">✓ Rien à compléter ici.</p>`) + `</div>`;
+      + body + `</div>`;
   }
   // Champs remplissables depuis les cartes grises (données pré-extraites dans FP.CG_DATA, par immat).
   const CG_APPLY_FIELDS = ['co2', 'puissanceFiscale', 'dateMiseEnCirculation', 'prochainCT', 'carburant'];
@@ -401,6 +420,17 @@
 
   // Bouton « Compléter depuis les cartes grises » : remplit les champs VIDES depuis FP.CG_DATA.
   document.getElementById('suivi-complet').addEventListener('click', async (e) => {
+    // « Voir tout » / « Réduire » sur une section trop longue (> 10 lignes)
+    const vt = e.target.closest('[data-voirtout]');
+    if (vt) {
+      e.preventDefault();
+      const more = vt.parentElement.querySelector('.comp-more');
+      if (more) {
+        if (more.hasAttribute('hidden')) { more.removeAttribute('hidden'); vt.textContent = 'Réduire ↑'; }
+        else { more.setAttribute('hidden', ''); vt.textContent = vt.dataset.voirtout; }
+      }
+      return;
+    }
     // ✕ sur un tag → ignorer ce champ pour cet élément (persistant, par société)
     const ign = e.target.closest('[data-ign]');
     if (ign) { e.preventDefault(); e.stopPropagation(); if (window.FP && FP.ignore) { FP.ignore.set(ign.dataset.ign, true); renderComplet(); } return; }
