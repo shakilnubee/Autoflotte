@@ -278,7 +278,11 @@ const FP = {
     if (!iso || iso === '—') return null;
     const d = new Date(iso);
     if (isNaN(d)) return null;
-    const diff = Math.ceil((d - new Date()) / (1000*60*60*24));
+    // Référence à MINUIT (comme buildEcheances) → décompte en jours calendaires cohérent partout
+    // (Alertes, fiche véhicule, Renouvellements). Évite un off-by-one selon l'heure ou un DST.
+    d.setHours(0, 0, 0, 0);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const diff = Math.round((d - now) / (1000*60*60*24));
     return diff;
   },
   // Calcul TVS approximatif (Taxe sur les Véhicules de Société) — démo
@@ -401,7 +405,29 @@ FP.coutFactureExploit = (f) => { const t = String((f && f.type) || '').toLowerCa
 FP.estUlys = (f) => { const n = s => String(s || '').toLowerCase(); return n(f && f.type) === 'ulys' || /\bulys\b/.test(n(f && f.fournisseur)); };
 FP.estTotalFleet = (f) => { if (FP.estUlys(f)) return false; const n = s => String(s || '').toLowerCase(); const t = n(f && f.type); if (t === 'carburant' || t === 'peage') return true; return /total\s*energies|totalenergies/.test(n(f && f.fournisseur)); };
 FP.estCarburantPeage = (f) => FP.estUlys(f) || FP.estTotalFleet(f);
-FP.coutMois = (data, ym) => (((data && data.factures) || []).filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0));
+// ⚠️ HELPER CANONIQUE — dédoublonnage des factures par n° (comme Statistiques / rapport direction) :
+// deux lignes qui partagent le même numeroFacture ne sont comptées qu'une fois (évite de gonfler les
+// totaux). Les factures sans numéro sont toutes gardées. À utiliser partout où on somme des factures.
+FP.dedupeFactures = (list) => { const seen = new Set(); return (list || []).filter(f => { const k = ((f && f.numeroFacture) || '').toString().toUpperCase(); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }); };
+// ⚠️ HELPER CANONIQUE — coût d'exploitation d'un mois : factures dédoublonnées par n° + filtre exploit.
+// Même chiffre partout (dashboard, écran mural, rapport direction) — sinon un doublon de n° gonflait le mois.
+FP.coutMois = (data, ym) => (FP.dedupeFactures(((data && data.factures) || [])).filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0));
+// ⚠️ HELPER CANONIQUE — amende « à payer » (statut tolérant aux accents/espaces/casse) : « à payer »,
+// « a payer », « À Payer » … sont tous reconnus, pour que dashboard, page Amendes et alertes comptent pareil.
+FP.estAPayer = (a) => { const s = ((a && a.statut) || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); return s === 'a payer'; };
+// ⚠️ HELPER CANONIQUE — nom du loueur d'un véhicule (multi-loueurs) : on matche le propriétaire du
+// véhicule sur settings.loueurs[].prop ; repli sur le propriétaire brut puis sur le loueur unique du
+// profil (loueurNom). Sert au LIBELLÉ « Forfait leasing X » de la fiche (sans toucher à la détection
+// du leasing) — sinon une société multi-loueurs affichait toujours le loueur unique du profil.
+FP.loueurOf = (v) => {
+  const p = String((v && v.proprietaire) || '').trim(); const pl = p.toLowerCase();
+  let list = []; try { const s = FP.settings.get(); if (Array.isArray(s.loueurs)) list = s.loueurs; } catch (e) {}
+  const m = pl ? (list || []).find(l => l && String(l.prop || '').trim().toLowerCase() === pl) : null;
+  if (m && m.nom) return String(m.nom).trim();
+  if (p) return p;
+  const prof = FP.societeProfil ? FP.societeProfil() : {};
+  return String(prof.loueurNom || '').trim();
+};
 
 // Masses en ORDRE DE MARCHE (champ G de la carte grise, en kg) — c'est le champ qu'utilise
 // la règle de stationnement de Paris (≤ 2 t), PAS le poids à vide G.1. Valeurs LUES DIRECTEMENT
@@ -2054,7 +2080,7 @@ FP.buildAlertes = (data) => {
   });
 
   // --- Amendes à payer ---
-  const amAPayer = (data.amendes || []).filter(a => a.statut === 'à payer');
+  const amAPayer = (data.amendes || []).filter(a => FP.estAPayer(a));
   if (amAPayer.length > 0) {
     const totalDu = amAPayer.reduce((s, a) => s + FP.montantDu(a), 0);
     out.push({

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260730l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260730l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260730l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -609,12 +609,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260730l"></script>
-<script src="../assets/js/supabase-client.js?v=20260730l"></script>
-<script src="../assets/js/data.js?v=20260730l"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260730l"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260730l"></script>
-<script src="../assets/js/app.js?v=20260730l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731a"></script>
+<script src="../assets/js/supabase-client.js?v=20260731a"></script>
+<script src="../assets/js/data.js?v=20260731a"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731a"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731a"></script>
+<script src="../assets/js/app.js?v=20260731a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1285,6 +1285,13 @@
     const num = (n) => { const v = parseFloat(String(n == null ? '' : n).replace(/\s/g, '').replace(',', '.')); return isNaN(v) ? null : v; };
     const ttc = num($('fa-ttc').value);
     if (ttc == null || ttc <= 0){ $('fa-ttc').focus(); faStatus('Indiquez au moins le montant TTC (il sert aux calculs).', 'error'); return; }
+    // Contrôle systématique HT + TVA = TTC (tolérance 2 cts) — même règle qu'au scan, mais aussi sur une
+    // saisie/édition MANUELLE : on ne valide jamais des montants incohérents en silence (cf. CLAUDE.md).
+    const _ht = num($('fa-ht').value), _tva = num($('fa-tva').value);
+    if (_ht != null && _tva != null && Math.abs((_ht + _tva) - ttc) > 0.02) {
+      const ok = confirm(`⚠️ Montants incohérents :\nHT ${_ht.toFixed(2)} € + TVA ${_tva.toFixed(2)} € = ${(_ht + _tva).toFixed(2)} €\n≠ TTC ${ttc.toFixed(2)} €\n\nEnregistrer quand même ?`);
+      if (!ok) { $('fa-ht').focus(); faStatus('Vérifiez HT / TVA / TTC (l\'écart doit être ≤ 2 cts).', 'error'); return; }
+    }
     const date = $('fa-date').value || new Date().toISOString().slice(0,10);
     // Conserve le PDF en ligne (consultable + relisable plus tard par l'IA).
     let fileId = 'IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
@@ -1303,7 +1310,7 @@
       numeroFacture: $('fa-num').value.trim() || null,
       description: $('fa-desc').value.trim() || null,
       type: $('fa-type').value || 'autre',
-      montantHT: num($('fa-ht').value), montantTVA: num($('fa-tva').value), montantTTC: ttc,
+      montantHT: _ht, montantTVA: _tva, montantTTC: ttc,
       km: num($('fa-km').value),
       fileId,
       fileName,
@@ -2121,6 +2128,9 @@
         const r = await FP.supabase.from('total_conso').select('*');
         if (r.error) throw r.error;
         conso = r.data || [];
+        // Aligne la vue CEO scopée : ne montrer que la société active (RLS isole déjà les clients).
+        const _soc = FP.activeSociete ? FP.activeSociete() : null;
+        if (_soc && _soc !== '__all__') conso = conso.filter(x => !x.societe || x.societe === _soc);
       } catch (e) {
         console.warn('[total_conso] indisponible :', e && (e.message || e));
         conso = null; // table absente → on affiche un message d'aide
@@ -2874,7 +2884,7 @@
     const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
     async function loadConso(){
       consoLoaded = true;
-      try { const r = await FP.supabase.from('ulys_conso').select('*'); if (r.error) throw r.error; conso = r.data || []; }
+      try { const r = await FP.supabase.from('ulys_conso').select('*'); if (r.error) throw r.error; conso = r.data || []; const _soc = FP.activeSociete ? FP.activeSociete() : null; if (_soc && _soc !== '__all__') conso = conso.filter(x => !x.societe || x.societe === _soc); }
       catch (e) { console.warn('[ulys_conso] indisponible :', e && (e.message || e)); conso = null; }
       renderConso();
     }
