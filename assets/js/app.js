@@ -2962,6 +2962,64 @@ try { window.alert = function (m) { FP.alert(m); }; } catch (e) {}
   }, true);
 })();
 
+// ── Squelettes de chargement (shimmer) — remplacent « Chargement… » ──
+// FP.skeletonHTML(opts) → chaîne HTML ; FP.skeleton(el, opts) → l'injecte dans un conteneur.
+//   type: 'lines' (défaut) | 'rows' (lignes de tableau) | 'table' (dans un <tbody>)
+FP.skeletonHTML = function (opts) {
+  opts = opts || {};
+  const n = opts.count || 5;
+  const type = opts.type || 'lines';
+  const widths = ['92%', '68%', '84%', '54%', '76%', '88%', '61%'];
+  let out = '';
+  if (type === 'table') {
+    const cols = opts.cols || 6;
+    for (let i = 0; i < n; i++) {
+      let tds = '';
+      for (let c = 0; c < cols; c++) tds += '<td class="p-2"><div class="fp-skel fp-skel-line" style="width:' + widths[(i + c) % widths.length] + '"></div></td>';
+      out += '<tr>' + tds + '</tr>';
+    }
+    return out;
+  }
+  if (type === 'rows') {
+    for (let i = 0; i < n; i++) {
+      out += '<div class="fp-skel-row"><div class="fp-skel fp-skel-chip"></div><div class="fp-skel fp-skel-line" style="width:' + widths[i % widths.length] + '"></div></div>';
+    }
+    return out;
+  }
+  for (let i = 0; i < n; i++) out += '<div class="fp-skel fp-skel-line" style="width:' + widths[i % widths.length] + '"></div>';
+  return out;
+};
+FP.skeleton = function (el, opts) {
+  const node = typeof el === 'string' ? document.getElementById(el) : el;
+  if (node) node.innerHTML = FP.skeletonHTML(opts);
+  return node;
+};
+
+// ── États vides designés (icône + titre + message + action) ──
+// FP.emptyHTML({icon,title,text,actionLabel,href}) → HTML ; FP.emptyState(el, opts) → l'injecte.
+FP.emptyHTML = function (opts) {
+  opts = opts || {};
+  const icon = opts.icon || 'inbox';
+  const esc = FP.esc || (s => String(s == null ? '' : s));
+  let btn = '';
+  if (opts.actionLabel) {
+    const inner = '<i data-lucide="' + esc(opts.actionIcon || 'plus') + '"></i> ' + esc(opts.actionLabel);
+    btn = opts.href
+      ? '<a class="fp-empty-btn" href="' + esc(opts.href) + '">' + inner + '</a>'
+      : '<button type="button" class="fp-empty-btn" ' + (opts.actionId ? 'id="' + esc(opts.actionId) + '"' : '') + '>' + inner + '</button>';
+  }
+  return '<div class="fp-empty">'
+    + '<div class="fp-empty-ic"><i data-lucide="' + esc(icon) + '"></i></div>'
+    + (opts.title ? '<div class="fp-empty-title">' + esc(opts.title) + '</div>' : '')
+    + (opts.text ? '<div class="fp-empty-text">' + esc(opts.text) + '</div>' : '')
+    + btn + '</div>';
+};
+FP.emptyState = function (el, opts) {
+  const node = typeof el === 'string' ? document.getElementById(el) : el;
+  if (node) { node.innerHTML = FP.emptyHTML(opts); try { if (window.lucide && lucide.createIcons) lucide.createIcons(); } catch (e) {} }
+  return node;
+};
+
 // Avatar « initiales colorées » réutilisable (couleur stable dérivée du nom).
 FP.initiales = (name) => {
   const parts = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean);
