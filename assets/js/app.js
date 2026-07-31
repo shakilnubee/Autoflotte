@@ -1564,6 +1564,7 @@ FP.MANUAL_SECTION = {
   'statistiques.html': 's-stats', 'vehicules.html': 's-vehicules', 'emprunts.html': 's-divers',
   'conducteurs.html': 's-conducteurs', 'amendes.html': 's-amendes', 'sinistres.html': 's-sinistres',
   'factures.html': 's-factures', 'entretiens.html': 's-factures', 'contrats.html': 's-contrats',
+  'budget.html': 's-budget', 'renouvellements.html': 's-divers',
   'parametres.html': 's-params', 'aide.html': 's-divers',
 };
 FP.injectManualButton = function () {

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731f">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -97,6 +97,7 @@
       <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
       <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
       <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
       <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
       <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
       <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
@@ -146,8 +147,9 @@
       <h1 class="text-2xl font-extrabold text-white" style="color:#fff" data-edit-key="sinistres.title">Sinistres</h1>
       <p class="text-sm mt-1" style="color:#8598B4" data-edit-key="sinistres.subtitle">Tous les sinistres de la flotte — accidents, bris de glace, vols</p>
     </div>
-    <div class="mb-8 flex justify-end items-center gap-3">
-      <label class="btn btn-dark text-sm" style="cursor:pointer" title="Scanner / importer une facture de sinistre (même lecture que le scan du tableau de bord)">
+    <div class="mb-8 flex justify-end items-center gap-3 flex-wrap">
+      <button class="btn btn-dark text-sm" id="sin-declare-btn" title="Déclarer un nouveau sinistre pas-à-pas (véhicule, lieu, circonstances, constat, photos)"><i data-lucide="clipboard-pen-line" class="w-4 h-4"></i> Déclarer un sinistre</button>
+      <label class="btn btn-outline text-sm" style="cursor:pointer" title="Scanner / importer une facture de sinistre (même lecture que le scan du tableau de bord)">
         <i data-lucide="scan-line" class="w-4 h-4"></i> Ajouter une facture sinistre
         <input type="file" id="sin-facture-file" accept="image/*,application/pdf" multiple class="hidden">
       </label>
@@ -155,6 +157,38 @@
       <span data-data-io></span>
     </div>
     <div id="sin-facture-status" class="hidden mb-6 text-sm rounded-lg px-4 py-3"></div>
+
+    <!-- Déclaration de sinistre guidée -->
+    <div id="sin-declare-modal" style="position:fixed;inset:0;background:rgba(15,30,61,.5);display:none;align-items:center;justify-content:center;z-index:80;padding:1rem">
+      <div style="background:#fff;border-radius:1rem;max-width:520px;width:100%;max-height:90vh;overflow:auto;padding:1.2rem 1.3rem" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-slate-900 text-lg flex items-center gap-2"><i data-lucide="clipboard-pen-line" class="w-5 h-5" style="color:var(--fp-accent)"></i> Déclarer un sinistre</h3>
+          <button id="sin-declare-close" type="button" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Véhicule concerné *</div>
+            <select id="sd-veh" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full"><option value="">— choisir —</option></select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><div class="text-xs font-semibold text-slate-500 uppercase mb-1">Date du sinistre</div><input id="sd-date" type="date" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full"></div>
+            <div><div class="text-xs font-semibold text-slate-500 uppercase mb-1">Lieu</div><input id="sd-lieu" type="text" placeholder="Ville, rue, parking…" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full"></div>
+          </div>
+          <div><div class="text-xs font-semibold text-slate-500 uppercase mb-1">Circonstances</div><textarea id="sd-desc" rows="2" placeholder="Que s'est-il passé ? (choc arrière, bris de glace, vol…)" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full"></textarea></div>
+          <div><div class="text-xs font-semibold text-slate-500 uppercase mb-1">Tiers impliqué <span class="normal-case font-normal text-slate-400">(optionnel)</span></div><input id="sd-tiers" type="text" placeholder="Plaque / nom de l'autre partie, assureur adverse…" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full"></div>
+          <div>
+            <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Constat + photos <span class="normal-case font-normal text-slate-400">(optionnel, plusieurs)</span></div>
+            <input id="sd-files" type="file" accept="image/*,application/pdf,.pdf" multiple class="text-sm w-full">
+            <p class="text-xs text-slate-400 mt-1">Dépose le constat amiable et des photos des dommages — rangés dans le dossier du véhicule. L'IA pourra ensuite lire le constat pour la responsabilité.</p>
+          </div>
+          <div id="sd-status" class="text-xs"></div>
+        </div>
+        <div class="flex gap-2 pt-4">
+          <button type="button" class="btn btn-outline flex-1 justify-center" id="sin-declare-cancel">Annuler</button>
+          <button type="button" class="btn btn-dark flex-1 justify-center" id="sin-declare-ok"><i data-lucide="check" class="w-4 h-4"></i> Créer le dossier</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Sélecteur de PÉRIODE (pilote TOUTE la page : indicateurs, graphes, liste) -->
     <div class="card p-4 mb-6">
@@ -328,12 +362,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731e"></script>
-<script src="../assets/js/supabase-client.js?v=20260731e"></script>
-<script src="../assets/js/data.js?v=20260731e"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731e"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731e"></script>
-<script src="../assets/js/app.js?v=20260731e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731f"></script>
+<script src="../assets/js/supabase-client.js?v=20260731f"></script>
+<script src="../assets/js/data.js?v=20260731f"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731f"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731f"></script>
+<script src="../assets/js/app.js?v=20260731f"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -959,6 +993,67 @@
       sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
       refreshAll(); if (typeof renderDrive === 'function') renderDrive();
       setStatus(`<b>✓ ${ok} facture(s) sinistre ajoutée(s)</b>${dup ? ' · ' + dup + ' doublon(s) ignoré(s)' : ''}. Complète le montant / véhicule sur la ligne si besoin.`, ok ? 'ok' : 'err');
+    });
+  })();
+
+  // === Déclaration de sinistre guidée (formulaire pas-à-pas → crée le dossier + range constat/photos) ===
+  (function sinDeclare(){
+    const modal = $('sin-declare-modal'); if (!modal) return;
+    const setSt = (h, c) => { if ($('sd-status')) { $('sd-status').innerHTML = h || ''; $('sd-status').style.color = c || '#334155'; } };
+    const open = () => {
+      const sel = $('sd-veh');
+      if (sel) {
+        const vehs = ((window.FP_DATA && FP_DATA.vehicules) || data.vehicules || []).filter(v => !(FP.estVendu && FP.estVendu(v))).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+        sel.innerHTML = '<option value="">— choisir —</option>' + vehs.map(v => `<option value="${escapeHtml(v.immat || '')}">${escapeHtml(v.immat || '?')} — ${escapeHtml((v.marque || '') + ' ' + (v.modele || ''))}</option>`).join('');
+        if (FP.searchSelect && sel.dataset.ssDone !== '1') FP.searchSelect(sel, { placeholder: 'Rechercher un véhicule…' });
+      }
+      if ($('sd-date')) $('sd-date').value = new Date().toISOString().slice(0, 10);
+      ['sd-lieu', 'sd-desc', 'sd-tiers'].forEach(id => { if ($(id)) $(id).value = ''; });
+      if ($('sd-files')) $('sd-files').value = '';
+      setSt('');
+      modal.style.display = 'flex';
+      if (window.lucide) lucide.createIcons();
+    };
+    const close = () => { modal.style.display = 'none'; };
+    if ($('sin-declare-btn')) $('sin-declare-btn').addEventListener('click', open);
+    if ($('sin-declare-close')) $('sin-declare-close').addEventListener('click', close);
+    if ($('sin-declare-cancel')) $('sin-declare-cancel').addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    if ($('sin-declare-ok')) $('sin-declare-ok').addEventListener('click', async () => {
+      const immat = $('sd-veh') ? $('sd-veh').value.trim() : '';
+      if (!immat) { setSt('⚠️ Choisis un véhicule.', '#B91C1C'); return; }
+      if (!(window.FP && FP.persist)) { setSt('⚠️ Connexion requise pour enregistrer.', '#B91C1C'); return; }
+      const date = ($('sd-date') && $('sd-date').value) || new Date().toISOString().slice(0, 10);
+      const lieu = $('sd-lieu') ? $('sd-lieu').value.trim() : '';
+      const desc = $('sd-desc') ? $('sd-desc').value.trim() : '';
+      const tiers = $('sd-tiers') ? $('sd-tiers').value.trim() : '';
+      const descFull = [desc, lieu ? ('Lieu : ' + lieu) : '', tiers ? ('Tiers : ' + tiers) : ''].filter(Boolean).join(' · ') || 'Sinistre déclaré';
+      const btn = $('sin-declare-ok'); if (btn) btn.disabled = true;
+      setSt('⏳ Création du dossier…');
+      try {
+        const files = [...(($('sd-files') && $('sd-files').files) || [])];
+        let firstUrl = null;
+        for (const f of files) {
+          try {
+            const url = await FP.uploadScan(f, 'documents');
+            if (url) {
+              if (!firstUrl) firstUrl = url;
+              await FP.persist.insert('documents', { id: 'SD' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: immat, type: 'sinistre-doc', label: f.name, url, driveId: null });
+            }
+          } catch (_) {}
+        }
+        const fact = { id: 'F-SIN-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date, vehiculeImmat: immat, description: descFull, type: 'sinistre', montantTTC: null, fileId: firstUrl, fileName: files[0] ? files[0].name : null };
+        await FP.persist.insert('factures', fact);
+        (data.factures = data.factures || []).push(fact);
+        const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {}; s.sinistreStatut[fact.id] = 'attente'; FP.settings.save(s);
+        sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
+        refreshAll(); if (typeof renderDrive === 'function') renderDrive();
+        close();
+        if (FP.toast) FP.toast('Dossier sinistre créé — complète le montant quand tu auras la facture.');
+      } catch (e) {
+        console.error('[sin declare]', e);
+        setSt('⚠️ Erreur — réessaie.', '#B91C1C');
+      } finally { if (btn) btn.disabled = false; }
     });
   })();
 

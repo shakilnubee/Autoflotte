@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731f">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -294,6 +294,7 @@
       <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
       <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
       <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
       <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
       <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
       <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
@@ -545,6 +546,19 @@
   </div>
 </div>
 
+<!-- Checklist de process (entrée dans la flotte / cession) -->
+<div class="modal-backdrop" id="proc-backdrop">
+  <div class="modal p-6" style="max-width:470px">
+    <div class="flex justify-between items-center mb-2">
+      <h2 class="text-xl font-extrabold flex items-center gap-2" id="proc-title">Checklist</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="proc-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm text-slate-600 mb-3" id="proc-sub"></p>
+    <div id="proc-checklist" class="text-sm space-y-1.5"></div>
+    <div class="flex gap-2 pt-4"><button type="button" class="btn btn-dark flex-1 justify-center" id="proc-ok"><i data-lucide="check" class="w-4 h-4"></i> C'est noté</button></div>
+  </div>
+</div>
+
 <!-- =============== MODAL NOUVEAU / MODIFIER =============== -->
 <div class="modal-backdrop" id="modal-backdrop">
   <div class="modal p-6">
@@ -754,14 +768,14 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731e"></script>
-<script src="../assets/js/supabase-client.js?v=20260731e"></script>
-<script src="../assets/js/data.js?v=20260731e"></script>
-<script src="../assets/js/fleet-docs.js?v=20260731e"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260731e"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731e"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731e"></script>
-<script src="../assets/js/app.js?v=20260731e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731f"></script>
+<script src="../assets/js/supabase-client.js?v=20260731f"></script>
+<script src="../assets/js/data.js?v=20260731f"></script>
+<script src="../assets/js/fleet-docs.js?v=20260731f"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260731f"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731f"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731f"></script>
+<script src="../assets/js/app.js?v=20260731f"></script>
 <script>
   lucide.createIcons();
 
@@ -2447,6 +2461,7 @@
     const id = $('f-id').value;
     if (id) {
       const idx = data.vehicules.findIndex(v => v.id === id);
+      const _oldStatut = idx >= 0 ? data.vehicules[idx].statut : null;
       let updated = null;
       if (idx >= 0) { data.vehicules[idx] = { ...data.vehicules[idx], ...payload }; updated = data.vehicules[idx]; }
       saveMasse(id);
@@ -2456,6 +2471,8 @@
       if (updated) persistVehicleUpsert(updated, false);
       // Statut passé à « vendu » → archiver ses documents dans le sous-dossier « OUT » du dossier (plaque)
       if (updated && updated.statut === 'vendu' && updated.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(updated.immat);
+      // Nouveau passage à « vendu » → process de CESSION (checklist de sortie).
+      if (updated && updated.statut === 'vendu' && _oldStatut !== 'vendu') showCessionProcess(updated);
     } else {
       const newV = { id: nextVehId(), ...payload };
       // Anti-doublon : immatriculation déjà présente → on propose FUSION / ajout / annulation.
@@ -2479,8 +2496,52 @@
       renderKPIs();
       renderTable();
       persistVehicleUpsert(newV, true);
+      // Nouveau véhicule → process d'ENTRÉE dans la flotte (checklist).
+      showEntreeProcess(newV);
     }
   }
+
+  // ---------- Process « entrée / cession » d'un véhicule (checklist réutilisable) ----------
+  function showProcess(title, sub, items) {
+    if ($('proc-title')) $('proc-title').innerHTML = title;
+    if ($('proc-sub')) $('proc-sub').innerHTML = sub || '';
+    if ($('proc-checklist')) $('proc-checklist').innerHTML = items.filter(Boolean).map(t => `<div>${t}</div>`).join('');
+    $('proc-backdrop').classList.add('open');
+    if (window.lucide) lucide.createIcons();
+  }
+  function showEntreeProcess(v) {
+    // Date d'entrée dans la flotte (réglages société, pas de colonne DB).
+    try { const s = FP.settings.get(); s.vehEntree = (s.vehEntree && typeof s.vehEntree === 'object') ? s.vehEntree : {}; s.vehEntree[v.id] = new Date().toISOString().slice(0, 10); FP.settings.save(s); } catch (e) {}
+    showProcess(
+      '<i data-lucide="log-in" class="w-5 h-5" style="color:var(--fp-accent)"></i> Véhicule ajouté à la flotte',
+      `<b>${FP.esc(v.immat)}</b> — checklist d'entrée :`,
+      [
+        '✅ Fiche véhicule créée.',
+        v.cgUrl ? '✅ Carte grise scannée.' : '⬜ Scanner la <b>carte grise</b> (remplit auto CO₂, puissance, masse, VIN…).',
+        (v.prochainCT && v.prochainCT !== '—') ? '✅ Contrôle technique renseigné.' : '⬜ Planifier le <b>1er contrôle technique</b>.',
+        (v.chauffeur && v.chauffeur !== '—') ? `✅ Conducteur attribué (${FP.esc(v.chauffeur)}).` : '⬜ <b>Attribuer un conducteur</b>.',
+        '⬜ Souscrire / vérifier l\'<b>assurance</b>.',
+        '⬜ Commander la <b>carte carburant</b> + le <b>badge télépéage</b>.',
+      ]);
+  }
+  function showCessionProcess(v) {
+    try { const s = FP.settings.get(); s.vehCession = (s.vehCession && typeof s.vehCession === 'object') ? s.vehCession : {}; s.vehCession[v.id] = new Date().toISOString().slice(0, 10); FP.settings.save(s); } catch (e) {}
+    const isLeasing = !!(FP.leasingInfo && FP.leasingInfo(v));
+    showProcess(
+      '<i data-lucide="log-out" class="w-5 h-5" style="color:#B45309"></i> Cession du véhicule',
+      `<b>${FP.esc(v.immat)}</b> marqué <b>vendu</b> — checklist de sortie :`,
+      [
+        '⬜ <b>Résilier l\'assurance</b> (ne plus payer une voiture déjà vendue).',
+        '⬜ Établir le <b>certificat de cession</b> + fournir le <b>code de cession</b> (à ranger dans la fiche → Documents).',
+        '⬜ Retirer / résilier la <b>carte carburant</b> et le <b>badge télépéage</b>.',
+        isLeasing ? '⬜ <b>Clôturer le contrat de leasing</b> (restitution ou rachat).' : '',
+        (v.chauffeur && v.chauffeur !== '—') ? `⬜ <b>Désassigner le conducteur</b> (${FP.esc(v.chauffeur)}).` : '✅ Aucun conducteur assigné.',
+        '⬜ Remettre les <b>documents</b> (carte grise, dernier CT) à l\'acheteur.',
+      ]);
+  }
+  $('proc-ok') && $('proc-ok').addEventListener('click', () => $('proc-backdrop').classList.remove('open'));
+  $('proc-close') && $('proc-close').addEventListener('click', () => $('proc-backdrop').classList.remove('open'));
+  $('proc-backdrop') && $('proc-backdrop').addEventListener('click', e => { if (e.target === $('proc-backdrop')) $('proc-backdrop').classList.remove('open'); });
 
   function deleteVehicule() {
     if (!state.editingId) return;
