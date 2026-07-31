@@ -2328,6 +2328,19 @@
   // partagée entre tous les postes) sinon override local ; garde le local si la base échoue.
   async function persistVehFields(v, fields) {
     fields = Array.isArray(fields) ? fields : [fields];
+    // Cohérence compteur (tous les chemins d'édition) : une DERNIÈRE RÉVISION enregistrée à un km
+    // SUPÉRIEUR au km à jour remonte le km à jour (le véhicule est forcément au moins à ce km). On
+    // ajoute alors « km » au patch et on note la date de MAJ km. « Prochaine révision » se recalcule seule.
+    try {
+      if (fields.indexOf('kmDernierReleve') !== -1 && v) {
+        const revKm = Number(v.kmDernierReleve) || 0, curKm = Number(v.km) || 0;
+        if (revKm > curKm) {
+          v.km = revKm;
+          if (fields.indexOf('km') === -1) fields = [...fields, 'km'];
+          if (v.immat) { const s = FP.settings.get(); s.kmMajDates = (s.kmMajDates && typeof s.kmMajDates === 'object') ? s.kmMajDates : {}; s.kmMajDates[v.immat] = new Date().toISOString().slice(0, 10); FP.settings.save(s); }
+        }
+      }
+    } catch (e) {}
     if (dbAvailable()) {
       // N'envoyer QUE les champs modifiés (jamais toute la ligne) pour ne pas
       // écraser des modifs faites entre-temps (autre poste / autre champ).
