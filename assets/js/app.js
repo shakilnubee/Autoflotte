@@ -2904,6 +2904,64 @@ FP.prompt = (message, defaultValue, opts) => FP.dialog(Object.assign({ type: 'pr
 // Remplace la pop-up native alert() par la version stylée (DROP-IN : aucun appel à changer).
 try { window.alert = function (m) { FP.alert(m); }; } catch (e) {}
 
+// ── Infobulles « à la sauce Parc Pilot » — remplacent les tooltips gris natifs (title=) ──
+// À la 1re survol d'un élément portant `title`, on déplace le texte dans `data-fp-tip` et on
+// retire `title` (→ plus de bulle native), puis on affiche une infobulle stylée. Fonctionne
+// aussi sur le contenu ajouté dynamiquement (tables re-rendues) — aucune passe initiale requise.
+(function () {
+  let tip = null, scheduled = 0;
+  const ensure = () => { if (tip) return tip; tip = document.createElement('div'); tip.className = 'fp-tip'; tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); return tip; };
+  const textOf = (el) => {
+    if (el.hasAttribute && el.hasAttribute('title')) { const v = el.getAttribute('title'); el.setAttribute('data-fp-tip', v); el.removeAttribute('title'); }
+    return el.getAttribute ? el.getAttribute('data-fp-tip') : '';
+  };
+  const show = (el) => {
+    const txt = textOf(el); if (!txt) return;
+    const t = ensure(); t.textContent = txt; t.style.opacity = '0'; t.classList.add('on');
+    // mesure puis positionne (au-dessus, centré ; sinon en dessous)
+    const r = el.getBoundingClientRect(); const tw = t.offsetWidth, th = t.offsetHeight;
+    let x = r.left + r.width / 2 - tw / 2, y = r.top - th - 9;
+    if (y < 6) y = r.bottom + 9;
+    x = Math.max(6, Math.min(x, (window.innerWidth || 0) - tw - 6));
+    t.style.left = x + 'px'; t.style.top = y + 'px'; t.style.opacity = '1';
+  };
+  const hide = () => { if (tip) { tip.classList.remove('on'); tip.style.opacity = '0'; } };
+  const target = (e) => { const n = e.target; return (n && n.closest) ? n.closest('[title],[data-fp-tip]') : null; };
+  document.addEventListener('mouseover', (e) => { const el = target(e); if (el) show(el); }, true);
+  document.addEventListener('mouseout',  (e) => { const el = target(e); if (!el) return; const to = e.relatedTarget; if (to && el.contains(to)) return; hide(); }, true);
+  document.addEventListener('focusin',   (e) => { const el = target(e); if (el) show(el); });
+  document.addEventListener('focusout', hide);
+  window.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', hide);
+})();
+
+// ── Validation de formulaire « à la sauce Parc Pilot » — remplace la bulle native ──
+// ("Veuillez remplir ce champ."). On intercepte l'événement `invalid` (capture) : on empêche
+// la bulle native, on surligne le champ en rouge, on affiche UN message (toast) et on focus le 1er.
+(function () {
+  let salve = false;
+  document.addEventListener('invalid', function (e) {
+    const el = e.target; if (!el || !el.classList) return;
+    e.preventDefault();
+    el.classList.add('fp-invalid');
+    const clear = () => el.classList.remove('fp-invalid');
+    el.addEventListener('input', clear, { once: true });
+    el.addEventListener('change', clear, { once: true });
+    if (!salve) {
+      salve = true;
+      try { el.focus({ preventScroll: false }); } catch (_) { try { el.focus(); } catch (e2) {} }
+      const v = el.validity || {};
+      const msg = v.valueMissing ? 'Merci de remplir ce champ.'
+        : v.typeMismatch ? (el.type === 'email' ? 'Adresse e-mail invalide.' : 'Format invalide.')
+        : (v.patternMismatch || v.tooShort || v.tooLong) ? 'Format invalide.'
+        : v.rangeUnderflow || v.rangeOverflow || v.stepMismatch ? 'Valeur invalide.'
+        : (el.validationMessage || 'Merci de vérifier ce champ.');
+      if (FP.toast) FP.toast(msg); else if (FP.alert) FP.alert(msg);
+      setTimeout(function () { salve = false; }, 60);
+    }
+  }, true);
+})();
+
 // Avatar « initiales colorées » réutilisable (couleur stable dérivée du nom).
 FP.initiales = (name) => {
   const parts = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean);
