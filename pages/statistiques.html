@@ -268,7 +268,7 @@
         <h3 class="font-bold text-slate-900">Coût total par véhicule (tout compris)</h3>
         <span id="tco-export-mount"></span>
       </div>
-      <p class="text-xs text-slate-400 px-6 pb-3">Factures d'usage (entretien, réparation, leasing, sinistre, <b>carburant, péages</b>) + assurance + TVS + amendes du conducteur. <b>Hors prix d'achat du véhicule</b> (affiché à part dans « Prix d'acquisition » en haut). Assurance et TVS sont des montants <b>annuels</b> : pour comparer une année précise, choisis-la dans le filtre en haut.</p>
+      <p class="text-xs text-slate-400 px-6 pb-3">Factures d'usage (entretien, réparation, leasing, sinistre, <b>carburant, péages</b>) + assurance + TVS + amendes du conducteur. <b>Hors prix d'achat du véhicule</b> (affiché à part dans « Prix d'acquisition » en haut). En <b>« toutes années »</b>, tout est <b>cumulé depuis l'achat</b> (assurance et TVS multipliées par l'ancienneté du véhicule) → le « Coût total » = ce que le véhicule a coûté <b>en tout</b>. Choisis une année précise dans le filtre en haut pour voir les montants <b>de cette année-là</b>.</p>
       <div class="scrollable">
         <table class="fp-table" id="tco-table">
           <thead></thead>
@@ -637,8 +637,18 @@
       const _hasOffer = _loyerMois != null;
       const _leasing = _hasOffer ? ((annee === 'all') ? (FP.leasingTotalVerse(_leasC) || 0) : (_loyerMois * 12)) : 0;
       const factTotal = fv.filter(f => { const t = (f.type || '').toLowerCase(); if (_EXC_TCO.has(t)) return false; if (t === 'leasing' && _hasOffer) return false; return true; }).reduce((s, f) => s + (+f.montantTTC || 0), 0) + _leasing;
-      const pr = findPrime(v.immat); const assur = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : (FP.estVendu(v) ? 0 : _assurRepli);
-      const tvsD = FP.tvsDetail(v); const tvs = (tvsD.applicable && tvsD.total != null) ? tvsD.total : 0;
+      const pr = findPrime(v.immat); const assurAn = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : (FP.estVendu(v) ? 0 : _assurRepli);
+      const tvsD = FP.tvsDetail(v); const tvsAn = (tvsD.applicable && tvsD.total != null) ? tvsD.total : 0;
+      const achatF = fv.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+      // « Toutes années » = COÛT TOTAL DEPUIS L'ACHAT (Option A) : on CUMULE l'assurance et la TVS sur
+      // l'ancienneté du véhicule (× nb d'années), pour rester homogène avec le leasing et les factures
+      // qui sont déjà cumulés (sinon on additionnait 2,5 ans de leasing avec 1 an d'assurance). Réf
+      // d'ancienneté = date d'achat si connue, sinon 1re mise en circulation. Sur une année précise
+      // (filtre année), on garde le montant d'UNE seule année.
+      let _years = 1;
+      if (annee === 'all') { const _ref = (achatF && achatF.date) || v.dateMiseEnCirculation || ''; const _dr = _ref ? new Date(_ref) : null; if (_dr && !isNaN(_dr)) _years = Math.max(0.1, (Date.now() - _dr.getTime()) / (365.25 * 86400000)); }
+      const assur = assurAn * _years;
+      const tvs = tvsAn * _years;
       // Amendes du conducteur (par PRÉNOM), comptées UNE seule fois même s'il a plusieurs véhicules,
       // et au montant DÛ (majoré si l'amende est majorée).
       const drv = FP.normPrenom(v.chauffeur);
@@ -649,10 +659,7 @@
         _seenDrv.add(drv);
       }
       const total = factTotal + assur + tvs + amendes;
-      const achatF = fv.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
-      // €/km : n'a de sens que sur TOUTE la vie du véhicule (coût cumulé ÷ km compteur cumulé).
-      // Filtré sur une seule année, on diviserait un coût d'un an par le km à vie → chiffre faux.
-      // → on ne le calcule QUE pour « toutes années » ; sinon 0 (affiché « — »).
+      // €/km : coût cumulé ÷ km compteur cumulé → n'a de sens qu'en « toutes années » ; sinon 0 (« — »).
       return { id: v.id, immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, fact: factTotal, assur, tvs, amendes, total, perKm: (annee === 'all' && v.km > 0) ? total / v.km : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
     }).sort((a, b) => b.total - a.total);
     renderTcoTable();
@@ -697,8 +704,8 @@
     { key: 'modele',    label: 'Modèle',       defaultWidth: 190, render: t => FP.esc(t.modele || '—') },
     { key: 'km',        label: 'Km',           defaultWidth: 100, render: t => FP.num(t.km) + ' km' },
     { key: 'fact',      label: 'Factures & leasing', defaultWidth: 140, render: t => t.fact ? FP.euro(t.fact) : '<span class="text-slate-400">—</span>' },
-    { key: 'assur',     label: 'Assurance/an', defaultWidth: 120, render: t => t.assur ? FP.euro(t.assur) : '<span class="text-slate-400">—</span>' },
-    { key: 'tvs',       label: 'TVS/an',       defaultWidth: 110, render: t => t.tvs ? FP.euro(t.tvs) : '<span class="text-slate-400">—</span>' },
+    { key: 'assur',     label: 'Assurance',    defaultWidth: 120, render: t => t.assur ? FP.euro(t.assur) : '<span class="text-slate-400">—</span>' },
+    { key: 'tvs',       label: 'TVS',          defaultWidth: 110, render: t => t.tvs ? FP.euro(t.tvs) : '<span class="text-slate-400">—</span>' },
     { key: 'amendes',   label: 'Amendes',      defaultWidth: 110, render: t => t.amendes ? FP.euro(t.amendes) : '<span class="text-slate-400">—</span>' },
     { key: 'total',     label: 'Coût total',   defaultWidth: 130, cellCls: 'font-extrabold', render: t => FP.euro(t.total) },
     { key: 'perKm',     label: '€ / km',       defaultWidth: 100, render: t => `<span class="${t.perKm > 1 ? 'text-red-600 font-semibold' : t.perKm > 0.5 ? 'text-amber-600' : 'text-slate-700'}">${t.perKm > 0 ? FP.euroPrecis(t.perKm) : '—'}</span>` },
