@@ -403,6 +403,27 @@
   </div>
 </div>
 
+<!-- Sortie des effectifs (départ salarié) -->
+<div class="modal-backdrop" id="sortie-backdrop">
+  <div class="modal p-6" style="max-width:480px">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-xl font-extrabold flex items-center gap-2"><i data-lucide="door-open" class="w-5 h-5" style="color:#9A3412"></i> Sortie des effectifs</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="sortie-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm text-slate-600 mb-3">Départ de <b id="sortie-name">—</b>. On <b>conserve son historique</b> (amendes, accidents) sous son nom, et on <b>efface ses données personnelles</b> (permis, adresse, date de naissance, tél, e-mail) — obligation RGPD.</p>
+    <div class="field-label">Date de sortie</div>
+    <input type="date" class="field-input" id="sortie-date" />
+    <div class="mt-3">
+      <div class="field-label">À vérifier avant de valider</div>
+      <div id="sortie-checklist" class="text-sm space-y-1 mt-1"></div>
+    </div>
+    <div class="flex gap-2 pt-4">
+      <button type="button" class="btn btn-outline flex-1 justify-center" id="sortie-cancel">Annuler</button>
+      <button type="button" class="btn flex-1 justify-center" style="background:#9A3412;color:#fff" id="sortie-confirm"><i data-lucide="check" class="w-4 h-4"></i> Confirmer le départ</button>
+    </div>
+  </div>
+</div>
+
 <!-- Visionneuse document (aperçu Drive) -->
 <div class="modal-backdrop" id="viewer-backdrop">
   <div class="viewer">
@@ -567,6 +588,10 @@
             // La base fait foi : on ne RECRÉE PAS une fiche locale absente de la base
             // (sinon une fiche supprimée — ex. Xavier — réapparaît à chaque chargement).
             if (!row) return;
+            // ⚠️ RGPD : un conducteur ARCHIVÉ (masqué, ex. sorti des effectifs) ne doit JAMAIS
+            // être ré-hydraté depuis le store local — sinon la purge de ses données perso (permis,
+            // adresse, tél…) serait annulée à chaque rechargement (et sur les autres postes).
+            if (row.masque) return;
             fiche.forEach(f => { if (m[f] && !row[f]) { row[f] = m[f]; changed = true; } });
             if (changed && FP.persist.available()) FP.persist.upsert('conducteurs', toCondDb(row));
           });
@@ -1133,7 +1158,8 @@
       <div class="pt-2 border-t border-slate-100 space-y-2">
         <button type="button" id="drawer-edit" data-key="${escapeHtml(d.key)}" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="pencil" class="w-4 h-4"></i> Modifier</button>
         <button type="button" id="drawer-pdf" data-key="${escapeHtml(d.key)}" class="btn btn-outline text-sm w-full justify-center"><i data-lucide="file-down" class="w-4 h-4"></i> Imprimer / Exporter la fiche PDF</button>
-        <button type="button" id="drawer-delete" data-key="${escapeHtml(d.key)}" class="btn text-sm text-red-600 hover:bg-red-50 w-full justify-center"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer ce conducteur</button>
+        <button type="button" id="drawer-sortie" data-key="${escapeHtml(d.key)}" class="btn text-sm w-full justify-center" style="background:#FFF7ED;color:#9A3412;border:1px solid #FED7AA;font-weight:600" title="Départ d'un salarié : archive la fiche, efface les données perso (RGPD) et garde l'historique"><i data-lucide="door-open" class="w-4 h-4"></i> Sortie des effectifs (départ salarié)</button>
+        <button type="button" id="drawer-delete" data-key="${escapeHtml(d.key)}" class="btn text-xs text-slate-400 hover:text-red-600 w-full justify-center" title="À utiliser seulement pour une erreur de saisie"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer (erreur de saisie)</button>
       </div>`;
 
     let corps;
@@ -1422,7 +1448,67 @@
     if (pbtn) exportCondPDF(pbtn.dataset.key);
     const edbtn = e.target.closest('#drawer-edit');
     if (edbtn) openEditModal(edbtn.dataset.key);
+    const sobtn = e.target.closest('#drawer-sortie');
+    if (sobtn) openSortieModal(sobtn.dataset.key);
   });
+
+  // ---------- Sortie des effectifs (départ salarié) ----------
+  // Archive la fiche (masque), EFFACE les données perso (RGPD) mais GARDE l'historique (amendes/
+  // accidents) sous le nom, libère les véhicules, purge les documents perso, et note la date de sortie.
+  let _sortieKey = null;
+  function openSortieModal(key) {
+    const d = drivers.find(x => x.key === key); if (!d) return;
+    _sortieKey = key;
+    if ($('sortie-name')) $('sortie-name').textContent = d.name || 'ce conducteur';
+    const dateEl = $('sortie-date'); if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+    const items = [];
+    const vehs = d.vehicules || [];
+    items.push(vehs.length
+      ? `⚠️ <b>${vehs.length} véhicule(s)</b> assigné(s) (${vehs.map(v => escapeHtml(v.immat)).join(', ')}) → seront <b>libérés</b>. Pense à les réattribuer à un remplaçant.`
+      : '✅ Aucun véhicule assigné.');
+    const dues = (d.amendes || []).filter(a => (FP.estAPayer ? FP.estAPayer(a) : a.statut === 'à payer'));
+    items.push(dues.length
+      ? `⚠️ <b>${dues.length} amende(s) à payer</b> encore en cours → à solder / désigner avant le départ.`
+      : '✅ Aucune amende en cours.');
+    items.push('🔑 Pense aussi à récupérer / clôturer : <b>carte carburant</b>, <b>badge télépéage</b>, <b>emprunt de véhicule en cours</b> (le cas échéant).');
+    if ($('sortie-checklist')) $('sortie-checklist').innerHTML = items.map(t => `<div>${t}</div>`).join('');
+    $('sortie-backdrop').classList.add('open');
+    if (window.lucide) lucide.createIcons();
+  }
+  function confirmSortie() {
+    const key = _sortieKey; if (!key) return;
+    const d = drivers.find(x => x.key === key);
+    const date = ($('sortie-date') && $('sortie-date').value) || new Date().toISOString().slice(0, 10);
+    // 1) Archive + PURGE RGPD des données perso (on garde le nom pour l'historique).
+    upsertCond(key, {
+      masque: true, manuel: false, name: (condRow(key) && condRow(key).name) || (d && d.name),
+      adresse: null, dateNaissance: null, tel: null, email: null,
+      permisType: null, permisNumero: null, permisObtention: null, permisExpiration: null, permisUrl: null, permisFileId: null,
+    });
+    // 2) Libère les véhicules + purge les documents perso scannés (permis, CI…).
+    unassignVehiclesOf(key);
+    condDocsRemove(key);
+    // 2bis) Purge AUSSI le store local legacy (PXP) : sa fiche « manuelle » et son permis scanné y
+    // vivent encore et seraient ré-injectés au rechargement → on les retire pour que la purge RGPD tienne.
+    try {
+      const store = JSON.parse(localStorage.getItem(COND_KEY) || '{}');
+      if (Array.isArray(store.manuels)) store.manuels = store.manuels.filter(m => normPrenom(m.name) !== key);
+      store.masques = Array.isArray(store.masques) ? store.masques : [];
+      if (!store.masques.includes(key)) store.masques.push(key);
+      localStorage.setItem(COND_KEY, JSON.stringify(store));
+      const permis = JSON.parse(localStorage.getItem(PERMIS_KEY) || '{}'); if (permis[key]) { delete permis[key]; localStorage.setItem(PERMIS_KEY, JSON.stringify(permis)); }
+    } catch (e) {}
+    // 3) Note la date de sortie (réglages par société, pas de colonne DB).
+    try { const s = FP.settings.get(); s.condSortie = (s.condSortie && typeof s.condSortie === 'object') ? s.condSortie : {}; s.condSortie[key] = date; FP.settings.save(s); } catch (e) {}
+    $('sortie-backdrop').classList.remove('open');
+    closeDrawer();
+    drivers = buildDrivers(); renderKPIs(); renderGrid();
+    if (FP.toast) FP.toast('Départ enregistré · données perso effacées, historique conservé');
+  }
+  $('sortie-cancel')?.addEventListener('click', () => $('sortie-backdrop').classList.remove('open'));
+  $('sortie-close')?.addEventListener('click', () => $('sortie-backdrop').classList.remove('open'));
+  $('sortie-backdrop')?.addEventListener('click', e => { if (e.target === $('sortie-backdrop')) $('sortie-backdrop').classList.remove('open'); });
+  $('sortie-confirm')?.addEventListener('click', confirmSortie);
 
   // ---------- Modifier les infos essentielles (bouton « Modifier » de la fiche) ----------
   function openEditModal(key) {
