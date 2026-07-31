@@ -819,16 +819,38 @@ FP.setActiveSociete = (s) => { try { localStorage.setItem('fp_societe', s || 'PX
 // Liste des sociétés = métadonnée GLOBALE de l'admin (pas par société, sinon elle se
 // réinitialiserait en changeant de société). Stockée à part ; repli sur l'ancienne liste des réglages.
 FP.SOCIETES_KEY = 'fp_societes_list';
+// ⚠️ « Tombstone » des sociétés SUPPRIMÉES : une société supprimée pouvait « revenir » via une synchro
+// (réglages serveur, compte résiduel, autre poste). On tient donc une liste des sociétés supprimées et
+// getSocietes la FILTRE toujours → une société supprimée ne réapparaît JAMAIS (sauf si on la recrée).
+FP.SOCIETES_DEL_KEY = 'fp_societes_deleted';
+FP.getSocietesDeleted = () => {
+  const set = new Set();
+  try { (JSON.parse(localStorage.getItem(FP.SOCIETES_DEL_KEY) || '[]') || []).forEach(x => set.add(String(x).trim().toLowerCase())); } catch (e) {}
+  try { (FP.settings.get().societesDeleted || []).forEach(x => set.add(String(x).trim().toLowerCase())); } catch (e) {}
+  set.delete('pxp');
+  return [...set];
+};
 FP.getSocietes = () => {
   let arr = null;
   try { arr = JSON.parse(localStorage.getItem(FP.SOCIETES_KEY) || 'null'); } catch (e) {}
   if (!Array.isArray(arr) || !arr.length) { try { arr = (FP.settings.get().societes || []).slice(); } catch (e) { arr = []; } }
   if (!Array.isArray(arr)) arr = [];
   if (!arr.includes('PXP')) arr.unshift('PXP');
+  // Filtre les sociétés supprimées (tombstone) + dédoublonne (garde toujours PXP).
+  const del = FP.getSocietesDeleted();
+  const seen = new Set();
+  arr = arr.filter(s => {
+    const k = String(s).trim().toLowerCase();
+    if (k !== 'pxp' && del.includes(k)) return false;
+    if (seen.has(k)) return false; seen.add(k); return true;
+  });
   return arr;
 };
 FP.addSociete = (name) => {
   name = (name || '').trim(); if (!name) return false;
+  // Recréer une société supprimée = lever son tombstone (sinon getSocietes la re-filtrerait).
+  try { const d = (JSON.parse(localStorage.getItem(FP.SOCIETES_DEL_KEY) || '[]') || []).filter(x => String(x).trim().toLowerCase() !== name.toLowerCase()); localStorage.setItem(FP.SOCIETES_DEL_KEY, JSON.stringify(d)); } catch (e) {}
+  try { const s = FP.settings.get(); if (Array.isArray(s.societesDeleted)) { s.societesDeleted = s.societesDeleted.filter(x => String(x).trim().toLowerCase() !== name.toLowerCase()); FP.settings.save(s); } } catch (e) {}
   const arr = FP.getSocietes();
   if (arr.some(x => x.toLowerCase() === name.toLowerCase())) return false;
   arr.push(name);
@@ -837,14 +859,22 @@ FP.addSociete = (name) => {
 };
 // Retire une société de la LISTE (registre) — CEO only côté UI. La maison « PXP » est protégée.
 // ⚠️ Ne supprime PAS les données (véhicules/amendes…) déjà en base : elles restent isolées par RLS,
-// juste plus sélectionnables. On nettoie le registre local (SOCIETES_KEY) + la config partagée.
+// juste plus sélectionnables. Nettoie le registre local + la config partagée + pose un TOMBSTONE.
 FP.removeSociete = (name) => {
   name = (name || '').trim();
   if (!name || name.toLowerCase() === 'pxp') return false;
   let arr = FP.getSocietes().filter(x => String(x).toLowerCase() !== name.toLowerCase());
   if (!arr.includes('PXP')) arr.unshift('PXP');
   try { localStorage.setItem(FP.SOCIETES_KEY, JSON.stringify(arr)); } catch (e) {}
-  try { const s = FP.settings.get(); if (Array.isArray(s.societes)) { s.societes = s.societes.filter(x => String(x).toLowerCase() !== name.toLowerCase()); if (!s.societes.includes('PXP')) s.societes.unshift('PXP'); FP.settings.save(s); } } catch (e) {}
+  // Tombstone local (bloque tout retour via synchro, même hors-ligne).
+  try { const d = JSON.parse(localStorage.getItem(FP.SOCIETES_DEL_KEY) || '[]') || []; if (!d.map(x => String(x).trim().toLowerCase()).includes(name.toLowerCase())) { d.push(name); localStorage.setItem(FP.SOCIETES_DEL_KEY, JSON.stringify(d)); } } catch (e) {}
+  try {
+    const s = FP.settings.get();
+    if (Array.isArray(s.societes)) { s.societes = s.societes.filter(x => String(x).toLowerCase() !== name.toLowerCase()); if (!s.societes.includes('PXP')) s.societes.unshift('PXP'); }
+    s.societesDeleted = Array.isArray(s.societesDeleted) ? s.societesDeleted : [];
+    if (!s.societesDeleted.map(x => String(x).trim().toLowerCase()).includes(name.toLowerCase())) s.societesDeleted.push(name);
+    FP.settings.save(s);
+  } catch (e) {}
   return true;
 };
 // Modèles d'e-mail par défaut (amende) — source UNIQUE, réutilisée par amendes.html ET
