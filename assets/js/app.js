@@ -750,8 +750,9 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailExpediteur',     label: "E-mail d'envoi des amendes",       type: 'email', ph: 'ex. contact@masociete.fr' },
   { key: 'mailCopie',          label: 'E-mails en copie (séparés par ,)', type: 'text',  ph: 'ex. compta@masociete.fr, direction@masociete.fr' },
   { key: 'mailDomaineEnvoi',   label: "Domaine d'envoi vérifié (Resend)", type: 'text',  ph: 'ex. resend.masociete.fr — le domaine validé dans Resend (le mail part de <ton adresse>@ce-domaine, réponse vers l’e-mail ci-dessus)' },
-  { key: 'loueurNom',          label: 'Nom du loueur (leasing)',          type: 'text',  ph: 'ex. Arval, Ayvens, BPCE Car Lease… (doit correspondre au « propriétaire » des véhicules en leasing)' },
-  { key: 'proprietaireLeasing', label: 'Propriétaire des véhicules loués (si différent du loueur)', type: 'text', ph: 'ex. BPCE — la valeur inscrite dans le champ « propriétaire » des véhicules en leasing (sert à détecter le leasing). Laisse vide si identique au loueur.' },
+  // ⚠️ Les LOUEURS (BPCE, Ayvens…) se gèrent dans l'onglet CONTRATS (liste multi-loueurs
+  // settings.loueurs), PAS ici. On n'expose donc PAS loueurNom/proprietaireLeasing dans le
+  // formulaire Paramètres (les valeurs restent en base pour la rétro-compat / le repli PXP).
   { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom.', default: FP.MAIL_DEFAUT.paiement },
   { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.designation },
 ];
