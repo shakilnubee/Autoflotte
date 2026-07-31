@@ -820,27 +820,35 @@
     // Bouton « Supprimer une société » : visible UNIQUEMENT pour le CEO.
     const db = $('btn-del-societe'); if (db) db.classList.toggle('hidden', !(FP.isCEO && FP.isCEO()));
   }
-  // Suppression d'une société (CEO) — retire du registre, ne touche PAS aux données déjà en base.
+  // Suppression COMPLÈTE d'une société (CEO) — société + ses comptes. Ne touche PAS aux données
+  // déjà en base (véhicules/amendes… restent isolés). Liste depuis TOUTES les sources (registre local,
+  // réglages, comptes serveur) → une société qui « traîne » (ex. comme compte de test) reste supprimable.
   async function deleteSociete() {
     if (!(FP.isCEO && FP.isCEO())) { alert('Action réservée au CEO.'); return; }
-    const list = (FP.getSocietes ? FP.getSocietes() : ['PXP']).filter(s => String(s).toLowerCase() !== 'pxp');
+    const set = new Set();
+    try { (FP.getSocietes ? FP.getSocietes() : []).forEach(s => set.add(String(s))); } catch (e) {}
+    try { (FP.settings.get().societes || []).forEach(s => set.add(String(s))); } catch (e) {}
+    let users = [];
+    try {
+      const r = await FP.supabase.functions.invoke('manage-users', { body: { action: 'list' } });
+      users = (r && r.data && r.data.users) || [];
+      users.forEach(u => { if (u.societe) set.add(String(u.societe)); });
+    } catch (e) {}
+    const list = [...set].filter(s => s && String(s).trim().toLowerCase() !== 'pxp');
     if (!list.length) { alert('Aucune société cliente à supprimer (seule « PXP » existe).'); return; }
-    const name = (prompt('Quelle société retirer de la liste ?\n\n• ' + list.join('\n• ') + '\n\nTape son nom exact :') || '').trim();
+    const name = (prompt('Quelle société supprimer COMPLÈTEMENT (société + ses comptes) ?\n\n• ' + list.join('\n• ') + '\n\nTape son nom exact :') || '').trim();
     if (!name) return;
     const match = list.find(s => String(s).trim().toLowerCase() === name.trim().toLowerCase());
-    if (!match) { alert('Société « ' + name + ' » introuvable dans la liste.'); return; }
-    if (!confirm('Supprimer « ' + match + ' » de la liste ?\n\n⚠️ La société disparaît du sélecteur et de la Facturation.\nLes données déjà enregistrées (véhicules, amendes…) NE sont PAS effacées de la base : elles restent isolées et simplement inaccessibles depuis la liste.\n\nContinuer ?')) return;
+    if (!match) { alert('Société « ' + name + ' » introuvable.'); return; }
+    const accs = users.filter(u => String(u.societe || '').trim().toLowerCase() === match.toLowerCase() && !u.self && u.acces !== 'ceo');
+    if (!confirm('Supprimer « ' + match + ' » ?\n\n• Retirée du sélecteur et de la Facturation.\n• ' + accs.length + ' compte(s) associé(s) supprimé(s).\n• Les données déjà en base (véhicules, amendes…) ne sont PAS effacées (isolées, inaccessibles).\n\nContinuer ?')) return;
     const cur = (FP.activeSociete ? FP.activeSociete() : 'PXP');
     if (String(cur).toLowerCase() === match.toLowerCase() && FP.setActiveSociete) FP.setActiveSociete('PXP');
-    if (!(FP.removeSociete && FP.removeSociete(match))) { alert('Suppression impossible (« PXP » est protégée).'); return; }
-    // ⚠️ Persiste la nouvelle liste CÔTÉ SERVEUR **avant** de recharger : sinon la reload interrompt la
-    // sauvegarde asynchrone des réglages et la société « revient » depuis les réglages synchronisés.
-    try {
-      if (FP.supabase && FP.settings && FP.settings._dbId) {
-        const id = FP.settings._dbId();
-        await FP.supabase.from('app_settings').upsert({ id, data: FP.settings.get() });
-      }
-    } catch (e) { console.warn('[deleteSociete] persist', e); }
+    if (FP.removeSociete) FP.removeSociete(match);
+    // Supprime les comptes de cette société (jamais soi-même ni un CEO).
+    for (const u of accs) { try { await FP.supabase.functions.invoke('manage-users', { body: { action: 'delete', id: u.id } }); } catch (e) {} }
+    // Persiste la liste CÔTÉ SERVEUR avant de recharger (sinon la reload coupe la sauvegarde → retour).
+    try { if (FP.supabase && FP.settings && FP.settings._dbId) { await FP.supabase.from('app_settings').upsert({ id: FP.settings._dbId(), data: FP.settings.get() }); } } catch (e) {}
     location.reload();
   }
   // Formulaire du profil (champs générés depuis FP.PROFIL_CHAMPS)
