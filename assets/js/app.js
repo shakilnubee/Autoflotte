@@ -617,6 +617,56 @@ FP.searchSelect = function (select, opts) {
   } catch (e) { /* en cas de souci, on garde le <select> natif */ }
 };
 
+// ⚠️ RÈGLE PROJET — un bouton « Réinitialiser » par barre de filtres (partout sur le site).
+// FP.filterResetButton(bar, { onReset, mount, after }) : ajoute un bouton « ↺ Réinitialiser » qui
+// remet les filtres de la page à zéro. `onReset` (recommandé) = fonction de la page qui remet son
+// état + resync les contrôles + re-render (fiable). Sans `onReset`, un reset GÉNÉRIQUE vide les
+// champs texte/date, remet les <select> sur l'option « all »/vide, et clique la puce « Tous » de
+// chaque groupe, en émettant les événements (compatible FP.searchSelect qui resync sur 'change').
+// `mount` = où poser le bouton (défaut = la barre). Renvoie le bouton (ou null).
+FP.filterResetButton = function (bar, opts) {
+  try {
+    opts = opts || {};
+    const barEl = (typeof bar === 'string') ? document.querySelector(bar) : bar;
+    const mount = (typeof opts.mount === 'string' ? document.querySelector(opts.mount) : opts.mount) || barEl;
+    if (!mount || mount.querySelector('.fp-filter-reset')) return null;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fp-filter-reset';
+    btn.title = 'Réinitialiser les filtres';
+    btn.innerHTML = '<i data-lucide="rotate-ccw" style="width:14px;height:14px"></i><span>Réinitialiser</span>';
+    btn.style.cssText = 'display:inline-flex;align-items:center;gap:.35rem;padding:.5rem .8rem;border:1px solid var(--fp-border,#E3E8F0);border-radius:9999px;background:#fff;color:var(--fp-muted,#5A6577);font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap';
+    btn.addEventListener('click', () => {
+      if (typeof opts.onReset === 'function') { try { opts.onReset(); } catch (e) {} }
+      else if (barEl) {
+        barEl.querySelectorAll('input').forEach(i => {
+          const t = (i.type || 'text').toLowerCase();
+          if (['checkbox', 'radio', 'button', 'submit', 'hidden'].indexOf(t) !== -1) return;
+          i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        barEl.querySelectorAll('select').forEach(s => {
+          const optAll = Array.from(s.options).find(o => o.value === 'all' || o.value === '');
+          s.value = optAll ? optAll.value : (s.options[0] ? s.options[0].value : '');
+          s.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        const groups = new Set();
+        Array.from(barEl.querySelectorAll('.filter-chip, .emp-chip, .sin-chip, [data-remb], [data-statut], [data-filtre]')).forEach(c => { if (c.parentElement) groups.add(c.parentElement); });
+        groups.forEach(grp => {
+          const list = Array.from(grp.children).filter(x => x.tagName === 'BUTTON' || x.classList.contains('filter-chip') || x.classList.contains('emp-chip') || x.classList.contains('sin-chip'));
+          const tok = x => (x.dataset.remb || x.dataset.statut || x.dataset.filtre || x.dataset.value || x.textContent || '').trim().toLowerCase();
+          const def = list.find(x => /^(all|tous|toutes)\b/.test(tok(x))) || list[0];
+          if (def) def.click();
+        });
+      }
+      if (window.lucide) lucide.createIcons();
+      if (typeof opts.after === 'function') { try { opts.after(); } catch (e) {} }
+    });
+    mount.appendChild(btn);
+    if (window.lucide) lucide.createIcons();
+    return btn;
+  } catch (e) { return null; }
+};
+
 // === Conducteurs — accès GLOBAL (liste / recherche / création depuis N'IMPORTE QUELLE page) ===
 // RÈGLE PROJET : partout où on désigne un conducteur, on doit pouvoir le CHOISIR dans la liste
 // existante OU en CRÉER un nouveau en tapant son nom (la plateforme demande alors ses infos).

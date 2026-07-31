@@ -194,6 +194,15 @@ fleet-app/
      → `FP.newConducteurModal` → `FP.conducteurs.create` (persisté, société auto-taggée, anti-doublon
      `FP.conducteurs.find`). **Tout NOUVEAU champ conducteur/emprunteur DOIT passer par `FP.conducteurPicker`.**
 
+0quinquies. ⚠️ **BOUTON « RÉINITIALISER » PAR BARRE DE FILTRES — RÈGLE** (consigne explicite) : toute
+   barre de filtres (recherche + puces + selects + dates) DOIT avoir **un bouton « ↺ Réinitialiser »**
+   qui remet TOUS les filtres de la page à zéro d'un clic. Helper global **`FP.filterResetButton(bar,
+   {onReset, mount, after})`** (app.js) : pose le bouton et, via `onReset` (recommandé), appelle la
+   fonction de la page qui remet son `state` + resync les contrôles + re-render (fiable). Sans `onReset`,
+   reset générique (vide les champs, selects → `all`, puces « Tous », émet les événements ; compatible
+   `FP.searchSelect` qui resync sur `change`). Déjà branché : Sinistres, Factures, Amendes, Entretiens,
+   Véhicules, Emprunts. ⚠️ **Toute NOUVELLE barre de filtres DOIT avoir son bouton via `FP.filterResetButton`.**
+
 1. **Tailwind précompilé** — pour éviter le délai du CDN à chaque page, Tailwind est compilé en local dans `assets/css/tailwind.css` (les pages le chargent via `<link>`, plus de `cdn.tailwindcss.com`). ⚠️ Après toute modif de classes Tailwind dans le HTML/JS, REBUILD : `npx tailwindcss@3.4.17 -c tailwind.config.js -i assets/css/_tw-input.css -o assets/css/tailwind.css --minify` (sinon les nouvelles classes ne seront pas stylées). ⚠️ **`brochure.html` et `prix.html` utilisent désormais le Tailwind LOCAL** (ajoutés à `content` dans `tailwind.config.js`) → à inclure dans le REBUILD. Seule `logos.html` reste sur le CDN. Ces deux pages sont en **thème sombre « 21st »** via une classe `.sheet-dark` (styles inline, autonomes) ; dans `prix.html` l'**aide-mémoire interne** (`#sheet-interne`) reste volontairement CLAIR et `display:none` (jamais montré au client). Les PDF client sont dans `presentation/` (`Parc-Pilot-Brochure.pdf`, `Parc-Pilot-Tarifs.pdf`) et les boutons **« Télécharger en PDF »** de `brochure.html`/`prix.html` pointent dessus (`<a download>` = beau design en 1 clic). ⚠️ **À REGÉNÉRER quand le contenu de brochure/prix change** (sinon le PDF téléchargé est périmé), via Chromium headless : `"/opt/pw-browsers/chromium-1194/chrome-linux/chrome" --headless=new --no-sandbox --virtual-time-budget=12000 --no-pdf-header-footer --print-to-pdf-no-header --print-to-pdf="presentation/Parc-Pilot-Brochure.pdf" "file://$PWD/brochure.html"` (idem prix.html → Parc-Pilot-Tarifs.pdf). Le mode impression masque les boutons flottants et l'aide-mémoire interne.
 2. **Auth guard** synchrone dans le `<head>` de chaque page protégée (11 pages)
 2bis. ⚠️ **ANTI-XSS — RÈGLE (audit sécurité)** : toute donnée **saisie ou lue par OCR/IA**

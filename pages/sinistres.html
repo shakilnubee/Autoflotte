@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731b">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -293,7 +293,7 @@
 
     <!-- Filtres -->
     <div class="card p-4 mb-6">
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3" id="sin-filterbar">
         <div class="relative flex-1 min-w-[220px]">
           <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
           <input id="search" type="text" placeholder="Véhicule, description, fournisseur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
@@ -328,12 +328,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731a"></script>
-<script src="../assets/js/supabase-client.js?v=20260731a"></script>
-<script src="../assets/js/data.js?v=20260731a"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731a"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731a"></script>
-<script src="../assets/js/app.js?v=20260731a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731b"></script>
+<script src="../assets/js/supabase-client.js?v=20260731b"></script>
+<script src="../assets/js/data.js?v=20260731b"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731b"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731b"></script>
+<script src="../assets/js/app.js?v=20260731b"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -829,6 +829,19 @@
   $('search').addEventListener('input', e => { state.search = e.target.value; sinExpanded = false; renderTimeline(); });
   $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; sinExpanded = false; refreshAll(); });
   $('filter-vehicule').addEventListener('change', e => { state.vehicule = e.target.value; sinExpanded = false; renderTimeline(); });
+  // Bouton « Réinitialiser » de la barre de filtres (remet TOUT à zéro : recherche, année, véhicule,
+  // suivi de remboursement, période) puis re-render.
+  function resetSinFilters() {
+    state.search = ''; state.annee = 'all'; state.vehicule = 'all'; state.remb = 'all'; state.dateFrom = ''; state.dateTo = '';
+    if ($('search')) $('search').value = '';
+    if ($('filter-from')) $('filter-from').value = '';
+    if ($('filter-to')) $('filter-to').value = '';
+    if ($('filter-annee')) $('filter-annee').value = 'all';
+    if ($('filter-vehicule')) { $('filter-vehicule').value = 'all'; $('filter-vehicule').dispatchEvent(new Event('change', { bubbles: true })); }
+    document.querySelectorAll('#sin-filters .sin-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.remb === 'all'));
+    sinExpanded = false; if (typeof syncPeriodUI === 'function') syncPeriodUI(); refreshAll();
+  }
+  if (FP.filterResetButton) FP.filterResetButton($('sin-filterbar'), { onReset: resetSinFilters });
 
   // ---------- Sélecteur de PÉRIODE (pilote toute la page) ----------
   function fmtFr(d) { const p = (d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : (d || ''); }
