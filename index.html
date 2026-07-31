@@ -22,6 +22,24 @@
   <script defer src="assets/js/lucide.min.js?v=20260731e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
 <link rel="stylesheet" href="assets/css/styles.css?v=20260731e">
+<style>
+  /* ===== Effets cockpit (ambiance, derrière le contenu) ===== */
+  .fx-layer{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+  .fx-layer #fx{position:absolute;inset:0}
+  .fx-layer .aurora{position:absolute;border-radius:50%;filter:blur(100px);opacity:.30;will-change:transform}
+  .fx-layer .a1{width:560px;height:560px;background:radial-gradient(circle,#F97316,transparent 70%);top:-180px;right:-150px;animation:fxFloatA 16s ease-in-out infinite}
+  .fx-layer .a2{width:520px;height:520px;background:radial-gradient(circle,#38BDF8,transparent 70%);bottom:-200px;left:-160px;animation:fxFloatB 20s ease-in-out infinite}
+  .fx-layer .a3{width:420px;height:420px;background:radial-gradient(circle,#FB923C,transparent 72%);top:46%;left:60%;animation:fxFloatA 24s ease-in-out infinite reverse}
+  .fx-layer .road{position:absolute;left:-30%;right:-30%;bottom:0;height:46vh;
+    background:repeating-linear-gradient(90deg,transparent 0 89px,rgba(249,115,22,.4) 89px 91px),repeating-linear-gradient(0deg,transparent 0 89px,rgba(56,189,248,.22) 89px 91px);
+    transform:perspective(300px) rotateX(78deg);transform-origin:bottom center;
+    -webkit-mask-image:linear-gradient(to top,#000 2%,transparent 72%);mask-image:linear-gradient(to top,#000 2%,transparent 72%);
+    animation:fxRoad 2.6s linear infinite;opacity:.26}
+  @keyframes fxRoad{from{background-position:0 0,0 0}to{background-position:0 91px,0 91px}}
+  @keyframes fxFloatA{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-40px,30px) scale(1.12)}}
+  @keyframes fxFloatB{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(50px,-30px) scale(1.1)}}
+  @media (prefers-reduced-motion:reduce){ .fx-layer .aurora,.fx-layer .road{animation:none!important} }
+</style>
 <script>
   try { if (matchMedia('(prefers-reduced-motion: no-preference)').matches) document.documentElement.classList.add('reveal-on'); } catch(e){}
 </script>
@@ -30,6 +48,11 @@
 <body>
 <div class="st">
 <div class="st-bg"></div>
+<div class="fx-layer" aria-hidden="true">
+  <canvas id="fx"></canvas>
+  <div class="aurora a1"></div><div class="aurora a2"></div><div class="aurora a3"></div>
+  <div class="road"></div>
+</div>
 
 <!-- ============== NAV ============== -->
 <header id="lp-nav" class="st-nav">
@@ -478,6 +501,32 @@
     document.querySelectorAll('.st-showcase .st-glass').forEach(c => attachTilt(c, 10, 12, 1100, 6));
     document.querySelectorAll('.st .lp-bento-item').forEach(c => attachTilt(c, 6, 7, 1000, 4));
   }
+</script>
+<script>
+/* Champ de particules « télémétrie » (ambiance accueil) */
+(function(){
+  var c=document.getElementById('fx'); if(!c) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var ctx=c.getContext('2d'), W,H,pts=[], DPR=Math.min(2,window.devicePixelRatio||1);
+  function size(){ W=c.width=innerWidth*DPR; H=c.height=innerHeight*DPR; c.style.width=innerWidth+'px'; c.style.height=innerHeight+'px'; }
+  size(); addEventListener('resize', size);
+  var N=Math.round(Math.min(64, innerWidth/22));
+  for(var i=0;i<N;i++) pts.push({ x:Math.random()*W, y:Math.random()*H, vx:(Math.random()-.5)*.22*DPR, vy:(-.12-Math.random()*.35)*DPR, r:(Math.random()*1.5+.6)*DPR, o:Math.random()*.45+.2 });
+  var mx=-1e5,my=-1e5; addEventListener('mousemove',function(e){ mx=e.clientX*DPR; my=e.clientY*DPR; });
+  function tick(){
+    ctx.clearRect(0,0,W,H);
+    for(var i=0;i<pts.length;i++){
+      var p=pts[i]; p.x+=p.vx; p.y+=p.vy;
+      if(p.y<-10){p.y=H+10;p.x=Math.random()*W} if(p.x<-10)p.x=W+10; if(p.x>W+10)p.x=-10;
+      var dx=p.x-mx, dy=p.y-my, d=dx*dx+dy*dy, R=(130*DPR)*(130*DPR);
+      if(d<R){ var a=(1-d/R)*.45; ctx.strokeStyle='rgba(249,115,22,'+a+')'; ctx.lineWidth=DPR; ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(mx,my); ctx.stroke(); }
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.283);
+      ctx.fillStyle=(i%3===0?'rgba(56,189,248,':'rgba(251,146,60,')+p.o+')'; ctx.fill();
+    }
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
 </script>
 </body>
 </html>
