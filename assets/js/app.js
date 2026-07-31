@@ -678,7 +678,11 @@ FP.filterResetButton = function (bar, opts) {
       if (window.lucide) lucide.createIcons();
       if (typeof opts.after === 'function') { try { opts.after(); } catch (e) {} }
     });
-    mount.appendChild(btn);
+    // Placer le bouton JUSTE APRÈS les filtres : s'il y a un élément poussé à droite (ml-auto,
+    // ex. une étiquette ou des boutons d'action), on insère AVANT lui pour rester collé aux filtres ;
+    // sinon on ajoute à la fin de la barre.
+    const pushed = Array.from(mount.children).find(c => c.classList && c.classList.contains('ml-auto'));
+    if (pushed) mount.insertBefore(btn, pushed); else mount.appendChild(btn);
     if (window.lucide) lucide.createIcons();
     return btn;
   } catch (e) { return null; }
