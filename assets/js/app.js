@@ -278,7 +278,11 @@ const FP = {
     if (!iso || iso === '—') return null;
     const d = new Date(iso);
     if (isNaN(d)) return null;
-    const diff = Math.ceil((d - new Date()) / (1000*60*60*24));
+    // Référence à MINUIT (comme buildEcheances) → décompte en jours calendaires cohérent partout
+    // (Alertes, fiche véhicule, Renouvellements). Évite un off-by-one selon l'heure ou un DST.
+    d.setHours(0, 0, 0, 0);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const diff = Math.round((d - now) / (1000*60*60*24));
     return diff;
   },
   // Calcul TVS approximatif (Taxe sur les Véhicules de Société) — démo
@@ -387,6 +391,23 @@ FP.setAmendeMontantPaye = (id, val) => {
 FP.getAmendeMontantPaye = (id) => {
   try { const m = FP.settings.get().amendeMontantPaye; return (m && m[id] != null && m[id] !== '') ? Number(m[id]) : null; } catch (e) { return null; }
 };
+// Détail des 3 montants officiels d'un avis (minoré / forfaitaire / majoré) + les 2 dates limites,
+// lus par l'IA au scan. Stockés PAR SOCIÉTÉ dans les réglages (app_settings.amendeMontants[id]) —
+// AUCUNE colonne DB à créer. On ne change PAS le montant qui fait foi (FP.montantDu) : c'est juste
+// pour ne pas PERDRE la ventilation lue et pouvoir l'afficher / l'exploiter plus tard.
+FP.setAmendeMontants = (id, o) => {
+  if (!FP.settings || id == null) return;
+  const s = FP.settings.get();
+  const map = (s.amendeMontants && typeof s.amendeMontants === 'object') ? s.amendeMontants : {};
+  const clean = {};
+  ['montantMinore', 'montantForfaitaire', 'montantMajore', 'dateLimiteMinore', 'dateLimiteForfaitaire'].forEach(k => {
+    const v = o && o[k]; if (v != null && v !== '') clean[k] = v;
+  });
+  if (Object.keys(clean).length) { map[id] = clean; s.amendeMontants = map; FP.settings.save(s); }
+};
+FP.getAmendeMontants = (id) => {
+  try { const m = FP.settings.get().amendeMontants; return (m && m[id]) ? m[id] : null; } catch (e) { return null; }
+};
 // ⚠️ HELPER CANONIQUE — année d'une amende (peut revenir en NOMBRE depuis Supabase) : on force
 // en chaîne, avec repli sur l'année de la date. Évite les filtres `annee === '2026'` qui ratent le nombre.
 FP.anneeAmende = (a) => { if (!a) return ''; const y = a.annee; if (y != null && String(y).trim() !== '') return String(y).trim(); return String(a.date || '').slice(0, 4); };
@@ -401,7 +422,29 @@ FP.coutFactureExploit = (f) => { const t = String((f && f.type) || '').toLowerCa
 FP.estUlys = (f) => { const n = s => String(s || '').toLowerCase(); return n(f && f.type) === 'ulys' || /\bulys\b/.test(n(f && f.fournisseur)); };
 FP.estTotalFleet = (f) => { if (FP.estUlys(f)) return false; const n = s => String(s || '').toLowerCase(); const t = n(f && f.type); if (t === 'carburant' || t === 'peage') return true; return /total\s*energies|totalenergies/.test(n(f && f.fournisseur)); };
 FP.estCarburantPeage = (f) => FP.estUlys(f) || FP.estTotalFleet(f);
-FP.coutMois = (data, ym) => (((data && data.factures) || []).filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0));
+// ⚠️ HELPER CANONIQUE — dédoublonnage des factures par n° (comme Statistiques / rapport direction) :
+// deux lignes qui partagent le même numeroFacture ne sont comptées qu'une fois (évite de gonfler les
+// totaux). Les factures sans numéro sont toutes gardées. À utiliser partout où on somme des factures.
+FP.dedupeFactures = (list) => { const seen = new Set(); return (list || []).filter(f => { const k = ((f && f.numeroFacture) || '').toString().toUpperCase(); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }); };
+// ⚠️ HELPER CANONIQUE — coût d'exploitation d'un mois : factures dédoublonnées par n° + filtre exploit.
+// Même chiffre partout (dashboard, écran mural, rapport direction) — sinon un doublon de n° gonflait le mois.
+FP.coutMois = (data, ym) => (FP.dedupeFactures(((data && data.factures) || [])).filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0));
+// ⚠️ HELPER CANONIQUE — amende « à payer » (statut tolérant aux accents/espaces/casse) : « à payer »,
+// « a payer », « À Payer » … sont tous reconnus, pour que dashboard, page Amendes et alertes comptent pareil.
+FP.estAPayer = (a) => { const s = ((a && a.statut) || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); return s === 'a payer'; };
+// ⚠️ HELPER CANONIQUE — nom du loueur d'un véhicule (multi-loueurs) : on matche le propriétaire du
+// véhicule sur settings.loueurs[].prop ; repli sur le propriétaire brut puis sur le loueur unique du
+// profil (loueurNom). Sert au LIBELLÉ « Forfait leasing X » de la fiche (sans toucher à la détection
+// du leasing) — sinon une société multi-loueurs affichait toujours le loueur unique du profil.
+FP.loueurOf = (v) => {
+  const p = String((v && v.proprietaire) || '').trim(); const pl = p.toLowerCase();
+  let list = []; try { const s = FP.settings.get(); if (Array.isArray(s.loueurs)) list = s.loueurs; } catch (e) {}
+  const m = pl ? (list || []).find(l => l && String(l.prop || '').trim().toLowerCase() === pl) : null;
+  if (m && m.nom) return String(m.nom).trim();
+  if (p) return p;
+  const prof = FP.societeProfil ? FP.societeProfil() : {};
+  return String(prof.loueurNom || '').trim();
+};
 
 // Masses en ORDRE DE MARCHE (champ G de la carte grise, en kg) — c'est le champ qu'utilise
 // la règle de stationnement de Paris (≤ 2 t), PAS le poids à vide G.1. Valeurs LUES DIRECTEMENT
@@ -589,6 +632,56 @@ FP.searchSelect = function (select, opts) {
     select.addEventListener('change', sync);
     sync();
   } catch (e) { /* en cas de souci, on garde le <select> natif */ }
+};
+
+// ⚠️ RÈGLE PROJET — un bouton « Réinitialiser » par barre de filtres (partout sur le site).
+// FP.filterResetButton(bar, { onReset, mount, after }) : ajoute un bouton « ↺ Réinitialiser » qui
+// remet les filtres de la page à zéro. `onReset` (recommandé) = fonction de la page qui remet son
+// état + resync les contrôles + re-render (fiable). Sans `onReset`, un reset GÉNÉRIQUE vide les
+// champs texte/date, remet les <select> sur l'option « all »/vide, et clique la puce « Tous » de
+// chaque groupe, en émettant les événements (compatible FP.searchSelect qui resync sur 'change').
+// `mount` = où poser le bouton (défaut = la barre). Renvoie le bouton (ou null).
+FP.filterResetButton = function (bar, opts) {
+  try {
+    opts = opts || {};
+    const barEl = (typeof bar === 'string') ? document.querySelector(bar) : bar;
+    const mount = (typeof opts.mount === 'string' ? document.querySelector(opts.mount) : opts.mount) || barEl;
+    if (!mount || mount.querySelector('.fp-filter-reset')) return null;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fp-filter-reset';
+    btn.title = 'Réinitialiser les filtres';
+    btn.innerHTML = '<i data-lucide="rotate-ccw" style="width:14px;height:14px"></i><span>Réinitialiser</span>';
+    btn.style.cssText = 'display:inline-flex;align-items:center;gap:.35rem;padding:.5rem .8rem;border:1px solid var(--fp-border,#E3E8F0);border-radius:9999px;background:#fff;color:var(--fp-muted,#5A6577);font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap';
+    btn.addEventListener('click', () => {
+      if (typeof opts.onReset === 'function') { try { opts.onReset(); } catch (e) {} }
+      else if (barEl) {
+        barEl.querySelectorAll('input').forEach(i => {
+          const t = (i.type || 'text').toLowerCase();
+          if (['checkbox', 'radio', 'button', 'submit', 'hidden'].indexOf(t) !== -1) return;
+          i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        barEl.querySelectorAll('select').forEach(s => {
+          const optAll = Array.from(s.options).find(o => o.value === 'all' || o.value === '');
+          s.value = optAll ? optAll.value : (s.options[0] ? s.options[0].value : '');
+          s.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        const groups = new Set();
+        Array.from(barEl.querySelectorAll('.filter-chip, .emp-chip, .sin-chip, [data-remb], [data-statut], [data-filtre]')).forEach(c => { if (c.parentElement) groups.add(c.parentElement); });
+        groups.forEach(grp => {
+          const list = Array.from(grp.children).filter(x => x.tagName === 'BUTTON' || x.classList.contains('filter-chip') || x.classList.contains('emp-chip') || x.classList.contains('sin-chip'));
+          const tok = x => (x.dataset.remb || x.dataset.statut || x.dataset.filtre || x.dataset.value || x.textContent || '').trim().toLowerCase();
+          const def = list.find(x => /^(all|tous|toutes)\b/.test(tok(x))) || list[0];
+          if (def) def.click();
+        });
+      }
+      if (window.lucide) lucide.createIcons();
+      if (typeof opts.after === 'function') { try { opts.after(); } catch (e) {} }
+    });
+    mount.appendChild(btn);
+    if (window.lucide) lucide.createIcons();
+    return btn;
+  } catch (e) { return null; }
 };
 
 // === Conducteurs — accès GLOBAL (liste / recherche / création depuis N'IMPORTE QUELLE page) ===
@@ -1027,12 +1120,51 @@ FP.settings = {
     localStorage.setItem(this._key(), JSON.stringify(obj));
     this.applyTheme();
     // Partage les réglages PAR SOCIÉTÉ sur tous les postes via Supabase (ligne app_settings = la
-    // société). Passe par la file de sécurité : renvoyé auto si la base est momentanément injoignable.
-    try {
-      const id = this._dbId();
-      if (FP.persist && FP.persist.upsert) FP.persist.upsert('app_settings', { id, data: obj });
-      else if (FP.db && FP.supabase) FP.db.upsert('app_settings', { id, data: obj });
-    } catch (e) {}
+    // société). Écriture par FUSION « delta » anti-écrasement (voir _pushSettings) — sinon deux
+    // postes admin qui enregistrent en même temps s'écrasaient (le dernier gagnait, l'autre perdait
+    // ses ajouts). Passe par la file de sécurité : renvoyé auto si la base est momentanément injoignable.
+    this._pushSettings(obj);
+  },
+  // Réf. = ce que le serveur contenait au dernier chargement/écriture (posé par supabase-client au load).
+  // Sert à ne réécrire QUE les clés que CE poste a modifiées (le « delta »).
+  _serverSnap: null,
+  _pushSettings(obj) {
+    const self = this;
+    let id; try { id = this._dbId(); } catch (e) { id = 'global'; }
+    const plainUpsert = (data) => {
+      try {
+        if (FP.persist && FP.persist.upsert) FP.persist.upsert('app_settings', { id, data });
+        else if (FP.db && FP.supabase) FP.db.upsert('app_settings', { id, data });
+      } catch (e) {}
+    };
+    const base = (this._serverSnap && typeof this._serverSnap === 'object') ? this._serverSnap : null;
+    // Sans point de référence (pas encore chargé depuis le serveur) OU sans Supabase : comportement
+    // d'avant (on écrit le blob local tel quel). Aucun risque de régression.
+    if (!base || !(FP.supabase && FP.supabase.from)) { this._serverSnap = null; plainUpsert(obj); return; }
+    (async () => {
+      try {
+        const r = await FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
+        const remote = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : null;
+        if (!remote) { self._serverSnap = JSON.parse(JSON.stringify(obj)); plainUpsert(obj); return; }
+        // On repart de la version FRAÎCHE du serveur, et on n'y applique QUE les clés que CE poste a
+        // changées depuis son dernier sync (obj vs base) : ajout/màj = on pose notre valeur ;
+        // suppression = on retire la clé. → les modifs d'un AUTRE poste sont préservées, et une
+        // suppression reste une suppression (pas de « resurrection »).
+        const merged = { ...remote };
+        const keys = new Set([...Object.keys(obj), ...Object.keys(base)]);
+        keys.forEach(k => {
+          const changedHere = JSON.stringify(obj[k]) !== JSON.stringify(base[k]);
+          if (changedHere) { if (Object.prototype.hasOwnProperty.call(obj, k)) merged[k] = obj[k]; else delete merged[k]; }
+        });
+        self._serverSnap = JSON.parse(JSON.stringify(merged));
+        // Le local se met à jour vers la fusion (il récupère aussi les changements de l'autre poste).
+        try { localStorage.setItem(self._key(), JSON.stringify(merged)); } catch (_) {}
+        plainUpsert(merged);
+      } catch (e) {
+        // Base momentanément injoignable / erreur : repli sur l'écriture simple (comme avant).
+        plainUpsert(obj);
+      }
+    })();
   },
   reset() {
     localStorage.removeItem(this._key());
@@ -2054,7 +2186,7 @@ FP.buildAlertes = (data) => {
   });
 
   // --- Amendes à payer ---
-  const amAPayer = (data.amendes || []).filter(a => a.statut === 'à payer');
+  const amAPayer = (data.amendes || []).filter(a => FP.estAPayer(a));
   if (amAPayer.length > 0) {
     const totalDu = amAPayer.reduce((s, a) => s + FP.montantDu(a), 0);
     out.push({
@@ -2956,6 +3088,29 @@ FP.normCarburant = function (raw) {
 // montantHT, montantTVA, montantTTC, description } ou null si indisponible/échec
 // (dans ce cas l'appelant retombe sur le lecteur local). La clé API reste côté
 // serveur : on n'envoie que le fichier + le type de document.
+// Prompt IA pour lire un CONSTAT AMIABLE (ou courrier d'assurance) et PROPOSER la responsabilité de
+// NOTRE véhicule. On injecte la plaque de l'incident pour que l'IA sache lequel des 2 véhicules est le
+// nôtre. L'IA PROPOSE seulement — l'utilisateur confirme (jamais d'enregistrement automatique).
+FP.constatPrompt = function (plaque) {
+  const p = (plaque ? String(plaque) : '').trim() || '(plaque inconnue)';
+  return [
+    'Tu analyses un CONSTAT AMIABLE d\'accident automobile (ou un courrier d\'assurance) pour déterminer',
+    'la RESPONSABILITÉ de NOTRE véhicule, dont la plaque d\'immatriculation est « ' + p + ' ».',
+    'Un constat oppose deux véhicules (A et B). Repère lequel est le NÔTRE grâce à cette plaque (tolère',
+    'espaces/tirets/casse). D\'après les cases cochées, le croquis, les circonstances et les déclarations,',
+    'détermine si NOTRE conducteur est en tort.',
+    'Réponds UNIQUEMENT en JSON strict, sans texte autour :',
+    '{',
+    '  "responsabilite": "responsable" | "non-responsable" | "partagee" | "inconnu",',
+    '  "justification": "<une phrase courte en français, ce qui te fait conclure>",',
+    '  "autrePlaque": "<plaque de l\'autre véhicule si lisible, sinon chaîne vide>"',
+    '}',
+    'Définitions : "responsable" = NOTRE véhicule est en tort ; "non-responsable" = l\'AUTRE véhicule',
+    'est en tort ; "partagee" = torts partagés. Mets "inconnu" si le document ne permet pas de trancher',
+    '(illisible, plaque absente, ce n\'est pas un constat). En cas de doute, réponds "inconnu" —',
+    'ne DEVINE JAMAIS une responsabilité que le document n\'établit pas clairement.',
+  ].join('\n');
+};
 FP.scanIA = async function (file, docType, promptOverride, opts) {
   opts = opts || {};
   try {
