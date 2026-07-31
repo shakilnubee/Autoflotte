@@ -35,6 +35,15 @@
   .ec-ticker { margin:6px 28px 0; background:rgba(255,255,255,.05); border-radius:16px; padding:16px 24px; display:flex; align-items:center; gap:16px; min-height:64px; }
   .ec-dot { width:12px; height:12px; border-radius:50%; flex-shrink:0; }
   #ec-clock { font-variant-numeric:tabular-nums; font-weight:800; font-size:22px; }
+  /* Ambiance (derrière les tuiles) */
+  .ec-fx { position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden; }
+  .ec-fx canvas { position:absolute; inset:0; }
+  .ec-fx .au { position:absolute; border-radius:50%; filter:blur(110px); opacity:.28; }
+  .ec-fx .au1 { width:620px; height:620px; background:radial-gradient(circle,#F97316,transparent 70%); top:-200px; right:-160px; animation:ecA 18s ease-in-out infinite; }
+  .ec-fx .au2 { width:560px; height:560px; background:radial-gradient(circle,#38BDF8,transparent 70%); bottom:-220px; left:-180px; animation:ecB 22s ease-in-out infinite; }
+  @keyframes ecA { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-40px,30px) scale(1.1)} }
+  @keyframes ecB { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(50px,-30px) scale(1.08)} }
+  @media (prefers-reduced-motion:reduce){ .ec-fx .au{animation:none} }
 </style>
 <script>
 (function(){
@@ -49,6 +58,8 @@
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
 </head>
 <body>
+
+<div class="ec-fx" aria-hidden="true"><canvas id="ecfx"></canvas><div class="au au1"></div><div class="au au2"></div></div>
 
 <div class="ec-top">
   <div class="flex items-center gap-4">
@@ -134,6 +145,26 @@
   setInterval(() => { _ti++; showTick(); }, 6000);         // fait défiler les alertes
   setInterval(clock, 30000);                                // horloge
   setInterval(() => { if (window.FP && FP.db && FP.supabase) FP.db.loadAll().then(d => { Object.assign(window.FP_DATA, d); render(); }).catch(() => {}); }, 300000); // rafraîchit les données (5 min)
+</script>
+<script>
+/* Ambiance particules (constellation) derrière l'affichage TV */
+(function(){
+  var c=document.getElementById('ecfx'); if(!c) return;
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var ctx=c.getContext('2d'),W,H,pts=[],DPR=Math.min(2,devicePixelRatio||1);
+  function size(){W=c.width=innerWidth*DPR;H=c.height=innerHeight*DPR;c.style.width=innerWidth+'px';c.style.height=innerHeight+'px';}
+  size(); addEventListener('resize',size);
+  var N=Math.round(Math.min(72,innerWidth/22));
+  for(var i=0;i<N;i++)pts.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.2*DPR,vy:(-.1-Math.random()*.28)*DPR,r:(Math.random()*1.7+.8)*DPR,o:Math.random()*.4+.32});
+  var L2=(122*DPR)*(122*DPR);
+  function tick(){
+    ctx.clearRect(0,0,W,H);
+    for(var i=0;i<pts.length;i++){for(var j=i+1;j<pts.length;j++){var a=pts[i],b=pts[j],dx=a.x-b.x,dy=a.y-b.y,d=dx*dx+dy*dy;if(d<L2){ctx.strokeStyle='rgba(148,175,214,'+((1-d/L2)*.20)+')';ctx.lineWidth=DPR;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}}}
+    for(var i=0;i<pts.length;i++){var p=pts[i];p.x+=p.vx;p.y+=p.vy;if(p.y<-10){p.y=H+10;p.x=Math.random()*W}if(p.x<-10)p.x=W+10;if(p.x>W+10)p.x=-10;var col=(i%3===0?'56,189,248':'251,146,60');ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.283);ctx.shadowColor='rgba('+col+',.8)';ctx.shadowBlur=6*DPR;ctx.fillStyle='rgba('+col+','+p.o+')';ctx.fill();}
+    ctx.shadowBlur=0; requestAnimationFrame(tick);
+  }
+  tick();
+})();
 </script>
 </body>
 </html>
