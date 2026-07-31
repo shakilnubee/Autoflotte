@@ -1120,12 +1120,51 @@ FP.settings = {
     localStorage.setItem(this._key(), JSON.stringify(obj));
     this.applyTheme();
     // Partage les réglages PAR SOCIÉTÉ sur tous les postes via Supabase (ligne app_settings = la
-    // société). Passe par la file de sécurité : renvoyé auto si la base est momentanément injoignable.
-    try {
-      const id = this._dbId();
-      if (FP.persist && FP.persist.upsert) FP.persist.upsert('app_settings', { id, data: obj });
-      else if (FP.db && FP.supabase) FP.db.upsert('app_settings', { id, data: obj });
-    } catch (e) {}
+    // société). Écriture par FUSION « delta » anti-écrasement (voir _pushSettings) — sinon deux
+    // postes admin qui enregistrent en même temps s'écrasaient (le dernier gagnait, l'autre perdait
+    // ses ajouts). Passe par la file de sécurité : renvoyé auto si la base est momentanément injoignable.
+    this._pushSettings(obj);
+  },
+  // Réf. = ce que le serveur contenait au dernier chargement/écriture (posé par supabase-client au load).
+  // Sert à ne réécrire QUE les clés que CE poste a modifiées (le « delta »).
+  _serverSnap: null,
+  _pushSettings(obj) {
+    const self = this;
+    let id; try { id = this._dbId(); } catch (e) { id = 'global'; }
+    const plainUpsert = (data) => {
+      try {
+        if (FP.persist && FP.persist.upsert) FP.persist.upsert('app_settings', { id, data });
+        else if (FP.db && FP.supabase) FP.db.upsert('app_settings', { id, data });
+      } catch (e) {}
+    };
+    const base = (this._serverSnap && typeof this._serverSnap === 'object') ? this._serverSnap : null;
+    // Sans point de référence (pas encore chargé depuis le serveur) OU sans Supabase : comportement
+    // d'avant (on écrit le blob local tel quel). Aucun risque de régression.
+    if (!base || !(FP.supabase && FP.supabase.from)) { this._serverSnap = null; plainUpsert(obj); return; }
+    (async () => {
+      try {
+        const r = await FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
+        const remote = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : null;
+        if (!remote) { self._serverSnap = JSON.parse(JSON.stringify(obj)); plainUpsert(obj); return; }
+        // On repart de la version FRAÎCHE du serveur, et on n'y applique QUE les clés que CE poste a
+        // changées depuis son dernier sync (obj vs base) : ajout/màj = on pose notre valeur ;
+        // suppression = on retire la clé. → les modifs d'un AUTRE poste sont préservées, et une
+        // suppression reste une suppression (pas de « resurrection »).
+        const merged = { ...remote };
+        const keys = new Set([...Object.keys(obj), ...Object.keys(base)]);
+        keys.forEach(k => {
+          const changedHere = JSON.stringify(obj[k]) !== JSON.stringify(base[k]);
+          if (changedHere) { if (Object.prototype.hasOwnProperty.call(obj, k)) merged[k] = obj[k]; else delete merged[k]; }
+        });
+        self._serverSnap = JSON.parse(JSON.stringify(merged));
+        // Le local se met à jour vers la fusion (il récupère aussi les changements de l'autre poste).
+        try { localStorage.setItem(self._key(), JSON.stringify(merged)); } catch (_) {}
+        plainUpsert(merged);
+      } catch (e) {
+        // Base momentanément injoignable / erreur : repli sur l'écriture simple (comme avant).
+        plainUpsert(obj);
+      }
+    })();
   },
   reset() {
     localStorage.removeItem(this._key());

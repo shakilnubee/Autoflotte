@@ -351,6 +351,8 @@
         if (shared && typeof shared === 'object') {
           const key = (FP.settings && FP.settings._key) ? FP.settings._key() : 'auto_flotte_settings';
           localStorage.setItem(key, JSON.stringify(shared));
+          // Point de référence pour la fusion « delta » anti-écrasement des réglages (cf. FP.settings._pushSettings).
+          try { if (FP.settings) FP.settings._serverSnap = JSON.parse(JSON.stringify(shared)); } catch (_) {}
           if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme();
           if (FP.applyCustomNavLabels) FP.applyCustomNavLabels();
           if (FP.applyNavOrder) FP.applyNavOrder();
