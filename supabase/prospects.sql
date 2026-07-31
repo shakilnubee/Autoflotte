@@ -32,14 +32,14 @@ create policy prospects_insert_anon
 drop policy if exists prospects_select_owner on public.prospects;
 create policy prospects_select_owner
   on public.prospects for select to authenticated
-  using ( lower(auth.jwt() ->> 'email') in ('shakil.nubeebaccus@projectxparis.fr','jis.nubee@gmail.com') );
+  using ( lower(auth.jwt() ->> 'email') in ('shakil.nubee@projectxparis.fr','jis.nubee@gmail.com') );
 
 drop policy if exists prospects_update_owner on public.prospects;
 create policy prospects_update_owner
   on public.prospects for update to authenticated
-  using ( lower(auth.jwt() ->> 'email') in ('shakil.nubeebaccus@projectxparis.fr','jis.nubee@gmail.com') );
+  using ( lower(auth.jwt() ->> 'email') in ('shakil.nubee@projectxparis.fr','jis.nubee@gmail.com') );
 
 drop policy if exists prospects_delete_owner on public.prospects;
 create policy prospects_delete_owner
   on public.prospects for delete to authenticated
-  using ( lower(auth.jwt() ->> 'email') in ('shakil.nubeebaccus@projectxparis.fr','jis.nubee@gmail.com') );
+  using ( lower(auth.jwt() ->> 'email') in ('shakil.nubee@projectxparis.fr','jis.nubee@gmail.com') );

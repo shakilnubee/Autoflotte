@@ -561,7 +561,7 @@ FP.CEO_ONLY_NAV = ['brochure.html', 'prix.html'];
 // générateurs de devis/contrat). Visible UNIQUEMENT si l'e-mail de connexion est dans la liste.
 // ⚠️ Consigne explicite : personne d'autre ne doit y avoir accès.
 FP.userEmail = (() => { try { return (localStorage.getItem('fp_email') || '').trim().toLowerCase(); } catch (e) { return ''; } })();
-FP.JIS_OWNERS = ['shakil.nubeebaccus@projectxparis.fr', 'jis.nubee@gmail.com'];
+FP.JIS_OWNERS = ['shakil.nubee@projectxparis.fr', 'jis.nubee@gmail.com'];
 FP.isJisOwner = () => FP.JIS_OWNERS.indexOf((FP.userEmail || '').trim().toLowerCase()) !== -1;
 
 // === Sélecteur CHERCHABLE (RÈGLE PROJET) =====================================
@@ -915,8 +915,8 @@ FP.societeProfil = () => {
   let p = {}; try { p = FP.settings.get().profil || {}; } catch (e) {}
   const soc = (FP.activeSociete && FP.activeSociete()) || 'PXP';
   const base = (soc === 'PXP')
-    ? { mailExpediteur: 'shakil.nubeebaccus@projectxparis.fr',
-        mailCopie: 'shakil.nubeebaccus@projectxparis.fr,mallaury.herembert@projectxparis.fr',
+    ? { mailExpediteur: 'shakil.nubee@projectxparis.fr',
+        mailCopie: 'shakil.nubee@projectxparis.fr,mallaury.herembert@projectxparis.fr',
         mailDomaineEnvoi: 'resend.projectxparis.fr',
         loueurNom: 'BPCE Car Lease', proprietaireLeasing: 'BPCE' }
     : { mailExpediteur: '', mailCopie: '', mailDomaineEnvoi: '', loueurNom: '', proprietaireLeasing: '' };

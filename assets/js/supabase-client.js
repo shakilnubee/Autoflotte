@@ -33,7 +33,7 @@
         if (!msg.from) {
           // Le FROM doit être sur le DOMAINE VÉRIFIÉ dans Resend. Si un domaine d'envoi est
           // configuré (Paramètres → Société → « Domaine d'envoi vérifié »), on garde la même
-          // partie locale sur ce domaine (ex. shakil.nubeebaccus@resend.projectxparis.fr) →
+          // partie locale sur ce domaine (ex. shakil.nubee@resend.projectxparis.fr) →
           // Resend accepte l'envoi, et la réponse part vers l'adresse réelle (reply-to).
           const dom = String(prof.mailDomaineEnvoi || '').trim().replace(/^@/, '');
           const fromAddr = dom ? (exp.split('@')[0] + '@' + dom) : exp;

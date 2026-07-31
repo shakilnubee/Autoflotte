@@ -8,7 +8,7 @@
 //       → colle ce fichier.
 //    2. Supabase → Project Settings → Edge Functions → Secrets :
 //         RESEND_API_KEY = <ta clé Resend>
-//         EMAIL_FROM     = Parc Pilot <shakil.nubeebaccus@projectxparis.fr>
+//         EMAIL_FROM     = Parc Pilot <shakil.nubee@projectxparis.fr>
 //       (EMAIL_FROM : mets d'abord "Parc Pilot <onboarding@resend.dev>" pour tester,
 //        puis ton adresse @projectxparis.fr une fois le domaine vérifié sur Resend.)
 //
