@@ -144,6 +144,16 @@
   .backlink i{transition:transform .2s}
   @keyframes linkIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
+  /* Overlay vortex de connexion */
+  #spiral-overlay{position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 50%, #0A1428 0%, #05070D 72%);
+    opacity:0; visibility:hidden; transition:opacity .45s ease}
+  #spiral-overlay.on{opacity:1; visibility:visible}
+  #spiral-overlay #spiral{position:absolute; inset:0; width:100%; height:100%}
+  .spiral-center{position:relative; z-index:2; text-align:center; display:flex; flex-direction:column; align-items:center; gap:16px}
+  .spiral-ring{width:54px;height:54px;border-radius:50%;border:2px solid rgba(249,115,22,.25);border-top-color:var(--orange);animation:spin 1s linear infinite;box-shadow:0 0 30px -6px rgba(249,115,22,.7)}
+  .spiral-txt{font-family:'Space Mono',monospace; letter-spacing:.36em; text-transform:uppercase; font-size:13px; color:#fff; padding-left:.36em; animation:blink 1.6s ease-in-out infinite}
+
   @media (max-width:480px){ .panel{padding:2rem 1.5rem} .title{font-size:1.6rem} }
   @media (prefers-reduced-motion:reduce){
     .road,.aurora,.radar,.radar-ring,.panel,.panel::before,#btn-login::after,.eyebrow .dot{animation:none!important}
@@ -206,6 +216,15 @@
     <a href="index.html" class="backlink"><i data-lucide="arrow-left" class="w-4 h-4"></i> Retour à l'accueil</a>
   </div>
 
+  <!-- Overlay de connexion : vortex spirale (affiché pendant l'authentification) -->
+  <div id="spiral-overlay" aria-hidden="true">
+    <canvas id="spiral"></canvas>
+    <div class="spiral-center">
+      <div class="spiral-ring"></div>
+      <div class="spiral-txt">Connexion</div>
+    </div>
+  </div>
+
   <!-- ===== Effets visuels (décor uniquement) ===== -->
   <script>
   (function(){
@@ -244,6 +263,41 @@
       if(road) road.style.transform='perspective(300px) rotateX(76deg) translateX('+(-ry*40)+'px)';
     });
     addEventListener('mouseleave', function(){ if(panel) panel.style.transform=''; });
+  })();
+  </script>
+
+  <!-- ===== Vortex spirale (transition de connexion) ===== -->
+  <script>
+  (function(){
+    var cv, ctx, raf=0, DPR=Math.min(2,window.devicePixelRatio||1), t=0, W,H,cx,cy, bound=false;
+    function size(){ W=cv.width=innerWidth*DPR; H=cv.height=innerHeight*DPR; cv.style.width=innerWidth+'px'; cv.style.height=innerHeight+'px'; cx=W/2; cy=H/2; }
+    function frame(){
+      ctx.fillStyle='rgba(5,7,13,.16)'; ctx.fillRect(0,0,W,H);   // traînée = arcs continus
+      t+=0.032;
+      var N=480, GA=2.399963, base=Math.min(W,H)*0.52;
+      for(var i=0;i<N;i++){
+        var f=i/N, r=Math.sqrt(f)*base;
+        var a=i*GA + t*(0.45 + 1.7*(1-f));                       // rotation différentielle = vortex
+        var x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r;
+        var col=(f<0.55?'251,146,60':'56,189,248');
+        ctx.beginPath(); ctx.arc(x,y,(1-f)*2.4*DPR+0.6*DPR,0,6.283);
+        ctx.shadowColor='rgba('+col+',.9)'; ctx.shadowBlur=6*DPR;
+        ctx.fillStyle='rgba('+col+','+(0.9*(1-f)+0.1)+')'; ctx.fill();
+      }
+      ctx.shadowBlur=0;
+      raf=requestAnimationFrame(frame);
+    }
+    window.plSpiralStart=function(){
+      var ov=document.getElementById('spiral-overlay'); cv=document.getElementById('spiral');
+      if(!ov||!cv) return; ov.classList.add('on');
+      if(matchMedia('(prefers-reduced-motion: reduce)').matches) return; // overlay seul, sans anim
+      ctx=cv.getContext('2d'); size(); if(!bound){ addEventListener('resize',function(){ if(cv&&ctx) size(); }); bound=true; }
+      cancelAnimationFrame(raf); t=0; frame();
+    };
+    window.plSpiralStop=function(){
+      if(raf) cancelAnimationFrame(raf); raf=0;
+      var ov=document.getElementById('spiral-overlay'); if(ov) ov.classList.remove('on');
+    };
   })();
   </script>
 
@@ -304,9 +358,11 @@
       btn.disabled = true;
       btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Connexion...';
       lucide.createIcons();
+      if (window.plSpiralStart) plSpiralStart();   // vortex de transition
 
       const { data, error } = await client.auth.signInWithPassword({ email, password });
       if (error) {
+        if (window.plSpiralStop) plSpiralStop();    // erreur → on retire le vortex
         errorEl.textContent = error.message === 'Invalid login credentials'
           ? 'Email ou mot de passe incorrect'
           : (error.message || 'Erreur de connexion');
