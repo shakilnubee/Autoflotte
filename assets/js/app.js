@@ -1419,7 +1419,9 @@ FP.DEFAULT_NAV_LABELS = {
   'sinistres.html':    'Sinistres',
   'factures.html':     'Factures',
   'contrats.html':     'Contrats',
+  'budget.html':       'Budget',
   'guide.html':        'Guide',
+  'manuel.html':       'Manuel',
   'aide.html':         'Aide',
   'parametres.html':   'Paramètres',
   'brochure.html':     'Brochure',
@@ -5286,11 +5288,12 @@ document.addEventListener('DOMContentLoaded', () => {
   FP.enable3DTilt();
   window.addEventListener('fp:data-ready', () => { try { FP.enable3DTilt(); } catch (e) {} });
 
-  // Rappel de sauvegarde (anti-perte) : pour les responsables (CEO/admin), UNE fois par session,
-  // si aucune sauvegarde ou trop ancienne (> 30 jours) → petit rappel non bloquant vers Paramètres.
+  // Rappel de sauvegarde (anti-perte) : RÉSERVÉ AU CEO (la sauvegarde complète est une action CEO),
+  // et seulement une fois connecté (ce code ne tourne que dans l'app, après l'auth guard). UNE fois par
+  // session, si aucune sauvegarde ou trop ancienne (> 30 jours) → petit rappel non bloquant vers Paramètres.
   (function backupReminder() {
     try {
-      if (!(FP.isAdmin && FP.isAdmin())) return;
+      if (!(FP.isCEO && FP.isCEO())) return;
       if (sessionStorage.getItem('fp_backup_reminded') === '1') return;
       let iso = ''; try { iso = localStorage.getItem('fp_last_backup') || ''; } catch (e) {}
       const stale = !iso || (Date.now() - new Date(iso).getTime()) > 30 * 86400000;
