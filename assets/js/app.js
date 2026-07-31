@@ -1421,6 +1421,40 @@ FP.refreshProspectsBadge = async () => {
 };
 // Rafraîchit le badge quand les données Supabase sont prêtes (le menu peut être bâti avant).
 try { window.addEventListener('fp:data-ready', () => { if (FP.refreshProspectsBadge) FP.refreshProspectsBadge(); }); } catch (e) {}
+
+// === Bouton « Mémo » : depuis le titre de chaque page → la section correspondante du Manuel ===
+FP.MANUAL_SECTION = {
+  'dashboard.html': 's-dashboard', 'notifications.html': 's-alertes', 'taches.html': 's-divers',
+  'statistiques.html': 's-stats', 'vehicules.html': 's-vehicules', 'emprunts.html': 's-divers',
+  'conducteurs.html': 's-conducteurs', 'amendes.html': 's-amendes', 'sinistres.html': 's-sinistres',
+  'factures.html': 's-factures', 'entretiens.html': 's-factures', 'contrats.html': 's-contrats',
+  'parametres.html': 's-params', 'aide.html': 's-divers',
+};
+FP.injectManualButton = function () {
+  try {
+    if (document.getElementById('fp-memo-btn')) return;
+    var file = (location.pathname.split('/').pop() || '').toLowerCase();
+    var sec = FP.MANUAL_SECTION[file]; if (!sec) return;
+    var h1 = document.querySelector('main h1') || document.querySelector('.guide-hero h1') || document.querySelector('h1');
+    if (!h1) return;
+    if (!document.getElementById('fp-memo-style')) {
+      var st = document.createElement('style'); st.id = 'fp-memo-style';
+      st.textContent = '.fp-memo-btn{display:inline-flex;align-items:center;gap:.3rem;margin-left:.7rem;padding:.22rem .62rem;border:1px solid var(--fp-border);border-radius:999px;font-size:.72rem;font-weight:600;color:var(--fp-accent);background:#fff;vertical-align:middle;text-decoration:none;box-shadow:0 1px 2px rgba(15,30,61,.06);transition:all .12s;white-space:nowrap}.fp-memo-btn:hover{border-color:var(--fp-accent);background:#FFF7ED;transform:translateY(-1px)}.fp-memo-btn i{width:14px;height:14px}';
+      document.head.appendChild(st);
+    }
+    var pfx = /\/pages\//.test(location.pathname) ? '' : 'pages/';
+    var a = document.createElement('a');
+    a.id = 'fp-memo-btn'; a.className = 'fp-memo-btn';
+    a.href = pfx + 'manuel.html#' + sec;
+    a.title = 'Mémo — comprendre cette page dans le manuel';
+    a.innerHTML = '<i data-lucide="book-open-check"></i> Mémo';
+    h1.style.display = 'inline-block';
+    h1.insertAdjacentElement('afterend', a);
+    if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
+  } catch (e) {}
+};
+try { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', FP.injectManualButton); else FP.injectManualButton(); } catch (e) {}
+
 // Active le glisser-déposer des onglets directement dans le menu de gauche (toutes pages)
 FP.enableNavReorder = () => {
   document.querySelectorAll('aside nav').forEach(nav => {
