@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731f">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -155,6 +155,7 @@
       <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
       <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
       <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
       <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
       <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
       <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
@@ -479,13 +480,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731e"></script>
-<script src="../assets/js/supabase-client.js?v=20260731e"></script>
-<script src="../assets/js/data.js?v=20260731e"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731e"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731e"></script>
-<script src="../assets/js/fleet-docs.js?v=20260731e"></script>
-<script src="../assets/js/app.js?v=20260731e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731f"></script>
+<script src="../assets/js/supabase-client.js?v=20260731f"></script>
+<script src="../assets/js/data.js?v=20260731f"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731f"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731f"></script>
+<script src="../assets/js/fleet-docs.js?v=20260731f"></script>
+<script src="../assets/js/app.js?v=20260731f"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -593,8 +594,25 @@
     condCache = Object.values(map);
   }
   // Charge depuis Supabase ; migre le localStorage existant si la table est vide
+  // ⚠️ RGPD — purge AUTOMATIQUE : à chaque chargement, on efface les données personnelles RÉSIDUELLES
+  // de toute personne DÉJÀ sortie des effectifs (présente dans settings.condSortie). Auto-réparation :
+  // si une donnée perso « revenait » (édition, autre poste…), elle est re-purgée toute seule. Sûr : ne
+  // touche QUE les gens explicitement marqués comme partis, jamais un salarié actif.
+  const _PII_FIELDS = ['adresse', 'dateNaissance', 'tel', 'email', 'permisType', 'permisNumero', 'permisObtention', 'permisExpiration', 'permisUrl', 'permisFileId'];
+  function purgeDepartedPII() {
+    try {
+      const sorties = (FP.settings.get().condSortie) || {};
+      Object.keys(sorties).forEach(k => {
+        const row = condRow(k); if (!row) return;
+        if (_PII_FIELDS.some(f => row[f] != null && row[f] !== '')) {
+          const patch = { masque: true }; _PII_FIELDS.forEach(f => patch[f] = null);
+          upsertCond(k, patch);
+        }
+      });
+    } catch (e) {}
+  }
   function loadConducteurs() {
-    const done = () => { drivers = buildDrivers(); if (!suppressRender) { renderKPIs(); renderGrid(); } if (currentDriverKey && $('drawer').classList.contains('open')) openDrawer(currentDriverKey); };
+    const done = () => { purgeDepartedPII(); drivers = buildDrivers(); if (!suppressRender) { renderKPIs(); renderGrid(); } if (currentDriverKey && $('drawer').classList.contains('open')) openDrawer(currentDriverKey); };
     if (!(window.FP && FP.db && FP.supabase)) { seedCondCacheFromLS(); done(); return Promise.resolve(); }
     return FP.db.select('conducteurs').then(r => {
       // ⚠️ Lecture en erreur OU vide : on NE VIDE PAS ce qui est déjà affiché (cache local / data.js).
