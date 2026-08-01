@@ -402,7 +402,11 @@
     const cfgHTML = cfg.length ? `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5"></i> Configuration société <span class="badge badge-danger">${cfg.length}</span></h2><div class="space-y-2" style="max-width:840px">`
       + cfg.map(c => `<a href="${esc(c.target)}" class="notif" style="text-decoration:none"><div class="flex-1 min-w-0"><div class="font-semibold text-slate-900">${esc(c.label)}</div></div><span class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap">Compléter →</span></a>`).join('') + `</div></div>` : '';
     const total = vehItems.length + condItems.length + amItems.length + cfg.length;
-    const intro = total ? `<p class="text-sm text-slate-500 mb-5">${total} élément(s) à compléter. Clique sur une ligne pour aller la remplir directement.</p>`
+    const rafN = buildRaf().length;
+    const intro = total ? `<div class="mb-5 flex items-center gap-3 flex-wrap">
+        <p class="text-sm text-slate-500" style="margin:0">${total} élément(s) à compléter. Clique une ligne pour la remplir, ou enchaîne-les toutes :</p>
+        ${rafN ? `<button type="button" id="raf-start" class="btn btn-dark text-sm"><i data-lucide="zap" class="w-4 h-4"></i> Remplir en rafale (${rafN})</button>` : ''}
+      </div>`
       : `<p class="text-emerald-600 font-semibold mb-5">🎉 Tout est complet — aucune info manquante !</p>`;
     const nbIgn = (window.FP && FP.ignore && FP.ignore.countPrefix('complet:')) || 0;
     const restoreHTML = nbIgn ? `<p class="text-xs text-slate-400 mt-4">${nbIgn} info(s) marquée(s) « non concerné » et masquée(s) · <button type="button" id="complet-restore" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline;font-size:12px">tout réafficher</button></p>` : '';
@@ -412,6 +416,106 @@
       + sectionCompHTML('Amendes à compléter', 'ticket', amItems)
       + restoreHTML;
     lucide.createIcons();
+  }
+
+  // ===== « Remplir en rafale » : enchaîne toutes les infos manquantes remplissables en ligne =====
+  function rafMeta(type, k) {
+    if (type === 'veh') {
+      if (k === 'boite') return { kind: 'select', options: ['Manuelle', 'Automatique'] };
+      if (k === 'carburant') return { kind: 'select', options: (window.FP && FP.CARBURANTS) || [] };
+      if (['dateMiseEnCirculation', 'prochainCT', 'antiPollution'].indexOf(k) !== -1) return { kind: 'date' };
+      if (['km', 'puissanceFiscale', 'co2'].indexOf(k) !== -1) return { kind: 'number' };
+      if (k === 'masse') return { kind: 'masse' };
+      if (k === 'cleDetenteur' || k === 'cgDetenteur') return { kind: 'detenteur' };
+      if (k === 'leasing') return { kind: 'fiche' }; // trop spécifique → reste dans la liste (fiche)
+      return { kind: 'text' };
+    }
+    if (type === 'cond') { return (['dateNaissance', 'permisExpiration'].indexOf(k) !== -1) ? { kind: 'date' } : { kind: 'text' }; }
+    if (type === 'am') { if (k === 'montant') return { kind: 'number' }; if (k === 'date') return { kind: 'date' }; return { kind: 'text' }; }
+    return { kind: 'fiche' };
+  }
+  function buildRaf() {
+    const out = [];
+    const actifs = (data.vehicules || []).filter(v => !(FP.estVendu && FP.estVendu(v)));
+    actifs.forEach(v => { const pfx = 'complet:veh:' + v.id + ':'; missOf(v, VEH_FIELDS, pfx).forEach(m => { const meta = rafMeta('veh', m.k); if (meta.kind === 'fiche') return; out.push({ type: 'veh', entity: v, entityLabel: `${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), field: m, ignKey: pfx + m.k, meta }); }); });
+    const conds = (data.conducteurs || []).filter(c => c && c.masque !== true && (c.manuel === true || !isEmptyV(c.nom) || !isEmptyV(c.prenom)));
+    conds.forEach(c => { const pfx = 'complet:cond:' + (c.key || '') + ':'; missOf(c, COND_FIELDS, pfx).forEach(m => { const meta = rafMeta('cond', m.k); if (meta.kind === 'fiche') return; const nom = [c.prenom, c.nom].filter(x => !isEmptyV(x)).join(' ') || c.name || c.key || 'Conducteur'; out.push({ type: 'cond', entity: c, entityLabel: nom, field: m, ignKey: pfx + m.k, meta }); }); });
+    (data.amendes || []).forEach(a => { const pfx = 'complet:am:' + (a.id || '') + ':'; missOf(a, AMENDE_FIELDS, pfx).forEach(m => { const meta = rafMeta('am', m.k); if (meta.kind === 'fiche') return; out.push({ type: 'am', entity: a, entityLabel: `${(a.motif || 'Amende')} · ${a.date ? FP.date(a.date) : 'date ?'}`, field: m, ignKey: pfx + m.k, meta }); }); });
+    return out;
+  }
+  function rafPersist(step, raw) {
+    const type = step.type, entity = step.entity, field = step.field, meta = step.meta;
+    try {
+      if (meta.kind === 'masse') { const n = Number(raw); if (!isFinite(n) || n <= 0) return false; const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; s.vehMasse[entity.id] = n; FP.settings.save(s); return true; }
+      if (meta.kind === 'detenteur') { if (!raw) return false; const isSiege = raw === 'Siège'; if (field.k === 'cleDetenteur') { entity.cleSiege = isSiege; entity.cleSalarie = !isSiege; FP.persist.update('vehicules', entity.id, { cleSiege: isSiege, cleSalarie: !isSiege }); } else { entity.cgOrigSiege = isSiege; entity.cgOrigSalarie = !isSiege; FP.persist.update('vehicules', entity.id, { cgOrigSiege: isSiege, cgOrigSalarie: !isSiege }); } return true; }
+      let val = raw;
+      if (meta.kind === 'number') { val = (field.k === 'montant' && FP.parseMontant) ? FP.parseMontant(raw) : Number(raw); if (val == null || !isFinite(val)) return false; }
+      else { val = (raw == null ? '' : String(raw)).trim(); if (!val) return false; if (field.k === 'immat' || field.k === 'vin') val = val.toUpperCase(); }
+      const table = type === 'veh' ? 'vehicules' : (type === 'cond' ? 'conducteurs' : 'amendes');
+      const id = type === 'cond' ? entity.key : entity.id;
+      entity[field.k] = val;
+      if (FP.persist && FP.persist.update) FP.persist.update(table, id, { [field.k]: val });
+      return true;
+    } catch (e) { console.warn('[rafale]', e); return false; }
+  }
+  let rafList = [], rafIdx = 0;
+  function ensureRafModal() {
+    if (document.getElementById('raf-modal')) return;
+    const ov = document.createElement('div');
+    ov.id = 'raf-modal';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,61,.55);display:none;align-items:center;justify-content:center;z-index:10000;padding:1rem';
+    ov.innerHTML = '<div style="background:#fff;border-radius:1rem;max-width:470px;width:100%;padding:1.4rem;box-shadow:0 24px 60px -20px rgba(15,30,61,.5)">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem"><div id="raf-progress" style="font-size:.78rem;color:#64748b;font-weight:800;letter-spacing:.02em"></div><button type="button" id="raf-close" style="border:none;background:none;font-size:1.2rem;color:#94a3b8;cursor:pointer;line-height:1">✕</button></div>'
+      + '<div style="height:6px;background:#EEF2F7;border-radius:9999px;overflow:hidden;margin-bottom:1rem"><div id="raf-bar-fill" style="height:100%;width:0;background:var(--fp-accent,#F97316);transition:width .2s"></div></div>'
+      + '<div id="raf-body">'
+      + '<div id="raf-entity" style="font-size:.78rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.03em"></div>'
+      + '<div id="raf-label" style="font-size:1.2rem;font-weight:800;color:var(--fp-primary,#0F1E3D);margin:.15rem 0 .85rem"></div>'
+      + '<div id="raf-input-wrap"></div>'
+      + '<div style="display:flex;gap:.5rem;margin-top:1.1rem;flex-wrap:wrap"><button type="button" id="raf-save" class="btn btn-dark text-sm" style="flex:1;justify-content:center;min-width:150px">Enregistrer &amp; suivant →</button>'
+      + '<button type="button" id="raf-skip" class="btn btn-outline text-sm">Passer</button>'
+      + '<button type="button" id="raf-ignore" class="btn btn-outline text-sm" title="Non concerné — ne plus demander">Non concerné</button></div>'
+      + '<p class="text-xs text-slate-400" style="margin-top:.7rem">Entrée = enregistrer &amp; suivant · Échap = fermer</p>'
+      + '</div>'
+      + '<div id="raf-done" style="display:none;text-align:center;padding:1.3rem 0"><div style="font-size:2rem">🎉</div><div style="font-weight:800;color:var(--fp-primary,#0F1E3D);margin-top:.3rem">Terminé — tout est passé !</div><button type="button" id="raf-finish" class="btn btn-dark text-sm" style="margin-top:1rem">Fermer</button></div>'
+      + '</div>';
+    document.body.appendChild(ov);
+    const close = () => { ov.style.display = 'none'; renderComplet(); render(); };
+    document.getElementById('raf-close').addEventListener('click', close);
+    document.getElementById('raf-finish').addEventListener('click', close);
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    document.getElementById('raf-save').addEventListener('click', rafSaveNext);
+    document.getElementById('raf-skip').addEventListener('click', () => { rafIdx++; rafShow(); });
+    document.getElementById('raf-ignore').addEventListener('click', () => { const s = rafList[rafIdx]; if (s && window.FP && FP.ignore) FP.ignore.set(s.ignKey, true); rafList.splice(rafIdx, 1); rafShow(); });
+    document.addEventListener('keydown', (e) => { if (ov.style.display === 'flex' && e.key === 'Escape') { e.preventDefault(); close(); } });
+  }
+  function rafSaveNext() {
+    const step = rafList[rafIdx]; if (!step) return;
+    const inp = document.getElementById('raf-input'); const raw = inp ? inp.value : '';
+    if (!rafPersist(step, raw)) { if (inp) { inp.focus(); inp.style.borderColor = '#DC2626'; } return; }
+    rafIdx++; rafShow();
+  }
+  function rafShow() {
+    const ov = document.getElementById('raf-modal'); if (!ov) return;
+    if (rafIdx >= rafList.length) { document.getElementById('raf-body').style.display = 'none'; document.getElementById('raf-done').style.display = 'block'; document.getElementById('raf-progress').textContent = ''; document.getElementById('raf-bar-fill').style.width = '100%'; return; }
+    const step = rafList[rafIdx];
+    document.getElementById('raf-body').style.display = ''; document.getElementById('raf-done').style.display = 'none';
+    document.getElementById('raf-progress').textContent = `${rafIdx + 1} / ${rafList.length}`;
+    document.getElementById('raf-bar-fill').style.width = Math.round(rafIdx / rafList.length * 100) + '%';
+    document.getElementById('raf-entity').textContent = ({ veh: 'Véhicule', cond: 'Conducteur', am: 'Amende' }[step.type]) + ' · ' + step.entityLabel;
+    document.getElementById('raf-label').textContent = step.field.label;
+    const wrap = document.getElementById('raf-input-wrap'); const meta = step.meta;
+    if (meta.kind === 'select') wrap.innerHTML = `<select id="raf-input" class="field-input" style="width:100%"><option value="">— choisir —</option>${(meta.options || []).map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select>`;
+    else if (meta.kind === 'detenteur') wrap.innerHTML = `<select id="raf-input" class="field-input" style="width:100%"><option value="">— choisir —</option><option value="Siège">Siège</option><option value="Salarié">Salarié</option></select>`;
+    else { const t = (meta.kind === 'date') ? 'date' : ((meta.kind === 'number' || meta.kind === 'masse') ? 'number' : 'text'); wrap.innerHTML = `<input id="raf-input" type="${t}" class="field-input" style="width:100%">`; }
+    const inp = document.getElementById('raf-input');
+    if (inp) { inp.focus(); inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); rafSaveNext(); } }); }
+  }
+  function openRaf() {
+    rafList = buildRaf(); rafIdx = 0;
+    if (!rafList.length) return;
+    ensureRafModal();
+    document.getElementById('raf-modal').style.display = 'flex';
+    rafShow();
   }
 
   const tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet');
@@ -430,6 +534,8 @@
 
   // Bouton « Compléter depuis les cartes grises » : remplit les champs VIDES depuis FP.CG_DATA.
   document.getElementById('suivi-complet').addEventListener('click', async (e) => {
+    // « Remplir en rafale » → enchaîne toutes les infos manquantes remplissables
+    if (e.target.closest('#raf-start')) { e.preventDefault(); openRaf(); return; }
     // « Voir tout » / « Réduire » sur une section trop longue (> 10 lignes)
     const vt = e.target.closest('[data-voirtout]');
     if (vt) {
