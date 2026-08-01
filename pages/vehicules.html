@@ -990,6 +990,20 @@
   // même mécanisme que budgets/tâches) ; photos dans la table documents (type 'etat-des-lieux').
   const INSP_ITEMS = ['Carrosserie', 'Pare-brise', 'Pneus', 'Intérieur', 'Niveaux / voyants', 'Équipements (roue de secours, gilet…)'];
   function getInspections(vehId) { try { return ((FP.settings.get().inspections) || {})[vehId] || []; } catch (e) { return []; } }
+  // Buffer des photos/fichiers de l'état des lieux EN COURS de saisie : on ACCUMULE les prises
+  // (utile sur mobile : reprendre l'appareil photo plusieurs fois ajoute au lieu de remplacer).
+  let edlPending = [];
+  function renderEdlPreviews() {
+    const box = document.getElementById('edl-previews'); if (!box) return;
+    box.querySelectorAll('img[data-obj]').forEach(im => { try { URL.revokeObjectURL(im.src); } catch (e) {} });
+    if (!edlPending.length) { box.innerHTML = ''; return; }
+    box.innerHTML = edlPending.map((f, i) => {
+      const thumb = /^image\//.test(f.type)
+        ? `<img data-obj src="${URL.createObjectURL(f)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--fp-border);display:block" />`
+        : `<div style="width:64px;height:64px;border-radius:8px;border:1px solid var(--fp-border);display:flex;align-items:center;justify-content:center;background:#f1f5f9;color:#64748b;font-size:11px;font-weight:800">PDF</div>`;
+      return `<div style="position:relative">${thumb}<button type="button" data-edl-rm="${i}" title="Retirer" style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:9999px;width:20px;height:20px;line-height:1;font-size:12px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.3)">✕</button></div>`;
+    }).join('') + `<div style="align-self:center;font-size:12px;color:#64748b;font-weight:700">${edlPending.length} photo${edlPending.length > 1 ? 's' : ''} prête${edlPending.length > 1 ? 's' : ''}</div>`;
+  }
   function edlSectionHTML(v){
     const photos = getVehDocs(v.id).filter(d => d.type === 'etat-des-lieux');
     const list = getInspections(v.id);
@@ -1034,8 +1048,15 @@
           <div class="mt-1">${items}</div>
           <textarea id="insp-note" class="field-input" rows="2" placeholder="Note (rayures, chocs, manquants…)"></textarea>
           <div><div class="field-label !mb-0">Photos / fichier état des lieux (facultatif)</div>
-          <input id="edl-file" type="file" accept="image/*,application/pdf,.pdf" multiple class="field-input" style="padding:8px;font-size:13px" />
-          <p class="text-xs text-slate-400 mt-1">Photos du véhicule <b>et/ou</b> le fichier de l'état des lieux (PDF).</p></div>
+          <div class="flex flex-wrap gap-2 mt-1">
+            <button type="button" id="edl-cam" class="btn btn-outline text-sm"><i data-lucide="camera" class="w-4 h-4"></i> Prendre une photo</button>
+            <button type="button" id="edl-pick" class="btn btn-outline text-sm"><i data-lucide="image-plus" class="w-4 h-4"></i> Galerie / fichiers</button>
+          </div>
+          <!-- Appareil photo (une prise à la fois, on peut recommencer) et sélection multiple : les deux ACCUMULENT -->
+          <input id="edl-file-cam" type="file" accept="image/*" capture="environment" class="hidden" />
+          <input id="edl-file" type="file" accept="image/*,application/pdf,.pdf" multiple class="hidden" />
+          <div id="edl-previews" class="flex flex-wrap gap-2 mt-2"></div>
+          <p class="text-xs text-slate-400 mt-1">Tu peux <b>reprendre l'appareil photo plusieurs fois</b> : chaque photo s'ajoute (elle ne remplace pas les précédentes). Photos du véhicule <b>et/ou</b> le fichier de l'état des lieux (PDF).</p></div>
           <button type="button" id="insp-save" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="clipboard-check" class="w-4 h-4"></i> Enregistrer l'état des lieux</button>
           <p class="text-xs text-slate-400">Inspection + photos enregistrées ensemble, consultables depuis tous les postes.</p>
         </div>
@@ -1802,6 +1823,7 @@
     const v = data.vehicules.find(x => x.id === id);
     if (!v) return;
     drawerVehId = id;
+    edlPending = [];   // repart à zéro à chaque ouverture de fiche (pas de fuite entre véhicules)
 
     // Flèches précédent / suivant : suivent l'ordre du tableau affiché (filtré/trié)
     (function setupDrawerNav(){
@@ -3398,6 +3420,21 @@
     }
   });
 
+  // État des lieux : les prises photo/fichiers s'ACCUMULENT (appareil ou galerie), plusieurs fois.
+  $('drawer-body').addEventListener('change', (e) => {
+    const inp = e.target.closest('#edl-file, #edl-file-cam');
+    if (!inp) return;
+    const added = Array.from(inp.files || []);
+    if (added.length) { edlPending.push(...added); renderEdlPreviews(); }
+    inp.value = '';   // remet à zéro → reprendre l'appareil ou re-sélectionner AJOUTE (ne remplace pas)
+  });
+  $('drawer-body').addEventListener('click', (e) => {
+    if (e.target.closest('#edl-cam'))  { const i = document.getElementById('edl-file-cam'); if (i) i.click(); return; }
+    if (e.target.closest('#edl-pick')) { const i = document.getElementById('edl-file');     if (i) i.click(); return; }
+    const rm = e.target.closest('[data-edl-rm]');
+    if (rm) { const idx = parseInt(rm.dataset.edlRm, 10); if (idx >= 0 && idx < edlPending.length) { edlPending.splice(idx, 1); renderEdlPreviews(); } }
+  });
+
   // Sélecteur Siège / Salarié pour clé & carte grise (boutons)
   $('drawer-body').addEventListener('click', (e) => {
     const btn = e.target.closest('.hs-btn');
@@ -3480,9 +3517,9 @@
         try { persistVehFields(v, 'km'); } catch (e) {}
         try { renderTable(); renderKPIs(); } catch (e) {}
       }
-      // Photos jointes (facultatif) → uploadées avec la phase = sens
-      const fileInput = body.querySelector('#edl-file');
-      const files = Array.from((fileInput && fileInput.files) || []);
+      // Photos jointes (facultatif) → uploadées avec la phase = sens.
+      // On prend le BUFFER accumulé (toutes les prises), pas seulement la dernière sélection.
+      const files = edlPending.slice();
       const btn = e.target.closest('#insp-save');
       if (files.length && window.FP && FP.supabase && FP.uploadScan) {
         btn.disabled = true; btn.style.opacity = '.7';
