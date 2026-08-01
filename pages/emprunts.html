@@ -176,6 +176,13 @@
       <button type="button" class="emp-chip" data-statut="encours">En cours <span class="n" id="chip-n-encours">0</span></button>
       <button type="button" class="emp-chip active" data-statut="all">Tous</button>
       <button type="button" class="emp-chip" data-statut="rendus">Rendus <span class="n" id="chip-n-rendus">0</span></button>
+      <select id="emp-sort-key" class="text-sm border border-slate-200 rounded-lg px-3 py-2" title="Trier">
+        <option value="date">Tri : Date d'emprunt</option>
+        <option value="retour">Tri : Date de retour</option>
+        <option value="vehicule">Tri : Véhicule</option>
+        <option value="emprunteur">Tri : Emprunteur</option>
+      </select>
+      <button id="emp-sort-dir" type="button" class="btn btn-outline text-sm !px-2.5" title="Inverser le sens du tri"><i data-lucide="arrow-down-wide-narrow" class="w-4 h-4"></i></button>
     </div>
 
     <!-- Tableau -->
@@ -333,7 +340,7 @@
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
   const data = window.FP_DATA;
-  const state = { search: '', voirTout: false, statut: 'all' };
+  const state = { search: '', voirTout: false, statut: 'all', sortKey: 'date', sortDir: 'desc' };
   const EMP_LIMIT = 15;
 
   // ---- Stockage : Supabase si dispo, sinon localStorage ----
@@ -345,6 +352,18 @@
   const lsSet = () => localStorage.setItem(LS, JSON.stringify(cache));
   function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+  // Tri utilisateur de la liste des emprunts (contrôlé par le select #emp-sort-key + le bouton de sens).
+  function sortRowsEmp(arr) {
+    const dir = state.sortDir === 'asc' ? 1 : -1;
+    return arr.slice().sort((a, b) => {
+      let r;
+      if (state.sortKey === 'vehicule') r = String(a.vehicule || '').localeCompare(String(b.vehicule || ''), 'fr', { sensitivity: 'base' });
+      else if (state.sortKey === 'emprunteur') r = String(a.emprunteur || '').localeCompare(String(b.emprunteur || ''), 'fr', { sensitivity: 'base' });
+      else if (state.sortKey === 'retour') { const da = String(a.dateRetour || ''); const db = String(b.dateRetour || ''); r = da.localeCompare(db); }
+      else { const da = String(a.dateEmprunt || ''); const db = String(b.dateEmprunt || ''); r = da.localeCompare(db); }   // date d'emprunt par défaut
+      return r * dir;
+    });
+  }
   function sortCache() {
     cache.sort((a, b) => `${b.dateEmprunt||''} ${b.heureEmprunt||''}`.localeCompare(`${a.dateEmprunt||''} ${a.heureEmprunt||''}`));
   }
@@ -458,13 +477,10 @@
     // Filtre par onglet de statut
     if (state.statut === 'encours') rows = rows.filter(e => !e.dateRetour);
     else if (state.statut === 'rendus') rows = rows.filter(e => !!e.dateRetour);
-    // TRI PAR STATUT : « En cours » toujours EN HAUT (les retards en premier), puis les rendus (plus récents d'abord)
-    rows.sort((a, b) => {
-      const ea = a.dateRetour ? 1 : 0, eb = b.dateRetour ? 1 : 0;
-      if (ea !== eb) return ea - eb;                                   // en cours (0) avant rendu (1)
-      if (!a.dateRetour && !b.dateRetour) return joursDepuis(b.dateEmprunt) - joursDepuis(a.dateEmprunt); // retards d'abord
-      return `${b.dateEmprunt||''} ${b.heureEmprunt||''}`.localeCompare(`${a.dateEmprunt||''} ${a.heureEmprunt||''}`); // rendus récents d'abord
-    });
+    // Tri choisi par l'utilisateur (select #emp-sort-key + bouton de sens) ; par défaut date d'emprunt décroissante.
+    rows = sortRowsEmp(rows);
+    // Les « En cours » (non rendus) restent en tête — tri secondaire STABLE par-dessus le tri utilisateur.
+    rows.sort((a, b) => (a.dateRetour ? 1 : 0) - (b.dateRetour ? 1 : 0));
     const nEncours = cache.filter(e => !e.dateRetour).length;
     $('kpi-encours').textContent = nEncours;
     $('kpi-total').textContent = cache.length;
@@ -761,10 +777,21 @@
   // ---- Wiring ----
   $('search').addEventListener('input', e => { state.search = e.target.value; render(); });
   { const ef = $('emp-filters'); if (ef) ef.addEventListener('click', e => { const b = e.target.closest('.emp-chip'); if (!b) return; state.statut = b.dataset.statut || 'all'; state.voirTout = false; render(); }); }
+  // Tri par colonne (select + bouton de sens).
+  (function () {
+    const sk = document.getElementById('emp-sort-key'), sd = document.getElementById('emp-sort-dir');
+    const syncDir = () => { if (!sd) return; const i = sd.querySelector('i'); if (i) i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); try { if (window.lucide) lucide.createIcons(); } catch (e) {} };
+    if (sk) { sk.value = state.sortKey; sk.addEventListener('change', e => { state.sortKey = e.target.value; render(); }); }
+    if (sd) sd.addEventListener('click', () => { state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc'; syncDir(); render(); });
+    syncDir();
+  })();
   // Bouton « Réinitialiser » de la barre de filtres (recherche + statut).
   function resetEmpFilters() {
     state.search = ''; state.statut = 'all'; state.voirTout = false;
+    state.sortKey = 'date'; state.sortDir = 'desc';
     if ($('search')) $('search').value = '';
+    if ($('emp-sort-key')) $('emp-sort-key').value = state.sortKey;
+    { const sd = $('emp-sort-dir'), i = sd && sd.querySelector('i'); if (i) { i.setAttribute('data-lucide', 'arrow-down-wide-narrow'); try { if (window.lucide) lucide.createIcons(); } catch (e) {} } }
     document.querySelectorAll('#emp-filters .emp-chip').forEach(c => c.classList.toggle('active', c.dataset.statut === 'all'));
     render();
   }

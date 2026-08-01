@@ -338,6 +338,13 @@
         <select id="filter-vehicule" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
           <option value="all">Tous véhicules</option>
         </select>
+        <select id="sin-sort-key" class="text-sm border border-slate-200 rounded-lg px-3 py-2" title="Trier">
+          <option value="date">Tri : Date</option>
+          <option value="cost">Tri : Coût</option>
+          <option value="vehicule">Tri : Véhicule</option>
+          <option value="conducteur">Tri : Conducteur</option>
+        </select>
+        <button id="sin-sort-dir" type="button" class="btn btn-outline text-sm !px-2.5" title="Inverser le sens du tri"><i data-lucide="arrow-down-wide-narrow" class="w-4 h-4"></i></button>
       </div>
     </div>
 
@@ -377,7 +384,7 @@
 
   // Tous les sinistres = factures type=sinistre
   let sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
-  const state = { search: '', annee: 'all', vehicule: 'all', remb: 'all', dateFrom: '', dateTo: '' };
+  const state = { search: '', annee: 'all', vehicule: 'all', remb: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc' };
   const REGLES = ['rembourse', 'pec', 'refuse'];
   const rembOf = (g) => { try { return (FP.settings.get().sinistreStatut || {})[g.key] || ''; } catch (e) { return ''; } };
 
@@ -406,6 +413,29 @@
     return true;
   }
   function filtered() { return sinistres.filter(matchFilter); }
+
+  // Tri utilisateur de la LISTE des incidents (colonne + sens) — même logique que factures.html.
+  // Opère sur les INCIDENTS regroupés ({ key, rep, cost }), pas sur les factures brutes.
+  function sortRowsSin(arr) {
+    const dir = state.sortDir === 'asc' ? 1 : -1;
+    const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+    const doss = (FP.settings.get().sinistreAssurance) || {};
+    const condOf = g => {
+      const frozen = ((doss[g.key] || {}).conducteur || '').trim();
+      if (frozen) return frozen;
+      const veh = (data.vehicules || []).find(v => v.immat === g.rep.vehiculeImmat);
+      return (veh && veh.chauffeur && veh.chauffeur !== '—') ? veh.chauffeur : '';
+    };
+    return arr.slice().sort((a, b) => {
+      let r;
+      if (state.sortKey === 'cost') r = (num(a.cost) ?? -Infinity) - (num(b.cost) ?? -Infinity);
+      else if (state.sortKey === 'vehicule') r = String(a.rep.vehiculeImmat || '').localeCompare(String(b.rep.vehiculeImmat || ''), 'fr', { sensitivity: 'base' });
+      else if (state.sortKey === 'conducteur') r = String(condOf(a) || '').localeCompare(String(condOf(b) || ''), 'fr', { sensitivity: 'base' });
+      else r = String(a.rep.date || '').localeCompare(String(b.rep.date || ''));   // date par défaut
+      if (r === 0) r = String(a.rep.date || '').localeCompare(String(b.rep.date || ''));
+      return r * dir;
+    });
+  }
 
   // ---------- Association devis ↔ facture (un "incident" = plusieurs documents) ----------
   // Stockage dans les réglages partagés : sinistreGroupes {idDoc: clé de groupe}, sinistreStage {idDoc: 'devis'|'facture'}.
@@ -548,7 +578,9 @@
     else if (state.remb === 'regles') groups = groups.filter(g => REGLES.includes(rembOf(g)));
     // TRI : « en attente » toujours EN HAUT, puis non suivis, puis réglés ; par date dans chaque groupe.
     const prio = g => { const s = rembOf(g); if (s === 'attente') return 0; if (s === '') return 1; if (s === 'pec') return 2; return 3; };
-    groups = groups.slice().sort((a, b) => prio(a) - prio(b) || (b.rep.date || '').localeCompare(a.rep.date || ''));
+    // Tri utilisateur (colonne + sens) appliqué DANS chaque niveau de priorité : on trie d'abord
+    // selon le choix (sortRowsSin), puis un tri STABLE par priorité garde « en attente » en haut.
+    groups = sortRowsSin(groups).sort((a, b) => prio(a) - prio(b));
     // Compteurs + onglet actif
     { const all = allGroups();
       const na = $('sin-n-attente'); if (na) na.textContent = all.filter(g => rembOf(g) === 'attente').length;
@@ -918,9 +950,21 @@
     if ($('filter-annee')) $('filter-annee').value = 'all';
     if ($('filter-vehicule')) { $('filter-vehicule').value = 'all'; $('filter-vehicule').dispatchEvent(new Event('change', { bubbles: true })); }
     document.querySelectorAll('#sin-filters .sin-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.remb === 'all'));
+    state.sortKey = 'date'; state.sortDir = 'desc';
+    if ($('sin-sort-key')) $('sin-sort-key').value = 'date';
+    if ($('sin-sort-dir')) { const i = $('sin-sort-dir').querySelector('i'); if (i) i.setAttribute('data-lucide', 'arrow-down-wide-narrow'); }
     sinExpanded = false; if (typeof syncPeriodUI === 'function') syncPeriodUI(); refreshAll();
   }
   if (FP.filterResetButton) { FP.filterResetButton($('sin-period-bar'), { onReset: resetSinFilters }); FP.filterResetButton($('sin-filterbar'), { onReset: resetSinFilters }); }
+
+  // Tri de la liste des incidents (colonne + sens) — même pattern que factures.html.
+  (function () {
+    const sk = document.getElementById('sin-sort-key'), sd = document.getElementById('sin-sort-dir');
+    const syncDir = () => { if (!sd) return; const i = sd.querySelector('i'); if (i) i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); try { if (window.lucide) lucide.createIcons(); } catch (e) {} };
+    if (sk) { sk.value = state.sortKey; sk.addEventListener('change', e => { state.sortKey = e.target.value; renderTimeline(); }); }
+    if (sd) sd.addEventListener('click', () => { state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc'; syncDir(); renderTimeline(); });
+    syncDir();
+  })();
 
   // ---------- Sélecteur de PÉRIODE (pilote toute la page) ----------
   function fmtFr(d) { const p = (d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : (d || ''); }
