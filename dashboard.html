@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260731t">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260731u">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260731t"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260731u"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260731t">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260731u">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -451,10 +451,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260731t"></script>
-<script src="assets/js/supabase-client.js?v=20260731t"></script>
-<script src="assets/js/data.js?v=20260731t"></script>
-<script src="assets/js/app.js?v=20260731t"></script>
+<script src="assets/js/vendor/supabase.js?v=20260731u"></script>
+<script src="assets/js/supabase-client.js?v=20260731u"></script>
+<script src="assets/js/data.js?v=20260731u"></script>
+<script src="assets/js/app.js?v=20260731u"></script>
 <!-- Upsell gestion déléguée : visible uniquement pour les ADMINS clients (ni CEO, ni gestionnaire, ni salarié), masquable -->
 <script>
 (function(){
@@ -1362,7 +1362,7 @@
               vehiculeImmat: veh ? veh.immat : null,
               fournisseur: det.fournisseur || routing.four || null,
               numeroFacture: det.numeroFacture || null,
-              description: r.file.name || (isSin ? 'Sinistre scanné' : 'Facture scannée'),
+              description: det.description || r.file.name || (isSin ? 'Sinistre scanné' : 'Facture scannée'),
               type: cat,
               montantHT: Number.isFinite(det.montantHT) ? det.montantHT : null,
               montantTVA: Number.isFinite(det.montantTVA) ? det.montantTVA : null,
@@ -1375,26 +1375,18 @@
             if (isSin) { // marque le sinistre « en attente de remboursement » pour le suivi
               const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {}; s.sinistreStatut[fact.id] = 'attente'; FP.settings.save(s);
             }
-            // Entretien / réparation → met à jour la fiche véhicule (dernière révision, km, pneus)
+            // ⚠️ SOURCE UNIQUE : la mise à jour de la fiche (km à la hausse + dernière révision + pneus
+            // + rappel « relevé km ») passe par FP.applyFactureToVehicule (app.js). On préserve la
+            // détection « maintenance » du scanner (mots-clés du fichier/description) en traitant la
+            // facture comme entretien pour CETTE synchro si les mots-clés matchent — sans changer le
+            // type réellement enregistré.
             let majMsg = '';
             if (!isSin && veh) {
-              const today = new Date().toISOString().slice(0, 10);
               const maintTxt = `${det.description || ''} ${r.file.name || ''} ${cat}`.toLowerCase();
               const isMaint = cat === 'entretien' || cat === 'reparation' || /pneu|vidange|entretien|r[eé]vision|frein|climatisation|distribution|filtre|amortisseur|courroie|plaquette|disque|embrayage/.test(maintTxt);
-              const vUpd = {}; const bits = [];
-              if (isMaint && r.date && r.date <= today && (!veh.derniereRevision || veh.derniereRevision === '—' || r.date > veh.derniereRevision)) { vUpd.derniereRevision = r.date; bits.push('révision'); }
-              // KM : TOUTE facture liée à un véhicule et portant un relevé (peu importe le type), à la hausse uniquement.
-              if (Number.isFinite(r.km) && r.km > 0 && (!veh.kmDernierReleve || r.km >= veh.kmDernierReleve)) {
-                vUpd.kmDernierReleve = r.km; bits.push(FP.num(r.km) + ' km');
-                // Réinitialise le rappel « Relevé km » (date du relevé = date de la facture, sinon aujourd'hui).
-                try {
-                  const s = FP.settings.get(); s.kmMajDates = (s.kmMajDates && typeof s.kmMajDates === 'object') ? s.kmMajDates : {};
-                  const d = (r.date && /^\d{4}-\d{2}-\d{2}/.test(r.date)) ? r.date.slice(0, 10) : today;
-                  if (!s.kmMajDates[veh.immat] || d > s.kmMajDates[veh.immat]) { s.kmMajDates[veh.immat] = d; FP.settings.save(s); }
-                } catch (e) {}
-              }
-              if (/pneu/i.test(maintTxt) && r.date && r.date <= today && (!veh.dateChangementPneus || r.date > veh.dateChangementPneus)) { vUpd.dateChangementPneus = r.date; bits.push('pneus'); }
-              if (Object.keys(vUpd).length) { await FP.persist.update('vehicules', veh.id, vUpd); Object.assign(veh, vUpd); majMsg = ` · fiche maj (${bits.join(', ')})`; }
+              const forSync = { vehiculeImmat: fact.vehiculeImmat, date: fact.date, km: fact.km, type: isMaint ? 'entretien' : fact.type, description: `${det.description || ''} ${r.file.name || ''}` };
+              const rSync = FP.applyFactureToVehicule ? FP.applyFactureToVehicule(forSync, window.FP_DATA.vehicules) : null;
+              if (rSync && rSync.bits && rSync.bits.length) majMsg = ` · fiche maj (${rSync.bits.join(', ')})`;
             }
             const dest = isSin ? 'Sinistres (en attente de remboursement)' : (routing.dest || 'liste Factures');
             const page = isSin ? 'sinistres.html' : (routing.page || 'factures.html');
