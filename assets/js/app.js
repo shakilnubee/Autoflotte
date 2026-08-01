@@ -370,7 +370,7 @@ FP.horsFlotte = (v) => ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 
 // (aucune colonne DB à créer). On ne lit les réglages que pour les amendes payées (pas dans toutes les boucles).
 FP.montantDu = (a) => {
   if (!a) return 0;
-  if (a.statut === 'payée' && a.id != null && FP.settings) {
+  if (FP.estPayee(a) && a.id != null && FP.settings) {
     try {
       const ov = FP.settings.get().amendeMontantPaye;
       if (ov && ov[a.id] != null && ov[a.id] !== '') return Number(ov[a.id]) || 0;
@@ -432,6 +432,49 @@ FP.coutMois = (data, ym) => (FP.dedupeFactures(((data && data.factures) || [])).
 // ⚠️ HELPER CANONIQUE — amende « à payer » (statut tolérant aux accents/espaces/casse) : « à payer »,
 // « a payer », « À Payer » … sont tous reconnus, pour que dashboard, page Amendes et alertes comptent pareil.
 FP.estAPayer = (a) => { const s = ((a && a.statut) || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); return s === 'a payer'; };
+// ⚠️ HELPER CANONIQUE — amende « payée » (symétrique de estAPayer, tolérant accents/casse) : « payée »,
+// « payee », « Payé »… tous reconnus. À utiliser partout au lieu de statut === 'payée' (sinon totaux faux).
+FP.estPayee = (a) => { const s = ((a && a.statut) || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); return s === 'payee' || s === 'paye'; };
+// ⚠️ HELPER CANONIQUE — « facture d'entretien / réparation » (tolérant à l'accent : entretien, réparation,
+// reparation). À utiliser PARTOUT (carnet fiche, page Entretiens, coût véhicule, budget, alertes) — sinon
+// une facture typée « reparation » (sans accent) apparaît sur un écran et pas sur l'autre.
+FP.estEntretien = (f) => { const t = ((f && f.type) || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); return t === 'entretien' || t === 'reparation'; };
+// ⚠️ HELPER CANONIQUE — kilométrage RÉEL d'un véhicule : le max entre le km à jour et le km de la dernière
+// révision (le véhicule ne peut pas rouler moins que son dernier relevé). À utiliser partout où on AFFICHE
+// « km actuel », pour que même des données non réconciliées (data.js figé) montrent la bonne valeur.
+FP.kmActuel = (v) => Math.max(Number(v && v.km) || 0, Number(v && v.kmDernierReleve) || 0);
+// ⚠️ HELPERS CANONIQUES — statut d'un emprunt. « en cours » = pas encore rendu (dateRetour absente ou
+// sentinelle inconnue). À utiliser partout (page Emprunts, dashboard, fiche véhicule) — sinon deux écrans
+// divergent sur « ce véhicule est-il sorti ? ».
+FP.EMP_RETOUR_INCONNU = '1900-01-01';
+FP.empEnCours = (e) => { const d = (e && e.dateRetour) ? String(e.dateRetour).slice(0, 10) : ''; return !d || d === FP.EMP_RETOUR_INCONNU; };
+FP.empEnRetard = (e) => { if (!FP.empEnCours(e)) return false; const p = (e && e.dateRetourPrevue) ? String(e.dateRetourPrevue).slice(0, 10) : ''; if (!p) return false; return p < new Date().toISOString().slice(0, 10); };
+// ⚠️ SOURCE UNIQUE — recalcule la fiche véhicule à partir des factures RESTANTES (à appeler après la
+// SUPPRESSION d'une facture, symétrique de FP.applyFactureToVehicule). Évite les « dernière révision /
+// km / pneus » fantômes laissés par une facture supprimée. Ne fait jamais BAISSER le km affiché (v.km),
+// mais recale la dernière révision, le km de révision et la date pneus sur ce qui reste réellement.
+FP.recomputeVehiculeFromFactures = function (v, factures) {
+  try {
+    if (!v || !v.immat) return null;
+    const mine = (factures || []).filter(f => f && FP.estEntretien(f) && (f.vehiculeImmat || '').toUpperCase() === String(v.immat).toUpperCase());
+    const patch = {};
+    // Dernière révision = date la plus récente parmi les factures d'entretien restantes (sinon vide).
+    const dates = mine.map(f => f.date).filter(Boolean).sort();
+    const derniere = dates.length ? dates[dates.length - 1] : null;
+    if ((v.derniereRevision || null) !== (derniere || null)) { v.derniereRevision = derniere; patch.derniereRevision = derniere; }
+    // Km de révision = max km parmi les factures d'entretien restantes (sinon vide).
+    const kms = mine.map(f => Number(f.km)).filter(n => Number.isFinite(n) && n > 0);
+    const kmRev = kms.length ? Math.max(...kms) : null;
+    if ((Number(v.kmDernierReleve) || null) !== (kmRev || null)) { v.kmDernierReleve = kmRev; patch.kmDernierReleve = kmRev; }
+    // Date pneus = date la plus récente parmi les factures d'entretien « pneu » restantes (sinon vide).
+    const pneuDates = mine.filter(f => /pneu/i.test(String(f.description || ''))).map(f => f.date).filter(Boolean).sort();
+    const pneu = pneuDates.length ? pneuDates[pneuDates.length - 1] : null;
+    if ((v.dateChangementPneus || null) !== (pneu || null)) { v.dateChangementPneus = pneu; patch.dateChangementPneus = pneu; }
+    if (!Object.keys(patch).length) return null;
+    if (FP.persist && FP.persist.update) { try { FP.persist.update('vehicules', v.id, patch); } catch (e) {} }
+    return { veh: v, patch };
+  } catch (e) { return null; }
+};
 // ⚠️ HELPER CANONIQUE — nom du loueur d'un véhicule (multi-loueurs) : on matche le propriétaire du
 // véhicule sur settings.loueurs[].prop ; repli sur le propriétaire brut puis sur le loueur unique du
 // profil (loueurNom). Sert au LIBELLÉ « Forfait leasing X » de la fiche (sans toucher à la détection
@@ -1741,8 +1784,7 @@ FP.applyFactureToVehicule = function (f, vehicules) {
     const list = vehicules || (typeof window !== 'undefined' && window.FP_DATA && window.FP_DATA.vehicules) || [];
     const v = list.find(x => (x.immat || '').toUpperCase() === String(f.vehiculeImmat).toUpperCase());
     if (!v) return null;
-    const t = (f.type || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    const estEntretien = (t === 'entretien' || t === 'reparation');
+    const estEntretien = FP.estEntretien(f);
     const patch = {}; const bits = [];
     const km = (f.km != null && f.km !== '' && Number.isFinite(Number(f.km))) ? Number(f.km) : null;
     // KM : toute facture, à la hausse uniquement.
