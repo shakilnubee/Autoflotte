@@ -1725,6 +1725,7 @@ FP.notifCfg = () => {
     ctJours: num(n.ctJours, 90),    // anticipation d'alerte du contrôle technique (jours)
     revAlerteKm:   num(n.revAlerteKm, 1000),   // alerte révision quand il reste ≤ X km
     revAlerteJours: num(n.revAlerteJours, 30), // alerte révision quand il reste ≤ X jours (avant l'échéance mois)
+    releveKmJours: num(n.releveKmJours, 45),   // rappel « relevé km » : tous les X jours (défaut 45 = 1 mois et demi)
   };
 };
 // Intervalle de révision : par défaut tous les 15 000 km OU tous les 12 mois (au premier atteint),
@@ -2234,6 +2235,25 @@ FP.buildAlertes = (data) => {
     else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
     else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Anti-pollution', message: `Anti-pollution à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
+
+  // --- Relevé kilométrique périodique (rappel tous les X jours, réglable dans Paramètres → Notifications) ---
+  // Base = date du DERNIER relevé (settings.kmMajDates, posée à chaque MAJ du km). Ignorable PAR véhicule.
+  {
+    const periodeJ = FP.notifCfg().releveKmJours || 45;
+    const kmDates = (function () { try { return FP.settings.get().kmMajDates || {}; } catch (e) { return {}; } })();
+    (data.vehicules || []).forEach(v => {
+      if (horsFlotte(v)) return;
+      const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
+      const tgt = 'vehicules.html?veh=' + v.id;
+      const mk = 'relevekm|' + v.id; // ignore PAR VÉHICULE
+      const last = kmDates[v.immat];
+      if (!last) { out.push({ niveau: 'info', categorie: 'Relevé km', message: 'Relevé km jamais renseigné', detail: veh, sort: 1000, target: tgt, muteKey: mk, vehLabel: veh }); return; }
+      const since = Math.floor((today - new Date(last)) / 86400000);
+      if (since >= periodeJ) {
+        out.push({ niveau: since >= periodeJ * 1.5 ? 'warn' : 'info', categorie: 'Relevé km', message: `Relevé km à faire (dernier il y a ${since} j)`, detail: veh, sort: periodeJ - since, target: tgt, muteKey: mk, vehLabel: veh });
+      }
+    });
+  }
 
   // --- Amendes à payer ---
   const amAPayer = (data.amendes || []).filter(a => FP.estAPayer(a));
