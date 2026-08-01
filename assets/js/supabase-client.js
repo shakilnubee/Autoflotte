@@ -168,6 +168,15 @@
   const toClient = (row) => remapKeys(row, snakeToCamel);
   const toDb     = (row) => remapKeys(row, camelToSnake);
 
+  // Cohérence compteur : le « km à jour » ne peut jamais être INFÉRIEUR au « km de la dernière
+  // révision » (un véhicule roule toujours vers l'avant). Certaines lignes importées ont un
+  // km à jour resté en dessous du km de révision → on le remonte pour TOUTES les pages, dès le
+  // chargement (pas d'écriture en base : la correction se persiste au prochain enregistrement).
+  function reconcileVehKm(v) {
+    try { const rev = Number(v.kmDernierReleve) || 0, cur = Number(v.km) || 0; if (rev > cur) v.km = rev; } catch (e) {}
+    return v;
+  }
+
   // ===== Multi-sociétés (étiquette "societe" par ligne) =====
   // Société active = celle affichée par l'admin. Par défaut "PXP" (= comportement actuel).
   function activeSociete() { try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } }
@@ -208,7 +217,7 @@
         throw new Error(errors.map(e => e.message).join(' | '));
       }
       return {
-        vehicules: filterSociete((v.data || []).map(toClient)),
+        vehicules: filterSociete((v.data || []).map(toClient).map(reconcileVehKm)),
         amendes:   filterSociete((a.data || []).map(toClient)),
         factures:  filterSociete((f.data || []).map(toClient)),
         conducteurs: filterSociete((c.data || []).map(toClient)),
