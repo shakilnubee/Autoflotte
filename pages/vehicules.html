@@ -1671,6 +1671,11 @@
     // Archive les documents de chaque véhicule supprimé (sous-dossier « OUT » du dossier plaque)
     if (FP.archiveVehicleDocs) { const ims = removedIds.map(id => { const v = data.vehicules.find(x => x.id === id); return v && v.immat; }).filter(Boolean); if (ims.length) FP.archiveVehicleDocs(ims); }
     data.vehicules = data.vehicules.filter(v => !state.selectedIds.has(v.id));
+    // Purge du cache local (société) pour éviter la « réapparition » au prochain affichage.
+    try {
+      const CK = window.FP_CACHE_KEY; const c = CK && JSON.parse(localStorage.getItem(CK) || 'null');
+      if (c && Array.isArray(c.vehicules)) { const rm = new Set(removedIds); c.vehicules = c.vehicules.filter(x => !rm.has(x.id)); localStorage.setItem(CK, JSON.stringify(c)); }
+    } catch (e) {}
     state.selectedIds.clear();
     renderTable(); renderKPIs(); renderBulkBar();
     removedIds.forEach(id => persistVehicleDelete(id));
@@ -2584,12 +2589,27 @@
     if (!state.editingId) return;
     const v = data.vehicules.find(x => x.id === state.editingId);
     if (!v) return;
-    if (!(await FP.confirm(`Supprimer le véhicule ${v.immat} (${v.marque} ${v.modele}) ?`))) return;
+    // Compter les factures liées : elles sont CONSERVÉES (dépenses réellement engagées → restent dans
+    // l'historique et les totaux, comme en comptabilité). On prévient juste l'utilisateur.
+    const up = (v.immat || '').toUpperCase();
+    const nbFact = (data.factures || []).filter(f => (f.vehiculeImmat || '').toUpperCase() === up).length;
+    let msg = `Supprimer le véhicule ${v.immat} (${v.marque} ${v.modele}) ?`;
+    if (nbFact > 0) {
+      msg += `\n\n⚠️ ${nbFact} facture(s) sont liées à ce véhicule. Elles seront CONSERVÉES `
+        + `(les dépenses ont eu lieu → elles restent dans l'historique et les totaux de coût). `
+        + `\n\nAstuce : pour retirer un véhicule vendu en gardant tout tracé, utilise plutôt le statut « vendu » (ne supprime rien).`;
+    }
+    if (!(await FP.confirm(msg))) return;
     FP.history.commit();
     // Archive ses documents (sous-dossier « OUT » dans son dossier plaque) AVANT de le retirer.
     if (v.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(v.immat);
     const removedId = state.editingId;
     data.vehicules = data.vehicules.filter(x => x.id !== removedId);
+    // Purge le véhicule du cache local (société) pour qu'il ne « réapparaisse » pas au prochain affichage.
+    try {
+      const CK = window.FP_CACHE_KEY; const c = CK && JSON.parse(localStorage.getItem(CK) || 'null');
+      if (c && Array.isArray(c.vehicules)) { c.vehicules = c.vehicules.filter(x => x.id !== removedId); localStorage.setItem(CK, JSON.stringify(c)); }
+    } catch (e) {}
     state.editingId = null;
     closeDrawer();
     renderKPIs();
