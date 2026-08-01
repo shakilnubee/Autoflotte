@@ -670,10 +670,13 @@
 
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <div class="field-label">Contrôle anti-pollution <span class="text-slate-400 normal-case font-normal">(utilitaires)</span></div>
+          <div class="field-label">Prochain contrôle anti-pollution <span class="text-slate-400 normal-case font-normal">(utilitaires)</span></div>
           <input class="field-input" type="date" id="f-antipol" />
         </div>
-        <div></div>
+        <div>
+          <div class="field-label">Dernier anti-pollution réalisé le <span class="text-slate-400 normal-case font-normal">(→ prochain +1 an)</span></div>
+          <input class="field-input" type="date" id="f-antipol-dernier" title="Renseigne la date où le contrôle a été fait : la prochaine échéance se cale automatiquement 1 an après (contrôle annuel)." />
+        </div>
       </div>
 
       <div>
@@ -2129,7 +2132,8 @@
           <div class="flex justify-between"><span class="text-slate-600">Autonomie</span><span class="font-medium" data-df="autonomie" data-dt="text">${escapeHtml(v.autonomie) || '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">TVS ${FP.TVS_ANNEE} détail</span><span class="font-medium text-right">${tvsDet.applicable ? (tvsDet.total != null ? `CO₂ ${FP.euro(tvsDet.co2)} + polluants ${FP.euro(tvsDet.polluant)}` : '<span class="text-amber-600">CO₂ manquant</span>') : '<span class="text-slate-400">' + (tvsDet.raison || 'Non soumis') + '</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Dernier CT</span><span class="font-medium" data-df="dateDernierCT" data-dt="date">${v.dateDernierCT ? FP.dateNum(v.dateDernierCT) : '<span class="text-slate-400">—</span>'}</span></div>
-          <div class="flex justify-between"><span class="text-slate-600">Contrôle anti-pollution${isUtilitaire ? ' <span style="color:var(--fp-accent);font-size:.68rem;font-weight:700">• concerné</span>' : ''}</span><span class="font-medium" data-df="antiPollution" data-dt="date">${v.antiPollution ? FP.dateNum(v.antiPollution) : '<span class="text-slate-400">—</span>'}</span></div>
+          <div class="flex justify-between"><span class="text-slate-600">Prochain anti-pollution${isUtilitaire ? ' <span style="color:var(--fp-accent);font-size:.68rem;font-weight:700">• concerné</span>' : ''}</span><span class="font-medium" data-df="antiPollution" data-dt="date">${v.antiPollution ? FP.dateNum(v.antiPollution) : '<span class="text-slate-400">—</span>'}</span></div>
+          ${isUtilitaire ? (() => { let ap = ''; try { ap = (FP.settings.get().antiPollDates || {})[v.immat] || ''; } catch (e) {} return `<div class="flex justify-between"><span class="text-slate-600">Dernier anti-pollution réalisé</span><span class="font-medium">${ap ? FP.dateNum(ap) : '<span class="text-slate-400">—</span>'}</span></div>`; })() : ''}
           <div class="flex justify-between"><span class="text-slate-600">Dernière révision</span><span class="font-medium text-right">${(!v.derniereRevision && estNeuf) ? '<span class="text-emerald-600">Véhicule neuf — pas encore de révision</span>' : `<span data-df="derniereRevision" data-dt="date">${v.derniereRevision ? FP.dateNum(v.derniereRevision) : '<span class="text-slate-400">—</span>'}</span> · <span data-df="kmDernierReleve" data-dt="number" class="text-slate-500">${(v.kmDernierReleve != null && v.kmDernierReleve !== '') ? FP.num(v.kmDernierReleve) + ' km' : '—'}</span>`}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Révision préconisée</span><span class="font-medium">tous les ${FP.num(rev.intervalle.km)} km / ${rev.intervalle.mois} mois</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Prochaine révision (est.)</span><span class="font-medium" style="${revColor}">${revProchaine}${rev.niveau ? ' ⚠️' : ''}</span></div>${leaseHTML}
@@ -2222,6 +2226,8 @@
     if (typeof syncChauffeurClearBtn === 'function') syncChauffeurClearBtn();
     $('f-ct').value         = vehicule?.prochainCT || '';
     $('f-antipol').value    = (vehicule?.antiPollution && vehicule.antiPollution !== '—') ? vehicule.antiPollution : '';
+    // Dernier anti-pollution réalisé (stocké par société dans les réglages, pas de colonne DB à créer).
+    if ($('f-antipol-dernier')) { let _ap = ''; try { const m = FP.settings.get().antiPollDates || {}; _ap = (vehicule && m[vehicule.immat]) || ''; } catch (e) {} $('f-antipol-dernier').value = _ap; }
     $('f-vin').value        = vehicule?.vin || '';
     // Réinitialise la zone d'import carte grise
     _cgFile = null;
@@ -2465,6 +2471,17 @@
       groupes: Array.from(document.querySelectorAll('#f-groupes-list input.f-groupe-cb:checked')).map(cb => cb.value),
     };
     if (cgUrl) payload.cgUrl = cgUrl;
+    // Anti-pollution : si on renseigne « dernier réalisé le », la PROCHAINE échéance se cale à +1 an
+    // (contrôle annuel) → l'alerte disparaît toute seule ; on mémorise la date de réalisation par société.
+    try {
+      const apDern = $('f-antipol-dernier') ? ($('f-antipol-dernier').value || '') : '';
+      if (apDern) {
+        const d = new Date(apDern);
+        if (!isNaN(d)) { d.setFullYear(d.getFullYear() + 1); payload.antiPollution = d.toISOString().slice(0, 10); }
+        const s = FP.settings.get(); s.antiPollDates = (s.antiPollDates && typeof s.antiPollDates === 'object') ? s.antiPollDates : {};
+        s.antiPollDates[immat] = apDern; FP.settings.save(s);
+      }
+    } catch (e) {}
     // Date de dernière MISE À JOUR du kilométrage (par société) : mémorisée quand le km change,
     // affichée dans la fiche à côté du km (petit index « MAJ le … »).
     try {
