@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731u">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731v">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731u"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731v"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731u">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731v">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -454,12 +454,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731u"></script>
-<script src="../assets/js/supabase-client.js?v=20260731u"></script>
-<script src="../assets/js/data.js?v=20260731u"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731u"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731u"></script>
-<script src="../assets/js/app.js?v=20260731u"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731v"></script>
+<script src="../assets/js/supabase-client.js?v=20260731v"></script>
+<script src="../assets/js/data.js?v=20260731v"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731v"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731v"></script>
+<script src="../assets/js/app.js?v=20260731v"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -697,7 +697,7 @@
     // KPIs sur l'année sélectionnée (ou toutes années)
     const all = (state.annee === 'all') ? data.amendes.slice() : data.amendes.filter(a => anneeOf(a) === state.annee);
     const apayer = all.filter(a => FP.estAPayer(a));
-    const payees = all.filter(a => a.statut === 'payée');
+    const payees = all.filter(a => FP.estPayee(a));
     const points = all.reduce((s, a) => s + (Number(a.points) || 0), 0);
     const montantApayer = apayer.reduce((s,a) => s + montantDu(a), 0);
     const montantPayees = payees.reduce((s,a) => s + montantDu(a), 0);
@@ -716,9 +716,10 @@
     { key: 'date',         label: 'Date',        defaultWidth: 110, render: a => FP.date(a.date) },
     { key: 'prenom',       label: 'Conducteur',  defaultWidth: 140, cellCls: 'font-semibold', render: a => a.prenom ? FP.lienConducteur(a.prenom) : '<span class="text-slate-400">—</span>' },
     { key: 'motif',        label: 'Motif',       defaultWidth: 200, render: a => motifPill(a.motif) },
-    { key: 'montant',      label: 'Montant',     defaultWidth: 110, render: a => a.majoree && a.montantMajore
-        ? `<span class="font-semibold text-red-700" title="Majorée — montant initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}">${FP.euroPrecis(a.montantMajore)} <span class="text-[10px]">⚠ maj.</span></span>`
-        : (a.montant ? FP.euroPrecis(a.montant) : '<span class="text-slate-400">—</span>') },
+    { key: 'montant',      label: 'Montant',     defaultWidth: 110, render: a => { const md = montantDu(a); const disp = md ? FP.euroPrecis(md) : '<span class="text-slate-400">—</span>';
+        return (a.majoree && a.montantMajore)
+          ? `<span class="font-semibold text-red-700" title="Majorée — montant initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}">${disp} <span class="text-[10px]">⚠ maj.</span></span>`
+          : disp; } },
     { key: 'points',       label: 'Points',      defaultWidth: 80,  render: a => { const p = Number(a.points) || 0; return p > 0 ? `<span class="text-amber-600 font-bold">−${p}</span>` : '<span class="text-amber-500">●</span>'; } },
     { key: 'numeroAvis',   label: 'N° avis',     defaultWidth: 150, cellCls: 'font-mono text-xs text-slate-500', render: a => escAmende(a.numeroAvis || '—') },
     { key: 'annee',        label: 'Année',       defaultWidth: 80,  render: a => escAmende(a.annee) || '—' },
@@ -731,7 +732,7 @@
   function sortRows(arr) {
     const dir = state.sortDir === 'asc' ? 1 : -1;
     // PRIORITÉ (toujours, quel que soit le tri choisi) : « à payer » en haut, et les MAJORÉES d'abord.
-    const grpApayer = a => (a.statut === 'à payer' ? 0 : 1);
+    const grpApayer = a => (FP.estAPayer(a) ? 0 : 1);
     const grpMajore = a => (a.majoree && a.montantMajore ? 0 : 1);
     return arr.slice().sort((a, b) => {
       let g = grpApayer(a) - grpApayer(b); if (g) return g;               // à payer avant le reste
@@ -748,7 +749,7 @@
 
   function renderSummary(rows) {
     const sumMontant = rows.reduce((s, a) => s + montantDu(a), 0);
-    const sumApayer = rows.filter(a => a.statut === 'à payer').reduce((s, a) => s + montantDu(a), 0);
+    const sumApayer = rows.filter(a => FP.estAPayer(a)).reduce((s, a) => s + montantDu(a), 0);
     const sumPoints = rows.reduce((s, a) => s + (Number(a.points) || 0), 0);
     $('sum-count').textContent = rows.length;
     $('sum-montant').textContent = FP.euro(sumMontant);
@@ -853,9 +854,9 @@
         const sel = state.selectedIds.has(a.id);
         if (cellsArr.length) cellsArr[0] = cellsArr[0].replace(/^(<td[^>]*>)/, `$1<input type="checkbox" class="am-cb" data-id="${a.id}"${sel ? ' checked' : ''} title="Sélectionner" />`);
         // Couleur de ligne selon le statut
-        const stc = a.statut === 'payée' ? 'row-paid'
+        const stc = FP.estPayee(a) ? 'row-paid'
           : a.statut === 'contestée' ? 'row-contested'
-          : (a.statut === 'à payer' && a.date && (Date.now() - new Date(a.date)) / 86400000 > 30) ? 'row-overdue' : '';
+          : (FP.estAPayer(a) && a.date && (Date.now() - new Date(a.date)) / 86400000 > 30) ? 'row-overdue' : '';
         return `<tr class="cursor-pointer ${stc}${sel ? ' row-selected' : ''}" data-id="${a.id}">${cellsArr.join('')}</tr>`;
       }).join('');
       updateBulkBar();
@@ -1100,7 +1101,7 @@
   function renderExtras(amendes2026) {
     // --- Délai de paiement (amendes à payer depuis +30 j) ---
     const today = new Date();
-    const overdue = amendes2026.filter(a => a.statut === 'à payer' && a.date && ((today - new Date(a.date)) / 86400000) > 30);
+    const overdue = amendes2026.filter(a => FP.estAPayer(a) && a.date && ((today - new Date(a.date)) / 86400000) > 30);
     const banner = $('delai-banner');
     if (overdue.length) {
       const tot = overdue.reduce((s, a) => s + montantDu(a), 0);

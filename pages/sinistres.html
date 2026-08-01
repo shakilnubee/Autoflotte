@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731u">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731v">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731u"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731v"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731u">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731v">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -369,12 +369,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731u"></script>
-<script src="../assets/js/supabase-client.js?v=20260731u"></script>
-<script src="../assets/js/data.js?v=20260731u"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731u"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731u"></script>
-<script src="../assets/js/app.js?v=20260731u"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731v"></script>
+<script src="../assets/js/supabase-client.js?v=20260731v"></script>
+<script src="../assets/js/data.js?v=20260731v"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731v"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731v"></script>
+<script src="../assets/js/app.js?v=20260731v"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -695,11 +695,14 @@
       const frozen = ((doss[g.key] || {}).conducteur || '').trim();
       const cond = frozen || (veh && veh.chauffeur && veh.chauffeur !== '—' ? veh.chauffeur : '') || null;
       if (!cond) return;
-      const r = byCond[cond] || (byCond[cond] = { nb: 0, resp: 0, cost: 0 });
+      // ⚠️ Regroupement par conducteur via FP.normPrenom (même source que le podium amendes / dashboard) :
+      // « Jean » et « Jean Dupont » = même personne, pas deux lignes de risque distinctes.
+      const key = FP.normPrenom ? FP.normPrenom(cond) : cond.toLowerCase();
+      const r = byCond[key] || (byCond[key] = { cond, nb: 0, resp: 0, cost: 0 });
       r.nb++; r.cost += g.cost || 0;
       if ((doss[g.key] || {}).resp === 'responsable') r.resp++;
     });
-    const rows = Object.keys(byCond).map(c => ({ cond: c, ...byCond[c] }))
+    const rows = Object.keys(byCond).map(k => ({ ...byCond[k] }))
       .sort((a, b) => b.resp - a.resp || b.nb - a.nb || b.cost - a.cost);
     if (!rows.length) { box.innerHTML = '<p class="text-sm text-slate-400">Aucun sinistre attribué à un conducteur pour l\'instant (renseigne un chauffeur sur les véhicules concernés).</p>'; return; }
     box.innerHTML = '<div class="scrollable"><table class="fp-table"><thead><tr><th>Conducteur</th><th style="text-align:right">Sinistres</th><th style="text-align:right">Responsable</th><th style="text-align:right">Coût total</th><th>Niveau</th></tr></thead><tbody>'
