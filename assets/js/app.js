@@ -742,14 +742,29 @@ FP.conducteurs = {
     return (c.nom && !base.toLowerCase().includes(String(c.nom).toLowerCase())) ? (base + ' ' + c.nom).trim() : base;
   },
   find(name) {
+    const list = this.list();
+    // 1) match EXACT sur le nom complet (départage les homonymes de prénom quand le nom est fourni)
+    const full = FP.normNomComplet(name || '');
+    if (full && full.indexOf(' ') !== -1) {
+      const exact = list.find(c => FP.normNomComplet(FP.conducteurs.displayName(c)) === full);
+      if (exact) return exact;
+    }
+    // 2) repli historique : match par prénom seul (préserve les liens des données ne portant qu'un prénom)
     const k = FP.normPrenom(name || ''); if (!k) return null;
-    return this.list().find(c => FP.normPrenom(c.name || c.prenom || c.key) === k) || null;
+    return list.find(c => FP.normPrenom(c.name || c.prenom || c.key) === k) || null;
   },
   async create(info) {
     info = info || {};
     const name = String(info.name || ((info.prenom || '') + ' ' + (info.nom || ''))).trim() || String(info.prenom || '').trim();
     if (!name) return null;
-    const key = FP.normPrenom(name);
+    // Clé = prénom seul (rétro-compatible). MAIS si un homonyme de prénom existe déjà avec un nom
+    // DIFFÉRENT, on prend une clé prénom+nom pour ne pas fusionner deux personnes distinctes.
+    let key = FP.normPrenom(name);
+    const nom = String(info.nom || '').toLowerCase().trim();
+    if (nom) {
+      const homonymeDiff = this.list().some(c => FP.normPrenom(c.name || c.prenom || c.key) === key && String(c.nom || '').toLowerCase().trim() && String(c.nom || '').toLowerCase().trim() !== nom);
+      if (homonymeDiff) { const kf = FP.normNomComplet(name).replace(/\s+/g, '-'); if (kf) key = kf; }
+    }
     const row = { key, name, prenom: info.prenom || null, nom: info.nom || null, tel: info.tel || null, email: info.email || null,
       poste: info.poste || null, permisNumero: info.permisNumero || null, permisType: info.permisType || null, manuel: true };
     try { if (FP.persist && FP.persist.upsert) await FP.persist.upsert('conducteurs', row); } catch (e) { console.warn('[FP.conducteurs.create]', e); }
@@ -1405,6 +1420,10 @@ document.addEventListener('fp:data-ready', () => { try { FP.userEmail = (localSt
 
 // Normalisation d'un prénom (1er mot, minuscules, accents conservés) — partagé
 FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
+// ⚠️ HELPER CANONIQUE — nom COMPLET normalisé (prénom + nom, accents/casse/espaces neutralisés).
+// Sert à distinguer deux homonymes de prénom (« Jean Dupont » ≠ « Jean Martin ») SANS casser le
+// rapprochement historique par prénom seul (qui reste le repli quand la donnée n'a qu'un prénom).
+FP.normNomComplet = (s) => (s || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 // Conducteurs connus (fichier Drive de référence) — partagé entre pages pour un comptage cohérent
 FP.DRIVE_CONDUCTEURS = new Set(["ahmed","akram","ambre","andrea","anna","bram","charles","conu","daniel","david","diana","enguerrand","eugénie","farah","frédéric","fx","gionata","guerric","halim","ilhem","jérémie","jérémy","jimmy","jocelyn","johanna","léopold","lucie","martin","maxime","mégane","mickaël","mona","monsieur","mr","nacim","nawelle","nicolas","pauline","raphaël","romuald","samira","sergio","shakil","shaohui","sofiane","thomas","xavi","yannis","youssouf"]);
 // Étiquettes de chauffeur qui ne sont PAS des personnes

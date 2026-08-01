@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731v">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731w">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731v"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731w"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731v">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731w">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -369,12 +369,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731v"></script>
-<script src="../assets/js/supabase-client.js?v=20260731v"></script>
-<script src="../assets/js/data.js?v=20260731v"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731v"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731v"></script>
-<script src="../assets/js/app.js?v=20260731v"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731w"></script>
+<script src="../assets/js/supabase-client.js?v=20260731w"></script>
+<script src="../assets/js/data.js?v=20260731w"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731w"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731w"></script>
+<script src="../assets/js/app.js?v=20260731w"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -617,7 +617,7 @@
         const dossierPanel = `
           <details class="mt-2">
             <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#475569;list-style:none" class="inline-flex items-center gap-1"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Dossier assurance</summary>
-            <label class="text-xs text-slate-500" style="display:block;margin-top:8px">Conducteur au moment du sinistre <span class="text-slate-400">(figé, sinon = chauffeur actuel)</span><input class="sin-doss" data-key="${g.key}" data-k="conducteur" type="text" list="sin-cond-list" value="${escapeHtml(dv.conducteur || '')}" placeholder="${escapeHtml(vehCh || '—')}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
+            <label class="text-xs text-slate-500" style="display:block;margin-top:8px">Conducteur au moment du sinistre <span class="text-slate-400">(figé, sinon = chauffeur actuel)</span><input class="sin-doss" data-key="${g.key}" data-k="conducteur" type="text" value="${escapeHtml(dv.conducteur || '')}" placeholder="${escapeHtml(vehCh || '—')}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
             <div class="grid grid-cols-3 gap-2 mt-2">
               <label class="text-xs text-slate-500">Franchise (€)<input class="sin-doss" data-key="${g.key}" data-k="franchise" type="number" value="${dv.franchise ?? ''}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
               <label class="text-xs text-slate-500">Remboursé (€)<input class="sin-doss" data-key="${g.key}" data-k="rembourse" type="number" value="${dv.rembourse ?? ''}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
@@ -680,6 +680,20 @@
     const attente = all.filter(g => stat[g.key] === 'attente').length;
     $('result-count').innerHTML = `${groups.length} incident${groups.length > 1 ? 's' : ''} sur ${all.length}` + (attente ? ` · <b style="color:#B45309">${attente} en attente de remboursement</b>` : '');
     lucide.createIcons();
+    // ⚠️ Sélecteur conducteur intelligent (choisir OU créer) sur chaque dossier — règle 0quater :
+    // plus de texte libre → plus de nom fantôme qui ne correspond à aucune fiche. Source unique FP.conducteurPicker.
+    document.querySelectorAll('.sin-doss[data-k="conducteur"]').forEach(inp => {
+      if (!FP.conducteurPicker) return;
+      FP.conducteurPicker(inp, { onPick: (c) => {
+        const key = inp.dataset.key;
+        const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
+        const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
+        const name = FP.conducteurs && FP.conducteurs.displayName ? FP.conducteurs.displayName(c) : (c && (c.name || c.prenom) || '');
+        if (name) o.conducteur = name; else delete o.conducteur;
+        if (!Object.keys(o).length) delete s.sinistreAssurance[key];
+        FP.settings.save(s); renderConducteursRisque();
+      } });
+    });
   }
 
   // Conducteurs à risque : agrégation par chauffeur (via le véhicule du sinistre) sur les INCIDENTS.
