@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731t">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731u">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731t"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731u"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731t">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731u">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -619,12 +619,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731t"></script>
-<script src="../assets/js/supabase-client.js?v=20260731t"></script>
-<script src="../assets/js/data.js?v=20260731t"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731t"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731t"></script>
-<script src="../assets/js/app.js?v=20260731t"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731u"></script>
+<script src="../assets/js/supabase-client.js?v=20260731u"></script>
+<script src="../assets/js/data.js?v=20260731u"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731u"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731u"></script>
+<script src="../assets/js/app.js?v=20260731u"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1002,6 +1002,9 @@
         if (FP.history && FP.history.commit) FP.history.commit();
         renderKPIs(); renderTable(); renderCharts();
         if (FP.persist) FP.persist.update('factures', f.id, patch);
+        // ⚠️ Éditer km/date/type d'une facture doit AUSSI remonter au véhicule (même source unique qu'à la création).
+        const maj = syncRevisionVehicule(f);
+        if (maj && FP.toast) FP.toast('✓ Fiche véhicule mise à jour : ' + maj);
         openDrawer(f.fileId);
       },
       onCancel: () => openDrawer(f.fileId),
@@ -1359,44 +1362,12 @@
     }
   }
 
-  // Met à jour la fiche du véhicule à partir d'une facture.
-  // - Le KM est reporté pour TOUTE facture liée à un véhicule et portant un relevé (kilométrage),
-  //   quel que soit le type (achat, entretien…), et UNIQUEMENT à la hausse (le km ne redescend jamais).
-  // - La « dernière révision » et le « changement de pneus » restent réservés aux factures entretien/réparation.
-  // Renvoie un libellé de ce qui a été mis à jour, ou null.
+  // Met à jour la fiche du véhicule à partir d'une facture. ⚠️ SOURCE UNIQUE : délègue entièrement
+  // à FP.applyFactureToVehicule (app.js) — toute la logique km/révision/pneus/rappel vit là-bas, un
+  // seul endroit à avoir juste. Renvoie un libellé de ce qui a été mis à jour, ou null.
   function syncRevisionVehicule(f){
-    try {
-      if (!f.vehiculeImmat) return null;
-      const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === String(f.vehiculeImmat).toUpperCase());
-      if (!v) return null;
-      const t = (f.type || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      const estEntretien = (t === 'entretien' || t === 'reparation');
-      const patch = {}; const bits = [];
-      // KM : toute facture (peu importe le type) — ne fait que MONTER.
-      if (f.km != null && (!v.kmDernierReleve || f.km >= v.kmDernierReleve)) {
-        v.kmDernierReleve = f.km; patch.kmDernierReleve = f.km;
-        if (!v.km || f.km > v.km) { v.km = f.km; patch.km = f.km; }
-        bits.push(FP.num(f.km) + ' km');
-        // Réinitialise le rappel « Relevé km » avec la date du relevé (= date de la facture).
-        try {
-          const s = FP.settings.get(); s.kmMajDates = (s.kmMajDates && typeof s.kmMajDates === 'object') ? s.kmMajDates : {};
-          const d = (f.date && /^\d{4}-\d{2}-\d{2}/.test(f.date)) ? f.date.slice(0, 10) : new Date().toISOString().slice(0, 10);
-          if (!s.kmMajDates[v.immat] || d > s.kmMajDates[v.immat]) { s.kmMajDates[v.immat] = d; FP.settings.save(s); }
-        } catch (e) {}
-      }
-      // Dernière révision + pneus : seulement pour entretien/réparation.
-      if (estEntretien) {
-        if (f.date && (!v.derniereRevision || v.derniereRevision === '—' || f.date > v.derniereRevision)) {
-          v.derniereRevision = f.date; patch.derniereRevision = f.date; bits.push('révision ' + FP.date(f.date));
-        }
-        if (/pneu/i.test(`${f.description || ''}`) && f.date && (!v.dateChangementPneus || f.date > v.dateChangementPneus)) {
-          v.dateChangementPneus = f.date; patch.dateChangementPneus = f.date; bits.push('pneus');
-        }
-      }
-      if (!Object.keys(patch).length) return null;
-      if (FP.persist) FP.persist.update('vehicules', v.id, patch);
-      return `${v.immat} (${bits.join(' · ')})`;
-    } catch (e) { return null; }
+    const r = FP.applyFactureToVehicule ? FP.applyFactureToVehicule(f, data.vehicules) : null;
+    return r ? r.label : null;
   }
 
   $('btn-import-facture').addEventListener('click', openFactureModal);
@@ -1630,6 +1601,9 @@
         f[field] = nv;
         renderKPIs(); renderTable(); renderCharts();
         FP.persist.update('factures', f.id, { [field]: nv });
+        // ⚠️ km/date/type édités → remonter au véhicule (source unique).
+        const maj = syncRevisionVehicule(f);
+        if (maj && FP.toast) FP.toast('✓ Fiche véhicule mise à jour : ' + maj);
       },
       onCancel: () => renderTable(),
     });

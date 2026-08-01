@@ -1729,6 +1729,49 @@ FP.notifCfg = () => {
     releveKmDebut: (typeof n.releveKmDebut === 'string' && n.releveKmDebut.trim()) ? n.releveKmDebut.trim() : '', // date d'ancrage du cycle (optionnelle)
   };
 };
+// ⚠️ SOURCE UNIQUE — Applique une facture à la fiche du véhicule (km + dernière révision + pneus +
+// rappel « relevé km »). TOUS les chemins qui créent OU éditent une facture DOIVENT passer par ici
+// (saisie manuelle, scanner du tableau de bord, édition inline/drawer, sinistres). Ne jamais
+// réécrire cette logique ailleurs — c'est la cause des régressions « le km ne se met pas à jour ».
+// Règles : le km ne fait QUE monter (jamais de baisse) ; « dernière révision » + « pneus » seulement
+// pour les factures entretien/réparation. Renvoie { veh, patch, label, bits } si qqch a changé, sinon null.
+FP.applyFactureToVehicule = function (f, vehicules) {
+  try {
+    if (!f || !f.vehiculeImmat) return null;
+    const list = vehicules || (typeof window !== 'undefined' && window.FP_DATA && window.FP_DATA.vehicules) || [];
+    const v = list.find(x => (x.immat || '').toUpperCase() === String(f.vehiculeImmat).toUpperCase());
+    if (!v) return null;
+    const t = (f.type || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const estEntretien = (t === 'entretien' || t === 'reparation');
+    const patch = {}; const bits = [];
+    const km = (f.km != null && f.km !== '' && Number.isFinite(Number(f.km))) ? Number(f.km) : null;
+    // KM : toute facture, à la hausse uniquement.
+    if (km != null && km > 0 && (!v.kmDernierReleve || km >= Number(v.kmDernierReleve))) {
+      v.kmDernierReleve = km; patch.kmDernierReleve = km;
+      if (!v.km || km > Number(v.km)) { v.km = km; patch.km = km; }
+      bits.push(FP.num(km) + ' km');
+      // Réinitialise le rappel « Relevé km » (date du relevé = date de la facture, sinon aujourd'hui).
+      try {
+        const s = FP.settings.get(); s.kmMajDates = (s.kmMajDates && typeof s.kmMajDates === 'object') ? s.kmMajDates : {};
+        const d = (f.date && /^\d{4}-\d{2}-\d{2}/.test(f.date)) ? f.date.slice(0, 10) : new Date().toISOString().slice(0, 10);
+        if (!s.kmMajDates[v.immat] || d > s.kmMajDates[v.immat]) { s.kmMajDates[v.immat] = d; FP.settings.save(s); }
+      } catch (e) {}
+    }
+    // Dernière révision + pneus : entretien/réparation uniquement.
+    if (estEntretien) {
+      if (f.date && (!v.derniereRevision || v.derniereRevision === '—' || f.date > v.derniereRevision)) {
+        v.derniereRevision = f.date; patch.derniereRevision = f.date; bits.push('révision ' + FP.date(f.date));
+      }
+      if (/pneu/i.test(`${f.description || ''}`) && f.date && (!v.dateChangementPneus || f.date > v.dateChangementPneus)) {
+        v.dateChangementPneus = f.date; patch.dateChangementPneus = f.date; bits.push('pneus');
+      }
+    }
+    if (!Object.keys(patch).length) return null;
+    if (FP.persist && FP.persist.update) { try { FP.persist.update('vehicules', v.id, patch); } catch (e) {} }
+    return { veh: v, patch, bits, label: `${v.immat} (${bits.join(' · ')})` };
+  } catch (e) { return null; }
+};
+
 // Intervalle de révision : par défaut tous les 15 000 km OU tous les 12 mois (au premier atteint),
 // réglable dans Paramètres → Notifications (FP.notifCfg).
 FP.revisionIntervalle = (v) => { const c = FP.notifCfg(); return { km: c.revKm, mois: c.revMois }; };
