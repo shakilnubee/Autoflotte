@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731z">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260801a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731z"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260801a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731z">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260801a">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -771,14 +771,14 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731z"></script>
-<script src="../assets/js/supabase-client.js?v=20260731z"></script>
-<script src="../assets/js/data.js?v=20260731z"></script>
-<script src="../assets/js/fleet-docs.js?v=20260731z"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260731z"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731z"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731z"></script>
-<script src="../assets/js/app.js?v=20260731z"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260801a"></script>
+<script src="../assets/js/supabase-client.js?v=20260801a"></script>
+<script src="../assets/js/data.js?v=20260801a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260801a"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260801a"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260801a"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260801a"></script>
+<script src="../assets/js/app.js?v=20260801a"></script>
 <script>
   lucide.createIcons();
 
@@ -2660,21 +2660,26 @@
     ],
     getRows: () => filtered(),
     onImport: (records) => {
-      let added = 0, updated = 0;
+      let added = 0, updated = 0, skipped = 0;
       records.forEach(rec => {
         if (rec.groupes && (!Array.isArray(rec.groupes) || !rec.groupes.length)) delete rec.groupes;
+        if (rec.immat) rec.immat = String(rec.immat).toUpperCase().trim();
+        // Résolution : par id d'abord, sinon par immatriculation via l'anti-doublon central FP.dupe
+        // → un ré-import du même véhicule MET À JOUR la fiche au lieu de créer un doublon.
         let v = rec.id ? data.vehicules.find(x => x.id === rec.id) : null;
+        if (!v && rec.immat && FP.dupe) v = FP.dupe.find('vehicules', rec, data.vehicules);
         let isNew = false;
         if (v) { Object.assign(v, rec); updated++; }
         else {
+          if (!rec.immat) { skipped++; return; } // sans immatriculation = ligne inexploitable
           isNew = true;
-          v = Object.assign({ id: rec.id || ('V-IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)), groupes: ['non-classe'], statut: 'actif' }, rec);
+          v = Object.assign({ id: 'V-IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), groupes: ['non-classe'], statut: 'actif' }, rec);
           data.vehicules.push(v); added++;
         }
         persistVehicleUpsert(v, isNew);
       });
       renderTabBar(); renderKPIs(); renderTable();
-      alert(`Import terminé ✓\n${added} ajout(s), ${updated} mise(s) à jour.`);
+      alert(`Import terminé ✓\n${added} ajout(s), ${updated} mise(s) à jour${skipped ? `, ${skipped} ligne(s) ignorée(s) (sans immatriculation)` : ''}.`);
     },
   });
 
@@ -4174,7 +4179,6 @@
   function renderBatchRows() {
     const tbody = $('cg-batch-tbody');
     const carbs = ['', ...(window.FP && FP.CARBURANTS ? FP.CARBURANTS : ['Essence', 'Diesel', 'Électrique', 'Essence / Hybride'])];
-    if (FP.normCarburant && p.carburant) p.carburant = FP.normCarburant(p.carburant);
     tbody.innerHTML = _cgBatch.map((row, i) => {
       const p = row.parsed || {};
       const esc = s => (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
@@ -4211,20 +4215,51 @@
     lucide.createIcons();
     try {
       batchProgress('<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Préparation de la lecture…</span>', 'working');
-      await loadScript(TESSERACT_CDN);
-      const worker = await Tesseract.createWorker('fra');
+      // La lecture IA (Claude, via scan-doc) est prioritaire : bien plus fiable que l'OCR local,
+      // surtout pour le VIN, le modèle, la masse et la catégorie. Tesseract sert de REPLI (si l'IA
+      // est indisponible ou ne renvoie pas un champ) → on ne le charge qu'à la demande.
+      const numOrU = v => (v != null && v !== '' && Number.isFinite(+v)) ? +v : undefined;
+      let worker = null;
+      const getWorker = async () => {
+        if (worker) return worker;
+        await loadScript(TESSERACT_CDN);
+        worker = await Tesseract.createWorker('fra');
+        return worker;
+      };
       for (let i = 0; i < _cgBatch.length; i++) {
-        batchProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Lecture ${i + 1}/${_cgBatch.length} — ${_cgBatch[i].file.name}…</span>`, 'working');
+        batchProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Lecture ${i + 1}/${_cgBatch.length} (IA) — ${_cgBatch[i].file.name}…</span>`, 'working');
+        let parsed = {};
+        // 1) IA (Claude) — lecture directe de l'image/PDF.
         try {
-          const text = await ocrFileToText(_cgBatch[i].file, worker);
-          _cgBatch[i].parsed = parseCarteGrise(text);
-        } catch (err) {
-          console.error('[batch OCR]', err);
-          _cgBatch[i].parsed = {};
+          const ai = (window.FP && FP.scanIA) ? await FP.scanIA(_cgBatch[i].file, 'carte-grise', FP.CG_SCAN_PROMPT) : null;
+          if (ai) parsed = {
+            immat: ai.immat || '',
+            marque: ai.marque || '',
+            modele: ai.modele || '',
+            dateMiseEnCirculation: ai.dateMiseEnCirculation || '',
+            prochainCT: ai.prochainCT || '',
+            vin: ai.vin ? String(ai.vin).toUpperCase().replace(/[^A-Z0-9]/g, '') : '',
+            co2: numOrU(ai.co2),
+            puissanceFiscale: numOrU(ai.puissanceFiscale),
+            carburant: ai.carburant || '',
+            masse: numOrU(ai.masse),
+            categorie: ai.categorie || '',
+          };
+        } catch (e) { console.warn('[batch IA]', e); }
+        // 2) REPLI : OCR local (couche texte PDF + Tesseract) — complète les champs manquants seulement.
+        if (!parsed.immat || !parsed.marque || !parsed.modele || !parsed.vin) {
+          try {
+            const text = await ocrFileToText(_cgBatch[i].file, await getWorker());
+            const local = parseCarteGrise(text) || {};
+            for (const k in local) { const v = local[k]; if ((parsed[k] == null || parsed[k] === '') && v != null && v !== '') parsed[k] = v; }
+          } catch (err) { console.error('[batch OCR]', err); }
         }
+        // Carburant : libellé unifié (l'IA peut renvoyer « Hybride », l'OCR « Essence / Hybride »).
+        if (parsed.carburant && FP.normCarburant) parsed.carburant = FP.normCarburant(parsed.carburant);
+        _cgBatch[i].parsed = parsed;
         renderBatchRows();
       }
-      await worker.terminate();
+      if (worker) { try { await worker.terminate(); } catch (e) {} }
       const lus = _cgBatch.filter(r => r.parsed && r.parsed.immat).length;
       batchProgress(`<b>✓ Lecture terminée</b> — ${lus}/${_cgBatch.length} immatriculation(s) détectée(s). Corrige les champs manquants (lignes surlignées) avant de créer.`, lus ? 'ok' : 'error');
     } catch (err) {
@@ -4258,7 +4293,7 @@
         id: nextVehId(),
         immat: String(p.immat).toUpperCase(),
         marque: p.marque, modele: p.modele,
-        categorie: 'Berline',
+        categorie: (p.categorie && String(p.categorie).trim()) || 'Berline',
         km: 0, statut: 'actif', chauffeur: '—', prochainCT: p.prochainCT || '—',
         dateMiseEnCirculation: p.dateMiseEnCirculation || '',
         vin: (p.vin || '').toUpperCase(),
