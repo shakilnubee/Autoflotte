@@ -87,8 +87,35 @@ l'UI en gardant la même fonction de save), référentiel commun pour les garage
 ⚠️ NE PAS sortir les champs MÉTIER de leur logique (n° de police d'assurance,
 `prop` du loueur qui sert à détecter le leasing) sous prétexte de regrouper.
 
+## 13. Parcours client — actions qui ne se répercutent pas + concepts dispersés
+Simuler un utilisateur qui **dépose / édite / SUPPRIME / ajoute**, domaine par domaine,
+et traquer 2 classes de bug : **(1)** un même concept calculé/lu à PLUSIEURS endroits
+sans helper `FP.*` commun (écrans qui divergent) ; **(2)** une action (surtout la
+**suppression** et l'**édition**) qui ne se répercute pas partout (KPI, totaux, cache,
+entité liée). Cinq sous-auditeurs, en parallèle :
+- **13a. Factures & coûts** — coût mois/TCO/dashboard via `FP.coutMois`/`dedupeFactures` ;
+  suppression/édition d'une facture qui laisse une révision/km/pneus fantôme sur le
+  véhicule (symétrie `FP.applyFactureToVehicule` ↔ `FP.recomputeVehiculeFromFactures`) ;
+  `FP.estEntretien` employé partout (carnet, Entretiens, Budget) ; dédup homogène.
+- **13b. Amendes** — montant affiché = total via `FP.montantDu` ; statut « à payer »/
+  « payée » via `FP.estAPayer`/`FP.estPayee` (jamais `statut === '…'` en dur) ; podiums
+  et filtres d'année via `FP.normPrenom`/`FP.anneeAmende` ; suppression → KPI + podium.
+- **13c. Véhicules** — statut via `FP.estVendu`/`FP.horsFlotte` (jamais `=== 'actif'`/
+  `'vendu'` en dur) ; km affiché via `FP.kmActuel` ; leasing/TVS via les helpers ;
+  **suppression → factures/amendes/emprunts orphelins** (choix : conserver l'historique
+  des coûts + purger le cache société + avertir).
+- **13d. Conducteurs & emprunts** — tout sélecteur de conducteur via `FP.conducteurPicker`
+  (aucun `<select>`/texte libre) ; rapprochement via `FP.normPrenom`/`FP.normNomComplet` ;
+  statut emprunt via `FP.empEnCours`/`empEnRetard` ; offboarding/suppression → libère les
+  véhicules + purge PII ; homonymes de prénom qui fusionnent (identité prénom seul).
+- **13e. Config / multi-sociétés / cache / rôles** — `FP.settings` toujours en delta-merge ;
+  clés de cache suffixées par société (aucune fuite) ; tombstone société ; gardes de rôle
+  **fail-closed** quand `FP.profile` non résolu ; pas de bleed PXP à la 1re peinture.
+
 ---
 
 *Historique : batterie constituée les 2026-07-30 après plusieurs incohérences
-« même concept lu/calculé différemment selon l'écran ». Voir la règle
-« une seule source de vérité » dans `CLAUDE.md`.*
+« même concept lu/calculé différemment selon l'écran ». Section 13 (parcours client)
+ajoutée le 2026-08-01 après l'audit qui a créé les helpers `FP.applyFactureToVehicule`,
+`FP.recomputeVehiculeFromFactures`, `FP.estEntretien`, `FP.estPayee`, `FP.kmActuel`,
+`FP.empEnCours`, `FP.normNomComplet`. Voir la règle « une seule source de vérité » dans `CLAUDE.md`.*
