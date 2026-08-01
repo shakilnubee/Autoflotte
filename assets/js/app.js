@@ -1385,8 +1385,14 @@ FP.darkMode = {
 FP.ignore = {
   _all() { try { return FP.settings.get().ignores || {}; } catch (e) { return {}; } },
   has(key) { return !!this._all()[key]; },
-  set(key, on) { try { const s = FP.settings.get(); s.ignores = s.ignores || {}; if (on) s.ignores[key] = true; else delete s.ignores[key]; FP.settings.save(s); } catch (e) {} },
-  toggle(key) { this.set(key, !this.has(key)); return this.has(key); },
+  // Valeur stockée : `true` (legacy) OU `{ l: '<libellé lisible>' }`. Le libellé sert à afficher
+  // la liste des éléments ignorés (pour en réafficher UN SEUL) sans tout réafficher d'un coup.
+  set(key, on, label) { try { const s = FP.settings.get(); s.ignores = s.ignores || {}; if (on) s.ignores[key] = label ? { l: String(label) } : true; else delete s.ignores[key]; FP.settings.save(s); } catch (e) {} },
+  toggle(key, label) { this.set(key, !this.has(key), label); return this.has(key); },
+  label(key) { const v = this._all()[key]; return (v && typeof v === 'object' && v.l) ? v.l : ''; },
+  // Liste des clés ignorées sous un préfixe, avec leur libellé → pour un gestionnaire « voir / réafficher ».
+  list(prefix) { const all = this._all(); return Object.keys(all).filter(k => !prefix || k.indexOf(prefix) === 0).map(k => ({ key: k, label: (all[k] && typeof all[k] === 'object' && all[k].l) ? all[k].l : k })); },
+  clear(key) { this.set(key, false); },              // réaffiche UN élément
   clearPrefix(prefix) { try { const s = FP.settings.get(); s.ignores = s.ignores || {}; Object.keys(s.ignores).forEach(k => { if (k.indexOf(prefix) === 0) delete s.ignores[k]; }); FP.settings.save(s); } catch (e) {} },
   countPrefix(prefix) { return Object.keys(this._all()).filter(k => k.indexOf(prefix) === 0).length; },
 };
