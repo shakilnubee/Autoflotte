@@ -685,7 +685,10 @@
     const builtinKey = permisKeyOf(d);
     const manual = getManualPermis()[key];
     const permisMasque = (FP.settings.get().permisMasque) || {};
-    const builtin = (window.FP_DOCS && FP_DOCS.permis && !permisMasque[key]) ? FP_DOCS.permis[builtinKey] : null;
+    const builtinAvail = (window.FP_DOCS && FP_DOCS.permis) ? FP_DOCS.permis[builtinKey] : null;
+    const builtin = (builtinAvail && !permisMasque[key]) ? builtinAvail : null;
+    // Permis intégré présent mais MASQUÉ (et pas de permis manuel) → on propose de le réafficher.
+    const builtinHidden = !!builtinAvail && !!permisMasque[key] && !manual;
     const eff = manual || builtin;
     let body;
     if (eff) {
@@ -700,6 +703,11 @@
         ${action}
         ${eff.url ? `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" id="permis-reread" data-url="${escapeHtml(eff.url)}" data-key="${escapeHtml(key)}" title="Relire le scan en haute qualité"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i> Relire</button>` : ''}
         <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-permis-del="${escapeHtml(key)}" data-permis-builtin="${manual ? '0' : '1'}" title="Supprimer ce permis"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+      </div>`;
+    } else if (builtinHidden) {
+      body = `<div class="flex items-center justify-between gap-2 py-1 text-sm" style="background:#F8FAFC;border:1px solid var(--fp-border,#E3E8F0);border-radius:8px;padding:6px 10px">
+        <span class="text-slate-500 flex items-center gap-2"><i data-lucide="eye-off" class="w-4 h-4 text-slate-400"></i> Permis intégré masqué</span>
+        <button type="button" class="text-xs font-semibold" data-permis-unhide="${escapeHtml(key)}" style="color:var(--fp-accent,#F97316);background:none;border:none;cursor:pointer;white-space:nowrap">↺ Réafficher</button>
       </div>`;
     } else {
       body = '<p class="text-sm text-slate-500">Aucun permis pour ce conducteur.</p>';
@@ -1574,6 +1582,15 @@
     // Relire un scan déjà enregistré (haute qualité + binarisation pour effacer la rosette)
     const rr = e.target.closest('#permis-reread');
     if (rr) { rereadPermis(rr.dataset.url, rr.dataset.key); return; }
+
+    // ↺ Réafficher un permis intégré précédemment masqué
+    const unhidePermis = e.target.closest('[data-permis-unhide]');
+    if (unhidePermis) {
+      const s = FP.settings.get();
+      if (s.permisMasque && s.permisMasque[unhidePermis.dataset.permisUnhide]) { s.permisMasque = { ...s.permisMasque }; delete s.permisMasque[unhidePermis.dataset.permisUnhide]; FP.settings.save(s); }
+      openDrawer(currentDriverKey);
+      return;
+    }
 
     const delPermis = e.target.closest('[data-permis-del]');
     if (delPermis) {

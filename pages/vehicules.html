@@ -901,21 +901,26 @@
   function hiddenBuiltinAll(){ try { return JSON.parse(localStorage.getItem(HIDDEN_BUILTIN_KEY) || '{}'); } catch(e){ return {}; } }
   function hiddenBuiltinFor(id){ return hiddenBuiltinAll()[id] || []; }
   function hideBuiltinDoc(id, key){ const h = hiddenBuiltinAll(); const a = (h[id] = h[id] || []); if (!a.includes(key)) a.push(key); try { localStorage.setItem(HIDDEN_BUILTIN_KEY, JSON.stringify(h)); } catch(e){} }
+  // Réafficher UN document intégré précédemment masqué (les autres restent masqués).
+  function unhideBuiltinDoc(id, key){ const h = hiddenBuiltinAll(); if (h[id]) { h[id] = h[id].filter(k => k !== key); if (!h[id].length) delete h[id]; try { localStorage.setItem(HIDDEN_BUILTIN_KEY, JSON.stringify(h)); } catch(e){} } }
 
   // Immatriculation normalisée (clé des mémos assurance dans FP_DOCS)
   function normImmat(s){ return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
 
   // Documents Drive intégrés (carte grise + mémo assurance), consultables sur le site
-  function builtinDocs(v){
+  function builtinDocsAll(v){
     const list = [];
     if (v.cgUrl) list.push({ type: 'carte-grise', label: 'Carte grise', url: v.cgUrl });
     else if (v.cgFileId) list.push({ type: 'carte-grise', label: 'Carte grise', drive: v.cgFileId });
     const docs = (typeof window !== 'undefined' && window.FP_DOCS) ? window.FP_DOCS : { assurance: {} };
     const aId = docs.assurance && docs.assurance[normImmat(v.immat)];
     if (aId) list.push({ type: 'assurance', label: 'Mémo assurance', drive: aId });
-    const hidden = hiddenBuiltinFor(v.id);
-    return list.filter(d => !hidden.includes(d.drive || d.url || d.type));
+    return list;
   }
+  const _biKey = d => d.drive || d.url || d.type;
+  function builtinDocs(v){ const hidden = hiddenBuiltinFor(v.id); return builtinDocsAll(v).filter(d => !hidden.includes(_biKey(d))); }
+  // Les documents intégrés MASQUÉS (pour pouvoir les réafficher un par un depuis la fiche).
+  function builtinDocsHidden(v){ const hidden = hiddenBuiltinFor(v.id); return builtinDocsAll(v).filter(d => hidden.includes(_biKey(d))); }
 
   function builtinDocRowHTML(doc, vehId){
     const t = DOC_TYPES.find(x => x.key === doc.type) || DOC_TYPES[DOC_TYPES.length - 1];
@@ -971,10 +976,22 @@
     const linkRows = docs.length ? docs.map(docRowHTML).join('') : '';
     const rows = (builtinRows + linkRows) || '<p class="text-sm text-slate-500">Aucun document pour le moment.</p>';
     const count = builtin.length + docs.length;
+    // Documents intégrés MASQUÉS : consultables + réaffichables un par un (les autres restent masqués).
+    const hiddenB = builtinDocsHidden(v);
+    const hiddenHTML = hiddenB.length ? `<details class="mt-3">
+        <summary class="cursor-pointer text-xs font-semibold text-slate-500 flex items-center gap-2" style="user-select:none"><i data-lucide="eye-off" class="w-3.5 h-3.5 text-slate-400"></i> ${hiddenB.length} document(s) intégré(s) masqué(s) <span class="font-normal text-slate-400">(gérer)</span></summary>
+        <div class="mt-2 space-y-1">
+          ${hiddenB.map(d => `<div class="flex items-center justify-between gap-3" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:5px 9px">
+            <span class="text-xs text-slate-600" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(d.label)}</span>
+            <button type="button" class="text-xs font-semibold" data-builtin-unhide="${escapeHtml(v.id)}" data-builtin-unhide-key="${escapeHtml(_biKey(d))}" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;white-space:nowrap">↺ Réafficher</button>
+          </div>`).join('')}
+        </div>
+      </details>` : '';
     return `
       <div>
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Documents (${count})</div>
         <div class="mt-3">${rows}</div>
+        ${hiddenHTML}
         <div class="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
           <div class="field-label !mb-0">Ajouter un document</div>
           <select id="doc-type" class="field-input">${typeOptions}</select>
@@ -3551,6 +3568,9 @@
   $('drawer-body').addEventListener('click', async (e) => {
     const view = e.target.closest('[data-doc-view]');
     if (view) { openViewer(view.dataset.docView, view.dataset.docTitle); return; }
+    // ↺ Réafficher un document intégré masqué (fonctionne même hors mode édition)
+    const bUnhide = e.target.closest('[data-builtin-unhide]');
+    if (bUnhide) { unhideBuiltinDoc(bUnhide.dataset.builtinUnhide, bUnhide.dataset.builtinUnhideKey); openDrawer(bUnhide.dataset.builtinUnhide); return; }
     if (!state.editingId) return;
     const del = e.target.closest('[data-doc-del]');
     if (del) {
