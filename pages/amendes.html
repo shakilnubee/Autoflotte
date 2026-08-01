@@ -678,8 +678,13 @@
     return data.amendes.filter(a => {
       // Filtre par année : celle choisie dans le sélecteur (2026, 2027, …) ou « Toutes années ».
       if (state.annee !== 'all' && anneeOf(a) !== state.annee) return false;
-      // Filtre par statut (les payées restent visibles dans « Payées » / « Toutes »)
-      if (state.statut !== 'all' && a.statut !== state.statut) return false;
+      // Filtre par statut (tolérant casse/accents via les helpers — sinon une amende « À payer »
+      // majuscule est comptée par le KPI mais ratée par la puce → compteurs qui divergent).
+      if (state.statut !== 'all') {
+        if (state.statut === 'à payer') { if (!FP.estAPayer(a)) return false; }
+        else if (state.statut === 'payée') { if (!FP.estPayee(a)) return false; }
+        else if (a.statut !== state.statut) return false;
+      }
       if (state.onlyPoints && !((Number(a.points) || 0) > 0)) return false;
       if (state.motif !== 'all' && a.motif !== state.motif) return false;
       if (state.motifCat !== 'all' && categorize(a.motif) !== state.motifCat) return false;
