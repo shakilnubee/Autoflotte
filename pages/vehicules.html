@@ -2133,7 +2133,7 @@
           <div class="flex justify-between"><span class="text-slate-600">TVS ${FP.TVS_ANNEE} détail</span><span class="font-medium text-right">${tvsDet.applicable ? (tvsDet.total != null ? `CO₂ ${FP.euro(tvsDet.co2)} + polluants ${FP.euro(tvsDet.polluant)}` : '<span class="text-amber-600">CO₂ manquant</span>') : '<span class="text-slate-400">' + (tvsDet.raison || 'Non soumis') + '</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Dernier CT</span><span class="font-medium" data-df="dateDernierCT" data-dt="date">${v.dateDernierCT ? FP.dateNum(v.dateDernierCT) : '<span class="text-slate-400">—</span>'}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Prochain anti-pollution${isUtilitaire ? ' <span style="color:var(--fp-accent);font-size:.68rem;font-weight:700">• concerné</span>' : ''}</span><span class="font-medium" data-df="antiPollution" data-dt="date">${v.antiPollution ? FP.dateNum(v.antiPollution) : '<span class="text-slate-400">—</span>'}</span></div>
-          ${isUtilitaire ? (() => { let ap = ''; try { ap = (FP.settings.get().antiPollDates || {})[v.immat] || ''; } catch (e) {} return `<div class="flex justify-between"><span class="text-slate-600">Dernier anti-pollution réalisé</span><span class="font-medium">${ap ? FP.dateNum(ap) : '<span class="text-slate-400">—</span>'}</span></div>`; })() : ''}
+          ${isUtilitaire ? (() => { let ap = ''; try { ap = (FP.settings.get().antiPollDates || {})[v.immat] || ''; } catch (e) {} return `<div class="flex justify-between"><span class="text-slate-600">Dernier anti-pollution réalisé</span><span class="font-medium cursor-pointer" data-antipol-dernier="1" style="border-bottom:1px dashed var(--fp-border)" title="Cliquer pour saisir la date du dernier contrôle — la prochaine échéance se calera +1 an">${ap ? FP.dateNum(ap) : '<span class="text-slate-400">— cliquer</span>'}</span></div>`; })() : ''}
           <div class="flex justify-between"><span class="text-slate-600">Dernière révision</span><span class="font-medium text-right">${(!v.derniereRevision && estNeuf) ? '<span class="text-emerald-600">Véhicule neuf — pas encore de révision</span>' : `<span data-df="derniereRevision" data-dt="date">${v.derniereRevision ? FP.dateNum(v.derniereRevision) : '<span class="text-slate-400">—</span>'}</span> · <span data-df="kmDernierReleve" data-dt="number" class="text-slate-500">${(v.kmDernierReleve != null && v.kmDernierReleve !== '') ? FP.num(v.kmDernierReleve) + ' km' : '—'}</span>`}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Révision préconisée</span><span class="font-medium">tous les ${FP.num(rev.intervalle.km)} km / ${rev.intervalle.mois} mois</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Prochaine révision (est.)</span><span class="font-medium" style="${revColor}">${revProchaine}${rev.niveau ? ' ⚠️' : ''}</span></div>${leaseHTML}
@@ -3355,6 +3355,37 @@
     if (!el) return;
     const v = data.vehicules.find(x => x.id === drawerVehId);
     if (v) startCellEdit(el, v, el.dataset.df, el.dataset.dt || 'text');
+  });
+  // « Dernier anti-pollution réalisé » : éditeur date maison (cette date vit dans les réglages, pas
+  // dans une colonne véhicule). En validant, la PROCHAINE échéance se cale +1 an (contrôle annuel).
+  $('drawer-body').addEventListener('click', (e) => {
+    const el = e.target.closest('[data-antipol-dernier]');
+    if (!el || el.querySelector('input')) return;
+    const v = data.vehicules.find(x => x.id === drawerVehId); if (!v) return;
+    let cur = ''; try { cur = (FP.settings.get().antiPollDates || {})[v.immat] || ''; } catch (e2) {}
+    el.innerHTML = `<input type="date" class="cell-edit" value="${cur}" style="border:1px solid var(--fp-accent);border-radius:6px;padding:.15rem .3rem;font-size:.85rem">`;
+    const inp = el.querySelector('input'); inp.focus();
+    let done = false;
+    const commit = (save) => {
+      if (done) return; done = true;
+      if (save) {
+        const val = inp.value || '';
+        const s = FP.settings.get(); s.antiPollDates = (s.antiPollDates && typeof s.antiPollDates === 'object') ? s.antiPollDates : {};
+        if (val) {
+          s.antiPollDates[v.immat] = val; FP.settings.save(s);
+          const d = new Date(val); if (!isNaN(d)) { d.setFullYear(d.getFullYear() + 1); FP.history.commit(); v.antiPollution = d.toISOString().slice(0, 10); persistVehFields(v, 'antiPollution'); }
+        } else { delete s.antiPollDates[v.immat]; FP.settings.save(s); }
+      }
+      renderTable(); renderKPIs(); if (drawerVehId && $('drawer').classList.contains('open')) openDrawer(drawerVehId);
+    };
+    inp.addEventListener('change', () => commit(true));
+    inp.addEventListener('blur', () => commit(true));
+    inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); commit(true); } else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); } });
+  });
+  // Formulaire « Modifier » : quand on saisit le dernier anti-pollution, la prochaine échéance se met à jour EN DIRECT.
+  if ($('f-antipol-dernier')) $('f-antipol-dernier').addEventListener('change', () => {
+    const val = $('f-antipol-dernier').value; if (!val) return;
+    const d = new Date(val); if (!isNaN(d)) { d.setFullYear(d.getFullYear() + 1); if ($('f-antipol')) $('f-antipol').value = d.toISOString().slice(0, 10); }
   });
   // Renommer la voiture (marque + modèle) en cliquant sur le titre
   $('drawer-title').addEventListener('click', async () => {
