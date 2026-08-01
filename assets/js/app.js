@@ -445,6 +445,25 @@ FP.primeVeh = (v) => {
 };
 // ⚠️ HELPER CANONIQUE — total annuel des primes d'assurance du parc POSSÉDÉ (exclut les vendus).
 FP.assuranceAnnuelle = (vehicules) => (vehicules || []).filter(v => !FP.estVendu(v)).reduce((s, v) => s + FP.primeVeh(v), 0);
+// ⚠️ HELPER CANONIQUE — loyer ANNUEL total des contrats Localease/Ayvens (LLD) enregistrés
+// (settings.localeaseContrats, synchronisé par société). Même calcul que la page Contrats (loyer courant
+// = offre + avenant, sinon loyer de base ; override loyer par plaque prioritaire) ×12. Sert à ce que le
+// leasing du Budget/écran corresponde à celui des Contrats (avant, le Budget ratait les LLD).
+FP.leasingLocaleaseAnnuel = function () {
+  try {
+    const list = FP.settings.get().localeaseContrats;
+    if (!Array.isArray(list)) return 0;
+    const ov = FP.getLeasingOverrides ? FP.getLeasingOverrides() : {};
+    const mens = list.reduce((s, c) => {
+      const ik = String(c.immat || '').toUpperCase();
+      const o = (ik && ov[ik]) ? ov[ik].loyer : null;
+      const base = (o != null && o !== '') ? Number(o) : c.loyerTTC;
+      const off = FP.leasingLoyerCourant ? FP.leasingLoyerCourant({ loyer: base, avenants: c.avenants }) : null;
+      return s + (off != null ? off : (Number(base) || 0));
+    }, 0);
+    return mens * 12;
+  } catch (e) { return 0; }
+};
 // ⚠️ HELPER CANONIQUE — coût RESTANT À CHARGE d'une facture de sinistre : 0 si remboursé/pris en charge
 // (sinistreStatut ∈ {rembourse, pec}) ou si c'est un simple devis (sinistreStage ou mots devis/proforma/
 // estimation), sinon le TTC. Même règle que la page Sinistres et le KPI Statistiques.
