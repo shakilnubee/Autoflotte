@@ -1726,6 +1726,7 @@ FP.notifCfg = () => {
     revAlerteKm:   num(n.revAlerteKm, 1000),   // alerte révision quand il reste ≤ X km
     revAlerteJours: num(n.revAlerteJours, 30), // alerte révision quand il reste ≤ X jours (avant l'échéance mois)
     releveKmJours: num(n.releveKmJours, 45),   // rappel « relevé km » : tous les X jours (défaut 45 = 1 mois et demi)
+    releveKmDebut: (typeof n.releveKmDebut === 'string' && n.releveKmDebut.trim()) ? n.releveKmDebut.trim() : '', // date d'ancrage du cycle (optionnelle)
   };
 };
 // Intervalle de révision : par défaut tous les 15 000 km OU tous les 12 mois (au premier atteint),
@@ -2237,18 +2238,42 @@ FP.buildAlertes = (data) => {
   });
 
   // --- Relevé kilométrique périodique (rappel tous les X jours, réglable dans Paramètres → Notifications) ---
-  // Base = date du DERNIER relevé (settings.kmMajDates, posée à chaque MAJ du km). Ignorable PAR véhicule.
+  // Deux modes :
+  //  • SANS date de début → base = date du DERNIER relevé de CHAQUE véhicule (settings.kmMajDates).
+  //  • AVEC date de début → cycle GLOBAL : échéances tous les X jours à partir de cette date ;
+  //    un véhicule dont le km a été mis à jour APRÈS la dernière échéance est considéré à jour.
+  // Dans les deux cas : ignorable PAR véhicule.
   {
-    const periodeJ = FP.notifCfg().releveKmJours || 45;
+    const nc = FP.notifCfg();
+    const periodeJ = nc.releveKmJours || 45;
+    const debut = (nc.releveKmDebut ? new Date(nc.releveKmDebut) : null);
+    const debutOk = debut && !isNaN(debut);
     const kmDates = (function () { try { return FP.settings.get().kmMajDates || {}; } catch (e) { return {}; } })();
+    // Dernière échéance globale passée (mode « date de début »)
+    let echeance = null, sinceEch = null;
+    if (debutOk) {
+      const dsStart = Math.floor((today - debut) / 86400000);
+      if (dsStart >= 0) {
+        const cycles = Math.floor(dsStart / periodeJ);
+        echeance = new Date(debut.getTime() + cycles * periodeJ * 86400000);
+        sinceEch = Math.floor((today - echeance) / 86400000);
+      }
+    }
     (data.vehicules || []).forEach(v => {
       if (horsFlotte(v)) return;
       const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
       const tgt = 'vehicules.html?veh=' + v.id;
       const mk = 'relevekm|' + v.id; // ignore PAR VÉHICULE
-      const last = kmDates[v.immat];
+      const last = kmDates[v.immat] ? new Date(kmDates[v.immat]) : null;
+      if (debutOk) {
+        if (!echeance) return;                       // cycle pas encore commencé
+        if (last && last >= echeance) return;        // relevé déjà fait après la dernière échéance
+        out.push({ niveau: sinceEch >= periodeJ * 0.5 ? 'warn' : 'info', categorie: 'Relevé km', message: `Relevé km à faire (échéance il y a ${sinceEch} j)`, detail: veh, sort: -sinceEch, target: tgt, muteKey: mk, vehLabel: veh });
+        return;
+      }
+      // Mode par véhicule (pas de date d'ancrage)
       if (!last) { out.push({ niveau: 'info', categorie: 'Relevé km', message: 'Relevé km jamais renseigné', detail: veh, sort: 1000, target: tgt, muteKey: mk, vehLabel: veh }); return; }
-      const since = Math.floor((today - new Date(last)) / 86400000);
+      const since = Math.floor((today - last) / 86400000);
       if (since >= periodeJ) {
         out.push({ niveau: since >= periodeJ * 1.5 ? 'warn' : 'info', categorie: 'Relevé km', message: `Relevé km à faire (dernier il y a ${since} j)`, detail: veh, sort: periodeJ - since, target: tgt, muteKey: mk, vehLabel: veh });
       }
