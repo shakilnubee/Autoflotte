@@ -2285,8 +2285,7 @@ FP.concerneAntiPollution = (v) => {
 //   { score, niveau:'bon'|'surveiller'|'critique', raisons:[...] }
 FP.santeVehicule = (v) => {
   if (!v) return null;
-  const st = (v.statut || 'actif').toString().toLowerCase().trim();
-  if (st && st !== 'actif') return null; // seulement les véhicules en service
+  if (FP.horsFlotte(v)) return null; // seulement les véhicules encore en flotte (tolérant casse/accents)
   let score = 100; const raisons = [];
   // Contrôle technique
   const jCT = (v.prochainCT && v.prochainCT !== '—' && !FP.ctIgnored(v)) ? FP.joursRestants(v.prochainCT) : null;
@@ -2442,7 +2441,7 @@ FP.buildAlertes = (data) => {
   try {
     const watchJ = (FP.settings.get().amendesJustifWatch) || [];
     if (watchJ.length) {
-      const sansJustif = (data.amendes || []).filter(a => watchJ.includes(a.id) && a.statut === 'payée' && !a.justifUrl);
+      const sansJustif = (data.amendes || []).filter(a => watchJ.includes(a.id) && FP.estPayee(a) && !a.justifUrl);
       if (sansJustif.length) {
         out.push({
           niveau: 'warn', categorie: 'Amendes',
@@ -2461,7 +2460,7 @@ FP.buildAlertes = (data) => {
   try {
     const maintenant = new Date();
     const risque = (data.amendes || [])
-      .filter(a => a && a.statut === 'à payer' && a.date && !isNaN(new Date(a.date)))
+      .filter(a => a && FP.estAPayer(a) && a.date && !isNaN(new Date(a.date)))
       .map(a => {
         const base = new Date(a.date);
         const isFps = /stationnement/i.test(a.motif || '');
@@ -2528,7 +2527,7 @@ FP.buildAlertes = (data) => {
 
   // --- Révisions constructeur ---
   (data.vehicules || []).forEach(v => {
-    if (v.statut && v.statut !== 'actif') return; // on ignore vendus / à vendre / hors service
+    if (FP.horsFlotte(v)) return; // on ignore vendus / à vendre / hors service
     const r = FP.revisionInfo(v);
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
     const tgt = 'vehicules.html?veh=' + v.id;
@@ -2563,7 +2562,7 @@ FP.buildAlertes = (data) => {
 
   // --- Dépassement kilométrique leasing BPCE ---
   (data.vehicules || []).forEach(v => {
-    if (v.statut && v.statut !== 'actif') return;
+    if (FP.horsFlotte(v)) return;
     const l = FP.leasingInfo(v);
     if (!l || !l.niveau) return;
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
@@ -2578,7 +2577,7 @@ FP.buildAlertes = (data) => {
 
   // --- Fin de contrat leasing BPCE approchant (par date de fin) ---
   (data.vehicules || []).forEach(v => {
-    if (v.statut && v.statut !== 'actif') return;
+    if (FP.horsFlotte(v)) return;
     const l = FP.leasingInfo(v);
     if (!l || !l.finContrat || isNaN(l.finContrat)) return;
     const diff = days(l.finContrat);

@@ -15,11 +15,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731x">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731y">
 <script>window.lucide={createIcons:function(){}};</script>
-<script defer src="../assets/js/lucide.min.js?v=20260731x"></script>
+<script defer src="../assets/js/lucide.min.js?v=20260731y"></script>
 <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731x">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731y">
 <style>
   body { background:#0B1220; color:#fff; overflow:hidden; }
   .ec-top { display:flex; align-items:center; justify-content:space-between; padding:18px 28px; }
@@ -76,10 +76,10 @@
 <div class="ec-grid" id="ec-grid"></div>
 <div class="ec-ticker"><i data-lucide="siren" class="w-6 h-6" style="color:#F59E0B;flex-shrink:0"></i><div id="ec-ticker-txt" class="text-lg font-semibold" style="min-width:0">—</div></div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731x"></script>
-<script src="../assets/js/supabase-client.js?v=20260731x"></script>
-<script src="../assets/js/data.js?v=20260731x"></script>
-<script src="../assets/js/app.js?v=20260731x"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731y"></script>
+<script src="../assets/js/supabase-client.js?v=20260731y"></script>
+<script src="../assets/js/data.js?v=20260731y"></script>
+<script src="../assets/js/app.js?v=20260731y"></script>
 <script>
   const $ = id => document.getElementById(id);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -96,7 +96,11 @@
     const facts = D.factures || [];
     // Coût du mois = coût d'EXPLOITATION (helper canonique) — même chiffre que le dashboard.
     const coutMois = FP.coutMois ? FP.coutMois(D, ym) : facts.filter(f => (f.date || '').slice(0, 7) === ym).reduce((s, f) => s + (+f.montantTTC || 0), 0);
-    const cout12 = facts.filter(f => (f.date || '').slice(0, 7) >= y12).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+    // Coûts 12 mois = somme du coût d'exploitation mensuel (même périmètre que la tuile « Coût du mois » :
+    // dédoublonné + exploit). Éviter la somme brute qui incluait achat/leasing/doublons.
+    const cout12 = FP.coutMois
+      ? (function () { let t = 0; const base = new Date(ym + '-01'); for (let i = 0; i < 12; i++) { const m = new Date(base.getFullYear(), base.getMonth() - i, 1); const s = m.getFullYear() + '-' + String(m.getMonth() + 1).padStart(2, '0'); t += FP.coutMois(D, s); } return t; })()
+      : facts.filter(f => (f.date || '').slice(0, 7) >= y12).reduce((s, f) => s + (+f.montantTTC || 0), 0);
     const alerts = FP.buildAlertes ? FP.buildAlertes(D) : [];
     const critiques = alerts.filter(a => a.niveau === 'danger' || a.niveau === 'warn').length;
     const ech = (FP.buildEcheances ? FP.buildEcheances(D) : []).filter(e => { const j = Math.ceil((new Date(e.date) - now) / 86400000); return j <= 90; });

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731x">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731y">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731x"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731y"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731x">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731y">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -280,10 +280,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731x"></script>
-<script src="../assets/js/supabase-client.js?v=20260731x"></script>
-<script src="../assets/js/data.js?v=20260731x"></script>
-<script src="../assets/js/app.js?v=20260731x"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731y"></script>
+<script src="../assets/js/supabase-client.js?v=20260731y"></script>
+<script src="../assets/js/data.js?v=20260731y"></script>
+<script src="../assets/js/app.js?v=20260731y"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -629,7 +629,7 @@
     const _nbOwned = (data.vehicules || []).filter(v => !FP.estVendu(v)).length || 1;
     const _assurRepli = (!_hasPerVehPrime && _primeFlotte > 0) ? (_primeFlotte / _nbOwned) : 0;
     tcoData = data.vehicules.map(v => {
-      const fv = fact.filter(f => f.vehiculeImmat === v.immat);
+      const fv = fact.filter(f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat)); // match plaque tolérant (tirets/espaces/OCR)
       // Leasing : le loyer fait foi via l'OFFRE (Contrats), les factures 'leasing' ne sont qu'une preuve.
       // Si l'offre a un loyer connu → on EXCLUT ses factures 'leasing' (sinon double compte) et on ajoute
       // le coût de l'offre : cumulé (leasingTotalVerse) en « toutes années », loyer courant×12 sur une année.
@@ -639,7 +639,7 @@
       const _leasing = _hasOffer ? ((annee === 'all') ? (FP.leasingTotalVerse(_leasC) || 0) : (_loyerMois * 12)) : 0;
       const factTotal = fv.filter(f => { const t = (f.type || '').toLowerCase(); if (_EXC_TCO.has(t)) return false; if (t === 'leasing' && _hasOffer) return false; return true; }).reduce((s, f) => s + (+f.montantTTC || 0), 0) + _leasing;
       const pr = findPrime(v.immat); const assurAn = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : (FP.estVendu(v) ? 0 : _assurRepli);
-      const tvsD = FP.tvsDetail(v); const tvsAn = (tvsD.applicable && tvsD.total != null) ? tvsD.total : 0;
+      const tvsD = FP.tvsDetail(v); const tvsAn = (!FP.estVendu(v) && tvsD.applicable && tvsD.total != null) ? tvsD.total : 0; // exclure les vendus (comme le KPI TVS)
       const achatF = fv.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
       // « Toutes années » = COÛT TOTAL DEPUIS L'ACHAT (Option A) : on CUMULE l'assurance et la TVS sur
       // l'ancienneté du véhicule (× nb d'années), pour rester homogène avec le leasing et les factures

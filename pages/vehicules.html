@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731x">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731y">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731x"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731y"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731x">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731y">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -768,14 +768,14 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731x"></script>
-<script src="../assets/js/supabase-client.js?v=20260731x"></script>
-<script src="../assets/js/data.js?v=20260731x"></script>
-<script src="../assets/js/fleet-docs.js?v=20260731x"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260731x"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731x"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731x"></script>
-<script src="../assets/js/app.js?v=20260731x"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731y"></script>
+<script src="../assets/js/supabase-client.js?v=20260731y"></script>
+<script src="../assets/js/data.js?v=20260731y"></script>
+<script src="../assets/js/fleet-docs.js?v=20260731y"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260731y"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731y"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731y"></script>
+<script src="../assets/js/app.js?v=20260731y"></script>
 <script>
   lucide.createIcons();
 
@@ -1899,39 +1899,30 @@
     // Calculs liés (data.entretiens/contrats peuvent être absents de FP_DATA → garde || [])
     const entretiens = (data.entretiens || []).filter(e => e.vehiculeId === v.id);
     const contrats   = (data.contrats   || []).filter(c => c.vehiculeId === v.id);
-    // Coût total annuel = somme RÉELLE des factures d'entretien/réparation 2026 du véhicule.
-    // Liste blanche stricte : on NE compte QUE l'entretien et la réparation
-    // (on exclut donc loyers leasing, malus/autre, achat, cession, sinistre, assurance…).
-    const COUT_TYPES = ['entretien', 'réparation', 'reparation'];
-    const factures2026 = (data.factures || []).filter(f =>
-      f.vehiculeImmat === v.immat
-      && (f.date || '').startsWith('2026')
-      && COUT_TYPES.includes((f.type || '').toLowerCase()));
-    // Sinistres 2026 NON remboursés → comptent dans le coût (reste à charge) ; remboursés = 0.
-    const sinStat = (FP.settings.get().sinistreStatut) || {};
-    const sinistres2026 = (data.factures || []).filter(f =>
-      f.vehiculeImmat === v.immat
-      && (f.date || '').startsWith('2026')
-      && (f.type || '').toLowerCase() === 'sinistre'
-      && sinStat[f.id] !== 'rembourse' && sinStat[f.id] !== 'pec');
-    const coutSinistres = sinistres2026.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
-    const coutTotal = factures2026.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0) + coutSinistres;
-    // Coût par année : entretien/réparation + sinistres non remboursés/non pris en charge
+    // Dépenses entretien/réparation + sinistres à charge de l'ANNÉE COURANTE (dynamique, plus de « 2026 » figé).
+    // Sources uniques : FP.estEntretien (type tolérant accent), FP.normImmat (match plaque tolérant tirets/espaces),
+    // FP.coutSinistre (0 si remboursé/pec/devis, sinon TTC).
+    const ANNEE = String(new Date().getFullYear());
+    const sameVeh = f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat);
+    const facturesAnnee = (data.factures || []).filter(f => sameVeh(f) && (f.date || '').startsWith(ANNEE) && FP.estEntretien(f));
+    const sinistresAnnee = (data.factures || []).filter(f => sameVeh(f) && (f.date || '').startsWith(ANNEE) && (f.type || '').toLowerCase() === 'sinistre');
+    const coutSinistres = sinistresAnnee.reduce((s, f) => s + FP.coutSinistre(f), 0);
+    const coutTotal = facturesAnnee.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0) + coutSinistres;
+    // Coût par année : entretien/réparation + sinistres à charge (même règles)
     const coutByYear = {};
     (data.factures || []).forEach(f => {
-      if (f.vehiculeImmat !== v.immat) return;
+      if (!sameVeh(f)) return;
       const y = (f.date || '').slice(0, 4); if (!/^\d{4}$/.test(y)) return;
-      const t = (f.type || '').toLowerCase();
       let amount = 0;
-      if (COUT_TYPES.includes(t)) amount = Number(f.montantTTC) || 0;
-      else if (t === 'sinistre' && sinStat[f.id] !== 'rembourse' && sinStat[f.id] !== 'pec') amount = Number(f.montantTTC) || 0;
+      if (FP.estEntretien(f)) amount = Number(f.montantTTC) || 0;
+      else if ((f.type || '').toLowerCase() === 'sinistre') amount = FP.coutSinistre(f);
       if (amount) coutByYear[y] = (coutByYear[y] || 0) + amount;
     });
     const coutYears = Object.keys(coutByYear).sort().reverse();
     const coutGrandTotal = coutYears.reduce((s, y) => s + coutByYear[y], 0);
     // Carnet d'entretien : toutes les factures entretien/réparation du véhicule (toutes années), récentes en premier
     const carnet = (data.factures || [])
-      .filter(f => f.vehiculeImmat === v.immat && COUT_TYPES.includes((f.type || '').toLowerCase()))
+      .filter(f => sameVeh(f) && FP.estEntretien(f))
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const carnetHTML = carnet.length ? `
       <div>
@@ -2686,10 +2677,12 @@
   // Bouton « Réinitialiser » de la barre de filtres (recherche + statut + catégorie).
   function resetVehFilters() {
     state.search = ''; state.statut = 'all'; state.categorie = 'all';
+    state.groupe = 'all';                    // revient à l'onglet « Tous »
+    state.sortKey = null; state.sortDir = 'asc'; // et annule le tri par colonne
     if ($('search')) $('search').value = '';
     if ($('filter-categorie')) $('filter-categorie').value = 'all';
     document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
-    renderTable();
+    renderTabBar(); renderTable();
   }
   if (FP.filterResetButton) FP.filterResetButton($('veh-filterbar'), { onReset: resetVehFilters });
 
@@ -3666,9 +3659,9 @@
     if (!v) return;
     const tvsDet = FP.tvsDetail(v);
     const rev = FP.revisionInfo(v);
-    const COUT_TYPES = ['entretien', 'réparation', 'reparation'];
-    const fAll = (data.factures || []).filter(f => f.vehiculeImmat === v.immat && COUT_TYPES.includes((f.type || '').toLowerCase()));
-    const cout2026 = fAll.filter(f => (f.date || '').startsWith('2026')).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    const _annPdf = String(new Date().getFullYear());
+    const fAll = (data.factures || []).filter(f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat) && FP.estEntretien(f));
+    const cout2026 = fAll.filter(f => (f.date || '').startsWith(_annPdf)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
     const carnet = fAll.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     const row = (k, val) => `<tr><td style="color:#555;padding:3px 12px 3px 0">${k}</td><td style="font-weight:600">${val}</td></tr>`;
@@ -3705,7 +3698,7 @@
           ${row('Dernière révision', (v.derniereRevision ? FP.dateNum(v.derniereRevision) : '—') + (v.kmDernierReleve ? ' · ' + FP.num(v.kmDernierReleve) + ' km' : ''))}
         </table></div>
       </div>
-      <h2>Coût d'entretien 2026</h2>
+      <h2>Coût d'entretien ${_annPdf}</h2>
       <div class="tot">${FP.euro(cout2026)}</div>
       <h2>Carnet d'entretien (${carnet.length})</h2>
       <table class="carnet">
