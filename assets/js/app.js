@@ -422,6 +422,43 @@ FP.coutFactureExploit = (f) => { const t = String((f && f.type) || '').toLowerCa
 FP.estUlys = (f) => { const n = s => String(s || '').toLowerCase(); return n(f && f.type) === 'ulys' || /\bulys\b/.test(n(f && f.fournisseur)); };
 FP.estTotalFleet = (f) => { if (FP.estUlys(f)) return false; const n = s => String(s || '').toLowerCase(); const t = n(f && f.type); if (t === 'carburant' || t === 'peage') return true; return /total\s*energies|totalenergies/.test(n(f && f.fournisseur)); };
 FP.estCarburantPeage = (f) => FP.estUlys(f) || FP.estTotalFleet(f);
+// ⚠️ HELPER CANONIQUE — parse un montant saisi/OCR : gère l'espace (dont insécable), le point ET la
+// virgule décimale. « 1 466,48 » / « 1 466.48 » / « 1466,48 » → 1466.48. À utiliser PARTOUT au lieu de
+// parseFloat(x.replace(',','.')) qui casse sur « 1 500 » (→ 1). Renvoie null si vide/non numérique.
+FP.parseMontant = (s) => { if (s == null || s === '') return null; const n = parseFloat(String(s).replace(/\s/g, '').replace(',', '.')); return isNaN(n) ? null : n; };
+// ⚠️ HELPER CANONIQUE — normalise une immatriculation pour la COMPARER (majuscules, retrait de tout ce
+// qui n'est pas alphanumérique : tirets, espaces, points). « AB-123-CD », « ab 123 cd », « AB123CD » →
+// « AB123CD ». À utiliser pour TOUT match facture↔véhicule / amende↔véhicule / document↔véhicule.
+FP.normImmat = (s) => String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+// ⚠️ HELPER CANONIQUE — prime d'assurance annuelle TTC d'un véhicule. La prime est stockée en OBJET
+// { ht, ttc } (settings.assurancePrimes[id]) — ne JAMAIS faire Number(prime) (→ NaN). Renvoie le TTC (nombre) ou 0.
+// La prime est keyée par IMMATRICULATION (comparaison normalisée, comme dans Contrats), PAS par id.
+FP.primeVeh = (v) => {
+  try {
+    const map = FP.settings.get().assurancePrimes || {};
+    const k = FP.normImmat(v && v.immat); if (!k) return 0;
+    let p = map[v.immat];
+    if (p == null) { for (const key in map) { if (FP.normImmat(key) === k) { p = map[key]; break; } } }
+    if (p == null) return 0;
+    return (typeof p === 'object') ? (Number(p.ttc) || 0) : (Number(p) || 0);
+  } catch (e) { return 0; }
+};
+// ⚠️ HELPER CANONIQUE — total annuel des primes d'assurance du parc POSSÉDÉ (exclut les vendus).
+FP.assuranceAnnuelle = (vehicules) => (vehicules || []).filter(v => !FP.estVendu(v)).reduce((s, v) => s + FP.primeVeh(v), 0);
+// ⚠️ HELPER CANONIQUE — coût RESTANT À CHARGE d'une facture de sinistre : 0 si remboursé/pris en charge
+// (sinistreStatut ∈ {rembourse, pec}) ou si c'est un simple devis (sinistreStage ou mots devis/proforma/
+// estimation), sinon le TTC. Même règle que la page Sinistres et le KPI Statistiques.
+FP.coutSinistre = (f) => {
+  try {
+    if (!f) return 0;
+    const st = ((FP.settings.get().sinistreStatut || {})[f.id] || '').toString().toLowerCase();
+    if (st === 'rembourse' || st === 'pec') return 0;
+    const stage = ((FP.settings.get().sinistreStage || {})[f.id] || '').toString().toLowerCase();
+    const isDevis = stage ? (stage === 'devis') : /\b(devis|proforma|estimation)\b/i.test(((f.description || '') + ' ' + (f.fournisseur || '')));
+    if (isDevis) return 0;
+    return Number(f.montantTTC) || 0;
+  } catch (e) { return Number(f && f.montantTTC) || 0; }
+};
 // ⚠️ HELPER CANONIQUE — dédoublonnage des factures par n° (comme Statistiques / rapport direction) :
 // deux lignes qui partagent le même numeroFacture ne sont comptées qu'une fois (évite de gonfler les
 // totaux). Les factures sans numéro sont toutes gardées. À utiliser partout où on somme des factures.
@@ -447,7 +484,10 @@ FP.kmActuel = (v) => Math.max(Number(v && v.km) || 0, Number(v && v.kmDernierRel
 // sentinelle inconnue). À utiliser partout (page Emprunts, dashboard, fiche véhicule) — sinon deux écrans
 // divergent sur « ce véhicule est-il sorti ? ».
 FP.EMP_RETOUR_INCONNU = '1900-01-01';
-FP.empEnCours = (e) => { const d = (e && e.dateRetour) ? String(e.dateRetour).slice(0, 10) : ''; return !d || d === FP.EMP_RETOUR_INCONNU; };
+// ⚠️ Sémantique alignée sur l'UI : une dateRetour renseignée = RENDU (y compris la sentinelle
+// « 1900-01-01 » = rendu à une date inconnue, via la case « je ne connais pas la date de retour »).
+// EN COURS = aucune dateRetour du tout. (Ne PAS traiter la sentinelle comme « en cours ».)
+FP.empEnCours = (e) => !(e && e.dateRetour && String(e.dateRetour).slice(0, 10));
 FP.empEnRetard = (e) => { if (!FP.empEnCours(e)) return false; const p = (e && e.dateRetourPrevue) ? String(e.dateRetourPrevue).slice(0, 10) : ''; if (!p) return false; return p < new Date().toISOString().slice(0, 10); };
 // ⚠️ SOURCE UNIQUE — recalcule la fiche véhicule à partir des factures RESTANTES (à appeler après la
 // SUPPRESSION d'une facture, symétrique de FP.applyFactureToVehicule). Évite les « dernière révision /
