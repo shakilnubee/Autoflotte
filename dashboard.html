@@ -1383,7 +1383,16 @@
               const isMaint = cat === 'entretien' || cat === 'reparation' || /pneu|vidange|entretien|r[eé]vision|frein|climatisation|distribution|filtre|amortisseur|courroie|plaquette|disque|embrayage/.test(maintTxt);
               const vUpd = {}; const bits = [];
               if (isMaint && r.date && r.date <= today && (!veh.derniereRevision || veh.derniereRevision === '—' || r.date > veh.derniereRevision)) { vUpd.derniereRevision = r.date; bits.push('révision'); }
-              if (isMaint && Number.isFinite(r.km) && r.km > 0 && (!veh.kmDernierReleve || r.km >= veh.kmDernierReleve)) { vUpd.kmDernierReleve = r.km; bits.push(FP.num(r.km) + ' km'); }
+              // KM : TOUTE facture liée à un véhicule et portant un relevé (peu importe le type), à la hausse uniquement.
+              if (Number.isFinite(r.km) && r.km > 0 && (!veh.kmDernierReleve || r.km >= veh.kmDernierReleve)) {
+                vUpd.kmDernierReleve = r.km; bits.push(FP.num(r.km) + ' km');
+                // Réinitialise le rappel « Relevé km » (date du relevé = date de la facture, sinon aujourd'hui).
+                try {
+                  const s = FP.settings.get(); s.kmMajDates = (s.kmMajDates && typeof s.kmMajDates === 'object') ? s.kmMajDates : {};
+                  const d = (r.date && /^\d{4}-\d{2}-\d{2}/.test(r.date)) ? r.date.slice(0, 10) : today;
+                  if (!s.kmMajDates[veh.immat] || d > s.kmMajDates[veh.immat]) { s.kmMajDates[veh.immat] = d; FP.settings.save(s); }
+                } catch (e) {}
+              }
               if (/pneu/i.test(maintTxt) && r.date && r.date <= today && (!veh.dateChangementPneus || r.date > veh.dateChangementPneus)) { vUpd.dateChangementPneus = r.date; bits.push('pneus'); }
               if (Object.keys(vUpd).length) { await FP.persist.update('vehicules', veh.id, vUpd); Object.assign(veh, vUpd); majMsg = ` · fiche maj (${bits.join(', ')})`; }
             }
