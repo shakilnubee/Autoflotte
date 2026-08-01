@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731x">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731y">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731x"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260731y"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731x">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260731y">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -369,12 +369,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731x"></script>
-<script src="../assets/js/supabase-client.js?v=20260731x"></script>
-<script src="../assets/js/data.js?v=20260731x"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731x"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731x"></script>
-<script src="../assets/js/app.js?v=20260731x"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260731y"></script>
+<script src="../assets/js/supabase-client.js?v=20260731y"></script>
+<script src="../assets/js/data.js?v=20260731y"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731y"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731y"></script>
+<script src="../assets/js/app.js?v=20260731y"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -786,15 +786,17 @@
     const grp = s.sinistreGroupes = s.sinistreGroupes || {};
     const stg = s.sinistreStage = s.sinistreStage || {};
     const st = s.sinistreStatut = s.sinistreStatut || {};
+    const assur = s.sinistreAssurance = s.sinistreAssurance || {}; // dossier (franchise/remboursé/resp/conducteur)
     const key = grp[id];
     delete grp[id]; delete stg[id];
     if (key) {
       const remaining = Object.keys(grp).filter(x => grp[x] === key);
       if (remaining.length <= 1) {
-        if (remaining.length === 1) { const last = remaining[0]; delete grp[last]; if (st[key]) st[last] = st[key]; }
+        if (remaining.length === 1) { const last = remaining[0]; delete grp[last]; if (st[key]) st[last] = st[key]; if (assur[key]) assur[last] = assur[key]; }
         if (st[key]) delete st[key];
+        if (assur[key]) delete assur[key]; // ⚠️ nettoyer le dossier assurance orphelin (fantôme dans les réglages)
       }
-    } else if (st[id]) { delete st[id]; }
+    } else if (st[id]) { delete st[id]; if (assur[id]) delete assur[id]; }
     FP.settings.save(s);
   }
 
@@ -822,7 +824,9 @@
       if (fld === 'franchise' || fld === 'rembourse') { val = (val === '' ? null : parseFloat(String(val).replace(',', '.'))); }
       if (val === '' || val == null) delete o[fld]; else o[fld] = val;
       if (!Object.keys(o).length) delete s.sinistreAssurance[key];
-      FP.settings.save(s); renderTimeline(); if (fld === 'resp') renderConducteursRisque(); return;
+      // ⚠️ refreshAll (pas seulement renderTimeline) : les KPI « Sinistres responsables » / « Reste à charge »
+      // vivent dans renderKPIs → sans ça, le haut de page reste périmé après un changement de dossier.
+      FP.settings.save(s); refreshAll(); return;
     }
     // Constat amiable déposé → l'IA lit et PROPOSE la responsabilité (l'utilisateur confirme).
     const cf = e.target.closest('.sin-constat-file');
