@@ -283,6 +283,12 @@
       </div>
     </div>
 
+    <!-- Tout sélectionner (les amendes filtrées) -->
+    <label id="am-select-all-wrap" class="flex items-center gap-2 text-sm text-slate-600 mb-2 select-none" style="width:max-content;cursor:pointer">
+      <input type="checkbox" id="am-select-all" style="width:15px;height:15px;accent-color:var(--fp-accent);cursor:pointer;margin:0" />
+      <span>Tout sélectionner <span class="text-slate-400" id="am-select-all-n"></span></span>
+    </label>
+
     <!-- Tableau amendes -->
     <div class="card overflow-hidden">
       <div class="scrollable">
@@ -790,6 +796,12 @@
     const n = state.selectedIds.size;
     bar.classList.toggle('active', n > 0);
     const c = $('am-bulk-count'); if (c) c.textContent = n;
+    // Synchro « Tout sélectionner » (coché / partiel / vide) sur les amendes FILTRÉES
+    const all = filtered(); const total = all.length;
+    const selInFilter = all.filter(a => state.selectedIds.has(a.id)).length;
+    const cbAll = $('am-select-all'); const nEl = $('am-select-all-n');
+    if (cbAll) { cbAll.checked = total > 0 && selInFilter === total; cbAll.indeterminate = selInFilter > 0 && selInFilter < total; }
+    if (nEl) nEl.textContent = total ? `(${total})` : '';
   }
 
   let drawerOrder = []; // ordre courant (filtré + trié) pour la navigation ‹ › dans le tiroir
@@ -2496,6 +2508,13 @@
     if (FP.toast) FP.toast(`🗑 ${n} amende(s) supprimée(s)`);
   });
   $('am-bulk-clear').addEventListener('click', () => { state.selectedIds.clear(); renderTable(); });
+  // Tout sélectionner / tout désélectionner (sur les amendes filtrées)
+  $('am-select-all').addEventListener('change', (e) => {
+    const all = filtered();
+    if (e.target.checked) all.forEach(a => state.selectedIds.add(a.id));
+    else all.forEach(a => state.selectedIds.delete(a.id));
+    renderTable();
+  });
 
   $('amendes-tbody').addEventListener('click', e => {
     if (e.target.closest('.cell-edit, select, .am-cb')) return;
