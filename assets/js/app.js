@@ -3047,6 +3047,78 @@ FP.emptyState = function (el, opts) {
   }, true);
 })();
 
+// ── Échap ferme le tiroir/la fenêtre ouverte — partout, un seul mécanisme ──
+// (Les dialogues stylés FP.dialog gèrent déjà leur propre Échap ; on les laisse passer.)
+(function () {
+  const vis = (el) => { if (!el) return false; const st = getComputedStyle(el); return st.display !== 'none' && st.visibility !== 'hidden' && el.getClientRects().length > 0; };
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (document.querySelector('.fp-dlg-backdrop, .pp-dlg-bk')) return;      // un dialogue stylé est au-dessus → il gère
+    const overlays = Array.from(document.querySelectorAll('.drawer.open, .fiche-ov.open, .modal.open, .modal-backdrop.open, .drawer-backdrop.open, [id="drawer"].open')).filter(vis);
+    if (!overlays.length) return;
+    const top = overlays[overlays.length - 1];
+    // 1) bouton de fermeture (id se terminant par "close", data-close, aria-label Fermer)
+    const btn = top.querySelector('[id$="close"], [id*="-close"], [data-close], [aria-label*="ermer"]')
+      || document.querySelector('#drawer.open [id$="close"], .fiche-ov.open [id$="close"], .modal.open [id$="close"]');
+    if (btn) { e.preventDefault(); btn.click(); return; }
+    // 2) repli : clic sur le fond (souvent câblé pour fermer) puis retrait de .open
+    e.preventDefault();
+    if (/backdrop/.test(top.className)) { top.click(); }
+    top.classList.remove('open');
+    const bd = document.querySelector('.modal-backdrop.open, .drawer-backdrop.open'); if (bd) bd.classList.remove('open');
+  }, true);
+})();
+
+// ── Copier en 1 clic (helper réutilisable, sans conflit avec les data-copy-val existants) ──
+// FP.copy(txt) → copie + toast « Copié ✓ ». Boutons : classe .fp-copy + data-fp-copy="valeur".
+FP.copy = function (txt) {
+  txt = String(txt == null ? '' : txt);
+  const ok = () => { if (FP.toast) FP.toast('Copié ✓'); };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(() => { try { window.prompt('Copier :', txt); } catch (e) {} });
+    else { window.prompt('Copier :', txt); }
+  } catch (e) { try { window.prompt('Copier :', txt); } catch (e2) {} }
+};
+document.addEventListener('click', function (e) {
+  const c = e.target.closest && e.target.closest('.fp-copy, [data-fp-copy]');
+  if (!c) return;
+  e.preventDefault(); e.stopPropagation();
+  FP.copy(c.getAttribute('data-fp-copy') || c.textContent || '');
+});
+
+// ── Bouton « Remonter en haut » — apparaît après avoir descendu, sur toutes les pages ──
+(function () {
+  if (typeof window === 'undefined') return;
+  const make = () => {
+    if (document.getElementById('fp-totop')) return;
+    const b = document.createElement('button');
+    b.id = 'fp-totop'; b.type = 'button'; b.setAttribute('aria-label', 'Remonter en haut'); b.title = 'Remonter en haut';
+    b.innerHTML = '<i data-lucide="arrow-up"></i>';
+    const mainEl = () => document.querySelector('main');
+    const curScroll = () => {
+      const se = document.scrollingElement || document.documentElement;
+      let t = Math.max(se.scrollTop || 0, window.scrollY || 0, document.body.scrollTop || 0);
+      const m = mainEl(); if (m && m.scrollTop > t) t = m.scrollTop;   // certaines mises en page scrollent <main>
+      return t;
+    };
+    b.addEventListener('click', () => {
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
+      const m = mainEl(); if (m) { try { m.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { m.scrollTop = 0; } }
+    });
+    document.body.appendChild(b);
+    try { if (window.lucide && lucide.createIcons) lucide.createIcons(); } catch (e) {}
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return; ticking = true;
+      requestAnimationFrame(() => { b.classList.toggle('on', curScroll() > 420); ticking = false; });
+    };
+    // capture:true → capte aussi le scroll d'un conteneur interne (main/body), pas seulement window
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+  };
+  if (document.body) make(); else document.addEventListener('DOMContentLoaded', make);
+})();
+
 // Avatar « initiales colorées » réutilisable (couleur stable dérivée du nom).
 FP.initiales = (name) => {
   const parts = String(name == null ? '' : name).trim().split(/\s+/).filter(Boolean);
