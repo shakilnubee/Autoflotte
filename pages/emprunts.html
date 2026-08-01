@@ -582,6 +582,12 @@
       heureEmprunt: $('f-heure').value || '',
       dateRetour: null, heureRetour: '', renduPar: '',
     };
+    // Conflit : le véhicule est-il DÉJÀ emprunté (non rendu) ? On avertit (non bloquant).
+    const enCours = cache.find(x => x.vehicule === immat && FP.empEnCours && FP.empEnCours(x));
+    if (enCours) {
+      const ok = await FP.confirm(`⚠️ ${immat} est déjà emprunté par ${enCours.emprunteur || 'quelqu\'un'} (non rendu depuis le ${enCours.dateEmprunt ? FP.dateNum(enCours.dateEmprunt) : '—'}).\n\nCréer quand même un 2ᵉ emprunt en cours ?`);
+      if (!ok) return;
+    }
     // Anti-doublon : même véhicule + même emprunteur + même date d'emprunt.
     if (FP.dupe && !(await FP.dupe.confirmAdd('emprunts', obj, cache))) return;
     cache.unshift(obj);
