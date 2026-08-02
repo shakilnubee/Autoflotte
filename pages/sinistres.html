@@ -667,7 +667,7 @@
             </div>
             <div class="mt-2 flex flex-wrap items-center gap-2">
               <button type="button" class="sin-courrier-btn" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" style="display:inline-flex;align-items:center;gap:.3rem;font-size:12px;font-weight:700;color:#fff;background:var(--fp-accent,#F97316);border:none;border-radius:8px;padding:5px 10px;cursor:pointer" title="Déposer le courrier de l'assureur : l'IA lit la responsabilité, le n° de dossier et la date, et remplit le dossier (tu confirmes la responsabilité)"><i data-lucide="mail-search" class="w-3.5 h-3.5"></i> Scanner le courrier de l'assureur (IA)</button>
-              <input type="file" class="sin-courrier-file hidden" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" accept="image/*,application/pdf,.pdf">
+              <input type="file" class="sin-courrier-file hidden" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" data-annee="${escapeHtml((s.date || '').slice(0, 4) || String(new Date().getFullYear()))}" accept="image/*,application/pdf,.pdf">
               <button type="button" class="sin-constat-btn" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" style="display:inline-flex;align-items:center;gap:.3rem;font-size:12px;font-weight:600;color:var(--fp-accent);background:#fff;border:1px solid var(--fp-border);border-radius:8px;padding:4px 8px;cursor:pointer" title="Déposer le constat amiable : l'IA lit qui est en tort et te le propose (tu confirmes)"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i> Lire le constat (IA)</button>
               <input type="file" class="sin-constat-file hidden" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" accept="image/*,application/pdf,.pdf">
               ${courrierLien}
@@ -920,9 +920,11 @@
     setSt('⏳ Lecture du courrier par l\'IA…');
     let res = null;
     try { res = await FP.scanIA(file, 'courrier', FP.courrierAssureurPrompt(immat)); } catch (_) {}
-    // On garde le courrier (best-effort) + on remplit n° dossier / date de réponse dans le dossier.
+    // On garde le courrier (best-effort), RANGÉ par plaque puis par année → « sinistres/<PLAQUE>/<ANNÉE> ».
     let url = '';
-    try { if (FP.uploadScan) url = await FP.uploadScan(file, 'sinistres') || ''; } catch (_) {}
+    const plaqueSlug = String(immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'sans-plaque';
+    const annee = (input.dataset.annee && /^\d{4}$/.test(input.dataset.annee)) ? input.dataset.annee : String(new Date().getFullYear());
+    try { if (FP.uploadScan) url = await FP.uploadScan(file, `sinistres/${plaqueSlug}/${annee}`) || ''; } catch (_) {}
     const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
     const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
     if (url) o.courrierUrl = url;
