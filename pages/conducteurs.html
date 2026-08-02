@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260801b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260801b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260802a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260801b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260802a">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -480,13 +480,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260801b"></script>
-<script src="../assets/js/supabase-client.js?v=20260801b"></script>
-<script src="../assets/js/data.js?v=20260801b"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260801b"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260801b"></script>
-<script src="../assets/js/fleet-docs.js?v=20260801b"></script>
-<script src="../assets/js/app.js?v=20260801b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260802a"></script>
+<script src="../assets/js/supabase-client.js?v=20260802a"></script>
+<script src="../assets/js/data.js?v=20260802a"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802a"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260802a"></script>
+<script src="../assets/js/app.js?v=20260802a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -925,17 +925,9 @@
     });
     return clusters.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   }
-  // Replie une liste de lignes à N (5 par défaut) et ajoute un bouton « Voir tout (X de plus) » /
-  // « Réduire ». Prend un TABLEAU de lignes HTML. Le déroulé est géré par le clic sur .clamp-toggle.
-  function clampList(rowsHtml, limit) {
-    const N = limit || 5;
-    const rows = (rowsHtml || []).filter(Boolean);
-    if (rows.length <= N) return rows.join('');
-    const more = rows.length - N;
-    return rows.slice(0, N).join('')
-      + `<div class="clamp-more" hidden>${rows.slice(N).join('')}</div>`
-      + `<button type="button" class="clamp-toggle" data-more="${more}" style="margin-top:.5rem;display:inline-flex;align-items:center;gap:5px;background:#F1F5F9;color:#334155;border:1px solid var(--fp-border,#E3E8F0);border-radius:8px;padding:.4rem .75rem;font-size:.8rem;font-weight:700;cursor:pointer">Voir tout (${more} de plus) ↓</button>`;
-  }
+  // Repli des longues listes → helper GLOBAL unique FP.clampList (app.js), déroulé géré par
+  // l'écouteur global. Repli de secours si FP indisponible.
+  const clampList = (rowsHtml, limit) => (window.FP && FP.clampList) ? FP.clampList(rowsHtml, limit) : (rowsHtml || []).filter(Boolean).join('');
   // Stats d'un conducteur
   function driverStats(d) {
     const nbAmendes = d.amendes.length;
@@ -1552,16 +1544,7 @@
 
   // Clics dans le drawer : voir / ajouter / supprimer un permis, ou supprimer le conducteur
   $('drawer-body').addEventListener('click', e => {
-    // Repli des longues listes : « Voir tout (X de plus) » ↔ « Réduire »
-    const clampBtn = e.target.closest('.clamp-toggle');
-    if (clampBtn) {
-      const more = clampBtn.previousElementSibling;
-      if (more && more.classList.contains('clamp-more')) {
-        if (more.hasAttribute('hidden')) { more.removeAttribute('hidden'); clampBtn.textContent = 'Réduire ↑'; }
-        else { more.setAttribute('hidden', ''); clampBtn.textContent = `Voir tout (${clampBtn.dataset.more} de plus) ↓`; }
-      }
-      return;
-    }
+    // (Le repli « Voir tout / Réduire » est géré globalement par FP.clampList dans app.js.)
     // Bascule de style de fiche (Cartes / Profil)
     const fsw = e.target.closest('[data-fstyle]');
     if (fsw) { localStorage.setItem('fp_cond_fiche_style', fsw.dataset.fstyle); if (currentDriverKey) openDrawer(currentDriverKey); return; }
