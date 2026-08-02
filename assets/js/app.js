@@ -6406,7 +6406,7 @@ FP.injectTour = (force) => {
 FP.featureTip = () => {
   try {
     if (!document.body || !/dashboard/i.test(location.pathname)) return;
-    if (document.getElementById('fp-tour') || document.getElementById('fp-tip')) return; // pas en même temps que le tour
+    if (document.getElementById('fp-tour') || document.getElementById('fp-nf')) return; // pas en même temps que le tour
     const TIPS = [
       { id: 'shortcuts', t: 'Personnalise tes raccourcis', m: 'Le bouton « ⚡ Raccourcis » en haut : choisis les actions à afficher (km, immobilisé, scan…).' },
       { id: 'favoris',   t: 'Épingle tes véhicules',       m: "Clique l'étoile ⭐ au bout d'une ligne véhicule pour la remonter en tête de liste." },
@@ -6419,16 +6419,16 @@ FP.featureTip = () => {
     ];
     const seen = (() => { try { return (FP.settings.get().featureTipsSeen) || []; } catch (e) { return []; } })();
     const tip = TIPS.find(t => !seen.includes(t.id)); if (!tip) return;
-    const el = document.createElement('div'); el.id = 'fp-tip'; el.className = 'fp-tip';
+    const el = document.createElement('div'); el.id = 'fp-nf'; el.className = 'fp-nf';
     const esc = FP.esc || (x => x);
-    el.innerHTML = `<div class="fp-tip-head"><span>💡 ${esc(tip.t)}</span><button class="fp-tip-x" title="Fermer">✕</button></div>`
-      + `<div class="fp-tip-body">${esc(tip.m)}</div>`
-      + `<div class="fp-tip-actions"><button type="button" class="fp-tip-never">Ne plus proposer</button><button type="button" class="fp-tip-ok">OK, compris</button></div>`;
+    el.innerHTML = `<div class="fp-nf-head"><span>💡 ${esc(tip.t)}</span><button class="fp-nf-x" title="Fermer">✕</button></div>`
+      + `<div class="fp-nf-body">${esc(tip.m)}</div>`
+      + `<div class="fp-nf-actions"><button type="button" class="fp-nf-never">Ne plus proposer</button><button type="button" class="fp-nf-ok">OK, compris</button></div>`;
     document.body.appendChild(el);
     const seeIt = (all) => { try { const s = FP.settings.get(); s.featureTipsSeen = all ? TIPS.map(t => t.id) : ((s.featureTipsSeen || []).concat([tip.id])); FP.settings.save(s); } catch (e) {} el.remove(); };
-    el.querySelector('.fp-tip-x').onclick = () => seeIt(false);
-    el.querySelector('.fp-tip-ok').onclick = () => seeIt(false);
-    el.querySelector('.fp-tip-never').onclick = () => seeIt(true);
+    el.querySelector('.fp-nf-x').onclick = () => seeIt(false);
+    el.querySelector('.fp-nf-ok').onclick = () => seeIt(false);
+    el.querySelector('.fp-nf-never').onclick = () => seeIt(true);
   } catch (e) {}
 };
 
