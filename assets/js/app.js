@@ -1438,6 +1438,29 @@ FP.norm = (s) => (s == null ? '' : s.toString()).toLowerCase().normalize('NFD').
 // Échappement HTML — À UTILISER pour toute donnée saisie/OCR injectée en innerHTML (anti-XSS).
 FP.esc = (s) => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// ---- REPLI DES LONGUES LISTES (helper GLOBAL) ----
+// Replie une liste de lignes à N (5 par défaut) et ajoute un bouton « Voir tout (X de plus) ↓ »
+// ↔ « Réduire ↑ ». Prend un TABLEAU de lignes HTML, renvoie le HTML prêt à injecter. Le déroulé
+// est géré par UN SEUL écouteur global (ci-dessous) → utilisable sur n'importe quelle page/fiche.
+FP.clampList = function (rowsHtml, limit) {
+  const N = limit || 5;
+  const rows = (rowsHtml || []).filter(Boolean);
+  if (rows.length <= N) return rows.join('');
+  const more = rows.length - N;
+  return rows.slice(0, N).join('')
+    + '<div class="clamp-more" hidden>' + rows.slice(N).join('') + '</div>'
+    + '<button type="button" class="clamp-toggle" data-more="' + more + '" style="margin-top:.5rem;display:inline-flex;align-items:center;gap:5px;background:#F1F5F9;color:#334155;border:1px solid var(--fp-border,#E3E8F0);border-radius:8px;padding:.4rem .75rem;font-size:.8rem;font-weight:700;cursor:pointer">Voir tout (' + more + ' de plus) ↓</button>';
+};
+// Écouteur unique (délégué au document) : bascule « Voir tout » / « Réduire » partout.
+document.addEventListener('click', function (e) {
+  const btn = e.target.closest && e.target.closest('.clamp-toggle');
+  if (!btn) return;
+  const more = btn.previousElementSibling;
+  if (!more || !more.classList.contains('clamp-more')) return;
+  if (more.hasAttribute('hidden')) { more.removeAttribute('hidden'); btn.textContent = 'Réduire ↑'; }
+  else { more.setAttribute('hidden', ''); btn.textContent = 'Voir tout (' + (btn.dataset.more || '') + ' de plus) ↓'; }
+});
+
 (function guardBackspace() {
   // Empêche la touche « Retour arrière » de déclencher « page précédente » du navigateur
   // (sinon : on efface du texte, le curseur sort du champ, un Backspace de plus = la page
