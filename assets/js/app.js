@@ -811,6 +811,83 @@ FP.filterResetButton = function (bar, opts) {
   } catch (e) { return null; }
 };
 
+// ⚠️ RÈGLE PROJET — sélection multi-lignes réutilisable (« bulk actions »).
+// FP.bulkSelect({ mount, tbody, getFilteredIds, onDelete, onRender, noun, nounPlural }) pose une
+// case « Tout sélectionner » (toujours visible) + une barre flottante « N sélectionné(s) · Supprimer
+// · Désélectionner » (apparaît dès qu'une ligne est cochée). La page appelle bulk.cbCell(id) pour
+// injecter la case en tête de sa 1re cellule, marque le <tr> avec la classe row-selected via
+// bulk.has(id), et appelle bulk.refresh() après CHAQUE render. `getFilteredIds()` = ids des lignes
+// actuellement affichées (pour « Tout sélectionner » + le compteur). `onDelete(ids)` = suppression
+// réelle côté page (les ids sont des CHAÎNES). Déjà branché : factures, entretiens, sinistres.
+// ⚠️ Tout nouveau tableau qui veut la sélection multiple DOIT passer par ce helper.
+FP.bulkSelect = function (opts) {
+  opts = opts || {};
+  const noun = opts.noun || 'élément';
+  const nounP = opts.nounPlural || (noun + 's');
+  const sel = new Set(); // ids en CHAÎNE
+  const S = (x) => String(x);
+  const host = (typeof opts.mount === 'string') ? document.getElementById(opts.mount) : opts.mount;
+  const api = {
+    selected: () => [...sel],
+    has: (id) => sel.has(S(id)),
+    cbCell(id) { return `<input type="checkbox" class="fp-bulk-cb" data-id="${S(id)}"${sel.has(S(id)) ? ' checked' : ''} title="Sélectionner" onclick="event.stopPropagation()">`; },
+    refresh() { update(); },
+    clear() { sel.clear(); rerender(); },
+  };
+  if (!host) { api.cbCell = () => ''; return api; }
+  const filteredIds = () => ((opts.getFilteredIds && opts.getFilteredIds()) || []).map(S);
+  const wrap = document.createElement('div');
+  wrap.className = 'fp-bulk-wrap';
+  wrap.innerHTML =
+    `<label class="fp-bulk-selall"><input type="checkbox" class="fp-bulk-all"> <span>Tout sélectionner <span class="fp-bulk-total"></span></span></label>`
+    + `<div class="fp-bulkbar"><span class="fp-bulkbar-count"><b class="fp-bulk-n">0</b> ${nounP} sélectionné(s)</span>`
+    + `<button type="button" class="fp-bulk-btn danger" data-bulk="delete"><i data-lucide="trash-2" style="width:14px;height:14px"></i> Supprimer</button>`
+    + `<button type="button" class="fp-bulk-btn" data-bulk="clear"><i data-lucide="x" style="width:14px;height:14px"></i> Désélectionner</button></div>`;
+  host.prepend(wrap);
+  const bar = wrap.querySelector('.fp-bulkbar');
+  const allCb = wrap.querySelector('.fp-bulk-all');
+  function rerender() { if (typeof opts.onRender === 'function') { try { opts.onRender(); } catch (e) {} } update(); }
+  function update() {
+    const ids = filteredIds();
+    wrap.querySelector('.fp-bulk-n').textContent = sel.size;
+    if (bar) bar.classList.toggle('active', sel.size > 0);
+    const inFilter = ids.filter(id => sel.has(id)).length;
+    allCb.checked = ids.length > 0 && inFilter === ids.length;
+    allCb.indeterminate = inFilter > 0 && inFilter < ids.length;
+    const tot = wrap.querySelector('.fp-bulk-total'); if (tot) tot.textContent = ids.length ? `(${ids.length})` : '';
+    if (window.lucide) lucide.createIcons();
+  }
+  allCb.addEventListener('change', (e) => {
+    const ids = filteredIds();
+    if (e.target.checked) ids.forEach(id => sel.add(id)); else ids.forEach(id => sel.delete(id));
+    rerender();
+  });
+  wrap.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-bulk]'); if (!b) return;
+    const act = b.dataset.bulk;
+    if (act === 'clear') { sel.clear(); rerender(); return; }
+    if (act === 'delete') {
+      const ids = [...sel]; if (!ids.length) return;
+      const label = ids.length > 1 ? nounP : noun;
+      const ok = FP.confirm ? await FP.confirm(`Supprimer ${ids.length} ${label} ? Action définitive.`) : window.confirm('Supprimer ?');
+      if (!ok) return;
+      try { if (typeof opts.onDelete === 'function') await opts.onDelete(ids); } catch (err) { console.error('[FP.bulkSelect.onDelete]', err); }
+      sel.clear(); rerender();
+      if (FP.toast) FP.toast(`🗑 ${ids.length} ${label} supprimé(s)`);
+    }
+  });
+  const tb = (typeof opts.tbody === 'string') ? document.getElementById(opts.tbody) : opts.tbody;
+  if (tb) tb.addEventListener('change', (e) => {
+    const cb = e.target.closest('.fp-bulk-cb'); if (!cb) return;
+    const id = S(cb.dataset.id);
+    if (cb.checked) sel.add(id); else sel.delete(id);
+    const tr = cb.closest('tr'); if (tr) tr.classList.toggle('row-selected', cb.checked);
+    update();
+  });
+  update();
+  return api;
+};
+
 // === Conducteurs — accès GLOBAL (liste / recherche / création depuis N'IMPORTE QUELLE page) ===
 // RÈGLE PROJET : partout où on désigne un conducteur, on doit pouvoir le CHOISIR dans la liste
 // existante OU en CRÉER un nouveau en tapant son nom (la plateforme demande alors ses infos).

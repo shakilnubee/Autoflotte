@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260802f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260802g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260802f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260802g">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -307,6 +307,9 @@
       </div>
     </div>
 
+    <!-- Sélection multiple (barre injectée par FP.bulkSelect) -->
+    <div id="ent-bulk-mount"></div>
+
     <!-- Table -->
     <div class="card overflow-hidden">
       <div class="scrollable">
@@ -326,10 +329,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260802f"></script>
-<script src="../assets/js/supabase-client.js?v=20260802f"></script>
-<script src="../assets/js/data.js?v=20260802f"></script>
-<script src="../assets/js/app.js?v=20260802f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260802g"></script>
+<script src="../assets/js/supabase-client.js?v=20260802g"></script>
+<script src="../assets/js/data.js?v=20260802g"></script>
+<script src="../assets/js/app.js?v=20260802g"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -338,6 +341,7 @@
 
   // Sourcés depuis factures avec type entretien ou réparation
   let interventions = (data.factures || []).filter(f => FP.estEntretien(f));
+  let entBulk = null; // barre de sélection multiple (instanciée plus bas)
   const state = { search: '', type: 'all', vehicule: 'all', annee: 'all', sortKey: 'date', sortDir: 'desc' };
   // Tri des interventions (par colonne choisie dans le menu « Tri »)
   function sortRowsEnt(arr) {
@@ -495,10 +499,13 @@
           const link = `<a href="${fileHref}" target="_blank" rel="noopener" class="ml-2 text-slate-400 hover:text-slate-700" title="Ouvrir le PDF"><i data-lucide="external-link" class="w-3.5 h-3.5 inline"></i></a>`;
           cellsArr[cellsArr.length - 1] = cellsArr[cellsArr.length - 1].replace(/<\/td>\s*$/, link + '</td>');
         }
-        return `<tr>${cellsArr.join('')}</tr>`;
+        // Sélection multiple : case en tête de la 1re cellule
+        if (entBulk && i.id != null && cellsArr.length) cellsArr[0] = cellsArr[0].replace(/^(<td[^>]*>)/, `$1${entBulk.cbCell(i.id)}`);
+        return `<tr class="${entBulk && entBulk.has(i.id) ? 'row-selected' : ''}" data-id="${i.id != null ? i.id : ''}">${cellsArr.join('')}</tr>`;
       }).join('');
     }
     $('result-count').textContent = `${rows.length} intervention${rows.length > 1 ? 's' : ''} sur ${interventions.length}`;
+    if (entBulk) entBulk.refresh();
     lucide.createIcons();
   }
 
@@ -649,6 +656,19 @@
       </div>`;
     }).join('');
   }
+
+  // Sélection multiple (supprimer plusieurs interventions = factures d'entretien/réparation)
+  if (FP.bulkSelect) entBulk = FP.bulkSelect({
+    mount: 'ent-bulk-mount', tbody: 'tbody', noun: 'intervention', nounPlural: 'interventions',
+    getFilteredIds: () => filtered().filter(f => f.id != null).map(f => f.id),
+    onDelete: async (ids) => {
+      const set = new Set(ids.map(String));
+      ids.forEach(id => { if (FP.persist && FP.persist.delete) FP.persist.delete('factures', id); });
+      if (Array.isArray(data.factures)) data.factures = data.factures.filter(f => !set.has(String(f.id)));
+      interventions = (data.factures || []).filter(f => FP.estEntretien(f));
+      renderKPIs(); renderCTList(); renderPodium(); renderTable(); renderCharts();
+    },
+  });
 
   renderKPIs(); renderCTList(); renderPodium(); renderTable(); renderCharts();
   { const sel = $('podium-year'); if (sel) sel.addEventListener('change', renderPodium); }

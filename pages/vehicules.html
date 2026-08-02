@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260802f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260802g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260802f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260802g">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -66,6 +66,9 @@
   /* La colonne case à cocher ne doit jamais être rognée (sinon la case disparaît) */
   .fp-table-resizable th.cb-col, .fp-table-resizable td.cb-col { overflow: visible; text-overflow: clip; }
   .row-cb, .all-cb { width: 16px; height: 16px; cursor: pointer; accent-color: var(--fp-accent); vertical-align: middle; }
+  /* Étoile favori pleine (véhicule épinglé) */
+  .icon-fav-on { fill: currentColor; }
+  #vehicules-tbody tr.is-fav td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
   /* Modale choix des colonnes de la fiche */
   .fiche-ov { display: none; position: fixed; inset: 0; z-index: 60; background: rgba(15,23,42,.45); align-items: center; justify-content: center; padding: 20px; }
   .fiche-ov.open { display: flex; }
@@ -771,14 +774,14 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260802f"></script>
-<script src="../assets/js/supabase-client.js?v=20260802f"></script>
-<script src="../assets/js/data.js?v=20260802f"></script>
-<script src="../assets/js/fleet-docs.js?v=20260802f"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260802f"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802f"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802f"></script>
-<script src="../assets/js/app.js?v=20260802f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260802g"></script>
+<script src="../assets/js/supabase-client.js?v=20260802g"></script>
+<script src="../assets/js/data.js?v=20260802g"></script>
+<script src="../assets/js/fleet-docs.js?v=20260802g"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260802g"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802g"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802g"></script>
+<script src="../assets/js/app.js?v=20260802g"></script>
 <script>
   lucide.createIcons();
 
@@ -843,6 +846,20 @@
 
   // ---------- Helpers locaux ----------
   const $ = (id) => document.getElementById(id);
+
+  // ====== Favoris / véhicules épinglés (⭐, par société, local) ======
+  // Les épinglés remontent en tête de liste, sur toutes les vues. Stockage local
+  // par société (comme les autres préférences d'affichage) — propre à chaque poste.
+  const FAV_KEY = 'fp_veh_favoris_' + (function () { try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } })();
+  function favGet() { try { const a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
+  function favSave(set) { try { localStorage.setItem(FAV_KEY, JSON.stringify([...set])); } catch (e) {} }
+  function isFav(id) { return favGet().has(id); }
+  function toggleFav(id) { const s = favGet(); if (s.has(id)) s.delete(id); else s.add(id); favSave(s); }
+  // Tri stable « favoris d'abord » : conserve l'ordre relatif choisi à l'intérieur de chaque groupe.
+  function pinFavFirst(list) {
+    const favs = favGet(); if (!favs.size) return list;
+    const a = [], b = []; list.forEach(v => (favs.has(v.id) ? a : b).push(v)); return a.concat(b);
+  }
 
   // ====== Documents véhicule (liens, persistés dans Supabase ; cache mémoire) ======
   const DOCS_KEY = 'fp_veh_documents'; // fallback local si Supabase indisponible
@@ -1530,7 +1547,7 @@
         };
         filteredList.sort((a, b) => { const va = valOf(a), vb = valOf(b); return va === vb ? 0 : (va - vb) * dir; });
       }
-      return filteredList;
+      return pinFavFirst(filteredList);
     }
     // Application de l'ordre custom utilisateur si défini (drag-and-drop des lignes)
     const customOrder = FP.settings.get().vehiculesRowOrder || [];
@@ -1542,7 +1559,7 @@
         const bi = idx[b.id] ?? 1e9;
         return ai - bi;
       });
-      return filteredList;
+      return pinFavFirst(filteredList);
     }
     // Tri par défaut : regroupement par groupe (dans l'ordre des groupes de la sidebar),
     // puis par id à l'intérieur de chaque groupe (ordre stable).
@@ -1556,7 +1573,7 @@
     };
     filteredList.sort((a, b) =>
       (groupRank(a) - groupRank(b)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    return filteredList;
+    return pinFavFirst(filteredList);
   }
 
   // ---------- Rendu tableau ----------
@@ -1577,10 +1594,14 @@
           if (!def) return '';
           return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''} data-col="${k}">${def.render(v)}</td>`;
         }).join('');
-        return `<tr class="cursor-pointer${state.selectedIds.has(v.id) ? ' row-selected' : ''}" data-id="${v.id}">
+        const fav = isFav(v.id);
+        return `<tr class="cursor-pointer${state.selectedIds.has(v.id) ? ' row-selected' : ''}${fav ? ' is-fav' : ''}" data-id="${v.id}">
           <td class="cb-col"><span class="row-drag-handle" draggable="true" title="Glisser pour réorganiser">⋮⋮</span><input type="checkbox" class="row-cb" data-id="${v.id}" ${state.selectedIds.has(v.id) ? 'checked' : ''} /></td>
           ${cells}
           <td class="text-right whitespace-nowrap">
+            <button aria-label="${fav ? 'Retirer des favoris' : 'Épingler en favori'}" class="p-1.5 hover:bg-slate-100 rounded ${fav ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'}" data-action="fav" data-id="${v.id}" title="${fav ? 'Retirer des favoris' : 'Épingler en favori'}">
+              <i data-lucide="star" class="w-4 h-4${fav ? ' icon-fav-on' : ''}"></i>
+            </button>
             <button aria-label="Copier l'immatriculation" class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700" data-action="copy" data-immat="${v.immat || ''}" title="Copier l'immatriculation">
               <i data-lucide="copy" class="w-4 h-4"></i>
             </button>
@@ -1940,6 +1961,20 @@
     });
     const coutYears = Object.keys(coutByYear).sort().reverse();
     const coutGrandTotal = coutYears.reduce((s, y) => s + coutByYear[y], 0);
+    // Coût au km (indicateur flotte) : TOUS les frais d'exploitation cumulés (carburant, péages,
+    // entretien, réparations, pneus…) dédoublonnés — même définition que le « coût du mois » du
+    // tableau de bord (FP.dedupeFactures + FP.coutFactureExploit) — divisés par le km au compteur
+    // (source unique FP.kmActuel). Hors leasing/achat/cession/sinistre.
+    const coutExploitTotal = FP.dedupeFactures((data.factures || []).filter(f => sameVeh(f) && FP.coutFactureExploit(f)))
+      .reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    const kmCompteur = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
+    const coutKm = (kmCompteur > 0 && coutExploitTotal > 0) ? (coutExploitTotal / kmCompteur) : null;
+    const coutKmHTML = coutKm != null ? `
+        <div class="flex justify-between items-baseline mt-2 pt-2 border-t border-slate-100">
+          <span class="text-slate-600 text-sm" title="Tous frais d'exploitation cumulés (carburant, péages, entretien, réparations…) ÷ kilométrage au compteur">Coût au km <span class="text-xs text-slate-400">· exploitation ÷ compteur</span></span>
+          <span class="font-bold" style="color:var(--fp-primary)">${coutKm.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} €/km</span>
+        </div>
+        <div class="text-xs text-slate-400 mt-1">${FP.euro(coutExploitTotal)} de frais d'exploitation ÷ ${FP.num(kmCompteur)} km</div>` : '';
     // Carnet d'entretien : toutes les factures entretien/réparation du véhicule (toutes années), récentes en premier
     const carnet = (data.factures || [])
       .filter(f => sameVeh(f) && FP.estEntretien(f))
@@ -2014,8 +2049,14 @@
     const _cc = (_st.vehCarteCarb || {})[v.id] || '', _fc = (_st.vehFournCarb || {})[v.id] || '', _bt = (_st.vehBadge || {})[v.id] || '';
     const _notes = ((_st.vehNotes || {})[v.id]) || [];
     const _inp = 'width:160px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
+    const _noteMeta = (n) => {
+      const d = FP.dateNum ? FP.dateNum((n.ts || '').slice(0, 10)) : (n.ts || '').slice(0, 10);
+      let h = ''; try { const t = new Date(n.ts); if (!isNaN(t)) h = ' à ' + t.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); } catch (e) {}
+      const who = (n.by && String(n.by).trim()) ? ` · ${escapeHtml(n.by)}` : '';
+      return `${d}${h}${who}`;
+    };
     const notesListHTML = _notes.length
-      ? FP.clampList(_notes.map((n, idx) => `<div class="flex justify-between items-start gap-2 py-1.5 border-b border-slate-100"><div><div class="text-xs text-slate-400">${FP.dateNum ? FP.dateNum((n.ts || '').slice(0, 10)) : (n.ts || '').slice(0, 10)}</div><div class="text-sm text-slate-700">${escapeHtml(n.text || '')}</div></div><button class="p-1 text-slate-300 hover:text-red-600" data-note-del="${idx}" title="Supprimer">✕</button></div>`))
+      ? FP.clampList(_notes.map((n, idx) => `<div class="flex justify-between items-start gap-2 py-1.5 border-b border-slate-100"><div><div class="text-xs text-slate-400">${_noteMeta(n)}</div><div class="text-sm text-slate-700">${escapeHtml(n.text || '')}</div></div><button class="p-1 text-slate-300 hover:text-red-600" data-note-del="${idx}" title="Supprimer">✕</button></div>`))
       : '<p class="text-xs text-slate-400">Aucune note pour ce véhicule.</p>';
     const infoNotesHTML = `
       <div class="fp-panel">
@@ -2077,6 +2118,7 @@
         <div class="mt-2 space-y-1">
           ${coutYears.length ? coutYears.map(y => `<div class="flex justify-between text-sm"><span class="text-slate-600">${y}</span><span class="font-semibold">${FP.euro(coutByYear[y])}</span></div>`).join('') : '<div class="text-xs text-slate-500">Aucune dépense enregistrée pour ce véhicule.</div>'}
         </div>
+        ${coutKmHTML}
         ${(() => {
           const budget = Number((FP.settings.get().budgets || {})[v.id]);
           const hasB = Number.isFinite(budget) && budget > 0;
@@ -3194,6 +3236,10 @@
         const im = (v && v.immat) || actBtn.dataset.immat || '';
         try { if (navigator.clipboard) navigator.clipboard.writeText(im); } catch (_) {}
         if (FP.toast) FP.toast('✓ Immatriculation copiée');
+      } else if (act === 'fav') {
+        toggleFav(aid);
+        if (FP.toast) FP.toast(isFav(aid) ? '⭐ Épinglé en favori' : 'Retiré des favoris');
+        renderTable();
       } else if (act === 'open') {
         openDrawer(actBtn.dataset.id || (e.target.closest('tr[data-id]') || {}).dataset?.id);
       }
@@ -3481,16 +3527,23 @@
     if (drawerVehId) openDrawer(drawerVehId); // rafraîchit le total
   });
   // Notes / journal par véhicule (ajout + suppression)
+  function addVehNote(id) {
+    const inp = document.getElementById('veh-note-input');
+    const text = ((inp && inp.value) || '').trim(); if (!text || !id) return;
+    const s = FP.settings.get(); s.vehNotes = s.vehNotes || {};
+    // Auteur de la note : prénom/nom du profil, sinon le début de l'e-mail, sinon le rôle.
+    let by = '';
+    try { const p = FP.profile || {}; by = (p.nom || p.name || p.prenom || (FP.userEmail ? String(FP.userEmail).split('@')[0] : '') || (FP.roleLabel ? FP.roleLabel() : '')).toString().trim(); } catch (e) {}
+    s.vehNotes[id] = (s.vehNotes[id] || []).concat([{ ts: new Date().toISOString(), text, by }]);
+    FP.settings.save(s); if (drawerVehId) openDrawer(drawerVehId);
+  }
+  $('drawer-body').addEventListener('keydown', (e) => {
+    const inp = e.target.closest('#veh-note-input');
+    if (inp && e.key === 'Enter') { e.preventDefault(); addVehNote(inp.dataset.id); }
+  });
   $('drawer-body').addEventListener('click', (e) => {
     const add = e.target.closest('#veh-note-add');
-    if (add) {
-      const inp = document.getElementById('veh-note-input'); const id = add.dataset.id;
-      const text = ((inp && inp.value) || '').trim(); if (!text || !id) return;
-      const s = FP.settings.get(); s.vehNotes = s.vehNotes || {};
-      s.vehNotes[id] = (s.vehNotes[id] || []).concat([{ ts: new Date().toISOString(), text }]);
-      FP.settings.save(s); if (drawerVehId) openDrawer(drawerVehId);
-      return;
-    }
+    if (add) { addVehNote(add.dataset.id); return; }
     const del = e.target.closest('[data-note-del]');
     if (del && drawerVehId) {
       const idx = parseInt(del.dataset.noteDel, 10);
