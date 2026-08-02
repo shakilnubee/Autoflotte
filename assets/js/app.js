@@ -1253,8 +1253,17 @@ FP.societeProfil = () => {
       const close = () => { sb.classList.remove('fp-open'); bd.classList.remove('fp-open'); };
       bar.querySelector('.fp-burger').addEventListener('click', open);
       bd.addEventListener('click', close);
-      // clic sur un lien du menu ou en dehors → on referme
-      sb.addEventListener('click', (e) => { if (e.target.closest('a[href]')) close(); });
+      // clic sur un VRAI lien de navigation → on referme le tiroir.
+      // ⚠️ Exception : les liens internes (href="#") et les bascules de sous-menu
+      // (ex. l'entête « JIS » qui déplie ses sous-onglets) ne doivent PAS fermer le
+      // tiroir — sinon cliquer JIS referme tout le menu au lieu de l'ouvrir.
+      sb.addEventListener('click', (e) => {
+        const a = e.target.closest('a[href]');
+        if (!a) return;
+        const href = a.getAttribute('href') || '';
+        if (href === '#' || href.charAt(0) === '#' || a.classList.contains('fp-jis-toggle')) return;
+        close();
+      });
       addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
       if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
     } catch (e) {}
