@@ -478,6 +478,27 @@ FP.coutSinistre = (f) => {
     return Number(f.montantTTC) || 0;
   } catch (e) { return Number(f && f.montantTTC) || 0; }
 };
+// RESTE À CHARGE réel des sinistres (ce que la société paie vraiment, après remboursement assureur).
+// Le remboursement étant saisi PAR INCIDENT (settings.sinistreAssurance[clé].rembourse) et non par
+// facture, on REGROUPE d'abord par incident (settings.sinistreGroupes[id] || id), on somme le coût
+// (FP.coutSinistre → devis exclus, sinistre 100 % pris en charge = 0), puis on soustrait le remboursé.
+// Source unique pour toutes les vues « coût réel » (Coût d'usage, coût/km, TCO).
+FP.resteChargeSinistre = function (factures) {
+  try {
+    const s = FP.settings.get();
+    const grp = s.sinistreGroupes || {}, doss = s.sinistreAssurance || {};
+    const gk = id => grp[id] || id;
+    const byInc = {};
+    (factures || []).forEach(f => {
+      if (!f || (f.type || '').toLowerCase() !== 'sinistre') return;
+      const k = gk(f.id);
+      byInc[k] = (byInc[k] || 0) + (FP.coutSinistre ? FP.coutSinistre(f) : (Number(f.montantTTC) || 0));
+    });
+    let total = 0;
+    Object.keys(byInc).forEach(k => { total += Math.max(0, byInc[k] - (Number((doss[k] || {}).rembourse) || 0)); });
+    return total;
+  } catch (e) { return (factures || []).filter(f => f && (f.type || '').toLowerCase() === 'sinistre').reduce((a, f) => a + (Number(f.montantTTC) || 0), 0); }
+};
 // ⚠️ HELPER CANONIQUE — dédoublonnage des factures par n° (comme Statistiques / rapport direction) :
 // deux lignes qui partagent le même numeroFacture ne sont comptées qu'une fois (évite de gonfler les
 // totaux). Les factures sans numéro sont toutes gardées. À utiliser partout où on somme des factures.
