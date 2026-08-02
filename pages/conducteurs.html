@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731z">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260801b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731z"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260801b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731z">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260801b">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -480,13 +480,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731z"></script>
-<script src="../assets/js/supabase-client.js?v=20260731z"></script>
-<script src="../assets/js/data.js?v=20260731z"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731z"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731z"></script>
-<script src="../assets/js/fleet-docs.js?v=20260731z"></script>
-<script src="../assets/js/app.js?v=20260731z"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260801b"></script>
+<script src="../assets/js/supabase-client.js?v=20260801b"></script>
+<script src="../assets/js/data.js?v=20260801b"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260801b"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260801b"></script>
+<script src="../assets/js/fleet-docs.js?v=20260801b"></script>
+<script src="../assets/js/app.js?v=20260801b"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -685,7 +685,10 @@
     const builtinKey = permisKeyOf(d);
     const manual = getManualPermis()[key];
     const permisMasque = (FP.settings.get().permisMasque) || {};
-    const builtin = (window.FP_DOCS && FP_DOCS.permis && !permisMasque[key]) ? FP_DOCS.permis[builtinKey] : null;
+    const builtinAvail = (window.FP_DOCS && FP_DOCS.permis) ? FP_DOCS.permis[builtinKey] : null;
+    const builtin = (builtinAvail && !permisMasque[key]) ? builtinAvail : null;
+    // Permis intégré présent mais MASQUÉ (et pas de permis manuel) → on propose de le réafficher.
+    const builtinHidden = !!builtinAvail && !!permisMasque[key] && !manual;
     const eff = manual || builtin;
     let body;
     if (eff) {
@@ -700,6 +703,11 @@
         ${action}
         ${eff.url ? `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" id="permis-reread" data-url="${escapeHtml(eff.url)}" data-key="${escapeHtml(key)}" title="Relire le scan en haute qualité"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i> Relire</button>` : ''}
         <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-permis-del="${escapeHtml(key)}" data-permis-builtin="${manual ? '0' : '1'}" title="Supprimer ce permis"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+      </div>`;
+    } else if (builtinHidden) {
+      body = `<div class="flex items-center justify-between gap-2 py-1 text-sm" style="background:#F8FAFC;border:1px solid var(--fp-border,#E3E8F0);border-radius:8px;padding:6px 10px">
+        <span class="text-slate-500 flex items-center gap-2"><i data-lucide="eye-off" class="w-4 h-4 text-slate-400"></i> Permis intégré masqué</span>
+        <button type="button" class="text-xs font-semibold" data-permis-unhide="${escapeHtml(key)}" style="color:var(--fp-accent,#F97316);background:none;border:none;cursor:pointer;white-space:nowrap">↺ Réafficher</button>
       </div>`;
     } else {
       body = '<p class="text-sm text-slate-500">Aucun permis pour ce conducteur.</p>';
@@ -1017,8 +1025,53 @@
     $('view-list')?.classList.toggle('active', state.view === 'list');
     $('view-groups')?.classList.toggle('active', state.view === 'groups');
     $('result-count').textContent = `${filtered.length} conducteur${filtered.length > 1 ? 's' : ''} sur ${drivers.length}`;
+    renderArchived();
     if (window.lucide) lucide.createIcons();
     renderBulkBar();
+  }
+
+  // ---------- Conducteurs ARCHIVÉS (sortis des effectifs) ----------
+  // Ils restent MASQUÉS de la liste, mais on peut les CONSULTER et en RÉINTÉGRER un seul (au choix),
+  // sans avoir à tout réafficher. Même logique que les alertes masquées / la checklist « À compléter ».
+  function renderArchived() {
+    let box = document.getElementById('cond-archived');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'cond-archived';
+      box.className = 'mt-3';
+      box.style.maxWidth = '840px';
+      const rc = $('result-count');
+      if (rc && rc.parentNode) rc.parentNode.insertBefore(box, rc.nextSibling);
+      else document.querySelector('main')?.appendChild(box);
+      box.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-reintegrer]');
+        if (btn) { e.preventDefault(); reintegrerConducteur(btn.dataset.reintegrer); }
+      });
+    }
+    const arch = (condCache || []).filter(r => r && r.masque && r.key)
+      .map(r => ({ key: r.key, name: r.name || r.key }))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    if (!arch.length) { box.innerHTML = ''; return; }
+    box.innerHTML = `<details>
+      <summary class="cursor-pointer text-sm font-semibold text-slate-500 flex items-center gap-2" style="user-select:none"><i data-lucide="user-x" class="w-4 h-4 text-slate-400"></i> ${arch.length} conducteur(s) archivé(s) — sortis des effectifs <span class="text-xs font-normal text-slate-400">(cliquer pour gérer)</span></summary>
+      <div class="mt-2 space-y-1">
+        ${arch.map(a => `<div class="flex items-center justify-between gap-3" style="background:#F8FAFC;border:1px solid var(--fp-border,#E3E8F0);border-radius:8px;padding:6px 10px">
+          <span class="text-sm text-slate-600" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(a.name)}</span>
+          <button type="button" data-reintegrer="${escapeHtml(a.key)}" class="text-xs font-semibold" style="color:var(--fp-accent,#F97316);background:none;border:none;cursor:pointer;white-space:nowrap">↺ Réintégrer</button>
+        </div>`).join('')}
+      </div>
+    </details>`;
+  }
+  async function reintegrerConducteur(key) {
+    if (!key) return;
+    const row = condRow(key);
+    const nom = (row && row.name) || key;
+    if (!(await FP.confirm(`Réintégrer « ${nom} » dans la liste des conducteurs ?\n\n(La fiche réapparaît. Ses données perso avaient été effacées à la sortie des effectifs — tu pourras les re-saisir.)`))) return;
+    upsertCond(key, { masque: false, manuel: true });
+    // Retire la date de sortie (l'archivage est levé)
+    try { const s = FP.settings.get(); if (s.condSortie && s.condSortie[key]) { delete s.condSortie[key]; FP.settings.save(s); } } catch (e) {}
+    drivers = buildDrivers(); renderKPIs(); renderGrid();
+    if (FP.toast) FP.toast('✓ ' + nom + ' réintégré');
   }
   function setView(v) {
     state.view = v;
@@ -1529,6 +1582,15 @@
     // Relire un scan déjà enregistré (haute qualité + binarisation pour effacer la rosette)
     const rr = e.target.closest('#permis-reread');
     if (rr) { rereadPermis(rr.dataset.url, rr.dataset.key); return; }
+
+    // ↺ Réafficher un permis intégré précédemment masqué
+    const unhidePermis = e.target.closest('[data-permis-unhide]');
+    if (unhidePermis) {
+      const s = FP.settings.get();
+      if (s.permisMasque && s.permisMasque[unhidePermis.dataset.permisUnhide]) { s.permisMasque = { ...s.permisMasque }; delete s.permisMasque[unhidePermis.dataset.permisUnhide]; FP.settings.save(s); }
+      openDrawer(currentDriverKey);
+      return;
+    }
 
     const delPermis = e.target.closest('[data-permis-del]');
     if (delPermis) {
@@ -2289,9 +2351,9 @@
       { key: 'tel',   label: 'Téléphone' },
       { key: 'email', label: 'Email' },
       { key: 'note',  label: 'Note' },
-      { key: 'vehicules',  label: 'Véhicules' },   // lecture seule (dérivé)
-      { key: 'nbAmendes',  label: 'Nb amendes' },  // lecture seule
-      { key: 'points',     label: 'Points retirés' }, // lecture seule
+      { key: 'vehicules',  label: 'Véhicules', readonly: true },   // lecture seule (dérivé) — export only
+      { key: 'nbAmendes',  label: 'Nb amendes', readonly: true },  // lecture seule
+      { key: 'points',     label: 'Points retirés', readonly: true }, // lecture seule
     ],
     getRows: () => drivers.map(d => {
       const r = condRow(d.key) || {};

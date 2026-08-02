@@ -1385,8 +1385,14 @@ FP.darkMode = {
 FP.ignore = {
   _all() { try { return FP.settings.get().ignores || {}; } catch (e) { return {}; } },
   has(key) { return !!this._all()[key]; },
-  set(key, on) { try { const s = FP.settings.get(); s.ignores = s.ignores || {}; if (on) s.ignores[key] = true; else delete s.ignores[key]; FP.settings.save(s); } catch (e) {} },
-  toggle(key) { this.set(key, !this.has(key)); return this.has(key); },
+  // Valeur stockée : `true` (legacy) OU `{ l: '<libellé lisible>' }`. Le libellé sert à afficher
+  // la liste des éléments ignorés (pour en réafficher UN SEUL) sans tout réafficher d'un coup.
+  set(key, on, label) { try { const s = FP.settings.get(); s.ignores = s.ignores || {}; if (on) s.ignores[key] = label ? { l: String(label) } : true; else delete s.ignores[key]; FP.settings.save(s); } catch (e) {} },
+  toggle(key, label) { this.set(key, !this.has(key), label); return this.has(key); },
+  label(key) { const v = this._all()[key]; return (v && typeof v === 'object' && v.l) ? v.l : ''; },
+  // Liste des clés ignorées sous un préfixe, avec leur libellé → pour un gestionnaire « voir / réafficher ».
+  list(prefix) { const all = this._all(); return Object.keys(all).filter(k => !prefix || k.indexOf(prefix) === 0).map(k => ({ key: k, label: (all[k] && typeof all[k] === 'object' && all[k].l) ? all[k].l : k })); },
+  clear(key) { this.set(key, false); },              // réaffiche UN élément
   clearPrefix(prefix) { try { const s = FP.settings.get(); s.ignores = s.ignores || {}; Object.keys(s.ignores).forEach(k => { if (k.indexOf(prefix) === 0) delete s.ignores[k]; }); FP.settings.save(s); } catch (e) {} },
   countPrefix(prefix) { return Object.keys(this._all()).filter(k => k.indexOf(prefix) === 0).length; },
 };
@@ -5778,9 +5784,165 @@ FP.pdfPreview = function (doc, filename, subtitle) {
   if (window.lucide) try { lucide.createIcons(); } catch (e) {}
 };
 
-// Toolbar Import/Export CSV retirée (remplacée par l'import de document sur Véhicules/Amendes).
-// Conservée en NO-OP : encore appelée par plusieurs pages (amendes, vehicules, factures…).
-FP.injectDataIO = () => {};
+// IMPORT PAR COLLAGE EXCEL (ou fichier CSV) — bouton monté dans le repère [data-data-io].
+// Complète l'import par scan de document : ici on COLLE un tableau (immat, marque, km, chauffeur…)
+// copié depuis Excel / Google Sheets, et la plateforme crée/complète les fiches d'un coup — idéal
+// pour rattacher un nouveau client dont on a déjà les données. La création réelle, l'ANTI-DOUBLON
+// (FP.dupe) et le tag société sont délégués à cfg.onImport (fourni par chaque page). L'export reste
+// géré à part par FP.makeExportMenu.
+FP.injectDataIO = function (cfg) {
+  cfg = cfg || {};
+  const cols = (cfg.columns || []).filter(c => c && c.key && !c.readonly);
+  if (!cols.length || typeof cfg.onImport !== 'function') return;
+  const mount = document.querySelector('[data-data-io]');
+  if (!mount || mount.dataset.ioReady === '1') return;
+  mount.dataset.ioReady = '1';
+  const esc = FP.esc || (s => String(s == null ? '' : s));
+  // Normalise un en-tête pour le mapping (sans accents / casse / ponctuation).
+  const norm = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const colByHeader = {};
+  cols.forEach(c => { colByHeader[norm(c.label)] = c; colByHeader[norm(c.key)] = c; });
+
+  // Découpe un texte CSV/TSV en lignes de cellules, en respectant les guillemets et en
+  // détectant le séparateur (TAB pour un collage Excel, sinon ; ou ,).
+  function splitRows(text) {
+    text = String(text || '').replace(/\r\n?/g, '\n').replace(/\n+$/, '');
+    if (!text.trim()) return [];
+    const firstLine = text.split('\n')[0];
+    const sep = firstLine.indexOf('\t') >= 0 ? '\t'
+      : (firstLine.split(';').length > firstLine.split(',').length ? ';' : ',');
+    const rows = []; let row = [], field = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) {
+        if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; }
+        else field += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === sep) { row.push(field); field = ''; }
+      else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += ch;
+    }
+    row.push(field); rows.push(row);
+    return rows;
+  }
+
+  function parseText(text) {
+    const rows = splitRows(text);
+    if (!rows.length) return { records: [], mapped: [], ignored: [] };
+    const header = rows[0].map(h => (h || '').trim());
+    const map = header.map(h => colByHeader[norm(h)] || null);
+    const mapped = [], ignored = [];
+    header.forEach((h, i) => { if (map[i]) mapped.push(map[i].label); else if (h) ignored.push(h); });
+    const records = [];
+    for (let r = 1; r < rows.length; r++) {
+      const cells = rows[r];
+      if (!cells.some(c => (c || '').trim() !== '')) continue; // saute les lignes vides
+      const rec = {};
+      cells.forEach((cell, i) => {
+        const col = map[i]; if (!col) return;
+        let val = (cell == null ? '' : String(cell)).trim();
+        if (col.parse) { try { val = col.parse(val); } catch (e) {} }
+        rec[col.key] = val;
+      });
+      if (Object.keys(rec).length) records.push(rec);
+    }
+    return { records, mapped, ignored };
+  }
+
+  // --- Bouton + modale ---
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn btn-outline text-sm';
+  btn.innerHTML = '<i data-lucide="clipboard-paste" class="w-4 h-4"></i> Importer (Excel)';
+  mount.appendChild(btn);
+  if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+
+  const headerModel = cols.map(c => c.label).join('\t');
+  let ov = null, parsed = { records: [], mapped: [], ignored: [] };
+
+  function render() {
+    const nMap = parsed.mapped.length, nRec = parsed.records.length;
+    const prev = ov.querySelector('#fp-io-preview');
+    if (!nRec) {
+      prev.innerHTML = '<div style="color:#94A3B8;font-size:13px;padding:10px 0">Colle tes cellules ci-dessus (avec la ligne d\'en-têtes) pour voir l\'aperçu.</div>';
+    } else {
+      const sample = parsed.records.slice(0, 4);
+      const rowsHtml = sample.map(r => '<tr>' + parsed.mapped.map(lbl => {
+        const col = cols.find(c => c.label === lbl);
+        let v = col ? r[col.key] : '';
+        if (Array.isArray(v)) v = v.join(', ');
+        return '<td style="padding:3px 8px;border-bottom:1px solid #EEF2F7;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis">' + esc(v == null ? '' : v) + '</td>';
+      }).join('') + '</tr>').join('');
+      prev.innerHTML =
+        '<div style="font-size:13px;color:#334155;margin-bottom:6px"><b>' + nRec + '</b> ligne(s) · <b>' + nMap + '</b> colonne(s) reconnue(s)'
+        + (parsed.ignored.length ? ' · <span style="color:#B45309">ignorée(s) : ' + esc(parsed.ignored.join(', ')) + '</span>' : '') + '</div>'
+        + (nMap ? '<div style="overflow:auto;border:1px solid #E2E8F0;border-radius:8px"><table style="font-size:12px;border-collapse:collapse;min-width:100%"><thead><tr>'
+          + parsed.mapped.map(l => '<th style="text-align:left;padding:4px 8px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;white-space:nowrap">' + esc(l) + '</th>').join('')
+          + '</tr></thead><tbody>' + rowsHtml + '</tbody></table></div>'
+          + (nRec > sample.length ? '<div style="font-size:11px;color:#94A3B8;margin-top:4px">… et ' + (nRec - sample.length) + ' de plus</div>' : '')
+          : '<div style="color:#B91C1C;font-size:13px">Aucune colonne reconnue. Vérifie que la 1re ligne contient bien les en-têtes (ex. « Immat. », « Marque »…).</div>');
+    }
+    const imp = ov.querySelector('#fp-io-import');
+    imp.disabled = !nMap || !nRec;
+    imp.style.opacity = imp.disabled ? '.5' : '';
+    imp.textContent = nRec && nMap ? ('Importer ' + nRec + ' ligne(s)') : 'Importer';
+  }
+
+  function open() {
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.setAttribute('style', 'position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;background:rgba(15,23,42,.55);padding:16px');
+      ov.innerHTML =
+        '<div style="background:#fff;border-radius:16px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:90vh">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #E2E8F0">'
+        + '<div style="font-weight:800;color:var(--fp-primary,#0f1d3d)"><i data-lucide="clipboard-paste" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Importer par collage (Excel / Google Sheets)</div>'
+        + '<button id="fp-io-close" style="border:none;background:transparent;cursor:pointer;color:#94A3B8;font-size:20px;line-height:1">&times;</button></div>'
+        + '<div style="padding:18px;overflow:auto">'
+        + '<p style="font-size:13px;color:#475569;margin-bottom:8px">Dans Excel/Sheets, sélectionne les cellules <b>avec la ligne d\'en-têtes</b>, copie (Ctrl+C) puis colle ici (Ctrl+V). Colonnes reconnues : <b>' + esc(cols.map(c => c.label).join(' · ')) + '</b>. <button id="fp-io-tpl" type="button" style="border:none;background:transparent;color:var(--fp-accent,#F97316);font-weight:700;cursor:pointer;padding:0">Copier la ligne d\'en-têtes</button></p>'
+        + '<textarea id="fp-io-text" placeholder="Colle ici tes cellules…" style="width:100%;min-height:120px;border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;font-family:ui-monospace,monospace;font-size:12px;resize:vertical"></textarea>'
+        + '<div style="display:flex;align-items:center;gap:10px;margin:8px 0 12px"><label style="font-size:12px;color:#64748b;cursor:pointer;display:inline-flex;align-items:center;gap:6px"><i data-lucide="file-up" class="w-4 h-4"></i> …ou charger un fichier CSV <input id="fp-io-file" type="file" accept=".csv,text/csv,text/plain" style="display:none"></label></div>'
+        + '<div id="fp-io-preview"></div>'
+        + '</div>'
+        + '<div style="display:flex;gap:10px;padding:14px 18px;border-top:1px solid #E2E8F0">'
+        + '<button id="fp-io-cancel" class="btn btn-outline text-sm" style="flex:1;justify-content:center">Annuler</button>'
+        + '<button id="fp-io-import" class="btn btn-dark text-sm" style="flex:1;justify-content:center" disabled><i data-lucide="check" class="w-4 h-4"></i> <span>Importer</span></button>'
+        + '</div></div>';
+      document.body.appendChild(ov);
+      if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+      const close = () => { ov.style.display = 'none'; };
+      ov.querySelector('#fp-io-close').onclick = close;
+      ov.querySelector('#fp-io-cancel').onclick = close;
+      const ta = ov.querySelector('#fp-io-text');
+      const reparse = () => { parsed = parseText(ta.value); render(); };
+      ta.addEventListener('input', reparse);
+      ov.querySelector('#fp-io-tpl').onclick = () => {
+        try { navigator.clipboard && navigator.clipboard.writeText(headerModel); } catch (e) {}
+        if (FP.toast) FP.toast('✓ Ligne d\'en-têtes copiée — colle-la en 1re ligne de ton tableau si besoin');
+      };
+      ov.querySelector('#fp-io-file').addEventListener('change', (e) => {
+        const f = (e.target.files || [])[0]; if (!f) return;
+        const rd = new FileReader();
+        rd.onload = () => { ta.value = String(rd.result || ''); reparse(); };
+        rd.readAsText(f, 'utf-8');
+      });
+      ov.querySelector('#fp-io-import').onclick = async () => {
+        if (!parsed.records.length) return;
+        const imp = ov.querySelector('#fp-io-import');
+        imp.disabled = true; imp.style.opacity = '.6';
+        try { await cfg.onImport(parsed.records.slice()); } catch (err) { console.error('[injectDataIO onImport]', err); if (FP.toast) FP.toast('Import : une erreur est survenue (voir console).'); }
+        close();
+        ta.value = ''; parsed = { records: [], mapped: [], ignored: [] };
+      };
+    }
+    ov.querySelector('#fp-io-text').value = '';
+    parsed = { records: [], mapped: [], ignored: [] };
+    render();
+    ov.style.display = 'flex';
+    setTimeout(() => { try { ov.querySelector('#fp-io-text').focus(); } catch (e) {} }, 30);
+  }
+
+  btn.addEventListener('click', open);
+};
 
 // Compteurs animés GLOBAUX : anime tous les chiffres « .kpi-value » (montée depuis 0) au
 // chargement de N'IMPORTE QUELLE page, puis à chaque arrivée de données Supabase. Idempotent

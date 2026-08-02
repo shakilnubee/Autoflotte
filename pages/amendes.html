@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731z">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260801b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731z"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260801b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731z">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260801b">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -454,12 +454,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731z"></script>
-<script src="../assets/js/supabase-client.js?v=20260731z"></script>
-<script src="../assets/js/data.js?v=20260731z"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731z"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731z"></script>
-<script src="../assets/js/app.js?v=20260731z"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260801b"></script>
+<script src="../assets/js/supabase-client.js?v=20260801b"></script>
+<script src="../assets/js/data.js?v=20260801b"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260801b"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260801b"></script>
+<script src="../assets/js/app.js?v=20260801b"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -935,7 +935,8 @@
       });
     }).catch(() => {});
   }
-  async function ouvrirMail(body) {
+  async function ouvrirMail(body, opts) {
+    opts = opts || {};
     const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
     // Adresses d'envoi PROPRES À LA SOCIÉTÉ active (profil rempli dans Paramètres → Sociétés).
     // PXP conserve ses adresses historiques ; une nouvelle société doit les renseigner.
@@ -947,7 +948,17 @@
       return;
     }
     const to = lookupEmail(a.prenom);
-    const subject = `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`;
+    const subjectBase = `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`;
+    // Une relance doit arriver DANS LA SUITE du 1er e-mail (même fil). On préfixe « Re: » et,
+    // surtout, on ancre TOUS les e-mails d'une même amende sur un identifiant RACINE déterministe
+    // (dérivé de l'id de l'amende) via les en-têtes RFC References/In-Reply-To → Gmail les regroupe
+    // dans le même fil. Aucun stockage nécessaire (marche pour tous les rôles, gestionnaire inclus).
+    const subject = opts.reply ? ('Re: ' + subjectBase) : subjectBase;
+    const _mailDom = (String(EXPEDITEUR).split('@')[1] || String(_prof.mailDomaineEnvoi || '').replace(/^@/, '') || 'parc-pilot.fr').trim();
+    const _rootId = `<pp-amende-${a.id}@${_mailDom}>`;
+    const _ownId = `<pp-amende-${a.id}-${Date.now()}@${_mailDom}>`;
+    const mailHeaders = { 'Message-ID': _ownId, 'References': _rootId };
+    if (opts.reply) mailHeaders['In-Reply-To'] = _rootId;   // relance = réponse au fil
     // Lien vers le scan de l'avis (PDF) via une page de redirection propre.
     let lien = '';
     if (a.avisUrl) {
@@ -976,7 +987,7 @@
       if (lien) html += `<br><br>📎 <a href="${escH(lien)}">Voir l'avis de contravention${a.numeroAvis ? ' n° ' + escH(a.numeroAvis) : ''} (PDF)</a>`;
       try {
         if (FP.toast) FP.toast('Envoi de l\'e-mail…');
-        await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: fullBody, replyTo: EXPEDITEUR, attachments });
+        await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: fullBody, replyTo: EXPEDITEUR, attachments, headers: mailHeaders });
         if (FP.toast) FP.toast('✓ E-mail envoyé à ' + to); else alert('✓ E-mail envoyé à ' + to);
         return;
       } catch (e) {
@@ -1032,7 +1043,7 @@
   // Relance courte
   function relanceEmail() {
     const p = prenomCourant();
-    ouvrirMail(`Bonjour${p ? ' ' + p : ''}, petite relance, Merci.`);
+    ouvrirMail(`Bonjour${p ? ' ' + p : ''}, petite relance, Merci.`, { reply: true });
   }
 
   // ---------- Charts ----------

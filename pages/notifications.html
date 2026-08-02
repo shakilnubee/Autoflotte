@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260731z">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260801b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260731z"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260801b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260731z">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260801b">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -132,12 +132,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260731z"></script>
-<script src="../assets/js/supabase-client.js?v=20260731z"></script>
-<script src="../assets/js/data.js?v=20260731z"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260731z"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260731z"></script>
-<script src="../assets/js/app.js?v=20260731z"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260801b"></script>
+<script src="../assets/js/supabase-client.js?v=20260801b"></script>
+<script src="../assets/js/data.js?v=20260801b"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260801b"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260801b"></script>
+<script src="../assets/js/app.js?v=20260801b"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -336,7 +336,7 @@
     return `<div class="notif" style="align-items:flex-start">
         <div class="flex-1 min-w-0">
           <a href="${esc(it.target)}" class="font-semibold text-slate-900" style="text-decoration:none">${esc(it.nom)}</a>
-          <div class="mt-1 flex flex-wrap gap-1">${it.miss.map(m => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 4px 2px 8px;border-radius:9999px">${esc(m.label)}${it.ignPrefix ? `<button type="button" data-ign="${esc(it.ignPrefix + m.k)}" title="Ignorer — ne plus demander cette info (non concerné)" style="border:none;background:rgba(146,64,14,.15);color:#92400E;cursor:pointer;border-radius:9999px;width:16px;height:16px;line-height:1;font-size:10px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>` : ''}</span>`).join('')}</div>
+          <div class="mt-1 flex flex-wrap gap-1">${it.miss.map(m => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 4px 2px 8px;border-radius:9999px">${esc(m.label)}${it.ignPrefix ? `<button type="button" data-ign="${esc(it.ignPrefix + m.k)}" data-ignlabel="${esc(it.nom + ' · ' + m.label)}" title="Ignorer — ne plus demander cette info (non concerné)" style="border:none;background:rgba(146,64,14,.15);color:#92400E;cursor:pointer;border-radius:9999px;width:16px;height:16px;line-height:1;font-size:10px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>` : ''}</span>`).join('')}</div>
         </div>
         <a href="${esc(it.target)}" class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap;text-decoration:none">Compléter →</a>
       </div>`;
@@ -408,8 +408,19 @@
         ${rafN ? `<button type="button" id="raf-start" class="btn btn-dark text-sm"><i data-lucide="zap" class="w-4 h-4"></i> Remplir en rafale (${rafN})</button>` : ''}
       </div>`
       : `<p class="text-emerald-600 font-semibold mb-5">🎉 Tout est complet — aucune info manquante !</p>`;
-    const nbIgn = (window.FP && FP.ignore && FP.ignore.countPrefix('complet:')) || 0;
-    const restoreHTML = nbIgn ? `<p class="text-xs text-slate-400 mt-4">${nbIgn} info(s) marquée(s) « non concerné » et masquée(s) · <button type="button" id="complet-restore" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline;font-size:12px">tout réafficher</button></p>` : '';
+    // Éléments marqués « non concerné » : on les GARDE masqués, mais on peut les CONSULTER
+    // et en réafficher UN SEUL (ou tout) — sans avoir à tout réafficher pour re-masquer le reste.
+    const ignList = (window.FP && FP.ignore && FP.ignore.list) ? FP.ignore.list('complet:') : [];
+    const restoreHTML = ignList.length ? `<details class="mt-4" style="max-width:840px">
+        <summary class="cursor-pointer text-sm font-semibold text-slate-500 flex items-center gap-2"><i data-lucide="eye-off" class="w-4 h-4 text-slate-400"></i> ${ignList.length} info(s) marquée(s) « non concerné » <span class="text-xs font-normal text-slate-400">(cliquer pour gérer)</span></summary>
+        <div class="mt-2 space-y-1">
+          ${ignList.map(it => `<div class="flex items-center justify-between gap-3" style="background:#F8FAFC;border:1px solid var(--fp-border);border-radius:8px;padding:6px 10px">
+            <span class="text-sm text-slate-600" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.label)}</span>
+            <button type="button" data-unign="${esc(it.key)}" class="text-xs font-semibold" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;white-space:nowrap">↺ Réafficher</button>
+          </div>`).join('')}
+          <button type="button" id="complet-restore" class="text-xs mt-1" style="color:#64748b;background:none;border:none;cursor:pointer;text-decoration:underline">Tout réafficher</button>
+        </div>
+      </details>` : '';
     box.innerHTML = intro + cgFillBanner() + cfgHTML
       + sectionCompHTML('Véhicules à compléter', 'car', vehItems)
       + sectionCompHTML('Conducteurs à compléter', 'users', condItems)
@@ -486,7 +497,7 @@
     ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
     document.getElementById('raf-save').addEventListener('click', rafSaveNext);
     document.getElementById('raf-skip').addEventListener('click', () => { rafIdx++; rafShow(); });
-    document.getElementById('raf-ignore').addEventListener('click', () => { const s = rafList[rafIdx]; if (s && window.FP && FP.ignore) FP.ignore.set(s.ignKey, true); rafList.splice(rafIdx, 1); rafShow(); });
+    document.getElementById('raf-ignore').addEventListener('click', () => { const s = rafList[rafIdx]; if (s && window.FP && FP.ignore) FP.ignore.set(s.ignKey, true, (s.entityLabel || '') + ' · ' + (s.field && s.field.label || '')); rafList.splice(rafIdx, 1); rafShow(); });
     document.addEventListener('keydown', (e) => { if (ov.style.display === 'flex' && e.key === 'Escape') { e.preventDefault(); close(); } });
   }
   function rafSaveNext() {
@@ -557,7 +568,10 @@
     }
     // ✕ sur un tag → ignorer ce champ pour cet élément (persistant, par société)
     const ign = e.target.closest('[data-ign]');
-    if (ign) { e.preventDefault(); e.stopPropagation(); if (window.FP && FP.ignore) { FP.ignore.set(ign.dataset.ign, true); renderComplet(); } return; }
+    if (ign) { e.preventDefault(); e.stopPropagation(); if (window.FP && FP.ignore) { FP.ignore.set(ign.dataset.ign, true, ign.dataset.ignlabel || ''); renderComplet(); } return; }
+    // ↺ Réafficher UN SEUL élément « non concerné » (les autres restent masqués)
+    const unign = e.target.closest('[data-unign]');
+    if (unign) { e.preventDefault(); e.stopPropagation(); if (window.FP && FP.ignore) { FP.ignore.clear(unign.dataset.unign); renderComplet(); } return; }
     if (e.target.closest('#complet-restore')) { e.preventDefault(); if (window.FP && FP.ignore) { FP.ignore.clearPrefix('complet:'); renderComplet(); } return; }
     const b = e.target.closest('#cg-fill-btn'); if (!b) return;
     const cg = (window.FP && FP.CG_DATA) || {};
