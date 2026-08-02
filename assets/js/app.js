@@ -1482,6 +1482,43 @@ document.addEventListener('click', function (e) {
   else { more.setAttribute('hidden', ''); btn.textContent = 'Voir tout (' + (btn.dataset.more || '') + ' de plus) ↓'; }
 });
 
+// ---- ADRESSES EN CASES SÉPARÉES (helper GLOBAL) ----
+// « Une info par case » : on saisit rue / code postal / ville / pays séparément, mais on continue de
+// STOCKER une seule chaîne « rue, CP ville, pays » (aucune colonne DB à créer). compose() fabrique la
+// chaîne canonique ; parse() la re-découpe (heuristique tolérante : repère le code postal 4-5 chiffres).
+FP.addr = {
+  compose(p) {
+    p = p || {};
+    const g = k => (p[k] == null ? '' : String(p[k])).trim();
+    const cpVille = [g('cp'), g('ville')].filter(Boolean).join(' ');
+    return [g('rue'), cpVille, g('pays')].filter(Boolean).join(', ');
+  },
+  parse(str) {
+    const s = (str == null ? '' : String(str)).trim();
+    const empty = { rue: '', cp: '', ville: '', pays: '' };
+    if (!s) return empty;
+    const parts = s.split(',').map(x => x.trim()).filter(Boolean);
+    const idx = parts.findIndex(x => /\b\d{4,5}\b/.test(x));
+    if (idx === -1) return { rue: s, cp: '', ville: '', pays: '' }; // pas de CP → tout en rue
+    // Adresse « en vrac » sans virgule (ex. « 15 rue du Test 75015 Paris ») → on découpe autour du CP.
+    if (parts.length === 1) {
+      const mm = s.match(/\b(\d{4,5})\b/);
+      const cp = mm[1];
+      return {
+        rue: s.slice(0, mm.index).replace(/[,\-–\s]+$/, '').trim(),
+        cp,
+        ville: s.slice(mm.index + cp.length).replace(/^[,\-–\s]+/, '').trim(),
+        pays: '',
+      };
+    }
+    const seg = parts[idx];
+    const m = seg.match(/\b(\d{4,5})\b/);
+    const cp = m ? m[1] : '';
+    const ville = seg.replace(/\b\d{4,5}\b/, '').replace(/^[\s\-–,]+|[\s\-–,]+$/g, '').trim();
+    return { rue: parts.slice(0, idx).join(', '), cp, ville, pays: parts.slice(idx + 1).join(', ') };
+  },
+};
+
 (function guardBackspace() {
   // Empêche la touche « Retour arrière » de déclencher « page précédente » du navigateur
   // (sinon : on efface du texte, le curseur sort du champ, un Backspace de plus = la page
