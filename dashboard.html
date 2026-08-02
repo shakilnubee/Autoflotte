@@ -968,6 +968,38 @@
       if (!drag) return; drag.classList.remove('dragging'); cont.classList.remove('is-dragging'); drag = null; save();
     });
     apply();
+
+    // --- Masquage de blocs (✕) — mémorisé par société (FP.settings.dashHiddenWidgets) ---
+    const hiddenList = () => { try { return (FP.settings.get().dashHiddenWidgets) || []; } catch (e) { return []; } };
+    const setHidden = (arr) => { try { const s = FP.settings.get(); s.dashHiddenWidgets = arr; FP.settings.save(s); } catch (e) {} };
+    const wLabel = (el) => { const g = el.querySelector('.widget-grip'); return g ? g.textContent.trim() : el.dataset.widget; };
+    let restoreBar = null;
+    function renderRestore() {
+      if (restoreBar) { restoreBar.remove(); restoreBar = null; }
+      const h = hiddenList(); if (!h.length) return;
+      const labels = {}; cont.querySelectorAll('.dash-widget').forEach(el => { labels[el.dataset.widget] = wLabel(el); });
+      restoreBar = document.createElement('div');
+      restoreBar.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-bottom:1rem;font-size:.8rem;color:#64748b';
+      restoreBar.innerHTML = '<span style="font-weight:600">Blocs masqués :</span>'
+        + h.map(k => `<button type="button" data-restore="${k}" class="btn btn-outline text-xs" style="padding:2px 8px" title="Réafficher ce bloc">↩ ${labels[k] || k}</button>`).join('')
+        + '<button type="button" data-restore="__all" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font-weight:600">Tout réafficher</button>';
+      restoreBar.addEventListener('click', (e) => { const b = e.target.closest('[data-restore]'); if (!b) return; const k = b.dataset.restore; setHidden(k === '__all' ? [] : hiddenList().filter(x => x !== k)); applyHidden(); });
+      cont.parentNode.insertBefore(restoreBar, cont);
+    }
+    function applyHidden() {
+      const h = hiddenList();
+      cont.querySelectorAll('.dash-widget').forEach(el => { el.style.display = h.includes(el.dataset.widget) ? 'none' : ''; });
+      renderRestore();
+    }
+    cont.querySelectorAll('.dash-widget').forEach(el => {
+      const bar = el.querySelector('.widget-bar'); if (!bar || bar.querySelector('.widget-hide')) return;
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'widget-hide'; b.title = 'Masquer ce bloc'; b.textContent = '✕';
+      b.style.cssText = 'margin-left:auto;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:.9rem;padding:.15rem .45rem;line-height:1';
+      b.addEventListener('click', () => { const h = hiddenList(); if (!h.includes(el.dataset.widget)) { h.push(el.dataset.widget); setHidden(h); applyHidden(); } });
+      bar.appendChild(b);
+    });
+    applyHidden();
   })();
 
   // === Sélecteur de société (vue admin multi-flotte) ===
