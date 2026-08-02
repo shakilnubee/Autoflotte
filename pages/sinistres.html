@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260802a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260802b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260802a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260802b">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -369,12 +369,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260802a"></script>
-<script src="../assets/js/supabase-client.js?v=20260802a"></script>
-<script src="../assets/js/data.js?v=20260802a"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802a"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802a"></script>
-<script src="../assets/js/app.js?v=20260802a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260802b"></script>
+<script src="../assets/js/supabase-client.js?v=20260802b"></script>
+<script src="../assets/js/data.js?v=20260802b"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802b"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802b"></script>
+<script src="../assets/js/app.js?v=20260802b"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -571,6 +571,38 @@
 
   const SIN_LIMIT = 15;
   let sinExpanded = false;
+
+  // ---- Suivi d'étapes d'un dossier sinistre (déclaration → réponse assureur → réparation → remboursement → clôture) ----
+  const RESP_LABEL = { 'responsable': 'Responsable', 'non-responsable': 'Non responsable', 'partagee': 'Partagée', 'en-cours': 'En cours' };
+  function sinSteps(g, dv, cur) {
+    const repaired = (g.cost || 0) > 0;
+    const reimbursed = (Number(dv.rembourse) || 0) > 0 || cur === 'rembourse' || cur === 'pec';
+    return [
+      { label: 'Déclaré', done: true, date: g.rep.date },
+      { label: 'Envoyé assurance', done: !!(dv.dateDeclaration || dv.numeroDossier), date: dv.dateDeclaration },
+      { label: 'Réponse assureur', done: !!(dv.resp || dv.dateReponse), date: dv.dateReponse, extra: dv.resp ? RESP_LABEL[dv.resp] : '' },
+      { label: 'Réparation', done: repaired },
+      { label: 'Remboursement', done: reimbursed },
+      { label: 'Clôturé', done: !!dv.dateCloture, date: dv.dateCloture },
+    ];
+  }
+  function sinTimelineHTML(steps) {
+    let curIdx = steps.findIndex(s => !s.done); if (curIdx === -1) curIdx = steps.length - 1;
+    const dt = d => (d && FP.dateNum) ? FP.dateNum(String(d).slice(0, 10)) : '';
+    return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:2px 0 6px">'
+      + steps.map((s, i) => {
+        const done = s.done, isCur = i === curIdx && !done;
+        const bg = done ? '#047857' : (isCur ? 'var(--fp-accent,#F97316)' : '#E2E8F0');
+        const txtCol = (done || isCur) ? '#334155' : '#94A3B8';
+        return (i ? '<span style="color:#CBD5E1;font-size:11px">›</span>' : '')
+          + `<span style="display:inline-flex;align-items:center;gap:5px">
+              <span style="width:17px;height:17px;border-radius:50%;background:${bg};color:#fff;font-size:9.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${done ? '✓' : (i + 1)}</span>
+              <span style="font-size:11px;font-weight:${isCur ? 800 : 600};color:${txtCol}">${s.label}${s.date ? ` <span style="color:#94A3B8;font-weight:500">${dt(s.date)}</span>` : ''}${s.extra ? ` <span style="color:#047857;font-weight:700">· ${escapeHtml(s.extra)}</span>` : ''}</span>
+            </span>`;
+      }).join('')
+      + '</div>';
+  }
+
   function renderTimeline() {
     let groups = visibleGroups();
     // Onglet de suivi : filtre par statut de remboursement
@@ -614,21 +646,36 @@
         const respOpts = [['', '—'], ['responsable', 'Responsable'], ['non-responsable', 'Non responsable'], ['partagee', 'Partagée'], ['en-cours', 'En cours']];
         const reste = (g.cost || 0) - (Number(dv.rembourse) || 0);
         const vehCh = (veh && veh.chauffeur && veh.chauffeur !== '—') ? veh.chauffeur : '';
+        const _inpCss = 'width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px';
+        const courrierLien = dv.courrierUrl ? `<a href="${escapeHtml(/^https?:\/\//.test(dv.courrierUrl) ? dv.courrierUrl : ('https://drive.google.com/file/d/' + dv.courrierUrl + '/view'))}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs hover:underline" style="color:var(--fp-accent);margin-left:6px"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Voir le courrier</a>` : '';
         const dossierPanel = `
           <details class="mt-2">
-            <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#475569;list-style:none" class="inline-flex items-center gap-1"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Dossier assurance</summary>
-            <label class="text-xs text-slate-500" style="display:block;margin-top:8px">Conducteur au moment du sinistre <span class="text-slate-400">(figé, sinon = chauffeur actuel)</span><input class="sin-doss" data-key="${g.key}" data-k="conducteur" type="text" value="${escapeHtml(dv.conducteur || '')}" placeholder="${escapeHtml(vehCh || '—')}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
+            <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#475569;list-style:none" class="inline-flex items-center gap-1"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Dossier assurance — suivi</summary>
+            ${sinTimelineHTML(sinSteps(g, dv, cur))}
+            <label class="text-xs text-slate-500" style="display:block;margin-top:8px">Conducteur au moment du sinistre <span class="text-slate-400">(figé, sinon = chauffeur actuel)</span><input class="sin-doss" data-key="${g.key}" data-k="conducteur" type="text" value="${escapeHtml(dv.conducteur || '')}" placeholder="${escapeHtml(vehCh || '—')}" style="${_inpCss}"></label>
             <div class="grid grid-cols-3 gap-2 mt-2">
-              <label class="text-xs text-slate-500">Franchise (€)<input class="sin-doss" data-key="${g.key}" data-k="franchise" type="number" value="${dv.franchise ?? ''}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
-              <label class="text-xs text-slate-500">Remboursé (€)<input class="sin-doss" data-key="${g.key}" data-k="rembourse" type="number" value="${dv.rembourse ?? ''}" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px"></label>
-              <label class="text-xs text-slate-500">Responsabilité<select class="sin-doss" data-key="${g.key}" data-k="resp" style="width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px">${respOpts.map(([v, l]) => `<option value="${v}" ${dv.resp === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+              <label class="text-xs text-slate-500">N° dossier assureur<input class="sin-doss" data-key="${g.key}" data-k="numeroDossier" type="text" value="${escapeHtml(dv.numeroDossier || '')}" placeholder="—" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Déclaré à l'assurance le<input class="sin-doss" data-key="${g.key}" data-k="dateDeclaration" type="date" value="${escapeHtml(dv.dateDeclaration || '')}" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Réponse assureur le<input class="sin-doss" data-key="${g.key}" data-k="dateReponse" type="date" value="${escapeHtml(dv.dateReponse || '')}" style="${_inpCss}"></label>
             </div>
-            <div class="mt-2">
+            <div class="grid grid-cols-3 gap-2 mt-2">
+              <label class="text-xs text-slate-500">Franchise (€)<input class="sin-doss" data-key="${g.key}" data-k="franchise" type="number" value="${dv.franchise ?? ''}" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Remboursé (€)<input class="sin-doss" data-key="${g.key}" data-k="rembourse" type="number" value="${dv.rembourse ?? ''}" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Responsabilité<select class="sin-doss" data-key="${g.key}" data-k="resp" style="${_inpCss}">${respOpts.map(([v, l]) => `<option value="${v}" ${dv.resp === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <button type="button" class="sin-courrier-btn" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" style="display:inline-flex;align-items:center;gap:.3rem;font-size:12px;font-weight:700;color:#fff;background:var(--fp-accent,#F97316);border:none;border-radius:8px;padding:5px 10px;cursor:pointer" title="Déposer le courrier de l'assureur : l'IA lit la responsabilité, le n° de dossier et la date, et remplit le dossier (tu confirmes la responsabilité)"><i data-lucide="mail-search" class="w-3.5 h-3.5"></i> Scanner le courrier de l'assureur (IA)</button>
+              <input type="file" class="sin-courrier-file hidden" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" accept="image/*,application/pdf,.pdf">
               <button type="button" class="sin-constat-btn" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" style="display:inline-flex;align-items:center;gap:.3rem;font-size:12px;font-weight:600;color:var(--fp-accent);background:#fff;border:1px solid var(--fp-border);border-radius:8px;padding:4px 8px;cursor:pointer" title="Déposer le constat amiable : l'IA lit qui est en tort et te le propose (tu confirmes)"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i> Lire le constat (IA)</button>
               <input type="file" class="sin-constat-file hidden" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" accept="image/*,application/pdf,.pdf">
-              <div class="sin-constat-status text-xs mt-1" data-key="${g.key}"></div>
+              ${courrierLien}
             </div>
+            <div class="sin-courrier-status text-xs mt-1" data-key="${g.key}"></div>
+            <div class="sin-constat-status text-xs mt-1" data-key="${g.key}"></div>
             ${g.cost ? `<div class="text-xs text-slate-500 mt-2">Coût ${FP.euroPrecis(g.cost)}${Number(dv.rembourse) ? ` · remboursé ${FP.euroPrecis(dv.rembourse)}` : ''} → <b style="color:${reste > 0 ? '#b45309' : '#047857'}">reste à charge ${FP.euroPrecis(Math.max(0, reste))}</b></div>` : ''}
+            <div class="mt-2">
+              <button type="button" class="sin-cloturer" data-key="${g.key}" style="display:inline-flex;align-items:center;gap:.3rem;font-size:12px;font-weight:700;border-radius:8px;padding:4px 10px;cursor:pointer;${dv.dateCloture ? 'color:#475569;background:#fff;border:1px solid var(--fp-border)' : 'color:#047857;background:#ECFDF5;border:1px solid #A7F3D0'}"><i data-lucide="${dv.dateCloture ? 'rotate-ccw' : 'check-circle-2'}" class="w-3.5 h-3.5"></i> ${dv.dateCloture ? 'Rouvrir le dossier' : 'Clôturer le dossier'}</button>
+            </div>
           </details>`;
         // Candidats à associer : autres sinistres du même véhicule pas déjà dans cet incident
         const candidats = sinistres.filter(c => c.vehiculeImmat === s.vehiculeImmat && groupKeyOf(c.id) !== g.key);
@@ -831,6 +878,9 @@
     // Constat amiable déposé → l'IA lit et PROPOSE la responsabilité (l'utilisateur confirme).
     const cf = e.target.closest('.sin-constat-file');
     if (cf) { handleConstatScan(cf); return; }
+    // Courrier de l'assureur déposé → l'IA lit responsabilité + n° dossier + date, remplit le dossier.
+    const crf = e.target.closest('.sin-courrier-file');
+    if (crf) { handleCourrierScan(crf); return; }
   });
 
   // Lecture IA d'un constat : propose la responsabilité de NOTRE véhicule (jamais enregistré sans confirmation).
@@ -857,8 +907,60 @@
     setSt(`🔍 <b>IA propose : ${labels[val]}</b>${just}. <button type="button" class="sin-constat-ok" data-key="${key}" data-val="${val}" style="margin-left:4px;font-size:11px;font-weight:700;color:#fff;background:#047857;border:none;border-radius:6px;padding:2px 8px;cursor:pointer">✓ Enregistrer</button> <span style="color:#94A3B8">ou corrige le menu ci-dessus.</span>`, '#0F766E');
   }
 
+  // Lecture IA du COURRIER de l'assureur : remplit n° dossier + date + garde le courrier, et PROPOSE
+  // la responsabilité (confirmation, jamais enregistrée en douce). Réutilise le bouton « ✓ Enregistrer ».
+  async function handleCourrierScan(input) {
+    const key = input.dataset.key, immat = input.dataset.immat || '';
+    const file = (input.files || [])[0]; input.value = '';
+    if (!file) return;
+    const setSt = (html, color) => { const el = $('timeline').querySelector(`.sin-courrier-status[data-key="${key}"]`); if (el) { el.innerHTML = html; el.style.color = color || '#475569'; if (window.lucide) lucide.createIcons(); } };
+    if (!(window.FP && FP.scanIA && FP.courrierAssureurPrompt)) { setSt('⚠️ Connexion requise pour lire le courrier.', '#B91C1C'); return; }
+    setSt('⏳ Lecture du courrier par l\'IA…');
+    let res = null;
+    try { res = await FP.scanIA(file, 'courrier', FP.courrierAssureurPrompt(immat)); } catch (_) {}
+    // On garde le courrier (best-effort) + on remplit n° dossier / date de réponse dans le dossier.
+    let url = '';
+    try { if (FP.uploadScan) url = await FP.uploadScan(file, 'sinistres') || ''; } catch (_) {}
+    const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
+    const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
+    if (url) o.courrierUrl = url;
+    if (res && res.numeroDossier && String(res.numeroDossier).trim()) o.numeroDossier = String(res.numeroDossier).trim();
+    if (res && res.dateCourrier && /^\d{4}-\d{2}-\d{2}/.test(String(res.dateCourrier))) o.dateReponse = String(res.dateCourrier).slice(0, 10);
+    FP.settings.save(s);
+    // Mise à jour EN PLACE des champs (ne pas re-render : ça refermerait le panneau et masquerait la
+    // confirmation). Les nouveaux champs/timeline/lien se rafraîchissent au prochain rendu de la page.
+    const setVal = (k, v) => { const el = $('timeline').querySelector(`.sin-doss[data-k="${k}"][data-key="${key}"]`); if (el && v != null && v !== '') el.value = v; };
+    if (o.numeroDossier) setVal('numeroDossier', o.numeroDossier);
+    if (o.dateReponse) setVal('dateReponse', o.dateReponse);
+    const norm = res && res.responsabilite ? String(res.responsabilite).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') : '';
+    const map = { 'responsable': 'responsable', 'non-responsable': 'non-responsable', 'non responsable': 'non-responsable', 'partagee': 'partagee' };
+    const val = map[norm] || '';
+    const labels = { 'responsable': 'Responsable (nous en tort)', 'non-responsable': 'Non responsable', 'partagee': 'Partagée' };
+    const just = (res && res.justification) ? ' — ' + FP.esc(res.justification) : '';
+    const lus = [url ? 'courrier enregistré' : '', (res && res.numeroDossier) ? ('n° ' + FP.esc(o.numeroDossier)) : '', (o.dateReponse) ? ('reçu le ' + (FP.dateNum ? FP.dateNum(o.dateReponse) : o.dateReponse)) : ''].filter(Boolean).join(' · ');
+    const prefix = lus ? ('✓ ' + lus + '. ') : '';
+    if (!val) { setSt(prefix + '🤷 L\'IA n\'a pas pu trancher la responsabilité' + just + ' — renseigne-la à la main.', '#B45309'); return; }
+    const sel = $('timeline').querySelector(`.sin-doss[data-k="resp"][data-key="${key}"]`);
+    if (sel) sel.value = val;
+    setSt(prefix + `🔍 <b>IA propose : ${labels[val]}</b>${just}. <button type="button" class="sin-constat-ok" data-key="${key}" data-val="${val}" style="margin-left:4px;font-size:11px;font-weight:700;color:#fff;background:#047857;border:none;border-radius:6px;padding:2px 8px;cursor:pointer">✓ Enregistrer</button> <span style="color:#94A3B8">ou corrige le menu.</span>`, '#0F766E');
+  }
+
   // Clics : associer / détacher / supprimer
   $('timeline').addEventListener('click', async (e) => {
+    // Courrier assureur : bouton → ouvre le sélecteur de fichier
+    const crbtn = e.target.closest('.sin-courrier-btn');
+    if (crbtn) { const inp = crbtn.parentElement && crbtn.parentElement.querySelector('.sin-courrier-file'); if (inp) inp.click(); return; }
+    // Clôturer / rouvrir le dossier (pose ou retire la date de clôture)
+    const clo = e.target.closest('.sin-cloturer');
+    if (clo) {
+      const key = clo.dataset.key;
+      const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
+      const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
+      if (o.dateCloture) { delete o.dateCloture; }
+      else { o.dateCloture = new Date().toISOString().slice(0, 10); }
+      if (!Object.keys(o).length) delete s.sinistreAssurance[key];
+      FP.settings.save(s); refreshAll(); return;
+    }
     // Constat IA : bouton « Lire le constat » → ouvre le sélecteur de fichier
     const cbtn = e.target.closest('.sin-constat-btn');
     if (cbtn) { const inp = cbtn.parentElement && cbtn.parentElement.querySelector('.sin-constat-file'); if (inp) inp.click(); return; }

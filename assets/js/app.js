@@ -3726,6 +3726,26 @@ FP.constatPrompt = function (plaque) {
     'ne DEVINE JAMAIS une responsabilité que le document n\'établit pas clairement.',
   ].join('\n');
 };
+// Prompt IA pour le COURRIER DE L'ASSUREUR (réponse après déclaration de sinistre) : en plus de la
+// responsabilité, on lit le n° de dossier et la date du courrier pour remplir le dossier tout seul.
+FP.courrierAssureurPrompt = function (plaque) {
+  const p = (plaque ? String(plaque) : '').trim() || '(plaque inconnue)';
+  return [
+    'Tu analyses un COURRIER D\'ASSURANCE reçu après la déclaration d\'un sinistre automobile, concernant',
+    'NOTRE véhicule dont la plaque est « ' + p +' ». Ce courrier indique généralement la RESPONSABILITÉ',
+    '(qui est en tort), un NUMÉRO DE DOSSIER / SINISTRE, et une DATE.',
+    'Réponds UNIQUEMENT en JSON strict, sans texte autour :',
+    '{',
+    '  "responsabilite": "responsable" | "non-responsable" | "partagee" | "inconnu",',
+    '  "numeroDossier": "<référence du dossier/sinistre si présente, sinon chaîne vide>",',
+    '  "dateCourrier": "<date du courrier au format AAAA-MM-JJ si présente, sinon chaîne vide>",',
+    '  "justification": "<une phrase courte en français expliquant la conclusion>"',
+    '}',
+    'Définitions : "responsable" = NOTRE véhicule/conducteur est en tort ; "non-responsable" = l\'autre',
+    'partie est en tort ; "partagee" = torts partagés. Mets "inconnu" si le courrier ne tranche pas',
+    'clairement. Ne DEVINE JAMAIS : en cas de doute, réponds "inconnu".',
+  ].join('\n');
+};
 FP.scanIA = async function (file, docType, promptOverride, opts) {
   opts = opts || {};
   try {
