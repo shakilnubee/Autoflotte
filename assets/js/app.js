@@ -1271,6 +1271,33 @@ FP.societeProfil = () => {
   if (document.body) build(); else document.addEventListener('DOMContentLoaded', build);
 })();
 
+// === Menus déroulants : rester dans l'écran sur mobile (ne jamais couper) ======
+// Un menu « position:absolute; right:0 » ancré à un bouton proche du bord gauche
+// débordait hors écran à gauche (ex. Raccourcis). Après CHAQUE ouverture, on
+// recale horizontalement tout menu déroulant visible pour qu'il tienne dans la
+// fenêtre — position-agnostique (gauche OU droite). Les menus « position:fixed »
+// (FP.searchSelect) se placent déjà seuls → ignorés.
+FP.clampDropdowns = () => {
+  try {
+    if (window.innerWidth > 640) return;
+    const vw = window.innerWidth, M = 8;
+    document.querySelectorAll('#sc-menu, #soc-menu, .fp-export-menu, .fp-menu').forEach(m => {
+      if (!m || m.classList.contains('hidden')) return;
+      const cs = getComputedStyle(m);
+      if (cs.display === 'none' || cs.position === 'fixed') return;
+      m.style.transform = 'none';
+      const r = m.getBoundingClientRect();
+      if (r.width < 2) return;
+      let dx = 0;
+      if (r.right > vw - M) dx = (vw - M) - r.right;   // déborde à droite → décaler à gauche
+      if (r.left + dx < M) dx = M - r.left;            // déborde à gauche → décaler à droite
+      if (dx) m.style.transform = 'translateX(' + Math.round(dx) + 'px)';
+    });
+  } catch (e) {}
+};
+document.addEventListener('click', () => setTimeout(FP.clampDropdowns, 0), true);
+window.addEventListener('resize', () => { try { FP.clampDropdowns(); } catch (e) {} });
+
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
   STORAGE_KEY: 'auto_flotte_settings',
