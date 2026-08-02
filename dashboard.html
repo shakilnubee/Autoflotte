@@ -322,10 +322,7 @@
 
     <!-- Indicateurs détaillés (repliés par défaut) -->
     <div class="mt-4">
-      <button id="toggle-details" class="text-sm font-semibold inline-flex items-center gap-1.5" style="color: var(--fp-accent)">
-        <i data-lucide="chevron-right" id="details-chevron" class="w-4 h-4"></i> <span id="details-label">Voir les indicateurs détaillés</span>
-      </button>
-      <div id="details-panel" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+      <div id="details-panel" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
         <div class="kpi">
           <div class="kpi-label">Km cumulés</div>
           <div class="kpi-value" id="kpi-km" style="font-size:1.5rem">—</div>
@@ -357,6 +354,9 @@
           <div class="kpi-delta">en attente d'assurance</div>
         </a>
       </div>
+      <button id="toggle-details" class="text-sm font-semibold inline-flex items-center gap-1.5" style="color: var(--fp-accent)">
+        <i data-lucide="chevron-right" id="details-chevron" class="w-4 h-4"></i> <span id="details-label">Voir les indicateurs détaillés</span>
+      </button>
     </div>
 
     <div id="dash-widgets" class="mt-8">
@@ -617,14 +617,26 @@
   document.getElementById('kpi-entretien').textContent = flotteActive.filter(v => v.statut === 'entretien').length;
   fillMoneyKpis();
 
-  // Repli / dépli de la section détaillée
-  document.getElementById('toggle-details').addEventListener('click', () => {
+  // Repli / dépli de la section détaillée — l'état (masqué / affiché) est MÉMORISÉ et réappliqué
+  // à chaque visite (et d'une page à l'autre) : on garde ton dernier choix.
+  (function () {
+    const DKEY = 'fp_dash_details_open';
     const panel = document.getElementById('details-panel');
     const chevron = document.getElementById('details-chevron');
-    const open = panel.classList.toggle('hidden') === false;
-    chevron.style.transform = open ? 'rotate(90deg)' : '';
-    document.getElementById('details-label').textContent = open ? 'Masquer les indicateurs détaillés' : 'Voir les indicateurs détaillés';
-  });
+    const label = document.getElementById('details-label');
+    const applyState = (open) => {
+      panel.classList.toggle('hidden', !open);
+      if (chevron) chevron.style.transform = open ? 'rotate(90deg)' : '';
+      if (label) label.textContent = open ? 'Masquer les indicateurs détaillés' : 'Voir les indicateurs détaillés';
+    };
+    let saved = false; try { saved = localStorage.getItem(DKEY) === '1'; } catch (e) {}
+    applyState(saved);
+    document.getElementById('toggle-details').addEventListener('click', () => {
+      const open = panel.classList.contains('hidden'); // masqué actuellement → on ouvre
+      applyState(open);
+      try { localStorage.setItem(DKEY, open ? '1' : '0'); } catch (e) {}
+    });
+  })();
 
   // Coût du mois courant : on EXCLUT les loyers de leasing (comptés dans Contrats) et les sinistres.
   // Le carburant/péages (Total Fleet) et Ulys sont désormais COMPTÉS (vrai coût d'exploitation),
