@@ -198,8 +198,8 @@ var PALIERS = [
   { nom:'Pro',        max:60,       prixMois:189 },
   { nom:'Enterprise', max:Infinity, parVeh:2.90  }  // >60 : au véhicule
 ];
-var DELEGUE_PAR_VEH = 15;     // €/véh/mois
-var DELEGUE_PLANCHER = 150;   // €/mois minimum
+var DELEGUE_BASE = 290;       // €/mois — forfait de gestion (temps, dispo, reporting)
+var DELEGUE_PAR_VEH = 12;     // €/véh/mois — outil + traitement au volume
 var MES_PRIX = 149;           // mise en service €
 var MOIS_ANNUEL = 11;         // annuel = 11 mois payés (1 offert)
 
@@ -228,15 +228,13 @@ function render(){
   // -- Ligne principale selon la formule --
   var lignes = [], loyerMensuel = 0, formuleLabel = '';
   if (state.formule === 'delegue') {
-    var puVeh = DELEGUE_PAR_VEH;
-    var mensuel = Math.max(DELEGUE_PLANCHER, puVeh * nb);
+    var mensuel = DELEGUE_BASE + DELEGUE_PAR_VEH * nb;
     loyerMensuel = mensuel;
     formuleLabel = 'Gestion déléguée';
-    var planchit = (puVeh * nb) < DELEGUE_PLANCHER;
     var qte = annuel ? MOIS_ANNUEL : 1;
     lignes.push({
       des:'Gestion déléguée de flotte — outil inclus',
-      det:(planchit ? 'Forfait minimum ('+euro0(DELEGUE_PLANCHER)+'/mois) — '+nb+' véh.' : nb+' véhicules × '+euro0(puVeh)+'/véh/mois')
+      det:'Forfait de gestion '+euro0(DELEGUE_BASE)+'/mois + '+nb+' véhicule'+(nb>1?'s':'')+' × '+euro0(DELEGUE_PAR_VEH)+'/véh/mois'
           + (annuel ? ' · '+MOIS_ANNUEL+' mois (1 offert)' : ' · mensuel'),
       qte:qte, pu:mensuel, total:mensuel*qte
     });
@@ -313,7 +311,7 @@ function render(){
   // -- Hint formule --
   var p2 = palierPour(nb);
   $('formule-hint').textContent = state.formule==='delegue'
-    ? (nb+' véh. → '+euro0(Math.max(DELEGUE_PLANCHER,DELEGUE_PAR_VEH*nb))+'/mois')
+    ? (nb+' véh. → '+euro0(DELEGUE_BASE + DELEGUE_PAR_VEH*nb)+'/mois')
     : (nb+' véh. → palier '+(p2.parVeh?'Enterprise':p2.nom));
 
   // -- Mémorise les montants calculés pour passer au générateur de contrat --
