@@ -2018,6 +2018,8 @@ FP.notifCfg = () => {
     releveKmJours: num(n.releveKmJours, 45),   // rappel « relevé km » : tous les X jours (défaut 45 = 1 mois et demi)
     releveKmDebut: (typeof n.releveKmDebut === 'string' && n.releveKmDebut.trim()) ? n.releveKmDebut.trim() : '', // date d'ancrage du cycle (optionnelle)
     leasingFinMois: num(n.leasingFinMois, 2),  // anticipation d'alerte « fin de leasing » (mois avant la fin ; défaut 2)
+    immobiliseJours: num(n.immobiliseJours, 15), // alerte « véhicule immobilisé » après X jours (défaut 15)
+    consoSeuilPct: num(n.consoSeuilPct, 60),   // alerte conso carburant : hausse ≥ X % vs moyenne du véhicule (défaut 60 %)
   };
 };
 // ⚠️ SOURCE UNIQUE — Applique une facture à la fiche du véhicule (km + dernière révision + pneus +
@@ -2787,6 +2789,81 @@ FP.buildAlertes = (data) => {
 
   // (Le « véhicules sans dernière révision » n'est PAS une alerte : véhicules neufs, etc.
   //  → retiré des notifications. L'info reste visible dans la fiche véhicule.)
+
+  // --- Véhicules IMMOBILISÉS depuis trop longtemps (marqués via le dashboard) ---
+  try {
+    const immo = (FP.settings.get().vehImmobilise) || {};
+    const seuilJ = FP.notifCfg().immobiliseJours;
+    const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+    const items = [];
+    (data.vehicules || []).forEach(v => {
+      if (FP.horsFlotte(v)) return;
+      const im = immo[v.id]; if (!im || !im.since) return;
+      const j = Math.floor((t0 - new Date(im.since)) / 86400000);
+      if (j >= seuilJ) items.push({ label: `${v.immat} · ${v.marque} ${v.modele} — immobilisé depuis ${j} j`, target: 'vehicules.html' });
+    });
+    if (items.length) out.push({ niveau: 'warn', categorie: 'Immobilisation', message: `${items.length} véhicule(s) immobilisé(s) depuis + de ${seuilJ} j`, detail: 'Au garage / hors service trop longtemps — à débloquer', sort: 400, vehicules: items });
+  } catch (e) {}
+
+  // --- Consommation carburant ANORMALE (dépense d'un mois clos >> moyenne du véhicule) ---
+  // Ignorable par véhicule via « masquer » (muteKey conso|<id>) : le gestionnaire peut connaître
+  // la raison (gros déplacement, plein exceptionnel…) et couper l'alerte pour ce véhicule.
+  try {
+    const seuil = 1 + (FP.notifCfg().consoSeuilPct / 100);
+    const byVeh = {};
+    (data.factures || []).forEach(f => {
+      if (!FP.estCarburantPeage(f) || !f.vehiculeImmat) return;
+      const ym = (f.date || '').slice(0, 7); if (!/^\d{4}-\d{2}$/.test(ym)) return;
+      const im = String(f.vehiculeImmat).toUpperCase();
+      (byVeh[im] = byVeh[im] || {})[ym] = (byVeh[im][ym] || 0) + (Number(f.montantTTC) || 0);
+    });
+    const nowYm = new Date().toISOString().slice(0, 7);
+    Object.keys(byVeh).forEach(im => {
+      const months = Object.keys(byVeh[im]).sort();
+      if (months.length < 4) return;                 // pas assez d'historique
+      const last = months[months.length - 1];
+      if (last === nowYm) return;                    // mois courant incomplet → on prend le dernier mois CLOS
+      const prev = months.slice(0, -1);
+      const avg = prev.reduce((s, m) => s + byVeh[im][m], 0) / prev.length;
+      const val = byVeh[im][last];
+      if (avg <= 0 || val < 50 || val < avg * seuil) return;
+      const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === im);
+      if (!v || FP.horsFlotte(v)) return;
+      const pct = Math.round((val / avg - 1) * 100);
+      out.push({ niveau: 'info', categorie: 'Carburant', message: `${im} : carburant +${pct}% en ${last} (${FP.euro(val)} vs moy. ${FP.euro(avg)})`, detail: 'Dépense inhabituelle — vérifie (gros plein, fuite, usage) ou masque si c\'est normal', sort: 350, target: 'factures.html', muteKey: 'conso|' + v.id, vehLabel: `${v.immat} · ${v.marque} ${v.modele}` });
+    });
+  } catch (e) {}
+
+  // --- Expiration carte carburant / badge télépéage (dates saisies dans la fiche véhicule) ---
+  try {
+    const st = FP.settings.get();
+    const exps = [['vehCarteCarbExp', 'Carte carburant'], ['vehBadgeExp', 'Badge télépéage']];
+    const t0e = new Date(); t0e.setHours(0, 0, 0, 0);
+    (data.vehicules || []).forEach(v => {
+      if (FP.horsFlotte(v)) return;
+      exps.forEach(([mapKey, lib]) => {
+        const d = (st[mapKey] || {})[v.id]; if (!d) return;
+        const dt = new Date(d); if (isNaN(dt)) return;
+        const diff = Math.ceil((dt - t0e) / 86400000);
+        const veh = `${v.immat} · ${v.marque} ${v.modele}`;
+        const mk = 'exp' + mapKey + '|' + v.id;
+        if (diff < 0)       out.push({ niveau: 'danger', categorie: lib, message: `${lib} EXPIRÉE depuis ${-diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
+        else if (diff < 30) out.push({ niveau: 'warn',   categorie: lib, message: `${lib} expire dans ${diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
+      });
+    });
+  } catch (e) {}
+
+  // --- Amende potentiellement PAYÉE EN DOUBLE (même n° d'avis réglé plusieurs fois) ---
+  try {
+    const byAvis = {};
+    (data.amendes || []).forEach(a => { const n = (a.numeroAvis || '').toString().trim().toUpperCase(); if (!n) return; (byAvis[n] = byAvis[n] || []).push(a); });
+    const dbl = [];
+    Object.keys(byAvis).forEach(n => {
+      const payees = byAvis[n].filter(a => FP.estPayee ? FP.estPayee(a) : a.statut === 'payée');
+      if (payees.length >= 2) dbl.push({ label: `Avis ${n} — réglé ${payees.length}×`, target: 'amendes.html' });
+    });
+    if (dbl.length) out.push({ niveau: 'warn', categorie: 'Amendes', message: `${dbl.length} amende(s) peut-être payée(s) en double`, detail: "Même n° d'avis réglé plusieurs fois — vérifie / demande le remboursement", sort: 420, vehicules: dbl });
+  } catch (e) {}
 
   // --- Sinistres en attente de remboursement (rappel de suivi) ---
   const sinStatut = (FP.settings.get().sinistreStatut) || {};
