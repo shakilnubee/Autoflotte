@@ -6432,10 +6432,30 @@ FP.featureTip = () => {
   } catch (e) {}
 };
 
+// Flèche « ← Retour » en haut de chaque page : revient à la page précédente (page/onglet d'où l'on
+// vient). N'apparaît QUE si l'on arrive d'une autre page DU SITE (sinon « retour » n'a pas de sens).
+FP.injectBackButton = () => {
+  try {
+    if (!document.body || document.getElementById('fp-back')) return;
+    if (/login|brochure|prix|logos|carte|avis|ecran|demo/i.test(location.pathname)) return;
+    let sameApp = false;
+    try { const r = document.referrer ? new URL(document.referrer) : null; sameApp = !!r && r.host === location.host && r.pathname !== location.pathname; } catch (e) {}
+    if (!sameApp) return;
+    const main = document.querySelector('main') || document.body;
+    const b = document.createElement('button');
+    b.id = 'fp-back'; b.type = 'button'; b.className = 'fp-back'; b.title = 'Revenir à la page précédente';
+    b.innerHTML = '<i data-lucide="arrow-left" style="width:15px;height:15px"></i> Retour';
+    b.addEventListener('click', () => { history.back(); });
+    main.insertBefore(b, main.firstChild);
+    if (window.lucide) lucide.createIcons();
+  } catch (e) {}
+};
+
 // Navigation active state (sidebar)
 document.addEventListener('DOMContentLoaded', () => {
   // Appliquer le thème (couleurs des groupes) dès le chargement
   FP.settings.applyTheme();
+  FP.injectBackButton();
   // Rôle courant : marque le body + retire les onglets réservés à l'admin (rôle interne)
   const _isAdmin = FP.isAdmin();
   document.body.setAttribute('data-role', FP.role());
