@@ -647,7 +647,9 @@
         const reste = (g.cost || 0) - (Number(dv.rembourse) || 0);
         const vehCh = (veh && veh.chauffeur && veh.chauffeur !== '—') ? veh.chauffeur : '';
         const _inpCss = 'width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px';
-        const courrierLien = dv.courrierUrl ? `<a href="${escapeHtml(/^https?:\/\//.test(dv.courrierUrl) ? dv.courrierUrl : ('https://drive.google.com/file/d/' + dv.courrierUrl + '/view'))}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs hover:underline" style="color:var(--fp-accent);margin-left:6px"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Voir le courrier</a>` : '';
+        // Ouverture via FP.openScan (URL signée) : le bucket des scans est privé → un lien public brut
+        // ne s'ouvrirait pas. Repli Google Drive pour un éventuel identifiant Drive hérité.
+        const courrierLien = dv.courrierUrl ? `<button type="button" class="sin-courrier-open" data-url="${escapeHtml(dv.courrierUrl)}" style="display:inline-flex;align-items:center;gap:.25rem;font-size:12px;color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline;margin-left:2px"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Voir le courrier</button>` : '';
         const dossierPanel = `
           <details class="mt-2">
             <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#475569;list-style:none" class="inline-flex items-center gap-1"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Dossier assurance — suivi</summary>
@@ -950,6 +952,14 @@
     // Courrier assureur : bouton → ouvre le sélecteur de fichier
     const crbtn = e.target.closest('.sin-courrier-btn');
     if (crbtn) { const inp = crbtn.parentElement && crbtn.parentElement.querySelector('.sin-courrier-file'); if (inp) inp.click(); return; }
+    // « Voir le courrier » : ouverture via lien signé (bucket privé), repli Drive pour un id hérité
+    const crOpen = e.target.closest('.sin-courrier-open');
+    if (crOpen) {
+      const u = crOpen.dataset.url || '';
+      if (/^https?:\/\//.test(u)) { if (FP.openScan) FP.openScan(u); else window.open(u, '_blank', 'noopener'); }
+      else if (u) window.open('https://drive.google.com/file/d/' + u + '/view', '_blank', 'noopener');
+      return;
+    }
     // Clôturer / rouvrir le dossier (pose ou retire la date de clôture)
     const clo = e.target.closest('.sin-cloturer');
     if (clo) {
