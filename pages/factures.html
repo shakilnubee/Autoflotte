@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260802g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260802h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260802g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260802h">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -160,7 +160,7 @@
         <span id="fa-export-mount"></span>
         <button class="btn btn-outline text-sm" id="fa-fiche-btn" title="Relevé de dépenses (PDF) des factures affichées"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
         <span id="fa-recap-mount"></span>
-        <button class="btn btn-dark text-sm" id="btn-import-facture"><i data-lucide="file-up" class="w-4 h-4"></i> Importer une facture</button>
+        <button class="btn btn-dark text-sm" id="btn-import-facture" data-quickadd><i data-lucide="file-up" class="w-4 h-4"></i> Importer une facture</button>
       </div>
     </div>
 
@@ -226,7 +226,11 @@
         </div>
       </div>
       <div id="cp-years" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
-      <p class="text-xs text-slate-400 mt-2">Total des factures par année (clique une année pour la sélectionner, ou choisis une période personnalisée). Hors loyers de leasing et sinistres.</p>
+      <div class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-slate-100 flex-wrap">
+        <span class="text-sm text-slate-600"><i data-lucide="receipt-text" class="w-4 h-4 inline" style="vertical-align:-3px"></i> <b>TVA récupérable</b> <span class="text-xs text-slate-400" id="cp-tva-scope">— toutes années</span></span>
+        <span class="font-extrabold text-lg" style="color:#0369a1" id="cp-tva-total">—</span>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Total des factures par année (clique une année pour la sélectionner, ou choisis une période personnalisée). Hors loyers de leasing et sinistres. La <b>TVA récupérable</b> = somme des TVA des factures de la période (utile pour le comptable).</p>
     </div>
 
     <!-- Filtres -->
@@ -622,12 +626,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260802g"></script>
-<script src="../assets/js/supabase-client.js?v=20260802g"></script>
-<script src="../assets/js/data.js?v=20260802g"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802g"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802g"></script>
-<script src="../assets/js/app.js?v=20260802g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260802h"></script>
+<script src="../assets/js/supabase-client.js?v=20260802h"></script>
+<script src="../assets/js/data.js?v=20260802h"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802h"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802h"></script>
+<script src="../assets/js/app.js?v=20260802h"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1661,12 +1665,14 @@
         if (f.vehiculeImmat) immats.add(String(f.vehiculeImmat).toUpperCase());
         try { const s = FP.settings.get(); if (s.sinistreStatut && s.sinistreStatut[f.id] != null) { delete s.sinistreStatut[f.id]; FP.settings.save(s); } } catch (e) {}
       });
-      // Recale les fiches véhicules concernées sur les factures restantes (source unique app.js)
-      if (FP.recomputeVehiculeFromFactures) immats.forEach(im => {
-        const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === im);
-        if (v) FP.recomputeVehiculeFromFactures(v, data.factures);
-      });
+      const recalc = () => { if (FP.recomputeVehiculeFromFactures) immats.forEach(im => { const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === im); if (v) FP.recomputeVehiculeFromFactures(v, data.factures); }); };
+      recalc();
       renderKPIs(); renderTable(); renderCharts();
+      return () => { // Annuler : ré-insère les factures supprimées
+        cibles.forEach(f => { data.factures.push(f); factures.push(f); if (FP.persist) FP.persist.insert('factures', f); });
+        recalc();
+        renderKPIs(); renderTable(); renderCharts();
+      };
     },
   });
 
@@ -1681,7 +1687,23 @@
     yearsEl: 'cp-years', fromEl: 'cp-from', toEl: 'cp-to', totalEl: 'cp-range-total', clearEl: 'cp-clear', exportEl: 'cp-export', fileLabel: 'cout-factures-par-annee',
   });
   coutPeriode.render();
-  document.addEventListener('fp:data-ready', () => coutPeriode.render());
+  // TVA récupérable = somme des TVA des factures d'exploitation (hors leasing/sinistre) sur la période
+  // choisie (mêmes bornes que « Coût par période »). Suit le du/au ; sinon = toutes années.
+  function renderTvaRecap() {
+    try {
+      const from = ($('cp-from') || {}).value || '', to = ($('cp-to') || {}).value || '';
+      const items = (data.factures || []).filter(f => f.type !== 'leasing' && f.type !== 'sinistre');
+      const inRange = items.filter(f => { const d = f.date || ''; if (from && d < from) return false; if (to && d > to) return false; return true; });
+      const tva = inRange.reduce((s, f) => s + (Number(f.montantTVA) || 0), 0);
+      const tot = $('cp-tva-total'); if (tot) tot.textContent = FP.euro(tva);
+      const sc = $('cp-tva-scope'); if (sc) sc.textContent = (from || to) ? `— du ${from ? FP.date(from) : '…'} au ${to ? FP.date(to) : '…'}` : '— toutes années';
+    } catch (e) {}
+  }
+  renderTvaRecap();
+  ['cp-from', 'cp-to'].forEach(id => { const el = $(id); if (el) el.addEventListener('change', renderTvaRecap); });
+  { const y = $('cp-years'); if (y) y.addEventListener('click', () => setTimeout(renderTvaRecap, 0)); }
+  { const c = $('cp-clear'); if (c) c.addEventListener('click', () => setTimeout(renderTvaRecap, 0)); }
+  document.addEventListener('fp:data-ready', () => { coutPeriode.render(); renderTvaRecap(); });
   // Données Supabase arrivées (ou import) → on reconstruit la liste et on rafraîchit le tableau
   document.addEventListener('fp:data-ready', () => { rebuildFactures(); rebuildAnneeFilter(); renderKPIs(); renderTable(); renderCharts(); });
   if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });

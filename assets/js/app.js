@@ -869,11 +869,14 @@ FP.bulkSelect = function (opts) {
     if (act === 'delete') {
       const ids = [...sel]; if (!ids.length) return;
       const label = ids.length > 1 ? nounP : noun;
-      const ok = FP.confirm ? await FP.confirm(`Supprimer ${ids.length} ${label} ? Action définitive.`) : window.confirm('Supprimer ?');
+      const ok = FP.confirm ? await FP.confirm(`Supprimer ${ids.length} ${label} ?`) : window.confirm('Supprimer ?');
       if (!ok) return;
-      try { if (typeof opts.onDelete === 'function') await opts.onDelete(ids); } catch (err) { console.error('[FP.bulkSelect.onDelete]', err); }
+      let undo = null;
+      try { if (typeof opts.onDelete === 'function') undo = await opts.onDelete(ids); } catch (err) { console.error('[FP.bulkSelect.onDelete]', err); }
       sel.clear(); rerender();
-      if (FP.toast) FP.toast(`🗑 ${ids.length} ${label} supprimé(s)`);
+      // Si onDelete renvoie une fonction, on l'utilise comme action « Annuler ».
+      if (typeof undo === 'function' && FP.undoToast) FP.undoToast(`🗑 ${ids.length} ${label} supprimé(s)`, undo);
+      else if (FP.toast) FP.toast(`🗑 ${ids.length} ${label} supprimé(s)`);
     }
   });
   const tb = (typeof opts.tbody === 'string') ? document.getElementById(opts.tbody) : opts.tbody;
@@ -2014,6 +2017,7 @@ FP.notifCfg = () => {
     revAlerteJours: num(n.revAlerteJours, 30), // alerte révision quand il reste ≤ X jours (avant l'échéance mois)
     releveKmJours: num(n.releveKmJours, 45),   // rappel « relevé km » : tous les X jours (défaut 45 = 1 mois et demi)
     releveKmDebut: (typeof n.releveKmDebut === 'string' && n.releveKmDebut.trim()) ? n.releveKmDebut.trim() : '', // date d'ancrage du cycle (optionnelle)
+    leasingFinMois: num(n.leasingFinMois, 2),  // anticipation d'alerte « fin de leasing » (mois avant la fin ; défaut 2)
   };
 };
 // ⚠️ SOURCE UNIQUE — Applique une facture à la fiche du véhicule (km + dernière révision + pneus +
@@ -2768,10 +2772,15 @@ FP.buildAlertes = (data) => {
     const diff = days(l.finContrat);
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
     const finStr = FP.date(l.finContrat.toISOString());
+    // Seuil configurable (Paramètres → Notifications) : « danger » à X mois de la fin (défaut 2),
+    // « warn » pendant les 3 mois qui précèdent ce seuil.
+    const finMois = FP.notifCfg().leasingFinMois;
+    const dangerJ = Math.max(0, finMois) * 30;
+    const warnJ = dangerJ + 90;
     let niveau = null, msg = null;
-    if (diff < 0)        { niveau = 'danger'; msg = `Leasing terminé depuis ${-diff}j (${finStr})`; }
-    else if (diff < 90)  { niveau = 'danger'; msg = `Fin de leasing dans ${diff}j (${finStr})`; }
-    else if (diff < 180) { niveau = 'warn';   msg = `Fin de leasing dans ~${Math.round(diff / 30)} mois (${finStr})`; }
+    if (diff < 0)          { niveau = 'danger'; msg = `Leasing terminé depuis ${-diff}j (${finStr})`; }
+    else if (diff <= dangerJ) { niveau = 'danger'; msg = `Fin de leasing dans ${diff}j (${finStr})`; }
+    else if (diff <= warnJ)   { niveau = 'warn';   msg = `Fin de leasing dans ~${Math.round(diff / 30)} mois (${finStr})`; }
     else return;
     out.push({ niveau, categorie: 'Leasing', message: msg, detail: veh, sort: diff, target: 'contrats.html', muteKey: 'leasingfin|' + v.id + '|' + finStr, vehLabel: veh });
   });
@@ -6167,6 +6176,154 @@ FP.injectDataIO = function (cfg) {
   document.addEventListener('fp:data-ready', () => setTimeout(animateKpis, 40));
 })();
 
+// =====================================================================
+// === Confort transversal : Annuler (undo), contacts cliquables, bouton +, tour, vue mobile ===
+// =====================================================================
+
+// ⚠️ RÈGLE PROJET — après une SUPPRESSION, proposer « Annuler » via ce helper.
+// FP.undoToast(message, onUndo) : toast avec bouton « ↶ Annuler » qui restaure. onUndo DOIT
+// ré-insérer la donnée (tableau EN MÉMOIRE + FP.persist.insert) — cf. usages factures/amendes/sinistres.
+FP.undoToast = (message, onUndo, opts) =>
+  FP.toast(message, Object.assign({ actionLabel: '↶ Annuler', onAction: onUndo, duration: 7000 }, opts || {}));
+
+// Coordonnées d'un conducteur (par nom/prénom) → { tel, email } depuis la table conducteurs.
+FP.conducteurContact = (name) => {
+  try {
+    const norm = (x) => FP.normPrenom ? FP.normPrenom(x) : String(x || '').toLowerCase().trim();
+    const n = norm(name); if (!n) return {};
+    const list = (window.FP_DATA && Array.isArray(FP_DATA.conducteurs)) ? FP_DATA.conducteurs : [];
+    const c = list.find(c => [c.name, c.prenom, c.key, c.nom].filter(Boolean).map(norm).includes(n));
+    return c ? { tel: c.tel || '', email: c.email || '' } : {};
+  } catch (e) { return {}; }
+};
+// Puces cliquables tel:/mailto: + bouton copier — réutilisable partout où un conducteur apparaît.
+FP.contactChips = (name) => {
+  const { tel, email } = FP.conducteurContact(name);
+  if (!tel && !email) return '';
+  const esc = FP.esc || (x => x);
+  const chip = (href, icon, txt, lbl) =>
+    `<a href="${href}" class="fp-contact-chip"><i data-lucide="${icon}" style="width:13px;height:13px"></i> ${esc(txt)}</a>`
+    + `<button type="button" class="fp-contact-copy" data-copy="${esc(txt)}" title="Copier ${lbl}"><i data-lucide="copy" style="width:12px;height:12px"></i></button>`;
+  let out = '<span class="fp-contact-wrap">';
+  if (tel) out += chip('tel:' + String(tel).replace(/\s+/g, ''), 'phone', tel, 'le téléphone');
+  if (email) out += chip('mailto:' + email, 'mail', email, "l'e-mail");
+  return out + '</span>';
+};
+// Écoute globale du « copier » des contacts (délégué au document).
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('.fp-contact-copy'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const v = b.getAttribute('data-copy') || '';
+  try { if (FP.copy) FP.copy(v); else if (navigator.clipboard) navigator.clipboard.writeText(v); } catch (_) {}
+  if (FP.toast) FP.toast('✓ Copié : ' + v);
+});
+
+// Bouton « + » flottant (quick-add) : accès rapide aux ajouts fréquents depuis n'importe quelle page
+// applicative. Chaque lien pointe vers la page cible + hash #add ; la page ouvre alors son formulaire
+// « Nouveau… » via l'élément portant l'attribut data-quickadd (géré ci-dessous).
+FP.injectQuickAdd = () => {
+  try {
+    if (document.getElementById('fp-fab') || !document.body) return;
+    const path = location.pathname;
+    // Pas de FAB sur login / pages publiques / supports de vente / pages de lecture seule.
+    if (/login|brochure|prix|logos|carte|avis|demo|kit-commercial|guide|manuel|aide|ecran/i.test(path)) return;
+    const inPages = /\/pages\//.test(path);
+    const pref = inPages ? '' : 'pages/';
+    const items = [
+      { label: 'Nouveau véhicule', icon: 'car',           href: 'vehicules.html#add' },
+      { label: 'Nouvelle amende',  icon: 'ticket',        href: 'amendes.html#add' },
+      { label: 'Nouvelle facture', icon: 'receipt',       href: 'factures.html#add' },
+      { label: 'Nouveau sinistre', icon: 'alert-octagon', href: 'sinistres.html#add' },
+    ];
+    const fab = document.createElement('div');
+    fab.id = 'fp-fab';
+    fab.innerHTML =
+      `<div class="fp-fab-menu" id="fp-fab-menu">${items.map(i => `<a href="${pref}${i.href}" class="fp-fab-item"><i data-lucide="${i.icon}"></i> ${i.label}</a>`).join('')}</div>`
+      + `<button type="button" class="fp-fab-btn" id="fp-fab-btn" title="Ajouter" aria-label="Ajouter rapidement"><i data-lucide="plus"></i></button>`;
+    document.body.appendChild(fab);
+    const btn = fab.querySelector('#fp-fab-btn');
+    btn.addEventListener('click', (e) => { e.stopPropagation(); fab.classList.toggle('open'); });
+    document.addEventListener('click', () => fab.classList.remove('open'));
+    if (window.lucide) lucide.createIcons();
+  } catch (e) {}
+};
+// Ouverture directe d'un formulaire « Nouveau… » quand on arrive avec #add (depuis le bouton +).
+// La page doit poser l'attribut data-quickadd sur son bouton « Nouveau… ».
+FP.handleQuickAddHash = () => {
+  try {
+    if (location.hash !== '#add') return;
+    const trigger = () => { const el = document.querySelector('[data-quickadd]'); if (el) { el.click(); return true; } return false; };
+    if (!trigger()) document.addEventListener('fp:data-ready', () => setTimeout(trigger, 60), { once: true });
+    // Nettoie le hash pour ne pas rouvrir au rechargement
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+  } catch (e) {}
+};
+
+// Vue mobile « en cartes » : sur petit écran, chaque ligne de .fp-table devient une carte, avec le
+// libellé de colonne à gauche de la valeur. On copie les en-têtes du <thead> dans data-label des <td>
+// (le CSS fait le reste). Générique → s'applique à TOUS les tableaux du site, sans les réécrire.
+FP.mobileCardify = (root) => {
+  try {
+    if (!window.matchMedia || !matchMedia('(max-width: 640px)').matches) return;
+    (root || document).querySelectorAll('table.fp-table').forEach(tbl => {
+      const ths = [...tbl.querySelectorAll('thead th')].map(th => (th.textContent || '').trim());
+      if (!ths.length) return;
+      tbl.querySelectorAll('tbody tr').forEach(tr => {
+        [...tr.children].forEach((td, i) => { if (td.tagName === 'TD' && ths[i] && !td.hasAttribute('data-label')) td.setAttribute('data-label', ths[i]); });
+      });
+    });
+  } catch (e) {}
+};
+
+// Petit tour guidé à la 1re visite (dashboard). Ignorable ; « ne plus afficher » mémorisé en local.
+FP.injectTour = (force) => {
+  try {
+    if (!document.body) return;
+    const KEY = 'fp_tour_v1_done';
+    if (!force) { if (!/dashboard/i.test(location.pathname)) return; if (localStorage.getItem(KEY) === '1') return; }
+    if (document.getElementById('fp-tour')) return;
+    const steps = [
+      { t: 'Bienvenue sur Parc Pilot 👋', d: "Voici un tour express (30 s) des grands repères. Vous pourrez le revoir depuis le Manuel." },
+      { t: '📊 Tableau de bord', d: "Vos chiffres clés en un coup d'œil : véhicules, coûts du mois, amendes à payer, alertes." },
+      { t: '🔔 Suivi & alertes', d: "Tout ce qui arrive à échéance (contrôle technique, assurance, révision, fin de leasing) et un onglet « À compléter » qui liste ce qui reste à renseigner." },
+      { t: '🚗 Vos véhicules', d: "Une fiche par véhicule : documents, coûts, €/km, leasing, journal. Épinglez vos favoris avec l'étoile ⭐." },
+      { t: '➕ Bouton d\'ajout rapide', d: "En bas à droite, le bouton « + » ajoute un véhicule, une amende, une facture ou un sinistre depuis n'importe quelle page." },
+      { t: '🔎 Recherche & aide', d: "La barre de recherche (en haut de la colonne de gauche, ou Ctrl+K) trouve tout. Le Manuel explique chaque écran en détail." },
+    ];
+    let i = 0;
+    const ov = document.createElement('div'); ov.id = 'fp-tour';
+    ov.innerHTML =
+      `<div class="fp-tour-card">
+         <button type="button" class="fp-tour-skip" title="Fermer">✕</button>
+         <div class="fp-tour-title"></div>
+         <div class="fp-tour-desc"></div>
+         <div class="fp-tour-dots"></div>
+         <div class="fp-tour-actions">
+           <label class="fp-tour-never"><input type="checkbox" class="fp-tour-never-cb"> Ne plus afficher</label>
+           <div style="display:flex;gap:.5rem;margin-left:auto">
+             <button type="button" class="fp-tour-btn fp-tour-prev">Précédent</button>
+             <button type="button" class="fp-tour-btn primary fp-tour-next">Suivant</button>
+           </div>
+         </div>
+       </div>`;
+    document.body.appendChild(ov);
+    const q = (s) => ov.querySelector(s);
+    const render = () => {
+      q('.fp-tour-title').textContent = steps[i].t;
+      q('.fp-tour-desc').textContent = steps[i].d;
+      q('.fp-tour-dots').innerHTML = steps.map((_, k) => `<span class="fp-tour-dot${k === i ? ' on' : ''}"></span>`).join('');
+      q('.fp-tour-prev').style.visibility = i === 0 ? 'hidden' : 'visible';
+      q('.fp-tour-next').textContent = i === steps.length - 1 ? 'Terminer' : 'Suivant';
+    };
+    const close = () => { if (q('.fp-tour-never-cb').checked || i >= steps.length - 1) { try { localStorage.setItem(KEY, '1'); } catch (_) {} } ov.remove(); };
+    q('.fp-tour-skip').addEventListener('click', () => { try { localStorage.setItem(KEY, '1'); } catch (_) {} ov.remove(); });
+    q('.fp-tour-prev').addEventListener('click', () => { if (i > 0) { i--; render(); } });
+    q('.fp-tour-next').addEventListener('click', () => { if (i < steps.length - 1) { i++; render(); } else close(); });
+    ov.addEventListener('click', (e) => { if (e.target === ov) { /* clic hors carte = ne ferme pas (évite fermeture accidentelle) */ } });
+    render();
+  } catch (e) {}
+};
+
 // Navigation active state (sidebar)
 document.addEventListener('DOMContentLoaded', () => {
   // Appliquer le thème (couleurs des groupes) dès le chargement
@@ -6198,6 +6355,13 @@ document.addEventListener('DOMContentLoaded', () => {
   FP.injectGlobalSearch();
   // Injecter le bouton déconnexion en bas des sidebars
   FP.injectLogoutButton();
+  // Confort transversal : bouton « + » flottant, ouverture directe #add, vue mobile en cartes, tour guidé
+  FP.injectQuickAdd();
+  FP.handleQuickAddHash();
+  FP.mobileCardify(document);
+  window.addEventListener('fp:data-ready', () => { try { FP.mobileCardify(document); } catch (e) {} });
+  window.addEventListener('resize', () => { try { FP.mobileCardify(document); } catch (e) {} });
+  FP.injectTour();
 
   // Animations 3D au survol des bulles KPI (global — validé). La carte s'incline vers le
   // curseur + reflet qui suit la souris. Ré-appliqué après un re-rendu de données

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260802g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260802h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260802g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260802h">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -222,6 +222,16 @@
       </div>
     </div>
 
+    <!-- Comparaison des dépenses (mois vs mois · année vs année) -->
+    <div class="card p-6 mb-6">
+      <h3 class="font-bold text-slate-900 mb-4">Comparaison des dépenses</h3>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div class="kpi p-4" id="cmp-mois"></div>
+        <div class="kpi p-4" id="cmp-annee"></div>
+      </div>
+      <p class="text-xs text-slate-400 mt-3">Coûts d'exploitation (carburant, péages, entretien, réparations…), hors leasing / sinistres / achats. <b style="color:#dc2626">▲</b> = en hausse, <b style="color:#16a34a">▼</b> = en baisse par rapport à la période précédente.</p>
+    </div>
+
     <!-- Charts -->
     <div class="grid lg:grid-cols-2 gap-6 mb-6">
       <div class="card p-6">
@@ -280,10 +290,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260802g"></script>
-<script src="../assets/js/supabase-client.js?v=20260802g"></script>
-<script src="../assets/js/data.js?v=20260802g"></script>
-<script src="../assets/js/app.js?v=20260802g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260802h"></script>
+<script src="../assets/js/supabase-client.js?v=20260802h"></script>
+<script src="../assets/js/data.js?v=20260802h"></script>
+<script src="../assets/js/app.js?v=20260802h"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -743,6 +753,37 @@
   $('filter-annee').addEventListener('change', (e) => render(e.target.value));
   // Bouton « Réinitialiser » : revient à « Toutes années ».
   if (FP.filterResetButton) FP.filterResetButton($('stat-filterbar'), { onReset: () => { const s = $('filter-annee'); if (s) { s.value = 'all'; s.dispatchEvent(new Event('change', { bubbles: true })); } } });
+  // Comparaison des dépenses : ce mois-ci vs mois dernier, cette année vs an dernier.
+  // Coûts d'EXPLOITATION dédoublonnés (mêmes règles que FP.coutMois du dashboard).
+  function renderComparaison() {
+    try {
+      const now = new Date();
+      const key = (y, m) => y + '-' + String(m + 1).padStart(2, '0');
+      const moisLabel = (y, m) => new Date(y, m, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      const curY = now.getFullYear(), curM = now.getMonth();
+      const prev = new Date(curY, curM - 1, 1);
+      const coutMois = (ymk) => FP.coutMois ? FP.coutMois(data, ymk) : 0;
+      const cThis = coutMois(key(curY, curM)), cLast = coutMois(key(prev.getFullYear(), prev.getMonth()));
+      const yearCost = (y) => (FP.dedupeFactures ? FP.dedupeFactures(data.factures || []) : (data.factures || []))
+        .filter(f => (f.date || '').slice(0, 4) === String(y) && (FP.coutFactureExploit ? FP.coutFactureExploit(f) : true))
+        .reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+      const cThisY = yearCost(curY), cLastY = yearCost(curY - 1);
+      const block = (label, a, b, subA, subB) => {
+        const delta = b > 0 ? ((a - b) / b * 100) : (a > 0 ? 100 : 0);
+        const col = a > b ? '#dc2626' : a < b ? '#16a34a' : '#64748b';
+        const arrow = a > b ? '▲' : a < b ? '▼' : '=';
+        return `<div class="kpi-label">${label}</div>
+          <div class="flex items-baseline gap-2 flex-wrap"><div class="kpi-value" style="font-size:1.6rem">${FP.euro(a)}</div>
+            <span style="color:${col};font-weight:800;font-size:.95rem">${arrow} ${b > 0 ? Math.abs(delta).toFixed(0) + '%' : (a > 0 ? 'nouveau' : '—')}</span></div>
+          <div class="kpi-delta">${subA} · précédent <b>${FP.euro(b)}</b> (${subB})</div>`;
+      };
+      const em = $('cmp-mois'); if (em) em.innerHTML = block('Ce mois-ci vs mois dernier', cThis, cLast, moisLabel(curY, curM), moisLabel(prev.getFullYear(), prev.getMonth()));
+      const ea = $('cmp-annee'); if (ea) ea.innerHTML = block('Cette année vs an dernier', cThisY, cLastY, String(curY), String(curY - 1));
+    } catch (e) { console.warn('[renderComparaison]', e); }
+  }
+  renderComparaison();
+  document.addEventListener('fp:data-ready', renderComparaison);
+
   render('all');
   // Coût de la flotte par période (année + période personnalisée)
   const coutPeriode = FP.coutParPeriode({

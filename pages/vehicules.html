@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260802g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260802h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260802g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260802h">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -366,7 +366,23 @@
         </div>
         <span data-data-io></span>
         <span id="veh-export-mount"></span>
-        <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
+        <button class="btn btn-outline text-sm" id="btn-compare" title="Comparer deux véhicules côte à côte"><i data-lucide="scale" class="w-4 h-4"></i> Comparer</button>
+        <button class="btn btn-dark text-sm" id="btn-new" data-quickadd><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
+      </div>
+    </div>
+
+    <!-- Modal : comparateur de 2 véhicules -->
+    <div id="cmp-ov" class="fiche-ov">
+      <div class="fiche-card" style="max-width:720px">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2"><i data-lucide="scale" class="w-5 h-5"></i> Comparer deux véhicules</h3>
+          <button type="button" id="cmp-close" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+        </div>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <select id="cmp-a" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"></select>
+          <select id="cmp-b" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"></select>
+        </div>
+        <div id="cmp-result"></div>
       </div>
     </div>
 
@@ -774,14 +790,14 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260802g"></script>
-<script src="../assets/js/supabase-client.js?v=20260802g"></script>
-<script src="../assets/js/data.js?v=20260802g"></script>
-<script src="../assets/js/fleet-docs.js?v=20260802g"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260802g"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802g"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802g"></script>
-<script src="../assets/js/app.js?v=20260802g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260802h"></script>
+<script src="../assets/js/supabase-client.js?v=20260802h"></script>
+<script src="../assets/js/data.js?v=20260802h"></script>
+<script src="../assets/js/fleet-docs.js?v=20260802h"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260802h"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802h"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802h"></script>
+<script src="../assets/js/app.js?v=20260802h"></script>
 <script>
   lucide.createIcons();
 
@@ -4014,6 +4030,77 @@
   $('grp-cancel').addEventListener('click', closeGroupEdit);
   $('grp-modal-close').addEventListener('click', closeGroupEdit);
   $('grp-modal-backdrop').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeGroupEdit(); });
+
+  // ====== Comparateur de 2 véhicules (côte à côte) ======
+  function vehCmpStats(v) {
+    const sameVeh = f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat);
+    const km = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
+    const exploitTotal = FP.dedupeFactures((data.factures || []).filter(f => sameVeh(f) && FP.coutFactureExploit(f))).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    const ANNEE = String(new Date().getFullYear());
+    const entretienAnnee = (data.factures || []).filter(f => sameVeh(f) && (f.date || '').startsWith(ANNEE) && FP.estEntretien(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    const lease = FP.leasingInfo ? FP.leasingInfo(v) : null;
+    const dec = FP.decoteVehicule ? FP.decoteVehicule(v) : null;
+    return {
+      km, exploitTotal,
+      coutKm: (km > 0 && exploitTotal > 0) ? exploitTotal / km : null,
+      entretienAnnee,
+      tvs: FP.tvsAnnuelle ? FP.tvsAnnuelle(v) : 0,
+      lease, decote: dec ? dec.valeur : null,
+      ctJ: FP.joursRestants ? FP.joursRestants(v.prochainCT) : null,
+    };
+  }
+  function renderCompare() {
+    const box = $('cmp-result'); if (!box) return;
+    const va = data.vehicules.find(x => x.id === $('cmp-a').value);
+    const vb = data.vehicules.find(x => x.id === $('cmp-b').value);
+    if (!va || !vb) { box.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">Choisis deux véhicules à comparer.</p>'; return; }
+    const sa = vehCmpStats(va), sb = vehCmpStats(vb);
+    const eur = n => (n == null ? '—' : FP.euro(n));
+    const km3 = n => (n == null ? '—' : n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + ' €/km');
+    const leaseTxt = s => s.lease ? `${FP.num(s.lease.kmContrat)} km / ${s.lease.dureeMois} mois` : '—';
+    const ctTxt = s => (s.ctJ == null) ? '—' : (s.ctJ < 0 ? `dépassé (${-s.ctJ} j)` : `dans ${s.ctJ} j`);
+    // « mieux » : plus petit €/km, plus petit coût, CT le plus loin → surligné en vert
+    const cmpCell = (av, bv, aBetter) => {
+      const aC = aBetter ? '#16a34a' : '', bC = aBetter === false ? '#16a34a' : '';
+      return { a: `<td class="p-2 text-right font-semibold" style="color:${aC}">${av}</td>`, b: `<td class="p-2 text-right font-semibold" style="color:${bC}">${bv}</td>` };
+    };
+    const rows = [];
+    const addRow = (label, av, bv, better) => { const c = cmpCell(av, bv, better); rows.push(`<tr class="border-t border-slate-100"><td class="p-2 text-slate-500">${label}</td>${c.a}${c.b}</tr>`); };
+    const less = (a, b) => (a == null && b == null) ? null : (a == null ? false : b == null ? true : a < b ? true : a > b ? false : null);
+    const more = (a, b) => (a == null && b == null) ? null : (a == null ? false : b == null ? true : a > b ? true : a < b ? false : null);
+    addRow('Marque / modèle', FP.esc(`${va.marque || ''} ${va.modele || ''}`.trim() || '—'), FP.esc(`${vb.marque || ''} ${vb.modele || ''}`.trim() || '—'));
+    addRow('Catégorie', FP.esc(va.categorie || '—'), FP.esc(vb.categorie || '—'));
+    addRow('Carburant', FP.esc(va.carburant || '—'), FP.esc(vb.carburant || '—'));
+    addRow('Kilométrage', FP.num(sa.km) + ' km', FP.num(sb.km) + ' km');
+    addRow('Coût au km', km3(sa.coutKm), km3(sb.coutKm), less(sa.coutKm, sb.coutKm));
+    addRow('Coûts exploitation cumulés', eur(sa.exploitTotal), eur(sb.exploitTotal), less(sa.exploitTotal, sb.exploitTotal));
+    addRow('Entretien ' + new Date().getFullYear(), eur(sa.entretienAnnee), eur(sb.entretienAnnee), less(sa.entretienAnnee, sb.entretienAnnee));
+    addRow('TVS annuelle', eur(sa.tvs), eur(sb.tvs), less(sa.tvs, sb.tvs));
+    addRow('Forfait leasing', leaseTxt(sa), leaseTxt(sb));
+    addRow('Prochain CT', ctTxt(sa), ctTxt(sb), more(sa.ctJ, sb.ctJ));
+    addRow('Valeur de revente estimée', eur(sa.decote), eur(sb.decote), more(sa.decote, sb.decote));
+    box.innerHTML = `<div class="overflow-x-auto"><table class="w-full text-sm" style="border-collapse:collapse">
+      <thead><tr><th class="p-2"></th><th class="p-2 text-right font-mono">${FP.esc(va.immat || '?')}</th><th class="p-2 text-right font-mono">${FP.esc(vb.immat || '?')}</th></tr></thead>
+      <tbody>${rows.join('')}</tbody></table></div>
+      <p class="text-xs text-slate-400 mt-2">En <b style="color:#16a34a">vert</b> = le plus avantageux (coût le plus bas, CT/valeur le plus favorable).</p>`;
+  }
+  function openCompare() {
+    const ov = $('cmp-ov'); if (!ov) return;
+    const opts = data.vehicules.filter(v => !FP.estVendu(v)).slice()
+      .sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
+      .map(v => `<option value="${v.id}">${FP.esc((v.immat || '?') + ' — ' + ((v.marque || '') + ' ' + (v.modele || '')).trim())}</option>`).join('');
+    const selA = $('cmp-a'), selB = $('cmp-b');
+    selA.innerHTML = '<option value="">Véhicule A…</option>' + opts;
+    selB.innerHTML = '<option value="">Véhicule B…</option>' + opts;
+    ov.classList.add('open');
+    if (FP.searchSelect) { FP.searchSelect(selA, { placeholder: 'Véhicule A…' }); FP.searchSelect(selB, { placeholder: 'Véhicule B…' }); }
+    renderCompare();
+  }
+  { const b = $('btn-compare'); if (b) b.addEventListener('click', openCompare); }
+  { const c = $('cmp-close'); if (c) c.addEventListener('click', () => $('cmp-ov').classList.remove('open')); }
+  { const ov = $('cmp-ov'); if (ov) ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('open'); }); }
+  { const a = $('cmp-a'); if (a) a.addEventListener('change', renderCompare); }
+  { const b = $('cmp-b'); if (b) b.addEventListener('change', renderCompare); }
 
   $('btn-new').addEventListener('click', () => openModal(null));
   $('modal-close').addEventListener('click', closeModal);

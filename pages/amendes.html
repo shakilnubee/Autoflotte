@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260802g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260802h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260802g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260802h">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -174,7 +174,7 @@
         <span data-data-io></span>
         <span id="am-export-mount"></span>
         <button class="btn btn-outline text-sm" id="am-fiche-btn" title="Relevé PDF des amendes affichées (ou du conducteur filtré)"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
-        <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle amende</button>
+        <button class="btn btn-dark text-sm" id="btn-new" data-quickadd><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle amende</button>
       </div>
     </div>
 
@@ -454,12 +454,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260802g"></script>
-<script src="../assets/js/supabase-client.js?v=20260802g"></script>
-<script src="../assets/js/data.js?v=20260802g"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802g"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802g"></script>
-<script src="../assets/js/app.js?v=20260802g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260802h"></script>
+<script src="../assets/js/supabase-client.js?v=20260802h"></script>
+<script src="../assets/js/data.js?v=20260802h"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802h"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802h"></script>
+<script src="../assets/js/app.js?v=20260802h"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1095,9 +1095,11 @@
   // ---------- Podium des conducteurs (extensible) ----------
   let podiumExpanded = false;
   function renderPodium() {
-    const amendes2026 = data.amendes.filter(a => anneeOf(a) === '2026');
+    // Suit le filtre d'année choisi (au lieu d'être figé sur 2026) : « toutes » = cumul toutes années.
+    const yr = state.annee;
+    const src = data.amendes.filter(a => yr === 'all' || yr == null || anneeOf(a) === String(yr));
     const agg = {};
-    amendes2026.forEach(a => { const k = FP.normPrenom(a.prenom) || '—'; if (!agg[k]) agg[k] = { label: (a.prenom || '—').trim() || '—', n: 0, montant: 0, points: 0 }; agg[k].n++; agg[k].montant += montantDu(a); agg[k].points += (Number(a.points) || 0); });
+    src.forEach(a => { const k = FP.normPrenom(a.prenom) || '—'; if (!agg[k]) agg[k] = { label: (a.prenom || '—').trim() || '—', n: 0, montant: 0, points: 0 }; agg[k].n++; agg[k].montant += montantDu(a); agg[k].points += (Number(a.points) || 0); });
     const all = Object.entries(agg).sort((a, b) => b[1].n - a[1].n || b[1].montant - a[1].montant);
     const shown = podiumExpanded ? all : all.slice(0, 5);
     const medals = ['🥇', '🥈', '🥉'];
@@ -1200,15 +1202,33 @@
     lucide.createIcons();
   }
 
-  // Estimation de l'échéance de majoration (pas de date stockée -> on estime depuis la date de l'amende).
-  // FPS / stationnement : ~3 mois ; contravention forfaitaire : ~45 jours. Affiché seulement si "à payer".
+  // Échéance de paiement. On PRIVILÉGIE les dates LUES sur l'avis par l'IA (dateLimiteMinore =
+  // payer avant pour le tarif réduit ; dateLimiteForfaitaire = au-delà, majoré). À défaut, on ESTIME
+  // depuis la date de l'amende (FPS ~3 mois ; forfaitaire ~45 j). Affiché seulement si "à payer".
   function majorationInfo(a) {
     if (!a || a.statut !== 'à payer' || !a.date) return null;
-    const base = new Date(a.date); if (isNaN(base)) return null;
+    const bd = (FP.getAmendeMontants && FP.getAmendeMontants(a.id)) || {};
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const jrs = (d) => Math.ceil((new Date(d) - today) / 86400000);
     const isFps = /stationnement/i.test(a.motif || '');
+    // 1) Date limite du tarif MINORÉ lue sur l'avis → payer avant = économie
+    if (bd.dateLimiteMinore) {
+      const dm = new Date(bd.dateLimiteMinore);
+      if (!isNaN(dm) && jrs(dm) >= 0) {
+        const mino = Number(bd.montantMinore) || null, forf = Number(bd.montantForfaitaire) || null;
+        const eco = (mino && forf && forf > mino) ? (forf - mino) : null;
+        return { date: dm, jours: jrs(dm), isFps, kind: 'minore', economie: eco };
+      }
+    }
+    // 2) Date limite FORFAITAIRE lue sur l'avis (au-delà = majoré)
+    if (bd.dateLimiteForfaitaire) {
+      const df = new Date(bd.dateLimiteForfaitaire);
+      if (!isNaN(df)) return { date: df, jours: jrs(df), isFps, kind: 'forfait' };
+    }
+    // 3) Estimation (aucune date lue sur l'avis)
+    const base = new Date(a.date); if (isNaN(base)) return null;
     const lim = new Date(base); lim.setDate(lim.getDate() + (isFps ? 90 : 45));
-    const jours = Math.ceil((lim - new Date()) / 86400000);
-    return { date: lim, jours, isFps };
+    return { date: lim, jours: jrs(lim), isFps, kind: 'estime' };
   }
 
   // ---------- Drawer ----------
@@ -1249,12 +1269,23 @@
       </div>
       ${(() => {
         const m = majorationInfo(a); if (!m) return '';
-        const col = m.jours < 0 ? '#b91c1c' : m.jours < 15 ? '#dc2626' : m.jours < 30 ? '#b45309' : '#64748b';
-        const bg = m.jours < 15 ? '#fef2f2' : m.jours < 30 ? '#fffbeb' : '#f8fafc';
-        const txt = m.jours < 0 ? `Majoration probablement dépassée (depuis ~${-m.jours} j)` : `Plus que ~${m.jours} j avant majoration`;
+        const col = m.jours < 0 ? '#b91c1c' : m.jours < 15 ? '#dc2626' : m.jours < 30 ? '#b45309' : (m.kind === 'minore' ? '#047857' : '#0369a1');
+        const bg = m.jours < 15 ? '#fef2f2' : m.jours < 30 ? '#fffbeb' : (m.kind === 'minore' ? '#ecfdf5' : '#eff6ff');
+        const dstr = FP.date(m.date.toISOString());
+        let titre, sub;
+        if (m.kind === 'minore') {
+          titre = m.jours < 0 ? 'Tarif minoré dépassé' : `💶 Payez avant le ${dstr} pour le tarif minoré`;
+          sub = (m.economie ? `Économie ~${FP.euroPrecis(m.economie)}. ` : '') + `Plus que ${Math.max(0, m.jours)} j — date lue sur l'avis.`;
+        } else if (m.kind === 'forfait') {
+          titre = m.jours < 0 ? `Majoration dépassée (depuis ~${-m.jours} j)` : `⏳ Payez avant le ${dstr} pour éviter la majoration`;
+          sub = `Plus que ${Math.max(0, m.jours)} j — date lue sur l'avis.`;
+        } else {
+          titre = m.jours < 0 ? `Majoration probablement dépassée (depuis ~${-m.jours} j)` : `⏳ Plus que ~${m.jours} j avant majoration`;
+          sub = `Limite estimée : ${dstr} · ${m.isFps ? 'FPS ~3 mois' : 'forfaitaire ~45 j'} — vérifiez l'avis`;
+        }
         return `<div style="background:${bg};border:1px solid var(--fp-border);border-left:4px solid ${col};border-radius:.55rem;padding:.6rem .8rem">
-          <div style="color:${col};font-weight:700;font-size:.9rem">⏳ ${txt}</div>
-          <div class="text-slate-500" style="font-size:.72rem;margin-top:.15rem">Limite estimée : ${FP.date(m.date.toISOString())} · estimation ${m.isFps ? 'FPS ~3 mois' : 'forfaitaire ~45 j'} — vérifiez l'avis</div>
+          <div style="color:${col};font-weight:700;font-size:.9rem">${titre}</div>
+          <div class="text-slate-500" style="font-size:.72rem;margin-top:.15rem">${sub}</div>
         </div>`;
       })()}
       <hr style="border:0; border-top:2px dashed var(--fp-border); margin:.2rem 0">
@@ -1298,8 +1329,14 @@
               ${a.cle ? `<button type="button" id="am-cle-copy" class="btn btn-outline !p-2 flex-shrink-0" title="Copier la clé"><i data-lucide="copy" class="w-4 h-4"></i></button>` : ''}
             </div>
           </div>
+          <button type="button" id="am-payer-online" data-fps="${/stationnement/i.test(a.motif || '') ? '1' : '0'}" class="btn btn-dark text-sm w-full justify-center mt-1">
+            <i data-lucide="external-link" class="w-4 h-4"></i> Payer en ligne ${/stationnement/i.test(a.motif || '') ? '(FPS · stationnement.gouv.fr)' : '(amendes.gouv.fr)'}
+          </button>
+          <p class="text-xs text-slate-400 mt-1">Ouvre le site officiel de télépaiement${a.numeroTelepaiement ? ' et copie automatiquement le n° de télépaiement' : ''}. ${/stationnement/i.test(a.motif || '') ? 'FPS = forfait post-stationnement.' : ''}</p>
         </div>
       </div>
+
+      ${(() => { const c = (FP.contactChips && FP.contactChips(a.prenom)) || ''; return c ? `<div><div class="field-label">Contacter le conducteur</div>${c}</div>` : ''; })()}
 
       ${a.avisUrl ? `
         <div>
@@ -1404,6 +1441,16 @@
     const avv = $('am-avis-val'); if (avv) avv.onclick = () => editAmField(avv, 'numeroAvis', 'text');
     const tc = $('am-tel-copy'); if (tc) tc.onclick = () => copierTexte((a.numeroTelepaiement || '').replace(/\D/g, ''), tc);
     const cc = $('am-cle-copy'); if (cc) cc.onclick = () => copierTexte(a.cle, cc);
+    const payOnlineBtn = $('am-payer-online');
+    if (payOnlineBtn) payOnlineBtn.onclick = () => {
+      const isFps = payOnlineBtn.dataset.fps === '1';
+      const num = (a.numeroTelepaiement || '').replace(/\D/g, '');
+      // Copie le n° de télépaiement pour un collage direct sur le site officiel.
+      if (num) { try { if (FP.copy) FP.copy(num); else if (navigator.clipboard) navigator.clipboard.writeText(num); } catch (_) {} }
+      if (FP.toast) FP.toast(num ? '✓ N° de télépaiement copié — collez-le sur le site' : 'Ouverture du site de télépaiement');
+      const url = isFps ? 'https://www.stationnement.gouv.fr/' : 'https://amendes.gouv.fr/';
+      window.open(url, '_blank', 'noopener');
+    };
     const cmv = $('am-comment-edit');
     if (cmv) cmv.onchange = () => {
       const aa = data.amendes.find(x => x.id === state.currentId); if (!aa) return;
@@ -2462,7 +2509,7 @@
   { const c = $('kpi-card-apayer'); if (c) c.addEventListener('click', () => applyKpiFilter('à payer', false)); }
   { const c = $('kpi-card-payees'); if (c) c.addEventListener('click', () => applyKpiFilter('payée', false)); }
   { const c = $('kpi-card-points'); if (c) c.addEventListener('click', () => applyKpiFilter('all', true)); }
-  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderKPIs(); renderTable(); });
+  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderKPIs(); renderTable(); renderPodium(); });
   $('filter-motif').addEventListener('change', e => { state.motif = e.target.value; renderTable(); });
   $('filter-date-from').addEventListener('change', e => { state.dateFrom = e.target.value; renderTable(); });
   $('filter-date-to').addEventListener('change', e => { state.dateTo = e.target.value; renderTable(); });
@@ -2523,12 +2570,20 @@
   $('am-bulk-unpay').addEventListener('click', () => bulkStatut('à payer'));
   $('am-bulk-delete').addEventListener('click', async () => {
     const ids = [...state.selectedIds]; if (!ids.length) return;
-    if (!await FP.confirm(`Supprimer ${ids.length} amende(s) ? (annulable avec Ctrl+Z)`)) return;
+    if (!await FP.confirm(`Supprimer ${ids.length} amende(s) ?`)) return;
     FP.history.commit();
-    ids.forEach(id => { const i = data.amendes.findIndex(x => x.id === id); if (i >= 0) data.amendes.splice(i, 1); FP.persist.delete('amendes', id); });
+    // Capture les amendes supprimées (avec leur position) pour permettre « Annuler ».
+    const removed = [];
+    ids.forEach(id => { const i = data.amendes.findIndex(x => x.id === id); if (i >= 0) { removed.push({ rec: data.amendes[i], idx: i }); data.amendes.splice(i, 1); FP.persist.delete('amendes', id); } });
     const n = ids.length; state.selectedIds.clear();
     renderKPIs(); renderTable(); renderCharts();
-    if (FP.toast) FP.toast(`🗑 ${n} amende(s) supprimée(s)`);
+    const restore = () => {
+      removed.sort((a, b) => a.idx - b.idx).forEach(({ rec, idx }) => { data.amendes.splice(Math.min(idx, data.amendes.length), 0, rec); if (FP.persist) FP.persist.insert('amendes', rec); });
+      renderKPIs(); renderTable(); renderCharts();
+      if (FP.toast) FP.toast(`↺ ${n} amende(s) restaurée(s)`);
+    };
+    if (FP.undoToast) FP.undoToast(`🗑 ${n} amende(s) supprimée(s)`, restore);
+    else if (FP.toast) FP.toast(`🗑 ${n} amende(s) supprimée(s)`);
   });
   $('am-bulk-clear').addEventListener('click', () => { state.selectedIds.clear(); renderTable(); });
   // Tout sélectionner / tout désélectionner (sur les amendes filtrées)
