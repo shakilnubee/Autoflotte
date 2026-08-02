@@ -30,6 +30,10 @@ function json(body: unknown, status = 200) {
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  // Point de contrôle PUBLIC (lecture seule) : permet de vérifier QUELLE version est déployée
+  // (utile pour confirmer que la transmission des en-têtes de fil de discussion est active).
+  // Ne renvoie AUCUN secret et n'envoie AUCUN e-mail.
+  if (req.method === "GET") return json({ ok: true, version: "headers-v2", supportsThreadingHeaders: true });
   if (req.method !== "POST") return json({ error: "Méthode non autorisée" }, 405);
 
   // ⚠️ SÉCURITÉ : seul un utilisateur CONNECTÉ peut envoyer un e-mail (sinon un tiers pourrait

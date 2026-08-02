@@ -955,10 +955,14 @@
     // dans le même fil. Aucun stockage nécessaire (marche pour tous les rôles, gestionnaire inclus).
     const subject = opts.reply ? ('Re: ' + subjectBase) : subjectBase;
     const _mailDom = (String(EXPEDITEUR).split('@')[1] || String(_prof.mailDomaineEnvoi || '').replace(/^@/, '') || 'parc-pilot.fr').trim();
-    const _rootId = `<pp-amende-${a.id}@${_mailDom}>`;
+    const _rootId = `<pp-amende-${a.id}@${_mailDom}>`;   // identifiant STABLE du fil (dérivé de l'amende)
     const _ownId = `<pp-amende-${a.id}-${Date.now()}@${_mailDom}>`;
-    const mailHeaders = { 'Message-ID': _ownId, 'References': _rootId };
-    if (opts.reply) mailHeaders['In-Reply-To'] = _rootId;   // relance = réponse au fil
+    // ⚠️ Pour que Gmail empile la relance sous le 1er e-mail, la relance doit RÉPONDRE au VRAI
+    // Message-ID du 1er e-mail. On donne donc au 1er e-mail (paiement/désignation) le Message-ID
+    // RACINE _rootId, et la relance y répond via In-Reply-To/References = _rootId.
+    const mailHeaders = opts.reply
+      ? { 'Message-ID': _ownId, 'In-Reply-To': _rootId, 'References': _rootId }
+      : { 'Message-ID': _rootId };
     // Lien vers le scan de l'avis (PDF) via une page de redirection propre.
     let lien = '';
     if (a.avisUrl) {
