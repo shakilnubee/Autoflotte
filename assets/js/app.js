@@ -2650,6 +2650,37 @@ FP.buildAlertes = (data) => {
       vehicules: sinAttente.map(s => ({ label: `${s.vehiculeImmat || '—'} · ${(s.description || 'sinistre').slice(0, 45)}${s.montantTTC ? ' — ' + FP.euro(s.montantTTC) : ''}`, target: 'sinistres.html' })) });
   }
 
+  // --- Sinistres SANS réponse de l'assureur depuis longtemps → relancer l'assureur ---
+  // Un incident = une clé de groupe (settings.sinistreGroupes[id] || id). « Pas de réponse » = ni
+  // responsabilité, ni date de réponse, ni clôture dans le dossier (settings.sinistreAssurance[clé]).
+  try {
+    const sinGroupes = (FP.settings.get().sinistreGroupes) || {};
+    const sinDoss = (FP.settings.get().sinistreAssurance) || {};
+    const gkOf = id => sinGroupes[id] || id;
+    const incidents = {};
+    (data.factures || []).forEach(f => {
+      if (f.type !== 'sinistre') return;
+      const k = gkOf(f.id);
+      const g = incidents[k] || (incidents[k] = { key: k, rep: f, date: f.date || '' });
+      if ((f.date || '') && (!g.date || f.date < g.date)) g.date = f.date;      // date de déclaration = plus ancienne
+      if ((!g.rep.vehiculeImmat && f.vehiculeImmat) || (!g.rep.description && f.description)) g.rep = f;
+    });
+    const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+    const SIN_RELANCE_J = 21; // 3 semaines sans réponse → on relance
+    const sansReponse = Object.values(incidents).filter(g => {
+      const d = sinDoss[g.key] || {};
+      if (d.resp || d.dateReponse || d.dateCloture) return false; // réponse reçue / dossier clos
+      const decl = d.dateDeclaration || g.date;
+      const dt = decl ? new Date(decl) : null; if (!dt || isNaN(dt)) return false;
+      return Math.floor((today0 - dt) / 86400000) >= SIN_RELANCE_J;
+    });
+    if (sansReponse.length) {
+      sansReponse.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+      out.push({ niveau: 'warn', categorie: 'Sinistres', message: `${sansReponse.length} sinistre(s) sans réponse de l'assureur`, detail: "Relance l'assureur : responsabilité pas encore reçue (> 3 semaines).", sort: 490,
+        vehicules: sansReponse.map(g => ({ label: `${g.rep.vehiculeImmat || '—'} · déclaré ${g.date ? FP.date(g.date) : '?'}${g.rep.description ? ' — ' + String(g.rep.description).slice(0, 40) : ''}`, target: 'sinistres.html' })) });
+    }
+  } catch (e) { console.warn('[alerte sinistre relance]', e); }
+
   // --- Budgets d'entretien dépassés (budget annuel défini par véhicule) ---
   try {
     const budgets = (FP.settings.get().budgets) || {};
