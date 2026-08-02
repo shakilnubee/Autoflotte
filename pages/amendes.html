@@ -1154,8 +1154,11 @@
     renderPodium();
 
     // --- Évolution mensuelle ---
+    // ⚠️ On range par mois de la DATE, mais UNIQUEMENT pour les amendes dont la date est
+    // réellement en 2026. Sinon une amende étiquetée « année 2026 » mais datée déc. 2025
+    // (incohérence de saisie) apparaîtrait à tort dans la courbe de décembre.
     const mois = Array(12).fill(0); const moisMontant = Array(12).fill(0);
-    amendes2026.forEach(a => { const m = parseInt((a.date || '').slice(5, 7), 10) - 1; if (m >= 0 && m < 12) { mois[m]++; moisMontant[m] += montantDu(a); } });
+    amendes2026.forEach(a => { const ds = a.date || ''; if (ds.slice(0, 4) !== '2026') return; const m = parseInt(ds.slice(5, 7), 10) - 1; if (m >= 0 && m < 12) { mois[m]++; moisMontant[m] += montantDu(a); } });
     const moisLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
     if ($('moisChart')) {
       if (moisChart) moisChart.destroy();
@@ -1378,6 +1381,12 @@
       </div>
 
       <div>
+        <div class="field-label">Désigner le conducteur (ANTAI)</div>
+        <button type="button" id="am-antai-designer" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="external-link" class="w-4 h-4"></i> Désigner sur ANTAI (site officiel)</button>
+        <p class="text-xs text-slate-400 mt-1">Ouvre <b>antai.gouv.fr</b> — désignation en ligne (cas « représentant légal »)${a.numeroAvis ? " et copie le n° d'avis" : ''}. Prévois l'avis de contravention, l'identité et le <b>n° de permis</b> du conducteur. Délai légal : <b>45 jours</b>.</p>
+      </div>
+
+      <div>
         <div class="field-label">Année</div>
         <div>${escAmende(a.annee)}</div>
       </div>
@@ -1450,6 +1459,14 @@
       if (FP.toast) FP.toast(num ? '✓ N° de télépaiement copié — collez-le sur le site' : 'Ouverture du site de télépaiement');
       const url = isFps ? 'https://www.stationnement.gouv.fr/' : 'https://amendes.gouv.fr/';
       window.open(url, '_blank', 'noopener');
+    };
+    const antaiBtn = $('am-antai-designer');
+    if (antaiBtn) antaiBtn.onclick = () => {
+      // La désignation en ligne se fait sur antai.gouv.fr avec le n° d'avis (dossier) → on le copie.
+      const avis = (a.numeroAvis || '').trim();
+      if (avis) { try { if (FP.copy) FP.copy(avis); else if (navigator.clipboard) navigator.clipboard.writeText(avis); } catch (_) {} }
+      if (FP.toast) FP.toast(avis ? "✓ N° d'avis copié — collez-le sur ANTAI" : 'Ouverture d\'ANTAI');
+      window.open('https://www.antai.gouv.fr/', '_blank', 'noopener');
     };
     const cmv = $('am-comment-edit');
     if (cmv) cmv.onchange = () => {
