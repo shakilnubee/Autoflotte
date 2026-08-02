@@ -1281,3 +1281,85 @@ textarea:-webkit-autofill, select:-webkit-autofill {
 #fp-totop svg { width: 20px; height: 20px; }
 @media (max-width: 640px) { #fp-totop { right: 14px; bottom: 76px; } } /* au-dessus d'une éventuelle barre du bas */
 @media (prefers-reduced-motion: reduce) { #fp-totop { transition: opacity .2s; transform: none; } #fp-totop.on { transform: none; } }
+
+/* ================================================================
+   ===== Audit mobile (iPhone ~390px) — corrections ciblées =====
+   Uniquement du mobile : TOUT est enfermé dans des media queries
+   (≤768px / ≤640px / ≤560px) → aucun impact sur le bureau (≥769px).
+   Objectif n°1 : plus AUCUN débordement horizontal, et des écrans
+   lisibles + confortables au doigt. Complète les blocs mobiles déjà
+   présents plus haut (menu off-canvas, tableaux en cartes…).
+   ================================================================ */
+@media (max-width: 768px) {
+  /* 0. UN SEUL menu hamburger. app.js injecte DEUX systèmes : la barre
+     sticky « .fp-mobile-bar » (officielle, avec logo) ET un bouton flottant
+     « .fp-nav-toggle » (doublon) → deux hamburgers superposés. On masque le
+     doublon et son overlay, et on annule le décalage haut qu'il imposait
+     (la barre sticky réserve déjà sa place). */
+  .fp-nav-toggle, .fp-nav-overlay { display: none !important; }
+  main.flex-1 { padding-top: 1rem !important; }
+
+  /* 1. Bandeau cockpit (en-tête de page) : padding réduit + titre compact
+     (l'inline style padding:1.4rem 1.6rem oblige le !important). */
+  .fp-cockpit { padding: 1rem 1.05rem !important; border-radius: 16px; }
+  .fp-cockpit h1 { font-size: 1.5rem; }
+  .fp-cockpit p { font-size: .85rem; }
+  /* La rangée d'actions du cockpit s'aligne à GAUCHE une fois repliée
+     (plus lisible que collée à droite) et ne déborde jamais. */
+  .fp-cockpit .justify-end { justify-content: flex-start; }
+
+  /* 1b. Boutons d'ACTION de l'appli (cockpit, barres d'outils, tiroirs :
+     tous en « .btn ... text-sm ») : plus compacts pour tenir sur peu de
+     lignes, tout en gardant une bonne cible tactile (min 40px de haut). */
+  .btn.text-sm { padding: .5rem .72rem; font-size: .8rem; gap: .35rem; }
+  .btn { min-height: 40px; }
+  /* Puces de filtre : cible tactile plus généreuse au doigt. */
+  .filter-chip { padding: .5rem .9rem; }
+
+  /* 4. Menus déroulants (Raccourcis #sc-menu, Sociétés #soc-menu) : jamais
+     plus larges que l'écran, alignés au bord droit sans déborder. */
+  #sc-menu, #soc-menu { max-width: calc(100vw - 1.5rem); right: 0; }
+
+  /* 3. Modales génériques + fiches (raccourcis, comparateur, km/immobilisé…) :
+     tiennent dans l'écran, marge écran réduite, contenu défilable. */
+  .sc-ov, .fiche-ov { padding: .7rem !important; }
+  .sc-card, .fiche-card { padding: 1rem 1.05rem !important; max-height: 88vh; }
+
+  /* 6. Barres de filtres : la recherche prend toute la largeur (plus de
+     min-width qui force un débordement sur les très petits écrans). */
+  .relative.flex-1 { min-width: 0 !important; flex-basis: 100%; }
+}
+
+@media (max-width: 640px) {
+  /* 2. Gros chiffres KPI : réduits pour ne JAMAIS déborder de leur carte
+     (ex. « 1 191 717 € » qui sortait à 1.85rem). */
+  .kpi-value { font-size: 1.35rem; }
+  .kpi { padding: .9rem; }
+  .kpi-label { font-size: .64rem; letter-spacing: .05em; }
+  .kpi-delta { font-size: .72rem; }
+
+  /* 6/9. Barre d'onglets de Factures (inline « display:flex » sans wrap :
+     Factures · Documents · Total Fleet · Ulys · Fournisseurs · Entretiens)
+     → débordait la page. On la rend défilable horizontalement dans son
+     propre cadre au lieu de casser la mise en page. */
+  div:has(> #tab-btn-factures) {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap !important; scrollbar-width: none;
+  }
+  div:has(> #tab-btn-factures)::-webkit-scrollbar { display: none; }
+  div:has(> #tab-btn-factures) > * { flex: 0 0 auto; white-space: nowrap; }
+}
+
+@media (max-width: 560px) {
+  /* 7. Formulaires denses des fiches (ajout/édition véhicule, amende,
+     conducteur, facture…) : les grilles de champs standard passent en UNE
+     colonne (les champs à 2/3 colonnes deviennent trop serrés à 390px).
+     Ciblé via « :has(.field-input) » → ne touche PAS les readouts d'en-tête
+     (#drawer-readouts) ni le comparateur (colonnes voulues côte à côte). */
+  .grid.grid-cols-2:has(> div > .field-input),
+  .grid.grid-cols-2:has(> div .field-input),
+  .grid.grid-cols-3:has(> div > .field-input),
+  .grid.grid-cols-3:has(> div .field-input) {
+    grid-template-columns: 1fr;
+  }
+}
