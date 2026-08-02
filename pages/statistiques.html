@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260802c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260802d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260802c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260802d">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -280,10 +280,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260802c"></script>
-<script src="../assets/js/supabase-client.js?v=20260802c"></script>
-<script src="../assets/js/data.js?v=20260802c"></script>
-<script src="../assets/js/app.js?v=20260802c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260802d"></script>
+<script src="../assets/js/supabase-client.js?v=20260802d"></script>
+<script src="../assets/js/data.js?v=20260802d"></script>
+<script src="../assets/js/app.js?v=20260802d"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -528,8 +528,11 @@
     { const _seen = new Set(); fact = fact.filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (_seen.has(k)) return false; _seen.add(k); return true; }); }
     $('periode-label').textContent = (annee === 'all') ? 'toutes années' : annee;
 
-    // KPI : usage vs achat
-    const usage = fact.filter(isUsage).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+    // KPI : usage vs achat. Coût d'usage = coût RÉEL pour la société → sinistres comptés au
+    // RESTE À CHARGE (après remboursement assureur) via FP.resteChargeSinistre ; le reste au brut.
+    const _sinT = f => (f.type || '').toLowerCase() === 'sinistre';
+    const usage = fact.filter(f => isUsage(f) && !_sinT(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0)
+      + (FP.resteChargeSinistre ? FP.resteChargeSinistre(fact) : 0);
     const achat = fact.filter(f => (f.type || '').toLowerCase() === 'achat').reduce((s, f) => s + (+f.montantTTC || 0), 0);
     $('kpi-usage').textContent = FP.euro(usage);
     $('kpi-achat').textContent = FP.euro(achat);
@@ -537,9 +540,9 @@
     // Métrique « à vie » cohérente : on ne divise PAS un coût d'une seule année par le km cumulé du véhicule.
     const usageAllTime = (function () {
       const seen = new Set();
-      return (factures || [])
-        .filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; })
-        .filter(isUsage).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+      const ded = (factures || []).filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; });
+      return ded.filter(f => isUsage(f) && !_sinT(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0)
+        + (FP.resteChargeSinistre ? FP.resteChargeSinistre(ded) : 0);
     })();
     const totalKm = data.vehicules.reduce((s, v) => s + (v.km || 0), 0);
     $('kpi-perkm').textContent = totalKm > 0 ? FP.euroPrecis(usageAllTime / totalKm) : '—';
@@ -637,7 +640,9 @@
       const _loyerMois = (_leasC && FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(_leasC) : null;
       const _hasOffer = _loyerMois != null;
       const _leasing = _hasOffer ? ((annee === 'all') ? (FP.leasingTotalVerse(_leasC) || 0) : (_loyerMois * 12)) : 0;
-      const factTotal = fv.filter(f => { const t = (f.type || '').toLowerCase(); if (_EXC_TCO.has(t)) return false; if (t === 'leasing' && _hasOffer) return false; return true; }).reduce((s, f) => s + (+f.montantTTC || 0), 0) + _leasing;
+      // Sinistres comptés au RESTE À CHARGE (après remboursement assureur), pas au brut → même source
+      // que le Coût d'usage. Les autres factures d'usage restent au montant brut.
+      const factTotal = fv.filter(f => { const t = (f.type || '').toLowerCase(); if (_EXC_TCO.has(t)) return false; if (t === 'leasing' && _hasOffer) return false; if (t === 'sinistre') return false; return true; }).reduce((s, f) => s + (+f.montantTTC || 0), 0) + _leasing + (FP.resteChargeSinistre ? FP.resteChargeSinistre(fv) : 0);
       const pr = findPrime(v.immat); const assurAn = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : (FP.estVendu(v) ? 0 : _assurRepli);
       const tvsD = FP.tvsDetail(v); const tvsAn = (!FP.estVendu(v) && tvsD.applicable && tvsD.total != null) ? tvsD.total : 0; // exclure les vendus (comme le KPI TVS)
       const achatF = fv.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
