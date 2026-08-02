@@ -82,6 +82,15 @@ Deno.serve(async (req) => {
   if (msg.html) payload.html = String(msg.html);
   if (msg.text) payload.text = String(msg.text);
   if (msg.replyTo) payload.reply_to = String(msg.replyTo);
+  // En-têtes personnalisés (fil de discussion : Message-ID / In-Reply-To / References →
+  // une relance d'amende arrive DANS LE MÊME FIL que le 1er e-mail). Transmis tels quels à Resend.
+  if (msg.headers && typeof msg.headers === "object" && !Array.isArray(msg.headers)) {
+    const h: Record<string, string> = {};
+    for (const [k, v] of Object.entries(msg.headers as Record<string, unknown>)) {
+      if (v != null && String(v).trim()) h[String(k)] = String(v);
+    }
+    if (Object.keys(h).length) payload.headers = h;
+  }
   // Pièces jointes : chaque entrée = { filename, path } (URL distante que Resend télécharge)
   // OU { filename, content } (contenu base64). On transmet tel quel à Resend.
   if (Array.isArray(msg.attachments) && msg.attachments.length) {
