@@ -6401,6 +6401,37 @@ FP.injectTour = (force) => {
   } catch (e) {}
 };
 
+// Pop « nouveauté » (feature discovery) : présente UNE fonctionnalité à la fois (dashboard), avec
+// « Ne plus proposer ». Idéal pour un nouveau client (ou soi-même) qui découvre la plateforme.
+FP.featureTip = () => {
+  try {
+    if (!document.body || !/dashboard/i.test(location.pathname)) return;
+    if (document.getElementById('fp-tour') || document.getElementById('fp-tip')) return; // pas en même temps que le tour
+    const TIPS = [
+      { id: 'shortcuts', t: 'Personnalise tes raccourcis', m: 'Le bouton « ⚡ Raccourcis » en haut : choisis les actions à afficher (km, immobilisé, scan…).' },
+      { id: 'favoris',   t: 'Épingle tes véhicules',       m: "Clique l'étoile ⭐ au bout d'une ligne véhicule pour la remonter en tête de liste." },
+      { id: 'compare',   t: 'Compare 2 véhicules',         m: 'Onglet Véhicules → bouton « Comparer » : coûts, €/km, TVS, leasing côte à côte.' },
+      { id: 'kmphoto',   t: 'Relève le km en photo',       m: 'Raccourcis → « Km par photo » : tu photographies le compteur, l\'IA lit le kilométrage.' },
+      { id: 'fab',       t: 'Ajout rapide partout',        m: 'Le bouton « + » en bas à droite ajoute véhicule/amende/facture/sinistre depuis n\'importe quelle page.' },
+      { id: 'antai',     t: 'Désigner sur ANTAI',          m: 'Fiche d\'une amende → « Désigner sur ANTAI » ouvre le site officiel et copie le n° d\'avis.' },
+      { id: 'tva',       t: 'TVA récupérable',             m: 'Onglet Factures → « Coût par période » affiche la TVA récupérable (pour le comptable).' },
+      { id: 'immobilise',t: 'Suis les immobilisations',    m: 'Raccourcis → « Marquer un véhicule immobilisé » : alerte si un véhicule reste trop longtemps au garage.' },
+    ];
+    const seen = (() => { try { return (FP.settings.get().featureTipsSeen) || []; } catch (e) { return []; } })();
+    const tip = TIPS.find(t => !seen.includes(t.id)); if (!tip) return;
+    const el = document.createElement('div'); el.id = 'fp-tip'; el.className = 'fp-tip';
+    const esc = FP.esc || (x => x);
+    el.innerHTML = `<div class="fp-tip-head"><span>💡 ${esc(tip.t)}</span><button class="fp-tip-x" title="Fermer">✕</button></div>`
+      + `<div class="fp-tip-body">${esc(tip.m)}</div>`
+      + `<div class="fp-tip-actions"><button type="button" class="fp-tip-never">Ne plus proposer</button><button type="button" class="fp-tip-ok">OK, compris</button></div>`;
+    document.body.appendChild(el);
+    const seeIt = (all) => { try { const s = FP.settings.get(); s.featureTipsSeen = all ? TIPS.map(t => t.id) : ((s.featureTipsSeen || []).concat([tip.id])); FP.settings.save(s); } catch (e) {} el.remove(); };
+    el.querySelector('.fp-tip-x').onclick = () => seeIt(false);
+    el.querySelector('.fp-tip-ok').onclick = () => seeIt(false);
+    el.querySelector('.fp-tip-never').onclick = () => seeIt(true);
+  } catch (e) {}
+};
+
 // Navigation active state (sidebar)
 document.addEventListener('DOMContentLoaded', () => {
   // Appliquer le thème (couleurs des groupes) dès le chargement
@@ -6439,6 +6470,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('fp:data-ready', () => { try { FP.mobileCardify(document); } catch (e) {} });
   window.addEventListener('resize', () => { try { FP.mobileCardify(document); } catch (e) {} });
   FP.injectTour();
+  setTimeout(() => { try { FP.featureTip(); } catch (e) {} }, 2500); // pop « nouveauté » (après le tour éventuel)
 
   // Animations 3D au survol des bulles KPI (global — validé). La carte s'incline vers le
   // curseur + reflet qui suit la souris. Ré-appliqué après un re-rendu de données
