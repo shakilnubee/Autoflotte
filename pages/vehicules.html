@@ -2678,8 +2678,14 @@
     getRows: () => filtered(),
     onImport: (records) => {
       let added = 0, updated = 0, skipped = 0;
-      records.forEach(rec => {
-        if (rec.groupes && (!Array.isArray(rec.groupes) || !rec.groupes.length)) delete rec.groupes;
+      const _isEmpty = x => x == null || x === '' || (Array.isArray(x) && !x.length);
+      records.forEach(raw => {
+        // ⚠️ Ne JAMAIS écraser une valeur existante avec une cellule VIDE du collage : on ne garde
+        // que les champs réellement renseignés (comme l'import conducteurs). Une cellule vide = « ne
+        // touche pas à ce champ » (sinon un ré-import qui met à jour effacerait chauffeur/km/statut…).
+        const rec = {};
+        Object.keys(raw).forEach(k => { if (!_isEmpty(raw[k])) rec[k] = raw[k]; });
+        if (rec.groupes && !Array.isArray(rec.groupes)) delete rec.groupes;
         if (rec.immat) rec.immat = String(rec.immat).toUpperCase().trim();
         // Résolution : par id d'abord, sinon par immatriculation via l'anti-doublon central FP.dupe
         // → un ré-import du même véhicule MET À JOUR la fiche au lieu de créer un doublon.
@@ -2690,7 +2696,8 @@
         else {
           if (!rec.immat) { skipped++; return; } // sans immatriculation = ligne inexploitable
           isNew = true;
-          v = Object.assign({ id: 'V-IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), groupes: ['non-classe'], statut: 'actif' }, rec);
+          // Valeurs par défaut d'abord, cellules renseignées ensuite (une cellule vide n'écrase pas le défaut).
+          v = Object.assign({ id: 'V-IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), groupes: ['non-classe'], statut: 'actif', km: 0 }, rec);
           data.vehicules.push(v); added++;
         }
         persistVehicleUpsert(v, isNew);
