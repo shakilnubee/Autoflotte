@@ -5405,10 +5405,12 @@ FP.injectLogoutButton = () => {
         <span class="fp-user-av" style="width:26px;height:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"></span>
         <span class="fp-logout-label">Déconnexion</span>
         <span class="fp-user-email" style="margin-left: auto; font-size: .65rem; opacity: .5; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+        <i data-lucide="power" class="fp-logout-power" style="width:16px;height:16px;flex-shrink:0;margin-left:.4rem;opacity:.85" title="Se déconnecter"></i>
       </button>
       <div class="fp-user-role" style="margin-top:.4rem; font-size:.62rem; letter-spacing:.04em; text-transform:uppercase; color:rgba(255,255,255,.4); padding-left:.85rem;"></div>
     `;
     sb.appendChild(div);
+    if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} } // rend l'icône « power »
     const roleEl = div.querySelector('.fp-user-role');
     if (roleEl) roleEl.textContent = 'Rôle : ' + FP.roleLabel();
 
@@ -6437,7 +6439,9 @@ FP.featureTip = () => {
 FP.injectBackButton = () => {
   try {
     if (!document.body || document.getElementById('fp-back')) return;
-    if (/login|brochure|prix|logos|carte|avis|ecran|demo/i.test(location.pathname)) return;
+    // Pas de « Retour » sur les pages « racine »/accueil (le tableau de bord notamment) ni sur les
+    // pages publiques : le retour n'y mène nulle part d'utile.
+    if (/dashboard|index|login|brochure|prix|logos|carte|avis|ecran|demo/i.test(location.pathname)) return;
     let sameApp = false;
     try { const r = document.referrer ? new URL(document.referrer) : null; sameApp = !!r && r.host === location.host && r.pathname !== location.pathname; } catch (e) {}
     if (!sameApp) return;
