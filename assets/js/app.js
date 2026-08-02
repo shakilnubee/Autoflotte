@@ -1020,6 +1020,7 @@ FP.removeSociete = (name) => {
 FP.MAIL_DEFAUT = {
   paiement: `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`,
   designation: `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.`,
+  relance: `Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`,
 };
 // Champs du profil société (rendu générique : le formulaire de Paramètres itère dessus).
 // Un champ avec `default` est PRÉ-REMPLI avec ce texte quand la valeur est vide (l'utilisateur le voit).
@@ -1032,6 +1033,7 @@ FP.PROFIL_CHAMPS = [
   // formulaire Paramètres (les valeurs restent en base pour la rétro-compat / le repli PXP).
   { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom.', default: FP.MAIL_DEFAUT.paiement },
   { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.designation },
+  { key: 'mailModeleRelance',    label: "Modèle e-mail — relance",                 type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.relance },
 ];
 // Contrat d'assurance de la société ACTIVE (assureur + n° de police), paramétrable dans Contrats.
 // Défaut PXP = SWISSLIFE (valeur historique) ; une nouvelle société démarre vide.
