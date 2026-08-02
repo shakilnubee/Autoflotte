@@ -1044,63 +1044,12 @@
     const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.designation) || `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.`;
     ouvrirMail(appliquerModele(modeleMail('mailModeleDesignation', def), p));
   }
-  // ---------- Relance : ÉCRIRE le message puis l'envoyer DANS LE FIL (façon « Répondre à tous ») ----------
-  // Une petite fenêtre s'ouvre pour rédiger la relance (recipients pré-remplis = conducteur + copies,
-  // objet « Re: … »), puis l'envoi se fait dans la même conversation que le 1er e-mail via ouvrirMail(reply).
-  function ensureRelanceModal() {
-    if (document.getElementById('relance-modal')) return;
-    const ov = document.createElement('div');
-    ov.id = 'relance-modal';
-    ov.setAttribute('style', 'position:fixed;inset:0;z-index:95;display:none;align-items:center;justify-content:center;background:rgba(15,23,42,.55);padding:16px');
-    ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:92vh">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #E2E8F0">
-        <div style="font-weight:800;color:var(--fp-primary,#0f1d3d)"><i data-lucide="reply-all" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Répondre dans le fil — relance</div>
-        <button id="relance-x" type="button" style="border:none;background:transparent;cursor:pointer;color:#94A3B8;font-size:20px;line-height:1">&times;</button>
-      </div>
-      <div style="padding:16px 18px;overflow:auto">
-        <div id="relance-meta" style="font-size:12.5px;color:#475569;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px;margin-bottom:10px"></div>
-        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:#94A3B8;margin-bottom:4px">Votre message</label>
-        <textarea id="relance-body" style="width:100%;min-height:160px;border:1px solid #CBD5E1;border-radius:8px;padding:9px 11px;font-size:14px;line-height:1.5;resize:vertical"></textarea>
-        <p id="relance-note" style="font-size:11.5px;color:#94A3B8;margin-top:8px"></p>
-      </div>
-      <div style="display:flex;gap:10px;padding:12px 18px;border-top:1px solid #E2E8F0">
-        <button id="relance-cancel" type="button" class="btn btn-outline text-sm" style="flex:1;justify-content:center">Annuler</button>
-        <button id="relance-send" type="button" class="btn btn-dark text-sm" style="flex:1;justify-content:center"><i data-lucide="send" class="w-4 h-4"></i> Envoyer la relance</button>
-      </div>
-    </div>`;
-    document.body.appendChild(ov);
-    if (window.lucide) try { lucide.createIcons(); } catch (e) {}
-    const close = () => { ov.style.display = 'none'; };
-    document.getElementById('relance-x').onclick = close;
-    document.getElementById('relance-cancel').onclick = close;
-    ov.addEventListener('click', e => { if (e.target === ov) close(); });
-    document.getElementById('relance-send').onclick = async () => {
-      const body = (document.getElementById('relance-body').value || '').trim();
-      if (!body) { document.getElementById('relance-body').focus(); return; }
-      close();
-      await ouvrirMail(body, { reply: true });   // → envoi DANS LE FIL du 1er e-mail
-    };
-  }
+  // Relance : réponse AUTOMATIQUE en UN CLIC, envoyée DANS LE FIL du 1er e-mail (comme si l'e-mail
+  // initial se répondait à lui-même). Pas de fenêtre, pas d'objet à saisir : ouvrirMail({reply:true})
+  // pose In-Reply-To/References = Message-ID racine du 1er e-mail → l'e-mail s'empile dans la conversation.
   function relanceEmail() {
-    const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
     const p = prenomCourant();
-    const to = lookupEmail(a.prenom);
-    const _prof = (window.FP && FP.societeProfil) ? FP.societeProfil() : {};
-    const cc = _prof.mailCopie || '';
-    const subjectBase = `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`;
-    ensureRelanceModal();
-    const esc = (window.FP && FP.esc) ? FP.esc : (s => String(s == null ? '' : s));
-    document.getElementById('relance-meta').innerHTML =
-      `<div><b>À :</b> ${to ? esc(to) : '<span style="color:#B45309">aucun e-mail enregistré pour ce conducteur</span>'}</div>`
-      + (cc ? `<div><b>Copie :</b> ${esc(cc)}</div>` : '')
-      + `<div><b>Objet :</b> Re: ${esc(subjectBase)}</div>`;
-    document.getElementById('relance-note').textContent = to
-      ? 'La relance part dans la même conversation que le 1er e-mail (comme un « Répondre à tous »).'
-      : "Sans e-mail enregistré pour ce conducteur, l'envoi ouvrira Gmail (le fil ne peut pas être conservé automatiquement).";
-    const ta = document.getElementById('relance-body');
-    ta.value = `Bonjour${p ? ' ' + p : ''},\n\nPetite relance concernant la contravention ci-dessous.\nPeux-tu me tenir informé s'il te plaît ?\n\nMerci d'avance.`;
-    document.getElementById('relance-modal').style.display = 'flex';
-    setTimeout(() => { try { ta.focus(); } catch (e) {} }, 30);
+    ouvrirMail(`Bonjour${p ? ' ' + p : ''},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`, { reply: true });
   }
 
   // ---------- Charts ----------
