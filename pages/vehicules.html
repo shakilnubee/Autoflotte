@@ -542,6 +542,7 @@
     <button class="btn btn-outline text-sm justify-center" id="drawer-pdf" title="Exporter la fiche en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> PDF</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-vente" title="Dossier de vente (PDF) à montrer à un acheteur : photo, caractéristiques, prix, CT, entretien"><i data-lucide="tag" class="w-4 h-4"></i> Vente</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-qr" title="QR code à coller dans la boîte à gants (ouvre la fiche du véhicule)"><i data-lucide="qr-code" class="w-4 h-4"></i> QR</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-qr-sin" title="QR « Déclarer un sinistre » : le conducteur le scanne après un accident → e-mail pré-rempli (plaque)"><i data-lucide="siren" class="w-4 h-4"></i> QR sinistre</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
@@ -4024,6 +4025,36 @@
     w.document.close();
   }
   $('drawer-qr').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v); });
+  // QR « Déclarer un sinistre » : encode un e-mail pré-rempli (destinataire = contact société /
+  // gestionnaire connecté, sujet + modèle avec la plaque). Le conducteur scanne → son appli mail
+  // s'ouvre déjà remplie. Aucune donnée publique exposée, aucun stockage côté serveur.
+  function openQrSinistre(v) {
+    if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
+    const immat = v.immat || '';
+    let to = '';
+    try { const p = (FP.societeProfil && FP.societeProfil()) || {}; to = p.email || p.contactEmail || p.mail || ''; } catch (e) {}
+    if (!to && FP.userEmail) to = FP.userEmail;
+    const subject = `Déclaration de sinistre — ${immat}`;
+    const body = [
+      `Véhicule : ${immat} (${((v.marque || '') + ' ' + (v.modele || '')).trim()})`,
+      '',
+      'Date et heure du sinistre : ',
+      'Lieu : ',
+      "Circonstances (que s'est-il passé ?) : ",
+      'Tiers impliqué ? (plaque, assureur, nom) : ',
+      'Blessés ? : ',
+      '',
+      'Merci de joindre le constat amiable et des photos des dommages.'
+    ].join('\n');
+    const url = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    const canvas = buildQrCanvas(url, 6, 4);
+    canvas.style.width = '240px'; canvas.style.height = '240px'; canvas.style.imageRendering = 'pixelated';
+    qrCurrent = { immat: immat + '-sinistre', label: 'Déclarer un sinistre · ' + immat, url };
+    const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
+    $('qr-label').textContent = 'Déclarer un sinistre · ' + immat;
+    $('qr-backdrop').classList.add('open');
+  }
+  $('drawer-qr-sin').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQrSinistre(v); });
   $('qr-close').addEventListener('click', () => $('qr-backdrop').classList.remove('open'));
   $('qr-print').addEventListener('click', printQr);
   $('qr-download').addEventListener('click', downloadQr);
