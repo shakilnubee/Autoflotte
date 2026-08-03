@@ -1384,7 +1384,14 @@
     return r ? r.label : null;
   }
 
-  $('btn-import-facture').addEventListener('click', openFactureModal);
+  $('btn-import-facture').addEventListener('click', () => {
+    // Import contextuel : sur Total Fleet / Ulys, le bouton du haut déclenche l'import DÉDIÉ
+    // (relevé Total / facture Ulys) au lieu du formulaire de facture classique.
+    const tab = window._facturesTab || 'factures';
+    if (tab === 'total') { const t = document.getElementById('tf-import-trigger'); if (t) { t.click(); return; } }
+    if (tab === 'ulys')  { const t = document.getElementById('uls-import-trigger'); if (t) { t.click(); return; } }
+    openFactureModal();
+  });
 
   // Export comptable : les factures AFFICHÉES (selon les filtres en cours), ligne par ligne,
   // avec Société (déduite du propriétaire du véhicule) et Mois — Excel/CSV, vue courante ou période.
@@ -1695,6 +1702,15 @@
       if (name === 'total' && window.renderTotalFleet) window.renderTotalFleet();
       if (name === 'ulys' && window.renderUlys) window.renderUlys();
       if (name === 'fournisseurs' && window.renderFournisseurs) window.renderFournisseurs();
+      // Le bouton d'import du HAUT colle au sous-onglet actif (fini la confusion : plus besoin de
+      // descendre chercher le bon bouton). Sur « Fournisseurs » (pas d'import), on le masque.
+      window._facturesTab = name;
+      const _imp = document.getElementById('btn-import-facture');
+      if (_imp) {
+        const lbl = { factures: 'Importer une facture', documents: 'Importer une facture', total: 'Importer un relevé Total', ulys: 'Importer un relevé Ulys' }[name];
+        _imp.style.display = lbl ? '' : 'none';
+        if (lbl) { const tn = _imp.lastChild; if (tn && tn.nodeType === 3) tn.textContent = ' ' + lbl; }
+      }
     }
     $('tab-btn-factures').addEventListener('click', () => switchTab('factures'));
     $('tab-btn-documents').addEventListener('click', () => switchTab('documents'));
