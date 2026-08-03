@@ -619,16 +619,28 @@ function safeName(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'
 $('btn-dl').addEventListener('click', function(){
   var btn = $('btn-dl'), old = btn.textContent; btn.textContent = 'Génération…'; btn.disabled = true;
   var name = 'Contrat' + (val('f-num') ? '-'+safeName(val('f-num')) : '') + (val('f-soc') ? '-'+safeName(val('f-soc')) : '') + '.pdf';
+  // On capture un CLONE PROPRE du contrat, ancré en haut à gauche et à largeur A4
+  // fixe (794px ≈ 210mm @96dpi), sans bordure/ombre/arrondi. Sinon html2pdf partait
+  // de la position du #doc dans la grille (colonne de droite) → grand blanc en haut
+  // de la 1re page. Le clone hors-écran supprime tout décalage.
+  var holder = null;
   loadScript('https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js').then(function(){
+    var src = $('doc');
+    holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff;padding:0;margin:0;z-index:-1';
+    var clone = src.cloneNode(true);
+    clone.style.border = 'none'; clone.style.boxShadow = 'none'; clone.style.borderRadius = '0';
+    clone.style.margin = '0'; clone.style.width = '794px'; clone.style.maxWidth = '794px';
+    holder.appendChild(clone); document.body.appendChild(holder);
     return html2pdf().set({
       margin: [10,10,12,10], filename: name,
       image: { type:'jpeg', quality:0.98 },
-      html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff' },
+      html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff', scrollX:0, scrollY:0, windowWidth:794 },
       jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
       pagebreak: { mode:['css','legacy'] }
-    }).from($('doc')).save();
+    }).from(clone).save();
   }).catch(function(){ alert("Impossible de générer le PDF (connexion internet requise). Utilise « Imprimer » puis « Enregistrer en PDF »."); })
-    .then(function(){ btn.textContent = old; btn.disabled = false; });
+    .then(function(){ if (holder) { try { holder.remove(); } catch(e){} } btn.textContent = old; btn.disabled = false; });
 });
 
 // Envoyer pour signature (prépare l'email — le PDF est à joindre manuellement)
