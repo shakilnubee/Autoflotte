@@ -962,29 +962,37 @@
     const _ownId = `<pp-amende-${a.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@${_mailDom}>`;
     const mailHeaders = { 'Message-ID': _ownId, 'References': _rootId };
     if (opts.reply) mailHeaders['In-Reply-To'] = _rootId;   // relance = réponse au fil
-    // Avis de contravention : lien SIGNÉ temporaire (7 jours) + pièce jointe.
-    // ⚠️ Sécurité : plus AUCUN accès public au bucket. Le lien signé est généré avec
-    // la session de l'expéditeur (bucket privé), il expire au bout de 7 j, et Resend
-    // joint AUSSI le PDF à l'e-mail (la pièce jointe est donc toujours présente).
-    let lien = '';
+    // Avis de contravention : PIÈCE JOINTE OBLIGATOIRE (aucun lien dans l'e-mail, aucun accès public).
+    // ⚠️ Règle métier (consigne utilisateur) : on n'envoie JAMAIS une amende sans l'avis en pièce
+    // jointe. Si le PDF ne peut pas être préparé (bug / récupération impossible), on BLOQUE l'envoi et
+    // on le signale — pas d'envoi silencieux sans PJ. Le PDF est joint côté serveur (Resend télécharge
+    // le fichier via un lien signé au moment de l'envoi ; le destinataire n'a besoin d'aucun compte).
     let attachments;
-    if (a.avisUrl && window.FP && FP.signedScanUrl) {
-      try {
-        const signed = await FP.signedScanUrl(a.avisUrl, 604800); // 7 jours
-        if (signed) {
-          lien = signed;
-          attachments = [{ filename: `avis-${a.numeroAvis || 'contravention'}.pdf`, path: signed }];
-        }
-      } catch (e) { console.warn('[avis lien/PJ]', e); }
+    let avisSigned = null;
+    if (a.avisUrl) {
+      if (!(window.FP && FP.signedScanUrl)) {
+        alert("⚠️ Impossible de préparer la pièce jointe (fonction indisponible).\n\nE-mail NON envoyé. Recharge la page (Ctrl+Maj+R) et réessaie.");
+        return;
+      }
+      try { avisSigned = await FP.signedScanUrl(a.avisUrl, 604800); } catch (e) { console.warn('[avis PJ]', e); }
+      if (!avisSigned) {
+        alert("⚠️ Impossible de joindre l'avis de contravention (le PDF n'a pas pu être récupéré).\n\nE-mail NON envoyé — pour éviter d'envoyer une amende SANS sa pièce jointe. Réessaie dans un instant.");
+        return;
+      }
+      attachments = [{ filename: `avis-${a.numeroAvis || 'contravention'}.pdf`, path: avisSigned }];
+    } else {
+      // Aucun scan d'avis rattaché à l'amende → rien à joindre. Confirmation explicite requise.
+      const sansPJ = await FP.confirm("⚠️ Aucun avis (PDF) n'est rattaché à cette amende → l'e-mail partira SANS pièce jointe.\n\nConseil : ajoute d'abord le scan de l'avis sur la fiche de l'amende (il sera alors joint automatiquement).\n\nOK = envoyer quand même sans PJ · Annuler = ne rien faire.");
+      if (!sansPJ) return;
     }
-    // Version TEXTE (repli Gmail + partie texte de l'e-mail).
-    let fullBody = body + (lien ? `\n\n📎 Avis de contravention n° ${a.numeroAvis || '—'} :\n${lien}` : '');
+    // Corps du mail : uniquement le texte — plus de lien (seule la pièce jointe fait foi).
+    let fullBody = body;
     // 1) Envoi AUTOMATIQUE via la fonction Resend (si déployée) — un clic = envoyé.
     if (to && window.FP && FP.sendEmail) {
       // Version HTML : le lien s'affiche en CLIQUABLE avec un libellé (pas l'URL brute).
       const escH = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       let html = escH(body).replace(/\n/g, '<br>');
-      if (lien) html += `<br><br>📎 <a href="${escH(lien)}">Voir l'avis de contravention${a.numeroAvis ? ' n° ' + escH(a.numeroAvis) : ''} (PDF)</a>`;
+      // Plus de lien dans le corps du message : l'avis de contravention est en PIÈCE JOINTE.
       try {
         if (FP.toast) FP.toast('Envoi de l\'e-mail…');
         await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: fullBody, replyTo: EXPEDITEUR, attachments, headers: mailHeaders });
@@ -995,9 +1003,10 @@
         console.warn('[sendEmail] échec → repli Gmail', e);
         // On explique POURQUOI l'envoi auto a échoué (au lieu d'ouvrir Gmail en silence),
         // puis on propose quand même le repli Gmail.
-        const goGmail = await FP.confirm("L'envoi automatique par e-mail a échoué :\n\n" + em
+        const goGmail = await FP.confirm("❌ L'envoi automatique de l'amende a ÉCHOUÉ :\n\n" + em
           + "\n\n(Souvent : le domaine de l'adresse d'envoi n'est pas encore « Verified » dans Resend.)\n\n"
-          + "OK = ouvrir Gmail pour envoyer à la main · Annuler = ne rien faire.");
+          + (avisSigned ? "⚠️ Le repli Gmail n'attache PAS le PDF tout seul : l'avis va s'ouvrir dans un onglet, glisse-le dans le mail avant d'envoyer.\n\n" : "")
+          + "OK = ouvrir Gmail" + (avisSigned ? " (+ l'avis)" : "") + " pour envoyer à la main · Annuler = ne rien faire.");
         if (!goGmail) return;
         // sinon on continue vers le repli Gmail ci-dessous
       }
@@ -1013,6 +1022,8 @@
     const url = `https://mail.google.com/mail/?view=cm&fs=1&authuser=${encodeURIComponent(EXPEDITEUR)}`
       + `&to=${encodeURIComponent(to)}&cc=${encodeURIComponent(COPIE_MAIL)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullBody)}`;
     window.open(url, '_blank', 'noopener');
+    // Gmail ne peut pas attacher le PDF automatiquement → on l'ouvre pour que l'utilisateur le glisse dans le mail.
+    if (avisSigned) { try { window.open(avisSigned, '_blank', 'noopener'); } catch (e) {} }
   }
   // Prénom du collaborateur lié à l'amende ouverte
   function prenomCourant() {
