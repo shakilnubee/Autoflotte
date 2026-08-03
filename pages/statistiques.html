@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802t">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260802t"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260803a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260802t">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260803a">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -222,25 +222,6 @@
       </div>
     </div>
 
-    <!-- Comparaison des dépenses (mois vs mois · année vs année) -->
-    <div class="card p-6 mb-6">
-      <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <h3 class="font-bold text-slate-900">Comparaison des dépenses</h3>
-        <div class="flex items-center gap-2 text-sm flex-wrap">
-          <span class="text-slate-500">Comparer</span>
-          <input type="month" id="cmp-m1" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Mois A">
-          <span class="text-slate-400">à</span>
-          <input type="month" id="cmp-m2" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Mois B">
-          <button type="button" id="cmp-reset" class="text-xs text-slate-400 hover:text-slate-700" title="Revenir à ce mois-ci vs le mois dernier">↺</button>
-        </div>
-      </div>
-      <div class="grid sm:grid-cols-2 gap-4">
-        <div class="kpi p-4" id="cmp-mois"></div>
-        <div class="kpi p-4" id="cmp-annee"></div>
-      </div>
-      <p class="text-xs text-slate-400 mt-3">Coûts d'exploitation (carburant, péages, entretien, réparations…), hors leasing / sinistres / achats. <b style="color:#dc2626">▲</b> = en hausse, <b style="color:#16a34a">▼</b> = en baisse par rapport à la période comparée. Choisis 2 mois, ou laisse par défaut (ce mois-ci vs le mois dernier).</p>
-    </div>
-
     <!-- Charts -->
     <div class="grid lg:grid-cols-2 gap-6 mb-6">
       <div class="card p-6">
@@ -299,10 +280,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260802t"></script>
-<script src="../assets/js/supabase-client.js?v=20260802t"></script>
-<script src="../assets/js/data.js?v=20260802t"></script>
-<script src="../assets/js/app.js?v=20260802t"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260803a"></script>
+<script src="../assets/js/supabase-client.js?v=20260803a"></script>
+<script src="../assets/js/data.js?v=20260803a"></script>
+<script src="../assets/js/app.js?v=20260803a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -762,51 +743,6 @@
   $('filter-annee').addEventListener('change', (e) => render(e.target.value));
   // Bouton « Réinitialiser » : revient à « Toutes années ».
   if (FP.filterResetButton) FP.filterResetButton($('stat-filterbar'), { onReset: () => { const s = $('filter-annee'); if (s) { s.value = 'all'; s.dispatchEvent(new Event('change', { bubbles: true })); } } });
-  // Comparaison des dépenses : ce mois-ci vs mois dernier, cette année vs an dernier.
-  // Coûts d'EXPLOITATION dédoublonnés (mêmes règles que FP.coutMois du dashboard).
-  function renderComparaison() {
-    try {
-      const now = new Date();
-      const key = (y, m) => y + '-' + String(m + 1).padStart(2, '0');
-      const moisLabel = (y, m) => new Date(y, m, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-      const ymLabel = (ym) => { const p = (ym || '').split('-'); return (p.length === 2) ? moisLabel(+p[0], +p[1] - 1) : ym; };
-      const curY = now.getFullYear(), curM = now.getMonth();
-      const prev = new Date(curY, curM - 1, 1);
-      const coutMois = (ymk) => FP.coutMois ? FP.coutMois(data, ymk) : 0;
-      // Mois choisis par l'utilisateur (input type=month), sinon défaut = ce mois-ci vs le mois dernier.
-      const defA = key(curY, curM), defB = key(prev.getFullYear(), prev.getMonth());
-      const m1 = ($('cmp-m1') && $('cmp-m1').value) || defA;
-      const m2 = ($('cmp-m2') && $('cmp-m2').value) || defB;
-      const cThis = coutMois(m1), cLast = coutMois(m2);
-      const yearCost = (y) => (FP.dedupeFactures ? FP.dedupeFactures(data.factures || []) : (data.factures || []))
-        .filter(f => (f.date || '').slice(0, 4) === String(y) && (FP.coutFactureExploit ? FP.coutFactureExploit(f) : true))
-        .reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
-      const cThisY = yearCost(curY), cLastY = yearCost(curY - 1);
-      const block = (label, a, b, subA, subB) => {
-        const delta = b > 0 ? ((a - b) / b * 100) : (a > 0 ? 100 : 0);
-        const col = a > b ? '#dc2626' : a < b ? '#16a34a' : '#64748b';
-        const arrow = a > b ? '▲' : a < b ? '▼' : '=';
-        return `<div class="kpi-label">${label}</div>
-          <div class="flex items-baseline gap-2 flex-wrap"><div class="kpi-value" style="font-size:1.6rem">${FP.euro(a)}</div>
-            <span style="color:${col};font-weight:800;font-size:.95rem">${arrow} ${b > 0 ? Math.abs(delta).toFixed(0) + '%' : (a > 0 ? 'nouveau' : '—')}</span></div>
-          <div class="kpi-delta">${subA} · précédent <b>${FP.euro(b)}</b> (${subB})</div>`;
-      };
-      const em = $('cmp-mois'); if (em) em.innerHTML = block(ymLabel(m1) + ' vs ' + ymLabel(m2), cThis, cLast, ymLabel(m1), ymLabel(m2));
-      const ea = $('cmp-annee'); if (ea) ea.innerHTML = block('Cette année vs an dernier', cThisY, cLastY, String(curY), String(curY - 1));
-    } catch (e) { console.warn('[renderComparaison]', e); }
-  }
-  (function initCmpMonths() {
-    const now = new Date(); const k = (y, m) => y + '-' + String(m + 1).padStart(2, '0');
-    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const m1 = $('cmp-m1'), m2 = $('cmp-m2');
-    if (m1 && !m1.value) m1.value = k(now.getFullYear(), now.getMonth());
-    if (m2 && !m2.value) m2.value = k(prev.getFullYear(), prev.getMonth());
-    [m1, m2].forEach(el => { if (el) el.addEventListener('change', renderComparaison); });
-    const rb = $('cmp-reset'); if (rb) rb.addEventListener('click', () => { if (m1) m1.value = k(now.getFullYear(), now.getMonth()); if (m2) m2.value = k(prev.getFullYear(), prev.getMonth()); renderComparaison(); });
-  })();
-  renderComparaison();
-  document.addEventListener('fp:data-ready', renderComparaison);
-
   render('all');
   // Coût de la flotte par période (année + période personnalisée)
   const coutPeriode = FP.coutParPeriode({

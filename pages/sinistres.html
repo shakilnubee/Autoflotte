@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260802t">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260802t"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260803a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260802t">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260803a">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -148,7 +148,7 @@
       <p class="text-sm mt-1" style="color:#8598B4" data-edit-key="sinistres.subtitle">Tous les sinistres de la flotte — accidents, bris de glace, vols</p>
     </div>
     <div class="mb-8 flex justify-end items-center gap-3 flex-wrap">
-      <button class="btn btn-dark text-sm" id="sin-declare-btn" data-quickadd title="Déclarer un nouveau sinistre pas-à-pas (véhicule, lieu, circonstances, constat, photos)"><i data-lucide="clipboard-pen-line" class="w-4 h-4"></i> Déclarer un sinistre</button>
+      <button class="btn btn-dark text-sm" id="sin-declare-btn" title="Déclarer un nouveau sinistre pas-à-pas (véhicule, lieu, circonstances, constat, photos)"><i data-lucide="clipboard-pen-line" class="w-4 h-4"></i> Déclarer un sinistre</button>
       <label class="btn btn-outline text-sm" style="cursor:pointer" title="Scanner / importer une facture de sinistre (même lecture que le scan du tableau de bord)">
         <i data-lucide="scan-line" class="w-4 h-4"></i> Ajouter une facture sinistre
         <input type="file" id="sin-facture-file" accept="image/*,application/pdf" multiple class="hidden">
@@ -364,8 +364,6 @@
         <button type="button" class="sin-chip active" data-remb="all">Tous</button>
         <button type="button" class="sin-chip" data-remb="regles">Réglés <span class="n" id="sin-n-regles">0</span></button>
       </div>
-      <!-- Sélection multiple (barre injectée par FP.bulkSelect) -->
-      <div id="sin-bulk-mount"></div>
       <div id="timeline" class="grid sm:grid-cols-2 gap-4"></div>
       <div id="sin-more" class="hidden pt-3 text-center"></div>
       <div id="empty-state" class="hidden text-center py-8">
@@ -378,12 +376,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260802t"></script>
-<script src="../assets/js/supabase-client.js?v=20260802t"></script>
-<script src="../assets/js/data.js?v=20260802t"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260802t"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260802t"></script>
-<script src="../assets/js/app.js?v=20260802t"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260803a"></script>
+<script src="../assets/js/supabase-client.js?v=20260803a"></script>
+<script src="../assets/js/data.js?v=20260803a"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803a"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803a"></script>
+<script src="../assets/js/app.js?v=20260803a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -393,7 +391,6 @@
 
   // Tous les sinistres = factures type=sinistre
   let sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
-  let sinBulk = null; // barre de sélection multiple (instanciée à l'init)
   const state = { search: '', annee: 'all', vehicule: 'all', remb: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc' };
   const REGLES = ['rembourse', 'pec', 'refuse'];
   const rembOf = (g) => { try { return (FP.settings.get().sinistreStatut || {})[g.key] || ''; } catch (e) { return ''; } };
@@ -710,14 +707,11 @@
               </div>` : `<div class="text-xs text-slate-400">Aucun autre sinistre enregistré pour ${escapeHtml(s.vehiculeImmat || 'ce véhicule')}.</div>`}
           </div>`;
         return `
-          <div class="card p-4${sinBulk && sinBulk.has(g.key) ? ' row-selected' : ''}" style="border-left:4px solid ${bar}">
+          <div class="card p-4" style="border-left:4px solid ${bar}">
             <div class="flex justify-between items-start gap-2">
-              <div class="flex items-start gap-2 min-w-0">
-                ${sinBulk ? `<label style="padding-top:2px;cursor:pointer" title="Sélectionner cet incident">${sinBulk.cbCell(g.key)}</label>` : ''}
-                <div class="min-w-0">
-                  <div class="font-mono font-extrabold text-slate-900 cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="vehiculeImmat" data-lbl="Plaque du véhicule" title="Cliquer pour modifier">${escapeHtml(s.vehiculeImmat || '—')}</div>
-                  <div class="text-xs text-slate-500 mt-0.5"><span class="cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="date" data-typ="date" data-lbl="Date du sinistre" title="Modifier la date">${FP.date(s.date)}</span>${!multi ? ` · <span class="cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="fournisseur" data-lbl="Fournisseur / réparateur" title="Modifier">${s.fournisseur ? escapeHtml(s.fournisseur) : 'fournisseur'}</span>` : ''}</div>
-                </div>
+              <div class="min-w-0">
+                <div class="font-mono font-extrabold text-slate-900 cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="vehiculeImmat" data-lbl="Plaque du véhicule" title="Cliquer pour modifier">${escapeHtml(s.vehiculeImmat || '—')}</div>
+                <div class="text-xs text-slate-500 mt-0.5"><span class="cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="date" data-typ="date" data-lbl="Date du sinistre" title="Modifier la date">${FP.date(s.date)}</span>${!multi ? ` · <span class="cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="fournisseur" data-lbl="Fournisseur / réparateur" title="Modifier">${s.fournisseur ? escapeHtml(s.fournisseur) : 'fournisseur'}</span>` : ''}</div>
               </div>
               <div class="text-right shrink-0">
                 ${multi
@@ -748,7 +742,6 @@
     const all = allGroups();
     const attente = all.filter(g => stat[g.key] === 'attente').length;
     $('result-count').innerHTML = `${groups.length} incident${groups.length > 1 ? 's' : ''} sur ${all.length}` + (attente ? ` · <b style="color:#B45309">${attente} en attente de remboursement</b>` : '');
-    if (sinBulk) sinBulk.refresh();
     lucide.createIcons();
     // ⚠️ Sélecteur conducteur intelligent (choisir OU créer) sur chaque dossier — règle 0quater :
     // plus de texte libre → plus de nom fantôme qui ne correspond à aucune fiche. Source unique FP.conducteurPicker.
@@ -1271,44 +1264,6 @@
       } finally { if (btn) btn.disabled = false; }
     });
   })();
-
-  // Sélection multiple d'incidents (supprime toutes les factures/lignes de chaque incident coché)
-  if (FP.bulkSelect) sinBulk = FP.bulkSelect({
-    mount: 'sin-bulk-mount', tbody: 'timeline', noun: 'incident', nounPlural: 'incidents',
-    getFilteredIds: () => {
-      let gs = visibleGroups();
-      if (state.remb === 'attente') gs = gs.filter(g => rembOf(g) === 'attente');
-      else if (state.remb === 'regles') gs = gs.filter(g => REGLES.includes(rembOf(g)));
-      return gs.map(g => g.key);
-    },
-    onDelete: async (keys) => {
-      const keySet = new Set(keys.map(String));
-      const removed = sinistres.filter(s => keySet.has(String(groupKeyOf(s.id))));
-      const lineIds = removed.map(s => s.id);
-      // Snapshot des réglages liés (groupes, statut, dossier assurance) pour un vrai « Annuler ».
-      const s0 = FP.settings.get();
-      const snap = JSON.parse(JSON.stringify({ sinistreGroupes: s0.sinistreGroupes || {}, sinistreStage: s0.sinistreStage || {}, sinistreStatut: s0.sinistreStatut || {}, sinistreAssurance: s0.sinistreAssurance || {} }));
-      lineIds.forEach(id => {
-        forgetSinistre(id);
-        if (data.factures) { const i = data.factures.findIndex(f => f.id === id); if (i !== -1) data.factures.splice(i, 1); }
-        if (FP.persist) FP.persist.delete('factures', id);
-      });
-      const rm = new Set(lineIds.map(String));
-      sinistres = sinistres.filter(s => !rm.has(String(s.id)));
-      refreshAll();
-      return () => { // Annuler : ré-insère les sinistres + restaure les réglages liés
-        removed.forEach(f => { data.factures.push(f); if (FP.persist) FP.persist.insert('factures', f); });
-        const s = FP.settings.get();
-        s.sinistreGroupes = Object.assign(s.sinistreGroupes || {}, snap.sinistreGroupes);
-        s.sinistreStage = Object.assign(s.sinistreStage || {}, snap.sinistreStage);
-        s.sinistreStatut = Object.assign(s.sinistreStatut || {}, snap.sinistreStatut);
-        s.sinistreAssurance = Object.assign(s.sinistreAssurance || {}, snap.sinistreAssurance);
-        FP.settings.save(s);
-        sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
-        refreshAll();
-      };
-    },
-  });
 
   renderKPIs();
   renderTimeline();
