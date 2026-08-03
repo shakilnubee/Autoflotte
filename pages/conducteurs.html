@@ -1226,6 +1226,16 @@
         ${fRow('Adresse', 'adresse', 'text', d.adresse)}
       </div>`;
     const noteInner = `<div class="text-sm">${fRow('Note libre', 'note', 'text', d.note)}</div>`;
+    // Cartes carburant / badge télépéage DU CONDUCTEUR — 2 numéros DISTINCTS (Total vs Ulys),
+    // stockés par société dans les réglages. Servent à rattacher la conso Total Fleet / Ulys au
+    // bon conducteur à l'import des factures (le badge/carte lu sur la facture = ce numéro).
+    const _stC = FP.settings.get();
+    const _cardTotal = ((_stC.condCarteTotal || {})[d.key]) || '', _badgeUlys = ((_stC.condBadgeUlys || {})[d.key]) || '';
+    const _inpC = 'width:170px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
+    const carteInner = `<div class="text-sm space-y-2">
+        <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Carte carburant <b>Total</b> (n°)</span><input class="cond-carte" data-k="condCarteTotal" data-id="${escapeHtml(d.key)}" value="${escapeHtml(_cardTotal)}" placeholder="—" style="${_inpC}"></div>
+        <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Badge télépéage <b>Ulys</b> (n°)</span><input class="cond-carte" data-k="condBadgeUlys" data-id="${escapeHtml(d.key)}" value="${escapeHtml(_badgeUlys)}" placeholder="—" style="${_inpC}"></div>
+      </div>`;
     const vehiculesInner = d.vehicules.length === 0 ? '<p class="text-sm text-slate-500">Aucun véhicule assigné.</p>' :
       clampList(d.vehicules.map(v => `
         <div class="fiche-line">
@@ -1293,6 +1303,7 @@
         + card('ticket', `Amendes · ${d.amendes.length}`, amendesInner)
         + card('alert-triangle', `Accidents · ${accs.length}`, accidentsInner)
         + card('gauge', 'Kilométrage', kmInner)
+        + card('credit-card', 'Carte carburant &amp; télépéage', carteInner)
         + card('sticky-note', 'Note', noteInner);
     } else {
       corps = cCard('#6366F1', 'user', 'Identité', identiteInner)
@@ -1303,6 +1314,7 @@
         + cCard('#EF4444', 'ticket', `Amendes · ${d.amendes.length}`, amendesInner)
         + cCard('#F97316', 'alert-triangle', `Accidents · ${accs.length}`, accidentsInner)
         + cCard('#0EA5E9', 'gauge', 'Kilométrage', kmInner)
+        + cCard('#0D9488', 'credit-card', 'Carte carburant &amp; télépéage', carteInner)
         + cCard('#64748B', 'sticky-note', 'Note', noteInner);
     }
 
@@ -1973,6 +1985,17 @@
     const made = condFichePDF(d);
     if (made) FP.pdfPreview(made.doc, made.filename, '· ' + made.name);
   }
+
+  // Carte carburant Total / badge Ulys du conducteur (n°) — sauvés PAR SOCIÉTÉ dans les réglages.
+  // Serviront à rattacher la conso Total Fleet / Ulys au bon conducteur à l'import des factures.
+  $('drawer-body').addEventListener('change', (e) => {
+    const c = e.target.closest('input.cond-carte'); if (!c) return;
+    const k = c.dataset.k, id = c.dataset.id; if (!k || !id) return;
+    const s = FP.settings.get(); s[k] = s[k] || {};
+    const val = (c.value || '').trim();
+    if (val) s[k][id] = val; else delete s[k][id];
+    FP.settings.save(s);
+  });
 
   // Réception du fichier permis téléversé → Supabase Storage, puis enregistrement du lien
   let _permisUploadKey = null;
