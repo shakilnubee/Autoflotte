@@ -1095,6 +1095,27 @@ FP.removeSociete = (name) => {
   } catch (e) {}
   return true;
 };
+// SÉCURITÉ MULTI-PC : `fp_societe` (société active) est stockée PAR APPAREIL. Si cette société a été
+// SUPPRIMÉE (sur un autre poste → tombstone synchronisé via settings.societesDeleted), ce poste ne
+// doit pas rester « coincé » dessus (sinon on voit une société fantôme, vide). On revient sur PXP.
+// Appelé après la synchro des réglages (fp:data-ready), quand getSocietes() reflète les suppressions.
+FP.ensureValidSociete = () => {
+  try {
+    const cur = FP.activeSociete();
+    if (cur === 'PXP' || cur === '__all__') return false;
+    const list = (FP.getSocietes ? FP.getSocietes() : ['PXP']).map(x => String(x).trim().toLowerCase());
+    if (!list.includes(String(cur).trim().toLowerCase())) { FP.setActiveSociete('PXP'); return true; }
+  } catch (e) {}
+  return false;
+};
+document.addEventListener('fp:data-ready', () => {
+  try {
+    if (FP.ensureValidSociete && FP.ensureValidSociete() && !sessionStorage.getItem('fp_soc_reset')) {
+      sessionStorage.setItem('fp_soc_reset', '1'); // anti-boucle
+      location.reload(); // recharge proprement les données de PXP
+    }
+  } catch (e) {}
+});
 // Modèles d'e-mail par défaut (amende) — source UNIQUE, réutilisée par amendes.html ET
 // pré-affichée dans Paramètres pour que l'utilisateur les voie et puisse les personnaliser.
 FP.MAIL_DEFAUT = {
