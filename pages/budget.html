@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260803f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260803f">
 <style>
   .pill-ech { font-size: .72rem; font-weight: 700; padding: .12rem .55rem; border-radius: 9999px; white-space: nowrap; }
   .ech-danger { background:#FEE2E2; color:#991B1B; }
@@ -142,13 +142,37 @@
       <p class="text-xs text-slate-400 mb-3">Les sorties d'argent déjà <b>connues</b> à venir (leasing, assurance, TVS) + une estimation carburant/entretien selon ton budget.</p>
       <div id="bud-treso"></div>
     </div>
+
+    <!-- 🎯 Objectifs -->
+    <div class="card p-5 mt-6" id="bud-obj-card">
+      <h3 class="font-bold text-slate-900 mb-1 flex items-center gap-2"><i data-lucide="target" class="w-4 h-4" style="color:var(--fp-accent)"></i> 🎯 Objectifs</h3>
+      <p class="text-xs text-slate-400 mb-4">Fixe tes cibles. La plateforme compare tout de suite au réel et passe en <span style="color:var(--fp-danger);font-weight:700">rouge</span> quand c'est dépassé, <span style="color:#059669;font-weight:700">vert</span> quand c'est tenu. Enregistré automatiquement.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div style="border:1px solid var(--fp-border);border-radius:12px;padding:14px">
+          <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Objectif €/km</label>
+          <div class="flex items-center gap-2"><input type="text" inputmode="decimal" id="obj-eurkm" placeholder="0,25" style="width:90px;text-align:right;font-size:14px;padding:5px 8px;border:1px solid var(--fp-border);border-radius:6px"><span class="text-sm text-slate-400">€/km</span></div>
+          <div id="obj-eurkm-out" class="text-sm mt-2"></div>
+        </div>
+        <div style="border:1px solid var(--fp-border);border-radius:12px;padding:14px">
+          <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Plafond d'amendes / an</label>
+          <div class="flex items-center gap-2"><input type="text" inputmode="decimal" id="obj-plafamendes" placeholder="1000" style="width:90px;text-align:right;font-size:14px;padding:5px 8px;border:1px solid var(--fp-border);border-radius:6px"><span class="text-sm text-slate-400">€</span></div>
+          <div id="obj-plafamendes-out" class="text-sm mt-2"></div>
+          <div id="obj-plafamendes-bar" style="background:#EEF1F6;border-radius:9999px;height:8px;overflow:hidden;margin-top:6px;display:none"><div style="height:100%;width:0;background:#059669"></div></div>
+        </div>
+        <div style="border:1px solid var(--fp-border);border-radius:12px;padding:14px">
+          <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide block mb-1">Coût / véhicule / mois cible</label>
+          <div class="flex items-center gap-2"><input type="text" inputmode="decimal" id="obj-coutvehmois" placeholder="300" style="width:90px;text-align:right;font-size:14px;padding:5px 8px;border:1px solid var(--fp-border);border-radius:6px"><span class="text-sm text-slate-400">€/mois</span></div>
+          <div id="obj-coutvehmois-out" class="text-sm mt-2"></div>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803e"></script>
-<script src="../assets/js/supabase-client.js?v=20260803e"></script>
-<script src="../assets/js/data.js?v=20260803e"></script>
-<script src="../assets/js/app.js?v=20260803e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260803f"></script>
+<script src="../assets/js/supabase-client.js?v=20260803f"></script>
+<script src="../assets/js/data.js?v=20260803f"></script>
+<script src="../assets/js/app.js?v=20260803f"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -197,6 +221,60 @@
     { key: 'amendes', label: 'Amendes', reel: (y) => amendesYear(y).reduce((s, a) => s + (FP.montantDu ? FP.montantDu(a) : (+a.montant || 0)), 0) },
     { key: 'autres', label: 'Autres frais', reel: (y) => facturesYear(y).filter(f => { if (!(FP.coutFactureExploit && FP.coutFactureExploit(f))) return false; if (FP.estCarburantPeage && FP.estCarburantPeage(f)) return false; if (isEnt(f)) return false; return true; }).reduce((s, f) => s + (+f.montantTTC || 0), 0) },
   ];
+
+  // 🎯 Objectifs (cibles société, stockées dans app_settings → cfg().objectifs)
+  const getObj = () => { try { return cfg().objectifs || {}; } catch (e) { return {}; } };
+  function setObj(key, val) {
+    try {
+      const s = cfg(); s.objectifs = (s.objectifs && typeof s.objectifs === 'object') ? s.objectifs : {};
+      const n = parseFloat(String(val).replace(',', '.').replace(/\s/g, ''));
+      if (!val || isNaN(n) || n < 0) delete s.objectifs[key]; else s.objectifs[key] = n;
+      FP.settings.save(s);
+    } catch (e) {}
+  }
+  const euro3 = (n) => (Math.round(n * 1000) / 1000).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+
+  function renderObjectifs(totReel) {
+    const obj = getObj();
+    const owned = (data.vehicules || []).filter(v => !(FP.estVendu && FP.estVendu(v)));
+    const nbOwned = owned.length || 1;
+    // -- Objectif €/km (MÊME définition que la fiche véhicule : coûts d'exploitation ÷ km compteur) --
+    const facts = FP.dedupeFactures ? FP.dedupeFactures(data.factures || []) : (data.factures || []);
+    const objEurKm = Number(obj.eurKm) || 0;
+    let totKm = 0, totExploit = 0, above = 0, comptes = 0;
+    owned.forEach(v => {
+      const km = Number(v.km) || 0;
+      const exploit = facts.filter(f => normP(f.vehiculeImmat) === normP(v.immat) && FP.coutFactureExploit && FP.coutFactureExploit(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+      totKm += km; totExploit += exploit;
+      if (km > 0 && exploit > 0) { comptes++; if (objEurKm > 0 && (exploit / km) > objEurKm) above++; }
+    });
+    const fleetEurKm = totKm > 0 && totExploit > 0 ? (totExploit / totKm) : null;
+    const oEk = $('obj-eurkm-out');
+    if (fleetEurKm == null) { oEk.innerHTML = '<span class="text-slate-400">Pas encore de km + coûts pour calculer.</span>'; }
+    else if (!objEurKm) { oEk.innerHTML = `Réel flotte : <b>${euro3(fleetEurKm)} €/km</b><div class="text-xs text-slate-400">Fixe une cible pour comparer.</div>`; }
+    else { const ok = fleetEurKm <= objEurKm; oEk.innerHTML = `Réel flotte : <b style="color:${ok ? '#059669' : 'var(--fp-danger)'}">${euro3(fleetEurKm)} €/km</b> ${ok ? '✓' : '⚠'}<div class="text-xs text-slate-400">${above > 0 ? above + ' véhicule' + (above > 1 ? 's' : '') + ' au-dessus de la cible' : 'tous sous la cible'} · ${comptes} calculé${comptes > 1 ? 's' : ''}</div>`; }
+
+    // -- Plafond d'amendes / an (montant DÛ via FP.montantDu, comme le poste Amendes) --
+    const amDu = amendesYear(year).reduce((s, a) => s + (FP.montantDu ? FP.montantDu(a) : (+a.montant || 0)), 0);
+    const plaf = Number(obj.plafondAmendes) || 0;
+    const oPa = $('obj-plafamendes-out'), oBar = $('obj-plafamendes-bar');
+    if (!plaf) { oPa.innerHTML = `Amendes ${year} : <b>${euro(amDu)}</b><div class="text-xs text-slate-400">Fixe un plafond pour suivre.</div>`; oBar.style.display = 'none'; }
+    else {
+      const pct = Math.min(100, Math.round(amDu / plaf * 100));
+      const over = amDu > plaf; const near = !over && pct >= 80;
+      const col = over ? 'var(--fp-danger)' : (near ? 'var(--fp-warn)' : '#059669');
+      oPa.innerHTML = `Amendes ${year} : <b style="color:${col}">${euro(amDu)}</b> / ${euro(plaf)} ${over ? '⚠ dépassé' : (near ? '⚠ proche' : '✓')}`;
+      oBar.style.display = 'block'; oBar.firstElementChild.style.width = pct + '%'; oBar.firstElementChild.style.background = col;
+    }
+
+    // -- Coût / véhicule / mois cible (coût annuel total réel ÷ véhicules ÷ 12) --
+    const cvm = totReel / nbOwned / 12;
+    const cible = Number(obj.coutVehMois) || 0;
+    const oCv = $('obj-coutvehmois-out');
+    if (!totReel) { oCv.innerHTML = '<span class="text-slate-400">Pas encore de coûts sur l\'année.</span>'; }
+    else if (!cible) { oCv.innerHTML = `Réel : <b>${euro(cvm)}/mois</b> par véhicule<div class="text-xs text-slate-400">${nbOwned} véhicule${nbOwned > 1 ? 's' : ''} · fixe une cible.</div>`; }
+    else { const ok = cvm <= cible; oCv.innerHTML = `Réel : <b style="color:${ok ? '#059669' : 'var(--fp-danger)'}">${euro(cvm)}/mois</b> / cible ${euro(cible)} ${ok ? '✓' : '⚠'}<div class="text-xs text-slate-400">${nbOwned} véhicule${nbOwned > 1 ? 's' : ''}</div>`; }
+  }
 
   const getBudget = (y) => { try { const b = cfg().budget; return (b && b[y]) ? b[y] : {}; } catch (e) { return {}; } };
   function setBudget(y, key, val) {
@@ -259,15 +337,28 @@
     const totalTreso = items.reduce((s, x) => s + x[1], 0);
     $('bud-treso').innerHTML = (items.length ? items.map(x => `<div class="flex justify-between py-1.5 border-b border-slate-100"><span class="text-slate-600">${x[0]}</span><span class="font-semibold">${euro(x[1])}</span></div>`).join('') : '<p class="text-sm text-slate-400">Renseigne des primes d\'assurance, loyers de leasing ou un budget pour voir la prévision.</p>')
       + (totalTreso ? `<div class="flex justify-between pt-2 mt-1 font-bold"><span>Sorties prévues sur 12 mois</span><span style="color:var(--fp-primary)">${euro(totalTreso)}</span></div>` : '');
+
+    renderObjectifs(totReel);
     lucide.createIcons();
   }
+
+  // Objectifs : pré-remplir les champs + enregistrer à la saisie
+  function syncObjInputs() {
+    const o = getObj();
+    if ($('obj-eurkm')) $('obj-eurkm').value = o.eurKm != null ? String(o.eurKm).replace('.', ',') : '';
+    if ($('obj-plafamendes')) $('obj-plafamendes').value = o.plafondAmendes != null ? o.plafondAmendes : '';
+    if ($('obj-coutvehmois')) $('obj-coutvehmois').value = o.coutVehMois != null ? o.coutVehMois : '';
+  }
+  [['obj-eurkm', 'eurKm'], ['obj-plafamendes', 'plafondAmendes'], ['obj-coutvehmois', 'coutVehMois']].forEach(([id, key]) => {
+    const el = $(id); if (el) el.addEventListener('change', () => { setObj(key, el.value); render(); });
+  });
 
   // Saisie du budget → enregistrée tout seul (par société + année).
   $('bud-tbody').addEventListener('change', (e) => { const inp = e.target.closest('.bud-in'); if (!inp) return; setBudget(year, inp.dataset.key, inp.value); render(); });
   $('bud-annee').addEventListener('change', (e) => { year = e.target.value; render(); });
   if (FP.filterResetButton) FP.filterResetButton($('bud-filterbar'), { onReset: () => { year = String(nowY); buildYears(); render(); } });
 
-  function boot() { buildYears(); render(); }
+  function boot() { buildYears(); syncObjInputs(); render(); }
   boot();
   document.addEventListener('fp:data-ready', boot);
 </script>
