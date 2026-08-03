@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260803g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260803g">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -454,12 +454,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803f"></script>
-<script src="../assets/js/supabase-client.js?v=20260803f"></script>
-<script src="../assets/js/data.js?v=20260803f"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803f"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803f"></script>
-<script src="../assets/js/app.js?v=20260803f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260803g"></script>
+<script src="../assets/js/supabase-client.js?v=20260803g"></script>
+<script src="../assets/js/data.js?v=20260803g"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803g"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803g"></script>
+<script src="../assets/js/app.js?v=20260803g"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -962,26 +962,23 @@
     const _ownId = `<pp-amende-${a.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@${_mailDom}>`;
     const mailHeaders = { 'Message-ID': _ownId, 'References': _rootId };
     if (opts.reply) mailHeaders['In-Reply-To'] = _rootId;   // relance = réponse au fil
-    // Lien vers le scan de l'avis (PDF) via une page de redirection propre.
+    // Avis de contravention : lien SIGNÉ temporaire (7 jours) + pièce jointe.
+    // ⚠️ Sécurité : plus AUCUN accès public au bucket. Le lien signé est généré avec
+    // la session de l'expéditeur (bucket privé), il expire au bout de 7 j, et Resend
+    // joint AUSSI le PDF à l'e-mail (la pièce jointe est donc toujours présente).
     let lien = '';
-    if (a.avisUrl) {
-      const fn = String(a.avisUrl).split('?')[0].split('/').pop() || '';
-      const m = fn.match(/^avis-(.+)\.pdf$/i);
-      if (m) lien = `https://parc-pilot.fr/avis.html?${encodeURIComponent(m[1])}`;
-      else if (fn) lien = `https://parc-pilot.fr/avis.html?f=${encodeURIComponent(fn)}`;
-      else lien = a.avisUrl;
-    }
-    // Version TEXTE (repli Gmail + partie texte de l'e-mail) : on garde l'URL brute.
-    let fullBody = body + (lien ? `\n\n📎 Avis de contravention n° ${a.numeroAvis || '—'} :\n${lien}` : '');
-    // PIÈCE JOINTE : le PDF de l'avis, joint à l'e-mail (en plus du lien). Resend le télécharge
-    // via un lien SIGNÉ temporaire (bucket privé). Le nom du fichier reste propre.
     let attachments;
     if (a.avisUrl && window.FP && FP.signedScanUrl) {
       try {
-        const signed = await FP.signedScanUrl(a.avisUrl, 3600);
-        if (signed) attachments = [{ filename: `avis-${a.numeroAvis || 'contravention'}.pdf`, path: signed }];
-      } catch (e) { console.warn('[avis pièce jointe]', e); }
+        const signed = await FP.signedScanUrl(a.avisUrl, 604800); // 7 jours
+        if (signed) {
+          lien = signed;
+          attachments = [{ filename: `avis-${a.numeroAvis || 'contravention'}.pdf`, path: signed }];
+        }
+      } catch (e) { console.warn('[avis lien/PJ]', e); }
     }
+    // Version TEXTE (repli Gmail + partie texte de l'e-mail).
+    let fullBody = body + (lien ? `\n\n📎 Avis de contravention n° ${a.numeroAvis || '—'} :\n${lien}` : '');
     // 1) Envoi AUTOMATIQUE via la fonction Resend (si déployée) — un clic = envoyé.
     if (to && window.FP && FP.sendEmail) {
       // Version HTML : le lien s'affiche en CLIQUABLE avec un libellé (pas l'URL brute).
