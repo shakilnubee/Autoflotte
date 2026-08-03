@@ -811,6 +811,86 @@ FP.filterResetButton = function (bar, opts) {
   } catch (e) { return null; }
 };
 
+// ⚠️ RÈGLE PROJET — sélection multi-lignes réutilisable (« bulk actions »).
+// FP.bulkSelect({ mount, tbody, getFilteredIds, onDelete, onRender, noun, nounPlural }) pose une
+// case « Tout sélectionner » (toujours visible) + une barre flottante « N sélectionné(s) · Supprimer
+// · Désélectionner » (apparaît dès qu'une ligne est cochée). La page appelle bulk.cbCell(id) pour
+// injecter la case en tête de sa 1re cellule, marque le <tr> avec la classe row-selected via
+// bulk.has(id), et appelle bulk.refresh() après CHAQUE render. `getFilteredIds()` = ids des lignes
+// actuellement affichées (pour « Tout sélectionner » + le compteur). `onDelete(ids)` = suppression
+// réelle côté page (les ids sont des CHAÎNES). Déjà branché : factures, entretiens, sinistres.
+// ⚠️ Tout nouveau tableau qui veut la sélection multiple DOIT passer par ce helper.
+FP.bulkSelect = function (opts) {
+  opts = opts || {};
+  const noun = opts.noun || 'élément';
+  const nounP = opts.nounPlural || (noun + 's');
+  const sel = new Set(); // ids en CHAÎNE
+  const S = (x) => String(x);
+  const host = (typeof opts.mount === 'string') ? document.getElementById(opts.mount) : opts.mount;
+  const api = {
+    selected: () => [...sel],
+    has: (id) => sel.has(S(id)),
+    cbCell(id) { return `<input type="checkbox" class="fp-bulk-cb" data-id="${S(id)}"${sel.has(S(id)) ? ' checked' : ''} title="Sélectionner" onclick="event.stopPropagation()">`; },
+    refresh() { update(); },
+    clear() { sel.clear(); rerender(); },
+  };
+  if (!host) { api.cbCell = () => ''; return api; }
+  const filteredIds = () => ((opts.getFilteredIds && opts.getFilteredIds()) || []).map(S);
+  const wrap = document.createElement('div');
+  wrap.className = 'fp-bulk-wrap';
+  wrap.innerHTML =
+    `<label class="fp-bulk-selall"><input type="checkbox" class="fp-bulk-all"> <span>Tout sélectionner <span class="fp-bulk-total"></span></span></label>`
+    + `<div class="fp-bulkbar"><span class="fp-bulkbar-count"><b class="fp-bulk-n">0</b> ${nounP} sélectionné(s)</span>`
+    + `<button type="button" class="fp-bulk-btn danger" data-bulk="delete"><i data-lucide="trash-2" style="width:14px;height:14px"></i> Supprimer</button>`
+    + `<button type="button" class="fp-bulk-btn" data-bulk="clear"><i data-lucide="x" style="width:14px;height:14px"></i> Désélectionner</button></div>`;
+  host.prepend(wrap);
+  const bar = wrap.querySelector('.fp-bulkbar');
+  const allCb = wrap.querySelector('.fp-bulk-all');
+  function rerender() { if (typeof opts.onRender === 'function') { try { opts.onRender(); } catch (e) {} } update(); }
+  function update() {
+    const ids = filteredIds();
+    wrap.querySelector('.fp-bulk-n').textContent = sel.size;
+    if (bar) bar.classList.toggle('active', sel.size > 0);
+    const inFilter = ids.filter(id => sel.has(id)).length;
+    allCb.checked = ids.length > 0 && inFilter === ids.length;
+    allCb.indeterminate = inFilter > 0 && inFilter < ids.length;
+    const tot = wrap.querySelector('.fp-bulk-total'); if (tot) tot.textContent = ids.length ? `(${ids.length})` : '';
+    if (window.lucide) lucide.createIcons();
+  }
+  allCb.addEventListener('change', (e) => {
+    const ids = filteredIds();
+    if (e.target.checked) ids.forEach(id => sel.add(id)); else ids.forEach(id => sel.delete(id));
+    rerender();
+  });
+  wrap.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-bulk]'); if (!b) return;
+    const act = b.dataset.bulk;
+    if (act === 'clear') { sel.clear(); rerender(); return; }
+    if (act === 'delete') {
+      const ids = [...sel]; if (!ids.length) return;
+      const label = ids.length > 1 ? nounP : noun;
+      const ok = FP.confirm ? await FP.confirm(`Supprimer ${ids.length} ${label} ?`) : window.confirm('Supprimer ?');
+      if (!ok) return;
+      let undo = null;
+      try { if (typeof opts.onDelete === 'function') undo = await opts.onDelete(ids); } catch (err) { console.error('[FP.bulkSelect.onDelete]', err); }
+      sel.clear(); rerender();
+      // Si onDelete renvoie une fonction, on l'utilise comme action « Annuler ».
+      if (typeof undo === 'function' && FP.undoToast) FP.undoToast(`🗑 ${ids.length} ${label} supprimé(s)`, undo);
+      else if (FP.toast) FP.toast(`🗑 ${ids.length} ${label} supprimé(s)`);
+    }
+  });
+  const tb = (typeof opts.tbody === 'string') ? document.getElementById(opts.tbody) : opts.tbody;
+  if (tb) tb.addEventListener('change', (e) => {
+    const cb = e.target.closest('.fp-bulk-cb'); if (!cb) return;
+    const id = S(cb.dataset.id);
+    if (cb.checked) sel.add(id); else sel.delete(id);
+    const tr = cb.closest('tr'); if (tr) tr.classList.toggle('row-selected', cb.checked);
+    update();
+  });
+  update();
+  return api;
+};
+
 // === Conducteurs — accès GLOBAL (liste / recherche / création depuis N'IMPORTE QUELLE page) ===
 // RÈGLE PROJET : partout où on désigne un conducteur, on doit pouvoir le CHOISIR dans la liste
 // existante OU en CRÉER un nouveau en tapant son nom (la plateforme demande alors ses infos).
@@ -1173,14 +1253,50 @@ FP.societeProfil = () => {
       const close = () => { sb.classList.remove('fp-open'); bd.classList.remove('fp-open'); };
       bar.querySelector('.fp-burger').addEventListener('click', open);
       bd.addEventListener('click', close);
-      // clic sur un lien du menu ou en dehors → on referme
-      sb.addEventListener('click', (e) => { if (e.target.closest('a[href]')) close(); });
+      // clic sur un VRAI lien de navigation → on referme le tiroir.
+      // ⚠️ Exception : les liens internes (href="#") et les bascules de sous-menu
+      // (ex. l'entête « JIS » qui déplie ses sous-onglets) ne doivent PAS fermer le
+      // tiroir — sinon cliquer JIS referme tout le menu au lieu de l'ouvrir.
+      sb.addEventListener('click', (e) => {
+        const a = e.target.closest('a[href]');
+        if (!a) return;
+        const href = a.getAttribute('href') || '';
+        if (href === '#' || href.charAt(0) === '#' || a.classList.contains('fp-jis-toggle')) return;
+        close();
+      });
       addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
       if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
     } catch (e) {}
   };
   if (document.body) build(); else document.addEventListener('DOMContentLoaded', build);
 })();
+
+// === Menus déroulants : rester dans l'écran sur mobile (ne jamais couper) ======
+// Un menu « position:absolute; right:0 » ancré à un bouton proche du bord gauche
+// débordait hors écran à gauche (ex. Raccourcis). Après CHAQUE ouverture, on
+// recale horizontalement tout menu déroulant visible pour qu'il tienne dans la
+// fenêtre — position-agnostique (gauche OU droite). Les menus « position:fixed »
+// (FP.searchSelect) se placent déjà seuls → ignorés.
+FP.clampDropdowns = () => {
+  try {
+    if (window.innerWidth > 640) return;
+    const vw = window.innerWidth, M = 8;
+    document.querySelectorAll('#sc-menu, #soc-menu, .fp-export-menu, .fp-menu').forEach(m => {
+      if (!m || m.classList.contains('hidden')) return;
+      const cs = getComputedStyle(m);
+      if (cs.display === 'none' || cs.position === 'fixed') return;
+      m.style.transform = 'none';
+      const r = m.getBoundingClientRect();
+      if (r.width < 2) return;
+      let dx = 0;
+      if (r.right > vw - M) dx = (vw - M) - r.right;   // déborde à droite → décaler à gauche
+      if (r.left + dx < M) dx = M - r.left;            // déborde à gauche → décaler à droite
+      if (dx) m.style.transform = 'translateX(' + Math.round(dx) + 'px)';
+    });
+  } catch (e) {}
+};
+document.addEventListener('click', () => setTimeout(FP.clampDropdowns, 0), true);
+window.addEventListener('resize', () => { try { FP.clampDropdowns(); } catch (e) {} });
 
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
@@ -1737,7 +1853,7 @@ FP.applyNavGroups = () => {
 // Sous-onglets de l'onglet privé « JIS » (tous des pages autonomes → nouvel onglet).
 FP.JIS_PAGES = [
   { file: 'prospects.html',    label: 'Prospects (pipeline)',  icon: 'user-plus' },
-  { file: 'facturation.html',  label: 'Facturation',           icon: 'receipt-euro' },
+  { file: 'pages/facturation.html', label: 'Facturation',       icon: 'receipt-euro' },
   { file: 'kit-commercial.html', label: 'Kit commercial',      icon: 'target' },
   { file: 'brochure.html',     label: 'Brochure',              icon: 'sparkles' },
   { file: 'prix.html',         label: 'Tarifs',                icon: 'badge-euro' },
@@ -1937,6 +2053,9 @@ FP.notifCfg = () => {
     revAlerteJours: num(n.revAlerteJours, 30), // alerte révision quand il reste ≤ X jours (avant l'échéance mois)
     releveKmJours: num(n.releveKmJours, 45),   // rappel « relevé km » : tous les X jours (défaut 45 = 1 mois et demi)
     releveKmDebut: (typeof n.releveKmDebut === 'string' && n.releveKmDebut.trim()) ? n.releveKmDebut.trim() : '', // date d'ancrage du cycle (optionnelle)
+    leasingFinMois: num(n.leasingFinMois, 2),  // anticipation d'alerte « fin de leasing » (mois avant la fin ; défaut 2)
+    immobiliseJours: num(n.immobiliseJours, 15), // alerte « véhicule immobilisé » après X jours (défaut 15)
+    consoSeuilPct: num(n.consoSeuilPct, 60),   // alerte conso carburant : hausse ≥ X % vs moyenne du véhicule (défaut 60 %)
   };
 };
 // ⚠️ SOURCE UNIQUE — Applique une facture à la fiche du véhicule (km + dernière révision + pneus +
@@ -2691,16 +2810,96 @@ FP.buildAlertes = (data) => {
     const diff = days(l.finContrat);
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
     const finStr = FP.date(l.finContrat.toISOString());
+    // Seuil configurable (Paramètres → Notifications) : « danger » à X mois de la fin (défaut 2),
+    // « warn » pendant les 3 mois qui précèdent ce seuil.
+    const finMois = FP.notifCfg().leasingFinMois;
+    const dangerJ = Math.max(0, finMois) * 30;
+    const warnJ = dangerJ + 90;
     let niveau = null, msg = null;
-    if (diff < 0)        { niveau = 'danger'; msg = `Leasing terminé depuis ${-diff}j (${finStr})`; }
-    else if (diff < 90)  { niveau = 'danger'; msg = `Fin de leasing dans ${diff}j (${finStr})`; }
-    else if (diff < 180) { niveau = 'warn';   msg = `Fin de leasing dans ~${Math.round(diff / 30)} mois (${finStr})`; }
+    if (diff < 0)          { niveau = 'danger'; msg = `Leasing terminé depuis ${-diff}j (${finStr})`; }
+    else if (diff <= dangerJ) { niveau = 'danger'; msg = `Fin de leasing dans ${diff}j (${finStr})`; }
+    else if (diff <= warnJ)   { niveau = 'warn';   msg = `Fin de leasing dans ~${Math.round(diff / 30)} mois (${finStr})`; }
     else return;
     out.push({ niveau, categorie: 'Leasing', message: msg, detail: veh, sort: diff, target: 'contrats.html', muteKey: 'leasingfin|' + v.id + '|' + finStr, vehLabel: veh });
   });
 
   // (Le « véhicules sans dernière révision » n'est PAS une alerte : véhicules neufs, etc.
   //  → retiré des notifications. L'info reste visible dans la fiche véhicule.)
+
+  // --- Véhicules IMMOBILISÉS depuis trop longtemps (marqués via le dashboard) ---
+  try {
+    const immo = (FP.settings.get().vehImmobilise) || {};
+    const seuilJ = FP.notifCfg().immobiliseJours;
+    const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+    const items = [];
+    (data.vehicules || []).forEach(v => {
+      if (FP.horsFlotte(v)) return;
+      const im = immo[v.id]; if (!im || !im.since) return;
+      const j = Math.floor((t0 - new Date(im.since)) / 86400000);
+      if (j >= seuilJ) items.push({ label: `${v.immat} · ${v.marque} ${v.modele} — immobilisé depuis ${j} j`, target: 'vehicules.html' });
+    });
+    if (items.length) out.push({ niveau: 'warn', categorie: 'Immobilisation', message: `${items.length} véhicule(s) immobilisé(s) depuis + de ${seuilJ} j`, detail: 'Au garage / hors service trop longtemps — à débloquer', sort: 400, vehicules: items });
+  } catch (e) {}
+
+  // --- Consommation carburant ANORMALE (dépense d'un mois clos >> moyenne du véhicule) ---
+  // Ignorable par véhicule via « masquer » (muteKey conso|<id>) : le gestionnaire peut connaître
+  // la raison (gros déplacement, plein exceptionnel…) et couper l'alerte pour ce véhicule.
+  try {
+    const seuil = 1 + (FP.notifCfg().consoSeuilPct / 100);
+    const byVeh = {};
+    (data.factures || []).forEach(f => {
+      if (!FP.estCarburantPeage(f) || !f.vehiculeImmat) return;
+      const ym = (f.date || '').slice(0, 7); if (!/^\d{4}-\d{2}$/.test(ym)) return;
+      const im = String(f.vehiculeImmat).toUpperCase();
+      (byVeh[im] = byVeh[im] || {})[ym] = (byVeh[im][ym] || 0) + (Number(f.montantTTC) || 0);
+    });
+    const nowYm = new Date().toISOString().slice(0, 7);
+    Object.keys(byVeh).forEach(im => {
+      const months = Object.keys(byVeh[im]).sort();
+      if (months.length < 4) return;                 // pas assez d'historique
+      const last = months[months.length - 1];
+      if (last === nowYm) return;                    // mois courant incomplet → on prend le dernier mois CLOS
+      const prev = months.slice(0, -1);
+      const avg = prev.reduce((s, m) => s + byVeh[im][m], 0) / prev.length;
+      const val = byVeh[im][last];
+      if (avg <= 0 || val < 50 || val < avg * seuil) return;
+      const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === im);
+      if (!v || FP.horsFlotte(v)) return;
+      const pct = Math.round((val / avg - 1) * 100);
+      out.push({ niveau: 'info', categorie: 'Carburant', message: `${im} : carburant +${pct}% en ${last} (${FP.euro(val)} vs moy. ${FP.euro(avg)})`, detail: 'Dépense inhabituelle — vérifie (gros plein, fuite, usage) ou masque si c\'est normal', sort: 350, target: 'factures.html', muteKey: 'conso|' + v.id, vehLabel: `${v.immat} · ${v.marque} ${v.modele}` });
+    });
+  } catch (e) {}
+
+  // --- Expiration carte carburant / badge télépéage (dates saisies dans la fiche véhicule) ---
+  try {
+    const st = FP.settings.get();
+    const exps = [['vehCarteCarbExp', 'Carte carburant'], ['vehBadgeExp', 'Badge télépéage']];
+    const t0e = new Date(); t0e.setHours(0, 0, 0, 0);
+    (data.vehicules || []).forEach(v => {
+      if (FP.horsFlotte(v)) return;
+      exps.forEach(([mapKey, lib]) => {
+        const d = (st[mapKey] || {})[v.id]; if (!d) return;
+        const dt = new Date(d); if (isNaN(dt)) return;
+        const diff = Math.ceil((dt - t0e) / 86400000);
+        const veh = `${v.immat} · ${v.marque} ${v.modele}`;
+        const mk = 'exp' + mapKey + '|' + v.id;
+        if (diff < 0)       out.push({ niveau: 'danger', categorie: lib, message: `${lib} EXPIRÉE depuis ${-diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
+        else if (diff < 30) out.push({ niveau: 'warn',   categorie: lib, message: `${lib} expire dans ${diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
+      });
+    });
+  } catch (e) {}
+
+  // --- Amende potentiellement PAYÉE EN DOUBLE (même n° d'avis réglé plusieurs fois) ---
+  try {
+    const byAvis = {};
+    (data.amendes || []).forEach(a => { const n = (a.numeroAvis || '').toString().trim().toUpperCase(); if (!n) return; (byAvis[n] = byAvis[n] || []).push(a); });
+    const dbl = [];
+    Object.keys(byAvis).forEach(n => {
+      const payees = byAvis[n].filter(a => FP.estPayee ? FP.estPayee(a) : a.statut === 'payée');
+      if (payees.length >= 2) dbl.push({ label: `Avis ${n} — réglé ${payees.length}×`, target: 'amendes.html' });
+    });
+    if (dbl.length) out.push({ niveau: 'warn', categorie: 'Amendes', message: `${dbl.length} amende(s) peut-être payée(s) en double`, detail: "Même n° d'avis réglé plusieurs fois — vérifie / demande le remboursement", sort: 420, vehicules: dbl });
+  } catch (e) {}
 
   // --- Sinistres en attente de remboursement (rappel de suivi) ---
   const sinStatut = (FP.settings.get().sinistreStatut) || {};
@@ -5242,10 +5441,12 @@ FP.injectLogoutButton = () => {
         <span class="fp-user-av" style="width:26px;height:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"></span>
         <span class="fp-logout-label">Déconnexion</span>
         <span class="fp-user-email" style="margin-left: auto; font-size: .65rem; opacity: .5; max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+        <i data-lucide="power" class="fp-logout-power" style="width:16px;height:16px;flex-shrink:0;margin-left:.4rem;opacity:.85" title="Se déconnecter"></i>
       </button>
       <div class="fp-user-role" style="margin-top:.4rem; font-size:.62rem; letter-spacing:.04em; text-transform:uppercase; color:rgba(255,255,255,.4); padding-left:.85rem;"></div>
     `;
     sb.appendChild(div);
+    if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} } // rend l'icône « power »
     const roleEl = div.querySelector('.fp-user-role');
     if (roleEl) roleEl.textContent = 'Rôle : ' + FP.roleLabel();
 
@@ -6090,10 +6291,211 @@ FP.injectDataIO = function (cfg) {
   document.addEventListener('fp:data-ready', () => setTimeout(animateKpis, 40));
 })();
 
+// =====================================================================
+// === Confort transversal : Annuler (undo), contacts cliquables, bouton +, tour, vue mobile ===
+// =====================================================================
+
+// ⚠️ RÈGLE PROJET — après une SUPPRESSION, proposer « Annuler » via ce helper.
+// FP.undoToast(message, onUndo) : toast avec bouton « ↶ Annuler » qui restaure. onUndo DOIT
+// ré-insérer la donnée (tableau EN MÉMOIRE + FP.persist.insert) — cf. usages factures/amendes/sinistres.
+FP.undoToast = (message, onUndo, opts) =>
+  FP.toast(message, Object.assign({ actionLabel: '↶ Annuler', onAction: onUndo, duration: 7000 }, opts || {}));
+
+// Coordonnées d'un conducteur (par nom/prénom) → { tel, email } depuis la table conducteurs.
+FP.conducteurContact = (name) => {
+  try {
+    const norm = (x) => FP.normPrenom ? FP.normPrenom(x) : String(x || '').toLowerCase().trim();
+    const n = norm(name); if (!n) return {};
+    const list = (window.FP_DATA && Array.isArray(FP_DATA.conducteurs)) ? FP_DATA.conducteurs : [];
+    const c = list.find(c => [c.name, c.prenom, c.key, c.nom].filter(Boolean).map(norm).includes(n));
+    return c ? { tel: c.tel || '', email: c.email || '' } : {};
+  } catch (e) { return {}; }
+};
+// Puces cliquables tel:/mailto: + bouton copier — réutilisable partout où un conducteur apparaît.
+FP.contactChips = (name) => {
+  const { tel, email } = FP.conducteurContact(name);
+  if (!tel && !email) return '';
+  const esc = FP.esc || (x => x);
+  const chip = (href, icon, txt, lbl) =>
+    `<a href="${href}" class="fp-contact-chip"><i data-lucide="${icon}" style="width:13px;height:13px"></i> ${esc(txt)}</a>`
+    + `<button type="button" class="fp-contact-copy" data-copy="${esc(txt)}" title="Copier ${lbl}"><i data-lucide="copy" style="width:12px;height:12px"></i></button>`;
+  let out = '<span class="fp-contact-wrap">';
+  if (tel) out += chip('tel:' + String(tel).replace(/\s+/g, ''), 'phone', tel, 'le téléphone');
+  if (email) out += chip('mailto:' + email, 'mail', email, "l'e-mail");
+  return out + '</span>';
+};
+// Écoute globale du « copier » des contacts (délégué au document).
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('.fp-contact-copy'); if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const v = b.getAttribute('data-copy') || '';
+  try { if (FP.copy) FP.copy(v); else if (navigator.clipboard) navigator.clipboard.writeText(v); } catch (_) {}
+  if (FP.toast) FP.toast('✓ Copié : ' + v);
+});
+
+// Bouton « + » flottant (quick-add) : accès rapide aux ajouts fréquents depuis n'importe quelle page
+// applicative. Chaque lien pointe vers la page cible + hash #add ; la page ouvre alors son formulaire
+// « Nouveau… » via l'élément portant l'attribut data-quickadd (géré ci-dessous).
+FP.injectQuickAdd = () => {
+  try {
+    if (document.getElementById('fp-fab') || !document.body) return;
+    const path = location.pathname;
+    // Pas de FAB sur login / pages publiques / supports de vente / pages de lecture seule.
+    if (/login|brochure|prix|logos|carte|avis|demo|kit-commercial|guide|manuel|aide|ecran/i.test(path)) return;
+    const inPages = /\/pages\//.test(path);
+    const pref = inPages ? '' : 'pages/';
+    const items = [
+      { label: 'Nouveau véhicule', icon: 'car',           href: 'vehicules.html#add' },
+      { label: 'Nouvelle amende',  icon: 'ticket',        href: 'amendes.html#add' },
+      { label: 'Nouvelle facture', icon: 'receipt',       href: 'factures.html#add' },
+      { label: 'Nouveau sinistre', icon: 'alert-octagon', href: 'sinistres.html#add' },
+    ];
+    const fab = document.createElement('div');
+    fab.id = 'fp-fab';
+    fab.innerHTML =
+      `<div class="fp-fab-menu" id="fp-fab-menu">${items.map(i => `<a href="${pref}${i.href}" class="fp-fab-item"><i data-lucide="${i.icon}"></i> ${i.label}</a>`).join('')}</div>`
+      + `<button type="button" class="fp-fab-btn" id="fp-fab-btn" title="Ajouter" aria-label="Ajouter rapidement"><i data-lucide="plus"></i></button>`;
+    document.body.appendChild(fab);
+    const btn = fab.querySelector('#fp-fab-btn');
+    btn.addEventListener('click', (e) => { e.stopPropagation(); fab.classList.toggle('open'); });
+    document.addEventListener('click', () => fab.classList.remove('open'));
+    if (window.lucide) lucide.createIcons();
+  } catch (e) {}
+};
+// Ouverture directe d'un formulaire « Nouveau… » quand on arrive avec #add (depuis le bouton +).
+// La page doit poser l'attribut data-quickadd sur son bouton « Nouveau… ».
+FP.handleQuickAddHash = () => {
+  try {
+    if (location.hash !== '#add') return;
+    const trigger = () => { const el = document.querySelector('[data-quickadd]'); if (el) { el.click(); return true; } return false; };
+    if (!trigger()) document.addEventListener('fp:data-ready', () => setTimeout(trigger, 60), { once: true });
+    // Nettoie le hash pour ne pas rouvrir au rechargement
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
+  } catch (e) {}
+};
+
+// Vue mobile « en cartes » : sur petit écran, chaque ligne de .fp-table devient une carte, avec le
+// libellé de colonne à gauche de la valeur. On copie les en-têtes du <thead> dans data-label des <td>
+// (le CSS fait le reste). Générique → s'applique à TOUS les tableaux du site, sans les réécrire.
+FP.mobileCardify = (root) => {
+  try {
+    if (!window.matchMedia || !matchMedia('(max-width: 640px)').matches) return;
+    (root || document).querySelectorAll('table.fp-table').forEach(tbl => {
+      const ths = [...tbl.querySelectorAll('thead th')].map(th => (th.textContent || '').trim());
+      if (!ths.length) return;
+      tbl.querySelectorAll('tbody tr').forEach(tr => {
+        [...tr.children].forEach((td, i) => { if (td.tagName === 'TD' && ths[i] && !td.hasAttribute('data-label')) td.setAttribute('data-label', ths[i]); });
+      });
+    });
+  } catch (e) {}
+};
+
+// Petit tour guidé à la 1re visite (dashboard). Ignorable ; « ne plus afficher » mémorisé en local.
+FP.injectTour = (force) => {
+  try {
+    if (!document.body) return;
+    const KEY = 'fp_tour_v1_done';
+    if (!force) { if (!/dashboard/i.test(location.pathname)) return; if (localStorage.getItem(KEY) === '1') return; }
+    if (document.getElementById('fp-tour')) return;
+    const steps = [
+      { t: 'Bienvenue sur Parc Pilot 👋', d: "Voici un tour express (30 s) des grands repères. Vous pourrez le revoir depuis le Manuel." },
+      { t: '📊 Tableau de bord', d: "Vos chiffres clés en un coup d'œil : véhicules, coûts du mois, amendes à payer, alertes." },
+      { t: '🔔 Suivi & alertes', d: "Tout ce qui arrive à échéance (contrôle technique, assurance, révision, fin de leasing) et un onglet « À compléter » qui liste ce qui reste à renseigner." },
+      { t: '🚗 Vos véhicules', d: "Une fiche par véhicule : documents, coûts, €/km, leasing, journal. Épinglez vos favoris avec l'étoile ⭐." },
+      { t: '➕ Bouton d\'ajout rapide', d: "En bas à droite, le bouton « + » ajoute un véhicule, une amende, une facture ou un sinistre depuis n'importe quelle page." },
+      { t: '🔎 Recherche & aide', d: "La barre de recherche (en haut de la colonne de gauche, ou Ctrl+K) trouve tout. Le Manuel explique chaque écran en détail." },
+    ];
+    let i = 0;
+    const ov = document.createElement('div'); ov.id = 'fp-tour';
+    ov.innerHTML =
+      `<div class="fp-tour-card">
+         <button type="button" class="fp-tour-skip" title="Fermer">✕</button>
+         <div class="fp-tour-title"></div>
+         <div class="fp-tour-desc"></div>
+         <div class="fp-tour-dots"></div>
+         <div class="fp-tour-actions">
+           <label class="fp-tour-never"><input type="checkbox" class="fp-tour-never-cb"> Ne plus afficher</label>
+           <div style="display:flex;gap:.5rem;margin-left:auto">
+             <button type="button" class="fp-tour-btn fp-tour-prev">Précédent</button>
+             <button type="button" class="fp-tour-btn primary fp-tour-next">Suivant</button>
+           </div>
+         </div>
+       </div>`;
+    document.body.appendChild(ov);
+    const q = (s) => ov.querySelector(s);
+    const render = () => {
+      q('.fp-tour-title').textContent = steps[i].t;
+      q('.fp-tour-desc').textContent = steps[i].d;
+      q('.fp-tour-dots').innerHTML = steps.map((_, k) => `<span class="fp-tour-dot${k === i ? ' on' : ''}"></span>`).join('');
+      q('.fp-tour-prev').style.visibility = i === 0 ? 'hidden' : 'visible';
+      q('.fp-tour-next').textContent = i === steps.length - 1 ? 'Terminer' : 'Suivant';
+    };
+    const close = () => { if (q('.fp-tour-never-cb').checked || i >= steps.length - 1) { try { localStorage.setItem(KEY, '1'); } catch (_) {} } ov.remove(); };
+    q('.fp-tour-skip').addEventListener('click', () => { try { localStorage.setItem(KEY, '1'); } catch (_) {} ov.remove(); });
+    q('.fp-tour-prev').addEventListener('click', () => { if (i > 0) { i--; render(); } });
+    q('.fp-tour-next').addEventListener('click', () => { if (i < steps.length - 1) { i++; render(); } else close(); });
+    ov.addEventListener('click', (e) => { if (e.target === ov) { /* clic hors carte = ne ferme pas (évite fermeture accidentelle) */ } });
+    render();
+  } catch (e) {}
+};
+
+// Pop « nouveauté » (feature discovery) : présente UNE fonctionnalité à la fois (dashboard), avec
+// « Ne plus proposer ». Idéal pour un nouveau client (ou soi-même) qui découvre la plateforme.
+FP.featureTip = () => {
+  try {
+    if (!document.body || !/dashboard/i.test(location.pathname)) return;
+    if (document.getElementById('fp-tour') || document.getElementById('fp-nf')) return; // pas en même temps que le tour
+    const TIPS = [
+      { id: 'shortcuts', t: 'Personnalise tes raccourcis', m: 'Le bouton « ⚡ Raccourcis » en haut : choisis les actions à afficher (km, immobilisé, scan…).' },
+      { id: 'favoris',   t: 'Épingle tes véhicules',       m: "Clique l'étoile ⭐ au bout d'une ligne véhicule pour la remonter en tête de liste." },
+      { id: 'compare',   t: 'Compare 2 véhicules',         m: 'Onglet Véhicules → bouton « Comparer » : coûts, €/km, TVS, leasing côte à côte.' },
+      { id: 'kmphoto',   t: 'Relève le km en photo',       m: 'Raccourcis → « Km par photo » : tu photographies le compteur, l\'IA lit le kilométrage.' },
+      { id: 'fab',       t: 'Ajout rapide partout',        m: 'Le bouton « + » en bas à droite ajoute véhicule/amende/facture/sinistre depuis n\'importe quelle page.' },
+      { id: 'antai',     t: 'Désigner sur ANTAI',          m: 'Fiche d\'une amende → « Désigner sur ANTAI » ouvre le site officiel et copie le n° d\'avis.' },
+      { id: 'tva',       t: 'TVA récupérable',             m: 'Onglet Factures → « Coût par période » affiche la TVA récupérable (pour le comptable).' },
+      { id: 'immobilise',t: 'Suis les immobilisations',    m: 'Raccourcis → « Marquer un véhicule immobilisé » : alerte si un véhicule reste trop longtemps au garage.' },
+    ];
+    const seen = (() => { try { return (FP.settings.get().featureTipsSeen) || []; } catch (e) { return []; } })();
+    const tip = TIPS.find(t => !seen.includes(t.id)); if (!tip) return;
+    const el = document.createElement('div'); el.id = 'fp-nf'; el.className = 'fp-nf';
+    const esc = FP.esc || (x => x);
+    el.innerHTML = `<div class="fp-nf-head"><span>💡 ${esc(tip.t)}</span><button class="fp-nf-x" title="Fermer">✕</button></div>`
+      + `<div class="fp-nf-body">${esc(tip.m)}</div>`
+      + `<div class="fp-nf-actions"><button type="button" class="fp-nf-never">Ne plus proposer</button><button type="button" class="fp-nf-ok">OK, compris</button></div>`;
+    document.body.appendChild(el);
+    const seeIt = (all) => { try { const s = FP.settings.get(); s.featureTipsSeen = all ? TIPS.map(t => t.id) : ((s.featureTipsSeen || []).concat([tip.id])); FP.settings.save(s); } catch (e) {} el.remove(); };
+    el.querySelector('.fp-nf-x').onclick = () => seeIt(false);
+    el.querySelector('.fp-nf-ok').onclick = () => seeIt(false);
+    el.querySelector('.fp-nf-never').onclick = () => seeIt(true);
+  } catch (e) {}
+};
+
+// Flèche « ← Retour » en haut de chaque page : revient à la page précédente (page/onglet d'où l'on
+// vient). N'apparaît QUE si l'on arrive d'une autre page DU SITE (sinon « retour » n'a pas de sens).
+FP.injectBackButton = () => {
+  try {
+    if (!document.body || document.getElementById('fp-back')) return;
+    // Pas de « Retour » sur les pages « racine »/accueil (le tableau de bord notamment) ni sur les
+    // pages publiques : le retour n'y mène nulle part d'utile.
+    if (/dashboard|index|login|brochure|prix|logos|carte|avis|ecran|demo/i.test(location.pathname)) return;
+    let sameApp = false;
+    try { const r = document.referrer ? new URL(document.referrer) : null; sameApp = !!r && r.host === location.host && r.pathname !== location.pathname; } catch (e) {}
+    if (!sameApp) return;
+    const main = document.querySelector('main') || document.body;
+    const b = document.createElement('button');
+    b.id = 'fp-back'; b.type = 'button'; b.className = 'fp-back'; b.title = 'Revenir à la page précédente';
+    b.innerHTML = '<i data-lucide="arrow-left" style="width:15px;height:15px"></i> Retour';
+    b.addEventListener('click', () => { history.back(); });
+    main.insertBefore(b, main.firstChild);
+    if (window.lucide) lucide.createIcons();
+  } catch (e) {}
+};
+
 // Navigation active state (sidebar)
 document.addEventListener('DOMContentLoaded', () => {
   // Appliquer le thème (couleurs des groupes) dès le chargement
   FP.settings.applyTheme();
+  FP.injectBackButton();
   // Rôle courant : marque le body + retire les onglets réservés à l'admin (rôle interne)
   const _isAdmin = FP.isAdmin();
   document.body.setAttribute('data-role', FP.role());
@@ -6121,6 +6523,14 @@ document.addEventListener('DOMContentLoaded', () => {
   FP.injectGlobalSearch();
   // Injecter le bouton déconnexion en bas des sidebars
   FP.injectLogoutButton();
+  // Confort transversal : bouton « + » flottant, ouverture directe #add, vue mobile en cartes, tour guidé
+  FP.injectQuickAdd();
+  FP.handleQuickAddHash();
+  FP.mobileCardify(document);
+  window.addEventListener('fp:data-ready', () => { try { FP.mobileCardify(document); } catch (e) {} });
+  window.addEventListener('resize', () => { try { FP.mobileCardify(document); } catch (e) {} });
+  FP.injectTour();
+  setTimeout(() => { try { FP.featureTip(); } catch (e) {} }, 2500); // pop « nouveauté » (après le tour éventuel)
 
   // Animations 3D au survol des bulles KPI (global — validé). La carte s'incline vers le
   // curseur + reflet qui suit la souris. Ré-appliqué après un re-rendu de données
