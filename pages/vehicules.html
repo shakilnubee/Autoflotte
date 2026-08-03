@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260803h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260803h">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -383,6 +383,13 @@
           <select id="cmp-b" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"></select>
         </div>
         <div id="cmp-result"></div>
+      </div>
+    </div>
+
+    <!-- Modal : simulateur « conserver ou remplacer ? » -->
+    <div id="sim-ov" class="fiche-ov">
+      <div class="fiche-card" style="max-width:660px;max-height:92vh;overflow-y:auto">
+        <div id="sim-content"></div>
       </div>
     </div>
 
@@ -791,14 +798,14 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803g"></script>
-<script src="../assets/js/supabase-client.js?v=20260803g"></script>
-<script src="../assets/js/data.js?v=20260803g"></script>
-<script src="../assets/js/fleet-docs.js?v=20260803g"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260803g"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803g"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803g"></script>
-<script src="../assets/js/app.js?v=20260803g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260803h"></script>
+<script src="../assets/js/supabase-client.js?v=20260803h"></script>
+<script src="../assets/js/data.js?v=20260803h"></script>
+<script src="../assets/js/fleet-docs.js?v=20260803h"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260803h"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803h"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803h"></script>
+<script src="../assets/js/app.js?v=20260803h"></script>
 <script>
   lucide.createIcons();
 
@@ -1147,6 +1154,10 @@
     (getInspections(v.id) || []).forEach(ins => push(ins.date, ins.sens === 'Sortie' ? '📤' : '📥', '#10B981', 'État des lieux · ' + ins.sens, ins.km != null ? (FP.num(ins.km) + ' km') : ''));
     push(v.dateDernierCT, '🛠️', '#7C3AED', 'Contrôle technique', '');
     push(v.dateChangementPneus, '🛞', '#0891B2', 'Changement de pneus', '');
+    // Historique d'affectation daté (qui conduit, depuis quand)
+    (FP.affectations ? FP.affectations.forVeh(v.id) : []).forEach(a => {
+      push(a.debut, '👤', '#2563EB', 'Conducteur · ' + (a.conducteur || ''), a.fin ? ('jusqu’au ' + FP.dateNum(a.fin)) : 'en cours');
+    });
 
     if (!evts.length) return '';
     evts.sort((a, b) => b.date.localeCompare(a.date));
@@ -2244,6 +2255,8 @@
 
       ${vehTimelineHTML(v)}
 
+      ${simulateurCardHTML(v)}
+
       ${infoNotesHTML}
       ${restitHTML}
       ${carnetHTML}
@@ -2600,7 +2613,10 @@
       const idx = data.vehicules.findIndex(v => v.id === id);
       const _oldStatut = idx >= 0 ? data.vehicules[idx].statut : null;
       let updated = null;
+      const _oldChauffeur = idx >= 0 ? (data.vehicules[idx].chauffeur || '') : '';
       if (idx >= 0) { data.vehicules[idx] = { ...data.vehicules[idx], ...payload }; updated = data.vehicules[idx]; }
+      // Historique d'affectation daté : on note le changement de conducteur (ferme l'ancien, ouvre le nouveau)
+      try { if (FP.affectations && (_oldChauffeur || '').trim() !== (payload.chauffeur || '').trim()) FP.affectations.record(id, payload.chauffeur); } catch (e) {}
       saveMasse(id);
       closeModal();
       renderKPIs();
@@ -2628,6 +2644,7 @@
         // action === 'add' → on continue et on ajoute un nouveau véhicule.
       }
       data.vehicules.push(newV);
+      try { if (FP.affectations && (newV.chauffeur || '').trim() && newV.chauffeur !== '—') FP.affectations.record(newV.id, newV.chauffeur); } catch (e) {}
       saveMasse(newV.id);
       closeModal();
       renderKPIs();
@@ -4103,6 +4120,105 @@
       ctJ: FP.joursRestants ? FP.joursRestants(v.prochainCT) : null,
     };
   }
+  // ===== Simulateur « conserver ou remplacer ? » (Feature) =====
+  function simulateurCardHTML(v) {
+    if (FP.horsFlotte && FP.horsFlotte(v)) return '';
+    return `<div class="card p-4" style="border:1px solid var(--fp-border)">
+      <div class="font-semibold text-slate-900 flex items-center gap-2 mb-1"><i data-lucide="git-compare-arrows" class="w-4 h-4" style="color:var(--fp-accent)"></i> Conserver ou remplacer&nbsp;?</div>
+      <p class="text-xs text-slate-500 mb-2.5">Compare le coût de garder ce véhicule encore quelques années avec celui de le remplacer (achat neuf ou leasing).</p>
+      <button type="button" class="btn btn-outline text-sm" data-sim-veh="${v.id}"><i data-lucide="calculator" class="w-4 h-4"></i> Ouvrir le simulateur</button>
+    </div>`;
+  }
+  let simMode = 'achat';
+  const simNum = (id) => { const el = $(id); return el ? (FP.parseMontant(el.value) || 0) : 0; };
+  function openSimulateur(vehId) {
+    const v = data.vehicules.find(x => x.id === vehId); if (!v) return;
+    simMode = 'achat';
+    const s = vehCmpStats(v);
+    const E0 = Math.round((s.entretienAnnee && s.entretienAnnee > 0) ? s.entretienAnnee : 1200);
+    const vNow = (s.decote != null) ? s.decote : (Number(v.valeurAchat) ? Math.round(Number(v.valeurAchat) * 0.5) : 8000);
+    const prixNeuf = Number(v.valeurAchat) ? Math.round(Number(v.valeurAchat)) : Math.max(15000, Math.round(vNow * 2.2));
+    const inp = (id, val, unit) => `<label class="block"><span class="text-xs font-medium text-slate-600">${unit}</span><input id="${id}" type="text" inputmode="decimal" value="${val}" class="w-full mt-0.5 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:border-teal-500"></label>`;
+    $('sim-content').innerHTML = `
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2"><i data-lucide="git-compare-arrows" class="w-5 h-5"></i> Conserver ou remplacer&nbsp;?</h3>
+        <button type="button" id="sim-close" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-3">${escapeHtml(v.immat)} · ${escapeHtml(v.marque)} ${escapeHtml(v.modele)} — estimation sur l'horizon choisi. Le carburant et l'assurance sont exclus (comparables dans les deux cas).</p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-3">
+        ${inp('sim-horizon', 3, 'Horizon (années)')}
+        ${inp('sim-e0', E0, 'Entretien / an actuel (€)')}
+        ${inp('sim-infl', 15, 'Inflation entretien (%/an)')}
+        ${inp('sim-vnow', vNow, 'Revente actuelle (€)')}
+      </div>
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-sm font-semibold text-slate-700">Remplacement :</span>
+        <button type="button" id="sim-m-achat" class="btn btn-outline text-xs" style="padding:3px 12px">Achat neuf</button>
+        <button type="button" id="sim-m-leasing" class="btn btn-outline text-xs" style="padding:3px 12px">Leasing</button>
+      </div>
+      <div id="sim-grp-achat" class="grid grid-cols-2 gap-2.5 mb-3">
+        ${inp('sim-prix', prixNeuf, 'Prix du véhicule neuf (€)')}
+        ${inp('sim-mnew-a', 400, 'Entretien / an du neuf (€)')}
+      </div>
+      <div id="sim-grp-leasing" class="grid grid-cols-2 gap-2.5 mb-3" style="display:none">
+        ${inp('sim-loyer', 400, 'Loyer leasing (€/mois)')}
+        ${inp('sim-mnew-l', 0, 'Entretien / an (si non inclus)')}
+      </div>
+      <div id="sim-out"></div>`;
+    $('sim-ov').classList.add('open');
+    simSetMode('achat');
+    lucide.createIcons();
+  }
+  function simSetMode(m) {
+    simMode = m;
+    const a = $('sim-grp-achat'), l = $('sim-grp-leasing');
+    if (a) a.style.display = m === 'achat' ? '' : 'none';
+    if (l) l.style.display = m === 'leasing' ? '' : 'none';
+    const ba = $('sim-m-achat'), bl = $('sim-m-leasing');
+    [[ba, 'achat'], [bl, 'leasing']].forEach(([b, mm]) => { if (!b) return; const on = mm === m; b.style.background = on ? 'var(--fp-primary)' : ''; b.style.color = on ? '#fff' : ''; b.style.borderColor = on ? 'var(--fp-primary)' : ''; });
+    computeSim();
+  }
+  function computeSim() {
+    const out = $('sim-out'); if (!out) return;
+    const eur = n => FP.euro(Math.round(n));
+    const N = Math.max(1, Math.min(10, Math.round(simNum('sim-horizon') || 3)));
+    const E0 = simNum('sim-e0'), infl = simNum('sim-infl') / 100, vNow = simNum('sim-vnow');
+    let maintOld = 0; for (let k = 0; k < N; k++) maintOld += E0 * Math.pow(1 + infl, k);
+    const vN = Math.round(vNow * Math.pow(0.82, N));
+    const deprOld = Math.max(0, vNow - vN);
+    const coutConserver = maintOld + deprOld;
+    const bConserver = [`Entretien cumulé ${N} ans : <b>${eur(maintOld)}</b> <span class="text-slate-400">(inflation ${Math.round(infl * 100)}%/an)</span>`, `Dépréciation : <b>${eur(deprOld)}</b> <span class="text-slate-400">(${eur(vNow)} → ~${eur(vN)})</span>`];
+    let coutRemplacer, bRemplacer;
+    if (simMode === 'achat') {
+      const P = simNum('sim-prix'), mNew = simNum('sim-mnew-a');
+      const maintNew = mNew * N; const vNewN = Math.round(P * Math.pow(0.80, N));
+      coutRemplacer = maintNew + (P - vNewN);
+      bRemplacer = [`Entretien ${N} ans (neuf) : <b>${eur(maintNew)}</b>`, `Dépréciation du neuf : <b>${eur(P - vNewN)}</b> <span class="text-slate-400">(${eur(P)} → ~${eur(vNewN)})</span>`, `<span class="text-slate-500">La revente de l'actuel (${eur(vNow)}) finance l'achat.</span>`];
+    } else {
+      const loyer = simNum('sim-loyer'), mNew = simNum('sim-mnew-l');
+      const loyerTot = loyer * 12 * N; const maintNew = mNew * N;
+      coutRemplacer = loyerTot + maintNew - vNow;
+      bRemplacer = [`Loyers ${N} ans : <b>${eur(loyerTot)}</b> <span class="text-slate-400">(${eur(loyer)}/mois)</span>`, maintNew ? `Entretien ${N} ans : <b>${eur(maintNew)}</b>` : `Entretien : <span class="text-slate-400">inclus dans le loyer</span>`, `− Revente de l'actuel : <b>${eur(vNow)}</b> <span class="text-slate-400">(trésorerie récupérée)</span>`];
+    }
+    const conserverMieux = coutConserver <= coutRemplacer;
+    const diff = Math.abs(coutConserver - coutRemplacer);
+    const cardHTML = (titre, cout, lignes, best) => `<div style="flex:1;border:2px solid ${best ? '#16a34a' : 'var(--fp-border)'};border-radius:.8rem;padding:.85rem .95rem;background:${best ? '#f0fdf4' : '#fff'}">
+      <div class="flex items-center justify-between mb-1"><span class="font-bold text-slate-900">${titre}</span>${best ? '<span style="font-size:10px;font-weight:800;color:#16a34a;background:#dcfce7;border-radius:9999px;padding:2px 8px">MEILLEUR</span>' : ''}</div>
+      <div style="font-size:1.5rem;font-weight:800;color:${best ? '#16a34a' : 'var(--fp-primary)'}">${eur(cout)}</div>
+      <div class="text-xs text-slate-400 mb-2">coût total sur ${N} ans</div>
+      <ul style="list-style:none;padding:0;margin:0;font-size:12px;color:#475569" class="space-y-1">${lignes.map(x => `<li>${x}</li>`).join('')}</ul>
+    </div>`;
+    out.innerHTML = `
+      <div class="flex gap-3 flex-col sm:flex-row mb-3">
+        ${cardHTML('🔧 Conserver', coutConserver, bConserver, conserverMieux)}
+        ${cardHTML(simMode === 'achat' ? '🚗 Remplacer (achat)' : '🚗 Remplacer (leasing)', coutRemplacer, bRemplacer, !conserverMieux)}
+      </div>
+      <div class="p-3 rounded-lg" style="background:${conserverMieux ? '#f0fdf4' : '#FFF7ED'};border:1px solid ${conserverMieux ? '#bbf7d0' : '#FED7AA'}">
+        <div class="font-semibold text-slate-900">${conserverMieux ? '✅ Conserver ce véhicule' : '🔁 Remplacer ce véhicule'} semble ~${eur(diff)} moins cher sur ${N} ans.</div>
+        <div class="text-xs text-slate-500 mt-1">Estimation indicative (dépréciation ~18%/an actuel, ~20%/an neuf). Ajuste les valeurs pour ton cas réel. Hors carburant, assurance et TVS (comparables des deux côtés).</div>
+      </div>`;
+  }
+
   function renderCompare() {
     const box = $('cmp-result'); if (!box) return;
     const va = data.vehicules.find(x => x.id === $('cmp-a').value);
@@ -4155,6 +4271,16 @@
   { const ov = $('cmp-ov'); if (ov) ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('open'); }); }
   { const a = $('cmp-a'); if (a) a.addEventListener('change', renderCompare); }
   { const b = $('cmp-b'); if (b) b.addEventListener('change', renderCompare); }
+
+  // Simulateur « conserver ou remplacer ? » : ouverture depuis la fiche + interactions du modal
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-sim-veh]'); if (t) { e.preventDefault(); openSimulateur(t.dataset.simVeh); return; }
+    if (e.target.closest('#sim-close')) { $('sim-ov').classList.remove('open'); return; }
+    if (e.target.closest('#sim-m-achat')) { simSetMode('achat'); return; }
+    if (e.target.closest('#sim-m-leasing')) { simSetMode('leasing'); return; }
+  });
+  { const ov = $('sim-ov'); if (ov) ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('open'); }); }
+  { const c = $('sim-content'); if (c) c.addEventListener('input', (e) => { if (e.target.closest('input')) computeSim(); }); }
 
   $('btn-new').addEventListener('click', () => openModal(null));
   $('modal-close').addEventListener('click', closeModal);

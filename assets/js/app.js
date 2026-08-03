@@ -2484,6 +2484,57 @@ FP.leasingInfo = (v) => {
            loyer: (c.loyer != null ? Number(c.loyer) : null), avenants: Array.isArray(c.avenants) ? c.avenants : [] };
 };
 
+// ===== HISTORIQUE D'AFFECTATION véhicule ↔ conducteur =====
+// Journal DATÉ de « qui conduit quel véhicule et depuis quand ». Stocké par société
+// dans app_settings (settings.affectations = { [vehId]: [ {conducteur, debut, fin} ] }) —
+// pas de nouvelle table. La dernière entrée avec fin=null = affectation EN COURS.
+// Alimenté automatiquement à chaque changement de conducteur d'un véhicule (fiche véhicule).
+FP.affectations = {
+  _norm(n) { return (n == null ? '' : String(n)).trim(); },
+  all() { const s = FP.settings.get(); return (s.affectations && typeof s.affectations === 'object') ? s.affectations : {}; },
+  forVeh(vehId) { const a = this.all()[vehId]; return Array.isArray(a) ? a.slice() : []; },
+  // Affectation EN COURS (fin === null) d'un véhicule, ou null.
+  courante(vehId) { const o = this.forVeh(vehId).filter(x => !x.fin); return o.length ? o[o.length - 1] : null; },
+  // Véhicules conduits par un conducteur (par nom, tolérant casse/espaces).
+  forConducteur(nom) {
+    const cible = this._norm(nom).toLowerCase(); if (!cible) return [];
+    const out = []; const map = this.all();
+    Object.keys(map).forEach(vehId => (Array.isArray(map[vehId]) ? map[vehId] : []).forEach(a => {
+      if (this._norm(a.conducteur).toLowerCase() === cible) out.push({ vehId, ...a });
+    }));
+    return out.sort((x, y) => String(y.debut || '').localeCompare(String(x.debut || '')));
+  },
+  // Enregistre un changement de conducteur : ferme l'entrée en cours si le nom change,
+  // en ouvre une nouvelle si un conducteur est désigné. Idempotent (rien si inchangé).
+  record(vehId, nouveauConducteur, dateISO) {
+    if (!vehId) return;
+    const nom = this._norm(nouveauConducteur);
+    const vide = !nom || nom === '—';
+    const jour = dateISO || new Date().toISOString().slice(0, 10);
+    const s = FP.settings.get();
+    s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
+    const list = Array.isArray(s.affectations[vehId]) ? s.affectations[vehId] : [];
+    const encours = [...list].reverse().find(x => !x.fin) || null;
+    const actuel = encours ? this._norm(encours.conducteur) : '';
+    if (actuel === (vide ? '' : nom)) return; // aucun changement réel
+    if (encours) encours.fin = jour;          // on clôt l'affectation précédente
+    if (!vide) list.push({ conducteur: nom, debut: jour, fin: null });
+    s.affectations[vehId] = list;
+    FP.settings.save(s);
+  },
+  // Renomme un conducteur dans tout l'historique (suit un renommage de fiche).
+  rename(oldName, newName) {
+    const from = this._norm(oldName).toLowerCase(); const to = this._norm(newName);
+    if (!from || !to) return;
+    const s = FP.settings.get(); const map = s.affectations; if (!map || typeof map !== 'object') return;
+    let touched = false;
+    Object.keys(map).forEach(vehId => (Array.isArray(map[vehId]) ? map[vehId] : []).forEach(a => {
+      if (this._norm(a.conducteur).toLowerCase() === from) { a.conducteur = to; touched = true; }
+    }));
+    if (touched) FP.settings.save(s);
+  },
+};
+
 // ===== LOYERS DE LEASING basés sur l'OFFRE (fixe) + AVENANTS (prorata) =====
 // Le loyer d'un contrat vient de l'OFFRE (montant fixe), PAS des factures. Un avenant
 // { date, loyer } change le loyer à partir de sa date → le total est recalculé au prorata.
@@ -2590,6 +2641,165 @@ FP.decoteVehicule = (v) => {
   if (attendu > 0) { kmAdj = 1 - ((km - attendu) / 100000) * 0.10; kmAdj = Math.max(0.80, Math.min(1.10, kmAdj)); }
   const valeur = Math.max(0, Math.round((achat * res * kmAdj) / 50) * 50);
   return { valeur, ageAnnees: ageY, residuel: res, kmAdj, attendu };
+};
+
+// ===== CENTRE DE DÉCISIONS — recommandations automatiques, triées par impact =====
+// Ne REMPLACE pas les alertes (factuelles, « il se passe X ») : ici on transforme les
+// signaux en DÉCISIONS À PRENDRE, chacune avec une action claire + un impact € estimé,
+// classées par priorité. S'appuie UNIQUEMENT sur les helpers canoniques (santeVehicule,
+// leasingInfo, montantDu, decoteVehicule…) — aucune donnée recalculée à la main.
+//   [{ id, priorite, categorie, icon, titre, detail, action, impact, impactEuro, target }]
+FP.recommandations = (data) => {
+  data = data || { vehicules: [], amendes: [], factures: [], conducteurs: [] };
+  const out = [];
+  const enFlotte = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
+  const j = (d) => { const x = new Date(d); return isNaN(x) ? null : Math.ceil((x - new Date()) / 86400000); };
+
+  // 1) AMENDES — payer avant la majoration (économie chiffrée)
+  try {
+    const now = new Date();
+    const risque = (data.amendes || [])
+      .filter(a => a && FP.estAPayer && FP.estAPayer(a) && a.date && !isNaN(new Date(a.date)))
+      .map(a => {
+        const base = new Date(a.date);
+        const isFps = /stationnement/i.test(a.motif || '');
+        const lim = a.dateLimiteMinore ? new Date(a.dateLimiteMinore) : (() => { const l = new Date(base); l.setDate(l.getDate() + (isFps ? 90 : 45)); return l; })();
+        const jours = Math.ceil((lim - now) / 86400000);
+        const du = FP.montantDu ? FP.montantDu(a) : (Number(a.montantTTC) || 0);
+        const maj = Number(a.montantMajore) || 0;
+        const eco = (maj > du) ? (maj - du) : 0; // économie si payé avant majoration
+        return { a, jours, eco };
+      })
+      .filter(x => x.jours >= 0 && x.jours < 30);
+    if (risque.length) {
+      const ecoTot = risque.reduce((s, x) => s + x.eco, 0);
+      const min = Math.min(...risque.map(x => x.jours));
+      out.push({
+        id: 'amendes-minore', priorite: min < 7 ? 95 : 80, categorie: 'Amendes', icon: 'alarm-clock',
+        titre: `Régler ${risque.length} amende${risque.length > 1 ? 's' : ''} avant la majoration`,
+        detail: `La plus urgente expire dans ${min} j. Passé la date limite, le montant augmente.`,
+        action: 'Payer maintenant', target: 'amendes.html?filtre=apayer',
+        impactEuro: ecoTot, impact: ecoTot > 0 ? ('≈ ' + FP.euro(ecoTot) + ' d’économie') : 'éviter la majoration',
+      });
+    }
+  } catch (e) {}
+
+  // 2) LEASING — fin de contrat proche : décider restitution ou renouvellement
+  // 3) LEASING — dépassement km projeté : risque de pénalité chiffré
+  enFlotte.forEach(v => {
+    let l = null; try { l = FP.leasingInfo ? FP.leasingInfo(v) : null; } catch (e) {}
+    if (!l) return;
+    if (l.finContrat && !isNaN(l.finContrat)) {
+      const jf = j(l.finContrat);
+      if (jf !== null && jf <= 120) {
+        // Progression de la checklist de restitution (remplie sur la page Contrats)
+        let coches = 0; try { const cl = (FP.settings.get().restitutionChecklist || {})[v.id] || {}; coches = Object.keys(cl).filter(k => cl[k]).length; } catch (e) {}
+        out.push({
+          id: 'leasing-fin-' + v.id, priorite: jf < 0 ? 92 : (jf < 60 ? 78 : 62), categorie: 'Leasing', icon: 'calendar-clock',
+          titre: `${v.immat} — ${jf < 0 ? 'leasing terminé' : 'fin de leasing dans ' + jf + ' j'}`,
+          detail: 'Décider : restituer (préparer l’état des lieux de sortie) ou renouveler / racheter le véhicule.' + (coches ? ` Checklist de restitution : ${coches} point(s) déjà cochés.` : ''),
+          action: 'Préparer la restitution', target: 'contrats.html',
+          impactEuro: 0, impact: 'décision à prendre',
+        });
+      }
+    }
+    if (l.depassementProjete && l.depassementProjete > 0 && l.kmSupp) {
+      const penalite = Math.round(l.depassementProjete * l.kmSupp);
+      if (penalite >= 100) out.push({
+        id: 'leasing-km-' + v.id, priorite: 74, categorie: 'Leasing', icon: 'gauge',
+        titre: `${v.immat} — risque de pénalité kilométrique`,
+        detail: `Projection ${FP.num(l.depassementProjete)} km au-dessus du forfait. Réduire l’usage, réaffecter, ou négocier un avenant km.`,
+        action: 'Voir le contrat', target: 'contrats.html',
+        impactEuro: penalite, impact: '≈ ' + FP.euro(penalite) + ' de pénalité évitable',
+      });
+    }
+  });
+
+  // 4) SANTÉ — véhicules critiques : planifier avant la panne / le refus au CT
+  enFlotte.forEach(v => {
+    let s = null; try { s = FP.santeVehicule ? FP.santeVehicule(v) : null; } catch (e) {}
+    if (!s || s.niveau !== 'critique') return;
+    out.push({
+      id: 'sante-' + v.id, priorite: 70, categorie: 'Entretien', icon: 'heart-pulse',
+      titre: `${v.immat} — véhicule fragile (score ${s.score}/100)`,
+      detail: (s.raisons || []).slice(0, 3).join(' · ') || 'Plusieurs échéances en retard.',
+      action: 'Ouvrir la fiche', target: 'vehicules.html?veh=' + encodeURIComponent(v.id),
+      impactEuro: 0, impact: 'à planifier',
+    });
+  });
+
+  // 5) À VENDRE — véhicules marqués à vendre : valeur estimée, ne pas laisser dormir
+  // (on itère TOUS les véhicules : « à vendre » est considéré hors-flotte par FP.horsFlotte,
+  //  donc absent de `enFlotte` — mais on veut justement le rappeler à la vente.)
+  (data.vehicules || []).forEach(v => {
+    const st = (v.statut || '').toLowerCase();
+    const aVendre = /vendre/.test(st) || (Array.isArray(v.groupes) && v.groupes.includes('a-vendre'));
+    const dejaCede = /vendu|c[ée]d[ée]|hors[\s-]?service|\bhs\b|archiv|restitu/.test(st);
+    if (!aVendre || dejaCede) return;
+    let dec = null; try { dec = FP.decoteVehicule ? FP.decoteVehicule(v) : null; } catch (e) {}
+    out.push({
+      id: 'avendre-' + v.id, priorite: 45, categorie: 'À vendre', icon: 'tag',
+      titre: `${v.immat} — à vendre`,
+      detail: dec ? `Valeur de revente estimée ≈ ${FP.euro(dec.valeur)}. Relancer les acheteurs ou ajuster le prix.` : 'Relancer les acheteurs ou ajuster le prix.',
+      action: 'Voir les véhicules à vendre', target: 'a-vendre.html',
+      impactEuro: dec ? dec.valeur : 0, impact: dec ? ('≈ ' + FP.euro(dec.valeur) + ' à récupérer') : 'à céder',
+    });
+  });
+
+  // 6) CARBURANT — usages de carte suspects à vérifier
+  try {
+    const anoms = FP.cartesAnomalies ? FP.cartesAnomalies(data) : [];
+    if (anoms.length) {
+      out.push({
+        id: 'carte-anomalies', priorite: 66, categorie: 'Carburant', icon: 'credit-card',
+        titre: `${anoms.length} usage${anoms.length > 1 ? 's' : ''} de carte carburant à vérifier`,
+        detail: 'Pleins multiples le même jour ou montants inhabituels détectés — contrôle qu’il n’y a pas d’erreur ou d’abus.',
+        action: 'Voir les anomalies', target: 'contrats.html',
+        impactEuro: 0, impact: 'à contrôler',
+      });
+    }
+  } catch (e) {}
+
+  // Tri : priorité décroissante, puis impact € décroissant
+  out.sort((a, b) => (b.priorite - a.priorite) || ((b.impactEuro || 0) - (a.impactEuro || 0)));
+  return out;
+};
+
+// ===== CARTES CARBURANT — détection d'anomalies / fraude =====
+// Repère les usages suspects des cartes carburant à partir des factures de carburant :
+//  a) plusieurs pleins le MÊME jour sur un même véhicule (carte prêtée / double passage) ;
+//  b) plein au montant anormalement élevé (seuil réglable, défaut 300 € ; doublé pour les gros
+//     véhicules utilitaires/camions). Retourne [] si aucune donnée. Lecture seule.
+//   [{ vehId, immat, type:'doublon-jour'|'plein-eleve', date, montant, label }]
+FP.cartesAnomalies = (data) => {
+  data = data || {};
+  const out = [];
+  const vehByImmat = {};
+  (data.vehicules || []).forEach(v => { if (v && v.immat) vehByImmat[FP.normImmat(v.immat)] = v; });
+  const estCarburant = (f) => { const t = String((f && f.type) || '').toLowerCase(); return t === 'carburant' || (FP.estTotalFleet && FP.estTotalFleet(f) && t !== 'peage'); };
+  const carburants = (data.factures || []).filter(f => f && f.vehiculeImmat && f.date && estCarburant(f));
+  // a) plusieurs pleins le même jour
+  const byVehDay = {};
+  carburants.forEach(f => { const k = FP.normImmat(f.vehiculeImmat) + '|' + String(f.date).slice(0, 10); (byVehDay[k] = byVehDay[k] || []).push(f); });
+  Object.keys(byVehDay).forEach(k => {
+    const list = byVehDay[k]; if (list.length < 2) return;
+    const np = k.split('|')[0], day = k.split('|')[1]; const v = vehByImmat[np]; if (!v) return;
+    const tot = list.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    out.push({ vehId: v.id, immat: v.immat, type: 'doublon-jour', date: day, montant: tot,
+      label: `${list.length} pleins le même jour (${FP.date(day)})${tot ? ' — total ' + FP.euro(tot) : ''}` });
+  });
+  // b) plein anormalement élevé
+  let seuil = 300; try { const s = FP.settings.get(); if (Number(s.pleinSeuilAnormal) > 0) seuil = Number(s.pleinSeuilAnormal); } catch (e) {}
+  carburants.forEach(f => {
+    const m = Number(f.montantTTC) || 0; if (m < seuil) return;
+    const v = vehByImmat[FP.normImmat(f.vehiculeImmat)]; if (!v) return;
+    const gros = /utilit|camion|engin|poids/.test(String(v.categorie || '').toLowerCase());
+    if (gros && m < seuil * 2) return;               // tolérance gros réservoirs
+    out.push({ vehId: v.id, immat: v.immat, type: 'plein-eleve', date: String(f.date).slice(0, 10), montant: m,
+      label: `Plein inhabituel de ${FP.euro(m)} le ${FP.date(f.date)} — à vérifier` });
+  });
+  out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  return out;
 };
 
 FP.buildAlertes = (data) => {

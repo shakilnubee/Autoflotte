@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260803h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260803h">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -117,13 +117,15 @@
       <a href="calendrier.html" class="btn btn-outline text-sm"><i data-lucide="calendar-days" class="w-4 h-4"></i> Vue calendrier</a>
     </div>
 
-    <div class="flex gap-1 border-b border-slate-200 mb-6">
-      <button type="button" id="tab-alertes" style="padding:8px 16px;font-weight:700;font-size:14px;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">🔔 Alertes</button>
-      <button type="button" id="tab-echeances" style="padding:8px 16px;font-weight:700;font-size:14px;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔄 Renouvellements</button>
-      <button type="button" id="tab-complet" style="padding:8px 16px;font-weight:700;font-size:14px;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📝 À compléter</button>
+    <div class="flex gap-1 border-b border-slate-200 mb-6" style="overflow-x:auto">
+      <button type="button" id="tab-decisions" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">💡 Décisions</button>
+      <button type="button" id="tab-alertes" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔔 Alertes</button>
+      <button type="button" id="tab-echeances" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔄 Renouvellements</button>
+      <button type="button" id="tab-complet" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📝 À compléter</button>
     </div>
 
-    <div id="notif-cols" class="grid gap-6 md:grid-cols-2 xl:grid-cols-4"></div>
+    <div id="suivi-decisions"></div>
+    <div id="notif-cols" class="hidden grid gap-6 md:grid-cols-2 xl:grid-cols-4"></div>
     <div id="suivi-echeances" class="hidden"></div>
     <div id="suivi-complet" class="hidden"></div>
 
@@ -132,12 +134,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803g"></script>
-<script src="../assets/js/supabase-client.js?v=20260803g"></script>
-<script src="../assets/js/data.js?v=20260803g"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803g"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803g"></script>
-<script src="../assets/js/app.js?v=20260803g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260803h"></script>
+<script src="../assets/js/supabase-client.js?v=20260803h"></script>
+<script src="../assets/js/data.js?v=20260803h"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803h"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803h"></script>
+<script src="../assets/js/app.js?v=20260803h"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -285,6 +287,37 @@
     });
     lucide.createIcons();
   }
+  // ===== Onglet « Décisions » : recommandations automatiques triées par impact (FP.recommandations) =====
+  function renderDecisions() {
+    const box = document.getElementById('suivi-decisions'); if (!box) return;
+    const recos = (FP.recommandations ? FP.recommandations(data) : []);
+    if (!recos.length) {
+      box.innerHTML = '<div class="card p-6 text-center" style="max-width:820px"><div style="font-size:2rem">✅</div><p class="font-semibold text-slate-900 mt-2">Rien à décider pour l’instant</p><p class="text-sm text-slate-500 mt-1">Aucune amende à régler en urgence, aucun leasing à trancher, aucun véhicule critique. Reviens ici régulièrement — les décisions apparaissent dès qu’une échéance approche.</p></div>';
+      lucide.createIcons(); return;
+    }
+    const gainTotal = recos.reduce((s, r) => s + (r.impactEuro || 0), 0);
+    const col = { Amendes: '#E11D48', Leasing: '#7C3AED', Entretien: '#F59E0B', 'À vendre': '#0D9488', Carburant: '#0EA5E9' };
+    const head = gainTotal > 0
+      ? `<div class="card p-4 mb-4 flex items-center gap-3" style="max-width:820px;background:linear-gradient(90deg,#FFF7ED,#fff);border-left:4px solid var(--fp-accent)"><i data-lucide="lightbulb" class="w-6 h-6" style="color:var(--fp-accent)"></i><div><div class="font-bold text-slate-900">${recos.length} décision${recos.length > 1 ? 's' : ''} à prendre</div><div class="text-sm text-slate-600">Jusqu’à <b>${FP.euro(gainTotal)}</b> d’enjeu financier identifié (économies possibles + valeur à récupérer).</div></div></div>`
+      : `<div class="card p-4 mb-4 flex items-center gap-3" style="max-width:820px"><i data-lucide="lightbulb" class="w-6 h-6" style="color:var(--fp-accent)"></i><div class="font-bold text-slate-900">${recos.length} décision${recos.length > 1 ? 's' : ''} à prendre</div></div>`;
+    box.innerHTML = head + '<div class="space-y-2" style="max-width:820px">' + recos.map(r => {
+      const c = col[r.categorie] || '#64748b';
+      return `<a href="${esc(r.target || '#')}" class="notif" style="text-decoration:none;border-left:4px solid ${c}">
+        <span style="width:34px;height:34px;border-radius:9px;background:${c}1a;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i data-lucide="${esc(r.icon || 'lightbulb')}" class="w-5 h-5" style="color:${c}"></i></span>
+        <div class="flex-1 min-w-0">
+          <div class="notif-cat" style="color:${c}">${esc(r.categorie)}</div>
+          <div class="font-semibold text-slate-900">${esc(r.titre)}</div>
+          ${r.detail ? `<div class="text-sm text-slate-500 mt-0.5">${esc(r.detail)}</div>` : ''}
+          <div class="mt-1.5 flex items-center gap-2 flex-wrap">
+            <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:9999px;background:${c};color:#fff">${esc(r.action || 'Voir')} →</span>
+            ${r.impact ? `<span class="text-xs font-semibold" style="color:${c}">${esc(r.impact)}</span>` : ''}
+          </div>
+        </div>
+      </a>`;
+    }).join('') + '</div>';
+    lucide.createIcons();
+  }
+
   // ===== Sous-onglet « À compléter » : TOUTES les infos manquantes de la plateforme =====
   const isEmptyV = (x) => x == null || String(x).trim() === '' || String(x).trim() === '—';
   function vehMasseEff(v) { try { const s = (FP.settings.get().vehMasse || {})[v.id]; if (s != null && String(s).trim() !== '') return s; } catch (e) {} try { return FP.masseCG && FP.masseCG(v); } catch (e) {} return null; }
@@ -541,16 +574,19 @@
     rafShow();
   }
 
-  const tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet');
+  const tabD = document.getElementById('tab-decisions'), tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet');
   function showTab(which) {
+    document.getElementById('suivi-decisions').classList.toggle('hidden', which !== 'decisions');
     document.getElementById('notif-cols').classList.toggle('hidden', which !== 'alertes');
     document.getElementById('notif-masquees').classList.toggle('hidden', which !== 'alertes');
     document.getElementById('suivi-echeances').classList.toggle('hidden', which !== 'echeances');
     document.getElementById('suivi-complet').classList.toggle('hidden', which !== 'complet');
-    [[tabA, 'alertes'], [tabE, 'echeances'], [tabC, 'complet']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
+    [[tabD, 'decisions'], [tabA, 'alertes'], [tabE, 'echeances'], [tabC, 'complet']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
+    if (which === 'decisions') renderDecisions();
     if (which === 'echeances') renderEcheances();
     if (which === 'complet') renderComplet();
   }
+  if (tabD) tabD.addEventListener('click', () => showTab('decisions'));
   if (tabA) tabA.addEventListener('click', () => showTab('alertes'));
   if (tabE) tabE.addEventListener('click', () => showTab('echeances'));
   if (tabC) tabC.addEventListener('click', () => showTab('complet'));
@@ -595,9 +631,16 @@
   });
 
   const isCompletVisible = () => !document.getElementById('suivi-complet').classList.contains('hidden');
+  const isDecisionsVisible = () => !document.getElementById('suivi-decisions').classList.contains('hidden');
   render();
+  // Onglet initial : « Décisions » par défaut, ou celui demandé dans l'URL (?tab=alertes/echeances/complet).
+  (function initTab() {
+    const t = new URLSearchParams(location.search).get('tab');
+    showTab(['decisions', 'alertes', 'echeances', 'complet'].includes(t) ? t : 'decisions');
+  })();
   document.addEventListener('fp:data-ready', () => {
     render();
+    if (isDecisionsVisible()) renderDecisions();
     if (!document.getElementById('suivi-echeances').classList.contains('hidden')) renderEcheances();
     if (isCompletVisible()) renderComplet();
   });
@@ -605,7 +648,7 @@
   // Charge les conducteurs (table à part) → alertes "permis qui expire" + onglet « À compléter »
   if (window.FP && FP.db && FP.db.select) {
     FP.db.select('conducteurs').then(r => {
-      if (r && r.data) { data.conducteurs = r.data; render(); if (isCompletVisible()) renderComplet(); }
+      if (r && r.data) { data.conducteurs = r.data; render(); if (isDecisionsVisible()) renderDecisions(); if (isCompletVisible()) renderComplet(); }
     }).catch(() => {});
   }
 </script>

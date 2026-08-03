@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260803h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260803h">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -227,6 +227,41 @@
       <p id="leasing-bpce-masque" class="text-sm text-slate-400 hidden">Section masquée par le filtre. Choisis <b>« Tous les loueurs »</b> ci-dessus pour la réafficher.</p>
     </div>
 
+    <!-- Section Cartes carburant & télépéage -->
+    <div class="card p-6 mb-6 contrat-section" data-section="cartes">
+      <div class="section-title">
+        <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
+        <i data-lucide="credit-card" class="w-5 h-5"></i> Cartes carburant &amp; télépéage
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Toutes les cartes carburant et badges télépéage de la flotte, avec le véhicule, le conducteur et l'échéance. Les <b>anomalies d'usage</b> (pleins suspects) sont repérées automatiquement.</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div class="kpi"><div class="kpi-label">Cartes carburant</div><div class="kpi-value" id="kpi-cartes-nb">—</div></div>
+        <div class="kpi"><div class="kpi-label">Badges télépéage</div><div class="kpi-value" id="kpi-badges-nb">—</div></div>
+        <div class="kpi"><div class="kpi-label">Expirent &lt; 60 j</div><div class="kpi-value" id="kpi-cartes-exp" style="color:var(--fp-warn)">—</div></div>
+        <div class="kpi"><div class="kpi-label">Anomalies d'usage</div><div class="kpi-value" id="kpi-cartes-anom" style="color:var(--fp-danger)">—</div></div>
+      </div>
+      <div id="cartes-anom" class="mb-4"></div>
+      <div class="flex flex-wrap items-center gap-3 mb-3">
+        <div class="relative flex-1 min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search-cartes" type="text" placeholder="Immat., conducteur, n° de carte, fournisseur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+        <label class="text-xs text-slate-500 flex items-center gap-1.5" style="white-space:nowrap"><input type="checkbox" id="cartes-only-filled" style="accent-color:var(--fp-accent)"> Seulement les véhicules équipés</label>
+      </div>
+      <div class="scrollable">
+        <table class="fp-table">
+          <thead><tr>
+            <th>Immat.</th><th>Véhicule</th><th>Conducteur</th>
+            <th>Carte carburant (n°)</th><th>Fournisseur</th><th>Exp. carte</th>
+            <th>Badge télépéage (n°)</th><th>Exp. badge</th>
+          </tr></thead>
+          <tbody id="tbody-cartes"></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-slate-500 mt-3" id="cartes-count"></p>
+      <p class="text-xs text-slate-400 mt-1">Modifie une case directement ici : c'est enregistré tout de suite (les mêmes infos apparaissent dans la fiche du véhicule).</p>
+    </div>
+
     <!-- Section Leasing Localease (Ayvens) — séparée de BPCE -->
     <div class="card p-6 mb-6 contrat-section" data-section="localease">
       <div class="section-title" data-fp-note="contrats.leasing-ayvens" data-fp-note-label="Leasing Ayvens / LLD">
@@ -367,6 +402,13 @@
     </div>
   </div>
 
+  <!-- Modal : checklist de restitution LLD (compte à rebours 120/90/60/30 j) -->
+  <div id="restit-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
+    <div class="bg-white rounded-xl w-full max-w-lg mx-4 shadow-xl" style="max-height:92vh;overflow-y:auto">
+      <div id="restit-body" class="p-6"></div>
+    </div>
+  </div>
+
   <!-- Modal : ajouter une prime d'assurance (par véhicule) -->
   <div id="prime-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
     <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-xl">
@@ -452,12 +494,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803g"></script>
-<script src="../assets/js/supabase-client.js?v=20260803g"></script>
-<script src="../assets/js/data.js?v=20260803g"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803g"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803g"></script>
-<script src="../assets/js/app.js?v=20260803g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260803h"></script>
+<script src="../assets/js/supabase-client.js?v=20260803h"></script>
+<script src="../assets/js/data.js?v=20260803h"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803h"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803h"></script>
+<script src="../assets/js/app.js?v=20260803h"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -562,7 +604,56 @@
   function refreshAllContrats() {
     rebuildLeasingData(); renderKPIs(); renderLeasing(); renderAssurance();
     if (typeof renderLocalease === 'function') renderLocalease();
+    if (typeof renderCartes === 'function') renderCartes();
   }
+
+  // ===== Cartes carburant & télépéage : vue centrale + anomalies (Feature) =====
+  function renderCartes() {
+    const tb = $('tbody-cartes'); if (!tb) return;
+    const st = FP.settings.get();
+    const cc = st.vehCarteCarb || {}, cce = st.vehCarteCarbExp || {}, fc = st.vehFournCarb || {}, bt = st.vehBadge || {}, bte = st.vehBadgeExp || {};
+    const q = (($('search-cartes') && $('search-cartes').value) || '').toLowerCase().trim();
+    const onlyFilled = $('cartes-only-filled') && $('cartes-only-filled').checked;
+    const enFlotte = vehicules.filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
+    const expCell = (iso) => { if (!iso) return '<span class="text-slate-400">—</span>'; const j = FP.joursRestants ? FP.joursRestants(iso) : null; if (j == null) return FP.dateNum(iso); const c = j < 0 ? 'var(--fp-danger)' : (j < 60 ? 'var(--fp-warn)' : '#64748b'); return `<span style="color:${c};font-size:11px;font-weight:600">${j < 0 ? 'expiré' : j < 60 ? j + ' j' : 'OK'}</span>`; };
+    const inp = (k, id, val, type) => `<input class="carte-cell" data-k="${k}" data-id="${id}" ${type ? `type="${type}"` : ''} value="${FP.esc(val || '')}" placeholder="—" style="width:100%;min-width:${type === 'date' ? '128' : '90'}px;border:1px solid var(--fp-border);border-radius:6px;padding:3px 6px;font-size:12.5px">`;
+    let rows = enFlotte.map(v => ({ v, hasAny: !!(cc[v.id] || cce[v.id] || fc[v.id] || bt[v.id] || bte[v.id]) }));
+    if (onlyFilled) rows = rows.filter(r => r.hasAny);
+    if (q) rows = rows.filter(({ v }) => [v.immat, v.marque, v.modele, v.chauffeur, cc[v.id], fc[v.id], bt[v.id]].some(x => String(x || '').toLowerCase().includes(q)));
+    tb.innerHTML = rows.map(({ v }) => `
+      <tr>
+        <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
+        <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}</td>
+        <td>${FP.lienConducteur(v.chauffeur)}</td>
+        <td>${inp('vehCarteCarb', v.id, cc[v.id])}</td>
+        <td>${inp('vehFournCarb', v.id, fc[v.id])}</td>
+        <td>${inp('vehCarteCarbExp', v.id, cce[v.id], 'date')} ${expCell(cce[v.id])}</td>
+        <td>${inp('vehBadge', v.id, bt[v.id])}</td>
+        <td>${inp('vehBadgeExp', v.id, bte[v.id], 'date')} ${expCell(bte[v.id])}</td>
+      </tr>`).join('') || '<tr><td colspan="8" class="text-slate-400">Aucun véhicule.</td></tr>';
+    const nbC = enFlotte.filter(v => cc[v.id]).length, nbB = enFlotte.filter(v => bt[v.id]).length;
+    const exp60 = enFlotte.filter(v => [cce[v.id], bte[v.id]].filter(Boolean).some(iso => { const j = FP.joursRestants ? FP.joursRestants(iso) : null; return j != null && j < 60; })).length;
+    const anoms = FP.cartesAnomalies ? FP.cartesAnomalies({ vehicules, factures: (window.FP_DATA && FP_DATA.factures) || [] }) : [];
+    const setTxt = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+    setTxt('kpi-cartes-nb', nbC); setTxt('kpi-badges-nb', nbB); setTxt('kpi-cartes-exp', exp60); setTxt('kpi-cartes-anom', anoms.length);
+    setTxt('cartes-count', `${rows.length} véhicule(s) affiché(s)`);
+    const anomBox = $('cartes-anom');
+    if (anomBox) anomBox.innerHTML = anoms.length
+      ? `<details class="card p-3" style="border-left:3px solid var(--fp-danger)"><summary class="cursor-pointer font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 text-red-600"></i> ${anoms.length} anomalie(s) d'usage détectée(s) <span class="text-xs font-normal text-slate-400">(cliquer pour voir)</span></summary><div class="mt-2 space-y-1">${anoms.map(a => `<a href="vehicules.html?veh=${encodeURIComponent(a.vehId)}" class="block text-sm text-slate-600 hover:text-slate-900 hover:underline">• <span class="font-mono font-semibold">${FP.esc(a.immat)}</span> — ${FP.esc(a.label)}</a>`).join('')}</div><p class="text-xs text-slate-400 mt-2">« Pleins le même jour » ou « plein inhabituel » = à vérifier (carte prêtée, erreur, ou usage anormal).</p></details>`
+      : '';
+    lucide.createIcons();
+  }
+  // Édition inline : enregistre la case modifiée dans les réglages (mêmes clés que la fiche véhicule)
+  if ($('tbody-cartes')) $('tbody-cartes').addEventListener('change', e => {
+    const c = e.target.closest('.carte-cell'); if (!c) return;
+    const s = FP.settings.get(); const k = c.dataset.k; s[k] = s[k] || {};
+    const val = (c.value || '').trim();
+    if (val) s[k][c.dataset.id] = val; else delete s[k][c.dataset.id];
+    FP.settings.save(s);
+    if (FP.toast) FP.toast('✓ Enregistré');
+  });
+  if ($('search-cartes')) $('search-cartes').addEventListener('input', () => renderCartes());
+  if ($('cartes-only-filled')) $('cartes-only-filled').addEventListener('change', () => renderCartes());
 
   // Mensualité FIXE estimée = médiane des factures leasing importées (robuste à une 1re facture
   // gonflée par des frais de dossier). Les montants ne changent pas → médiane = vraie mensualité.
@@ -1054,6 +1145,7 @@
         <td>${moyMens != null && moyMens > 0 ? FP.euroPrecis(moyMens) : '<span class="text-slate-400">—</span>'}</td>
         <td>${(() => { const d = FP.tvsDetail(v); return (d && d.applicable && d.total != null) ? FP.euro(d.total) : '<span class="text-slate-400">—</span>'; })()}</td>
         <td style="white-space:nowrap">
+          ${(() => { const jf = (l && l.finContrat && !isNaN(l.finContrat)) ? Math.ceil((l.finContrat - new Date()) / 86400000) : null; const urg = jf !== null && jf <= 120; return `<button type="button" class="btn btn-outline text-xs !px-2" data-restit-lease="${v.immat}" title="Checklist de restitution (compte à rebours 120/90/60/30 j)"${urg ? ' style="border-color:var(--fp-accent);color:var(--fp-accent)"' : ''}><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i></button>`; })()}
           <button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}" title="Modifier le forfait du contrat"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
           <button type="button" class="btn btn-outline text-xs !px-2" data-del-lease="${v.immat}" title="Retirer ce véhicule du leasing"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>
         </td>
@@ -1146,7 +1238,87 @@
   function closeLeaseModal() {
     const m = $('lease-modal'); m.classList.add('hidden'); m.classList.remove('flex'); leaseEditImmat = null;
   }
+  // ===== Checklist de restitution LLD (compte à rebours 120/90/60/30 j) =====
+  const RESTIT_ITEMS = [
+    { k: 'rdv',         stage: 120, label: 'Prévenir le loueur et convenir d’une date de restitution' },
+    { k: 'edl',         stage: 90,  label: 'État des lieux de SORTIE : relevé km + photos sous toutes les faces' },
+    { k: 'km',          stage: 90,  label: 'Rapprocher le kilométrage / négocier le rachat du dépassement' },
+    { k: 'repar',       stage: 60,  label: 'Réparer les dommages facturables (rayures, jantes, pare-brise, pneus usés)' },
+    { k: 'nettoyage',   stage: 30,  label: 'Nettoyage intérieur + extérieur (évite les frais de remise en état)' },
+    { k: 'effets',      stage: 30,  label: 'Retirer effets personnels, badge télépéage et carte carburant du véhicule' },
+    { k: 'cles',        stage: 30,  label: 'Réunir les 2 jeux de clés, la carte grise et le carnet d’entretien' },
+    { k: 'assurance',   stage: 30,  label: 'Prévenir l’assurance (résiliation ou transfert au véhicule remplaçant)' },
+    { k: 'attestation', stage: 0,   label: 'Récupérer l’attestation / le procès-verbal de restitution' },
+  ];
+  const STAGES = [120, 90, 60, 30, 0];
+  function restitState(vehId) { try { const s = FP.settings.get(); return (s.restitutionChecklist && s.restitutionChecklist[vehId]) || {}; } catch (e) { return {}; } }
+  function restitSet(vehId, key, val) { const s = FP.settings.get(); s.restitutionChecklist = s.restitutionChecklist || {}; s.restitutionChecklist[vehId] = s.restitutionChecklist[vehId] || {}; s.restitutionChecklist[vehId][key] = val; FP.settings.save(s); }
+  let restitVehId = null;
+  function openRestit(immat) {
+    const v = vehicules.find(x => x.immat === immat); if (!v) return;
+    restitVehId = v.id;
+    const l = FP.leasingInfo ? FP.leasingInfo(v) : null;
+    const fin = (l && l.finContrat && !isNaN(l.finContrat)) ? l.finContrat : null;
+    const jf = fin ? Math.ceil((fin - new Date()) / 86400000) : null;
+    const st = restitState(v.id);
+    const done = RESTIT_ITEMS.filter(it => st[it.k]).length;
+    // Bandeau compte à rebours 120/90/60/30/Jour J
+    const ribbon = STAGES.map(m => {
+      const reached = jf !== null && jf <= m;                 // fenêtre entamée
+      const label = m === 0 ? 'Jour J' : m + ' j';
+      const bg = reached ? 'var(--fp-accent)' : '#E2E8F0';
+      const fg = reached ? '#fff' : '#64748b';
+      return `<div style="flex:1;text-align:center"><div style="height:8px;border-radius:9999px;background:${bg}"></div><div style="font-size:10.5px;font-weight:700;color:${fg};margin-top:4px">${label}</div></div>`;
+    }).join('<div style="width:6px"></div>');
+    const finTxt = fin ? FP.dateNum(fin.toISOString ? fin.toISOString() : fin) : '—';
+    const jfTxt = jf === null ? 'date de fin inconnue — renseigne le contrat'
+      : (jf < 0 ? `contrat terminé depuis ${-jf} j` : `dans <b>${jf} j</b>`);
+    const jfColor = jf === null ? '#94a3b8' : (jf < 30 ? 'var(--fp-danger)' : (jf <= 120 ? 'var(--fp-accent)' : '#0e7490'));
+    // Pénalité km projetée (rappel)
+    const pen = (l && l.depassementProjete > 0 && l.kmSupp) ? Math.round(l.depassementProjete * l.kmSupp) : 0;
+    const rows = RESTIT_ITEMS.map(it => {
+      const on = !!st[it.k];
+      const stg = it.stage === 0 ? 'Jour J' : it.stage + ' j avant';
+      return `<label style="display:flex;gap:.6rem;align-items:flex-start;padding:.5rem .2rem;border-bottom:1px solid #f1f5f9;cursor:pointer">
+        <input type="checkbox" data-restit-item="${it.k}" ${on ? 'checked' : ''} style="margin-top:3px;width:16px;height:16px;accent-color:var(--fp-accent)">
+        <span style="flex:1"><span style="font-size:13.5px;color:${on ? '#94a3b8' : '#0f1e3d'};${on ? 'text-decoration:line-through' : ''}">${FP.esc(it.label)}</span>
+        <span style="display:inline-block;font-size:10px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:9999px;padding:1px 7px;margin-left:6px">${stg}</span></span>
+      </label>`;
+    }).join('');
+    $('restit-body').innerHTML = `
+      <div class="flex items-start justify-between gap-3 mb-1">
+        <div><h3 class="text-lg font-extrabold">Restitution — ${FP.esc(v.immat)}</h3>
+        <p class="text-sm text-slate-500">${FP.esc(v.marque)} ${FP.esc(v.modele)} · Fin de contrat : <b>${finTxt}</b> (${jfTxt})</p></div>
+        <button id="restit-close" type="button" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+      </div>
+      <div style="border:1px solid var(--fp-border);border-radius:.7rem;padding:.7rem .8rem;margin:.8rem 0;background:#fbfcfe">
+        <div class="flex" style="align-items:flex-end">${ribbon}</div>
+        <p class="text-xs mt-2" style="color:${jfColor};font-weight:600">${jf === null ? '⚠️ Renseigne la date de début et la durée du contrat pour activer le compte à rebours.' : (jf < 30 ? '🔴 Dernière ligne droite : boucle les points ci-dessous.' : (jf <= 120 ? '🟠 La restitution approche — commence à préparer le dossier.' : '🟢 Rien d’urgent, mais tu peux déjà anticiper.'))}</p>
+      </div>
+      ${pen ? `<div class="text-xs mb-2 p-2 rounded" style="background:#FEF2F2;color:#991B1B">💡 Dépassement km projeté : pénalité estimée ≈ <b>${FP.euro(pen)}</b>. Négocie un rachat de km ou lève le pied d’ici la fin.</div>` : ''}
+      <div class="flex items-center justify-between mb-1"><span class="text-sm font-bold text-slate-700">Checklist de restitution</span><span class="text-xs font-semibold" style="color:var(--fp-accent)" id="restit-progress">${done}/${RESTIT_ITEMS.length} fait</span></div>
+      <div id="restit-list">${rows}</div>
+      <div class="flex justify-end mt-4"><button id="restit-done" type="button" class="btn btn-dark text-sm">Fermer</button></div>`;
+    const modal = $('restit-modal'); modal.classList.remove('hidden'); modal.classList.add('flex');
+    lucide.createIcons();
+  }
+  function closeRestit() { const m = $('restit-modal'); m.classList.add('hidden'); m.classList.remove('flex'); restitVehId = null; }
+  $('restit-modal').addEventListener('click', e => {
+    if (e.target.id === 'restit-modal' || e.target.id === 'restit-close' || e.target.id === 'restit-done') { closeRestit(); return; }
+    const cb = e.target.closest('[data-restit-item]');
+    if (cb && restitVehId) {
+      restitSet(restitVehId, cb.dataset.restitItem, cb.checked);
+      // Rafraîchit le libellé (barré) + le compteur sans refermer
+      const st = restitState(restitVehId); const done = RESTIT_ITEMS.filter(it => st[it.k]).length;
+      const p = $('restit-progress'); if (p) p.textContent = `${done}/${RESTIT_ITEMS.length} fait`;
+      const lbl = cb.parentElement.querySelector('span span:first-child');
+      if (lbl) { lbl.style.textDecoration = cb.checked ? 'line-through' : ''; lbl.style.color = cb.checked ? '#94a3b8' : '#0f1e3d'; }
+    }
+  });
+
   $('tbody-leasing').addEventListener('click', async e => {
+    const restit = e.target.closest('[data-restit-lease]');
+    if (restit) { openRestit(restit.dataset.restitLease); return; }
     const del = e.target.closest('[data-del-lease]');
     if (del) {
       const immat = del.dataset.delLease;
@@ -1351,6 +1523,7 @@
   renderKPIs();
   renderAssurance();
   renderLeasing();
+  renderCartes();
 
   // ===== Leasing Localease (Ayvens) — contrats LLD séparés de BPCE =====
   // Prompt de lecture automatique d'une offre/contrat LLD Ayvens (Localease)
@@ -1896,7 +2069,7 @@
 
   document.addEventListener('fp:data-ready', () => {
     rebuildLeasingData();
-    renderKPIs(); renderAssurance(); renderLeasing(); renderLocalease();
+    renderKPIs(); renderAssurance(); renderLeasing(); renderLocalease(); renderCartes();
   });
 </script>
 </body>
