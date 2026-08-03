@@ -3831,23 +3831,58 @@
     const cout2026 = fAll.filter(f => (f.date || '').startsWith(_annPdf)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
     const carnet = fAll.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-    const row = (k, val) => `<tr><td style="color:#555;padding:3px 12px 3px 0">${k}</td><td style="font-weight:600">${val}</td></tr>`;
+    const row = (k, val) => `<tr><td>${k}</td><td>${val}</td></tr>`;
+    const statut = String(v.statut || '').toLowerCase();
+    const statutCls = /vendu|cédé|cede|hors/.test(statut) ? 'danger' : (statut === 'a-vendre' || statut === 'à vendre' ? 'warn' : 'ok');
     const tvsTxt = tvsDet.applicable ? (tvsDet.total != null ? FP.euro(tvsDet.total) : 'CO₂ manquant') : 'Non soumis';
     const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Fiche ${esc(v.immat)}</title>
       <style>
-        body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:32px;font-size:13px}
-        h1{margin:0;font-size:22px} .sub{color:#64748b;margin:2px 0 16px}
-        h2{font-size:14px;border-bottom:1px solid #cbd5e1;padding-bottom:4px;margin:22px 0 8px}
-        table{border-collapse:collapse;width:100%} td{padding:3px 0;vertical-align:top}
-        .grid{display:flex;gap:40px} .grid>div{flex:1}
-        .carnet td{border-bottom:1px solid #eee;padding:5px 8px 5px 0}
-        .tot{font-size:18px;font-weight:800;color:#0f766e}
-        @media print{body{margin:12mm}}
-      </style></head><body onload="window.print()">
-      <h1>${esc(v.marque || '')} ${esc(v.modele || '')}</h1>
-      <div class="sub">${esc(v.immat || '')} — ${esc(v.categorie || '')} · ${esc(v.chauffeur && v.chauffeur !== '—' ? v.chauffeur : 'Sans conducteur')}</div>
+        *{box-sizing:border-box}
+        body{font-family:'Segoe UI',Roboto,Arial,Helvetica,sans-serif;color:#0F1E3D;margin:0;padding:26px;font-size:13px;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+        .hdr{position:relative;background:linear-gradient(135deg,#0B1220 0%,#0F1E3D 100%);border-radius:14px;padding:20px 22px;color:#fff;overflow:hidden}
+        .hdr::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(180deg,#FB923C,#F97316)}
+        .hdr h1{margin:0;font-size:22px;font-weight:800;letter-spacing:-.01em}
+        .hdr .plate{font-family:'Courier New',monospace;font-weight:700;color:#C7D2E6;font-size:12.5px;margin-top:4px;letter-spacing:1px}
+        .hdr .brand{position:absolute;right:22px;top:19px;font-weight:800;font-style:italic;font-size:16px}
+        .hdr .brand b{color:#F97316}
+        .hdr .tag{position:absolute;right:22px;top:43px;font-size:7.5px;letter-spacing:1.6px;color:#94A3B8;font-weight:700}
+        .chips{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 2px}
+        .chip{font-size:11px;font-weight:700;padding:4px 11px;border-radius:999px;background:#F1F5F9;color:#334155}
+        .chip.ok{background:#DCFCE7;color:#166534}.chip.warn{background:#FEF3C7;color:#92400E}.chip.danger{background:#FEE2E2;color:#991B1B}
+        .grid{display:flex;gap:16px;margin-top:14px}.grid>div{flex:1}
+        .card{border:1px solid #E3E8F0;border-radius:12px;padding:14px 16px;background:#fff}
+        .card h2{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#F97316;margin:0 0 8px;border:0;padding:0}
+        .card h2::before{content:"";width:14px;height:3px;border-radius:2px;background:linear-gradient(90deg,#F97316,#FB923C)}
+        table{border-collapse:collapse;width:100%}
+        .kv td{padding:5px 0;vertical-align:top;font-size:12.5px;border-bottom:1px solid #F3F5F9}
+        .kv tr:last-child td{border-bottom:0}
+        .kv td:first-child{color:#64748B;width:46%}.kv td:last-child{font-weight:700;text-align:right}
+        .cost{margin-top:16px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#FFF7ED,#fff);border:1px solid #FED7AA;border-radius:12px;padding:13px 18px}
+        .cost .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#9A3412;font-weight:700}
+        .cost .val{font-size:23px;font-weight:900;color:#EA580C}
+        .sec-t{display:flex;align-items:center;gap:8px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#0F1E3D;font-weight:800;margin:20px 0 8px}
+        .sec-t::before{content:"";width:14px;height:3px;border-radius:2px;background:linear-gradient(90deg,#F97316,#FB923C)}
+        .carnet{border:1px solid #E3E8F0;border-radius:12px;overflow:hidden;width:100%}
+        .carnet th{background:#0F1E3D;color:#fff;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;text-align:left;padding:8px 12px}
+        .carnet td{padding:7px 12px;font-size:12px;border-bottom:1px solid #EEF2F7}
+        .carnet tbody tr:last-child td{border-bottom:0}
+        .carnet tbody tr:nth-child(even){background:#F8FAFC}
+        .foot{margin-top:22px;color:#94A3B8;font-size:10.5px;border-top:1px solid #EEF2F7;padding-top:10px}
+        @page{size:A4;margin:12mm}
+      </style></head><body onload="setTimeout(function(){window.print()},250)">
+      <div class="hdr">
+        <h1>${esc(v.marque || '')} ${esc(v.modele || '')}</h1>
+        <div class="plate">${esc(v.immat || '')}${v.categorie ? ' · ' + esc(v.categorie) : ''} · ${esc(v.chauffeur && v.chauffeur !== '—' ? v.chauffeur : 'Sans conducteur')}</div>
+        <div class="brand">Parc<b>Pilot</b></div>
+        <div class="tag">FICHE VÉHICULE</div>
+      </div>
+      <div class="chips">
+        <span class="chip ${statutCls}">${esc(v.statut || '—')}</span>
+        ${(v.prochainCT && v.prochainCT !== '—') ? `<span class="chip">CT · ${FP.dateNum(v.prochainCT)}</span>` : ''}
+        ${(v.km != null && v.km !== '') ? `<span class="chip">${FP.num(v.km)} km</span>` : ''}
+      </div>
       <div class="grid">
-        <div><h2>Général</h2><table>
+        <div class="card"><h2>Général</h2><table class="kv">
           ${row('Statut', esc(v.statut || '—'))}
           ${row('Kilométrage', FP.num(v.km) + ' km')}
           ${row('Carburant', esc(v.carburant || '—'))}
@@ -3856,7 +3891,7 @@
           ${row('Assurance', esc(v.assurance || (window.FP && FP.assuranceLabel && FP.assuranceLabel()) || '—'))}
           ${row('Valeur d\'achat', v.valeurAchat ? FP.euro(v.valeurAchat) : '—')}
         </table></div>
-        <div><h2>Technique & échéances</h2><table>
+        <div class="card"><h2>Technique &amp; échéances</h2><table class="kv">
           ${row('VIN', esc(v.vin || '—'))}
           ${row('CO₂', v.co2 != null && v.co2 !== '' ? FP.num(v.co2) + ' g/km' : '—')}
           ${row('Puissance fiscale', v.puissanceFiscale != null && v.puissanceFiscale !== '' ? FP.num(v.puissanceFiscale) + ' CV' : '—')}
@@ -3865,13 +3900,13 @@
           ${row('Dernière révision', (v.derniereRevision ? FP.dateNum(v.derniereRevision) : '—') + (v.kmDernierReleve ? ' · ' + FP.num(v.kmDernierReleve) + ' km' : ''))}
         </table></div>
       </div>
-      <h2>Coût d'entretien ${_annPdf}</h2>
-      <div class="tot">${FP.euro(cout2026)}</div>
-      <h2>Carnet d'entretien (${carnet.length})</h2>
+      <div class="cost"><span class="lbl">Coût d'entretien ${_annPdf}</span><span class="val">${FP.euro(cout2026)}</span></div>
+      <div class="sec-t">Carnet d'entretien · ${carnet.length}</div>
       <table class="carnet">
-        ${carnet.map(f => `<tr><td style="white-space:nowrap">${f.date ? FP.dateNum(f.date) : '—'}</td><td>${esc(f.description || f.fournisseur || f.numeroFacture || 'Facture')}</td><td style="text-align:right;white-space:nowrap;font-weight:600">${FP.euro(f.montantTTC)}</td></tr>`).join('') || '<tr><td>Aucune facture</td></tr>'}
+        <thead><tr><th>Date</th><th>Prestation</th><th style="text-align:right">Montant</th></tr></thead>
+        <tbody>${carnet.map(f => `<tr><td style="white-space:nowrap">${f.date ? FP.dateNum(f.date) : '—'}</td><td>${esc(f.description || f.fournisseur || f.numeroFacture || 'Facture')}</td><td style="text-align:right;white-space:nowrap;font-weight:700">${FP.euro(f.montantTTC)}</td></tr>`).join('') || '<tr><td colspan="3" style="color:#94a3b8">Aucune facture</td></tr>'}</tbody>
       </table>
-      <div style="margin-top:24px;color:#94a3b8;font-size:11px">Parc Pilot — fiche générée le ${FP.dateNum(new Date().toISOString())}</div>
+      <div class="foot">Parc Pilot — fiche générée le ${FP.dateNum(new Date().toISOString())}</div>
       </body></html>`;
     const w = window.open('', '_blank');
     if (!w) { alert('Autorise les fenêtres pop-up pour exporter le PDF.'); return; }
