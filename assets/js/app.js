@@ -2655,31 +2655,35 @@ FP.recommandations = (data) => {
   const enFlotte = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
   const j = (d) => { const x = new Date(d); return isNaN(x) ? null : Math.ceil((x - new Date()) / 86400000); };
 
-  // 1) AMENDES — payer avant la majoration (économie chiffrée)
+  // 1) AMENDES — payer AVANT LA MAJORATION (le vrai saut de prix : forfaitaire → majoré).
+  // ⚠️ Cohérence échéance/économie : la fenêtre est ancrée sur la date où l'amende devient MAJORÉE
+  // (dateLimiteForfaitaire si connue, sinon estimation date + 45 j, 90 j pour un FPS). L'économie
+  // chiffrée = montant MAJORÉ − montant dû (le surcoût évité). Ne JAMAIS croiser la date limite du
+  // minoré avec l'économie du majoré (surestimerait à la fois l'urgence et le gain — cf. revue de code).
   try {
     const now = new Date();
     const risque = (data.amendes || [])
-      .filter(a => a && FP.estAPayer && FP.estAPayer(a) && a.date && !isNaN(new Date(a.date)))
+      .filter(a => a && FP.estAPayer && FP.estAPayer(a) && a.date && !isNaN(new Date(a.date)) && Number(a.montantMajore) > 0)
       .map(a => {
         const base = new Date(a.date);
         const isFps = /stationnement/i.test(a.motif || '');
-        const lim = a.dateLimiteMinore ? new Date(a.dateLimiteMinore) : (() => { const l = new Date(base); l.setDate(l.getDate() + (isFps ? 90 : 45)); return l; })();
+        const lim = a.dateLimiteForfaitaire ? new Date(a.dateLimiteForfaitaire) : (() => { const l = new Date(base); l.setDate(l.getDate() + (isFps ? 90 : 45)); return l; })();
         const jours = Math.ceil((lim - now) / 86400000);
         const du = FP.montantDu ? FP.montantDu(a) : (Number(a.montantTTC) || 0);
         const maj = Number(a.montantMajore) || 0;
-        const eco = (maj > du) ? (maj - du) : 0; // économie si payé avant majoration
+        const eco = (maj > du) ? (maj - du) : 0;                // surcoût évité en payant avant la majoration
         return { a, jours, eco };
       })
-      .filter(x => x.jours >= 0 && x.jours < 30);
+      .filter(x => x.jours >= 0 && x.jours < 30);                // majoration imminente (< 30 j)
     if (risque.length) {
       const ecoTot = risque.reduce((s, x) => s + x.eco, 0);
       const min = Math.min(...risque.map(x => x.jours));
       out.push({
         id: 'amendes-minore', priorite: min < 7 ? 95 : 80, categorie: 'Amendes', icon: 'alarm-clock',
         titre: `Régler ${risque.length} amende${risque.length > 1 ? 's' : ''} avant la majoration`,
-        detail: `La plus urgente expire dans ${min} j. Passé la date limite, le montant augmente.`,
+        detail: `La plus urgente : encore ${min} j avant majoration. Passé ce délai, le montant grimpe fortement.`,
         action: 'Payer maintenant', target: 'amendes.html?filtre=apayer',
-        impactEuro: ecoTot, impact: ecoTot > 0 ? ('≈ ' + FP.euro(ecoTot) + ' d’économie') : 'éviter la majoration',
+        impactEuro: ecoTot, impact: ecoTot > 0 ? ('≈ ' + FP.euro(ecoTot) + ' de surcoût évité') : 'éviter la majoration',
       });
     }
   } catch (e) {}
