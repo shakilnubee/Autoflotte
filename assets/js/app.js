@@ -1653,8 +1653,12 @@ FP.addr = {
     const seg = parts[idx];
     const m = seg.match(/\b(\d{4,5})\b/);
     const cp = m ? m[1] : '';
-    const ville = seg.replace(/\b\d{4,5}\b/, '').replace(/^[\s\-–,]+|[\s\-–,]+$/g, '').trim();
-    return { rue: parts.slice(0, idx).join(', '), cp, ville, pays: parts.slice(idx + 1).join(', ') };
+    // ⚠️ La ville se trouve TOUJOURS juste après le code postal (règle utilisateur) : d'abord
+    // ce qui reste dans le même segment (« 75015 Paris »), sinon le segment suivant (« 75015, Paris »).
+    let ville = seg.replace(/\b\d{4,5}\b/, '').replace(/^[\s\-–,]+|[\s\-–,]+$/g, '').trim();
+    let rest = parts.slice(idx + 1);
+    if (!ville && rest.length) { ville = rest[0]; rest = rest.slice(1); }
+    return { rue: parts.slice(0, idx).join(', '), cp, ville, pays: rest.join(', ') };
   },
 };
 
