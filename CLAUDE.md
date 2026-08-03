@@ -251,6 +251,13 @@ git push              # Netlify redéploie automatiquement
 ## Pour Claude (nouvelle session)
 
 Si tu reprends ce projet :
+- ⚠️ **UTILISER LES SKILLS SYSTÉMATIQUEMENT** (consigne explicite de l'utilisateur) : dès qu'un
+  skill correspond à la demande, l'invoquer **de toi-même**, sans attendre qu'il le nomme. Réflexe par
+  défaut : **design/UX** (`frontend-design`, `ui-ux-pro-max`), **déploiement** (`deploy`, `rebuild`),
+  **projet** (`parc-pilot-dev`), **graphiques** (`dataviz`), **revue/sécu** (`requesting-code-review`,
+  `security-review`) et tout autre skill pertinent. Les skills de **guidage** (qui chargent juste des
+  instructions) coûtent quasi rien → toujours les prendre. Les skills qui **lancent des agents**
+  (revues, audits) coûtent des crédits réels → les lancer quand c'est utile et le signaler si c'est gros.
 - L'utilisateur parle **français**, garde un ton direct et simple (il n'est pas dev)
 - Il bosse sous **Windows / PowerShell 5.1** (pas Python, pas Node installés)
 - Préfère les solutions **sans terminal** quand possible (UI Supabase, UI Netlify, UI GitHub)
