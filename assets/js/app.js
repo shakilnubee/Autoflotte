@@ -6216,6 +6216,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (matches.length) html += (answers.length ? '<div class="fp-search-cat">Résultats</div>' : '') + matches.map(item).join('');
       results.innerHTML = html;
     }
+    // ⚠️ La fermeture (clic ailleurs / Échap) pose un `display:none` EN LIGNE sur la liste ; un
+    // style inline l'emporte sur la classe .open → sans ça, retaper ne réaffiche plus rien (il
+    // fallait rafraîchir la page). On efface donc l'inline à chaque ré-affichage.
+    results.style.display = '';
     results.classList.add('open');
   });
   // Fermer le dropdown si clic ailleurs
