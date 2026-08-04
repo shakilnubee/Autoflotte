@@ -3237,15 +3237,21 @@ FP.buildAlertes = (data) => {
     (data.factures || []).forEach(f => {
       if (f.type !== 'sinistre') return;
       const k = gkOf(f.id);
-      const g = incidents[k] || (incidents[k] = { key: k, rep: f, date: f.date || '' });
+      const g = incidents[k] || (incidents[k] = { key: k, rep: f, date: f.date || '', ids: [] });
+      g.ids.push(f.id);                                                         // toutes les lignes de l'incident
       if ((f.date || '') && (!g.date || f.date < g.date)) g.date = f.date;      // date de déclaration = plus ancienne
       if ((!g.rep.vehiculeImmat && f.vehiculeImmat) || (!g.rep.description && f.description)) g.rep = f;
     });
     const today0 = new Date(); today0.setHours(0, 0, 0, 0);
     const SIN_RELANCE_J = 21; // 3 semaines sans réponse → on relance
+    // Un statut « remboursé / prise en charge / refusé » = l'assureur A répondu → plus « sans réponse ».
+    const RESOLU = new Set(['rembourse', 'pec', 'refuse']);
     const sansReponse = Object.values(incidents).filter(g => {
       const d = sinDoss[g.key] || {};
-      if (d.resp || d.dateReponse || d.dateCloture) return false; // réponse reçue / dossier clos
+      // Résolu si : réponse/clôture dans le dossier, OU statut de suivi = remboursé/PEC/refusé
+      // (sur n'importe quelle ligne de l'incident), OU un montant remboursé a été saisi.
+      const statResolu = (g.ids || []).some(id => RESOLU.has(sinStatut[id]));
+      if (d.resp || d.dateReponse || d.dateCloture || statResolu || (Number(d.rembourse) || 0) > 0) return false;
       const decl = d.dateDeclaration || g.date;
       const dt = decl ? new Date(decl) : null; if (!dt || isNaN(dt)) return false;
       return Math.floor((today0 - dt) / 86400000) >= SIN_RELANCE_J;
