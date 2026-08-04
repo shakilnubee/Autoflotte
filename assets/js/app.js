@@ -1222,6 +1222,43 @@ FP.societeProfil = () => {
   } catch (e) {}
 })();
 
+// === jsPDF paresseux : chargé À LA DEMANDE (1er export), pas à l'ouverture de la page ===
+// jsPDF + autotable pèsent ~400 Ko et ne servent QU'au clic sur un bouton « Télécharger PDF ».
+// Les charger en <script defer> bloquait l'init de chaque page (DOMContentLoaded attendait le
+// parse de 400 Ko) → navigation ralentie. On les injecte donc dynamiquement (async, non bloquant)
+// à la 1re demande, et on lance un préchargement discret dès que la page est libre (requestIdle).
+// FP.ensureJsPDF() renvoie une promesse résolue quand window.jspdf.jsPDF est prêt.
+FP.ensureJsPDF = function () {
+  if (window._jspdfReady) return window._jspdfReady;
+  if (window.jspdf && window.jspdf.jsPDF) { window._jspdfReady = Promise.resolve(true); return window._jspdfReady; }
+  window._jspdfReady = new Promise((resolve, reject) => {
+    try {
+      const base = location.pathname.indexOf('/pages/') !== -1 ? '../' : './';
+      let ver = '';
+      try { const s = document.querySelector('script[src*="app.js"]'); const m = s && s.src && s.src.match(/\?v=[^"'&]+/); if (m) ver = m[0]; } catch (e) {}
+      const load = (src) => new Promise((res, rej) => {
+        const sc = document.createElement('script'); sc.src = src + ver; sc.async = true;
+        sc.onload = res; sc.onerror = rej; document.head.appendChild(sc);
+      });
+      load(base + 'assets/js/vendor/jspdf.umd.min.js')
+        .then(() => load(base + 'assets/js/vendor/jspdf.plugin.autotable.min.js'))
+        .then(() => resolve(true))
+        .catch(reject);
+    } catch (e) { reject(e); }
+  });
+  return window._jspdfReady;
+};
+// Préchargement discret sur les pages qui ont des exports PDF (marqueur window.FP_PDF), une fois
+// la page interactive → le clic « PDF » est immédiat, sans jamais bloquer le chargement de l'onglet.
+(function preloadJsPDF() {
+  try {
+    if (!window.FP_PDF) return;
+    const kick = () => { try { FP.ensureJsPDF(); } catch (e) {} };
+    if ('requestIdleCallback' in window) requestIdleCallback(kick, { timeout: 2500 });
+    else setTimeout(kick, 1200);
+  } catch (e) {}
+})();
+
 // === PWA : appli installable (« Ajouter à l'écran d'accueil ») + fonctionnement hors-ligne ===
 // Injecte le manifest + les balises iOS et enregistre le service worker (fichiers à la RACINE
 // du site : manifest.json et sw.js). Le chemin de base s'adapte selon qu'on est dans /pages/.
@@ -6496,7 +6533,7 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
 
   function openPreview() {
     const c = ctx(); if (!c) return;
-    if (!window.jspdf || !window.jspdf.jsPDF) { alert('La librairie PDF n\'est pas chargée sur cette page.'); return; }
+    if (!(window.jspdf && window.jspdf.jsPDF)) { FP.ensureJsPDF().then(openPreview).catch(() => alert('La librairie PDF n\'a pas pu être chargée.')); return; }
     const made = makeDoc(c);
     curDoc = made.doc; curName = made.filename;
     // #view=FitH → le PDF s'ouvre ajusté à la LARGEUR (lisible d'emblée, plus le mini-aperçu à 27 %) ;
