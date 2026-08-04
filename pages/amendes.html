@@ -276,6 +276,8 @@
       <span class="font-semibold text-sm"><span id="am-bulk-count">0</span> amende(s) sélectionnée(s)</span>
       <div class="flex items-center gap-1 flex-wrap" style="margin-left:auto">
         <button type="button" class="am-bulk-btn" id="am-bulk-fiche"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Relevé PDF</button>
+        <button type="button" class="am-bulk-btn" id="am-bulk-envoi"><i data-lucide="mail" class="w-3.5 h-3.5"></i> Envoyer les demandes de paiement</button>
+        <button type="button" class="am-bulk-btn" id="am-bulk-relance"><i data-lucide="bell" class="w-3.5 h-3.5"></i> Relancer les paiements</button>
         <button type="button" class="am-bulk-btn" id="am-bulk-pay"><i data-lucide="check" class="w-3.5 h-3.5"></i> Marquer payées</button>
         <button type="button" class="am-bulk-btn" id="am-bulk-unpay"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Marquer non payées</button>
         <button type="button" class="am-bulk-btn danger" id="am-bulk-delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>
@@ -1058,6 +1060,71 @@
     const p = prenomCourant();
     const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.relance) || `Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`;
     ouvrirMail(appliquerModele(modeleMail('mailModeleRelance', def), p), { reply: true });
+  }
+
+  // ---------- ENVOI EN LOT (demandes de paiement / relances) sur les amendes sélectionnées ----------
+  const prenomDe = (a) => (a && a.prenom && a.prenom.trim() && a.prenom.trim() !== '—') ? a.prenom.trim() : '';
+  // Envoi AUTOMATIQUE (Resend) pour UNE amende, SANS aucune boîte de dialogue (utilisé par le lot).
+  // Renvoie un statut : 'sent' | 'no-mail' | 'no-pdf' | 'no-config' | 'error'. On ne fait PAS de repli
+  // Gmail ni de confirmation par amende (ce serait 1 popup par ligne) — on collecte et on résume à la fin.
+  async function sendAmendeAuto(a, body, opts) {
+    opts = opts || {};
+    const _prof = (window.FP && FP.societeProfil) ? FP.societeProfil() : {};
+    const EXPEDITEUR = _prof.mailExpediteur || '';
+    const COPIE_MAIL = _prof.mailCopie || '';
+    if (!EXPEDITEUR || !(window.FP && FP.sendEmail)) return 'no-config';
+    const to = lookupEmail(a.prenom);
+    if (!to) return 'no-mail';
+    const subjectBase = `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`;
+    const subject = opts.reply ? ('Re: ' + subjectBase) : subjectBase;
+    const _mailDom = (String(EXPEDITEUR).split('@')[1] || String(_prof.mailDomaineEnvoi || '').replace(/^@/, '') || 'parc-pilot.fr').trim();
+    const _rootId = `<pp-amende-${a.id}@${_mailDom}>`;
+    const _ownId = `<pp-amende-${a.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@${_mailDom}>`;
+    const headers = { 'Message-ID': _ownId, 'References': _rootId };
+    if (opts.reply) headers['In-Reply-To'] = _rootId;
+    // Avis en PIÈCE JOINTE obligatoire : sans PDF on n'envoie JAMAIS (règle métier). En lot, on saute + on signale.
+    let attachments;
+    if (!a.avisUrl) return 'no-pdf';
+    if (!(window.FP && FP.signedScanUrl)) return 'no-pdf';
+    let signed = null; try { signed = await FP.signedScanUrl(a.avisUrl, 600); } catch (e) { console.warn('[bulk avis PJ]', e); }
+    if (!signed) return 'no-pdf';
+    attachments = [{ filename: `avis-${a.numeroAvis || 'contravention'}.pdf`, path: signed }];
+    const escH = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const html = escH(body).replace(/\n/g, '<br>');
+    try {
+      await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: body, replyTo: EXPEDITEUR, attachments, headers });
+      return 'sent';
+    } catch (e) { console.warn('[bulk sendEmail]', e); return 'error'; }
+  }
+  async function bulkEnvoiAmendes(ids, mode) {
+    const reply = mode === 'relance';
+    const def = reply
+      ? ((window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.relance) || `Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`)
+      : ((window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.paiement) || `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`);
+    const tpl = modeleMail(reply ? 'mailModeleRelance' : 'mailModelePaiement', def);
+    const list = ids.map(id => data.amendes.find(x => x.id === id)).filter(Boolean);
+    if (!list.length) return;
+    const label = reply ? 'Relancer les paiements' : 'Envoyer les demandes de paiement';
+    const okGo = await FP.confirm(`${label}\n\nEnvoyer ${list.length} e-mail(s) au(x) conducteur(s) sélectionné(s) ?\nChaque e-mail part avec l'avis en pièce jointe. Les amendes sans avis PDF ou sans e-mail conducteur seront ignorées et listées à la fin.`);
+    if (!okGo) return;
+    let sent = 0; const noMail = [], noPdf = [], errs = []; let noConfig = false;
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      if (FP.toast) FP.toast(`Envoi ${i + 1}/${list.length}…`);
+      const st = await sendAmendeAuto(a, appliquerModele(tpl, prenomDe(a)), { reply });
+      if (st === 'sent') sent++;
+      else if (st === 'no-mail') noMail.push(a);
+      else if (st === 'no-pdf') noPdf.push(a);
+      else if (st === 'no-config') { noConfig = true; break; }
+      else errs.push(a);
+    }
+    if (noConfig) { alert("Aucune adresse d'envoi n'est configurée pour cette société.\nRenseigne-la dans Paramètres → Sociétés (e-mail d'envoi des amendes)."); return; }
+    const lbl = a => `${a.prenom || '?'}${a.numeroAvis ? ' (' + a.numeroAvis + ')' : ''}`;
+    let msg = `✓ ${sent} e-mail(s) envoyé(s).`;
+    if (noMail.length) msg += `\n\n${noMail.length} sans e-mail conducteur (ignorée·s) : ${noMail.slice(0, 8).map(lbl).join(', ')}${noMail.length > 8 ? '…' : ''}`;
+    if (noPdf.length) msg += `\n\n${noPdf.length} sans avis PDF joint (ignorée·s — on n'envoie jamais sans pièce jointe) : ${noPdf.slice(0, 8).map(lbl).join(', ')}${noPdf.length > 8 ? '…' : ''}`;
+    if (errs.length) msg += `\n\n${errs.length} échec·s d'envoi : ${errs.slice(0, 8).map(lbl).join(', ')}${errs.length > 8 ? '…' : ''}`;
+    alert(msg);
   }
 
   // ---------- Charts ----------
@@ -2604,6 +2671,8 @@
     renderKPIs(); renderTable(); renderCharts();
     if (FP.toast) FP.toast(`✓ ${n} amende(s) → ${st === 'payée' ? 'payées' : 'à payer'}`);
   }
+  if ($('am-bulk-envoi')) $('am-bulk-envoi').addEventListener('click', () => { const ids = [...state.selectedIds]; if (ids.length) bulkEnvoiAmendes(ids, 'paiement'); });
+  if ($('am-bulk-relance')) $('am-bulk-relance').addEventListener('click', () => { const ids = [...state.selectedIds]; if (ids.length) bulkEnvoiAmendes(ids, 'relance'); });
   $('am-bulk-pay').addEventListener('click', () => bulkStatut('payée'));
   $('am-bulk-unpay').addEventListener('click', () => bulkStatut('à payer'));
   $('am-bulk-delete').addEventListener('click', async () => {
