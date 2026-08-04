@@ -6270,11 +6270,17 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     // Ligne de total (si au moins une colonne a une fonction `sum`) → pied de tableau « TOTAL ».
     let foot = null;
     if (cols.some(c => typeof c.sum === 'function')) {
-      const footRow = ['TOTAL'];
-      cols.forEach(c => {
+      // ⚠️ Le libellé « TOTAL » ne doit PAS aller dans la colonne « # » (8 mm) : il s'y afficherait
+      // à la VERTICALE (une lettre par ligne). On le met dans une cellule FUSIONNÉE (colSpan) qui
+      // couvre le « # » + toutes les colonnes AVANT le 1er total, alignée à droite → il a la place.
+      const firstSumCol = cols.findIndex(c => typeof c.sum === 'function');   // index dans `cols`
+      const span = firstSumCol < 0 ? 1 : firstSumCol + 1;                      // +1 pour la colonne « # »
+      const footRow = [{ content: 'TOTAL', colSpan: span, styles: { halign: 'right', fontStyle: 'bold' } }];
+      cols.forEach((c, idx) => {
+        if (idx < firstSumCol) return;   // déjà couvert par le colSpan du libellé
         if (typeof c.sum === 'function') {
           const t = rows.reduce((s, r) => { const n = Number(c.sum(r)); return s + (isFinite(n) ? n : 0); }, 0);
-          footRow.push(clean(c.fmt ? c.fmt(t) : FP.euro(t)));
+          footRow.push({ content: clean(c.fmt ? c.fmt(t) : FP.euro(t)), styles: { halign: c.align === 'right' ? 'right' : 'left' } });
         } else footRow.push('');
       });
       foot = [footRow];
