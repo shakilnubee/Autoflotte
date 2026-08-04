@@ -85,6 +85,7 @@
     },
     async signOut() {
       try { if (window.FP && typeof FP.warp === 'function') FP.warp('Déconnexion'); } catch (e) {}
+      try { sessionStorage.setItem('fp_logout_burst', '1'); } catch (e) {}  // déluge d'éclairs à l'arrivée sur login.html
       var t0 = Date.now();
       try { await client.auth.signOut(); } catch (e) {}
       var wait = Math.max(0, 1500 - (Date.now() - t0));   // laisser l'animation tourner ≥ 1,5 s
