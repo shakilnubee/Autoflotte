@@ -1135,6 +1135,7 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom.', default: FP.MAIL_DEFAUT.paiement },
   { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.designation },
   { key: 'mailModeleRelance',    label: "Modèle e-mail — relance",                 type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.relance },
+  { key: 'mailSignature',        label: "Signature (bas des e-mails d'amende)",    type: 'textarea', ph: 'Colle ici ta signature (ex.\nShakil Nubeebaccus\nProject X Paris · Gestion de flotte\n06 12 34 56 78). Elle est ajoutée automatiquement en bas des envois.' },
 ];
 // Contrat d'assurance de la société ACTIVE (assureur + n° de police), paramétrable dans Contrats.
 // Défaut PXP = SWISSLIFE (valeur historique) ; une nouvelle société démarre vide.

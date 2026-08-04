@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803q">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803r">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803q"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260803r"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803q">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260803r">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -456,12 +456,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803q"></script>
-<script src="../assets/js/supabase-client.js?v=20260803q"></script>
-<script src="../assets/js/data.js?v=20260803q"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803q"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803q"></script>
-<script src="../assets/js/app.js?v=20260803q"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260803r"></script>
+<script src="../assets/js/supabase-client.js?v=20260803r"></script>
+<script src="../assets/js/data.js?v=20260803r"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803r"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803r"></script>
+<script src="../assets/js/app.js?v=20260803r"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -937,6 +937,12 @@
       });
     }).catch(() => {});
   }
+  // Ajoute la signature de la société (Paramètres → Société → « Signature ») en bas du corps.
+  function withSignature(body) {
+    try { const sig = ((window.FP && FP.societeProfil) ? FP.societeProfil() : {}).mailSignature || '';
+      if (sig && String(sig).trim()) return String(body || '') + '\n\n' + String(sig).trim(); } catch (e) {}
+    return body;
+  }
   async function ouvrirMail(body, opts) {
     opts = opts || {};
     const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
@@ -988,16 +994,19 @@
       if (!sansPJ) return;
     }
     // Corps du mail : uniquement le texte — plus de lien (seule la pièce jointe fait foi).
+    // On ajoute la SIGNATURE de la société (Paramètres → Société) sur l'envoi AUTOMATIQUE (Resend) :
+    // le repli Gmail, lui, garde la signature Gmail native (sinon on en aurait deux).
     let fullBody = body;
     // 1) Envoi AUTOMATIQUE via la fonction Resend (si déployée) — un clic = envoyé.
     if (to && window.FP && FP.sendEmail) {
+      const sigBody = withSignature(body);
       // Version HTML : le lien s'affiche en CLIQUABLE avec un libellé (pas l'URL brute).
       const escH = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      let html = escH(body).replace(/\n/g, '<br>');
+      let html = escH(sigBody).replace(/\n/g, '<br>');
       // Plus de lien dans le corps du message : l'avis de contravention est en PIÈCE JOINTE.
       try {
         if (FP.toast) FP.toast('Envoi de l\'e-mail…');
-        await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: fullBody, replyTo: EXPEDITEUR, attachments, headers: mailHeaders });
+        await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: sigBody, replyTo: EXPEDITEUR, attachments, headers: mailHeaders });
         if (FP.toast) FP.toast('✓ E-mail envoyé à ' + to); else alert('✓ E-mail envoyé à ' + to);
         return;
       } catch (e) {
@@ -1089,10 +1098,11 @@
     let signed = null; try { signed = await FP.signedScanUrl(a.avisUrl, 600); } catch (e) { console.warn('[bulk avis PJ]', e); }
     if (!signed) return 'no-pdf';
     attachments = [{ filename: `avis-${a.numeroAvis || 'contravention'}.pdf`, path: signed }];
+    const sigBody = withSignature(body);
     const escH = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const html = escH(body).replace(/\n/g, '<br>');
+    const html = escH(sigBody).replace(/\n/g, '<br>');
     try {
-      await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: body, replyTo: EXPEDITEUR, attachments, headers });
+      await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: sigBody, replyTo: EXPEDITEUR, attachments, headers });
       return 'sent';
     } catch (e) { console.warn('[bulk sendEmail]', e); return 'error'; }
   }
