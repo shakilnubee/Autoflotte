@@ -467,10 +467,23 @@ FP.leasingLocaleaseAnnuel = function () {
 // ⚠️ HELPER CANONIQUE — coût RESTANT À CHARGE d'une facture de sinistre : 0 si remboursé/pris en charge
 // (sinistreStatut ∈ {rembourse, pec}) ou si c'est un simple devis (sinistreStage ou mots devis/proforma/
 // estimation), sinon le TTC. Même règle que la page Sinistres et le KPI Statistiques.
+// Statut de suivi d'un sinistre (— / attente / pec / rembourse / refuse), SOURCE UNIQUE.
+// Le statut est saisi PAR INCIDENT (clé de groupe sinistreGroupes[id] || id) dans la page Sinistres,
+// mais l'import le pose parfois par id de facture. On résout donc via la clé de groupe D'ABORD,
+// puis repli sur l'id de facture → page, alertes et coûts lisent toujours la même valeur.
+FP.sinistreStatutOf = (f) => {
+  if (!f) return '';
+  try {
+    const s = FP.settings.get();
+    const grp = s.sinistreGroupes || {}, st = s.sinistreStatut || {};
+    const gk = grp[f.id] || f.id;
+    return (st[gk] || st[f.id] || '').toString().toLowerCase();
+  } catch (e) { return ''; }
+};
 FP.coutSinistre = (f) => {
   try {
     if (!f) return 0;
-    const st = ((FP.settings.get().sinistreStatut || {})[f.id] || '').toString().toLowerCase();
+    const st = FP.sinistreStatutOf(f);
     if (st === 'rembourse' || st === 'pec') return 0;
     const stage = ((FP.settings.get().sinistreStage || {})[f.id] || '').toString().toLowerCase();
     const isDevis = stage ? (stage === 'devis') : /\b(devis|proforma|estimation)\b/i.test(((f.description || '') + ' ' + (f.fournisseur || '')));
@@ -3220,7 +3233,7 @@ FP.buildAlertes = (data) => {
 
   // --- Sinistres en attente de remboursement (rappel de suivi) ---
   const sinStatut = (FP.settings.get().sinistreStatut) || {};
-  const sinAttente = (data.factures || []).filter(f => f.type === 'sinistre' && sinStatut[f.id] === 'attente');
+  const sinAttente = (data.factures || []).filter(f => f.type === 'sinistre' && FP.sinistreStatutOf(f) === 'attente');
   if (sinAttente.length) {
     out.push({ niveau: 'warn', categorie: 'Sinistres', message: `${sinAttente.length} sinistre(s) en attente de remboursement`, detail: "Vérifie si l'assureur t'a remboursé", sort: 500,
       vehicules: sinAttente.map(s => ({ label: `${s.vehiculeImmat || '—'} · ${(s.description || 'sinistre').slice(0, 45)}${s.montantTTC ? ' — ' + FP.euro(s.montantTTC) : ''}`, target: 'sinistres.html' })) });
@@ -3250,7 +3263,7 @@ FP.buildAlertes = (data) => {
       const d = sinDoss[g.key] || {};
       // Résolu si : réponse/clôture dans le dossier, OU statut de suivi = remboursé/PEC/refusé
       // (sur n'importe quelle ligne de l'incident), OU un montant remboursé a été saisi.
-      const statResolu = (g.ids || []).some(id => RESOLU.has(sinStatut[id]));
+      const statResolu = RESOLU.has((sinStatut[g.key] || '').toLowerCase()) || (g.ids || []).some(id => RESOLU.has((sinStatut[id] || '').toLowerCase()));
       if (d.resp || d.dateReponse || d.dateCloture || statResolu || (Number(d.rembourse) || 0) > 0) return false;
       const decl = d.dateDeclaration || g.date;
       const dt = decl ? new Date(decl) : null; if (!dt || isNaN(dt)) return false;
@@ -6038,7 +6051,7 @@ FP.smartAnswers = (q) => {
 
   // 1) « combien de … »
   if (has('combien', 'nombre de', 'nb ')) {
-    if (has('vehicule', 'voiture')) { const n = vehs.filter(v => !/vendu/i.test(v.statut || '')).length; out.push({ icon: '💡', label: `${n} véhicules actifs`, sub: 'dans la flotte', url: pref + 'vehicules.html' }); }
+    if (has('vehicule', 'voiture')) { const n = vehs.filter(v => !FP.estVendu(v)).length; out.push({ icon: '💡', label: `${n} véhicules actifs`, sub: 'dans la flotte', url: pref + 'vehicules.html' }); }
     if (has('amende')) out.push({ icon: '💡', label: `${am.length} amendes`, sub: 'enregistrées', url: pref + 'amendes.html' });
     if (has('facture')) out.push({ icon: '💡', label: `${facts.length} factures`, sub: 'enregistrées', url: pref + 'factures.html' });
     if (has('conducteur', 'chauffeur', 'salarie')) out.push({ icon: '💡', label: `${conds.length} conducteurs`, sub: 'enregistrés', url: pref + 'conducteurs.html' });
@@ -6080,7 +6093,7 @@ FP.smartAnswers = (q) => {
 
   // 5) TVS / CO₂ (totaux flotte)
   if (has('tvs', 'taxe')) { const t = vehs.reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0); out.push({ icon: '🏛️', label: `${eur(t)} — TVS annuelle`, sub: 'estimée sur la flotte', url: pref + 'statistiques.html' }); }
-  if (has('co2', 'carbone', 'emission')) { let g = 0; vehs.forEach(v => { const cat = (v.categorie || '').toLowerCase(); if (/moto|utilit|engin|remorque/.test(cat) || /vendu/i.test(v.statut || '')) return; const c = Number(v.co2); if (/lectri|hydrog/.test((v.carburant || '').toLowerCase())) return; if (Number.isFinite(c) && c > 0) g += c * 15000; }); out.push({ icon: '🌱', label: `${(Math.round(g / 1e5) / 10).toLocaleString('fr-FR')} t CO₂/an`, sub: 'estimation (15 000 km/an)', url: pref + 'statistiques.html' }); }
+  if (has('co2', 'carbone', 'emission')) { let g = 0; vehs.forEach(v => { const cat = (v.categorie || '').toLowerCase(); if (/moto|utilit|engin|remorque/.test(cat) || FP.estVendu(v)) return; const c = Number(v.co2); if (/lectri|hydrog/.test((v.carburant || '').toLowerCase())) return; if (Number.isFinite(c) && c > 0) g += c * 15000; }); out.push({ icon: '🌱', label: `${(Math.round(g / 1e5) / 10).toLocaleString('fr-FR')} t CO₂/an`, sub: 'estimation (15 000 km/an)', url: pref + 'statistiques.html' }); }
 
   const seen = new Set();
   return out.filter(a => { if (seen.has(a.label)) return false; seen.add(a.label); return true; }).slice(0, 4);

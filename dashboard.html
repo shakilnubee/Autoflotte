@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260804f">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260804g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260804f"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260804g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260804f">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260804g">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -534,10 +534,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260804f"></script>
-<script src="assets/js/supabase-client.js?v=20260804f"></script>
-<script src="assets/js/data.js?v=20260804f"></script>
-<script src="assets/js/app.js?v=20260804f"></script>
+<script src="assets/js/vendor/supabase.js?v=20260804g"></script>
+<script src="assets/js/supabase-client.js?v=20260804g"></script>
+<script src="assets/js/data.js?v=20260804g"></script>
+<script src="assets/js/app.js?v=20260804g"></script>
 <!-- Upsell gestion déléguée : visible uniquement pour les ADMINS clients (ni CEO, ni gestionnaire, ni salarié), masquable -->
 <script>
 (function(){
@@ -698,7 +698,7 @@
     const spark = document.getElementById('kpi-couts-spark'); if (!spark || !FP.sparklineHTML) return;
     const months = [];
     for (let i = 5; i >= 0; i--) { const d = new Date(today.getFullYear(), today.getMonth() - i, 1); months.push(d.toISOString().slice(0, 7)); }
-    const série = months.map(ym => (data.factures || []).filter(f => (f.date || '').startsWith(ym) && compteCout(f)).reduce((s, f) => s + (f.montantTTC || 0), 0));
+    const série = months.map(ym => FP.coutMois(data, ym)); // source unique (dédup + filtre exploit), cohérent avec le KPI
     if (série.some(v => v > 0)) spark.innerHTML = FP.sparklineHTML(série, { width: 110, height: 26, color: '#0e7490' });
   })();
 
@@ -884,14 +884,13 @@
     return out;
   }
   const months = buildLast6Months();
-  const _excCout = (f) => { const t = String(f.type || '').toLowerCase(); return t !== 'leasing' && t !== 'sinistre' && t !== 'achat' && t !== 'cession'; };
   let _chCosts = null, _chGroupes = null; // instances Chart.js — détruites avant chaque re-dessin (fp:data-ready)
 
   // Graphiques regroupés : Chart.js est chargé en différé → on dessine dès qu'il est prêt,
   // sans bloquer l'affichage des KPIs (→ navigation fluide, pas de gris).
   // ⚠️ Recalcule les données à CHAQUE appel + détruit l'ancien graphe → suit les données en direct.
   function drawDashCharts() {
-  const monthlyTotals = months.map(m => (data.factures || []).filter(f => (f.date || '').startsWith(m.ym) && _excCout(f)).reduce((s, f) => s + (f.montantTTC || 0), 0));
+  const monthlyTotals = months.map(m => FP.coutMois(data, m.ym)); // source unique (dédup + filtre exploit), cohérent avec le KPI et la sparkline
   { // sous-titre tendance (variation 1er → dernier mois)
     const first = monthlyTotals[0], last = monthlyTotals[monthlyTotals.length - 1];
     const deltaPct = first > 0 ? Math.round(((last - first) / first) * 100) : 0;
@@ -957,7 +956,7 @@
 
   // === Podium conducteurs — amendes 2026 (recalculable pour le rafraîchissement live) ===
   const NP_POD = new Set(['siege', 'depot', 'navette', 'vendu', 'x', 'fenwick', '']);
-  const _podKey = s => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
+  const _podKey = s => (FP.normPrenom ? FP.normPrenom(s) : (s || '').toString().trim().split(/\s+/)[0].toLowerCase()); // source unique (comme le podium Amendes)
   let _podExpanded = false;
   const _podBox = document.getElementById('dash-podium');
   const _podBtn = document.getElementById('dash-podium-toggle');

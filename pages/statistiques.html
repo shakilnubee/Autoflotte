@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260804f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260804g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260804f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260804g">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -299,10 +299,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260804f"></script>
-<script src="../assets/js/supabase-client.js?v=20260804f"></script>
-<script src="../assets/js/data.js?v=20260804f"></script>
-<script src="../assets/js/app.js?v=20260804f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260804g"></script>
+<script src="../assets/js/supabase-client.js?v=20260804g"></script>
+<script src="../assets/js/data.js?v=20260804g"></script>
+<script src="../assets/js/app.js?v=20260804g"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -543,8 +543,8 @@
 
   function render(annee) {
     let fact = (annee === 'all') ? factures : factures.filter(f => (f.date || '').startsWith(annee));
-    // Dédoublonnage par numéro de facture (comme la page Factures) → évite de gonfler les totaux/graphes/TCO.
-    { const _seen = new Set(); fact = fact.filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (_seen.has(k)) return false; _seen.add(k); return true; }); }
+    // Dédoublonnage par numéro de facture (source unique FP.dedupeFactures) → évite de gonfler les totaux/graphes/TCO.
+    fact = FP.dedupeFactures(fact);
     $('periode-label').textContent = (annee === 'all') ? 'toutes années' : annee;
 
     // KPI : usage vs achat. Coût d'usage = coût RÉEL pour la société → sinistres comptés au
@@ -558,8 +558,7 @@
     // Coût d'usage / km = coût d'usage TOTAL (toutes années, dédoublonné) rapporté au km au compteur.
     // Métrique « à vie » cohérente : on ne divise PAS un coût d'une seule année par le km cumulé du véhicule.
     const usageAllTime = (function () {
-      const seen = new Set();
-      const ded = (factures || []).filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; });
+      const ded = FP.dedupeFactures(factures);
       return ded.filter(f => isUsage(f) && !_sinT(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0)
         + (FP.resteChargeSinistre ? FP.resteChargeSinistre(ded) : 0);
     })();
@@ -590,9 +589,7 @@
     // Comparaison N vs N-1 : quand une année précise est choisie, on superpose l'année précédente (pointillés).
     if (annee !== 'all' && /^\d{4}$/.test(annee)) {
       const py = String(+annee - 1);
-      const seen = new Set();
-      const prevFact = (factures || []).filter(f => (f.date || '').startsWith(py))
-        .filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; });
+      const prevFact = FP.dedupeFactures((factures || []).filter(f => (f.date || '').startsWith(py)));
       const prevData = months.map((m, i) => { const pym = py + '-' + String(i + 1).padStart(2, '0'); return prevFact.filter(f => (f.date || '').startsWith(pym)).reduce((s, f) => s + (+f.montantTTC || 0), 0); });
       if (prevData.some(x => x > 0)) {
         datasets.push({ label: py, data: prevData, borderColor: '#94A3B8', borderDash: [5, 4], backgroundColor: 'transparent', tension: .35, fill: false, pointRadius: 2 });
@@ -636,7 +633,7 @@
     // ⚠️ Le PRIX D'ACHAT du véhicule est EXCLU du TCO (il est affiché à part dans le KPI
     // « Prix d'acquisition » en haut de page) — le TCO reflète ce que le véhicule coûte à rouler.
     const primes = (FP.settings && FP.settings.get) ? (FP.settings.get().assurancePrimes || {}) : {};
-    const normP = s => (s || '').toString().toUpperCase().replace(/\s/g, '');
+    const normP = s => FP.normImmat(s); // source unique (retire tirets ET espaces) — sinon prime d'une plaque avec tiret non trouvée
     const findPrime = (immat) => { const k = normP(immat); for (const key in primes) { if (normP(key) === k) return primes[key]; } return null; };
     const normN = s => (s || '').toString().trim().toLowerCase();
     const amAll = (annee === 'all') ? (data.amendes || []) : (data.amendes || []).filter(a => FP.anneeAmende(a) === annee);
@@ -662,7 +659,7 @@
       // Sinistres comptés au RESTE À CHARGE (après remboursement assureur), pas au brut → même source
       // que le Coût d'usage. Les autres factures d'usage restent au montant brut.
       const factTotal = fv.filter(f => { const t = (f.type || '').toLowerCase(); if (_EXC_TCO.has(t)) return false; if (t === 'leasing' && _hasOffer) return false; if (t === 'sinistre') return false; return true; }).reduce((s, f) => s + (+f.montantTTC || 0), 0) + _leasing + (FP.resteChargeSinistre ? FP.resteChargeSinistre(fv) : 0);
-      const pr = findPrime(v.immat); const assurAn = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : (FP.estVendu(v) ? 0 : _assurRepli);
+      const pr = findPrime(v.immat); const assurAn = FP.estVendu(v) ? 0 : ((pr && Number.isFinite(pr.ttc)) ? pr.ttc : _assurRepli); // exclure les vendus (comme la TVS ci-dessous et Contrats)
       const tvsD = FP.tvsDetail(v); const tvsAn = (!FP.estVendu(v) && tvsD.applicable && tvsD.total != null) ? tvsD.total : 0; // exclure les vendus (comme le KPI TVS)
       const achatF = fv.filter(f => f.type === 'achat').sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
       // « Toutes années » = COÛT TOTAL DEPUIS L'ACHAT (Option A) : on CUMULE l'assurance et la TVS sur

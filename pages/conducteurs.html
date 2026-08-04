@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260804f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260804g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260804f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260804g">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -486,12 +486,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260804f"></script>
-<script src="../assets/js/supabase-client.js?v=20260804f"></script>
-<script src="../assets/js/data.js?v=20260804f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260804g"></script>
+<script src="../assets/js/supabase-client.js?v=20260804g"></script>
+<script src="../assets/js/data.js?v=20260804g"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/fleet-docs.js?v=20260804f"></script>
-<script src="../assets/js/app.js?v=20260804f"></script>
+<script src="../assets/js/fleet-docs.js?v=20260804g"></script>
+<script src="../assets/js/app.js?v=20260804g"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1250,7 +1250,7 @@
       clampList(d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(a => `
         <div class="fiche-line">
           <div class="min-w-0"><div class="font-medium truncate">${escapeHtml(a.motif || '—')}</div><div class="text-xs text-slate-500">${FP.date(a.date)}${(Number(a.points) || 0) > 0 ? ' · −' + a.points + ' pt' : ''}</div></div>
-          <div class="text-right flex-shrink-0"><div class="font-semibold">${FP.montantDu(a) ? FP.euroPrecis(FP.montantDu(a)) : '—'}</div><div class="text-xs">${a.statut === 'payée' ? '<span class="text-emerald-600">Payée</span>' : '<span class="text-red-600">À payer</span>'}</div></div>
+          <div class="text-right flex-shrink-0"><div class="font-semibold">${FP.montantDu(a) ? FP.euroPrecis(FP.montantDu(a)) : '—'}</div><div class="text-xs">${FP.estPayee(a) ? '<span class="text-emerald-600">Payée</span>' : '<span class="text-red-600">À payer</span>'}</div></div>
         </div>`));
     // Accidents (sinistres déduits des factures)
     const accidentsInner = accs.length === 0 ? '<p class="text-sm text-slate-500">Aucun accident ✓</p>' :
@@ -1812,7 +1812,7 @@
       ? d.vehicules.map(v => `<tr><td class="mono">${esc(v.immat)}</td><td>${esc(v.marque)} ${esc(v.modele)}</td><td>${esc(v.statut || '—')}</td><td class="r">${FP.num(v.km || 0)} km</td></tr>`).join('')
       : '<tr><td colspan="4" style="color:#94a3b8">Aucun véhicule assigné</td></tr>';
     const amRows = d.amendes.length
-      ? d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(a => `<tr><td>${a.date ? FP.date(a.date) : '—'}</td><td>${esc(a.motif || '—')}</td><td class="c">${(Number(a.points) || 0) > 0 ? '−' + a.points : '—'}</td><td class="r">${FP.montantDu(a) ? FP.euroPrecis(FP.montantDu(a)) : '—'}</td><td class="${a.statut === 'payée' ? 'pay' : 'due'}">${a.statut === 'payée' ? 'Payée' : 'À payer'}</td></tr>`).join('')
+      ? d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(a => `<tr><td>${a.date ? FP.date(a.date) : '—'}</td><td>${esc(a.motif || '—')}</td><td class="c">${(Number(a.points) || 0) > 0 ? '−' + a.points : '—'}</td><td class="r">${FP.montantDu(a) ? FP.euroPrecis(FP.montantDu(a)) : '—'}</td><td class="${FP.estPayee(a) ? 'pay' : 'due'}">${FP.estPayee(a) ? 'Payée' : 'À payer'}</td></tr>`).join('')
       : '<tr><td colspan="5" style="color:#94a3b8">Aucune amende ✓</td></tr>';
     const fullName = d.nom ? `${d.name} ${d.nom}` : d.name;
     const grp = driverGroupLabel(d);
@@ -1990,7 +1990,7 @@
     doc.autoTable({
       startY: cy, margin: { left: 12, right: 12 }, didDrawPage: footer,
       head: [['Date', 'Motif', 'Pts', 'Montant', 'Statut']],
-      body: d.amendes.length ? d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(a => [a.date ? FP.date(a.date) : '—', clean(a.motif || '—'), (Number(a.points) || 0) > 0 ? '−' + a.points : '—', FP.montantDu(a) ? clean(FP.euroPrecis(FP.montantDu(a))) : '—', a.statut === 'payée' ? 'Payée' : 'À payer']) : [['—', 'Aucune amende', '', '', '']],
+      body: d.amendes.length ? d.amendes.slice().sort((a, b) => (b.date || '').localeCompare(a.date || '')).map(a => [a.date ? FP.date(a.date) : '—', clean(a.motif || '—'), (Number(a.points) || 0) > 0 ? '−' + a.points : '—', FP.montantDu(a) ? clean(FP.euroPrecis(FP.montantDu(a))) : '—', FP.estPayee(a) ? 'Payée' : 'À payer']) : [['—', 'Aucune amende', '', '', '']],
       styles: { fontSize: 9, cellPadding: 2.2, textColor: [30, 41, 59], lineColor: [233, 238, 245], lineWidth: 0.1 },
       headStyles: { fillColor: [15, 30, 61], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
       alternateRowStyles: { fillColor: [248, 250, 252] },

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260804f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260804g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260804f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260804g">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -379,11 +379,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260804f"></script>
-<script src="../assets/js/supabase-client.js?v=20260804f"></script>
-<script src="../assets/js/data.js?v=20260804f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260804g"></script>
+<script src="../assets/js/supabase-client.js?v=20260804g"></script>
+<script src="../assets/js/data.js?v=20260804g"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260804f"></script>
+<script src="../assets/js/app.js?v=20260804g"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -502,8 +502,13 @@
       if (anneeLbl) anneeLbl.textContent = 'Cette année';
       $('kpi-annee').textContent = groups.filter(g => (g.rep.date || '').startsWith(cy)).length;
     }
-    // Reste à charge total = Σ (coût incident − remboursé) ; et nb de sinistres responsables.
-    const reste = groups.reduce((s, g) => s + Math.max(0, (g.cost || 0) - (Number((doss[g.key] || {}).rembourse) || 0)), 0);
+    // Reste à charge total = Σ (coût réel incident − remboursé). Coût réel via FP.coutSinistre
+    // (source unique : 0 si le sinistre est « Remboursé »/« Prise en charge » ou un devis) — même
+    // règle que Statistiques/TCO (FP.resteChargeSinistre), sinon un dossier PEC restait à 100 %.
+    const reste = groups.reduce((s, g) => {
+      const coutReel = g.lines.reduce((t, l) => t + FP.coutSinistre(l), 0);
+      return s + Math.max(0, coutReel - (Number((doss[g.key] || {}).rembourse) || 0));
+    }, 0);
     const resp = groups.filter(g => (doss[g.key] || {}).resp === 'responsable').length;
     if ($('kpi-reste')) $('kpi-reste').textContent = FP.euro(reste);
     if ($('kpi-resp')) $('kpi-resp').textContent = resp;
@@ -654,7 +659,8 @@
         // Dossier assurance structuré (franchise / remboursé / responsabilité) — par incident
         const dv = (FP.settings.get().sinistreAssurance || {})[g.key] || {};
         const respOpts = [['', '—'], ['responsable', 'Responsable'], ['non-responsable', 'Non responsable'], ['partagee', 'Partagée'], ['en-cours', 'En cours']];
-        const reste = (g.cost || 0) - (Number(dv.rembourse) || 0);
+        const coutReel = g.lines.reduce((t, l) => t + FP.coutSinistre(l), 0); // 0 si Remboursé/PEC/devis (source unique)
+        const reste = coutReel - (Number(dv.rembourse) || 0);
         const vehCh = (veh && veh.chauffeur && veh.chauffeur !== '—') ? veh.chauffeur : '';
         const _inpCss = 'width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px';
         // Ouverture via FP.openScan (URL signée) : le bucket des scans est privé → un lien public brut
