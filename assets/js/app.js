@@ -2532,6 +2532,37 @@ FP.affectations = {
     }
     if (changed) { s.affectations[vehId] = list; FP.settings.save(s); }
   },
+  // --- Édition manuelle (crayon dans la fiche véhicule) ---
+  // Modifie les dates début/fin d'une entrée (index = position dans le tableau stocké).
+  setEntry(vehId, index, patch) {
+    const s = FP.settings.get();
+    const list = (s.affectations && Array.isArray(s.affectations[vehId])) ? s.affectations[vehId] : null;
+    if (!list || !list[index]) return;
+    if ('debut' in patch) list[index].debut = patch.debut || null;
+    if ('fin' in patch) list[index].fin = patch.fin || null;
+    if ('conducteur' in patch && this._norm(patch.conducteur)) list[index].conducteur = this._norm(patch.conducteur);
+    FP.settings.save(s);
+  },
+  // Supprime une entrée de l'historique (index dans le tableau stocké).
+  removeEntry(vehId, index) {
+    const s = FP.settings.get();
+    const list = (s.affectations && Array.isArray(s.affectations[vehId])) ? s.affectations[vehId] : null;
+    if (!list || !list[index]) return;
+    list.splice(index, 1);
+    if (!list.length) delete s.affectations[vehId];
+    FP.settings.save(s);
+  },
+  // Ajoute une période à la main (backfill : conducteur connu à une date connue).
+  addEntry(vehId, conducteur, debut, fin) {
+    const nom = this._norm(conducteur);
+    if (!vehId || !nom) return;
+    const s = FP.settings.get();
+    s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
+    const list = Array.isArray(s.affectations[vehId]) ? s.affectations[vehId] : [];
+    list.push({ conducteur: nom, debut: debut || null, fin: fin || null });
+    s.affectations[vehId] = list;
+    FP.settings.save(s);
+  },
   // Renomme un conducteur dans tout l'historique (suit un renommage de fiche).
   rename(oldName, newName) {
     const from = this._norm(oldName).toLowerCase(); const to = this._norm(newName);
