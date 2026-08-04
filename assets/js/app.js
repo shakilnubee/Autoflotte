@@ -541,7 +541,11 @@ FP.EMP_RETOUR_INCONNU = '1900-01-01';
 // « 1900-01-01 » = rendu à une date inconnue, via la case « je ne connais pas la date de retour »).
 // EN COURS = aucune dateRetour du tout. (Ne PAS traiter la sentinelle comme « en cours ».)
 FP.empEnCours = (e) => !(e && e.dateRetour && String(e.dateRetour).slice(0, 10));
-FP.empEnRetard = (e) => { if (!FP.empEnCours(e)) return false; const p = (e && e.dateRetourPrevue) ? String(e.dateRetourPrevue).slice(0, 10) : ''; if (!p) return false; return p < new Date().toISOString().slice(0, 10); };
+// Jours écoulés depuis la date d'emprunt (calendaires, minuit → aujourd'hui).
+FP.empJoursDepuis = (e) => { const d = (e && e.dateEmprunt) ? new Date(String(e.dateEmprunt).slice(0, 10)) : null; if (!d || isNaN(d)) return 0; const t = new Date(); t.setHours(0, 0, 0, 0); return Math.floor((t - d) / 86400000); };
+// SOURCE UNIQUE « emprunt en retard » (règle choisie par l'utilisateur) : en cours ET emprunté
+// depuis plus de 2 jours. Utilisé par le tableau de bord ET la page Emprunts.
+FP.empEnRetard = (e) => FP.empEnCours(e) && FP.empJoursDepuis(e) > 2;
 // ⚠️ SOURCE UNIQUE — recalcule la fiche véhicule à partir des factures RESTANTES (à appeler après la
 // SUPPRESSION d'une facture, symétrique de FP.applyFactureToVehicule). Évite les « dernière révision /
 // km / pneus » fantômes laissés par une facture supprimée. Ne fait jamais BAISSER le km affiché (v.km),
