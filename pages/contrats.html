@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260804a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260804b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260804a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260804b">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -379,7 +379,7 @@
         <button type="button" class="cmp-tabbtn on" data-cmp-tab="leasing"><i data-lucide="banknote" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Leasing</button>
         <button type="button" class="cmp-tabbtn" data-cmp-tab="assurance"><i data-lucide="shield-check" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Assurance</button>
       </div>
-      <p class="text-sm text-slate-500 mb-3" id="cmp-hint">Saisis chaque devis dans une colonne. Parc Pilot calcule le <b>coût total réel</b> et te dit lequel choisir.</p>
+      <p class="text-sm text-slate-500 mb-3" id="cmp-hint"><b>Importe chaque devis</b> (PDF ou photo) : l'IA remplit la colonne toute seule — ou saisis à la main. Parc Pilot calcule le <b>coût total réel</b> et te dit lequel choisir.</p>
       <div class="flex items-center gap-2 mb-3">
         <button id="cmp-addcol" type="button" class="btn btn-outline text-xs"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter un devis</button>
         <button id="cmp-reset" type="button" class="btn btn-outline text-xs"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Réinitialiser</button>
@@ -532,12 +532,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260804a"></script>
-<script src="../assets/js/supabase-client.js?v=20260804a"></script>
-<script src="../assets/js/data.js?v=20260804a"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260804a"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260804a"></script>
-<script src="../assets/js/app.js?v=20260804a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260804b"></script>
+<script src="../assets/js/supabase-client.js?v=20260804b"></script>
+<script src="../assets/js/data.js?v=20260804b"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260804b"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260804b"></script>
+<script src="../assets/js/app.js?v=20260804b"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -2195,6 +2195,90 @@
   let mode = 'leasing';
   const data = { leasing: [{}, {}], assurance: [{}, {}] };
 
+  // Prompts d'extraction IA (un devis PDF/photo → champs du comparateur).
+  const PROMPTS = {
+    leasing: [
+      'Tu lis un DEVIS ou CONTRAT de LEASING automobile (LLD / LOA / crédit-bail). Extrais les',
+      'informations et réponds STRICTEMENT en JSON (aucun texte autour), au format :',
+      '{',
+      '  "nom": "<nom du loueur / société de leasing, ex. Arval, ALD, Ayvens, Leaseplan>",',
+      '  "loyer": <loyer mensuel TTC en euros, nombre>,',
+      '  "duree": <durée du contrat en MOIS, nombre>,',
+      '  "apport": <1er loyer majoré / apport / dépôt en euros, 0 si aucun>,',
+      '  "frais": <frais de dossier / mise en service en euros, 0 si aucun>,',
+      '  "kman": <kilométrage inclus PAR AN, nombre ; si seul le total est donné, divise par la durée en années>,',
+      '  "kmsup": <prix du kilomètre supplémentaire en euros (ex. 0.12), 0 si absent>,',
+      '  "entretien": <true si l\'entretien/révisions est inclus, sinon false>,',
+      '  "pneus": <true si les pneumatiques sont inclus, sinon false>,',
+      '  "assist": <true si assistance ou véhicule de remplacement inclus, sinon false>',
+      '}',
+      'Les montants : prends le TTC. Si une info est absente, mets 0 (nombres) ou false (cases) —',
+      "n'invente jamais. Convertis les nombres au format JSON (point décimal, pas d'espace, pas de €).",
+    ].join('\n'),
+    assurance: [
+      'Tu lis un DEVIS ou CONTRAT d\'ASSURANCE de flotte / automobile. Extrais les informations et',
+      'réponds STRICTEMENT en JSON (aucun texte autour), au format :',
+      '{',
+      '  "nom": "<nom de l\'assureur, ex. AXA, Swisslife, Allianz, Generali>",',
+      '  "prime": <prime annuelle TTC en euros, nombre ; si mensuelle, multiplie par 12>,',
+      '  "nbveh": <nombre de véhicules couverts, 1 si non précisé>,',
+      '  "franchise": <montant de la franchise dommages en euros, 0 si absente>,',
+      '  "trisques": <true si formule tous risques / tous dommages, sinon false>,',
+      '  "bris": <true si bris de glace inclus, sinon false>,',
+      '  "vol": <true si vol et/ou incendie inclus, sinon false>,',
+      '  "assist0": <true si assistance 0 km / dépannage inclus, sinon false>,',
+      '  "relais": <true si véhicule de remplacement / prêt inclus, sinon false>,',
+      '  "juridique": <true si protection juridique incluse, sinon false>,',
+      '  "conduct": <true si garantie du conducteur incluse, sinon false>',
+      '}',
+      'Prends le TTC. Si une info est absente, mets 0 (nombres) ou false (cases) — n\'invente jamais.',
+      "Convertis les nombres au format JSON (point décimal, pas d'espace, pas de €).",
+    ].join('\n'),
+  };
+
+  // Champ fichier partagé + colonne cible courante
+  let importCol = -1;
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'application/pdf,image/*';
+  fileInput.style.display = 'none';
+  document.body.appendChild(fileInput);
+
+  function setImStatus(i, txt, color) {
+    const el = table.querySelector('[data-cmp-imstatus="' + i + '"]');
+    if (el) { el.textContent = txt || ''; if (color) el.style.color = color; }
+  }
+
+  async function importDevis(file, i) {
+    if (!file) return;
+    if (!(window.FP && FP.scanIA)) { setImStatus(i, 'IA indisponible (connexion requise)', '#dc2626'); return; }
+    setImStatus(i, '⏳ Lecture du devis…', '#0B1E3D');
+    let fields = null;
+    try { fields = await FP.scanIA(file, mode === 'leasing' ? 'devis-leasing' : 'devis-assurance', PROMPTS[mode]); }
+    catch (e) { fields = null; }
+    if (!fields || typeof fields !== 'object') { setImStatus(i, '❌ Lecture impossible, réessaie ou saisis à la main', '#dc2626'); return; }
+    // Mappe les champs lus dans la colonne
+    const sch = SCHEMAS[mode];
+    const rec = {};
+    sch.fields.forEach(f => {
+      let v = fields[f.key];
+      if (v == null) return;
+      if (f.type === 'check') rec[f.key] = (v === true || v === 'true' || v === 1 || v === '1' || v === 'oui');
+      else if (f.type === 'num') { const n = num(v); rec[f.key] = n ? String(n) : ''; }
+      else rec[f.key] = String(v);
+    });
+    data[mode][i] = rec;
+    build();
+    setImStatus(i, '✓ Devis importé — vérifie les cases', '#059669');
+  }
+
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files && fileInput.files[0];
+    const i = importCol;
+    fileInput.value = '';
+    if (f && i >= 0) importDevis(f, i);
+  });
+
   function build() {
     const sch = SCHEMAS[mode];
     const cols = data[mode];
@@ -2205,6 +2289,7 @@
     cols.forEach((c, i) => {
       html += '<div class="cmp-head" style="position:relative">Devis ' + (i + 1) +
         (cols.length > 2 ? ' <button type="button" data-cmp-del="' + i + '" title="Retirer" style="position:absolute;right:.4rem;top:.35rem;color:#94a3b8;font-weight:900;cursor:pointer">×</button>' : '') +
+        '<div style="margin-top:.35rem"><button type="button" data-cmp-import="' + i + '" class="btn btn-outline" style="font-size:.72rem;padding:2px 8px;font-weight:700"><i data-lucide="upload" style="width:13px;height:13px;display:inline;vertical-align:-2px"></i> Importer le devis</button><span data-cmp-imstatus="' + i + '" style="display:block;font-size:.68rem;color:#94a3b8;font-weight:600;margin-top:2px"></span></div>' +
         '</div>';
     });
     // Champs de saisie
@@ -2293,6 +2378,8 @@
     if (e.target.type === 'checkbox') refreshComputed();
   });
   table.addEventListener('click', (e) => {
+    const imp = e.target.closest('[data-cmp-import]');
+    if (imp) { importCol = +imp.dataset.cmpImport; fileInput.click(); return; }
     const del = e.target.closest('[data-cmp-del]'); if (!del) return;
     const i = +del.dataset.cmpDel;
     if (data[mode].length <= 2) return;
@@ -2314,8 +2401,8 @@
     mode = b.dataset.cmpTab;
     document.querySelectorAll('[data-cmp-tab]').forEach(x => x.classList.toggle('on', x === b));
     hint.innerHTML = mode === 'leasing'
-      ? 'Saisis chaque devis de leasing dans une colonne. Parc Pilot calcule le <b>coût total réel</b> (loyers + apport + frais) et le <b>coût au km</b>, puis te dit lequel choisir.'
-      : 'Saisis chaque offre d\'assurance. Parc Pilot compare la <b>prime</b>, la <b>franchise</b> et les <b>garanties</b> — le moins cher n\'est pas toujours le mieux couvert.';
+      ? '<b>Importe chaque devis</b> (PDF ou photo) : l\'IA remplit la colonne toute seule — ou saisis à la main. Parc Pilot calcule le <b>coût total réel</b> (loyers + apport + frais) et le <b>coût au km</b>, puis te dit lequel choisir.'
+      : '<b>Importe chaque offre</b> (PDF ou photo) : l\'IA remplit la colonne toute seule — ou saisis à la main. Parc Pilot compare la <b>prime</b>, la <b>franchise</b> et les <b>garanties</b> — le moins cher n\'est pas toujours le mieux couvert.';
     build();
   }));
   document.getElementById('cmp-addcol').addEventListener('click', () => { if (data[mode].length < 4) { data[mode].push({}); build(); } });
