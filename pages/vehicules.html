@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260804b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260804c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260804b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260804c">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -798,14 +798,14 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260804b"></script>
-<script src="../assets/js/supabase-client.js?v=20260804b"></script>
-<script src="../assets/js/data.js?v=20260804b"></script>
-<script src="../assets/js/fleet-docs.js?v=20260804b"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260804b"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260804b"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260804b"></script>
-<script src="../assets/js/app.js?v=20260804b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260804c"></script>
+<script src="../assets/js/supabase-client.js?v=20260804c"></script>
+<script src="../assets/js/data.js?v=20260804c"></script>
+<script src="../assets/js/fleet-docs.js?v=20260804c"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260804c"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260804c"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260804c"></script>
+<script src="../assets/js/app.js?v=20260804c"></script>
 <script>
   lucide.createIcons();
 
@@ -1156,7 +1156,8 @@
     push(v.dateChangementPneus, '🛞', '#0891B2', 'Changement de pneus', '');
     // Historique d'affectation daté (qui conduit, depuis quand)
     (FP.affectations ? FP.affectations.forVeh(v.id) : []).forEach(a => {
-      push(a.debut, '👤', '#2563EB', 'Conducteur · ' + (a.conducteur || ''), a.fin ? ('jusqu’au ' + FP.dateNum(a.fin)) : 'en cours');
+      const sub = a.fin ? ('jusqu’au ' + FP.dateNum(a.fin)) : 'en cours';
+      push(a.debut || a.fin, '👤', '#2563EB', 'Conducteur · ' + (a.conducteur || ''), sub);
     });
 
     if (!evts.length) return '';
@@ -1173,6 +1174,38 @@
         <summary class="font-semibold text-slate-900 border-b border-slate-200 pb-1" style="cursor:pointer">Historique du véhicule <span class="text-xs font-normal text-slate-400">${evts.length} événement${evts.length > 1 ? 's' : ''}</span></summary>
         <div style="border-left:2px solid var(--fp-border);margin-left:7px;padding-top:10px;margin-top:10px">${rows}</div>
         ${evts.length > 40 ? '<div class="text-xs text-slate-400 mt-1">40 événements les plus récents affichés.</div>' : ''}
+      </details>`;
+  }
+
+  // Bloc dédié « Conducteurs (historique) » : la liste des personnes affectées au véhicule
+  // avec leur période — CONSERVÉE même après avoir retiré le conducteur de la fiche.
+  function conducteursHistoHTML(v) {
+    const list = (FP.affectations ? FP.affectations.forVeh(v.id) : []).slice()
+      .sort((a, b) => String(b.debut || b.fin || '').localeCompare(String(a.debut || a.fin || '')));
+    const rows = list.map(a => {
+      const enCours = !a.fin;
+      const debut = a.debut ? FP.dateNum(a.debut) : '<span class="text-slate-400">depuis l’origine</span>';
+      const periode = enCours
+        ? `depuis ${a.debut ? FP.dateNum(a.debut) : '—'}`
+        : `${debut} → ${FP.dateNum(a.fin)}`;
+      return `<div class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0">
+        <div class="flex items-center gap-2 min-w-0">
+          <span style="width:9px;height:9px;border-radius:50%;flex:none;background:${enCours ? '#16a34a' : '#94a3b8'}"></span>
+          <span class="font-semibold text-slate-800 truncate">${escapeHtml(a.conducteur || '—')}</span>
+          ${enCours ? '<span style="font-size:.66rem;font-weight:700;color:#fff;background:#16a34a;border-radius:9999px;padding:1px 8px">actuel</span>' : ''}
+        </div>
+        <span class="text-xs text-slate-500 whitespace-nowrap">${periode}</span>
+      </div>`;
+    }).join('');
+    const body = list.length
+      ? rows
+      : '<p class="text-sm text-slate-400 py-2">Aucune affectation enregistrée pour l’instant. Dès que tu attribues (ou retires) un conducteur, l’historique se construit ici avec les dates.</p>';
+    return `
+      <details class="mt-4" open>
+        <summary class="font-semibold text-slate-900 border-b border-slate-200 pb-1" style="cursor:pointer">
+          Conducteurs — historique <span class="text-xs font-normal text-slate-400">${list.length ? list.length + ' au total' : ''}</span>
+        </summary>
+        <div class="pt-2">${body}</div>
       </details>`;
   }
 
@@ -2249,6 +2282,8 @@
         </div>
       </div>
 
+      ${conducteursHistoHTML(v)}
+
       ${docsSectionHTML(v)}
 
       ${edlSectionHTML(v)}
@@ -2616,7 +2651,7 @@
       const _oldChauffeur = idx >= 0 ? (data.vehicules[idx].chauffeur || '') : '';
       if (idx >= 0) { data.vehicules[idx] = { ...data.vehicules[idx], ...payload }; updated = data.vehicules[idx]; }
       // Historique d'affectation daté : on note le changement de conducteur (ferme l'ancien, ouvre le nouveau)
-      try { if (FP.affectations && (_oldChauffeur || '').trim() !== (payload.chauffeur || '').trim()) FP.affectations.record(id, payload.chauffeur); } catch (e) {}
+      try { if (FP.affectations && (_oldChauffeur || '').trim() !== (payload.chauffeur || '').trim()) FP.affectations.record(id, payload.chauffeur, null, _oldChauffeur); } catch (e) {}
       saveMasse(id);
       closeModal();
       renderKPIs();

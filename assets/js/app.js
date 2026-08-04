@@ -2507,7 +2507,7 @@ FP.affectations = {
   },
   // Enregistre un changement de conducteur : ferme l'entrée en cours si le nom change,
   // en ouvre une nouvelle si un conducteur est désigné. Idempotent (rien si inchangé).
-  record(vehId, nouveauConducteur, dateISO) {
+  record(vehId, nouveauConducteur, dateISO, ancienConducteur) {
     if (!vehId) return;
     const nom = this._norm(nouveauConducteur);
     const vide = !nom || nom === '—';
@@ -2515,13 +2515,22 @@ FP.affectations = {
     const s = FP.settings.get();
     s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
     const list = Array.isArray(s.affectations[vehId]) ? s.affectations[vehId] : [];
-    const encours = [...list].reverse().find(x => !x.fin) || null;
+    let encours = [...list].reverse().find(x => !x.fin) || null;
+    let changed = false;
+    // Rattrapage : un conducteur était déjà sur la fiche AVANT que l'historique n'existe
+    // (aucune entrée ouverte) → on trace sa sortie pour ne rien perdre au moment du retrait/
+    // changement. Début inconnu (null → affiché « depuis l'origine »).
+    const ancien = this._norm(ancienConducteur);
+    if (!encours && ancien && ancien !== '—' && ancien.toLowerCase() !== (vide ? '' : nom.toLowerCase())) {
+      list.push({ conducteur: ancien, debut: null, fin: jour });
+      changed = true;
+    }
     const actuel = encours ? this._norm(encours.conducteur) : '';
-    if (actuel === (vide ? '' : nom)) return; // aucun changement réel
-    if (encours) encours.fin = jour;          // on clôt l'affectation précédente
-    if (!vide) list.push({ conducteur: nom, debut: jour, fin: null });
-    s.affectations[vehId] = list;
-    FP.settings.save(s);
+    if (actuel !== (vide ? '' : nom)) {   // vrai changement
+      if (encours) { encours.fin = jour; changed = true; } // on clôt l'affectation précédente
+      if (!vide) { list.push({ conducteur: nom, debut: jour, fin: null }); changed = true; }
+    }
+    if (changed) { s.affectations[vehId] = list; FP.settings.save(s); }
   },
   // Renomme un conducteur dans tout l'historique (suit un renommage de fiche).
   rename(oldName, newName) {
