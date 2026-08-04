@@ -6284,7 +6284,7 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       body: rows.map((r, i) => [String(i + 1)].concat(cols.map(c2 => clean(c2.get(r))))),
       foot: foot || undefined,
       footStyles: { fillColor: [241, 245, 249], textColor: [15, 30, 61], fontStyle: 'bold', fontSize: 9, lineColor: [203, 213, 225], lineWidth: 0.1 },
-      startY: 36, margin: { top: 36, left: 10, right: 10 }, theme: 'grid',
+      startY: 36, margin: { top: 36, left: 10, right: 10 }, tableWidth: pageW - 20, theme: 'grid',
       styles: { fontSize: 9, cellPadding: { top: 2.6, right: 3, bottom: 2.6, left: 3 }, textColor: [30, 41, 59], lineColor: [233, 238, 245], lineWidth: 0.1, valign: 'middle' },
       headStyles: { fillColor: [15, 30, 61], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: [15, 30, 61], lineWidth: 0, cellPadding: { top: 3, right: 3, bottom: 3, left: 3 } },
       alternateRowStyles: { fillColor: [247, 249, 252] },
@@ -6312,7 +6312,9 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     if (!window.jspdf || !window.jspdf.jsPDF) { alert('La librairie PDF n\'est pas chargée sur cette page.'); return; }
     const made = makeDoc(c);
     curDoc = made.doc; curName = made.filename;
-    const url = curDoc.output('bloburl');
+    // #view=FitH → le PDF s'ouvre ajusté à la LARGEUR (lisible d'emblée, plus le mini-aperçu à 27 %) ;
+    // navpanes=0 masque le volet de vignettes à gauche → on voit le document en grand.
+    const url = curDoc.output('bloburl') + '#toolbar=1&navpanes=0&view=FitH';
     prev.querySelector('#fp-prev-frame').src = url;
     prev.querySelector('#fp-prev-sub').textContent = '· ' + c.rows.length + ' ligne(s)';
     modal.style.display = 'none';
@@ -6364,7 +6366,7 @@ FP.pdfPreview = function (doc, filename, subtitle) {
   }
   ov._doc = doc; ov._name = filename || 'document.pdf';
   ov.querySelector('#fp-pdfprev-sub').textContent = subtitle || '';
-  ov.querySelector('#fp-pdfprev-frame').src = doc.output('bloburl');
+  ov.querySelector('#fp-pdfprev-frame').src = doc.output('bloburl') + '#toolbar=1&navpanes=0&view=FitH';
   ov.style.display = 'flex';
   if (window.lucide) try { lucide.createIcons(); } catch (e) {}
 };

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803p">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260803p"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260803p">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -311,7 +311,7 @@
         <div class="flex flex-wrap items-center gap-3">
           <div class="relative flex-1 min-w-[220px]">
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-            <input id="doc-search" type="text" placeholder="Véhicule, type, nom du document…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+            <input id="doc-search" type="text" placeholder="Véhicule, conducteur, type, nom du document…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
           </div>
           <select id="doc-filter-veh" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous véhicules</option></select>
           <select id="doc-filter-type" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous types</option></select>
@@ -619,12 +619,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803o"></script>
-<script src="../assets/js/supabase-client.js?v=20260803o"></script>
-<script src="../assets/js/data.js?v=20260803o"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803o"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803o"></script>
-<script src="../assets/js/app.js?v=20260803o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260803p"></script>
+<script src="../assets/js/supabase-client.js?v=20260803p"></script>
+<script src="../assets/js/data.js?v=20260803p"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803p"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803p"></script>
+<script src="../assets/js/app.js?v=20260803p"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1868,7 +1868,7 @@
         if (fv !== 'all' && vehImmat(d.vehiculeId) !== fv) return false;
         if (ft !== 'all' && d.type !== ft) return false;
         if (hideArch && isArchived(d)) return false;
-        if (q){ const s = (vehImmat(d.vehiculeId)+' '+(DL[d.type]||d.type)+' '+(d.label||'')).toLowerCase(); if (!s.includes(q)) return false; }
+        if (q){ const _ch = (vehById(d.vehiculeId)||{}).chauffeur || ''; const s = (vehImmat(d.vehiculeId)+' '+(DL[d.type]||d.type)+' '+(d.label||'')+' '+_ch).toLowerCase(); if (!s.includes(q)) return false; }
         return true;
       });
       const tb = $('doc-tbody');
@@ -2001,8 +2001,10 @@
       const folderImmat = vid => (vid === '__noplate__' ? 'Sans plaque' : vehImmat(vid));
       if (!driveFolder) {
         // Niveau 1 : un dossier par véhicule (documents + factures) + un dossier « Sans plaque »
-        let entries = Object.entries(byVeh).map(([vid, o]) => ({ vid, o, veh: vehById(vid), immat: folderImmat(vid), n: o.docs.length + o.facts.length }));
-        if (q) entries = entries.filter(e => (e.immat + ' ' + (e.veh ? (e.veh.marque + ' ' + e.veh.modele) : '')).toLowerCase().includes(q));
+        const chauffeurOf = veh => (veh && veh.chauffeur && String(veh.chauffeur).trim() && String(veh.chauffeur).trim() !== '—') ? String(veh.chauffeur).trim() : '';
+        let entries = Object.entries(byVeh).map(([vid, o]) => ({ vid, o, veh: vehById(vid), immat: folderImmat(vid), ch: chauffeurOf(vehById(vid)), n: o.docs.length + o.facts.length }));
+        // Recherche : plaque + marque/modèle + PRÉNOM du conducteur (pour retrouver un dossier par son conducteur).
+        if (q) entries = entries.filter(e => (e.immat + ' ' + (e.veh ? (e.veh.marque + ' ' + e.veh.modele) : '') + ' ' + e.ch).toLowerCase().includes(q));
         entries.sort((a, b) => ((a.vid === '__noplate__') - (b.vid === '__noplate__')) || (a.immat || '').localeCompare(b.immat || ''));
         if (!entries.length) { box.innerHTML = '<div class="card">' + (FP.emptyHTML ? FP.emptyHTML({ icon: 'folder-open', title: 'Aucun document', text: 'Utilise « Importer un document » ou « Importer une facture » pour commencer.' }) : 'Aucun document.') + '</div>'; try { if (window.lucide) lucide.createIcons(); } catch (e) {} return; }
         box.innerHTML = `<div style="${GRID}">` + entries.map(e => {
@@ -2014,6 +2016,7 @@
             <i data-lucide="${e.vid === '__noplate__' ? 'folder-search' : 'folder'}" style="width:40px;height:40px;color:${e.vid === '__noplate__' ? '#94a3b8' : '#F59E0B'}"></i>
             <div style="font-family:monospace;font-weight:800;color:#0f1e3d">${escapeHtml(e.immat)}</div>
             <div style="font-size:11px;color:#64748b">${e.vid === '__noplate__' ? 'Non rattachées à un véhicule' : (e.veh ? escapeHtml(e.veh.marque + ' ' + e.veh.modele) : '—')}</div>
+            ${e.ch ? `<div style="font-size:11px;color:#F97316;font-weight:600">${escapeHtml(e.ch)}</div>` : ''}
             <div style="font-size:11px;color:#94a3b8">${e.n} doc${e.n > 1 ? 's' : ''}</div>
           </button>`;
         }).join('') + '</div>';
