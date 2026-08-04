@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803t">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803t"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260804a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803t">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260804a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -126,6 +126,7 @@
             <span class="text-xs font-semibold" style="color:#8598B4">Filtrer par loueur :</span>
             <select id="leasing-loueur-filter" class="field-input !py-1 !text-sm" style="width:auto;min-width:170px"></select>
           </span>
+          <button id="cmp-open" type="button" class="btn text-sm" style="background:#fff;color:#0B1E3D;border:none;font-weight:700" title="Comparer 2 devis de leasing ou 2 offres d'assurance et savoir lequel choisir"><i data-lucide="scale" class="w-4 h-4"></i> Comparer des devis</button>
           <button id="loueur-add-quick" type="button" class="btn text-sm" style="background:var(--fp-accent);color:#fff;border:none;font-weight:600"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un loueur</button>
         </div>
       </div>
@@ -351,6 +352,43 @@
 
   </main>
 
+  <!-- ============ Comparateur de devis (leasing / assurance) ============ -->
+  <style>
+    #cmp-modal { background:rgba(15,23,42,.5); }
+    #cmp-modal .cmp-card { background:#fff; border-radius:1rem; width:min(1080px,96vw); max-height:92vh; overflow:auto; box-shadow:0 30px 80px rgba(2,6,23,.4); }
+    .cmp-tabbtn { padding:.55rem 1.1rem; border-radius:.7rem; font-weight:700; font-size:.9rem; border:1px solid var(--fp-border); background:#fff; color:#475569; cursor:pointer; }
+    .cmp-tabbtn.on { background:#0B1E3D; color:#fff; border-color:#0B1E3D; }
+    .cmp-grid { display:grid; grid-template-columns:220px repeat(var(--cols,2),1fr); gap:0; font-size:.86rem; }
+    .cmp-grid > div { padding:.55rem .7rem; border-bottom:1px solid #eef1f6; }
+    .cmp-grid .cmp-rowlabel { color:#475569; font-weight:600; background:#fafbfd; }
+    .cmp-grid .cmp-head { font-weight:800; color:#0B1E3D; border-bottom:2px solid #e2e8f0; }
+    .cmp-grid input { width:100%; border:1px solid var(--fp-border); border-radius:.5rem; padding:.4rem .55rem; font-size:.85rem; }
+    .cmp-grid input[type=checkbox]{ width:auto; }
+    .cmp-win { background:#ecfdf5 !important; box-shadow:inset 3px 0 0 #10b981; }
+    .cmp-verdict { background:linear-gradient(135deg,#0B1E3D,#123a63); color:#EAF1FB; border-radius:.9rem; padding:1.1rem 1.25rem; margin-top:1rem; }
+    .cmp-verdict b { color:#fff; }
+    .cmp-badge { display:inline-block; background:#10b981; color:#fff; font-size:.68rem; font-weight:800; padding:2px 8px; border-radius:999px; margin-left:.4rem; vertical-align:middle; }
+  </style>
+  <div id="cmp-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-3">
+    <div class="cmp-card p-5 sm:p-6">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <h2 class="text-xl font-extrabold text-slate-900 flex items-center gap-2"><i data-lucide="scale" class="w-5 h-5" style="color:var(--fp-accent)"></i> Comparateur de devis</h2>
+        <button id="cmp-close" type="button" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="flex gap-2 mb-4">
+        <button type="button" class="cmp-tabbtn on" data-cmp-tab="leasing"><i data-lucide="banknote" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Leasing</button>
+        <button type="button" class="cmp-tabbtn" data-cmp-tab="assurance"><i data-lucide="shield-check" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Assurance</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-3" id="cmp-hint">Saisis chaque devis dans une colonne. Parc Pilot calcule le <b>coût total réel</b> et te dit lequel choisir.</p>
+      <div class="flex items-center gap-2 mb-3">
+        <button id="cmp-addcol" type="button" class="btn btn-outline text-xs"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter un devis</button>
+        <button id="cmp-reset" type="button" class="btn btn-outline text-xs"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Réinitialiser</button>
+      </div>
+      <div style="overflow-x:auto"><div id="cmp-table" class="cmp-grid"></div></div>
+      <div id="cmp-verdict" class="cmp-verdict" style="display:none"></div>
+    </div>
+  </div>
+
   <!-- Modal import loyers depuis facture mensuelle du loueur -->
   <div id="leasimport-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
     <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-xl">
@@ -494,12 +532,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803t"></script>
-<script src="../assets/js/supabase-client.js?v=20260803t"></script>
-<script src="../assets/js/data.js?v=20260803t"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803t"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803t"></script>
-<script src="../assets/js/app.js?v=20260803t"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260804a"></script>
+<script src="../assets/js/supabase-client.js?v=20260804a"></script>
+<script src="../assets/js/data.js?v=20260804a"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260804a"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260804a"></script>
+<script src="../assets/js/app.js?v=20260804a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -2080,6 +2118,215 @@
     rebuildLeasingData();
     renderKPIs(); renderAssurance(); renderLeasing(); renderLocalease(); renderCartes();
   });
+</script>
+
+<!-- ============ Comparateur de devis : logique ============ -->
+<script>
+(function () {
+  const modal = document.getElementById('cmp-modal');
+  const table = document.getElementById('cmp-table');
+  const verdictBox = document.getElementById('cmp-verdict');
+  const hint = document.getElementById('cmp-hint');
+  if (!modal || !table) return;
+  const euro = (n) => (window.FP && FP.euro) ? FP.euro(n) : (Math.round(Number(n) || 0).toLocaleString('fr-FR') + ' €');
+  const esc = (s) => (window.FP && FP.esc) ? FP.esc(s) : String(s == null ? '' : s);
+  const num = (v) => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.').replace(/[^0-9.\-]/g, '')); return isNaN(n) ? 0 : n; };
+
+  // Définition des lignes de chaque comparateur.
+  // type: 'text' | 'num' | 'check' ; sur num : unit affiché ; les 'sum'/'calc' sont dérivés.
+  const SCHEMAS = {
+    leasing: {
+      cols: 2,
+      fields: [
+        { key: 'nom',    label: 'Loueur / offre',            type: 'text', ph: 'ex. Arval, ALD…' },
+        { key: 'loyer',  label: 'Loyer mensuel TTC',         type: 'num',  unit: '€/mois' },
+        { key: 'duree',  label: 'Durée',                     type: 'num',  unit: 'mois' },
+        { key: 'apport', label: '1er loyer / apport',        type: 'num',  unit: '€' },
+        { key: 'frais',  label: 'Frais de dossier',          type: 'num',  unit: '€' },
+        { key: 'kman',   label: 'Km inclus / an',            type: 'num',  unit: 'km' },
+        { key: 'kmsup',  label: 'Prix du km supplémentaire', type: 'num',  unit: '€/km' },
+        { key: 'entretien', label: 'Entretien inclus',       type: 'check' },
+        { key: 'pneus',  label: 'Pneus inclus',              type: 'check' },
+        { key: 'assist', label: 'Assistance / véhicule relais', type: 'check' },
+      ],
+      compute(c) {
+        const total = num(c.apport) + num(c.loyer) * num(c.duree) + num(c.frais);
+        const anneesDuree = num(c.duree) / 12;
+        const kmTotal = num(c.kman) * anneesDuree;
+        const parKm = kmTotal > 0 ? total / kmTotal : 0;
+        return { total, parMois: num(c.duree) > 0 ? total / num(c.duree) : 0, kmTotal, parKm };
+      },
+      rows: [
+        { label: 'Coût total sur la durée', get: (r) => euro(r.total), winner: 'min', val: (r) => r.total, key: 'total' },
+        { label: 'Coût réel par mois',      get: (r) => euro(r.parMois), val: (r) => r.parMois },
+        { label: 'Km inclus au total',      get: (r, c) => r.kmTotal ? Math.round(r.kmTotal).toLocaleString('fr-FR') + ' km' : '—', val: (r) => r.kmTotal, winner: 'max' },
+        { label: 'Coût au km (tout compris)', get: (r) => r.parKm ? r.parKm.toFixed(3).replace('.', ',') + ' €/km' : '—', val: (r) => r.parKm, winner: 'min' },
+      ],
+    },
+    assurance: {
+      cols: 2,
+      fields: [
+        { key: 'nom',      label: 'Assureur / offre',        type: 'text', ph: 'ex. AXA, Swisslife…' },
+        { key: 'prime',    label: 'Prime annuelle TTC',      type: 'num',  unit: '€/an' },
+        { key: 'nbveh',    label: 'Véhicules couverts',      type: 'num',  unit: 'véh.' },
+        { key: 'franchise',label: 'Franchise dommages',      type: 'num',  unit: '€' },
+        { key: 'trisques', label: 'Tous risques',            type: 'check' },
+        { key: 'bris',     label: 'Bris de glace',           type: 'check' },
+        { key: 'vol',      label: 'Vol / incendie',          type: 'check' },
+        { key: 'assist0',  label: 'Assistance 0 km',         type: 'check' },
+        { key: 'relais',   label: 'Véhicule de remplacement',type: 'check' },
+        { key: 'juridique',label: 'Protection juridique',    type: 'check' },
+        { key: 'conduct',  label: 'Garantie du conducteur',  type: 'check' },
+      ],
+      compute(c) {
+        const nb = num(c.nbveh) || 1;
+        const garanties = ['trisques', 'bris', 'vol', 'assist0', 'relais', 'juridique', 'conduct'].filter(k => c[k]).length;
+        return { prime: num(c.prime), parVeh: num(c.prime) / nb, garanties, franchise: num(c.franchise) };
+      },
+      rows: [
+        { label: 'Prime annuelle',        get: (r) => euro(r.prime), val: (r) => r.prime, winner: 'min', key: 'prime' },
+        { label: 'Coût par véhicule / an', get: (r) => euro(r.parVeh), val: (r) => r.parVeh, winner: 'min' },
+        { label: 'Franchise',             get: (r) => r.franchise ? euro(r.franchise) : '—', val: (r) => r.franchise, winner: 'min' },
+        { label: 'Garanties incluses',    get: (r) => r.garanties + ' / 7', val: (r) => r.garanties, winner: 'max' },
+      ],
+    },
+  };
+
+  let mode = 'leasing';
+  const data = { leasing: [{}, {}], assurance: [{}, {}] };
+
+  function build() {
+    const sch = SCHEMAS[mode];
+    const cols = data[mode];
+    table.style.setProperty('--cols', cols.length);
+    let html = '';
+    // Ligne d'en-tête
+    html += '<div class="cmp-rowlabel cmp-head"></div>';
+    cols.forEach((c, i) => {
+      html += '<div class="cmp-head" style="position:relative">Devis ' + (i + 1) +
+        (cols.length > 2 ? ' <button type="button" data-cmp-del="' + i + '" title="Retirer" style="position:absolute;right:.4rem;top:.35rem;color:#94a3b8;font-weight:900;cursor:pointer">×</button>' : '') +
+        '</div>';
+    });
+    // Champs de saisie
+    sch.fields.forEach(f => {
+      html += '<div class="cmp-rowlabel">' + esc(f.label) + (f.unit ? ' <span style="color:#94a3b8;font-weight:400">(' + esc(f.unit) + ')</span>' : '') + '</div>';
+      cols.forEach((c, i) => {
+        if (f.type === 'check') {
+          html += '<div style="text-align:center"><input type="checkbox" data-cmp-i="' + i + '" data-cmp-k="' + f.key + '"' + (c[f.key] ? ' checked' : '') + '></div>';
+        } else {
+          html += '<div><input type="text" inputmode="' + (f.type === 'num' ? 'decimal' : 'text') + '" data-cmp-i="' + i + '" data-cmp-k="' + f.key + '" value="' + esc(c[f.key] == null ? '' : c[f.key]) + '"' + (f.ph ? ' placeholder="' + esc(f.ph) + '"' : '') + '></div>';
+        }
+      });
+    });
+    // Lignes calculées
+    const computed = cols.map(c => sch.compute(c));
+    sch.rows.forEach(row => {
+      const vals = computed.map(r => row.val ? row.val(r) : 0);
+      let bestIdx = -1;
+      if (row.winner && vals.some(v => v > 0)) {
+        const nonZero = vals.map((v, i) => ({ v, i })).filter(o => o.v > 0);
+        if (nonZero.length) {
+          bestIdx = (row.winner === 'max')
+            ? nonZero.reduce((a, b) => b.v > a.v ? b : a).i
+            : nonZero.reduce((a, b) => b.v < a.v ? b : a).i;
+        }
+      }
+      html += '<div class="cmp-rowlabel" style="font-weight:700;color:#0B1E3D">' + esc(row.label) + '</div>';
+      computed.forEach((r, i) => {
+        html += '<div class="' + (i === bestIdx ? 'cmp-win' : '') + '" style="font-weight:700">' + row.get(r, cols[i]) + (i === bestIdx ? ' <span class="cmp-badge">✓ mieux</span>' : '') + '</div>';
+      });
+    });
+    table.innerHTML = html;
+    renderVerdict(cols, computed);
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function renderVerdict(cols, computed) {
+    const named = cols.map((c, i) => ({ c, r: computed[i], i })).filter(o => (o.c.nom || '').trim() || primaryVal(o.r) > 0);
+    if (named.length < 2) { verdictBox.style.display = 'none'; return; }
+    const key = mode === 'leasing' ? 'total' : 'prime';
+    const withCost = named.filter(o => primaryVal(o.r) > 0);
+    if (withCost.length < 2) { verdictBox.style.display = 'none'; return; }
+    const cheapest = withCost.reduce((a, b) => primaryVal(b.r) < primaryVal(a.r) ? b : a);
+    const dearest = withCost.reduce((a, b) => primaryVal(b.r) > primaryVal(a.r) ? b : a);
+    const nom = (o) => (o.c.nom || '').trim() || ('Devis ' + (o.i + 1));
+    const ecart = primaryVal(dearest.r) - primaryVal(cheapest.r);
+    let html = '';
+    if (mode === 'leasing') {
+      html = '<b>💡 Le moins cher : ' + esc(nom(cheapest)) + '</b> — coût total ' + euro(cheapest.r.total) +
+        (ecart > 0 ? ' (soit ' + euro(ecart) + ' de moins que ' + esc(nom(dearest)) + ' sur toute la durée)' : '') + '.';
+      // Nuances : km inclus + services
+      const notes = [];
+      const bestKm = withCost.reduce((a, b) => b.r.kmTotal > a.r.kmTotal ? b : a);
+      if (bestKm.i !== cheapest.i && bestKm.r.kmTotal > cheapest.r.kmTotal) {
+        notes.push('⚠️ ' + esc(nom(bestKm)) + ' inclut plus de km (' + Math.round(bestKm.r.kmTotal).toLocaleString('fr-FR') + ' vs ' + Math.round(cheapest.r.kmTotal).toLocaleString('fr-FR') + ') : compare le <b>coût au km</b> si tu roules beaucoup.');
+      }
+      const svc = (o) => ['entretien', 'pneus', 'assist'].filter(k => o.c[k]).length;
+      if (svc(dearest) > svc(cheapest)) notes.push('⚠️ ' + esc(nom(dearest)) + ' inclut plus de services (entretien / pneus / assistance) : à prestations égales l\'écart de prix se réduit.');
+      if (notes.length) html += '<div style="margin-top:.6rem;font-size:.85rem;line-height:1.5;color:#CFE0F7">' + notes.join('<br>') + '</div>';
+    } else {
+      html = '<b>💡 Le moins cher : ' + esc(nom(cheapest)) + '</b> — ' + euro(cheapest.r.prime) + '/an' +
+        (ecart > 0 ? ' (' + euro(ecart) + ' de moins que ' + esc(nom(dearest)) + ')' : '') + '.';
+      const notes = [];
+      const bestCov = withCost.reduce((a, b) => b.r.garanties > a.r.garanties ? b : a);
+      if (bestCov.i !== cheapest.i && bestCov.r.garanties > cheapest.r.garanties) {
+        notes.push('⚠️ ' + esc(nom(bestCov)) + ' couvre plus de garanties (' + bestCov.r.garanties + '/7 vs ' + cheapest.r.garanties + '/7) : le moins cher n\'est pas forcément le mieux couvert.');
+      }
+      if (cheapest.r.franchise > 0 && dearest.r.franchise >= 0 && cheapest.r.franchise > dearest.r.franchise) {
+        notes.push('⚠️ ' + esc(nom(cheapest)) + ' a une franchise plus élevée (' + euro(cheapest.r.franchise) + ') : tu paieras plus en cas de sinistre.');
+      }
+      if (notes.length) html += '<div style="margin-top:.6rem;font-size:.85rem;line-height:1.5;color:#CFE0F7">' + notes.join('<br>') + '</div>';
+    }
+    verdictBox.innerHTML = html;
+    verdictBox.style.display = 'block';
+  }
+  function primaryVal(r) { return mode === 'leasing' ? r.total : r.prime; }
+
+  // Événements
+  table.addEventListener('input', (e) => {
+    const el = e.target.closest('[data-cmp-i]'); if (!el) return;
+    const i = +el.dataset.cmpI, k = el.dataset.cmpK;
+    data[mode][i][k] = (el.type === 'checkbox') ? el.checked : el.value;
+    refreshComputed(); // rebuild lignes calculées + verdict, focus conservé
+  });
+  table.addEventListener('change', (e) => {
+    if (e.target.type === 'checkbox') refreshComputed();
+  });
+  table.addEventListener('click', (e) => {
+    const del = e.target.closest('[data-cmp-del]'); if (!del) return;
+    const i = +del.dataset.cmpDel;
+    if (data[mode].length <= 2) return;
+    data[mode].splice(i, 1); build();
+  });
+  function refreshComputed() {
+    const sch = SCHEMAS[mode], cols = data[mode];
+    const computed = cols.map(c => sch.compute(c));
+    // Reconstruit uniquement le bloc des lignes calculées en re-buildant tout mais en gardant les valeurs :
+    // simple et fiable — on rebuild tout sauf qu'on re-focus l'élément courant.
+    const active = document.activeElement;
+    const ai = active && active.dataset ? active.dataset.cmpI : null;
+    const ak = active && active.dataset ? active.dataset.cmpK : null;
+    build();
+    if (ai != null && ak) { const back = table.querySelector('[data-cmp-i="' + ai + '"][data-cmp-k="' + ak + '"]'); if (back && back.focus) { back.focus(); if (back.setSelectionRange && back.value) { try { back.setSelectionRange(back.value.length, back.value.length); } catch (_) {} } } }
+  }
+
+  document.querySelectorAll('[data-cmp-tab]').forEach(b => b.addEventListener('click', () => {
+    mode = b.dataset.cmpTab;
+    document.querySelectorAll('[data-cmp-tab]').forEach(x => x.classList.toggle('on', x === b));
+    hint.innerHTML = mode === 'leasing'
+      ? 'Saisis chaque devis de leasing dans une colonne. Parc Pilot calcule le <b>coût total réel</b> (loyers + apport + frais) et le <b>coût au km</b>, puis te dit lequel choisir.'
+      : 'Saisis chaque offre d\'assurance. Parc Pilot compare la <b>prime</b>, la <b>franchise</b> et les <b>garanties</b> — le moins cher n\'est pas toujours le mieux couvert.';
+    build();
+  }));
+  document.getElementById('cmp-addcol').addEventListener('click', () => { if (data[mode].length < 4) { data[mode].push({}); build(); } });
+  document.getElementById('cmp-reset').addEventListener('click', () => { data[mode] = [{}, {}]; build(); });
+  function openM() { modal.classList.remove('hidden'); modal.classList.add('flex'); build(); }
+  function closeM() { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+  document.getElementById('cmp-open').addEventListener('click', openM);
+  document.getElementById('cmp-close').addEventListener('click', closeM);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeM(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeM(); });
+})();
 </script>
 </body>
 </html>

@@ -4326,6 +4326,146 @@ FP.scanIA = async function (file, docType, promptOverride, opts) {
     return null;
   }
 };
+// === AGENT IA (tableau de bord) ============================================
+// Construit un résumé COMPACT de la flotte (chiffres agrégés + listes bornées)
+// à partir de FP_DATA et des helpers canoniques. Ce contexte est envoyé à l'IA
+// pour qu'elle réponde aux questions de l'utilisateur AVEC ses vraies données.
+// ⚠️ Tourne côté client, après login (données déjà chargées) — ce n'est PAS data.js
+// (le public) : on peut donc utiliser les vraies valeurs d'exploitation. On évite
+// quand même les PII lourdes inutiles (n° de permis, adresses) pour rester sobre.
+FP.aiContext = function (data) {
+  data = data || (window.FP_DATA || {});
+  const euro = (n) => (FP.euro ? FP.euro(n) : (Math.round(Number(n) || 0) + ' €'));
+  const lines = [];
+  let soc = 'PXP';
+  try { soc = localStorage.getItem('fp_societe') || 'PXP'; if (soc === '__all__') soc = 'Toutes sociétés'; } catch (e) {}
+  const now = new Date();
+  const ym = now.toISOString().slice(0, 7);
+  lines.push('SOCIÉTÉ : ' + soc);
+  lines.push('DATE DU JOUR : ' + now.toISOString().slice(0, 10));
+
+  const vehs = (data.vehicules || []);
+  const actifs = vehs.filter(v => !FP.estVendu(v));
+  const kmTotal = actifs.reduce((s, v) => s + (Number(v.km) || 0), 0);
+  const valeur = actifs.reduce((s, v) => s + (Number(v.valeurAchat) || Number(v.prix) || 0), 0);
+  lines.push('');
+  lines.push('=== PARC ===');
+  lines.push('Véhicules dans la flotte active : ' + actifs.length + ' (total possédés : ' + vehs.length + ')');
+  lines.push('Kilométrage total : ' + (FP.num ? FP.num(kmTotal) : kmTotal) + ' km');
+  if (valeur) lines.push('Valeur estimée du parc : ' + euro(valeur));
+  // Liste des véhicules (bornée) : immat, marque/modèle, km, statut, chauffeur, prochain CT
+  lines.push('Détail des véhicules :');
+  actifs.slice(0, 80).forEach(v => {
+    const parts = [
+      (v.immat || '?'),
+      [v.marque, v.modele].filter(Boolean).join(' '),
+    ];
+    if (v.km) parts.push((FP.num ? FP.num(v.km) : v.km) + ' km');
+    if (v.chauffeur) parts.push('conducteur ' + v.chauffeur);
+    if (v.pool) parts.push('groupe ' + v.pool);
+    if (v.prochainCT && v.prochainCT !== '—') parts.push('CT ' + v.prochainCT);
+    lines.push('- ' + parts.join(' · '));
+  });
+
+  // Amendes à payer
+  const amendes = (data.amendes || []);
+  const aPayer = amendes.filter(a => FP.estAPayer && FP.estAPayer(a));
+  const duTotal = aPayer.reduce((s, a) => s + (FP.montantDu ? FP.montantDu(a) : (Number(a.montant) || 0)), 0);
+  lines.push('');
+  lines.push('=== AMENDES ===');
+  lines.push('Amendes à payer : ' + aPayer.length + ' · total dû ' + euro(duTotal));
+  aPayer.slice()
+    .sort((a, b) => (FP.montantDu(b) - FP.montantDu(a)))
+    .slice(0, 15)
+    .forEach(a => {
+      const who = a.prenom || a.conducteur || '';
+      lines.push('- ' + [a.immat, who, a.date, euro(FP.montantDu(a))].filter(Boolean).join(' · '));
+    });
+
+  // Coûts (mois courant + 12 mois glissants)
+  lines.push('');
+  lines.push('=== COÛTS ===');
+  try { lines.push('Coût du mois en cours (' + ym + ') : ' + euro(FP.coutMois(data, ym))); } catch (e) {}
+  try {
+    let tot12 = 0;
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      tot12 += FP.coutMois(data, d.toISOString().slice(0, 7));
+    }
+    lines.push('Coût d\'exploitation sur 12 mois glissants : ' + euro(tot12));
+  } catch (e) {}
+
+  // Échéances à venir (90 j)
+  try {
+    const ech = (FP.buildEcheances ? FP.buildEcheances(data) : []).filter(e => {
+      const diff = Math.ceil((new Date(e.date) - now) / 86400000);
+      return diff <= 90;
+    });
+    lines.push('');
+    lines.push('=== ÉCHÉANCES (90 prochains jours) ===');
+    if (!ech.length) lines.push('Aucune échéance dans les 90 jours.');
+    ech.slice(0, 25).forEach(e => lines.push('- ' + e.date + ' · ' + e.categorie + ' · ' + (e.label || e.detail || '')));
+  } catch (e) {}
+
+  // Alertes en cours (résumé)
+  try {
+    const al = (FP.buildAlertes ? FP.buildAlertes(data) : []);
+    const nb = { danger: 0, warn: 0, info: 0 };
+    al.forEach(a => { if (nb[a.niveau] != null) nb[a.niveau]++; });
+    lines.push('');
+    lines.push('=== ALERTES ===');
+    lines.push('Urgentes : ' + nb.danger + ' · à prévoir : ' + nb.warn + ' · info : ' + nb.info);
+    al.slice(0, 12).forEach(a => lines.push('- [' + a.niveau + '] ' + a.categorie + ' : ' + a.message + ' (' + (a.detail || '') + ')'));
+  } catch (e) {}
+
+  return lines.join('\n');
+};
+
+// Pose une question en langage naturel à l'IA, en s'appuyant sur le résumé de la
+// flotte (FP.aiContext). Astuce : le relais « scan-doc » attend une IMAGE ; on lui
+// envoie donc un PNG 1×1 transparent + tout le raisonnement dans le prompt texte,
+// sans rien changer côté serveur. Renvoie une string (la réponse) ou null.
+FP._AI_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+FP.askIA = async function (question, opts) {
+  opts = opts || {};
+  question = String(question || '').trim();
+  if (!question) return null;
+  if (!(FP.supabase && FP.supabase.functions)) return null;
+  const ctx = opts.context || FP.aiContext();
+  const prompt = [
+    'Tu es l\'assistant de gestion de flotte « Parc Pilot ». Tu réponds à la question du',
+    'gestionnaire en te basant UNIQUEMENT sur les données de sa flotte fournies ci-dessous.',
+    'Réponds en FRANÇAIS, de façon claire, courte et directe (l\'utilisateur n\'est pas informaticien).',
+    'Donne des chiffres précis quand c\'est pertinent. Si l\'information demandée n\'est PAS dans les',
+    'données, dis-le simplement (« Je n\'ai pas cette information dans tes données ») — n\'INVENTE JAMAIS',
+    'un chiffre, un véhicule, un conducteur ou un montant. N\'ignore pas l\'image jointe : elle est vide',
+    'volontairement, tout est dans ce texte.',
+    '',
+    '===== DONNÉES DE LA FLOTTE =====',
+    ctx,
+    '===== FIN DES DONNÉES =====',
+    '',
+    'QUESTION DU GESTIONNAIRE : ' + question,
+    '',
+    'Réponds STRICTEMENT en JSON, sans texte autour, au format :',
+    '{ "reponse": "<ta réponse en français>" }',
+  ].join('\n');
+  const payload = { fileBase64: FP._AI_PIXEL, mediaType: 'image/png', docType: 'question', prompt, maxTokens: opts.maxTokens || 900 };
+  const names = [...new Set([FP._scanFn, 'Scan-doc', 'scan-doc'].filter(Boolean))];
+  for (const name of names) {
+    try {
+      const { data, error } = await FP.supabase.functions.invoke(name, { body: payload });
+      if (!error && data && data.ok && data.fields) {
+        FP._scanFn = name;
+        const f = data.fields;
+        if (typeof f === 'string') return f;
+        return f.reponse || f.answer || f.text || (typeof f === 'object' ? JSON.stringify(f) : String(f));
+      }
+    } catch (_) { /* essaie le nom suivant */ }
+  }
+  return null;
+};
+
 FP.uploadScan = async function (file, folder, opts) {
   opts = opts || {};
   if (!FP.supabase || !FP.supabase.storage) throw new Error('Stockage indisponible (Supabase non chargé).');
