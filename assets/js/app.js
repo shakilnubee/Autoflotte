@@ -2985,8 +2985,8 @@ FP.buildAlertes = (data) => {
         (since >= periodeJ * 1.5 ? relKmWarn : relKmInfo).push({ label: `${veh} — dernier il y a ${since} j`, target: tgt });
       }
     });
-    if (relKmWarn.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relKmWarn.length} relevé${relKmWarn.length > 1 ? 's' : ''} km à faire`, detail: 'Kilométrage à mettre à jour (échéance dépassée).', sort: 480, muteKey: 'relevekm-warn', target: 'notifications.html', vehicules: relKmWarn });
-    if (relKmInfo.length) out.push({ niveau: 'info', categorie: 'Relevé km', message: `${relKmInfo.length} relevé${relKmInfo.length > 1 ? 's' : ''} km à renseigner`, detail: 'Kilométrage jamais saisi ou à rafraîchir.', sort: 1000, muteKey: 'relevekm-info', target: 'notifications.html', vehicules: relKmInfo });
+    if (relKmWarn.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relKmWarn.length} relevé${relKmWarn.length > 1 ? 's' : ''} km à faire`, detail: 'Kilométrage à mettre à jour (échéance dépassée).', sort: 480, muteKey: 'relevekm-warn', vehicules: relKmWarn });
+    if (relKmInfo.length) out.push({ niveau: 'info', categorie: 'Relevé km', message: `${relKmInfo.length} relevé${relKmInfo.length > 1 ? 's' : ''} km à renseigner`, detail: 'Kilométrage jamais saisi ou à rafraîchir.', sort: 1000, muteKey: 'relevekm-info', vehicules: relKmInfo });
   }
 
   // --- Amendes à payer ---
