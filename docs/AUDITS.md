@@ -112,10 +112,45 @@ entité liée). Cinq sous-auditeurs, en parallèle :
   clés de cache suffixées par société (aucune fuite) ; tombstone société ; gardes de rôle
   **fail-closed** quand `FP.profile` non résolu ; pas de bleed PXP à la 1re peinture.
 
+## 14. Source unique par CONCEPT (6 sous-auditeurs en parallèle)
+Pour CHAQUE concept ci-dessous : le lit-on / calcule-t-on PARTOUT via le même helper
+`FP.*` ? Une réimplémentation à la main (même « équivalente ») est un futur bug.
+Sortie = `fichier:ligne` + snippet + helper attendu, **vérifié dans le code réel**.
+- **14a. Statut véhicule** — `FP.estVendu` / `FP.horsFlotte` (jamais `statut === 'vendu'`,
+  jamais un regex `/vendu/i` qui matche « **in**vendu », jamais une liste locale de statuts
+  inactifs qui oublie « hors-service »).
+- **14b. Amendes** — montant = `FP.montantDu` (jamais `a.montant` brut dans un total, jamais
+  `Math.max`) ; statut via `FP.estAPayer`/`FP.estPayee` (jamais `=== 'payée'`/`'à payer'`) ;
+  prénom via `FP.normPrenom`.
+- **14c. Plaques & factures/coûts** — `FP.normImmat` (⚠️ piège : une normalisation « espaces
+  seulement » `replace(/\s/g,'')` NE retire PAS les tirets → une plaque `AB-123-CD` ne
+  retrouve pas sa prime/ses factures) ; dédup via `FP.dedupeFactures` ; coût via
+  `FP.coutMois`/`FP.coutFactureExploit` (graphe ET KPI dédoublonnés à l'identique).
+- **14d. Leasing / loueur / TVS / assurance** — `FP.leasingContrat`/`FP.leasingInfo` (jamais
+  `FP.LEASING_CONTRATS[immat]` brut → fuite multi-sociétés) ; `FP.loueurOf` (pas de comparaison
+  brute du champ propriétaire) ; `FP.tvsDetail` ; prime d'un véhicule **vendu** exclue partout
+  (Contrats, Budget, Statistiques/TCO — même règle).
+- **14e. Échéances / jours / société / checklist** — `FP.joursRestants` (minuit→minuit ; jamais
+  `(new Date(x) - new Date())/86400000` qui prend l'heure courante → décalage d'un jour) ;
+  couleur/urgence = `niveau` de `FP.buildEcheances` (même barème `<30`/`<60` sur toutes les pages :
+  Alertes, Renouvellements, calendrier, écran) ; `FP.ctIgnored`/`FP.concerneAntiPollution`
+  respectés partout (pas de « CT dépassé » sur un véhicule étranger exempté) ; checklist
+  « À compléter » qui teste la MÊME source que l'écran qui affiche la donnée.
+- **14f. Sinistres / conducteurs / emprunts** — statut sinistre via `FP.sinistreStatutOf`
+  (résout la clé de groupe PUIS l'id de facture — sinon le statut d'un incident **regroupé** est
+  invisible aux alertes) ; « reste à charge » via `FP.coutSinistre`/`FP.resteChargeSinistre`
+  (0 si Remboursé/PEC, jamais le brut) ; emprunt « en retard » via `FP.empEnRetard` (règle
+  > 2 jours, jamais réimplémentée) ; identité conducteur via `FP.normPrenom`.
+
 ---
 
 *Historique : batterie constituée les 2026-07-30 après plusieurs incohérences
 « même concept lu/calculé différemment selon l'écran ». Section 13 (parcours client)
 ajoutée le 2026-08-01 après l'audit qui a créé les helpers `FP.applyFactureToVehicule`,
 `FP.recomputeVehiculeFromFactures`, `FP.estEntretien`, `FP.estPayee`, `FP.kmActuel`,
-`FP.empEnCours`, `FP.normNomComplet`. Voir la règle « une seule source de vérité » dans `CLAUDE.md`.*
+`FP.empEnCours`, `FP.normNomComplet`. Voir la règle « une seule source de vérité » dans `CLAUDE.md`.
+Section 14 (source unique par concept, 6 sous-auditeurs) ajoutée le 2026-08-04 après l'audit
+qui a créé `FP.sinistreStatutOf`, `FP.empJoursDepuis` (et réécrit `FP.empEnRetard` sur la règle
+« > 2 jours ») et corrigé : normalisations plaque « espaces seulement » (tirets ignorés),
+graphe de coûts non dédoublonné vs KPI, prime d'assurance d'un véhicule vendu comptée dans le TCO,
+statut sinistre invisible aux alertes sur un incident regroupé, fuite leasing multi-sociétés.*
