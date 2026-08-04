@@ -2963,25 +2963,30 @@ FP.buildAlertes = (data) => {
         sinceEch = Math.floor((today - echeance) / 86400000);
       }
     }
+    // ⚠️ Liste potentiellement LONGUE (toute la flotte) → on REGROUPE en une seule alerte
+    // dépliable (champ `vehicules` rendu en <details> dans notifications.html), au lieu d'une
+    // carte par véhicule. Deux paquets par urgence : « à faire » (warn) et « à renseigner » (info).
+    const relKmWarn = [], relKmInfo = [];
     (data.vehicules || []).forEach(v => {
       if (horsFlotte(v)) return;
       const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
       const tgt = 'vehicules.html?veh=' + v.id;
-      const mk = 'relevekm|' + v.id; // ignore PAR VÉHICULE
       const last = kmDates[v.immat] ? new Date(kmDates[v.immat]) : null;
       if (debutOk) {
         if (!echeance) return;                       // cycle pas encore commencé
         if (last && last >= echeance) return;        // relevé déjà fait après la dernière échéance
-        out.push({ niveau: sinceEch >= periodeJ * 0.5 ? 'warn' : 'info', categorie: 'Relevé km', message: `Relevé km à faire (échéance il y a ${sinceEch} j)`, detail: veh, sort: -sinceEch, target: tgt, muteKey: mk, vehLabel: veh });
+        (sinceEch >= periodeJ * 0.5 ? relKmWarn : relKmInfo).push({ label: `${veh} — échéance il y a ${sinceEch} j`, target: tgt });
         return;
       }
       // Mode par véhicule (pas de date d'ancrage)
-      if (!last) { out.push({ niveau: 'info', categorie: 'Relevé km', message: 'Relevé km jamais renseigné', detail: veh, sort: 1000, target: tgt, muteKey: mk, vehLabel: veh }); return; }
+      if (!last) { relKmInfo.push({ label: `${veh} — jamais renseigné`, target: tgt }); return; }
       const since = Math.floor((today - last) / 86400000);
       if (since >= periodeJ) {
-        out.push({ niveau: since >= periodeJ * 1.5 ? 'warn' : 'info', categorie: 'Relevé km', message: `Relevé km à faire (dernier il y a ${since} j)`, detail: veh, sort: periodeJ - since, target: tgt, muteKey: mk, vehLabel: veh });
+        (since >= periodeJ * 1.5 ? relKmWarn : relKmInfo).push({ label: `${veh} — dernier il y a ${since} j`, target: tgt });
       }
     });
+    if (relKmWarn.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relKmWarn.length} relevé${relKmWarn.length > 1 ? 's' : ''} km à faire`, detail: 'Kilométrage à mettre à jour (échéance dépassée).', sort: 480, muteKey: 'relevekm-warn', target: 'notifications.html', vehicules: relKmWarn });
+    if (relKmInfo.length) out.push({ niveau: 'info', categorie: 'Relevé km', message: `${relKmInfo.length} relevé${relKmInfo.length > 1 ? 's' : ''} km à renseigner`, detail: 'Kilométrage jamais saisi ou à rafraîchir.', sort: 1000, muteKey: 'relevekm-info', target: 'notifications.html', vehicules: relKmInfo });
   }
 
   // --- Amendes à payer ---
