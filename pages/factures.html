@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803r">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803s">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803r"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260803s"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803r">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260803s">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -605,6 +605,9 @@
         <div><div class="field-label">TVA (€)</div><input class="field-input" type="text" inputmode="decimal" id="fa-tva" placeholder="0" /></div>
         <div><div class="field-label">Montant TTC (€) *</div><input class="field-input" type="text" inputmode="decimal" id="fa-ttc" placeholder="0" required /></div>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#334155;cursor:pointer;background:#F8FAFC;border:1px solid var(--fp-border);border-radius:8px;padding:8px 10px">
+        <input type="checkbox" id="fa-avoir"> C'est un <b>avoir</b> (remboursement du fournisseur) — saisis les montants en positif, ils seront <b>déduits</b> des coûts.
+      </label>
       <div class="grid grid-cols-2 gap-4">
         <div><div class="field-label">Véhicule (plaque)</div><input class="field-input" id="fa-immat" placeholder="ex. GC-885-LB" autocomplete="off" /></div>
         <div><div class="field-label">Kilométrage</div><input class="field-input" type="text" inputmode="numeric" id="fa-km" placeholder="" /></div>
@@ -619,12 +622,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803r"></script>
-<script src="../assets/js/supabase-client.js?v=20260803r"></script>
-<script src="../assets/js/data.js?v=20260803r"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803r"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803r"></script>
-<script src="../assets/js/app.js?v=20260803r"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260803s"></script>
+<script src="../assets/js/supabase-client.js?v=20260803s"></script>
+<script src="../assets/js/data.js?v=20260803s"></script>
+<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803s"></script>
+<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803s"></script>
+<script src="../assets/js/app.js?v=20260803s"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1264,6 +1267,13 @@
       const val = map[key];
       if (val){ const el = $('fa-type'); if (el && el.value !== val){ el.value = val; filled.push('type'); } }
     }
+    // Avoir détecté par l'IA (montant négatif ou description « Avoir … ») : on coche la case
+    // et on remet les montants en POSITIF (la case les re-passera en négatif à l'enregistrement).
+    if (fromIA && $('fa-avoir') && ((Number(parsed.montantTTC) < 0) || /^\s*avoir/i.test(String(parsed.description || '')))) {
+      $('fa-avoir').checked = true;
+      ['fa-ht','fa-tva','fa-ttc'].forEach(id => { const el = $(id); if (el && el.value) { const nn = parseFloat(String(el.value).replace(',', '.')); if (isFinite(nn)) el.value = Math.abs(nn); } });
+      filled.push('avoir');
+    }
     // Contrôle de cohérence HT + TVA = TTC (à vérifier sur TOUTE facture) : on alerte si l'écart
     // dépasse 2 centimes, pour ne jamais valider des montants incohérents en silence.
     const _ht = num($('fa-ht').value), _tva = num($('fa-tva').value), _ttc = num($('fa-ttc').value);
@@ -1324,6 +1334,7 @@
     ['fa-fournisseur','fa-num','fa-ht','fa-tva','fa-ttc','fa-immat','fa-km','fa-desc'].forEach(id => $(id).value = '');
     $('fa-date').value = new Date().toISOString().slice(0,10);
     $('fa-type').value = 'entretien';
+    if ($('fa-avoir')) $('fa-avoir').checked = false;
     // Import depuis un onglet dédié (ex. Ulys) : on pré-remplit le fournisseur. Le helper `set`
     // ne remplit que les champs VIDES → l'OCR ne l'écrasera pas, et la facture atterrit dans le bon onglet.
     if (opts && opts.fournisseur) $('fa-fournisseur').value = opts.fournisseur;
@@ -1410,14 +1421,22 @@
         if (url) { fileId = url; fileName = _faFile.name; }
       } catch (e) { console.warn('[facture upload]', e); }
     }
+    // Avoir : les montants saisis (positifs) sont stockés en NÉGATIF → déduits partout dans les coûts.
+    const isAvoir = $('fa-avoir') && $('fa-avoir').checked;
+    const sgn = isAvoir ? -1 : 1;
+    const sTtc = sgn * Math.abs(ttc);
+    const sHt = _ht != null ? sgn * Math.abs(_ht) : null;
+    const sTva = _tva != null ? sgn * Math.abs(_tva) : null;
+    let desc = $('fa-desc').value.trim();
+    if (isAvoir) desc = /^avoir/i.test(desc) ? desc : ('Avoir – ' + (desc || 'remboursement fournisseur'));
     const newF = {
       id: nextFactId(), date,
       vehiculeImmat: $('fa-immat').value.trim().toUpperCase() || null,
       fournisseur: $('fa-fournisseur').value.trim() || null,
       numeroFacture: $('fa-num').value.trim() || null,
-      description: $('fa-desc').value.trim() || null,
+      description: desc || null,
       type: $('fa-type').value || 'autre',
-      montantHT: _ht, montantTVA: _tva, montantTTC: ttc,
+      montantHT: sHt, montantTVA: sTva, montantTTC: sTtc,
       km: num($('fa-km').value),
       fileId,
       fileName,
