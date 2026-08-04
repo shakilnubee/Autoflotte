@@ -160,6 +160,8 @@
         <span id="fa-export-mount"></span>
         <button class="btn btn-outline text-sm" id="fa-fiche-btn" title="Relevé de dépenses (PDF) des factures affichées"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
         <span id="fa-recap-mount"></span>
+        <button class="btn btn-outline text-sm" id="btn-import-lot" title="Déposer plusieurs PDF : l'IA lit chaque facture et la crée automatiquement"><i data-lucide="files" class="w-4 h-4"></i> Importer un lot (PDF)</button>
+        <input type="file" id="fa-lot-file" accept="application/pdf,image/*" multiple class="hidden" />
         <button class="btn btn-dark text-sm" id="btn-import-facture" data-quickadd><i data-lucide="file-up" class="w-4 h-4"></i> Importer une facture</button>
       </div>
     </div>
@@ -519,6 +521,17 @@
       <button id="di-save" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Importer</button>
       <p class="text-xs text-slate-400">Le(s) fichier(s) sont enregistrés en ligne et rattachés au véhicule choisi (consultables ici et dans la fiche véhicule).</p>
     </div>
+  </div>
+</div>
+
+<!-- Import en lot de factures PDF : progression + récapitulatif -->
+<div class="modal-backdrop" id="fabulk-modal">
+  <div class="modal p-6" style="max-width:520px">
+    <div class="flex justify-between items-start mb-3">
+      <h2 class="text-lg font-extrabold" style="color:var(--fp-primary)">Import en lot — factures PDF</h2>
+      <button aria-label="Fermer" id="fabulk-close" class="p-1.5 hover:bg-slate-100 rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div id="fabulk-body" class="text-sm"></div>
   </div>
 </div>
 
@@ -1320,6 +1333,57 @@
     lucide.createIcons();
   }
   function closeFactureModal(){ $('facture-modal').classList.remove('open'); }
+
+  // ---- Import en LOT de factures PDF : l'IA lit chaque document et crée la facture ----
+  // (anti-doublon FP.dupe, contrôle HT+TVA=TTC signalé, type deviné par l'IA, PDF stocké en ligne).
+  function faTypeFromIA(ft){
+    if (!ft) return null;
+    const map = { entretien:'entretien', reparation:'réparation', achat:'achat', leasing:'leasing', cession:'cession', sinistre:'sinistre', autre:'autre' };
+    const k = String(ft).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+    return map[k] || null;
+  }
+  async function handleFactureLot(fileList){
+    const files = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) || /^image\//.test(f.type || ''));
+    const modal = $('fabulk-modal'), body = $('fabulk-body');
+    modal.classList.add('open'); lucide.createIcons();
+    if (!files.length){ body.innerHTML = '<p class="text-red-600">Aucun PDF ou image sélectionné.</p>'; return; }
+    let ok = 0, dupes = 0, warn = 0, fail = 0; const added = [];
+    const line = (extra) => `<div class="inline-flex items-center gap-2"><span class="fa-spin"></span> ${extra}</div><div class="mt-2 text-xs text-slate-500">✓ ${ok} importée(s) · ${dupes} doublon(s) · ${warn} à vérifier · ${fail} illisible(s)</div>`;
+    for (let i = 0; i < files.length; i++){
+      const file = files[i];
+      body.innerHTML = line(`Lecture ${i + 1}/${files.length} : ${escapeHtml(file.name)}…`);
+      let ia = null;
+      try { ia = await FP.scanIA(file, 'facture'); } catch (e) { ia = null; }
+      if (!ia || (ia.montantTTC == null && ia.montantHT == null && !ia.numeroFacture && !ia.fournisseur)) { fail++; continue; }
+      const ht = ia.montantHT != null ? Number(ia.montantHT) : null;
+      const tva = ia.montantTVA != null ? Number(ia.montantTVA) : null;
+      const ttc = ia.montantTTC != null ? Number(ia.montantTTC) : ((ht != null && tva != null) ? +(ht + tva).toFixed(2) : null);
+      const incoherent = (ht != null && tva != null && ttc != null && Math.abs((ht + tva) - ttc) > 0.02);
+      const rec = { date: ia.date || null,
+        vehiculeImmat: ia.vehiculeImmat ? String(ia.vehiculeImmat).toUpperCase().replace(/\s+/g,'') : null,
+        fournisseur: ia.fournisseur || null, numeroFacture: ia.numeroFacture || null, description: ia.description || null,
+        type: faTypeFromIA(ia.factureType) || 'autre', montantHT: ht, montantTVA: tva, montantTTC: ttc,
+        km: ia.km != null ? (parseInt(String(ia.km).replace(/\D/g,''), 10) || null) : null };
+      if (FP.dupe && FP.dupe.find && FP.dupe.find('factures', rec, data.factures)) { dupes++; continue; }
+      let fileId = 'IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), fileName = file.name;
+      try { if (FP.uploadScan){ const url = await FP.uploadScan(file, 'factures'); if (url) fileId = url; } } catch (e) { /* on garde la facture même si l'upload échoue */ }
+      const row = { id: nextFactId(), ...rec, fileId, fileName };
+      try {
+        await FP.persist.insert('factures', row);
+        data.factures.push(row); if (row.type !== 'leasing') factures.push(row);
+        ok++; if (incoherent) warn++; added.push({ row, incoherent });
+      } catch (e) { fail++; }
+    }
+    try { renderKPIs(); renderTable(); renderCharts(); } catch (e) {}
+    body.innerHTML = `<p class="font-semibold text-emerald-700 mb-1">✓ ${ok} facture(s) importée(s)</p>` +
+      `<p class="text-sm text-slate-600">${dupes} doublon(s) ignoré(s)${warn ? ` · <span class="text-amber-600">${warn} à vérifier (HT+TVA ≠ TTC)</span>` : ''}${fail ? ` · <span class="text-red-600">${fail} illisible(s)</span>` : ''}.</p>` +
+      (added.length ? `<div class="mt-3 max-h-52 overflow-auto text-xs border-t border-slate-100 pt-2">${added.map(a => `<div class="py-1 flex justify-between gap-3 ${a.incoherent ? 'text-amber-600' : 'text-slate-600'}"><span class="truncate">${escapeHtml(a.row.fournisseur || '?')} · ${a.row.type}</span><span class="whitespace-nowrap">${a.row.montantTTC != null ? FP.euro(a.row.montantTTC) : '—'}${a.incoherent ? ' ⚠️' : ''}</span></div>`).join('')}</div>` : '') +
+      (fail ? `<p class="text-xs text-slate-400 mt-2">Les documents illisibles peuvent être ajoutés à la main via « Importer une facture ».</p>` : '') +
+      `<button id="fabulk-done" class="btn btn-dark text-sm w-full justify-center mt-3">Terminé</button>`;
+    lucide.createIcons();
+    const done = $('fabulk-done'); if (done) done.addEventListener('click', () => modal.classList.remove('open'));
+    if (ok && FP.toast) FP.toast(ok + ' facture(s) importée(s) ✓');
+  }
   async function saveFacture(ev){
     ev.preventDefault();
     // Normalise « 1 466,48 » / « 1466.48 » → 1466.48
@@ -1474,6 +1538,10 @@
   $('facture-form').addEventListener('submit', saveFacture);
   $('fa-trigger').addEventListener('click', () => $('fa-file').click());
   $('fa-file').addEventListener('change', (e) => { const file = e.target.files && e.target.files[0]; _faFileName = file ? file.name : ''; _faFile = file || null; handleFacture(file); e.target.value = ''; });
+  // Import en lot (plusieurs PDF d'un coup)
+  if ($('btn-import-lot')) $('btn-import-lot').addEventListener('click', () => $('fa-lot-file').click());
+  if ($('fa-lot-file')) $('fa-lot-file').addEventListener('change', (e) => { const fl = e.target.files; if (fl && fl.length) handleFactureLot(fl); e.target.value = ''; });
+  if ($('fabulk-close')) $('fabulk-close').addEventListener('click', () => $('fabulk-modal').classList.remove('open'));
   // #1 : glisser-déposer un PDF/photo sur la zone d'import de facture
   (function(){
     const z = $('fa-trigger'); if (!z) return;
