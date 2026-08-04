@@ -84,12 +84,11 @@
       return session;
     },
     async signOut() {
-      try { if (window.FP && typeof FP.warp === 'function') FP.warp('Déconnexion'); } catch (e) {}
-      try { sessionStorage.setItem('fp_logout_burst', '1'); } catch (e) {}  // déluge d'éclairs à l'arrivée sur login.html
-      var t0 = Date.now();
+      // Déconnexion : plus d'ancienne transition « hyperspace » — on redirige vers login.html
+      // où la scène d'orage joue un DÉLUGE d'éclairs (drapeau fp_logout_burst lu au chargement).
+      try { sessionStorage.setItem('fp_logout_burst', '1'); } catch (e) {}
       try { await client.auth.signOut(); } catch (e) {}
-      var wait = Math.max(0, 1500 - (Date.now() - t0));   // laisser l'animation tourner ≥ 1,5 s
-      setTimeout(function () { window.location.href = loginPath; }, wait);
+      setTimeout(function () { window.location.href = loginPath; }, 120);
     },
     /** Photo d'avatar de l'utilisateur (cosmétique) — stockée dans user_metadata.avatar_url.
      *  (Pas un champ de sécurité → OK dans user_metadata, contrairement au rôle/société.) */
