@@ -291,7 +291,7 @@
         </select>
 
         <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
-          <option value="all">Toutes années</option>
+          <option value="all">Toutes les années</option>
           <option value="2026">2026</option>
           <option value="2025">2025</option>
         </select>
@@ -372,7 +372,7 @@
   function rebuildAnneeFilter() {
     const sel = $('filter-annee'); if (!sel) return; const cur = sel.value || 'all';
     const years = [...new Set(interventions.map(i => (i.date || '').slice(0, 4)).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
-    sel.innerHTML = '<option value="all">Toutes années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    sel.innerHTML = '<option value="all">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
     sel.value = (years.includes(cur) || cur === 'all') ? cur : 'all';
     state.annee = sel.value;
   }
@@ -621,9 +621,9 @@
     years.sort().reverse();
     if (sel.dataset.filled !== years.join(',')) {
       const prev = sel.value;
-      sel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+      sel.innerHTML = '<option value="all">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
       sel.dataset.filled = years.join(',');
-      sel.value = (prev && years.includes(prev)) ? prev : cur;
+      sel.value = (prev && (prev === 'all' || years.includes(prev))) ? prev : cur;
     }
   }
   function renderPodium() {
@@ -631,14 +631,14 @@
     const sel = $('podium-year');
     const annee = (sel && sel.value) || new Date().getFullYear().toString();
     const perVeh = {};
-    interventions.filter(i => (i.date || '').startsWith(annee)).forEach(i => {
+    interventions.filter(i => annee === 'all' || (i.date || '').startsWith(annee)).forEach(i => {
       const k = i.vehiculeImmat || '?';
       perVeh[k] = (perVeh[k] || 0) + (i.montantTTC || 0);
     });
     const top = Object.entries(perVeh).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const vlabel = (immat) => { const v = (data.vehicules || []).find(x => x.immat === immat); return v ? `${v.marque} ${v.modele}`.trim() : immat; };
     const el = $('podium');
-    if (!top.length) { el.innerHTML = `<p class="col-span-3 text-sm text-slate-500 text-center py-4">Aucune facture d'entretien ${annee}.</p>`; return; }
+    if (!top.length) { el.innerHTML = `<p class="col-span-3 text-sm text-slate-500 text-center py-4">Aucune facture d'entretien ${annee === 'all' ? '(toutes années)' : annee}.</p>`; return; }
     const medals = ['🥇', '🥈', '🥉'];
     el.innerHTML = [1, 0, 2].map(rank => {
       const t = top[rank];
