@@ -3762,6 +3762,14 @@ FP.toast = (msg, opts) => {
     btn.onclick = () => { close(); try { opts.onAction(); } catch (e) {} };
     el.appendChild(btn);
   }
+  // Croix pour fermer soi-même (utile surtout sur téléphone, où le pop-up gêne).
+  if (opts.closable !== false) {
+    const x = document.createElement('button');
+    x.setAttribute('aria-label', 'Fermer'); x.textContent = '✕';
+    x.style.cssText = 'background:transparent;color:rgba(255,255,255,.7);border:none;font-size:1rem;line-height:1;cursor:pointer;flex-shrink:0;padding:.15rem .2rem;margin-left:.1rem';
+    x.onclick = close;
+    el.appendChild(x);
+  }
   if (!document.getElementById('fp-toast-style')) {
     const st = document.createElement('style'); st.id = 'fp-toast-style';
     st.textContent = '@keyframes fp-toast-in{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
@@ -7184,6 +7192,9 @@ document.addEventListener('DOMContentLoaded', () => {
   (function backupReminder() {
     try {
       if (!(FP.isCEO && FP.isCEO())) return;
+      // Sur téléphone : pas de rappel de sauvegarde (télécharger un fichier de sauvegarde n'a
+      // pas de sens sur mobile, et le pop-up gêne). Réservé aux écrans larges (ordinateur).
+      try { if (window.matchMedia && window.matchMedia('(max-width: 820px)').matches) return; } catch (e) {}
       if (sessionStorage.getItem('fp_backup_reminded') === '1') return;
       let iso = ''; try { iso = localStorage.getItem('fp_last_backup') || ''; } catch (e) {}
       const stale = !iso || (Date.now() - new Date(iso).getTime()) > 30 * 86400000;
