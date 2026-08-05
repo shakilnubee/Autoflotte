@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805h">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -429,7 +429,7 @@
                 <span class="text-slate-600">Achat « Autres » listé au-delà de</span>
                 <span class="flex items-center gap-1"><input id="ts-autre" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
               </label>
-              <p class="text-[11px] text-slate-400 mb-2">0 = tous les achats « Autres » (gaz, accessoires…) apparaissent dans les points à vérifier.</p>
+              <p class="text-[11px] text-slate-400 mb-2">Défaut 20 € : seuls les achats « Autres » notables (bonbonne de gaz…) sont signalés. Mets 0 pour tout voir.</p>
               <label class="flex items-center justify-between gap-3 mb-3">
                 <span class="text-slate-600">Boutique (hors carburant) / mois au-delà de</span>
                 <span class="flex items-center gap-1"><input id="ts-horscarb" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
@@ -700,11 +700,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805g"></script>
-<script src="../assets/js/supabase-client.js?v=20260805g"></script>
-<script src="../assets/js/data.js?v=20260805g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805h"></script>
+<script src="../assets/js/supabase-client.js?v=20260805h"></script>
+<script src="../assets/js/data.js?v=20260805h"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805g"></script>
+<script src="../assets/js/app.js?v=20260805h"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2411,7 +2411,7 @@
     // --- Consommation par conducteur / véhicule (table total_conso) ---
     let conso = null, consoTx = null, consoLoaded = false, consoSortDesc = true, _tfAnom = [];
     // Seuils d'alerte configurables (réglages société). Défauts raisonnables.
-    function tfLimits(){ let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {} return { repasJour: Number(s.repasJour) > 0 ? Number(s.repasJour) : 20, autreItem: Number(s.autreItem) > 0 ? Number(s.autreItem) : 0, horsCarbMois: Number(s.horsCarbMois) > 0 ? Number(s.horsCarbMois) : 40 }; }
+    function tfLimits(){ let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {} return { repasJour: Number(s.repasJour) > 0 ? Number(s.repasJour) : 20, autreItem: (s.autreItem === 0 || Number(s.autreItem) > 0) ? Number(s.autreItem) : 20, horsCarbMois: Number(s.horsCarbMois) > 0 ? Number(s.horsCarbMois) : 40 }; }
     const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
 
     async function loadConso(){
@@ -2626,12 +2626,12 @@
           if (_f || _t) { const fm = _f ? _f.slice(0, 7) : null, tm = _t ? _t.slice(0, 7) : null; if (fm && (t.mois || '') < fm) return; if (tm && (t.mois || '') > tm) return; }
           else if (_sm && _sm !== '__all__') { if ((t.mois || '') !== _sm) return; }
           if (_cs && (t.conducteur || '') !== _cs) return;
-          if (t.categorie === 'repas') { repasTot += _tfN(t.montant_ttc); hasTxRep = true; }
+          if (t.categorie === 'repas' || t.categorie === 'boutique') { repasTot += _tfN(t.montant_ttc); hasTxRep = true; }
           else if (t.categorie === 'autre') { autreTot += _tfN(t.montant_ttc); hasTxRep = true; }
         });
       }
       const parts = hasTxRep
-        ? [['Carburant', tot.carb, '#f97316'], ['Péage / parking', tot.peage, '#0e7490'], ['Lavage', tot.lav, '#0891b2'], ['Repas', repasTot, '#8b5cf6'], ['Autres (gaz, divers)', autreTot, '#ec4899']]
+        ? [['Carburant', tot.carb, '#f97316'], ['Péage / parking', tot.peage, '#0e7490'], ['Lavage', tot.lav, '#0891b2'], ['Boutique / repas', repasTot, '#8b5cf6'], ['Autres (gaz, divers)', autreTot, '#ec4899']]
         : [['Carburant', tot.carb, '#f97316'], ['Péage / parking', tot.peage, '#0e7490'], ['Lavage', tot.lav, '#0891b2'], ['Boutique / repas', tot.bout, '#8b5cf6']];
       const totP = parts.reduce((s, p) => s + p[1], 0) || 1;
       $('tf-an-repart').innerHTML = parts.map(p => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px"><div style="width:118px;font-size:12px;color:#475569">${p[0]}</div><div style="flex:1;background:#f1f5f9;border-radius:6px;overflow:hidden;height:14px"><div style="width:${Math.round(p[1] / totP * 100)}%;height:100%;background:${p[2]}"></div></div><div style="width:42px;text-align:right;font-size:12px;font-weight:600">${Math.round(p[1] / totP * 100)}%</div><div style="width:78px;text-align:right;font-size:11px;color:#94a3b8">${eur(p[1])}</div></div>`).join('');
@@ -2753,7 +2753,7 @@
         const s = $('ts-save'); if (s) { s.disabled = true; s.classList.add('opacity-40', 'cursor-not-allowed'); s.title = 'Réservé à l\'administrateur'; }
         const r = $('ts-reset'); if (r) r.style.display = 'none';
       }
-      if ($('ts-reset')) $('ts-reset').addEventListener('click', () => { $('ts-repas').value = 20; $('ts-autre').value = 0; $('ts-horscarb').value = 40; });
+      if ($('ts-reset')) $('ts-reset').addEventListener('click', () => { $('ts-repas').value = 20; $('ts-autre').value = 20; $('ts-horscarb').value = 40; });
       if ($('ts-save')) $('ts-save').addEventListener('click', async () => {
         if (!canEdit) return;
         const g = (id, d) => { const v = Number($(id).value); return v > 0 ? v : d; };
@@ -2895,7 +2895,7 @@
     // === DÉTAIL TRANSACTION PAR TRANSACTION (une ligne = un achat) ===
     // Validé sur une vraie facture Total. Ancre les produits sur leurs libellés connus, prend le
     // TTC = dernier montant à 2 décimales non suivi d'un chiffre (exclut les PU à 4 décimales).
-    const TX_PROD = /(Gazole(?: Premier| Excellium)?|Super \d+(?: Sans PL)?|SP\d{2}(?: E\d+)?|Bouteille Gaz|Boissons T[RN]|Alimentation T[RN]|Produit [Ff]rais|Sandwich|Lavage(?: Progr\.? ?\d)?|Parking|AdBlue|GNR|GPL|E85)/;
+    const TX_PROD = /(Gazole(?: Premier| Excellium)?|Super \d+(?: Sans PL)?|SP\d{2}(?: E\d+)?|Bouteille Gaz|Boissons T[RN]|Alimentation T[RN]|Produit [Ff]rais|Sandwich|Lavage(?: Progr\.? ?\d)?|Parking|AdBlue|GNR|GPL|E85|Lubrifiant|Lave[- ]?glace|Accessoires?|Huile|Ampoule|Balai)/;
     const TX_TTC = /\d[\d ]*[.,]\d{2}(?!\d)/g;
     function txCat(p){
       const s = (p || '').toLowerCase();
@@ -2903,6 +2903,9 @@
       if (/lavage/.test(s)) return 'lavage';
       if (/parking/.test(s)) return 'parking';
       if (/aliment|boisson|sandwich|repas|restaur|snack|produit\s*frais|caf[ée]|menu/.test(s)) return 'repas';
+      // Consommables véhicule normaux (lave-glace, lubrifiant, huile, accessoires, ampoule, balai) →
+      // « boutique » (colonne Boutique/Repas), PAS « autres » : ce ne sont pas des dépenses suspectes.
+      if (/lubrifiant|lave[- ]?glace|accessoire|huile|ampoule|balai|essuie|adblue/.test(s)) return 'boutique';
       return 'autre';
     }
     function parseTx(raw, facNum, resolveNom){
