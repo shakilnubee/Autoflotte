@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805g">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -700,11 +700,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805f"></script>
-<script src="../assets/js/supabase-client.js?v=20260805f"></script>
-<script src="../assets/js/data.js?v=20260805f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805g"></script>
+<script src="../assets/js/supabase-client.js?v=20260805g"></script>
+<script src="../assets/js/data.js?v=20260805g"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805f"></script>
+<script src="../assets/js/app.js?v=20260805g"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2674,9 +2674,21 @@
       Object.keys(dm).forEach(n => { const ms = Object.keys(dm[n]).sort(); if (ms.length < 3) return; const last = ms[ms.length - 1], prev = ms.slice(0, -1); const avg = prev.reduce((s, m) => s + dm[n][m], 0) / prev.length; if (avg > 100 && dm[n][last] > avg * 1.6) anom.push({ t:'info', mois:last, txt:`${n} : ${moisLabel(last)} en forte hausse (${eur(dm[n][last])} vs sa moyenne ${eur(Math.round(avg))})` }); });
       anom.sort((a, b) => (a.t === 'warn' ? 0 : 1) - (b.t === 'warn' ? 0 : 1));
       _tfAnom = anom;
-      $('tf-an-anom').innerHTML = anom.length
-        ? anom.map((a, i) => `<div data-anom="${i}" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f1f5f9;font-size:12.5px;cursor:pointer;border-radius:6px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''" title="Ouvrir la facture Total de ce mois"><span style="color:${a.t === 'warn' ? '#d97706' : '#64748b'}">●</span><span style="color:#334155;flex:1">${esc(a.txt)}</span><span style="font-size:11px;color:var(--fp-accent);font-weight:700;white-space:nowrap">Voir la facture ›</span></div>`).join('')
-        : '<p class="text-sm text-emerald-700">✓ Rien d\'anormal détecté sur les relevés.</p>';
+      // ⚠️ Liste potentiellement longue → 3 visibles + « Voir tout (N) » qui déroule le reste SUR PLACE
+      // et se replie en « Voir moins » (règle projet : jamais de liste interminable, toggle obligatoire).
+      const HEAD = 3;
+      const row = (a, i) => `<div data-anom="${i}" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f1f5f9;font-size:12.5px;cursor:pointer;border-radius:6px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''" title="Ouvrir la facture Total concernée"><span style="color:${a.t === 'warn' ? '#d97706' : '#64748b'}">●</span><span style="color:#334155;flex:1">${esc(a.txt)}</span><span style="font-size:11px;color:var(--fp-accent);font-weight:700;white-space:nowrap">Voir la facture ›</span></div>`;
+      if (!anom.length) {
+        $('tf-an-anom').innerHTML = '<p class="text-sm text-emerald-700">✓ Rien d\'anormal détecté sur les relevés.</p>';
+      } else {
+        const head = anom.slice(0, HEAD).map(row).join('');
+        const rest = anom.slice(HEAD).map(row).join('');
+        const more = anom.length > HEAD
+          ? `<div class="tf-anom-rest" style="display:none">${rest}</div>`
+            + `<button type="button" id="tf-anom-more" data-open="0" data-total="${anom.length}" style="margin-top:8px;width:100%;text-align:center;font-size:12px;font-weight:700;color:var(--fp-accent);background:none;border:none;cursor:pointer;padding:6px">Voir tout (${anom.length}) ›</button>`
+          : '';
+        $('tf-an-anom').innerHTML = head + more;
+      }
       if (window.lucide) lucide.createIcons();
     }
     // Export CSV de la conso (relevés mensuels par carte)
@@ -2712,6 +2724,15 @@
 
     // Clic sur un « Point à vérifier » → ouvre la facture Total du mois concerné.
     if ($('tf-an-anom')) $('tf-an-anom').addEventListener('click', (e) => {
+      // Toggle « Voir tout / Voir moins » (déroule/replie le reste sur place).
+      const more = e.target.closest('#tf-anom-more');
+      if (more) {
+        const rest = $('tf-an-anom').querySelector('.tf-anom-rest'); const open = more.dataset.open === '1';
+        if (rest) rest.style.display = open ? 'none' : '';
+        more.dataset.open = open ? '0' : '1';
+        more.innerHTML = open ? ('Voir tout (' + (more.dataset.total || '') + ') ›') : 'Voir moins ▲';
+        return;
+      }
       const el = e.target.closest('[data-anom]'); if (!el) return;
       const a = _tfAnom[+el.dataset.anom]; if (!a) return;
       let fac = a.facnum ? (window.FP_DATA.factures || []).find(f => (f.numeroFacture || '') === a.facnum || f.id === 'TF-' + a.facnum) : null;
