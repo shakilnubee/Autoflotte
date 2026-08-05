@@ -431,13 +431,11 @@ function dateFr(iso){ if(!iso) return '—'; var p=iso.split('-'); return p.leng
 function todayFr(){ var d=new Date(); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
 
 // ===== Grille tarifaire (identique au devis) — calcul auto du prix =====
-var PRICING = { paliers:[{max:10,mois:49},{max:30,mois:99},{max:60,mois:189}], entVeh:2.90, delegVeh:15, delegMin:150, mes:149 };
+// Gestion externalisée : 40 €/véh dégressif (min 390 €/mois) ; mise en service 390 € OFFERTE si engagement annuel.
+var PRICING = { min:390, mes:390 };
 var priceTouched = { mensuel:false, mes:false };
-function calcMensuel(nb, formule){
-  if (formule === 'delegue') return Math.max(PRICING.delegMin, PRICING.delegVeh * nb);
-  for (var i=0;i<PRICING.paliers.length;i++){ if (nb <= PRICING.paliers[i].max) return PRICING.paliers[i].mois; }
-  return Math.round(PRICING.entVeh * nb); // > 60 véhicules : au véhicule
-}
+function tarifVeh(nb){ if (nb <= 20) return 40; if (nb <= 50) return 35; return 30; }
+function calcMensuel(nb, formule){ nb = Math.max(1, nb); return (nb <= 10) ? PRICING.min : tarifVeh(nb) * nb; }
 
 function segWire(segId, key){
   document.querySelectorAll('#'+segId+' button').forEach(function(b){
@@ -505,7 +503,7 @@ function render(){
   // Calcul AUTOMATIQUE du prix selon la flotte + la formule (comme le devis),
   // tant que l'utilisateur n'a pas saisi un montant à la main.
   if (!priceTouched.mensuel) $('f-mensuel').value = calcMensuel(nb, state.formule);
-  if (!priceTouched.mes) $('f-mes').value = (duree >= 12) ? 0 : PRICING.mes;
+  if (!priceTouched.mes) $('f-mes').value = (duree >= 12) ? 0 : PRICING.mes; // offerte si engagement annuel, sinon 390 €
   var mensuel = Math.max(0, parseFloat(val('f-mensuel')) || 0);
   var mes = Math.max(0, parseFloat(val('f-mes')) || 0);
   var preavis = Math.max(0, parseInt(val('f-preavis'),10) || 0);
@@ -574,9 +572,9 @@ function render(){
 
   // -- Article 4 : Prix --
   var prixHtml = 'En contrepartie, le Client verse une redevance de <b>'+euro0(mensuel)+' par mois</b>'
-    + (deleg && nb ? ' (soit environ '+euro0(nb? (mensuel/nb):0)+'/véhicule/mois)' : '') + '.';
-  if (mes > 0) prixHtml += ' Des <b>frais de mise en service de '+euro0(mes)+'</b> (import des données et prise en main) sont facturés une seule fois au démarrage.';
-  else prixHtml += ' La mise en service (import des données et prise en main) est <b>offerte</b>.';
+    + (nb>10 ? ' (soit '+euro0(mensuel/nb)+' / véhicule / mois)' : ' (forfait minimum, jusqu\'à 10 véhicules)') + '.';
+  if (mes > 0) prixHtml += ' Des <b>frais de mise en service de '+euro0(mes)+'</b> (reprise et intégration de la flotte) sont facturés une seule fois au démarrage.';
+  else prixHtml += ' La mise en service (reprise et intégration de la flotte) est <b>offerte</b> (engagement annuel).';
   var annuel = mensuel*12;
   prixHtml += ' Soit un montant annuel indicatif de <b>'+euro0(annuel)+'</b>' + (mes>0?' (hors mise en service)':'') + '.';
   $('o-prix').innerHTML = prixHtml;

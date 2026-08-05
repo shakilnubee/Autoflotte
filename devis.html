@@ -100,26 +100,13 @@
         <div><label>Nb de sociétés</label><input id="f-socn" type="number" min="1" value="1"></div>
       </div>
 
-      <label>Formule</label>
-      <div class="seg" id="seg-formule">
-        <button data-formule="delegue" class="on">Gestion déléguée</button>
-        <button data-formule="logiciel">Outil seul</button>
-      </div>
-      <div class="hint" id="formule-hint"></div>
+      <div class="hint" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:8px 10px;margin:10px 0">✅ Gestion externalisée : <b>à partir de 390 €/mois</b>, puis <b>~40 €/véhicule</b> (logiciel 15 + gestion 25), dégressif. <b>Mise en service offerte en annuel.</b></div>
 
       <label>Engagement</label>
       <div class="seg" id="seg-engage">
-        <button data-engage="annuel" class="on">Annuel (1 mois offert)</button>
+        <button data-engage="annuel" class="on">Annuel (mise en service offerte)</button>
         <button data-engage="mensuel">Mensuel</button>
       </div>
-
-      <label>Mise en service</label>
-      <div class="seg" id="seg-mes">
-        <button data-mes="auto" class="on">Auto</button>
-        <button data-mes="offerte">Offerte</button>
-        <button data-mes="payante">Payante</button>
-      </div>
-      <div class="hint">Auto = offerte si engagement annuel, sinon 149 €.</div>
 
       <label>Remise commerciale (%)</label>
       <input id="f-remise" type="number" min="0" max="100" value="0">
@@ -191,33 +178,24 @@
 </div>
 
 <script>
-// ================= Grille tarifaire (HT) — MODIFIABLE ICI =================
-var PALIERS = [
-  { nom:'Starter',    max:10,       prixMois:49  },
-  { nom:'Business',   max:30,       prixMois:99  },
-  { nom:'Pro',        max:60,       prixMois:189 },
-  { nom:'Enterprise', max:Infinity, parVeh:2.90  }  // >60 : au véhicule
-];
-var DELEGUE_BASE = 290;       // €/mois — forfait de gestion (temps, dispo, reporting)
-var DELEGUE_PAR_VEH = 12;     // €/véh/mois — outil + traitement au volume
-var MES_PRIX = 149;           // mise en service €
-var MOIS_ANNUEL = 11;         // annuel = 11 mois payés (1 offert)
+// ================= Tarif (HT) — MODIFIABLE ICI =================
+// Gestion de flotte externalisée : logiciel 15 € + gestion 25 € = 40 €/véh/mois, DÉGRESSIF, minimum 390 €/mois.
+var LOGICIEL_VEH = 15, GESTION_VEH = 25;   // décomposition (affichage)
+var MIN_MENSUEL = 390;                      // facturation minimum / mois
+var MES_PRIX = 390;                         // mise en service (reprise) — OFFERTE si engagement annuel
+function tarifVeh(nb){ if (nb <= 20) return 40; if (nb <= 50) return 35; return 30; } // €/véhicule/mois
+function tarifMensuel(nb){ return (nb <= 10) ? MIN_MENSUEL : tarifVeh(nb) * nb; }
 
 // Estimation ROI (risques évités / an) — hypothèses prudentes
 var ROI_AMENDE = 330;   // 1 amende majorée évitée / an
 var ROI_KMSUPP = 900;   // 1 dépassement leasing évité / an
 var ROI_CT = 135;       // 1 CT/échéance manqué évité / an
 
-var state = { formule:'delegue', engage:'annuel', mes:'auto' };
+var state = { engage:'annuel' };
 
 function euro(n){ return (Math.round(n*100)/100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €'; }
 function euro0(n){ return Math.round(n).toLocaleString('fr-FR') + ' €'; }
 function $(id){ return document.getElementById(id); }
-
-function palierPour(nb){
-  for (var i=0;i<PALIERS.length;i++){ if (nb <= PALIERS[i].max) return PALIERS[i]; }
-  return PALIERS[PALIERS.length-1];
-}
 
 function render(){
   var nb = Math.max(1, parseInt($('f-veh').value,10) || 1);
@@ -225,45 +203,23 @@ function render(){
   var remise = Math.min(100, Math.max(0, parseFloat($('f-remise').value) || 0));
   var annuel = state.engage === 'annuel';
 
-  // -- Ligne principale selon la formule --
-  var lignes = [], loyerMensuel = 0, formuleLabel = '';
-  if (state.formule === 'delegue') {
-    var mensuel = DELEGUE_BASE + DELEGUE_PAR_VEH * nb;
-    loyerMensuel = mensuel;
-    formuleLabel = 'Gestion déléguée';
-    var qte = annuel ? MOIS_ANNUEL : 1;
-    lignes.push({
-      des:'Gestion déléguée de flotte — outil inclus',
-      det:'Forfait de gestion '+euro0(DELEGUE_BASE)+'/mois + '+nb+' véhicule'+(nb>1?'s':'')+' × '+euro0(DELEGUE_PAR_VEH)+'/véh/mois'
-          + (annuel ? ' · '+MOIS_ANNUEL+' mois (1 offert)' : ' · mensuel'),
-      qte:qte, pu:mensuel, total:mensuel*qte
-    });
-  } else {
-    var p = palierPour(nb);
-    if (p.parVeh){
-      loyerMensuel = p.parVeh * nb;
-      formuleLabel = 'Outil — Enterprise';
-      var q1 = annuel ? MOIS_ANNUEL : 1;
-      lignes.push({ des:'Outil Parc Pilot — Enterprise (60+ véh.)',
-        det:nb+' véhicules × '+euro(p.parVeh)+'/véh/mois'+(annuel?' · '+MOIS_ANNUEL+' mois (1 offert)':' · mensuel'),
-        qte:q1, pu:loyerMensuel, total:loyerMensuel*q1 });
-    } else {
-      loyerMensuel = p.prixMois;
-      formuleLabel = 'Outil — '+p.nom;
-      var q2 = annuel ? MOIS_ANNUEL : 1;
-      lignes.push({ des:'Outil Parc Pilot — formule '+p.nom+' (≤'+p.max+' véh.)',
-        det:'Toutes fonctions · multi-postes'+(socn>1?' · multi-sociétés ('+socn+')':'')+(annuel?' · '+MOIS_ANNUEL+' mois (1 offert)':' · mensuel'),
-        qte:q2, pu:p.prixMois, total:p.prixMois*q2 });
-    }
-  }
+  // -- Gestion externalisée : 40 €/véh/mois dégressif, minimum 390 €/mois --
+  var lignes = [], loyerMensuel = tarifMensuel(nb), pv = tarifVeh(nb);
+  var qte = annuel ? 12 : 1;
+  lignes.push({
+    des:'Gestion de flotte externalisée — logiciel Parc Pilot inclus',
+    det:(nb<=10
+          ? 'Forfait minimum ('+nb+' véhicule'+(nb>1?'s':'')+', jusqu\'à 10)'
+          : nb+' véhicules × '+euro0(pv)+' / véhicule / mois')
+        + (socn>1?' · multi-sociétés ('+socn+')':'')
+        + (annuel ? ' · engagement annuel' : ' · mensuel'),
+    qte:qte, pu:loyerMensuel, total:loyerMensuel*qte
+  });
 
-  // -- Mise en service --
-  var mesOfferte = (state.mes==='offerte') || (state.mes==='auto' && annuel);
-  if (state.mes!=='offerte' && !(state.mes==='auto' && annuel)) {
-    lignes.push({ des:'Mise en service (import des données + prise en main)', det:'Paiement unique', qte:1, pu:MES_PRIX, total:MES_PRIX });
-  } else {
-    lignes.push({ des:'Mise en service (import des données + prise en main)', det:'Offerte pour tout engagement annuel', qte:1, pu:MES_PRIX, total:0, offert:true });
-  }
+  // -- Mise en service (reprise + intégration) : OFFERTE si engagement annuel, sinon 390 € --
+  var mesOfferte = annuel;
+  if (annuel) lignes.push({ des:'Mise en service (reprise + intégration de la flotte)', det:'Offerte pour tout engagement annuel', qte:1, pu:MES_PRIX, total:0, offert:true });
+  else lignes.push({ des:'Mise en service (reprise + intégration de la flotte)', det:'Paiement unique au démarrage', qte:1, pu:MES_PRIX, total:MES_PRIX });
 
   // -- Sous-total / remise --
   var sousTotal = lignes.reduce(function(s,l){return s+l.total;},0);
@@ -282,11 +238,11 @@ function render(){
   $('o-ttc').textContent = euro(ht);
 
   // -- Récurrence (ce que ça coûte "après") --
-  var recur = annuel ? (euro(loyerMensuel*MOIS_ANNUEL)+' / an') : (euro(loyerMensuel)+' / mois');
+  var recur = annuel ? (euro(loyerMensuel*12)+' / an') : (euro(loyerMensuel)+' / mois');
   $('o-recur').textContent = 'Puis ' + recur;
 
   // -- ROI --
-  var coutAnnuel = annuel ? loyerMensuel*MOIS_ANNUEL : loyerMensuel*12;
+  var coutAnnuel = loyerMensuel*12;
   var risqueEvite = ROI_AMENDE + ROI_KMSUPP + ROI_CT; // par an, prudent
   var parVehMois = loyerMensuel / nb;
   $('o-roi').innerHTML =
@@ -297,9 +253,9 @@ function render(){
   // -- Conditions --
   $('o-cond').innerHTML =
     '<b>Conditions :</b> Prix en euros. TVA non applicable, art. 293 B du CGI (auto-entrepreneur). '+
-    (annuel ? 'Facturation annuelle (1 mois offert). ' : 'Facturation mensuelle. ')+
-    'Mises à jour et support inclus. Devis valable 30 jours. '+
-    (state.formule==='delegue' ? 'Prestation de gestion déléguée : périmètre défini d\'un commun accord, ajustable selon le nombre de véhicules.' : 'Ajout de véhicules possible à tout moment (passage au palier supérieur au prorata).');
+    (annuel ? 'Engagement annuel : mise en service offerte. ' : 'Sans engagement annuel : mise en service '+euro0(MES_PRIX)+'. ')+
+    'Mises à jour et support inclus. Mise en service offerte. Devis valable 30 jours. '+
+    'Ajout ou retrait de véhicules possible à tout moment (facturé au prorata selon la tranche). Prestations ponctuelles (livraison, sinistre complexe, commande/restitution) facturées en sus.';
 
   // -- En-tête / client --
   $('o-num').textContent = $('f-num').value.trim() || '—';
@@ -308,14 +264,8 @@ function render(){
     + ($('f-mail').value? '<br>'+esc($('f-mail').value):'')
     + '<br>'+nb+' véhicule'+(nb>1?'s':'')+(socn>1?' · '+socn+' sociétés':'');
 
-  // -- Hint formule --
-  var p2 = palierPour(nb);
-  $('formule-hint').textContent = state.formule==='delegue'
-    ? (nb+' véh. → '+euro0(DELEGUE_BASE + DELEGUE_PAR_VEH*nb)+'/mois')
-    : (nb+' véh. → palier '+(p2.parVeh?'Enterprise':p2.nom));
-
-  // -- Mémorise les montants calculés pour passer au générateur de contrat --
-  window.__devisCalc = { mensuel: loyerMensuel, mesAmount: (mesOfferte ? 0 : MES_PRIX) };
+  // -- Mémorise les montants calculés pour passer au générateur de contrat (mise en service offerte) --
+  window.__devisCalc = { mensuel: loyerMensuel, mesAmount: mesOfferte ? 0 : MES_PRIX };
 }
 
 function esc(s){ return String(s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
@@ -340,9 +290,7 @@ function bindSeg(segId, key){
     });
   });
 }
-bindSeg('seg-formule','formule');
 bindSeg('seg-engage','engage');
-bindSeg('seg-mes','mes');
 
 // -- Téléchargement PDF en un clic (html2pdf, chargé à la demande) --
 function loadScript(src){ return new Promise(function(res,rej){ if(window.html2pdf) return res(); var s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
@@ -371,9 +319,9 @@ $('btn-contrat').addEventListener('click', function(){
     soc: dval('f-soc'), forme: dval('f-forme'), siren: dval('f-siren'), adr: dval('f-adr'),
     rep: dval('f-contact'), qual: dval('f-qual'), mail: dval('f-mail'),
     veh: dval('f-veh'), socn: dval('f-socn'),
-    formule: state.formule,
+    formule: 'logiciel',
     mensuel: Math.round(calc.mensuel || 0),
-    mes: Math.round(calc.mesAmount || 0),
+    mes: 0,
     duree: (state.engage === 'annuel') ? 12 : 1
   };
   try { localStorage.setItem('pp_devis_to_contrat', JSON.stringify(payload)); } catch(e){}
