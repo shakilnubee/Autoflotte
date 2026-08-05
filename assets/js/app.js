@@ -544,8 +544,10 @@ FP.empEnCours = (e) => !(e && e.dateRetour && String(e.dateRetour).slice(0, 10))
 // Jours écoulés depuis la date d'emprunt (calendaires, minuit → aujourd'hui).
 FP.empJoursDepuis = (e) => { const d = (e && e.dateEmprunt) ? new Date(String(e.dateEmprunt).slice(0, 10)) : null; if (!d || isNaN(d)) return 0; const t = new Date(); t.setHours(0, 0, 0, 0); return Math.floor((t - d) / 86400000); };
 // SOURCE UNIQUE « emprunt en retard » (règle choisie par l'utilisateur) : en cours ET emprunté
-// depuis plus de 2 jours. Utilisé par le tableau de bord ET la page Emprunts.
-FP.empEnRetard = (e) => FP.empEnCours(e) && FP.empJoursDepuis(e) > 2;
+// depuis plus de X jours (réglable dans Paramètres → Seuils d'alerte, défaut 2). Utilisé par le
+// tableau de bord ET la page Emprunts.
+FP.empRetardJours = () => { try { return FP.notifCfg ? FP.notifCfg().empruntRetardJours : 2; } catch (e) { return 2; } };
+FP.empEnRetard = (e) => FP.empEnCours(e) && FP.empJoursDepuis(e) > FP.empRetardJours();
 // ⚠️ SOURCE UNIQUE — recalcule la fiche véhicule à partir des factures RESTANTES (à appeler après la
 // SUPPRESSION d'une facture, symétrique de FP.applyFactureToVehicule). Évite les « dernière révision /
 // km / pneus » fantômes laissés par une facture supprimée. Ne fait jamais BAISSER le km affiché (v.km),
@@ -2136,6 +2138,12 @@ FP.notifCfg = () => {
     leasingFinMois: num(n.leasingFinMois, 2),  // anticipation d'alerte « fin de leasing » (mois avant la fin ; défaut 2)
     immobiliseJours: num(n.immobiliseJours, 15), // alerte « véhicule immobilisé » après X jours (défaut 15)
     consoSeuilPct: num(n.consoSeuilPct, 60),   // alerte conso carburant : hausse ≥ X % vs moyenne du véhicule (défaut 60 %)
+    amendeTotalWarn: num(n.amendeTotalWarn, 500),       // amendes à payer : alerte (orange) au-delà de X € dus au total
+    amendeMajorationJours: num(n.amendeMajorationJours, 30), // amende « bientôt majorée » : alerte X jours avant la date limite estimée
+    docAlerteJours: num(n.docAlerteJours, 120),          // permis + pièces d'identité : 1re alerte X j avant expiration (rouge = moitié)
+    carteExpJours: num(n.carteExpJours, 30),             // carte carburant / badge télépéage : alerte X j avant expiration
+    sinistreRelanceJours: num(n.sinistreRelanceJours, 21), // sinistre sans réponse de l'assureur : relancer après X jours
+    empruntRetardJours: num(n.empruntRetardJours, 2),    // emprunt non rendu : considéré « en retard » au-delà de X jours
   };
 };
 // ⚠️ SOURCE UNIQUE — Applique une facture à la fiche du véhicule (km + dernière révision + pneus +
@@ -2919,10 +2927,13 @@ FP.buildAlertes = (data) => {
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
     const tgt = 'vehicules.html?veh=' + v.id; // ouvre directement la fiche du véhicule
     const mk = 'ct|' + v.id + '|' + v.prochainCT;
+    // Les 3 paliers (rouge / orange / info) se calent sur l'anticipation configurée (ctJours) :
+    // info = ctJours (défaut 90), orange = 2/3, rouge = 1/3 → 30/60/90 par défaut.
+    const _ctI = FP.notifCfg().ctJours, _ctW = Math.round(_ctI * 2 / 3), _ctD = Math.round(_ctI / 3);
     if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < FP.notifCfg().ctJours) out.push({ niveau: 'info', categorie: 'Contrôle technique', message: `CT à venir (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _ctD) out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _ctW) out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _ctI) out.push({ niveau: 'info', categorie: 'Contrôle technique', message: `CT à venir (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
 
   // --- Contrôle anti-pollution (utilitaires / camions diesel) ---
@@ -2936,9 +2947,10 @@ FP.buildAlertes = (data) => {
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
     const tgt = 'vehicules.html?veh=' + v.id;
     const mk = 'pol|' + v.id + '|' + v.antiPollution;
-    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Anti-pollution', message: `Anti-pollution à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    const _polI = FP.notifCfg().ctJours, _polW = Math.round(_polI * 2 / 3), _polD = Math.round(_polI / 3);
+    if (diff < 0)         out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _polD) out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _polW) out.push({ niveau: 'warn',   categorie: 'Anti-pollution', message: `Anti-pollution à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
 
   // --- Relevé kilométrique périodique (rappel tous les X jours, réglable dans Paramètres → Notifications) ---
@@ -2994,7 +3006,7 @@ FP.buildAlertes = (data) => {
   if (amAPayer.length > 0) {
     const totalDu = amAPayer.reduce((s, a) => s + FP.montantDu(a), 0);
     out.push({
-      niveau: totalDu > 500 ? 'warn' : 'info',
+      niveau: totalDu > FP.notifCfg().amendeTotalWarn ? 'warn' : 'info',
       categorie: 'Amendes',
       message: `${amAPayer.length} amende${amAPayer.length > 1 ? 's' : ''} à payer`,
       detail: `${FP.euro(totalDu)} dus au total`,
@@ -3034,7 +3046,7 @@ FP.buildAlertes = (data) => {
         const jours = Math.ceil((lim - maintenant) / 86400000);
         return { a, lim, jours };
       })
-      .filter(x => x.jours < 30)            // bientôt majorée (< 30 j) ou déjà dépassée
+      .filter(x => x.jours < FP.notifCfg().amendeMajorationJours) // bientôt majorée (< X j réglable) ou déjà dépassée
       .sort((x, y) => x.jours - y.jours);
     if (risque.length) {
       const depasse = risque.filter(x => x.jours < 0).length;
@@ -3064,9 +3076,10 @@ FP.buildAlertes = (data) => {
     const detail = `${who} — expire le ${FP.date(c.permisExpiration)}`;
     const tgt = 'conducteurs.html?cond=' + encodeURIComponent(c.key);
     const mk = 'permis|' + c.key + '|' + c.permisExpiration;
-    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis EXPIRÉ depuis ${-diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
-    else if (diff < 60)  out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis expire dans ${diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
-    else if (diff < 120) out.push({ niveau: 'warn',   categorie: 'Permis', message: `Permis à renouveler (${diff}j)`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
+    const _docW = FP.notifCfg().docAlerteJours, _docD = Math.round(_docW / 2); // orange = X j avant, rouge = moitié
+    if (diff < 0)         out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis EXPIRÉ depuis ${-diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
+    else if (diff < _docD) out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis expire dans ${diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
+    else if (diff < _docW) out.push({ niveau: 'warn',   categorie: 'Permis', message: `Permis à renouveler (${diff}j)`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
   });
 
   // --- Pièces d'identité (carte d'identité, titre de séjour…) qui expirent (réglages condDocs) ---
@@ -3084,9 +3097,10 @@ FP.buildAlertes = (data) => {
         const detail = `${who} — ${lib} expire le ${FP.date(doc.date)}`;
         const tgt = 'conducteurs.html?cond=' + encodeURIComponent(key);
         const mk = 'cid|' + key + '|' + doc.type + '|' + doc.date;
-        if (diff < 0)        out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} EXPIRÉE depuis ${-diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
-        else if (diff < 60)  out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} expire dans ${diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
-        else if (diff < 120) out.push({ niveau: 'warn',   categorie: "Pièce d'identité", message: `${lib} à renouveler (${diff}j)`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
+        const _docW = FP.notifCfg().docAlerteJours, _docD = Math.round(_docW / 2);
+        if (diff < 0)         out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} EXPIRÉE depuis ${-diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
+        else if (diff < _docD) out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} expire dans ${diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
+        else if (diff < _docW) out.push({ niveau: 'warn',   categorie: "Pièce d'identité", message: `${lib} à renouveler (${diff}j)`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
       });
     });
   } catch (e) {}
@@ -3222,8 +3236,8 @@ FP.buildAlertes = (data) => {
         const diff = Math.ceil((dt - t0e) / 86400000);
         const veh = `${v.immat} · ${v.marque} ${v.modele}`;
         const mk = 'exp' + mapKey + '|' + v.id;
-        if (diff < 0)       out.push({ niveau: 'danger', categorie: lib, message: `${lib} EXPIRÉE depuis ${-diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
-        else if (diff < 30) out.push({ niveau: 'warn',   categorie: lib, message: `${lib} expire dans ${diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
+        if (diff < 0)                              out.push({ niveau: 'danger', categorie: lib, message: `${lib} EXPIRÉE depuis ${-diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
+        else if (diff < FP.notifCfg().carteExpJours) out.push({ niveau: 'warn',   categorie: lib, message: `${lib} expire dans ${diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
       });
     });
   } catch (e) {}
@@ -3265,7 +3279,7 @@ FP.buildAlertes = (data) => {
       if ((!g.rep.vehiculeImmat && f.vehiculeImmat) || (!g.rep.description && f.description)) g.rep = f;
     });
     const today0 = new Date(); today0.setHours(0, 0, 0, 0);
-    const SIN_RELANCE_J = 21; // 3 semaines sans réponse → on relance
+    const SIN_RELANCE_J = FP.notifCfg().sinistreRelanceJours; // délai sans réponse → on relance (défaut 21 j)
     // Un statut « remboursé / prise en charge / refusé » = l'assureur A répondu → plus « sans réponse ».
     const RESOLU = new Set(['rembourse', 'pec', 'refuse']);
     const sansReponse = Object.values(incidents).filter(g => {
@@ -3280,7 +3294,7 @@ FP.buildAlertes = (data) => {
     });
     if (sansReponse.length) {
       sansReponse.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-      out.push({ niveau: 'warn', categorie: 'Sinistres', message: `${sansReponse.length} sinistre(s) sans réponse de l'assureur`, detail: "Relance l'assureur : responsabilité pas encore reçue (> 3 semaines).", sort: 490,
+      out.push({ niveau: 'warn', categorie: 'Sinistres', message: `${sansReponse.length} sinistre(s) sans réponse de l'assureur`, detail: `Relance l'assureur : responsabilité pas encore reçue (> ${SIN_RELANCE_J} j).`, sort: 490,
         vehicules: sansReponse.map(g => ({ label: `${g.rep.vehiculeImmat || '—'} · déclaré ${g.date ? FP.date(g.date) : '?'}${g.rep.description ? ' — ' + String(g.rep.description).slice(0, 40) : ''}`, target: 'sinistres.html' })) });
     }
   } catch (e) { console.warn('[alerte sinistre relance]', e); }
