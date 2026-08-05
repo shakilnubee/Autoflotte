@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805j">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805k">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805j"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805k"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805j">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805k">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -701,11 +701,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805j"></script>
-<script src="../assets/js/supabase-client.js?v=20260805j"></script>
-<script src="../assets/js/data.js?v=20260805j"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805k"></script>
+<script src="../assets/js/supabase-client.js?v=20260805k"></script>
+<script src="../assets/js/data.js?v=20260805k"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805j"></script>
+<script src="../assets/js/app.js?v=20260805k"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2654,25 +2654,30 @@
       };
       if (consoTx && consoTx.length) {
         // Détail transaction par transaction disponible → détection au JOUR et à l'ARTICLE.
+        // ⚠️ Le MONTANT des pleins de carburant n'est JAMAIS une alerte (c'est normal). Le seul
+        //    signal côté carburant = TROP de pleins le même jour (carte prêtée / carburant revendu).
         const tx = consoTx.filter(_txIn);
-        // 1) REPAS abusifs : par conducteur & par JOUR au-delà du seuil (défaut 20 €/jour).
+        // 1) PLUS DE 3 PLEINS de carburant le même jour (par conducteur).
+        const pleins = {};
+        tx.filter(t => t.categorie === 'carburant').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = pleins[k] || (pleins[k] = { n:t.conducteur || '—', d:t.date_tx, fac:t.facnum, mois:t.mois, c:0 }); o.c += 1; });
+        Object.values(pleins).forEach(o => { if (o.c > 3) anom.push({ t:'warn', mois:o.mois, facnum:o.fac, txt:`${o.n} · ${FP.dateNum(o.d)} : ${o.c} pleins de carburant le MÊME jour → à vérifier (carte prêtée ? plusieurs véhicules ? carburant revendu ?)` }); });
+        // 2) REPAS abusifs : par conducteur & par JOUR au-delà du seuil (défaut 20 €/jour).
         const day = {};
         tx.filter(t => t.categorie === 'repas').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = day[k] || (day[k] = { n:t.conducteur || '—', d:t.date_tx, fac:t.facnum, mois:t.mois, s:0 }); o.s += Number(t.montant_ttc) || 0; });
-        Object.values(day).forEach(o => { if (o.s > lim.repasJour) anom.push({ t:'warn', mois:o.mois, facnum:o.fac, txt:`${o.n} · ${FP.dateNum(o.d)} : ${eur(o.s)} de repas sur la carte carburant (seuil ${lim.repasJour} €/jour)` }); });
-        // 2) Chaque achat « AUTRES » (ni carburant, ni repas, ni lavage, ni péage) = un point à vérifier
-        //    à part entière : une bonbonne de gaz, un accessoire, un lubrifiant… n'ont rien à faire sur
-        //    une carte carburant → on les liste UN PAR UN (cliquables), sans amalgame. Le seuil « article
-        //    autre » sert de plancher optionnel (0 = on montre tout).
+        Object.values(day).forEach(o => { if (o.s > lim.repasJour) anom.push({ t:'warn', mois:o.mois, facnum:o.fac, txt:`${o.n} · ${FP.dateNum(o.d)} : ${eur(o.s)} de repas/boissons en une seule journée → dépense repas élevée, à vérifier (seuil ${lim.repasJour} €/jour)` }); });
+        // 3) Chaque achat « AUTRES » (ni carburant, ni repas, ni lavage, ni péage, ni lubrifiant) = un
+        //    point à vérifier à part : bonbonne de gaz, lave-glace, accessoire… n'ont rien à faire sur
+        //    une carte carburant. Le seuil « autre » (défaut 20 €) sert de plancher.
         tx.filter(t => t.categorie === 'autre' && (Number(t.montant_ttc) || 0) >= (lim.autreItem || 0))
           .sort((a, b) => (Number(b.montant_ttc) || 0) - (Number(a.montant_ttc) || 0))
-          .forEach(t => anom.push({ t:'warn', mois:t.mois, facnum:t.facnum, txt:`${t.conducteur || '—'} · ${FP.dateNum(t.date_tx)} : ${t.produit} ${eur(t.montant_ttc)} — dépense « Autres » (hors carburant) à vérifier` }));
+          .forEach(t => anom.push({ t:'warn', mois:t.mois, facnum:t.facnum, txt:`${t.conducteur || '—'} · ${FP.dateNum(t.date_tx)} : ${t.produit} à ${eur(t.montant_ttc)} → achat qui n'est pas du carburant, payé avec la carte essence, à vérifier` }));
       } else {
         // Détail pas encore importé → PAS d'amalgame mensuel : une seule invitation à reconstruire le détail.
         anom.push({ t:'info', txt:'Clique sur « 🔄 Reconstruire le détail » (en haut de cet encart) pour analyser les achats un par un — repas/jour, bonbonnes de gaz, accessoires…' });
       }
       // Dépense globale d'un conducteur qui EXPLOSE d'un mois sur l'autre (grosse hausse seulement).
       const dm = {}; conso.forEach(c => { if (!c.mois) return; const n = _tfName(c, vbp); (dm[n] = dm[n] || {})[c.mois] = (dm[n][c.mois] || 0) + _tfN(c.total_ttc); });
-      Object.keys(dm).forEach(n => { const ms = Object.keys(dm[n]).sort(); if (ms.length < 3) return; const last = ms[ms.length - 1], prev = ms.slice(0, -1); const avg = prev.reduce((s, m) => s + dm[n][m], 0) / prev.length; if (avg > 100 && dm[n][last] > avg * 1.6) anom.push({ t:'info', mois:last, txt:`${n} : ${moisLabel(last)} en forte hausse (${eur(dm[n][last])} vs sa moyenne ${eur(Math.round(avg))})` }); });
+      Object.keys(dm).forEach(n => { const ms = Object.keys(dm[n]).sort(); if (ms.length < 3) return; const last = ms[ms.length - 1], prev = ms.slice(0, -1); const avg = prev.reduce((s, m) => s + dm[n][m], 0) / prev.length; if (avg > 100 && dm[n][last] > avg * 1.6) anom.push({ t:'info', mois:last, txt:`${n} · ${moisLabel(last)} : ${eur(dm[n][last])} dépensés ce mois-ci vs ${eur(Math.round(avg))} en moyenne → forte hausse, à vérifier` }); });
       anom.sort((a, b) => (a.t === 'warn' ? 0 : 1) - (b.t === 'warn' ? 0 : 1));
       _tfAnom = anom;
       // ⚠️ Liste potentiellement longue → 3 visibles + « Voir tout (N) » qui déroule le reste SUR PLACE
@@ -2921,7 +2926,7 @@
     const TX_TTC = /\d[\d ]*[.,]\d{2}(?!\d)/g;
     function txCat(p){
       const s = (p || '').toLowerCase();
-      if (/gazole|gasoil|diesel|super|sp\d|essence|excellium|premier|adblue|gnr|gpl|e85|b7/.test(s)) return 'carburant';
+      if (/gazole|gasoil|diesel|super|sp\d|sans[- ]?plomb|essence|excellium|premier|adblue|gnr|gpl|e10|e85|b7/.test(s)) return 'carburant';
       if (/lavage/.test(s)) return 'lavage';
       if (/parking/.test(s)) return 'parking';
       if (/aliment|boisson|sandwich|repas|restaur|snack|produit\s*frais|caf[ée]|menu/.test(s)) return 'repas';
