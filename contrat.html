@@ -421,6 +421,7 @@
 
 </div>
 
+<script src="assets/js/bareme.js?v=20260805v"></script>
 <script>
 var state = { formule:'delegue', recond:'tacite' };
 function $(id){ return document.getElementById(id); }
@@ -431,11 +432,11 @@ function dateFr(iso){ if(!iso) return '—'; var p=iso.split('-'); return p.leng
 function todayFr(){ var d=new Date(); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
 
 // ===== Grille tarifaire (identique au devis) — calcul auto du prix =====
-// Gestion externalisée : 40 €/véh dégressif (min 390 €/mois) ; mise en service 390 € OFFERTE si engagement annuel.
-var PRICING = { min:390, mes:390 };
+// Gestion externalisée — barème PARTAGÉ (assets/js/bareme.js, éditable sur bareme.html).
+function BAR(){ return (window.PP_BAREME && PP_BAREME.get) ? PP_BAREME.get() : { minMensuel:390, r1:40, r2:35, r3:30, mes:390 }; }
+var PRICING = { get min(){ return BAR().minMensuel; }, get mes(){ return BAR().mes; } };
 var priceTouched = { mensuel:false, mes:false };
-function tarifVeh(nb){ if (nb <= 20) return 40; if (nb <= 50) return 35; return 30; }
-function calcMensuel(nb, formule){ nb = Math.max(1, nb); return (nb <= 10) ? PRICING.min : tarifVeh(nb) * nb; }
+function calcMensuel(nb, formule){ return (window.PP_BAREME && PP_BAREME.tarifMensuel) ? PP_BAREME.tarifMensuel(nb) : (function(){ var b=BAR(); nb=Math.max(1,nb); if(nb<=10)return b.minMensuel; if(nb<=20)return b.r1*nb; if(nb<=50)return b.r2*nb; return b.r3*nb; })(); }
 
 function segWire(segId, key){
   document.querySelectorAll('#'+segId+' button').forEach(function(b){

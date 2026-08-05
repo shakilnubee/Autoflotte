@@ -100,7 +100,7 @@
         <div><label>Nb de sociétés</label><input id="f-socn" type="number" min="1" value="1"></div>
       </div>
 
-      <div class="hint" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:8px 10px;margin:10px 0">✅ Gestion externalisée : <b>à partir de 390 €/mois</b>, puis <b>~40 €/véhicule</b> (logiciel 15 + gestion 25), dégressif. <b>Mise en service offerte en annuel.</b></div>
+      <div class="hint" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:8px 10px;margin:10px 0">✅ Gestion externalisée : <b>à partir de 390 €/mois</b>, puis <b>~40 €/véhicule</b> (dégressif). <b>Mise en service offerte en annuel.</b> · <a href="bareme.html" style="color:#166534;text-decoration:underline;font-weight:700">✏️ Modifier mon barème</a></div>
 
       <label>Engagement</label>
       <div class="seg" id="seg-engage">
@@ -177,14 +177,12 @@
 
 </div>
 
+<script src="assets/js/bareme.js?v=20260805v"></script>
 <script>
-// ================= Tarif (HT) — MODIFIABLE ICI =================
-// Gestion de flotte externalisée : logiciel 15 € + gestion 25 € = 40 €/véh/mois, DÉGRESSIF, minimum 390 €/mois.
-var LOGICIEL_VEH = 15, GESTION_VEH = 25;   // décomposition (affichage)
-var MIN_MENSUEL = 390;                      // facturation minimum / mois
-var MES_PRIX = 390;                         // mise en service (reprise) — OFFERTE si engagement annuel
-function tarifVeh(nb){ if (nb <= 20) return 40; if (nb <= 50) return 35; return 30; } // €/véhicule/mois
-function tarifMensuel(nb){ return (nb <= 10) ? MIN_MENSUEL : tarifVeh(nb) * nb; }
+// ================= Tarif (HT) — barème PARTAGÉ (assets/js/bareme.js, éditable sur bareme.html) =================
+function BAR(){ return (window.PP_BAREME && PP_BAREME.get) ? PP_BAREME.get() : { minMensuel:390, r1:40, r2:35, r3:30, mes:390, logicielVeh:15, gestionVeh:25 }; }
+function tarifVeh(nb){ var b=BAR(); nb=Math.max(1,nb); if(nb<=10)return null; if(nb<=20)return b.r1; if(nb<=50)return b.r2; return b.r3; }
+function tarifMensuel(nb){ var b=BAR(); nb=Math.max(1,nb); var pv=tarifVeh(nb); return pv==null? b.minMensuel : Math.max(b.minMensuel, pv*nb); }
 
 // Estimation ROI (risques évités / an) — hypothèses prudentes
 var ROI_AMENDE = 330;   // 1 amende majorée évitée / an
@@ -203,7 +201,8 @@ function render(){
   var remise = Math.min(100, Math.max(0, parseFloat($('f-remise').value) || 0));
   var annuel = state.engage === 'annuel';
 
-  // -- Gestion externalisée : 40 €/véh/mois dégressif, minimum 390 €/mois --
+  // -- Gestion externalisée : barème partagé (dégressif, minimum garanti) --
+  var MES_PRIX = BAR().mes;
   var lignes = [], loyerMensuel = tarifMensuel(nb), pv = tarifVeh(nb);
   var qte = annuel ? 12 : 1;
   lignes.push({
