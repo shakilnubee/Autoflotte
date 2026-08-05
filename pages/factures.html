@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805p">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805p"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805p">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -705,11 +705,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805o"></script>
-<script src="../assets/js/supabase-client.js?v=20260805o"></script>
-<script src="../assets/js/data.js?v=20260805o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805p"></script>
+<script src="../assets/js/supabase-client.js?v=20260805p"></script>
+<script src="../assets/js/data.js?v=20260805p"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805o"></script>
+<script src="../assets/js/app.js?v=20260805p"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -3011,6 +3011,11 @@
       _pendingTx = tx || [];
       const existing = new Set((window.FP_DATA.factures || []).map(f => (f.numeroFacture || '').toUpperCase()));
       const freshF = factures.filter(r => !existing.has(r.numero.toUpperCase()));
+      // Factures DÉJÀ enregistrées mais SANS PDF (upload raté à un import précédent) → on rattache le PDF
+      // à la ré-importation (sinon le drawer affiche « Aucun PDF stocké » pour toujours).
+      const _byNum = {}; (window.FP_DATA.factures || []).forEach(f => { if (f.numeroFacture) _byNum[String(f.numeroFacture).toUpperCase()] = f; });
+      const _noPdf = (f) => !f || !f.fileId || /^IMP-/.test(f.fileId);
+      const toAttach = factures.filter(r => r._file && existing.has(r.numero.toUpperCase()) && _noPdf(_byNum[r.numero.toUpperCase()]));
       const dupes = factures.length - freshF.length;
       const sumTTC = factures.reduce((s,r)=>s+(r.ttc||0),0);
       const warn = (r) => {
@@ -3050,12 +3055,13 @@
 
       const willDo = [];
       if (freshF.length) willDo.push(freshF.length + ' facture(s)');
+      if (toAttach.length) willDo.push(toAttach.length + ' PDF à rattacher');
       if (conso.length) willDo.push('la conso de ' + conso.length + ' carte(s)');
 
-      _pending = { freshF, conso };
+      _pending = { freshF, conso, toAttach };
       // Message clair si rien de NOUVEAU côté factures (cas fréquent : déjà importées)
       if (factures.length && !freshF.length) {
-        tfImpStatus('✓ Ces <b>' + factures.length + ' facture(s)</b> sont <b>déjà enregistrées</b> — rien de nouveau à ajouter (elles sont déjà dans le tableau ci-dessous).', 'ok');
+        tfImpStatus('✓ Ces <b>' + factures.length + ' facture(s)</b> sont <b>déjà enregistrées</b>' + (toAttach.length ? (' — je vais juste <b>rattacher le PDF</b> à ' + toAttach.length + ' d\'entre elles.') : ' — rien de nouveau à ajouter (elles sont déjà dans le tableau ci-dessous).'), 'ok');
       }
       $('tf-import-preview').classList.remove('hidden');
       $('tf-import-preview').innerHTML = facBlock + consoBlock
@@ -3070,10 +3076,20 @@
 
     async function commitPending(){
       if (!_pending) return;
-      const freshF = _pending.freshF, conso = _pending.conso;
+      const freshF = _pending.freshF, conso = _pending.conso, toAttach = _pending.toAttach || [];
       $('tf-import-confirm').disabled = true;
       tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement...</span>', 'working');
-      let okF = 0, okC = 0;
+      let okF = 0, okC = 0, okA = 0, attachErr = null;
+      // Rattache le PDF aux factures déjà enregistrées qui n'en avaient pas.
+      for (const r of toAttach){
+        if (!(r._file && FP.uploadScan)) continue;
+        try {
+          const url = await FP.uploadScan(r._file, 'factures-total', { name: 'TF-' + r.numero });
+          if (!url) { if (!attachErr) attachErr = 'upload sans URL'; continue; }
+          const fac = (window.FP_DATA.factures || []).find(f => (f.numeroFacture || '').toUpperCase() === String(r.numero).toUpperCase());
+          if (fac) { fac.fileId = url; if (r._file) fac.fileName = r._file.name; if (FP.persist && FP.persist.update) await FP.persist.update('factures', fac.id, { fileId: url, fileName: fac.fileName }); okA++; }
+        } catch (e) { console.warn('[tf-import attach PDF]', e); if (!attachErr) attachErr = (e && (e.message || e.error || e)) + ''; }
+      }
       for (const r of freshF){
         // Stocke le PDF d'origine pour pouvoir le rouvrir (bouton « Ouvrir le PDF »)
         let fileUrl = null;
@@ -3113,7 +3129,8 @@
       if (consoErr) {
         tfImpStatus('⚠️ ' + okF + ' facture(s) enregistrée(s), mais la CONSO par conducteur n\'a PAS pu être sauvegardée : <b>' + esc(consoErr) + '</b><br>Copie-moi ce message.', 'error');
       } else {
-        tfImpStatus('<b>✓ Enregistré</b> : ' + okF + ' facture(s) + conso de ' + okC + ' carte(s). Sauvegardé dans la base (visible sur tous les postes).', 'ok');
+        tfImpStatus('<b>✓ Enregistré</b> : ' + okF + ' facture(s)' + (okA ? ' + ' + okA + ' PDF rattaché(s)' : '') + ' + conso de ' + okC + ' carte(s). Sauvegardé dans la base (visible sur tous les postes).'
+          + (attachErr ? '<br>⚠️ Un PDF au moins n\'a pas pu être stocké : <b>' + esc(attachErr) + '</b> (le détail marche quand même ; copie-moi ce message).' : ''), 'ok');
       }
       _pending = null;
       render();
