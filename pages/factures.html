@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805c">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -414,7 +414,10 @@
           <div class="card p-4">
             <div class="font-semibold text-slate-800 mb-3 flex items-center justify-between gap-2">
               <span class="flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500"></i> Points à vérifier</span>
-              <button id="tf-seuils-btn" type="button" class="text-xs text-slate-400 hover:text-teal-600 flex items-center gap-1" title="Régler les seuils d'alerte"><i data-lucide="settings-2" class="w-3.5 h-3.5"></i> Seuils</button>
+              <span class="flex items-center gap-3">
+                <button id="tf-backfill-tx" type="button" class="text-xs text-slate-400 hover:text-teal-600 flex items-center gap-1" title="Relire les relevés Total déjà enregistrés pour reconstruire le détail achat par achat (sans réimport)"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Reconstruire le détail</button>
+                <button id="tf-seuils-btn" type="button" class="text-xs text-slate-400 hover:text-teal-600 flex items-center gap-1" title="Régler les seuils d'alerte"><i data-lucide="settings-2" class="w-3.5 h-3.5"></i> Seuils</button>
+              </span>
             </div>
             <div id="tf-seuils" class="hidden mb-3 p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm">
               <div class="font-medium text-slate-700 mb-2 text-xs uppercase tracking-wide">Seuils d'alerte (carte carburant)</div>
@@ -696,11 +699,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805b"></script>
-<script src="../assets/js/supabase-client.js?v=20260805b"></script>
-<script src="../assets/js/data.js?v=20260805b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805c"></script>
+<script src="../assets/js/supabase-client.js?v=20260805c"></script>
+<script src="../assets/js/data.js?v=20260805c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805b"></script>
+<script src="../assets/js/app.js?v=20260805c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -3122,6 +3125,64 @@
       else $('tf-import-status').classList.add('hidden');
       showPreview(factures, consoOut, txOut);
     }
+
+    // ============================================================
+    //  RECONSTRUIRE LE DÉTAIL (transaction par transaction) SANS RÉIMPORT
+    //  Les relevés Total déjà importés sont stockés (PDF) dans Supabase Storage → on les RELIT
+    //  automatiquement (fetch → pdf.js → parseTx) et on (re)remplit total_conso_tx. Idempotent
+    //  (id de tx stable = n°facture-index → aucun doublon). Aucune manip Supabase pour l'utilisateur.
+    // ============================================================
+    async function loadPdfFromUrl(url){
+      const resp = await fetch(url); if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const blob = await resp.blob(); return loadPdf(blob); // loadPdf accepte tout Blob (arrayBuffer())
+    }
+    async function backfillTx(btn){
+      if (!(FP.db && FP.db.upsert)) { if (FP.toast) FP.toast('Base indisponible.'); return; }
+      // Correspondance carte → conducteur (comme à l'import) pour bien nommer les achats.
+      try { if (!consoLoaded) await loadConso(); } catch (e) {}
+      const cardMap = {}; (conso || []).forEach(c => { if (c.carte) cardMap[String(c.carte)] = c; });
+      const resolveTxNom = (nom, carte) => {
+        const ref = cardMap[String(carte)] || {};
+        if (ref.conducteur) return ref.conducteur;
+        if (nom && !isPlaque(nom)) { const rn = resolveConducteurName(nom); if (rn) return rn; }
+        if (nom && isPlaque(nom)) { const np = String(nom).toUpperCase().replace(/[^A-Z0-9]/g, ''); const v = (window.FP_DATA.vehicules || []).find(x => String(x.immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === np); if (v && v.chauffeur && v.chauffeur !== '—') return v.chauffeur; }
+        return nom || null;
+      };
+      // Relevés Total avec un PDF re-téléchargeable (URL http = Supabase Storage) ; on dédoublonne par URL.
+      const rele = (window.FP_DATA.factures || []).filter(f => isTotalFleet(f) && f.fileId && /^https?:\/\//.test(f.fileId));
+      const byUrl = new Map(); rele.forEach(f => { if (!byUrl.has(f.fileId)) byUrl.set(f.fileId, f); });
+      const list = [...byUrl.values()];
+      if (!list.length) { if (FP.toast) FP.toast('Aucun relevé Total avec PDF stocké à relire (réimporte une fois pour attacher les PDF).'); return; }
+      const old = btn ? btn.innerHTML : ''; if (btn) { btn.disabled = true; }
+      let okTx = 0, failed = 0, tableMissing = false, done = 0;
+      for (const f of list) {
+        if (btn) btn.innerHTML = 'Lecture ' + (done + 1) + '/' + list.length + '…';
+        try {
+          const pdf = await loadPdfFromUrl(f.fileId);
+          const text = await pdfTextAll(pdf);
+          const fromFac = parseFac(text, f.fileName || '');
+          const facNum = (fromFac && fromFac.numero) || f.numeroFacture || String(f.fileId).replace(/\W+/g, '').slice(-10);
+          const mois = (f.date || '').slice(0, 7) || (fromFac && fromFac.date ? fromFac.date.slice(0, 7) : null);
+          for (const tr of parseTx(text, facNum, resolveTxNom)) {
+            tr.mois = mois || tr.mois;
+            const res = await FP.db.upsert('total_conso_tx', tr);
+            if (res && res.error) { const msg = String((res.error && res.error.message) || res.error); if (/total_conso_tx|relation|exist|schema/i.test(msg)) { tableMissing = true; throw res.error; } throw res.error; }
+            okTx++;
+          }
+        } catch (e) { console.warn('[backfillTx]', f.id, e); if (tableMissing) break; failed++; }
+        done++;
+      }
+      if (btn) { btn.innerHTML = old; btn.disabled = false; }
+      if (tableMissing) {
+        const m = 'Il faut d\'abord créer la table (une seule fois) : dans Supabase → SQL Editor, lance le script « total-conso-tx », puis reclique sur « Reconstruire le détail ».';
+        if (FP.alert) FP.alert(m); else alert(m); return;
+      }
+      consoLoaded = false; try { await loadConso(); } catch (e) {}
+      renderConso(); renderAnalyse();
+      const msg = '✓ Détail reconstruit : ' + okTx + ' achat(s) sur ' + list.length + ' relevé(s)' + (failed ? ' · ' + failed + ' illisible(s)' : '');
+      if (FP.toast) FP.toast(msg);
+    }
+    if ($('tf-backfill-tx')) $('tf-backfill-tx').addEventListener('click', function () { backfillTx(this).catch(e => { console.error('[backfillTx]', e); if (FP.toast) FP.toast('Erreur pendant la reconstruction.'); this.disabled = false; }); });
 
     // (Le bouton de dropzone Total a été retiré : l'import se lance via le bouton « Importer un relevé Total » du haut.)
     $('tf-import-file').addEventListener('change', (e) => {
