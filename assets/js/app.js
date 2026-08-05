@@ -1584,15 +1584,42 @@ FP.settings = {
     document.documentElement.style.setProperty('--fp-logo-bg', useWhite ? '#FFFFFF' : '#111111');
     document.documentElement.style.setProperty('--fp-logo-fg', useWhite ? pc : '#FFFFFF');
     document.documentElement.style.setProperty('--fp-logo-border', useWhite ? 'rgba(0,0,0,.18)' : '#000000');
-    // Mode sombre 🌙 — préférence LOCALE (par poste/utilisateur), pas synchronisée
-    if (document.body) { try { document.body.classList.toggle('fp-dark', localStorage.getItem('fp_dark_mode') === '1'); } catch (e) {} }
+    // Mode sombre 🌙 — SYNCHRONISÉ (règle 0-sync) : lu depuis les réglages, cache local pour l'instant.
+    if (document.body) { try { const p = (this.get().prefs || {}); const dk = (p.darkMode != null) ? !!p.darkMode : (localStorage.getItem('fp_dark_mode') === '1'); document.body.classList.toggle('fp-dark', dk); } catch (e) {} }
   },
 };
 
-// Mode sombre = choix propre à CHAQUE utilisateur/poste (stocké en local, jamais partagé).
+// ⚠️ RÈGLE 0-sync — PRÉFÉRENCE UTILISATEUR SYNCHRONISÉE (tous les appareils) : stockée dans les réglages
+// (FP.settings → app_settings, par société) sous s.prefs[<clé>], avec localStorage comme simple cache
+// rapide. À utiliser pour TOUT réglage/choix d'affichage (favoris, filtres, ordres, cases, styles…).
+FP.pref = {
+  get(key, dflt) {
+    try { const p = (FP.settings.get().prefs) || {}; if (Object.prototype.hasOwnProperty.call(p, key)) return p[key]; } catch (e) {}
+    try { const v = localStorage.getItem(key); if (v != null) { try { return JSON.parse(v); } catch (e) { return v; } } } catch (e) {}
+    return dflt;
+  },
+  set(key, val) {
+    try { const s = FP.settings.get(); s.prefs = s.prefs || {}; s.prefs[key] = val; FP.settings.save(s); } catch (e) {}
+    try { localStorage.setItem(key, typeof val === 'string' ? val : JSON.stringify(val)); } catch (e) {}
+  },
+  remove(key) {
+    try { const s = FP.settings.get(); if (s.prefs) { delete s.prefs[key]; FP.settings.save(s); } } catch (e) {}
+    try { localStorage.removeItem(key); } catch (e) {}
+  },
+};
+
+// Mode sombre 🌙 — SYNCHRONISÉ sur tous les appareils (via FP.settings.prefs.darkMode) + cache local.
 FP.darkMode = {
-  get() { try { return localStorage.getItem('fp_dark_mode') === '1'; } catch (e) { return false; } },
-  set(v) { try { localStorage.setItem('fp_dark_mode', v ? '1' : '0'); } catch (e) {} if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme(); },
+  get() {
+    try { const p = FP.settings.get().prefs || {}; if (p.darkMode != null) return !!p.darkMode; } catch (e) {}
+    try { return localStorage.getItem('fp_dark_mode') === '1'; } catch (e) { return false; }
+  },
+  set(v) {
+    v = !!v;
+    try { localStorage.setItem('fp_dark_mode', v ? '1' : '0'); } catch (e) {}
+    try { const s = FP.settings.get(); s.prefs = s.prefs || {}; s.prefs.darkMode = v; FP.settings.save(s); } catch (e) {}
+    if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme();
+  },
   toggle() { this.set(!this.get()); return this.get(); },
 };
 
@@ -4107,12 +4134,16 @@ FP.lienConducteur = function (name, label) {
   return `<a class="fp-lien" href="${FP._pagePrefix()}conducteurs.html?cond=${encodeURIComponent(key)}" title="Voir la fiche conducteur" onclick="event.stopPropagation()">${txt}</a>`;
 };
 
-// Densité d'affichage : bascule compact/confortable (mémorisée, appliquée partout).
-FP.getDensity = () => { try { return (localStorage.getItem('fp_density') || '') === 'compact' ? 'compact' : 'confort'; } catch (e) { return 'confort'; } };
+// Densité d'affichage : bascule compact/confortable — SYNCHRONISÉE (règle 0-sync) via FP.pref
+// (FP.settings → app_settings) + cache local rapide (relu par l'IIFE applyDensity au 1er paint).
+FP.getDensity = () => { try { return FP.pref.get('fp_density', 'confort') === 'compact' ? 'compact' : 'confort'; } catch (e) { return 'confort'; } };
 FP.setDensity = (compact) => {
-  try { localStorage.setItem('fp_density', compact ? 'compact' : 'confort'); } catch (e) {}
+  try { FP.pref.set('fp_density', compact ? 'compact' : 'confort'); } catch (e) {}
   document.documentElement.classList.toggle('fp-compact', !!compact);
 };
+// Ré-applique la densité quand les réglages arrivent d'un autre appareil (fp:data-ready / fp:settings-synced).
+FP.applyDensity = () => { try { document.documentElement.classList.toggle('fp-compact', FP.getDensity() === 'compact'); } catch (e) {} };
+try { window.addEventListener('fp:data-ready', function () { FP.applyDensity(); if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme(); }); } catch (e) {}
 
 FP.persist = {
   _QKEY: 'fp_pending_writes',

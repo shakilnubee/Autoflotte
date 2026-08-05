@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805x">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805y">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805x"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805y"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805x">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805y">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -798,13 +798,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805x"></script>
-<script src="../assets/js/supabase-client.js?v=20260805x"></script>
-<script src="../assets/js/data.js?v=20260805x"></script>
-<script src="../assets/js/fleet-docs.js?v=20260805x"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260805x"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805y"></script>
+<script src="../assets/js/supabase-client.js?v=20260805y"></script>
+<script src="../assets/js/data.js?v=20260805y"></script>
+<script src="../assets/js/fleet-docs.js?v=20260805y"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260805y"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805x"></script>
+<script src="../assets/js/app.js?v=20260805y"></script>
 <script>
   lucide.createIcons();
 
@@ -874,8 +874,9 @@
   // Les épinglés remontent en tête de liste, sur toutes les vues. Stockage local
   // par société (comme les autres préférences d'affichage) — propre à chaque poste.
   const FAV_KEY = 'fp_veh_favoris_' + (function () { try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } })();
-  function favGet() { try { const a = JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
-  function favSave(set) { try { localStorage.setItem(FAV_KEY, JSON.stringify([...set])); } catch (e) {} }
+  // ⭐ Favoris SYNCHRONISÉS tous appareils (règle 0-sync) via FP.pref (app_settings) + cache local.
+  function favGet() { try { const a = (window.FP && FP.pref) ? FP.pref.get(FAV_KEY, []) : JSON.parse(localStorage.getItem(FAV_KEY) || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (e) { return new Set(); } }
+  function favSave(set) { try { if (window.FP && FP.pref) FP.pref.set(FAV_KEY, [...set]); else localStorage.setItem(FAV_KEY, JSON.stringify([...set])); } catch (e) {} }
   function isFav(id) { return favGet().has(id); }
   function toggleFav(id) { const s = favGet(); if (s.has(id)) s.delete(id); else s.add(id); favSave(s); }
   // Tri stable « favoris d'abord » : conserve l'ordre relatif choisi à l'intérieur de chaque groupe.
@@ -938,11 +939,13 @@
   // Documents « intégrés » masqués par véhicule (ex. mémo assurance/carte grise retiré par l'utilisateur).
   // Mémorisé en local (par société) ; la carte grise est en plus effacée du véhicule (champ cgUrl).
   const HIDDEN_BUILTIN_KEY = 'fp_hidden_builtin_docs_' + (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return 'PXP'; } })();
-  function hiddenBuiltinAll(){ try { return JSON.parse(localStorage.getItem(HIDDEN_BUILTIN_KEY) || '{}'); } catch(e){ return {}; } }
+  // Docs intégrés masqués — SYNCHRONISÉS tous appareils (règle 0-sync) via FP.pref + cache local.
+  function hiddenBuiltinAll(){ try { const o = (window.FP && FP.pref) ? FP.pref.get(HIDDEN_BUILTIN_KEY, {}) : JSON.parse(localStorage.getItem(HIDDEN_BUILTIN_KEY) || '{}'); return (o && typeof o === 'object') ? o : {}; } catch(e){ return {}; } }
+  function hiddenBuiltinSave(h){ try { if (window.FP && FP.pref) FP.pref.set(HIDDEN_BUILTIN_KEY, h); else localStorage.setItem(HIDDEN_BUILTIN_KEY, JSON.stringify(h)); } catch(e){} }
   function hiddenBuiltinFor(id){ return hiddenBuiltinAll()[id] || []; }
-  function hideBuiltinDoc(id, key){ const h = hiddenBuiltinAll(); const a = (h[id] = h[id] || []); if (!a.includes(key)) a.push(key); try { localStorage.setItem(HIDDEN_BUILTIN_KEY, JSON.stringify(h)); } catch(e){} }
+  function hideBuiltinDoc(id, key){ const h = hiddenBuiltinAll(); const a = (h[id] = h[id] || []); if (!a.includes(key)) a.push(key); hiddenBuiltinSave(h); }
   // Réafficher UN document intégré précédemment masqué (les autres restent masqués).
-  function unhideBuiltinDoc(id, key){ const h = hiddenBuiltinAll(); if (h[id]) { h[id] = h[id].filter(k => k !== key); if (!h[id].length) delete h[id]; try { localStorage.setItem(HIDDEN_BUILTIN_KEY, JSON.stringify(h)); } catch(e){} } }
+  function unhideBuiltinDoc(id, key){ const h = hiddenBuiltinAll(); if (h[id]) { h[id] = h[id].filter(k => k !== key); if (!h[id].length) delete h[id]; hiddenBuiltinSave(h); } }
 
   // Immatriculation normalisée (clé des mémos assurance dans FP_DOCS)
   function normImmat(s){ return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }

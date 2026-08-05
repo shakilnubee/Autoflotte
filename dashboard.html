@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260805x">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260805y">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260805x"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260805y"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260805x">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260805y">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -534,10 +534,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260805x"></script>
-<script src="assets/js/supabase-client.js?v=20260805x"></script>
-<script src="assets/js/data.js?v=20260805x"></script>
-<script src="assets/js/app.js?v=20260805x"></script>
+<script src="assets/js/vendor/supabase.js?v=20260805y"></script>
+<script src="assets/js/supabase-client.js?v=20260805y"></script>
+<script src="assets/js/data.js?v=20260805y"></script>
+<script src="assets/js/app.js?v=20260805y"></script>
 <!-- Upsell gestion déléguée : visible uniquement pour les ADMINS clients (ni CEO, ni gestionnaire, ni salarié), masquable -->
 <script>
 (function(){
@@ -667,12 +667,13 @@
       if (chevron) chevron.style.transform = open ? 'rotate(90deg)' : '';
       if (label) label.textContent = open ? 'Masquer les indicateurs détaillés' : 'Voir les indicateurs détaillés';
     };
-    let saved = false; try { saved = localStorage.getItem(DKEY) === '1'; } catch (e) {}
+    // État SYNCHRONISÉ tous appareils (règle 0-sync) via FP.pref + cache local.
+    let saved = false; try { saved = (window.FP && FP.pref) ? FP.pref.get(DKEY, false) === true || FP.pref.get(DKEY, false) === '1' : localStorage.getItem(DKEY) === '1'; } catch (e) {}
     applyState(saved);
     document.getElementById('toggle-details').addEventListener('click', () => {
       const open = panel.classList.contains('hidden'); // masqué actuellement → on ouvre
       applyState(open);
-      try { localStorage.setItem(DKEY, open ? '1' : '0'); } catch (e) {}
+      try { if (window.FP && FP.pref) FP.pref.set(DKEY, open); else localStorage.setItem(DKEY, open ? '1' : '0'); } catch (e) {}
     });
   })();
 
@@ -987,14 +988,15 @@
     const KEY = 'auto_flotte_dash_widgets_order';
     const cont = document.getElementById('dash-widgets');
     if (!cont) return;
+    // Ordre des widgets SYNCHRONISÉ tous appareils (règle 0-sync) via FP.pref + cache local.
     function apply() {
-      let o; try { o = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+      let o; try { o = (window.FP && FP.pref) ? FP.pref.get(KEY, null) : JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
       if (!Array.isArray(o)) return;
       o.forEach(k => { const el = cont.querySelector(`.dash-widget[data-widget="${k}"]`); if (el) cont.appendChild(el); });
     }
     function save() {
       const o = [...cont.querySelectorAll('.dash-widget')].map(el => el.dataset.widget);
-      localStorage.setItem(KEY, JSON.stringify(o));
+      try { if (window.FP && FP.pref) FP.pref.set(KEY, o); else localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) {}
     }
     function after(y) {
       const els = [...cont.querySelectorAll('.dash-widget:not(.dragging)')];
