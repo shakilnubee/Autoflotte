@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805e">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -372,7 +372,7 @@
               <th>Conducteur / Véhicule</th>
               <th style="text-align:right">Carburant</th><th style="text-align:right">Litres</th>
               <th style="text-align:right">Boutique / Repas</th><th style="text-align:right">Lavage</th>
-              <th style="text-align:right">Péage / Parking</th>
+              <th style="text-align:right">Péage / Parking</th><th style="text-align:right">Autres</th>
               <th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">Total TTC</th>
             </tr></thead>
             <tbody id="tf-conso-tbody"></tbody>
@@ -457,7 +457,7 @@
 
       <!-- Import d'un relevé Total : déclenché par le bouton « Importer un relevé Total » du HAUT de page
            (plus de bouton en double ici). Le champ fichier + le statut/aperçu restent pour l'import. -->
-      <input type="file" id="tf-import-file" accept="application/pdf" multiple class="hidden" />
+      <input type="file" id="tf-import-file" accept="application/pdf,application/zip,application/x-zip-compressed,.zip" multiple class="hidden" />
       <div id="tf-import-status" class="hidden mb-3 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
       <div id="tf-import-preview" class="hidden mb-3"></div>
 
@@ -699,11 +699,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805d"></script>
-<script src="../assets/js/supabase-client.js?v=20260805d"></script>
-<script src="../assets/js/data.js?v=20260805d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805e"></script>
+<script src="../assets/js/supabase-client.js?v=20260805e"></script>
+<script src="../assets/js/data.js?v=20260805e"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805d"></script>
+<script src="../assets/js/app.js?v=20260805e"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1170,6 +1170,7 @@
   //  les chiffres pour les calculs (totaux, KPIs, graphiques).
   // ============================================================
   const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  const JSZIP_CDN     = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'; // dézip des relevés Total (à la demande)
   const PDFJS_CDN     = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
   const PDFJS_WORKER  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
@@ -2530,26 +2531,48 @@
         if (c.plaque) return `<span class="font-mono text-slate-500 text-xs">${esc(c.plaque)}</span>`;
         return '<span class="text-slate-400">—</span>';
       };
+      // Colonne « Autres » (bonbonne de gaz, accessoires, lubrifiant… = ni carburant, ni boutique/repas,
+      // ni lavage, ni péage) depuis le détail transaction, agrégée par la MÊME clé que les lignes. La
+      // « Boutique / Repas » affichée est alors NETTE de ces « autres » (sinon le gaz compterait 2×).
+      const rowKey = (c) => cond ? (c._month || '—') : ((c.carte && String(c.carte)) || resolveName(c) || c.plaque || c.id);
+      const autreByKey = {};
+      if (consoTx && consoTx.length) {
+        const _f = $('tf-conso-from').value, _t = $('tf-conso-to').value, _sm = (!_f && !_t) ? ($('tf-conso-mois').value || '') : '', _cs = tfCondSel();
+        consoTx.forEach(t => {
+          if (t.categorie !== 'autre') return;
+          if (_f || _t) { const fm = _f ? _f.slice(0, 7) : null, tm = _t ? _t.slice(0, 7) : null; if (fm && (t.mois || '') < fm) return; if (tm && (t.mois || '') > tm) return; }
+          else if (_sm && _sm !== '__all__') { if ((t.mois || '') !== _sm) return; }
+          if (_cs && (t.conducteur || '') !== _cs) return;
+          const key = cond ? (t.mois || '—') : ((t.carte && String(t.carte)) || t.conducteur || t.plaque || '—');
+          autreByKey[key] = (autreByKey[key] || 0) + (Number(t.montant_ttc) || 0);
+        });
+      }
+      const autreOf = (c) => autreByKey[rowKey(c)] || 0;
+      const boutiqueNetOf = (c) => Math.max(0, (Number(c.boutique_ttc) || 0) - autreOf(c));
       const cell = (v) => v ? FP.euro(v) : '<span class="text-slate-300">—</span>';
       tbody.innerHTML = rows.map(c => `<tr>
         <td>${cond ? '<span class="font-semibold">' + esc(moisLabel(c._month || '—')) + '</span>' : who(c)}</td>
         <td style="text-align:right">${cell(c.carburant_ttc)}</td>
         <td style="text-align:right" class="text-slate-500">${c.litres ? FP.num(Math.round(c.litres)) + ' L' : '—'}</td>
-        <td style="text-align:right">${cell(c.boutique_ttc)}</td>
+        <td style="text-align:right">${cell(boutiqueNetOf(c))}</td>
         <td style="text-align:right">${cell(c.lavage_ttc)}</td>
         <td style="text-align:right">${cell(c.peage_ttc)}</td>
+        <td style="text-align:right">${cell(autreOf(c))}</td>
         <td style="text-align:right" class="text-slate-500">${cell(c.total_ht)}</td>
         <td style="text-align:right" class="text-slate-500">${cell(c.total_tva)}</td>
         <td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc)}</td>
       </tr>`).join('');
       const sum = (k) => rows.reduce((s,c) => s + (Number(c[k]) || 0), 0);
+      const sumAutre = rows.reduce((s, c) => s + autreOf(c), 0);
+      const sumBoutiqueNet = rows.reduce((s, c) => s + boutiqueNetOf(c), 0);
       tfoot.innerHTML = `<tr style="border-top:2px solid var(--fp-border);font-weight:700;background:#f8fafc">
         <td>Total ${esc(label)}</td>
         <td style="text-align:right">${FP.euro(sum('carburant_ttc'))}</td>
         <td style="text-align:right" class="text-slate-500">${FP.num(Math.round(sum('litres')))} L</td>
-        <td style="text-align:right">${FP.euro(sum('boutique_ttc'))}</td>
+        <td style="text-align:right">${FP.euro(sumBoutiqueNet)}</td>
         <td style="text-align:right">${FP.euro(sum('lavage_ttc'))}</td>
         <td style="text-align:right">${FP.euro(sum('peage_ttc'))}</td>
+        <td style="text-align:right">${FP.euro(sumAutre)}</td>
         <td style="text-align:right">${FP.euro(sum('total_ht'))}</td>
         <td style="text-align:right">${FP.euro(sum('total_tva'))}</td>
         <td style="text-align:right">${FP.euro(sum('total_ttc'))}</td>
@@ -3048,8 +3071,31 @@
     }
 
     async function handleReleves(fileList){
-      const files = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
-      if (!files.length){ tfImpReset(); tfImpStatus('Depose un ou plusieurs <b>PDF</b> TotalEnergies (releve et/ou factures detaillees).', 'error'); return; }
+      // ZIP accepté : on le décompresse en mémoire et on ne garde que les FACTURES (FAC*),
+      // en IGNORANT le relevé global (RLP*) → anti double-comptage (cf. règle projet + consigne).
+      let src = Array.from(fileList || []);
+      if (src.some(f => /\.zip$/i.test(f.name) || /zip/i.test(f.type || ''))) {
+        tfImpReset(); tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Décompression des ZIP…</span>', 'working');
+        const expanded = [];
+        for (const f of src) {
+          if (/\.zip$/i.test(f.name) || /zip/i.test(f.type || '')) {
+            try {
+              await loadScript(JSZIP_CDN);
+              const zip = await window.JSZip.loadAsync(f);
+              for (const nm of Object.keys(zip.files)) {
+                const entry = zip.files[nm]; if (entry.dir) continue;
+                if (!/\.pdf$/i.test(nm)) continue;
+                if (/RLP/i.test(nm)) continue; // relevé global → ignoré (on garde les factures FAC)
+                const blob = await entry.async('blob');
+                expanded.push(new File([blob], nm.split('/').pop(), { type: 'application/pdf' }));
+              }
+            } catch (e) { console.warn('[unzip]', f.name, e); }
+          } else { expanded.push(f); }
+        }
+        src = expanded;
+      }
+      const files = src.filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+      if (!files.length){ tfImpReset(); tfImpStatus('Depose un ou plusieurs <b>PDF</b> ou <b>ZIP</b> TotalEnergies (factures detaillees). Le relevé global (RLP) est ignoré automatiquement.', 'error'); return; }
       tfImpReset();
       tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture des PDF…</span>', 'working');
       // Correspondance carte -> conducteur (ne DOIT PAS bloquer l'import si la base tarde/échoue)
