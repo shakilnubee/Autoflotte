@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805s">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805t">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805s"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805t"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805s">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805t">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -136,11 +136,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805s"></script>
-<script src="../assets/js/supabase-client.js?v=20260805s"></script>
-<script src="../assets/js/data.js?v=20260805s"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805t"></script>
+<script src="../assets/js/supabase-client.js?v=20260805t"></script>
+<script src="../assets/js/data.js?v=20260805t"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805s"></script>
+<script src="../assets/js/app.js?v=20260805t"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -631,10 +631,20 @@
     const anoms = verifAnoms();
     paintVerifTab(anoms.length);
     if (!anoms.length) { box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier sur la carte carburant Total.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div></div></div>'; lucide.createIcons(); return; }
-    box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant <b>Total</b> (repas élevés, achats hors carburant, plusieurs pleins/jour). Ouvre la page <b>Factures → Total Fleet</b> pour vérifier et archiver.</p>'
-      + anoms.map(a => `<a href="factures.html" class="notif lvl-warn"><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"></i><div class="flex-1 min-w-0"><div class="notif-cat">Carte carburant Total</div><div class="font-semibold text-slate-900">${esc(a.txt)}</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 flex-shrink-0 self-center"></i></a>`).join('');
+    box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant <b>Total</b> (repas élevés, achats hors carburant, plusieurs pleins/jour, diesel). La <b>✓ verte</b> archive comme sur Factures → Total Fleet (même suivi). Clique le texte pour ouvrir la facture.</p>'
+      + anoms.map(a => `<div class="notif lvl-warn" style="align-items:center"><button type="button" data-verif-ok="${esc(a.key)}" title="Marquer vérifié / archiver (même suivi que Factures)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:17px;line-height:1">✓</button><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0"></i><a href="factures.html" class="flex-1 min-w-0" style="text-decoration:none;color:inherit"><div class="notif-cat">Carte carburant Total</div><div class="font-semibold text-slate-900">${esc(a.txt)}</div></a><i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 flex-shrink-0"></i></div>`).join('');
     lucide.createIcons();
   }
+  // ✓ Archiver depuis « Suivi & alertes » → écrit dans la MÊME source (FP.settings.tfAnomOk) que Factures.
+  { const vbox = document.getElementById('suivi-verif'); if (vbox) vbox.addEventListener('click', (e) => {
+    const ok = e.target.closest('[data-verif-ok]'); if (!ok) return;
+    e.preventDefault();
+    const key = ok.getAttribute('data-verif-ok');
+    const a = verifAnoms().find(x => x.key === key);
+    try { const s = FP.settings.get(); const m = s.tfAnomOk || {}; m[key] = a ? { key, t: a.t, txt: a.txt, mois: a.mois || '', facnum: a.facnum || '', okAt: Date.now() } : { key, okAt: Date.now() }; s.tfAnomOk = m; FP.settings.save(s); } catch (er) {}
+    renderVerif();
+    if (window.FP && FP.toast) FP.toast('✓ Archivé (visible aussi dans Factures)');
+  }); }
 
   // Bouton « Compléter depuis les cartes grises » : remplit les champs VIDES depuis FP.CG_DATA.
   document.getElementById('suivi-complet').addEventListener('click', async (e) => {
