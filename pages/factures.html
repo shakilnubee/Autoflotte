@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805t">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805u">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805t"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805u"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805t">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805u">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -706,11 +706,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805t"></script>
-<script src="../assets/js/supabase-client.js?v=20260805t"></script>
-<script src="../assets/js/data.js?v=20260805t"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805u"></script>
+<script src="../assets/js/supabase-client.js?v=20260805u"></script>
+<script src="../assets/js/data.js?v=20260805u"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805t"></script>
+<script src="../assets/js/app.js?v=20260805u"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2684,7 +2684,9 @@
       Object.keys(dm).forEach(n => { const ms = Object.keys(dm[n]).sort(); if (ms.length < 3) return; const last = ms[ms.length - 1], prev = ms.slice(0, -1); const avg = prev.reduce((s, m) => s + dm[n][m], 0) / prev.length; if (avg > 100 && dm[n][last] > avg * 1.6) anom.push({ t:'info', mois:last, txt:`${n} · ${moisLabel(last)} : ${eur(dm[n][last])} dépensés ce mois-ci vs ${eur(Math.round(avg))} en moyenne → forte hausse, à vérifier` }); });
       anom.sort((a, b) => (a.t === 'warn' ? 0 : 1) - (b.t === 'warn' ? 0 : 1));
       // Clé stable par anomalie (pour mémoriser « vérifiée / archivée ») + index par clé (ouverture facture).
-      anom.forEach(a => { a.key = a.t + '|' + (a.facnum || '') + '|' + a.txt; });
+      // ⚠️ NE PAS écraser la clé déjà posée par le helper partagé (ex. diesel = « diesel|<nom> ») :
+      //    sinon l'archivage ne serait PAS reconnu par « Suivi & alertes » (clés différentes).
+      anom.forEach(a => { if (!a.key) a.key = a.t + '|' + (a.facnum || '') + '|' + a.txt; });
       _tfAnom = anom; _tfAnomByKey = {}; anom.forEach(a => { _tfAnomByKey[a.key] = a; });
       renderAnomList();
     }
@@ -2714,7 +2716,7 @@
         return;
       }
       // mode « à vérifier » : anomalies calculées NON archivées
-      const active = _tfAnom.filter(a => !okMap[a.key]);
+      const active = _tfAnom.filter(a => (FP.tfAnomArchivee ? !FP.tfAnomArchivee(a, okMap) : !okMap[a.key]));
       if (!active.length) { box.innerHTML = '<p class="text-sm text-emerald-700">✓ Rien à vérifier' + (okKeys.length ? ' (tout est archivé).' : '.') + '</p>'; if (window.lucide) lucide.createIcons(); return; }
       const row = (a) => `<div data-anom-key="${esc(a.key)}" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f1f5f9;font-size:12.5px;border-radius:6px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><button type="button" data-anom-ok="${esc(a.key)}" title="Marquer comme vérifié / OK (archive)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:15px">✓</button>${dot(a.t)}<span style="color:#334155;flex:1;cursor:pointer" data-anom-open="1" title="Ouvrir la facture Total concernée">${esc(a.txt)}</span><span style="font-size:11px;color:var(--fp-accent);font-weight:700;white-space:nowrap;cursor:pointer" data-anom-open="1">Voir la facture ›</span></div>`;
       box.innerHTML = active.map(row).join('')

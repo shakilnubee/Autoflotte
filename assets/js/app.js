@@ -2190,10 +2190,17 @@ FP.totalFleetAnomaliesTx = function (tx) {
   anom.forEach(a => { if (!a.key) a.key = a.t + '|' + (a.facnum || '') + '|' + a.txt; });
   return anom;
 };
+// Vrai si une anomalie a été archivée (« vérifié »). Reconnaît aussi l'ANCIENNE clé
+// (« warn|<facnum>|<txt> ») pour que ce qui a déjà été archivé ne réapparaisse pas après un changement
+// de clé (ex. diesel devenu « diesel|<nom> »). SOURCE UNIQUE — utilisée par Factures et Suivi & alertes.
+FP.tfAnomArchivee = function (a, ok) {
+  if (!a) return false; ok = ok || {};
+  return !!(ok[a.key] || ok[a.t + '|' + (a.facnum || '') + '|' + a.txt]);
+};
 // Anomalies NON archivées (exclut celles cochées « vérifié » dans les réglages tfAnomOk).
 FP.totalFleetAnomaliesActives = function (tx) {
   let ok = {}; try { ok = FP.settings.get().tfAnomOk || {}; } catch (e) {}
-  return FP.totalFleetAnomaliesTx(tx).filter(a => !ok[a.key]);
+  return FP.totalFleetAnomaliesTx(tx).filter(a => !FP.tfAnomArchivee(a, ok));
 };
 // ⚠️ SOURCE UNIQUE — Applique une facture à la fiche du véhicule (km + dernière révision + pneus +
 // rappel « relevé km »). TOUS les chemins qui créent OU éditent une facture DOIVENT passer par ici
