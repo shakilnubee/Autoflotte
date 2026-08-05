@@ -332,19 +332,25 @@
     if (!btn) return;
     btn.addEventListener('click', function(){
       var old = btn.innerHTML; btn.textContent = 'Génération…'; btn.disabled = true;
+      var wrap = document.querySelector('.kc-wrap');
       // Masquer l'interface (non désirée sur le papier) — restaurée après la capture.
       var hidden = [];
       document.querySelectorAll('#kc-toolbar, .kc-del, .kc-addbtn').forEach(function(el){ hidden.push([el, el.style.display]); el.style.display = 'none'; });
       try { window.scrollTo(0, 0); } catch(e){}
-      function restore(){ hidden.forEach(function(p){ p[0].style.display = p[1]; }); btn.innerHTML = old; btn.disabled = false; }
+      function restore(){
+        hidden.forEach(function(p){ p[0].style.display = p[1]; });
+        btn.innerHTML = old; btn.disabled = false;
+      }
+      // Capture BRUTE de la vraie page (aucune retouche de largeur/marge : c'est ce qui garantit
+      // un rendu FIDÈLE, sans rognage — vérifié). Repli window.print() si le module ne charge pas.
       loadScript('https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js').then(function(){
         return html2pdf().set({
-          margin: [6, 6, 8, 6], filename: 'Kit-commercial-Parc-Pilot.pdf',
+          margin: [8, 8, 10, 8], filename: 'Kit-commercial-Parc-Pilot.pdf',
           image: { type:'jpeg', quality:0.98 },
-          html2canvas: { scale:2, useCORS:true, backgroundColor:'#F4F6FA', scrollY:0, windowWidth: document.querySelector('.kc-wrap').scrollWidth },
+          html2canvas: { scale:2, useCORS:true, backgroundColor:'#F4F6FA' },
           jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
           pagebreak: { mode:['css','legacy'], avoid:'.kc-card' }
-        }).from(document.querySelector('.kc-wrap')).save();
+        }).from(wrap).save();
       }).catch(function(){ restore(); window.print(); }).then(function(){ restore(); });
     });
   })();
