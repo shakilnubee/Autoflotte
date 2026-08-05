@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805f">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -425,10 +425,11 @@
                 <span class="text-slate-600">Repas / jour au-delà de</span>
                 <span class="flex items-center gap-1"><input id="ts-repas" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
               </label>
-              <label class="flex items-center justify-between gap-3 mb-2">
-                <span class="text-slate-600">Article « autre » au-delà de</span>
+              <label class="flex items-center justify-between gap-3 mb-1">
+                <span class="text-slate-600">Achat « Autres » listé au-delà de</span>
                 <span class="flex items-center gap-1"><input id="ts-autre" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
               </label>
+              <p class="text-[11px] text-slate-400 mb-2">0 = tous les achats « Autres » (gaz, accessoires…) apparaissent dans les points à vérifier.</p>
               <label class="flex items-center justify-between gap-3 mb-3">
                 <span class="text-slate-600">Boutique (hors carburant) / mois au-delà de</span>
                 <span class="flex items-center gap-1"><input id="ts-horscarb" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
@@ -699,11 +700,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805e"></script>
-<script src="../assets/js/supabase-client.js?v=20260805e"></script>
-<script src="../assets/js/data.js?v=20260805e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805f"></script>
+<script src="../assets/js/supabase-client.js?v=20260805f"></script>
+<script src="../assets/js/data.js?v=20260805f"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805e"></script>
+<script src="../assets/js/app.js?v=20260805f"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2410,7 +2411,7 @@
     // --- Consommation par conducteur / véhicule (table total_conso) ---
     let conso = null, consoTx = null, consoLoaded = false, consoSortDesc = true, _tfAnom = [];
     // Seuils d'alerte configurables (réglages société). Défauts raisonnables.
-    function tfLimits(){ let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {} return { repasJour: Number(s.repasJour) > 0 ? Number(s.repasJour) : 20, autreItem: Number(s.autreItem) > 0 ? Number(s.autreItem) : 15, horsCarbMois: Number(s.horsCarbMois) > 0 ? Number(s.horsCarbMois) : 40 }; }
+    function tfLimits(){ let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {} return { repasJour: Number(s.repasJour) > 0 ? Number(s.repasJour) : 20, autreItem: Number(s.autreItem) > 0 ? Number(s.autreItem) : 0, horsCarbMois: Number(s.horsCarbMois) > 0 ? Number(s.horsCarbMois) : 40 }; }
     const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
 
     async function loadConso(){
@@ -2657,12 +2658,16 @@
         const day = {};
         tx.filter(t => t.categorie === 'repas').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = day[k] || (day[k] = { n:t.conducteur || '—', d:t.date_tx, fac:t.facnum, mois:t.mois, s:0 }); o.s += Number(t.montant_ttc) || 0; });
         Object.values(day).forEach(o => { if (o.s > lim.repasJour) anom.push({ t:'warn', mois:o.mois, facnum:o.fac, txt:`${o.n} · ${FP.dateNum(o.d)} : ${eur(o.s)} de repas sur la carte carburant (seuil ${lim.repasJour} €/jour)` }); });
-        // 2) Achats « AUTRE » (ni carburant, ni repas, ni lavage, ni péage) : bonbonne de gaz, etc.
-        tx.filter(t => t.categorie === 'autre' && (Number(t.montant_ttc) || 0) >= lim.autreItem).forEach(t => anom.push({ t:'warn', mois:t.mois, facnum:t.facnum, txt:`${t.conducteur || '—'} · ${FP.dateNum(t.date_tx)} : ${t.produit} ${eur(t.montant_ttc)} — achat inhabituel hors carburant` }));
+        // 2) Chaque achat « AUTRES » (ni carburant, ni repas, ni lavage, ni péage) = un point à vérifier
+        //    à part entière : une bonbonne de gaz, un accessoire, un lubrifiant… n'ont rien à faire sur
+        //    une carte carburant → on les liste UN PAR UN (cliquables), sans amalgame. Le seuil « article
+        //    autre » sert de plancher optionnel (0 = on montre tout).
+        tx.filter(t => t.categorie === 'autre' && (Number(t.montant_ttc) || 0) >= (lim.autreItem || 0))
+          .sort((a, b) => (Number(b.montant_ttc) || 0) - (Number(a.montant_ttc) || 0))
+          .forEach(t => anom.push({ t:'warn', mois:t.mois, facnum:t.facnum, txt:`${t.conducteur || '—'} · ${FP.dateNum(t.date_tx)} : ${t.produit} ${eur(t.montant_ttc)} — dépense « Autres » (hors carburant) à vérifier` }));
       } else {
-        // Repli (détail pas encore importé) : achats hors carburant par conducteur & par MOIS.
-        const bm = {}; conso.forEach(c => { const b = _tfN(c.boutique_ttc); if (b <= 0) return; const n = _tfName(c, vbp); const k = n + '|' + (c.mois || ''); const o = bm[k] || (bm[k] = { n, mois:c.mois, b:0 }); o.b += b; });
-        Object.values(bm).forEach(o => { if (o.b >= lim.horsCarbMois) anom.push({ t:'warn', mois:o.mois, txt:`${o.n} · ${moisLabel(o.mois)} : ${eur(o.b)} d'achats hors carburant (boutique / repas / gaz…) — à vérifier` }); });
+        // Détail pas encore importé → PAS d'amalgame mensuel : une seule invitation à reconstruire le détail.
+        anom.push({ t:'info', txt:'Clique sur « 🔄 Reconstruire le détail » (en haut de cet encart) pour analyser les achats un par un — repas/jour, bonbonnes de gaz, accessoires…' });
       }
       // Dépense globale d'un conducteur qui EXPLOSE d'un mois sur l'autre (grosse hausse seulement).
       const dm = {}; conso.forEach(c => { if (!c.mois) return; const n = _tfName(c, vbp); (dm[n] = dm[n] || {})[c.mois] = (dm[n][c.mois] || 0) + _tfN(c.total_ttc); });
@@ -2727,11 +2732,11 @@
         const s = $('ts-save'); if (s) { s.disabled = true; s.classList.add('opacity-40', 'cursor-not-allowed'); s.title = 'Réservé à l\'administrateur'; }
         const r = $('ts-reset'); if (r) r.style.display = 'none';
       }
-      if ($('ts-reset')) $('ts-reset').addEventListener('click', () => { $('ts-repas').value = 20; $('ts-autre').value = 15; $('ts-horscarb').value = 40; });
+      if ($('ts-reset')) $('ts-reset').addEventListener('click', () => { $('ts-repas').value = 20; $('ts-autre').value = 0; $('ts-horscarb').value = 40; });
       if ($('ts-save')) $('ts-save').addEventListener('click', async () => {
         if (!canEdit) return;
         const g = (id, d) => { const v = Number($(id).value); return v > 0 ? v : d; };
-        const seuils = { repasJour: g('ts-repas', 20), autreItem: g('ts-autre', 15), horsCarbMois: g('ts-horscarb', 40) };
+        const seuils = { repasJour: g('ts-repas', 20), autreItem: Math.max(0, Number($('ts-autre').value) || 0), horsCarbMois: g('ts-horscarb', 40) };
         try { const s = FP.settings.get(); s.tfSeuils = seuils; await FP.settings.save(s); if (FP.toast) FP.toast('Seuils enregistrés ✓'); }
         catch (e) { if (FP.toast) FP.toast('Enregistrement impossible'); return; }
         panel.classList.add('hidden'); renderAnalyse();
