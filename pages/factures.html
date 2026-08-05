@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260804m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260804m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -412,7 +412,29 @@
           </div>
           <!-- Anomalies -->
           <div class="card p-4">
-            <div class="font-semibold text-slate-800 mb-3 flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500"></i> Points à vérifier</div>
+            <div class="font-semibold text-slate-800 mb-3 flex items-center justify-between gap-2">
+              <span class="flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500"></i> Points à vérifier</span>
+              <button id="tf-seuils-btn" type="button" class="text-xs text-slate-400 hover:text-teal-600 flex items-center gap-1" title="Régler les seuils d'alerte"><i data-lucide="settings-2" class="w-3.5 h-3.5"></i> Seuils</button>
+            </div>
+            <div id="tf-seuils" class="hidden mb-3 p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm">
+              <div class="font-medium text-slate-700 mb-2 text-xs uppercase tracking-wide">Seuils d'alerte (carte carburant)</div>
+              <label class="flex items-center justify-between gap-3 mb-2">
+                <span class="text-slate-600">Repas / jour au-delà de</span>
+                <span class="flex items-center gap-1"><input id="ts-repas" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
+              </label>
+              <label class="flex items-center justify-between gap-3 mb-2">
+                <span class="text-slate-600">Article « autre » au-delà de</span>
+                <span class="flex items-center gap-1"><input id="ts-autre" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
+              </label>
+              <label class="flex items-center justify-between gap-3 mb-3">
+                <span class="text-slate-600">Boutique (hors carburant) / mois au-delà de</span>
+                <span class="flex items-center gap-1"><input id="ts-horscarb" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
+              </label>
+              <div class="flex items-center justify-end gap-2">
+                <button id="ts-reset" type="button" class="text-xs text-slate-500 hover:text-slate-700">Valeurs par défaut</button>
+                <button id="ts-save" type="button" class="text-xs bg-teal-600 text-white rounded px-3 py-1.5 hover:bg-teal-700">Enregistrer</button>
+              </div>
+            </div>
             <div id="tf-an-anom"></div>
           </div>
         </div>
@@ -674,11 +696,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260804m"></script>
-<script src="../assets/js/supabase-client.js?v=20260804m"></script>
-<script src="../assets/js/data.js?v=20260804m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805a"></script>
+<script src="../assets/js/supabase-client.js?v=20260805a"></script>
+<script src="../assets/js/data.js?v=20260805a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260804m"></script>
+<script src="../assets/js/app.js?v=20260805a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2374,7 +2396,9 @@
     }
 
     // --- Consommation par conducteur / véhicule (table total_conso) ---
-    let conso = null, consoLoaded = false, consoSortDesc = true, _tfAnom = [];
+    let conso = null, consoTx = null, consoLoaded = false, consoSortDesc = true, _tfAnom = [];
+    // Seuils d'alerte configurables (réglages société). Défauts raisonnables.
+    function tfLimits(){ let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {} return { repasJour: Number(s.repasJour) > 0 ? Number(s.repasJour) : 20, autreItem: Number(s.autreItem) > 0 ? Number(s.autreItem) : 15, horsCarbMois: Number(s.horsCarbMois) > 0 ? Number(s.horsCarbMois) : 40 }; }
     const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
 
     async function loadConso(){
@@ -2390,6 +2414,14 @@
         console.warn('[total_conso] indisponible :', e && (e.message || e));
         conso = null; // table absente → on affiche un message d'aide
       }
+      // Détail transaction par transaction (best-effort : table absente = null → repli mensuel).
+      try {
+        const rt = await FP.supabase.from('total_conso_tx').select('*');
+        if (rt.error) throw rt.error;
+        consoTx = rt.data || [];
+        const _soc = FP.activeSociete ? FP.activeSociete() : null;
+        if (_soc && _soc !== '__all__') consoTx = consoTx.filter(x => !x.societe || x.societe === _soc);
+      } catch (e) { consoTx = null; }
       renderConso();
       renderAnalyse();
     }
@@ -2549,24 +2581,56 @@
       const byMonth = {}; conso.forEach(c => { if (!c.mois) return; const m = byMonth[c.mois] || (byMonth[c.mois] = { ttc:0, litres:0 }); m.ttc += _tfN(c.total_ttc); m.litres += _tfN(c.litres); });
       const months = Object.keys(byMonth).sort().slice(-12); const maxT = Math.max(1, ...months.map(m => byMonth[m].ttc));
       $('tf-an-evol').innerHTML = months.length ? months.map(m => { const v = byMonth[m]; return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="width:74px;font-size:11px;color:#64748b">${moisLabel(m)}</div><div style="flex:1;background:#f1f5f9;border-radius:6px;overflow:hidden;height:15px"><div style="width:${Math.round(v.ttc / maxT * 100)}%;height:100%;background:linear-gradient(90deg,#f97316,#fb923c)"></div></div><div style="width:88px;text-align:right;font-size:12px;font-weight:600">${eur(v.ttc)}</div><div style="width:60px;text-align:right;font-size:11px;color:#94a3b8">${FP.num(Math.round(v.litres))} L</div></div>`; }).join('') : '<p class="text-sm text-slate-400">Pas assez de données.</p>';
-      // Répartition
-      const parts = [['Carburant', tot.carb, '#f97316'], ['Péage / parking', tot.peage, '#0e7490'], ['Lavage', tot.lav, '#0891b2'], ['Boutique / repas', tot.bout, '#8b5cf6']];
+      // Répartition — si le détail transaction est importé, on sépare « Repas » et « Autres »
+      // (bonbonne de gaz, divers) ; sinon on garde le poste groupé « Boutique / repas ».
+      let repasTot = 0, autreTot = 0, hasTxRep = false;
+      if (consoTx && consoTx.length) {
+        const _f = $('tf-conso-from').value, _t = $('tf-conso-to').value;
+        const _sm = (!_f && !_t) ? ($('tf-conso-mois').value || '') : '', _cs = tfCondSel();
+        consoTx.forEach(t => {
+          if (_f || _t) { const fm = _f ? _f.slice(0, 7) : null, tm = _t ? _t.slice(0, 7) : null; if (fm && (t.mois || '') < fm) return; if (tm && (t.mois || '') > tm) return; }
+          else if (_sm && _sm !== '__all__') { if ((t.mois || '') !== _sm) return; }
+          if (_cs && (t.conducteur || '') !== _cs) return;
+          if (t.categorie === 'repas') { repasTot += _tfN(t.montant_ttc); hasTxRep = true; }
+          else if (t.categorie === 'autre') { autreTot += _tfN(t.montant_ttc); hasTxRep = true; }
+        });
+      }
+      const parts = hasTxRep
+        ? [['Carburant', tot.carb, '#f97316'], ['Péage / parking', tot.peage, '#0e7490'], ['Lavage', tot.lav, '#0891b2'], ['Repas', repasTot, '#8b5cf6'], ['Autres (gaz, divers)', autreTot, '#ec4899']]
+        : [['Carburant', tot.carb, '#f97316'], ['Péage / parking', tot.peage, '#0e7490'], ['Lavage', tot.lav, '#0891b2'], ['Boutique / repas', tot.bout, '#8b5cf6']];
       const totP = parts.reduce((s, p) => s + p[1], 0) || 1;
       $('tf-an-repart').innerHTML = parts.map(p => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px"><div style="width:118px;font-size:12px;color:#475569">${p[0]}</div><div style="flex:1;background:#f1f5f9;border-radius:6px;overflow:hidden;height:14px"><div style="width:${Math.round(p[1] / totP * 100)}%;height:100%;background:${p[2]}"></div></div><div style="width:42px;text-align:right;font-size:12px;font-weight:600">${Math.round(p[1] / totP * 100)}%</div><div style="width:78px;text-align:right;font-size:11px;color:#94a3b8">${eur(p[1])}</div></div>`).join('');
       // Classement conducteurs
       const byD = {}; rows.forEach(c => { const n = _tfName(c, vbp); const d = byD[n] || (byD[n] = { nom:n, ttc:0, carb:0, litres:0, bout:0 }); d.ttc += _tfN(c.total_ttc); d.carb += _tfN(c.carburant_ttc); d.litres += _tfN(c.litres); d.bout += _tfN(c.boutique_ttc); });
       const rank = Object.values(byD).sort((a, b) => b.ttc - a.ttc).slice(0, 8); const maxD = Math.max(1, ...rank.map(d => d.ttc));
       $('tf-an-rank').innerHTML = rank.map((d, i) => { const pl = d.litres > 0 ? d.carb / d.litres : 0; return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><div style="width:16px;font-weight:800;color:#94a3b8">${i + 1}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#0f1e3d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.nom)}</div><div style="background:#f1f5f9;border-radius:5px;overflow:hidden;height:7px;margin-top:2px"><div style="width:${Math.round(d.ttc / maxD * 100)}%;height:100%;background:#f97316"></div></div></div><div style="width:78px;text-align:right;font-size:12px;font-weight:700">${eur(d.ttc)}</div><div style="width:66px;text-align:right;font-size:11px;color:#94a3b8">${pl ? pl.toFixed(2).replace('.', ',') + ' €/L' : ''}</div></div>`; }).join('') || '<p class="text-sm text-slate-400">—</p>';
-      // Anomalies UTILES et PEU NOMBREUSES — clic sur une ligne → ouvre la facture Total du mois.
-      // (On ne spamme plus une alerte par prix au litre : seulement les vrais signaux d'abus.)
+      // === POINTS À VÉRIFIER — seuils configurables ; clic → ouvre la facture concernée ===
       const anom = [];
-      // 1) Achats HORS CARBURANT notables par CONDUCTEUR & par MOIS (boutique + repas + gaz…). Sur une
-      //    carte carburant ça devrait être quasi nul → au-delà du seuil, dépense à vérifier (cas Romuald :
-      //    bonbonne de gaz 45 €). Un seul point par conducteur/mois (pas une ligne par achat).
-      const HORS_CARB = 40; // € sur le mois
-      { const bm = {}; conso.forEach(c => { const b = _tfN(c.boutique_ttc); if (b <= 0) return; const n = _tfName(c, vbp); const k = n + '|' + (c.mois || ''); const o = bm[k] || (bm[k] = { n, mois:c.mois, b:0 }); o.b += b; });
-        Object.values(bm).forEach(o => { if (o.b >= HORS_CARB) anom.push({ t:'warn', mois:o.mois, txt:`${o.n} · ${moisLabel(o.mois)} : ${eur(o.b)} d'achats hors carburant (boutique / repas / gaz…) — à vérifier` }); }); }
-      // 2) Dépense globale d'un conducteur qui EXPLOSE d'un mois sur l'autre (grosse hausse seulement).
+      const lim = tfLimits();
+      // Même filtre de période que la vue (mois OU dates), + conducteur.
+      const _from = $('tf-conso-from').value, _to = $('tf-conso-to').value;
+      const _selM = (!_from && !_to) ? ($('tf-conso-mois').value || '') : '';
+      const _condSel = tfCondSel();
+      const _txIn = (t) => {
+        if (_from || _to) { const fm = _from ? _from.slice(0, 7) : null, tm = _to ? _to.slice(0, 7) : null; if (fm && (t.mois || '') < fm) return false; if (tm && (t.mois || '') > tm) return false; }
+        else if (_selM && _selM !== '__all__') { if ((t.mois || '') !== _selM) return false; }
+        return !_condSel || (t.conducteur || '') === _condSel;
+      };
+      if (consoTx && consoTx.length) {
+        // Détail transaction par transaction disponible → détection au JOUR et à l'ARTICLE.
+        const tx = consoTx.filter(_txIn);
+        // 1) REPAS abusifs : par conducteur & par JOUR au-delà du seuil (défaut 20 €/jour).
+        const day = {};
+        tx.filter(t => t.categorie === 'repas').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = day[k] || (day[k] = { n:t.conducteur || '—', d:t.date_tx, fac:t.facnum, mois:t.mois, s:0 }); o.s += Number(t.montant_ttc) || 0; });
+        Object.values(day).forEach(o => { if (o.s > lim.repasJour) anom.push({ t:'warn', mois:o.mois, facnum:o.fac, txt:`${o.n} · ${FP.dateNum(o.d)} : ${eur(o.s)} de repas sur la carte carburant (seuil ${lim.repasJour} €/jour)` }); });
+        // 2) Achats « AUTRE » (ni carburant, ni repas, ni lavage, ni péage) : bonbonne de gaz, etc.
+        tx.filter(t => t.categorie === 'autre' && (Number(t.montant_ttc) || 0) >= lim.autreItem).forEach(t => anom.push({ t:'warn', mois:t.mois, facnum:t.facnum, txt:`${t.conducteur || '—'} · ${FP.dateNum(t.date_tx)} : ${t.produit} ${eur(t.montant_ttc)} — achat inhabituel hors carburant` }));
+      } else {
+        // Repli (détail pas encore importé) : achats hors carburant par conducteur & par MOIS.
+        const bm = {}; conso.forEach(c => { const b = _tfN(c.boutique_ttc); if (b <= 0) return; const n = _tfName(c, vbp); const k = n + '|' + (c.mois || ''); const o = bm[k] || (bm[k] = { n, mois:c.mois, b:0 }); o.b += b; });
+        Object.values(bm).forEach(o => { if (o.b >= lim.horsCarbMois) anom.push({ t:'warn', mois:o.mois, txt:`${o.n} · ${moisLabel(o.mois)} : ${eur(o.b)} d'achats hors carburant (boutique / repas / gaz…) — à vérifier` }); });
+      }
+      // Dépense globale d'un conducteur qui EXPLOSE d'un mois sur l'autre (grosse hausse seulement).
       const dm = {}; conso.forEach(c => { if (!c.mois) return; const n = _tfName(c, vbp); (dm[n] = dm[n] || {})[c.mois] = (dm[n][c.mois] || 0) + _tfN(c.total_ttc); });
       Object.keys(dm).forEach(n => { const ms = Object.keys(dm[n]).sort(); if (ms.length < 3) return; const last = ms[ms.length - 1], prev = ms.slice(0, -1); const avg = prev.reduce((s, m) => s + dm[n][m], 0) / prev.length; if (avg > 100 && dm[n][last] > avg * 1.6) anom.push({ t:'info', mois:last, txt:`${n} : ${moisLabel(last)} en forte hausse (${eur(dm[n][last])} vs sa moyenne ${eur(Math.round(avg))})` }); });
       anom.sort((a, b) => (a.t === 'warn' ? 0 : 1) - (b.t === 'warn' ? 0 : 1));
@@ -2610,11 +2674,35 @@
     // Clic sur un « Point à vérifier » → ouvre la facture Total du mois concerné.
     if ($('tf-an-anom')) $('tf-an-anom').addEventListener('click', (e) => {
       const el = e.target.closest('[data-anom]'); if (!el) return;
-      const a = _tfAnom[+el.dataset.anom]; if (!a || !a.mois) return;
-      const facs = (window.FP_DATA.factures || []).filter(f => (typeof isTotalFleet === 'function' ? isTotalFleet(f) : true) && (f.date || '').slice(0, 7) === a.mois).sort((x, y) => (Number(y.montantTTC) || 0) - (Number(x.montantTTC) || 0));
-      if (facs.length && typeof openTfDrawer === 'function') openTfDrawer(facs[0]);
-      else if (FP.toast) FP.toast('Facture Total de ' + a.mois + ' introuvable dans la liste.');
+      const a = _tfAnom[+el.dataset.anom]; if (!a) return;
+      let fac = a.facnum ? (window.FP_DATA.factures || []).find(f => (f.numeroFacture || '') === a.facnum || f.id === 'TF-' + a.facnum) : null;
+      if (!fac && a.mois) { fac = (window.FP_DATA.factures || []).filter(f => (typeof isTotalFleet === 'function' ? isTotalFleet(f) : true) && (f.date || '').slice(0, 7) === a.mois).sort((x, y) => (Number(y.montantTTC) || 0) - (Number(x.montantTTC) || 0))[0]; }
+      if (fac && typeof openTfDrawer === 'function') openTfDrawer(fac);
+      else if (FP.toast) FP.toast('Facture introuvable — réimporte le relevé Total.');
     });
+
+    // === Seuils d'alerte configurables (repas/jour, article « autre », boutique/mois) ===
+    (function () {
+      const btn = $('tf-seuils-btn'), panel = $('tf-seuils'); if (!btn || !panel) return;
+      const canEdit = !FP.canManageSociete || FP.canManageSociete(); // config société = CEO/Admin
+      const fill = () => { const l = tfLimits(); $('ts-repas').value = l.repasJour; $('ts-autre').value = l.autreItem; $('ts-horscarb').value = l.horsCarbMois; };
+      btn.addEventListener('click', () => { const show = panel.classList.contains('hidden'); panel.classList.toggle('hidden'); if (show) fill(); });
+      if (!canEdit) {
+        // Gestionnaire : lecture seule (la config société est réservée CEO/Admin).
+        ['ts-repas', 'ts-autre', 'ts-horscarb'].forEach(id => { const e = $(id); if (e) e.disabled = true; });
+        const s = $('ts-save'); if (s) { s.disabled = true; s.classList.add('opacity-40', 'cursor-not-allowed'); s.title = 'Réservé à l\'administrateur'; }
+        const r = $('ts-reset'); if (r) r.style.display = 'none';
+      }
+      if ($('ts-reset')) $('ts-reset').addEventListener('click', () => { $('ts-repas').value = 20; $('ts-autre').value = 15; $('ts-horscarb').value = 40; });
+      if ($('ts-save')) $('ts-save').addEventListener('click', async () => {
+        if (!canEdit) return;
+        const g = (id, d) => { const v = Number($(id).value); return v > 0 ? v : d; };
+        const seuils = { repasJour: g('ts-repas', 20), autreItem: g('ts-autre', 15), horsCarbMois: g('ts-horscarb', 40) };
+        try { const s = FP.settings.get(); s.tfSeuils = seuils; await FP.settings.save(s); if (FP.toast) FP.toast('Seuils enregistrés ✓'); }
+        catch (e) { if (FP.toast) FP.toast('Enregistrement impossible'); return; }
+        panel.classList.add('hidden'); renderAnalyse();
+      });
+    })();
     const _tfRerender = () => { renderConso(); renderAnalyse(); };
     $('tf-conso-cond').addEventListener('change', _tfRerender);
     $('tf-conso-mois').addEventListener('change', _tfRerender);
@@ -2744,6 +2832,47 @@
       return rows;
     }
 
+    // === DÉTAIL TRANSACTION PAR TRANSACTION (une ligne = un achat) ===
+    // Validé sur une vraie facture Total. Ancre les produits sur leurs libellés connus, prend le
+    // TTC = dernier montant à 2 décimales non suivi d'un chiffre (exclut les PU à 4 décimales).
+    const TX_PROD = /(Gazole(?: Premier| Excellium)?|Super \d+(?: Sans PL)?|SP\d{2}(?: E\d+)?|Bouteille Gaz|Boissons T[RN]|Alimentation T[RN]|Produit [Ff]rais|Sandwich|Lavage(?: Progr\.? ?\d)?|Parking|AdBlue|GNR|GPL|E85)/;
+    const TX_TTC = /\d[\d ]*[.,]\d{2}(?!\d)/g;
+    function txCat(p){
+      const s = (p || '').toLowerCase();
+      if (/gazole|gasoil|diesel|super|sp\d|essence|excellium|premier|adblue|gnr|gpl|e85|b7/.test(s)) return 'carburant';
+      if (/lavage/.test(s)) return 'lavage';
+      if (/parking/.test(s)) return 'parking';
+      if (/aliment|boisson|sandwich|repas|restaur|snack|produit\s*frais|caf[ée]|menu/.test(s)) return 'repas';
+      return 'autre';
+    }
+    function parseTx(raw, facNum, resolveNom){
+      const t = (raw || '').replace(SP, ' ').replace(/[ \t]+/g, ' ');
+      const idx = t.indexOf('Votre Facture et son détail');
+      const det = idx >= 0 ? t.slice(idx) : t;
+      const supRe = /Total Support (\d+)(?: (\d+))? (.+?) Type véh\. (\d+)/g;
+      const hits = []; let m;
+      while ((m = supRe.exec(det))) hits.push({ i:m.index, end:supRe.lastIndex, carte:m[1], rang:m[2] || '', nom:m[3].trim() });
+      const out = []; let prev = 0, seq = 0;
+      for (const h of hits){
+        const block = det.slice(prev, h.i); prev = h.end;
+        const who = (typeof resolveNom === 'function' ? (resolveNom(h.nom, h.carte) || h.nom) : h.nom);
+        const plaque = isPlaque(h.nom) ? h.nom : null;
+        const txRe = /(\d{6}) (\d{4}) (?:TOTAL TF|GEIE FR|TOTAL|GEIE)\b(.+?)(?=(?:\d{6} \d{4} (?:TOTAL|GEIE))|Total |$)/gs;
+        let x;
+        while ((x = txRe.exec(block))){
+          const dmy = x[1], tail = x[3];
+          const nums = tail.match(TX_TTC) || []; if (!nums.length) continue;
+          const ttc = parseFloat(nums[nums.length - 1].replace(/ /g, '').replace(',', '.')); if (!isFinite(ttc)) continue;
+          const pm = tail.match(TX_PROD);
+          const produit = pm ? pm[1].replace(/\s+/g, ' ').trim() : ((tail.trim().split(/\s+\d/)[0] || '').trim().slice(0, 30) || 'Achat');
+          const y = dmy.slice(4, 6), mo = dmy.slice(2, 4), da = dmy.slice(0, 2);
+          out.push({ id: facNum + '-' + (seq++), facnum: facNum, carte: h.carte, conducteur: who, plaque,
+            dateTx: '20' + y + '-' + mo + '-' + da, mois: '20' + y + '-' + mo, produit, categorie: txCat(produit), montantTtc: +ttc.toFixed(2) });
+        }
+      }
+      return out;
+    }
+
     function tfImpStatus(msg, type){
       const el = $('tf-import-status'); el.classList.remove('hidden');
       const colors = { working:'background:#F1F5F9;color:#475569;', ok:'background:#ECFDF5;color:#047857;', error:'background:#FEF2F2;color:#B91C1C;' };
@@ -2756,8 +2885,10 @@
     }
 
     let _pending = null; // { freshF, conso } en attente de confirmation
+    let _pendingTx = []; // détail transaction par transaction en attente
 
-    function showPreview(factures, conso){
+    function showPreview(factures, conso, tx){
+      _pendingTx = tx || [];
       const existing = new Set((window.FP_DATA.factures || []).map(f => (f.numeroFacture || '').toUpperCase()));
       const freshF = factures.filter(r => !existing.has(r.numero.toUpperCase()));
       const dupes = factures.length - freshF.length;
@@ -2851,6 +2982,13 @@
           okC++;
         } catch (e) { console.error('[tf-import conso]', e); if (!consoErr) consoErr = (e && (e.message || e.details || e.hint)) || String(e); }
       }
+      // Détail transaction par transaction (table total_conso_tx). Best-effort : si la table n'existe
+      // pas encore (SQL non lancé), on ignore silencieusement (les alertes retombent sur le mensuel).
+      let okTx = 0;
+      for (const tr of _pendingTx) {
+        try { const res = (FP.db && FP.db.upsert) ? await FP.db.upsert('total_conso_tx', tr) : null; if (res && res.error) throw res.error; okTx++; }
+        catch (e) { /* table absente ou RLS → silencieux */ break; }
+      }
       $('tf-import-preview').classList.add('hidden');
       if (consoErr) {
         tfImpStatus('⚠️ ' + okF + ' facture(s) enregistrée(s), mais la CONSO par conducteur n\'a PAS pu être sauvegardée : <b>' + esc(consoErr) + '</b><br>Copie-moi ce message.', 'error');
@@ -2910,6 +3048,15 @@
 
       const facBySig = new Map();   // numero -> facture (dedup)
       const consoByKey = new Map(); // mois|carte -> conso agregee
+      const txOut = [];             // détail transaction par transaction (achats)
+      // Résolveur de conducteur pour le détail : carte connue → son conducteur ; sinon nom/plaque du PDF.
+      const resolveTxNom = (nom, carte) => {
+        const ref = cardMap[String(carte)] || {};
+        if (ref.conducteur) return ref.conducteur;
+        if (nom && !isPlaque(nom)) { const rn = resolveConducteurName(nom); if (rn) return rn; }
+        if (nom && isPlaque(nom)) { const np = String(nom).toUpperCase().replace(/[^A-Z0-9]/g, ''); const v = (window.FP_DATA.vehicules || []).find(x => String(x.immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === np); if (v && v.chauffeur && v.chauffeur !== '—') return v.chauffeur; }
+        return nom || null;
+      };
       const failed = []; let read = 0;
       for (const file of files){
         tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture ' + (read + 1) + '/' + files.length + ' : ' + esc(file.name) + '...</span>', 'working');
@@ -2936,6 +3083,8 @@
               a.lavage+=r.lavage; a.total+=r.total; a.ht+=r.ht; a.tva+=r.tva;
               consoByKey.set(key, a);
             }
+            // Détail transaction par transaction (une ligne = un achat) → pour la détection au jour/article.
+            try { for (const tr of parseTx(text, facNum, resolveTxNom)) { tr.mois = mois || tr.mois; txOut.push(tr); } } catch (e) { console.warn('[parseTx]', e); }
           }
           if (!used) failed.push(file.name);
         } catch (err) { console.error(err); failed.push(file.name); }
@@ -2971,7 +3120,7 @@
       }
       if (failed.length) tfImpStatus('! ' + failed.length + ' fichier(s) non reconnu(s) (ignore.s) : ' + failed.map(esc).join(', ') + '.', 'error');
       else $('tf-import-status').classList.add('hidden');
-      showPreview(factures, consoOut);
+      showPreview(factures, consoOut, txOut);
     }
 
     // (Le bouton de dropzone Total a été retiré : l'import se lance via le bouton « Importer un relevé Total » du haut.)
