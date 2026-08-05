@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805k">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805l">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805k"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805l"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805k">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805l">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -701,11 +701,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805k"></script>
-<script src="../assets/js/supabase-client.js?v=20260805k"></script>
-<script src="../assets/js/data.js?v=20260805k"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805l"></script>
+<script src="../assets/js/supabase-client.js?v=20260805l"></script>
+<script src="../assets/js/data.js?v=20260805l"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805k"></script>
+<script src="../assets/js/app.js?v=20260805l"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2381,6 +2381,19 @@
         ${preview}`;
       const openBtn = $('drawer-open-drive');
       if (url){ openBtn.href = url; openBtn.style.display = ''; } else { openBtn.removeAttribute('href'); openBtn.style.display = 'none'; }
+      // Bucket privé : l'URL publique ne s'affiche pas → on la remplace par une URL SIGNÉE (async).
+      if (url && /\/storage\/v1\/object\//.test(url) && FP.supabase && FP.supabase.storage) {
+        (async () => {
+          try {
+            const m = /\/storage\/v1\/object\/(?:public\/|sign\/|authenticated\/)?([^/?]+)\/([^?]+)/.exec(url);
+            if (!m) return;
+            const r = await FP.supabase.storage.from(decodeURIComponent(m[1])).createSignedUrl(decodeURIComponent(m[2]), 3600);
+            const signed = r && r.data && (r.data.signedUrl || r.data.signedURL); if (!signed) return;
+            const ifr = $('drawer-body') && $('drawer-body').querySelector('iframe'); if (ifr && ifr.src !== signed) ifr.src = signed;
+            if (openBtn) openBtn.href = signed;
+          } catch (e) {}
+        })();
+      }
       $('drawer').classList.add('open'); $('drawer-backdrop').classList.add('open');
       if (window.lucide) lucide.createIcons();
     }
@@ -3243,9 +3256,22 @@
     //  automatiquement (fetch → pdf.js → parseTx) et on (re)remplit total_conso_tx. Idempotent
     //  (id de tx stable = n°facture-index → aucun doublon). Aucune manip Supabase pour l'utilisateur.
     // ============================================================
-    async function loadPdfFromUrl(url){
+    async function fetchPdfBlob(url){
+      // Si c'est une URL Supabase Storage → on télécharge via le SDK (fonctionne même si le bucket
+      // n'est PAS public, car l'utilisateur est authentifié). Sinon repli sur un fetch direct.
+      try {
+        const m = /\/storage\/v1\/object\/(?:public\/|sign\/|authenticated\/)?([^/?]+)\/([^?]+)/.exec(url);
+        if (m && FP.supabase && FP.supabase.storage) {
+          const bucket = decodeURIComponent(m[1]), path = decodeURIComponent(m[2]);
+          const res = await FP.supabase.storage.from(bucket).download(path);
+          if (res && res.data && !res.error) return res.data; // Blob
+        }
+      } catch (e) { /* on tente le fetch direct ci-dessous */ }
       const resp = await fetch(url); if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const blob = await resp.blob(); return loadPdf(blob); // loadPdf accepte tout Blob (arrayBuffer())
+      return resp.blob();
+    }
+    async function loadPdfFromUrl(url){
+      const blob = await fetchPdfBlob(url); return loadPdf(blob); // loadPdf accepte tout Blob (arrayBuffer())
     }
     async function backfillTx(btn){
       if (!(FP.db && FP.db.upsert)) { if (FP.toast) FP.toast('Base indisponible.'); return; }
