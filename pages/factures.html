@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805n">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -440,6 +440,10 @@
                 <button id="ts-save" type="button" class="text-xs bg-teal-600 text-white rounded px-3 py-1.5 hover:bg-teal-700">Enregistrer</button>
               </div>
             </div>
+            <div class="flex items-center gap-2 mb-2">
+              <button id="tf-anom-tab-active" type="button" class="text-xs font-semibold px-2.5 py-1 rounded-full border border-teal-500 bg-teal-500 text-white">À vérifier</button>
+              <button id="tf-anom-tab-arch" type="button" class="text-xs font-semibold px-2.5 py-1 rounded-full border border-slate-200 text-slate-500 hover:border-teal-400">Archivées <span id="tf-anom-arch-n">(0)</span></button>
+            </div>
             <div id="tf-an-anom"></div>
           </div>
         </div>
@@ -701,11 +705,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805m"></script>
-<script src="../assets/js/supabase-client.js?v=20260805m"></script>
-<script src="../assets/js/data.js?v=20260805m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805n"></script>
+<script src="../assets/js/supabase-client.js?v=20260805n"></script>
+<script src="../assets/js/data.js?v=20260805n"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805m"></script>
+<script src="../assets/js/app.js?v=20260805n"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2423,7 +2427,7 @@
     }
 
     // --- Consommation par conducteur / véhicule (table total_conso) ---
-    let conso = null, consoTx = null, consoLoaded = false, consoSortDesc = true, _tfAnom = [];
+    let conso = null, consoTx = null, consoLoaded = false, consoSortDesc = true, _tfAnom = [], _tfAnomByKey = {};
     // Seuils d'alerte configurables (réglages société). Défauts raisonnables.
     function tfLimits(){ let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {} return { repasJour: Number(s.repasJour) > 0 ? Number(s.repasJour) : 20, autreItem: (s.autreItem === 0 || Number(s.autreItem) > 0) ? Number(s.autreItem) : 20, horsCarbMois: Number(s.horsCarbMois) > 0 ? Number(s.horsCarbMois) : 40 }; }
     const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
@@ -2697,26 +2701,50 @@
       const dm = {}; conso.forEach(c => { if (!c.mois) return; const n = _tfName(c, vbp); (dm[n] = dm[n] || {})[c.mois] = (dm[n][c.mois] || 0) + _tfN(c.total_ttc); });
       Object.keys(dm).forEach(n => { const ms = Object.keys(dm[n]).sort(); if (ms.length < 3) return; const last = ms[ms.length - 1], prev = ms.slice(0, -1); const avg = prev.reduce((s, m) => s + dm[n][m], 0) / prev.length; if (avg > 100 && dm[n][last] > avg * 1.6) anom.push({ t:'info', mois:last, txt:`${n} · ${moisLabel(last)} : ${eur(dm[n][last])} dépensés ce mois-ci vs ${eur(Math.round(avg))} en moyenne → forte hausse, à vérifier` }); });
       anom.sort((a, b) => (a.t === 'warn' ? 0 : 1) - (b.t === 'warn' ? 0 : 1));
-      _tfAnom = anom;
-      // ⚠️ Liste potentiellement longue → 3 visibles + « Voir tout (N) » qui déroule le reste SUR PLACE
-      // et se replie en « Voir moins ». ⚠️ On ne fige PAS un nombre de lignes : on affiche autant de
-      // points que la carte peut en contenir (elle a la même hauteur que « Classement » via la grille),
-      // puis « Voir tout » pour le reste → plus d'espace blanc. Le calcul se fait après rendu (fitAnoms).
-      const row = (a, i) => `<div data-anom="${i}" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f1f5f9;font-size:12.5px;cursor:pointer;border-radius:6px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''" title="Ouvrir la facture Total concernée"><span style="color:${a.t === 'warn' ? '#d97706' : '#64748b'}">●</span><span style="color:#334155;flex:1">${esc(a.txt)}</span><span style="font-size:11px;color:var(--fp-accent);font-weight:700;white-space:nowrap">Voir la facture ›</span></div>`;
-      if (!anom.length) {
-        $('tf-an-anom').innerHTML = '<p class="text-sm text-emerald-700">✓ Rien d\'anormal détecté sur les relevés.</p>';
-      } else {
-        $('tf-an-anom').innerHTML = anom.map(row).join('')
-          + `<button type="button" id="tf-anom-more" data-open="0" data-total="${anom.length}" data-cut="0" style="display:none;margin-top:8px;width:100%;text-align:center;font-size:12px;font-weight:700;color:var(--fp-accent);background:none;border:none;cursor:pointer;padding:6px">Voir tout (${anom.length}) ›</button>`;
-        (window.requestAnimationFrame || setTimeout)(fitAnoms);
+      // Clé stable par anomalie (pour mémoriser « vérifiée / archivée ») + index par clé (ouverture facture).
+      anom.forEach(a => { a.key = a.t + '|' + (a.facnum || '') + '|' + a.txt; });
+      _tfAnom = anom; _tfAnomByKey = {}; anom.forEach(a => { _tfAnomByKey[a.key] = a; });
+      renderAnomList();
+    }
+    // Anomalies « vérifiées » (archivées) : mémorisées dans les réglages (clé → enregistrement complet,
+    // pour garder l'HISTORIQUE même si la donnée change). Coche verte = archive ; flèche rouge = désarchive.
+    function tfAnomOk(){ try { return FP.settings.get().tfAnomOk || {}; } catch (e) { return {}; } }
+    function tfAnomSaveOk(map){ try { const s = FP.settings.get(); s.tfAnomOk = map; FP.settings.save(s); } catch (e) { if (FP.toast) FP.toast('Enregistrement impossible'); } }
+    let _tfAnomMode = 'active';
+    function renderAnomList(){
+      const box = $('tf-an-anom'); if (!box) return;
+      const okMap = tfAnomOk();
+      const okKeys = Object.keys(okMap);
+      { const n = $('tf-anom-arch-n'); if (n) n.textContent = '(' + okKeys.length + ')'; }
+      // onglets
+      const tA = $('tf-anom-tab-active'), tR = $('tf-anom-tab-arch');
+      if (tA && tR) {
+        const on = 'border-teal-500 bg-teal-500 text-white', off = 'border-slate-200 text-slate-500 hover:border-teal-400';
+        tA.className = 'text-xs font-semibold px-2.5 py-1 rounded-full border ' + (_tfAnomMode === 'active' ? on : off);
+        tR.className = 'text-xs font-semibold px-2.5 py-1 rounded-full border ' + (_tfAnomMode === 'archive' ? on : off);
       }
+      const dot = (t) => `<span style="color:${t === 'warn' ? '#d97706' : '#64748b'}">●</span>`;
+      if (_tfAnomMode === 'archive') {
+        const recs = okKeys.map(k => okMap[k]).sort((a, b) => (b.okAt || 0) - (a.okAt || 0));
+        if (!recs.length) { box.innerHTML = '<p class="text-sm text-slate-400">Aucune anomalie archivée. Coche la ✓ verte sur un point à vérifier pour l\'archiver.</p>'; if (window.lucide) lucide.createIcons(); return; }
+        box.innerHTML = recs.map(a => `<div data-anom-key="${esc(a.key)}" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f1f5f9;font-size:12.5px;border-radius:6px"><button type="button" data-anom-unok="${esc(a.key)}" title="Désarchiver (remettre à vérifier)" style="flex:none;color:#dc2626;background:none;border:none;cursor:pointer;font-weight:800;font-size:14px">↩</button>${dot(a.t)}<span style="color:#334155;flex:1;cursor:pointer" data-anom-open="1">${esc(a.txt)}${a.okAt ? ' <span style=\"color:#94a3b8\">· vérifié le ' + esc(FP.dateNum(new Date(a.okAt).toISOString().slice(0,10))) + '</span>' : ''}</span><span style="font-size:11px;color:var(--fp-accent);font-weight:700;white-space:nowrap;cursor:pointer" data-anom-open="1">Voir la facture ›</span></div>`).join('');
+        if (window.lucide) lucide.createIcons();
+        return;
+      }
+      // mode « à vérifier » : anomalies calculées NON archivées
+      const active = _tfAnom.filter(a => !okMap[a.key]);
+      if (!active.length) { box.innerHTML = '<p class="text-sm text-emerald-700">✓ Rien à vérifier' + (okKeys.length ? ' (tout est archivé).' : '.') + '</p>'; if (window.lucide) lucide.createIcons(); return; }
+      const row = (a) => `<div data-anom-key="${esc(a.key)}" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f1f5f9;font-size:12.5px;border-radius:6px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><button type="button" data-anom-ok="${esc(a.key)}" title="Marquer comme vérifié / OK (archive)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:15px">✓</button>${dot(a.t)}<span style="color:#334155;flex:1;cursor:pointer" data-anom-open="1" title="Ouvrir la facture Total concernée">${esc(a.txt)}</span><span style="font-size:11px;color:var(--fp-accent);font-weight:700;white-space:nowrap;cursor:pointer" data-anom-open="1">Voir la facture ›</span></div>`;
+      box.innerHTML = active.map(row).join('')
+        + `<button type="button" id="tf-anom-more" data-open="0" data-total="${active.length}" data-cut="0" style="display:none;margin-top:8px;width:100%;text-align:center;font-size:12px;font-weight:700;color:var(--fp-accent);background:none;border:none;cursor:pointer;padding:6px">Voir tout (${active.length}) ›</button>`;
+      (window.requestAnimationFrame || setTimeout)(fitAnoms);
       if (window.lucide) lucide.createIcons();
     }
     // Réduit la liste des points à vérifier à ce qui TIENT dans la carte (hauteur = carte « Classement »
     // via la grille), le reste est masqué derrière « Voir tout ». Recalculé au rendu et au redimensionnement.
     function fitAnoms(){
       const box = $('tf-an-anom'); if (!box) return;
-      const rows = [].slice.call(box.querySelectorAll('[data-anom]'));
+      const rows = [].slice.call(box.querySelectorAll('[data-anom-key]'));
       const btn = box.querySelector('#tf-anom-more');
       if (!rows.length || !btn) return;
       rows.forEach(r => r.classList.remove('tf-anom-hidden'));
@@ -2767,20 +2795,31 @@
       ] });
     });
 
-    // Clic sur un « Point à vérifier » → ouvre la facture Total du mois concerné.
+    // Onglets « À vérifier » / « Archivées ».
+    if ($('tf-anom-tab-active')) $('tf-anom-tab-active').addEventListener('click', () => { _tfAnomMode = 'active'; renderAnomList(); });
+    if ($('tf-anom-tab-arch')) $('tf-anom-tab-arch').addEventListener('click', () => { _tfAnomMode = 'archive'; renderAnomList(); });
+
+    // Clics dans la liste des points à vérifier : ✓ archive · ↩ désarchive · toggle · ouvrir la facture.
     if ($('tf-an-anom')) $('tf-an-anom').addEventListener('click', (e) => {
-      // Toggle « Voir tout / Voir moins » (déroule/replie le reste sur place).
+      // ✓ vert : marquer vérifié (archiver)
+      const ok = e.target.closest('[data-anom-ok]');
+      if (ok) { const key = ok.getAttribute('data-anom-ok'); const a = _tfAnomByKey[key]; if (a) { const m = tfAnomOk(); m[key] = { key, t: a.t, txt: a.txt, mois: a.mois || '', facnum: a.facnum || '', okAt: Date.now() }; tfAnomSaveOk(m); renderAnomList(); if (FP.toast) FP.toast('✓ Archivé'); } return; }
+      // ↩ rouge : désarchiver (remettre à vérifier)
+      const unok = e.target.closest('[data-anom-unok]');
+      if (unok) { const key = unok.getAttribute('data-anom-unok'); const m = tfAnomOk(); delete m[key]; tfAnomSaveOk(m); renderAnomList(); if (FP.toast) FP.toast('Remis à vérifier'); return; }
+      // Toggle « Voir tout / Voir moins »
       const more = e.target.closest('#tf-anom-more');
       if (more) {
-        const rows = [].slice.call($('tf-an-anom').querySelectorAll('[data-anom]'));
+        const rows = [].slice.call($('tf-an-anom').querySelectorAll('[data-anom-key]'));
         const open = more.dataset.open === '1', cut = +(more.dataset.cut || 0);
-        rows.forEach((r, i) => { if (i >= cut) r.classList.toggle('tf-anom-hidden', open); }); // open→on replie
+        rows.forEach((r, i) => { if (i >= cut) r.classList.toggle('tf-anom-hidden', open); });
         more.dataset.open = open ? '0' : '1';
         more.innerHTML = open ? ('Voir tout (' + (more.dataset.total || '') + ') ›') : 'Voir moins ▲';
         return;
       }
-      const el = e.target.closest('[data-anom]'); if (!el) return;
-      const a = _tfAnom[+el.dataset.anom]; if (!a) return;
+      // Ouvrir la facture (clic sur le texte / « Voir la facture »)
+      const el = e.target.closest('[data-anom-key]'); if (!el) return;
+      const key = el.getAttribute('data-anom-key'); const a = _tfAnomByKey[key] || tfAnomOk()[key]; if (!a) return;
       let fac = a.facnum ? (window.FP_DATA.factures || []).find(f => (f.numeroFacture || '') === a.facnum || f.id === 'TF-' + a.facnum) : null;
       if (!fac && a.mois) { fac = (window.FP_DATA.factures || []).filter(f => (typeof isTotalFleet === 'function' ? isTotalFleet(f) : true) && (f.date || '').slice(0, 7) === a.mois).sort((x, y) => (Number(y.montantTTC) || 0) - (Number(x.montantTTC) || 0))[0]; }
       if (fac && typeof openTfDrawer === 'function') openTfDrawer(fac);
