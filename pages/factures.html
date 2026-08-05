@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804k">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260804l">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260804k"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260804l"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260804k">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260804l">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -157,9 +157,13 @@
     <div class="flex flex-wrap justify-end items-center gap-4 mb-8">
       <div class="flex items-center gap-3">
         <span data-data-io></span>
-        <span id="fa-export-mount"></span>
-        <button class="btn btn-outline text-sm" id="fa-fiche-btn" title="Relevé de dépenses (PDF) des factures affichées"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
-        <span id="fa-recap-mount"></span>
+        <!-- Exports SPÉCIFIQUES à l'onglet Factures → masqués sur les autres sous-onglets (Total Fleet/Ulys
+             ont leurs propres exports). Évite le bug « le bouton exporte les factures alors que je suis sur Total Fleet ». -->
+        <span id="fa-topexports" class="inline-flex items-center gap-3">
+          <span id="fa-export-mount"></span>
+          <button class="btn btn-outline text-sm" id="fa-fiche-btn" title="Relevé de dépenses (PDF) des factures affichées"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
+          <span id="fa-recap-mount"></span>
+        </span>
         <button class="btn btn-outline text-sm" id="btn-import-lot" title="Déposer plusieurs PDF : l'IA lit chaque facture et la crée automatiquement"><i data-lucide="files" class="w-4 h-4"></i> Importer un lot (PDF)</button>
         <input type="file" id="fa-lot-file" accept="application/pdf,image/*" multiple class="hidden" />
         <button class="btn btn-dark text-sm" id="btn-import-facture" data-quickadd><i data-lucide="file-up" class="w-4 h-4"></i> Importer une facture</button>
@@ -377,6 +381,44 @@
       </div>
       <p class="text-xs text-slate-500 mt-3">Détail reconstitué depuis les factures TotalEnergies (par carte carburant). Les « Frais de gestion » ne sont pas rattachés à un conducteur. Clique sur l'en-tête « Total TTC » pour trier.</p>
 
+      <!-- ===== ANALYSE CONSO (prix/litre, CO₂, répartition, évolution, classement, anomalies) ===== -->
+      <div id="tf-analyse" class="mt-10 hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 class="text-lg font-extrabold" style="color: var(--fp-primary)">Analyse de la consommation</h3>
+          <div class="flex gap-2">
+            <button id="tf-an-csv" type="button" class="btn btn-outline text-xs"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Export CSV</button>
+            <button id="tf-an-pdf" type="button" class="btn btn-dark text-xs"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Rapport PDF</button>
+          </div>
+        </div>
+        <!-- Chiffres clés enrichis -->
+        <div id="tf-an-stats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5"></div>
+        <div class="grid md:grid-cols-2 gap-5">
+          <!-- Évolution 12 mois -->
+          <div class="card p-4">
+            <div class="font-semibold text-slate-800 mb-3">Évolution sur 12 mois</div>
+            <div id="tf-an-evol"></div>
+          </div>
+          <!-- Répartition -->
+          <div class="card p-4">
+            <div class="font-semibold text-slate-800 mb-3">Répartition des dépenses</div>
+            <div id="tf-an-repart"></div>
+          </div>
+        </div>
+        <div class="grid md:grid-cols-2 gap-5 mt-5">
+          <!-- Classement conducteurs -->
+          <div class="card p-4">
+            <div class="font-semibold text-slate-800 mb-3">Classement conducteurs <span class="text-xs font-normal text-slate-400">(dépense totale)</span></div>
+            <div id="tf-an-rank"></div>
+          </div>
+          <!-- Anomalies -->
+          <div class="card p-4">
+            <div class="font-semibold text-slate-800 mb-3 flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500"></i> Points à vérifier</div>
+            <div id="tf-an-anom"></div>
+          </div>
+        </div>
+        <p class="text-xs text-slate-400 mt-3">Les prix au litre, CO₂ et anomalies sont calculés sur les relevés mensuels par carte. La détection « plein par plein » (plein impossible, week-end, > 3 pleins/jour) nécessitera le relevé <b>transaction par transaction</b> — à activer plus tard.</p>
+      </div>
+
       <!-- Filtres -->
       <div class="card p-4 mb-6">
         <div class="flex flex-wrap items-center gap-3">
@@ -423,6 +465,11 @@
         <div class="kpi"><div class="kpi-label">Nb factures</div><div class="kpi-value" id="uls-kpi-count">—</div><div class="kpi-delta">filtre actif</div></div>
       </div>
 
+      <!-- Exports propres à Ulys (le sous-onglet a ses propres boutons, pas ceux des Factures) -->
+      <div class="flex justify-end gap-2 mb-3">
+        <button id="uls-an-csv" type="button" class="btn btn-outline text-xs"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Export CSV</button>
+        <button id="uls-an-pdf" type="button" class="btn btn-dark text-xs"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Relevé PDF</button>
+      </div>
       <!-- Consommation par conducteur (péages par badge) — comme Total Fleet -->
       <div class="flex flex-wrap items-center justify-between gap-3 mt-2 mb-3">
         <h3 class="text-lg font-extrabold" style="color: var(--fp-primary)">Consommation par conducteur</h3>
@@ -622,11 +669,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260804k"></script>
-<script src="../assets/js/supabase-client.js?v=20260804k"></script>
-<script src="../assets/js/data.js?v=20260804k"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260804l"></script>
+<script src="../assets/js/supabase-client.js?v=20260804l"></script>
+<script src="../assets/js/data.js?v=20260804l"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260804k"></script>
+<script src="../assets/js/app.js?v=20260804l"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1836,6 +1883,10 @@
       // Le bouton d'import du HAUT colle au sous-onglet actif (fini la confusion : plus besoin de
       // descendre chercher le bon bouton). Sur « Fournisseurs » (pas d'import), on le masque.
       window._facturesTab = name;
+      // Export comptable / Relevé PDF / Récap par poste = spécifiques aux FACTURES → masqués ailleurs
+      // (Total Fleet a son propre « Export CSV » + « Rapport PDF » dans le panneau Analyse).
+      const _texp = document.getElementById('fa-topexports');
+      if (_texp) _texp.style.display = (name === 'factures') ? '' : 'none';
       const _imp = document.getElementById('btn-import-facture');
       if (_imp) {
         const lbl = { factures: 'Importer une facture', documents: 'Importer une facture', total: 'Importer un relevé Total', ulys: 'Importer un relevé Ulys' }[name];
@@ -2335,6 +2386,7 @@
         conso = null; // table absente → on affiche un message d'aide
       }
       renderConso();
+      renderAnalyse();
     }
 
     function renderConso(){
@@ -2438,6 +2490,85 @@
         <td style="text-align:right">${FP.euro(sum('total_ttc'))}</td>
       </tr>`;
     }
+
+    // ===== ANALYSE CONSO : prix/litre, CO₂, évolution, répartition, classement, anomalies =====
+    const _tfN = x => Number(x) || 0;
+    const _tfNormP = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    function _tfVehBy(){ const m = {}; (window.FP_DATA.vehicules || []).forEach(v => { if (v.immat) m[_tfNormP(v.immat)] = v; }); return m; }
+    function _tfName(c, vbp){ if (c.conducteur) return c.conducteur; const v = c.plaque && vbp[_tfNormP(c.plaque)]; if (v && v.chauffeur && v.chauffeur !== '—') return v.chauffeur; return c.plaque || '—'; }
+    function renderAnalyse(){
+      const wrap = $('tf-analyse'); if (!wrap) return;
+      if (!conso || !conso.length) { wrap.classList.add('hidden'); return; }
+      wrap.classList.remove('hidden');
+      const vbp = _tfVehBy();
+      const tot = { carb:0, litres:0, bout:0, lav:0, peage:0, ttc:0, ht:0, tva:0 }, co2Ref = { gazole:2.64, essence:2.31, mixte:2.51 };
+      let co2 = 0;
+      conso.forEach(c => {
+        tot.carb += _tfN(c.carburant_ttc); tot.litres += _tfN(c.litres); tot.bout += _tfN(c.boutique_ttc);
+        tot.lav += _tfN(c.lavage_ttc); tot.peage += _tfN(c.peage_ttc); tot.ttc += _tfN(c.total_ttc);
+        tot.ht += _tfN(c.total_ht); tot.tva += _tfN(c.total_tva);
+        const v = c.plaque && vbp[_tfNormP(c.plaque)]; const carb = ((v && v.carburant) || '').toLowerCase();
+        let f = co2Ref.mixte; if (/gazole|diesel|gasoil/.test(carb)) f = co2Ref.gazole; else if (/essence|sp9|sans plomb/.test(carb)) f = co2Ref.essence; else if (/lectri|hydrog/.test(carb)) f = 0;
+        co2 += _tfN(c.litres) * f;
+      });
+      const prixL = tot.litres > 0 ? tot.carb / tot.litres : 0;
+      const eur = FP.euro;
+      $('tf-an-stats').innerHTML = [
+        ['Litres totaux', FP.num(Math.round(tot.litres)) + ' L', 'carburant consommé'],
+        ['Prix moyen / L', prixL ? (prixL.toFixed(3).replace('.', ',') + ' €') : '—', 'carburant TTC ÷ litres'],
+        ['CO₂ estimé', (Math.round(co2 / 100) / 10).toLocaleString('fr-FR') + ' t', 'depuis les litres (est.)'],
+        ['Péages', eur(tot.peage), Math.round(tot.peage / (tot.ttc || 1) * 100) + ' % du total'],
+      ].map(s => `<div class="kpi"><div class="kpi-label">${s[0]}</div><div class="kpi-value" style="font-size:1.35rem">${s[1]}</div><div class="kpi-delta">${s[2]}</div></div>`).join('');
+      // Évolution 12 mois
+      const byMonth = {}; conso.forEach(c => { if (!c.mois) return; const m = byMonth[c.mois] || (byMonth[c.mois] = { ttc:0, litres:0 }); m.ttc += _tfN(c.total_ttc); m.litres += _tfN(c.litres); });
+      const months = Object.keys(byMonth).sort().slice(-12); const maxT = Math.max(1, ...months.map(m => byMonth[m].ttc));
+      $('tf-an-evol').innerHTML = months.length ? months.map(m => { const v = byMonth[m]; return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="width:74px;font-size:11px;color:#64748b">${moisLabel(m)}</div><div style="flex:1;background:#f1f5f9;border-radius:6px;overflow:hidden;height:15px"><div style="width:${Math.round(v.ttc / maxT * 100)}%;height:100%;background:linear-gradient(90deg,#f97316,#fb923c)"></div></div><div style="width:88px;text-align:right;font-size:12px;font-weight:600">${eur(v.ttc)}</div><div style="width:60px;text-align:right;font-size:11px;color:#94a3b8">${FP.num(Math.round(v.litres))} L</div></div>`; }).join('') : '<p class="text-sm text-slate-400">Pas assez de données.</p>';
+      // Répartition
+      const parts = [['Carburant', tot.carb, '#f97316'], ['Péage / parking', tot.peage, '#0e7490'], ['Lavage', tot.lav, '#0891b2'], ['Boutique / repas', tot.bout, '#8b5cf6']];
+      const totP = parts.reduce((s, p) => s + p[1], 0) || 1;
+      $('tf-an-repart').innerHTML = parts.map(p => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px"><div style="width:118px;font-size:12px;color:#475569">${p[0]}</div><div style="flex:1;background:#f1f5f9;border-radius:6px;overflow:hidden;height:14px"><div style="width:${Math.round(p[1] / totP * 100)}%;height:100%;background:${p[2]}"></div></div><div style="width:42px;text-align:right;font-size:12px;font-weight:600">${Math.round(p[1] / totP * 100)}%</div><div style="width:78px;text-align:right;font-size:11px;color:#94a3b8">${eur(p[1])}</div></div>`).join('');
+      // Classement conducteurs
+      const byD = {}; conso.forEach(c => { const n = _tfName(c, vbp); const d = byD[n] || (byD[n] = { nom:n, ttc:0, carb:0, litres:0, bout:0 }); d.ttc += _tfN(c.total_ttc); d.carb += _tfN(c.carburant_ttc); d.litres += _tfN(c.litres); d.bout += _tfN(c.boutique_ttc); });
+      const rank = Object.values(byD).sort((a, b) => b.ttc - a.ttc).slice(0, 8); const maxD = Math.max(1, ...rank.map(d => d.ttc));
+      $('tf-an-rank').innerHTML = rank.map((d, i) => { const pl = d.litres > 0 ? d.carb / d.litres : 0; return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><div style="width:16px;font-weight:800;color:#94a3b8">${i + 1}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#0f1e3d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.nom)}</div><div style="background:#f1f5f9;border-radius:5px;overflow:hidden;height:7px;margin-top:2px"><div style="width:${Math.round(d.ttc / maxD * 100)}%;height:100%;background:#f97316"></div></div></div><div style="width:78px;text-align:right;font-size:12px;font-weight:700">${eur(d.ttc)}</div><div style="width:66px;text-align:right;font-size:11px;color:#94a3b8">${pl ? pl.toFixed(2).replace('.', ',') + ' €/L' : ''}</div></div>`; }).join('') || '<p class="text-sm text-slate-400">—</p>';
+      // Anomalies (au niveau des relevés mensuels)
+      const anom = [];
+      const plArr = conso.filter(c => _tfN(c.litres) >= 20).map(c => _tfN(c.carburant_ttc) / _tfN(c.litres)).filter(x => x > 0.5 && x < 5).sort((a, b) => a - b);
+      const med = plArr.length ? plArr[Math.floor(plArr.length / 2)] : 0;
+      if (med > 0) conso.forEach(c => { const l = _tfN(c.litres); if (l < 20) return; const p = _tfN(c.carburant_ttc) / l; if (p > med * 1.25) anom.push({ t:'warn', txt:`${_tfName(c, vbp)} · ${moisLabel(c.mois)} : prix élevé ${p.toFixed(2).replace('.', ',')} €/L (médiane ${med.toFixed(2).replace('.', ',')})` }); });
+      const dm = {}; conso.forEach(c => { if (!c.mois) return; const n = _tfName(c, vbp); (dm[n] = dm[n] || {})[c.mois] = (dm[n][c.mois] || 0) + _tfN(c.total_ttc); });
+      Object.keys(dm).forEach(n => { const ms = Object.keys(dm[n]).sort(); if (ms.length < 3) return; const last = ms[ms.length - 1], prev = ms.slice(0, -1); const avg = prev.reduce((s, m) => s + dm[n][m], 0) / prev.length; if (avg > 50 && dm[n][last] > avg * 1.5) anom.push({ t:'warn', txt:`${n} : ${moisLabel(last)} en forte hausse (${eur(dm[n][last])} vs moyenne ${eur(Math.round(avg))})` }); });
+      Object.values(byD).forEach(d => { if (d.carb > 200 && d.bout / d.carb > 0.3) anom.push({ t:'info', txt:`${d.nom} : boutique/repas élevé (${eur(d.bout)} soit ${Math.round(d.bout / d.carb * 100)} % du carburant)` }); });
+      $('tf-an-anom').innerHTML = anom.length ? anom.slice(0, 12).map(a => `<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:12.5px"><span style="color:${a.t === 'warn' ? '#d97706' : '#64748b'}">●</span><span style="color:#334155">${esc(a.txt)}</span></div>`).join('') + (anom.length > 12 ? `<div class="text-xs text-slate-400 mt-1">+ ${anom.length - 12} autres</div>` : '') : '<p class="text-sm text-emerald-700">✓ Rien d\'anormal détecté sur les relevés mensuels.</p>';
+      if (window.lucide) lucide.createIcons();
+    }
+    // Export CSV de la conso (relevés mensuels par carte)
+    if ($('tf-an-csv')) $('tf-an-csv').addEventListener('click', () => {
+      if (!conso || !conso.length) { if (FP.toast) FP.toast('Aucune donnée à exporter'); return; }
+      const cols = ['mois', 'conducteur', 'plaque', 'carte', 'carburant_ttc', 'litres', 'boutique_ttc', 'lavage_ttc', 'peage_ttc', 'total_ht', 'total_tva', 'total_ttc'];
+      const head = ['Mois', 'Conducteur', 'Plaque', 'Carte', 'Carburant TTC', 'Litres', 'Boutique', 'Lavage', 'Péage', 'HT', 'TVA', 'TTC'];
+      const q = v => { const s = String(v == null ? '' : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      const lines = [head.join(';')].concat(conso.slice().sort((a, b) => String(a.mois).localeCompare(String(b.mois))).map(c => cols.map(k => q(c[k])).join(';')));
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'total-fleet-conso.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    });
+    // Rapport PDF (relevé Total Fleet agrégé par conducteur) — via FP.fiche (jsPDF paresseux géré)
+    if ($('tf-an-pdf')) $('tf-an-pdf').addEventListener('click', () => {
+      if (!(FP.fiche && FP.fiche.open)) return;
+      if (!conso || !conso.length) { if (FP.toast) FP.toast('Aucune donnée'); return; }
+      const vbp = _tfVehBy(); const g = {};
+      conso.forEach(c => { const n = _tfName(c, vbp); const d = g[n] || (g[n] = { nom:n, carb:0, litres:0, peage:0, ht:0, tva:0, ttc:0 }); d.carb += _tfN(c.carburant_ttc); d.litres += _tfN(c.litres); d.peage += _tfN(c.peage_ttc); d.ht += _tfN(c.total_ht); d.tva += _tfN(c.total_tva); d.ttc += _tfN(c.total_ttc); });
+      const rows = Object.values(g).sort((a, b) => b.ttc - a.ttc);
+      FP.fiche.open({ key: 'totalfleet', title: 'Relevé Total Fleet — carburant & péages', rows, cols: [
+        { id: 'nom', label: 'Conducteur / Véhicule', def: true, get: r => r.nom },
+        { id: 'carb', label: 'Carburant', def: true, align: 'right', get: r => FP.euro(r.carb), sum: r => r.carb },
+        { id: 'litres', label: 'Litres', def: true, align: 'right', get: r => FP.num(Math.round(r.litres)) + ' L', sum: r => r.litres, fmt: t => FP.num(Math.round(t)) + ' L' },
+        { id: 'peage', label: 'Péage', def: true, align: 'right', get: r => FP.euro(r.peage), sum: r => r.peage },
+        { id: 'ht', label: 'HT', def: false, align: 'right', get: r => FP.euro(r.ht), sum: r => r.ht },
+        { id: 'tva', label: 'TVA', def: false, align: 'right', get: r => FP.euro(r.tva), sum: r => r.tva },
+        { id: 'ttc', label: 'TTC', def: true, align: 'right', get: r => FP.euro(r.ttc), sum: r => r.ttc },
+      ] });
+    });
 
     $('tf-conso-mois').addEventListener('change', renderConso);
     $('tf-conso-from').addEventListener('change', renderConso);
@@ -3119,6 +3250,35 @@
       tfoot.innerHTML = rows.length ? `<tr style="font-weight:700;border-top:2px solid var(--fp-border)"><td>Total ${lbl}</td><td></td><td style="text-align:right">${totKm ? FP.num(totKm) + ' km' : '—'}</td><td style="text-align:right">${FP.euro(tot)}</td></tr>` : '';
     }
     $('uls-conso-mois').addEventListener('change', renderConso);
+
+    // Conso Ulys ADOSSÉE à une facture réellement présente (même règle que le tableau).
+    function ulsExportRows(){
+      if (!conso) return [];
+      const ulsFac = (window.FP_DATA.factures || []).filter(isUlys);
+      const facNums = new Set(ulsFac.map(f => String(f.numeroFacture || '').trim()).filter(Boolean));
+      const facMois = new Set(ulsFac.map(f => (f.date || '').slice(0, 7)).filter(Boolean));
+      return conso.filter(c => { const n = String(c.numeroFacture || '').trim(); return n ? facNums.has(n) : facMois.has(c.mois); });
+    }
+    if ($('uls-an-csv')) $('uls-an-csv').addEventListener('click', () => {
+      const rows = ulsExportRows(); if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée à exporter'); return; }
+      const cols = ['mois', 'conducteur', 'numeroFacture', 'nb_trajets', 'km', 'total_ttc'];
+      const head = ['Mois', 'Conducteur', 'N° facture', 'Trajets', 'Km', 'TTC'];
+      const q = v => { const s = String(v == null ? '' : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      const lines = [head.join(';')].concat(rows.slice().sort((a, b) => String(a.mois).localeCompare(String(b.mois))).map(c => cols.map(k => q(c[k])).join(';')));
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ulys-conso.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    });
+    if ($('uls-an-pdf')) $('uls-an-pdf').addEventListener('click', () => {
+      if (!(FP.fiche && FP.fiche.open)) return; const rows = ulsExportRows(); if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée'); return; }
+      const g = {}; rows.forEach(c => { const n = c.conducteur || '—'; const d = g[n] || (g[n] = { nom:n, trajets:0, km:0, ttc:0 }); d.trajets += Number(c.nb_trajets) || 0; d.km += Number(c.km) || 0; d.ttc += Number(c.total_ttc) || 0; });
+      const list = Object.values(g).sort((a, b) => b.ttc - a.ttc);
+      FP.fiche.open({ key: 'ulys', title: 'Relevé Ulys — péages', rows: list, cols: [
+        { id: 'nom', label: 'Conducteur', def: true, get: r => r.nom },
+        { id: 'trajets', label: 'Trajets', def: true, align: 'right', get: r => r.trajets ? String(r.trajets) : '—', sum: r => r.trajets, fmt: t => String(Math.round(t)) },
+        { id: 'km', label: 'Km', def: true, align: 'right', get: r => r.km ? FP.num(r.km) + ' km' : '—', sum: r => r.km, fmt: t => FP.num(Math.round(t)) + ' km' },
+        { id: 'ttc', label: 'TTC', def: true, align: 'right', get: r => FP.euro(r.ttc), sum: r => r.ttc },
+      ] });
+    });
 
     window.renderUlys = () => { render(); if (!consoLoaded) loadConso(); else renderConso(); };
     document.addEventListener('fp:data-ready', () => { if (!$('view-ulys').classList.contains('hidden')){ render(); if (consoLoaded) renderConso(); } });
