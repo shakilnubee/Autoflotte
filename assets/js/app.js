@@ -3383,6 +3383,19 @@ FP.buildAlertes = (data) => {
     }
   } catch (e) {}
 
+  // --- Factures Total (carburant) SANS PDF stocké (upload raté / bucket bloqué) ---
+  // Filet de sécurité : un relevé Total importé doit TOUJOURS avoir son PDF réaffichable.
+  // On regroupe en UNE alerte dépliable → on voit tout de suite s'il manque des PDF.
+  try {
+    const sansPdf = (data.factures || []).filter(f => FP.estTotalFleet(f) && (!f.fileId || /^IMP-/.test(String(f.fileId))));
+    if (sansPdf.length) {
+      out.push({ niveau: 'info', categorie: 'Factures', message: `${sansPdf.length} facture(s) Total sans PDF stocké`,
+        detail: "Le PDF n'a pas pu être enregistré (stockage). Ré-importe les relevés Total pour rattacher les PDF.", sort: 700,
+        target: 'factures.html',
+        vehicules: sansPdf.slice(0, 100).map(f => ({ label: `${f.numeroFacture || f.id} — ${f.date ? FP.date(f.date) : '—'}${f.montantTTC != null ? ' · ' + FP.euro(f.montantTTC) : ''}`, target: 'factures.html' })) });
+    }
+  } catch (e) {}
+
   const order = { danger: 0, warn: 1, info: 2 };
   out.sort((a, b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
   // Masque les alertes que l'utilisateur a explicitement enlevées (par véhicule / échéance)
