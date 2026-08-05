@@ -2146,6 +2146,55 @@ FP.notifCfg = () => {
     empruntRetardJours: num(n.empruntRetardJours, 2),    // emprunt non rendu : considéré « en retard » au-delà de X jours
   };
 };
+
+// ⚠️ SOURCE UNIQUE — Total Fleet : catégorie d'un achat, seuils, et « points à vérifier » (anomalies).
+// Utilisé PARTOUT (page Factures ET page Suivi & alertes) pour ne pas diverger.
+FP.txCat = function (p) {
+  const s = (p || '').toLowerCase();
+  if (/gazole|gasoil|diesel|super|sp\d|sans[- ]?plomb|essence|excellium|premier|adblue|gnr|gpl|e10|e85|b7/.test(s)) return 'carburant';
+  if (/lavage/.test(s)) return 'lavage';
+  if (/parking/.test(s)) return 'parking';
+  if (/aliment|boisson|sandwich|repas|restaur|snack|produit\s*frais|caf[ée]|menu/.test(s)) return 'repas';
+  if (/lubrifiant/.test(s)) return 'boutique';
+  return 'autre';
+};
+FP.tfSeuils = function () {
+  let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {}
+  return {
+    repasJour: Number(s.repasJour) > 0 ? Number(s.repasJour) : 20,
+    autreItem: (s.autreItem === 0 || Number(s.autreItem) > 0) ? Number(s.autreItem) : 20,
+    horsCarbMois: Number(s.horsCarbMois) > 0 ? Number(s.horsCarbMois) : 40,
+  };
+};
+// Anomalies « carte carburant » à partir du détail transaction (total_conso_tx déjà filtré par l'appelant) :
+// >3 pleins/jour, repas > seuil/jour, achat « Autres » (hors carburant) ≥ seuil. Renvoie [{t,mois,facnum,txt,key}].
+FP.totalFleetAnomaliesTx = function (tx) {
+  const lim = FP.tfSeuils(), list = tx || [], anom = [];
+  const dnum = (d) => FP.dateNum ? FP.dateNum(d) : (d || '');
+  const eur = (v) => FP.euro ? FP.euro(v) : (v + ' €');
+  const catOf = (t) => (t && t.produit ? FP.txCat(t.produit) : (t && t.categorie) || 'autre');
+  const pleins = {};
+  list.filter(t => catOf(t) === 'carburant').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = pleins[k] || (pleins[k] = { n: t.conducteur || '—', d: t.date_tx, fac: t.facnum, mois: t.mois, c: 0 }); o.c += 1; });
+  Object.values(pleins).forEach(o => { if (o.c > 3) anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, txt: `${o.n} · ${dnum(o.d)} : ${o.c} pleins de carburant le MÊME jour → à vérifier (carte prêtée ? plusieurs véhicules ? carburant revendu ?)` }); });
+  // DIESEL (gazole) : la flotte roule à l'essence → toute conso de gazole/diesel = à vérifier.
+  // Regroupé par conducteur (clé stable « diesel|nom ») pour rester lisible.
+  const diesel = {};
+  list.filter(t => catOf(t) === 'carburant' && /gazole|gasoil|diesel/i.test(t.produit || '')).forEach(t => { const n = t.conducteur || '—'; const o = diesel[n] || (diesel[n] = { n, fac: t.facnum, mois: t.mois, c: 0, s: 0 }); o.c += 1; o.s += Number(t.montant_ttc) || 0; if (!o.fac) o.fac = t.facnum; if (t.mois) o.mois = t.mois; });
+  Object.values(diesel).forEach(o => anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, key: 'diesel|' + o.n, txt: `${o.n} : ${o.c} conso de GAZOLE (diesel) pour ${eur(o.s)} → à vérifier (la carte carburant est censée être à l'essence)` }));
+  const day = {};
+  list.filter(t => catOf(t) === 'repas').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = day[k] || (day[k] = { n: t.conducteur || '—', d: t.date_tx, fac: t.facnum, mois: t.mois, s: 0 }); o.s += Number(t.montant_ttc) || 0; });
+  Object.values(day).forEach(o => { if (o.s > lim.repasJour) anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, txt: `${o.n} · ${dnum(o.d)} : ${eur(o.s)} de repas/boissons en une seule journée → dépense repas élevée, à vérifier (seuil ${lim.repasJour} €/jour)` }); });
+  list.filter(t => catOf(t) === 'autre' && (Number(t.montant_ttc) || 0) >= (lim.autreItem || 0))
+    .sort((a, b) => (Number(b.montant_ttc) || 0) - (Number(a.montant_ttc) || 0))
+    .forEach(t => anom.push({ t: 'warn', mois: t.mois, facnum: t.facnum, txt: `${t.conducteur || '—'} · ${dnum(t.date_tx)} : ${t.produit} à ${eur(t.montant_ttc)} → achat qui n'est pas du carburant, payé avec la carte essence, à vérifier` }));
+  anom.forEach(a => { if (!a.key) a.key = a.t + '|' + (a.facnum || '') + '|' + a.txt; });
+  return anom;
+};
+// Anomalies NON archivées (exclut celles cochées « vérifié » dans les réglages tfAnomOk).
+FP.totalFleetAnomaliesActives = function (tx) {
+  let ok = {}; try { ok = FP.settings.get().tfAnomOk || {}; } catch (e) {}
+  return FP.totalFleetAnomaliesTx(tx).filter(a => !ok[a.key]);
+};
 // ⚠️ SOURCE UNIQUE — Applique une facture à la fiche du véhicule (km + dernière révision + pneus +
 // rappel « relevé km »). TOUS les chemins qui créent OU éditent une facture DOIVENT passer par ici
 // (saisie manuelle, scanner du tableau de bord, édition inline/drawer, sinistres). Ne jamais

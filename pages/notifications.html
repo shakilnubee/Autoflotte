@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805n">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260805o">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260805n"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260805o"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260805n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260805o">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -119,6 +119,7 @@
 
     <div class="flex gap-1 border-b border-slate-200 mb-6" style="overflow-x:auto">
       <button type="button" id="tab-alertes" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">🔔 Alertes</button>
+      <button type="button" id="tab-verif" style="display:none;padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔎 Points à vérifier <span id="tab-verif-n"></span></button>
       <button type="button" id="tab-echeances" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔄 Renouvellements</button>
       <button type="button" id="tab-complet" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📝 À compléter</button>
       <button type="button" id="tab-decisions" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">💡 Décisions</button>
@@ -128,17 +129,18 @@
     <div id="notif-cols" class="grid gap-6 md:grid-cols-2 xl:grid-cols-4"></div>
     <div id="suivi-echeances" class="hidden"></div>
     <div id="suivi-complet" class="hidden"></div>
+    <div id="suivi-verif" class="hidden"></div>
 
     <div id="notif-masquees" class="mt-8"></div>
 
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260805n"></script>
-<script src="../assets/js/supabase-client.js?v=20260805n"></script>
-<script src="../assets/js/data.js?v=20260805n"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260805o"></script>
+<script src="../assets/js/supabase-client.js?v=20260805o"></script>
+<script src="../assets/js/data.js?v=20260805o"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260805n"></script>
+<script src="../assets/js/app.js?v=20260805o"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -587,22 +589,52 @@
     rafShow();
   }
 
-  const tabD = document.getElementById('tab-decisions'), tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet');
+  const tabD = document.getElementById('tab-decisions'), tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet'), tabV = document.getElementById('tab-verif');
   function showTab(which) {
     document.getElementById('suivi-decisions').classList.toggle('hidden', which !== 'decisions');
     document.getElementById('notif-cols').classList.toggle('hidden', which !== 'alertes');
     document.getElementById('notif-masquees').classList.toggle('hidden', which !== 'alertes');
     document.getElementById('suivi-echeances').classList.toggle('hidden', which !== 'echeances');
     document.getElementById('suivi-complet').classList.toggle('hidden', which !== 'complet');
-    [[tabD, 'decisions'], [tabA, 'alertes'], [tabE, 'echeances'], [tabC, 'complet']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
+    document.getElementById('suivi-verif').classList.toggle('hidden', which !== 'verif');
+    [[tabD, 'decisions'], [tabA, 'alertes'], [tabE, 'echeances'], [tabC, 'complet'], [tabV, 'verif']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
     if (which === 'decisions') renderDecisions();
     if (which === 'echeances') renderEcheances();
     if (which === 'complet') renderComplet();
+    if (which === 'verif') renderVerif();
   }
   if (tabD) tabD.addEventListener('click', () => showTab('decisions'));
   if (tabA) tabA.addEventListener('click', () => showTab('alertes'));
   if (tabE) tabE.addEventListener('click', () => showTab('echeances'));
   if (tabC) tabC.addEventListener('click', () => showTab('complet'));
+  if (tabV) tabV.addEventListener('click', () => showTab('verif'));
+
+  // ===== Points à vérifier (carte carburant Total) — même détection que la page Factures (FP.*) =====
+  let _verifTx = null; // cache des transactions total_conso_tx (chargées 1×)
+  async function loadVerifTx() {
+    if (_verifTx !== null) return _verifTx;
+    try { const r = await FP.supabase.from('total_conso_tx').select('*'); _verifTx = (r && r.data) || []; } // RLS filtre déjà par société
+    catch (e) { _verifTx = []; }
+    return _verifTx;
+  }
+  function verifAnoms() { return (window.FP && FP.totalFleetAnomaliesActives) ? FP.totalFleetAnomaliesActives(_verifTx || []) : []; }
+  function paintVerifTab(n) {
+    if (!tabV) return;
+    tabV.style.display = n > 0 ? '' : 'none';
+    const b = document.getElementById('tab-verif-n'); if (b) b.textContent = n > 0 ? '(' + n + ')' : '';
+  }
+  async function refreshVerifCount() { await loadVerifTx(); paintVerifTab(verifAnoms().length); }
+  async function renderVerif() {
+    const box = document.getElementById('suivi-verif'); if (!box) return;
+    box.innerHTML = '<p class="text-sm text-slate-400">Chargement…</p>';
+    await loadVerifTx();
+    const anoms = verifAnoms();
+    paintVerifTab(anoms.length);
+    if (!anoms.length) { box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier sur la carte carburant Total.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div></div></div>'; lucide.createIcons(); return; }
+    box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant <b>Total</b> (repas élevés, achats hors carburant, plusieurs pleins/jour). Ouvre la page <b>Factures → Total Fleet</b> pour vérifier et archiver.</p>'
+      + anoms.map(a => `<a href="factures.html" class="notif lvl-warn"><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5"></i><div class="flex-1 min-w-0"><div class="notif-cat">Carte carburant Total</div><div class="font-semibold text-slate-900">${esc(a.txt)}</div></div><i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 flex-shrink-0 self-center"></i></a>`).join('');
+    lucide.createIcons();
+  }
 
   // Bouton « Compléter depuis les cartes grises » : remplit les champs VIDES depuis FP.CG_DATA.
   document.getElementById('suivi-complet').addEventListener('click', async (e) => {
@@ -649,13 +681,15 @@
   // Onglet initial : « Alertes » par défaut, ou celui demandé dans l'URL (?tab=alertes/echeances/complet/decisions).
   (function initTab() {
     const t = new URLSearchParams(location.search).get('tab');
-    showTab(['decisions', 'alertes', 'echeances', 'complet'].includes(t) ? t : 'alertes');
+    showTab(['decisions', 'alertes', 'echeances', 'complet', 'verif'].includes(t) ? t : 'alertes');
   })();
+  refreshVerifCount(); // affiche l'onglet « Points à vérifier » seulement s'il y en a
   document.addEventListener('fp:data-ready', () => {
     render();
     if (isDecisionsVisible()) renderDecisions();
     if (!document.getElementById('suivi-echeances').classList.contains('hidden')) renderEcheances();
     if (isCompletVisible()) renderComplet();
+    if (!document.getElementById('suivi-verif').classList.contains('hidden')) renderVerif();
   });
 
   // Charge les conducteurs (table à part) → alertes "permis qui expire" + onglet « À compléter »
