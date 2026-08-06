@@ -4987,6 +4987,95 @@ FP.ocr = {
   },
 };
 
+// ================= FACTURES ULYS (péages VINCI) — lecture précise PARTAGÉE =================
+// SOURCE DE VÉRITÉ UNIQUE pour lire un relevé Ulys (règle « une seule source ») : le PDF a une
+// couche texte, mais une lecture standard MÉLANGE les colonnes → montants/prénoms faux. On
+// reconstruit donc les lignes en triant les fragments PAR POSITION (y décroissant puis x), puis on
+// ancre le détail par collaborateur sur le N° DE BADGE. Utilisé par la page Factures (import) ET
+// par le scanner unifié (pages/scanner.html). Ne JAMAIS réimplémenter ailleurs.
+FP.ulys = {
+  MOIS_FR: { janvier:'01',fevrier:'02',mars:'03',avril:'04',mai:'05',juin:'06',juillet:'07',aout:'08',septembre:'09',octobre:'10',novembre:'11',decembre:'12' },
+  num(s){ return parseFloat(String(s).replace(/\s/g,'').replace(',','.')) || 0; },
+  norm(s){ return (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); },
+  slug(s){ return (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); },
+  moisLabel(m){ const [y,mo]=(m||'').split('-'); const N=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo?`${N[+mo]} ${y}`:m; },
+  // Reconstruit le texte du PDF EN LIGNES (tri par position). Repli sur OCR image si pas de couche texte.
+  async pdfToText(file){
+    try {
+      await FP.ocr.loadScript(FP.ocr.PDFJS_CDN);
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = FP.ocr.PDFJS_WORKER;
+      const buf = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+      let text = '';
+      for (let pg=1; pg<=pdf.numPages; pg++){
+        const page = await pdf.getPage(pg);
+        const tc = await page.getTextContent();
+        const items = tc.items.filter(i => i.str && i.str.trim() !== '')
+          .map(i => ({ x: i.transform[4], y: i.transform[5], s: i.str.trim() }));
+        items.sort((a,b) => (b.y - a.y) || (a.x - b.x));   // haut→bas puis gauche→droite
+        const lines = []; let cur = null;
+        for (const it of items){
+          if (!cur || Math.abs(it.y - cur.y) > 2){ cur = { y: it.y, parts: [it] }; lines.push(cur); }
+          else cur.parts.push(it);
+        }
+        for (const ln of lines){ ln.parts.sort((a,b)=>a.x-b.x); text += ln.parts.map(p=>p.s).join(' ') + '\n'; }
+        text += '\n';
+      }
+      return text;
+    } catch(e){ console.warn('[FP.ulys.pdfToText]', e); return ''; }
+  },
+  // Extrait n° / date / période / HT / TVA / TTC + détail par collaborateur (ancré sur le badge).
+  parse(text){
+    const t = String(text || '').replace(/[\u00a0\u202f\u2009]/g, ' ');   // normalise les espaces insecables
+    const N = (s) => this.num(s);
+    const mNum = t.match(/Facture\s*n[°ºo]\s*([A-Z]{1,3}\d{6,})/i);
+    const mEm  = t.match(/[ÉE]mise?\s*le\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+    const numero = mNum ? mNum[1] : null;
+    const emise = mEm ? `${mEm[3]}-${mEm[2]}-${mEm[1]}` : '';
+    let mois = '';
+    const mPer = t.match(/Facture\s+(?:de|d['’])\s*([a-zA-ZéèûôA-ZÀ-Ý]+)\s*(\d{4})/);
+    if (mPer){ const mm = this.MOIS_FR[this.norm(mPer[1])]; if (mm) mois = mPer[2] + '-' + mm; }
+    if (!mois && emise){ const d = new Date(emise); d.setMonth(d.getMonth()-1); mois = d.toISOString().slice(0,7); }
+    // Date de la facture = 1er jour de la PÉRIODE (sinon « janvier » s'afficherait en février).
+    const date = mois ? (mois + '-01') : emise;
+    // Montants : TTC = « NET A PAYER TTC » imprimé avec € ; TVA = 20 % d'une base du récap 1re page ; HT = TTC − TVA.
+    let ht=null, tva=null, ttc=null;
+    const toNums = (s) => (String(s||'').match(/\d[\d\s]*,\d{2}/g)||[]).map(N);
+    const afterNet = t.split(/NET\s*A\s*PAYER\s*TTC/i).slice(1).join(' ') || t;
+    const mTtc = afterNet.match(/(\d[\d\s]*,\d{2})\s*€/) || t.match(/(\d[\d\s]*,\d{2})\s*€/);
+    if (mTtc) ttc = N(mTtc[1]);
+    const page1 = t.split(/Badge n[°ºo]/)[0];
+    const p1nums = toNums(page1);
+    if (ttc == null && p1nums.length) ttc = Math.max.apply(null, p1nums);
+    if (ttc != null){
+      let best = null;
+      for (const b of p1nums) for (const tv of p1nums){
+        if (tv > 0 && Math.abs(b * 0.20 - tv) <= 0.02 && b + tv <= ttc + 0.05){ if (!best || b > best.b) best = { b, tv }; }
+      }
+      if (best){ tva = best.tv; ht = +(ttc - tva).toFixed(2); }
+      else { ht = +(ttc / 1.2).toFixed(2); tva = +(ttc - ht).toFixed(2); }
+    }
+    // Détail par collaborateur, ancré sur le N° DE BADGE (l'ordre des prénoms n'est PAS fiable).
+    const badgeSuffix = (x) => String(x).replace(/\D/g,'').slice(-5);
+    const nameByBadge = {};
+    { const rx = /Badge\s*n[°ºo]\s+([\d ]+\d)\s+([A-Za-zÀ-ÿ][^\n]*?)\s*$/gim; let m;
+      while ((m = rx.exec(t))){ const suf = badgeSuffix(m[1]); const nm = m[2].trim();
+        if (suf && nm && !nameByBadge[suf]) nameByBadge[suf] = nm; } }
+    const conso = [];
+    { const rx = /Total\s+Badge\s+([\d ]+?\d)\s+(\d+)\s*consommation\(s\)\s*([\d\s.,]+?)\s*€\s*TTC\s*([\d\s.,]+?)\s*km/gi; let m;
+      const seenB = new Set();
+      while ((m = rx.exec(t))){
+        const suf = badgeSuffix(m[1]); if (seenB.has(suf)) continue; seenB.add(suf);
+        conso.push({ conducteur: nameByBadge[suf] || ('Badge ' + suf), nb: parseInt(m[2],10)||0, ttc: N(m[3]), km: N(m[4]) });
+      }
+    }
+    return { numero, date, mois, ht, tva, ttc, conso };
+  },
+  // Enregistrements prêts pour la base — MÊMES ids/formats que l'import de la page Factures.
+  factureRecord(p){ return { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+this.moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc }; },
+  consoRecord(c, societe){ return { id:'ULYSC-'+c.mois+'-'+this.slug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe: societe||'PXP' }; }
+};
+
 // ================= DÉTECTION DE DOUBLONS (toute la plateforme) =================
 // Un helper unique pour éviter d'ajouter deux fois le même élément (factures, amendes,
 // véhicules, conducteurs, emprunts, sinistres). Chaque table a sa règle d'identité.

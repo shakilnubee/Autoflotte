@@ -178,7 +178,25 @@
     try { det = await FP.scanIA(file, 'detect', DETECT_PROMPT); } catch (e) { console.warn('[scan2 detect]', e); }
     let type = (det && (det.type_document || det.type)) || 'document_inconnu';
     type = normType(type);
-    // Type mieux traité par un outil dédié (ex. péages Ulys) → on renvoie une redirection au lieu d'un OCR approximatif.
+    // Péages Ulys : lecture PRÉCISE (pas d'OCR vision approximatif) via la source unique FP.ulys —
+    // reconstruction des colonnes par position + détail par collaborateur ancré sur le badge.
+    if (type === 'facture_ulys') {
+      const isPdf = (file.type === 'application/pdf') || /\.pdf$/i.test(file.name || '');
+      if (isPdf && window.FP && FP.ulys) {
+        onStep && onStep('extract', { type, label: 'Péages Ulys' });
+        let text = await FP.ulys.pdfToText(file);
+        if ((!text || text.replace(/\s/g, '').length < 80) && FP.ocr && FP.ocr.fileToText) { try { text = await FP.ocr.fileToText(file, 99); } catch (e) {} }
+        const p = FP.ulys.parse(text || '');
+        if (p && p.numero && p.ttc != null) {
+          onStep && onStep('coherence');
+          const rows = (p.conso || []).map(c => Object.assign({ mois: p.mois, numero: p.numero }, c));
+          return { type_document: 'facture_ulys', cible: 'factures', qualite_document: (det && det.qualite_document) || 'bonne',
+            _ulys: { fac: [p], rows }, champs: [] };
+        }
+      }
+      // PDF illisible ou photo (pas de couche texte) → on oriente vers l'importateur dédié.
+      return { type_document: type, _redirect: REDIRECTS[type], qualite_document: (det && det.qualite_document) || '', champs: [] };
+    }
     if (REDIRECTS[type]) {
       return { type_document: type, _redirect: REDIRECTS[type], qualite_document: (det && det.qualite_document) || '', champs: [] };
     }
@@ -315,6 +333,33 @@
         cible_table: target.table, cible_id: target.id };
       if (FP.persist && FP.persist.insert) FP.persist.insert('scans', srec);
     } catch (e) { console.warn('[scan2 trace]', e); }
+    return target;
+  };
+
+  // Enregistrement d'un relevé Ulys lu précisément (facture type 'peage' + détail ulys_conso) —
+  // MÊME logique/format que l'import de la page Factures (via FP.ulys.*).
+  FP2.saveUlys = async function (model) {
+    if (!(model && model._ulys && window.FP && FP.ulys)) throw new Error("Aucun relevé Ulys à enregistrer.");
+    const soc = societe(); let okF = 0, okC = 0, firstId = null;
+    for (const p of (model._ulys.fac || [])) {
+      const rec = FP.ulys.factureRecord(p);
+      try { const i = (data.factures || []).findIndex(x => x.id === rec.id); if (i >= 0) data.factures[i] = rec; else if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
+      try { await FP.persist.upsert('factures', rec); okF++; } catch (e) { console.error('[scan2 ulys facture]', e); }
+      if (!firstId) firstId = rec.id;
+    }
+    for (const c of (model._ulys.rows || [])) {
+      if (c.ttc == null) continue;
+      const row = FP.ulys.consoRecord(c, soc);
+      try { await FP.persist.upsert('ulys_conso', row); okC++; } catch (e) { console.error('[scan2 ulys conso]', e); }
+    }
+    const target = { table: 'factures', id: firstId };
+    try {
+      const srec = { id: uid('sc'), societe: soc, type_document: 'facture_ulys', sous_type: '', statut: 'valide',
+        qualite: model.qualite_document || '', fichier_url: model._fileUrl || null,
+        extraction: { fac: model._ulys.fac, rows: model._ulys.rows, okFactures: okF, okConso: okC },
+        cible_table: 'factures', cible_id: firstId };
+      if (FP.persist && FP.persist.insert) FP.persist.insert('scans', srec);
+    } catch (e) { console.warn('[scan2 trace ulys]', e); }
     return target;
   };
 
