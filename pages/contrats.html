@@ -303,6 +303,7 @@
       <input type="file" id="loc-upload-file" accept="application/pdf,image/*" class="hidden" />
       <div class="mt-3 pt-3 border-t border-slate-100">
         <button id="loc-recover-pdf" type="button" class="text-xs font-semibold" style="color:var(--fp-accent)"><i data-lucide="link" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Retrouver les PDF (relier les contrats déjà sur le Drive)</button>
+        <button id="loc-restore-default" type="button" class="text-xs font-semibold ml-4" style="color:var(--fp-accent)"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Restaurer les contrats Ayvens manquants</button>
         <div id="loc-recover-panel" class="hidden mt-3 p-4 rounded-lg" style="background:#FFFBEB;border:1px solid #FDE68A"></div>
       </div>
     </div>
@@ -1667,6 +1668,7 @@
     const tit = $('loc-title'); if (tit) tit.textContent = (leasingLoueurFilter !== 'all' && leasingLoueurFilter !== LOCALEASE_VAL) ? ('Contrats saisis — ' + leasingLoueurFilter) : (estPXP ? 'Leasing — Localease (Ayvens)' : 'Leasing (LLD)');
     const desc = $('loc-desc'); if (desc) desc.textContent = 'Contrats de leasing — loyers mensuels, échéances et documents.';
     const rec = $('loc-recover-pdf'); if (rec) rec.style.display = estPXP ? '' : 'none';
+    { const rd = $('loc-restore-default'); if (rd) rd.style.display = estPXP ? '' : 'none'; }
     const list = getLocalease();
     const tbody = $('tbody-localease'); if (!tbody) return;
     // On garde l'INDEX d'origine (les actions data-loc-* pointent dessus) tout en filtrant par loueur.
@@ -1966,7 +1968,7 @@
       if(FP.toast)FP.toast(`Mémo assurance déplacé vers ${immat} ✓`); else alert(`Déplacé vers l'assurance du véhicule ${immat}.`);
       return; }
     const dd=e.target.closest('[data-loc-doc-del]'); if(dd){ const [i,di]=dd.dataset.locDocDel.split(':').map(Number); if(Array.isArray(list[i].docs)){ list[i].docs.splice(di,1); list[i].pdfUrl=list[i].docs[0]?list[i].docs[0].url:null; save(); } return; }
-    const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; const immat=c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):''); if(!await FP.confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${immat?' ('+immat+')':''} ?`)) return; list.splice(i,1); save(); if(immat && (data.vehicules||[]).some(x=>x.immat===immat)){ if(await FP.confirm(`Supprimer AUSSI le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible (leasing, assurance, liste véhicules…).`)){ if(deleteVehiculeFlotte(immat)) refreshAllContrats(); } } if(FP.toast)FP.toast('Contrat supprimé'); return; }
+    const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; const immat=c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):''); if(!await FP.confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${immat?' ('+immat+')':''} ?`)) return; try{ if(FP.trash) FP.trash.add('leasing', c); }catch(_){} list.splice(i,1); save(); if(immat && (data.vehicules||[]).some(x=>x.immat===immat)){ if(await FP.confirm(`Supprimer AUSSI le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible (leasing, assurance, liste véhicules…).`)){ if(deleteVehiculeFlotte(immat)) refreshAllContrats(); } } if(FP.toast)FP.toast('Contrat supprimé'); return; }
   });
   // Téléversement du PDF du contrat vers Supabase (bucket scans, comme les cartes grises)
   $('loc-upload-file').addEventListener('change', async (e)=>{
@@ -2023,6 +2025,19 @@
   function contratOptionsHtml() {
     return getLocalease().map((c, i) => `<option value="${i}">${escC((c.conducteur || '?') + ' — ' + (c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '') || '?') + ' — ' + (c.marque || '') + ' ' + (c.modele || ''))}</option>`).join('');
   }
+  // Restaurer les contrats Ayvens du modèle d'origine qui ne sont plus dans la liste enregistrée.
+  if ($('loc-restore-default')) $('loc-restore-default').addEventListener('click', async () => {
+    if (((FP.activeSociete && FP.activeSociete()) || 'PXP') !== 'PXP') { alert('Restauration réservée à la flotte PXP.'); return; }
+    const norm = s => (s || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const cur = getLocalease();
+    const has = (d) => cur.some(c => norm(c.conducteur) === norm(d.conducteur) && ((d.offre && norm(c.offre) === norm(d.offre)) || norm(c.modele) === norm(d.modele)));
+    const missing = LOCALEASE_DEFAUT.filter(d => !has(d));
+    if (!missing.length) { if (FP.toast) FP.toast('Aucun contrat Ayvens manquant ✓'); else alert('Rien à restaurer — tous les contrats Ayvens du modèle sont présents.'); return; }
+    if (!await FP.confirm(`Restaurer ${missing.length} contrat(s) Ayvens manquant(s) ?\n\n${missing.map(d => '• ' + d.conducteur + ' — ' + d.modele + (d.offre ? ' (' + d.offre + ')' : '')).join('\n')}`)) return;
+    const s = FP.settings.get(); const l = getLocalease(); missing.forEach(d => l.push({ ...d, docs: [] })); s.localeaseContrats = l; FP.settings.save(s);
+    renderLocalease(); renderKPIs();
+    if (FP.toast) FP.toast(`✓ ${missing.length} contrat(s) Ayvens restauré(s)`); else alert(missing.length + ' contrat(s) restauré(s).');
+  });
   if ($('loc-recover-pdf')) $('loc-recover-pdf').addEventListener('click', async () => {
     const panel = $('loc-recover-panel'); if (!panel) return;
     if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }

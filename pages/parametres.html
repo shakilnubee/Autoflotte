@@ -391,6 +391,16 @@
         <div id="imp-preview" class="text-sm mt-3"></div>
         <p class="text-xs text-slate-400 mt-2">Colonnes reconnues — <b>Véhicules</b> : immatriculation, marque, modèle, catégorie, carburant, km, mise en circulation, propriétaire, statut. <b>Conducteurs</b> : nom, prénom (ou « conducteur »). <b>Factures</b> : date, fournisseur, type (entretien/réparation/achat/leasing/cession/sinistre/autre), montant HT, TVA, TTC, n° facture, immatriculation, km, description. Formats de date acceptés : JJ/MM/AAAA ou AAAA-MM-JJ.</p>
       </div>
+
+      <div class="mt-5 pt-4 border-t border-slate-100">
+        <div class="field-label flex items-center gap-2"><i data-lucide="trash-2" class="w-4 h-4" style="color:var(--fp-accent)"></i> Corbeille — restaurer un élément supprimé</div>
+        <p class="text-sm text-slate-600 mb-3">Les <b>véhicules</b>, <b>amendes</b>, <b>conducteurs</b> et <b>contrats de leasing</b> supprimés sont conservés ici (synchronisés sur tous tes appareils). Clique sur <b>Restaurer</b> pour les remettre. <span class="text-slate-400">Après une restauration, recharge la page (Ctrl+Maj+R) pour la voir apparaître partout.</span></p>
+        <div id="corbeille-list" class="space-y-2"></div>
+        <div class="flex gap-2 mt-3">
+          <button class="btn btn-outline text-sm" id="corb-refresh"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Rafraîchir</button>
+          <button class="btn btn-outline text-sm" id="corb-clear" style="color:#b91c1c"><i data-lucide="trash" class="w-4 h-4"></i> Vider la corbeille</button>
+        </div>
+      </div>
     </div>
 
     <!-- Section Journal des modifications -->
@@ -1914,6 +1924,40 @@
     });
     paint();
   })();
+</script>
+<!-- Corbeille : restaurer un élément supprimé (véhicule / amende / conducteur / contrat leasing) -->
+<script>
+(function(){
+  function esc(s){ return (window.FP && FP.esc) ? FP.esc(s) : String(s==null?'':s); }
+  function renderCorbeille(){
+    var host = document.getElementById('corbeille-list'); if (!host) return;
+    if (!(window.FP && FP.trash)) { host.innerHTML = '<p class="text-sm text-slate-400">Corbeille indisponible (recharge la page).</p>'; return; }
+    var list = FP.trash.list();
+    if (!list.length) { host.innerHTML = '<p class="text-sm text-slate-400">Corbeille vide — rien à restaurer.</p>'; return; }
+    host.innerHTML = list.map(function(e){
+      var d = new Date(e.ts); var ds = isNaN(d) ? '' : d.toLocaleDateString('fr-FR');
+      return '<div class="flex items-center justify-between gap-2 p-2 rounded-lg" style="border:1px solid var(--fp-border);background:#fff">'
+        + '<div class="min-w-0"><span class="text-xs font-bold" style="color:#0e7490">' + esc(FP.trash.typeLabel(e.type)) + '</span> '
+        + '<span class="text-sm text-slate-700">' + esc(e.label || '(sans nom)') + '</span>'
+        + '<span class="text-xs text-slate-400 block">Supprimé le ' + ds + '</span></div>'
+        + '<div class="flex gap-1 flex-shrink-0">'
+        + '<button class="btn btn-dark text-xs" style="padding:.3rem .6rem" data-corb-restore="' + e.id + '"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Restaurer</button>'
+        + '<button class="btn btn-outline text-xs" style="padding:.3rem .5rem" data-corb-del="' + e.id + '" title="Retirer de la corbeille (définitif)"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>'
+        + '</div></div>';
+    }).join('');
+    if (window.lucide) lucide.createIcons();
+  }
+  document.addEventListener('click', async function(e){
+    var r = e.target.closest && e.target.closest('[data-corb-restore]');
+    if (r) { var ok = await FP.trash.restore(r.getAttribute('data-corb-restore')); renderCorbeille(); if (FP.toast) FP.toast(ok ? '✓ Restauré — recharge la page (Ctrl+Maj+R) pour le voir partout' : 'Échec de la restauration'); return; }
+    var d = e.target.closest && e.target.closest('[data-corb-del]');
+    if (d) { if (window.FP && FP.confirm ? await FP.confirm('Retirer définitivement cet élément de la corbeille ? Il ne sera plus restaurable.') : confirm('Retirer ?')) { FP.trash.remove(d.getAttribute('data-corb-del')); renderCorbeille(); } return; }
+  });
+  var cr = document.getElementById('corb-refresh'); if (cr) cr.addEventListener('click', renderCorbeille);
+  var cc = document.getElementById('corb-clear'); if (cc) cc.addEventListener('click', async function(){ if (window.FP && FP.confirm ? await FP.confirm('Vider TOUTE la corbeille ? Les éléments ne seront plus restaurables.') : confirm('Vider ?')) { FP.trash.clear(); renderCorbeille(); } });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderCorbeille); else renderCorbeille();
+  window.addEventListener('fp:data-ready', renderCorbeille);
+})();
 </script>
 </body>
 </html>
