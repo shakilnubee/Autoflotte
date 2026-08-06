@@ -4862,6 +4862,48 @@ FP.askIA = async function (question, opts) {
   return null;
 };
 
+// ================= SANTÉ DU SERVICE IA (auto-diagnostic) =================
+// But : ne plus jamais échouer EN SILENCE. FP.aiHealth() envoie un mini-appel de test au relais
+// « scan-doc » et renvoie { ok, model, reason }. Sert au bandeau d'alerte (dashboard) et au bouton
+// « Tester l'IA » (Paramètres). FP.aiHealthLabel() traduit la panne en message clair + piste de fix.
+FP._aiErrText = async function (error) {
+  try { if (error && error.context && typeof error.context.json === 'function') { const j = await error.context.json(); if (j && (j.error || j.message)) return j.error || j.message; } } catch (_) {}
+  try { if (error && error.context && typeof error.context.text === 'function') { const t = await error.context.text(); if (t) return String(t).slice(0, 200); } } catch (_) {}
+  return (error && error.message) || 'Erreur du service IA.';
+};
+FP.aiHealth = async function () {
+  if (!(FP.supabase && FP.supabase.functions)) return { ok: false, reason: 'Connexion au serveur indisponible (non connecté ?).' };
+  const payload = { fileBase64: FP._AI_PIXEL, mediaType: 'image/png', docType: 'ping',
+    prompt: 'Test de disponibilité. Ignore l\'image (volontairement vide). Réponds STRICTEMENT en JSON : { "reponse": "ok" }.', maxTokens: 40 };
+  const names = [...new Set([FP._scanFn, 'Scan-doc', 'scan-doc'].filter(Boolean))];
+  let reason = 'Fonction IA « scan-doc » introuvable côté serveur.';
+  for (const name of names) {
+    try {
+      const { data, error } = await FP.supabase.functions.invoke(name, { body: payload });
+      if (error) { reason = await FP._aiErrText(error); continue; }
+      if (data && data.ok) { FP._scanFn = name; return { ok: true, model: data.model || null }; }
+      if (data && data.error) { reason = data.error; continue; }
+      reason = 'Réponse inattendue du service IA.';
+    } catch (e) { reason = (e && e.message) || String(e); }
+  }
+  return { ok: false, reason };
+};
+// Traduit un résultat de FP.aiHealth() en { level, msg, hint } compréhensible (admin).
+FP.aiHealthLabel = function (r) {
+  if (!r) return { level: 'err', msg: 'IA : état inconnu.' };
+  if (r.ok) return { level: 'ok', msg: 'IA opérationnelle' + (r.model ? ' — modèle ' + r.model : '') + '.' };
+  const s = (r.reason || '').toLowerCase();
+  if (/model|modèle|modele|not_found|not found|404|does not exist|unknown model/.test(s))
+    return { level: 'err', msg: 'Modèle Claude invalide ou retiré.', hint: 'Corrige `MODEL` (ou le secret ANTHROPIC_MODEL) dans la fonction scan-doc, puis redéploie.', reason: r.reason };
+  if (/api[_ ]?key|x-api-key|authentication|invalid.*key|unauthorized|401|manquante|permission/.test(s))
+    return { level: 'err', msg: 'Clé API Anthropic manquante ou invalide.', hint: 'Vérifie le secret ANTHROPIC_API_KEY dans Supabase → Edge Functions → Secrets.', reason: r.reason };
+  if (/quota|rate.?limit|overloaded|credit|billing|429|insufficient|exceeded/.test(s))
+    return { level: 'err', msg: 'Quota / crédit Anthropic épuisé (ou surcharge).', hint: 'Vérifie le solde / les limites de ton compte Anthropic.', reason: r.reason };
+  if (/connexion|serveur indisponible|non connecté/.test(s))
+    return { level: 'warn', msg: r.reason };
+  return { level: 'err', msg: 'Service IA indisponible.', hint: r.reason, reason: r.reason };
+};
+
 FP.uploadScan = async function (file, folder, opts) {
   opts = opts || {};
   if (!FP.supabase || !FP.supabase.storage) throw new Error('Stockage indisponible (Supabase non chargé).');

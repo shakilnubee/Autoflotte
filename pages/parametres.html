@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260806i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260806j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260806i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260806j">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -377,6 +377,15 @@
       </div>
 
       <div class="mt-5 pt-4 border-t border-slate-100">
+        <div class="field-label flex items-center gap-2"><i data-lucide="sparkles" class="w-4 h-4" style="color:var(--fp-accent)"></i> État du service IA (assistant &amp; scanner)</div>
+        <p class="text-sm text-slate-600 mb-3">Vérifie que l'<b>assistant</b> et le <b>scanner</b> fonctionnent (ils passent par la fonction serveur <code class="bg-slate-100 px-1 rounded text-xs">scan-doc</code> qui parle à Claude). Si c'est en panne, le test te dit <b>précisément pourquoi</b> (modèle invalide, clé API manquante, quota…). Le tableau de bord te prévient aussi tout seul par un bandeau.</p>
+        <div class="flex gap-2 flex-wrap items-center">
+          <button class="btn btn-dark text-sm" id="btn-ia-test"><i data-lucide="activity" class="w-4 h-4"></i> Tester l'IA maintenant</button>
+        </div>
+        <div id="ia-test-result" class="hidden mt-3 text-sm leading-relaxed rounded-lg p-3 border"></div>
+      </div>
+
+      <div class="mt-5 pt-4 border-t border-slate-100">
         <div class="field-label">Import en masse (Excel / CSV)</div>
         <p class="text-sm text-slate-600 mb-3">Importe des <b>véhicules</b>, <b>conducteurs</b> ou <b>factures</b> depuis Excel (colle directement le tableau) ou un fichier CSV. 1ʳᵉ ligne = en-têtes. Les <b>doublons sont ignorés</b>. Teste d'abord avec quelques lignes.</p>
         <div class="flex gap-2 flex-wrap items-center mb-2">
@@ -644,10 +653,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260806i"></script>
-<script src="../assets/js/supabase-client.js?v=20260806i"></script>
-<script src="../assets/js/data.js?v=20260806i"></script>
-<script src="../assets/js/app.js?v=20260806i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260806j"></script>
+<script src="../assets/js/supabase-client.js?v=20260806j"></script>
+<script src="../assets/js/data.js?v=20260806j"></script>
+<script src="../assets/js/app.js?v=20260806j"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1457,6 +1466,28 @@
     } catch (e) { st.style.color = '#DC2626'; st.textContent = 'Échec : ' + (e.message || e); }
   });
   // Diagnostic en clair (sans console) : librairie ? client ? accès réel à la base ?
+  // Test IA à la demande : appelle FP.aiHealth() et affiche un verdict clair (OK / raison de panne).
+  { const iaBtn = $('btn-ia-test'); if (iaBtn) iaBtn.addEventListener('click', async () => {
+    const box = $('ia-test-result'); if (!box) return;
+    box.classList.remove('hidden');
+    box.style.borderColor = '#E2E8F0'; box.style.background = '#F8FAFC'; box.style.color = '#334155';
+    box.innerHTML = '⏳ Test en cours…';
+    iaBtn.disabled = true;
+    try {
+      const h = (window.FP && FP.aiHealth) ? await FP.aiHealth() : { ok: false, reason: 'Fonction de test indisponible.' };
+      const l = FP.aiHealthLabel(h);
+      if (l.level === 'ok') { box.style.borderColor = '#A7F3D0'; box.style.background = '#ECFDF5'; box.style.color = '#047857';
+        box.innerHTML = '✅ <b>' + l.msg + '</b> L\'assistant et le scanner fonctionnent.';
+      } else { const warn = l.level === 'warn';
+        box.style.borderColor = warn ? '#FCD34D' : '#FCA5A5'; box.style.background = warn ? '#FEF3C7' : '#FEF2F2'; box.style.color = warn ? '#92400E' : '#991B1B';
+        box.innerHTML = (warn ? '⚠️ ' : '❌ ') + '<b>' + FP.esc(l.msg) + '</b>' + (l.hint ? '<div class="mt-1">' + FP.esc(l.hint) + '</div>' : '') + (l.reason && l.reason !== l.msg ? '<div class="mt-1 text-xs" style="opacity:.7">Détail technique : ' + FP.esc(l.reason) + '</div>' : '');
+      }
+      // Met aussi à jour le cache du bandeau tableau de bord.
+      try { localStorage.setItem('fp_ai_health', JSON.stringify({ at: Date.now(), label: l })); } catch (_) {}
+    } catch (e) { box.style.borderColor = '#FCA5A5'; box.style.background = '#FEF2F2'; box.style.color = '#991B1B'; box.innerHTML = '❌ Test impossible : ' + FP.esc((e && e.message) || String(e)); }
+    iaBtn.disabled = false;
+  }); }
+
   $('btn-sync-test').addEventListener('click', async () => {
     const d = $('sync-diag');
     d.classList.remove('hidden');

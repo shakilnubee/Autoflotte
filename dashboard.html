@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260806i">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260806j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260806i"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260806j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260806i">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260806j">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -383,6 +383,7 @@
         <i data-lucide="sparkles" class="w-5 h-5" style="color:#f97316"></i>
         <span class="ai-title">Assistant Parc Pilot</span>
       </div>
+      <div id="fp-ai-health" style="display:none"></div>
       <div class="ai-sub">Pose une question sur ta flotte — l'assistant répond à partir de tes vraies données (véhicules, amendes, coûts, échéances).</div>
       <form id="fp-ai-form" autocomplete="off">
         <input id="fp-ai-input" type="text" placeholder="Ex : Quelles amendes sont à payer ? Combien j'ai dépensé ce mois-ci ?" />
@@ -534,10 +535,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260806i"></script>
-<script src="assets/js/supabase-client.js?v=20260806i"></script>
-<script src="assets/js/data.js?v=20260806i"></script>
-<script src="assets/js/app.js?v=20260806i"></script>
+<script src="assets/js/vendor/supabase.js?v=20260806j"></script>
+<script src="assets/js/supabase-client.js?v=20260806j"></script>
+<script src="assets/js/data.js?v=20260806j"></script>
+<script src="assets/js/app.js?v=20260806j"></script>
 <!-- Upsell gestion déléguée : visible uniquement pour les ADMINS clients (ni CEO, ni gestionnaire, ni salarié), masquable -->
 <script>
 (function(){
@@ -1932,7 +1933,14 @@
       if (rep) {
         ans.innerHTML = esc(rep) + '<span class="ai-note">Réponse générée à partir de tes données. Vérifie toujours un chiffre important avant décision.</span>';
       } else {
-        ans.innerHTML = "Je n'ai pas pu obtenir de réponse. Réessaie dans un instant.";
+        // Pas de réponse → on DIAGNOSTIQUE (plus de « réessaie » vague) et on dit pourquoi.
+        let msg = "Je n'ai pas pu obtenir de réponse.";
+        try {
+          if (FP.aiHealth) { const h = await FP.aiHealth(); const l = FP.aiHealthLabel(h);
+            if (!h.ok) { msg = '⚠️ ' + l.msg + (l.hint && (FP.isAdmin && FP.isAdmin()) ? '<span class="ai-note">' + esc(l.hint) + '</span>' : '<span class="ai-note">Le service d\'IA est momentanément indisponible — préviens l\'administrateur si ça persiste.</span>'); }
+          }
+        } catch (_) {}
+        ans.innerHTML = msg;
       }
     } catch (e) {
       ans.innerHTML = "Une erreur est survenue. Réessaie dans un instant.";
@@ -1946,6 +1954,36 @@
     const b = e.target.closest('[data-q]'); if (!b) return;
     input.value = b.dataset.q; ask(b.dataset.q);
   });
+
+  // ── Surveillance automatique de l'IA : prévient TOUT SEUL si le service est en panne ──
+  // (au lieu de le découvrir par hasard). Vérifie au plus 1×/12 h, seulement pour un admin, et
+  // affiche un bandeau tant que c'est cassé. Résultat mis en cache (localStorage) pour ne pas
+  // re-pinger à chaque visite.
+  (function aiHealthWatch() {
+    const box = document.getElementById('fp-ai-health'); if (!box) return;
+    const KEY = 'fp_ai_health';
+    const show = (l) => {
+      if (!l || l.level === 'ok') { box.style.display = 'none'; return; }
+      const c = l.level === 'warn' ? { bg: '#FEF3C7', bd: '#FCD34D', tx: '#92400E' } : { bg: '#FEF2F2', bd: '#FCA5A5', tx: '#991B1B' };
+      box.style.cssText = `display:block;margin:8px 0;padding:10px 12px;border:1px solid ${c.bd};background:${c.bg};color:${c.tx};border-radius:10px;font-size:.82rem;line-height:1.45`;
+      box.innerHTML = `<b>⚠️ Assistant IA indisponible</b> — ${esc(l.msg)}` + (l.hint ? `<br><span style="opacity:.85">${esc(l.hint)}</span>` : '');
+    };
+    // Affiche tout de suite le dernier état connu (cache), puis re-teste si vieux de +12 h.
+    let cached = null; try { cached = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) {}
+    if (cached && cached.label) show(cached.label);
+    const isAdmin = window.FP && FP.isAdmin && FP.isAdmin();
+    if (!isAdmin) return; // seul un admin peut agir sur la fonction/clé → on ne teste que pour lui
+    const fresh = cached && cached.at && (Date.now() - cached.at < 12 * 3600 * 1000);
+    if (fresh) return;
+    const run = async () => {
+      if (!(window.FP && FP.aiHealth)) return;
+      try { const h = await FP.aiHealth(); const label = FP.aiHealthLabel(h);
+        try { localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), label })); } catch (_) {}
+        show(label);
+      } catch (_) {}
+    };
+    if (window.FP && FP.supabase) run(); else window.addEventListener('fp:data-ready', run, { once: true });
+  })();
 })();
 </script>
 </body>
