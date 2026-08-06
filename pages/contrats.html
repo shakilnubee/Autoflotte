@@ -484,7 +484,7 @@
   <div id="locadd-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
     <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-xl">
       <div class="flex items-center justify-between mb-1">
-        <h3 class="text-lg font-extrabold">Ajouter un contrat de leasing</h3>
+        <h3 id="locadd-title" class="text-lg font-extrabold">Ajouter un contrat de leasing</h3>
         <button id="locadd-close" type="button" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
       </div>
       <p class="text-sm text-slate-500 mb-4">Déposez le contrat (loyer, durée, km lus automatiquement) ou saisissez les infos. Le loyer entre dans le coût mensuel et annuel de la flotte.</p>
@@ -1669,12 +1669,15 @@
     const shown = q ? matched.filter(({ c }) => FP.norm(`${c.immat || ''} ${c.marque || ''} ${c.modele || ''} ${c.conducteur || ''}`).includes(q)) : matched;
     tbody.innerHTML = shown.map(({ c, i })=>{
       const dur = Number(c.dureeMois) || 0;
-      const kmAct = (c.kmActuel != null && c.kmActuel !== '') ? Number(c.kmActuel) : null;
       // Lien AUTO avec l'onglet Véhicules (par prénom/plaque via autoImmatLoc) → on récupère le
       // véhicule lié. Si la date de début n'est pas saisie, on prend sa date de MISE EN CIRCULATION
       // (carte grise) comme début de contrat → Fin + Total versé se calculent tout seuls.
       const autoImmat = c.immat || autoImmatLoc(c);
       const linkedV = autoImmat ? (data.vehicules || []).find(v => normPlaque(v.immat) === normPlaque(autoImmat)) : null;
+      // Km actuel : saisi sur le contrat, SINON on prend le km RÉEL du véhicule lié (exactement comme
+      // BPCE) → la projection et le statut se calculent tout seuls, plus de « contrat non renseigné ».
+      const kmAct = (c.kmActuel != null && c.kmActuel !== '') ? Number(c.kmActuel)
+                   : ((linkedV && linkedV.km != null && linkedV.km !== '') ? Number(linkedV.km) : null);
       const debutSource = c.debut ? 'saisie' : ((linkedV && linkedV.dateMiseEnCirculation) ? 'mec' : null);
       const effDebut = c.debut || (linkedV && linkedV.dateMiseEnCirculation) || '';
       // Mois écoulés depuis le début (théorique), plafonné à la durée du contrat.
@@ -1739,16 +1742,18 @@
         <td class="font-semibold" style="text-align:right">${totalVerse != null ? FP.euroPrecis(totalVerse) : '<span class="text-slate-400">—</span>'}</td>
         <td style="text-align:right">${loyerCourant != null ? FP.euroPrecis(loyerCourant) : '<span class="text-slate-400">—</span>'}</td>
         <td style="text-align:right">${FP.euro(tvsEst(c))}</td>
-        <td style="text-align:center;white-space:nowrap">${docsHtml}<button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px" data-loc-up="${i}" title="Ajouter / téléverser un document"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'doc' : '+ doc'}</button> <button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button></td>
+        <td style="text-align:center;white-space:nowrap">${docsHtml}<button type="button" class="btn btn-outline text-xs !px-2" data-loc-edit="${i}" title="Modifier le contrat (forfait km, durée, loyer, dates…)"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button> <button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px" data-loc-up="${i}" title="Ajouter / téléverser un document"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'doc' : '+ doc'}</button> <button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button></td>
       </tr>`;
     }).join('');
     if (window.lucide) lucide.createIcons();
   }
 
   // ----- Ajouter UN contrat de leasing (LLD) : dépôt du contrat + lecture auto + total mis à jour -----
-  let _locAddDoc = null, _locAddScan = null;
+  let _locAddDoc = null, _locAddScan = null, _locEditIdx = null;
   function openLocAddModal(){
-    _locAddDoc = null; _locAddScan = null;
+    _locAddDoc = null; _locAddScan = null; _locEditIdx = null;
+    { const t = $('locadd-title'); if (t) t.textContent = 'Ajouter un contrat de leasing'; }
+    { const b = $('locadd-save'); if (b) b.textContent = 'Ajouter'; }
     const sel = $('locadd-veh');
     if (sel) {
       sel.innerHTML = '<option value="">— aucun / à lier plus tard —</option>' + (vehicules || [])
@@ -1769,7 +1774,27 @@
     const m = $('locadd-modal'); m.classList.remove('hidden'); m.classList.add('flex');
     if (window.lucide) lucide.createIcons();
   }
-  function closeLocAddModal(){ const m = $('locadd-modal'); m.classList.add('hidden'); m.classList.remove('flex'); _locAddDoc = null; _locAddScan = null; }
+  function closeLocAddModal(){ const m = $('locadd-modal'); m.classList.add('hidden'); m.classList.remove('flex'); _locAddDoc = null; _locAddScan = null; _locEditIdx = null; }
+  // Édition d'un contrat existant : on réutilise la MÊME fenêtre (forfait km, durée, loyer, dates…).
+  function openLocEditModal(i){
+    const list = getLocalease(); const c = list[i]; if (!c) return;
+    openLocAddModal();                 // construit les listes déroulantes + réinitialise
+    _locEditIdx = i;
+    { const t = $('locadd-title'); if (t) t.textContent = 'Modifier le contrat de leasing'; }
+    { const b = $('locadd-save'); if (b) b.textContent = 'Enregistrer'; }
+    const lsel = $('locadd-loueur'); if (lsel) { const want = (c.loueur || '').toString().trim() || LOCALEASE_VAL; if ([...lsel.options].some(o => o.value === want)) lsel.value = want; }
+    const vsel = $('locadd-veh'); if (vsel && c.immat && [...vsel.options].some(o => o.value === c.immat)) { vsel.value = c.immat; try { vsel.dispatchEvent(new Event('change')); } catch (e) {} }
+    const setv = (id, val) => { const el = $(id); if (el) el.value = (val == null ? '' : val); };
+    setv('locadd-cond', c.conducteur);
+    setv('locadd-modele', `${c.marque || ''} ${c.modele || ''}`.trim());
+    setv('locadd-loyer', c.loyerTTC != null ? String(c.loyerTTC).replace('.', ',') : '');
+    setv('locadd-duree', c.dureeMois);
+    setv('locadd-km', c.kmTotal);
+    setv('locadd-offre', c.offre);
+    setv('locadd-kmsupp', c.kmSupp != null ? String(c.kmSupp).replace('.', ',') : '');
+    setv('locadd-tol', c.kmTolerance);
+    const st = $('locadd-status'); if (st) { st.innerHTML = 'Modifie les infos puis « Enregistrer ». Le document déjà attaché reste en place.'; st.setAttribute('style', 'color:#475569'); }
+  }
   function locAddVehPick(){ const immat = ($('locadd-veh').value || '').trim(); const v = (vehicules || []).find(x => normPlaque(x.immat) === normPlaque(immat)); if (v && !$('locadd-modele').value) $('locadd-modele').value = `${v.marque || ''} ${v.modele || ''}`.trim(); }
   const locNum = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[\s€]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
   async function locAddFileSelected(file){
@@ -1803,6 +1828,27 @@
     if (v) { marque = v.marque || ''; modele = v.modele || ''; }
     else { const mm = ($('locadd-modele').value || '').trim(); const p = mm.split(/\s+/); marque = p.shift() || ''; modele = p.join(' '); }
     const loueurSel = ($('locadd-loueur') && $('locadd-loueur').value) || LOCALEASE_VAL;
+    // --- Mode ÉDITION : on met à jour le contrat existant (on préserve docs, km actuel, début, avenants…) ---
+    if (_locEditIdx != null) {
+      const s = FP.settings.get(); const list = getLocalease(); const c = list[_locEditIdx];
+      if (c) {
+        c.conducteur = ($('locadd-cond').value || '').trim();
+        if (immat) c.immat = immat;                       // ne pas effacer la plaque si le champ est vide
+        c.marque = marque; c.modele = modele;
+        c.loueur = (loueurSel === LOCALEASE_VAL) ? '' : loueurSel;
+        c.loyerTTC = loyer;
+        c.dureeMois = parseInt($('locadd-duree').value, 10) || null;
+        c.kmTotal = parseInt($('locadd-km').value, 10) || null;
+        c.offre = ($('locadd-offre').value || '').trim();
+        { const ks = locNum($('locadd-kmsupp').value); if (ks != null && ks > 0) c.kmSupp = ks; else delete c.kmSupp; }
+        { const tl = parseInt($('locadd-tol').value, 10); if (Number.isFinite(tl) && tl > 0) c.kmTolerance = tl; else delete c.kmTolerance; }
+        if (_locAddDoc) { if (!Array.isArray(c.docs)) c.docs = []; c.docs.push({ url: _locAddDoc.url, name: _locAddDoc.name }); c.pdfUrl = c.docs[0].url; }
+        s.localeaseContrats = list; FP.settings.save(s);
+      }
+      closeLocAddModal(); renderLocalease(); renderKPIs();
+      if (FP.toast) FP.toast('✓ Contrat modifié — coûts mis à jour');
+      return;
+    }
     const rec = {
       conducteur: ($('locadd-cond').value || '').trim(), immat: immat || '', marque, modele,
       loueur: (loueurSel === LOCALEASE_VAL) ? '' : loueurSel, // '' = Localease/Ayvens (défaut historique)
@@ -1829,6 +1875,7 @@
   $('tbody-localease').addEventListener('click', async (e)=>{
     const list = getLocalease();
     const save = () => { const s=FP.settings.get(); s.localeaseContrats=list; FP.settings.save(s); renderLocalease(); };
+    const ed=e.target.closest('[data-loc-edit]'); if(ed){ openLocEditModal(+ed.dataset.locEdit); return; }
     // ➕ flotte : crée le VÉHICULE dans la liste Véhicules à partir du contrat leasing
     // (un véhicule en leasing n'était enregistré que comme contrat, pas dans la table vehicules).
     const tf=e.target.closest('[data-loc-tofleet]'); if(tf){
