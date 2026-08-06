@@ -10,7 +10,10 @@
 // ============================================================
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-6"; // lecture d'image plus fine (documents difficiles)
+// Modèle Claude utilisé pour lire les documents / répondre à l'assistant.
+// ⚠️ Doit être un identifiant de modèle VALIDE (un ID invalide fait échouer TOUS les appels → « IA à 0 »).
+// Surchargeable sans redéployer via le secret Supabase ANTHROPIC_MODEL (Edge Functions → Secrets).
+const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5"; // vision fine (documents difficiles)
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
