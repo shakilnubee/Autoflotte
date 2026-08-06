@@ -13,7 +13,7 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 // Modèle Claude utilisé pour lire les documents / répondre à l'assistant.
 // ⚠️ Doit être un identifiant de modèle VALIDE (un ID invalide fait échouer TOUS les appels → « IA à 0 »).
 // Surchargeable sans redéployer via le secret Supabase ANTHROPIC_MODEL (Edge Functions → Secrets).
-const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5"; // vision fine (documents difficiles)
+const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022"; // valeur SÛRE (vision fine)
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -67,7 +67,18 @@ function extractJson(text) {
   try { return JSON.parse(cleaned.slice(a, b + 1)); } catch (_) { return null; }
 }
 Deno.serve(async (req) => {
+  // ⚠️ CORS d'abord (le préflight OPTIONS doit toujours réussir).
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  // Filet de sécurité GLOBAL : quoi qu'il arrive, on renvoie une erreur JSON AVEC en-têtes CORS —
+  // jamais un plantage « brut » (sinon le navigateur affiche « Failed to send a request » sans la cause).
+  try {
+    return await handle(req);
+  } catch (e) {
+    return json({ ok: false, error: "Erreur interne de la fonction : " + (e && e.message ? e.message : String(e)) }, 500);
+  }
+});
+
+async function handle(req) {
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
   const auth = req.headers.get("Authorization") || "";
   if (!auth.startsWith("Bearer ")) return json({ error: "unauthorized" }, 401);
@@ -120,10 +131,14 @@ Deno.serve(async (req) => {
   } catch (e) {
     return json({ error: "appel API echoue: " + (e && e.message ? e.message : String(e)) }, 502);
   }
-  const data = await apiRes.json();
-  if (!apiRes.ok) return json({ error: (data && data.error && data.error.message) || "erreur API", status: apiRes.status }, 502);
+  // La réponse d'Anthropic n'est pas toujours du JSON (page d'erreur, surcharge, corps vide) :
+  // on lit d'abord en texte puis on tente le JSON, pour NE JAMAIS planter ici (sinon 502 sans CORS).
+  const rawText = await apiRes.text();
+  let data = null; try { data = JSON.parse(rawText); } catch (_) {}
+  if (!apiRes.ok) return json({ error: (data && data.error && data.error.message) || ("erreur API (HTTP " + apiRes.status + ") : " + rawText.slice(0, 300)), status: apiRes.status }, 502);
+  if (!data) return json({ ok: false, error: "Réponse illisible de l'API (non JSON) : " + rawText.slice(0, 300) }, 502);
   const text = (data.content || []).filter((x) => x.type === "text").map((x) => x.text || "").join("");
   const fields = extractJson(text);
   if (!fields) return json({ ok: false, error: "lecture impossible", raw: text }, 200);
   return json({ ok: true, fields, model: MODEL }, 200);
-});
+}
