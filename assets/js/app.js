@@ -970,6 +970,57 @@ FP.conducteurs = {
   }
 };
 
+// ================= RATTACHEMENT CONSO → CONDUCTEUR PAR N° DE CARTE / BADGE =================
+// Chaque conducteur peut porter un n° de carte carburant Total et un n° de badge péage Ulys
+// (réglages `condCarteTotal` / `condBadgeUlys`, par société — cf. fiche conducteur). Ces numéros
+// servent à attribuer la conso des onglets Total Fleet / Ulys à la BONNE personne, par NUMÉRO
+// (fiable) plutôt que par nom (fragile). ⚠️ Retirer un numéro d'une fiche N'EFFACE PAS la conso
+// déjà enregistrée : ça enlève seulement le lien pour les prochains imports / l'affichage.
+FP.normCarte = (s) => (s == null ? '' : String(s)).toUpperCase().replace(/[^A-Z0-9]/g, '');
+// Deux numéros « collent » si l'un se termine par l'autre (un relevé n'affiche souvent que les
+// derniers chiffres de la carte/badge). On exige ≥ 4 caractères communs pour rester fiable.
+FP.carteMatch = (enregistre, lu) => {
+  const a = FP.normCarte(enregistre), b = FP.normCarte(lu);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) < 4) return false;
+  return a.endsWith(b) || b.endsWith(a);
+};
+FP._condParNumero = (settingKey, lu) => {
+  if (!lu || !FP.settings) return null;
+  let map; try { map = FP.settings.get()[settingKey] || {}; } catch (e) { return null; }
+  for (const key in map) {
+    if (FP.carteMatch(map[key], lu)) {
+      let name = key;
+      try { const c = FP.conducteurs.list().find(x => x.key === key); if (c) name = FP.conducteurs.displayName(c); } catch (e) {}
+      return { key, name };
+    }
+  }
+  return null;
+};
+// Conducteur associé à un n° de carte Total / badge Ulys enregistré sur une fiche conducteur (ou null).
+FP.conducteurParCarteTotal = (lu) => FP._condParNumero('condCarteTotal', lu);
+FP.conducteurParBadgeUlys  = (lu) => FP._condParNumero('condBadgeUlys', lu);
+// Attribution d'une conso Total à partir du n° de carte : 1) fiche CONDUCTEUR (prioritaire) ;
+// 2) fiche VÉHICULE (rubrique Contrats → réglage `vehCarteCarb`) → chauffeur + plaque du véhicule.
+// Renvoie { conducteur, plaque } ou null (on laisse alors le repli nom/plaque habituel).
+FP.attributionCarteTotal = (lu) => {
+  if (!lu) return null;
+  const c = FP.conducteurParCarteTotal(lu);
+  if (c) return { conducteur: c.name, plaque: null };
+  try {
+    const map = FP.settings.get().vehCarteCarb || {};
+    const vehs = (window.FP_DATA && FP_DATA.vehicules) || (window.data && data.vehicules) || [];
+    for (const vid in map) {
+      if (FP.carteMatch(map[vid], lu)) {
+        const v = vehs.find(x => String(x.id) === String(vid));
+        if (v) return { conducteur: (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : null, plaque: v.immat || null };
+      }
+    }
+  } catch (e) {}
+  return null;
+};
+
 // Modale « Nouveau conducteur » réutilisable → Promise<conductor|null>. Collecte les infos
 // essentielles puis crée le conducteur (FP.conducteurs.create). Injectée une fois dans le body.
 FP.newConducteurModal = function (prefillName) {
@@ -5082,8 +5133,11 @@ FP.ulys = {
     { const rx = /Total\s+Badge\s+([\d ]+?\d)\s+(\d+)\s*consommation\(s\)\s*([\d\s.,]+?)\s*€\s*TTC\s*([\d\s.,]+?)\s*km/gi; let m;
       const seenB = new Set();
       while ((m = rx.exec(t))){
-        const suf = badgeSuffix(m[1]); if (seenB.has(suf)) continue; seenB.add(suf);
-        conso.push({ conducteur: nameByBadge[suf] || ('Badge ' + suf), nb: parseInt(m[2],10)||0, ttc: N(m[3]), km: N(m[4]) });
+        const badgeFull = m[1]; const suf = badgeSuffix(badgeFull); if (seenB.has(suf)) continue; seenB.add(suf);
+        // Priorité : conducteur enregistré avec CE badge (fiable) > nom lu à côté sur le PDF > « Badge <suf> ».
+        let cond = null;
+        try { const rc = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(badgeFull); if (rc && rc.name) cond = rc.name; } catch (e) {}
+        conso.push({ conducteur: cond || nameByBadge[suf] || ('Badge ' + suf), nb: parseInt(m[2],10)||0, ttc: N(m[3]), km: N(m[4]) });
       }
     }
     return { numero, date, mois, ht, tva, ttc, conso };

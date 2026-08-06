@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260806g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260806h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260806g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260806h">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -706,11 +706,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260806g"></script>
-<script src="../assets/js/supabase-client.js?v=20260806g"></script>
-<script src="../assets/js/data.js?v=20260806g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260806h"></script>
+<script src="../assets/js/supabase-client.js?v=20260806h"></script>
+<script src="../assets/js/data.js?v=20260806h"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260806g"></script>
+<script src="../assets/js/app.js?v=20260806h"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2603,7 +2603,13 @@
     const _tfN = x => Number(x) || 0;
     const _tfNormP = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     function _tfVehBy(){ const m = {}; (window.FP_DATA.vehicules || []).forEach(v => { if (v.immat) m[_tfNormP(v.immat)] = v; }); return m; }
-    function _tfName(c, vbp){ if (c.conducteur) return c.conducteur; const v = c.plaque && vbp[_tfNormP(c.plaque)]; if (v && v.chauffeur && v.chauffeur !== '—') return v.chauffeur; return c.plaque || '—'; }
+    function _tfName(c, vbp){
+      // Priorité au n° de carte enregistré sur une fiche conducteur (rattachement fiable, même pour
+      // la conso déjà en base : elle suit la fiche en direct). Sinon nom stocké, puis chauffeur/plaque.
+      if (window.FP && FP.conducteurParCarteTotal && c.carte){ const rc = FP.conducteurParCarteTotal(c.carte); if (rc && rc.name) return rc.name; }
+      if (c.conducteur) return c.conducteur;
+      const v = c.plaque && vbp[_tfNormP(c.plaque)]; if (v && v.chauffeur && v.chauffeur !== '—') return v.chauffeur; return c.plaque || '—';
+    }
     function renderAnalyse(){
       const wrap = $('tf-analyse'); if (!wrap) return;
       if (!conso || !conso.length) { wrap.classList.add('hidden'); return; }
@@ -3218,6 +3224,9 @@
       const txOut = [];             // détail transaction par transaction (achats)
       // Résolveur de conducteur pour le détail : carte connue → son conducteur ; sinon nom/plaque du PDF.
       const resolveTxNom = (nom, carte) => {
+        // Priorité absolue : n° de carte enregistré sur une fiche CONDUCTEUR (sinon carte du véhicule).
+        const att = (window.FP && FP.attributionCarteTotal) ? FP.attributionCarteTotal(carte) : null;
+        if (att && att.conducteur) return att.conducteur;
         const ref = cardMap[String(carte)] || {};
         if (ref.conducteur) return ref.conducteur;
         if (nom && !isPlaque(nom)) { const rn = resolveConducteurName(nom); if (rn) return rn; }
@@ -3262,10 +3271,11 @@
       const consoOut = Array.from(consoByKey.values()).map(a => {
         const ref = cardMap[String(a.carte)] || {};
         const pdfNom = a.nom || '';
-        // Priorité au nom DÉJÀ enregistré pour cette carte ; sinon on résout le nom du PDF
-        // (« BRAM », « THOMAS H »…) contre les conducteurs connus.
-        let conducteur = ref.conducteur || null;
-        let plaque = ref.plaque || (isPlaque(pdfNom) ? pdfNom : null);
+        // Priorité absolue : n° de carte enregistré sur une fiche CONDUCTEUR (sinon carte du véhicule) ;
+        // puis nom DÉJÀ mémorisé pour cette carte ; sinon on résout le nom du PDF contre les conducteurs.
+        const att = (window.FP && FP.attributionCarteTotal) ? FP.attributionCarteTotal(a.carte) : null;
+        let conducteur = (att && att.conducteur) || ref.conducteur || null;
+        let plaque = (att && att.plaque) || ref.plaque || (isPlaque(pdfNom) ? pdfNom : null);
         if (!conducteur && !isPlaque(pdfNom)) conducteur = resolveConducteurName(pdfNom);
         // Si on n'a qu'une plaque, on tente le chauffeur du véhicule correspondant.
         if (plaque && !conducteur) {
@@ -3319,6 +3329,9 @@
       try { if (!consoLoaded) await loadConso(); } catch (e) {}
       const cardMap = {}; (conso || []).forEach(c => { if (c.carte) cardMap[String(c.carte)] = c; });
       const resolveTxNom = (nom, carte) => {
+        // Priorité absolue : n° de carte enregistré sur une fiche CONDUCTEUR (sinon carte du véhicule).
+        const att = (window.FP && FP.attributionCarteTotal) ? FP.attributionCarteTotal(carte) : null;
+        if (att && att.conducteur) return att.conducteur;
         const ref = cardMap[String(carte)] || {};
         if (ref.conducteur) return ref.conducteur;
         if (nom && !isPlaque(nom)) { const rn = resolveConducteurName(nom); if (rn) return rn; }
