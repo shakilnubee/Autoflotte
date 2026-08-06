@@ -378,6 +378,23 @@ FP.montantDu = (a) => {
   }
   return (a.majoree && a.montantMajore != null && a.montantMajore !== '') ? Number(a.montantMajore) : (Number(a.montant) || 0);
 };
+// ⚠️ HELPER CANONIQUE — l'amende est-elle un FPS (Forfait Post-Stationnement) plutôt qu'un avis de
+// contravention ANTAI ? À UTILISER PARTOUT (règle « une seule source ») pour choisir le BON site de
+// paiement et le BON délai : FPS → stationnement.gouv.fr (RAPO ~3 mois, PAS de désignation ANTAI) ;
+// contravention → amendes.gouv.fr (minoré ~45 j, désignation ANTAI possible).
+// ⚠️ « Stationnement » seul ne suffit PAS : un « stationnement gênant/interdit » est une CONTRAVENTION,
+// pas un FPS. On tranche : (1) mention explicite FPS/forfait post-stationnement → FPS ; sinon
+// (2) présence d'un n° de télépaiement ANTAI → contravention ; sinon (3) « stationnement (payant) »
+// sans mention gênant/interdit → FPS.
+FP.estFps = (a) => {
+  if (!a) return false;
+  const m = (a.motif || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (/forfait\s*post.?stationnement/.test(m) || /\bf\.?p\.?s\.?\b/.test(m)) return true;
+  const tel = (a.numeroTelepaiement || '').toString().replace(/\D/g, '');
+  if (tel.length >= 10) return false; // n° de télépaiement ANTAI présent ⇒ contravention amendes.gouv.fr
+  if (/stationnement/.test(m) && !/(genant|interdit|dangereux|abusif|arret|double|trottoir|passage|livraison|bande|couloir|\bbus\b)/.test(m)) return true;
+  return false;
+};
 // Enregistre (ou efface si val vide) le montant réellement payé d'une amende — réglages par société, partagé entre postes.
 FP.setAmendeMontantPaye = (id, val) => {
   if (!FP.settings || id == null) return;
@@ -2852,7 +2869,7 @@ FP.recommandations = (data) => {
       .filter(a => a && FP.estAPayer && FP.estAPayer(a) && a.date && !isNaN(new Date(a.date)) && Number(a.montantMajore) > 0)
       .map(a => {
         const base = new Date(a.date);
-        const isFps = /stationnement/i.test(a.motif || '');
+        const isFps = FP.estFps(a);
         const lim = a.dateLimiteForfaitaire ? new Date(a.dateLimiteForfaitaire) : (() => { const l = new Date(base); l.setDate(l.getDate() + (isFps ? 90 : 45)); return l; })();
         const jours = Math.ceil((lim - now) / 86400000);
         const du = FP.montantDu ? FP.montantDu(a) : (Number(a.montantTTC) || 0);
@@ -3124,7 +3141,7 @@ FP.buildAlertes = (data) => {
       .filter(a => a && FP.estAPayer(a) && a.date && !isNaN(new Date(a.date)))
       .map(a => {
         const base = new Date(a.date);
-        const isFps = /stationnement/i.test(a.motif || '');
+        const isFps = FP.estFps(a);
         const lim = new Date(base); lim.setDate(lim.getDate() + (isFps ? 90 : 45));
         const jours = Math.ceil((lim - maintenant) / 86400000);
         return { a, lim, jours };
