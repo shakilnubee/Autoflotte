@@ -523,7 +523,7 @@
           <label class="block"><span class="text-sm font-medium text-slate-700">Date de fin <span class="text-slate-400">(opt.)</span></span>
             <input id="locadd-fin" type="date" class="field-input w-full mt-1"></label>
         </div>
-        <p class="text-xs text-slate-400" style="margin-top:-.35rem">La <b>fin</b> est optionnelle : si tu la renseignes, la durée se recalcule toute seule. Sinon, fin = début + durée.</p>
+        <p class="text-xs text-slate-400" style="margin-top:-.35rem">Dates &amp; durée se complètent toutes seules : <b>fin + durée → début</b>, <b>début + durée → fin</b>, ou <b>début + fin → durée</b>.</p>
         <label class="block"><span class="text-sm font-medium text-slate-700">N° d'offre <span class="text-slate-400">(opt.)</span></span>
           <input id="locadd-offre" type="text" class="field-input w-full mt-1" placeholder=""></label>
         <div class="grid grid-cols-2 gap-3">
@@ -1869,10 +1869,11 @@
     else { const mm = ($('locadd-modele').value || '').trim(); const p = mm.split(/\s+/); marque = p.shift() || ''; modele = p.join(' '); }
     const loueurSel = ($('locadd-loueur') && $('locadd-loueur').value) || LOCALEASE_VAL;
     // Dates : début (date-picker) + fin optionnelle. Si la fin est renseignée, la durée se recalcule.
-    const debutV = (($('locadd-debut') && $('locadd-debut').value) || '').trim() || null;
+    let debutV = (($('locadd-debut') && $('locadd-debut').value) || '').trim() || null;
     const finV = (($('locadd-fin') && $('locadd-fin').value) || '').trim() || null;
     let dureeV = parseInt($('locadd-duree').value, 10) || null;
-    if (finV && debutV) { const mb = monthsBetween(debutV, finV); if (mb && mb > 0) dureeV = mb; }
+    if (finV && debutV) { const mb = monthsBetween(debutV, finV); if (mb && mb > 0) dureeV = mb; }             // début + fin → durée
+    else if (finV && !debutV && dureeV) { const d = addMonths(finV, -dureeV); if (d) debutV = d.toISOString().slice(0, 10); } // fin + durée → on déduit le DÉBUT
     // --- Mode ÉDITION : on met à jour le contrat existant (on préserve docs, km actuel, avenants…) ---
     if (_locEditIdx != null) {
       const s = FP.settings.get(); const list = getLocalease(); const c = list[_locEditIdx];
@@ -1915,6 +1916,18 @@
   if ($('locadd-cancel')) $('locadd-cancel').addEventListener('click', closeLocAddModal);
   if ($('locadd-modal')) $('locadd-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeLocAddModal(); });
   if ($('locadd-veh')) $('locadd-veh').addEventListener('change', locAddVehPick);
+  // Dates ⇄ durée EN DIRECT : fin + durée → déduit le début ; début + fin → recalcule la durée.
+  function locAddSyncDates(src){
+    const deb = $('locadd-debut'), fin = $('locadd-fin'), dur = $('locadd-duree');
+    if (!deb || !fin || !dur) return;
+    const dv = deb.value || '', fv = fin.value || '', nv = parseInt(dur.value, 10) || 0;
+    if (fv && dv) { const mb = monthsBetween(dv, fv); if (mb && mb > 0) dur.value = mb; }              // les 2 dates → durée
+    else if (fv && !dv && nv > 0) { const d = addMonths(fv, -nv); if (d) deb.value = d.toISOString().slice(0, 10); } // fin + durée → début
+    else if (dv && !fv && nv > 0 && src !== 'fin') { const d = addMonths(dv, nv); if (d) fin.value = d.toISOString().slice(0, 10); } // début + durée → fin
+  }
+  if ($('locadd-fin')) $('locadd-fin').addEventListener('change', () => locAddSyncDates('fin'));
+  if ($('locadd-debut')) $('locadd-debut').addEventListener('change', () => locAddSyncDates('debut'));
+  if ($('locadd-duree')) $('locadd-duree').addEventListener('input', () => locAddSyncDates('duree'));
   if ($('locadd-drop')) $('locadd-drop').addEventListener('click', () => { const inp = $('locadd-file'); if (inp) { inp.value = ''; inp.click(); } });
   if ($('locadd-file')) $('locadd-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) locAddFileSelected(f); });
   if ($('locadd-save')) $('locadd-save').addEventListener('click', saveLocAdd);
