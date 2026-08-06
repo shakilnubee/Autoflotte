@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260806c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260806d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260806c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260806d">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -548,11 +548,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260806c"></script>
-<script src="../assets/js/supabase-client.js?v=20260806c"></script>
-<script src="../assets/js/data.js?v=20260806c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260806d"></script>
+<script src="../assets/js/supabase-client.js?v=20260806d"></script>
+<script src="../assets/js/data.js?v=20260806d"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260806c"></script>
+<script src="../assets/js/app.js?v=20260806d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1591,7 +1591,7 @@
   const LOCALEASE_PROMPT = [
     "Lis ce contrat / offre de Location Longue Duree (LLD) Ayvens (ex Localease) de vehicule.",
     "Renvoie UNIQUEMENT un objet JSON valide, sans texte autour, avec ces cles (mets null si absent) :",
-    "loyerTTC : le LOYER MENSUEL total TTC (par mois), nombre a point decimal (ex 414.71). C'est le loyer global incluant services, PAS le seul loyer financier.",
+    "loyerTTC : le LOYER MENSUEL total TTC (par mois), nombre a point decimal (ex 414.71). C'est le loyer global incluant services, PAS le seul loyer financier. Cherche les libelles 'Loyer mensuel', 'Total mensuel TTC', 'Redevance mensuelle', 'Mensualite TTC', 'Loyer TTC/mois'. Prends le montant PAR MOIS (jamais le total du contrat).",
     "dureeMois : la duree du contrat en mois (ex 25).",
     "kmTotal : le kilometrage TOTAL du contrat (ex 50000 ; '50.000 km' -> 50000).",
     "co2 : les grammes de CO2 par km (ex 126).",
@@ -1733,7 +1733,12 @@
       const _baseLoyer = (_ovL != null && _ovL !== '') ? Number(_ovL) : c.loyerTTC;
       const cNorm = { debut: effDebut, dureeMois: c.dureeMois, loyer: _baseLoyer, avenants: c.avenants };
       const loyerCourant = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cNorm) : (c.loyerTTC || null);
-      const totalVerse = (FP.leasingTotalVerse) ? FP.leasingTotalVerse(cNorm) : ((c.loyerTTC && moisEcoules) ? c.loyerTTC * moisEcoules : null);
+      // Total versé = uniquement depuis la VRAIE date de début du leasing (c.debut). Le MEC (mise en
+      // circulation du véhicule) N'EST PAS la date de début du leasing → l'utiliser gonflerait le total.
+      // Tant que la date de début n'est pas renseignée → « — » (comme BPCE). Clic sur « début » pour la saisir.
+      const totalVerse = c.debut && FP.leasingTotalVerse
+        ? FP.leasingTotalVerse({ debut: c.debut, dureeMois: c.dureeMois, loyer: _baseLoyer, avenants: c.avenants })
+        : null;
       const docs = Array.isArray(c.docs) ? c.docs : (c.pdfUrl ? [{ url: c.pdfUrl, name: 'Contrat' }] : []);
       const docsHtml = docs.map((d, di) => `<div class="flex items-center gap-1 justify-center" style="margin-bottom:2px;max-width:170px;margin-left:auto;margin-right:auto">
           <a href="${escC(d.url)}" target="_blank" rel="noopener" class="hover:underline" style="color:var(--fp-accent);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escC(d.name || 'Document')}"><i data-lucide="file-text" class="w-3 h-3 inline"></i> ${escC(d.name || 'Document')}</a>
@@ -1762,7 +1767,7 @@
         <td style="text-align:center">${finCell}</td>
         <td class="font-semibold" style="text-align:right">${totalVerse != null ? FP.euroPrecis(totalVerse) : '<span class="text-slate-400">—</span>'}</td>
         <td style="text-align:right">${loyerCourant != null ? FP.euroPrecis(loyerCourant) : '<span class="text-slate-400">—</span>'}</td>
-        <td style="text-align:right">${FP.euro(tvsEst(c))}</td>
+        <td style="text-align:right">${(() => { const d = (linkedV && FP.tvsDetail) ? FP.tvsDetail(linkedV) : null; const val = (d && d.applicable && d.total != null) ? d.total : tvsEst(c); return FP.euro(val); })()}</td>
         <td style="text-align:center;white-space:nowrap">${docsHtml}<button type="button" class="btn btn-outline text-xs !px-2" data-loc-edit="${i}" title="Modifier le contrat (forfait km, durée, loyer, dates…)"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button> <button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px" data-loc-up="${i}" title="Ajouter / téléverser un document"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'doc' : '+ doc'}</button> <button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button></td>
       </tr>`;
     }).join('');

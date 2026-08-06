@@ -4153,6 +4153,57 @@ FP.setDensity = (compact) => {
 FP.applyDensity = () => { try { document.documentElement.classList.toggle('fp-compact', FP.getDensity() === 'compact'); } catch (e) {} };
 try { window.addEventListener('fp:data-ready', function () { FP.applyDensity(); if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme(); }); } catch (e) {}
 
+// ===== CORBEILLE — restaurer un élément supprimé (véhicule, amende, conducteur, contrat leasing…) =====
+// Chaque suppression peut déposer une COPIE ici (via FP.persist.delete(table,id,record) ou FP.trash.add
+// direct). Stockée par société dans les réglages (settings.corbeille) → SYNCHRONISÉE sur tous les appareils.
+// Restaurer = ré-insérer l'élément dans sa table (ou dans les contrats leasing). Plafonné à 300 entrées.
+FP.trash = {
+  MAX: 300,
+  // Libellés lisibles par table (pour l'affichage dans Paramètres → Corbeille).
+  typeLabel(t) { return ({ vehicules:'Véhicule', amendes:'Amende', conducteurs:'Conducteur', factures:'Facture', documents:'Document', emprunts:'Emprunt', leasing:'Contrat leasing', sinistres:'Sinistre' })[t] || t; },
+  _all() { try { const a = FP.settings.get().corbeille; return Array.isArray(a) ? a : []; } catch (e) { return []; } },
+  // Fabrique un libellé court à partir de l'enregistrement (immat, prénom, n° d'avis…).
+  _label(type, rec) {
+    try {
+      if (!rec || typeof rec !== 'object') return '';
+      if (type === 'vehicules') return [rec.immat, rec.marque, rec.modele].filter(Boolean).join(' ');
+      if (type === 'amendes') return [rec.prenom || rec.conducteur, rec.numeroAvis || rec.avis, rec.montantTTC != null ? rec.montantTTC + ' €' : ''].filter(Boolean).join(' · ');
+      if (type === 'conducteurs') return rec.name || rec.nom || [rec.prenom, rec.nom].filter(Boolean).join(' ') || rec.key || '';
+      if (type === 'leasing') return [rec.conducteur, rec.immat, rec.marque, rec.modele].filter(Boolean).join(' ');
+      if (type === 'factures') return [rec.fournisseur, rec.numero, rec.montantTTC != null ? rec.montantTTC + ' €' : ''].filter(Boolean).join(' · ');
+      return rec.immat || rec.nom || rec.name || rec.label || rec.id || '';
+    } catch (e) { return ''; }
+  },
+  add(type, rec, label) {
+    if (!rec) return;
+    try {
+      const s = FP.settings.get();
+      const list = Array.isArray(s.corbeille) ? s.corbeille : [];
+      list.unshift({ id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), type: String(type), rec: JSON.parse(JSON.stringify(rec)), label: String(label || this._label(type, rec) || ''), ts: Date.now() });
+      s.corbeille = list.slice(0, this.MAX);
+      FP.settings.save(s);
+    } catch (e) {}
+  },
+  list() { return this._all(); },
+  remove(id) { try { const s = FP.settings.get(); s.corbeille = this._all().filter(x => x.id !== id); FP.settings.save(s); } catch (e) {} },
+  clear() { try { const s = FP.settings.get(); s.corbeille = []; FP.settings.save(s); } catch (e) {} },
+  // Restaure l'élément dans sa table (ou dans les contrats leasing) puis le retire de la Corbeille.
+  async restore(id) {
+    const e = this._all().find(x => x.id === id); if (!e) return false;
+    try {
+      if (e.type === 'leasing') {
+        const s = FP.settings.get(); const list = Array.isArray(s.localeaseContrats) ? s.localeaseContrats : [];
+        list.push(e.rec); s.localeaseContrats = list; FP.settings.save(s);
+      } else {
+        if (FP.persist && FP.persist.insert) FP.persist.insert(e.type, e.rec);
+        else if (FP.db && FP.db.insert) await FP.db.insert(e.type, e.rec);
+      }
+      this.remove(id);
+      return true;
+    } catch (err) { console.warn('[trash restore]', err); return false; }
+  },
+};
+
 FP.persist = {
   _QKEY: 'fp_pending_writes',
   available() { return !!(FP.db && FP.supabase); },
@@ -4200,7 +4251,10 @@ FP.persist = {
     try { const r = await FP.db.update(table, id, fields); if (r && r.error) throw r.error; this.flush(); }
     catch (e) { this._err(e); this._enqueue({ op: 'update', table, id, fields }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
   },
-  async delete(table, id) {
+  // record (optionnel) = copie complète de l'élément supprimé → déposée dans la Corbeille (FP.trash)
+  // pour pouvoir le RESTAURER depuis Paramètres. Rétro-compatible : sans record, aucune capture.
+  async delete(table, id, record) {
+    try { if (record && FP.trash) FP.trash.add(table, record); } catch (e) {}
     if (!this.available()) { this._enqueue({ op: 'delete', table, id }); return; }
     try { const r = await FP.db.delete(table, id); if (r && r.error) throw r.error; this.flush(); }
     catch (e) { this._err(e); this._enqueue({ op: 'delete', table, id }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
