@@ -1791,6 +1791,8 @@
       lsel.value = [...lsel.options].some(o => o.value === def) ? def : (lsel.options[0] ? lsel.options[0].value : LOCALEASE_VAL);
     }
     ['locadd-cond','locadd-modele','locadd-loyer','locadd-duree','locadd-km','locadd-debut','locadd-fin','locadd-offre','locadd-kmsupp','locadd-tol'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+    // Conducteur : combobox des conducteurs DÉJÀ enregistrés (+ « ➕ Créer ») — règle plateforme.
+    { const cinp = $('locadd-cond'); if (cinp && window.FP && FP.conducteurPicker && !cinp.dataset.picker) { cinp.dataset.picker = '1'; try { FP.conducteurPicker(cinp, { onPick: function () {} }); } catch (e) {} } }
     const st = $('locadd-status'); if (st) { st.innerHTML = ''; st.setAttribute('style', ''); }
     const m = $('locadd-modal'); m.classList.remove('hidden'); m.classList.add('flex');
     if (window.lucide) lucide.createIcons();
@@ -1818,7 +1820,15 @@
     setv('locadd-tol', c.kmTolerance);
     const st = $('locadd-status'); if (st) { st.innerHTML = 'Modifie les infos puis « Enregistrer ». Le document déjà attaché reste en place.'; st.setAttribute('style', 'color:#475569'); }
   }
-  function locAddVehPick(){ const immat = ($('locadd-veh').value || '').trim(); const v = (vehicules || []).find(x => normPlaque(x.immat) === normPlaque(immat)); if (v && !$('locadd-modele').value) $('locadd-modele').value = `${v.marque || ''} ${v.modele || ''}`.trim(); }
+  function locAddVehPick(){
+    const immat = ($('locadd-veh').value || '').trim();
+    const v = (vehicules || []).find(x => normPlaque(x.immat) === normPlaque(immat));
+    if (!v) return;
+    // Reconnaissance de la plaque : on récupère la marque/modèle ET le conducteur de la fiche véhicule
+    // (uniquement si le champ est encore vide, pour ne pas écraser une saisie).
+    if (!$('locadd-modele').value) $('locadd-modele').value = `${v.marque || ''} ${v.modele || ''}`.trim();
+    if (!($('locadd-cond').value || '').trim() && v.chauffeur && v.chauffeur !== '—') $('locadd-cond').value = v.chauffeur;
+  }
   const locNum = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[\s€]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
   async function locAddFileSelected(file){
     if (!file) return;
