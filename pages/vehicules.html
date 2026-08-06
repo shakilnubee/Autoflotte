@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260806h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260806i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260806h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260806i">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -801,13 +801,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260806h"></script>
-<script src="../assets/js/supabase-client.js?v=20260806h"></script>
-<script src="../assets/js/data.js?v=20260806h"></script>
-<script src="../assets/js/fleet-docs.js?v=20260806h"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260806h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260806i"></script>
+<script src="../assets/js/supabase-client.js?v=20260806i"></script>
+<script src="../assets/js/data.js?v=20260806i"></script>
+<script src="../assets/js/fleet-docs.js?v=20260806i"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260806i"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260806h"></script>
+<script src="../assets/js/app.js?v=20260806i"></script>
 <script>
   lucide.createIcons();
 
@@ -2207,8 +2207,12 @@
 
     // Cartes carburant / badge télépéage + Notes datées — stockés par société dans les réglages.
     const _st = FP.settings.get();
-    const _cc = (_st.vehCarteCarb || {})[v.id] || '', _fc = (_st.vehFournCarb || {})[v.id] || '', _bt = (_st.vehBadge || {})[v.id] || '';
+    // N° de carte / badge = MÊME source que la fiche conducteur (celui du chauffeur) → une seule branche.
+    const _cc = (FP.numCarteVehicule ? FP.numCarteVehicule(v, 'vehCarteCarb') : (_st.vehCarteCarb || {})[v.id]) || '';
+    const _bt = (FP.numCarteVehicule ? FP.numCarteVehicule(v, 'vehBadge') : (_st.vehBadge || {})[v.id]) || '';
+    const _fc = (_st.vehFournCarb || {})[v.id] || '';
     const _cce = (_st.vehCarteCarbExp || {})[v.id] || '', _bte = (_st.vehBadgeExp || {})[v.id] || '';
+    const _condLie = FP.condKeyDuVehicule && FP.condKeyDuVehicule(v);
     const _notes = ((_st.vehNotes || {})[v.id]) || [];
     const _inp = 'width:160px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
     const _noteMeta = (n) => {
@@ -2230,6 +2234,7 @@
           <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Badge télépéage (n°)</span><input class="veh-carte" data-k="vehBadge" data-id="${v.id}" value="${escapeHtml(_bt)}" placeholder="—" style="${_inp}"></div>
           <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Badge télépéage — expire le</span><input type="date" class="veh-carte" data-k="vehBadgeExp" data-id="${v.id}" value="${escapeHtml(_bte)}" style="${_inp}"></div>
         </div>
+        <p class="text-xs text-slate-400 mt-2" style="line-height:1.45">${_condLie ? `Le <b>n°</b> de carte et de badge est celui du <b>conducteur</b> (${escapeHtml(v.chauffeur)}) : le modifier ici le met à jour partout (fiche conducteur, Contrats) et rattache sa conso Total&nbsp;Fleet / Ulys.` : `Astuce : assigne un <b>chauffeur</b> à ce véhicule pour relier le n° de carte/badge à sa fiche conducteur (attribution auto de la conso).`}</p>
       </div>
       <div class="fp-panel">
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1 flex items-center gap-2"><i data-lucide="sticky-note" class="w-4 h-4"></i> Notes / journal</div>
@@ -3682,6 +3687,13 @@
   $('drawer-body').addEventListener('change', (e) => {
     const c = e.target.closest('input.veh-carte'); if (!c) return;
     const k = c.dataset.k, id = c.dataset.id; if (!k || !id) return;
+    // Les N° de carte/badge vont sur le CONDUCTEUR (source unique) si le véhicule a un chauffeur ;
+    // fournisseur + expirations restent sur le véhicule.
+    if (FP.CARTE_COND_MAP && FP.CARTE_COND_MAP[k]) {
+      const v = (window.FP_DATA && FP_DATA.vehicules || []).find(x => String(x.id) === String(id)) || { id };
+      FP.setNumCarteVehicule(v, k, c.value);
+      return;
+    }
     const s = FP.settings.get(); s[k] = s[k] || {};
     const val = (c.value || '').trim();
     if (val) s[k][id] = val; else delete s[k][id];

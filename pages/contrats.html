@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260806h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260806i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260806h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260806i">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -549,11 +549,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260806h"></script>
-<script src="../assets/js/supabase-client.js?v=20260806h"></script>
-<script src="../assets/js/data.js?v=20260806h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260806i"></script>
+<script src="../assets/js/supabase-client.js?v=20260806i"></script>
+<script src="../assets/js/data.js?v=20260806i"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260806h"></script>
+<script src="../assets/js/app.js?v=20260806i"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -670,21 +670,24 @@
     const enFlotte = vehicules.filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
     const expCell = (iso) => { if (!iso) return '<span class="text-slate-400">—</span>'; const j = FP.joursRestants ? FP.joursRestants(iso) : null; if (j == null) return FP.dateNum(iso); const c = j < 0 ? 'var(--fp-danger)' : (j < 60 ? 'var(--fp-warn)' : '#64748b'); return `<span style="color:${c};font-size:11px;font-weight:600">${j < 0 ? 'expiré' : j < 60 ? j + ' j' : 'OK'}</span>`; };
     const inp = (k, id, val, type) => `<input class="carte-cell" data-k="${k}" data-id="${id}" ${type ? `type="${type}"` : ''} value="${FP.esc(val || '')}" placeholder="—" style="width:100%;min-width:${type === 'date' ? '128' : '90'}px;border:1px solid var(--fp-border);border-radius:6px;padding:3px 6px;font-size:12.5px">`;
-    let rows = enFlotte.map(v => ({ v, hasAny: !!(cc[v.id] || cce[v.id] || fc[v.id] || bt[v.id] || bte[v.id]) }));
+    // N° de carte / badge = MÊME source que la fiche conducteur (celui du chauffeur du véhicule).
+    const numC = v => FP.numCarteVehicule ? FP.numCarteVehicule(v, 'vehCarteCarb') : (cc[v.id] || '');
+    const numB = v => FP.numCarteVehicule ? FP.numCarteVehicule(v, 'vehBadge') : (bt[v.id] || '');
+    let rows = enFlotte.map(v => ({ v, hasAny: !!(numC(v) || cce[v.id] || fc[v.id] || numB(v) || bte[v.id]) }));
     if (onlyFilled) rows = rows.filter(r => r.hasAny);
-    if (q) rows = rows.filter(({ v }) => [v.immat, v.marque, v.modele, v.chauffeur, cc[v.id], fc[v.id], bt[v.id]].some(x => String(x || '').toLowerCase().includes(q)));
+    if (q) rows = rows.filter(({ v }) => [v.immat, v.marque, v.modele, v.chauffeur, numC(v), fc[v.id], numB(v)].some(x => String(x || '').toLowerCase().includes(q)));
     tb.innerHTML = rows.map(({ v }) => `
       <tr>
         <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
         <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}</td>
         <td>${FP.lienConducteur(v.chauffeur)}</td>
-        <td>${inp('vehCarteCarb', v.id, cc[v.id])}</td>
+        <td>${inp('vehCarteCarb', v.id, numC(v))}</td>
         <td>${inp('vehFournCarb', v.id, fc[v.id])}</td>
         <td>${inp('vehCarteCarbExp', v.id, cce[v.id], 'date')} ${expCell(cce[v.id])}</td>
-        <td>${inp('vehBadge', v.id, bt[v.id])}</td>
+        <td>${inp('vehBadge', v.id, numB(v))}</td>
         <td>${inp('vehBadgeExp', v.id, bte[v.id], 'date')} ${expCell(bte[v.id])}</td>
       </tr>`).join('') || '<tr><td colspan="8" class="text-slate-400">Aucun véhicule.</td></tr>';
-    const nbC = enFlotte.filter(v => cc[v.id]).length, nbB = enFlotte.filter(v => bt[v.id]).length;
+    const nbC = enFlotte.filter(v => numC(v)).length, nbB = enFlotte.filter(v => numB(v)).length;
     const exp60 = enFlotte.filter(v => [cce[v.id], bte[v.id]].filter(Boolean).some(iso => { const j = FP.joursRestants ? FP.joursRestants(iso) : null; return j != null && j < 60; })).length;
     const anoms = FP.cartesAnomalies ? FP.cartesAnomalies({ vehicules, factures: (window.FP_DATA && FP_DATA.factures) || [] }) : [];
     const setTxt = (id, val) => { const el = $(id); if (el) el.textContent = val; };
@@ -699,7 +702,14 @@
   // Édition inline : enregistre la case modifiée dans les réglages (mêmes clés que la fiche véhicule)
   if ($('tbody-cartes')) $('tbody-cartes').addEventListener('change', e => {
     const c = e.target.closest('.carte-cell'); if (!c) return;
-    const s = FP.settings.get(); const k = c.dataset.k; s[k] = s[k] || {};
+    const k = c.dataset.k;
+    // Les N° de carte/badge se rangent sur le CONDUCTEUR (source unique) si le véhicule a un chauffeur
+    // → changer le n° ici le change PARTOUT (fiche conducteur, fiche véhicule). Fournisseur/expiration = par véhicule.
+    if (FP.CARTE_COND_MAP && FP.CARTE_COND_MAP[k]) {
+      const v = vehicules.find(x => String(x.id) === String(c.dataset.id));
+      if (v) { FP.setNumCarteVehicule(v, k, c.value); if (FP.toast) FP.toast('✓ Enregistré'); renderCartes(); return; }
+    }
+    const s = FP.settings.get(); s[k] = s[k] || {};
     const val = (c.value || '').trim();
     if (val) s[k][c.dataset.id] = val; else delete s[k][c.dataset.id];
     FP.settings.save(s);

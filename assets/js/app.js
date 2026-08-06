@@ -1020,6 +1020,53 @@ FP.attributionCarteTotal = (lu) => {
   } catch (e) {}
   return null;
 };
+// ---- UNE SEULE BRANCHE : le n° de carte Total / badge Ulys se range sur le CONDUCTEUR ----
+// Les fiches VÉHICULE et la rubrique Contrats « Cartes carburant » affichent/éditent le MÊME numéro
+// que la fiche conducteur (celui du chauffeur du véhicule). Ainsi, changer le n° à un endroit le
+// change PARTOUT. Repli sur l'ancien stockage par véhicule si le véhicule n'a pas de chauffeur reconnu.
+FP.CARTE_COND_MAP = { vehCarteCarb: 'condCarteTotal', vehBadge: 'condBadgeUlys' };
+FP.condKeyDuVehicule = (v) => {
+  if (!v || !v.chauffeur || v.chauffeur === '—') return null;
+  try { const c = FP.conducteurs.find(v.chauffeur); return c ? c.key : null; } catch (e) { return null; }
+};
+// Lit le n° d'un véhicule en privilégiant le CONDUCTEUR (source unique), repli sur le n° par véhicule.
+FP.numCarteVehicule = (v, vehKey) => {
+  try {
+    const s = FP.settings.get();
+    const condMapKey = FP.CARTE_COND_MAP[vehKey];
+    const condKey = FP.condKeyDuVehicule(v);
+    if (condKey && condMapKey) { const cv = (s[condMapKey] || {})[condKey]; if (cv) return cv; }
+    return (s[vehKey] || {})[v.id] || '';
+  } catch (e) { return ''; }
+};
+// Écrit un n° de carte/badge édité depuis une fiche véhicule / Contrats : va sur le CONDUCTEUR
+// (chauffeur reconnu), sinon repli sur le stockage par véhicule. Ne concerne QUE les champs "numéro".
+FP.setNumCarteVehicule = (v, vehKey, val) => {
+  const s = FP.settings.get();
+  const condMapKey = FP.CARTE_COND_MAP[vehKey];
+  const condKey = FP.condKeyDuVehicule(v);
+  let k = vehKey, id = v.id;
+  if (condKey && condMapKey) { k = condMapKey; id = condKey; }
+  s[k] = s[k] || {};
+  val = (val || '').trim();
+  if (val) s[k][id] = val; else delete s[k][id];
+  FP.settings.save(s);
+};
+// Lu depuis une fiche CONDUCTEUR : n° enregistré sur le conducteur, sinon repli d'affichage sur un
+// n° saisi par le passé sur un VÉHICULE qu'il conduit (pour que les deux fiches montrent la même
+// valeur avant première édition). condMapKey ∈ { 'condCarteTotal', 'condBadgeUlys' }.
+FP.numCarteConducteur = (condKey, condMapKey) => {
+  try {
+    const s = FP.settings.get();
+    const direct = (s[condMapKey] || {})[condKey]; if (direct) return direct;
+    const vehKey = Object.keys(FP.CARTE_COND_MAP).find(k => FP.CARTE_COND_MAP[k] === condMapKey);
+    if (!vehKey) return '';
+    const map = s[vehKey] || {};
+    const vehs = (window.FP_DATA && FP_DATA.vehicules) || [];
+    for (const v of vehs) { if (map[v.id] && FP.condKeyDuVehicule(v) === condKey) return map[v.id]; }
+    return '';
+  } catch (e) { return ''; }
+};
 
 // Modale « Nouveau conducteur » réutilisable → Promise<conductor|null>. Collecte les infos
 // essentielles puis crée le conducteur (FP.conducteurs.create). Injectée une fois dans le body.
