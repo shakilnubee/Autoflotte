@@ -33,6 +33,15 @@
   .drag-handle:active { cursor: grabbing; }
   .contrat-section.dragging { opacity: .45; }
   #contrat-sections.is-dragging .contrat-section { transition: transform .08s; }
+  /* Champs des fenêtres (ajouter / modifier un contrat) — style Parc Pilot (bordé, arrondi, focus accent) */
+  #locadd-modal .field-input, #locadd-modal input:not([type="file"]), #locadd-modal select {
+    width: 100%; border: 1px solid var(--fp-border); border-radius: .6rem; padding: .5rem .7rem;
+    font-size: .9rem; background: #fff; color: var(--fp-primary); transition: border-color .12s, box-shadow .12s;
+  }
+  #locadd-modal .field-input:focus, #locadd-modal input:focus, #locadd-modal select:focus {
+    outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(249,115,22,.15);
+  }
+  #locadd-modal label > span:first-child { display: block; margin-bottom: .15rem; }
 </style>
 <script>
 (function(){
@@ -507,6 +516,13 @@
           <label class="block"><span class="text-sm font-medium text-slate-700">Km total</span>
             <input id="locadd-km" type="number" min="0" step="1000" class="field-input w-full mt-1" placeholder="60000"></label>
         </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block"><span class="text-sm font-medium text-slate-700">Date de début</span>
+            <input id="locadd-debut" type="date" class="field-input w-full mt-1"></label>
+          <label class="block"><span class="text-sm font-medium text-slate-700">Date de fin <span class="text-slate-400">(opt.)</span></span>
+            <input id="locadd-fin" type="date" class="field-input w-full mt-1"></label>
+        </div>
+        <p class="text-xs text-slate-400" style="margin-top:-.35rem">La <b>fin</b> est optionnelle : si tu la renseignes, la durée se recalcule toute seule. Sinon, fin = début + durée.</p>
         <label class="block"><span class="text-sm font-medium text-slate-700">N° d'offre <span class="text-slate-400">(opt.)</span></span>
           <input id="locadd-offre" type="text" class="field-input w-full mt-1" placeholder=""></label>
         <div class="grid grid-cols-2 gap-3">
@@ -1613,6 +1629,7 @@
   }
   function escC(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function addMonths(iso, n){ const d=new Date(iso); if(isNaN(d)) return null; d.setMonth(d.getMonth()+(+n||0)); return d; }
+  function monthsBetween(aIso, bIso){ const d1=new Date(aIso), d2=new Date(bIso); if(isNaN(d1)||isNaN(d2)) return null; let m=(d2.getFullYear()-d1.getFullYear())*12+(d2.getMonth()-d1.getMonth()); if(d2.getDate()<d1.getDate()) m--; return m; }
   // TVS annuelle estimée via le calcul CENTRAL (app.js) → même barème que fiche véhicule / stats / dashboard.
   // Le carburant est déduit du modèle si absent (Hybrid / électrique / diesel CRDi…), sinon essence.
   function tvsEst(c){
@@ -1680,12 +1697,16 @@
                    : ((linkedV && linkedV.km != null && linkedV.km !== '') ? Number(linkedV.km) : null);
       const debutSource = c.debut ? 'saisie' : ((linkedV && linkedV.dateMiseEnCirculation) ? 'mec' : null);
       const effDebut = c.debut || (linkedV && linkedV.dateMiseEnCirculation) || '';
+      // Fin effective : date de fin SAISIE (prioritaire) sinon début + durée. Durée effective (mois) pour
+      // la projection = mois entre début et fin quand une fin est saisie, sinon la durée du contrat.
+      const effFinDate = c.fin ? new Date(c.fin) : (effDebut && dur ? addMonths(effDebut, dur) : null);
+      const durEff = (c.fin && effDebut) ? (monthsBetween(effDebut, c.fin) || dur) : dur;
       // Mois écoulés depuis le début (théorique), plafonné à la durée du contrat.
       let moisEcoules = null;
-      if (effDebut){ const d = new Date(effDebut); if (!isNaN(d)){ const now = new Date(); let m = (now.getFullYear()-d.getFullYear())*12 + (now.getMonth()-d.getMonth()); if (now.getDate() < d.getDate()) m--; moisEcoules = Math.max(0, dur ? Math.min(m, dur) : m); } }
+      if (effDebut){ const d = new Date(effDebut); if (!isNaN(d)){ const now = new Date(); let m = (now.getFullYear()-d.getFullYear())*12 + (now.getMonth()-d.getMonth()); if (now.getDate() < d.getDate()) m--; moisEcoules = Math.max(0, durEff ? Math.min(m, durEff) : m); } }
       // Projection km en fin de contrat (extrapolation linéaire) + statut, comme BPCE.
       const rate = (kmAct != null && moisEcoules && moisEcoules > 0) ? kmAct / moisEcoules : null;
-      const proj = (rate != null && dur) ? Math.round(rate * dur) : null;
+      const proj = (rate != null && durEff) ? Math.round(rate * durEff) : null;
       const ratio = (proj != null && c.kmTotal) ? proj / c.kmTotal : null;
       let statutCell = '<span class="text-slate-400 text-xs">contrat non renseigné</span>';
       if (ratio != null){ const pct = Math.round(ratio*100);
@@ -1693,17 +1714,17 @@
         const pen = (ratio > 0.9 && over > 0) ? penaltyHtml(over, c.kmSupp, `data-loc-kmsupp="${i}"`, c.kmTolerance) : '';
         statutCell = ratio > 1 ? `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${pen}` : ratio > 0.9 ? `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${pen}` : `<span class="badge badge-ok">OK (${pct}%)</span>`; }
       else if (c.kmTotal && kmAct != null){ statutCell = `<span class="badge badge-ok">OK (${Math.round(kmAct/c.kmTotal*100)}%)</span>`; }
-      // Début (éditable) et Fin (calculée = début + durée).
+      // Début & Fin — cliquer ouvre la fenêtre d'édition (date-pickers sûrs, plus de saisie libre qui casse tout).
       const debutCell = effDebut
         ? `<span class="cursor-pointer underline decoration-dotted" data-loc-debut="${i}" title="${debutSource === 'mec' ? 'Date de mise en circulation (carte grise) du véhicule lié — cliquer pour saisir la vraie date de début' : 'Modifier la date de début'}">${FP.dateNum(effDebut)}${debutSource === 'mec' ? ' <span class="text-xs text-slate-400">(MEC)</span>' : ''}</span>`
         : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-debut="${i}">+ début</button>`;
-      let finCell = '<span class="text-slate-400">—</span>';
-      if (effDebut){ const fin = addMonths(effDebut, c.dureeMois); if (fin){ const j = Math.round((fin - new Date())/86400000); const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`); finCell = `${FP.dateNum(fin.toISOString().slice(0,10))}<div>${badge}</div>`; } }
+      let finCell = `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-fin="${i}">+ fin</button>`;
+      if (effFinDate && !isNaN(effFinDate)){ const j = Math.round((effFinDate - new Date())/86400000); const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`); finCell = `<span class="cursor-pointer underline decoration-dotted" data-loc-fin="${i}" title="Modifier la date de fin">${FP.dateNum(effFinDate.toISOString().slice(0,10))}</span><div>${badge}</div>`; }
       // Km actuel (éditable) + reste.
       let kmActCell = (kmAct != null ? FP.num(kmAct) + ' km' : '<span class="text-slate-400">—</span>');
       if (c.kmTotal && kmAct != null){ const reste = c.kmTotal - kmAct; kmActCell += reste<0 ? `<div style="color:#B91C1C;font-weight:700">dépassé ${FP.num(-reste)}</div>` : (reste<5000 ? `<div style="color:#B45309;font-weight:700">reste ${FP.num(reste)}</div>` : `<div class="text-xs text-slate-500">reste ${FP.num(reste)}</div>`); }
       kmActCell += ` <button type="button" data-loc-km="${i}" class="text-xs underline decoration-dotted text-slate-500">${kmAct!=null?'maj':'+ km'}</button>`;
-      const mensPayees = (moisEcoules != null) ? `${moisEcoules}${dur?`<span class="text-xs text-slate-400"> / ${dur}</span>`:''}` : '<span class="text-slate-400">—</span>';
+      const mensPayees = (moisEcoules != null) ? `${moisEcoules}${durEff?`<span class="text-xs text-slate-400"> / ${durEff}</span>`:''}` : '<span class="text-slate-400">—</span>';
       // Total & loyer courant via le MÊME moteur que BPCE (offre + avenants + prorata au jour).
       // Un loyer importé depuis une facture (override par immat) prime sur le loyerTTC du contrat.
       // Début = date saisie sinon date de mise en circulation du véhicule lié (effDebut).
@@ -1769,7 +1790,7 @@
       const def = (leasingLoueurFilter && leasingLoueurFilter !== 'all') ? leasingLoueurFilter : LOCALEASE_VAL;
       lsel.value = [...lsel.options].some(o => o.value === def) ? def : (lsel.options[0] ? lsel.options[0].value : LOCALEASE_VAL);
     }
-    ['locadd-cond','locadd-modele','locadd-loyer','locadd-duree','locadd-km','locadd-offre','locadd-kmsupp','locadd-tol'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+    ['locadd-cond','locadd-modele','locadd-loyer','locadd-duree','locadd-km','locadd-debut','locadd-fin','locadd-offre','locadd-kmsupp','locadd-tol'].forEach(id => { const el = $(id); if (el) el.value = ''; });
     const st = $('locadd-status'); if (st) { st.innerHTML = ''; st.setAttribute('style', ''); }
     const m = $('locadd-modal'); m.classList.remove('hidden'); m.classList.add('flex');
     if (window.lucide) lucide.createIcons();
@@ -1790,6 +1811,8 @@
     setv('locadd-loyer', c.loyerTTC != null ? String(c.loyerTTC).replace('.', ',') : '');
     setv('locadd-duree', c.dureeMois);
     setv('locadd-km', c.kmTotal);
+    setv('locadd-debut', c.debut || '');
+    setv('locadd-fin', c.fin || '');
     setv('locadd-offre', c.offre);
     setv('locadd-kmsupp', c.kmSupp != null ? String(c.kmSupp).replace('.', ',') : '');
     setv('locadd-tol', c.kmTolerance);
@@ -1828,7 +1851,12 @@
     if (v) { marque = v.marque || ''; modele = v.modele || ''; }
     else { const mm = ($('locadd-modele').value || '').trim(); const p = mm.split(/\s+/); marque = p.shift() || ''; modele = p.join(' '); }
     const loueurSel = ($('locadd-loueur') && $('locadd-loueur').value) || LOCALEASE_VAL;
-    // --- Mode ÉDITION : on met à jour le contrat existant (on préserve docs, km actuel, début, avenants…) ---
+    // Dates : début (date-picker) + fin optionnelle. Si la fin est renseignée, la durée se recalcule.
+    const debutV = (($('locadd-debut') && $('locadd-debut').value) || '').trim() || null;
+    const finV = (($('locadd-fin') && $('locadd-fin').value) || '').trim() || null;
+    let dureeV = parseInt($('locadd-duree').value, 10) || null;
+    if (finV && debutV) { const mb = monthsBetween(debutV, finV); if (mb && mb > 0) dureeV = mb; }
+    // --- Mode ÉDITION : on met à jour le contrat existant (on préserve docs, km actuel, avenants…) ---
     if (_locEditIdx != null) {
       const s = FP.settings.get(); const list = getLocalease(); const c = list[_locEditIdx];
       if (c) {
@@ -1837,8 +1865,10 @@
         c.marque = marque; c.modele = modele;
         c.loueur = (loueurSel === LOCALEASE_VAL) ? '' : loueurSel;
         c.loyerTTC = loyer;
-        c.dureeMois = parseInt($('locadd-duree').value, 10) || null;
+        c.dureeMois = dureeV;
         c.kmTotal = parseInt($('locadd-km').value, 10) || null;
+        c.debut = debutV;
+        if (finV) c.fin = finV; else delete c.fin;
         c.offre = ($('locadd-offre').value || '').trim();
         { const ks = locNum($('locadd-kmsupp').value); if (ks != null && ks > 0) c.kmSupp = ks; else delete c.kmSupp; }
         { const tl = parseInt($('locadd-tol').value, 10); if (Number.isFinite(tl) && tl > 0) c.kmTolerance = tl; else delete c.kmTolerance; }
@@ -1852,9 +1882,10 @@
     const rec = {
       conducteur: ($('locadd-cond').value || '').trim(), immat: immat || '', marque, modele,
       loueur: (loueurSel === LOCALEASE_VAL) ? '' : loueurSel, // '' = Localease/Ayvens (défaut historique)
-      loyerTTC: loyer, dureeMois: parseInt($('locadd-duree').value, 10) || null, kmTotal: parseInt($('locadd-km').value, 10) || null,
-      offre: ($('locadd-offre').value || '').trim(), docs: _locAddDoc ? [{ url: _locAddDoc.url, name: _locAddDoc.name }] : [],
+      loyerTTC: loyer, dureeMois: dureeV, kmTotal: parseInt($('locadd-km').value, 10) || null,
+      debut: debutV, offre: ($('locadd-offre').value || '').trim(), docs: _locAddDoc ? [{ url: _locAddDoc.url, name: _locAddDoc.name }] : [],
     };
+    if (finV) rec.fin = finV;
     { const ks = locNum($('locadd-kmsupp').value); if (ks != null && ks > 0) rec.kmSupp = ks; }
     { const tl = parseInt($('locadd-tol').value, 10); if (Number.isFinite(tl) && tl > 0) rec.kmTolerance = tl; }
     if (_locAddScan) { const c = locNum(_locAddScan.co2); if (c != null) rec.co2 = Math.round(c); const ml = locNum(_locAddScan.malus); if (ml != null && ml > 0) rec.malus = ml; }
@@ -1896,7 +1927,8 @@
       return;
     }
     const up=e.target.closest('[data-loc-up]'); if(up){ _locUpIdx=+up.dataset.locUp; const inp=$('loc-upload-file'); inp.value=''; inp.click(); return; }
-    const db=e.target.closest('[data-loc-debut]'); if(db){ const i=+db.dataset.locDebut; const u=await FP.prompt('Date de début / livraison (format AAAA-MM-JJ) :', list[i].debut||''); if(u==null)return; list[i].debut=u.trim()||null; save(); return; }
+    const db=e.target.closest('[data-loc-debut]'); if(db){ openLocEditModal(+db.dataset.locDebut); return; }
+    const fn=e.target.closest('[data-loc-fin]'); if(fn){ openLocEditModal(+fn.dataset.locFin); return; }
     const km=e.target.closest('[data-loc-km]'); if(km){ const i=+km.dataset.locKm; const u=await FP.prompt('Kilométrage actuel du véhicule :', list[i].kmActuel!=null?list[i].kmActuel:''); if(u==null)return; const n=parseInt(String(u).replace(/\D/g,''),10); list[i].kmActuel=Number.isFinite(n)?n:null; save(); return; }
     const ks=e.target.closest('[data-loc-kmsupp]'); if(ks){ const i=+ks.dataset.locKmsupp; const u=await FP.prompt('Coût du km supplémentaire (€/km) — ex. 0,099 :', list[i].kmSupp!=null?String(list[i].kmSupp).replace('.',','):''); if(u==null)return; const n=parseFloat(String(u).replace(/[\s€]/g,'').replace(',','.')); list[i].kmSupp=Number.isFinite(n)&&n>0?n:null; save(); return; }
     const im=e.target.closest('[data-loc-immat]'); if(im){ const i=+im.dataset.locImmat; const u=await FP.prompt('Immatriculation du véhicule :', list[i].immat||''); if(u==null)return; const plaque=u.trim().toUpperCase()||null; list[i].immat=plaque;
