@@ -23,8 +23,8 @@
   const DETECT_PROMPT = J([
     "Identifie le TYPE de ce document de gestion de flotte. Ne l'extrais pas encore.",
     "Renvoie UNIQUEMENT un JSON : { \"type_document\":\"<cle>\", \"sous_type\":\"\", \"nombre_pages\":0, \"nombre_documents_detectes\":1, \"qualite_document\":\"bonne|moyenne|insuffisante\", \"langue\":\"fr\", \"confiance\":\"eleve|moyen|faible\" }.",
-    "Cles possibles pour type_document : certificat_immatriculation, permis_conduire, contrat_location, attestation_assurance, controle_technique, facture_entretien, avis_contravention, forfait_post_stationnement, document_inconnu.",
-    "Indices : 'Certificat d'immatriculation'/champs A B C D E = certificat_immatriculation ; 'Permis de conduire'/categories B = permis_conduire ; 'Location Longue Duree'/LLD/loyer/loueur = contrat_location ; 'Attestation d'assurance'/police/garanties = attestation_assurance ; 'Controle technique'/PV/defaillances = controle_technique ; 'Avis de contravention'/'amende'/telepaiement = avis_contravention ; 'Forfait Post-Stationnement'/FPS = forfait_post_stationnement ; facture/devis d'entretien-reparation = facture_entretien."
+    "Cles possibles pour type_document : certificat_immatriculation, permis_conduire, carte_identite, contrat_location, attestation_assurance, controle_technique, facture_entretien, facture_carburant, facture_ulys, facture_achat, sinistre, etat_des_lieux, avis_contravention, forfait_post_stationnement, document_inconnu.",
+    "Indices : 'Certificat d'immatriculation'/champs A B C D E = certificat_immatriculation ; 'Permis de conduire'/categories B = permis_conduire ; \"Carte nationale d'identite\"/CNI/passeport = carte_identite ; 'Location Longue Duree'/LLD/loyer/loueur = contrat_location ; 'Attestation d'assurance'/police/garanties = attestation_assurance ; 'Controle technique'/PV/defaillances = controle_technique ; 'Avis de contravention'/'amende'/telepaiement = avis_contravention ; 'Forfait Post-Stationnement'/FPS = forfait_post_stationnement ; facture/devis d'entretien-reparation-garage = facture_entretien ; facture TotalEnergies/carburant/gazole/pleins/carte carburant = facture_carburant ; facture de peages Ulys/VINCI Autoroutes/badge de teleage = facture_ulys ; constat amiable/declaration de sinistre/accident = sinistre ; etat des lieux/proces-verbal de restitution/remise du vehicule = etat_des_lieux ; autre facture ou achat = facture_achat."
   ]);
 
   // ---- Étape 2 : SCHÉMAS d'extraction par type (Phase 1 = 7 types) ----
@@ -76,10 +76,46 @@
       ["numeroFps", "N° de FPS"], ["collectivite", "Collectivite / operateur"], ["immat", "Immatriculation"], ["date", "Date"], ["lieu", "Lieu / zone"],
       ["montantInitial", "Montant initial"], ["montantMinore", "Montant minore"], ["dateLimite", "Date limite de paiement"],
       ["montantMajore", "Montant majore eventuel"], ["recoursDateLimite", "Date limite du recours (RAPO)"]
+    ]},
+    carte_identite: { label: "Pièce d'identité", cible: "conducteurs", champs: [
+      ["nom", "Nom"], ["prenom", "Prenom"], ["dateNaissance", "Date de naissance"],
+      ["numeroPiece", "N° du document (CNI/passeport)"], ["dateExpirationTitre", "Date d'expiration du titre"], ["nationalite", "Nationalite"]
+    ]},
+    facture_achat: { label: "Facture / achat", cible: "factures", factureType: null, champs: [
+      ["typeDoc", "Type (facture/devis/avoir)"], ["numero", "N° de facture"], ["date", "Date d'emission"],
+      ["fournisseur", "Fournisseur (emetteur, PAS le client)"], ["immat", "Immatriculation (si liee a un vehicule)"],
+      ["description", "Nature de l'achat (court)"], ["montantHT", "Total HT"], ["montantTVA", "TVA"], ["montantTTC", "Total TTC"]
+    ]},
+    facture_carburant: { label: "Carburant / péages TotalEnergies", cible: "factures", factureType: "carburant", fournisseurDefaut: "TotalEnergies", champs: [
+      ["numero", "N° de facture"], ["date", "Date d'emission"], ["fournisseur", "Fournisseur"], ["immat", "Immatriculation / n° de carte (si indique)"],
+      ["montantHT", "Total HT"], ["montantTVA", "TVA"], ["montantTTC", "Total TTC (net a payer)"], ["litres", "Litres (si indique)"], ["km", "Kilometrage (si indique)"]
+    ]},
+    sinistre: { label: "Sinistre / constat", cible: "sinistres", champs: [
+      ["date", "Date du sinistre"], ["immat", "Immatriculation de NOTRE vehicule"], ["lieu", "Lieu"],
+      ["circonstances", "Circonstances (court)"], ["responsabilite", "Responsabilite (responsable / non responsable / partagee / en cours)"],
+      ["tiersPlaque", "Plaque du tiers"], ["tiersAssureur", "Assureur adverse"], ["tiersNom", "Conducteur adverse"],
+      ["montantTTC", "Montant des dommages (si chiffre)"], ["numeroSinistre", "N° de dossier sinistre (si present)"]
+    ]},
+    etat_des_lieux: { label: "État des lieux / restitution", cible: "documents", docType: "etat-des-lieux", champs: [
+      ["immat", "Immatriculation"], ["date", "Date de l'etat des lieux"], ["km", "Kilometrage releve"],
+      ["typeEtat", "Type (entree / sortie / restitution)"], ["dommages", "Dommages / reserves (court)"], ["operateur", "Operateur / loueur"]
     ]}
   };
   // Alias renvoyés parfois par la détection.
-  const TYPE_ALIAS = { "carte_grise": "certificat_immatriculation", "carte-grise": "certificat_immatriculation", "amende_forfaitaire_majoree": "avis_contravention", "document_antai": "avis_contravention", "contrat_leasing": "contrat_location", "releve_information_assurance": "attestation_assurance", "devis_reparation": "facture_entretien", "facture_fournisseur": "facture_entretien" };
+  const TYPE_ALIAS = { "carte_grise": "certificat_immatriculation", "carte-grise": "certificat_immatriculation", "amende_forfaitaire_majoree": "avis_contravention", "document_antai": "avis_contravention", "contrat_leasing": "contrat_location", "releve_information_assurance": "attestation_assurance", "devis_reparation": "facture_entretien", "facture_fournisseur": "facture_entretien",
+    "carte-identite": "carte_identite", "cni": "carte_identite", "passeport": "carte_identite",
+    "facture_total": "facture_carburant", "facture-total": "facture_carburant", "carburant": "facture_carburant", "totalenergies": "facture_carburant",
+    "facture-ulys": "facture_ulys", "ulys": "facture_ulys", "peage": "facture_ulys",
+    "facture": "facture_achat", "achat": "facture_achat", "facture_divers": "facture_achat",
+    "constat": "sinistre", "constat_amiable": "sinistre", "declaration_sinistre": "sinistre", "accident": "sinistre",
+    "etat-des-lieux": "etat_des_lieux", "restitution": "etat_des_lieux", "pv_restitution": "etat_des_lieux" };
+
+  // Types détectés qui se traitent mieux dans un outil DÉDIÉ (on ne fait pas d'OCR vision approximatif) → on redirige.
+  // Ex. péages Ulys : la lecture précise (montants par collaborateur, colonnes) est faite par l'importateur de la page Factures.
+  const REDIRECTS = {
+    facture_ulys: { label: "Péages Ulys / VINCI", page: "factures.html?tab=ulys",
+      reason: "Les factures de péages Ulys se lisent dans l'importateur dédié (page Factures → onglet Ulys) : il reconstitue les colonnes pour donner les bons montants par collaborateur. Un OCR simple mélangerait les colonnes." }
+  };
 
   function schemaFor(type) { return SCHEMAS[type] || SCHEMAS[TYPE_ALIAS[type]] || null; }
   function normType(type) { return SCHEMAS[type] ? type : (TYPE_ALIAS[type] || type); }
@@ -93,6 +129,12 @@
       "Ne confonds jamais un montant avec un n° d'avis, de telepaiement, de telephone, une annee ou un code postal (le montant est petit, en general 11 a 1500 euros)."
     );
     if (s.cible === "vehicules") extra.push("Immatriculation = plaque francaise AB-123-CD. Ne confonds pas titulaire (C.1) et conducteur habituel.");
+    if (s.cible === "factures") extra.push(
+      "FACTURE : le TTC = le montant 'NET A PAYER' / 'Total TTC' imprime, PAS la somme de tous les nombres de la page. HT + TVA doivent egaler TTC. Le fournisseur est l'EMETTEUR (celui qui facture), jamais le client."
+    );
+    if (s.cible === "sinistres") extra.push(
+      "SINISTRE : 'immat' = la plaque de NOTRE vehicule (le titulaire/assure du document), pas celle du tiers. Distingue bien notre vehicule du vehicule adverse (tiers). Responsabilite = telle qu'ecrite (responsable / non responsable / partagee) sinon 'en cours'."
+    );
     return J([
       "Type de document : " + s.label + ". Extrais UNIQUEMENT ces champs (dans l'ordre) :",
       J(lignes),
@@ -114,8 +156,8 @@
     const add = (type2, gravite, description) => out.push({ type: type2, gravite, description, verification_humaine_requise: gravite !== 'basse' });
     // VIN 17 caractères
     const vin = val(model, 'vin'); if (vin && String(vin).replace(/\s/g, '').length !== 17) add('vin_longueur', 'moyenne', `Le VIN « ${vin} » ne fait pas 17 caractères — à vérifier.`);
-    // HT + TVA = TTC (tolérance 2 cts)
-    if (t === 'facture_entretien') { const ht = num(val(model, 'montantHT')), tva = num(val(model, 'montantTVA')), ttc = num(val(model, 'montantTTC')); if (ht != null && tva != null && ttc != null && Math.abs(ht + tva - ttc) > 0.02) add('montants_incoherents', 'elevee', `HT (${ht}) + TVA (${tva}) ≠ TTC (${ttc}). À vérifier avant enregistrement.`); }
+    // HT + TVA = TTC (tolérance 2 cts) — sur TOUTE facture (entretien, achat, carburant)
+    if ((schemaFor(t) || {}).cible === 'factures') { const ht = num(val(model, 'montantHT')), tva = num(val(model, 'montantTVA')), ttc = num(val(model, 'montantTTC')); if (ht != null && tva != null && ttc != null && Math.abs(ht + tva - ttc) > 0.02) add('montants_incoherents', 'elevee', `HT (${ht}) + TVA (${tva}) ≠ TTC (${ttc}). À vérifier avant enregistrement.`); }
     // Amende : les 3 montants, jamais le majoré par défaut
     if (t === 'avis_contravention') { const mi = num(val(model, 'montantMinore')), fo = num(val(model, 'montantForfaitaire')), ma = num(val(model, 'montantMajore')); if (mi == null && fo == null) add('montant_amende_absent', 'moyenne', "Aucun montant minoré/forfaitaire lu — à saisir à la main."); if (ma != null && mi == null && fo == null) add('montant_majore_seul', 'moyenne', "Seul le montant majoré a été lu : ne jamais l'appliquer par défaut, vérifie les dates limites."); }
     // Immatriculation présente dans la flotte ? (info, pas bloquant)
@@ -136,9 +178,13 @@
     try { det = await FP.scanIA(file, 'detect', DETECT_PROMPT); } catch (e) { console.warn('[scan2 detect]', e); }
     let type = (det && (det.type_document || det.type)) || 'document_inconnu';
     type = normType(type);
+    // Type mieux traité par un outil dédié (ex. péages Ulys) → on renvoie une redirection au lieu d'un OCR approximatif.
+    if (REDIRECTS[type]) {
+      return { type_document: type, _redirect: REDIRECTS[type], qualite_document: (det && det.qualite_document) || '', champs: [] };
+    }
     if (!schemaFor(type)) {
-      // type non couvert en Phase 1 : on tente quand même une extraction "facture" générique
-      type = 'facture_entretien';
+      // type non couvert : on tente une extraction "facture / achat" générique (neutre).
+      type = 'facture_achat';
     }
     onStep && onStep('extract', { type, label: (schemaFor(type) || {}).label });
     const prompt = buildExtractPrompt(type);
@@ -191,10 +237,22 @@
       target = { table: 'vehicules', id: rec.id };
     }
     else if (cible === 'factures') {
-      const rec = { id: uid('F'), societe: societe(), date: g('date') || '', fournisseur: g('fournisseur') || '', numero: g('numero') || '',
+      const sc = schemaFor(t) || {};
+      // Sous-type de facture : 'entretien' pour un devis/facture garage, 'carburant' pour TotalEnergies, sinon libre (null).
+      const factureType = (t === 'facture_entretien') ? 'entretien' : (Object.prototype.hasOwnProperty.call(sc, 'factureType') ? sc.factureType : null);
+      const rec = { id: uid('F'), societe: societe(), date: g('date') || '', fournisseur: g('fournisseur') || sc.fournisseurDefaut || '', numero: g('numero') || '',
         montantHT: num(g('montantHT')), montantTVA: num(g('montantTVA')), montantTTC: num(g('montantTTC')),
-        vehiculeImmat: (g('immat') || '').toUpperCase(), km: intv(g('km')), description: g('description') || '', type: 'entretien' };
+        vehiculeImmat: (g('immat') || '').toUpperCase(), km: intv(g('km')), description: g('description') || '', type: factureType };
       try { if (FP.dupe && FP.dupe.find && FP.dupe.find('factures', rec, data.factures || [])) { /* doublon */ } } catch (e) {}
+      FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
+      target = { table: 'factures', id: rec.id };
+    }
+    else if (cible === 'sinistres') {
+      // Un sinistre = une facture type 'sinistre' (comme la déclaration QR / la page Sinistres).
+      const tiers = [g('tiersPlaque') && ('plaque ' + g('tiersPlaque')), g('tiersAssureur') && ('assureur ' + g('tiersAssureur')), g('tiersNom')].filter(Boolean).join(', ');
+      const descFull = [g('circonstances'), g('lieu') ? ('Lieu : ' + g('lieu')) : '', tiers ? ('Tiers : ' + tiers) : ''].filter(Boolean).join(' · ') || 'Sinistre déclaré';
+      const rec = { id: 'F-SIN-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), societe: societe(),
+        date: g('date') || '', vehiculeImmat: (g('immat') || '').toUpperCase(), description: descFull, type: 'sinistre', montantTTC: num(g('montantTTC')) };
       FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
       target = { table: 'factures', id: rec.id };
     }
@@ -211,11 +269,17 @@
     else if (cible === 'conducteurs') {
       const nom = [g('prenom'), g('nom')].filter(Boolean).join(' ').trim() || g('nom') || '';
       if (!nom) throw new Error("Nom du conducteur manquant.");
-      const rec = { id: uid('C'), key: nom.toLowerCase().replace(/\s+/g, '-'), name: nom, societe: societe(),
-        permisNumero: g('numeroPermis') || '', permisExpiration: g('dateExpirationTitre') || '', permisObtention: g('dateDelivrance') || '',
-        permisType: Array.isArray(g('categories')) ? g('categories').join(', ') : (g('categories') || '') };
-      FP.persist.insert('conducteurs', rec);
-      target = { table: 'conducteurs', id: rec.id };
+      const rec = { id: uid('C'), key: nom.toLowerCase().replace(/\s+/g, '-'), name: nom, societe: societe() };
+      if (t === 'permis_conduire') {
+        rec.permisNumero = g('numeroPermis') || ''; rec.permisExpiration = g('dateExpirationTitre') || ''; rec.permisObtention = g('dateDelivrance') || '';
+        rec.permisType = Array.isArray(g('categories')) ? g('categories').join(', ') : (g('categories') || '');
+      } else if (t === 'carte_identite') {
+        rec.idNumero = g('numeroPiece') || ''; rec.idExpiration = g('dateExpirationTitre') || '';
+        if (g('dateNaissance')) rec.dateNaissance = g('dateNaissance');
+      }
+      // Anti-doublon conducteur (même nom déjà enregistré) — best effort.
+      try { const ex = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(nom) : null; if (ex) { target = { table: 'conducteurs', id: ex.id || ex.key }; } } catch (e) {}
+      if (!target.id) { FP.persist.insert('conducteurs', rec); target = { table: 'conducteurs', id: rec.id }; }
     }
     else if (cible === 'leasing') {
       const rec = { conducteur: '', immat: (g('immat') || '').toUpperCase(), marque: g('marque') || '', modele: g('modele') || '',
@@ -225,11 +289,19 @@
       target = { table: 'leasing', id: rec.immat };
     }
     else if (cible === 'documents') {
-      // Assurance → document rattaché au véhicule (si immat connue), sinon simple archive.
+      // Document rattaché au véhicule (si immat connue), sinon simple archive.
       const immat = (g('immat') || '').toUpperCase(); const veh = findVeh(immat);
-      const rec = { id: uid('D'), societe: societe(), vehiculeId: veh ? veh.id : null, type: 'assurance',
-        label: 'Attestation assurance' + (g('assureur') ? ' — ' + g('assureur') : ''), date: g('dateDebut') || '', url: model._fileUrl || null,
-        note: JSON.stringify({ assureur: g('assureur'), police: g('numeroPolice'), fin: g('dateFin') }) };
+      let rec;
+      if (t === 'etat_des_lieux') {
+        rec = { id: uid('D'), societe: societe(), vehiculeId: veh ? veh.id : null, type: 'etat-des-lieux',
+          label: 'État des lieux' + (g('typeEtat') ? ' — ' + g('typeEtat') : ''), date: g('date') || '', url: model._fileUrl || null,
+          note: JSON.stringify({ km: g('km'), dommages: g('dommages'), operateur: g('operateur') }) };
+      } else {
+        // Assurance (carte verte / attestation)
+        rec = { id: uid('D'), societe: societe(), vehiculeId: veh ? veh.id : null, type: 'assurance',
+          label: 'Attestation assurance' + (g('assureur') ? ' — ' + g('assureur') : ''), date: g('dateDebut') || '', url: model._fileUrl || null,
+          note: JSON.stringify({ assureur: g('assureur'), police: g('numeroPolice'), fin: g('dateFin') }) };
+      }
       FP.persist.insert('documents', rec);
       target = { table: 'documents', id: rec.id };
     }

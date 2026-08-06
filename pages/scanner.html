@@ -7,11 +7,11 @@
 <title>Scanner IA — Parc Pilot</title>
 <link rel="manifest" href="../manifest.json">
 <meta name="theme-color" content="#0F1E3D">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806e">
 <script>window.lucide={createIcons:function(){}};</script>
-<script defer src="../assets/js/lucide.min.js?v=20260806d"></script>
+<script defer src="../assets/js/lucide.min.js?v=20260806e"></script>
 <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260806d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260806e">
 <style>
   .drop { border:2px dashed var(--fp-border); border-radius:1rem; padding:2.5rem 1.5rem; text-align:center; cursor:pointer; transition:.15s; background:#fff; }
   .drop:hover, .drop.over { border-color:var(--fp-accent); background:#FFF7ED; }
@@ -72,7 +72,7 @@
   <main class="flex-1 p-6 md:p-10 max-w-4xl">
     <a href="../dashboard.html" class="text-sm font-semibold" style="color:var(--fp-accent)"><i data-lucide="arrow-left" class="w-4 h-4 inline"></i> Tableau de bord</a>
     <h1 class="text-2xl font-extrabold mt-2 mb-1" style="color:var(--fp-primary)">🔍 Scanner IA de documents <span style="font-size:.7rem;font-weight:700;color:#fff;background:var(--fp-accent);border-radius:9999px;padding:2px 9px;vertical-align:middle">Nouveau · v2</span></h1>
-    <p class="text-slate-500 text-sm mb-5">Dépose un document (carte grise, facture/devis, assurance, contrôle technique, avis d'amende/FPS, contrat LLD, permis). L'IA le lit en 3 étapes, puis tu <b>valides</b> les informations avant enregistrement. Rien n'est enregistré automatiquement.</p>
+    <p class="text-slate-500 text-sm mb-5">Dépose n'importe quel document de flotte (carte grise, permis, pièce d'identité, facture/devis, carburant, assurance, contrôle technique, avis d'amende/FPS, contrat LLD, sinistre/constat, état des lieux…). L'IA détecte le type, le range au bon endroit et te fait <b>valider</b> les informations avant enregistrement. <b>Rien n'est enregistré automatiquement.</b></p>
 
     <div id="sc-drop" class="drop">
       <i data-lucide="scan-line" class="w-8 h-8 mx-auto" style="color:var(--fp-accent)"></i>
@@ -92,11 +92,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260806d"></script>
-<script src="../assets/js/supabase-client.js?v=20260806d"></script>
-<script src="../assets/js/data.js?v=20260806d"></script>
-<script src="../assets/js/app.js?v=20260806d"></script>
-<script src="../assets/js/scanner2.js?v=20260806d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260806e"></script>
+<script src="../assets/js/supabase-client.js?v=20260806e"></script>
+<script src="../assets/js/data.js?v=20260806e"></script>
+<script src="../assets/js/app.js?v=20260806e"></script>
+<script src="../assets/js/scanner2.js?v=20260806e"></script>
 <script>
   if (window.lucide) lucide.createIcons();
   var $ = function (id) { return document.getElementById(id); };
@@ -120,11 +120,25 @@
     }).then(async function(model){
       stepDone('coherence'); $('sc-status').textContent='';
       try { model._fileUrl = await upP; } catch(e){}
-      _model = model; renderValidation(model);
+      _model = model;
+      if (model && model._redirect) { renderRedirect(model._redirect); return; }
+      renderValidation(model);
     }).catch(function(err){
       console.error('[scanner2]', err);
       $('sc-status').innerHTML = '<span style="color:#b91c1c">Échec de la lecture : '+esc(err.message||err)+'. Réessaie avec un document plus net.</span>';
     });
+  }
+
+  function renderRedirect(rd){
+    var page = '../pages/' + rd.page;
+    var html = '<div class="card p-5" style="background:#fff;border:1px solid var(--fp-border);border-radius:1rem">';
+    html += '<div class="font-extrabold text-lg mb-1" style="color:var(--fp-primary)">'+esc(rd.label)+'</div>';
+    html += '<p class="text-sm text-slate-600">'+esc(rd.reason)+'</p>';
+    html += '<div class="flex gap-2 mt-4"><a class="btn btn-dark" href="'+esc(page)+'"><i data-lucide="arrow-right" class="w-4 h-4"></i> Ouvrir l\'outil dédié</a><button id="sc-cancel" class="btn btn-outline">Scanner autre chose</button></div>';
+    html += '</div>';
+    $('sc-result').innerHTML = html;
+    if(window.lucide) lucide.createIcons();
+    $('sc-cancel').addEventListener('click', function(){ _model=null; _file=null; $('sc-result').innerHTML=''; $('sc-steps').classList.add('hidden'); });
   }
 
   function renderValidation(model){
