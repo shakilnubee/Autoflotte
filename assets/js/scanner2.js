@@ -162,7 +162,9 @@
     if (t === 'avis_contravention') { const mi = num(val(model, 'montantMinore')), fo = num(val(model, 'montantForfaitaire')), ma = num(val(model, 'montantMajore')); if (mi == null && fo == null) add('montant_amende_absent', 'moyenne', "Aucun montant minoré/forfaitaire lu — à saisir à la main."); if (ma != null && mi == null && fo == null) add('montant_majore_seul', 'moyenne', "Seul le montant majoré a été lu : ne jamais l'appliquer par défaut, vérifie les dates limites."); }
     // Immatriculation présente dans la flotte ? (info, pas bloquant)
     const immat = val(model, 'immat');
-    if (immat && window.data && Array.isArray(data.vehicules)) { const up = String(immat).toUpperCase().replace(/\s/g, ''); const known = data.vehicules.some(v => String(v.immat || '').toUpperCase().replace(/\s/g, '') === up); if (!known && t !== 'certificat_immatriculation') add('vehicule_inconnu', 'basse', `Le véhicule ${immat} n'est pas (encore) dans la flotte.`); }
+    if (immat && window.data && Array.isArray(data.vehicules)) { const up = String(immat).toUpperCase().replace(/\s/g, ''); const known = data.vehicules.some(v => String(v.immat || '').toUpperCase().replace(/\s/g, '') === up);
+      if (!known && t !== 'certificat_immatriculation') add('vehicule_inconnu', 'basse', `Le véhicule ${immat} n'est pas (encore) dans la flotte.`);
+      if (known && t === 'certificat_immatriculation') add('vehicule_existant', 'basse', `⚠️ Le véhicule ${immat} EXISTE DÉJÀ : on ne fera que compléter ses cases vides — aucune donnée déjà saisie ne sera écrasée. Vérifie bien que la plaque est correcte avant d'enregistrer.`); }
     // Dates : fin < début
     const d1 = val(model, 'dateDebut'), d2 = val(model, 'dateFin'); if (d1 && d2 && new Date(d1) > new Date(d2)) add('dates_incoherentes', 'moyenne', "La date de fin est antérieure à la date de début.");
     // CT / assurance expirés (info)
@@ -237,22 +239,28 @@
       const immat = (g('immat') || '').toUpperCase().trim();
       if (!immat) throw new Error("Immatriculation manquante.");
       const existing = findVeh(immat);
-      // Carte grise : crée/complète le véhicule. CT : met à jour dates CT.
       const rec = existing ? { ...existing } : { id: nextVehId(), immat, statut: 'actif', groupes: ['non-classe'], societe: societe() };
+      // ⚠️ RÈGLE : sur un véhicule DÉJÀ existant, on ne fait QUE COMPLÉTER les cases vides — on
+      // n'écrase JAMAIS une valeur déjà saisie (sinon un mauvais scan corrompt une fiche existante).
+      // Sur un véhicule NEUF, tout est vide → tout est rempli.
+      const setE = (k, v) => { if (v == null || v === '') return; if (!existing || rec[k] == null || rec[k] === '') rec[k] = v; };
       if (t === 'certificat_immatriculation') {
-        if (g('marque')) rec.marque = g('marque'); if (g('modele')) rec.modele = g('modele'); if (g('version')) rec.version = g('version');
-        if (g('vin')) rec.vin = g('vin'); if (num(g('co2')) != null) rec.co2 = num(g('co2'));
-        if (intv(g('puissanceFiscale')) != null) rec.puissanceFiscale = intv(g('puissanceFiscale'));
-        if (g('energie')) rec.carburant = g('energie'); if (g('date1')) rec.dateMiseEnCirculation = g('date1');
-        if (g('prochainCT')) rec.prochainCT = g('prochainCT');
-        if (intv(g('masse')) != null) { try { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; s.vehMasse[rec.id] = intv(g('masse')); FP.settings.save(s); } catch (e) {} }
+        setE('marque', g('marque')); setE('modele', g('modele')); setE('version', g('version'));
+        setE('vin', g('vin')); setE('co2', num(g('co2')));
+        setE('puissanceFiscale', intv(g('puissanceFiscale')));
+        setE('carburant', g('energie')); setE('dateMiseEnCirculation', g('date1'));
+        setE('prochainCT', g('prochainCT'));
+        // Masse : réglage séparé, on ne remplit que s'il est vide.
+        if (intv(g('masse')) != null) { try { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; if (s.vehMasse[rec.id] == null || s.vehMasse[rec.id] === '') { s.vehMasse[rec.id] = intv(g('masse')); FP.settings.save(s); } } catch (e) {} }
       } else if (t === 'controle_technique') {
+        // Un CT met légitimement à jour les dates de CT (info plus récente).
         if (g('date')) rec.dateDernierCT = g('date'); if (g('prochainCT')) rec.prochainCT = g('prochainCT');
-        if (intv(g('km')) != null) rec.km = intv(g('km'));
+        // Le km ne peut que MONTER : on n'écrit que s'il est supérieur au km connu.
+        const kmLu = intv(g('km')); if (kmLu != null && (!(Number(rec.km) > 0) || kmLu >= Number(rec.km))) rec.km = kmLu;
       }
-      if (existing) { try { FP.persist.update('vehicules', rec.id, rec); } catch (e) { FP.persist.upsert('vehicules', rec); } }
+      if (existing) { try { FP.persist.update('vehicules', rec.id, rec); } catch (e) { FP.persist.upsert('vehicules', rec); } try { if (window.data && Array.isArray(data.vehicules)) { const i = data.vehicules.findIndex(v => v.id === rec.id); if (i >= 0) data.vehicules[i] = rec; } } catch (e) {} }
       else { try { FP.persist.insert('vehicules', rec); } catch (e) {} try { if (window.data && Array.isArray(data.vehicules)) data.vehicules.push(rec); } catch (e) {} }
-      target = { table: 'vehicules', id: rec.id };
+      target = { table: 'vehicules', id: rec.id, existing: !!existing };
     }
     else if (cible === 'factures') {
       const sc = schemaFor(t) || {};
