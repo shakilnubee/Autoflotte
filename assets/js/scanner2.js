@@ -282,7 +282,8 @@
       // via le helper canonique (tirets/espaces) pour rattacher au bon véhicule.
       const rec = { id: uid('F'), societe: societe(), date: g('date') || '', fournisseur: g('fournisseur') || sc.fournisseurDefaut || '', numeroFacture: g('numero') || '',
         montantHT: num(g('montantHT')), montantTVA: num(g('montantTVA')), montantTTC: num(g('montantTTC')),
-        vehiculeImmat: FP.normImmat ? FP.normImmat(g('immat')) : (g('immat') || '').toUpperCase(), km: intv(g('km')), description: g('description') || '', type: factureType };
+        vehiculeImmat: FP.normImmat ? FP.normImmat(g('immat')) : (g('immat') || '').toUpperCase(), km: intv(g('km')), description: g('description') || '', type: factureType,
+        fileId: model._fileUrl || null };  // PDF scanné rattaché → bouton « Voir » sur la fiche facture
       // Anti-doublon central (règle plateforme) : n° + TTC, sinon fournisseur+TTC+date.
       if (FP.dupe && FP.dupe.confirmAdd && !(await FP.dupe.confirmAdd('factures', rec, data.factures || []))) return { table: 'factures', id: null, annule: true };
       await FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
@@ -293,7 +294,8 @@
       const tiers = [g('tiersPlaque') && ('plaque ' + g('tiersPlaque')), g('tiersAssureur') && ('assureur ' + g('tiersAssureur')), g('tiersNom')].filter(Boolean).join(', ');
       const descFull = [g('circonstances'), g('lieu') ? ('Lieu : ' + g('lieu')) : '', tiers ? ('Tiers : ' + tiers) : ''].filter(Boolean).join(' · ') || 'Sinistre déclaré';
       const rec = { id: 'F-SIN-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), societe: societe(),
-        date: g('date') || '', vehiculeImmat: FP.normImmat ? FP.normImmat(g('immat')) : (g('immat') || '').toUpperCase(), description: descFull, type: 'sinistre', montantTTC: num(g('montantTTC')) };
+        date: g('date') || '', vehiculeImmat: FP.normImmat ? FP.normImmat(g('immat')) : (g('immat') || '').toUpperCase(), description: descFull, type: 'sinistre', montantTTC: num(g('montantTTC')),
+        fileId: model._fileUrl || null };  // pièce scannée rattachée → bouton « Voir »
       await FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
       target = { table: 'factures', id: rec.id };
     }
@@ -314,7 +316,7 @@
       const rec = { id: uid('A'), societe: societe(), numeroAvis: g('numeroAvis') || g('numeroFps') || '',
         numeroTelepaiement: g('numeroTelepaiement') || '', prenom, date: dateAm, annee: (dateAm || '').slice(0, 4),
         motif: g('motif') || (t === 'forfait_post_stationnement' ? 'Stationnement (FPS)' : ''),
-        montant, statut: 'à payer' };
+        montant, statut: 'à payer', avisUrl: model._fileUrl || null };  // avis scanné rattaché → bouton « Voir » sur la fiche amende
       // Anti-doublon central (règle plateforme) : n° d'avis + montant, sinon prénom+date+montant.
       if (FP.dupe && FP.dupe.confirmAdd && !(await FP.dupe.confirmAdd('amendes', rec, data.amendes || []))) return { table: 'amendes', id: null, annule: true };
       await FP.persist.insert('amendes', rec); try { if (window.data && Array.isArray(data.amendes)) data.amendes.push(rec); } catch (e) {}
@@ -346,6 +348,7 @@
         setIfEmpty('permisNumero', g('numeroPermis')); setIfEmpty('permisObtention', g('dateDelivrance'));
         setIfEmpty('permisExpiration', g('dateExpirationTitre'));
         setIfEmpty('permisType', Array.isArray(g('categories')) ? g('categories').join(', ') : g('categories'));
+        setIfEmpty('permisUrl', model._fileUrl);  // scan du permis rattaché → visible sur la fiche conducteur
       } else if (t === 'carte_identite') {
         setIfEmpty('dateNaissance', g('dateNaissance'));
         // Pas de colonne dédiée au n° de pièce → on le consigne dans la note (case vide) pour ne rien perdre.
