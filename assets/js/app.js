@@ -1073,9 +1073,15 @@ FP.consoPendantConge = (txList, opts) => {
     const cat = String(t.categorie || '').toLowerCase();
     const mtt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc);
     if (cats && cats.indexOf(cat) === -1) return;
-    const key = FP.condKeyDeConso(t);
-    if (!key) return;
-    const cg = FP.congeCouvrant(key, dtx);
+    // Une même personne peut avoir plusieurs « clés » selon comment son nom est écrit (prénom seul,
+    // prénom+nom) ou d'où vient la conso (carte/badge). On teste le congé sous TOUTES les clés
+    // plausibles (la plus fiable d'abord) pour ne RATER aucune conso réellement faite pendant un congé.
+    const cand = [];
+    const k1 = FP.condKeyDeConso(t); if (k1) cand.push(k1);
+    try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(t.conducteur) : null; if (c && c.key && cand.indexOf(c.key) < 0) cand.push(c.key); } catch (e) {}
+    if (FP.normPrenom && t.conducteur) { const np = FP.normPrenom(t.conducteur); if (np && cand.indexOf(np) < 0) cand.push(np); }
+    let cg = null, key = null;
+    for (const k of cand) { const g = FP.congeCouvrant(k, dtx); if (g) { cg = g; key = k; break; } }
     if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '' });
   });
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));

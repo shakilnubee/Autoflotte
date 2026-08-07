@@ -15,11 +15,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807p">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807p"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807p">
 <style>
   .ctrl-kpi { background:#fff; border:1px solid var(--fp-border); border-radius:.7rem; padding:.85rem 1rem; }
   .ctrl-kpi .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--fp-muted); }
@@ -180,11 +180,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807o"></script>
-<script src="../assets/js/supabase-client.js?v=20260807o"></script>
-<script src="../assets/js/data.js?v=20260807o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807p"></script>
+<script src="../assets/js/supabase-client.js?v=20260807p"></script>
+<script src="../assets/js/data.js?v=20260807p"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807o"></script>
+<script src="../assets/js/app.js?v=20260807p"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -231,12 +231,20 @@
     const presBadge = FP.prestataireBadge ? FP.prestataireBadge() : 'Ulys';
     const catLbl = (cat, carte) => { if (String(cat||'').toLowerCase()==='peage' && /^ULYS/i.test(String(carte||''))) return 'péage ' + presBadge; return FP.consoCatLabel ? FP.consoCatLabel(cat) : (cat||'achat'); };
     const out = [];
+    // Identité canonique du conducteur (FUSIONNE « ROMUALD » et « Romuald LAMARQUE-BRUNET » → 1 personne).
+    // Clé de fusion = PRÉNOM normalisé (insensible casse/accents) → « ROMUALD », « Romuald LAMARQUE-BRUNET »
+    // et « Romuald » = UNE seule personne. Nom affiché = le nom complet enregistré (ou le plus long vu).
+    const canon = (name) => {
+      const np = FP.normPrenom ? FP.normPrenom(name) : String(name || '').trim().toLowerCase().split(/\s+/)[0];
+      let n = name; try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(name) : null; if (c && FP.conducteurs.displayName) n = FP.conducteurs.displayName(c); } catch (e) {}
+      return { k: np || String(name || '').toLowerCase(), n };
+    };
     // 1) Conso DATÉE pendant un congé (toutes catégories)
     (FP.consoPendantConge ? FP.consoPendantConge(_tx) : []).forEach(a => {
-      const cg = a.conge || {};
+      const cg = a.conge || {}; const cn = canon(a.conducteur);
       const fid = 'cg|' + (a.key||'') + '|' + a.date + '|' + (a.categorie||'') + '|' + (a.montant||'');
-      out.push({ fid, genre:'congé', conducteur:a.conducteur, categorie:a.categorie, type:catLbl(a.categorie,a.carte),
-        date:a.date, montant:a.montant, facnum:a.facnum||'', detail:'congé ' + dfr(cg.debut) + ' → ' + dfr(cg.fin),
+      out.push({ fid, genre:'congé', conducteur:cn.n, gkey:cn.k, categorie:a.categorie, type:catLbl(a.categorie,a.carte),
+        date:a.date, montant:a.montant, facnum:a.facnum||'', detail:'congé : ' + dfr(cg.debut) + ' au ' + dfr(cg.fin),
         statut: sm[fid] || 'a-verifier' });
     });
     // 2) Ulys mensuel pendant un congé (dédupliqué si des dates existent déjà)
@@ -246,18 +254,18 @@
       let k=null; try{const c=FP.conducteurs.find(r.conducteur); if(c)k=c.key;}catch(e){} if(!k&&FP.normPrenom)k=FP.normPrenom(r.conducteur); if(!k) return;
       const mois = String(r.mois).slice(0,7); if (datedMonths.has(k+'|'+mois)) return;
       const cg = FP.congeDansMois ? FP.congeDansMois(k, mois) : null; if (!cg) return;
-      const mm = mois.split('-'); const fid = 'um|'+k+'|'+mois;
-      out.push({ fid, genre:'congé', conducteur:r.conducteur, categorie:'peage', type:'péage '+presBadge,
+      const mm = mois.split('-'); const fid = 'um|'+k+'|'+mois; const cn = canon(r.conducteur);
+      out.push({ fid, genre:'congé', conducteur:cn.n, gkey:cn.k, categorie:'peage', type:'péage '+presBadge,
         date:'', mois, montant:(r.totalTtc!=null?r.totalTtc:(r.total_ttc!=null?r.total_ttc:null)), facnum:r.numeroFacture||r.numero_facture||'',
-        detail:'congé '+dfr(cg.debut)+' → '+dfr(cg.fin)+' · total du mois '+(mm[1]+'/'+mm[0])+' (détail par jour indisponible)',
+        detail:'congé : '+dfr(cg.debut)+' au '+dfr(cg.fin)+' · total du mois '+(mm[1]+'/'+mm[0])+' (détail par jour indisponible)',
         statut: sm[fid] || 'a-verifier' });
     });
     // 3) Anomalies carte (repas élevés, hors carburant, pleins multiples, diesel…)
     const txCard = _tx.filter(t => !/^ULYS/i.test(String(t.carte||'')));
     (FP.totalFleetAnomaliesTx ? FP.totalFleetAnomaliesTx(txCard) : []).forEach(a => {
-      const fid = 'ca|' + (a.key||'');
+      const fid = 'ca|' + (a.key||''); const cn = canon(a.conducteur||'—');
       const st = sm[fid] || (FP.tfAnomArchivee && FP.tfAnomArchivee(a, ok) ? 'classe' : 'a-verifier');
-      out.push({ fid, genre:'carte', conducteur:a.conducteur||'—', categorie:a.categorie||'autre', type:catLbl(a.categorie),
+      out.push({ fid, genre:'carte', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre', type:catLbl(a.categorie),
         date:a.date||'', montant:a.montant, facnum:a.facnum||'', detail:a.motif || a.txt || 'anomalie carte', statut: st });
     });
     return out;
@@ -305,7 +313,7 @@
     const all = applyFilters(_findings);
     // KPIs (sur le filtre courant)
     const tot = all.reduce((s,f)=>s+(Number(f.montant)||0),0);
-    const conducteurs = new Set(all.map(f=>f.conducteur)).size;
+    const conducteurs = new Set(all.map(f=>f.gkey||f.conducteur)).size;
     const fraude = all.filter(f=>f.statut==='fraude').reduce((s,f)=>s+(Number(f.montant)||0),0);
     const aVerif = all.filter(f=>f.statut==='a-verifier').length;
     $('ctrl-kpis').innerHTML =
@@ -319,8 +327,8 @@
     if (!all.length) { box.innerHTML = '<div class="card p-6 text-center text-slate-500">Aucune trouvaille pour ce filtre. 👍</div>'; if(window.lucide)lucide.createIcons(); return; }
 
     if (state.grouped){
-      const byC = {}; all.forEach(f => { (byC[f.conducteur] = byC[f.conducteur] || []).push(f); });
-      const groups = Object.keys(byC).map(n => ({ n, rows:byC[n], tot:byC[n].reduce((s,f)=>s+(Number(f.montant)||0),0) })).sort((a,b)=>b.tot-a.tot);
+      const byC = {}; all.forEach(f => { const gk = f.gkey || f.conducteur; (byC[gk] = byC[gk] || []).push(f); });
+      const groups = Object.keys(byC).map(gk => { const rows = byC[gk]; const n = rows.map(r=>r.conducteur).sort((a,b)=>String(b).length-String(a).length)[0]; return { n, rows, tot:rows.reduce((s,f)=>s+(Number(f.montant)||0),0) }; }).sort((a,b)=>b.tot-a.tot);
       box.innerHTML = groups.map((g,i)=>`
         <div class="mb-2">
           <div class="grp-head" data-grp="${i}">
@@ -382,12 +390,26 @@
     const rows = applyFilters(_findings); if (!rows.length) { if(FP.toast)FP.toast('Rien à exporter'); return; }
     if (!(window.jspdf && window.jspdf.jsPDF)) { if (FP.ensureJsPDF) FP.ensureJsPDF().then(exportPDF); return; }
     const doc = new window.jspdf.jsPDF({ orientation:'landscape' });
+    const W = doc.internal.pageSize.getWidth();
     const soc = (FP.activeSociete && FP.activeSociete()) || '';
-    doc.setFontSize(14); doc.setTextColor(15,30,61); doc.text('Contrôle des consommations — trouvailles', 14, 15);
-    doc.setFontSize(9); doc.setTextColor(120); doc.text((soc&&soc!=='__all__'?soc+' · ':'') + rows.length + ' trouvaille(s)', 14, 21);
+    const tot = rows.reduce((s,f)=>s+(Number(f.montant)||0),0);
+    // Bandeau « sauce Parc Pilot » : bloc bleu marine + liseré orange + logo texte.
+    doc.setFillColor(15,30,61); doc.rect(0,0,W,26,'F');
+    doc.setFillColor(249,115,22); doc.rect(0,26,W,1.6,'F');
+    doc.setTextColor(255,255,255); doc.setFont(undefined,'bold'); doc.setFontSize(16); doc.text('Parc', 14, 13);
+    doc.setTextColor(249,115,22); doc.text('Pilot', 27.5, 13);
+    doc.setTextColor(255,255,255); doc.setFont(undefined,'normal'); doc.setFontSize(11); doc.text('Contrôle des consommations — trouvailles', 14, 21);
+    doc.setTextColor(200,210,225); doc.setFontSize(8.5);
+    doc.text((soc && soc !== '__all__' ? soc + '     ' : '') + rows.length + ' trouvaille(s)     Total : ' + euro(tot), W - 14, 13, { align:'right' });
     const body = rows.map(f => [f.conducteur, f.type+(f.genre==='congé'?' (congé)':''), euro(f.montant), (f.date?dfr(f.date):(f.mois||'—')), f.detail, f.facnum||'—', (ST_LABEL[f.statut]||f.statut)]);
-    doc.autoTable({ startY:25, head:[['Conducteur','Conso','Montant','Date','Détail','N° facture','Statut']], body, styles:{fontSize:8,cellPadding:2}, headStyles:{fillColor:[15,30,61]}, columnStyles:{4:{cellWidth:80}} });
-    doc.save('controle-conso.pdf');
+    doc.autoTable({ startY:33, head:[['Conducteur','Conso','Montant','Date','Détail','N° facture','Statut']], body,
+      styles:{ fontSize:8, cellPadding:2.5, lineColor:[226,232,240], lineWidth:.1, textColor:[30,41,59] },
+      headStyles:{ fillColor:[15,30,61], textColor:255, fontStyle:'bold' },
+      alternateRowStyles:{ fillColor:[248,250,252] },
+      columnStyles:{ 2:{ halign:'right' }, 4:{ cellWidth:78 } },
+      didParseCell:(d) => { if (d.section==='body' && d.column.index===6) { const v = d.cell.raw||''; if (v==='Fraude') { d.cell.styles.textColor=[153,27,27]; d.cell.styles.fontStyle='bold'; } else if (v==='Justifié') { d.cell.styles.textColor=[21,83,45]; } else if (v==='Classé') { d.cell.styles.textColor=[100,116,139]; } } },
+      margin:{ left:14, right:14 } });
+    doc.save('parc-pilot-controle-conso.pdf');
   }
   $('ctrl-pdf').addEventListener('click', exportPDF);
   $('ctrl-csv').addEventListener('click', exportCSV);
