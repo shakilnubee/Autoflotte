@@ -67,8 +67,13 @@ function extractJson(text) {
   try { return JSON.parse(cleaned.slice(a, b + 1)); } catch (_) { return null; }
 }
 Deno.serve(async (req) => {
-  // ⚠️ CORS d'abord (le préflight OPTIONS doit toujours réussir).
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  // ⚠️ CORS d'abord (le préflight OPTIONS doit toujours réussir). On RENVOIE EXACTEMENT les en-têtes
+  // que le navigateur demande (Access-Control-Request-Headers) → le preflight passe TOUJOURS, même si
+  // le client ajoute un en-tête inattendu (sinon le navigateur bloque le POST → « Failed to send a request »).
+  if (req.method === "OPTIONS") {
+    const reqH = req.headers.get("Access-Control-Request-Headers") || CORS["Access-Control-Allow-Headers"];
+    return new Response("ok", { headers: { ...CORS, "Access-Control-Allow-Headers": reqH } });
+  }
   // Filet de sécurité GLOBAL : quoi qu'il arrive, on renvoie une erreur JSON AVEC en-têtes CORS —
   // jamais un plantage « brut » (sinon le navigateur affiche « Failed to send a request » sans la cause).
   try {
