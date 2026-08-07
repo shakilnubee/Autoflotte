@@ -2613,20 +2613,29 @@
       // ni lavage, ni péage) depuis le détail transaction, agrégée par la MÊME clé que les lignes. La
       // « Boutique / Repas » affichée est alors NETTE de ces « autres » (sinon le gaz compterait 2×).
       const rowKey = (c) => cond ? (c._month || '—') : ((c.carte && String(c.carte)) || resolveName(c) || c.plaque || c.id);
-      const autreByKey = {};
+      // Quand le DÉTAIL transaction est présent, on calcule « Boutique / Repas » et « Autres » depuis les
+      // VRAIES transactions (source fiable), pas depuis la ventilation mensuelle groupée (qui sous-comptait
+      // les repas). Repas/Boutique = alimentation, sandwich, boissons, produit frais, lubrifiant… ;
+      // Autres = uniquement ce qui n'est ni carburant, ni repas/boutique, ni lavage, ni péage (gaz, lave-glace…).
+      const txByKey = {};
       if (consoTx && consoTx.length) {
         const _f = $('tf-conso-from').value, _t = $('tf-conso-to').value, _sm = (!_f && !_t) ? ($('tf-conso-mois').value || '') : '', _cs = tfCondSel();
         consoTx.forEach(t => {
-          if ((t.produit ? txCat(t.produit) : t.categorie) !== 'autre') return;
           if (_f || _t) { const fm = _f ? _f.slice(0, 7) : null, tm = _t ? _t.slice(0, 7) : null; if (fm && (t.mois || '') < fm) return; if (tm && (t.mois || '') > tm) return; }
           else if (_sm && _sm !== '__all__') { if ((t.mois || '') !== _sm) return; }
           if (_cs && (t.conducteur || '') !== _cs) return;
+          const cat = t.produit ? txCat(t.produit) : (t.categorie || 'autre');
           const key = cond ? (t.mois || '—') : ((t.carte && String(t.carte)) || t.conducteur || t.plaque || '—');
-          autreByKey[key] = (autreByKey[key] || 0) + (Number(t.montant_ttc) || 0);
+          const o = txByKey[key] || (txByKey[key] = { repas: 0, autre: 0, has: true });
+          const m = Number(t.montant_ttc) || 0;
+          if (cat === 'repas' || cat === 'boutique') o.repas += m;
+          else if (cat === 'autre') o.autre += m;
         });
       }
-      const autreOf = (c) => autreByKey[rowKey(c)] || 0;
-      const boutiqueNetOf = (c) => Math.max(0, (Number(c.boutique_ttc) || 0) - autreOf(c));
+      const txOf = (c) => txByKey[rowKey(c)];
+      const autreOf = (c) => { const x = txOf(c); return x ? x.autre : 0; };
+      // Avec détail tx : repas réel ; sans détail : ventilation mensuelle « boutique » (repli).
+      const boutiqueNetOf = (c) => { const x = txOf(c); return x ? x.repas : (Number(c.boutique_ttc) || 0); };
       const cell = (v) => v ? FP.euro(v) : '<span class="text-slate-300">—</span>';
       tbody.innerHTML = rows.map(c => `<tr>
         <td>${cond ? '<span class="font-semibold">' + esc(moisLabel(c._month || '—')) + '</span>' : who(c)}</td>
