@@ -1,4 +1,14 @@
 -- ============================================================
+-- ⛔⛔ OBSOLÈTE — NE PLUS EXÉCUTER ⛔⛔  (neutralisé le 2026-08-07)
+-- Ce script DÉSACTIVE la Row Level Security (RLS). Or la RLS + les policies
+-- multi-sociétés « tenant_* » sont ACTIVES depuis le 2026-06-15 et assurent
+-- l'ISOLATION des données entre sociétés. Lancer ce script rouvrirait TOUTES
+-- les données à tous les comptes = fuite inter-sociétés grave.
+-- ➜ Ne rien coller de ce fichier. Pour (ré)activer la sécurité : supabase/enable-rls.sql
+-- Les lignes ci-dessous sont conservées pour mémoire uniquement.
+-- ============================================================
+/* --- CONTENU HISTORIQUE DÉSACTIVÉ (ne pas exécuter) ---
+-- ============================================================
 -- Auto-flotte - Import historique emprunts (depuis Google Sheet)
 -- A coller UNE FOIS dans Supabase -> SQL Editor -> Run.
 -- 1) Autorise les ecritures sur emprunts (comme les autres tables) pour
@@ -36,3 +46,4 @@ INSERT INTO emprunts (id, vehicule, emprunteur, date_emprunt, heure_emprunt, dat
 INSERT INTO emprunts (id, vehicule, emprunteur, date_emprunt, heure_emprunt, date_retour, heure_retour, rendu_par) VALUES ('Empzro2d5-113', 'ET-095-LV', 'Daniel', '2026-05-29', '17:30', '2026-06-04', '15:00', '');
 INSERT INTO emprunts (id, vehicule, emprunteur, date_emprunt, heure_emprunt, date_retour, heure_retour, rendu_par) VALUES ('Empzro2d5-114', 'ET-095-LV', 'Youssouf', '2026-06-01', '17:50', NULL, '', '');
 INSERT INTO emprunts (id, vehicule, emprunteur, date_emprunt, heure_emprunt, date_retour, heure_retour, rendu_par) VALUES ('Empzro2d5-115', 'GA-313-PK', 'Shaohui', '2026-06-04', '12:30', NULL, '', '');
+*/

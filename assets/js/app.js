@@ -989,14 +989,16 @@ FP.carteMatch = (enregistre, lu) => {
 FP._condParNumero = (settingKey, lu) => {
   if (!lu || !FP.settings) return null;
   let map; try { map = FP.settings.get()[settingKey] || {}; } catch (e) { return null; }
-  for (const key in map) {
-    if (FP.carteMatch(map[key], lu)) {
-      let name = key;
-      try { const c = FP.conducteurs.list().find(x => x.key === key); if (c) name = FP.conducteurs.displayName(c); } catch (e) {}
-      return { key, name };
-    }
-  }
-  return null;
+  const b = FP.normCarte(lu); if (!b) return null;
+  // 1) Match EXACT prioritaire (jamais ambigu) : on tranche tout de suite.
+  for (const key in map) { if (FP.normCarte(map[key]) === b) return _condOut(key); }
+  // 2) Match par SUFFIXE (un n° tronqué « …1234 ») : on ne devine PAS si plusieurs cartes
+  //    partagent les mêmes derniers chiffres (2 cartes → 2 conducteurs) — sinon fausse attribution.
+  const partiels = [];
+  for (const key in map) { if (FP.carteMatch(map[key], lu)) partiels.push(key); }
+  if (partiels.length === 1) return _condOut(partiels[0]);
+  return null; // 0 ou ≥2 correspondances partielles → on laisse le repli nom/plaque décider
+  function _condOut(key) { let name = key; try { const c = FP.conducteurs.list().find(x => x.key === key); if (c) name = FP.conducteurs.displayName(c); } catch (e) {} return { key, name }; }
 };
 // Conducteur associé à un n° de carte Total / badge Ulys enregistré sur une fiche conducteur (ou null).
 FP.conducteurParCarteTotal = (lu) => FP._condParNumero('condCarteTotal', lu);
