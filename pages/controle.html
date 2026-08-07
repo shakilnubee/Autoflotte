@@ -429,16 +429,24 @@
       const cg = all[key].map(x => FP.date(x.debut) + ' → ' + FP.date(x.fin)).join(', ');
       const txs = byKey[key] || [];
       const inC = txs.filter(t => FP.congeCouvrant(key, t.dateTx || t.date_tx));
-      const sample = txs.slice().sort((a,b)=>String(b.date_tx||b.dateTx||'').localeCompare(String(a.date_tx||a.dateTx||''))).slice(0, 25);
+      // Les dépenses PENDANT un congé d'abord (les seules qui comptent), puis les autres, par date.
+      const sample = txs.slice().sort((a,b)=>{
+        const ia = FP.congeCouvrant(key, a.dateTx||a.date_tx)?1:0, ib = FP.congeCouvrant(key, b.dateTx||b.date_tx)?1:0;
+        if (ia!==ib) return ib-ia;
+        return String(b.date_tx||b.dateTx||'').localeCompare(String(a.date_tx||a.dateTx||''));
+      }).slice(0, 25);
       return { nom, key, cg, nTx: txs.length, nIn: inC.length, sample };
     }).sort((a,b)=>b.nIn-a.nIn);
-    return '<details class="card p-3 mb-4" style="font-size:.85rem"><summary style="cursor:pointer;font-weight:700">🔬 Diagnostic congés — pourquoi ça remonte ou pas (' + rows.length + ' conducteur(s))</summary>'
-      + '<div class="mt-2" style="line-height:1.55">' + rows.map(r =>
-          '<div style="border-top:1px solid #EEF2F7;padding:.45rem 0"><b>' + esc(r.nom) + '</b> <span class="text-slate-400">(clé ' + esc(r.key) + ')</span><br>'
+    return '<details class="card p-3 mb-4" style="font-size:.85rem"><summary style="cursor:pointer;font-weight:700">🔬 Vérification des congés — quelles dépenses tombent pendant un congé (' + rows.length + ' conducteur(s))</summary>'
+      + '<div class="mt-2 mb-3 text-xs text-slate-500" style="line-height:1.5;background:#F8FAFC;border:1px solid var(--fp-border);border-radius:.5rem;padding:.55rem .7rem">'
+        + 'ℹ️ <b>Outil de contrôle</b> (rien à cocher ici). Pour chaque conducteur qui a des congés, on liste ses dépenses datées : celles <b style="color:#B91C1C">⛔ en rouge tombent pendant un congé</b> (ce sont elles qui remontent dans les trouvailles ci-dessus) ; les <b class="text-slate-400">grises « hors congé »</b> sont normales, affichées juste pour vérifier. Si tu attends une anomalie qui n\'apparaît pas, c\'est souvent que les <b>dates de congé</b> ne couvrent pas ce jour, ou que le <b>détail du relevé</b> n\'est pas importé.'
+      + '</div>'
+      + '<div style="line-height:1.55">' + rows.map(r =>
+          '<div style="border-top:1px solid #EEF2F7;padding:.45rem 0"><b>' + esc(r.nom) + '</b><br>'
           + 'Congés : <b>' + (r.cg || '—') + '</b><br>'
-          + 'Conso datées rattachées : <b>' + r.nTx + '</b> · dont <b style="color:' + (r.nIn ? '#16a34a' : '#B91C1C') + '">' + r.nIn + '</b> pendant un congé'
-          + (!r.nTx ? ' <span class="text-amber-600">→ aucune conso datée en base pour lui : clique « Reconstruire le détail » (onglet Total Fleet) ou réimporte le relevé détaillé.</span>' : (r.nTx && !r.nIn ? ' <span class="text-amber-600">→ des conso existent mais AUCUNE dans les dates de congé : vérifie les dates saisies.</span>' : ''))
-          + (r.sample.length ? '<div class="text-xs text-slate-500 mt-1" style="max-height:140px;overflow:auto">' + r.sample.map(t => { const d = t.dateTx || t.date_tx; const mt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc); return (FP.congeCouvrant(r.key, d) ? '✅' : '▫️') + ' ' + FP.date(d) + ' · ' + esc(t.produit || t.categorie || '') + ' · ' + euro(mt); }).join('<br>') + '</div>' : '')
+          + 'Dépenses datées : <b>' + r.nTx + '</b> · dont <b style="color:' + (r.nIn ? '#B91C1C' : '#16a34a') + '">' + r.nIn + '</b> pendant un congé'
+          + (!r.nTx ? ' <span class="text-amber-600">→ aucune dépense datée en base pour lui : clique « Reconstruire le détail » (onglet Total Fleet) ou réimporte le relevé détaillé.</span>' : (r.nTx && !r.nIn ? ' <span class="text-emerald-600">→ rien pendant ses congés 👍</span>' : ''))
+          + (r.sample.length ? '<div class="text-xs mt-1" style="max-height:150px;overflow:auto">' + r.sample.map(t => { const d = t.dateTx || t.date_tx; const mt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc); const inc = FP.congeCouvrant(r.key, d); return '<div style="padding:1px 0;color:' + (inc ? '#B91C1C' : '#94A3B8') + '">' + (inc ? '<b>⛔ pendant congé</b> · ' : 'hors congé · ') + FP.date(d) + ' · ' + esc(t.produit || t.categorie || '') + ' · ' + euro(mt) + '</div>'; }).join('') + '</div>' : '')
           + '</div>'
         ).join('') + '</div></details>';
   }
