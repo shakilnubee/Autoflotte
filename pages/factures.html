@@ -1973,8 +1973,21 @@
       if (_p.has('embed')) {
         document.body.classList.add('fac-embed');
         const st = document.createElement('style');
-        st.textContent = 'body.fac-embed .fp-sidebar,body.fac-embed .fp-cockpit,body.fac-embed #fa-tabbar,body.fac-embed #fa-actionbar{display:none!important}body.fac-embed main{padding:1rem 1.2rem!important;max-width:none!important}body.fac-embed{background:#fff}';
+        // On masque la chrome MAIS on GARDE le bouton d'import (#btn-import-facture) que switchTab
+        // renomme « Importer un relevé Total/Ulys » → l'import reste possible depuis la vue intégrée.
+        // Masque la chrome + le bouton « + » flottant (#fp-fab) — la page parente Contrôle a déjà le sien
+        // (sinon on en voit DEUX). On GARDE le bouton d'import (renommé par switchTab).
+        st.textContent = 'body.fac-embed .fp-sidebar,body.fac-embed .fp-cockpit,body.fac-embed #fa-tabbar,body.fac-embed #btn-import-lot,body.fac-embed #fa-topexports,body.fac-embed [data-data-io],body.fac-embed #fp-fab{display:none!important}body.fac-embed #fa-actionbar{margin-bottom:12px!important}body.fac-embed main{padding:1rem 1.2rem!important;max-width:none!important}body.fac-embed{background:#fff}';
         document.head.appendChild(st);
+        // Le contenu Total Fleet/Ulys (KPIs, conso par conducteur, graphes, « Reconstruire le détail »)
+        // se rend à l'activation de l'onglet ; on le REJOUE une fois les données chargées (sinon panneau vide).
+        if (_tab) { document.addEventListener('fp:data-ready', () => { try { switchTab(_tab); } catch (e) {} }); setTimeout(() => { try { switchTab(_tab); } catch (e) {} }, 1200); }
+        // Hauteur AUTO : on informe la page Contrôle de la hauteur réelle → l'iframe grandit, la page
+        // parente scrolle (plus de scroll imbriqué, tout le contenu — conso, graphes — est visible).
+        const postH = () => { try { parent.postMessage({ fpEmbedHeight: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) }, '*'); } catch (e) {} };
+        window.addEventListener('load', () => setTimeout(postH, 200));
+        document.addEventListener('fp:data-ready', () => setTimeout(postH, 400));
+        setInterval(postH, 1500);
       }
       if (_tab && ['factures','documents','total','ulys','fournisseurs'].includes(_tab)) switchTab(_tab); }
     // Exposé pour l'import en LOT : lui permet de basculer sur l'onglet Total/Ulys quand il route un relevé.
