@@ -85,6 +85,24 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
     colonnes inversées). Lire `Badge n° <id> <Nom>` (prénom) et
     `Total Badge <id> <n> consommation(s) <ttc> € TTC <km> km` (trajets + TTC + km), puis relier
     par le n° de badge. Le `Total Contrat` (grand total) est ignoré. Table `ulys_conso`.
+- ⚠️⚠️ **NOUVEAU PRESTATAIRE (carte carburant / badge péage) — MÊME STANDARD DE LECTURE OBLIGATOIRE**
+  (consigne explicite, permanente) : le framework multi-prestataires (Contrôle → ➕ Prestataire ;
+  `FP.prestataires/addPrestataire/condNum` ; sous-onglet + colonne « Cartes & badges » + zone fiche
+  conducteur) est **générique**, mais la **lecture détaillée d'un relevé** est **propre à chaque
+  fournisseur** (Total et Ulys ont chacun leur parseur). Donc **dès qu'un nouveau prestataire (Shell,
+  DKV, AS24, Eurotoll… — y compris pour un NOUVEAU CLIENT/société) fournit de vrais relevés**, il faut
+  lui écrire son parseur **avec EXACTEMENT le même niveau de qualité** que Total/Ulys :
+  (1) **reconstruire les lignes par POSITION** si les colonnes se mélangent (cf. `ulysPdfToText`) ;
+  (2) **montant EXACT par transaction** (jamais un `Math.max`, jamais une somme parasite) + contrôle
+  HT/TVA/TTC ; (3) **libellé produit propre** — retirer les préfixes de **station/lieu** (cf. `TX_STATION`
+  dans `parseTx`) et catégoriser via **`FP.txCat`** (carburant/repas/lavage/parking/autre) ;
+  (4) **alerte diesel/gazole** (flotte essence) via `RE_DIESEL` ; (5) écrire le détail DATÉ dans
+  **`total_conso_tx`** (mêmes champs : `dateTx, montantTtc, categorie, produit, carte/badge, conducteur,
+  plaque`) pour que **la détection conso-pendant-congé ET les anomalies marchent AUTOMATIQUEMENT** ;
+  (6) rattacher au conducteur **par n° de carte/badge** (`FP.condKeyDeConso`), jamais par nom seul ;
+  (7) intégrer au bouton **« Reconstruire le détail »** et à l'**import par lot** (mêmes montants qu'un
+  scan unitaire). Bref : un nouveau prestataire ne doit JAMAIS être un simple « listing de factures » —
+  il doit alimenter tout le pipeline de contrôle comme Total/Ulys.
 
 ## Structure du projet
 
