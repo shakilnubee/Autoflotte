@@ -2478,8 +2478,12 @@ FP.totalFleetAnomaliesTx = function (tx) {
   Object.values(pleins).forEach(o => { if (o.c > 3) anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, conducteur: o.n, date: o.d, montant: null, categorie: 'carburant', motif: o.c + ' pleins/jour', txt: `${o.n} · ${dnum(o.d)} : ${o.c} pleins de carburant le MÊME jour → à vérifier (carte prêtée ? plusieurs véhicules ? carburant revendu ?)` }); });
   // DIESEL (gazole) : la flotte roule à l'essence → toute conso de gazole/diesel = à vérifier.
   // Regroupé par conducteur (clé stable « diesel|nom ») pour rester lisible.
+  // DIESEL / GAZOLE = anomalie (flotte à l'essence). On reconnaît toutes les écritures d'un relevé :
+  // « gazole/gasoil/diesel », mais aussi « B7 » (gazole routier EN590), « GNR » (gazole non routier)
+  // et « GO » (gasoil). L'essence (SP95/98, E10/E85, Super…) n'est PAS concernée.
+  const RE_DIESEL = /gazole|gasoil|gazoil|diesel|\bb7\b|\bgnr\b|\bgo\b/i;
   const diesel = {};
-  list.filter(t => catOf(t) === 'carburant' && /gazole|gasoil|diesel/i.test(t.produit || '')).forEach(t => { const n = t.conducteur || '—'; const o = diesel[n] || (diesel[n] = { n, fac: t.facnum, mois: t.mois, c: 0, s: 0 }); o.c += 1; o.s += Number(t.montant_ttc) || 0; if (!o.fac) o.fac = t.facnum; if (t.mois) o.mois = t.mois; });
+  list.filter(t => catOf(t) === 'carburant' && RE_DIESEL.test(t.produit || '')).forEach(t => { const n = t.conducteur || '—'; const o = diesel[n] || (diesel[n] = { n, fac: t.facnum, mois: t.mois, c: 0, s: 0 }); o.c += 1; o.s += Number(t.montant_ttc) || 0; if (!o.fac) o.fac = t.facnum; if (t.mois) o.mois = t.mois; });
   Object.values(diesel).forEach(o => anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, key: 'diesel|' + o.n, conducteur: o.n, date: null, montant: o.s, categorie: 'carburant', produit: 'Gazole (diesel)', motif: o.c + ' conso gazole', txt: `${o.n} : ${o.c} conso de GAZOLE (diesel) pour ${eur(o.s)} → à vérifier (la carte carburant est censée être à l'essence)` }));
   const day = {};
   list.filter(t => catOf(t) === 'repas').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = day[k] || (day[k] = { n: t.conducteur || '—', d: t.date_tx, fac: t.facnum, mois: t.mois, s: 0, prods: [] }); o.s += Number(t.montant_ttc) || 0; const pp = String(t.produit || '').replace(/\s+/g, ' ').trim(); if (pp && o.prods.indexOf(pp) < 0) o.prods.push(pp); });
