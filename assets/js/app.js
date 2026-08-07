@@ -2437,18 +2437,18 @@ FP.totalFleetAnomaliesTx = function (tx) {
   const catOf = (t) => (t && t.produit ? FP.txCat(t.produit) : (t && t.categorie) || 'autre');
   const pleins = {};
   list.filter(t => catOf(t) === 'carburant').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = pleins[k] || (pleins[k] = { n: t.conducteur || '—', d: t.date_tx, fac: t.facnum, mois: t.mois, c: 0 }); o.c += 1; });
-  Object.values(pleins).forEach(o => { if (o.c > 3) anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, txt: `${o.n} · ${dnum(o.d)} : ${o.c} pleins de carburant le MÊME jour → à vérifier (carte prêtée ? plusieurs véhicules ? carburant revendu ?)` }); });
+  Object.values(pleins).forEach(o => { if (o.c > 3) anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, conducteur: o.n, date: o.d, montant: null, categorie: 'carburant', motif: o.c + ' pleins/jour', txt: `${o.n} · ${dnum(o.d)} : ${o.c} pleins de carburant le MÊME jour → à vérifier (carte prêtée ? plusieurs véhicules ? carburant revendu ?)` }); });
   // DIESEL (gazole) : la flotte roule à l'essence → toute conso de gazole/diesel = à vérifier.
   // Regroupé par conducteur (clé stable « diesel|nom ») pour rester lisible.
   const diesel = {};
   list.filter(t => catOf(t) === 'carburant' && /gazole|gasoil|diesel/i.test(t.produit || '')).forEach(t => { const n = t.conducteur || '—'; const o = diesel[n] || (diesel[n] = { n, fac: t.facnum, mois: t.mois, c: 0, s: 0 }); o.c += 1; o.s += Number(t.montant_ttc) || 0; if (!o.fac) o.fac = t.facnum; if (t.mois) o.mois = t.mois; });
-  Object.values(diesel).forEach(o => anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, key: 'diesel|' + o.n, txt: `${o.n} : ${o.c} conso de GAZOLE (diesel) pour ${eur(o.s)} → à vérifier (la carte carburant est censée être à l'essence)` }));
+  Object.values(diesel).forEach(o => anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, key: 'diesel|' + o.n, conducteur: o.n, date: null, montant: o.s, categorie: 'carburant', motif: o.c + ' conso gazole', txt: `${o.n} : ${o.c} conso de GAZOLE (diesel) pour ${eur(o.s)} → à vérifier (la carte carburant est censée être à l'essence)` }));
   const day = {};
   list.filter(t => catOf(t) === 'repas').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = day[k] || (day[k] = { n: t.conducteur || '—', d: t.date_tx, fac: t.facnum, mois: t.mois, s: 0 }); o.s += Number(t.montant_ttc) || 0; });
-  Object.values(day).forEach(o => { if (o.s > lim.repasJour) anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, txt: `${o.n} · ${dnum(o.d)} : ${eur(o.s)} de repas/boissons en une seule journée → dépense repas élevée, à vérifier (seuil ${lim.repasJour} €/jour)` }); });
+  Object.values(day).forEach(o => { if (o.s > lim.repasJour) anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, conducteur: o.n, date: o.d, montant: o.s, categorie: 'repas', motif: 'repas élevé (jour)', txt: `${o.n} · ${dnum(o.d)} : ${eur(o.s)} de repas/boissons en une seule journée → dépense repas élevée, à vérifier (seuil ${lim.repasJour} €/jour)` }); });
   list.filter(t => catOf(t) === 'autre' && (Number(t.montant_ttc) || 0) >= (lim.autreItem || 0))
     .sort((a, b) => (Number(b.montant_ttc) || 0) - (Number(a.montant_ttc) || 0))
-    .forEach(t => anom.push({ t: 'warn', mois: t.mois, facnum: t.facnum, txt: `${t.conducteur || '—'} · ${dnum(t.date_tx)} : ${t.produit} à ${eur(t.montant_ttc)} → achat qui n'est pas du carburant, payé avec la carte essence, à vérifier` }));
+    .forEach(t => anom.push({ t: 'warn', mois: t.mois, facnum: t.facnum, conducteur: t.conducteur || '—', date: t.date_tx, montant: Number(t.montant_ttc) || 0, categorie: 'autre', motif: 'achat hors carburant', txt: `${t.conducteur || '—'} · ${dnum(t.date_tx)} : ${t.produit} à ${eur(t.montant_ttc)} → achat qui n'est pas du carburant, payé avec la carte essence, à vérifier` }));
   anom.forEach(a => { if (!a.key) a.key = a.t + '|' + (a.facnum || '') + '|' + a.txt; });
   return anom;
 };
