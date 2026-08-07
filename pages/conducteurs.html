@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807d">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -486,12 +486,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807c"></script>
-<script src="../assets/js/supabase-client.js?v=20260807c"></script>
-<script src="../assets/js/data.js?v=20260807c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807d"></script>
+<script src="../assets/js/supabase-client.js?v=20260807d"></script>
+<script src="../assets/js/data.js?v=20260807d"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/fleet-docs.js?v=20260807c"></script>
-<script src="../assets/js/app.js?v=20260807c"></script>
+<script src="../assets/js/fleet-docs.js?v=20260807d"></script>
+<script src="../assets/js/app.js?v=20260807d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1237,10 +1237,31 @@
     const _cardTotal = (FP.numCarteConducteur ? FP.numCarteConducteur(d.key, 'condCarteTotal') : ((_stC.condCarteTotal || {})[d.key])) || '';
     const _badgeUlys = (FP.numCarteConducteur ? FP.numCarteConducteur(d.key, 'condBadgeUlys') : ((_stC.condBadgeUlys || {})[d.key])) || '';
     const _inpC = 'width:170px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
+    // Libellés du prestataire PAR SOCIÉTÉ (PXP = TotalEnergies / Ulys ; autres = leur propre nom).
+    const _presCarte = (FP.prestataireCarte ? FP.prestataireCarte() : 'TotalEnergies');
+    const _presBadge = (FP.prestataireBadge ? FP.prestataireBadge() : 'Ulys');
+    // Congés / absences du conducteur → détection d'une conso pendant un congé (interdit).
+    const _conges = (FP.getConges ? FP.getConges(d.key) : []);
+    const _inpD = 'border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
+    const _congeLines = _conges.length
+      ? _conges.map((c, i) => `<div class="flex justify-between items-center gap-2 py-1"><span>📅 ${FP.date(c.debut)} → ${FP.date(c.fin)}${c.motif ? ' · <span class="text-slate-500">' + escapeHtml(c.motif) + '</span>' : ''}</span><button type="button" class="text-red-500 hover:text-red-700 font-bold px-1" data-conge-del="${i}" data-key="${escapeHtml(d.key)}" title="Retirer ce congé">✕</button></div>`).join('')
+      : '<p class="text-slate-400">Aucun congé enregistré.</p>';
     const carteInner = `<div class="text-sm space-y-2">
-        <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Carte carburant <b>Total</b> (n°)</span><input class="cond-carte" data-k="condCarteTotal" data-id="${escapeHtml(d.key)}" value="${escapeHtml(_cardTotal)}" placeholder="—" style="${_inpC}"></div>
-        <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Badge télépéage <b>Ulys</b> (n°)</span><input class="cond-carte" data-k="condBadgeUlys" data-id="${escapeHtml(d.key)}" value="${escapeHtml(_badgeUlys)}" placeholder="—" style="${_inpC}"></div>
-        <p class="text-xs text-slate-400" style="line-height:1.45">Ces numéros rattachent automatiquement la conso <b>Total Fleet</b> et <b>Ulys</b> à ce conducteur (par n°, pas par nom). C'est la <b>même donnée</b> que dans la fiche véhicule et l'onglet Contrats : le modifier ici le change <b>partout</b>. Vider un champ enlève le lien mais <b>ne supprime pas</b> sa consommation déjà enregistrée.</p>
+        <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Carte carburant <b>${escapeHtml(_presCarte)}</b> (n°)</span><input class="cond-carte" data-k="condCarteTotal" data-id="${escapeHtml(d.key)}" value="${escapeHtml(_cardTotal)}" placeholder="—" style="${_inpC}"></div>
+        <div class="flex justify-between items-center gap-2"><span class="text-slate-600">Badge télépéage <b>${escapeHtml(_presBadge)}</b> (n°)</span><input class="cond-carte" data-k="condBadgeUlys" data-id="${escapeHtml(d.key)}" value="${escapeHtml(_badgeUlys)}" placeholder="—" style="${_inpC}"></div>
+        <p class="text-xs text-slate-400" style="line-height:1.45">Ces numéros rattachent automatiquement la conso <b>${escapeHtml(_presCarte)}</b> et <b>${escapeHtml(_presBadge)}</b> à ce conducteur (par n°, pas par nom). C'est la <b>même donnée</b> que dans la fiche véhicule et l'onglet Contrats : le modifier ici le change <b>partout</b>. Vider un champ enlève le lien mais <b>ne supprime pas</b> sa consommation déjà enregistrée.</p>
+        <div class="pt-2 mt-1 border-t border-slate-100">
+          <div class="font-semibold text-slate-700 mb-1">🌴 Congés / absences</div>
+          ${_congeLines}
+          <div class="flex flex-wrap items-center gap-2 pt-2">
+            <input type="date" data-conge-debut style="${_inpD}" title="Début du congé">
+            <span class="text-slate-400">→</span>
+            <input type="date" data-conge-fin style="${_inpD}" title="Fin du congé">
+            <input type="text" data-conge-motif placeholder="Motif (optionnel)" style="${_inpD};min-width:120px;text-align:left">
+            <button type="button" class="btn btn-outline text-xs" data-conge-add data-key="${escapeHtml(d.key)}"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter</button>
+          </div>
+          <p class="text-xs text-slate-400 mt-1" style="line-height:1.45">Sert à repérer une conso <b>carburant</b> pendant un congé (interdit) : une alerte remonte alors dans <b>Suivi &amp; alertes</b> → « Points à vérifier ».</p>
+        </div>
       </div>`;
     const vehiculesInner = d.vehicules.length === 0 ? '<p class="text-sm text-slate-500">Aucun véhicule assigné.</p>' :
       clampList(d.vehicules.map(v => `
@@ -2030,6 +2051,23 @@
     const val = (c.value || '').trim();
     if (val) s[k][id] = val; else delete s[k][id];
     FP.settings.save(s);
+  });
+
+  // Congés / absences du conducteur : ajout / retrait → synchronisé (settings.condConges) + re-render fiche.
+  $('drawer-body').addEventListener('click', (e) => {
+    const del = e.target.closest('[data-conge-del]');
+    if (del) { const key = del.dataset.key, idx = parseInt(del.dataset.congeDel, 10); if (key && FP.removeConge) { FP.removeConge(key, idx); if (currentDriverKey) openDrawer(currentDriverKey); } return; }
+    const add = e.target.closest('[data-conge-add]');
+    if (add) {
+      const key = add.dataset.key; if (!key) return;
+      const box = add.closest('div');
+      const deb = box.querySelector('[data-conge-debut]'), fin = box.querySelector('[data-conge-fin]'), mot = box.querySelector('[data-conge-motif]');
+      const dv = deb && deb.value, fv = fin && fin.value;
+      if (!dv || !fv) { alert('Indique une date de début ET une date de fin de congé.'); return; }
+      if (fv < dv) { alert('La date de fin doit être après la date de début.'); return; }
+      if (FP.addConge) { FP.addConge(key, { debut: dv, fin: fv, motif: (mot && mot.value || '').trim() }); if (FP.toast) FP.toast('✓ Congé ajouté'); if (currentDriverKey) openDrawer(currentDriverKey); }
+      return;
+    }
   });
 
   // Réception du fichier permis téléversé → Supabase Storage, puis enregistrement du lien

@@ -970,6 +970,54 @@ FP.conducteurs = {
   }
 };
 
+// ================= PRESTATAIRES CARTE CARBURANT / BADGE PÉAGE (nom PAR SOCIÉTÉ, synchronisé) =========
+// ⚠️ MULTI-SOCIÉTÉS : chaque société nomme SON prestataire (comme le leasing). PXP = TotalEnergies / Ulys
+// par défaut ; toute autre société part sur un libellé générique jusqu'à ce qu'elle règle le sien
+// (Paramètres → Société). Stockés dans app_settings (settings.prestataireCarte / .prestataireBadge).
+FP.prestataireCarte = () => { try { const v = FP.settings.get().prestataireCarte; if (v && String(v).trim()) return String(v).trim(); } catch (e) {} return (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? 'TotalEnergies' : 'Carte carburant'; };
+FP.prestataireBadge = () => { try { const v = FP.settings.get().prestataireBadge; if (v && String(v).trim()) return String(v).trim(); } catch (e) {} return (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? 'Ulys' : 'Badge péage'; };
+
+// ================= CONGÉS / ABSENCES DES CONDUCTEURS (par société, synchronisé app_settings) =========
+// But : repérer une conso carte carburant PENDANT un congé (interdit). On enregistre les périodes
+// d'absence PAR CONDUCTEUR (clé = key du conducteur). Stockage partagé (tous les postes) :
+//   settings.condConges = { [condKey]: [ { debut:'AAAA-MM-JJ', fin:'AAAA-MM-JJ', motif:'' } ] }.
+FP.getAllConges = () => { try { const m = FP.settings.get().condConges; return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } };
+FP.getConges = (condKey) => { const a = FP.getAllConges()[condKey]; return Array.isArray(a) ? a : []; };
+FP.setConges = (condKey, arr) => {
+  if (!FP.settings || !condKey) return;
+  const s = FP.settings.get(); const m = (s.condConges && typeof s.condConges === 'object') ? s.condConges : {};
+  const clean = (Array.isArray(arr) ? arr : []).filter(c => c && c.debut && c.fin).map(c => ({ debut: String(c.debut).slice(0, 10), fin: String(c.fin).slice(0, 10), motif: c.motif || '' }))
+    .sort((a, b) => String(a.debut).localeCompare(String(b.debut)));
+  if (clean.length) m[condKey] = clean; else delete m[condKey];
+  s.condConges = m; FP.settings.save(s);
+};
+FP.addConge = (condKey, conge) => { if (!conge || !conge.debut || !conge.fin) return; const a = FP.getConges(condKey).slice(); a.push({ debut: conge.debut, fin: conge.fin, motif: conge.motif || '' }); FP.setConges(condKey, a); };
+FP.removeConge = (condKey, idx) => { const a = FP.getConges(condKey).slice(); if (idx >= 0 && idx < a.length) { a.splice(idx, 1); FP.setConges(condKey, a); } };
+// Le conducteur `condKey` est-il en congé à la date ISO (bornes incluses) ? Renvoie le congé couvrant, ou null.
+FP.congeCouvrant = (condKey, dateISO) => {
+  if (!condKey || !dateISO) return null;
+  const d = String(dateISO).slice(0, 10);
+  return FP.getConges(condKey).find(c => c.debut && c.fin && d >= String(c.debut).slice(0, 10) && d <= String(c.fin).slice(0, 10)) || null;
+};
+FP.estEnConge = (condKey, dateISO) => !!FP.congeCouvrant(condKey, dateISO);
+// Détecte les consos survenues PENDANT un congé (interdit). `txList` = transactions DATÉES
+// { conducteur (nom), dateTx:'AAAA-MM-JJ', categorie, montantTtc, produit }. Par défaut on ne regarde
+// QUE le carburant (un péage un jour de départ/retour de congé est normal). `opts.categories` élargit.
+FP.consoPendantConge = (txList, opts) => {
+  const o = opts || {}; const cats = (o.categories || ['carburant']).map(c => String(c).toLowerCase());
+  const out = [];
+  (txList || []).forEach(t => {
+    if (!t || !t.dateTx || !t.conducteur) return;
+    if (cats.length && cats.indexOf(String(t.categorie || '').toLowerCase()) === -1) return;
+    let key = null; try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(t.conducteur) : null; if (c) key = c.key; } catch (e) {}
+    if (!key && FP.normPrenom) key = FP.normPrenom(t.conducteur);
+    if (!key) return;
+    const cg = FP.congeCouvrant(key, t.dateTx);
+    if (cg) out.push({ conducteur: t.conducteur, key, date: t.dateTx, montant: t.montantTtc, categorie: t.categorie, produit: t.produit, conge: cg });
+  });
+  return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+};
+
 // ================= RATTACHEMENT CONSO → CONDUCTEUR PAR N° DE CARTE / BADGE =================
 // Chaque conducteur peut porter un n° de carte carburant Total et un n° de badge péage Ulys
 // (réglages `condCarteTotal` / `condBadgeUlys`, par société — cf. fiche conducteur). Ces numéros
@@ -1265,6 +1313,11 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailExpediteur',     label: "E-mail d'envoi des amendes",       type: 'email', ph: 'ex. contact@masociete.fr' },
   { key: 'mailCopie',          label: 'E-mails en copie (séparés par ,)', type: 'text',  ph: 'ex. compta@masociete.fr, direction@masociete.fr' },
   { key: 'mailDomaineEnvoi',   label: "Domaine d'envoi vérifié (Resend)", type: 'text',  ph: 'ex. resend.masociete.fr — le domaine validé dans Resend (le mail part de <ton adresse>@ce-domaine, réponse vers l’e-mail ci-dessus)' },
+  // Prestataires carte carburant / badge péage PROPRES à la société (comme le loueur). Vide = valeur
+  // par défaut (PXP → TotalEnergies / Ulys ; autre société → libellé générique). Sert aux libellés
+  // partout (fiches, Total Fleet, Ulys) et au rattachement de la conso.
+  { key: 'prestataireCarte',   label: 'Prestataire carte carburant',      type: 'text',  ph: 'ex. TotalEnergies, Shell, BP… (vide = TotalEnergies pour PXP)' },
+  { key: 'prestataireBadge',   label: 'Prestataire badge de péage',       type: 'text',  ph: 'ex. Ulys, Fulli, Bip&Go… (vide = Ulys pour PXP)' },
   // ⚠️ Les LOUEURS (BPCE, Ayvens…) se gèrent dans l'onglet CONTRATS (liste multi-loueurs
   // settings.loueurs), PAS ici. On n'expose donc PAS loueurNom/proprietaireLeasing dans le
   // formulaire Paramètres (les valeurs restent en base pour la rétro-compat / le repli PXP).
