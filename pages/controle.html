@@ -364,14 +364,25 @@
         date:a.date, montant:a.montant, facnum:a.facnum||'', _plaque:a.plaque||'', detail:'congé : ' + dfr(cg.debut) + ' au ' + dfr(cg.fin),
         statut: sm[fid] || 'a-verifier' });
     });
-    // 2) Ulys mensuel pendant un congé (dédupliqué si des dates existent déjà)
-    const datedMonths = new Set(); _tx.forEach(t => { if (String(t.categorie||'').toLowerCase()!=='peage') return; let k=null; try{const c=FP.conducteurs.find(t.conducteur); if(c)k=c.key;}catch(e){} if(!k&&FP.normPrenom)k=FP.normPrenom(t.conducteur); if(k)datedMonths.add(k+'|'+String(t.date_tx||'').slice(0,7)); });
+    // 2) Ulys MENSUEL pendant un congé — repli affiché UNIQUEMENT si AUCUN détail daté n'existe
+    //    pour cette personne ce mois-là. Sinon (détail daté présent), la section 1 l'affiche déjà
+    //    aux DATES EXACTES → on ne remet PAS le total du mois (sinon doublon « total » vu par l'user).
+    //    Dédup + rattachement congé par PRÉNOM normalisé (clé cohérente avec l'affichage groupé).
+    const datedMonths = new Set();
+    _tx.forEach(t => { if (String(t.categorie||'').toLowerCase()!=='peage') return; const np = FP.normPrenom ? FP.normPrenom(t.conducteur) : ''; const m = String(t.date_tx||t.dateTx||'').slice(0,7); if (np && m) datedMonths.add(np+'|'+m); });
     (_ulys||[]).forEach(r => {
       if (!r.conducteur || !r.mois) return;
-      let k=null; try{const c=FP.conducteurs.find(r.conducteur); if(c)k=c.key;}catch(e){} if(!k&&FP.normPrenom)k=FP.normPrenom(r.conducteur); if(!k) return;
-      const mois = String(r.mois).slice(0,7); if (datedMonths.has(k+'|'+mois)) return;
-      const cg = FP.congeDansMois ? FP.congeDansMois(k, mois) : null; if (!cg) return;
-      const fid = 'um|'+k+'|'+mois; const cn = canon(r.conducteur, k);
+      const np = FP.normPrenom ? FP.normPrenom(r.conducteur) : '';
+      const mois = String(r.mois).slice(0,7);
+      if (np && datedMonths.has(np+'|'+mois)) return; // détail daté déjà présent → pas de total mensuel
+      // Congé sur ce mois : on teste toutes les clés plausibles (comme la détection datée).
+      const cands = [];
+      try { const c = FP.conducteurs.find(r.conducteur); if (c && c.key) cands.push(c.key); } catch (e) {}
+      if (np) { cands.push(np); try { Object.keys(FP.getAllConges()).forEach(kk => { if (String(kk).split(/[-\s]/)[0] === np && cands.indexOf(kk) < 0) cands.push(kk); }); } catch (e) {} }
+      let cg = null, ck = null;
+      for (const kk of cands) { const g = FP.congeDansMois ? FP.congeDansMois(kk, mois) : null; if (g) { cg = g; ck = kk; break; } }
+      if (!cg) return;
+      const fid = 'um|'+(ck||np)+'|'+mois; const cn = canon(r.conducteur, ck);
       out.push({ fid, genre:'congé', conducteur:cn.n, gkey:cn.k, categorie:'peage', type:'péage '+presBadge,
         date:'', mois, montant:(r.totalTtc!=null?r.totalTtc:(r.total_ttc!=null?r.total_ttc:null)), facnum:r.numeroFacture||r.numero_facture||'',
         detail:'congé : '+dfr(cg.debut)+' au '+dfr(cg.fin)+' · total du mois '+mfr(mois)+' — pour les DATES EXACTES : ouvre Total Fleet → « Reconstruire le détail » (ou réimporte le relevé Ulys)',
