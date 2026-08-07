@@ -5390,7 +5390,12 @@ FP.ulys = {
           let yy = dm[3]; if (yy.length === 2) yy = '20' + yy;
           const mm = +dm[2], dd = +dm[1]; if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return;
           const dateIso = yy + '-' + dm[2] + '-' + dm[1];
-          const amts = line.match(/\d[\d\s]*,\d{2}/g); const montant = (amts && amts.length) ? N(amts[amts.length - 1]) : null;
+          // Montant EXACT de la transaction : on privilégie le nombre suivi de « € » (= le TTC de la
+          // conso). Sinon repli sur le dernier montant à 2 décimales de la ligne (best-effort).
+          let montant = null;
+          const euroM = line.match(/(\d[\d\s]*,\d{2})\s*€/);
+          if (euroM) montant = N(euroM[1]);
+          else { const amts = line.match(/\d[\d\s]*,\d{2}/g); if (amts && amts.length) montant = N(amts[amts.length - 1]); }
           txConso.push({ date: dateIso, conducteur: cond, badge: suf, montant });
         });
       }
