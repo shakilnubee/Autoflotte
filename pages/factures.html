@@ -3037,7 +3037,10 @@
     // === DÉTAIL TRANSACTION PAR TRANSACTION (une ligne = un achat) ===
     // Validé sur une vraie facture Total. Ancre les produits sur leurs libellés connus, prend le
     // TTC = dernier montant à 2 décimales non suivi d'un chiffre (exclut les PU à 4 décimales).
-    const TX_PROD = /(Gazole(?: Premier| Excellium)?|Super \d+(?: Sans PL)?|SP\d{2}(?: E\d+)?|Bouteille Gaz|Boissons T[RN]|Alimentation T[RN]|Produit [Ff]rais|Sandwich|Lavage(?: Progr\.? ?\d)?|Parking|AdBlue|GNR|GPL|E85|Lubrifiant|Lave[- ]?glace|Accessoires?|Huile|Ampoule|Balai)/;
+    const TX_PROD = /(Gazole(?: Premier| Excellium)?|Super \d+(?: Sans PL)?|SP\d{2}(?: E\d+)?|Bouteille Gaz|Boissons(?: T[A-Z]{1,2})?|Alimentation(?: T[A-Z]{1,2})?|Produit [Ff]rais|Sandwich|Lavage(?: Progr\.? ?\d)?|Parking|AdBlue|GNR|GPL|E85|Lubrifiant|Lave[- ]?glace|Accessoires?|Huile|Ampoule|Balai)/;
+    // Préfixe de STATION à retirer d'un libellé « <n° site/pompe> NOM STATION » (ex. « 79 PAMPRO »)
+    // quand le produit exact n'est pas reconnu → sinon le nom de la station pollue le libellé.
+    const TX_STATION = /^\s*\d{1,4}\s+[A-ZÉÈÀÂÊÎÔÛÇ][A-Z0-9ÉÈÀÂÊÎÔÛÇ'.\-]+(?:\s+[A-Z0-9ÉÈÀÂÊÎÔÛÇ'.\-]{2,})*\s+/;
     const TX_TTC = /\d[\d ]*[.,]\d{2}(?!\d)/g;
     // ⚠️ SOURCE UNIQUE : la catégorisation vit dans FP.txCat (app.js), partagée avec « Suivi & alertes ».
     function txCat(p){ return (window.FP && FP.txCat) ? FP.txCat(p) : 'autre'; }
@@ -3064,7 +3067,10 @@
           const nums = tail.match(TX_TTC) || []; if (!nums.length) continue;
           const ttc = parseFloat(nums[nums.length - 1].replace(/ /g, '').replace(',', '.')); if (!isFinite(ttc)) continue;
           const pm = tail.match(TX_PROD);
-          const produit = pm ? pm[1].replace(/\s+/g, ' ').trim() : ((tail.trim().split(/\s+\d/)[0] || '').trim().slice(0, 30) || 'Achat');
+          // Produit reconnu → on prend le libellé propre. Sinon repli : on retire d'abord le préfixe
+          // de station (« 79 PAMPRO ») puis on garde le début du texte avant le 1er chiffre.
+          const produit = pm ? pm[1].replace(/\s+/g, ' ').trim()
+            : ((tail.replace(TX_STATION, '').trim().split(/\s+\d/)[0] || '').trim().slice(0, 30) || 'Achat');
           const y = dmy.slice(4, 6), mo = dmy.slice(2, 4), da = dmy.slice(0, 2);
           out.push({ id: facNum + '-' + (seq++), facnum: facNum, carte: h.carte, conducteur: who, plaque,
             dateTx: '20' + y + '-' + mo + '-' + da, mois: '20' + y + '-' + mo, produit, categorie: txCat(produit), montantTtc: +ttc.toFixed(2) });
