@@ -121,21 +121,33 @@ async function handle(req) {
     max_tokens: maxTok,
     messages: [{ role: "user", content: [fileBlock, { type: "text", text: promptText }] }],
   };
+  // Délai MAX sur l'appel à Claude : sans ça, un appel qui traîne fait tuer l'exécution par le
+  // serveur → 5xx SANS CORS (le navigateur affiche « Failed to send a request » sans la cause).
   let apiRes;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 55000);
+  console.log("[scan-doc] appel Anthropic — model=" + MODEL + " · cle=" + (apiKey ? ("presente(" + apiKey.length + ")") : "ABSENTE"));
   try {
     apiRes = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
       body: JSON.stringify(body),
+      signal: ctrl.signal,
     });
   } catch (e) {
-    return json({ error: "appel API echoue: " + (e && e.message ? e.message : String(e)) }, 502);
+    clearTimeout(timer);
+    const aborted = e && (e.name === "AbortError");
+    console.error("[scan-doc] echec fetch Anthropic: " + (aborted ? "TIMEOUT (55s)" : (e && e.message ? e.message : String(e))));
+    return json({ error: aborted ? "L'API Claude n'a pas repondu a temps (timeout). Reessaie ; si ca persiste, l'API est peut-etre surchargee." : ("appel API echoue: " + (e && e.message ? e.message : String(e))) }, 502);
   }
+  clearTimeout(timer);
+  console.log("[scan-doc] reponse Anthropic status=" + apiRes.status);
   // La réponse d'Anthropic n'est pas toujours du JSON (page d'erreur, surcharge, corps vide) :
   // on lit d'abord en texte puis on tente le JSON, pour NE JAMAIS planter ici (sinon 502 sans CORS).
   const rawText = await apiRes.text();
   let data = null; try { data = JSON.parse(rawText); } catch (_) {}
-  if (!apiRes.ok) return json({ error: (data && data.error && data.error.message) || ("erreur API (HTTP " + apiRes.status + ") : " + rawText.slice(0, 300)), status: apiRes.status }, 502);
+  if (!apiRes.ok) { console.error("[scan-doc] erreur Anthropic HTTP " + apiRes.status + " : " + rawText.slice(0, 500));
+    return json({ error: (data && data.error && data.error.message) || ("erreur API (HTTP " + apiRes.status + ") : " + rawText.slice(0, 300)), status: apiRes.status }, 502); }
   if (!data) return json({ ok: false, error: "Réponse illisible de l'API (non JSON) : " + rawText.slice(0, 300) }, 502);
   const text = (data.content || []).filter((x) => x.type === "text").map((x) => x.text || "").join("");
   const fields = extractJson(text);
