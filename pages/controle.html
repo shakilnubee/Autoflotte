@@ -294,6 +294,41 @@
     });
   }
 
+  // 🔬 Diagnostic par conducteur ayant des congés : dates de congé, conso datées rattachées, et
+  // combien tombent DANS un congé — pour voir précisément pourquoi une conso remonte (ou pas).
+  function congeDiag(){
+    const all = (FP.getAllConges && FP.getAllConges()) || {};
+    const keys = Object.keys(all); if (!keys.length) return '';
+    const byKey = {};
+    (_tx || []).forEach(t => {
+      const dtx = t.dateTx || t.date_tx; if (!dtx) return;
+      const cands = [];
+      try { const k = FP.condKeyDeConso ? FP.condKeyDeConso(t) : null; if (k) cands.push(k); } catch (e) {}
+      try { const c = FP.conducteurs.find(t.conducteur); if (c) cands.push(c.key); } catch (e) {}
+      if (FP.normPrenom) cands.push(FP.normPrenom(t.conducteur));
+      const kk = cands.find(x => x && all[x]) || cands[0]; if (!kk) return;
+      (byKey[kk] = byKey[kk] || []).push(t);
+    });
+    const rows = keys.map(key => {
+      const c = FP.conducteurs.list().find(x => x.key === key);
+      const nom = c ? FP.conducteurs.displayName(c) : key;
+      const cg = all[key].map(x => FP.date(x.debut) + ' → ' + FP.date(x.fin)).join(', ');
+      const txs = byKey[key] || [];
+      const inC = txs.filter(t => FP.congeCouvrant(key, t.dateTx || t.date_tx));
+      const sample = txs.slice().sort((a,b)=>String(b.date_tx||b.dateTx||'').localeCompare(String(a.date_tx||a.dateTx||''))).slice(0, 25);
+      return { nom, key, cg, nTx: txs.length, nIn: inC.length, sample };
+    }).sort((a,b)=>b.nIn-a.nIn);
+    return '<details class="card p-3 mb-4" style="font-size:.85rem"><summary style="cursor:pointer;font-weight:700">🔬 Diagnostic congés — pourquoi ça remonte ou pas (' + rows.length + ' conducteur(s))</summary>'
+      + '<div class="mt-2" style="line-height:1.55">' + rows.map(r =>
+          '<div style="border-top:1px solid #EEF2F7;padding:.45rem 0"><b>' + esc(r.nom) + '</b> <span class="text-slate-400">(clé ' + esc(r.key) + ')</span><br>'
+          + 'Congés : <b>' + (r.cg || '—') + '</b><br>'
+          + 'Conso datées rattachées : <b>' + r.nTx + '</b> · dont <b style="color:' + (r.nIn ? '#16a34a' : '#B91C1C') + '">' + r.nIn + '</b> pendant un congé'
+          + (!r.nTx ? ' <span class="text-amber-600">→ aucune conso datée en base pour lui : clique « Reconstruire le détail » (onglet Total Fleet) ou réimporte le relevé détaillé.</span>' : (r.nTx && !r.nIn ? ' <span class="text-amber-600">→ des conso existent mais AUCUNE dans les dates de congé : vérifie les dates saisies.</span>' : ''))
+          + (r.sample.length ? '<div class="text-xs text-slate-500 mt-1" style="max-height:140px;overflow:auto">' + r.sample.map(t => { const d = t.dateTx || t.date_tx; const mt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc); return (FP.congeCouvrant(r.key, d) ? '✅' : '▫️') + ' ' + FP.date(d) + ' · ' + esc(t.produit || t.categorie || '') + ' · ' + euro(mt); }).join('<br>') + '</div>' : '')
+          + '</div>'
+        ).join('') + '</div></details>';
+  }
+
   function stBadge(st){ return `<span class="st-badge st-${st}">${ST_LABEL[st]||st}</span>`; }
   function stSelect(f){
     return `<select class="ctrl-sel" data-statut="${esc(f.fid)}">` +
@@ -345,6 +380,7 @@
     } else if (!_findings.length) {
       diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">🔎 <b>' + _tx.length + '</b> conso datée(s) et <b>' + nConges + '</b> conducteur(s) avec congé analysés — aucune conso ne tombe dans une période de congé. Si tu en attends (ex. Romuald en juillet), vérifie que <b>ses dates de congé</b> couvrent bien ces jours et que le relevé <b>détaillé</b> de ce mois est importé.</div>';
     }
+    diag += congeDiag(); // détail conducteur par conducteur (toujours dispo tant qu'il y a des congés)
 
     if (!all.length) { box.innerHTML = diag + '<div class="card p-6 text-center text-slate-500">Aucune trouvaille pour ce filtre. 👍</div>'; if(window.lucide)lucide.createIcons(); return; }
 
