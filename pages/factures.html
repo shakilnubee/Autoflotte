@@ -3053,13 +3053,14 @@
         const block = det.slice(prev, h.i); prev = h.end;
         const who = (typeof resolveNom === 'function' ? (resolveNom(h.nom, h.carte) || h.nom) : h.nom);
         const plaque = isPlaque(h.nom) ? h.nom : null;
-        // ⚠️ Une transaction = « <date6> <heure4> <RÉSEAU> … ». Le réseau n'est PAS que TOTAL/GEIE :
-        // il y a aussi les PARTENAIRES (parkings INDIGO, SAEMES, EFFIA…). On accepte donc TOUT réseau
-        // commençant par une MAJUSCULE, sinon les lignes de parking étaient ignorées (conso manquante).
-        const txRe = /(\d{6}) (\d{4}) ([A-Z][^\n]*?)(?=(?:\d{6} \d{4} [A-Z])|Total\b|$)/gs;
+        // ⚠️ Une transaction = « <date6> <heure4> <RÉSEAU> <libellé/produit…> ». Le réseau n'est PAS que
+        // TOTAL/GEIE : il y a aussi les PARTENAIRES (parkings INDIGO, SAEMES, EFFIA…). On capture le RÉSEAU
+        // à PART (groupe 3, mots EN MAJUSCULES) pour que le PRODUIT (groupe 4) reste propre — sinon le repli
+        // prenait « TOTAL TF » comme produit → carburant classé à tort « achat hors carburant ».
+        const txRe = /(\d{6}) (\d{4}) ([A-Z]{2,}(?: [A-Z]{2,})?) (.+?)(?=(?:\d{6} \d{4} [A-Z]{2,})|Total\b|$)/gs;
         let x;
         while ((x = txRe.exec(block))){
-          const dmy = x[1], tail = x[3];
+          const dmy = x[1], tail = x[4];
           const nums = tail.match(TX_TTC) || []; if (!nums.length) continue;
           const ttc = parseFloat(nums[nums.length - 1].replace(/ /g, '').replace(',', '.')); if (!isFinite(ttc)) continue;
           const pm = tail.match(TX_PROD);
