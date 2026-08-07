@@ -1079,7 +1079,11 @@ FP.consoPendantConge = (txList, opts) => {
     const cand = [];
     const k1 = FP.condKeyDeConso(t); if (k1) cand.push(k1);
     try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(t.conducteur) : null; if (c && c.key && cand.indexOf(c.key) < 0) cand.push(c.key); } catch (e) {}
-    if (FP.normPrenom && t.conducteur) { const np = FP.normPrenom(t.conducteur); if (np && cand.indexOf(np) < 0) cand.push(np); }
+    const np = (FP.normPrenom && t.conducteur) ? FP.normPrenom(t.conducteur) : null;
+    if (np && cand.indexOf(np) < 0) cand.push(np);
+    // + TOUTE clé de congé du MÊME prénom (ex. congé saisi sous la fiche « romuald-lamarque-brunet »
+    //   alors que la conso se résout vers « romuald ») → sinon la conso pendant congé passe inaperçue.
+    if (np) { try { Object.keys(FP.getAllConges()).forEach(k => { if (String(k).split(/[-\s]/)[0] === np && cand.indexOf(k) < 0) cand.push(k); }); } catch (e) {} }
     let cg = null, key = null;
     for (const k of cand) { const g = FP.congeCouvrant(k, dtx); if (g) { cg = g; key = k; break; } }
     if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '' });
