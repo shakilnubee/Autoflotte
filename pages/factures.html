@@ -3478,7 +3478,16 @@
   (function ulysTab(){
     const ust = { search: '', annee: 'all', expanded: false };
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
-    const list = () => (window.FP_DATA.factures || []).filter(isUlys);
+    // Dé-doublonné par n° de facture (comme Total Fleet) → un n° = une seule ligne, KPI = total des
+    // factures affichées, jamais compté deux fois même si la base contient un doublon d'un ancien import.
+    const list = () => {
+      const seen = new Set(), out = [];
+      (window.FP_DATA.factures || []).filter(isUlys).forEach(f => {
+        const k = (f.numeroFacture || f.id || '').toString().toUpperCase();
+        if (k && seen.has(k)) return; if (k) seen.add(k); out.push(f);
+      });
+      return out;
+    };
 
     function render(){
       const all = list();
