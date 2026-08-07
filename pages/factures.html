@@ -1438,10 +1438,34 @@
     return map[k] || null;
   }
   async function handleFactureLot(fileList){
-    const files = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) || /^image\//.test(f.type || ''));
+    const allFiles = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) || /^image\//.test(f.type || ''));
     const modal = $('fabulk-modal'), body = $('fabulk-body');
     modal.classList.add('open'); lucide.createIcons();
-    if (!files.length){ body.innerHTML = '<p class="text-red-600">Aucun PDF ou image sélectionné.</p>'; return; }
+    if (!allFiles.length){ body.innerHTML = '<p class="text-red-600">Aucun PDF ou image sélectionné.</p>'; return; }
+    // ⚠️ PRÉ-TRI (import en lot = MÊME résultat que l'import 1 par 1) : un relevé TotalEnergies ou Ulys
+    // porte le DÉTAIL par conducteur. On les route vers leur importateur dédié (reconstruction de la
+    // conso par carte/badge) au lieu d'un simple scan de facture — sinon la conso serait perdue.
+    const totalFiles = [], ulysFiles = [], files = [];
+    body.innerHTML = `<div class="inline-flex items-center gap-2"><span class="fa-spin"></span> Analyse de ${allFiles.length} document(s)…</div>`;
+    for (const f of allFiles) {
+      let routed = false;
+      if (window.__facIsTotalStatement) { try { if (await window.__facIsTotalStatement(f)) { totalFiles.push(f); routed = true; } } catch (e) {} }
+      if (!routed && window.__facIsUlysStatement) { try { if (await window.__facIsUlysStatement(f)) { ulysFiles.push(f); routed = true; } } catch (e) {} }
+      if (!routed) files.push(f);
+    }
+    // Route les relevés détaillés vers leur importateur dédié (aperçu à valider, comme en individuel).
+    const routeStatements = () => {
+      if (totalFiles.length && FP._importTotalReleves) { if (window.__facSwitchTab) window.__facSwitchTab('total'); FP._importTotalReleves(totalFiles); }
+      if (ulysFiles.length && FP._importUlysReleves) { if (!totalFiles.length && window.__facSwitchTab) window.__facSwitchTab('ulys'); FP._importUlysReleves(ulysFiles); }
+    };
+    // Cas fréquent : QUE des relevés détaillés → on saute le récap générique et on ouvre directement
+    // l'aperçu dédié (avec le détail par conducteur à valider).
+    if (!files.length && (totalFiles.length || ulysFiles.length)) {
+      modal.classList.remove('open');
+      if (FP.toast) FP.toast((totalFiles.length + ulysFiles.length) + ' relevé(s) détaillé(s) → détail par conducteur');
+      routeStatements();
+      return;
+    }
     let ok = 0, dupes = 0, warn = 0, fail = 0; const added = [];
     const line = (extra) => `<div class="inline-flex items-center gap-2"><span class="fa-spin"></span> ${extra}</div><div class="mt-2 text-xs text-slate-500">✓ ${ok} importée(s) · ${dupes} doublon(s) · ${warn} à vérifier · ${fail} illisible(s)</div>`;
     for (let i = 0; i < files.length; i++){
@@ -1474,9 +1498,10 @@
       `<p class="text-sm text-slate-600">${dupes} doublon(s) ignoré(s)${warn ? ` · <span class="text-amber-600">${warn} à vérifier (HT+TVA ≠ TTC)</span>` : ''}${fail ? ` · <span class="text-red-600">${fail} illisible(s)</span>` : ''}.</p>` +
       (added.length ? `<div class="mt-3 max-h-52 overflow-auto text-xs border-t border-slate-100 pt-2">${added.map(a => `<div class="py-1 flex justify-between gap-3 ${a.incoherent ? 'text-amber-600' : 'text-slate-600'}"><span class="truncate">${escapeHtml(a.row.fournisseur || '?')} · ${a.row.type}</span><span class="whitespace-nowrap">${a.row.montantTTC != null ? FP.euro(a.row.montantTTC) : '—'}${a.incoherent ? ' ⚠️' : ''}</span></div>`).join('')}</div>` : '') +
       (fail ? `<p class="text-xs text-slate-400 mt-2">Les documents illisibles peuvent être ajoutés à la main via « Importer une facture ».</p>` : '') +
-      `<button id="fabulk-done" class="btn btn-dark text-sm w-full justify-center mt-3">Terminé</button>`;
+      ((totalFiles.length || ulysFiles.length) ? `<div class="mt-3 p-2 rounded-lg text-xs" style="background:#FFF7ED;color:#9A3412;line-height:1.5">🔎 ${[totalFiles.length ? totalFiles.length + ' relevé(s) TotalEnergies' : '', ulysFiles.length ? ulysFiles.length + ' relevé(s) Ulys' : ''].filter(Boolean).join(' + ')} détecté(s) : ils contiennent le <b>détail par conducteur</b> → je les ouvre pour validation.</div>` : '') +
+      `<button id="fabulk-done" class="btn btn-dark text-sm w-full justify-center mt-3">${(totalFiles.length || ulysFiles.length) ? 'Valider le détail conso →' : 'Terminé'}</button>`;
     lucide.createIcons();
-    const done = $('fabulk-done'); if (done) done.addEventListener('click', () => modal.classList.remove('open'));
+    const done = $('fabulk-done'); if (done) done.addEventListener('click', () => { modal.classList.remove('open'); if (totalFiles.length || ulysFiles.length) routeStatements(); });
     if (ok && FP.toast) FP.toast(ok + ' facture(s) importée(s) ✓');
   }
   async function saveFacture(ev){
@@ -1939,6 +1964,8 @@
     $('tab-btn-fourn').addEventListener('click', () => switchTab('fournisseurs'));
     // Ouverture directe sur un onglet via l'URL (ex. depuis le scanner du tableau de bord : ?tab=ulys)
     { const _tab = new URLSearchParams(location.search).get('tab'); if (_tab && ['factures','documents','total','ulys','fournisseurs'].includes(_tab)) switchTab(_tab); }
+    // Exposé pour l'import en LOT : lui permet de basculer sur l'onglet Total/Ulys quand il route un relevé.
+    window.__facSwitchTab = switchTab;
 
     async function loadDocs(){
       loaded = true;
@@ -3387,6 +3414,20 @@
       });
     });
 
+    // ── Exposé pour l'IMPORT EN LOT : router les relevés TotalEnergies vers CE traitement dédié
+    //    (reconstruction du détail par conducteur) au lieu d'un simple scan de facture. Le détecteur
+    //    lit le TEXTE du PDF et confirme via les MÊMES parseurs (parseConso/parseReleve/parseFac) :
+    //    un simple ticket TotalEnergies (sans détail flotte) ne matche pas → il reste en import normal.
+    FP._importTotalReleves = handleReleves;
+    window.__facIsTotalStatement = async (file) => {
+      try {
+        if (!(file.type === 'application/pdf' || /\.pdf$/i.test(file.name))) return false;
+        const pdf = await loadPdf(file); const text = await pdfTextAll(pdf);
+        if (!/totalenergies|total\s*energies/i.test(text)) return false;
+        return (parseConso(text).length > 0) || (parseReleve(text).length > 0) || !!parseFac(text, file.name);
+      } catch (e) { return false; }
+    };
+
   })();
 
   // ===== Onglet ULYS (péages VINCI) — même présentation que Total Fleet =====
@@ -3751,6 +3792,19 @@
 
     window.renderUlys = () => { render(); if (!consoLoaded) loadConso(); else renderConso(); };
     document.addEventListener('fp:data-ready', () => { if (!$('view-ulys').classList.contains('hidden')){ render(); if (consoLoaded) renderConso(); } });
+
+    // ── Exposé pour l'IMPORT EN LOT : router les relevés Ulys vers CE traitement dédié (détail par
+    //    collaborateur ancré sur le badge). Détecteur = lecture texte + parseUlys (n° + TTC présents).
+    FP._importUlysReleves = handleUlysImport;
+    window.__facIsUlysStatement = async (file) => {
+      try {
+        if (!(file.type === 'application/pdf' || /\.pdf$/i.test(file.name))) return false;
+        let text = await ulysPdfToText(file);
+        if (!text || text.replace(/\s/g, '').length < 80) return false; // OCR = trop coûteux juste pour détecter
+        if (!/ulys|vinci\s*autoroute/i.test(text)) return false;
+        const p = parseUlys(text); return !!(p && p.numero && p.ttc != null);
+      } catch (e) { return false; }
+    };
   })();
 
   // ===== Onglet FOURNISSEURS (voir + nettoyer les doublons) =====
