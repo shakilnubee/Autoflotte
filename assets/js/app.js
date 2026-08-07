@@ -5385,19 +5385,21 @@ FP.ulys = {
         const suf = badgeSuffix(h.badge);
         let cond = null; try { const rc = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(h.badge); if (rc && rc.name) cond = rc.name; } catch (e) {}
         cond = cond || nameByBadge[suf] || h.nom || ('Badge ' + suf);
-        block.split(/\n/).forEach(line => {
-          const dm = line.match(/\b(\d{2})\/(\d{2})\/(\d{2,4})\b/); if (!dm) return;
-          let yy = dm[3]; if (yy.length === 2) yy = '20' + yy;
-          const mm = +dm[2], dd = +dm[1]; if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return;
-          const dateIso = yy + '-' + dm[2] + '-' + dm[1];
-          // Montant EXACT de la transaction : on privilégie le nombre suivi de « € » (= le TTC de la
-          // conso). Sinon repli sur le dernier montant à 2 décimales de la ligne (best-effort).
-          let montant = null;
-          const euroM = line.match(/(\d[\d\s]*,\d{2})\s*€/);
-          if (euroM) montant = N(euroM[1]);
-          else { const amts = line.match(/\d[\d\s]*,\d{2}/g); if (amts && amts.length) montant = N(amts[amts.length - 1]); }
+        // Chaque transaction commence par une date JJ/MM/AAAA. On lit le SEGMENT jusqu'à la date
+        // suivante (robuste au retour à la ligne « entrée / sortie » du péage). Colonnes réelles Ulys :
+        //   … Classe | Tarif € HT | Tarif € TTC | TVA | Km — donc le TTC = le 2e nombre à 2 décimales
+        // (le 1er = HT). Le Km (ex. « 24,6 ») n'a qu'UNE décimale → il n'est pas capté. Pas de « € » sur la ligne.
+        const dre = /(\d{2})\/(\d{2})\/(\d{2,4})/g; const dpos = []; let dm2;
+        while ((dm2 = dre.exec(block))) dpos.push({ i: dm2.index, m: dm2 });
+        for (let j = 0; j < dpos.length; j++) {
+          const m = dpos[j].m; const mo = +m[2], da = +m[1]; if (mo < 1 || mo > 12 || da < 1 || da > 31) continue;
+          let yy = m[3]; if (yy.length === 2) yy = '20' + yy;
+          const dateIso = yy + '-' + m[2] + '-' + m[1];
+          const seg = block.slice(dpos[j].i, (j + 1 < dpos.length ? dpos[j + 1].i : block.length));
+          const amts = (seg.match(/\d[\d\s]*,\d{2}(?!\d)/g) || []).map(N);
+          const montant = amts.length >= 2 ? amts[1] : (amts.length === 1 ? amts[0] : null);
           txConso.push({ date: dateIso, conducteur: cond, badge: suf, montant });
-        });
+        }
       }
     }
     return { numero, date, mois, ht, tva, ttc, conso, txConso };
