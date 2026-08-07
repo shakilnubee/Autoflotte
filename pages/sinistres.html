@@ -919,11 +919,24 @@
     if (!file) return;
     const statusEl = $('timeline').querySelector(`.sin-constat-status[data-key="${key}"]`);
     const setSt = (html, color) => { if (statusEl) { statusEl.innerHTML = html; statusEl.style.color = color || '#475569'; if (window.lucide) lucide.createIcons(); } };
-    if (!(window.FP && FP.scanIA && FP.constatPrompt)) { setSt('⚠️ Connexion requise pour lire le constat.', '#B91C1C'); return; }
-    setSt('⏳ Lecture du constat par l\'IA…');
+    // TOUJOURS stocker le constat déposé (le but du « Drive ») — rangé par plaque/année comme le courrier,
+    // même si l'IA ne parvient pas à lire la responsabilité. On garde l'URL dans le dossier (constatUrl).
+    let constatSaved = false;
+    if (FP.uploadScan) {
+      setSt('⏳ Enregistrement du constat…');
+      try {
+        const plaqueSlug = String(immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'sans-plaque';
+        const annee = (input.dataset.annee && /^\d{4}$/.test(input.dataset.annee)) ? input.dataset.annee : String(new Date().getFullYear());
+        const url = await FP.uploadScan(file, `sinistres/${plaqueSlug}/${annee}`);
+        if (url) { const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {}; const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {}; o.constatUrl = url; FP.settings.save(s); constatSaved = true; }
+      } catch (_) {}
+    }
+    const pfx = constatSaved ? '📎 Constat enregistré. ' : '';
+    if (!(window.FP && FP.scanIA && FP.constatPrompt)) { setSt(pfx + '⚠️ Connexion requise pour lire le constat.', constatSaved ? '#0F766E' : '#B91C1C'); return; }
+    setSt(pfx + '⏳ Lecture du constat par l\'IA…');
     let res = null;
     try { res = await FP.scanIA(file, 'constat', FP.constatPrompt(immat)); } catch (_) {}
-    if (!res || !res.responsabilite) { setSt('⚠️ Lecture impossible. Renseigne la responsabilité à la main.', '#B45309'); return; }
+    if (!res || !res.responsabilite) { setSt(pfx + '⚠️ Lecture impossible. Renseigne la responsabilité à la main.', '#B45309'); return; }
     const norm = String(res.responsabilite).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     const map = { 'responsable': 'responsable', 'non-responsable': 'non-responsable', 'non responsable': 'non-responsable', 'partagee': 'partagee' };
     const val = map[norm] || '';
