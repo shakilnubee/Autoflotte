@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807j">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -136,11 +136,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807i"></script>
-<script src="../assets/js/supabase-client.js?v=20260807i"></script>
-<script src="../assets/js/data.js?v=20260807i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807j"></script>
+<script src="../assets/js/supabase-client.js?v=20260807j"></script>
+<script src="../assets/js/data.js?v=20260807j"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807i"></script>
+<script src="../assets/js/app.js?v=20260807j"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -636,7 +636,7 @@
       const cg = a.conge || {};
       const key = 'conge|' + (a.key || '') + '|' + a.date + '|' + (a.produit || '') + '|' + (a.montant || '');
       const mnt = (a.montant != null && a.montant !== 0) ? ' de ' + (FP.euro ? FP.euro(a.montant) : a.montant) : '';
-      return { key, t: 'conge', mois: String(a.date || '').slice(0, 7), facnum: '',
+      return { key, t: 'conge', mois: String(a.date || '').slice(0, 7), facnum: a.facnum || '',
         txt: `(congé) ${a.conducteur} — ${lbl(a.categorie)}${mnt} le ${FP.date ? FP.date(a.date) : a.date}, PENDANT un congé (${FP.date(cg.debut)} → ${FP.date(cg.fin)})${cg.motif ? ' · ' + cg.motif : ''}` };
     }).filter(a => !okMap[a.key]);
   }
@@ -695,11 +695,36 @@
       box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div>' + diag + '</div></div>'; lucide.createIcons(); return;
     }
     box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant (repas élevés, achats hors carburant, plusieurs pleins/jour, diesel) <b>et TOUTE conso (carburant, péage, boutique…) pendant un congé</b> (interdit — avec les dates). La <b>✓ verte</b> archive comme sur Factures → Total Fleet (même suivi). Clique le texte pour ouvrir la fiche concernée.</p>'
-      + anoms.map(a => { const conge = a.t === 'conge'; const cat = conge ? '🌴 Conso pendant un congé' : 'Carte carburant Total'; const href = conge ? 'conducteurs.html' : 'factures.html'; return `<div class="notif lvl-warn" style="align-items:center"><button type="button" data-verif-ok="${esc(a.key)}" title="Marquer vérifié / archiver (même suivi que Factures)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:17px;line-height:1">✓</button><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0"></i><a href="${href}" class="flex-1 min-w-0" style="text-decoration:none;color:inherit"><div class="notif-cat">${cat}</div><div class="font-semibold text-slate-900">${esc(a.txt)}</div></a><i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 flex-shrink-0"></i></div>`; }).join('');
+      + anoms.map(a => {
+        const conge = a.t === 'conge';
+        const cat = conge ? '🌴 Conso pendant un congé' : 'Carte carburant Total';
+        const body = `<div class="notif-cat">${cat}</div><div class="font-semibold text-slate-900">${esc(a.txt)}</div>`;
+        // Bouton « Voir » → ouvre la FACTURE concernée (PDF) quand on a son n°, comme Total Fleet.
+        const voir = a.facnum
+          ? `<button type="button" data-verif-facture="${esc(a.facnum)}" title="Voir la facture concernée" style="flex:none;font-size:12px;font-weight:700;color:var(--fp-accent);background:#FFF7ED;border:1px solid #FED7AA;border-radius:7px;padding:4px 11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`
+          : `<a href="${conge ? 'conducteurs.html' : 'factures.html'}" title="Ouvrir" style="flex:none;color:#94A3B8"><i data-lucide="chevron-right" class="w-4 h-4"></i></a>`;
+        return `<div class="notif lvl-warn" style="align-items:center;gap:8px"><button type="button" data-verif-ok="${esc(a.key)}" title="Marquer vérifié / archiver (même suivi que Factures)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:17px;line-height:1">✓</button><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0"></i><div class="flex-1 min-w-0">${body}</div>${voir}</div>`;
+      }).join('');
     lucide.createIcons();
+  }
+  // « Voir » → ouvre la facture concernée (PDF, lien signé si bucket privé) dans un nouvel onglet.
+  async function openFactureByNum(facnum) {
+    if (!facnum) return;
+    const up = String(facnum).toUpperCase();
+    const f = (window.FP_DATA.factures || []).find(x =>
+      String(x.numeroFacture || '').toUpperCase() === up ||
+      String(x.id || '').toUpperCase() === 'TF-' + up ||
+      String(x.id || '').toUpperCase() === 'ULYS-' + up);
+    if (!f) { if (FP.toast) FP.toast('Facture ' + facnum + ' introuvable.'); return; }
+    let url = f.url || f.fileId || '';
+    if (!url || /^IMP-/.test(url)) { if (FP.toast) FP.toast('Aucun PDF stocké pour cette facture — réimporte le relevé une fois.'); return; }
+    try { if (/\/storage\/v1\/object\//.test(url) && FP.signedScanUrl) { const s = await FP.signedScanUrl(url, 600); if (s) url = s; } } catch (e) {}
+    if (/^https?:\/\//.test(url)) window.open(url, '_blank', 'noopener');
+    else window.open('https://drive.google.com/file/d/' + url + '/view', '_blank', 'noopener');
   }
   // ✓ Archiver depuis « Suivi & alertes » → écrit dans la MÊME source (FP.settings.tfAnomOk) que Factures.
   { const vbox = document.getElementById('suivi-verif'); if (vbox) vbox.addEventListener('click', (e) => {
+    const vf = e.target.closest('[data-verif-facture]'); if (vf) { e.preventDefault(); openFactureByNum(vf.getAttribute('data-verif-facture')); return; }
     const ok = e.target.closest('[data-verif-ok]'); if (!ok) return;
     e.preventDefault();
     const key = ok.getAttribute('data-verif-ok');

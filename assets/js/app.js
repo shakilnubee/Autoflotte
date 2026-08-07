@@ -1048,7 +1048,7 @@ FP.consoPendantConge = (txList, opts) => {
     const key = FP.condKeyDeConso(t);
     if (!key) return;
     const cg = FP.congeCouvrant(key, dtx);
-    if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg });
+    if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '' });
   });
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 };
