@@ -359,44 +359,7 @@
       </button>
     </div>
 
-    <!-- ============ Assistant IA : pose ta question sur ta flotte ============ -->
-    <style>
-      #fp-ai-card { background:linear-gradient(135deg,#0B1E3D,#123a63); border:1px solid #1e3a5f; border-radius:1rem; padding:1.25rem 1.35rem; margin-top:1.75rem; color:#EAF1FB; box-shadow:var(--fp-shadow-sm); }
-      #fp-ai-card .ai-head { display:flex; align-items:center; gap:.6rem; margin-bottom:.35rem; }
-      #fp-ai-card .ai-title { font-weight:800; font-size:1.02rem; letter-spacing:-.01em; }
-      #fp-ai-card .ai-sub { color:#9DB4D6; font-size:.82rem; margin-bottom:.9rem; }
-      #fp-ai-form { display:flex; gap:.55rem; flex-wrap:wrap; }
-      #fp-ai-input { flex:1; min-width:220px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.16); color:#fff; border-radius:.7rem; padding:.72rem .95rem; font-size:.92rem; }
-      #fp-ai-input::placeholder { color:#8FA6C9; }
-      #fp-ai-input:focus { outline:none; border-color:#f97316; box-shadow:0 0 0 3px rgba(249,115,22,.22); }
-      #fp-ai-send { background:linear-gradient(135deg,#f97316,#ea580c); color:#fff; border:none; border-radius:.7rem; padding:.72rem 1.25rem; font-weight:700; font-size:.9rem; cursor:pointer; display:inline-flex; align-items:center; gap:.45rem; white-space:nowrap; }
-      #fp-ai-send:disabled { opacity:.6; cursor:default; }
-      #fp-ai-chips { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.75rem; }
-      #fp-ai-chips button { background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.14); color:#CFE0F7; border-radius:999px; padding:.34rem .8rem; font-size:.78rem; cursor:pointer; }
-      #fp-ai-chips button:hover { background:rgba(249,115,22,.18); border-color:rgba(249,115,22,.4); color:#fff; }
-      #fp-ai-answer { display:none; margin-top:1rem; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.12); border-radius:.8rem; padding:1rem 1.1rem; font-size:.92rem; line-height:1.55; color:#EAF1FB; white-space:pre-wrap; }
-      #fp-ai-answer.on { display:block; }
-      #fp-ai-answer .ai-note { display:block; margin-top:.7rem; color:#8FA6C9; font-size:.72rem; }
-    </style>
-    <div id="fp-ai-card">
-      <div class="ai-head">
-        <i data-lucide="sparkles" class="w-5 h-5" style="color:#f97316"></i>
-        <span class="ai-title">Assistant Parc Pilot</span>
-      </div>
-      <div id="fp-ai-health" style="display:none"></div>
-      <div class="ai-sub">Pose une question sur ta flotte — l'assistant répond à partir de tes vraies données (véhicules, amendes, coûts, échéances).</div>
-      <form id="fp-ai-form" autocomplete="off">
-        <input id="fp-ai-input" type="text" placeholder="Ex : Quelles amendes sont à payer ? Combien j'ai dépensé ce mois-ci ?" />
-        <button id="fp-ai-send" type="submit"><i data-lucide="send" class="w-4 h-4"></i> Demander</button>
-      </form>
-      <div id="fp-ai-chips">
-        <button type="button" data-q="Quel est le total des amendes à payer et combien je dois ?">Amendes à payer</button>
-        <button type="button" data-q="Combien j'ai dépensé ce mois-ci ?">Coût du mois</button>
-        <button type="button" data-q="Quelles sont les prochaines échéances (CT, leasing, permis) ?">Prochaines échéances</button>
-        <button type="button" data-q="Quels sont les véhicules avec le plus de kilomètres ?">Plus gros rouleurs</button>
-      </div>
-      <div id="fp-ai-answer"></div>
-    </div>
+    <!-- (Assistant IA retiré du tableau de bord à la demande de l'utilisateur.) -->
 
     <div id="dash-widgets" class="mt-8">
 
@@ -1908,83 +1871,6 @@
 })();
 </script>
 
-<!-- ============ Assistant IA : logique ============ -->
-<script>
-(function () {
-  const form = document.getElementById('fp-ai-form');
-  const input = document.getElementById('fp-ai-input');
-  const send = document.getElementById('fp-ai-send');
-  const ans = document.getElementById('fp-ai-answer');
-  const chips = document.getElementById('fp-ai-chips');
-  if (!form || !input || !ans) return;
-  const esc = (s) => (window.FP && FP.esc) ? FP.esc(s) : String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  let busy = false;
-
-  async function ask(q) {
-    q = String(q || '').trim();
-    if (!q || busy) return;
-    if (!(window.FP && FP.askIA)) { ans.classList.add('on'); ans.textContent = "L'assistant n'est pas disponible (connexion requise)."; return; }
-    busy = true;
-    send.disabled = true;
-    ans.classList.add('on');
-    ans.innerHTML = '<span style="opacity:.8">⏳ L\'assistant réfléchit…</span>';
-    try {
-      const rep = await FP.askIA(q);
-      if (rep) {
-        ans.innerHTML = esc(rep) + '<span class="ai-note">Réponse générée à partir de tes données. Vérifie toujours un chiffre important avant décision.</span>';
-      } else {
-        // Pas de réponse → on DIAGNOSTIQUE (plus de « réessaie » vague) et on dit pourquoi.
-        let msg = "Je n'ai pas pu obtenir de réponse.";
-        try {
-          if (FP.aiHealth) { const h = await FP.aiHealth(); const l = FP.aiHealthLabel(h);
-            if (!h.ok) { msg = '⚠️ ' + l.msg + (l.hint && (FP.isAdmin && FP.isAdmin()) ? '<span class="ai-note">' + esc(l.hint) + '</span>' : '<span class="ai-note">Le service d\'IA est momentanément indisponible — préviens l\'administrateur si ça persiste.</span>'); }
-          }
-        } catch (_) {}
-        ans.innerHTML = msg;
-      }
-    } catch (e) {
-      ans.innerHTML = "Une erreur est survenue. Réessaie dans un instant.";
-    }
-    busy = false;
-    send.disabled = false;
-  }
-
-  form.addEventListener('submit', (e) => { e.preventDefault(); ask(input.value); });
-  if (chips) chips.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-q]'); if (!b) return;
-    input.value = b.dataset.q; ask(b.dataset.q);
-  });
-
-  // ── Surveillance automatique de l'IA : prévient TOUT SEUL si le service est en panne ──
-  // (au lieu de le découvrir par hasard). Vérifie au plus 1×/12 h, seulement pour un admin, et
-  // affiche un bandeau tant que c'est cassé. Résultat mis en cache (localStorage) pour ne pas
-  // re-pinger à chaque visite.
-  (function aiHealthWatch() {
-    const box = document.getElementById('fp-ai-health'); if (!box) return;
-    const KEY = 'fp_ai_health';
-    const show = (l) => {
-      if (!l || l.level === 'ok') { box.style.display = 'none'; return; }
-      const c = l.level === 'warn' ? { bg: '#FEF3C7', bd: '#FCD34D', tx: '#92400E' } : { bg: '#FEF2F2', bd: '#FCA5A5', tx: '#991B1B' };
-      box.style.cssText = `display:block;margin:8px 0;padding:10px 12px;border:1px solid ${c.bd};background:${c.bg};color:${c.tx};border-radius:10px;font-size:.82rem;line-height:1.45`;
-      box.innerHTML = `<b>⚠️ Assistant IA indisponible</b> — ${esc(l.msg)}` + (l.hint ? `<br><span style="opacity:.85">${esc(l.hint)}</span>` : '');
-    };
-    // Affiche tout de suite le dernier état connu (cache), puis re-teste si vieux de +12 h.
-    let cached = null; try { cached = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (_) {}
-    if (cached && cached.label) show(cached.label);
-    const isAdmin = window.FP && FP.isAdmin && FP.isAdmin();
-    if (!isAdmin) return; // seul un admin peut agir sur la fonction/clé → on ne teste que pour lui
-    const fresh = cached && cached.at && (Date.now() - cached.at < 12 * 3600 * 1000);
-    if (fresh) return;
-    const run = async () => {
-      if (!(window.FP && FP.aiHealth)) return;
-      try { const h = await FP.aiHealth(); const label = FP.aiHealthLabel(h);
-        try { localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), label })); } catch (_) {}
-        show(label);
-      } catch (_) {}
-    };
-    if (window.FP && FP.supabase) run(); else window.addEventListener('fp:data-ready', run, { once: true });
-  })();
-})();
-</script>
+<!-- (Assistant IA retiré du tableau de bord à la demande de l'utilisateur.) -->
 </body>
 </html>
