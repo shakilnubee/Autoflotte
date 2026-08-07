@@ -15,11 +15,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807u">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807v">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807u"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807v"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807u">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807v">
 <style>
   .ctrl-kpi { background:#fff; border:1px solid var(--fp-border); border-radius:.7rem; padding:.85rem 1rem; }
   .ctrl-kpi .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--fp-muted); }
@@ -193,11 +193,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807u"></script>
-<script src="../assets/js/supabase-client.js?v=20260807u"></script>
-<script src="../assets/js/data.js?v=20260807u"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807v"></script>
+<script src="../assets/js/supabase-client.js?v=20260807v"></script>
+<script src="../assets/js/data.js?v=20260807v"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807u"></script>
+<script src="../assets/js/app.js?v=20260807v"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -374,10 +374,19 @@
       const st = sm[fid] || def;
       // « Conso » = le VRAI libellé lu sur le relevé (ex. « Bouteille Gaz »), pas un générique.
       const prod = a.produit || '';
-      const detail = (a.categorie === 'autre') ? 'payé avec la carte carburant — à vérifier'
-        : (a.categorie === 'repas') ? 'repas / boissons au-delà du seuil sur une journée'
-        : (a.motif || a.txt || 'anomalie carte');
-      out.push({ fid, genre:'carte', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre', type: prod || catLbl(a.categorie),
+      // Détail CHIFFRÉ : chaque dépense de la journée avec son montant exact (repas, pleins, gazole)
+      // → on voit où est le dépassement et on tranche « justifié / pas » plus facilement.
+      const brk = (Array.isArray(a.items) && a.items.length)
+        ? a.items.map(i => (i.d ? dfr(i.d) + ' ' : '') + (i.p || '') + ' ' + euro(i.m)).join(' · ')
+        : '';
+      const isDiesel = String(a.key || '').indexOf('diesel|') === 0;
+      let type, detail;
+      if (a.categorie === 'repas') { type = 'Repas / boissons'; detail = (brk ? brk + ' — ' : '') + 'total ' + euro(a.montant) + ' sur la journée'; }
+      else if (a.categorie === 'autre') { type = prod || 'Achat'; detail = 'payé avec la carte carburant — à vérifier'; }
+      else if (isDiesel) { type = 'Gazole (diesel)'; detail = (brk ? brk + ' — ' : '') + 'total ' + euro(a.montant) + ' de gazole (flotte à l\'essence)'; }
+      else if (/pleins/.test(a.motif || '')) { type = 'Carburant (pleins multiples)'; detail = (brk ? brk + ' — ' : '') + a.motif; }
+      else { type = prod || catLbl(a.categorie); detail = a.motif || a.txt || 'anomalie carte'; }
+      out.push({ fid, genre:'carte', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre', type,
         date:a.date||'', montant:a.montant, facnum:a.facnum||'', detail, statut: st, _def: def });
     });
     // Relie CHAQUE trouvaille à sa/ses VOITURE(S) — même source que les fiches véhicule :
