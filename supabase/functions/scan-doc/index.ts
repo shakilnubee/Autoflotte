@@ -13,7 +13,11 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 // Modèle Claude utilisé pour lire les documents / répondre à l'assistant.
 // ⚠️ Doit être un identifiant de modèle VALIDE (un ID invalide fait échouer TOUS les appels → « IA à 0 »).
 // Surchargeable sans redéployer via le secret Supabase ANTHROPIC_MODEL (Edge Functions → Secrets).
-const MODEL = Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022"; // valeur SÛRE (vision fine)
+// Liste de modèles essayés dans l'ORDRE : on garde le PREMIER accepté par le compte (les autres sont
+// des replis si l'un est retiré/indisponible). Surchargeable via le secret ANTHROPIC_MODEL (un seul
+// nom, ou plusieurs séparés par des virgules).
+const MODELS = (Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5,claude-haiku-4-5-20251001,claude-3-5-sonnet-20241022,claude-3-5-sonnet-latest")
+  .split(",").map((s) => s.trim()).filter(Boolean);
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -121,41 +125,48 @@ async function handle(req) {
   let maxTok = 1024;
   const reqTok = Number(payload.maxTokens);
   if (Number.isFinite(reqTok) && reqTok > 1024) maxTok = Math.min(Math.floor(reqTok), 8192);
-  const body = {
-    model: MODEL,
+  const baseBody = {
     max_tokens: maxTok,
     messages: [{ role: "user", content: [fileBlock, { type: "text", text: promptText }] }],
   };
-  // Délai MAX sur l'appel à Claude : sans ça, un appel qui traîne fait tuer l'exécution par le
-  // serveur → 5xx SANS CORS (le navigateur affiche « Failed to send a request » sans la cause).
-  let apiRes;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 55000);
-  console.log("[scan-doc] appel Anthropic — model=" + MODEL + " · cle=" + (apiKey ? ("presente(" + apiKey.length + ")") : "ABSENTE"));
-  try {
-    apiRes = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-  } catch (e) {
+  console.log("[scan-doc] cle=" + (apiKey ? ("presente(" + apiKey.length + ")") : "ABSENTE") + " · modeles=" + MODELS.join(","));
+  // On essaie chaque modèle dans l'ordre ; on garde le 1er accepté. Un « modèle introuvable » (404)
+  // fait passer au suivant ; toute AUTRE erreur (clé, quota) est renvoyée telle quelle (inutile d'insister).
+  let data = null, usedModel = null, lastErr = "aucun modele disponible", lastStatus = 502;
+  for (const m of MODELS) {
+    let apiRes;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 55000);
+    try {
+      apiRes = await fetch(ANTHROPIC_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ ...baseBody, model: m }),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      const aborted = e && (e.name === "AbortError");
+      lastErr = aborted ? "L'API Claude n'a pas repondu a temps (timeout)." : ("appel API echoue: " + (e && e.message ? e.message : String(e)));
+      console.error("[scan-doc] " + m + " → " + lastErr);
+      continue; // réseau/timeout : on tente le modèle suivant
+    }
     clearTimeout(timer);
-    const aborted = e && (e.name === "AbortError");
-    console.error("[scan-doc] echec fetch Anthropic: " + (aborted ? "TIMEOUT (55s)" : (e && e.message ? e.message : String(e))));
-    return json({ error: aborted ? "L'API Claude n'a pas repondu a temps (timeout). Reessaie ; si ca persiste, l'API est peut-etre surchargee." : ("appel API echoue: " + (e && e.message ? e.message : String(e))) }, 502);
+    const rawText = await apiRes.text();
+    let parsed = null; try { parsed = JSON.parse(rawText); } catch (_) {}
+    console.log("[scan-doc] " + m + " → status=" + apiRes.status);
+    if (apiRes.ok && parsed) { data = parsed; usedModel = m; break; }
+    lastErr = (parsed && parsed.error && parsed.error.message) || ("HTTP " + apiRes.status + " : " + rawText.slice(0, 200));
+    lastStatus = apiRes.status;
+    console.error("[scan-doc] " + m + " KO: " + lastErr);
+    const modelNotFound = apiRes.status === 404 && /model/i.test(lastErr);
+    if (modelNotFound) continue; // ce modèle n'existe pas pour ce compte → suivant
+    // Autre erreur (clé invalide, quota, surcharge…) : inutile d'essayer d'autres modèles.
+    return json({ error: lastErr, status: lastStatus }, 502);
   }
-  clearTimeout(timer);
-  console.log("[scan-doc] reponse Anthropic status=" + apiRes.status);
-  // La réponse d'Anthropic n'est pas toujours du JSON (page d'erreur, surcharge, corps vide) :
-  // on lit d'abord en texte puis on tente le JSON, pour NE JAMAIS planter ici (sinon 502 sans CORS).
-  const rawText = await apiRes.text();
-  let data = null; try { data = JSON.parse(rawText); } catch (_) {}
-  if (!apiRes.ok) { console.error("[scan-doc] erreur Anthropic HTTP " + apiRes.status + " : " + rawText.slice(0, 500));
-    return json({ error: (data && data.error && data.error.message) || ("erreur API (HTTP " + apiRes.status + ") : " + rawText.slice(0, 300)), status: apiRes.status }, 502); }
-  if (!data) return json({ ok: false, error: "Réponse illisible de l'API (non JSON) : " + rawText.slice(0, 300) }, 502);
+  if (!data) return json({ error: "Aucun modele Claude disponible pour ce compte. Derniere erreur : " + lastErr, status: lastStatus }, 502);
   const text = (data.content || []).filter((x) => x.type === "text").map((x) => x.text || "").join("");
   const fields = extractJson(text);
   if (!fields) return json({ ok: false, error: "lecture impossible", raw: text }, 200);
-  return json({ ok: true, fields, model: MODEL }, 200);
+  return json({ ok: true, fields, model: usedModel }, 200);
 }
