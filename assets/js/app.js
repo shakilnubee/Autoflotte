@@ -1006,24 +1006,50 @@ FP.congeDansMois = (condKey, mois) => {
   const m = String(mois).slice(0, 7);
   return FP.getConges(condKey).find(c => c.debut && c.fin && String(c.debut).slice(0, 10) <= m + '-31' && String(c.fin).slice(0, 10) >= m + '-01') || null;
 };
+// Clé conducteur d'une ligne de conso — la plus FIABLE possible, dans l'ordre :
+//   1) n° de CARTE/BADGE lu sur la conso → conducteur qui le porte (lien saisi sur la fiche) ;
+//   2) NOM du conducteur (nom complet puis prénom) ;
+//   3) PLAQUE → chauffeur du véhicule ;
+//   4) repli : prénom normalisé du nom lu.
+// Indispensable : la conso Total/Ulys est rattachée par carte/plaque, pas toujours par un nom qui
+// correspond exactement à la clé du congé. Sans ça, une vraie conso pendant un congé passe inaperçue.
+FP.condKeyDeConso = (t) => {
+  if (!t) return null;
+  const carte = t.carte || t.badge || null;
+  if (carte) {
+    try { const c = FP.conducteurParCarteTotal && FP.conducteurParCarteTotal(carte); if (c && c.key) return c.key; } catch (e) {}
+    try { const c = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(carte); if (c && c.key) return c.key; } catch (e) {}
+  }
+  const nm = t.conducteur || '';
+  if (nm) { try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(nm) : null; if (c && c.key) return c.key; } catch (e) {} }
+  const pl = t.plaque || null;
+  if (pl) {
+    try {
+      const vehs = (window.FP_DATA && FP_DATA.vehicules) || (window.data && data.vehicules) || [];
+      const np = (x) => FP.normPlaque ? FP.normPlaque(x) : String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const v = vehs.find(x => np(x.immat) === np(pl));
+      if (v && v.chauffeur && v.chauffeur !== '—') { const c = FP.conducteurs.find(v.chauffeur); if (c && c.key) return c.key; }
+    } catch (e) {}
+  }
+  return (nm && FP.normPrenom) ? FP.normPrenom(nm) : null;
+};
 // Détecte les consos survenues PENDANT un congé (interdit). `txList` = transactions DATÉES
-// { conducteur (nom), dateTx:'AAAA-MM-JJ', categorie, montantTtc, produit }. Par défaut on regarde
-// TOUS les types de conso (carburant, péage, boutique, lavage…) ; `opts.categories` peut restreindre.
+// { conducteur (nom), carte, plaque, dateTx:'AAAA-MM-JJ', categorie, montantTtc, produit }. Par défaut
+// on regarde TOUS les types de conso (carburant, péage, boutique, lavage…) ; `opts.categories` restreint.
 FP.consoPendantConge = (txList, opts) => {
   const o = opts || {}; const cats = (o.categories && o.categories.length) ? o.categories.map(c => String(c).toLowerCase()) : null;
   const out = [];
   (txList || []).forEach(t => {
-    if (!t || !t.conducteur) return;
+    if (!t) return;
     // Tolérant camelCase (FP.db) ET snake_case (lecture brute Supabase) : date_tx / montant_ttc.
     const dtx = t.dateTx || t.date_tx; if (!dtx) return;
     const cat = String(t.categorie || '').toLowerCase();
     const mtt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc);
     if (cats && cats.indexOf(cat) === -1) return;
-    let key = null; try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(t.conducteur) : null; if (c) key = c.key; } catch (e) {}
-    if (!key && FP.normPrenom) key = FP.normPrenom(t.conducteur);
+    const key = FP.condKeyDeConso(t);
     if (!key) return;
     const cg = FP.congeCouvrant(key, dtx);
-    if (cg) out.push({ conducteur: t.conducteur, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg });
+    if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg });
   });
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 };

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807g">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -136,11 +136,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807f"></script>
-<script src="../assets/js/supabase-client.js?v=20260807f"></script>
-<script src="../assets/js/data.js?v=20260807f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807g"></script>
+<script src="../assets/js/supabase-client.js?v=20260807g"></script>
+<script src="../assets/js/data.js?v=20260807g"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807f"></script>
+<script src="../assets/js/app.js?v=20260807g"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -670,9 +670,10 @@
     const card = (window.FP && FP.totalFleetAnomaliesActives) ? FP.totalFleetAnomaliesActives(txCard) : [];
     return card.concat(congeAnoms()).concat(ulysCongeAnoms());
   }
+  function hasConges() { try { return Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length > 0; } catch (e) { return false; } }
   function paintVerifTab(n) {
     if (!tabV) return;
-    tabV.style.display = n > 0 ? '' : 'none';
+    tabV.style.display = (n > 0 || hasConges()) ? '' : 'none'; // garde l'onglet visible si des congés existent (diagnostic)
     const b = document.getElementById('tab-verif-n'); if (b) b.textContent = n > 0 ? '(' + n + ')' : '';
   }
   async function refreshVerifCount() { await loadVerifTx(); paintVerifTab(verifAnoms().length); }
@@ -682,7 +683,17 @@
     await loadVerifTx();
     const anoms = verifAnoms();
     paintVerifTab(anoms.length);
-    if (!anoms.length) { box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier sur la carte carburant Total.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div></div></div>'; lucide.createIcons(); return; }
+    if (!anoms.length) {
+      let diag = '';
+      if (hasConges()) {
+        const nTx = (_verifTx || []).length, nUlys = (_verifUlys || []).length, nC = Object.keys(FP.getAllConges()).length;
+        const hint = nTx === 0
+          ? 'Aucune conso datée n\'est enregistrée. Importe le <b>relevé détaillé</b> (transaction par transaction, avec la colonne date) pour la détection au jour près.'
+          : 'Aucune conso ne tombe dans une période de congé — ou tout est déjà archivé. Vérifie que le <b>n° de carte/badge</b> du conducteur est bien renseigné sur sa fiche (c\'est ce qui relie la conso au bon conducteur).';
+        diag = `<div class="text-xs text-slate-400 mt-2" style="line-height:1.55">🔎 Analyse des congés : <b>${nTx}</b> conso datée(s) carte carburant · <b>${nUlys}</b> relevé(s) Ulys mensuel(s) · <b>${nC}</b> conducteur(s) avec congé.<br>${hint}</div>`;
+      }
+      box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div>' + diag + '</div></div>'; lucide.createIcons(); return;
+    }
     box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant (repas élevés, achats hors carburant, plusieurs pleins/jour, diesel) <b>et TOUTE conso (carburant, péage, boutique…) pendant un congé</b> (interdit — avec les dates). La <b>✓ verte</b> archive comme sur Factures → Total Fleet (même suivi). Clique le texte pour ouvrir la fiche concernée.</p>'
       + anoms.map(a => { const conge = a.t === 'conge'; const cat = conge ? '🌴 Conso pendant un congé' : 'Carte carburant Total'; const href = conge ? 'conducteurs.html' : 'factures.html'; return `<div class="notif lvl-warn" style="align-items:center"><button type="button" data-verif-ok="${esc(a.key)}" title="Marquer vérifié / archiver (même suivi que Factures)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:17px;line-height:1">✓</button><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0"></i><a href="${href}" class="flex-1 min-w-0" style="text-decoration:none;color:inherit"><div class="notif-cat">${cat}</div><div class="font-semibold text-slate-900">${esc(a.txt)}</div></a><i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 flex-shrink-0"></i></div>`; }).join('');
     lucide.createIcons();
