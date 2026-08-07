@@ -33,7 +33,7 @@
     certificat_immatriculation: { label: "Carte grise", cible: "vehicules", champs: [
       ["immat", "Immatriculation (A)"], ["date1", "1re mise en circulation (B)"], ["titulaire", "Titulaire (C.1)"],
       ["marque", "Marque (D.1)"], ["version", "Version (D.2)"], ["modele", "Denomination commerciale (D.3)"],
-      ["vin", "VIN (E)"], ["ptac", "PTAC (F.2)"], ["masse", "Masse en service (G)"], ["genre", "Genre national (J.1)"],
+      ["vin", "VIN (E)"], ["ptac", "PTAC en kg = repere F.2 (masse en charge max admissible)"], ["masse", "Masse EN SERVICE en kg = repere G EXACTEMENT (PAS G.1 poids a vide, PAS F.1/F.2 PTAC)"], ["genre", "Genre national (J.1)"],
       ["puissanceKw", "Puissance nette (P.2)"], ["energie", "Energie (P.3)"], ["puissanceFiscale", "Puissance administrative (P.6)"],
       ["places", "Nombre de places (S.1)"], ["co2", "CO2 g/km (V.7)"], ["prochainCT", "Date prochain CT (X.1)"], ["mentionsZ", "Mentions particulieres (Z)"]
     ]},
@@ -128,7 +128,10 @@
       "AMENDES : renvoie TOUJOURS les 3 montants separement (minore, forfaitaire, majore) avec leurs dates limites. NE choisis JAMAIS automatiquement le plus grand. Le montant a payer sera decide par l'application selon la date du jour.",
       "Ne confonds jamais un montant avec un n° d'avis, de telepaiement, de telephone, une annee ou un code postal (le montant est petit, en general 11 a 1500 euros)."
     );
-    if (s.cible === "vehicules") extra.push("Immatriculation = plaque francaise AB-123-CD. Ne confonds pas titulaire (C.1) et conducteur habituel.");
+    if (s.cible === "vehicules") extra.push(
+      "Immatriculation = plaque francaise AB-123-CD. Ne confonds pas titulaire (C.1) et conducteur habituel.",
+      "CARTE GRISE — POIDS (tres important) : le champ 'masse' = la MASSE EN SERVICE, reperee par la lettre « G » SEULE sur la carte grise (masse du vehicule en ordre de marche, en kg, en general 1000 a 2600 kg pour une voiture). NE PAS confondre : « G.1 » = poids a vide national (a IGNORER), « F.1 »/« F.2 » = PTAC / masse en charge maximale (plus eleve, va dans 'ptac'), « F.3 » = ensemble. Recopie le nombre EXACT du repere G en enlevant les espaces (ex '2 102 kg' -> 2102). Verifie bien que tu lis la ligne « G » et pas une ligne « F » ou « G.1 » juste a cote. Si le repere G est illisible/absent, mets null (ne devine pas)."
+    );
     if (s.cible === "factures") extra.push(
       "FACTURE : le TTC = le montant 'NET A PAYER' / 'Total TTC' imprime, PAS la somme de tous les nombres de la page. HT + TVA doivent egaler TTC. Le fournisseur est l'EMETTEUR (celui qui facture), jamais le client."
     );
@@ -156,6 +159,13 @@
     const add = (type2, gravite, description) => out.push({ type: type2, gravite, description, verification_humaine_requise: gravite !== 'basse' });
     // VIN 17 caractères
     const vin = val(model, 'vin'); if (vin && String(vin).replace(/\s/g, '').length !== 17) add('vin_longueur', 'moyenne', `Le VIN « ${vin} » ne fait pas 17 caractères — à vérifier.`);
+    // Carte grise : masse en service (champ G) plausible + cohérente avec le PTAC (F.2).
+    // Une valeur aberrante = souvent une confusion G / G.1 / PTAC → on alerte pour vérification.
+    if (t === 'certificat_immatriculation') {
+      const masse = num(val(model, 'masse')), ptac = num(val(model, 'ptac'));
+      if (masse != null && (masse < 400 || masse > 5000)) add('masse_suspecte', 'moyenne', `La masse en service lue (${masse} kg) semble anormale : vérifie que c'est bien le repère « G » (pas « G.1 » ni le PTAC « F.2 »).`);
+      if (masse != null && ptac != null && masse > ptac) add('masse_ptac_inversees', 'moyenne', `La masse en service (${masse} kg) dépasse le PTAC (${ptac} kg) — tu as probablement inversé le champ « G » et « F.2 ». Vérifie.`);
+    }
     // HT + TVA = TTC (tolérance 2 cts) — sur TOUTE facture (entretien, achat, carburant)
     if ((schemaFor(t) || {}).cible === 'factures') { const ht = num(val(model, 'montantHT')), tva = num(val(model, 'montantTVA')), ttc = num(val(model, 'montantTTC')); if (ht != null && tva != null && ttc != null && Math.abs(ht + tva - ttc) > 0.02) add('montants_incoherents', 'elevee', `HT (${ht}) + TVA (${tva}) ≠ TTC (${ttc}). À vérifier avant enregistrement.`); }
     // Amende : les 3 montants, jamais le majoré par défaut
