@@ -4276,7 +4276,19 @@ FP.trash = {
   MAX: 300,
   // Libellés lisibles par table (pour l'affichage dans Paramètres → Corbeille).
   typeLabel(t) { return ({ vehicules:'Véhicule', amendes:'Amende', conducteurs:'Conducteur', factures:'Facture', documents:'Document', emprunts:'Emprunt', leasing:'Contrat leasing', sinistres:'Sinistre' })[t] || t; },
-  _all() { try { const a = FP.settings.get().corbeille; return Array.isArray(a) ? a : []; } catch (e) { return []; } },
+  // ⚠️ FILET DE SÉCURITÉ LOCAL (par société) : la corbeille synchronisée (app_settings) est écrite en
+  // ASYNCHRONE ; si on recharge juste après une suppression, la synchro peut ne pas être partie → l'élément
+  // serait perdu. On garde donc EN PLUS une copie locale IMMÉDIATE (localStorage), qui survit au rechargement.
+  // La liste affichée = fusion des deux (dédup par id) → une suppression est TOUJOURS récupérable.
+  _lkey() { try { return 'fp_trash_' + (((FP.activeSociete && FP.activeSociete()) || 'default') + '').toLowerCase(); } catch (e) { return 'fp_trash_default'; } },
+  _local() { try { const a = JSON.parse(localStorage.getItem(this._lkey())); return Array.isArray(a) ? a : []; } catch (e) { return []; } },
+  _saveLocal(arr) { try { localStorage.setItem(this._lkey(), JSON.stringify((arr || []).slice(0, this.MAX))); } catch (e) {} },
+  _synced() { try { const a = FP.settings.get().corbeille; return Array.isArray(a) ? a : []; } catch (e) { return []; } },
+  _all() {
+    const byId = {}; const out = [];
+    [].concat(this._synced(), this._local()).forEach(e => { if (e && e.id && !byId[e.id]) { byId[e.id] = 1; out.push(e); } });
+    return out.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, this.MAX);
+  },
   // Fabrique un libellé court à partir de l'enregistrement (immat, prénom, n° d'avis…).
   _label(type, rec) {
     try {
@@ -4291,17 +4303,21 @@ FP.trash = {
   },
   add(type, rec, label) {
     if (!rec) return;
-    try {
-      const s = FP.settings.get();
-      const list = Array.isArray(s.corbeille) ? s.corbeille : [];
-      list.unshift({ id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), type: String(type), rec: JSON.parse(JSON.stringify(rec)), label: String(label || this._label(type, rec) || ''), ts: Date.now() });
-      s.corbeille = list.slice(0, this.MAX);
-      FP.settings.save(s);
-    } catch (e) {}
+    const entry = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), type: String(type), rec: JSON.parse(JSON.stringify(rec)), label: String(label || this._label(type, rec) || ''), ts: Date.now() };
+    // 1) Copie locale IMMÉDIATE (garantie même si on recharge tout de suite).
+    try { const l = this._local(); l.unshift(entry); this._saveLocal(l); } catch (e) {}
+    // 2) Copie synchronisée (cross-appareils) — asynchrone, best effort.
+    try { const s = FP.settings.get(); const list = Array.isArray(s.corbeille) ? s.corbeille : []; list.unshift(entry); s.corbeille = list.slice(0, this.MAX); FP.settings.save(s); } catch (e) {}
   },
   list() { return this._all(); },
-  remove(id) { try { const s = FP.settings.get(); s.corbeille = this._all().filter(x => x.id !== id); FP.settings.save(s); } catch (e) {} },
-  clear() { try { const s = FP.settings.get(); s.corbeille = []; FP.settings.save(s); } catch (e) {} },
+  remove(id) {
+    try { this._saveLocal(this._local().filter(x => x.id !== id)); } catch (e) {}
+    try { const s = FP.settings.get(); s.corbeille = this._synced().filter(x => x.id !== id); FP.settings.save(s); } catch (e) {}
+  },
+  clear() {
+    try { this._saveLocal([]); } catch (e) {}
+    try { const s = FP.settings.get(); s.corbeille = []; FP.settings.save(s); } catch (e) {}
+  },
   // Restaure l'élément dans sa table (ou dans les contrats leasing) puis le retire de la Corbeille.
   async restore(id) {
     const e = this._all().find(x => x.id === id); if (!e) return false;
