@@ -122,6 +122,7 @@
       <button type="button" id="tab-total" style="padding:9px 18px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">⛽ Total Fleet <span style="font-size:11px;font-weight:600">· carburant &amp; péages</span></button>
       <button type="button" id="tab-ulys" style="padding:9px 18px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🛣️ Ulys <span style="font-size:11px;font-weight:600">· péages</span></button>
       <button type="button" id="tab-controle" style="padding:9px 18px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">🛡️ Contrôle <span id="ctrl-count" style="font-size:11px;font-weight:700"></span></button>
+      <button type="button" id="tab-cartes" style="padding:9px 18px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">💳 Cartes &amp; badges</button>
     </div>
 
     <!-- Sous-onglets Total Fleet / Ulys : la vue complète (conso, imports, exports) est intégrée depuis
@@ -168,6 +169,19 @@
       <div id="ctrl-body"><p class="text-sm text-slate-400">Chargement…</p></div>
     </div>
 
+    <!-- Sous-onglet Cartes & badges : gérer au même endroit les n° carte carburant / badge péage de
+         TOUS les conducteurs (même donnée que la fiche conducteur, synchronisée). -->
+    <div id="pane-cartes" class="hidden">
+      <div class="card p-4 mb-4 text-sm text-slate-600" style="line-height:1.55">
+        Chaque n° <b>rattache automatiquement</b> la conso au bon conducteur (par numéro, pas par nom). C'est la <b>même donnée</b> que la fiche conducteur / la fiche véhicule : la modifier ici la change <b>partout</b>. Vider un champ enlève le lien mais ne supprime pas la conso déjà enregistrée.
+      </div>
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <input id="cb-search" type="text" placeholder="🔍 Conducteur…" class="field-input" style="max-width:240px;padding:.45rem .7rem;font-size:.88rem">
+        <span class="text-xs text-slate-400" id="cb-count"></span>
+      </div>
+      <div class="card p-2" style="overflow-x:auto"><div id="cb-body"><p class="text-sm text-slate-400 p-3">Chargement…</p></div></div>
+    </div>
+
   </main>
 </div>
 
@@ -185,20 +199,22 @@
   const dfr = (d) => d ? (FP.date ? FP.date(d) : d) : '';
 
   // ===== Sous-onglets =====
-  const panes = { total:'pane-total', ulys:'pane-ulys', controle:'pane-controle' };
-  const tabs = { total:'tab-total', ulys:'tab-ulys', controle:'tab-controle' };
+  const panes = { total:'pane-total', ulys:'pane-ulys', controle:'pane-controle', cartes:'pane-cartes' };
+  const tabs = { total:'tab-total', ulys:'tab-ulys', controle:'tab-controle', cartes:'tab-cartes' };
   function switchTab(name){
     Object.keys(panes).forEach(k => $(panes[k]).classList.toggle('hidden', k !== name));
     Object.keys(tabs).forEach(k => { const b = $(tabs[k]); const on = k === name; b.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; b.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
     // Chargement paresseux des vues intégrées Total Fleet / Ulys (1re ouverture seulement).
     if (name === 'total') { const f = $('if-total'); if (f && !f.src) f.src = 'factures.html?embed&tab=total'; }
     if (name === 'ulys')  { const f = $('if-ulys');  if (f && !f.src) f.src = 'factures.html?embed&tab=ulys'; }
+    if (name === 'cartes') renderCartes();
     if (window.lucide) lucide.createIcons();
   }
   $('tab-total').addEventListener('click', () => switchTab('total'));
   $('tab-ulys').addEventListener('click', () => switchTab('ulys'));
   $('tab-controle').addEventListener('click', () => switchTab('controle'));
-  { const t = new URLSearchParams(location.search).get('tab'); switchTab(['total','ulys','controle'].includes(t) ? t : 'controle'); }
+  $('tab-cartes').addEventListener('click', () => switchTab('cartes'));
+  { const t = new URLSearchParams(location.search).get('tab'); switchTab(['total','ulys','controle','cartes'].includes(t) ? t : 'controle'); }
   // La vue intégrée (Total Fleet / Ulys) nous envoie sa hauteur → on adapte l'iframe (aucun scroll imbriqué).
   window.addEventListener('message', (e) => {
     const h = e.data && e.data.fpEmbedHeight; if (!h || h < 300) return;
@@ -413,6 +429,43 @@
     state.statut = c.dataset.st; render();
   }));
   $('ctrl-group').addEventListener('click', () => { state.grouped = !state.grouped; $('ctrl-group').querySelector('span').textContent = state.grouped ? 'Vue par conducteur' : 'Vue liste'; render(); });
+
+  // ===== Sous-onglet « Cartes & badges » : n° carte carburant / badge péage de TOUS les conducteurs =====
+  let _cbSearch = '';
+  function renderCartes(){
+    const box = $('cb-body'); if (!box) return;
+    const presC = FP.prestataireCarte ? FP.prestataireCarte() : 'Carte carburant';
+    const presB = FP.prestataireBadge ? FP.prestataireBadge() : 'Badge péage';
+    let conds = (FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [];
+    const q = _cbSearch.trim().toLowerCase();
+    if (q) conds = conds.filter(c => FP.conducteurs.displayName(c).toLowerCase().includes(q));
+    conds = conds.slice().sort((a, b) => FP.conducteurs.displayName(a).localeCompare(FP.conducteurs.displayName(b)));
+    $('cb-count').textContent = conds.length + ' conducteur(s)';
+    if (!conds.length) { box.innerHTML = '<p class="text-sm text-slate-400 p-3">Aucun conducteur.</p>'; return; }
+    const inp = 'width:160px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
+    const vehLink = (im) => '<a href="vehicules.html?immat=' + encodeURIComponent(im) + '" style="display:inline-block;background:#EEF2FF;color:#3730A3;border-radius:6px;padding:1px 7px;font-size:.78rem;font-weight:700;text-decoration:none;margin:1px 2px 1px 0">' + esc(im) + '</a>';
+    box.innerHTML = '<table class="ctrl-tbl"><thead><tr><th>Conducteur</th><th>Véhicule(s)</th><th style="text-align:right">Carte ' + esc(presC) + '</th><th style="text-align:right">Badge ' + esc(presB) + '</th></tr></thead><tbody>'
+      + conds.map(c => {
+          const carte = (FP.numCarteConducteur ? FP.numCarteConducteur(c.key, 'condCarteTotal') : '') || '';
+          const badge = (FP.numCarteConducteur ? FP.numCarteConducteur(c.key, 'condBadgeUlys') : '') || '';
+          const vs = (data.vehicules || []).filter(v => { try { const cc = v.chauffeur && v.chauffeur !== '—' ? FP.conducteurs.find(v.chauffeur) : null; return cc && cc.key === c.key; } catch (e) { return false; } }).map(v => v.immat).filter(Boolean);
+          return '<tr><td><b>' + esc(FP.conducteurs.displayName(c)) + '</b></td>'
+            + '<td>' + (vs.length ? vs.map(vehLink).join('') : '<span class="text-slate-400">—</span>') + '</td>'
+            + '<td style="text-align:right"><input data-cb-key="' + esc(c.key) + '" data-cb-field="condCarteTotal" value="' + esc(carte) + '" placeholder="—" style="' + inp + '"></td>'
+            + '<td style="text-align:right"><input data-cb-key="' + esc(c.key) + '" data-cb-field="condBadgeUlys" value="' + esc(badge) + '" placeholder="—" style="' + inp + '"></td></tr>';
+        }).join('') + '</tbody></table>';
+    if (window.lucide) lucide.createIcons();
+  }
+  $('cb-search').addEventListener('input', e => { _cbSearch = e.target.value; renderCartes(); });
+  $('cb-body').addEventListener('change', e => {
+    const el = e.target.closest('[data-cb-key]'); if (!el) return;
+    const key = el.getAttribute('data-cb-key'), field = el.getAttribute('data-cb-field');
+    const s = FP.settings.get(); s[field] = s[field] || {};
+    const val = (el.value || '').trim();
+    if (val) s[field][key] = val; else delete s[field][key];
+    FP.settings.save(s);
+    if (FP.toast) FP.toast('✓ Enregistré');
+  });
 
   $('ctrl-body').addEventListener('click', async (e) => {
     const gh = e.target.closest('[data-grp]');

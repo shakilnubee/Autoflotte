@@ -3448,9 +3448,36 @@
         const m = 'Il faut d\'abord créer la table (une seule fois) : dans Supabase → SQL Editor, lance le script « total-conso-tx », puis reclique sur « Reconstruire le détail ».';
         if (FP.alert) FP.alert(m); else alert(m); return;
       }
+      // + Reconstruit AUSSI le détail Ulys DATÉ (péages par jour) depuis les PDF Ulys stockés → même
+      // table total_conso_tx (carte « ULYS-… ») pour le suivi des congés. Un seul bouton fait les deux.
+      let okUlys = 0;
+      try {
+        if (window.FP && FP.ulys && FP.ulys.parse && FP.ulys.pdfToText) {
+          const ul = (window.FP_DATA.factures || []).filter(f => isUlys(f) && f.fileId && /^https?:\/\//.test(f.fileId));
+          const byU = new Map(); ul.forEach(f => { if (!byU.has(f.fileId)) byU.set(f.fileId, f); });
+          let du = 0;
+          for (const f of byU.values()) {
+            if (btn) btn.innerHTML = 'Ulys ' + (++du) + '/' + byU.size + '…';
+            try {
+              const blob = await fetchPdfBlob(f.fileId);
+              const text = await FP.ulys.pdfToText(blob);
+              const p = FP.ulys.parse(text); const num = p.numero || f.numeroFacture || '';
+              let i = 0;
+              for (const c of (p.txConso || [])) {
+                const seq = i++; if (!c.date || !c.conducteur) continue;
+                const tr = { id: 'ULYSTX-' + num + '-' + (c.badge || '') + '-' + seq, facnum: num, carte: 'ULYS-' + (c.badge || ''),
+                  conducteur: c.conducteur, plaque: null, dateTx: c.date, mois: (c.date || '').slice(0, 7), produit: 'Péage Ulys',
+                  categorie: 'peage', montantTtc: (c.montant != null ? c.montant : 0) };
+                const res = await FP.db.upsert('total_conso_tx', tr); if (res && res.error) throw res.error; okUlys++;
+              }
+            } catch (e) { console.warn('[backfillTx ulys]', f.id, e); }
+          }
+        }
+      } catch (e) { console.warn('[backfillTx ulys]', e); }
+      if (btn) { btn.innerHTML = old; btn.disabled = false; }
       consoLoaded = false; try { await loadConso(); } catch (e) {}
       renderConso(); renderAnalyse();
-      const msg = '✓ Détail reconstruit : ' + okTx + ' achat(s) sur ' + list.length + ' relevé(s)' + (failed ? ' · ' + failed + ' illisible(s)' : '');
+      const msg = '✓ Détail reconstruit : ' + okTx + ' achat(s) Total sur ' + list.length + ' relevé(s)' + (okUlys ? ' · ' + okUlys + ' conso Ulys datées' : '') + (failed ? ' · ' + failed + ' illisible(s)' : '');
       if (FP.toast) FP.toast(msg);
     }
     if ($('tf-backfill-tx')) $('tf-backfill-tx').addEventListener('click', function () { backfillTx(this).catch(e => { console.error('[backfillTx]', e); if (FP.toast) FP.toast('Erreur pendant la reconstruction.'); this.disabled = false; }); });
