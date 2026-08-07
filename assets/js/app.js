@@ -970,6 +970,34 @@ FP.conducteurs = {
   }
 };
 
+// ================= INDICATEUR « ENREGISTREMENT EN COURS » (overlay centré, TRÈS visible) =========
+// ⚠️ RÈGLE (consigne explicite) : à CHAQUE enregistrement/import, montrer clairement que ça travaille
+// (spinner « … en cours ») PUIS le résultat (« ✓ … enregistré » / « ✕ échec »), au lieu d'un statut
+// discret en bas de page. Usage :
+//   const b = FP.busy('Enregistrement en cours…');  … ;  b.done('✓ 3 factures enregistrées');
+//   (ou b.fail('Échec : …'))  — b.update('…') pour changer le texte pendant le travail.
+FP.busy = (message) => {
+  let host = document.getElementById('fp-busy');
+  if (!host) {
+    if (!document.getElementById('fp-busy-style')) { const st = document.createElement('style'); st.id = 'fp-busy-style'; st.textContent = '@keyframes fpspin{to{transform:rotate(360deg)}}'; document.head.appendChild(st); }
+    host = document.createElement('div'); host.id = 'fp-busy';
+    host.setAttribute('style', 'position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;background:rgba(15,30,61,.30)');
+    host.innerHTML = '<div role="status" aria-live="polite" style="background:#fff;border-radius:14px;box-shadow:0 24px 60px -18px rgba(15,30,61,.55);padding:22px 26px;min-width:250px;max-width:90vw;text-align:center;color:#0F1E3D"><div id="fp-busy-ico" style="margin-bottom:10px;min-height:30px"></div><div id="fp-busy-msg" style="font-weight:600;line-height:1.45;font-size:.95rem"></div></div>';
+    document.body.appendChild(host);
+  }
+  const spin = '<span style="display:inline-block;width:28px;height:28px;border:3px solid #E2E8F0;border-top-color:#F97316;border-radius:50%;animation:fpspin .7s linear infinite"></span>';
+  const setIco = (h) => { const el = document.getElementById('fp-busy-ico'); if (el) el.innerHTML = h; };
+  const setMsg = (m) => { const el = document.getElementById('fp-busy-msg'); if (el) el.textContent = m || ''; };
+  host.style.display = 'flex'; setIco(spin); setMsg(message || 'Enregistrement en cours…');
+  const close = () => { if (host) host.style.display = 'none'; };
+  return {
+    update: setMsg,
+    done: (m, ms) => { setIco('<span style="color:#16a34a;font-size:32px;line-height:1">✓</span>'); setMsg(m || '✓ Enregistré'); setTimeout(close, ms == null ? 1900 : ms); },
+    fail: (m, ms) => { setIco('<span style="color:#DC2626;font-size:32px;line-height:1">✕</span>'); setMsg(m || "Échec de l'enregistrement"); setTimeout(close, ms == null ? 3800 : ms); },
+    close
+  };
+};
+
 // ================= PRESTATAIRES CARTE CARBURANT / BADGE PÉAGE (nom PAR SOCIÉTÉ, synchronisé) =========
 // ⚠️ MULTI-SOCIÉTÉS : chaque société nomme SON prestataire (comme le leasing). PXP = TotalEnergies / Ulys
 // par défaut ; toute autre société part sur un libellé générique jusqu'à ce qu'elle règle le sien
@@ -1048,7 +1076,7 @@ FP.consoPendantConge = (txList, opts) => {
     const key = FP.condKeyDeConso(t);
     if (!key) return;
     const cg = FP.congeCouvrant(key, dtx);
-    if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '' });
+    if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '' });
   });
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 };

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807n">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -706,11 +706,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807m"></script>
-<script src="../assets/js/supabase-client.js?v=20260807m"></script>
-<script src="../assets/js/data.js?v=20260807m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807n"></script>
+<script src="../assets/js/supabase-client.js?v=20260807n"></script>
+<script src="../assets/js/data.js?v=20260807n"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807m"></script>
+<script src="../assets/js/app.js?v=20260807n"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -3120,6 +3120,7 @@
       if (!_pending) return;
       const freshF = _pending.freshF, conso = _pending.conso, toAttach = _pending.toAttach || [];
       $('tf-import-confirm').disabled = true;
+      const _busy = (window.FP && FP.busy) ? FP.busy('Enregistrement du relevé TotalEnergies…') : null;
       tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement...</span>', 'working');
       let okF = 0, okC = 0, okA = 0, attachErr = null;
       // Rattache le PDF aux factures déjà enregistrées qui n'en avaient pas.
@@ -3170,12 +3171,15 @@
       $('tf-import-preview').classList.add('hidden');
       if (consoErr) {
         tfImpStatus('⚠️ ' + okF + ' facture(s) enregistrée(s), mais la CONSO par conducteur n\'a PAS pu être sauvegardée : <b>' + esc(consoErr) + '</b><br>Copie-moi ce message.', 'error');
+        if (_busy) _busy.fail('⚠️ Conso non sauvegardée — voir le détail à l\'écran');
       } else if (attachErr && !okA) {
         // Le stockage du PDF a échoué (bucket Supabase) → message dédié bien visible + cause probable.
         tfImpStatus('⚠️ <b>Le PDF n\'a pas pu être stocké.</b> Erreur exacte : <b>' + esc(attachErr) + '</b>'
           + '<br>Le détail des dépenses fonctionne quand même. Pour l\'aperçu PDF, il faut débloquer le stockage Supabase (bucket « scans »). <b>Copie-moi cette erreur</b> et je te donne le réglage exact.', 'error');
+        if (_busy) _busy.fail('⚠️ PDF non stocké (le détail est enregistré) — voir l\'écran');
       } else {
         tfImpStatus('<b>✓ Enregistré</b> : ' + okF + ' facture(s)' + (okA ? ' + ' + okA + ' PDF rattaché(s)' : '') + ' + conso de ' + okC + ' carte(s). Sauvegardé dans la base (visible sur tous les postes).', 'ok');
+        if (_busy) _busy.done('✓ Relevé TotalEnergies enregistré — ' + okF + ' facture(s), conso de ' + okC + ' carte(s)');
       }
       _pending = null;
       render();
@@ -3646,6 +3650,7 @@
     async function commitUlys(){
       if (!_ulsPending) return;
       $('uls-import-confirm').disabled = true;
+      const _busy = (window.FP && FP.busy) ? FP.busy('Enregistrement du relevé Ulys…') : null;
       ulsImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement…</span>', 'working');
       let okF=0, okC=0;
       for (const p of _ulsPending.fac){
@@ -3680,7 +3685,9 @@
         catch (e){ break; }
       }
       const nbCollab = new Set(_ulsPending.rows.map(r => r.conducteur).filter(Boolean)).size;
-      ulsImpStatus('<b>Enregistré</b> : '+okF+' facture(s) Ulys.' + (okC ? ' Détail de '+okC+' conducteur(s).' : (nbCollab ? ' '+nbCollab+' collaborateur(s) détecté(s) (montant par personne non lu automatiquement sur ce format).' : '')) + (okTx ? ' '+okTx+' conso(s) datée(s) pour le suivi des congés.' : '') + ((_ulsPending.skipped) ? ' <span style="color:#B45309">'+_ulsPending.skipped+' fichier(s) non reconnus.</span>' : '') + ' Visible sur tous les postes.', 'ok');
+      const _skip = _ulsPending.skipped || 0;
+      ulsImpStatus('<b>Enregistré</b> : '+okF+' facture(s) Ulys.' + (okC ? ' Détail de '+okC+' conducteur(s).' : (nbCollab ? ' '+nbCollab+' collaborateur(s) détecté(s) (montant par personne non lu automatiquement sur ce format).' : '')) + (okTx ? ' '+okTx+' conso(s) datée(s) pour le suivi des congés.' : '') + (_skip ? ' <span style="color:#B45309">'+_skip+' fichier(s) non reconnus.</span>' : '') + ' Visible sur tous les postes.', 'ok');
+      if (_busy) _busy.done('✓ Relevé Ulys enregistré — '+okF+' facture(s)' + (okTx ? ', '+okTx+' conso datées' : '') + (_skip ? ' · '+_skip+' non reconnu(s)' : ''));
       $('uls-import-preview').classList.add('hidden'); _ulsPending=null;
       render(); consoLoaded=false; loadConso();
     }

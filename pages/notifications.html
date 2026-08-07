@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807n">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -136,11 +136,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807m"></script>
-<script src="../assets/js/supabase-client.js?v=20260807m"></script>
-<script src="../assets/js/data.js?v=20260807m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807n"></script>
+<script src="../assets/js/supabase-client.js?v=20260807n"></script>
+<script src="../assets/js/data.js?v=20260807n"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807m"></script>
+<script src="../assets/js/app.js?v=20260807n"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -632,14 +632,17 @@
   function congeAnoms() {
     if (!(window.FP && FP.consoPendantConge)) return [];
     let okMap = {}; try { okMap = FP.settings.get().tfAnomOk || {}; } catch (e) {}
-    const lbl = (c) => FP.consoCatLabel ? FP.consoCatLabel(c) : 'achat';
+    const presBadge = FP.prestataireBadge ? FP.prestataireBadge() : 'Ulys';
+    const lbl = (a) => { if (String(a.categorie || '').toLowerCase() === 'peage' && /^ULYS/i.test(String(a.carte || ''))) return 'péage ' + presBadge; return FP.consoCatLabel ? FP.consoCatLabel(a.categorie) : 'achat'; };
     return FP.consoPendantConge(_verifTx || []).map(a => {
       const cg = a.conge || {};
       const key = 'conge|' + (a.key || '') + '|' + a.date + '|' + (a.produit || '') + '|' + (a.montant || '');
-      const mnt = (a.montant != null && a.montant !== 0) ? ' de ' + (FP.euro ? FP.euro(a.montant) : a.montant) : '';
+      const conso = lbl(a);
+      const mnt = (a.montant != null && a.montant !== 0) ? " d'un montant de " + (FP.euro ? FP.euro(a.montant) : a.montant) : '';
+      const facTxt = a.facnum ? ' · Facture n° ' + a.facnum : '';
       return { key, t: 'conge', mois: String(a.date || '').slice(0, 7), facnum: a.facnum || '',
-        xp: { conducteur: a.conducteur, conso: lbl(a.categorie), montant: a.montant, dateConso: a.date, congeDebut: cg.debut, congeFin: cg.fin, facnum: a.facnum || '' },
-        txt: `(congé) ${a.conducteur} — ${lbl(a.categorie)}${mnt} le ${FP.date ? FP.date(a.date) : a.date}, PENDANT un congé (${FP.date(cg.debut)} → ${FP.date(cg.fin)})${cg.motif ? ' · ' + cg.motif : ''}` };
+        xp: { conducteur: a.conducteur, conso, montant: a.montant, dateConso: a.date, congeDebut: cg.debut, congeFin: cg.fin, facnum: a.facnum || '' },
+        txt: `${a.conducteur} — ${conso} le ${FP.date ? FP.date(a.date) : a.date}${mnt} pendant le congé du ${FP.date(cg.debut)} au ${FP.date(cg.fin)}${facTxt}` };
     }).filter(a => !okMap[a.key]);
   }
   // Badge péage : le détail Ulys n'est QUE mensuel (pas daté au jour) → détection au niveau du MOIS
@@ -664,7 +667,7 @@
       const fnum = r.numeroFacture || r.numero_facture || '';
       return { key, t: 'conge', mois, facnum: fnum,
         xp: { conducteur: r.conducteur, conso: 'péages ' + presBadge + ' (mois ' + moisTxt + ')', montant: montant, dateConso: '', congeDebut: cg.debut, congeFin: cg.fin, facnum: fnum },
-        txt: `(congé) ${r.conducteur} — péages ${presBadge} : un congé tombe en ${moisTxt} (${FP.date(cg.debut)} → ${FP.date(cg.fin)}). ⚠️ Montant du MOIS ENTIER${montant != null ? ' : ' + (FP.euro ? FP.euro(montant) : montant) : ''} (PAS seulement le congé). Réimporte le relevé Ulys détaillé pour le montant EXACT par jour.` };
+        txt: `${r.conducteur} — péage ${presBadge} en ${moisTxt}, pendant le congé du ${FP.date(cg.debut)} au ${FP.date(cg.fin)}${montant != null ? ' · montant du mois ' + (FP.euro ? FP.euro(montant) : montant) + ' (détail par jour indisponible — réimporte le relevé détaillé)' : ''}${fnum ? ' · Facture n° ' + fnum : ''}` };
     }).filter(a => a && !okMap[a.key]);
   }
   function verifAnoms() {
@@ -738,7 +741,7 @@
   function exportVerifCSV() {
     const rows = _verifCongeRows || []; if (!rows.length) { if (FP.toast) FP.toast('Rien à exporter.'); return; }
     const q = (s) => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
-    const lines = [_verifCols.map(q).join(';')].concat(rows.map(a => _verifRow(a).map(q).join(';')));
+    const lines = [_verifCols.map(q).join(';')].concat(rows.map(a => { const r = _verifRow(a); r[2] = (r[2] !== '' && r[2] != null) ? Number(r[2]).toFixed(2).replace('.', ',') : ''; return r.map(q).join(';'); }));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob); const el = document.createElement('a'); el.href = url; el.download = 'points-a-verifier-conges.csv'; document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
   }
