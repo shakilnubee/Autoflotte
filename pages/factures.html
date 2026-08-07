@@ -3120,10 +3120,13 @@
       if (!_pending) return;
       const freshF = _pending.freshF, conso = _pending.conso, toAttach = _pending.toAttach || [];
       $('tf-import-confirm').disabled = true;
-      const _busy = (window.FP && FP.busy) ? FP.busy('Enregistrement du relevé TotalEnergies…') : null;
+      // Détail de CE qu'on enregistre, montré dans l'overlay.
+      const _nF = freshF.length, _nC = conso.length, _nTx = (_pendingTx || []).length, _nA = toAttach.length;
+      const _busy = (window.FP && FP.busy) ? FP.busy('Relevé TotalEnergies : ' + _nF + ' facture(s) · ' + _nC + ' carte(s) · ' + _nTx + ' conso datée(s)' + (_nA ? ' · ' + _nA + ' PDF à rattacher' : '') + '…') : null;
       tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement...</span>', 'working');
-      let okF = 0, okC = 0, okA = 0, attachErr = null;
+      let okF = 0, okC = 0, okA = 0, attachErr = null, _iF = 0;
       // Rattache le PDF aux factures déjà enregistrées qui n'en avaient pas.
+      if (_busy && _nA) _busy.update('Rattachement de ' + _nA + ' PDF…');
       for (const r of toAttach){
         if (!(r._file && FP.uploadScan)) continue;
         try {
@@ -3134,6 +3137,7 @@
         } catch (e) { console.warn('[tf-import attach PDF]', e); if (!attachErr) attachErr = (e && (e.message || e.error || e)) + ''; }
       }
       for (const r of freshF){
+        if (_busy) _busy.update('Facture ' + (++_iF) + '/' + _nF + ' · ' + r.numero + ' (' + FP.euro(r.ttc) + ')…');
         // Stocke le PDF d'origine pour pouvoir le rouvrir (bouton « Ouvrir le PDF »)
         let fileUrl = null;
         if (r._file && FP.uploadScan) {
@@ -3147,6 +3151,7 @@
         try { await FP.persist.upsert('factures', newF); okF++; } catch (e) { console.error('[tf-import facture]', e); }
       }
       let consoErr = null;
+      if (_busy && _nC) _busy.update('Conso par carte : ' + _nC + ' à enregistrer…');
       for (const c of conso){
         const row = { id:(c.mois + '-' + c.carte + '-' + c.facNum), mois:c.mois, carte:c.carte, conducteur:c.conducteur || null,
           plaque:c.plaque || null, typeVehicule:c.type_vehicule || null, carburantTtc:c.carburant_ttc,
@@ -3164,6 +3169,7 @@
       // Détail transaction par transaction (table total_conso_tx). Best-effort : si la table n'existe
       // pas encore (SQL non lancé), on ignore silencieusement (les alertes retombent sur le mensuel).
       let okTx = 0;
+      if (_busy && _nTx) _busy.update('Conso datées (suivi des congés) : ' + _nTx + '…');
       for (const tr of _pendingTx) {
         try { const res = (FP.db && FP.db.upsert) ? await FP.db.upsert('total_conso_tx', tr) : null; if (res && res.error) throw res.error; okTx++; }
         catch (e) { /* table absente ou RLS → silencieux */ break; }
@@ -3650,10 +3656,13 @@
     async function commitUlys(){
       if (!_ulsPending) return;
       $('uls-import-confirm').disabled = true;
-      const _busy = (window.FP && FP.busy) ? FP.busy('Enregistrement du relevé Ulys…') : null;
+      // Détail de CE qu'on va enregistrer, montré dans l'overlay (l'utilisateur voit le contenu).
+      const _nF = _ulsPending.fac.length, _nC = (_ulsPending.rows || []).filter(r => r.ttc != null).length, _nTx = (_ulsPending.tx || []).filter(c => c.date && c.conducteur).length;
+      const _busy = (window.FP && FP.busy) ? FP.busy('Relevé Ulys : ' + _nF + ' facture(s) · ' + _nC + ' détail(s) conducteur · ' + _nTx + ' conso datée(s)…') : null;
       ulsImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement…</span>', 'working');
-      let okF=0, okC=0;
+      let okF=0, okC=0, _iF=0;
       for (const p of _ulsPending.fac){
+        if (_busy) _busy.update('Facture ' + (++_iF) + '/' + _nF + ' · ' + p.numero + ' (' + FP.euro(p.ttc) + ')…');
         // Stocke le PDF d'origine (MÊME système que TotalEnergies) → bouton « Voir » = aperçu intégré.
         const prev = (window.FP_DATA.factures||[]).find(x => x.id === ('ULYS-'+p.numero));
         let fileUrl = null;
@@ -3666,6 +3675,7 @@
       }
       // Détail par collaborateur : on n'enregistre QUE si un montant fiable a pu être lu (sinon on
       // n'écrit pas de faux « 0 € » — cf. note d'import). Sur le format Ulys entremêlé, c.ttc est null.
+      if (_busy && _nC) _busy.update('Détail par conducteur : ' + _nC + ' à enregistrer…');
       for (const c of _ulsPending.rows){
         if (c.ttc == null) continue;
         // ⚠️ Société = la société ACTIVE (jamais 'PXP' en dur) sinon le détail Ulys d'une autre
@@ -3676,6 +3686,7 @@
       // Détail DATÉ (colonne date des consommations) → total_conso_tx (péage) pour la détection
       // « conso pendant un congé » à la bonne date. Best-effort : table absente = silencieux (repli mensuel).
       let okTx = 0;
+      if (_busy && _nTx) _busy.update('Conso datées (pour le suivi des congés) : ' + _nTx + '…');
       for (const c of (_ulsPending.tx || [])){
         if (!c.date || !c.conducteur) continue;
         const tr = { id:'ULYSTX-'+c.numero+'-'+(c.badge||'')+'-'+(c.seq!=null?c.seq:''), facnum:c.numero, carte:'ULYS-'+(c.badge||''),
