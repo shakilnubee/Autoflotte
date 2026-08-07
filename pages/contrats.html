@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807i">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -549,11 +549,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807h"></script>
-<script src="../assets/js/supabase-client.js?v=20260807h"></script>
-<script src="../assets/js/data.js?v=20260807h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807i"></script>
+<script src="../assets/js/supabase-client.js?v=20260807i"></script>
+<script src="../assets/js/data.js?v=20260807i"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807h"></script>
+<script src="../assets/js/app.js?v=20260807i"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -646,7 +646,7 @@
   // Suppression DÉFINITIVE d'un véhicule de toute la flotte (comme le bouton Supprimer de la
   // fiche véhicule) : base + mémoire. Renvoie true si supprimé. ⚠️ irréversible.
   function deleteVehiculeFlotte(immat) {
-    const v = (data.vehicules || []).find(x => x.immat === immat);
+    const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(immat));
     if (!v) { alert('Véhicule introuvable dans la flotte.'); return false; }
     // Archive ses documents (sous-dossier « OUT » du dossier plaque, dans Sinistres) avant suppression.
     if (v.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(v.immat);
@@ -1165,7 +1165,7 @@
     const q = FP.norm(leasingSearch).trim();
     const rows = [...leasingImmats]
       .map(immat => {
-        const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
+        const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)) || { immat, marque: '?', modele: '', chauffeur: '—' };
         return { v, agg: leasingByVeh[immat] || { count: 0, total: 0, lastDate: '', lastFile: null, amounts: [] } };
       })
       .filter(({ v }) => leasingLoueurFilter === 'all' || leasingLoueurFilter === LOCALEASE_VAL || loueurNomOf(v) === leasingLoueurFilter)
@@ -1264,7 +1264,7 @@
       const out = [];
       vehicules.forEach(v => out.push({ section: 'Assurance', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: (FP.assuranceLabel && FP.assuranceLabel()) || 'Assurance flotte', detail: 'Police flotte', cout: '' }));
       leasingImmats.forEach(immat => {
-        const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
+        const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)) || { immat, marque: '?', modele: '', chauffeur: '—' };
         const agg = leasingByVeh[immat] || { count: 0, total: 0, amounts: [] };
         const l = FP.leasingInfo(v); const mens = mensualiteFixe(immat); const moisT = moisTheoriques(l);
         const nbMens = (moisT != null) ? moisT : agg.count;
@@ -1279,7 +1279,7 @@
   let leaseEditImmat = null;
   function openLeaseModal(immat) {
     leaseEditImmat = immat;
-    const v = vehicules.find(x => x.immat === immat) || { immat };
+    const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)) || { immat };
     $('lease-modal-veh').textContent = `${immat} · ${v.marque || ''} ${v.modele || ''}${v.chauffeur && v.chauffeur !== '—' ? ' · ' + v.chauffeur : ''}`;
     const c = FP.leasingContrat(immat) || {};
     const debutStr = c.debut ? (typeof c.debut === 'string' ? c.debut.slice(0, 10) : new Date(c.debut).toISOString().slice(0, 10)) : (v.dateMiseEnCirculation || '');
@@ -1330,7 +1330,7 @@
   function restitSet(vehId, key, val) { const s = FP.settings.get(); s.restitutionChecklist = s.restitutionChecklist || {}; s.restitutionChecklist[vehId] = s.restitutionChecklist[vehId] || {}; s.restitutionChecklist[vehId][key] = val; FP.settings.save(s); }
   let restitVehId = null;
   function openRestit(immat) {
-    const v = vehicules.find(x => x.immat === immat); if (!v) return;
+    const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)); if (!v) return;
     restitVehId = v.id;
     const l = FP.leasingInfo ? FP.leasingInfo(v) : null;
     const fin = (l && l.finContrat && !isNaN(l.finContrat)) ? l.finContrat : null;
@@ -1458,7 +1458,7 @@
   // Dossier de restitution leasing (PDF) : km, dépassement projeté et pénalité estimée par véhicule.
   if ($('leasing-restit-btn')) $('leasing-restit-btn').addEventListener('click', () => {
     if (!(FP.fiche && FP.fiche.open)) return;
-    const list = [...leasingImmats].map(immat => vehicules.find(x => x.immat === immat)).filter(Boolean)
+    const list = [...leasingImmats].map(immat => vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat))).filter(Boolean)
       .sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
     if (!list.length) { if (FP.toast) FP.toast('Aucun véhicule en leasing.'); return; }
     const info = v => (FP.leasingInfo ? FP.leasingInfo(v) : null);
@@ -1978,7 +1978,7 @@
     const ks=e.target.closest('[data-loc-kmsupp]'); if(ks){ const i=+ks.dataset.locKmsupp; const u=await FP.prompt('Coût du km supplémentaire (€/km) — ex. 0,099 :', list[i].kmSupp!=null?String(list[i].kmSupp).replace('.',','):''); if(u==null)return; const n=parseFloat(String(u).replace(/[\s€]/g,'').replace(',','.')); list[i].kmSupp=Number.isFinite(n)&&n>0?n:null; save(); return; }
     const im=e.target.closest('[data-loc-immat]'); if(im){ const i=+im.dataset.locImmat; const u=await FP.prompt('Immatriculation du véhicule :', list[i].immat||''); if(u==null)return; const plaque=u.trim().toUpperCase()||null; list[i].immat=plaque;
       // Auto-affectation du conducteur depuis la fiche véhicule (si la plaque correspond et que le contrat n'a pas encore de conducteur).
-      if(plaque){ const v=(data.vehicules||[]).find(x=>String(x.immat||'').toUpperCase()===plaque); if(v && v.chauffeur && v.chauffeur!=='—' && !String(list[i].conducteur||'').trim()){ list[i].conducteur=v.chauffeur; } }
+      if(plaque){ const v=(data.vehicules||[]).find(x=>FP.normImmat(x.immat)===FP.normImmat(plaque)); if(v && v.chauffeur && v.chauffeur!=='—' && !String(list[i].conducteur||'').trim()){ list[i].conducteur=v.chauffeur; } }
       save(); return; }
     const cd=e.target.closest('[data-loc-cond]'); if(cd){ const i=+cd.dataset.locCond; const td=cd.closest('td'); if(!td) return;
       td.innerHTML=`<input class="field-input" style="font-size:.9rem;padding:.4rem .6rem;width:100%;min-width:150px;border:1px solid var(--fp-accent);border-radius:.5rem" id="loc-cond-edit" autocomplete="off" placeholder="Rechercher ou créer…" value="${escC(list[i].conducteur||'')}">`;
@@ -1988,7 +1988,7 @@
       return; }
     const da=e.target.closest('[data-loc-doc-assur]'); if(da){ const [i,di]=da.dataset.locDocAssur.split(':').map(Number); const c=list[i]||{}; const immat=String(c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):'')||'').toUpperCase(); const doc=(c.docs||[])[di]; if(!doc) return;
       if(!immat){ alert('Lie d\'abord la plaque du contrat (colonne Immatriculation) pour savoir sur quel véhicule ranger le mémo assurance.'); return; }
-      const v=(data.vehicules||[]).find(x=>String(x.immat||'').toUpperCase()===immat); if(!v){ alert('Aucun véhicule de la flotte avec la plaque '+immat+'.'); return; }
+      const v=(data.vehicules||[]).find(x=>FP.normImmat(x.immat)===FP.normImmat(immat)); if(!v){ alert('Aucun véhicule de la flotte avec la plaque '+immat+'.'); return; }
       if(!await FP.confirm(`Déplacer « ${doc.name||'Document'} » vers l'Assurance de la fiche véhicule ${immat} ?`)) return;
       const newDoc={ id:'D'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36), vehiculeId:v.id, type:'assurance', label:(doc.name&&/assur/i.test(doc.name))?doc.name:'Mémo assurance', url:doc.url, driveId:null };
       try{ if(FP.persist&&FP.persist.insert) FP.persist.insert('documents', newDoc); }catch(err){ console.warn('[move assur]',err); }
@@ -1996,7 +1996,7 @@
       if(FP.toast)FP.toast(`Mémo assurance déplacé vers ${immat} ✓`); else alert(`Déplacé vers l'assurance du véhicule ${immat}.`);
       return; }
     const dd=e.target.closest('[data-loc-doc-del]'); if(dd){ const [i,di]=dd.dataset.locDocDel.split(':').map(Number); if(Array.isArray(list[i].docs)){ list[i].docs.splice(di,1); list[i].pdfUrl=list[i].docs[0]?list[i].docs[0].url:null; save(); } return; }
-    const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; const immat=c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):''); if(!await FP.confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${immat?' ('+immat+')':''} ?`)) return; try{ if(FP.trash) FP.trash.add('leasing', c); }catch(_){} list.splice(i,1); save(); if(immat && (data.vehicules||[]).some(x=>x.immat===immat)){ if(await FP.confirm(`Supprimer AUSSI le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible (leasing, assurance, liste véhicules…).`)){ if(deleteVehiculeFlotte(immat)) refreshAllContrats(); } } if(FP.toast)FP.toast('Contrat supprimé'); return; }
+    const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; const immat=c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):''); if(!await FP.confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${immat?' ('+immat+')':''} ?`)) return; try{ if(FP.trash) FP.trash.add('leasing', c); }catch(_){} list.splice(i,1); save(); if(immat && (data.vehicules||[]).some(x=>FP.normImmat(x.immat)===FP.normImmat(immat))){ if(await FP.confirm(`Supprimer AUSSI le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible (leasing, assurance, liste véhicules…).`)){ if(deleteVehiculeFlotte(immat)) refreshAllContrats(); } } if(FP.toast)FP.toast('Contrat supprimé'); return; }
   });
   // Téléversement du PDF du contrat vers Supabase (bucket scans, comme les cartes grises)
   $('loc-upload-file').addEventListener('change', async (e)=>{

@@ -572,7 +572,7 @@ FP.empEnRetard = (e) => FP.empEnCours(e) && FP.empJoursDepuis(e) > FP.empRetardJ
 FP.recomputeVehiculeFromFactures = function (v, factures) {
   try {
     if (!v || !v.immat) return null;
-    const mine = (factures || []).filter(f => f && FP.estEntretien(f) && (f.vehiculeImmat || '').toUpperCase() === String(v.immat).toUpperCase());
+    const mine = (factures || []).filter(f => f && FP.estEntretien(f) && FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat));
     const patch = {};
     // Dernière révision = date la plus récente parmi les factures d'entretien restantes (sinon vide).
     const dates = mine.map(f => f.date).filter(Boolean).sort();
@@ -1026,8 +1026,7 @@ FP.condKeyDeConso = (t) => {
   if (pl) {
     try {
       const vehs = (window.FP_DATA && FP_DATA.vehicules) || (window.data && data.vehicules) || [];
-      const np = (x) => FP.normPlaque ? FP.normPlaque(x) : String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const v = vehs.find(x => np(x.immat) === np(pl));
+      const v = vehs.find(x => FP.normImmat(x.immat) === FP.normImmat(pl));
       if (v && v.chauffeur && v.chauffeur !== '—') { const c = FP.conducteurs.find(v.chauffeur); if (c && c.key) return c.key; }
     } catch (e) {}
   }
@@ -2447,7 +2446,7 @@ FP.applyFactureToVehicule = function (f, vehicules) {
   try {
     if (!f || !f.vehiculeImmat) return null;
     const list = vehicules || (typeof window !== 'undefined' && window.FP_DATA && window.FP_DATA.vehicules) || [];
-    const v = list.find(x => (x.immat || '').toUpperCase() === String(f.vehiculeImmat).toUpperCase());
+    const v = list.find(x => FP.normImmat(x.immat) === FP.normImmat(f.vehiculeImmat));
     if (!v) return null;
     const estEntretien = FP.estEntretien(f);
     const patch = {}; const bits = [];
@@ -3539,7 +3538,7 @@ FP.buildAlertes = (data) => {
       const avg = prev.reduce((s, m) => s + byVeh[im][m], 0) / prev.length;
       const val = byVeh[im][last];
       if (avg <= 0 || val < 50 || val < avg * seuil) return;
-      const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === im);
+      const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(im));
       if (!v || FP.horsFlotte(v)) return;
       const pct = Math.round((val / avg - 1) * 100);
       out.push({ niveau: 'info', categorie: 'Carburant', message: `${im} : carburant +${pct}% en ${last} (${FP.euro(val)} vs moy. ${FP.euro(avg)})`, detail: 'Dépense inhabituelle — vérifie (gros plein, fuite, usage) ou masque si c\'est normal', sort: 350, target: 'factures.html', muteKey: 'conso|' + v.id, vehLabel: `${v.immat} · ${v.marque} ${v.modele}` });
