@@ -2429,6 +2429,8 @@
       $('drawer').classList.add('open'); $('drawer-backdrop').classList.add('open');
       if (window.lucide) lucide.createIcons();
     }
+    // Exposé pour l'onglet Ulys : MÊME tiroir (aperçu PDF intégré + URL signée) que TotalEnergies.
+    window.__facOpenTfDrawer = openTfDrawer;
     $('tf-tbody').addEventListener('click', (e) => {
       const voir = e.target.closest('[data-tf-voir]');
       if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-tf-voir')); if (f) openTfDrawer(f); return; }
@@ -3600,6 +3602,7 @@
           if (!text || text.replace(/\s/g,'').length < 80) text = await FP.ocr.fileToText(f, 99); // repli
           const p = parseUlys(text);
           if (!p.numero || p.ttc == null) { skipped++; console.warn('[uls-import] non reconnu :', f.name); continue; }
+          p._file = f;                                       // garde le PDF d'origine → stocké au commit (bouton « Voir »)
           fac.push(p);
           p.conso.forEach(c => rows.push(Object.assign({ mois:p.mois, numero:p.numero }, c)));
           // Détail DATÉ (colonne date des consommations) → alimente total_conso_tx (péage) pour la
@@ -3646,7 +3649,12 @@
       ulsImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement…</span>', 'working');
       let okF=0, okC=0;
       for (const p of _ulsPending.fac){
-        const newF = { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc };
+        // Stocke le PDF d'origine (MÊME système que TotalEnergies) → bouton « Voir » = aperçu intégré.
+        const prev = (window.FP_DATA.factures||[]).find(x => x.id === ('ULYS-'+p.numero));
+        let fileUrl = null;
+        if (p._file && FP.uploadScan) { try { fileUrl = await FP.uploadScan(p._file, 'factures-total', { name:'ULYS-'+p.numero }); } catch(e){ console.warn('[uls upload PDF]', e); } }
+        const newF = { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc,
+          fileId: fileUrl || (prev && prev.fileId) || null, fileName: (p._file ? p._file.name : (prev && prev.fileName)) || null };
         const i = (window.FP_DATA.factures||[]).findIndex(x => x.id === newF.id);
         if (i>=0) window.FP_DATA.factures[i]=newF; else window.FP_DATA.factures.push(newF);
         try { await FP.persist.upsert('factures', newF); okF++; } catch(e){ console.error('[uls facture]', e); }
@@ -3718,7 +3726,7 @@
 
     $('uls-tbody').addEventListener('click', (e) => {
       const voir = e.target.closest('[data-uls-voir]');
-      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-uls-voir')); if (f) openUlsDrawer(f); return; }
+      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-uls-voir')); if (f) (window.__facOpenTfDrawer ? window.__facOpenTfDrawer(f) : openUlsDrawer(f)); return; }
       const del = e.target.closest('[data-uls-del]');
       if (del){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === del.getAttribute('data-uls-del')); if (f) deleteUlsFacture(f); }
     });
