@@ -1000,23 +1000,35 @@ FP.congeCouvrant = (condKey, dateISO) => {
   return FP.getConges(condKey).find(c => c.debut && c.fin && d >= String(c.debut).slice(0, 10) && d <= String(c.fin).slice(0, 10)) || null;
 };
 FP.estEnConge = (condKey, dateISO) => !!FP.congeCouvrant(condKey, dateISO);
+// Un congé du conducteur chevauche-t-il le MOIS `AAAA-MM` ? (pour les conso mensuelles non datées, ex. Ulys).
+FP.congeDansMois = (condKey, mois) => {
+  if (!condKey || !mois) return null;
+  const m = String(mois).slice(0, 7);
+  return FP.getConges(condKey).find(c => c.debut && c.fin && String(c.debut).slice(0, 10) <= m + '-31' && String(c.fin).slice(0, 10) >= m + '-01') || null;
+};
 // Détecte les consos survenues PENDANT un congé (interdit). `txList` = transactions DATÉES
-// { conducteur (nom), dateTx:'AAAA-MM-JJ', categorie, montantTtc, produit }. Par défaut on ne regarde
-// QUE le carburant (un péage un jour de départ/retour de congé est normal). `opts.categories` élargit.
+// { conducteur (nom), dateTx:'AAAA-MM-JJ', categorie, montantTtc, produit }. Par défaut on regarde
+// TOUS les types de conso (carburant, péage, boutique, lavage…) ; `opts.categories` peut restreindre.
 FP.consoPendantConge = (txList, opts) => {
-  const o = opts || {}; const cats = (o.categories || ['carburant']).map(c => String(c).toLowerCase());
+  const o = opts || {}; const cats = (o.categories && o.categories.length) ? o.categories.map(c => String(c).toLowerCase()) : null;
   const out = [];
   (txList || []).forEach(t => {
-    if (!t || !t.dateTx || !t.conducteur) return;
-    if (cats.length && cats.indexOf(String(t.categorie || '').toLowerCase()) === -1) return;
+    if (!t || !t.conducteur) return;
+    // Tolérant camelCase (FP.db) ET snake_case (lecture brute Supabase) : date_tx / montant_ttc.
+    const dtx = t.dateTx || t.date_tx; if (!dtx) return;
+    const cat = String(t.categorie || '').toLowerCase();
+    const mtt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc);
+    if (cats && cats.indexOf(cat) === -1) return;
     let key = null; try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(t.conducteur) : null; if (c) key = c.key; } catch (e) {}
     if (!key && FP.normPrenom) key = FP.normPrenom(t.conducteur);
     if (!key) return;
-    const cg = FP.congeCouvrant(key, t.dateTx);
-    if (cg) out.push({ conducteur: t.conducteur, key, date: t.dateTx, montant: t.montantTtc, categorie: t.categorie, produit: t.produit, conge: cg });
+    const cg = FP.congeCouvrant(key, dtx);
+    if (cg) out.push({ conducteur: t.conducteur, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg });
   });
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 };
+// Libellé lisible d'une catégorie de conso (carte carburant / péage).
+FP.consoCatLabel = (cat) => ({ carburant: 'plein carburant', peage: 'péage', boutique: 'achat boutique', lavage: 'lavage', parking: 'parking', adblue: 'AdBlue' })[String(cat || '').toLowerCase()] || 'achat';
 
 // ================= RATTACHEMENT CONSO → CONDUCTEUR PAR N° DE CARTE / BADGE =================
 // Chaque conducteur peut porter un n° de carte carburant Total et un n° de badge péage Ulys
@@ -5332,7 +5344,33 @@ FP.ulys = {
         conso.push({ conducteur: cond || nameByBadge[suf] || ('Badge ' + suf), nb: parseInt(m[2],10)||0, ttc: N(m[3]), km: N(m[4]) });
       }
     }
-    return { numero, date, mois, ht, tva, ttc, conso };
+    // Détail DATÉ transaction par transaction : le relevé Ulys porte une COLONNE DATE par consommation.
+    // Défensif & indépendant des colonnes : dans le bloc de CHAQUE badge (entre « Badge n° … » et son
+    // « Total Badge »), toute ligne contenant une date JJ/MM/AAAA = une conso ce jour-là (montant =
+    // dernier nombre à 2 décimales de la ligne, best-effort). Sert à repérer une conso pendant un congé.
+    const txConso = [];
+    {
+      const heads = []; const rxHead = /Badge\s*n[°ºo]\s+([\d ]+\d)\s+([A-Za-zÀ-ÿ][^\n]*?)\s*$/gim; let hm;
+      while ((hm = rxHead.exec(t))) heads.push({ end: rxHead.lastIndex, badge: hm[1], nom: hm[2].trim(), i: hm.index });
+      for (let k = 0; k < heads.length; k++){
+        const h = heads[k];
+        let end = (k + 1 < heads.length) ? heads[k + 1].i : t.length;
+        const totIdx = t.indexOf('Total Badge', h.end); if (totIdx >= 0 && totIdx < end) end = totIdx;
+        const block = t.slice(h.end, end);
+        const suf = badgeSuffix(h.badge);
+        let cond = null; try { const rc = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(h.badge); if (rc && rc.name) cond = rc.name; } catch (e) {}
+        cond = cond || nameByBadge[suf] || h.nom || ('Badge ' + suf);
+        block.split(/\n/).forEach(line => {
+          const dm = line.match(/\b(\d{2})\/(\d{2})\/(\d{2,4})\b/); if (!dm) return;
+          let yy = dm[3]; if (yy.length === 2) yy = '20' + yy;
+          const mm = +dm[2], dd = +dm[1]; if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return;
+          const dateIso = yy + '-' + dm[2] + '-' + dm[1];
+          const amts = line.match(/\d[\d\s]*,\d{2}/g); const montant = (amts && amts.length) ? N(amts[amts.length - 1]) : null;
+          txConso.push({ date: dateIso, conducteur: cond, badge: suf, montant });
+        });
+      }
+    }
+    return { numero, date, mois, ht, tva, ttc, conso, txConso };
   },
   // Enregistrements prêts pour la base — MÊMES ids/formats que l'import de la page Factures.
   factureRecord(p){ return { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+this.moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc }; },

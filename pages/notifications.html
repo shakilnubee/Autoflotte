@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807f">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -136,11 +136,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807d"></script>
-<script src="../assets/js/supabase-client.js?v=20260807d"></script>
-<script src="../assets/js/data.js?v=20260807d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807f"></script>
+<script src="../assets/js/supabase-client.js?v=20260807f"></script>
+<script src="../assets/js/data.js?v=20260807f"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807d"></script>
+<script src="../assets/js/app.js?v=20260807f"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -614,27 +614,61 @@
 
   // ===== Points à vérifier (carte carburant Total) — même détection que la page Factures (FP.*) =====
   let _verifTx = null; // cache des transactions total_conso_tx (chargées 1×)
+  let _verifUlys = null; // cache du détail Ulys mensuel par conducteur (ulys_conso)
   async function loadVerifTx() {
-    if (_verifTx !== null) return _verifTx;
+    if (_verifTx !== null && _verifUlys !== null) return _verifTx;
     try { const r = await FP.supabase.from('total_conso_tx').select('*'); _verifTx = (r && r.data) || []; } // RLS filtre déjà par société
     catch (e) { _verifTx = []; }
+    try {
+      const r = await FP.supabase.from('ulys_conso').select('*'); let rows = (r && r.data) || [];
+      const soc = FP.activeSociete ? FP.activeSociete() : null; if (soc && soc !== '__all__') rows = rows.filter(x => !x.societe || x.societe === soc);
+      _verifUlys = rows;
+    } catch (e) { _verifUlys = []; }
     return _verifTx;
   }
-  // Conso CARBURANT survenue pendant un congé du conducteur (interdit) — même source datée (total_conso_tx)
-  // + les congés saisis sur la fiche conducteur (FP.consoPendantConge). Archivable comme les autres.
+  // TOUTE conso (carburant, péage, boutique, lavage…) survenue pendant un congé du conducteur (interdit).
+  // Source DATÉE = total_conso_tx (carte carburant) ; + les congés de la fiche conducteur. Archivable.
   function congeAnoms() {
     if (!(window.FP && FP.consoPendantConge)) return [];
     let okMap = {}; try { okMap = FP.settings.get().tfAnomOk || {}; } catch (e) {}
-    return FP.consoPendantConge(_verifTx || [], { categories: ['carburant'] }).map(a => {
+    const lbl = (c) => FP.consoCatLabel ? FP.consoCatLabel(c) : 'achat';
+    return FP.consoPendantConge(_verifTx || []).map(a => {
       const cg = a.conge || {};
       const key = 'conge|' + (a.key || '') + '|' + a.date + '|' + (a.produit || '') + '|' + (a.montant || '');
+      const mnt = (a.montant != null && a.montant !== 0) ? ' de ' + (FP.euro ? FP.euro(a.montant) : a.montant) : '';
       return { key, t: 'conge', mois: String(a.date || '').slice(0, 7), facnum: '',
-        txt: `${a.conducteur} — plein de ${FP.euro ? FP.euro(a.montant) : a.montant} le ${FP.date ? FP.date(a.date) : a.date}, PENDANT un congé (${FP.date(cg.debut)} → ${FP.date(cg.fin)})${cg.motif ? ' · ' + cg.motif : ''}` };
+        txt: `(congé) ${a.conducteur} — ${lbl(a.categorie)}${mnt} le ${FP.date ? FP.date(a.date) : a.date}, PENDANT un congé (${FP.date(cg.debut)} → ${FP.date(cg.fin)})${cg.motif ? ' · ' + cg.motif : ''}` };
     }).filter(a => !okMap[a.key]);
   }
+  // Badge péage : le détail Ulys n'est QUE mensuel (pas daté au jour) → détection au niveau du MOIS
+  // (un congé chevauche le mois facturé). Dit honnêtement « dates non détaillées ». Archivable.
+  function ulysCongeAnoms() {
+    if (!(window.FP && FP.congeDansMois)) return [];
+    let okMap = {}; try { okMap = FP.settings.get().tfAnomOk || {}; } catch (e) {}
+    const presBadge = FP.prestataireBadge ? FP.prestataireBadge() : 'Ulys';
+    const keyOf = (nom) => { let k = null; try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(nom) : null; if (c) k = c.key; } catch (e) {} if (!k && FP.normPrenom) k = FP.normPrenom(nom); return k; };
+    // Mois déjà couverts au JOUR près (relevé Ulys daté importé dans total_conso_tx) → ne pas doubler.
+    const datedMonths = new Set();
+    (_verifTx || []).forEach(t => { if (String(t.categorie || '').toLowerCase() !== 'peage') return; const k = keyOf(t.conducteur); const m = String(t.dateTx || t.date_tx || '').slice(0, 7); if (k && m) datedMonths.add(k + '|' + m); });
+    return (_verifUlys || []).map(r => {
+      if (!r.conducteur || !r.mois) return null;
+      const ckey = keyOf(r.conducteur); if (!ckey) return null;
+      const mois = String(r.mois).slice(0, 7);
+      if (datedMonths.has(ckey + '|' + mois)) return null; // déjà détecté précisément (dates réelles)
+      const cg = FP.congeDansMois(ckey, mois); if (!cg) return null;
+      const mm = mois.split('-'); const moisTxt = mm.length === 2 ? mm[1] + '/' + mm[0] : mois;
+      const montant = (r.totalTtc != null ? r.totalTtc : (r.total_ttc != null ? r.total_ttc : null));
+      const key = 'ulysconge|' + ckey + '|' + mois;
+      return { key, t: 'conge', mois, facnum: r.numeroFacture || r.numero_facture || '',
+        txt: `(congé) ${r.conducteur} — péages ${presBadge} en ${moisTxt}${montant != null ? ' (' + (FP.euro ? FP.euro(montant) : montant) + ')' : ''}, mois d'un congé (${FP.date(cg.debut)} → ${FP.date(cg.fin)}) — montant global du mois, dates non détaillées, à vérifier` };
+    }).filter(a => a && !okMap[a.key]);
+  }
   function verifAnoms() {
-    const card = (window.FP && FP.totalFleetAnomaliesActives) ? FP.totalFleetAnomaliesActives(_verifTx || []) : [];
-    return card.concat(congeAnoms());
+    // Les conso Ulys datées vivent aussi dans total_conso_tx (péage) → on les exclut de la détection
+    // « carte carburant » (anomalies Total) ; elles ne servent QUE au suivi des congés (congeAnoms).
+    const txCard = (_verifTx || []).filter(t => !String(t.carte || '').toUpperCase().startsWith('ULYS'));
+    const card = (window.FP && FP.totalFleetAnomaliesActives) ? FP.totalFleetAnomaliesActives(txCard) : [];
+    return card.concat(congeAnoms()).concat(ulysCongeAnoms());
   }
   function paintVerifTab(n) {
     if (!tabV) return;
@@ -649,7 +683,7 @@
     const anoms = verifAnoms();
     paintVerifTab(anoms.length);
     if (!anoms.length) { box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier sur la carte carburant Total.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div></div></div>'; lucide.createIcons(); return; }
-    box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant (repas élevés, achats hors carburant, plusieurs pleins/jour, diesel) <b>et conso pendant un congé</b> (interdit). La <b>✓ verte</b> archive comme sur Factures → Total Fleet (même suivi). Clique le texte pour ouvrir la fiche concernée.</p>'
+    box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant (repas élevés, achats hors carburant, plusieurs pleins/jour, diesel) <b>et TOUTE conso (carburant, péage, boutique…) pendant un congé</b> (interdit — avec les dates). La <b>✓ verte</b> archive comme sur Factures → Total Fleet (même suivi). Clique le texte pour ouvrir la fiche concernée.</p>'
       + anoms.map(a => { const conge = a.t === 'conge'; const cat = conge ? '🌴 Conso pendant un congé' : 'Carte carburant Total'; const href = conge ? 'conducteurs.html' : 'factures.html'; return `<div class="notif lvl-warn" style="align-items:center"><button type="button" data-verif-ok="${esc(a.key)}" title="Marquer vérifié / archiver (même suivi que Factures)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:17px;line-height:1">✓</button><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0"></i><a href="${href}" class="flex-1 min-w-0" style="text-decoration:none;color:inherit"><div class="notif-cat">${cat}</div><div class="font-semibold text-slate-900">${esc(a.txt)}</div></a><i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 flex-shrink-0"></i></div>`; }).join('');
     lucide.createIcons();
   }

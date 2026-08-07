@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807f">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -706,11 +706,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807d"></script>
-<script src="../assets/js/supabase-client.js?v=20260807d"></script>
-<script src="../assets/js/data.js?v=20260807d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807f"></script>
+<script src="../assets/js/supabase-client.js?v=20260807f"></script>
+<script src="../assets/js/data.js?v=20260807f"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807d"></script>
+<script src="../assets/js/app.js?v=20260807f"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2480,6 +2480,9 @@
         consoTx = rt.data || [];
         const _soc = FP.activeSociete ? FP.activeSociete() : null;
         if (_soc && _soc !== '__all__') consoTx = consoTx.filter(x => !x.societe || x.societe === _soc);
+        // Les conso Ulys (péage) datées vivent aussi dans total_conso_tx (pour le suivi des congés) mais
+        // ne font PAS partie du relevé carte carburant Total → on les exclut des vues « Total Fleet ».
+        consoTx = consoTx.filter(x => !String(x.carte || '').toUpperCase().startsWith('ULYS'));
       } catch (e) { consoTx = null; }
       renderConso();
       renderAnalyse();
@@ -3590,19 +3593,22 @@
       if (!files || !files.length) return;
       if (!(window.FP && FP.ocr)){ ulsImpStatus('Lecteur PDF indisponible.', 'err'); return; }
       ulsImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture de '+files.length+' fichier(s)…</span>', 'working');
-      const fac=[], rows=[];
+      const fac=[], rows=[], tx=[]; let skipped=0;
       for (const f of files){
         try {
           let text = await ulysPdfToText(f);                 // reconstruction par position (lignes)
           if (!text || text.replace(/\s/g,'').length < 80) text = await FP.ocr.fileToText(f, 99); // repli
           const p = parseUlys(text);
-          if (!p.numero || p.ttc == null) continue;
+          if (!p.numero || p.ttc == null) { skipped++; console.warn('[uls-import] non reconnu :', f.name); continue; }
           fac.push(p);
           p.conso.forEach(c => rows.push(Object.assign({ mois:p.mois, numero:p.numero }, c)));
-        } catch (e){ console.error('[uls-import]', e); }
+          // Détail DATÉ (colonne date des consommations) → alimente total_conso_tx (péage) pour la
+          // détection « conso pendant un congé » à la bonne DATE. Best-effort (dépend du format PDF).
+          (p.txConso || []).forEach((c, i) => tx.push(Object.assign({ mois:p.mois, numero:p.numero, seq:i }, c)));
+        } catch (e){ console.error('[uls-import]', e); skipped++; }
       }
-      if (!fac.length){ ulsImpStatus('Aucune facture Ulys lisible (PDF avec couche texte attendu).', 'err'); return; }
-      _ulsPending = { fac, rows };
+      if (!fac.length){ ulsImpStatus('Aucune facture Ulys lisible' + (skipped ? ' ('+skipped+' fichier(s) non reconnus — le PDF doit avoir une couche texte Ulys/VINCI)' : '') + '.', 'err'); return; }
+      _ulsPending = { fac, rows, tx, skipped };
       const facLines = fac.map(p => `<tr><td style="font-family:monospace">${esc(p.numero)}</td><td>${p.date?FP.date(p.date):'—'}</td><td>${esc(moisLabel(p.mois))}</td><td style="text-align:right">${p.ht!=null?FP.euro(p.ht):'—'}</td><td style="text-align:right">${p.tva!=null?FP.euro(p.tva):'—'}</td><td style="text-align:right;font-weight:700">${FP.euro(p.ttc)}</td></tr>`).join('');
       const collabs = [...new Set(rows.map(c => c.conducteur).filter(Boolean))];
       const withTtc = rows.filter(c => c.ttc != null);
@@ -3654,8 +3660,19 @@
         const row = { id:'ULYSC-'+c.mois+'-'+ulsSlug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe:(FP.activeSociete?FP.activeSociete():'PXP') };
         try { await FP.persist.upsert('ulys_conso', row); okC++; } catch(e){ console.error('[uls conso]', e); }
       }
+      // Détail DATÉ (colonne date des consommations) → total_conso_tx (péage) pour la détection
+      // « conso pendant un congé » à la bonne date. Best-effort : table absente = silencieux (repli mensuel).
+      let okTx = 0;
+      for (const c of (_ulsPending.tx || [])){
+        if (!c.date || !c.conducteur) continue;
+        const tr = { id:'ULYSTX-'+c.numero+'-'+(c.badge||'')+'-'+(c.seq!=null?c.seq:''), facnum:c.numero, carte:'ULYS-'+(c.badge||''),
+          conducteur:c.conducteur, plaque:null, dateTx:c.date, mois:(c.date||'').slice(0,7), produit:'Péage Ulys',
+          categorie:'peage', montantTtc:(c.montant!=null?c.montant:0) };
+        try { const res = (FP.db && FP.db.upsert) ? await FP.db.upsert('total_conso_tx', tr) : null; if (res && res.error) throw res.error; okTx++; }
+        catch (e){ break; }
+      }
       const nbCollab = new Set(_ulsPending.rows.map(r => r.conducteur).filter(Boolean)).size;
-      ulsImpStatus('<b>Enregistré</b> : '+okF+' facture(s) Ulys.' + (okC ? ' Détail de '+okC+' conducteur(s).' : (nbCollab ? ' '+nbCollab+' collaborateur(s) détecté(s) (montant par personne non lu automatiquement sur ce format).' : '')) + ' Visible sur tous les postes.', 'ok');
+      ulsImpStatus('<b>Enregistré</b> : '+okF+' facture(s) Ulys.' + (okC ? ' Détail de '+okC+' conducteur(s).' : (nbCollab ? ' '+nbCollab+' collaborateur(s) détecté(s) (montant par personne non lu automatiquement sur ce format).' : '')) + (okTx ? ' '+okTx+' conso(s) datée(s) pour le suivi des congés.' : '') + ((_ulsPending.skipped) ? ' <span style="color:#B45309">'+_ulsPending.skipped+' fichier(s) non reconnus.</span>' : '') + ' Visible sur tous les postes.', 'ok');
       $('uls-import-preview').classList.add('hidden'); _ulsPending=null;
       render(); consoLoaded=false; loadConso();
     }
