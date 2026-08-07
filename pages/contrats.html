@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806n">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260806n"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260806n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -549,11 +549,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260806n"></script>
-<script src="../assets/js/supabase-client.js?v=20260806n"></script>
-<script src="../assets/js/data.js?v=20260806n"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807a"></script>
+<script src="../assets/js/supabase-client.js?v=20260807a"></script>
+<script src="../assets/js/data.js?v=20260807a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260806n"></script>
+<script src="../assets/js/app.js?v=20260807a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -650,7 +650,10 @@
     if (!v) { alert('Véhicule introuvable dans la flotte.'); return false; }
     // Archive ses documents (sous-dossier « OUT » du dossier plaque, dans Sinistres) avant suppression.
     if (v.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(v.immat);
-    try { if (FP.db && FP.db.delete) FP.db.delete('vehicules', v.id); } catch (e) { console.warn('[del veh]', e); }
+    // ⚠️ Corbeille + purge cache : on passe par FP.persist.delete(record) (capture restaurable),
+    // pas FP.db.delete direct (qui était irréversible et laissait le cache réafficher le véhicule).
+    try { if (FP.persist && FP.persist.delete) FP.persist.delete('vehicules', v.id, v); else if (FP.db && FP.db.delete) FP.db.delete('vehicules', v.id); } catch (e) { console.warn('[del veh]', e); }
+    try { const CK = window.FP_CACHE_KEY; const c = CK && JSON.parse(localStorage.getItem(CK) || 'null'); if (c && Array.isArray(c.vehicules)) { c.vehicules = c.vehicules.filter(x => x.id !== v.id); localStorage.setItem(CK, JSON.stringify(c)); } } catch (e) {}
     const idx = data.vehicules.findIndex(x => x.id === v.id); if (idx >= 0) data.vehicules.splice(idx, 1);
     return true;
   }

@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260806n">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260806n"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260806n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -706,11 +706,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260806n"></script>
-<script src="../assets/js/supabase-client.js?v=20260806n"></script>
-<script src="../assets/js/data.js?v=20260806n"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807a"></script>
+<script src="../assets/js/supabase-client.js?v=20260807a"></script>
+<script src="../assets/js/data.js?v=20260807a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260806n"></script>
+<script src="../assets/js/app.js?v=20260807a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1133,7 +1133,7 @@
     if (FP.history && FP.history.commit) FP.history.commit();
     const rm = (arr) => { const i = arr.findIndex(x => x.id === f.id); if (i >= 0) arr.splice(i, 1); };
     rm(data.factures); rm(factures);
-    if (FP.persist) FP.persist.delete('factures', f.id);
+    if (FP.persist) FP.persist.delete('factures', f.id, f); // record → Corbeille (restaurable)
     // ⚠️ Symétrie avec l'ajout : si c'était une facture d'entretien, recaler la fiche véhicule sur les
     // factures RESTANTES (sinon « dernière révision » / km / pneus fantômes). Source unique app.js.
     if (f.vehiculeImmat && FP.recomputeVehiculeFromFactures) {
@@ -1829,7 +1829,7 @@
       cibles.forEach(f => {
         const rm = (arr) => { const i = arr.findIndex(x => x.id === f.id); if (i >= 0) arr.splice(i, 1); };
         rm(data.factures); rm(factures);
-        if (FP.persist) FP.persist.delete('factures', f.id);
+        if (FP.persist) FP.persist.delete('factures', f.id, f); // record → Corbeille (restaurable)
         if (f.vehiculeImmat) immats.add(String(f.vehiculeImmat).toUpperCase());
         try { const s = FP.settings.get(); if (s.sinistreStatut && s.sinistreStatut[f.id] != null) { delete s.sinistreStatut[f.id]; FP.settings.save(s); } } catch (e) {}
       });
@@ -3608,7 +3608,9 @@
       // n'écrit pas de faux « 0 € » — cf. note d'import). Sur le format Ulys entremêlé, c.ttc est null.
       for (const c of _ulsPending.rows){
         if (c.ttc == null) continue;
-        const row = { id:'ULYSC-'+c.mois+'-'+ulsSlug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe:'PXP' };
+        // ⚠️ Société = la société ACTIVE (jamais 'PXP' en dur) sinon le détail Ulys d'une autre
+        // société atterrit chez PXP (fuite inter-sociétés + attribution conso faussée).
+        const row = { id:'ULYSC-'+c.mois+'-'+ulsSlug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe:(FP.activeSociete?FP.activeSociete():'PXP') };
         try { await FP.persist.upsert('ulys_conso', row); okC++; } catch(e){ console.error('[uls conso]', e); }
       }
       const nbCollab = new Set(_ulsPending.rows.map(r => r.conducteur).filter(Boolean)).size;

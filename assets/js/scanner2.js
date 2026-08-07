@@ -172,7 +172,7 @@
     if (t === 'avis_contravention') { const mi = num(val(model, 'montantMinore')), fo = num(val(model, 'montantForfaitaire')), ma = num(val(model, 'montantMajore')); if (mi == null && fo == null) add('montant_amende_absent', 'moyenne', "Aucun montant minoré/forfaitaire lu — à saisir à la main."); if (ma != null && mi == null && fo == null) add('montant_majore_seul', 'moyenne', "Seul le montant majoré a été lu : ne jamais l'appliquer par défaut, vérifie les dates limites."); }
     // Immatriculation présente dans la flotte ? (info, pas bloquant)
     const immat = val(model, 'immat');
-    if (immat && window.data && Array.isArray(data.vehicules)) { const up = String(immat).toUpperCase().replace(/\s/g, ''); const known = data.vehicules.some(v => String(v.immat || '').toUpperCase().replace(/\s/g, '') === up);
+    if (immat && window.data && Array.isArray(data.vehicules)) { const up = (window.FP && FP.normImmat) ? FP.normImmat(immat) : String(immat).toUpperCase().replace(/[^A-Z0-9]/g, ''); const known = data.vehicules.some(v => ((window.FP && FP.normImmat) ? FP.normImmat(v.immat) : String(v.immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '')) === up);
       if (!known && t !== 'certificat_immatriculation') add('vehicule_inconnu', 'basse', `Le véhicule ${immat} n'est pas (encore) dans la flotte.`);
       if (known && t === 'certificat_immatriculation') add('vehicule_existant', 'basse', `⚠️ Le véhicule ${immat} EXISTE DÉJÀ : on ne fera que compléter ses cases vides — aucune donnée déjà saisie ne sera écrasée. Vérifie bien que la plaque est correcte avant d'enregistrer.`); }
     // Dates : fin < début
@@ -235,7 +235,8 @@
   // ============================================================
   function societe() { try { return (FP.activeSociete && FP.activeSociete()) || 'PXP'; } catch (e) { return 'PXP'; } }
   function nextVehId() { let m = 0; try { (data.vehicules || []).forEach(v => { const x = String(v.id || '').match(/(\d+)/); if (x) m = Math.max(m, +x[1]); }); } catch (e) {} return 'V-' + String(m + 1).padStart(3, '0'); }
-  function findVeh(immat) { if (!immat) return null; const up = String(immat).toUpperCase().replace(/\s/g, ''); try { return (data.vehicules || []).find(v => String(v.immat || '').toUpperCase().replace(/\s/g, '') === up) || null; } catch (e) { return null; } }
+  function normI(s) { return (window.FP && FP.normImmat) ? FP.normImmat(s) : String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+  function findVeh(immat) { if (!immat) return null; const up = normI(immat); try { return (data.vehicules || []).find(v => normI(v.immat) === up) || null; } catch (e) { return null; } }
   function uid(p) { return (p || 'x') + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
   // Lit les valeurs éditées depuis l'UI (map champ->valeur) fusionnées avec le modèle.
@@ -268,19 +269,23 @@
         // Le km ne peut que MONTER : on n'écrit que s'il est supérieur au km connu.
         const kmLu = intv(g('km')); if (kmLu != null && (!(Number(rec.km) > 0) || kmLu >= Number(rec.km))) rec.km = kmLu;
       }
-      if (existing) { try { FP.persist.update('vehicules', rec.id, rec); } catch (e) { FP.persist.upsert('vehicules', rec); } try { if (window.data && Array.isArray(data.vehicules)) { const i = data.vehicules.findIndex(v => v.id === rec.id); if (i >= 0) data.vehicules[i] = rec; } } catch (e) {} }
-      else { try { FP.persist.insert('vehicules', rec); } catch (e) {} try { if (window.data && Array.isArray(data.vehicules)) data.vehicules.push(rec); } catch (e) {} }
+      if (existing) { try { await FP.persist.update('vehicules', rec.id, rec); } catch (e) { try { await FP.persist.upsert('vehicules', rec); } catch (e2) {} } try { if (window.data && Array.isArray(data.vehicules)) { const i = data.vehicules.findIndex(v => v.id === rec.id); if (i >= 0) data.vehicules[i] = rec; } } catch (e) {} }
+      else { try { await FP.persist.insert('vehicules', rec); } catch (e) {} try { if (window.data && Array.isArray(data.vehicules)) data.vehicules.push(rec); } catch (e) {} }
       target = { table: 'vehicules', id: rec.id, existing: !!existing };
     }
     else if (cible === 'factures') {
       const sc = schemaFor(t) || {};
       // Sous-type de facture : 'entretien' pour un devis/facture garage, 'carburant' pour TotalEnergies, sinon libre (null).
       const factureType = (t === 'facture_entretien') ? 'entretien' : (Object.prototype.hasOwnProperty.call(sc, 'factureType') ? sc.factureType : null);
-      const rec = { id: uid('F'), societe: societe(), date: g('date') || '', fournisseur: g('fournisseur') || sc.fournisseurDefaut || '', numero: g('numero') || '',
+      // ⚠️ La colonne DB s'appelle `numeroFacture` (→ numero_facture), PAS `numero` : écrire
+      // `numero` faisait rejeter tout l'INSERT (facture jamais enregistrée). Plaque normalisée
+      // via le helper canonique (tirets/espaces) pour rattacher au bon véhicule.
+      const rec = { id: uid('F'), societe: societe(), date: g('date') || '', fournisseur: g('fournisseur') || sc.fournisseurDefaut || '', numeroFacture: g('numero') || '',
         montantHT: num(g('montantHT')), montantTVA: num(g('montantTVA')), montantTTC: num(g('montantTTC')),
-        vehiculeImmat: (g('immat') || '').toUpperCase(), km: intv(g('km')), description: g('description') || '', type: factureType };
-      try { if (FP.dupe && FP.dupe.find && FP.dupe.find('factures', rec, data.factures || [])) { /* doublon */ } } catch (e) {}
-      FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
+        vehiculeImmat: FP.normImmat ? FP.normImmat(g('immat')) : (g('immat') || '').toUpperCase(), km: intv(g('km')), description: g('description') || '', type: factureType };
+      // Anti-doublon central (règle plateforme) : n° + TTC, sinon fournisseur+TTC+date.
+      if (FP.dupe && FP.dupe.confirmAdd && !(await FP.dupe.confirmAdd('factures', rec, data.factures || []))) return { table: 'factures', id: null, annule: true };
+      await FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
       target = { table: 'factures', id: rec.id };
     }
     else if (cible === 'sinistres') {
@@ -288,34 +293,67 @@
       const tiers = [g('tiersPlaque') && ('plaque ' + g('tiersPlaque')), g('tiersAssureur') && ('assureur ' + g('tiersAssureur')), g('tiersNom')].filter(Boolean).join(', ');
       const descFull = [g('circonstances'), g('lieu') ? ('Lieu : ' + g('lieu')) : '', tiers ? ('Tiers : ' + tiers) : ''].filter(Boolean).join(' · ') || 'Sinistre déclaré';
       const rec = { id: 'F-SIN-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), societe: societe(),
-        date: g('date') || '', vehiculeImmat: (g('immat') || '').toUpperCase(), description: descFull, type: 'sinistre', montantTTC: num(g('montantTTC')) };
-      FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
+        date: g('date') || '', vehiculeImmat: FP.normImmat ? FP.normImmat(g('immat')) : (g('immat') || '').toUpperCase(), description: descFull, type: 'sinistre', montantTTC: num(g('montantTTC')) };
+      await FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
       target = { table: 'factures', id: rec.id };
     }
     else if (cible === 'amendes') {
-      const mi = num(g('montantMinore')), fo = num(g('montantForfaitaire'));
+      // ⚠️ Colonnes DB réelles = `montant` (montant qui fait foi, lu par FP.montantDu), `prenom`,
+      // `numeroAvis`, `date`, `annee`, `motif`, `statut`, `numeroTelepaiement`. Il n'y a PAS de
+      // colonnes montantTTC / montantMinore / montantForfaitaire / montantMajore / vehiculeImmat /
+      // dateLimite* sur `amendes` → les écrire faisait rejeter l'INSERT (amende jamais enregistrée
+      // et affichée à 0 €). La ventilation des 3 montants + dates limites se stocke dans les
+      // réglages société via FP.setAmendeMontants (même source que la page Amendes, règle 0-source).
+      const mi = num(g('montantMinore')), fo = num(g('montantForfaitaire')), ini = num(g('montantInitial'));
+      const montant = (mi != null ? mi : (fo != null ? fo : (ini != null ? ini : 0))); // JAMAIS le majoré par défaut
+      const immat = FP.normImmat ? FP.normImmat(g('immat')) : (g('immat') || '').toUpperCase();
+      const dateAm = g('dateInfraction') || g('date') || '';
+      // Conducteur : déduit via la plaque → chauffeur du véhicule (comme la page Amendes).
+      let prenom = '';
+      try { const veh = (data.vehicules || []).find(v => (FP.normImmat ? FP.normImmat(v.immat) : String(v.immat || '').toUpperCase()) === immat); if (veh && veh.chauffeur) prenom = veh.chauffeur; } catch (e) {}
       const rec = { id: uid('A'), societe: societe(), numeroAvis: g('numeroAvis') || g('numeroFps') || '',
-        prenom: '', vehiculeImmat: (g('immat') || '').toUpperCase(), date: g('dateInfraction') || g('date') || '', motif: g('motif') || (t === 'forfait_post_stationnement' ? 'Stationnement (FPS)' : ''),
-        montantTTC: (mi != null ? mi : (fo != null ? fo : num(g('montantInitial')))), // JAMAIS le majoré par défaut
-        montantMinore: mi, montantForfaitaire: fo, montantMajore: num(g('montantMajore')),
-        dateLimiteMinore: g('dateLimiteMinore') || g('dateLimite') || '', dateLimiteForfaitaire: g('dateLimiteForfaitaire') || '', statut: 'à payer' };
-      FP.persist.insert('amendes', rec); try { if (window.data && Array.isArray(data.amendes)) data.amendes.push(rec); } catch (e) {}
+        numeroTelepaiement: g('numeroTelepaiement') || '', prenom, date: dateAm, annee: (dateAm || '').slice(0, 4),
+        motif: g('motif') || (t === 'forfait_post_stationnement' ? 'Stationnement (FPS)' : ''),
+        montant, statut: 'à payer' };
+      // Anti-doublon central (règle plateforme) : n° d'avis + montant, sinon prénom+date+montant.
+      if (FP.dupe && FP.dupe.confirmAdd && !(await FP.dupe.confirmAdd('amendes', rec, data.amendes || []))) return { table: 'amendes', id: null, annule: true };
+      await FP.persist.insert('amendes', rec); try { if (window.data && Array.isArray(data.amendes)) data.amendes.push(rec); } catch (e) {}
+      // Ventilation lue par l'IA → réglages société (pas de colonne DB), pour ne rien perdre.
+      try { if (FP.setAmendeMontants) FP.setAmendeMontants(rec.id, { montantMinore: mi, montantForfaitaire: fo, montantMajore: num(g('montantMajore')), dateLimiteMinore: g('dateLimiteMinore') || g('dateLimite') || '', dateLimiteForfaitaire: g('dateLimiteForfaitaire') || '' }); } catch (e) {}
       target = { table: 'amendes', id: rec.id };
     }
     else if (cible === 'conducteurs') {
-      const nom = [g('prenom'), g('nom')].filter(Boolean).join(' ').trim() || g('nom') || '';
-      if (!nom) throw new Error("Nom du conducteur manquant.");
-      const rec = { id: uid('C'), key: nom.toLowerCase().replace(/\s+/g, '-'), name: nom, societe: societe() };
-      if (t === 'permis_conduire') {
-        rec.permisNumero = g('numeroPermis') || ''; rec.permisExpiration = g('dateExpirationTitre') || ''; rec.permisObtention = g('dateDelivrance') || '';
-        rec.permisType = Array.isArray(g('categories')) ? g('categories').join(', ') : (g('categories') || '');
-      } else if (t === 'carte_identite') {
-        rec.idNumero = g('numeroPiece') || ''; rec.idExpiration = g('dateExpirationTitre') || '';
-        if (g('dateNaissance')) rec.dateNaissance = g('dateNaissance');
+      // ⚠️ La table `conducteurs` a pour clé primaire `key` (PAS de colonne `id`) : l'ancien code
+      // écrivait `id` + `idNumero`/`idExpiration` (colonnes inexistantes) → INSERT rejeté (permis
+      // jamais enregistré). On passe par le helper canonique FP.conducteurs.create/find (gère la
+      // clé, l'anti-doublon, la société et la persistance), puis on complète les cases VIDES.
+      const prenom = g('prenom') || '', nom = g('nom') || '';
+      const name = [prenom, nom].filter(Boolean).join(' ').trim() || nom || prenom;
+      if (!name) throw new Error("Nom du conducteur manquant.");
+      let cond = null;
+      try { cond = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(name) : null; } catch (e) {}
+      if (!cond) {
+        const info = { name, prenom, nom };
+        if (t === 'permis_conduire') { info.permisNumero = g('numeroPermis') || null; info.permisType = Array.isArray(g('categories')) ? g('categories').join(', ') : (g('categories') || null); }
+        try { cond = await FP.conducteurs.create(info); } catch (e) {}
       }
-      // Anti-doublon conducteur (même nom déjà enregistré) — best effort.
-      try { const ex = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(nom) : null; if (ex) { target = { table: 'conducteurs', id: ex.id || ex.key }; } } catch (e) {}
-      if (!target.id) { FP.persist.insert('conducteurs', rec); target = { table: 'conducteurs', id: rec.id }; }
+      const key = cond ? cond.key : (FP.normPrenom ? FP.normPrenom(name) : name.toLowerCase().replace(/\s+/g, '-'));
+      // Champs additionnels du permis / de la pièce d'identité — ne remplir que les cases vides
+      // (colonnes réelles : permisNumero, permisType, permisObtention, permisExpiration, dateNaissance).
+      const patch = {};
+      const setIfEmpty = (k, v) => { if (v == null || v === '') return; if (!cond || cond[k] == null || cond[k] === '') patch[k] = v; };
+      if (t === 'permis_conduire') {
+        setIfEmpty('permisNumero', g('numeroPermis')); setIfEmpty('permisObtention', g('dateDelivrance'));
+        setIfEmpty('permisExpiration', g('dateExpirationTitre'));
+        setIfEmpty('permisType', Array.isArray(g('categories')) ? g('categories').join(', ') : g('categories'));
+      } else if (t === 'carte_identite') {
+        setIfEmpty('dateNaissance', g('dateNaissance'));
+        // Pas de colonne dédiée au n° de pièce → on le consigne dans la note (case vide) pour ne rien perdre.
+        const cni = [g('numeroPiece') && ('CNI/titre n° ' + g('numeroPiece')), g('dateExpirationTitre') && ('exp. ' + g('dateExpirationTitre'))].filter(Boolean).join(' · ');
+        if (cni) setIfEmpty('note', cni);
+      }
+      if (Object.keys(patch).length) { try { await FP.persist.upsert('conducteurs', { key, ...patch }); if (cond) Object.assign(cond, patch); } catch (e) {} }
+      target = { table: 'conducteurs', id: key };
     }
     else if (cible === 'leasing') {
       const rec = { conducteur: '', immat: (g('immat') || '').toUpperCase(), marque: g('marque') || '', modele: g('modele') || '',
@@ -325,20 +363,26 @@
       target = { table: 'leasing', id: rec.immat };
     }
     else if (cible === 'documents') {
-      // Document rattaché au véhicule (si immat connue), sinon simple archive.
-      const immat = (g('immat') || '').toUpperCase(); const veh = findVeh(immat);
+      // ⚠️ Colonnes DB réelles de `documents` : id, vehiculeId (→ vehicule_id), type, label, url,
+      // driveId (→ drive_id), societe. Il n'y a PAS de colonne `date` ni `note` → les écrire faisait
+      // rejeter l'INSERT (attestation / état des lieux jamais enregistrés). On consigne les détails
+      // (échéance, km…) dans le `label` pour rester visible sans colonne supplémentaire.
+      const immat = FP.normImmat ? FP.normImmat(g('immat')) : (g('immat') || '').toUpperCase(); const veh = findVeh(immat);
+      const url = model._fileUrl || null;
+      const driveId = url ? (((String(url).match(/\/d\/([-\w]{20,})/) || [])[1]) || ((String(url).match(/[?&]id=([-\w]{20,})/) || [])[1]) || null) : null;
+      const dfmt = d => { try { return d ? (FP.date ? FP.date(d) : d) : ''; } catch (e) { return d || ''; } };
       let rec;
       if (t === 'etat_des_lieux') {
+        const bits = [g('typeEtat'), g('km') ? (g('km') + ' km') : '', dfmt(g('date'))].filter(Boolean).join(' · ');
         rec = { id: uid('D'), societe: societe(), vehiculeId: veh ? veh.id : null, type: 'etat-des-lieux',
-          label: 'État des lieux' + (g('typeEtat') ? ' — ' + g('typeEtat') : ''), date: g('date') || '', url: model._fileUrl || null,
-          note: JSON.stringify({ km: g('km'), dommages: g('dommages'), operateur: g('operateur') }) };
+          label: 'État des lieux' + (bits ? ' — ' + bits : ''), url, driveId };
       } else {
         // Assurance (carte verte / attestation)
+        const bits = [g('assureur'), g('numeroPolice') ? ('n° ' + g('numeroPolice')) : '', g('dateFin') ? ('échéance ' + dfmt(g('dateFin'))) : ''].filter(Boolean).join(' · ');
         rec = { id: uid('D'), societe: societe(), vehiculeId: veh ? veh.id : null, type: 'assurance',
-          label: 'Attestation assurance' + (g('assureur') ? ' — ' + g('assureur') : ''), date: g('dateDebut') || '', url: model._fileUrl || null,
-          note: JSON.stringify({ assureur: g('assureur'), police: g('numeroPolice'), fin: g('dateFin') }) };
+          label: 'Attestation assurance' + (bits ? ' — ' + bits : ''), url, driveId };
       }
-      FP.persist.insert('documents', rec);
+      await FP.persist.insert('documents', rec);
       target = { table: 'documents', id: rec.id };
     }
     else { throw new Error("Type non pris en charge pour l'enregistrement (Phase 1)."); }

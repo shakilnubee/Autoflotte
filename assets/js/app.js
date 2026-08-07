@@ -4294,10 +4294,10 @@ FP.trash = {
     try {
       if (!rec || typeof rec !== 'object') return '';
       if (type === 'vehicules') return [rec.immat, rec.marque, rec.modele].filter(Boolean).join(' ');
-      if (type === 'amendes') return [rec.prenom || rec.conducteur, rec.numeroAvis || rec.avis, rec.montantTTC != null ? rec.montantTTC + ' €' : ''].filter(Boolean).join(' · ');
+      if (type === 'amendes') return [rec.prenom || rec.conducteur, rec.numeroAvis || rec.avis, (rec.montant != null ? rec.montant : rec.montantTTC) != null ? (rec.montant != null ? rec.montant : rec.montantTTC) + ' €' : ''].filter(Boolean).join(' · ');
       if (type === 'conducteurs') return rec.name || rec.nom || [rec.prenom, rec.nom].filter(Boolean).join(' ') || rec.key || '';
       if (type === 'leasing') return [rec.conducteur, rec.immat, rec.marque, rec.modele].filter(Boolean).join(' ');
-      if (type === 'factures') return [rec.fournisseur, rec.numero, rec.montantTTC != null ? rec.montantTTC + ' €' : ''].filter(Boolean).join(' · ');
+      if (type === 'factures') return [rec.fournisseur, rec.numeroFacture || rec.numero, rec.montantTTC != null ? rec.montantTTC + ' €' : ''].filter(Boolean).join(' · ');
       return rec.immat || rec.nom || rec.name || rec.label || rec.id || '';
     } catch (e) { return ''; }
   },
