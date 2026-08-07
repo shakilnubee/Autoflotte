@@ -2876,6 +2876,38 @@ FP.leasingTotalVerse = (c, upto) => {
   return Math.round(total * 100) / 100;
 };
 
+// ⚠️ HELPER CANONIQUE — COÛT DE LEASING D'UN VÉHICULE, quelle que soit la provenance du contrat.
+// But : quand l'utilisateur ajoute un contrat (peu importe où), le coût se calcule TOUT SEUL dans le
+// TCO, sans double comptage. Deux stockages existent :
+//   1) contrat « km/forfait » (FP.leasingContrat : LEASING_CONTRATS PXP + overrides éditables) ;
+//   2) contrat LLD saisi dans l'app (settings.localeaseContrats, table « Leasing (LLD) » des Contrats).
+// Règle anti-double-comptage : UN véhicule = UN SEUL contrat. Priorité au forfait S'IL PORTE UN LOYER
+// (offre/override), sinon on prend le contrat LLD retrouvé par la plaque. Si le forfait n'a pas de
+// loyer connu (contrats PXP historiques) ET qu'aucun LLD n'existe → null : le TCO retombe alors sur
+// les factures 'leasing' (comportement inchangé). Renvoie { loyerMois, contrat, source } ou null.
+FP.leasingCoutContrat = (immat) => {
+  const norm = s => FP.normImmat ? FP.normImmat(s) : String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const key = norm(immat); if (!key) return null;
+  // 1) Forfait avec loyer (offre ou override) → fait foi.
+  try {
+    const c1 = FP.leasingContrat ? FP.leasingContrat(immat) : null;
+    if (c1) { const loyer = FP.leasingLoyerCourant ? FP.leasingLoyerCourant(c1) : (c1.loyer != null ? Number(c1.loyer) : null); if (loyer != null) return { loyerMois: loyer, contrat: c1, source: 'forfait' }; }
+  } catch (e) {}
+  // 2) Contrat LLD (Localease/Ayvens…) saisi dans l'app, retrouvé par la plaque.
+  try {
+    const list = FP.settings.get().localeaseContrats;
+    if (Array.isArray(list)) {
+      const it = list.find(c => norm(c.immat) === key);
+      if (it) {
+        const contrat = { debut: it.debut || null, dureeMois: Number(it.dureeMois) || 0, loyer: (it.loyerTTC != null && it.loyerTTC !== '') ? Number(it.loyerTTC) : null, avenants: Array.isArray(it.avenants) ? it.avenants : [] };
+        const loyer = FP.leasingLoyerCourant ? FP.leasingLoyerCourant(contrat) : contrat.loyer;
+        if (loyer != null) return { loyerMois: loyer, contrat, source: 'lld' };
+      }
+    }
+  } catch (e) {}
+  return null;
+};
+
 // Véhicule concerné par le contrôle anti-pollution (utilitaires + camions/engins
 // routiers diesel type IVECO), mais PAS les chariots élévateurs (Fenwick).
 FP.concerneAntiPollution = (v) => {
