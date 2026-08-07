@@ -1005,6 +1005,34 @@ FP.busy = (message) => {
 FP.prestataireCarte = () => { try { const v = FP.settings.get().prestataireCarte; if (v && String(v).trim()) return String(v).trim(); } catch (e) {} return (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? 'TotalEnergies' : 'Carte carburant'; };
 FP.prestataireBadge = () => { try { const v = FP.settings.get().prestataireBadge; if (v && String(v).trim()) return String(v).trim(); } catch (e) {} return (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? 'Ulys' : 'Badge péage'; };
 
+// ===== MULTI-PRESTATAIRES (générique) : Total & Ulys (natifs) + prestataires PERSO ajoutés par l'utilisateur =====
+// Chaque prestataire porte : id, nom, type ('carburant' = carte essence | 'peage' = badge de péage), et
+// numKey = la clé de réglage qui stocke le n° PAR CONDUCTEUR (settings[numKey][condKey]). Ainsi tout nouveau
+// prestataire est « branché » partout automatiquement : champ n° dans la fiche conducteur, colonne dans
+// « Cartes & badges », sous-onglet dans Contrôle. Persos synchronisés dans settings.prestatairesPerso.
+FP.prestataires = () => {
+  const out = [
+    { id: 'total', nom: FP.prestataireCarte(), type: 'carburant', builtin: true, numKey: 'condCarteTotal' },
+    { id: 'ulys',  nom: FP.prestataireBadge(), type: 'peage',     builtin: true, numKey: 'condBadgeUlys' }
+  ];
+  try { const p = FP.settings.get().prestatairesPerso; if (Array.isArray(p)) p.forEach(x => { if (x && x.id && x.nom) out.push({ id: x.id, nom: String(x.nom), type: (x.type === 'peage' ? 'peage' : 'carburant'), builtin: false, numKey: 'condNum_' + x.id }); }); } catch (e) {}
+  return out;
+};
+FP.prestataireById = (id) => FP.prestataires().find(p => p.id === id) || null;
+FP.addPrestataire = (nom, type) => {
+  nom = String(nom || '').trim(); if (!nom) return null;
+  const s = FP.settings.get(); const list = Array.isArray(s.prestatairesPerso) ? s.prestatairesPerso.slice() : [];
+  const base = (nom.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '') || 'presta').slice(0, 14);
+  let id = 'p_' + base, n = 1; const taken = new Set(list.map(x => x.id).concat(['total', 'ulys']));
+  while (taken.has(id)) id = 'p_' + base + (++n);
+  const rec = { id, nom, type: (type === 'peage' ? 'peage' : 'carburant') };
+  list.push(rec); s.prestatairesPerso = list; FP.settings.save(s); return rec;
+};
+FP.removePrestataire = (id) => { if (!id) return; const s = FP.settings.get(); s.prestatairesPerso = (s.prestatairesPerso || []).filter(x => x.id !== id); FP.settings.save(s); };
+// n° d'un prestataire pour un conducteur (généralise numCarteConducteur à N prestataires).
+FP.condNum = (condKey, numKey) => { try { const v = (FP.settings.get()[numKey] || {})[condKey]; if (v) return v; } catch (e) {} return (FP.numCarteConducteur && (numKey === 'condCarteTotal' || numKey === 'condBadgeUlys')) ? (FP.numCarteConducteur(condKey, numKey) || '') : ''; };
+FP.setCondNum = (condKey, numKey, val) => { if (!condKey || !numKey) return; const s = FP.settings.get(); s[numKey] = s[numKey] || {}; val = (val || '').trim(); if (val) s[numKey][condKey] = val; else delete s[numKey][condKey]; FP.settings.save(s); };
+
 // ================= CONGÉS / ABSENCES DES CONDUCTEURS (par société, synchronisé app_settings) =========
 // But : repérer une conso carte carburant PENDANT un congé (interdit). On enregistre les périodes
 // d'absence PAR CONDUCTEUR (clé = key du conducteur). Stockage partagé (tous les postes) :
@@ -2037,7 +2065,7 @@ document.addEventListener('fp:data-ready', FP.normalizeVehicleNames); // après 
 document.addEventListener('fp:data-ready', () => { try { FP.userEmail = (localStorage.getItem('fp_email') || '').trim().toLowerCase(); FP.buildJisMenu(); } catch (e) {} });
 
 // Normalisation d'un prénom (1er mot, minuscules, accents conservés) — partagé
-FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
+FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 // ⚠️ HELPER CANONIQUE — nom COMPLET normalisé (prénom + nom, accents/casse/espaces neutralisés).
 // Sert à distinguer deux homonymes de prénom (« Jean Dupont » ≠ « Jean Martin ») SANS casser le
 // rapprochement historique par prénom seul (qui reste le repli quand la donnée n'a qu'un prénom).
