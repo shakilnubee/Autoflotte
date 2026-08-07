@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807j">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807k">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807j"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807k"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807j">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807k">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -136,11 +136,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807j"></script>
-<script src="../assets/js/supabase-client.js?v=20260807j"></script>
-<script src="../assets/js/data.js?v=20260807j"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807k"></script>
+<script src="../assets/js/supabase-client.js?v=20260807k"></script>
+<script src="../assets/js/data.js?v=20260807k"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807j"></script>
+<script src="../assets/js/app.js?v=20260807k"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -615,6 +615,7 @@
   // ===== Points à vérifier (carte carburant Total) — même détection que la page Factures (FP.*) =====
   let _verifTx = null; // cache des transactions total_conso_tx (chargées 1×)
   let _verifUlys = null; // cache du détail Ulys mensuel par conducteur (ulys_conso)
+  let _verifCongeRows = []; // dernières alertes « conso pendant congé » (pour l'export relevé)
   async function loadVerifTx() {
     if (_verifTx !== null && _verifUlys !== null) return _verifTx;
     try { const r = await FP.supabase.from('total_conso_tx').select('*'); _verifTx = (r && r.data) || []; } // RLS filtre déjà par société
@@ -637,6 +638,7 @@
       const key = 'conge|' + (a.key || '') + '|' + a.date + '|' + (a.produit || '') + '|' + (a.montant || '');
       const mnt = (a.montant != null && a.montant !== 0) ? ' de ' + (FP.euro ? FP.euro(a.montant) : a.montant) : '';
       return { key, t: 'conge', mois: String(a.date || '').slice(0, 7), facnum: a.facnum || '',
+        xp: { conducteur: a.conducteur, conso: lbl(a.categorie), montant: a.montant, dateConso: a.date, congeDebut: cg.debut, congeFin: cg.fin, facnum: a.facnum || '' },
         txt: `(congé) ${a.conducteur} — ${lbl(a.categorie)}${mnt} le ${FP.date ? FP.date(a.date) : a.date}, PENDANT un congé (${FP.date(cg.debut)} → ${FP.date(cg.fin)})${cg.motif ? ' · ' + cg.motif : ''}` };
     }).filter(a => !okMap[a.key]);
   }
@@ -659,7 +661,9 @@
       const mm = mois.split('-'); const moisTxt = mm.length === 2 ? mm[1] + '/' + mm[0] : mois;
       const montant = (r.totalTtc != null ? r.totalTtc : (r.total_ttc != null ? r.total_ttc : null));
       const key = 'ulysconge|' + ckey + '|' + mois;
-      return { key, t: 'conge', mois, facnum: r.numeroFacture || r.numero_facture || '',
+      const fnum = r.numeroFacture || r.numero_facture || '';
+      return { key, t: 'conge', mois, facnum: fnum,
+        xp: { conducteur: r.conducteur, conso: 'péages ' + presBadge + ' (mois ' + moisTxt + ')', montant: montant, dateConso: '', congeDebut: cg.debut, congeFin: cg.fin, facnum: fnum },
         txt: `(congé) ${r.conducteur} — péages ${presBadge} en ${moisTxt}${montant != null ? ' (' + (FP.euro ? FP.euro(montant) : montant) + ')' : ''}, mois d'un congé (${FP.date(cg.debut)} → ${FP.date(cg.fin)}) — montant global du mois, dates non détaillées, à vérifier` };
     }).filter(a => a && !okMap[a.key]);
   }
@@ -694,7 +698,13 @@
       }
       box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div>' + diag + '</div></div>'; lucide.createIcons(); return;
     }
-    box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant (repas élevés, achats hors carburant, plusieurs pleins/jour, diesel) <b>et TOUTE conso (carburant, péage, boutique…) pendant un congé</b> (interdit — avec les dates). La <b>✓ verte</b> archive comme sur Factures → Total Fleet (même suivi). Clique le texte pour ouvrir la fiche concernée.</p>'
+    _verifCongeRows = anoms.filter(a => a.xp);
+    const toolbar = _verifCongeRows.length ? `<div class="flex flex-wrap gap-2 mb-3">
+        <button type="button" id="verif-pdf" class="btn btn-dark text-sm"><i data-lucide="file-down" class="w-4 h-4"></i> Relevé congés PDF (${_verifCongeRows.length})</button>
+        <button type="button" id="verif-csv" class="btn btn-outline text-sm"><i data-lucide="table" class="w-4 h-4"></i> Excel (CSV)</button>
+      </div>` : '';
+    box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant (repas élevés, achats hors carburant, plusieurs pleins/jour, diesel) <b>et TOUTE conso (carburant, péage, boutique…) pendant un congé</b> (interdit — avec les dates). La <b>✓ verte</b> archive comme sur Factures → Total Fleet (même suivi). Le bouton <b>Voir</b> ouvre la facture.</p>'
+      + toolbar
       + anoms.map(a => {
         const conge = a.t === 'conge';
         const cat = conge ? '🌴 Conso pendant un congé' : 'Carte carburant Total';
@@ -722,8 +732,32 @@
     if (/^https?:\/\//.test(url)) window.open(url, '_blank', 'noopener');
     else window.open('https://drive.google.com/file/d/' + url + '/view', '_blank', 'noopener');
   }
+  // Relevé « conso pendant congés » : colonnes conducteur · conso · montant · DATE conso · CONGÉ · N° FACTURE.
+  const _verifCols = ['Conducteur', 'Conso', 'Montant (€)', 'Date conso', 'Congé début', 'Congé fin', 'N° facture'];
+  const _verifRow = (a) => { const x = a.xp || {}; return [x.conducteur || '', x.conso || '', (x.montant != null ? x.montant : ''), (x.dateConso ? (FP.date ? FP.date(x.dateConso) : x.dateConso) : ''), (x.congeDebut ? FP.date(x.congeDebut) : ''), (x.congeFin ? FP.date(x.congeFin) : ''), x.facnum || '']; };
+  function exportVerifCSV() {
+    const rows = _verifCongeRows || []; if (!rows.length) { if (FP.toast) FP.toast('Rien à exporter.'); return; }
+    const q = (s) => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+    const lines = [_verifCols.map(q).join(';')].concat(rows.map(a => _verifRow(a).map(q).join(';')));
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob); const el = document.createElement('a'); el.href = url; el.download = 'points-a-verifier-conges.csv'; document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+  function exportVerifPDF() {
+    const rows = _verifCongeRows || []; if (!rows.length) { if (FP.toast) FP.toast('Rien à exporter.'); return; }
+    if (!(window.jspdf && window.jspdf.jsPDF)) { if (FP.ensureJsPDF) FP.ensureJsPDF().then(exportVerifPDF); return; }
+    const doc = new window.jspdf.jsPDF();
+    const soc = (FP.activeSociete && FP.activeSociete()) || '';
+    const today = (function () { try { return FP.date(new Date().toISOString().slice(0, 10)); } catch (e) { return ''; } })();
+    doc.setFontSize(14); doc.setTextColor(15, 30, 61); doc.text('Relevé — Conso pendant congés à vérifier', 14, 16);
+    doc.setFontSize(9); doc.setTextColor(120); doc.text((soc && soc !== '__all__' ? soc + ' · ' : '') + (rows.length + ' ligne(s)') + (today ? ' · édité le ' + today : ''), 14, 22);
+    const body = rows.map(a => { const r = _verifRow(a); return [r[0], r[1], (r[2] !== '' ? (FP.euro ? FP.euro(r[2]) : r[2]) : '—'), r[3] || '—', (r[4] && r[5] ? r[4] + ' → ' + r[5] : '—'), r[6] || '—']; });
+    doc.autoTable({ startY: 27, head: [['Conducteur', 'Conso', 'Montant', 'Date conso', 'Congé', 'N° facture']], body, styles: { fontSize: 8, cellPadding: 2 }, headStyles: { fillColor: [15, 30, 61] } });
+    doc.save('points-a-verifier-conges.pdf');
+  }
   // ✓ Archiver depuis « Suivi & alertes » → écrit dans la MÊME source (FP.settings.tfAnomOk) que Factures.
   { const vbox = document.getElementById('suivi-verif'); if (vbox) vbox.addEventListener('click', (e) => {
+    if (e.target.closest('#verif-pdf')) { e.preventDefault(); exportVerifPDF(); return; }
+    if (e.target.closest('#verif-csv')) { e.preventDefault(); exportVerifCSV(); return; }
     const vf = e.target.closest('[data-verif-facture]'); if (vf) { e.preventDefault(); openFactureByNum(vf.getAttribute('data-verif-facture')); return; }
     const ok = e.target.closest('[data-verif-ok]'); if (!ok) return;
     e.preventDefault();
