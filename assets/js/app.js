@@ -5181,6 +5181,21 @@ FP.openScan = (url) => {
   const w = window.open('', '_blank'); // ouvert TOUT DE SUITE (dans le geste de clic → pas bloqué)
   FP.signedScanUrl(url).then(u => { if (w) { try { w.opener = null; } catch (e) {} w.location = u; } else { location.href = u; } });
 };
+// ⚠️ SOURCE UNIQUE — Ouvre DIRECTEMENT le PDF/document concerné (jamais un aperçu intégré).
+// Accepte : une URL http(s), un chemin du bucket « scans » (→ lien signé), ou un ID Google Drive
+// (→ page /view). TOUT bouton « Voir » de la plateforme DOIT passer par ici pour un comportement
+// identique partout. Ouvre l'onglet DANS le geste de clic (sinon bloqué par le navigateur).
+FP.openPdf = function (ref, emptyMsg) {
+  const raw = String(ref == null ? '' : ref).trim();
+  if (!raw || /^IMP-/i.test(raw)) { if (FP.toast) FP.toast(emptyMsg || 'Aucun PDF disponible'); return false; }
+  const toFinal = (u) => /^https?:\/\//.test(u) ? u : ('https://drive.google.com/file/d/' + u + '/view');
+  const needSign = (/\/scans\//.test(raw) || /\/storage\/v1\/object\//.test(raw)) && FP.signedScanUrl;
+  if (!needSign) { window.open(toFinal(raw), '_blank', 'noopener'); return true; }
+  const w = window.open('', '_blank');
+  FP.signedScanUrl(raw, 600).then(u => { const f = toFinal(u || raw); if (w) { try { w.opener = null; } catch (e) {} w.location = f; } else { window.open(f, '_blank', 'noopener'); } })
+    .catch(() => { const f = toFinal(raw); if (w) w.location = f; else window.open(f, '_blank', 'noopener'); });
+  return true;
+};
 // Intercepte les clics sur les liens « Voir / Ouvrir » d'un document → ouverture signée.
 document.addEventListener('click', (e) => {
   const a = e.target.closest && e.target.closest('a[href]');
