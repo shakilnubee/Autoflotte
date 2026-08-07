@@ -330,12 +330,23 @@
       `<div class="ctrl-kpi"><div class="lbl">Fraude confirmée</div><div class="val" style="color:#991B1B">${euro(fraude)}</div></div>`;
     $('ctrl-count').textContent = _findings.length ? '· ' + _findings.length : '';
 
-    if (!all.length) { box.innerHTML = '<div class="card p-6 text-center text-slate-500">Aucune trouvaille pour ce filtre. 👍</div>'; if(window.lucide)lucide.createIcons(); return; }
+    // Diagnostic : explique POURQUOI il y a peu/pas de trouvailles (au lieu d'une page vide muette).
+    let diag = '';
+    const nConges = Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length;
+    if (!_tx.length && !_ulys.length) {
+      diag = '<div class="card p-3 mb-4" style="border-left:4px solid var(--fp-warn);background:#FFFBEB;font-size:.86rem;line-height:1.55">⚠️ <b>Aucune conso datée en base.</b> La détection « conso pendant un congé » au <b>jour</b> près a besoin du <b>détail transaction par transaction</b> (colonne date des consommations). Ouvre l\'onglet <b>⛽ Total Fleet</b> ci-dessus → bouton <b>« Reconstruire le détail »</b> (ou réimporte le relevé <b>détaillé</b>). ' + (nConges ? '' : 'Et saisis les <b>congés</b> sur les fiches conducteurs.') + '</div>';
+    } else if (!nConges) {
+      diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">ℹ️ <b>' + _tx.length + '</b> conso datée(s) chargée(s), mais <b>aucun congé saisi</b> sur les fiches conducteurs. Renseigne les congés (fiche conducteur → « Congés / absences ») pour détecter les conso faites pendant un congé.</div>';
+    } else if (!_findings.length) {
+      diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">🔎 <b>' + _tx.length + '</b> conso datée(s) et <b>' + nConges + '</b> conducteur(s) avec congé analysés — aucune conso ne tombe dans une période de congé. Si tu en attends (ex. Romuald en juillet), vérifie que <b>ses dates de congé</b> couvrent bien ces jours et que le relevé <b>détaillé</b> de ce mois est importé.</div>';
+    }
+
+    if (!all.length) { box.innerHTML = diag + '<div class="card p-6 text-center text-slate-500">Aucune trouvaille pour ce filtre. 👍</div>'; if(window.lucide)lucide.createIcons(); return; }
 
     if (state.grouped){
       const byC = {}; all.forEach(f => { const gk = f.gkey || f.conducteur; (byC[gk] = byC[gk] || []).push(f); });
       const groups = Object.keys(byC).map(gk => { const rows = byC[gk]; const n = rows.map(r=>r.conducteur).sort((a,b)=>String(b).length-String(a).length)[0]; return { n, rows, tot:rows.reduce((s,f)=>s+(Number(f.montant)||0),0) }; }).sort((a,b)=>b.tot-a.tot);
-      box.innerHTML = groups.map((g,i)=>`
+      box.innerHTML = diag + groups.map((g,i)=>`
         <div class="mb-2">
           <div class="grp-head" data-grp="${i}">
             <div class="font-semibold text-slate-900">${esc(g.n)} <span class="text-xs text-slate-500">· ${g.rows.length} trouvaille(s)</span></div>
@@ -344,7 +355,7 @@
           <div class="hidden" data-grpbody="${i}" style="overflow-x:auto"><table class="ctrl-tbl">${COLS}<tbody>${g.rows.map(rowHTML).join('')}</tbody></table></div>
         </div>`).join('');
     } else {
-      box.innerHTML = `<div class="card p-2" style="overflow-x:auto"><table class="ctrl-tbl">${COLS}<tbody>${all.map(rowHTML).join('')}</tbody></table></div>`;
+      box.innerHTML = diag + `<div class="card p-2" style="overflow-x:auto"><table class="ctrl-tbl">${COLS}<tbody>${all.map(rowHTML).join('')}</tbody></table></div>`;
     }
     if (window.lucide) lucide.createIcons();
   }
