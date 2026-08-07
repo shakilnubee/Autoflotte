@@ -2752,6 +2752,20 @@
     const saveMasse = (vehId) => { if (!masseFromCG || !vehId) return; try { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; if (!s.vehMasse[vehId]) { s.vehMasse[vehId] = masseFromCG; FP.settings.save(s); } } catch (e) {} };
     _cgFile = null;
     _cgExtra = null;
+    // « Scanner un document » : on stocke le fichier déposé dans la fiche (table documents) à
+    // l'enregistrement du véhicule — plus jamais jeté après lecture. Best-effort (comme la carte grise).
+    const extraDocFile = _extraDocFile, extraDocType = _extraDocType || 'autre';
+    _extraDocFile = null; _extraDocType = null;
+    const attachExtraDoc = async (vehId) => {
+      if (!extraDocFile || !vehId || !(FP.uploadScan)) return;
+      try {
+        const url = await FP.uploadScan(extraDocFile, 'documents'); if (!url) return;
+        const label = ({ 'controle-technique':'Contrôle technique', 'carte-grise':'Carte grise', 'facture':'Facture', 'assurance':'Attestation assurance' })[extraDocType] || 'Document';
+        const doc = { id:'D'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), vehiculeId: vehId, type: extraDocType, label, url, driveId: (typeof driveIdFromUrl === 'function' ? driveIdFromUrl(url) : null) };
+        try { if (typeof docsCache !== 'undefined' && docsCache) docsCache.push(doc); } catch (e) {}
+        if (FP.persist && FP.persist.available && FP.persist.available()) await FP.persist.insert('documents', doc);
+      } catch (e) { console.warn('[extra doc attach]', e); }
+    };
     const id = $('f-id').value;
     if (id) {
       const idx = data.vehicules.findIndex(v => v.id === id);
@@ -2766,6 +2780,7 @@
       renderKPIs();
       renderTable();
       if (updated) persistVehicleUpsert(updated, false);
+      attachExtraDoc(id);
       // Statut passé à « vendu » → archiver ses documents dans le sous-dossier « OUT » du dossier (plaque)
       if (updated && FP.estVendu(updated) && updated.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(updated.immat);
       // Nouveau passage à « vendu » → process de CESSION (checklist de sortie).
@@ -2794,6 +2809,7 @@
       renderKPIs();
       renderTable();
       persistVehicleUpsert(newV, true);
+      attachExtraDoc(newV.id);
       // Nouveau véhicule → process d'ENTRÉE dans la flotte (checklist).
       showEntreeProcess(newV);
     }
@@ -4449,6 +4465,7 @@
   // ============================================================
   let _cgFile = null; // scan de la carte grise sélectionné, envoyé au stockage à l'enregistrement
   let _cgExtra = null; // CO2 / puissance fiscale / carburant lus sur la carte grise (pas de champ dans le formulaire)
+  let _extraDocFile = null, _extraDocType = null; // « Scanner un document » (CT/facture…) → STOCKÉ dans la fiche à l'enregistrement (le but du « Drive »)
   const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
   const PDFJS_CDN     = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
   const PDFJS_WORKER  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -4861,14 +4878,17 @@
       try { det = (window.FP && FP.scanIA) ? await FP.scanIA(file) : null; } catch (e) {}
       if (!det) { try { const text = await FP.ocr.fileToText(file); det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []); } catch (e) {} }
       det = det || {};
+      // On GARDE le document déposé (le but du « Drive ») : il sera stocké dans la fiche véhicule
+      // (table documents) à l'enregistrement, en plus d'avoir servi au préremplissage.
+      _extraDocFile = file; _extraDocType = det.type || 'autre';
       const filled = [];
       const ctDate = det.controleTechniqueProchain || (det.type === 'controle-technique' ? det.date : '');
       const immat = det.vehiculeImmat || det.immat;
       if (ctDate && !$('f-ct').value) { $('f-ct').value = ctDate; filled.push('prochain CT'); }
       if (det.km && (!$('f-km').value || Number($('f-km').value) === 0)) { $('f-km').value = det.km; filled.push('kilométrage'); }
       if (immat && !$('f-immat').value) { $('f-immat').value = immat; filled.push('immatriculation'); }
-      if (filled.length) show('✓ Récupéré : ' + filled.join(', ') + '. Vérifie puis enregistre.', 'ok');
-      else show("Lu, mais aucune info exploitable trouvée (CT, km…). Saisis à la main si besoin.", 'error');
+      if (filled.length) show('✓ Récupéré : ' + filled.join(', ') + '. Le document sera aussi <b>enregistré dans la fiche</b>. Vérifie puis enregistre.', 'ok');
+      else show("Lu, mais aucune info exploitable trouvée (CT, km…). Le document sera quand même <b>enregistré dans la fiche</b>.", 'ok');
     } catch (e) { console.error('[extra doc]', e); show("Impossible de lire ce document. Réessaie ou saisis à la main.", 'error'); }
   }
   $('doc-scan-trigger').addEventListener('click', () => $('f-doc-file').click());
