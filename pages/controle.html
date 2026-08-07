@@ -15,11 +15,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807r">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807s">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807r"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807s"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807r">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807s">
 <style>
   .ctrl-kpi { background:#fff; border:1px solid var(--fp-border); border-radius:.7rem; padding:.85rem 1rem; }
   .ctrl-kpi .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--fp-muted); }
@@ -118,9 +118,10 @@
       <p class="text-sm mt-1" style="color:#8598B4">Relevés carburant &amp; péages, et suivi des anomalies (conso pendant congé, dépenses suspectes).</p>
     </div>
 
-    <div class="flex gap-1 border-b border-slate-200 mb-6" style="overflow-x:auto">
+    <div id="ctrl-tabbar" class="flex gap-1 border-b border-slate-200 mb-6" style="overflow-x:auto">
       <button type="button" id="tab-total" style="padding:9px 18px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">⛽ Total Fleet <span style="font-size:11px;font-weight:600">· carburant &amp; péages</span></button>
       <button type="button" id="tab-ulys" style="padding:9px 18px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🛣️ Ulys <span style="font-size:11px;font-weight:600">· péages</span></button>
+      <!-- Les sous-onglets des prestataires PERSO (créés dans « Cartes & badges ») s'insèrent ici. -->
       <button type="button" id="tab-controle" style="padding:9px 18px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">🛡️ Contrôle <span id="ctrl-count" style="font-size:11px;font-weight:700"></span></button>
       <button type="button" id="tab-cartes" style="padding:9px 18px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">💳 Cartes &amp; badges</button>
     </div>
@@ -133,6 +134,9 @@
     <div id="pane-ulys" class="hidden">
       <iframe id="if-ulys" title="Ulys" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff;overflow:hidden"></iframe>
     </div>
+
+    <!-- Panneaux des prestataires PERSO (générés dynamiquement, 1 par prestataire créé) -->
+    <div id="presta-panes"></div>
 
     <!-- Sous-onglet Contrôle (trouvailles) -->
     <div id="pane-controle">
@@ -173,11 +177,14 @@
          TOUS les conducteurs (même donnée que la fiche conducteur, synchronisée). -->
     <div id="pane-cartes" class="hidden">
       <div class="card p-4 mb-4 text-sm text-slate-600" style="line-height:1.55">
-        Chaque n° <b>rattache automatiquement</b> la conso au bon conducteur (par numéro, pas par nom). C'est la <b>même donnée</b> que la fiche conducteur / la fiche véhicule : la modifier ici la change <b>partout</b>. Vider un champ enlève le lien mais ne supprime pas la conso déjà enregistrée.
+        Chaque n° <b>rattache automatiquement</b> la conso au bon conducteur (par numéro, pas par nom). C'est la <b>même donnée</b> que la fiche conducteur / la fiche véhicule : la modifier ici la change <b>partout</b>. Vider un champ enlève le lien mais ne supprime pas la conso déjà enregistrée.<br>
+        <span class="text-slate-500">Une colonne par <b>prestataire</b>. Tu as un autre fournisseur de carte carburant ou de badge péage que Total / Ulys ? Clique <b>« ➕ Prestataire »</b> : ça crée son <b>sous-onglet</b> ci-dessus <b>et</b> une colonne ici (donc une zone à remplir sur chaque fiche conducteur).</span>
       </div>
       <div class="flex flex-wrap items-center gap-2 mb-3">
         <input id="cb-search" type="text" placeholder="🔍 Conducteur…" class="field-input" style="max-width:240px;padding:.45rem .7rem;font-size:.88rem">
         <span class="text-xs text-slate-400" id="cb-count"></span>
+        <span style="flex:1"></span>
+        <button type="button" id="cb-add-presta" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Prestataire</button>
       </div>
       <div class="card p-2" style="overflow-x:auto"><div id="cb-body"><p class="text-sm text-slate-400 p-3">Chargement…</p></div></div>
     </div>
@@ -185,11 +192,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807r"></script>
-<script src="../assets/js/supabase-client.js?v=20260807r"></script>
-<script src="../assets/js/data.js?v=20260807r"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807s"></script>
+<script src="../assets/js/supabase-client.js?v=20260807s"></script>
+<script src="../assets/js/data.js?v=20260807s"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807r"></script>
+<script src="../assets/js/app.js?v=20260807s"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -198,23 +205,103 @@
   const euro = (n) => (n == null ? '—' : (FP.euro ? FP.euro(n) : Number(n).toFixed(2) + ' €'));
   const dfr = (d) => d ? (FP.date ? FP.date(d) : d) : '';
 
-  // ===== Sous-onglets =====
-  const panes = { total:'pane-total', ulys:'pane-ulys', controle:'pane-controle', cartes:'pane-cartes' };
-  const tabs = { total:'tab-total', ulys:'tab-ulys', controle:'tab-controle', cartes:'tab-cartes' };
+  // ===== Sous-onglets (dynamiques : Total, Ulys, prestataires PERSO, Contrôle, Cartes) =====
+  let _tab = 'controle';
+  const customPres = () => (FP.prestataires ? FP.prestataires() : []).filter(p => !p.builtin);
+  const tabNames = () => ['total', 'ulys'].concat(customPres().map(p => p.id)).concat(['controle', 'cartes']);
   function switchTab(name){
-    Object.keys(panes).forEach(k => $(panes[k]).classList.toggle('hidden', k !== name));
-    Object.keys(tabs).forEach(k => { const b = $(tabs[k]); const on = k === name; b.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; b.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
+    const names = tabNames(); if (names.indexOf(name) < 0) name = 'controle';
+    _tab = name;
+    names.forEach(k => { const pane = $('pane-' + k); if (pane) pane.classList.toggle('hidden', k !== name); });
+    names.forEach(k => { const b = $('tab-' + k); if (!b) return; const on = k === name; b.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; b.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
     // Chargement paresseux des vues intégrées Total Fleet / Ulys (1re ouverture seulement).
     if (name === 'total') { const f = $('if-total'); if (f && !f.src) f.src = 'factures.html?embed&tab=total'; }
     if (name === 'ulys')  { const f = $('if-ulys');  if (f && !f.src) f.src = 'factures.html?embed&tab=ulys'; }
     if (name === 'cartes') renderCartes();
+    if (/^p_/.test(name)) renderPresta(name);
+    if (window.lucide) lucide.createIcons();
+  }
+  // Construit les onglets + panneaux des prestataires perso (idempotent : purge puis reconstruit).
+  function renderPrestaTabs(){
+    const bar = $('ctrl-tabbar'), host = $('presta-panes'); if (!bar || !host) return;
+    bar.querySelectorAll('[data-presta-tab]').forEach(el => el.remove());
+    host.querySelectorAll('[data-presta-pane]').forEach(el => el.remove());
+    const before = $('tab-controle');
+    customPres().forEach(p => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.id = 'tab-' + p.id; b.setAttribute('data-presta-tab', p.id);
+      b.style.cssText = 'padding:9px 18px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer';
+      b.innerHTML = (p.type === 'peage' ? '🛣️ ' : '⛽ ') + esc(p.nom) + ' <span style="font-size:11px;font-weight:600">· ' + (p.type === 'peage' ? 'péages' : 'carburant') + '</span>';
+      b.addEventListener('click', () => switchTab(p.id));
+      bar.insertBefore(b, before);
+      const pane = document.createElement('div'); pane.id = 'pane-' + p.id; pane.className = 'hidden'; pane.setAttribute('data-presta-pane', p.id);
+      host.appendChild(pane);
+    });
+  }
+  // Contenu d'un panneau prestataire perso : ses factures (fournisseur qui matche) + KPIs + gestion.
+  function renderPresta(id){
+    const p = FP.prestataireById ? FP.prestataireById(id) : null; const pane = $('pane-' + id); if (!pane || !p) return;
+    const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+    const pn = norm(p.nom);
+    const facs = (window.FP_DATA.factures || []).filter(f => { const fo = norm(f.fournisseur); return pn && fo && (fo.includes(pn) || pn.includes(fo)); })
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    const ttcOf = f => Number(f.montantTtc != null ? f.montantTtc : (f.montant_ttc != null ? f.montant_ttc : (f.montantTTC || 0))) || 0;
+    const tot = facs.reduce((s, f) => s + ttcOf(f), 0);
+    let nNum = 0; try { (FP.conducteurs.list() || []).forEach(c => { if (FP.condNum && FP.condNum(c.key, p.numKey)) nNum++; }); } catch (e) {}
+    const kpi = (l, v) => '<div class="ctrl-kpi"><div class="lbl">' + l + '</div><div class="val">' + v + '</div></div>';
+    const rows = facs.map(f => {
+      const url = f.url || f.fileId || '';
+      const voir = (url && !/^IMP-/.test(url)) ? '<button type="button" data-pfac="' + esc(f.id || '') + '" class="btn btn-outline" style="padding:2px 9px;font-size:12px"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>' : '';
+      return '<tr><td>' + (f.date ? dfr(f.date) : '—') + '</td><td>' + esc(f.numeroFacture || f.numero_facture || '—') + '</td><td>' + esc(f.fournisseur || '—') + '</td><td style="text-align:right;font-weight:600">' + euro(ttcOf(f)) + '</td><td style="text-align:right">' + voir + '</td></tr>';
+    }).join('');
+    pane.innerHTML =
+      '<div class="grid gap-3 mb-5" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">'
+        + kpi('Type', p.type === 'peage' ? 'Badge péage' : 'Carte carburant') + kpi('Factures', facs.length) + kpi('Total TTC', euro(tot)) + kpi('Conducteurs rattachés', nNum) + '</div>'
+      + '<div class="card p-4 mb-4 text-sm text-slate-600" style="line-height:1.55">Prestataire <b>' + esc(p.nom) + '</b>. Ses factures apparaissent ici (fournisseur reconnu). Les n° de carte/badge se remplissent dans <b>💳 Cartes &amp; badges</b> ou sur chaque <b>fiche conducteur</b> → la conso se rattache alors automatiquement au bon conducteur.</div>'
+      + '<div class="flex flex-wrap items-center gap-2 mb-3"><a href="factures.html" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Importer une facture</a><span style="flex:1"></span><button type="button" data-rm-presta="' + esc(p.id) + '" class="btn btn-outline text-sm" style="color:#B91C1C;border-color:#FCA5A5"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer ce prestataire</button></div>'
+      + '<div class="card p-2" style="overflow-x:auto"><table class="ctrl-tbl"><thead><tr><th>Date</th><th>N° facture</th><th>Fournisseur</th><th style="text-align:right">Montant TTC</th><th></th></tr></thead><tbody>'
+        + (facs.length ? rows : '<tr><td colspan="5" class="text-slate-400 p-3">Aucune facture reconnue pour ce prestataire pour l\'instant. Importe une facture (le fournisseur doit contenir « ' + esc(p.nom) +' »).</td></tr>')
+        + '</tbody></table></div>';
     if (window.lucide) lucide.createIcons();
   }
   $('tab-total').addEventListener('click', () => switchTab('total'));
   $('tab-ulys').addEventListener('click', () => switchTab('ulys'));
   $('tab-controle').addEventListener('click', () => switchTab('controle'));
   $('tab-cartes').addEventListener('click', () => switchTab('cartes'));
-  { const t = new URLSearchParams(location.search).get('tab'); switchTab(['total','ulys','controle','cartes'].includes(t) ? t : 'controle'); }
+  renderPrestaTabs();
+  { const t = new URLSearchParams(location.search).get('tab'); switchTab(tabNames().includes(t) ? t : 'controle'); }
+
+  // Clics dans les panneaux prestataire : ouvrir une facture / supprimer le prestataire.
+  $('presta-panes').addEventListener('click', async (e) => {
+    const rm = e.target.closest('[data-rm-presta]');
+    if (rm) {
+      const id = rm.getAttribute('data-rm-presta'); const p = FP.prestataireById(id);
+      if (!confirm('Supprimer le prestataire « ' + (p ? p.nom : id) + ' » ?\n\nSes factures et les n° déjà saisis ne sont PAS effacés — seul le sous-onglet et la colonne disparaissent.')) return;
+      FP.removePrestataire(id); renderPrestaTabs(); renderCartes(); switchTab('cartes');
+      if (FP.toast) FP.toast('Prestataire supprimé');
+      return;
+    }
+    const pf = e.target.closest('[data-pfac]');
+    if (pf) {
+      e.preventDefault();
+      const f = (window.FP_DATA.factures || []).find(x => String(x.id || '') === pf.getAttribute('data-pfac'));
+      if (!f) return; let url = f.url || f.fileId || '';
+      if (!url || /^IMP-/.test(url)) { if (FP.toast) FP.toast('Aucun PDF stocké'); return; }
+      try { if (/\/storage\/v1\/object\//.test(url) && FP.signedScanUrl) { const s = await FP.signedScanUrl(url, 600); if (s) url = s; } } catch (er) {}
+      window.open(/^https?:\/\//.test(url) ? url : ('https://drive.google.com/file/d/' + url + '/view'), '_blank', 'noopener');
+    }
+  });
+
+  // ➕ Créer un prestataire (nom + type) → crée le sous-onglet + la colonne + la zone fiche conducteur.
+  $('cb-add-presta').addEventListener('click', () => {
+    const nom = (prompt('Nom du nouveau prestataire (ex. Shell, DKV, Eurotoll, AS24)…') || '').trim();
+    if (!nom) return;
+    let type = (prompt('Type ? Tape « carburant » (carte essence) ou « peage » (badge télépéage) :', 'carburant') || '').trim().toLowerCase();
+    type = /peage|péage|badge|autoroute|toll/.test(type) ? 'peage' : 'carburant';
+    const rec = FP.addPrestataire(nom, type); if (!rec) { if (FP.toast) FP.toast('Nom invalide'); return; }
+    renderPrestaTabs(); renderCartes(); switchTab(rec.id);
+    alert('✅ Prestataire « ' + rec.nom + ' » créé.\n\n• Un sous-onglet vient d\'apparaître ici (Contrôle).\n• Une colonne « ' + (type === 'peage' ? 'Badge ' : 'Carte ') + rec.nom + ' » est ajoutée dans « Cartes & badges ».\n• Une zone à remplir apparaît aussi sur CHAQUE fiche conducteur.\n\nRenseigne le n° de carte/badge de chaque conducteur pour que ses consos se rattachent automatiquement.');
+  });
   // La vue intégrée (Total Fleet / Ulys) nous envoie sa hauteur → on adapte l'iframe (aucun scroll imbriqué).
   window.addEventListener('message', (e) => {
     const h = e.data && e.data.fpEmbedHeight; if (!h || h < 300) return;
@@ -227,7 +314,7 @@
     try { const r = await FP.supabase.from('conducteurs').select('*'); if (r && r.data) { const soc = FP.activeSociete ? FP.activeSociete() : null; window.FP_DATA.conducteurs = (soc && soc !== '__all__') ? r.data.filter(c => !c.societe || c.societe === soc) : r.data; } } catch (e) {}
   }
   async function loadData(){
-    try { const r = await FP.supabase.from('total_conso_tx').select('*'); _tx = (r && r.data) || []; } catch (e) { _tx = []; }
+    try { const r = await FP.supabase.from('total_conso_tx').select('*'); let rows = (r && r.data) || []; const soc = FP.activeSociete ? FP.activeSociete() : null; if (soc && soc !== '__all__') rows = rows.filter(x => !x.societe || x.societe === soc); _tx = rows; } catch (e) { _tx = []; }
     try { const r = await FP.supabase.from('ulys_conso').select('*'); let rows = (r && r.data) || []; const soc = FP.activeSociete ? FP.activeSociete() : null; if (soc && soc !== '__all__') rows = rows.filter(x => !x.societe || x.societe === soc); _ulys = rows; } catch (e) { _ulys = []; }
     _loaded = true;
   }
@@ -236,7 +323,10 @@
   // Compat : une anomalie archivée dans « Points à vérifier » (tfAnomOk) compte comme « classé ».
   function statutMap(){ try { return FP.settings.get().controleStatuts || {}; } catch (e) { return {}; } }
   function tfOk(){ try { return FP.settings.get().tfAnomOk || {}; } catch (e) { return {}; } }
-  function setStatut(fid, st){ const s = FP.settings.get(); const m = s.controleStatuts || {}; if (st && st !== 'a-verifier') m[fid] = st; else delete m[fid]; s.controleStatuts = m; FP.settings.save(s); }
+  // def = statut par défaut CALCULÉ de la trouvaille (ex. une anomalie carte déjà archivée dans
+  // « Points à vérifier » a pour défaut « classe »). On ne supprime la clé QUE si le choix retombe
+  // sur ce défaut — sinon un « À vérifier » explicite serait écrasé au prochain rebuild (régression).
+  function setStatut(fid, st, def){ const s = FP.settings.get(); const m = s.controleStatuts || {}; if (st && st !== (def || 'a-verifier')) m[fid] = st; else delete m[fid]; s.controleStatuts = m; FP.settings.save(s); }
 
   const ST_LABEL = { 'a-verifier':'À vérifier', 'justifie':'Justifié', 'fraude':'Fraude', 'classe':'Classé' };
 
@@ -279,9 +369,10 @@
     const txCard = _tx.filter(t => !/^ULYS/i.test(String(t.carte||'')));
     (FP.totalFleetAnomaliesTx ? FP.totalFleetAnomaliesTx(txCard) : []).forEach(a => {
       const fid = 'ca|' + (a.key||''); const cn = canon(a.conducteur||'—');
-      const st = sm[fid] || (FP.tfAnomArchivee && FP.tfAnomArchivee(a, ok) ? 'classe' : 'a-verifier');
+      const def = (FP.tfAnomArchivee && FP.tfAnomArchivee(a, ok)) ? 'classe' : 'a-verifier';
+      const st = sm[fid] || def;
       out.push({ fid, genre:'carte', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre', type:catLbl(a.categorie),
-        date:a.date||'', montant:a.montant, facnum:a.facnum||'', detail:a.motif || a.txt || 'anomalie carte', statut: st });
+        date:a.date||'', montant:a.montant, facnum:a.facnum||'', detail:a.motif || a.txt || 'anomalie carte', statut: st, _def: def });
     });
     // Relie CHAQUE trouvaille à sa/ses VOITURE(S) — même source que les fiches véhicule :
     // plaque lue sur la conso si présente, sinon le(s) véhicule(s) dont ce conducteur est le chauffeur.
@@ -434,25 +525,27 @@
   let _cbSearch = '';
   function renderCartes(){
     const box = $('cb-body'); if (!box) return;
-    const presC = FP.prestataireCarte ? FP.prestataireCarte() : 'Carte carburant';
-    const presB = FP.prestataireBadge ? FP.prestataireBadge() : 'Badge péage';
+    // Une COLONNE par prestataire (Total, Ulys + tout prestataire perso créé dans Contrôle).
+    const pres = (FP.prestataires ? FP.prestataires() : []);
     let conds = (FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [];
     const q = _cbSearch.trim().toLowerCase();
     if (q) conds = conds.filter(c => FP.conducteurs.displayName(c).toLowerCase().includes(q));
     conds = conds.slice().sort((a, b) => FP.conducteurs.displayName(a).localeCompare(FP.conducteurs.displayName(b)));
     $('cb-count').textContent = conds.length + ' conducteur(s)';
     if (!conds.length) { box.innerHTML = '<p class="text-sm text-slate-400 p-3">Aucun conducteur.</p>'; return; }
-    const inp = 'width:160px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
+    const inp = 'width:150px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
     const vehLink = (im) => '<a href="vehicules.html?immat=' + encodeURIComponent(im) + '" style="display:inline-block;background:#EEF2FF;color:#3730A3;border-radius:6px;padding:1px 7px;font-size:.78rem;font-weight:700;text-decoration:none;margin:1px 2px 1px 0">' + esc(im) + '</a>';
-    box.innerHTML = '<table class="ctrl-tbl"><thead><tr><th>Conducteur</th><th>Véhicule(s)</th><th style="text-align:right">Carte ' + esc(presC) + '</th><th style="text-align:right">Badge ' + esc(presB) + '</th></tr></thead><tbody>'
+    const th = pres.map(p => '<th style="text-align:right">' + (p.type === 'peage' ? 'Badge ' : 'Carte ') + esc(p.nom) + '</th>').join('');
+    box.innerHTML = '<table class="ctrl-tbl"><thead><tr><th>Conducteur</th><th>Véhicule(s)</th>' + th + '</tr></thead><tbody>'
       + conds.map(c => {
-          const carte = (FP.numCarteConducteur ? FP.numCarteConducteur(c.key, 'condCarteTotal') : '') || '';
-          const badge = (FP.numCarteConducteur ? FP.numCarteConducteur(c.key, 'condBadgeUlys') : '') || '';
           const vs = (data.vehicules || []).filter(v => { try { const cc = v.chauffeur && v.chauffeur !== '—' ? FP.conducteurs.find(v.chauffeur) : null; return cc && cc.key === c.key; } catch (e) { return false; } }).map(v => v.immat).filter(Boolean);
+          const tds = pres.map(p => {
+            const num = (FP.condNum ? FP.condNum(c.key, p.numKey) : '') || '';
+            return '<td style="text-align:right"><input data-cb-key="' + esc(c.key) + '" data-cb-field="' + esc(p.numKey) + '" value="' + esc(num) + '" placeholder="—" style="' + inp + '"></td>';
+          }).join('');
           return '<tr><td><b>' + esc(FP.conducteurs.displayName(c)) + '</b></td>'
             + '<td>' + (vs.length ? vs.map(vehLink).join('') : '<span class="text-slate-400">—</span>') + '</td>'
-            + '<td style="text-align:right"><input data-cb-key="' + esc(c.key) + '" data-cb-field="condCarteTotal" value="' + esc(carte) + '" placeholder="—" style="' + inp + '"></td>'
-            + '<td style="text-align:right"><input data-cb-key="' + esc(c.key) + '" data-cb-field="condBadgeUlys" value="' + esc(badge) + '" placeholder="—" style="' + inp + '"></td></tr>';
+            + tds + '</tr>';
         }).join('') + '</tbody></table>';
     if (window.lucide) lucide.createIcons();
   }
@@ -475,7 +568,7 @@
   });
   $('ctrl-body').addEventListener('change', (e) => {
     const sel = e.target.closest('[data-statut]');
-    if (sel) { const fid = sel.getAttribute('data-statut'); setStatut(fid, sel.value); const f = _findings.find(x=>x.fid===fid); if (f) f.statut = sel.value; if (FP.toast) FP.toast('Statut : ' + (ST_LABEL[sel.value]||sel.value)); render(); }
+    if (sel) { const fid = sel.getAttribute('data-statut'); const f = _findings.find(x=>x.fid===fid); setStatut(fid, sel.value, f && f._def); if (f) f.statut = sel.value; if (FP.toast) FP.toast('Statut : ' + (ST_LABEL[sel.value]||sel.value)); render(); }
   });
 
   async function openFacture(facnum){
@@ -541,8 +634,14 @@
     render();
   }
   boot();
-  // Recalcule quand les données live arrivent (settings/congés/immat…)
-  document.addEventListener('fp:data-ready', () => { if (_loaded) { _findings = buildFindings(); render(); } });
+  // Recalcule quand les données live arrivent (settings/congés/immat…). On reconstruit aussi les
+  // sous-onglets prestataires (au cas où un prestataire a été créé sur un autre appareil) en gardant
+  // l'onglet courant si possible.
+  document.addEventListener('fp:data-ready', () => {
+    const cur = _tab; renderPrestaTabs();
+    if (!tabNames().includes(cur)) switchTab('controle'); else switchTab(cur);
+    if (_loaded) { _findings = buildFindings(); render(); }
+  });
 </script>
 </body>
 </html>
