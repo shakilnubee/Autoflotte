@@ -113,7 +113,7 @@
   // Types détectés qui se traitent mieux dans un outil DÉDIÉ (on ne fait pas d'OCR vision approximatif) → on redirige.
   // Ex. péages Ulys : la lecture précise (montants par collaborateur, colonnes) est faite par l'importateur de la page Factures.
   const REDIRECTS = {
-    facture_ulys: { label: "Péages Ulys / VINCI", page: "factures.html?tab=ulys",
+    facture_ulys: { label: "Péages Ulys / VINCI", page: "controle.html?tab=ulys",
       reason: "Les factures de péages Ulys se lisent dans l'importateur dédié (page Factures → onglet Ulys) : il reconstitue les colonnes pour donner les bons montants par collaborateur. Un OCR simple mélangerait les colonnes." }
   };
 

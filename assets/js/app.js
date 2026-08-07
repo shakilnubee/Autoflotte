@@ -1082,7 +1082,7 @@ FP.consoPendantConge = (txList, opts) => {
     if (FP.normPrenom && t.conducteur) { const np = FP.normPrenom(t.conducteur); if (np && cand.indexOf(np) < 0) cand.push(np); }
     let cg = null, key = null;
     for (const k of cand) { const g = FP.congeCouvrant(k, dtx); if (g) { cg = g; key = k; break; } }
-    if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '' });
+    if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '' });
   });
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 };

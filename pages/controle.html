@@ -15,11 +15,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807p">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807q">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807p"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260807q"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807p">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260807q">
 <style>
   .ctrl-kpi { background:#fff; border:1px solid var(--fp-border); border-radius:.7rem; padding:.85rem 1rem; }
   .ctrl-kpi .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--fp-muted); }
@@ -124,22 +124,13 @@
       <button type="button" id="tab-controle" style="padding:9px 18px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">🛡️ Contrôle <span id="ctrl-count" style="font-size:11px;font-weight:700"></span></button>
     </div>
 
-    <!-- Sous-onglet Total Fleet (vue hébergée sur Factures — déplacement complet à l'étape 2) -->
+    <!-- Sous-onglets Total Fleet / Ulys : la vue complète (conso, imports, exports) est intégrée depuis
+         Factures en mode « embed » → un seul code source, aucune duplication. Chargée à la 1re ouverture. -->
     <div id="pane-total" class="hidden">
-      <div class="card p-6 text-sm text-slate-600" style="line-height:1.6">
-        <div class="font-semibold text-slate-900 mb-1">⛽ Total Fleet — carburant &amp; péages</div>
-        Le détail des relevés TotalEnergies (conso par carte, par conducteur, exports) est pour l'instant sur la page Factures.
-        <div class="mt-3"><a href="factures.html?tab=total" class="btn btn-dark text-sm"><i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir Total Fleet</a></div>
-      </div>
+      <iframe id="if-total" title="Total Fleet" style="width:100%;height:calc(100vh - 210px);min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>
     </div>
-
-    <!-- Sous-onglet Ulys -->
     <div id="pane-ulys" class="hidden">
-      <div class="card p-6 text-sm text-slate-600" style="line-height:1.6">
-        <div class="font-semibold text-slate-900 mb-1">🛣️ Ulys — péages</div>
-        Le détail des relevés Ulys (péages par conducteur, exports) est pour l'instant sur la page Factures.
-        <div class="mt-3"><a href="factures.html?tab=ulys" class="btn btn-dark text-sm"><i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir Ulys</a></div>
-      </div>
+      <iframe id="if-ulys" title="Ulys" style="width:100%;height:calc(100vh - 210px);min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>
     </div>
 
     <!-- Sous-onglet Contrôle (trouvailles) -->
@@ -180,11 +171,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807p"></script>
-<script src="../assets/js/supabase-client.js?v=20260807p"></script>
-<script src="../assets/js/data.js?v=20260807p"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260807q"></script>
+<script src="../assets/js/supabase-client.js?v=20260807q"></script>
+<script src="../assets/js/data.js?v=20260807q"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807p"></script>
+<script src="../assets/js/app.js?v=20260807q"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -199,6 +190,9 @@
   function switchTab(name){
     Object.keys(panes).forEach(k => $(panes[k]).classList.toggle('hidden', k !== name));
     Object.keys(tabs).forEach(k => { const b = $(tabs[k]); const on = k === name; b.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; b.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
+    // Chargement paresseux des vues intégrées Total Fleet / Ulys (1re ouverture seulement).
+    if (name === 'total') { const f = $('if-total'); if (f && !f.src) f.src = 'factures.html?embed&tab=total'; }
+    if (name === 'ulys')  { const f = $('if-ulys');  if (f && !f.src) f.src = 'factures.html?embed&tab=ulys'; }
     if (window.lucide) lucide.createIcons();
   }
   $('tab-total').addEventListener('click', () => switchTab('total'));
@@ -244,7 +238,7 @@
       const cg = a.conge || {}; const cn = canon(a.conducteur);
       const fid = 'cg|' + (a.key||'') + '|' + a.date + '|' + (a.categorie||'') + '|' + (a.montant||'');
       out.push({ fid, genre:'congé', conducteur:cn.n, gkey:cn.k, categorie:a.categorie, type:catLbl(a.categorie,a.carte),
-        date:a.date, montant:a.montant, facnum:a.facnum||'', detail:'congé : ' + dfr(cg.debut) + ' au ' + dfr(cg.fin),
+        date:a.date, montant:a.montant, facnum:a.facnum||'', _plaque:a.plaque||'', detail:'congé : ' + dfr(cg.debut) + ' au ' + dfr(cg.fin),
         statut: sm[fid] || 'a-verifier' });
     });
     // 2) Ulys mensuel pendant un congé (dédupliqué si des dates existent déjà)
@@ -267,6 +261,15 @@
       const st = sm[fid] || (FP.tfAnomArchivee && FP.tfAnomArchivee(a, ok) ? 'classe' : 'a-verifier');
       out.push({ fid, genre:'carte', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre', type:catLbl(a.categorie),
         date:a.date||'', montant:a.montant, facnum:a.facnum||'', detail:a.motif || a.txt || 'anomalie carte', statut: st });
+    });
+    // Relie CHAQUE trouvaille à sa/ses VOITURE(S) — même source que les fiches véhicule :
+    // plaque lue sur la conso si présente, sinon le(s) véhicule(s) dont ce conducteur est le chauffeur.
+    const vehsOf = (gkey) => { const set = []; (data.vehicules||[]).forEach(v => { if (v.chauffeur && v.chauffeur !== '—' && FP.normPrenom && FP.normPrenom(v.chauffeur) === gkey) { const im = v.immat; if (im && set.indexOf(im) < 0) set.push(im); } }); return set; };
+    out.forEach(f => {
+      let im = '';
+      if (f._plaque) { const v = (data.vehicules||[]).find(x => FP.normImmat(x.immat) === FP.normImmat(f._plaque)); im = v ? v.immat : f._plaque; }
+      if (!im) { const list = vehsOf(f.gkey); im = list.join(', '); }
+      f.immat = im || '';
     });
     return out;
   }
@@ -292,10 +295,13 @@
       ['a-verifier','justifie','fraude','classe'].map(v => `<option value="${v}"${f.statut===v?' selected':''}>${ST_LABEL[v]}</option>`).join('') + '</select>';
   }
   function voirBtn(f){ return f.facnum ? `<button type="button" data-fac="${esc(f.facnum)}" class="btn btn-outline" style="padding:2px 9px;font-size:12px"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>` : ''; }
+  function condCell(f){ return `<a href="conducteurs.html" title="Ouvrir les conducteurs" style="color:var(--fp-primary);text-decoration:none;font-weight:600">${esc(f.conducteur)}</a>`; }
+  function vehCell(f){ if (!f.immat) return '<span class="text-slate-400">—</span>'; return f.immat.split(',').map(s=>s.trim()).filter(Boolean).map(im => `<a href="vehicules.html?immat=${encodeURIComponent(im)}" title="Ouvrir la fiche véhicule" style="display:inline-block;background:#EEF2FF;color:#3730A3;border-radius:6px;padding:1px 7px;font-size:.78rem;font-weight:700;text-decoration:none;margin:1px 2px 1px 0">${esc(im)}</a>`).join(''); }
 
   function rowHTML(f){
     return `<tr>
-      <td>${esc(f.conducteur)}</td>
+      <td>${condCell(f)}</td>
+      <td>${vehCell(f)}</td>
       <td>${esc(f.type)}${f.genre==='congé'?' <span class="st-badge" style="background:#EDE9FE;color:#5B21B6">congé</span>':''}</td>
       <td style="text-align:right;font-weight:600">${euro(f.montant)}</td>
       <td>${f.date?dfr(f.date):(f.mois||'—')}</td>
@@ -305,7 +311,7 @@
       <td style="text-align:right">${voirBtn(f)}</td>
     </tr>`;
   }
-  const COLS = '<thead><tr><th>Conducteur</th><th>Conso</th><th style="text-align:right">Montant</th><th>Date</th><th>Détail</th><th>N° facture</th><th>Statut</th><th></th></tr></thead>';
+  const COLS = '<thead><tr><th>Conducteur</th><th>Véhicule</th><th>Conso</th><th style="text-align:right">Montant</th><th>Date</th><th>Détail</th><th>N° facture</th><th>Statut</th><th></th></tr></thead>';
 
   function render(){
     const box = $('ctrl-body');
