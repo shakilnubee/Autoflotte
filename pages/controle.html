@@ -204,7 +204,10 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
   const euro = (n) => (n == null ? '—' : (FP.euro ? FP.euro(n) : Number(n).toFixed(2) + ' €'));
-  const dfr = (d) => d ? (FP.date ? FP.date(d) : d) : '';
+  // Dates au format numérique JJ/MM/AAAA partout (trouvailles, détail, diagnostic, exports).
+  const dfr = (d) => d ? (FP.dateNum ? FP.dateNum(d) : (FP.date ? FP.date(d) : d)) : '';
+  // Mois « AAAA-MM » → « MM/AAAA » (pour les lignes sans date exacte, ex. Ulys mensuel).
+  const mfr = (m) => { const p = String(m || '').split('-'); return (p.length >= 2 ? p[1] + '/' + p[0] : (m || '')); };
 
   // ===== Sous-onglets (dynamiques : Total, Ulys, prestataires PERSO, Contrôle, Cartes) =====
   let _tab = 'controle';
@@ -340,14 +343,24 @@
     // Identité canonique du conducteur (FUSIONNE « ROMUALD » et « Romuald LAMARQUE-BRUNET » → 1 personne).
     // Clé de fusion = PRÉNOM normalisé (insensible casse/accents) → « ROMUALD », « Romuald LAMARQUE-BRUNET »
     // et « Romuald » = UNE seule personne. Nom affiché = le nom complet enregistré (ou le plus long vu).
-    const canon = (name) => {
+    // Nom AFFICHÉ = toujours le NOM COMPLET enregistré (Prénom NOM), jamais juste un prénom, dès
+    // qu'un conducteur correspond. On résout par clé (fiable, ex. congé) puis par nom, puis par
+    // prénom (si le relevé ne porte que le prénom → on retrouve le nom complet du conducteur).
+    const cndList = (FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [];
+    const cndByKey = {}; cndList.forEach(c => { cndByKey[c.key] = c; });
+    const dispName = (c) => (c && FP.conducteurs && FP.conducteurs.displayName) ? FP.conducteurs.displayName(c) : '';
+    const canon = (name, key) => {
       const np = FP.normPrenom ? FP.normPrenom(name) : String(name || '').trim().toLowerCase().split(/\s+/)[0];
-      let n = name; try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(name) : null; if (c && FP.conducteurs.displayName) n = FP.conducteurs.displayName(c); } catch (e) {}
-      return { k: np || String(name || '').toLowerCase(), n };
+      let c = (key && cndByKey[key]) || null;
+      if (!c) { try { c = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(name) : null; } catch (e) {} }
+      if (!c && np) { c = cndList.find(x => FP.normPrenom(dispName(x)) === np) || null; }
+      const n = c ? dispName(c) : (name || '');
+      const k = (c ? (FP.normPrenom(dispName(c)) || np) : np) || String(name || '').toLowerCase();
+      return { k, n };
     };
     // 1) Conso DATÉE pendant un congé (toutes catégories)
     (FP.consoPendantConge ? FP.consoPendantConge(_tx) : []).forEach(a => {
-      const cg = a.conge || {}; const cn = canon(a.conducteur);
+      const cg = a.conge || {}; const cn = canon(a.conducteur, a.key);
       const fid = 'cg|' + (a.key||'') + '|' + a.date + '|' + (a.categorie||'') + '|' + (a.montant||'');
       out.push({ fid, genre:'congé', conducteur:cn.n, gkey:cn.k, categorie:a.categorie, type:catLbl(a.categorie,a.carte),
         date:a.date, montant:a.montant, facnum:a.facnum||'', _plaque:a.plaque||'', detail:'congé : ' + dfr(cg.debut) + ' au ' + dfr(cg.fin),
@@ -360,10 +373,10 @@
       let k=null; try{const c=FP.conducteurs.find(r.conducteur); if(c)k=c.key;}catch(e){} if(!k&&FP.normPrenom)k=FP.normPrenom(r.conducteur); if(!k) return;
       const mois = String(r.mois).slice(0,7); if (datedMonths.has(k+'|'+mois)) return;
       const cg = FP.congeDansMois ? FP.congeDansMois(k, mois) : null; if (!cg) return;
-      const mm = mois.split('-'); const fid = 'um|'+k+'|'+mois; const cn = canon(r.conducteur);
+      const fid = 'um|'+k+'|'+mois; const cn = canon(r.conducteur, k);
       out.push({ fid, genre:'congé', conducteur:cn.n, gkey:cn.k, categorie:'peage', type:'péage '+presBadge,
         date:'', mois, montant:(r.totalTtc!=null?r.totalTtc:(r.total_ttc!=null?r.total_ttc:null)), facnum:r.numeroFacture||r.numero_facture||'',
-        detail:'congé : '+dfr(cg.debut)+' au '+dfr(cg.fin)+' · total du mois '+(mm[1]+'/'+mm[0])+' (détail par jour indisponible)',
+        detail:'congé : '+dfr(cg.debut)+' au '+dfr(cg.fin)+' · total du mois '+mfr(mois)+' — pour les DATES EXACTES : ouvre Total Fleet → « Reconstruire le détail » (ou réimporte le relevé Ulys)',
         statut: sm[fid] || 'a-verifier' });
     });
     // 3) Anomalies carte (repas élevés, hors carburant, pleins multiples, diesel…)
@@ -435,7 +448,7 @@
     const rows = keys.map(key => {
       const c = FP.conducteurs.list().find(x => x.key === key);
       const nom = c ? FP.conducteurs.displayName(c) : key;
-      const cg = all[key].map(x => FP.date(x.debut) + ' → ' + FP.date(x.fin)).join(', ');
+      const cg = all[key].map(x => dfr(x.debut) + ' → ' + dfr(x.fin)).join(', ');
       const txs = byKey[key] || [];
       const inC = txs.filter(t => FP.congeCouvrant(key, t.dateTx || t.date_tx));
       // Les dépenses PENDANT un congé d'abord (les seules qui comptent), puis les autres, par date.
@@ -455,7 +468,7 @@
           + 'Congés : <b>' + (r.cg || '—') + '</b><br>'
           + 'Dépenses datées : <b>' + r.nTx + '</b> · dont <b style="color:' + (r.nIn ? '#B91C1C' : '#16a34a') + '">' + r.nIn + '</b> pendant un congé'
           + (!r.nTx ? ' <span class="text-amber-600">→ aucune dépense datée en base pour lui : clique « Reconstruire le détail » (onglet Total Fleet) ou réimporte le relevé détaillé.</span>' : (r.nTx && !r.nIn ? ' <span class="text-emerald-600">→ rien pendant ses congés 👍</span>' : ''))
-          + (r.sample.length ? '<div class="text-xs mt-1" style="max-height:150px;overflow:auto">' + r.sample.map(t => { const d = t.dateTx || t.date_tx; const mt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc); const inc = FP.congeCouvrant(r.key, d); return '<div style="padding:1px 0;color:' + (inc ? '#B91C1C' : '#94A3B8') + '">' + (inc ? '<b>⛔ pendant congé</b> · ' : 'hors congé · ') + FP.date(d) + ' · ' + esc(t.produit || t.categorie || '') + ' · ' + euro(mt) + '</div>'; }).join('') + '</div>' : '')
+          + (r.sample.length ? '<div class="text-xs mt-1" style="max-height:150px;overflow:auto">' + r.sample.map(t => { const d = t.dateTx || t.date_tx; const mt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc); const inc = FP.congeCouvrant(r.key, d); return '<div style="padding:1px 0;color:' + (inc ? '#B91C1C' : '#94A3B8') + '">' + (inc ? '<b>⛔ pendant congé</b> · ' : 'hors congé · ') + dfr(d) + ' · ' + esc(t.produit || t.categorie || '') + ' · ' + euro(mt) + '</div>'; }).join('') + '</div>' : '')
           + '</div>'
         ).join('') + '</div></details>';
   }
@@ -475,7 +488,7 @@
       <td>${vehCell(f)}</td>
       <td>${esc(f.type)}${f.genre==='congé'?' <span class="st-badge" style="background:#EDE9FE;color:#5B21B6">congé</span>':''}</td>
       <td style="text-align:right;font-weight:600">${euro(f.montant)}</td>
-      <td>${f.date?dfr(f.date):(f.mois||'—')}</td>
+      <td>${f.date?dfr(f.date):(f.mois?mfr(f.mois):'—')}</td>
       <td class="text-slate-500" style="font-size:.8rem">${esc(f.detail)}</td>
       <td>${f.facnum?esc(f.facnum):'—'}</td>
       <td>${stSelect(f)}</td>
@@ -619,7 +632,7 @@
 
   // ===== Exports (suivent le filtre courant) =====
   const XCOLS = ['Conducteur','Conso','Montant (€)','Date','Détail','N° facture','Statut'];
-  const xrow = (f) => [f.conducteur, f.type + (f.genre==='congé'?' (congé)':''), (f.montant!=null?Number(f.montant).toFixed(2).replace('.',','):''), (f.date?dfr(f.date):(f.mois||'')), f.detail, f.facnum, (ST_LABEL[f.statut]||f.statut)];
+  const xrow = (f) => [f.conducteur, f.type + (f.genre==='congé'?' (congé)':''), (f.montant!=null?Number(f.montant).toFixed(2).replace('.',','):''), (f.date?dfr(f.date):(f.mois?mfr(f.mois):'')), f.detail, f.facnum, (ST_LABEL[f.statut]||f.statut)];
   function exportCSV(){
     const rows = applyFilters(_findings); if (!rows.length) { if(FP.toast)FP.toast('Rien à exporter'); return; }
     const q = s => '"' + String(s==null?'':s).replace(/"/g,'""') + '"';
@@ -642,7 +655,7 @@
     doc.setTextColor(255,255,255); doc.setFont(undefined,'normal'); doc.setFontSize(11); doc.text('Contrôle des consommations — trouvailles', 14, 21);
     doc.setTextColor(200,210,225); doc.setFontSize(8.5);
     doc.text((soc && soc !== '__all__' ? soc + '     ' : '') + rows.length + ' trouvaille(s)     Total : ' + euro(tot), W - 14, 13, { align:'right' });
-    const body = rows.map(f => [f.conducteur, f.type+(f.genre==='congé'?' (congé)':''), euro(f.montant), (f.date?dfr(f.date):(f.mois||'—')), f.detail, f.facnum||'—', (ST_LABEL[f.statut]||f.statut)]);
+    const body = rows.map(f => [f.conducteur, f.type+(f.genre==='congé'?' (congé)':''), euro(f.montant), (f.date?dfr(f.date):(f.mois?mfr(f.mois):'—')), f.detail, f.facnum||'—', (ST_LABEL[f.statut]||f.statut)]);
     doc.autoTable({ startY:33, head:[['Conducteur','Conso','Montant','Date','Détail','N° facture','Statut']], body,
       styles:{ fontSize:8, cellPadding:2.5, lineColor:[226,232,240], lineWidth:.1, textColor:[30,41,59] },
       headStyles:{ fillColor:[15,30,61], textColor:255, fontStyle:'bold' },
