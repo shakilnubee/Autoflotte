@@ -1174,7 +1174,7 @@
 
     const finContratCell = (l) => {
       if (!l || !l.finContrat || isNaN(l.finContrat)) return '<span class="text-slate-400">—</span>';
-      const diff = Math.ceil((l.finContrat - new Date()) / 86400000);
+      const diff = (FP.joursRestants ? FP.joursRestants(l.finContrat) : Math.ceil((l.finContrat - new Date()) / 86400000));
       const ds = FP.date(l.finContrat.toISOString());
       if (diff < 0)        return `<span style="color:var(--fp-danger);font-weight:700">${ds}</span><br><span class="text-xs" style="color:var(--fp-danger)">terminé (+${-diff}j)</span>`;
       if (diff < 90)       return `<span style="color:var(--fp-danger);font-weight:600">${ds}</span><br><span class="text-xs" style="color:var(--fp-danger)">dans ${diff}j</span>`;
@@ -1220,7 +1220,7 @@
         <td>${moyMens != null && moyMens > 0 ? FP.euroPrecis(moyMens) : '<span class="text-slate-400">—</span>'}</td>
         <td>${(() => { const d = FP.tvsDetail(v); return (d && d.applicable && d.total != null) ? FP.euro(d.total) : '<span class="text-slate-400">—</span>'; })()}</td>
         <td style="white-space:nowrap">
-          ${(() => { const jf = (l && l.finContrat && !isNaN(l.finContrat)) ? Math.ceil((l.finContrat - new Date()) / 86400000) : null; const urg = jf !== null && jf <= 120; return `<button type="button" class="btn btn-outline text-xs !px-2" data-restit-lease="${v.immat}" title="Checklist de restitution (compte à rebours 120/90/60/30 j)"${urg ? ' style="border-color:var(--fp-accent);color:var(--fp-accent)"' : ''}><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i></button>`; })()}
+          ${(() => { const jf = (l && l.finContrat && !isNaN(l.finContrat)) ? (FP.joursRestants ? FP.joursRestants(l.finContrat) : Math.ceil((l.finContrat - new Date()) / 86400000)) : null; const urg = jf !== null && jf <= 120; return `<button type="button" class="btn btn-outline text-xs !px-2" data-restit-lease="${v.immat}" title="Checklist de restitution (compte à rebours 120/90/60/30 j)"${urg ? ' style="border-color:var(--fp-accent);color:var(--fp-accent)"' : ''}><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i></button>`; })()}
           <button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}" title="Modifier le forfait du contrat"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
           <button type="button" class="btn btn-outline text-xs !px-2" data-del-lease="${v.immat}" title="Retirer ce véhicule du leasing"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>
         </td>
@@ -1334,7 +1334,7 @@
     restitVehId = v.id;
     const l = FP.leasingInfo ? FP.leasingInfo(v) : null;
     const fin = (l && l.finContrat && !isNaN(l.finContrat)) ? l.finContrat : null;
-    const jf = fin ? Math.ceil((fin - new Date()) / 86400000) : null;
+    const jf = fin ? (FP.joursRestants ? FP.joursRestants(fin) : Math.ceil((fin - new Date()) / 86400000)) : null; // source unique (minuit→minuit)
     const st = restitState(v.id);
     const done = RESTIT_ITEMS.filter(it => st[it.k]).length;
     // Bandeau compte à rebours 120/90/60/30/Jour J
@@ -1734,7 +1734,7 @@
         ? `<span class="cursor-pointer underline decoration-dotted" data-loc-debut="${i}" title="${debutSource === 'mec' ? 'Date de mise en circulation (carte grise) du véhicule lié — cliquer pour saisir la vraie date de début' : 'Modifier la date de début'}">${FP.dateNum(effDebut)}${debutSource === 'mec' ? ' <span class="text-xs text-slate-400">(MEC)</span>' : ''}</span>`
         : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-debut="${i}">+ début</button>`;
       let finCell = `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-fin="${i}">+ fin</button>`;
-      if (effFinDate && !isNaN(effFinDate)){ const j = Math.round((effFinDate - new Date())/86400000); const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`); finCell = `<span class="cursor-pointer underline decoration-dotted" data-loc-fin="${i}" title="Modifier la date de fin">${FP.dateNum(effFinDate.toISOString().slice(0,10))}</span><div>${badge}</div>`; }
+      if (effFinDate && !isNaN(effFinDate)){ const j = (FP.joursRestants ? FP.joursRestants(effFinDate) : Math.round((effFinDate - new Date())/86400000)); const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`); finCell = `<span class="cursor-pointer underline decoration-dotted" data-loc-fin="${i}" title="Modifier la date de fin">${FP.dateNum(effFinDate.toISOString().slice(0,10))}</span><div>${badge}</div>`; }
       // Km actuel (éditable) + reste.
       let kmActCell = (kmAct != null ? FP.num(kmAct) + ' km' : '<span class="text-slate-400">—</span>');
       if (c.kmTotal && kmAct != null){ const reste = c.kmTotal - kmAct; kmActCell += reste<0 ? `<div style="color:#B91C1C;font-weight:700">dépassé ${FP.num(-reste)}</div>` : (reste<5000 ? `<div style="color:#B45309;font-weight:700">reste ${FP.num(reste)}</div>` : `<div class="text-xs text-slate-500">reste ${FP.num(reste)}</div>`); }
