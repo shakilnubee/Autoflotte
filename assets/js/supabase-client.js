@@ -320,7 +320,10 @@
       const sig = (d) => {
         const f = (arr, ks) => (arr || []).map(x => ks.map(k => (x[k] ?? '')).join('|')).join(';');
         return f(d.vehicules, ['id','immat','marque','modele','version','km','statut','chauffeur','prochainCT','dateDernierCT','derniereRevision','proprietaire','carburant','co2','puissanceFiscale','dateMiseEnCirculation','valeurAchat','prix','assurance','vin','couleur','boite','prixVente','groupes','categorie','pipelineStatut','autonomie','critAir','antiPollution'])
-             + '#' + f(d.amendes, ['id','statut','montant','montantTTC','montantMinore','montantForfaitaire','montantMajore','majoree','points','date','prenom','motif','numeroAvis'])
+             + '#' + f(d.amendes, ['id','statut','montant','montantTTC','montantMinore','montantForfaitaire','montantMajore','majoree','points','date','prenom','motif','numeroAvis','avisUrl','justifUrl'])
+             // Pièces jointes (tableau d'objets) : sérialisées à part (nombre + ids) pour que l'ajout/
+             // suppression d'un document sur un poste rafraîchisse la section Documents sur les autres.
+             + '#' + (d.amendes || []).map(a => (a.id || '') + ':' + ((a.pieces || []).length) + ':' + ((a.pieces || []).map(p => (p && (p.id || p.url)) || '').join(','))).join(';')
              + '#' + f(d.factures, ['id','montantHT','montantTVA','montantTTC','type','date','vehiculeImmat','fournisseur','numeroFacture','km'])
              + '#' + f(d.conducteurs, ['key','nom','prenom','dateNaissance','poste','tel','email','adresse','permisNumero','permisExpiration','permisObtention']);
       };

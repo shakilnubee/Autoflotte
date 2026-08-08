@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260808a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260808b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260808a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260808b">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -487,12 +487,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260808a"></script>
-<script src="../assets/js/supabase-client.js?v=20260808a"></script>
-<script src="../assets/js/data.js?v=20260808a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260808b"></script>
+<script src="../assets/js/supabase-client.js?v=20260808b"></script>
+<script src="../assets/js/data.js?v=20260808b"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/fleet-docs.js?v=20260808a"></script>
-<script src="../assets/js/app.js?v=20260808a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260808b"></script>
+<script src="../assets/js/app.js?v=20260808b"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1495,7 +1495,23 @@
     e.preventDefault();
     const name = $('f-name').value.trim();
     if (!name) { alert('Le nom est obligatoire.'); return; }
-    const key = normPrenom(name);
+    let key = normPrenom(name);
+    // ⚠️ ANTI-FUSION D'HOMONYMES (même logique que FP.conducteurs.create) : si un conducteur
+    // EXISTANT partage ce prénom mais porte un nom complet DIFFÉRENT, on lui donne une clé
+    // prénom-nom distincte — sinon upsertCond écraserait/fusionnerait deux personnes différentes
+    // (ex. « Julien Martin » et « Julien Bernard » deviendraient un seul « julien »).
+    try {
+      const full = FP.normNomComplet ? FP.normNomComplet(name) : name.toLowerCase().trim();
+      if (full && full.indexOf(' ') !== -1) {
+        const list = (FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [];
+        const homonymeDiff = list.some(c => {
+          if (normPrenom(c.name || c.prenom || c.key) !== key) return false;
+          const cf = FP.normNomComplet ? FP.normNomComplet(c.name || c.key) : '';
+          return cf && cf !== full;
+        });
+        if (homonymeDiff) { const kf = full.replace(/\s+/g, '-'); if (kf) key = kf; }
+      }
+    } catch (e) {}
     // 1) Crée (ou réaffiche) le conducteur avec ses infos d'arrivée, masque levé.
     upsertCond(key, {
       name,
@@ -2459,8 +2475,8 @@
       { key: 'email', label: 'Email' },
       { key: 'note',  label: 'Note' },
       { key: 'vehicules',  label: 'Véhicules', readonly: true },   // lecture seule (dérivé) — export only
-      { key: 'nbAmendes',  label: 'Nb amendes', readonly: true },  // lecture seule
-      { key: 'points',     label: 'Points retirés', readonly: true }, // lecture seule
+      { key: 'nbAmendes',  label: 'Nb amendes', readonly: true, number: true },  // lecture seule
+      { key: 'points',     label: 'Points retirés', readonly: true, number: true }, // lecture seule
     ],
     getRows: () => drivers.map(d => {
       const r = condRow(d.key) || {};

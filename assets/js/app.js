@@ -6344,6 +6344,13 @@ FP.history = {
   },
 
   restore(snap) {
+    // État AVANT restauration (en mémoire) → sert à RÉCONCILIER la base : on ne pousse
+    // que ce qui change réellement (aucune écriture inutile).
+    const snapArr = (a) => (Array.isArray(a) ? JSON.parse(JSON.stringify(a)) : []);
+    const before = {
+      vehicules: (window.FP_DATA && window.FP_DATA.vehicules) ? snapArr(window.FP_DATA.vehicules) : [],
+      amendes:   (window.FP_DATA && window.FP_DATA.amendes)   ? snapArr(window.FP_DATA.amendes)   : [],
+    };
     localStorage.setItem(FP.settings._key(), JSON.stringify(snap.settings));
     localStorage.setItem(FP.VEH_OVERRIDES_KEY, JSON.stringify(snap.overrides));
     if (snap.fpData && window.FP_DATA) {
@@ -6356,6 +6363,40 @@ FP.history = {
     FP.settings.applyTheme();
     this.renderAll();
     this.updateUI();
+    // ⚠️ PERSISTER l'annulation/rétablissement DANS SUPABASE (sinon la modif « annulée »
+    // revient au rechargement / sur les autres postes). On pousse les réglages (delta) et on
+    // réconcilie les tables suivies (véhicules, amendes) : upsert des lignes restaurées/modifiées,
+    // suppression des lignes que l'annulation retire. Rien n'est envoyé si Supabase est absent
+    // (mode hors-ligne) — la file FP.persist rejouera plus tard.
+    try { if (FP.settings && FP.settings._pushSettings) FP.settings._pushSettings(snap.settings); } catch (e) {}
+    try { this._persistRestore(before, (snap.fpData || {})); } catch (e) { console.warn('[history._persistRestore]', e); }
+  },
+
+  // Aligne Supabase sur l'état restauré, table par table, SANS écriture inutile :
+  // - ligne présente après mais absente/différente avant → upsert (l'upsert ne touche
+  //   que les colonnes fournies, il n'efface pas les colonnes non mappées) ;
+  // - ligne présente avant mais absente après → delete (annulation d'un ajout).
+  _persistRestore(before, after) {
+    if (!(FP.persist && FP.persist.upsert && FP.persist.delete)) return;
+    const idMap = (arr) => { const m = {}; (arr || []).forEach(x => { if (x && x.id != null) m[x.id] = x; }); return m; };
+    ['vehicules', 'amendes'].forEach((tbl) => {
+      const bMap = idMap(before[tbl]);
+      const aArr = Array.isArray(after[tbl]) ? after[tbl] : null;
+      if (!aArr) return; // table non incluse dans ce snapshot → on n'y touche pas
+      const aMap = idMap(aArr);
+      // Ajouts / modifications à repousser
+      aArr.forEach((row) => {
+        if (!row || row.id == null) return;
+        const prev = bMap[row.id];
+        if (!prev || JSON.stringify(prev) !== JSON.stringify(row)) {
+          try { FP.persist.upsert(tbl, row); } catch (e) {}
+        }
+      });
+      // Lignes retirées par l'annulation → suppression (sans dépôt Corbeille : c'est un undo)
+      Object.keys(bMap).forEach((id) => {
+        if (!aMap[id]) { try { FP.persist.delete(tbl, id); } catch (e) {} }
+      });
+    });
   },
 
   canUndo() { return this.past.length > 0; },
@@ -7385,7 +7426,12 @@ FP.pdfPreview = function (doc, filename, subtitle) {
 FP.injectDataIO = function (cfg) {
   cfg = cfg || {};
   const cols = (cfg.columns || []).filter(c => c && c.key && !c.readonly);
-  if (!cols.length || typeof cfg.onImport !== 'function') return;
+  // Deux capacités indépendantes : IMPORT (si onImport) et EXPORT Excel (si getRows).
+  // ⚠️ RÈGLE PROJET « tout en Excel » : dès qu'une page fournit getRows, injectDataIO
+  // pose AUTOMATIQUEMENT un bouton « Exporter (Excel) » (.xlsx), partout, pareil.
+  const canImport = typeof cfg.onImport === 'function' && cols.length > 0 && cfg.exportOnly !== true;
+  const canExport = typeof cfg.getRows === 'function' && cfg.export !== false && (cfg.columns || []).length > 0;
+  if (!canImport && !canExport) return;
   const mount = document.querySelector('[data-data-io]');
   if (!mount || mount.dataset.ioReady === '1') return;
   mount.dataset.ioReady = '1';
@@ -7441,7 +7487,40 @@ FP.injectDataIO = function (cfg) {
     return { records, mapped, ignored };
   }
 
-  // --- Bouton + modale ---
+  // --- Bouton EXPORT (Excel .xlsx) — même standard partout (montants = vraies cellules
+  //     numériques, encodage propre, plus de « signes bizarres » du CSV). ---
+  if (canExport) {
+    const numFmt = (FP.csv && FP.csv.numFormat) || null;
+    const expColDefs = (cfg.columns || []).map(c => {
+      const isNum = c.number === true || (numFmt && c.format === numFmt);
+      return {
+        label: c.label, number: isNum, noTotal: c.noTotal === true,
+        value: (r) => {
+          let v = r[c.key];
+          if (isNum) { const n = Number(v); return (v === '' || v == null || !isFinite(n)) ? '' : n; }
+          if (c.format && (!numFmt || c.format !== numFmt)) { try { v = c.format(v, r); } catch (e) {} }
+          if (Array.isArray(v)) v = v.join(', ');
+          return v == null ? '' : v;
+        },
+      };
+    });
+    const expBtn = document.createElement('button');
+    expBtn.type = 'button';
+    expBtn.className = 'btn btn-outline text-sm';
+    expBtn.innerHTML = '<i data-lucide="sheet" class="w-4 h-4"></i> Exporter (Excel)';
+    expBtn.addEventListener('click', () => {
+      let rows = [];
+      try { rows = (cfg.getRows() || []).slice(); } catch (e) { rows = []; }
+      if (!rows.length) { if (FP.toast) FP.toast('Aucune ligne à exporter (vérifie les filtres).'); return; }
+      const baseName = String(cfg.baseName || cfg.filename || 'export').replace(/\.(csv|xlsx|xls)$/i, '');
+      if (FP.exportRows) FP.exportRows(baseName, expColDefs, rows, 'xlsx', { sheetName: cfg.sheetName || 'Export', total: !!cfg.total });
+      else if (FP.toast) FP.toast('Export Excel indisponible.');
+    });
+    mount.appendChild(expBtn);
+  }
+
+  // --- Bouton IMPORT + modale (uniquement si la page fournit onImport) ---
+  if (!canImport) { if (window.lucide) try { lucide.createIcons(); } catch (e) {} return; }
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn btn-outline text-sm';
