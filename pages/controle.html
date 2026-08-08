@@ -144,7 +144,8 @@
 
       <div class="card p-4 mb-5">
         <div class="flex flex-wrap items-center gap-2 mb-3" id="ctrl-filters">
-          <input id="ctrl-search" type="text" placeholder="🔍 Conducteur…" class="field-input" style="max-width:220px;padding:.45rem .7rem;font-size:.88rem">
+          <select id="ctrl-cond" class="ctrl-sel" aria-label="Conducteur"><option value="all">Tous les conducteurs</option></select>
+          <input id="ctrl-search" type="text" placeholder="🔍 Rechercher…" class="field-input" style="max-width:180px;padding:.45rem .7rem;font-size:.88rem">
           <select id="ctrl-type" class="ctrl-sel" aria-label="Type de conso">
             <option value="all">Tous types</option>
             <option value="carburant">Carburant</option>
@@ -408,10 +409,11 @@
   }
 
   // ===== Filtres =====
-  const state = { search:'', type:'all', statut:'all', mois:'all', from:'', to:'', grouped:true };
+  const state = { search:'', cond:'all', type:'all', statut:'all', mois:'all', from:'', to:'', grouped:true };
   function applyFilters(list){
     const q = state.search.trim().toLowerCase();
     return list.filter(f => {
+      if (state.cond !== 'all' && (f.gkey || f.conducteur) !== state.cond) return false; // conducteur choisi
       if (q && !(String(f.conducteur||'').toLowerCase().includes(q))) return false;
       if (state.type !== 'all') { const c = String(f.categorie||'').toLowerCase(); if (state.type==='repas' ? !(c==='repas'||c==='boutique') : c !== state.type) return false; }
       if (state.statut !== 'all' && f.statut !== state.statut) return false;
@@ -539,6 +541,7 @@
   }
 
   // ===== Interactions =====
+  $('ctrl-cond').addEventListener('change', e => { state.cond = e.target.value; render(); });
   $('ctrl-search').addEventListener('input', e => { state.search = e.target.value; render(); });
   $('ctrl-type').addEventListener('change', e => { state.type = e.target.value; render(); });
   $('ctrl-mois').addEventListener('change', e => { state.mois = e.target.value; render(); });
@@ -621,8 +624,17 @@
   }
 
   // ===== Exports (suivent le filtre courant) =====
+  // Détail COURT pour l'export (lisible en tableur) : on retire la longue liste d'achats d'une
+  // journée (visible à l'écran) et on garde juste le résumé après « — ». Le montant exact reste
+  // dans sa colonne. → Excel/PDF restent tabulaires et clairs.
+  const exDetail = (f) => {
+    const d = String(f.detail || '');
+    const i = d.indexOf(' — ');
+    if (i > 0 && (f.categorie === 'repas' || f.categorie === 'boutique' || /pleins|gazole|diesel/i.test(d))) return d.slice(i + 3);
+    return d;
+  };
   const XCOLS = ['Conducteur','Conso','Montant (€)','Date','Détail','N° facture','Statut'];
-  const xrow = (f) => [f.conducteur, f.type + (f.genre==='congé'?' (congé)':''), (f.montant!=null?Number(f.montant).toFixed(2).replace('.',','):''), (f.date?dfr(f.date):(f.mois?mfr(f.mois):'')), f.detail, f.facnum, (ST_LABEL[f.statut]||f.statut)];
+  const xrow = (f) => [f.conducteur, f.type + (f.genre==='congé'?' (congé)':''), (f.montant!=null?Number(f.montant).toFixed(2).replace('.',','):''), (f.date?dfr(f.date):(f.mois?mfr(f.mois):'')), exDetail(f), f.facnum, (ST_LABEL[f.statut]||f.statut)];
   function exportCSV(){
     const rows = applyFilters(_findings); if (!rows.length) { if(FP.toast)FP.toast('Rien à exporter'); return; }
     const q = s => '"' + String(s==null?'':s).replace(/"/g,'""') + '"';
@@ -630,7 +642,8 @@
     // (sinon, selon la config d'Excel, tout se retrouve dans une seule colonne = illisible/« moche »).
     const lines = ['sep=;', XCOLS.map(q).join(';')].concat(rows.map(f => xrow(f).map(q).join(';')));
     const blob = new Blob(['﻿'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
-    const url = URL.createObjectURL(blob); const el = document.createElement('a'); el.href=url; el.download='controle-conso.csv'; document.body.appendChild(el); el.click(); el.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+    const nom = state.cond !== 'all' ? '-' + String((rows[0]&&rows[0].conducteur)||state.cond).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') : '';
+    const url = URL.createObjectURL(blob); const el = document.createElement('a'); el.href=url; el.download='controle-conso'+nom+'.csv'; document.body.appendChild(el); el.click(); el.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
   }
   function exportPDF(){
     const rows = applyFilters(_findings); if (!rows.length) { if(FP.toast)FP.toast('Rien à exporter'); return; }
@@ -644,10 +657,12 @@
     doc.setFillColor(249,115,22); doc.rect(0,26,W,1.6,'F');
     doc.setTextColor(255,255,255); doc.setFont(undefined,'bold'); doc.setFontSize(16); doc.text('Parc', 14, 13);
     doc.setTextColor(249,115,22); doc.text('Pilot', 27.5, 13);
-    doc.setTextColor(255,255,255); doc.setFont(undefined,'normal'); doc.setFontSize(11); doc.text('Contrôle des consommations — trouvailles', 14, 21);
+    // Titre : rappelle le conducteur choisi (export ciblé) ou « tous ».
+    const condSel = state.cond !== 'all' ? (rows[0] && rows[0].conducteur ? rows[0].conducteur : state.cond) : '';
+    doc.setTextColor(255,255,255); doc.setFont(undefined,'normal'); doc.setFontSize(11); doc.text('Contrôle des consommations' + (condSel ? ' — ' + condSel : ' — trouvailles'), 14, 21);
     doc.setTextColor(200,210,225); doc.setFontSize(8.5);
     doc.text((soc && soc !== '__all__' ? soc + '     ' : '') + rows.length + ' trouvaille(s)     Total : ' + euro(tot), W - 14, 13, { align:'right' });
-    const body = rows.map(f => [f.conducteur, f.type+(f.genre==='congé'?' (congé)':''), euro(f.montant), (f.date?dfr(f.date):(f.mois?mfr(f.mois):'—')), f.detail, f.facnum||'—', (ST_LABEL[f.statut]||f.statut)]);
+    const body = rows.map(f => [f.conducteur, f.type+(f.genre==='congé'?' (congé)':''), euro(f.montant), (f.date?dfr(f.date):(f.mois?mfr(f.mois):'—')), exDetail(f), f.facnum||'—', (ST_LABEL[f.statut]||f.statut)]);
     doc.autoTable({ startY:33, head:[['Conducteur','Conso','Montant','Date','Détail','N° facture','Statut']], body,
       styles:{ fontSize:8, cellPadding:2.5, lineColor:[226,232,240], lineWidth:.1, textColor:[30,41,59] },
       headStyles:{ fillColor:[15,30,61], textColor:255, fontStyle:'bold' },
@@ -655,12 +670,23 @@
       columnStyles:{ 2:{ halign:'right' }, 4:{ cellWidth:78 } },
       didParseCell:(d) => { if (d.section==='body' && d.column.index===6) { const v = d.cell.raw||''; if (v==='Fraude') { d.cell.styles.textColor=[153,27,27]; d.cell.styles.fontStyle='bold'; } else if (v==='Justifié') { d.cell.styles.textColor=[21,83,45]; } else if (v==='Classé') { d.cell.styles.textColor=[100,116,139]; } } },
       margin:{ left:14, right:14 } });
-    doc.save('parc-pilot-controle-conso.pdf');
+    const nomF = condSel ? '-' + String(condSel).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') : '';
+    doc.save('parc-pilot-controle-conso'+nomF+'.pdf');
   }
   $('ctrl-pdf').addEventListener('click', exportPDF);
   $('ctrl-csv').addEventListener('click', exportCSV);
 
   // ===== Init =====
+  // Liste déroulante des conducteurs présents dans les trouvailles (pour un export ciblé, comme les amendes).
+  let _condSearchDone = false;
+  function fillConducteurs(){
+    const map = {}; _findings.forEach(f => { const k = f.gkey || f.conducteur; if (k && !map[k]) map[k] = f.conducteur || k; });
+    const sel = $('ctrl-cond'); if (!sel) return; const cur = sel.value;
+    const opts = Object.keys(map).map(k => ({ k, n: map[k] })).sort((a,b)=>String(a.n).localeCompare(String(b.n)));
+    sel.innerHTML = '<option value="all">Tous les conducteurs</option>' + opts.map(o => `<option value="${esc(o.k)}">${esc(o.n)}</option>`).join('');
+    if (cur && (cur === 'all' || map[cur])) sel.value = cur; else { sel.value = 'all'; state.cond = 'all'; }
+    if (FP.searchSelect && !_condSearchDone) { FP.searchSelect(sel, { placeholder: 'Rechercher un conducteur…' }); _condSearchDone = true; }
+  }
   function fillMois(){
     const set = new Set(); _findings.forEach(f => { const m = f.mois || String(f.date||'').slice(0,7); if (m) set.add(m); });
     const sel = $('ctrl-mois'); const cur = sel.value;
@@ -671,6 +697,7 @@
     await loadConducteurs();
     await loadData();
     _findings = buildFindings();
+    fillConducteurs();
     fillMois();
     render();
   }
@@ -681,7 +708,7 @@
   document.addEventListener('fp:data-ready', () => {
     const cur = _tab; renderPrestaTabs();
     if (!tabNames().includes(cur)) switchTab('controle'); else switchTab(cur);
-    if (_loaded) { _findings = buildFindings(); render(); }
+    if (_loaded) { _findings = buildFindings(); fillConducteurs(); fillMois(); render(); }
   });
 </script>
 </body>
