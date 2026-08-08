@@ -6,6 +6,32 @@
 vraies et te fait un rapport priorisé. On peut aussi n'en lancer qu'un : « fais
 l'audit sécurité », « audit des calculs », etc.
 
+**⚠️ MODE PROFOND — le défaut désormais (leçon du 2026-08-08).** Les auditeurs « par
+domaine » (sections ci-dessous) survolent un thème sur toute la plateforme ; ils laissent
+passer des bugs de **flux** très localisés (off-by-one d'un décompte, clé de dédup trop
+grossière, homonyme de prénom qui envoie un mail au mauvais conducteur, export orphelin
+après un refactor…). Donc « fais l'audit » lance MAINTENANT **en plus** un **agent par PAGE
+et par flux** — pas seulement par thème :
+- **1 agent par page applicative** (dashboard, véhicules, amendes, factures, contrôle,
+  conducteurs, emprunts, sinistres, entretiens, contrats, à-vendre, statistiques, budget,
+  calendrier, notifications, renouvellements, tâches, paramètres, scanner, facturation,
+  prospects, espace-salarié) **+ 1 agent « helpers/`app.js`+`bareme.js` »** et **1 agent
+  « Edge Functions » (`scan-doc`, `manage-users`, `send-email`)**.
+- Chaque agent **trace de bout en bout** chaque **ajout / modification / suppression /
+  import / export / scan / calcul** de sa page, en se mettant « dans la peau d'un client » :
+  quels handlers, quel mapping `FP.db` (camel↔snake), la donnée est-elle bien persistée en
+  base (pas juste en mémoire/localStorage), l'état se rafraîchit-il, `FP.dupe` est-il branché,
+  `FP.esc` sur toute donnée saisie/OCR, et surtout : **la valeur testée/affichée lit-elle le
+  même helper canonique que partout ailleurs** (`FP.estVendu`/`horsFlotte`, `FP.montantDu`,
+  `FP.leasingContrat`, `FP.dedupeFactures`, `FP.joursRestants`…) ?
+- Sortie identique : findings **vérifiés** `fichier:ligne` + gravité + **scénario concret**
+  (entrées → résultat faux), **sans modifier de fichier** ; Claude corrige ensuite les vraies,
+  vérifie la syntaxe, bumpe le `?v=`, et déploie.
+- ⚠️ Un audit ne prouve JAMAIS l'absence de bug, et il ne voit pas le code écrit APRÈS lui :
+  relancer le mode profond après tout gros lot de modifs.
+- ⚠️ **Edge Functions** = seule partie qui ne se déploie pas via GitHub Pages : elle part via
+  le workflow `.github/workflows/deploy-edge-functions.yml` (secret `SUPABASE_ACCESS_TOKEN`).
+
 > Règle de sortie commune à TOUS les auditeurs : ne remonter que des failles
 > **réelles et vérifiées** (lire les deux côtés du code avant d'affirmer), avec
 > `fichier:ligne` + gravité, **sans modifier de fichier** — Claude corrige ensuite.
