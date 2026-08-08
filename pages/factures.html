@@ -361,6 +361,24 @@
         <div class="kpi"><div class="kpi-label">Nb factures</div><div class="kpi-value" id="tf-kpi-count">—</div><div class="kpi-delta">filtre actif</div></div>
       </div>
       <!-- Consommation par conducteur / véhicule -->
+      <style>
+        .tfview-toggle{display:inline-flex;border:1px solid var(--fp-border);border-radius:9px;overflow:hidden}
+        .tfview-toggle button{padding:6px 11px;font-size:.8rem;font-weight:700;background:#fff;border:none;color:var(--fp-muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+        .tfview-toggle button.active{background:var(--fp-primary);color:#fff}
+        .tf-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px}
+        .tf-ccard{background:#fff;border:1px solid var(--fp-border);border-radius:14px;box-shadow:0 1px 2px rgba(15,30,61,.05),0 8px 24px -18px rgba(15,30,61,.25);padding:15px 16px;display:flex;flex-direction:column;gap:11px}
+        .tf-ccard .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+        .tf-ccard .nm{font-weight:800;color:var(--fp-primary)}
+        .tf-ccard .tot{font-size:1.28rem;font-weight:800;color:var(--fp-primary);white-space:nowrap}
+        .tf-splbar{display:flex;height:8px;border-radius:5px;overflow:hidden;background:var(--fp-border)}
+        .tf-splbar i{display:block;height:100%}
+        .tf-brk{display:flex;flex-direction:column;gap:5px;font-size:.8rem}
+        .tf-brk .r{display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .tf-brk .r .k{display:inline-flex;align-items:center;gap:6px;color:var(--fp-muted)}
+        .tf-brk .r .k::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--d,#64748B)}
+        .tf-ccard .foot{display:flex;gap:14px;border-top:1px solid var(--fp-border);padding-top:9px;font-size:.72rem;color:var(--fp-muted)}
+        .tf-ccard .foot b{display:block;font-size:.92rem;color:var(--fp-primary);font-weight:800}
+      </style>
       <div class="flex flex-wrap items-center justify-between gap-3 mt-10 mb-3">
         <h3 class="text-lg font-extrabold" style="color: var(--fp-primary)">Consommation par conducteur / véhicule</h3>
         <div class="flex flex-wrap items-center gap-2">
@@ -371,6 +389,11 @@
           <span class="text-xs text-slate-400">→</span>
           <input type="date" id="tf-conso-to" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Au" />
           <button id="tf-conso-clear" type="button" class="hidden text-xs text-slate-500 underline">effacer</button>
+          <span class="w-px h-6 bg-slate-200 mx-1"></span>
+          <span class="tfview-toggle" id="tf-conso-view" title="Changer l'affichage">
+            <button type="button" data-v="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+            <button type="button" data-v="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+          </span>
           <span class="w-px h-6 bg-slate-200 mx-1"></span>
           <button id="tf-an-csv" type="button" class="btn btn-outline text-xs" title="Exporter la conso de la période choisie en CSV"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Export CSV</button>
           <button id="tf-an-pdf" type="button" class="btn btn-dark text-xs" title="Relevé PDF de la période choisie"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Rapport PDF</button>
@@ -394,6 +417,7 @@
           <p class="text-slate-500 text-sm" id="tf-conso-empty-msg">Aucun détail de consommation pour ce mois.</p>
         </div>
       </div>
+      <div id="tf-conso-cards" class="tf-cards mt-2 hidden"></div>
       <p class="text-xs text-slate-500 mt-3">Détail reconstitué depuis les factures TotalEnergies (par carte carburant). Les « Frais de gestion » ne sont pas rattachés à un conducteur. Clique sur l'en-tête « Total TTC » pour trier.</p>
 
       <!-- ===== ANALYSE CONSO (prix/litre, CO₂, répartition, évolution, classement, anomalies) ===== -->
@@ -2602,7 +2626,7 @@
       // En-tête 1re colonne : « Mois » quand on filtre un conducteur, sinon « Conducteur / Véhicule ».
       { const th = document.querySelector('#tf-conso-table thead th:first-child'); if (th) th.textContent = cond ? 'Mois' : 'Conducteur / Véhicule'; }
       empty.classList.toggle('hidden', rows.length > 0);
-      if (!rows.length) { tbody.innerHTML = ''; tfoot.innerHTML = ''; emptyMsg.textContent = 'Aucun détail de consommation pour cette période.'; return; }
+      if (!rows.length) { tbody.innerHTML = ''; tfoot.innerHTML = ''; const _cb = $('tf-conso-cards'); if (_cb) _cb.innerHTML = ''; emptyMsg.textContent = 'Aucun détail de consommation pour cette période.'; applyConsoView(true); return; }
 
       // Si un conducteur a plusieurs véhicules (plusieurs lignes), on garde la plaque.
       const nameCount = {};
@@ -2673,6 +2697,41 @@
         <td style="text-align:right">${FP.euro(sum('total_tva'))}</td>
         <td style="text-align:right">${FP.euro(sum('total_ttc'))}</td>
       </tr>`;
+      // ===== Vue CARTES (Direction B) — mêmes données, une carte par conducteur (ou par mois si filtré) =====
+      const _cc = { carb:'#F97316', peage:'#2563EB', repas:'#7C3AED', lav:'#0D9488', autre:'#64748B' };
+      const cardsBox = $('tf-conso-cards');
+      if (cardsBox) {
+        cardsBox.innerHTML = rows.map(c => {
+          const nm = cond ? moisLabel(c._month || '—') : (resolveName(c) || c.plaque || '—');
+          const carb = Number(c.carburant_ttc)||0, peage = Number(c.peage_ttc)||0, repas = boutiqueNetOf(c), lav = Number(c.lavage_ttc)||0, autre = autreOf(c);
+          const ttc = Number(c.total_ttc)||0, litres = Number(c.litres)||0, prixL = litres>0 ? carb/litres : 0;
+          const parts = [['carb',carb,'Carburant'],['peage',peage,'Péage / Parking'],['repas',repas,'Boutique / Repas'],['lav',lav,'Lavage'],['autre',autre,'Autres']];
+          const denom = (carb+peage+repas+lav+autre) || 1;
+          const bar = parts.filter(p=>p[1]>0).map(p=>`<i style="width:${(p[1]/denom*100).toFixed(1)}%;background:${_cc[p[0]]}"></i>`).join('');
+          const brk = parts.filter(p=>p[1]>0).map(p=>`<div class="r"><span class="k" style="--d:${_cc[p[0]]}">${p[2]}</span><b>${FP.euro(p[1])}</b></div>`).join('') || '<span class="text-slate-400 text-xs">Aucun détail chiffré</span>';
+          const plaque = (!cond && c.plaque && resolveName(c)) ? ` <span class="font-mono text-slate-400 text-xs">${esc(c.plaque)}</span>` : '';
+          return `<div class="tf-ccard">
+            <div class="top"><span class="nm">${esc(nm)}${plaque}</span><span class="tot">${FP.euro(ttc)}</span></div>
+            <div class="tf-splbar">${bar}</div>
+            <div class="tf-brk">${brk}</div>
+            <div class="foot"><div>Litres<b>${litres?FP.num(Math.round(litres))+' L':'—'}</b></div><div>Prix / L<b>${prixL?prixL.toFixed(3).replace('.',',')+' €':'—'}</b></div><div>HT / TVA<b>${FP.euro(c.total_ht)} / ${FP.euro(c.total_tva)}</b></div></div>
+          </div>`;
+        }).join('');
+      }
+      applyConsoView();
+    }
+
+    // Bascule Tableau ⟷ Cartes (mémorisé par société via FP.settings, comme la vue Conducteurs).
+    function applyConsoView(forceTable){
+      let pref = 'table';
+      try { if (window.FP && FP.settings) pref = (FP.settings.get().consoView === 'cards') ? 'cards' : 'table'; } catch (e) {}
+      const v = forceTable ? 'table' : pref;
+      const tbl = $('tf-conso-table'), cardsBox = $('tf-conso-cards');
+      const tableCard = tbl ? tbl.closest('.card') : null;
+      if (tableCard) tableCard.classList.toggle('hidden', v === 'cards');
+      if (cardsBox) cardsBox.classList.toggle('hidden', v !== 'cards');
+      const tg = $('tf-conso-view'); if (tg) tg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.v === pref));
+      if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
     }
 
     // ===== ANALYSE CONSO : prix/litre, CO₂, évolution, répartition, classement, anomalies =====
@@ -2927,6 +2986,8 @@
     $('tf-conso-from').addEventListener('change', _tfRerender);
     $('tf-conso-to').addEventListener('change', _tfRerender);
     $('tf-conso-clear').addEventListener('click', () => { $('tf-conso-from').value = ''; $('tf-conso-to').value = ''; _tfRerender(); });
+    // Bascule Tableau / Cartes (mémorisée par société) — comme le sélecteur de vue des Conducteurs.
+    { const vt = $('tf-conso-view'); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.consoView = b.dataset.v; FP.settings.save(s); } } catch (e) {} applyConsoView(); })); }
     if (FP.filterResetButton) FP.filterResetButton($('tf-conso-cond').closest('div'), { onReset: () => {
       $('tf-conso-mois').value = '__all__'; $('tf-conso-from').value = ''; $('tf-conso-to').value = '';
       const cs = $('tf-conso-cond'); cs.value = ''; cs.dispatchEvent(new Event('change', { bubbles: true })); // resync searchSelect + re-render
