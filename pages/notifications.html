@@ -650,37 +650,17 @@
         txt: `${a.conducteur} — ${conso} le ${FP.date ? FP.date(a.date) : a.date}${mnt} pendant le congé du ${FP.date(cg.debut)} au ${FP.date(cg.fin)}${facTxt}` };
     }).filter(a => !okMap[a.key]);
   }
-  // Badge péage : le détail Ulys n'est QUE mensuel (pas daté au jour) → détection au niveau du MOIS
-  // (un congé chevauche le mois facturé). Dit honnêtement « dates non détaillées ». Archivable.
-  function ulysCongeAnoms() {
-    if (!(window.FP && FP.congeDansMois)) return [];
-    let okMap = {}; try { okMap = FP.settings.get().tfAnomOk || {}; } catch (e) {}
-    const presBadge = FP.prestataireBadge ? FP.prestataireBadge() : 'Ulys';
-    const keyOf = (nom) => { let k = null; try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(nom) : null; if (c) k = c.key; } catch (e) {} if (!k && FP.normPrenom) k = FP.normPrenom(nom); return k; };
-    // Mois déjà couverts au JOUR près (relevé Ulys daté importé dans total_conso_tx) → ne pas doubler.
-    const datedMonths = new Set();
-    (_verifTx || []).forEach(t => { if (String(t.categorie || '').toLowerCase() !== 'peage') return; const k = keyOf(t.conducteur); const m = String(t.dateTx || t.date_tx || '').slice(0, 7); if (k && m) datedMonths.add(k + '|' + m); });
-    return (_verifUlys || []).map(r => {
-      if (!r.conducteur || !r.mois) return null;
-      const ckey = keyOf(r.conducteur); if (!ckey) return null;
-      const mois = String(r.mois).slice(0, 7);
-      if (datedMonths.has(ckey + '|' + mois)) return null; // déjà détecté précisément (dates réelles)
-      const cg = FP.congeDansMois(ckey, mois); if (!cg) return null;
-      const mm = mois.split('-'); const moisTxt = mm.length === 2 ? mm[1] + '/' + mm[0] : mois;
-      const montant = (r.totalTtc != null ? r.totalTtc : (r.total_ttc != null ? r.total_ttc : null));
-      const key = 'ulysconge|' + ckey + '|' + mois;
-      const fnum = r.numeroFacture || r.numero_facture || '';
-      return { key, t: 'conge', mois, facnum: fnum,
-        xp: { conducteur: r.conducteur, conso: 'péages ' + presBadge + ' (mois ' + moisTxt + ')', montant: montant, dateConso: '', congeDebut: cg.debut, congeFin: cg.fin, facnum: fnum },
-        txt: `${r.conducteur} — péage ${presBadge} en ${moisTxt}, pendant le congé du ${FP.date(cg.debut)} au ${FP.date(cg.fin)}${montant != null ? ' · montant du mois ' + (FP.euro ? FP.euro(montant) : montant) + ' (détail par jour indisponible — réimporte le relevé détaillé)' : ''}${fnum ? ' · Facture n° ' + fnum : ''}` };
-    }).filter(a => a && !okMap[a.key]);
-  }
+  // ⚠️ On NE détecte les congés QUE sur des dates EXACTES (congeAnoms via total_conso_tx / FP.congeCouvrant).
+  // L'ancien repli « au MOIS » (un congé chevauche le mois facturé Ulys) a été RETIRÉ : il accusait à tort
+  // (des péages hors des dates de congé étaient signalés parce que le congé tombait dans le même mois) —
+  // même correction qu'en page Contrôle. Si un relevé n'a que le total mensuel, on n'accuse pas : le
+  // diagnostic invite à « Reconstruire le détail » pour obtenir les dates réelles.
   function verifAnoms() {
     // Les conso Ulys datées vivent aussi dans total_conso_tx (péage) → on les exclut de la détection
     // « carte carburant » (anomalies Total) ; elles ne servent QUE au suivi des congés (congeAnoms).
     const txCard = (_verifTx || []).filter(t => !String(t.carte || '').toUpperCase().startsWith('ULYS'));
     const card = (window.FP && FP.totalFleetAnomaliesActives) ? FP.totalFleetAnomaliesActives(txCard) : [];
-    return card.concat(congeAnoms()).concat(ulysCongeAnoms());
+    return card.concat(congeAnoms());
   }
   function hasConges() { try { return Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length > 0; } catch (e) { return false; } }
   function paintVerifTab(n) {
@@ -699,9 +679,10 @@
       let diag = '';
       if (hasConges()) {
         const nTx = (_verifTx || []).length, nUlys = (_verifUlys || []).length, nC = Object.keys(FP.getAllConges()).length;
+        const ulysHint = nUlys > 0 ? ' Certains relevés Ulys n\'ont que le <b>total du mois</b> : la détection se fait au <b>jour près</b> (dates réelles), donc reconstruis le détail (Contrôle → Total Fleet → « Reconstruire le détail ») pour qu\'ils soient couverts.' : '';
         const hint = nTx === 0
-          ? 'Aucune conso datée n\'est enregistrée. Importe le <b>relevé détaillé</b> (transaction par transaction, avec la colonne date) pour la détection au jour près.'
-          : 'Aucune conso ne tombe dans une période de congé — ou tout est déjà archivé. Vérifie que le <b>n° de carte/badge</b> du conducteur est bien renseigné sur sa fiche (c\'est ce qui relie la conso au bon conducteur).';
+          ? 'Aucune conso datée n\'est enregistrée. Importe le <b>relevé détaillé</b> (transaction par transaction, avec la colonne date) pour la détection au jour près.' + ulysHint
+          : 'Aucune conso ne tombe dans une période de congé — ou tout est déjà archivé. Vérifie que le <b>n° de carte/badge</b> du conducteur est bien renseigné sur sa fiche (c\'est ce qui relie la conso au bon conducteur).' + ulysHint;
         diag = `<div class="text-xs text-slate-400 mt-2" style="line-height:1.55">🔎 Analyse des congés : <b>${nTx}</b> conso datée(s) carte carburant · <b>${nUlys}</b> relevé(s) Ulys mensuel(s) · <b>${nC}</b> conducteur(s) avec congé.<br>${hint}</div>`;
       }
       box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div>' + diag + '</div></div>'; lucide.createIcons(); return;
