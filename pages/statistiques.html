@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260808b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260808c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260808b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260808c">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -300,10 +300,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260808b"></script>
-<script src="../assets/js/supabase-client.js?v=20260808b"></script>
-<script src="../assets/js/data.js?v=20260808b"></script>
-<script src="../assets/js/app.js?v=20260808b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260808c"></script>
+<script src="../assets/js/supabase-client.js?v=20260808c"></script>
+<script src="../assets/js/data.js?v=20260808c"></script>
+<script src="../assets/js/app.js?v=20260808c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -568,7 +568,12 @@
     // Top dépense = la plus grosse facture D'USAGE (entretien/répa/leasing/sinistre) —
     // on EXCLUT l'achat du véhicule (prix d'acquisition, affiché à part) ainsi que
     // cession/carburant/péages, comme pour le KPI « Coût d'usage » juste à côté.
-    const topF = fact.filter(isUsage).sort((a, b) => (b.montantTTC || 0) - (a.montantTTC || 0))[0];
+    // « Top dépense » = plus grosse facture d'entretien/réparation/leasing/sinistre (comme l'annonce
+    // le libellé) — on EXCLUT carburant/péages (sinon le plus gros relevé Total/Ulys sortait ici, mal
+    // étiqueté), ainsi que l'achat et la cession.
+    const TOP_TYPES = ['entretien', 'réparation', 'reparation', 'leasing', 'sinistre'];
+    const isTopDepense = (f) => !(FP.estCarburantPeage && FP.estCarburantPeage(f)) && TOP_TYPES.includes((f.type || '').toLowerCase());
+    const topF = fact.filter(isTopDepense).sort((a, b) => (b.montantTTC || 0) - (a.montantTTC || 0))[0];
     if (topF) { $('kpi-top').textContent = FP.euro(topF.montantTTC); $('kpi-top-sub').textContent = `${topF.vehiculeImmat || ''} · ${topF.fournisseur || topF.type || ''}`; }
     else { $('kpi-top').textContent = '—'; $('kpi-top-sub').textContent = ''; }
 
@@ -659,7 +664,24 @@
       const _leasC = _cout ? _cout.contrat : (FP.leasingContrat ? FP.leasingContrat(v.immat) : null);
       const _loyerMois = _cout ? _cout.loyerMois : null;
       const _hasOffer = _loyerMois != null;
-      const _leasing = _hasOffer ? ((annee === 'all') ? (FP.leasingTotalVerse(_leasC) || 0) : (_loyerMois * 12)) : 0;
+      // Sur une ANNÉE précise : ne compter le leasing QUE si le contrat était actif cette année-là,
+      // proratisé au nombre de mois actifs (avant : loyer×12 systématique → leasing FANTÔME pour un
+      // contrat terminé ou pas encore commencé l'année choisie).
+      let _leasing = 0;
+      if (_hasOffer) {
+        if (annee === 'all') { _leasing = FP.leasingTotalVerse(_leasC) || 0; }
+        else {
+          const _cDebut = (_leasC && _leasC.debut) ? new Date(_leasC.debut) : null;
+          let _cFin = null;
+          try { const _li = FP.leasingInfo ? FP.leasingInfo(v) : null; if (_li && _li.finContrat && !isNaN(_li.finContrat)) _cFin = _li.finContrat; } catch (e) {}
+          if (!_cFin && _leasC && _leasC.debut && Number(_leasC.dureeMois) > 0) { const f = new Date(_leasC.debut); if (!isNaN(f)) { f.setMonth(f.getMonth() + Number(_leasC.dureeMois)); _cFin = f; } }
+          const Y = Number(annee), yStart = new Date(Y, 0, 1), yEnd = new Date(Y, 11, 31);
+          const s = (_cDebut && !isNaN(_cDebut)) ? _cDebut : yStart;
+          const e = (_cFin && !isNaN(_cFin)) ? _cFin : yEnd;
+          if (e < yStart || s > yEnd) { _leasing = 0; }                 // contrat hors de l'année choisie
+          else { const a = s > yStart ? s : yStart, b = e < yEnd ? e : yEnd; let mois = Math.round((b - a) / (365.25 / 12 * 86400000)); mois = Math.max(1, Math.min(12, mois)); _leasing = _loyerMois * mois; }
+        }
+      }
       // Sinistres comptés au RESTE À CHARGE (après remboursement assureur), pas au brut → même source
       // que le Coût d'usage. Les autres factures d'usage restent au montant brut.
       const factTotal = fv.filter(f => { const t = (f.type || '').toLowerCase(); if (_EXC_TCO.has(t)) return false; if (t === 'leasing' && _hasOffer) return false; if (t === 'sinistre') return false; return true; }).reduce((s, f) => s + (+f.montantTTC || 0), 0) + _leasing + (FP.resteChargeSinistre ? FP.resteChargeSinistre(fv) : 0);
@@ -673,6 +695,13 @@
       // (filtre année), on garde le montant d'UNE seule année.
       let _years = 1;
       if (annee === 'all') { const _ref = (achatF && achatF.date) || v.dateMiseEnCirculation || ''; const _dr = _ref ? new Date(_ref) : null; if (_dr && !isNaN(_dr)) _years = Math.max(0.1, (Date.now() - _dr.getTime()) / (365.25 * 86400000)); }
+      else {
+        // Année précise : pas d'assurance/TVS si le véhicule a été acquis APRÈS l'année choisie
+        // (sinon on lui prête une année complète de primes/TVS qu'il n'a jamais eue).
+        const _ref = (achatF && achatF.date) || v.dateMiseEnCirculation || '';
+        const _ry = /^\d{4}/.test(_ref) ? _ref.slice(0, 4) : '';
+        if (_ry && Number(_ry) > Number(annee)) _years = 0;
+      }
       const assur = assurAn * _years;
       const tvs = tvsAn * _years;
       // Amendes du conducteur (par PRÉNOM), comptées UNE seule fois même s'il a plusieurs véhicules,

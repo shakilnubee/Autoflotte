@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260808b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260808c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260808b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260808c">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -457,11 +457,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260808b"></script>
-<script src="../assets/js/supabase-client.js?v=20260808b"></script>
-<script src="../assets/js/data.js?v=20260808b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260808c"></script>
+<script src="../assets/js/supabase-client.js?v=20260808c"></script>
+<script src="../assets/js/data.js?v=20260808c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260808b"></script>
+<script src="../assets/js/app.js?v=20260808c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -923,10 +923,16 @@
   }
 
   // Emails conducteurs (pour la relance) — chargés depuis Supabase si dispo
-  const condEmails = {};
+  const condEmails = {};        // clé EXACTE (key ou nom complet normalisé) → e-mail
+  const condEmailByFirst = {};  // prénom seul → e-mail, MAIS neutralisé si 2 personnes différentes le partagent
+  const AMBIGU = '__AMBIGU__';
   function lookupEmail(prenom) {
     const p = (prenom || '').toLowerCase().trim();
-    return condEmails[p] || condEmails[p.split(' ')[0]] || '';
+    if (condEmails[p]) return condEmails[p];               // 1) correspondance exacte (jamais ambiguë)
+    const fb = condEmailByFirst[p.split(' ')[0]];          // 2) repli prénom SEULEMENT s'il est unique
+    // ⚠️ Ne JAMAIS deviner sur un prénom partagé par 2 conducteurs (envoi de l'avis + PII au MAUVAIS
+    // destinataire). En cas d'ambiguïté on renvoie '' → le flux d'envoi bloque au lieu de se tromper.
+    return (fb && fb !== AMBIGU) ? fb : '';
   }
   if (FP.persist && FP.persist.available && FP.persist.available()) {
     FP.db.select('conducteurs').then(r => {
@@ -934,7 +940,10 @@
         if (!c.email) return;
         [c.key, c.name].filter(Boolean).forEach(n => {
           const k = String(n).toLowerCase().trim();
-          condEmails[k] = c.email; condEmails[k.split(' ')[0]] = c.email;
+          condEmails[k] = c.email;
+          const f = k.split(' ')[0];
+          if (condEmailByFirst[f] === undefined) condEmailByFirst[f] = c.email;
+          else if (condEmailByFirst[f] !== c.email) condEmailByFirst[f] = AMBIGU; // homonyme de prénom, e-mail différent
         });
       });
     }).catch(() => {});

@@ -33,7 +33,9 @@ function accesToProfile(acces: string, societe: string | null) {
   return { is_admin: false, role: "admin", societe }; // 'admin' (client)
 }
 function profileToAcces(p: { is_admin?: boolean; role?: string } | null) {
-  if (!p) return "admin";
+  // FAIL-CLOSED : aucun profil = AUCUN accès (avant : "admin" par défaut → un compte sans ligne
+  // profiles, ex. orphelin d'une création/suppression interrompue, était traité comme Admin client).
+  if (!p) return "";
   if (p.is_admin) return "ceo";
   return p.role === "gestionnaire" ? "gestionnaire" : "admin";
 }
@@ -162,9 +164,11 @@ Deno.serve(async (req) => {
       if (id === caller.id) return json({ error: "Vous ne pouvez pas supprimer votre propre compte." }, 400);
       const scopeErr = await canTouchTarget(id);
       if (scopeErr) return json({ error: scopeErr }, 403);
-      await admin.from("profiles").delete().eq("id", id);
+      // Ordre : compte AUTH d'abord, PUIS le profil. Si la suppression auth échoue, on n'a pas
+      // laissé un compte auth orphelin sans profil (qui, même en fail-closed, n'aurait plus accès).
       const { error } = await admin.auth.admin.deleteUser(id);
       if (error) return json({ error: error.message }, 500);
+      await admin.from("profiles").delete().eq("id", id);
       return json({ ok: true });
     }
 

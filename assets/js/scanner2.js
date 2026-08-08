@@ -296,6 +296,14 @@
       const rec = { id: 'F-SIN-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), societe: societe(),
         date: g('date') || '', vehiculeImmat: FP.normImmat ? FP.normImmat(g('immat')) : (g('immat') || '').toUpperCase(), description: descFull, type: 'sinistre', montantTTC: num(g('montantTTC')),
         fileId: model._fileUrl || null };  // pièce scannée rattachée → bouton « Voir »
+      // Anti-doublon (règle plateforme) : un sinistre n'a ni n° ni fournisseur, donc la règle
+      // générique « factures » ne le rattrape pas → contrôle dédié : même véhicule + même date +
+      // (même TTC ou même description). Évite de recréer le même constat à chaque re-scan.
+      const _dupSin = (window.data && Array.isArray(data.factures) ? data.factures : []).find(f => f && (f.type || '').toLowerCase() === 'sinistre'
+        && (FP.normImmat ? FP.normImmat(f.vehiculeImmat) : f.vehiculeImmat) === rec.vehiculeImmat
+        && (f.date || '') === (rec.date || '')
+        && ((rec.montantTTC != null && f.montantTTC != null && Math.abs((+f.montantTTC) - (+rec.montantTTC)) <= 0.02) || String(f.description || '') === String(rec.description || '')));
+      if (_dupSin && FP.confirm && !(await FP.confirm('Un sinistre identique semble déjà exister (même véhicule, même date). L\'ajouter quand même ?'))) return { table: 'factures', id: null, annule: true };
       await FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
       target = { table: 'factures', id: rec.id };
     }
