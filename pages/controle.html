@@ -203,7 +203,9 @@
   const data = window.FP_DATA;
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
-  const euro = (n) => (n == null ? '—' : (FP.euro ? FP.euro(n) : Number(n).toFixed(2) + ' €'));
+  // ⚠️ Contrôle = suivi financier → montants EXACTS (2 décimales), jamais arrondis à l'euro entier
+  // (FP.euro arrondit ; on utilise FP.euroPrecis). Sinon 95,48 € s'affiche « 96 € » → chiffres faux.
+  const euro = (n) => (n == null ? '—' : (FP.euroPrecis ? FP.euroPrecis(n) : (FP.euro ? FP.euro(n) : Number(n).toFixed(2).replace('.', ',') + ' €')));
   // Dates au format numérique JJ/MM/AAAA partout (trouvailles, détail, diagnostic, exports).
   const dfr = (d) => d ? (FP.dateNum ? FP.dateNum(d) : (FP.date ? FP.date(d) : d)) : '';
   // Mois « AAAA-MM » → « MM/AAAA » (pour les lignes sans date exacte, ex. Ulys mensuel).
@@ -624,7 +626,9 @@
   function exportCSV(){
     const rows = applyFilters(_findings); if (!rows.length) { if(FP.toast)FP.toast('Rien à exporter'); return; }
     const q = s => '"' + String(s==null?'':s).replace(/"/g,'""') + '"';
-    const lines = [XCOLS.map(q).join(';')].concat(rows.map(f => xrow(f).map(q).join(';')));
+    // « sep=; » en 1re ligne : force Excel (toutes langues) à découper en colonnes proprement
+    // (sinon, selon la config d'Excel, tout se retrouve dans une seule colonne = illisible/« moche »).
+    const lines = ['sep=;', XCOLS.map(q).join(';')].concat(rows.map(f => xrow(f).map(q).join(';')));
     const blob = new Blob(['﻿'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
     const url = URL.createObjectURL(blob); const el = document.createElement('a'); el.href=url; el.download='controle-conso.csv'; document.body.appendChild(el); el.click(); el.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
   }
