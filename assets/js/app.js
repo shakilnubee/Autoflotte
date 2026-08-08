@@ -7385,7 +7385,12 @@ FP.pdfPreview = function (doc, filename, subtitle) {
 FP.injectDataIO = function (cfg) {
   cfg = cfg || {};
   const cols = (cfg.columns || []).filter(c => c && c.key && !c.readonly);
-  if (!cols.length || typeof cfg.onImport !== 'function') return;
+  // Deux capacités indépendantes : IMPORT (si onImport) et EXPORT Excel (si getRows).
+  // ⚠️ RÈGLE PROJET « tout en Excel » : dès qu'une page fournit getRows, injectDataIO
+  // pose AUTOMATIQUEMENT un bouton « Exporter (Excel) » (.xlsx), partout, pareil.
+  const canImport = typeof cfg.onImport === 'function' && cols.length > 0;
+  const canExport = typeof cfg.getRows === 'function' && cfg.export !== false && (cfg.columns || []).length > 0;
+  if (!canImport && !canExport) return;
   const mount = document.querySelector('[data-data-io]');
   if (!mount || mount.dataset.ioReady === '1') return;
   mount.dataset.ioReady = '1';
@@ -7441,7 +7446,40 @@ FP.injectDataIO = function (cfg) {
     return { records, mapped, ignored };
   }
 
-  // --- Bouton + modale ---
+  // --- Bouton EXPORT (Excel .xlsx) — même standard partout (montants = vraies cellules
+  //     numériques, encodage propre, plus de « signes bizarres » du CSV). ---
+  if (canExport) {
+    const numFmt = (FP.csv && FP.csv.numFormat) || null;
+    const expColDefs = (cfg.columns || []).map(c => {
+      const isNum = c.number === true || (numFmt && c.format === numFmt);
+      return {
+        label: c.label, number: isNum, noTotal: c.noTotal === true,
+        value: (r) => {
+          let v = r[c.key];
+          if (isNum) { const n = Number(v); return (v === '' || v == null || !isFinite(n)) ? '' : n; }
+          if (c.format && (!numFmt || c.format !== numFmt)) { try { v = c.format(v, r); } catch (e) {} }
+          if (Array.isArray(v)) v = v.join(', ');
+          return v == null ? '' : v;
+        },
+      };
+    });
+    const expBtn = document.createElement('button');
+    expBtn.type = 'button';
+    expBtn.className = 'btn btn-outline text-sm';
+    expBtn.innerHTML = '<i data-lucide="sheet" class="w-4 h-4"></i> Exporter (Excel)';
+    expBtn.addEventListener('click', () => {
+      let rows = [];
+      try { rows = (cfg.getRows() || []).slice(); } catch (e) { rows = []; }
+      if (!rows.length) { if (FP.toast) FP.toast('Aucune ligne à exporter (vérifie les filtres).'); return; }
+      const baseName = String(cfg.baseName || cfg.filename || 'export').replace(/\.(csv|xlsx|xls)$/i, '');
+      if (FP.exportRows) FP.exportRows(baseName, expColDefs, rows, 'xlsx', { sheetName: cfg.sheetName || 'Export', total: !!cfg.total });
+      else if (FP.toast) FP.toast('Export Excel indisponible.');
+    });
+    mount.appendChild(expBtn);
+  }
+
+  // --- Bouton IMPORT + modale (uniquement si la page fournit onImport) ---
+  if (!canImport) { if (window.lucide) try { lucide.createIcons(); } catch (e) {} return; }
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn btn-outline text-sm';

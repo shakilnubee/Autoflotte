@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260808a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260808b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260808a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260808b">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -717,11 +717,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260808a"></script>
-<script src="../assets/js/supabase-client.js?v=20260808a"></script>
-<script src="../assets/js/data.js?v=20260808a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260808b"></script>
+<script src="../assets/js/supabase-client.js?v=20260808b"></script>
+<script src="../assets/js/data.js?v=20260808b"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260808a"></script>
+<script src="../assets/js/app.js?v=20260808b"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1162,6 +1162,7 @@
 
   // Import / Export CSV
   FP.injectDataIO({
+    export: false, // export géré par FP.makeExportMenu (Excel + CSV + période) ci-dessous
     filename: `parc-pilot-factures-${new Date().toISOString().slice(0,10)}.csv`,
     table: 'factures', collection: 'factures', idPrefix: 'FA-IMP-',
     columns: [
@@ -2835,8 +2836,15 @@
       if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée sur la période'); return; }
       const cols = ['mois', 'conducteur', 'plaque', 'carte', 'carburant_ttc', 'litres', 'boutique_ttc', 'lavage_ttc', 'peage_ttc', 'total_ht', 'total_tva', 'total_ttc'];
       const head = ['Mois', 'Conducteur', 'Plaque', 'Carte', 'Carburant TTC', 'Litres', 'Boutique', 'Lavage', 'Péage', 'HT', 'TVA', 'TTC'];
+      const numCols = { carburant_ttc:1, litres:1, boutique_ttc:1, lavage_ttc:1, peage_ttc:1, total_ht:1, total_tva:1, total_ttc:1 };
+      const src = rows.slice().sort((a, b) => String(a.mois).localeCompare(String(b.mois)));
+      // Vrai Excel (.xlsx) : montants en cellules numériques, colonnes propres, encodage correct.
+      if (FP.downloadXlsx) {
+        const data = src.map(c => cols.map(k => { const v = c[k]; if (numCols[k]) { const n = Number(v); return isFinite(n) ? n : ''; } return v == null ? '' : v; }));
+        FP.downloadXlsx('total-fleet-conso', head, data, { sheet: 'Total Fleet' }); return;
+      }
       const q = v => { const s = String(v == null ? '' : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-      const lines = [head.join(';')].concat(rows.slice().sort((a, b) => String(a.mois).localeCompare(String(b.mois))).map(c => cols.map(k => q(c[k])).join(';')));
+      const lines = ['sep=;', head.join(';')].concat(src.map(c => cols.map(k => q(c[k])).join(';')));
       const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'total-fleet-conso.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
     });
@@ -3947,8 +3955,14 @@
       const rows = ulsExportRows(); if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée à exporter'); return; }
       const cols = ['mois', 'conducteur', 'numeroFacture', 'nb_trajets', 'km', 'total_ttc'];
       const head = ['Mois', 'Conducteur', 'N° facture', 'Trajets', 'Km', 'TTC'];
+      const numCols = { nb_trajets:1, km:1, total_ttc:1 };
+      const src = rows.slice().sort((a, b) => String(a.mois).localeCompare(String(b.mois)));
+      if (FP.downloadXlsx) {
+        const data = src.map(c => cols.map(k => { const v = c[k]; if (numCols[k]) { const n = Number(v); return isFinite(n) ? n : ''; } return v == null ? '' : v; }));
+        FP.downloadXlsx('ulys-conso', head, data, { sheet: 'Ulys' }); return;
+      }
       const q = v => { const s = String(v == null ? '' : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-      const lines = [head.join(';')].concat(rows.slice().sort((a, b) => String(a.mois).localeCompare(String(b.mois))).map(c => cols.map(k => q(c[k])).join(';')));
+      const lines = ['sep=;', head.join(';')].concat(src.map(c => cols.map(k => q(c[k])).join(';')));
       const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ulys-conso.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
     });
