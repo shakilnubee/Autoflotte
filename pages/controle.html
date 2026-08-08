@@ -370,10 +370,15 @@
     //    Dédup + rattachement congé par PRÉNOM normalisé (clé cohérente avec l'affichage groupé).
     const datedMonths = new Set();
     _tx.forEach(t => { if (String(t.categorie||'').toLowerCase()!=='peage') return; const np = FP.normPrenom ? FP.normPrenom(t.conducteur) : ''; const m = String(t.date_tx||t.dateTx||'').slice(0,7); if (np && m) datedMonths.add(np+'|'+m); });
+    // ANTI-DOUBLON : la même personne peut avoir 2 lignes ulys_conso (prénom seul / nom complet) → on
+    // ne garde qu'UNE trouvaille par (personne, facture) sinon la trouvaille apparaît en double.
+    const ulysSeen = new Set();
     (_ulys||[]).forEach(r => {
       if (!r.conducteur || !r.mois) return;
       const np = FP.normPrenom ? FP.normPrenom(r.conducteur) : '';
       const mois = String(r.mois).slice(0,7);
+      const dedupKey = np + '|' + (r.numeroFacture || r.numero_facture || mois);
+      if (ulysSeen.has(dedupKey)) return; ulysSeen.add(dedupKey);
       if (np && datedMonths.has(np+'|'+mois)) return; // détail daté déjà présent → pas de total mensuel
       // Congé sur ce mois : on teste toutes les clés plausibles (comme la détection datée).
       const cands = [];

@@ -3456,10 +3456,12 @@
       }
       // + Reconstruit AUSSI le détail Ulys DATÉ (péages par jour) depuis les PDF Ulys stockés → même
       // table total_conso_tx (carte « ULYS-… ») pour le suivi des congés. Un seul bouton fait les deux.
-      let okUlys = 0;
+      let okUlys = 0, ulSansPdf = 0;
       try {
         if (window.FP && FP.ulys && FP.ulys.parse && FP.ulys.pdfToText) {
-          const ul = (window.FP_DATA.factures || []).filter(f => isUlys(f) && f.fileId && /^https?:\/\//.test(f.fileId));
+          const ulAll = (window.FP_DATA.factures || []).filter(f => isUlys(f));
+          const ul = ulAll.filter(f => f.fileId && /^https?:\/\//.test(f.fileId));
+          ulSansPdf = ulAll.length - ul.length; // relevés Ulys dont le PDF n'est pas stocké (pas relisibles)
           const byU = new Map(); ul.forEach(f => { if (!byU.has(f.fileId)) byU.set(f.fileId, f); });
           let du = 0;
           for (const f of byU.values()) {
@@ -3485,6 +3487,12 @@
       renderConso(); renderAnalyse();
       const msg = '✓ Détail reconstruit : ' + okTx + ' achat(s) Total sur ' + list.length + ' relevé(s)' + (okUlys ? ' · ' + okUlys + ' conso Ulys datées' : '') + (failed ? ' · ' + failed + ' illisible(s)' : '');
       if (FP.toast) FP.toast(msg);
+      // Si des relevés Ulys n'ont PAS leur PDF stocké, la reconstruction ne peut pas en lire les dates
+      // → on l'explique clairement (sinon le « total du mois » reste sans que l'utilisateur sache pourquoi).
+      if (ulSansPdf > 0) {
+        const m2 = ulSansPdf + ' relevé(s) Ulys n\'ont pas leur PDF enregistré : impossible d\'en relire les dates exactes. Réimporte ces relevés Ulys une fois (bouton « Importer un relevé Ulys ») — le PDF sera alors stocké et les dates exactes apparaîtront dans Contrôle.';
+        if (FP.alert) FP.alert(m2); else alert(m2);
+      }
     }
     if ($('tf-backfill-tx')) $('tf-backfill-tx').addEventListener('click', function () { backfillTx(this).catch(e => { console.error('[backfillTx]', e); if (FP.toast) FP.toast('Erreur pendant la reconstruction.'); this.disabled = false; }); });
 
@@ -3851,8 +3859,21 @@
       const filledKey = 'all,' + moisList.join(',');
       if (sel.dataset.filled !== filledKey) { sel.innerHTML = '<option value="all">Toutes les périodes</option>' + moisList.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join(''); sel.dataset.filled = filledKey; sel.value = 'all'; }
       const { src, label } = ulsPeriod();
+      // ⚠️ ANTI-DOUBLON : une même personne peut être stockée sous 2 orthographes (prénom seul
+      // « Charles » ET nom complet « Charles LENNON ») → mêmes chiffres en double. On garde UNE seule
+      // ligne par (personne, mois, facture), puis on regroupe par PERSONNE (prénom normalisé) en
+      // affichant le nom le plus complet. (Ne PAS sommer les doublons — ce sont les mêmes données.)
+      const _np = (s) => (FP.normPrenom ? FP.normPrenom(s) : String(s || '').trim().toLowerCase());
+      const seenUC = new Set(), dedup = [], bestName = {};
+      src.forEach(c => {
+        const np = _np(c.conducteur);
+        const uk = np + '|' + (c.mois || '') + '|' + (c.numeroFacture || c.numero_facture || '');
+        if (seenUC.has(uk)) return; seenUC.add(uk);
+        dedup.push(c);
+        const cur = bestName[np]; if (!cur || String(c.conducteur || '').length > cur.length) bestName[np] = c.conducteur || '—';
+      });
       const byCond = {};
-      src.forEach(c => { const k = c.conducteur || '—'; const a = (byCond[k] = byCond[k] || { conducteur:k, nb_trajets:0, km:0, total_ttc:0 }); a.nb_trajets += Number(c.nb_trajets)||0; a.km += Number(c.km)||0; a.total_ttc += Number(c.total_ttc)||0; });
+      dedup.forEach(c => { const np = _np(c.conducteur); const k = np || (c.conducteur || '—'); const a = (byCond[k] = byCond[k] || { conducteur: bestName[np] || c.conducteur || '—', nb_trajets:0, km:0, total_ttc:0 }); a.nb_trajets += Number(c.nb_trajets)||0; a.km += Number(c.km)||0; a.total_ttc += Number(c.total_ttc)||0; });
       const rows = Object.values(byCond).sort((a,b) => b.total_ttc - a.total_ttc);
       empty.classList.toggle('hidden', rows.length > 0);
       if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation sur cette période (importe la facture Ulys correspondante).';
