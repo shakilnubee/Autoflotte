@@ -364,35 +364,12 @@
         date:a.date, montant:a.montant, facnum:a.facnum||'', _plaque:a.plaque||'', detail:'congé : ' + dfr(cg.debut) + ' au ' + dfr(cg.fin),
         statut: sm[fid] || 'a-verifier' });
     });
-    // 2) Ulys MENSUEL pendant un congé — repli affiché UNIQUEMENT si AUCUN détail daté n'existe
-    //    pour cette personne ce mois-là. Sinon (détail daté présent), la section 1 l'affiche déjà
-    //    aux DATES EXACTES → on ne remet PAS le total du mois (sinon doublon « total » vu par l'user).
-    //    Dédup + rattachement congé par PRÉNOM normalisé (clé cohérente avec l'affichage groupé).
-    const datedMonths = new Set();
-    _tx.forEach(t => { if (String(t.categorie||'').toLowerCase()!=='peage') return; const np = FP.normPrenom ? FP.normPrenom(t.conducteur) : ''; const m = String(t.date_tx||t.dateTx||'').slice(0,7); if (np && m) datedMonths.add(np+'|'+m); });
-    // ANTI-DOUBLON : la même personne peut avoir 2 lignes ulys_conso (prénom seul / nom complet) → on
-    // ne garde qu'UNE trouvaille par (personne, facture) sinon la trouvaille apparaît en double.
-    const ulysSeen = new Set();
-    (_ulys||[]).forEach(r => {
-      if (!r.conducteur || !r.mois) return;
-      const np = FP.normPrenom ? FP.normPrenom(r.conducteur) : '';
-      const mois = String(r.mois).slice(0,7);
-      const dedupKey = np + '|' + (r.numeroFacture || r.numero_facture || mois);
-      if (ulysSeen.has(dedupKey)) return; ulysSeen.add(dedupKey);
-      if (np && datedMonths.has(np+'|'+mois)) return; // détail daté déjà présent → pas de total mensuel
-      // Congé sur ce mois : on teste toutes les clés plausibles (comme la détection datée).
-      const cands = [];
-      try { const c = FP.conducteurs.find(r.conducteur); if (c && c.key) cands.push(c.key); } catch (e) {}
-      if (np) { cands.push(np); try { Object.keys(FP.getAllConges()).forEach(kk => { if (String(kk).split(/[-\s]/)[0] === np && cands.indexOf(kk) < 0) cands.push(kk); }); } catch (e) {} }
-      let cg = null, ck = null;
-      for (const kk of cands) { const g = FP.congeDansMois ? FP.congeDansMois(kk, mois) : null; if (g) { cg = g; ck = kk; break; } }
-      if (!cg) return;
-      const fid = 'um|'+(ck||np)+'|'+mois; const cn = canon(r.conducteur, ck);
-      out.push({ fid, genre:'congé', conducteur:cn.n, gkey:cn.k, categorie:'peage', type:'péage '+presBadge,
-        date:'', mois, montant:(r.totalTtc!=null?r.totalTtc:(r.total_ttc!=null?r.total_ttc:null)), facnum:r.numeroFacture||r.numero_facture||'',
-        detail:'congé : '+dfr(cg.debut)+' au '+dfr(cg.fin)+' · total du mois '+mfr(mois)+' — pour les DATES EXACTES : ouvre Total Fleet → « Reconstruire le détail » (ou réimporte le relevé Ulys)',
-        statut: sm[fid] || 'a-verifier' });
-    });
+    // 2) ⛔ ANCIEN repli « Ulys mensuel pendant congé » SUPPRIMÉ (source de FAUSSES accusations).
+    //    Il prenait le TOTAL DU MOIS dès qu'un congé chevauchait le mois — même si les consos étaient
+    //    HORS des dates de congé (ex. Samira : congé fin avril, mais ses péages d'avril sont hors congé).
+    //    Désormais on NE signale une conso « pendant congé » QUE si la DATE EXACTE le prouve (section 1,
+    //    via le détail daté total_conso_tx). Si le détail daté d'un mois manque, on préfère ne RIEN
+    //    affirmer plutôt qu'accuser à tort : reconstruis le détail (Total Fleet) pour obtenir les dates.
     // 3) Anomalies carte (repas élevés, hors carburant, pleins multiples, diesel…)
     const txCard = _tx.filter(t => !/^ULYS/i.test(String(t.carte||'')));
     (FP.totalFleetAnomaliesTx ? FP.totalFleetAnomaliesTx(txCard) : []).forEach(a => {
