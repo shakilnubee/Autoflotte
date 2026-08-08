@@ -1073,8 +1073,18 @@ FP.condKeyDeConso = (t) => {
   if (!t) return null;
   const carte = t.carte || t.badge || null;
   if (carte) {
-    try { const c = FP.conducteurParCarteTotal && FP.conducteurParCarteTotal(carte); if (c && c.key) return c.key; } catch (e) {}
-    try { const c = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(carte); if (c && c.key) return c.key; } catch (e) {}
+    const s = String(carte);
+    // ⚠️ Le badge Ulys est stocké « ULYS-<n°> » : on RETIRE le préfixe « ULYS » avant de comparer au
+    // n° de la fiche (sinon les lettres « ULYS » cassent la comparaison « se termine par » quand la
+    // fiche porte le n° complet alors que le relevé n'affiche que les derniers chiffres).
+    const isUlys = /^ULYS/i.test(s);
+    const num = s.replace(/^ULYS[-_\s]*/i, '');
+    if (isUlys) {
+      try { const c = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(num); if (c && c.key) return c.key; } catch (e) {}
+    } else {
+      try { const c = FP.conducteurParCarteTotal && FP.conducteurParCarteTotal(s); if (c && c.key) return c.key; } catch (e) {}
+      try { const c = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(s); if (c && c.key) return c.key; } catch (e) {}
+    }
   }
   const nm = t.conducteur || '';
   if (nm) { try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(nm) : null; if (c && c.key) return c.key; } catch (e) {} }
