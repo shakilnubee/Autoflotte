@@ -543,6 +543,11 @@
           <input type="date" id="uls-conso-to" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Au" />
           <button id="uls-conso-clear" type="button" class="hidden text-xs text-slate-500 underline">effacer</button>
           <span class="w-px h-6 bg-slate-200 mx-1"></span>
+          <span class="tfview-toggle" id="uls-conso-view" title="Changer l'affichage">
+            <button type="button" data-v="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+            <button type="button" data-v="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+          </span>
+          <span class="w-px h-6 bg-slate-200 mx-1"></span>
           <button id="uls-an-csv" type="button" class="btn btn-outline text-xs" title="Exporter la conso de la période choisie en CSV"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Export CSV</button>
           <button id="uls-an-pdf" type="button" class="btn btn-dark text-xs" title="Relevé PDF de la période choisie"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Relevé PDF</button>
         </div>
@@ -557,6 +562,7 @@
         </div>
         <div id="uls-conso-empty" class="hidden p-10 text-center"><p class="text-slate-500 text-sm" id="uls-conso-empty-msg">Aucun détail de consommation pour ce mois.</p></div>
       </div>
+      <div id="uls-conso-cards" class="tf-cards mb-6 hidden"></div>
       <p class="text-xs text-slate-500 mb-6">Détail des péages par conducteur (reconstitué depuis les factures Ulys, par badge).</p>
 
       <!-- Filtres -->
@@ -608,6 +614,10 @@
             <option value="name">Ranger par : Nom (A→Z)</option>
           </select>
           <span class="text-sm text-slate-500" id="fn-count"></span>
+          <span class="tfview-toggle" id="fn-view" title="Changer l'affichage" style="margin-left:auto">
+            <button type="button" data-v="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+            <button type="button" data-v="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+          </span>
         </div>
       </div>
       <div class="card overflow-hidden">
@@ -619,6 +629,7 @@
         </div>
         <div id="fn-empty" class="hidden p-10 text-center"><p class="text-slate-500 text-sm">Aucun fournisseur.</p></div>
       </div>
+      <div id="fn-cards" class="tf-cards mt-3 hidden"></div>
       <p class="text-xs text-slate-500 mt-3"><b>Renommer / fusionner</b> : corrige un doublon (ex. « CAR WORLD » → « CAR WORLD CONSULTING FRANCE ») — toutes les factures sont mises à jour. <b>Supprimer le nom</b> : retire le fournisseur des factures concernées (les factures restent).</p>
     </div>
   </main>
@@ -3979,6 +3990,26 @@
       const tot = rows.reduce((s,c) => s + (Number(c.total_ttc)||0), 0);
       const totKm = rows.reduce((s,c) => s + (Number(c.km)||0), 0);
       tfoot.innerHTML = rows.length ? `<tr style="font-weight:700;border-top:2px solid var(--fp-border)"><td>Total ${esc(label)}</td><td></td><td style="text-align:right">${totKm ? FP.num(totKm) + ' km' : '—'}</td><td style="text-align:right">${FP.euro(tot)}</td></tr>` : '';
+      // ===== Vue CARTES (Direction B) — une carte par conducteur =====
+      const cardsBox = $('uls-conso-cards');
+      if (cardsBox) cardsBox.innerHTML = rows.map(c => {
+        const tr = Number(c.nb_trajets)||0, km = Number(c.km)||0, ttc = Number(c.total_ttc)||0;
+        return `<div class="tf-ccard"><div class="top"><span class="nm">${esc(c.conducteur || '—')}</span><span class="tot">${FP.euro(ttc)}</span></div>
+          <div class="foot"><div>Trajets<b>${tr || '—'}</b></div><div>Km<b>${km ? FP.num(km) + ' km' : '—'}</b></div><div>€ / trajet<b>${tr ? FP.euro(ttc / tr) : '—'}</b></div></div></div>`;
+      }).join('');
+      applyUlsView(!rows.length);
+    }
+    // Bascule Tableau / Cartes (même préférence société que Total Fleet : FP.settings.consoView).
+    function applyUlsView(forceTable){
+      let pref = 'table';
+      try { if (window.FP && FP.settings) pref = (FP.settings.get().consoView === 'cards') ? 'cards' : 'table'; } catch (e) {}
+      const v = forceTable ? 'table' : pref;
+      const tbl = $('uls-conso-table'), cardsBox = $('uls-conso-cards');
+      const tableCard = tbl ? tbl.closest('.card') : null;
+      if (tableCard) tableCard.classList.toggle('hidden', v === 'cards');
+      if (cardsBox) cardsBox.classList.toggle('hidden', v !== 'cards');
+      const tg = $('uls-conso-view'); if (tg) tg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.v === pref));
+      if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
     }
     // Conso Ulys ADOSSÉE à une facture réellement présente (même règle partout).
     function ulsBacked(){
@@ -4011,6 +4042,7 @@
     $('uls-conso-from').addEventListener('change', _ulsRe);
     $('uls-conso-to').addEventListener('change', _ulsRe);
     $('uls-conso-clear').addEventListener('click', () => { $('uls-conso-from').value = ''; $('uls-conso-to').value = ''; renderConso(); });
+    { const vt = $('uls-conso-view'); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.consoView = b.dataset.v; FP.settings.save(s); } } catch (e) {} applyUlsView(); })); }
     if (FP.filterResetButton) FP.filterResetButton($('uls-conso-mois').closest('div'), { onReset: () => { $('uls-conso-mois').value = 'all'; $('uls-conso-from').value = ''; $('uls-conso-to').value = ''; renderConso(); } });
     if ($('uls-an-csv')) $('uls-an-csv').addEventListener('click', () => {
       const rows = ulsExportRows(); if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée à exporter'); return; }
@@ -4090,7 +4122,26 @@
           <button class="btn btn-outline" style="padding:4px 9px;font-size:12px" data-fn-rename="${esc(r.name)}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Renommer</button>
           <button class="btn btn-outline" style="padding:4px 9px;font-size:12px;color:#b91c1c" data-fn-del="${esc(r.name)}" title="Retirer le nom des factures">✕</button>
         </td></tr>`).join('');
+      const cardsBox = $('fn-cards');
+      if (cardsBox) cardsBox.innerHTML = rows.map(r => `<div class="tf-ccard">
+        <div class="top"><span class="nm">${esc(r.name)}</span><span class="tot">${FP.euro(r.total)}</span></div>
+        <div class="foot" style="align-items:center;justify-content:space-between">
+          <div>Factures<b>${r.count}</b></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-outline" style="padding:4px 9px;font-size:12px" data-fn-rename="${esc(r.name)}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Renommer</button>
+            <button class="btn btn-outline" style="padding:4px 9px;font-size:12px;color:#b91c1c" data-fn-del="${esc(r.name)}" title="Retirer le nom des factures">✕</button>
+          </div>
+        </div></div>`).join('');
+      applyFnView(rows.length === 0);
       if (window.lucide) lucide.createIcons();
+    }
+    function applyFnView(forceTable){
+      let pref = 'table'; try { if (window.FP && FP.settings) pref = (FP.settings.get().fournView === 'cards') ? 'cards' : 'table'; } catch (e) {}
+      const v = forceTable ? 'table' : pref;
+      const tbl = document.querySelector('#view-fourn table.fp-table'), tableCard = tbl ? tbl.closest('.card') : null, cardsBox = $('fn-cards');
+      if (tableCard) tableCard.classList.toggle('hidden', v === 'cards');
+      if (cardsBox) cardsBox.classList.toggle('hidden', v !== 'cards');
+      const tg = $('fn-view'); if (tg) tg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.v === pref));
     }
     function applyRename(oldName, newName){
       newName = (newName || '').trim();
@@ -4108,12 +4159,16 @@
     }
     $('fn-search').addEventListener('input', (e) => { fnSearch = e.target.value; render(); });
     $('fn-sort').addEventListener('change', (e) => { fnSort = e.target.value; render(); });
-    $('fn-tbody').addEventListener('click', async (e) => {
+    // Actions renommer/supprimer — mêmes boutons en vue Tableau ET en vue Cartes.
+    async function fnAction(e){
       const rn = e.target.closest('[data-fn-rename]');
       if (rn){ const old = rn.dataset.fnRename; const nn = await FP.prompt(`Renommer / fusionner « ${old} » en :`, old); if (nn != null && nn.trim() && nn.trim() !== old){ const k = applyRename(old, nn); alert(`${k} facture(s) mises à jour.`); } return; }
       const dl = e.target.closest('[data-fn-del]');
       if (dl){ const old = dl.dataset.fnDel; if (await FP.confirm(`Retirer le fournisseur « ${old} » de ses factures ?\n(Les factures restent, sans fournisseur.)`)){ applyRename(old, ''); } }
-    });
+    }
+    $('fn-tbody').addEventListener('click', fnAction);
+    if ($('fn-cards')) $('fn-cards').addEventListener('click', fnAction);
+    { const vt = $('fn-view'); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.fournView = b.dataset.v; FP.settings.save(s); } } catch (e) {} applyFnView(); })); }
     window.renderFournisseurs = render;
     document.addEventListener('fp:data-ready', () => { if (!$('view-fourn').classList.contains('hidden')) render(); });
   })();
