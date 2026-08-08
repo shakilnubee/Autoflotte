@@ -3437,7 +3437,9 @@
       const rele = (window.FP_DATA.factures || []).filter(f => isTotalFleet(f) && f.fileId && /^https?:\/\//.test(f.fileId));
       const byUrl = new Map(); rele.forEach(f => { if (!byUrl.has(f.fileId)) byUrl.set(f.fileId, f); });
       const list = [...byUrl.values()];
-      if (!list.length) { if (FP.toast) FP.toast('Aucun relevé Total avec PDF stocké à relire (réimporte une fois pour attacher les PDF).'); return; }
+      // ⚠️ NE PAS s'arrêter ici s'il n'y a pas de relevé Total : la reconstruction Ulys (plus bas) DOIT
+      // quand même tourner. (Bug corrigé : un « return » ici empêchait toute reconstruction Ulys quand
+      // la flotte n'avait pas de relevés Total avec PDF stocké → péages toujours en « total du mois ».)
       const old = btn ? btn.innerHTML : ''; if (btn) { btn.disabled = true; }
       let okTx = 0, failed = 0, tableMissing = false, done = 0;
       for (const f of list) {
@@ -3493,7 +3495,11 @@
       if (btn) { btn.innerHTML = old; btn.disabled = false; }
       consoLoaded = false; try { await loadConso(); } catch (e) {}
       renderConso(); renderAnalyse();
-      const msg = '✓ Détail reconstruit : ' + okTx + ' achat(s) Total sur ' + list.length + ' relevé(s)' + (okUlys ? ' · ' + okUlys + ' conso Ulys datées' : '') + (failed ? ' · ' + failed + ' illisible(s)' : '');
+      const parts = [];
+      parts.push(okTx + ' achat(s) Total' + (list.length ? ' sur ' + list.length + ' relevé(s)' : ''));
+      if (okUlys) parts.push(okUlys + ' conso Ulys datées');
+      if (failed) parts.push(failed + ' illisible(s)');
+      const msg = (okTx || okUlys) ? ('✓ Détail reconstruit : ' + parts.join(' · ')) : 'Rien à reconstruire : aucun relevé (Total ou Ulys) avec PDF stocké. Réimporte tes relevés une fois pour attacher les PDF.';
       if (FP.toast) FP.toast(msg);
       // Info NON bloquante (toast) : seulement si la reconstruction Ulys n'a rien produit ET qu'il
       // existe des relevés Ulys sans PDF relisible. (Si des dates ont été reconstruites, on ne dit rien.)
