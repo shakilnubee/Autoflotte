@@ -97,12 +97,14 @@ async function handle(req) {
   {
     const token = auth.replace(/^Bearer\s+/i, "").trim();
     const SUPA = Deno.env.get("SUPABASE_URL"); const ANON = Deno.env.get("SUPABASE_ANON_KEY");
-    if (SUPA && ANON) {
-      try {
-        const u = await fetch(`${SUPA}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: ANON } });
-        if (!u.ok) return json({ error: "unauthorized" }, 401);
-      } catch (_) { return json({ error: "unauthorized" }, 401); }
-    }
+    // FAIL-CLOSED : sans moyen de vérifier le jeton (variables absentes/mal configurées), on REFUSE
+    // au lieu d'ouvrir l'accès — sinon un déploiement sans ces variables transforme la fonction en
+    // proxy IA ouvert facturé sur la clé Anthropic.
+    if (!SUPA || !ANON) return json({ error: "unauthorized" }, 401);
+    try {
+      const u = await fetch(`${SUPA}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: ANON } });
+      if (!u.ok) return json({ error: "unauthorized" }, 401);
+    } catch (_) { return json({ error: "unauthorized" }, 401); }
   }
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return json({ error: "ANTHROPIC_API_KEY manquante" }, 500);

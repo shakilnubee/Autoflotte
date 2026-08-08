@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260808b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260808c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260808b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260808c">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -672,10 +672,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260808b"></script>
-<script src="../assets/js/supabase-client.js?v=20260808b"></script>
-<script src="../assets/js/data.js?v=20260808b"></script>
-<script src="../assets/js/app.js?v=20260808b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260808c"></script>
+<script src="../assets/js/supabase-client.js?v=20260808c"></script>
+<script src="../assets/js/data.js?v=20260808c"></script>
+<script src="../assets/js/app.js?v=20260808c"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -926,7 +926,7 @@
     const sel = $('soc-switch'); if (!sel) return;
     const list = (FP.getSocietes ? FP.getSocietes() : ['PXP']);
     const cur = (FP.activeSociete ? FP.activeSociete() : 'PXP');
-    sel.innerHTML = list.map(s => `<option value="${s.replace(/"/g,'&quot;')}"${s === cur ? ' selected' : ''}>${s}</option>`).join('');
+    sel.innerHTML = list.map(s => `<option value="${s.replace(/"/g,'&quot;')}"${s === cur ? ' selected' : ''}>${FP.esc ? FP.esc(s) : s}</option>`).join('');
     // Bouton « Supprimer une société » : visible UNIQUEMENT pour le CEO.
     const db = $('btn-del-societe'); if (db) db.classList.toggle('hidden', !(FP.isCEO && FP.isCEO()));
   }
@@ -1702,6 +1702,19 @@
     });
     document.querySelectorAll('.settings-section').forEach(s => {
       if (allowed.indexOf(s.getAttribute('data-sec')) === -1) s.style.display = 'none';
+    });
+    // ⚠️ La CONFIG société (groupes, onglets, seuils d'alerte) est réservée à l'admin (durcissement
+    // app_settings côté base : un gestionnaire ne PEUT PAS écrire). On CACHE donc ses boutons
+    // « Enregistrer » — sinon il obtient un faux « ✓ enregistré » alors que la base rejette l'écriture.
+    ['btn-save-groupes', 'btn-save-nav', 'btn-save-notif'].forEach(id => {
+      const b = document.getElementById(id); if (!b) return;
+      b.style.display = 'none';
+      if (b.parentNode && !b.parentNode.querySelector('.fp-config-ro-note')) {
+        const note = document.createElement('div');
+        note.className = 'fp-config-ro-note text-xs text-slate-500 mt-2';
+        note.textContent = '🔒 Configuration réservée à l’administrateur (lecture seule).';
+        b.parentNode.insertBefore(note, b.nextSibling);
+      }
     });
   })();
 

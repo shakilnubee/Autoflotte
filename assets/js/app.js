@@ -532,7 +532,22 @@ FP.resteChargeSinistre = function (factures) {
 // ⚠️ HELPER CANONIQUE — dédoublonnage des factures par n° (comme Statistiques / rapport direction) :
 // deux lignes qui partagent le même numeroFacture ne sont comptées qu'une fois (évite de gonfler les
 // totaux). Les factures sans numéro sont toutes gardées. À utiliser partout où on somme des factures.
-FP.dedupeFactures = (list) => { const seen = new Set(); return (list || []).filter(f => { const k = ((f && f.numeroFacture) || '').toString().toUpperCase(); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }); };
+FP.dedupeFactures = (list) => {
+  const seen = new Set();
+  // SOURCE UNIQUE : même normalisation/règle que FP.dupe pour les factures (n° normalisé — accents
+  // & ponctuation retirés — de longueur ≥ 4 ET même TTC). Sinon un n° court/séquentiel (« 24 ») ou
+  // deux vraies factures au même n° mais montants différents étaient fusionnés à tort (sous-comptage),
+  // et une variante de ponctuation (« FA-2026/01 » vs « FA 2026 01 ») n'était PAS fusionnée (sur-comptage).
+  const norm = (s) => (FP.dupe && FP.dupe._n) ? FP.dupe._n(s) : (s == null ? '' : String(s)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+  const numOf = (v) => (FP.dupe && FP.dupe._num) ? FP.dupe._num(v) : (() => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.')); return isNaN(n) ? null : n; })();
+  return (list || []).filter(f => {
+    const k = norm(f && f.numeroFacture);
+    if (!k || k.length < 4) return true; // n° absent ou trop court → jamais dédoublonné (peut être une 2e vraie facture)
+    const ttc = numOf(f && f.montantTTC);
+    const key = k + '|' + (ttc == null ? '' : ttc);
+    if (seen.has(key)) return false; seen.add(key); return true;
+  });
+};
 // ⚠️ HELPER CANONIQUE — coût d'exploitation d'un mois : factures dédoublonnées par n° + filtre exploit.
 // Même chiffre partout (dashboard, écran mural, rapport direction) — sinon un doublon de n° gonflait le mois.
 FP.coutMois = (data, ym) => (FP.dedupeFactures(((data && data.factures) || [])).filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0));
@@ -1174,12 +1189,16 @@ FP.attributionCarteTotal = (lu) => {
   try {
     const map = FP.settings.get().vehCarteCarb || {};
     const vehs = (window.FP_DATA && FP_DATA.vehicules) || (window.data && data.vehicules) || [];
-    for (const vid in map) {
-      if (FP.carteMatch(map[vid], lu)) {
-        const v = vehs.find(x => String(x.id) === String(vid));
-        if (v) return { conducteur: (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : null, plaque: v.immat || null };
-      }
-    }
+    const b = FP.normCarte(lu);
+    const vehOf = (vid) => vehs.find(x => String(x.id) === String(vid));
+    const outOf = (v) => ({ conducteur: (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : null, plaque: v.immat || null });
+    // 1) Match EXACT prioritaire (jamais ambigu).
+    for (const vid in map) { if (FP.normCarte(map[vid]) === b) { const v = vehOf(vid); if (v) return outOf(v); } }
+    // 2) Match par SUFFIXE : on n'attribue PAS si ≥2 véhicules partagent les mêmes derniers chiffres
+    //    (même garde anti-ambiguïté que FP._condParNumero — sinon fausse attribution plaque/chauffeur).
+    const partiels = [];
+    for (const vid in map) { if (FP.carteMatch(map[vid], lu)) partiels.push(vid); }
+    if (partiels.length === 1) { const v = vehOf(partiels[0]); if (v) return outOf(v); }
   } catch (e) {}
   return null;
 };
@@ -3158,7 +3177,9 @@ FP.recommandations = (data) => {
   data = data || { vehicules: [], amendes: [], factures: [], conducteurs: [] };
   const out = [];
   const enFlotte = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
-  const j = (d) => { const x = new Date(d); return isNaN(x) ? null : Math.ceil((x - new Date()) / 86400000); };
+  // Décompte en jours via le helper canonique (minuit-à-minuit) → même valeur que la fiche véhicule
+  // et les Alertes (avant : Math.ceil sur l'instant courant → off-by-one selon l'heure).
+  const j = (d) => FP.joursRestants(d);
 
   // 1) AMENDES — payer AVANT LA MAJORATION (le vrai saut de prix : forfaitaire → majoré).
   // ⚠️ Cohérence échéance/économie : la fenêtre est ancrée sur la date où l'amende devient MAJORÉE
@@ -3173,7 +3194,7 @@ FP.recommandations = (data) => {
         const base = new Date(a.date);
         const isFps = FP.estFps(a);
         const lim = a.dateLimiteForfaitaire ? new Date(a.dateLimiteForfaitaire) : (() => { const l = new Date(base); l.setDate(l.getDate() + (isFps ? 90 : 45)); return l; })();
-        const jours = Math.ceil((lim - now) / 86400000);
+        const jours = FP.joursRestants(lim); // minuit-à-minuit, cohérent avec Alertes/fiche
         const du = FP.montantDu ? FP.montantDu(a) : (Number(a.montantTTC) || 0);
         const maj = Number(a.montantMajore) || 0;
         const eco = (maj > du) ? (maj - du) : 0;                // surcoût évité en payant avant la majoration
@@ -3611,10 +3632,14 @@ FP.buildAlertes = (data) => {
     const nowYm = new Date().toISOString().slice(0, 7);
     Object.keys(byVeh).forEach(im => {
       const months = Object.keys(byVeh[im]).sort();
-      if (months.length < 4) return;                 // pas assez d'historique
-      const last = months[months.length - 1];
-      if (last === nowYm) return;                    // mois courant incomplet → on prend le dernier mois CLOS
-      const prev = months.slice(0, -1);
+      // On évalue le dernier mois CLOS : le mois courant est incomplet, donc on l'IGNORE au lieu de
+      // sauter le véhicule (bug : avec des cartes carburant mensuelles, presque tout véhicule actif a
+      // une conso le mois courant → l'alerte ne se déclenchait jamais).
+      let idx = months.length - 1;
+      if (months[idx] === nowYm) idx--;              // écarte le mois courant incomplet
+      if (idx < 3) return;                           // besoin d'au moins 3 mois d'historique avant
+      const last = months[idx];
+      const prev = months.slice(0, idx);             // les mois antérieurs au mois évalué
       const avg = prev.reduce((s, m) => s + byVeh[im][m], 0) / prev.length;
       const val = byVeh[im][last];
       if (avg <= 0 || val < 50 || val < avg * seuil) return;
@@ -3785,7 +3810,10 @@ FP.buildEcheances = (data) => {
   // Barème ALIGNÉ sur buildAlertes (< 30 danger, < 60 warn, sinon info) pour qu'une MÊME
   // échéance ait la même couleur/gravité dans « Alertes » et dans « Renouvellements »/calendrier.
   const niv = (dateStr) => {
-    const diff = Math.ceil((new Date(dateStr) - today) / 86400000);
+    // Décompte via le helper canonique (minuit-à-minuit) → MÊME gravité/couleur qu'Alertes pour une
+    // même échéance (avant : Math.ceil sur une date parsée en UTC → +1 jour en France, couleurs décalées).
+    const diff = FP.joursRestants(dateStr);
+    if (diff == null) return 'info';
     if (diff < 30) return 'danger';
     if (diff < 60) return 'warn';
     return 'info';
@@ -3801,9 +3829,23 @@ FP.buildEcheances = (data) => {
     const tgt = 'vehicules.html?veh=' + v.id;
     if (v.prochainCT && v.prochainCT !== '—' && !FP.ctIgnored(v)) push(v.prochainCT, 'Contrôle technique', 'CT — ' + v.immat, veh, tgt);
     if (FP.concerneAntiPollution(v) && v.antiPollution && v.antiPollution !== '—') push(v.antiPollution, 'Anti-pollution', 'Anti-pollution — ' + v.immat, veh, tgt);
-    // Fin de leasing (BPCE)
+    // Fin de leasing (BPCE forfait) — sinon repli sur le contrat LLD (Localease/Ayvens) saisi dans
+    // l'app, dont le coût est déjà compté ailleurs mais dont la date de fin manquait au calendrier
+    // (rule 0-source). Un seul contrat par véhicule → on n'ajoute le LLD que si BPCE n'a rien donné.
     const l = FP.leasingInfo && FP.leasingInfo(v);
     if (l && l.finContrat && !isNaN(l.finContrat)) push(l.finContrat.toISOString(), 'Leasing', 'Fin leasing — ' + v.immat, veh, 'contrats.html');
+    else {
+      try {
+        const list = FP.settings.get().localeaseContrats;
+        if (Array.isArray(list)) {
+          const it = list.find(c => FP.normImmat(c.immat) === FP.normImmat(v.immat));
+          if (it && it.debut && Number(it.dureeMois) > 0) {
+            const fin = new Date(it.debut);
+            if (!isNaN(fin)) { fin.setMonth(fin.getMonth() + Number(it.dureeMois)); push(fin.toISOString(), 'Leasing', 'Fin leasing — ' + v.immat, veh, 'contrats.html'); }
+          }
+        }
+      } catch (e) {}
+    }
   });
 
   // Permis qui expirent
@@ -5573,7 +5615,7 @@ FP.ulys = {
 FP.dupe = {
   _n(s){ return (s == null ? '' : String(s)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ''); },
   _num(v){ if (v == null || v === '') return null; const n = parseFloat(String(v).replace(/\s/g, '').replace(',', '.')); return isNaN(n) ? null : n; },
-  _amtEq(a, b){ const x = this._num(a), y = this._num(b); return x != null && y != null && Math.abs(x - y) < 0.01; },
+  _amtEq(a, b){ const x = this._num(a), y = this._num(b); return x != null && y != null && Math.abs(x - y) <= 0.02; },
   _same(a, b){ return a && b && a === b; },
   find(table, rec, list){
     if (!rec) return null;
