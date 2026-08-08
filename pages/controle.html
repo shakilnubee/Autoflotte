@@ -15,11 +15,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260807z">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260807z"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260808a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260807z">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260808a">
 <style>
   .ctrl-kpi { background:#fff; border:1px solid var(--fp-border); border-radius:.7rem; padding:.85rem 1rem; }
   .ctrl-kpi .lbl { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--fp-muted); }
@@ -194,11 +194,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260807z"></script>
-<script src="../assets/js/supabase-client.js?v=20260807z"></script>
-<script src="../assets/js/data.js?v=20260807z"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260808a"></script>
+<script src="../assets/js/supabase-client.js?v=20260808a"></script>
+<script src="../assets/js/data.js?v=20260808a"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260807z"></script>
+<script src="../assets/js/app.js?v=20260808a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -637,12 +637,22 @@
   const xrow = (f) => [f.conducteur, f.type + (f.genre==='congé'?' (congé)':''), (f.montant!=null?Number(f.montant).toFixed(2).replace('.',','):''), (f.date?dfr(f.date):(f.mois?mfr(f.mois):'')), exDetail(f), f.facnum, (ST_LABEL[f.statut]||f.statut)];
   function exportCSV(){
     const rows = applyFilters(_findings); if (!rows.length) { if(FP.toast)FP.toast('Rien à exporter'); return; }
+    const nom = state.cond !== 'all' ? '-' + String((rows[0]&&rows[0].conducteur)||state.cond).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') : '';
+    // VRAI fichier Excel (.xlsx) : colonnes propres, encodage correct (é/€), MONTANT numérique.
+    if (FP.downloadXlsx) {
+      const headers = ['Conducteur','Conso','Montant (€)','Date','Détail','N° facture','Statut'];
+      const data = rows.map(f => [
+        f.conducteur, f.type + (f.genre==='congé'?' (congé)':''),
+        (f.montant!=null && isFinite(Number(f.montant)) ? Number(Number(f.montant).toFixed(2)) : ''),
+        (f.date?dfr(f.date):(f.mois?mfr(f.mois):'')), exDetail(f), (f.facnum||''), (ST_LABEL[f.statut]||f.statut)
+      ]);
+      FP.downloadXlsx('controle-conso'+nom, headers, data, { sheet: 'Contrôle' + (state.cond!=='all' ? ' — ' + ((rows[0]&&rows[0].conducteur)||'') : '') });
+      return;
+    }
+    // Repli CSV (si le générateur xlsx est indisponible).
     const q = s => '"' + String(s==null?'':s).replace(/"/g,'""') + '"';
-    // « sep=; » en 1re ligne : force Excel (toutes langues) à découper en colonnes proprement
-    // (sinon, selon la config d'Excel, tout se retrouve dans une seule colonne = illisible/« moche »).
     const lines = ['sep=;', XCOLS.map(q).join(';')].concat(rows.map(f => xrow(f).map(q).join(';')));
     const blob = new Blob(['﻿'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
-    const nom = state.cond !== 'all' ? '-' + String((rows[0]&&rows[0].conducteur)||state.cond).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') : '';
     const url = URL.createObjectURL(blob); const el = document.createElement('a'); el.href=url; el.download='controle-conso'+nom+'.csv'; document.body.appendChild(el); el.click(); el.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
   }
   function exportPDF(){
