@@ -346,6 +346,10 @@
 
     <!-- ===== Vue TOTAL FLEET (carburant & péages) ===== -->
     <div id="view-total" class="hidden">
+      <!-- Import (visible partout, y compris intégré dans Contrôle) — accepte un OU plusieurs PDF / ZIP -->
+      <div class="flex flex-wrap items-center gap-2 mb-4">
+        <button type="button" id="tf-import-btn" class="btn btn-dark text-sm"><i data-lucide="file-up" class="w-4 h-4"></i> Importer un relevé Total <span class="text-xs font-normal opacity-80">(un ou plusieurs / ZIP)</span></button>
+      </div>
       <!-- Statut / aperçu d'import EN HAUT (bien visible dès qu'on importe) -->
       <div id="tf-import-status" class="hidden mb-3 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
       <div id="tf-import-preview" class="hidden mb-4"></div>
@@ -492,6 +496,10 @@
 
     <!-- ===== Vue ULYS (péages) — même mise en forme que Total Fleet ===== -->
     <div id="view-ulys" class="hidden">
+      <!-- Import (visible partout, y compris intégré dans Contrôle) — accepte un OU plusieurs PDF -->
+      <div class="flex flex-wrap items-center gap-2 mb-4">
+        <button type="button" id="uls-import-btn" class="btn btn-dark text-sm"><i data-lucide="file-up" class="w-4 h-4"></i> Importer un relevé Ulys <span class="text-xs font-normal opacity-80">(un ou plusieurs)</span></button>
+      </div>
       <!-- KPIs -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div class="kpi"><div class="kpi-label">Total péages (TTC)</div><div class="kpi-value" id="uls-kpi-ttc">—</div><div class="kpi-delta" id="uls-kpi-sub">—</div></div>
@@ -3487,16 +3495,16 @@
       renderConso(); renderAnalyse();
       const msg = '✓ Détail reconstruit : ' + okTx + ' achat(s) Total sur ' + list.length + ' relevé(s)' + (okUlys ? ' · ' + okUlys + ' conso Ulys datées' : '') + (failed ? ' · ' + failed + ' illisible(s)' : '');
       if (FP.toast) FP.toast(msg);
-      // Si des relevés Ulys n'ont PAS leur PDF stocké, la reconstruction ne peut pas en lire les dates
-      // → on l'explique clairement (sinon le « total du mois » reste sans que l'utilisateur sache pourquoi).
-      if (ulSansPdf > 0) {
-        const m2 = ulSansPdf + ' relevé(s) Ulys n\'ont pas leur PDF enregistré : impossible d\'en relire les dates exactes. Réimporte ces relevés Ulys une fois (bouton « Importer un relevé Ulys ») — le PDF sera alors stocké et les dates exactes apparaîtront dans Contrôle.';
-        if (FP.alert) FP.alert(m2); else alert(m2);
+      // Info NON bloquante (toast) : seulement si la reconstruction Ulys n'a rien produit ET qu'il
+      // existe des relevés Ulys sans PDF relisible. (Si des dates ont été reconstruites, on ne dit rien.)
+      if (okUlys === 0 && ulSansPdf > 0 && FP.toast) {
+        FP.toast(ulSansPdf + ' relevé(s) Ulys sans PDF relisible — réimporte-les pour obtenir les dates exactes.');
       }
     }
     if ($('tf-backfill-tx')) $('tf-backfill-tx').addEventListener('click', function () { backfillTx(this).catch(e => { console.error('[backfillTx]', e); if (FP.toast) FP.toast('Erreur pendant la reconstruction.'); this.disabled = false; }); });
 
-    // (Le bouton de dropzone Total a été retiré : l'import se lance via le bouton « Importer un relevé Total » du haut.)
+    // Import Total : bouton dans le panneau (visible aussi dans Contrôle) OU bouton du haut.
+    if ($('tf-import-btn')) $('tf-import-btn').addEventListener('click', () => $('tf-import-file').click());
     $('tf-import-file').addEventListener('change', (e) => {
       // ⚠️ COPIER les fichiers AVANT de vider l'input : e.target.value='' efface la sélection
       // (FileList est vivante) → sinon l'import croit qu'il n'y a aucun fichier.
@@ -3793,6 +3801,7 @@
     }
     // (Le bouton de dropzone Ulys a été retiré : l'import se lance via le bouton « Importer un relevé Ulys » du haut.)
     $('uls-import-file').addEventListener('change', (e) => { handleUlysImport(e.target.files); e.target.value=''; });
+    if ($('uls-import-btn')) $('uls-import-btn').addEventListener('click', () => $('uls-import-file').click());
 
     function openUlsDrawer(f){
       $('drawer-num').textContent = f.numeroFacture || '—';
