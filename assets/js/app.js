@@ -4116,7 +4116,9 @@ FP.dialog = function (opts) {
   if (!document.getElementById('fp-dlg-style')) {
     const st = document.createElement('style'); st.id = 'fp-dlg-style';
     st.textContent = [
-      '.fp-dlg-backdrop{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:1.25rem;',
+      // Boîte de dialogue ancrée VERS LE HAUT (plus agréable qu\'en plein milieu d\'écran), et
+      // défilable si le message est long (téléphone).
+      '.fp-dlg-backdrop{position:fixed;inset:0;z-index:100000;display:flex;align-items:flex-start;justify-content:center;padding:1.25rem;padding-top:7vh;overflow-y:auto;',
       'background:rgba(11,18,32,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);animation:fp-dlg-fade .16s ease}',
       '.fp-dlg-card{width:100%;max-width:430px;background:#fff;border:1px solid var(--fp-border,#E3E8F0);border-radius:16px;',
       'box-shadow:0 30px 70px -20px rgba(11,18,32,.5);padding:1.4rem 1.4rem 1.15rem;animation:fp-dlg-pop .22s cubic-bezier(.16,1,.3,1)}',
