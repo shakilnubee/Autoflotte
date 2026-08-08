@@ -6344,6 +6344,13 @@ FP.history = {
   },
 
   restore(snap) {
+    // État AVANT restauration (en mémoire) → sert à RÉCONCILIER la base : on ne pousse
+    // que ce qui change réellement (aucune écriture inutile).
+    const snapArr = (a) => (Array.isArray(a) ? JSON.parse(JSON.stringify(a)) : []);
+    const before = {
+      vehicules: (window.FP_DATA && window.FP_DATA.vehicules) ? snapArr(window.FP_DATA.vehicules) : [],
+      amendes:   (window.FP_DATA && window.FP_DATA.amendes)   ? snapArr(window.FP_DATA.amendes)   : [],
+    };
     localStorage.setItem(FP.settings._key(), JSON.stringify(snap.settings));
     localStorage.setItem(FP.VEH_OVERRIDES_KEY, JSON.stringify(snap.overrides));
     if (snap.fpData && window.FP_DATA) {
@@ -6356,6 +6363,40 @@ FP.history = {
     FP.settings.applyTheme();
     this.renderAll();
     this.updateUI();
+    // ⚠️ PERSISTER l'annulation/rétablissement DANS SUPABASE (sinon la modif « annulée »
+    // revient au rechargement / sur les autres postes). On pousse les réglages (delta) et on
+    // réconcilie les tables suivies (véhicules, amendes) : upsert des lignes restaurées/modifiées,
+    // suppression des lignes que l'annulation retire. Rien n'est envoyé si Supabase est absent
+    // (mode hors-ligne) — la file FP.persist rejouera plus tard.
+    try { if (FP.settings && FP.settings._pushSettings) FP.settings._pushSettings(snap.settings); } catch (e) {}
+    try { this._persistRestore(before, (snap.fpData || {})); } catch (e) { console.warn('[history._persistRestore]', e); }
+  },
+
+  // Aligne Supabase sur l'état restauré, table par table, SANS écriture inutile :
+  // - ligne présente après mais absente/différente avant → upsert (l'upsert ne touche
+  //   que les colonnes fournies, il n'efface pas les colonnes non mappées) ;
+  // - ligne présente avant mais absente après → delete (annulation d'un ajout).
+  _persistRestore(before, after) {
+    if (!(FP.persist && FP.persist.upsert && FP.persist.delete)) return;
+    const idMap = (arr) => { const m = {}; (arr || []).forEach(x => { if (x && x.id != null) m[x.id] = x; }); return m; };
+    ['vehicules', 'amendes'].forEach((tbl) => {
+      const bMap = idMap(before[tbl]);
+      const aArr = Array.isArray(after[tbl]) ? after[tbl] : null;
+      if (!aArr) return; // table non incluse dans ce snapshot → on n'y touche pas
+      const aMap = idMap(aArr);
+      // Ajouts / modifications à repousser
+      aArr.forEach((row) => {
+        if (!row || row.id == null) return;
+        const prev = bMap[row.id];
+        if (!prev || JSON.stringify(prev) !== JSON.stringify(row)) {
+          try { FP.persist.upsert(tbl, row); } catch (e) {}
+        }
+      });
+      // Lignes retirées par l'annulation → suppression (sans dépôt Corbeille : c'est un undo)
+      Object.keys(bMap).forEach((id) => {
+        if (!aMap[id]) { try { FP.persist.delete(tbl, id); } catch (e) {} }
+      });
+    });
   },
 
   canUndo() { return this.past.length > 0; },
