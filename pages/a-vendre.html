@@ -245,7 +245,13 @@
     const v = data.vehicules.find(x => x.id === id);
     if (!v) return;
     const patch = { [field]: value };
-    if (field === 'pipelineStatut' && value === 'vendu') { v.statut = 'vendu'; patch.statut = 'vendu'; if (v.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(v.immat); }
+    if (field === 'pipelineStatut') {
+      if (value === 'vendu') { v.statut = 'vendu'; patch.statut = 'vendu'; if (v.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(v.immat); }
+      // Repasser d'un « Vendu » à une étape antérieure doit ANNULER le statut « vendu » global
+      // (sinon pipelineOf le renvoie dans « Vendu » et le véhicule reste vendu partout).
+      // On le remet « à vendre » pour qu'il reste dans le pipeline au lieu d'en disparaître.
+      else if (estVendu(v)) { v.statut = 'à vendre'; patch.statut = 'à vendre'; }
+    }
     v[field] = value;
     // Sauvegarde locale (toujours) + Supabase champ par champ (si dispo), sans écraser le reste
     FP.saveVehicleOverride(id, patch);

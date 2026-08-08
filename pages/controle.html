@@ -394,7 +394,8 @@
       else if (/pleins/.test(a.motif || '')) { type = 'Carburant (pleins multiples)'; detail = (brk ? brk + ' — ' : '') + a.motif; }
       else { type = prod || catLbl(a.categorie); detail = a.motif || a.txt || 'anomalie carte'; }
       out.push({ fid, genre:'carte', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre', type,
-        date:a.date||'', montant:a.montant, facnum:a.facnum||'', detail, statut: st, _def: def });
+        date:a.date||'', mois:a.mois || (a.date ? String(a.date).slice(0,7) : ''),
+        montant:a.montant, facnum:a.facnum||'', detail, statut: st, _def: def });
     });
     // Relie CHAQUE trouvaille à sa/ses VOITURE(S) — même source que les fiches véhicule :
     // plaque lue sur la conso si présente, sinon le(s) véhicule(s) dont ce conducteur est le chauffeur.
@@ -409,7 +410,7 @@
   }
 
   // ===== Filtres =====
-  const state = { search:'', cond:'all', type:'all', statut:'all', mois:'all', from:'', to:'', grouped:true };
+  const state = { search:'', cond:'all', type:'all', statut:'all', mois:'all', from:'', to:'', grouped:true, expanded:new Set() };
   function applyFilters(list){
     const q = state.search.trim().toLowerCase();
     return list.filter(f => {
@@ -525,15 +526,17 @@
 
     if (state.grouped){
       const byC = {}; all.forEach(f => { const gk = f.gkey || f.conducteur; (byC[gk] = byC[gk] || []).push(f); });
-      const groups = Object.keys(byC).map(gk => { const rows = byC[gk]; const n = rows.map(r=>r.conducteur).sort((a,b)=>String(b).length-String(a).length)[0]; return { n, rows, tot:rows.reduce((s,f)=>s+(Number(f.montant)||0),0) }; }).sort((a,b)=>b.tot-a.tot);
-      box.innerHTML = diag + groups.map((g,i)=>`
+      const groups = Object.keys(byC).map(gk => { const rows = byC[gk]; const n = rows.map(r=>r.conducteur).sort((a,b)=>String(b).length-String(a).length)[0]; return { gk, n, rows, tot:rows.reduce((s,f)=>s+(Number(f.montant)||0),0) }; }).sort((a,b)=>b.tot-a.tot);
+      // On garde en mémoire les groupes DÉPLIÉS (par conducteur, clé stable) pour que changer un
+      // statut — qui relance render() — ne REFERME pas tout ce qu'on avait ouvert.
+      box.innerHTML = diag + groups.map((g,i)=>{ const open = state.expanded.has(g.gk); return `
         <div class="mb-2">
-          <div class="grp-head" data-grp="${i}">
+          <div class="grp-head" data-grp="${i}" data-grpkey="${esc(g.gk)}">
             <div class="font-semibold text-slate-900">${esc(g.n)} <span class="text-xs text-slate-500">· ${g.rows.length} trouvaille(s)</span></div>
-            <div class="flex items-center gap-3"><span class="font-bold" style="color:var(--fp-primary)">${euro(g.tot)}</span><i data-lucide="chevron-down" class="w-4 h-4 text-slate-400" data-chev="${i}"></i></div>
+            <div class="flex items-center gap-3"><span class="font-bold" style="color:var(--fp-primary)">${euro(g.tot)}</span><i data-lucide="chevron-down" class="w-4 h-4 text-slate-400" data-chev="${i}"${open?' style="transform:rotate(180deg)"':''}></i></div>
           </div>
-          <div class="hidden" data-grpbody="${i}" style="overflow-x:auto"><table class="ctrl-tbl">${COLS}<tbody>${g.rows.map(rowHTML).join('')}</tbody></table></div>
-        </div>`).join('');
+          <div class="${open?'':'hidden'}" data-grpbody="${i}" style="overflow-x:auto"><table class="ctrl-tbl">${COLS}<tbody>${g.rows.map(rowHTML).join('')}</tbody></table></div>
+        </div>`; }).join('');
     } else {
       box.innerHTML = diag + `<div class="card p-2" style="overflow-x:auto"><table class="ctrl-tbl">${COLS}<tbody>${all.map(rowHTML).join('')}</tbody></table></div>`;
     }
@@ -607,7 +610,7 @@
 
   $('ctrl-body').addEventListener('click', async (e) => {
     const gh = e.target.closest('[data-grp]');
-    if (gh) { const i = gh.getAttribute('data-grp'); const b = document.querySelector('[data-grpbody="'+i+'"]'); const ch = document.querySelector('[data-chev="'+i+'"]'); if (b){ b.classList.toggle('hidden'); if(ch) ch.style.transform = b.classList.contains('hidden')?'':'rotate(180deg)'; } return; }
+    if (gh) { const i = gh.getAttribute('data-grp'); const key = gh.getAttribute('data-grpkey'); const b = document.querySelector('[data-grpbody="'+i+'"]'); const ch = document.querySelector('[data-chev="'+i+'"]'); if (b){ b.classList.toggle('hidden'); const hidden = b.classList.contains('hidden'); if(ch) ch.style.transform = hidden?'':'rotate(180deg)'; if(key){ if(hidden) state.expanded.delete(key); else state.expanded.add(key); } } return; }
     const fac = e.target.closest('[data-fac]');
     if (fac) { e.preventDefault(); openFacture(fac.getAttribute('data-fac')); return; }
   });

@@ -1495,7 +1495,23 @@
     e.preventDefault();
     const name = $('f-name').value.trim();
     if (!name) { alert('Le nom est obligatoire.'); return; }
-    const key = normPrenom(name);
+    let key = normPrenom(name);
+    // ⚠️ ANTI-FUSION D'HOMONYMES (même logique que FP.conducteurs.create) : si un conducteur
+    // EXISTANT partage ce prénom mais porte un nom complet DIFFÉRENT, on lui donne une clé
+    // prénom-nom distincte — sinon upsertCond écraserait/fusionnerait deux personnes différentes
+    // (ex. « Julien Martin » et « Julien Bernard » deviendraient un seul « julien »).
+    try {
+      const full = FP.normNomComplet ? FP.normNomComplet(name) : name.toLowerCase().trim();
+      if (full && full.indexOf(' ') !== -1) {
+        const list = (FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [];
+        const homonymeDiff = list.some(c => {
+          if (normPrenom(c.name || c.prenom || c.key) !== key) return false;
+          const cf = FP.normNomComplet ? FP.normNomComplet(c.name || c.key) : '';
+          return cf && cf !== full;
+        });
+        if (homonymeDiff) { const kf = full.replace(/\s+/g, '-'); if (kf) key = kf; }
+      }
+    } catch (e) {}
     // 1) Crée (ou réaffiche) le conducteur avec ses infos d'arrivée, masque levé.
     upsertCond(key, {
       name,
@@ -2459,8 +2475,8 @@
       { key: 'email', label: 'Email' },
       { key: 'note',  label: 'Note' },
       { key: 'vehicules',  label: 'Véhicules', readonly: true },   // lecture seule (dérivé) — export only
-      { key: 'nbAmendes',  label: 'Nb amendes', readonly: true },  // lecture seule
-      { key: 'points',     label: 'Points retirés', readonly: true }, // lecture seule
+      { key: 'nbAmendes',  label: 'Nb amendes', readonly: true, number: true },  // lecture seule
+      { key: 'points',     label: 'Points retirés', readonly: true, number: true }, // lecture seule
     ],
     getRows: () => drivers.map(d => {
       const r = condRow(d.key) || {};

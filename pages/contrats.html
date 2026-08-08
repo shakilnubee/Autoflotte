@@ -596,7 +596,8 @@
   function loueurDeVeh(v) {
     const p = String((v && v.proprietaire) || '').trim().toLowerCase();
     const m = getLoueurs().find(l => String(l.prop || '').trim().toLowerCase() === p && p);
-    return m ? m.nom : ((v && v.proprietaire) || '<span class="text-slate-400">—</span>');
+    // Échappe les valeurs saisies (proprietaire / nom loueur) — anti-XSS stocké (règle 2bis).
+    return m ? FP.esc(m.nom) : ((v && v.proprietaire) ? FP.esc(v.proprietaire) : '<span class="text-slate-400">—</span>');
   }
   // Nom de loueur EN CLAIR (sans HTML) pour un véhicule — sert au filtre par loueur.
   function loueurNomOf(v) {
@@ -1233,7 +1234,13 @@
     // KPIs en haut (même présentation que Localease)
     let mensTotal = 0, engagementTotal = 0, nbAvecLoyer = 0;
     rows.forEach(({ v }) => {
-      const mens = mensualiteFixe(v.immat);
+      // SOURCE UNIQUE du loyer = le loyer d'offre courant (FP.leasingLoyerCourant + avenants),
+      // la médiane des factures ne servant que de repli — même calcul que la colonne « loyer moyen »
+      // de la ligne et que le KPI du haut. (Avant : uniquement la médiane → 2 totaux différents à
+      // l'écran, et 0 pour un véhicule avec loyer d'offre mais sans encore de facture.)
+      const cRaw = (FP.leasingContrat) ? FP.leasingContrat(v.immat) : null;
+      const offerLoyer = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cRaw) : null;
+      const mens = (offerLoyer != null) ? offerLoyer : mensualiteFixe(v.immat);
       if (mens > 0) {
         mensTotal += mens; nbAvecLoyer++;
         const l = FP.leasingInfo(v);

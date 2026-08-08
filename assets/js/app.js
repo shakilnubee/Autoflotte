@@ -7388,7 +7388,7 @@ FP.injectDataIO = function (cfg) {
   // Deux capacités indépendantes : IMPORT (si onImport) et EXPORT Excel (si getRows).
   // ⚠️ RÈGLE PROJET « tout en Excel » : dès qu'une page fournit getRows, injectDataIO
   // pose AUTOMATIQUEMENT un bouton « Exporter (Excel) » (.xlsx), partout, pareil.
-  const canImport = typeof cfg.onImport === 'function' && cols.length > 0;
+  const canImport = typeof cfg.onImport === 'function' && cols.length > 0 && cfg.exportOnly !== true;
   const canExport = typeof cfg.getRows === 'function' && cfg.export !== false && (cfg.columns || []).length > 0;
   if (!canImport && !canExport) return;
   const mount = document.querySelector('[data-data-io]');
