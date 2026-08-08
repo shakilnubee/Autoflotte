@@ -5208,6 +5208,64 @@ FP.openPdf = function (ref, emptyMsg) {
     .catch(() => { const f = toFinal(raw); if (w) w.location = f; else window.open(f, '_blank', 'noopener'); });
   return true;
 };
+// ⚠️ SOURCE UNIQUE — Génère un VRAI fichier Excel (.xlsx) et le télécharge. Colonnes propres,
+// encodage UTF-8 correct (é, €… sans « signes bizarres »), montants NUMÉRIQUES (typeof number →
+// vraie cellule chiffre). Aucune dépendance : ZIP « store » + CRC32 écrits à la main.
+//   FP.downloadXlsx(nomFichier, entetes[], lignes[][], { sheet })  — une valeur number = cellule
+//   numérique ; sinon texte. À utiliser PARTOUT à la place des exports CSV « moches ».
+FP._xlsxCRC = (() => { let c, t = []; for (let n = 0; n < 256; n++) { c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t; })();
+FP.buildXlsx = function (headers, rows, sheetName) {
+  const CT = FP._xlsxCRC, te = new TextEncoder();
+  const crc32 = (b) => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CT[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const enc = (s) => te.encode(s);
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const colL = (i) => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = (i - (m + 1)) / 26; } return s; };
+  const sheetRows = [];
+  sheetRows.push('<row r="1">' + (headers || []).map((h, c) => `<c r="${colL(c)}1" t="inlineStr" s="1"><is><t xml:space="preserve">${esc(h)}</t></is></c>`).join('') + '</row>');
+  (rows || []).forEach((row, ri) => { const r = ri + 2;
+    sheetRows.push(`<row r="${r}">` + row.map((v, c) => { const ref = colL(c) + r;
+      if (typeof v === 'number' && isFinite(v)) return `<c r="${ref}"><v>${v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+    }).join('') + '</row>');
+  });
+  const nm = String(sheetName || 'Feuille1').replace(/[\\\/\?\*\[\]:]/g, ' ').slice(0, 31) || 'Feuille1';
+  const sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + sheetRows.join('') + '</sheetData></worksheet>';
+  const files = [
+    { name: '[Content_Types].xml', bytes: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>') },
+    { name: '_rels/.rels', bytes: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>') },
+    { name: 'xl/workbook.xml', bytes: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="' + esc(nm) + '" sheetId="1" r:id="rId1"/></sheets></workbook>') },
+    { name: 'xl/_rels/workbook.xml.rels', bytes: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>') },
+    { name: 'xl/styles.xml', bytes: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>') },
+    { name: 'xl/worksheets/sheet1.xml', bytes: enc(sheetXml) },
+  ];
+  // ZIP « store » (aucune compression) + répertoire central + EOCD.
+  const chunks = [], central = []; let off = 0;
+  const u16 = (n) => [n & 255, (n >> 8) & 255], u32 = (n) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255];
+  for (const f of files) {
+    const nameB = enc(f.name), crc = crc32(f.bytes), sz = f.bytes.length;
+    const lh = [].concat(u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0), u32(crc), u32(sz), u32(sz), u16(nameB.length), u16(0));
+    chunks.push(Uint8Array.from(lh), nameB, f.bytes);
+    const ch = [].concat(u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0), u32(crc), u32(sz), u32(sz), u16(nameB.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(off));
+    central.push(Uint8Array.from(ch), nameB);
+    off += lh.length + nameB.length + sz;
+  }
+  let csize = 0; central.forEach(c => csize += c.length);
+  const eocd = [].concat(u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length), u32(csize), u32(off), u16(0));
+  const all = chunks.concat(central, [Uint8Array.from(eocd)]);
+  let tot = 0; all.forEach(a => tot += a.length); const out = new Uint8Array(tot); let p = 0; all.forEach(a => { out.set(a, p); p += a.length; });
+  return out;
+};
+FP.downloadXlsx = function (filename, headers, rows, opts) {
+  opts = opts || {};
+  try {
+    const bytes = FP.buildXlsx(headers, rows, opts.sheet);
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob); const el = document.createElement('a');
+    el.href = url; el.download = String(filename || 'export').replace(/\.xlsx$/i, '') + '.xlsx';
+    document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return true;
+  } catch (e) { console.warn('[downloadXlsx]', e); if (FP.toast) FP.toast('Export Excel impossible.'); return false; }
+};
 // Intercepte les clics sur les liens « Voir / Ouvrir » d'un document → ouverture signée.
 document.addEventListener('click', (e) => {
   const a = e.target.closest && e.target.closest('a[href]');
