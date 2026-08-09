@@ -527,11 +527,25 @@
   function condCell(f){ return `<a href="conducteurs.html" title="Ouvrir les conducteurs" style="color:var(--fp-primary);text-decoration:none;font-weight:600">${esc(f.conducteur)}</a>`; }
   function vehCell(f){ if (!f.immat) return '<span class="text-slate-400">—</span>'; return f.immat.split(',').map(s=>s.trim()).filter(Boolean).map(im => `<a href="vehicules.html?immat=${encodeURIComponent(im)}" title="Ouvrir la fiche véhicule" style="display:inline-block;background:#EEF2FF;color:#3730A3;border-radius:6px;padding:1px 7px;font-size:.78rem;font-weight:700;text-decoration:none;white-space:nowrap;margin:1px 2px 1px 0">${esc(im)}</a>`).join(''); }
 
+  // Petit MOT qui explique POURQUOI la ligne est signalée (comme le badge « congé »). Chaque
+  // trouvaille en a un : congé, dépassement (repas), gazole (flotte essence), pleins multiples,
+  // achat inhabituel (hors carburant)… Badges à fond clair + texte foncé → lisibles en clair ET sombre.
+  function raisonBadge(f){
+    if (f.genre === 'congé') return ' <span class="st-badge" style="background:#EDE9FE;color:#5B21B6">congé</span>';
+    const cat = String(f.categorie || '').toLowerCase();
+    const t = String(f.type || '').toLowerCase();
+    let label = 'inhabituel', bg = '#FEF3C7', col = '#92400E';
+    if (/gazole|diesel/.test(t)) { label = 'gazole'; bg = '#FEE2E2'; col = '#991B1B'; }
+    else if (/pleins?\s*multiples|plusieurs pleins/.test(t)) { label = 'pleins multiples'; bg = '#FEE2E2'; col = '#991B1B'; }
+    else if (cat === 'repas') { label = 'dépassement'; bg = '#FFEDD5'; col = '#9A3412'; }
+    else if (cat === 'autre' || cat === 'boutique') { label = 'achat inhabituel'; bg = '#FEF3C7'; col = '#92400E'; }
+    return ` <span class="st-badge" style="background:${bg};color:${col}">${label}</span>`;
+  }
   function rowHTML(f){
     return `<tr>
       <td>${condCell(f)}</td>
       <td>${vehCell(f)}</td>
-      <td>${esc(f.type)}${f.genre==='congé'?' <span class="st-badge" style="background:#EDE9FE;color:#5B21B6">congé</span>':''}</td>
+      <td>${esc(f.type)}${raisonBadge(f)}</td>
       <td style="text-align:right;font-weight:600">${euro(f.montant)}</td>
       <td>${f.date?dfr(f.date):(f.mois?mfr(f.mois):'—')}</td>
       <td class="text-slate-500" style="font-size:.8rem">${esc(f.detail)}</td>
