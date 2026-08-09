@@ -1924,6 +1924,23 @@ FP.settings = {
   },
 };
 
+// === Graphiques (Chart.js) — couleurs lisibles selon le thème (clair/sombre) ===
+// Encre « primaire » des barres/lignes : navy en clair, bleu clair en sombre (invisible sinon sur
+// fond nuit). Tout graphique dont la couleur de série était #0F1E3D doit passer par FP.chartInk().
+FP.chartInk = () => { try { return (FP.settings && FP.settings.isDark && FP.settings.isDark()) ? '#60A5FA' : '#0F1E3D'; } catch (e) { return '#0F1E3D'; } };
+// Applique aux défauts Chart.js la couleur du TEXTE (axes/légende) et des GRILLES selon le thème.
+FP.setupChartTheme = () => {
+  try {
+    if (!window.Chart || !window.Chart.defaults) return;
+    const dark = FP.settings && FP.settings.isDark && FP.settings.isDark();
+    window.Chart.defaults.color = dark ? '#cbd5e1' : '#475569';
+    window.Chart.defaults.borderColor = dark ? 'rgba(148,163,184,.18)' : 'rgba(15,30,61,.08)';
+  } catch (e) {}
+};
+try { FP.setupChartTheme(); } catch (e) {}
+document.addEventListener('DOMContentLoaded', () => { try { FP.setupChartTheme(); } catch (e) {} });
+document.addEventListener('fp:data-ready', () => { try { FP.setupChartTheme(); } catch (e) {} });
+
 // === Dernier sous-onglet ouvert d'une page (rouvre là où l'utilisateur était) ===
 // RÈGLE (consigne explicite) : chaque page à sous-onglets doit rouvrir sur le DERNIER onglet consulté.
 // Synchronisé (FP.settings → tous les appareils, règle 0-sync). pageKey = id court ('controle'…).
@@ -2996,6 +3013,28 @@ FP.affectations = {
   forVeh(vehId) { const a = this.all()[vehId]; return Array.isArray(a) ? a.slice() : []; },
   // Affectation EN COURS (fin === null) d'un véhicule, ou null.
   courante(vehId) { const o = this.forVeh(vehId).filter(x => !x.fin); return o.length ? o[o.length - 1] : null; },
+  // Garantit qu'une affectation EN COURS existe pour le chauffeur actuel du véhicule. Si aucune n'est
+  // ouverte (véhicules d'avant l'historique, imports…), on en crée une avec pour DATE D'ENTRÉE (par
+  // défaut) la 1re mise en circulation du véhicule. Consigne explicite : toujours afficher une date
+  // d'entrée, même sans date de sortie. Écrit UNE fois (les ouvertures suivantes trouvent l'entrée).
+  // Renvoie l'affectation en cours (existante ou créée), ou null si le véhicule n'a pas de chauffeur.
+  ensureCourante(veh) {
+    if (!veh || veh.id == null) return null;
+    const ch = this._norm(veh.chauffeur);
+    if (!ch || ch === '—') return null;
+    const cur = this.courante(veh.id);
+    if (cur) return cur;                                   // une affectation est déjà ouverte
+    this.addEntry(veh.id, ch, veh.dateMiseEnCirculation || null, null);
+    return this.courante(veh.id);
+  },
+  // Date d'ENTRÉE affichée du chauffeur actuel : début de l'affectation en cours si connu, sinon
+  // (défaut) la 1re mise en circulation du véhicule. 'AAAA-MM-JJ' ou null. Ne mute rien (lecture).
+  debutAffiche(veh) {
+    if (!veh) return null;
+    const cur = this.courante(veh.id);
+    if (cur && cur.debut) return cur.debut;
+    return veh.dateMiseEnCirculation || null;
+  },
   // Véhicules conduits par un conducteur (par nom, tolérant casse/espaces).
   forConducteur(nom) {
     const cible = this._norm(nom).toLowerCase(); if (!cible) return [];

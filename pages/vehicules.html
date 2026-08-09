@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260809f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260809f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809g">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -809,13 +809,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260809f"></script>
-<script src="../assets/js/supabase-client.js?v=20260809f"></script>
-<script src="../assets/js/data.js?v=20260809f"></script>
-<script src="../assets/js/fleet-docs.js?v=20260809f"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260809f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260809g"></script>
+<script src="../assets/js/supabase-client.js?v=20260809g"></script>
+<script src="../assets/js/data.js?v=20260809g"></script>
+<script src="../assets/js/fleet-docs.js?v=20260809g"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260809g"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260809f"></script>
+<script src="../assets/js/app.js?v=20260809g"></script>
 <script>
   lucide.createIcons();
 
@@ -1234,6 +1234,9 @@
   }
 
   function conducteursHistoHTML(v) {
+    // Garantit une affectation en cours (date d'entrée par défaut = 1re mise en circulation) → il y a
+    // toujours une ligne « entrée » pour le conducteur actuel, même sans date de sortie.
+    if (FP.affectations && FP.affectations.ensureCourante) { try { FP.affectations.ensureCourante(v); } catch (e) {} }
     const n = (FP.affectations ? FP.affectations.forVeh(v.id) : []).length;
     return `
       <details class="mt-4" open>
@@ -2067,10 +2070,14 @@
     $('drawer-subtitle').textContent = v.categorie;
     renderDrawerPhoto(v);
     renderDrawerLogo(v);
-    // Nom du chauffeur à côté, s'il y en a un
+    // Nom du chauffeur à côté, s'il y en a un — + date d'ENTRÉE (discrète) du conducteur actuel.
     const chauf = $('drawer-chauffeur');
     const hasChauf = v.chauffeur && v.chauffeur !== '—' && v.chauffeur.trim() !== '';
-    chauf.innerHTML = hasChauf ? `<i data-lucide="user" class="w-5 h-5 text-white/70"></i> ${escapeHtml(v.chauffeur)}` : '';
+    // Garantit une affectation en cours (date d'entrée par défaut = 1re mise en circulation).
+    if (hasChauf && FP.affectations && FP.affectations.ensureCourante) { try { FP.affectations.ensureCourante(v); } catch (e) {} }
+    const _entree = (hasChauf && FP.affectations && FP.affectations.debutAffiche) ? FP.affectations.debutAffiche(v) : null;
+    const _entreeTxt = _entree ? ` <span style="font-weight:400;font-size:.8rem;color:rgba(255,255,255,.6)">· depuis le ${FP.date ? FP.date(_entree) : _entree}</span>` : '';
+    chauf.innerHTML = hasChauf ? `<i data-lucide="user" class="w-5 h-5 text-white/70"></i> ${escapeHtml(v.chauffeur)}${_entreeTxt}` : '';
     // Readouts "instruments" dans l'en-tête sombre (comme l'artefact) : km · carburant · CT · TVS
     (function fillReadouts(){
       const box = $('drawer-readouts'); if (!box) return;
