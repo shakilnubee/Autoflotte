@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260809a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260809a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809b">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -29,7 +29,7 @@
   .color-input { width: 48px; height: 38px; border: 1px solid var(--fp-border); border-radius: .55rem; cursor: pointer; padding: 0; }
   .color-input::-webkit-color-swatch-wrapper { padding: 0; }
   .color-input::-webkit-color-swatch { border: none; border-radius: .45rem; }
-  .groupe-row { display: grid; grid-template-columns: 20px 26px 1fr 76px 96px; gap: .65rem; align-items: center; padding: .55rem 0; border-bottom: 1px solid var(--fp-border); }
+  .groupe-row { display: grid; grid-template-columns: 20px 26px 1fr 76px 96px 28px; gap: .65rem; align-items: center; padding: .55rem 0; border-bottom: 1px solid var(--fp-border); }
   .groupe-row:last-child { border-bottom: none; }
   .groupe-key { font-family: monospace; font-size: .72rem; color: var(--fp-muted); }
   .grp-drag { cursor: grab; color: var(--fp-muted); user-select: none; font-size: .9rem; text-align: center; }
@@ -173,9 +173,13 @@
       <div class="section-title">
         <i data-lucide="users" class="w-5 h-5"></i> Groupes de véhicules
       </div>
-      <p class="text-sm text-slate-600 mb-4">Renomme, recolore, réordonne (glisser ⋮⋮) et masque les groupes. Clique « Enregistrer » pour appliquer.</p>
+      <p class="text-sm text-slate-600 mb-4">Renomme, recolore, réordonne (glisser ⋮⋮) et masque les groupes. Tu peux aussi <b>créer tes propres groupes</b> (ex. « Direction », « Utilitaires ») et supprimer ceux que tu as créés. Clique « Enregistrer » pour appliquer.</p>
 
       <div id="groupes-form"></div>
+
+      <div class="mt-3">
+        <button class="btn btn-outline text-sm" id="btn-add-groupe"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un groupe</button>
+      </div>
 
       <div class="flex gap-2 mt-5">
         <button class="btn btn-dark text-sm" id="btn-save-groupes"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer les groupes</button>
@@ -672,10 +676,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260809a"></script>
-<script src="../assets/js/supabase-client.js?v=20260809a"></script>
-<script src="../assets/js/data.js?v=20260809a"></script>
-<script src="../assets/js/app.js?v=20260809a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260809b"></script>
+<script src="../assets/js/supabase-client.js?v=20260809b"></script>
+<script src="../assets/js/data.js?v=20260809b"></script>
+<script src="../assets/js/app.js?v=20260809b"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -692,8 +696,12 @@
     const settings = FP.settings.get();
     const hidden = settings.groupesHidden || [];
     const form = $('groupes-form');
+    const isCustom = (k) => !FP.settings.defaults.groupes[k]; // groupe créé par l'utilisateur (supprimable)
     form.innerHTML = FP.groupeKeys().map(k => {
       const g = settings.groupes[k];
+      const delBtn = isCustom(k)
+        ? `<button type="button" class="grp-del" data-grp-del="${k}" title="Supprimer ce groupe" style="border:none;background:none;cursor:pointer;color:#DC2626;padding:0 4px;font-size:1rem">🗑</button>`
+        : `<span title="Groupe par défaut (non supprimable)" style="color:#CBD5E1;padding:0 4px;font-size:.9rem">🔒</span>`;
       return `
         <div class="groupe-row" draggable="true" data-key="${k}">
           <span class="grp-drag" title="Glisser pour réordonner">⋮⋮</span>
@@ -701,6 +709,7 @@
           <input class="field-input" type="text" data-grp-label="${k}" value="${g.label.replace(/"/g, '&quot;')}" />
           <input class="color-input" type="color" data-grp-color="${k}" value="${g.color}" />
           <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer"><input type="checkbox" class="accent-teal-600 w-4 h-4" data-grp-hide="${k}" ${hidden.includes(k) ? 'checked' : ''} /> Masquer</label>
+          ${delBtn}
         </div>
       `;
     }).join('');
@@ -744,19 +753,23 @@
       if (row.querySelector('[data-grp-hide]').checked) hidden.push(k);
     });
     FP.settings.save({ ...current, groupes: newGroupes, groupeOrder: order, groupesHidden: hidden });
+    if (FP.settings.applyTheme) FP.settings.applyTheme(); // regénère les règles couleur (dont groupes perso)
     renderGroupesForm();
     renderPreview();
     showToast('Groupes enregistrés ✓');
   }
 
   async function resetGroupes() {
-    if (!await FP.confirm('Réinitialiser les groupes (noms, couleurs, ordre, masquage) aux valeurs par défaut ?')) return;
+    if (!await FP.confirm('Réinitialiser les groupes par défaut (noms, couleurs, ordre, masquage) ? Tes groupes personnalisés sont conservés.')) return;
     FP.history.commit();
     const current = FP.settings.get();
-    FP.settings.save({ ...current, groupes: JSON.parse(JSON.stringify(FP.settings.defaults.groupes)), groupeOrder: [], groupesHidden: [] });
+    // On garde les groupes PERSO (créés par l'utilisateur) — seuls les 8 défauts reviennent à zéro.
+    const customs = {}; Object.keys(current.groupes).forEach(k => { if (!FP.settings.defaults.groupes[k]) customs[k] = current.groupes[k]; });
+    FP.settings.save({ ...current, groupes: { ...JSON.parse(JSON.stringify(FP.settings.defaults.groupes)), ...customs }, groupeOrder: [], groupesHidden: [] });
+    if (FP.settings.applyTheme) FP.settings.applyTheme();
     renderGroupesForm();
     renderPreview();
-    showToast('Groupes réinitialisés');
+    showToast('Groupes par défaut réinitialisés');
   }
 
   // Réordonnancement des lignes de groupes par glisser-déposer (DOM uniquement ; persisté au clic « Enregistrer »)
@@ -1131,6 +1144,58 @@
   // ---------- Wiring ----------
   $('btn-save-groupes').addEventListener('click', saveGroupes);
   $('btn-reset-groupes').addEventListener('click', resetGroupes);
+
+  // ---------- Ajouter un groupe personnalisé ----------
+  $('btn-add-groupe').addEventListener('click', () => {
+    const name = window.prompt('Nom du nouveau groupe (ex. Direction, Utilitaires) :');
+    if (name == null) return;
+    const label = name.trim(); if (!label) return;
+    // Clé SÛRE pour un sélecteur CSS ([a-z0-9-]) — sinon la couleur ne s'appliquerait pas.
+    let base = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'groupe';
+    const cur = FP.settings.get();
+    let key = base, n = 2;
+    while (cur.groupes[key]) { key = base + '-' + n; n++; }
+    FP.history.commit();
+    const palette = ['#EF4444', '#F97316', '#EAB308', '#22C55E', '#14B8A6', '#0EA5E9', '#6366F1', '#A855F7', '#EC4899'];
+    const color = palette[Object.keys(cur.groupes).length % palette.length];
+    const groupes = { ...cur.groupes, [key]: { label, color, custom: true } };
+    // Insérer AVANT « Non classé » dans l'ordre.
+    let order = (Array.isArray(cur.groupeOrder) && cur.groupeOrder.length) ? cur.groupeOrder.slice() : FP.groupeKeys().slice();
+    order = order.filter(k => k !== key);
+    const nc = order.indexOf('non-classe');
+    if (nc >= 0) order.splice(nc, 0, key); else order.push(key);
+    FP.settings.save({ ...cur, groupes, groupeOrder: order });
+    if (FP.settings.applyTheme) FP.settings.applyTheme();
+    renderGroupesForm(); renderPreview();
+    showToast('Groupe « ' + label + ' » ajouté ✓');
+  });
+
+  // ---------- Supprimer un groupe personnalisé (réaffecte ses véhicules à « Non classé ») ----------
+  $('groupes-form').addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-grp-del]'); if (!del) return;
+    const key = del.getAttribute('data-grp-del');
+    const cur = FP.settings.get();
+    const g = cur.groupes[key]; if (!g) return;
+    if (FP.settings.defaults.groupes[key]) { showToast('Un groupe par défaut ne peut pas être supprimé.'); return; }
+    const vehs = ((window.FP_DATA && FP_DATA.vehicules) || []).filter(v => FP.vehGroupes(v).includes(key));
+    const msg = 'Supprimer le groupe « ' + g.label + ' » ?' + (vehs.length ? '\n\n' + vehs.length + ' véhicule(s) rattaché(s) repasseront en « Non classé ».' : '');
+    if (!await FP.confirm(msg)) return;
+    FP.history.commit();
+    // Réaffecter les véhicules concernés (persisté en base pour tous les postes).
+    for (const v of vehs) {
+      let ng = FP.vehGroupes(v).filter(k => k !== key);
+      if (!ng.length) ng = ['non-classe'];
+      v.groupes = ng;
+      try { await FP.db.update('vehicules', v.id, { groupes: ng }); } catch (err) { console.warn('[grp del]', err); }
+    }
+    const groupes = { ...cur.groupes }; delete groupes[key];
+    const groupeOrder = (cur.groupeOrder || []).filter(k => k !== key);
+    const groupesHidden = (cur.groupesHidden || []).filter(k => k !== key);
+    FP.settings.save({ ...cur, groupes, groupeOrder, groupesHidden });
+    if (FP.settings.applyTheme) FP.settings.applyTheme();
+    renderGroupesForm(); renderPreview();
+    showToast('Groupe supprimé' + (vehs.length ? ' · ' + vehs.length + ' véhicule(s) reclassé(s)' : ''));
+  });
   $('btn-save-nav').addEventListener('click', saveNavLabels);
   $('btn-reset-nav').addEventListener('click', resetNavLabels);
   // Flèches ▲▼ : montent/descendent l'onglet et appliquent tout de suite au menu de gauche

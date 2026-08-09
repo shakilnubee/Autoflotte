@@ -1810,6 +1810,13 @@ FP.settings = {
             merged.groupes[k] = { ...merged.groupes[k], ...stored.groupes[k] };
           }
         });
+        // Groupes PERSO créés par l'utilisateur (clés absentes des 8 défauts) : on les ajoute tels
+        // quels. Marqués `custom:true` → l'UI n'autorise la SUPPRESSION que sur ceux-là.
+        Object.keys(stored.groupes).forEach(k => {
+          if (!merged.groupes[k] && stored.groupes[k] && stored.groupes[k].label) {
+            merged.groupes[k] = { label: stored.groupes[k].label, color: stored.groupes[k].color || '#94A3B8', custom: true };
+          }
+        });
       }
       return merged;
     } catch { return JSON.parse(JSON.stringify(this.defaults)); }
@@ -1890,6 +1897,16 @@ FP.settings = {
     Object.entries(s.groupes).forEach(([k, v]) => {
       document.documentElement.style.setProperty(`--grp-${k}`, v.color);
     });
+    // Règles .dot-<k> / .gp-<k> générées pour TOUS les groupes (8 défauts + perso) : ainsi un groupe
+    // personnalisé (ex. « direction ») reçoit sa couleur partout (pastilles, onglets, filtres) sans
+    // toucher chaque page. La feuille de style de base ne définit que les 8 défauts.
+    try {
+      let st = document.getElementById('fp-grp-style');
+      if (!st) { st = document.createElement('style'); st.id = 'fp-grp-style'; (document.head || document.documentElement).appendChild(st); }
+      st.textContent = Object.keys(s.groupes)
+        .filter(k => /^[a-z0-9-]+$/.test(k))                       // clés sûres pour un sélecteur CSS
+        .map(k => `.dot-${k},.gp-${k} .dot{background:var(--grp-${k})}`).join('');
+    } catch (e) {}
     // Couleur de base de la plateforme (sidebar, titres, boutons foncés)
     const pc = (s.platformColor && s.platformColor[0] === '#') ? s.platformColor : '#' + (s.platformColor || this.defaults.platformColor);
     document.documentElement.style.setProperty('--fp-primary', pc);
@@ -2176,12 +2193,14 @@ FP.groupeColor = (key) => {
   return (FP.settings.get().groupes[k] || FP.settings.defaults.groupes['non-classe']).color;
 };
 FP.groupeKeys = () => {
-  const allKeys = Object.keys(FP.settings.defaults.groupes);
+  // Toutes les clés = 8 défauts + groupes PERSO (créés dans Paramètres). « non-classe » reste en dernier.
+  const allKeys = Object.keys(FP.settings.get().groupes);
   const order = FP.settings.get().groupeOrder;
-  if (!Array.isArray(order) || !order.length) return allKeys;
+  const lastPin = (arr) => { const a = arr.filter(k => k !== 'non-classe'); if (arr.includes('non-classe')) a.push('non-classe'); return a; };
+  if (!Array.isArray(order) || !order.length) return lastPin(allKeys);
   const valid = order.filter(k => allKeys.includes(k));         // garde uniquement les clés connues
-  const missing = allKeys.filter(k => !valid.includes(k));      // n'oublie aucun groupe
-  return [...valid, ...missing];
+  const missing = allKeys.filter(k => !valid.includes(k));      // n'oublie aucun groupe (dont les perso récents)
+  return lastPin([...valid, ...missing]);
 };
 // Clés de groupes visibles (onglets non masqués), dans l'ordre
 FP.groupeKeysVisible = () => {
