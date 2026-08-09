@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260808c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260808c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -753,11 +753,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260808c"></script>
-<script src="../assets/js/supabase-client.js?v=20260808c"></script>
-<script src="../assets/js/data.js?v=20260808c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260809a"></script>
+<script src="../assets/js/supabase-client.js?v=20260809a"></script>
+<script src="../assets/js/data.js?v=20260809a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260808c"></script>
+<script src="../assets/js/app.js?v=20260809a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2644,9 +2644,11 @@
       const nameCount = {};
       rows.forEach(c => { const n = resolveName(c); if (n) nameCount[n] = (nameCount[n] || 0) + 1; });
       const who = (c) => {
-        const nom = resolveName(c);
+        const brut = resolveName(c);
+        // Nom AFFICHÉ = fiche conducteur (unifié : « ROMUALD » et « Romuald LAMARQUE-BRUNET » → 1 seul nom).
+        const nom = brut && FP.conducteurNomUnifie ? (FP.conducteurNomUnifie(brut) || brut) : brut;
         if (nom) {
-          if (c.plaque && nameCount[nom] > 1) {
+          if (c.plaque && nameCount[brut] > 1) {
             return `<span class="font-semibold">${esc(nom)}</span> <span class="font-mono text-slate-400 text-xs">${esc(c.plaque)}</span>`;
           }
           return `<span class="font-semibold">${esc(nom)}</span>`;
@@ -3983,7 +3985,9 @@
         const cur = bestName[np]; if (!cur || String(c.conducteur || '').length > cur.length) bestName[np] = c.conducteur || '—';
       });
       const byCond = {};
-      dedup.forEach(c => { const np = _np(c.conducteur); const k = np || (c.conducteur || '—'); const a = (byCond[k] = byCond[k] || { conducteur: bestName[np] || c.conducteur || '—', nb_trajets:0, km:0, total_ttc:0 }); a.nb_trajets += Number(c.nb_trajets)||0; a.km += Number(c.km)||0; a.total_ttc += Number(c.total_ttc)||0; });
+      // Nom AFFICHÉ = fiche conducteur (unifié) ; repli sur le libellé le plus complet du relevé.
+      const _nomUnif = (raw) => (FP.conducteurNomUnifie ? (FP.conducteurNomUnifie(raw) || raw) : raw);
+      dedup.forEach(c => { const np = _np(c.conducteur); const k = np || (c.conducteur || '—'); const a = (byCond[k] = byCond[k] || { conducteur: _nomUnif(bestName[np] || c.conducteur || '—'), nb_trajets:0, km:0, total_ttc:0 }); a.nb_trajets += Number(c.nb_trajets)||0; a.km += Number(c.km)||0; a.total_ttc += Number(c.total_ttc)||0; });
       const rows = Object.values(byCond).sort((a,b) => b.total_ttc - a.total_ttc);
       empty.classList.toggle('hidden', rows.length > 0);
       if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation sur cette période (importe la facture Ulys correspondante).';

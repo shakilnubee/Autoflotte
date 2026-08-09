@@ -15,11 +15,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260808c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260808c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260808c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809a">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -220,6 +220,9 @@
       </details>
       <div class="flex flex-wrap items-center gap-2 mb-3">
         <input id="cb-search" type="text" placeholder="🔍 Conducteur…" class="field-input" style="max-width:240px;padding:.45rem .7rem;font-size:.88rem">
+        <label style="display:inline-flex;align-items:center;gap:.4rem;font-size:.82rem;color:#475569;cursor:pointer;user-select:none">
+          <input id="cb-only-num" type="checkbox" style="width:15px;height:15px;cursor:pointer"> Avec un n° attribué seulement
+        </label>
         <span class="text-xs text-slate-400" id="cb-count"></span>
         <span style="flex:1"></span>
         <button type="button" id="cb-add-presta" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Prestataire</button>
@@ -230,11 +233,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260808c"></script>
-<script src="../assets/js/supabase-client.js?v=20260808c"></script>
-<script src="../assets/js/data.js?v=20260808c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260809a"></script>
+<script src="../assets/js/supabase-client.js?v=20260809a"></script>
+<script src="../assets/js/data.js?v=20260809a"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260808c"></script>
+<script src="../assets/js/app.js?v=20260809a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -602,7 +605,9 @@
   });
 
   // ===== Sous-onglet « Cartes & badges » : n° carte carburant / badge péage de TOUS les conducteurs =====
-  let _cbSearch = '';
+  let _cbSearch = '', _cbOnlyNum = false;
+  // Un conducteur a-t-il AU MOINS un n° (carte ou badge) attribué chez un prestataire quelconque ?
+  function _cbHasNum(c, pres){ return pres.some(p => String((FP.condNum ? FP.condNum(c.key, p.numKey) : '') || '').trim()); }
   function renderCartes(){
     const box = $('cb-body'); if (!box) return;
     // Une COLONNE par prestataire (Total, Ulys + tout prestataire perso créé dans Contrôle).
@@ -610,8 +615,9 @@
     let conds = (FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [];
     const q = _cbSearch.trim().toLowerCase();
     if (q) conds = conds.filter(c => FP.conducteurs.displayName(c).toLowerCase().includes(q));
+    if (_cbOnlyNum) conds = conds.filter(c => _cbHasNum(c, pres)); // n'afficher que ceux avec un n° attribué
     conds = conds.slice().sort((a, b) => FP.conducteurs.displayName(a).localeCompare(FP.conducteurs.displayName(b)));
-    $('cb-count').textContent = conds.length + ' conducteur(s)';
+    $('cb-count').textContent = conds.length + ' conducteur(s)' + (_cbOnlyNum ? ' avec n°' : '');
     if (!conds.length) { box.innerHTML = '<p class="text-sm text-slate-400 p-3">Aucun conducteur.</p>'; return; }
     // Champs VERROUILLÉS par défaut (anti-modif accidentelle) : double-clic (ou ✏️) pour éditer,
     // re-verrouillage automatique dès qu'on quitte le champ.
@@ -638,6 +644,7 @@
   const cbUnlock = (el) => { if (!el) return; el.readOnly = false; el.style.background = '#fff'; el.style.color = 'inherit'; el.style.cursor = 'text'; el.style.borderColor = 'var(--fp-accent)'; el.focus(); try { el.select(); } catch (e) {} };
   const cbLock = (el) => { if (!el) return; el.readOnly = true; el.style.background = '#F1F5F9'; el.style.color = '#475569'; el.style.cursor = 'pointer'; el.style.borderColor = 'var(--fp-border)'; };
   $('cb-search').addEventListener('input', e => { _cbSearch = e.target.value; renderCartes(); });
+  if ($('cb-only-num')) $('cb-only-num').addEventListener('change', e => { _cbOnlyNum = e.target.checked; renderCartes(); });
   // Déverrouiller : double-clic sur le champ, ou clic sur le crayon ✏️.
   $('cb-body').addEventListener('dblclick', e => { const el = e.target.closest('input.cb-inp'); if (el && el.readOnly) cbUnlock(el); });
   $('cb-body').addEventListener('click', e => { const b = e.target.closest('.cb-edit'); if (!b) return; const el = b.parentNode.querySelector('input.cb-inp'); cbUnlock(el); });

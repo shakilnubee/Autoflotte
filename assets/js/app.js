@@ -1113,6 +1113,21 @@ FP.condKeyDeConso = (t) => {
   }
   return (nm && FP.normPrenom) ? FP.normPrenom(nm) : null;
 };
+// Nom AFFICHÉ *unifié* d'un conducteur, à partir d'un nom brut lu sur un relevé (Total/Ulys/autre)
+// et/ou d'une clé déjà résolue. ⚠️ RÈGLE PROJET (consigne explicite) : une même personne = UN SEUL
+// nom affiché — celui de sa FICHE CONDUCTEUR — quel que soit le libellé du relevé (« ROMUALD » seul
+// vs « Romuald LAMARQUE-BRUNET », « THOMAS HOCQUET » vs « Thomas HOCQUET »). Tout écran qui affiche
+// un nom venant d'une conso/facture DOIT passer par ce helper pour rester unifié partout.
+FP.conducteurNomUnifie = (name, key) => {
+  try {
+    let c = null;
+    if (key) c = FP.conducteurs.list().find(x => x.key === key) || null;
+    if (!c && name) c = FP.conducteurs.find(name);
+    if (!c && key) c = FP.conducteurs.find(key);
+    if (c) return FP.conducteurs.displayName(c);
+  } catch (e) {}
+  return name || key || '';
+};
 // Détecte les consos survenues PENDANT un congé (interdit). `txList` = transactions DATÉES
 // { conducteur (nom), carte, plaque, dateTx:'AAAA-MM-JJ', categorie, montantTtc, produit }. Par défaut
 // on regarde TOUS les types de conso (carburant, péage, boutique, lavage…) ; `opts.categories` restreint.
@@ -1139,7 +1154,8 @@ FP.consoPendantConge = (txList, opts) => {
     if (np) { try { Object.keys(FP.getAllConges()).forEach(k => { if (String(k).split(/[-\s]/)[0] === np && cand.indexOf(k) < 0) cand.push(k); }); } catch (e) {} }
     let cg = null, key = null;
     for (const k of cand) { const g = FP.congeCouvrant(k, dtx); if (g) { cg = g; key = k; break; } }
-    if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '' });
+    // Nom AFFICHÉ = celui de la fiche conducteur (unifié), jamais le libellé brut du relevé.
+    if (cg) out.push({ conducteur: FP.conducteurNomUnifie(t.conducteur, key), conducteurBrut: t.conducteur || '', key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '' });
   });
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 };
