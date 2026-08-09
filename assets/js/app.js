@@ -1113,6 +1113,21 @@ FP.condKeyDeConso = (t) => {
   }
   return (nm && FP.normPrenom) ? FP.normPrenom(nm) : null;
 };
+// Nom AFFICHÉ *unifié* d'un conducteur, à partir d'un nom brut lu sur un relevé (Total/Ulys/autre)
+// et/ou d'une clé déjà résolue. ⚠️ RÈGLE PROJET (consigne explicite) : une même personne = UN SEUL
+// nom affiché — celui de sa FICHE CONDUCTEUR — quel que soit le libellé du relevé (« ROMUALD » seul
+// vs « Romuald LAMARQUE-BRUNET », « THOMAS HOCQUET » vs « Thomas HOCQUET »). Tout écran qui affiche
+// un nom venant d'une conso/facture DOIT passer par ce helper pour rester unifié partout.
+FP.conducteurNomUnifie = (name, key) => {
+  try {
+    let c = null;
+    if (key) c = FP.conducteurs.list().find(x => x.key === key) || null;
+    if (!c && name) c = FP.conducteurs.find(name);
+    if (!c && key) c = FP.conducteurs.find(key);
+    if (c) return FP.conducteurs.displayName(c);
+  } catch (e) {}
+  return name || key || '';
+};
 // Détecte les consos survenues PENDANT un congé (interdit). `txList` = transactions DATÉES
 // { conducteur (nom), carte, plaque, dateTx:'AAAA-MM-JJ', categorie, montantTtc, produit }. Par défaut
 // on regarde TOUS les types de conso (carburant, péage, boutique, lavage…) ; `opts.categories` restreint.
@@ -1139,7 +1154,8 @@ FP.consoPendantConge = (txList, opts) => {
     if (np) { try { Object.keys(FP.getAllConges()).forEach(k => { if (String(k).split(/[-\s]/)[0] === np && cand.indexOf(k) < 0) cand.push(k); }); } catch (e) {} }
     let cg = null, key = null;
     for (const k of cand) { const g = FP.congeCouvrant(k, dtx); if (g) { cg = g; key = k; break; } }
-    if (cg) out.push({ conducteur: t.conducteur || key, key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '' });
+    // Nom AFFICHÉ = celui de la fiche conducteur (unifié), jamais le libellé brut du relevé.
+    if (cg) out.push({ conducteur: FP.conducteurNomUnifie(t.conducteur, key), conducteurBrut: t.conducteur || '', key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '' });
   });
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 };
@@ -1794,6 +1810,13 @@ FP.settings = {
             merged.groupes[k] = { ...merged.groupes[k], ...stored.groupes[k] };
           }
         });
+        // Groupes PERSO créés par l'utilisateur (clés absentes des 8 défauts) : on les ajoute tels
+        // quels. Marqués `custom:true` → l'UI n'autorise la SUPPRESSION que sur ceux-là.
+        Object.keys(stored.groupes).forEach(k => {
+          if (!merged.groupes[k] && stored.groupes[k] && stored.groupes[k].label) {
+            merged.groupes[k] = { label: stored.groupes[k].label, color: stored.groupes[k].color || '#94A3B8', custom: true };
+          }
+        });
       }
       return merged;
     } catch { return JSON.parse(JSON.stringify(this.defaults)); }
@@ -1874,6 +1897,16 @@ FP.settings = {
     Object.entries(s.groupes).forEach(([k, v]) => {
       document.documentElement.style.setProperty(`--grp-${k}`, v.color);
     });
+    // Règles .dot-<k> / .gp-<k> générées pour TOUS les groupes (8 défauts + perso) : ainsi un groupe
+    // personnalisé (ex. « direction ») reçoit sa couleur partout (pastilles, onglets, filtres) sans
+    // toucher chaque page. La feuille de style de base ne définit que les 8 défauts.
+    try {
+      let st = document.getElementById('fp-grp-style');
+      if (!st) { st = document.createElement('style'); st.id = 'fp-grp-style'; (document.head || document.documentElement).appendChild(st); }
+      st.textContent = Object.keys(s.groupes)
+        .filter(k => /^[a-z0-9-]+$/.test(k))                       // clés sûres pour un sélecteur CSS
+        .map(k => `.dot-${k},.gp-${k} .dot{background:var(--grp-${k})}`).join('');
+    } catch (e) {}
     // Couleur de base de la plateforme (sidebar, titres, boutons foncés)
     const pc = (s.platformColor && s.platformColor[0] === '#') ? s.platformColor : '#' + (s.platformColor || this.defaults.platformColor);
     document.documentElement.style.setProperty('--fp-primary', pc);
@@ -1888,6 +1921,20 @@ FP.settings = {
     document.documentElement.style.setProperty('--fp-logo-border', useWhite ? 'rgba(0,0,0,.18)' : '#000000');
     // Mode sombre 🌙 — SYNCHRONISÉ (règle 0-sync) : lu depuis les réglages, cache local pour l'instant.
     if (document.body) { try { const p = (this.get().prefs || {}); const dk = (p.darkMode != null) ? !!p.darkMode : (localStorage.getItem('fp_dark_mode') === '1'); document.body.classList.toggle('fp-dark', dk); } catch (e) {} }
+  },
+};
+
+// === Dernier sous-onglet ouvert d'une page (rouvre là où l'utilisateur était) ===
+// RÈGLE (consigne explicite) : chaque page à sous-onglets doit rouvrir sur le DERNIER onglet consulté.
+// Synchronisé (FP.settings → tous les appareils, règle 0-sync). pageKey = id court ('controle'…).
+FP.lastTab = {
+  get(pageKey, def) { try { const m = FP.settings.get().lastTab || {}; return m[pageKey] || def; } catch (e) { return def; } },
+  set(pageKey, tabId) {
+    try {
+      const s = FP.settings.get(); const m = s.lastTab || {};
+      if (m[pageKey] === tabId || !tabId) return; // pas d'écriture inutile
+      m[pageKey] = tabId; s.lastTab = m; FP.settings.save(s);
+    } catch (e) {}
   },
 };
 
@@ -2160,12 +2207,14 @@ FP.groupeColor = (key) => {
   return (FP.settings.get().groupes[k] || FP.settings.defaults.groupes['non-classe']).color;
 };
 FP.groupeKeys = () => {
-  const allKeys = Object.keys(FP.settings.defaults.groupes);
+  // Toutes les clés = 8 défauts + groupes PERSO (créés dans Paramètres). « non-classe » reste en dernier.
+  const allKeys = Object.keys(FP.settings.get().groupes);
   const order = FP.settings.get().groupeOrder;
-  if (!Array.isArray(order) || !order.length) return allKeys;
+  const lastPin = (arr) => { const a = arr.filter(k => k !== 'non-classe'); if (arr.includes('non-classe')) a.push('non-classe'); return a; };
+  if (!Array.isArray(order) || !order.length) return lastPin(allKeys);
   const valid = order.filter(k => allKeys.includes(k));         // garde uniquement les clés connues
-  const missing = allKeys.filter(k => !valid.includes(k));      // n'oublie aucun groupe
-  return [...valid, ...missing];
+  const missing = allKeys.filter(k => !valid.includes(k));      // n'oublie aucun groupe (dont les perso récents)
+  return lastPin([...valid, ...missing]);
 };
 // Clés de groupes visibles (onglets non masqués), dans l'ordre
 FP.groupeKeysVisible = () => {
@@ -5228,6 +5277,20 @@ FP.signedScanUrl = async (url, expires) => {
     return (error || !data || !data.signedUrl) ? url : data.signedUrl;
   } catch (e) { return url; }
 };
+// Variante STRICTE : sert à savoir si le document EXISTE VRAIMENT (pour ne pas afficher l'erreur
+// brute « Bucket not found » dans un aperçu). Renvoie : le lien SIGNÉ si l'objet existe ; `null` si
+// l'objet/bucket est INTROUVABLE (erreur createSignedUrl) ; l'URL d'origine si on ne peut pas trancher
+// (Supabase pas encore prêt, ou URL hors bucket « scans »).
+FP.signedScanUrlStrict = async (url, expires) => {
+  try {
+    const path = FP.scanPath(url);
+    if (!path) return url;                                   // pas un fichier du bucket → on ne juge pas
+    if (!(FP.supabase && FP.supabase.storage)) return url;   // pas encore prêt → repli, pas d'erreur
+    const { data, error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).createSignedUrl(path, expires || 3600);
+    if (error || !data || !data.signedUrl) return null;      // objet/bucket manquant → aperçu impossible
+    return data.signedUrl;
+  } catch (e) { return null; }
+};
 // Ouvre un document : lien signé si c'est un fichier du bucket, sinon ouverture normale.
 FP.openScan = (url) => {
   if (!url) return;
@@ -5331,7 +5394,20 @@ FP._signMedia = function (el) {
     if (el.dataset.scanSigned === '1') return;
     el.dataset.scanSigned = '1';
     if (/\/object\/sign\//.test(cur)) return; // déjà un lien signé
-    FP.signedScanUrl(cur, 3600).then(u => { if (u && u !== cur) el.setAttribute('src', u); });
+    FP.signedScanUrlStrict(cur, 3600).then(u => {
+      if (u === null) {
+        // Document INTROUVABLE (objet/bucket manquant) : au lieu de laisser l'iframe afficher l'erreur
+        // brute « Bucket not found » (JSON illisible), on remplace par un message propre. Vaut pour
+        // TOUTES les pages (amendes, factures, sinistres, conducteurs…) via le MutationObserver global.
+        const msg = document.createElement('div');
+        msg.className = 'scan-missing';
+        msg.style.cssText = 'padding:1.1rem;text-align:center;color:var(--fp-muted,#64748b);font-size:.85rem;line-height:1.5;border:1px dashed var(--fp-border);border-radius:.55rem;background:var(--fp-surface,#f8fafc)';
+        msg.innerHTML = '📄 Aperçu indisponible — ce document n\'a pas pu être chargé (fichier introuvable). Réimporte-le, ou ouvre-le via « Ouvrir en grand ».';
+        if (el.parentNode) el.parentNode.replaceChild(msg, el);
+        return;
+      }
+      if (u && u !== cur) el.setAttribute('src', u);
+    });
   } catch (e) {}
 };
 FP.hydrateScanMedia = function (root) {
