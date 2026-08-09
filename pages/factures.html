@@ -2504,7 +2504,8 @@
     window.__facOpenTfDrawer = openTfDrawer;
     $('tf-tbody').addEventListener('click', (e) => {
       const voir = e.target.closest('[data-tf-voir]');
-      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-tf-voir')); if (f) openTfDrawer(f); return; }
+      // « Voir » = ouvre DIRECTEMENT le PDF dans un nouvel onglet (jamais un pop-up/aperçu intégré) — via le helper unique FP.openPdf.
+      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-tf-voir')); if (f) { if (FP.openPdf) FP.openPdf(f.url || f.fileId, 'Aucun PDF stocké pour ce relevé — réimporte-le une fois pour l\'attacher.'); else openTfDrawer(f); } return; }
       const del = e.target.closest('[data-tf-del]');
       if (del){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === del.getAttribute('data-tf-del')); if (f) deleteTfFacture(f); }
     });
@@ -2968,7 +2969,9 @@
       const key = el.getAttribute('data-anom-key'); const a = _tfAnomByKey[key] || tfAnomOk()[key]; if (!a) return;
       let fac = a.facnum ? (window.FP_DATA.factures || []).find(f => (f.numeroFacture || '') === a.facnum || f.id === 'TF-' + a.facnum) : null;
       if (!fac && a.mois) { fac = (window.FP_DATA.factures || []).filter(f => (typeof isTotalFleet === 'function' ? isTotalFleet(f) : true) && (f.date || '').slice(0, 7) === a.mois).sort((x, y) => (Number(y.montantTTC) || 0) - (Number(x.montantTTC) || 0))[0]; }
-      if (fac && typeof openTfDrawer === 'function') openTfDrawer(fac);
+      // « Voir la facture » = ouvre DIRECTEMENT le PDF (jamais un aperçu intégré) — helper unique FP.openPdf.
+      if (fac && FP.openPdf) FP.openPdf(fac.url || fac.fileId, 'Aucun PDF stocké pour ce relevé — réimporte-le une fois.');
+      else if (fac && typeof openTfDrawer === 'function') openTfDrawer(fac);
       else if (FP.toast) FP.toast('Facture introuvable — réimporte le relevé Total.');
     });
 
@@ -3947,7 +3950,8 @@
 
     $('uls-tbody').addEventListener('click', (e) => {
       const voir = e.target.closest('[data-uls-voir]');
-      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-uls-voir')); if (f) (window.__facOpenTfDrawer ? window.__facOpenTfDrawer(f) : openUlsDrawer(f)); return; }
+      // « Voir » = ouvre DIRECTEMENT le PDF dans un nouvel onglet (jamais un pop-up) — helper unique FP.openPdf.
+      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-uls-voir')); if (f) { if (FP.openPdf) FP.openPdf(f.url || f.fileId, 'Aucun PDF stocké pour ce relevé Ulys — réimporte-le une fois pour l\'attacher.'); else (window.__facOpenTfDrawer ? window.__facOpenTfDrawer(f) : openUlsDrawer(f)); } return; }
       const del = e.target.closest('[data-uls-del]');
       if (del){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === del.getAttribute('data-uls-del')); if (f) deleteUlsFacture(f); }
     });
