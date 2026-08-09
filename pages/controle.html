@@ -15,11 +15,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260809b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260809b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809d">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -52,10 +52,16 @@
   /* ===== Groupes & tableaux ===== */
   .grp-head { display:flex; justify-content:space-between; align-items:center; gap:.6rem; padding:.7rem .9rem; background:#F8FAFC; border:1px solid var(--fp-border); border-radius:.6rem; cursor:pointer; transition:background .12s; }
   .grp-head:hover { background:#EEF2F7; }
+  /* ===== Mode sombre : les surfaces CLAIRES ci-dessus rendraient leur texte (clair) illisible ===== */
+  body.fp-dark .ctrl-tabs { background:#182234; }
+  body.fp-dark .ctrl-tab:hover { background:#243044; color:#e6edf6; }
+  body.fp-dark .grp-head { background:#182234; }
+  body.fp-dark .grp-head:hover { background:#243044; }
   table.ctrl-tbl { width:100%; border-collapse:collapse; font-size:.85rem; }
   table.ctrl-tbl th { text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; color:var(--fp-muted); padding:.5rem .6rem; border-bottom:1px solid var(--fp-border); background:#F8FAFC; }
   table.ctrl-tbl td { padding:.55rem .6rem; border-bottom:1px solid #EEF2F7; vertical-align:middle; }
   table.ctrl-tbl tbody tr:hover { background:#F8FAFC; }
+  body.fp-dark table.ctrl-tbl tbody tr:hover { background:#182234; } /* survol lisible en sombre */
   /* ===== Aide dépliable ===== */
   details.ctrl-help { background:#F8FAFC; border:1px solid var(--fp-border); border-radius:.7rem; padding:.7rem .95rem; font-size:.85rem; color:#475569; line-height:1.55; }
   details.ctrl-help > summary { cursor:pointer; font-weight:700; color:var(--fp-primary); list-style:none; display:flex; align-items:center; gap:.45rem; }
@@ -192,8 +198,8 @@
         </div>
         <div class="ctrl-frow" style="border-top:1px solid var(--fp-border);padding-top:.8rem">
           <span class="ctrl-flabel">Statut</span>
-          <button type="button" class="st-chip active" data-st="all">Tous</button>
-          <button type="button" class="st-chip" data-st="a-verifier">À vérifier</button>
+          <button type="button" class="st-chip" data-st="all">Tous</button>
+          <button type="button" class="st-chip active" data-st="a-verifier">À vérifier</button>
           <button type="button" class="st-chip" data-st="justifie">Justifié</button>
           <button type="button" class="st-chip" data-st="fraude">Fraude</button>
           <button type="button" class="st-chip" data-st="classe">Classé</button>
@@ -233,11 +239,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260809b"></script>
-<script src="../assets/js/supabase-client.js?v=20260809b"></script>
-<script src="../assets/js/data.js?v=20260809b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260809d"></script>
+<script src="../assets/js/supabase-client.js?v=20260809d"></script>
+<script src="../assets/js/data.js?v=20260809d"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260809b"></script>
+<script src="../assets/js/app.js?v=20260809d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -258,6 +264,7 @@
   function switchTab(name){
     const names = tabNames(); if (names.indexOf(name) < 0) name = 'controle';
     _tab = name;
+    if (FP.lastTab) FP.lastTab.set('controle', name); // rouvre sur ce sous-onglet la prochaine fois
     names.forEach(k => { const pane = $('pane-' + k); if (pane) pane.classList.toggle('hidden', k !== name); });
     names.forEach(k => { const b = $('tab-' + k); if (b) { b.classList.toggle('active', k === name); b.setAttribute('aria-selected', k === name ? 'true' : 'false'); } });
     // Chargement paresseux des vues intégrées Total Fleet / Ulys (1re ouverture seulement).
@@ -314,7 +321,10 @@
   $('tab-controle').addEventListener('click', () => switchTab('controle'));
   $('tab-cartes').addEventListener('click', () => switchTab('cartes'));
   renderPrestaTabs();
-  { const t = new URLSearchParams(location.search).get('tab'); switchTab(tabNames().includes(t) ? t : 'controle'); }
+  // Ouverture : 1) ?tab=… (lien direct) ; 2) sinon le DERNIER sous-onglet consulté ; 3) sinon « Contrôle ».
+  { const t = new URLSearchParams(location.search).get('tab');
+    const last = FP.lastTab ? FP.lastTab.get('controle', 'controle') : 'controle';
+    switchTab(tabNames().includes(t) ? t : (tabNames().includes(last) ? last : 'controle')); }
 
   // Clics dans les panneaux prestataire : ouvrir une facture / supprimer le prestataire.
   $('presta-panes').addEventListener('click', async (e) => {
@@ -448,7 +458,8 @@
   }
 
   // ===== Filtres =====
-  const state = { search:'', cond:'all', type:'all', statut:'all', mois:'all', from:'', to:'', grouped:true, expanded:new Set() };
+  // Par défaut on ouvre sur les anomalies « À vérifier » (les éléments à traiter), pas « Tous ».
+  const state = { search:'', cond:'all', type:'all', statut:'a-verifier', mois:'all', from:'', to:'', grouped:true, expanded:new Set() };
   function applyFilters(list){
     const q = state.search.trim().toLowerCase();
     return list.filter(f => {

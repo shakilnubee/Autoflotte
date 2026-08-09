@@ -1924,6 +1924,20 @@ FP.settings = {
   },
 };
 
+// === Dernier sous-onglet ouvert d'une page (rouvre là où l'utilisateur était) ===
+// RÈGLE (consigne explicite) : chaque page à sous-onglets doit rouvrir sur le DERNIER onglet consulté.
+// Synchronisé (FP.settings → tous les appareils, règle 0-sync). pageKey = id court ('controle'…).
+FP.lastTab = {
+  get(pageKey, def) { try { const m = FP.settings.get().lastTab || {}; return m[pageKey] || def; } catch (e) { return def; } },
+  set(pageKey, tabId) {
+    try {
+      const s = FP.settings.get(); const m = s.lastTab || {};
+      if (m[pageKey] === tabId || !tabId) return; // pas d'écriture inutile
+      m[pageKey] = tabId; s.lastTab = m; FP.settings.save(s);
+    } catch (e) {}
+  },
+};
+
 // ⚠️ RÈGLE 0-sync — PRÉFÉRENCE UTILISATEUR SYNCHRONISÉE (tous les appareils) : stockée dans les réglages
 // (FP.settings → app_settings, par société) sous s.prefs[<clé>], avec localStorage comme simple cache
 // rapide. À utiliser pour TOUT réglage/choix d'affichage (favoris, filtres, ordres, cases, styles…).
@@ -5263,6 +5277,20 @@ FP.signedScanUrl = async (url, expires) => {
     return (error || !data || !data.signedUrl) ? url : data.signedUrl;
   } catch (e) { return url; }
 };
+// Variante STRICTE : sert à savoir si le document EXISTE VRAIMENT (pour ne pas afficher l'erreur
+// brute « Bucket not found » dans un aperçu). Renvoie : le lien SIGNÉ si l'objet existe ; `null` si
+// l'objet/bucket est INTROUVABLE (erreur createSignedUrl) ; l'URL d'origine si on ne peut pas trancher
+// (Supabase pas encore prêt, ou URL hors bucket « scans »).
+FP.signedScanUrlStrict = async (url, expires) => {
+  try {
+    const path = FP.scanPath(url);
+    if (!path) return url;                                   // pas un fichier du bucket → on ne juge pas
+    if (!(FP.supabase && FP.supabase.storage)) return url;   // pas encore prêt → repli, pas d'erreur
+    const { data, error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).createSignedUrl(path, expires || 3600);
+    if (error || !data || !data.signedUrl) return null;      // objet/bucket manquant → aperçu impossible
+    return data.signedUrl;
+  } catch (e) { return null; }
+};
 // Ouvre un document : lien signé si c'est un fichier du bucket, sinon ouverture normale.
 FP.openScan = (url) => {
   if (!url) return;
@@ -5366,7 +5394,20 @@ FP._signMedia = function (el) {
     if (el.dataset.scanSigned === '1') return;
     el.dataset.scanSigned = '1';
     if (/\/object\/sign\//.test(cur)) return; // déjà un lien signé
-    FP.signedScanUrl(cur, 3600).then(u => { if (u && u !== cur) el.setAttribute('src', u); });
+    FP.signedScanUrlStrict(cur, 3600).then(u => {
+      if (u === null) {
+        // Document INTROUVABLE (objet/bucket manquant) : au lieu de laisser l'iframe afficher l'erreur
+        // brute « Bucket not found » (JSON illisible), on remplace par un message propre. Vaut pour
+        // TOUTES les pages (amendes, factures, sinistres, conducteurs…) via le MutationObserver global.
+        const msg = document.createElement('div');
+        msg.className = 'scan-missing';
+        msg.style.cssText = 'padding:1.1rem;text-align:center;color:var(--fp-muted,#64748b);font-size:.85rem;line-height:1.5;border:1px dashed var(--fp-border);border-radius:.55rem;background:var(--fp-surface,#f8fafc)';
+        msg.innerHTML = '📄 Aperçu indisponible — ce document n\'a pas pu être chargé (fichier introuvable). Réimporte-le, ou ouvre-le via « Ouvrir en grand ».';
+        if (el.parentNode) el.parentNode.replaceChild(msg, el);
+        return;
+      }
+      if (u && u !== cur) el.setAttribute('src', u);
+    });
   } catch (e) {}
 };
 FP.hydrateScanMedia = function (root) {

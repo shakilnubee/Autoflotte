@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260809b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260809b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809d">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -42,6 +42,8 @@
   .set-tab { padding: .6rem 1rem; font-size: .88rem; font-weight: 600; color: var(--fp-muted); border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -2px; display: inline-flex; align-items: center; gap: .45rem; }
   .set-tab:hover { color: var(--fp-primary); }
   .set-tab.active { color: var(--fp-primary); border-bottom-color: var(--fp-accent); }
+  /* Mode sombre : --fp-primary très foncé → onglet actif invisible ; on force un texte clair. */
+  body.fp-dark .set-tab.active, body.fp-dark .set-tab:hover { color: #e6edf6; }
   .set-tab i { width: 16px; height: 16px; }
   .settings-section.hidden-sec { display: none; }
   .nav-row { display: grid; grid-template-columns: 18px 56px 130px 1fr 34px; gap: .65rem; align-items: center; padding: .45rem 0; border-bottom: 1px solid var(--fp-border); }
@@ -676,10 +678,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260809b"></script>
-<script src="../assets/js/supabase-client.js?v=20260809b"></script>
-<script src="../assets/js/data.js?v=20260809b"></script>
-<script src="../assets/js/app.js?v=20260809b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260809d"></script>
+<script src="../assets/js/supabase-client.js?v=20260809d"></script>
+<script src="../assets/js/data.js?v=20260809d"></script>
+<script src="../assets/js/app.js?v=20260809d"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -807,18 +809,35 @@
   })();
 
   // Onglets de la page Paramètres
+  function activateSettingsSection(sec) {
+    const tabs = $('settings-tabs'); if (!tabs) return;
+    const btn = tabs.querySelector(`.set-tab[data-sec="${sec}"]`); if (!btn) return;
+    tabs.querySelectorAll('.set-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.settings-section').forEach(s => {
+      s.classList.toggle('hidden-sec', s.dataset.sec !== sec);
+    });
+  }
   function setupSettingsTabs() {
     const tabs = $('settings-tabs');
     tabs.querySelectorAll('.set-tab').forEach(tab => {
       tab.addEventListener('click', () => {
-        tabs.querySelectorAll('.set-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
         const sec = tab.dataset.sec;
-        document.querySelectorAll('.settings-section').forEach(s => {
-          s.classList.toggle('hidden-sec', s.dataset.sec !== sec);
-        });
+        activateSettingsSection(sec);
+        if (FP.lastTab) FP.lastTab.set('parametres', sec); // rouvre sur cette section la prochaine fois
       });
     });
+    // Rouvre sur la DERNIÈRE section consultée (si son onglet est visible pour ce rôle), sinon défaut.
+    // Différé (setTimeout 0) pour s'exécuter APRÈS le masquage des onglets selon le rôle (plus bas).
+    setTimeout(() => {
+      try {
+        const last = FP.lastTab ? FP.lastTab.get('parametres', '') : '';
+        if (!last || last === 'groupes') return;
+        const b = tabs.querySelector(`.set-tab[data-sec="${last}"]`);
+        // offsetParent null = onglet masqué (gating de rôle) → on ne le restaure pas.
+        if (b && b.offsetParent !== null) activateSettingsSection(last);
+      } catch (e) {}
+    }, 0);
   }
 
   // ---------- Onglets sidebar (renommer + réordonner) ----------
