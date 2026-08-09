@@ -200,6 +200,7 @@
         .tfview-toggle button{padding:6px 11px;font-size:.8rem;font-weight:700;background:#fff;border:none;color:var(--fp-muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
         .tfview-toggle button.active{background:var(--fp-primary);color:#fff}
         .ls-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+        .ls-cards.hidden{display:none}  /* sinon .ls-cards (chargé après Tailwind) écrase .hidden → cartes + tableau visibles ensemble */
         .ls-card{background:#fff;border:1px solid var(--fp-border);border-radius:14px;box-shadow:0 1px 2px rgba(15,30,61,.05),0 8px 24px -18px rgba(15,30,61,.25);padding:15px 16px;display:flex;flex-direction:column;gap:12px}
         .ls-card .ls-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
         .ls-immat{font-family:ui-monospace,monospace;font-weight:800;color:var(--fp-primary)}
@@ -314,6 +315,10 @@
           <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
           <input id="search-localease" type="text" placeholder="Immat., chauffeur, modèle…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
         </div>
+        <span class="tfview-toggle" id="loc-view" title="Changer l'affichage">
+          <button type="button" data-v="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+          <button type="button" data-v="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+        </span>
       </div>
       <div class="scrollable">
         <table class="fp-table">
@@ -321,6 +326,7 @@
           <tbody id="tbody-localease"></tbody>
         </table>
       </div>
+      <div id="loc-cards" class="ls-cards hidden"></div>
       <p class="text-xs text-slate-500 mt-3">Une même <b>offre</b> peut couvrir 2 véhicules (ex. <b>26MI086362</b> = Samira + David, <b>26AV048042</b> = les 2 « Nouveau collaborateur »). Clique sur « + téléverser » pour <b>enregistrer le PDF du contrat sur Supabase</b> (comme les cartes grises) — consultable depuis tous les postes.</p>
       <input type="file" id="loc-upload-file" accept="application/pdf,image/*" class="hidden" />
       <div class="mt-3 pt-3 border-t border-slate-100">
@@ -1284,7 +1290,7 @@
         </div>
       </div>`;
     }).join('');
-    applyLeasingView(rows.length === 0);
+    applyLeasingView();
 
     { const nl = getLoueurs().length; $('leasing-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} en leasing` + (nl > 1 ? ` · ${nl} loueurs` : ''); }
 
@@ -1472,17 +1478,24 @@
   }
   $('tbody-leasing').addEventListener('click', leaseAction);
   if ($('ls-cards')) $('ls-cards').addEventListener('click', leaseAction);
-  // Bascule Tableau / Cartes (mémorisée par société : FP.settings.leasingView).
-  function applyLeasingView(forceTable){
-    let pref = 'table'; try { if (window.FP && FP.settings) pref = (FP.settings.get().leasingView === 'cards') ? 'cards' : 'table'; } catch (e) {}
-    const v = forceTable ? 'table' : pref;
-    const tbl = document.querySelector('#leasing-bpce-body table.fp-table'), scroll = tbl ? tbl.closest('.scrollable') : null, cardsBox = $('ls-cards');
-    if (scroll) scroll.classList.toggle('hidden', v === 'cards');
-    if (cardsBox) cardsBox.classList.toggle('hidden', v !== 'cards');
-    const tg = $('ls-view'); if (tg) tg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.v === pref));
+  // ⚠️ GÉNÉRIQUE : la vue Tableau/Cartes du leasing gouverne TOUTES les sections de leasing
+  // (BPCE + Localease/LLD, donc tous les loueurs actuels ET futurs — un nouveau loueur atterrit
+  // dans l'une de ces 2 tables et hérite automatiquement du basculement). Une seule préférence
+  // société (FP.settings.leasingView). ⚠️ Si on ajoute un jour une AUTRE table de leasing, l'ajouter ici.
+  const LEASING_VIEWS = [['#leasing-bpce-body table.fp-table', 'ls-cards'], ['[data-section="localease"] table.fp-table', 'loc-cards']];
+  function applyLeasingView(){
+    let v = 'table'; try { if (window.FP && FP.settings) v = (FP.settings.get().leasingView === 'cards') ? 'cards' : 'table'; } catch (e) {}
+    LEASING_VIEWS.forEach(([tblSel, cardsId]) => {
+      const tbl = document.querySelector(tblSel), scroll = tbl ? tbl.closest('.scrollable') : null, cardsBox = document.getElementById(cardsId);
+      const showCards = (v === 'cards') && cardsBox && cardsBox.children.length > 0; // section vide → on garde le tableau (message « aucun »)
+      if (scroll) scroll.classList.toggle('hidden', showCards);
+      if (cardsBox) cardsBox.classList.toggle('hidden', !showCards);
+    });
+    document.querySelectorAll('#ls-view button, #loc-view button').forEach(b => b.classList.toggle('active', b.dataset.v === v));
     if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
   }
-  { const vt = $('ls-view'); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.leasingView = b.dataset.v; FP.settings.save(s); } } catch (e) {} applyLeasingView(); })); }
+  function setLeasingView(mode){ try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.leasingView = mode; FP.settings.save(s); } } catch (e) {} applyLeasingView(); }
+  ['ls-view', 'loc-view'].forEach(id => { const vt = document.getElementById(id); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => setLeasingView(b.dataset.v))); });
   $('lease-cancel').addEventListener('click', closeLeaseModal);
   $('lease-modal').addEventListener('click', e => { if (e.target.id === 'lease-modal') closeLeaseModal(); });
   $('lease-save').addEventListener('click', () => {
@@ -1778,7 +1791,7 @@
     // Recherche (comme BPCE) : ne filtre QUE les lignes affichées, pas les KPIs (totaux du loueur).
     const q = FP.norm(localeaseSearch).trim();
     const shown = q ? matched.filter(({ c }) => FP.norm(`${c.immat || ''} ${c.marque || ''} ${c.modele || ''} ${c.conducteur || ''}`).includes(q)) : matched;
-    tbody.innerHTML = shown.map(({ c, i })=>{
+    const _lc = shown.map(({ c, i })=>{
       const dur = Number(c.dureeMois) || 0;
       // Lien AUTO avec l'onglet Véhicules (par prénom/plaque via autoImmatLoc) → on récupère le
       // véhicule lié. Si la date de début n'est pas saisie, on prend sa date de MISE EN CIRCULATION
@@ -1849,24 +1862,51 @@
         const inFleet = (data.vehicules || []).some(v => normPlaque(v.immat) === normPlaque(auto));
         return `<span class="cursor-pointer underline decoration-dotted ${c.immat ? '' : 'text-slate-500'}" data-loc-immat="${i}" title="${c.immat ? 'Modifier la plaque' : 'Plaque liée automatiquement depuis la fiche véhicule — cliquer pour forcer'}">${escC(auto)}</span>`
           + (inFleet ? '' : `<div><button type="button" class="btn btn-outline" style="padding:1px 7px;font-size:10.5px;margin-top:3px;color:var(--fp-accent);border-color:#FDBA74" data-loc-tofleet="${i}" title="Ce véhicule n'est pas dans la liste Véhicules — cliquer pour l'y ajouter">➕ flotte</button></div>`); })();
-      // Colonnes IDENTIQUES à BPCE (+ Début de contrat) :
-      return `<tr>
+      // --- Cellules d'affichage, calculées UNE fois et partagées par le Tableau ET les Cartes ---
+      const vehHtml = `${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}${c.offre?`<div class="text-xs text-slate-400">offre ${escC(c.offre)}</div>`:''}`;
+      const condHtml = `<span class="cursor-pointer underline decoration-dotted" data-loc-cond="${i}" title="Affecter / changer le conducteur">${c.conducteur ? escC(c.conducteur) : '<span class="text-slate-400">+ affecter</span>'}</span>`;
+      const loueurTxt = escC((c.loueur || '').toString().trim() || localeaseLabel());
+      const kmTotalHtml = c.kmTotal ? FP.num(c.kmTotal) + ' km' : '<span class="text-slate-400">—</span>';
+      const projHtml = proj != null ? '~' + FP.num(proj) + ' km' : '<span class="text-slate-400">—</span>';
+      const totalVerseHtml = totalVerse != null ? `<span${totalVerseEst ? ' class="cursor-help" title="Estimation basée sur la date de mise en circulation. Clique la date de « Début de contrat » pour saisir la vraie date et obtenir le montant exact."' : ''}>${totalVerseEst ? '~' : ''}${FP.euroPrecis(totalVerse)}</span>` : '<span class="text-slate-400">—</span>';
+      const loyerHtml = loyerCourant != null ? FP.euroPrecis(loyerCourant) : '<span class="text-slate-400">—</span>';
+      const tvsHtml = (() => { const d = (linkedV && FP.tvsDetail) ? FP.tvsDetail(linkedV) : null; const val = (d && d.applicable && d.total != null) ? d.total : tvsEst(c); return FP.euro(val); })();
+      const actionsHtml = `${docsHtml}<button type="button" class="btn btn-outline text-xs !px-2" data-loc-edit="${i}" title="Modifier le contrat (forfait km, durée, loyer, dates…)"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button> <button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px" data-loc-up="${i}" title="Ajouter / téléverser un document"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'doc' : '+ doc'}</button> <button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>`;
+      const tr = `<tr>
         <td class="font-mono">${immatCell}</td>
-        <td>${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}${c.offre?`<div class="text-xs text-slate-400">offre ${escC(c.offre)}</div>`:''}</td>
-        <td class="font-medium"><span class="cursor-pointer underline decoration-dotted" data-loc-cond="${i}" title="Affecter / changer le conducteur">${c.conducteur ? escC(c.conducteur) : '<span class="text-slate-400">+ affecter</span>'}</span></td>
-        <td class="text-sm text-slate-600">${escC((c.loueur || '').toString().trim() || localeaseLabel())}</td>
-        <td>${c.kmTotal ? FP.num(c.kmTotal) + ' km' : '<span class="text-slate-400">—</span>'}</td>
+        <td>${vehHtml}</td>
+        <td class="font-medium">${condHtml}</td>
+        <td class="text-sm text-slate-600">${loueurTxt}</td>
+        <td>${kmTotalHtml}</td>
         <td style="text-align:right">${kmActCell}</td>
-        <td style="text-align:right">${proj != null ? '~' + FP.num(proj) + ' km' : '<span class="text-slate-400">—</span>'}</td>
+        <td style="text-align:right">${projHtml}</td>
         <td>${statutCell}</td>
         <td style="text-align:center">${debutCell}</td>
         <td style="text-align:center">${finCell}</td>
-        <td class="font-semibold" style="text-align:right">${totalVerse != null ? `<span${totalVerseEst ? ' class="cursor-help" title="Estimation basée sur la date de mise en circulation. Clique la date de « Début de contrat » pour saisir la vraie date et obtenir le montant exact."' : ''}>${totalVerseEst ? '~' : ''}${FP.euroPrecis(totalVerse)}</span>` : '<span class="text-slate-400">—</span>'}</td>
-        <td style="text-align:right">${loyerCourant != null ? FP.euroPrecis(loyerCourant) : '<span class="text-slate-400">—</span>'}</td>
-        <td style="text-align:right">${(() => { const d = (linkedV && FP.tvsDetail) ? FP.tvsDetail(linkedV) : null; const val = (d && d.applicable && d.total != null) ? d.total : tvsEst(c); return FP.euro(val); })()}</td>
-        <td style="text-align:center;white-space:nowrap">${docsHtml}<button type="button" class="btn btn-outline text-xs !px-2" data-loc-edit="${i}" title="Modifier le contrat (forfait km, durée, loyer, dates…)"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button> <button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px" data-loc-up="${i}" title="Ajouter / téléverser un document"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'doc' : '+ doc'}</button> <button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button></td>
+        <td class="font-semibold" style="text-align:right">${totalVerseHtml}</td>
+        <td style="text-align:right">${loyerHtml}</td>
+        <td style="text-align:right">${tvsHtml}</td>
+        <td style="text-align:center;white-space:nowrap">${actionsHtml}</td>
       </tr>`;
-    }).join('');
+      return { immatCell, vehHtml, condHtml, loueurTxt, kmTotalHtml, kmActCell, projHtml, statutCell, debutCell, finCell, totalVerseHtml, loyerHtml, tvsHtml, actionsHtml, tr };
+    });
+    tbody.innerHTML = _lc.map(b => b.tr).join('');
+    const locBox = $('loc-cards');
+    if (locBox) locBox.innerHTML = _lc.map(b => `<div class="ls-card">
+      <div class="ls-top"><div><span class="ls-immat">${b.immatCell}</span> <span class="ls-veh">${b.vehHtml}</span><br><span class="ls-sub">${b.condHtml} · ${b.loueurTxt}</span></div><div>${b.statutCell}</div></div>
+      <div class="ls-grid">
+        <div><span class="k">Loyer / mois</span><b>${b.loyerHtml}</b></div>
+        <div><span class="k">Forfait km</span><b>${b.kmTotalHtml}</b></div>
+        <div><span class="k">Km actuel</span><b>${b.kmActCell}</b></div>
+        <div><span class="k">Projection fin</span><b>${b.projHtml}</b></div>
+        <div><span class="k">Début</span><b>${b.debutCell}</b></div>
+        <div><span class="k">Fin de contrat</span><b>${b.finCell}</b></div>
+        <div><span class="k">Total versé</span><b>${b.totalVerseHtml}</b></div>
+        <div><span class="k">TVS / an</span><b>${b.tvsHtml}</b></div>
+      </div>
+      <div class="ls-actions" style="flex-wrap:wrap">${b.actionsHtml}</div>
+    </div>`).join('');
+    applyLeasingView();
     if (window.lucide) lucide.createIcons();
   }
 
@@ -2027,7 +2067,7 @@
   if ($('locadd-save')) $('locadd-save').addEventListener('click', saveLocAdd);
 
   let _locUpIdx = null;
-  $('tbody-localease').addEventListener('click', async (e)=>{
+  const locAction = async (e)=>{
     const list = getLocalease();
     const save = () => { const s=FP.settings.get(); s.localeaseContrats=list; FP.settings.save(s); renderLocalease(); };
     const ed=e.target.closest('[data-loc-edit]'); if(ed){ openLocEditModal(+ed.dataset.locEdit); return; }
@@ -2076,7 +2116,10 @@
       return; }
     const dd=e.target.closest('[data-loc-doc-del]'); if(dd){ const [i,di]=dd.dataset.locDocDel.split(':').map(Number); if(Array.isArray(list[i].docs)){ list[i].docs.splice(di,1); list[i].pdfUrl=list[i].docs[0]?list[i].docs[0].url:null; save(); } return; }
     const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; const immat=c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):''); if(!await FP.confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${immat?' ('+immat+')':''} ?`)) return; try{ if(FP.trash) FP.trash.add('leasing', c); }catch(_){} list.splice(i,1); save(); if(immat && (data.vehicules||[]).some(x=>FP.normImmat(x.immat)===FP.normImmat(immat))){ if(await FP.confirm(`Supprimer AUSSI le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible (leasing, assurance, liste véhicules…).`)){ if(deleteVehiculeFlotte(immat)) refreshAllContrats(); } } if(FP.toast)FP.toast('Contrat supprimé'); return; }
-  });
+  };
+  // Mêmes actions en vue Tableau ET en vue Cartes.
+  $('tbody-localease').addEventListener('click', locAction);
+  if ($('loc-cards')) $('loc-cards').addEventListener('click', locAction);
   // Téléversement du PDF du contrat vers Supabase (bucket scans, comme les cartes grises)
   $('loc-upload-file').addEventListener('change', async (e)=>{
     const file = e.target.files && e.target.files[0]; e.target.value='';
