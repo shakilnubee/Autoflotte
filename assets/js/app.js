@@ -7510,7 +7510,13 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(148, 163, 184);
       const g = 'GESTION DE FLOTTE'; doc.text(g, pageW - 16 - doc.getTextWidth(g), 24);
     };
-    const columnStyles = { 0: { halign: 'left', textColor: [148, 163, 184], cellWidth: 12, cellPadding: { top: 2.6, right: 1.5, bottom: 2.6, left: 2 }, overflow: 'visible' } };
+    // Mise à l'échelle selon le NOMBRE de colonnes : avec « toutes les colonnes » (≈20), une police
+    // de 9 pt se replie sur plusieurs lignes et devient illisible. On réduit progressivement police
+    // + marges pour que chaque cellule tienne sur une ligne, tout en restant net pour peu de colonnes.
+    const _nc = cols.length + 1;
+    const _fs = _nc > 16 ? 6 : _nc > 13 ? 6.6 : _nc > 10 ? 7.3 : _nc > 7 ? 8.2 : 9;
+    const _pad = _nc > 13 ? 1.5 : _nc > 10 ? 2 : _nc > 7 ? 2.3 : 2.6;
+    const columnStyles = { 0: { halign: 'left', textColor: [148, 163, 184], cellWidth: _nc > 13 ? 9 : 12, cellPadding: { top: _pad, right: 1.2, bottom: _pad, left: 1.6 }, overflow: 'visible' } };
     cols.forEach((col, idx) => { columnStyles[idx + 1] = { halign: col.align === 'right' ? 'right' : 'left', font: col.mono ? 'courier' : 'helvetica' }; });
     // Ligne de total (si au moins une colonne a une fonction `sum`) → pied de tableau « TOTAL ».
     let foot = null;
@@ -7536,8 +7542,8 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       foot: foot || undefined,
       footStyles: { fillColor: [241, 245, 249], textColor: [15, 30, 61], fontStyle: 'bold', fontSize: 9, lineColor: [203, 213, 225], lineWidth: 0.1 },
       startY: 36, margin: { top: 36, left: 10, right: 10 }, tableWidth: pageW - 20, theme: 'grid',
-      styles: { fontSize: 9, cellPadding: { top: 2.6, right: 3, bottom: 2.6, left: 3 }, textColor: [30, 41, 59], lineColor: [233, 238, 245], lineWidth: 0.1, valign: 'middle' },
-      headStyles: { fillColor: [15, 30, 61], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: [15, 30, 61], lineWidth: 0, cellPadding: { top: 3, right: 3, bottom: 3, left: 3 } },
+      styles: { fontSize: _fs, cellPadding: { top: _pad, right: _pad + 0.4, bottom: _pad, left: _pad + 0.4 }, textColor: [30, 41, 59], lineColor: [233, 238, 245], lineWidth: 0.1, valign: 'middle', overflow: 'linebreak' },
+      headStyles: { fillColor: [15, 30, 61], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: Math.max(6, _fs - 0.5), lineColor: [15, 30, 61], lineWidth: 0, cellPadding: { top: _pad + 0.4, right: _pad + 0.4, bottom: _pad + 0.4, left: _pad + 0.4 } },
       alternateRowStyles: { fillColor: [247, 249, 252] },
       columnStyles: columnStyles,
       didParseCell: (data) => {
