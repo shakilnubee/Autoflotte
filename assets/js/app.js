@@ -827,7 +827,7 @@ FP.filterResetButton = function (bar, opts) {
     btn.className = 'fp-filter-reset';
     btn.title = 'Réinitialiser les filtres';
     btn.innerHTML = '<i data-lucide="rotate-ccw" style="width:14px;height:14px"></i><span>Réinitialiser</span>';
-    btn.style.cssText = 'display:inline-flex;align-items:center;gap:.35rem;padding:.5rem .8rem;border:1px solid var(--fp-border,#E3E8F0);border-radius:9999px;background:#fff;color:var(--fp-muted,#5A6577);font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap';
+    btn.style.cssText = 'display:inline-flex;align-items:center;gap:.35rem;padding:.5rem .8rem;border:1px solid var(--fp-border,#E3E8F0);border-radius:9999px;background:var(--fp-surface,#fff);color:var(--fp-muted,#5A6577);font-size:.82rem;font-weight:600;cursor:pointer;white-space:nowrap';
     btn.addEventListener('click', () => {
       if (typeof opts.onReset === 'function') { try { opts.onReset(); } catch (e) {} }
       else if (barEl) {
@@ -7788,7 +7788,7 @@ FP.injectDataIO = function (cfg) {
       ov.innerHTML =
         '<div style="background:#fff;border-radius:16px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;max-height:90vh">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #E2E8F0">'
-        + '<div style="font-weight:800;color:var(--fp-primary,#0f1d3d)"><i data-lucide="clipboard-paste" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Importer par collage (Excel / Google Sheets)</div>'
+        + '<div style="font-weight:800;color:var(--fp-primary)"><i data-lucide="clipboard-paste" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Importer par collage (Excel / Google Sheets)</div>'
         + '<button id="fp-io-close" style="border:none;background:transparent;cursor:pointer;color:#94A3B8;font-size:20px;line-height:1">&times;</button></div>'
         + '<div style="padding:18px;overflow:auto">'
         + '<p style="font-size:13px;color:#475569;margin-bottom:8px">Dans Excel/Sheets, sélectionne les cellules <b>avec la ligne d\'en-têtes</b>, copie (Ctrl+C) puis colle ici (Ctrl+V). Colonnes reconnues : <b>' + esc(cols.map(c => c.label).join(' · ')) + '</b>. <button id="fp-io-tpl" type="button" style="border:none;background:transparent;color:var(--fp-accent,#F97316);font-weight:700;cursor:pointer;padding:0">Copier la ligne d\'en-têtes</button></p>'
