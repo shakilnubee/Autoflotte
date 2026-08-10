@@ -156,7 +156,7 @@
 
     <table>
       <thead>
-        <tr><th>Désignation</th><th class="r">Qté</th><th class="r">P.U.</th><th class="r">Total</th></tr>
+        <tr><th>Désignation</th><th class="r">Qté</th><th class="r">P.U.</th><th class="r">Total</th><th class="r">/ mois</th></tr>
       </thead>
       <tbody id="o-lines"></tbody>
     </table>
@@ -280,7 +280,8 @@ function render(){
             : nb+' véhicules × '+euro0(pv)+' / véhicule / mois')
           + (socn>1?' · multi-sociétés ('+socn+')':'')
           + ' · engagement 12 mois',
-      qte:nb, pu:puAnVeh, puUnit:'/an', total:totalAn
+      qte:nb, pu:puAnVeh, puUnit:'/an', total:totalAn,
+      mois:loyerMensuel, moisSub:euro0(loyerMensuel/nb)+' / véh'   // coût mensuel total + par véhicule
     });
   }
 
@@ -307,9 +308,14 @@ function render(){
   var html = lignes.map(function(l){
     var pu = (l.pu==null) ? '—' : (l.offert ? '<span class="strike">'+euro(l.pu)+'</span>' : euro(l.pu)+(l.puUnit||''));
     var tot = l.surDevis ? '<span class="tag-ok">Sur devis</span>' : (l.offert ? '<span class="tag-ok">Offert</span>' : euro(l.total));
-    return '<tr><td><b>'+esc(l.des)+'</b>'+(l.det?'<div class="d">'+l.det+'</div>':'')+'</td><td class="r">'+l.qte+'</td><td class="r">'+pu+'</td><td class="r">'+tot+'</td></tr>';
+    // Colonne « / mois » : coût mensuel de la ligne. Lignes ponctuelles (mise en service, prestations) =
+    // paiement unique → pas de mensuel (« — »). Gestion = total ÷ 12 + rappel du coût par véhicule/mois.
+    var mo = (l.mois==null || !(l.mois>0))
+      ? (l.surDevis ? '<span class="d">sur devis</span>' : '<span class="d" title="Paiement unique">—</span>')
+      : (euro(l.mois)+(l.moisSub?'<div class="d">'+l.moisSub+'</div>':''));
+    return '<tr><td><b>'+esc(l.des)+'</b>'+(l.det?'<div class="d">'+l.det+'</div>':'')+'</td><td class="r">'+l.qte+'</td><td class="r">'+pu+'</td><td class="r">'+tot+'</td><td class="r">'+mo+'</td></tr>';
   }).join('');
-  if (montantRemise>0) html += '<tr><td><b>Remise commerciale</b><div class="d">'+remise+' % (hors prestations ponctuelles)</div></td><td class="r"></td><td class="r"></td><td class="r" style="color:var(--ok)">− '+euro(montantRemise)+'</td></tr>';
+  if (montantRemise>0) html += '<tr><td><b>Remise commerciale</b><div class="d">'+remise+' % (hors prestations ponctuelles)</div></td><td class="r"></td><td class="r"></td><td class="r" style="color:var(--ok)">− '+euro(montantRemise)+'</td><td class="r" style="color:var(--ok)">− '+euro(montantRemise/12)+'</td></tr>';
   $('o-lines').innerHTML = html;
 
   // -- Total à payer --
@@ -321,7 +327,7 @@ function render(){
 
   // -- Récurrence (ce que ça coûte "après") --
   $('o-recur').textContent = devisFlotte ? 'Gestion mensuelle établie après analyse de la flotte'
-    : ('Puis ' + euro(loyerMensuel*12) + ' / an de gestion');
+    : ('Puis ' + euro(loyerMensuel*12) + ' / an de gestion — soit ' + euro(loyerMensuel) + ' / mois (' + euro0(loyerMensuel/nb) + ' / véhicule / mois)');
 
   // -- ROI --
   if (devisFlotte) {
