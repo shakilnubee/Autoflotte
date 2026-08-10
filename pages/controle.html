@@ -439,11 +439,15 @@
     // AUTOMATIQUE sur tout l'historique si la requête filtrée échoue (colonne absente…) → jamais de
     // trouvailles vides par erreur. Lectures EN PARALLÈLE (total_conso_tx + ulys_conso).
     const _d = new Date(); _d.setMonth(_d.getMonth() - 24); const cutoff = _d.toISOString().slice(0, 10);
+    // On ne demande QUE les colonnes utiles (payload ~5× plus léger que select('*')) + les 24 derniers
+    // mois. Repli en cascade si la requête échoue → jamais de trouvailles vides par erreur.
+    const COLS = 'id,conducteur,carte,plaque,date_tx,mois,categorie,montant_ttc,produit,facnum,societe';
     let [rt, ru] = await Promise.all([
-      FP.supabase.from('total_conso_tx').select('*').gte('date_tx', cutoff).then(r => r, () => null),
+      FP.supabase.from('total_conso_tx').select(COLS).gte('date_tx', cutoff).then(r => (r && !r.error ? r : null), () => null),
       FP.supabase.from('ulys_conso').select('*').then(r => r, () => ({ data: [] }))
     ]);
-    if (!rt || rt.error) { rt = await FP.supabase.from('total_conso_tx').select('*').then(r => r, () => ({ data: [] })); }
+    if (!rt) { rt = await FP.supabase.from('total_conso_tx').select('*').gte('date_tx', cutoff).then(r => (r && !r.error ? r : null), () => null); }
+    if (!rt) { rt = await FP.supabase.from('total_conso_tx').select('*').then(r => r, () => ({ data: [] })); }
     _tx = flt(rt && rt.data); _ulys = flt(ru && ru.data);
     _loaded = true;
     _writeCtrlCache();
