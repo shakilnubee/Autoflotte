@@ -1344,7 +1344,7 @@ FP._condParNumero = (settingKey, lu) => {
   for (const key in map) { if (FP.carteMatch(map[key], lu)) partiels.push(key); }
   if (partiels.length === 1) return _condOut(partiels[0]);
   return null; // 0 ou ≥2 correspondances partielles → on laisse le repli nom/plaque décider
-  function _condOut(key) { let name = key; try { const c = FP.conducteurs.list().find(x => x.key === key); if (c) name = FP.conducteurs.displayName(c); } catch (e) {} return { key, name }; }
+  function _condOut(key) { let name = key; try { const all = FP.conducteursTous ? FP.conducteursTous() : FP.conducteurs.list(); const c = all.find(x => x.key === key); if (c) name = FP.conducteurs.displayName(c); } catch (e) {} return { key, name }; }
 };
 // Conducteur associé à un n° de carte Total / badge Ulys enregistré sur une fiche conducteur (ou null).
 FP.conducteurParCarteTotal = (lu) => FP._condParNumero('condCarteTotal', lu);
@@ -1560,6 +1560,16 @@ FP.addSociete = (name) => {
   if (arr.some(x => x.toLowerCase() === name.toLowerCase())) return false;
   arr.push(name);
   try { localStorage.setItem(FP.SOCIETES_KEY, JSON.stringify(arr)); } catch (e) {}
+  // ⚠️ SYNC MULTI-APPAREILS (règle 0-sync) : la liste des sociétés DOIT aussi vivre côté serveur
+  // (app_settings), sinon une société créée sur le PC reste invisible sur le téléphone (localStorage
+  // n'est qu'un cache local). On aligne s.societes sur removeSociete.
+  try {
+    const s = FP.settings.get();
+    s.societes = Array.isArray(s.societes) ? s.societes : [];
+    if (!s.societes.includes('PXP')) s.societes.unshift('PXP');
+    if (!s.societes.some(x => String(x).toLowerCase() === name.toLowerCase())) s.societes.push(name);
+    FP.settings.save(s);
+  } catch (e) {}
   return true;
 };
 // Retire une société de la LISTE (registre) — CEO only côté UI. La maison « PXP » est protégée.

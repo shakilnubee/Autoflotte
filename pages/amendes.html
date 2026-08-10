@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260810h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260810i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260810h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260810i">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -473,11 +473,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260810h"></script>
-<script src="../assets/js/supabase-client.js?v=20260810h"></script>
-<script src="../assets/js/data.js?v=20260810h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260810i"></script>
+<script src="../assets/js/supabase-client.js?v=20260810i"></script>
+<script src="../assets/js/data.js?v=20260810i"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260810h"></script>
+<script src="../assets/js/app.js?v=20260810i"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -742,7 +742,7 @@
   // === Configuration colonnes (éditables via drag / ✕ / dblclick) ===
   const AMENDES_COLUMNS = [
     { key: 'date',         label: 'Date',        defaultWidth: 110, render: a => FP.date(a.date) },
-    { key: 'prenom',       label: 'Conducteur',  defaultWidth: 140, cellCls: 'font-semibold', render: a => a.prenom ? FP.lienConducteur(a.prenom) : '<span class="text-slate-400">—</span>' },
+    { key: 'prenom',       label: 'Conducteur',  defaultWidth: 140, cellCls: 'font-semibold', render: a => a.prenom ? FP.lienConducteur(a.prenom, FP.conducteurNomUnifie ? FP.conducteurNomUnifie(a.prenom) : a.prenom) : '<span class="text-slate-400">—</span>' },
     { key: 'motif',        label: 'Motif',       defaultWidth: 200, render: a => motifPill(a.motif) },
     { key: 'montant',      label: 'Montant',     defaultWidth: 110, render: a => { const md = montantDu(a); const disp = md ? FP.euroPrecis(md) : '<span class="text-slate-400">—</span>';
         return (a.majoree && a.montantMajore)
@@ -1380,7 +1380,7 @@
     })();
     $('drawer-id').textContent = a.id;
     $('drawer-title').textContent = a.motif || 'Amende';
-    $('drawer-subtitle').textContent = `${a.prenom || '—'} · ${FP.date(a.date)}`;
+    $('drawer-subtitle').textContent = `${(a.prenom ? (FP.conducteurNomUnifie ? FP.conducteurNomUnifie(a.prenom) : a.prenom) : '') || '—'} · ${FP.date(a.date)}`;
 
     $('drawer-body').innerHTML = `
       <div style="text-align:center; padding:.2rem 0 .5rem">
@@ -1576,7 +1576,9 @@
     // (la plateforme demande alors ses infos). Règle projet — FP.conducteurPicker.
     if (FP.conducteurPicker && $('am-cond-input')) {
       FP.conducteurPicker($('am-cond-input'), { onPick: (cond) => {
-        const nm = (cond && (cond.name || cond.prenom)) || (FP.conducteurs.displayName ? FP.conducteurs.displayName(cond) : '');
+        // Nom COMPLET (prénom + nom de famille) — displayName d'abord, sinon repli. Avant, on prenait
+        // cond.name en premier (souvent le prénom seul d'un import Ulys) → le nom de famille était perdu.
+        const nm = (FP.conducteurs.displayName ? FP.conducteurs.displayName(cond) : '') || (cond && (cond.name || cond.prenom)) || '';
         if (!nm) return;
         if (FP.history && FP.history.commit) FP.history.commit();
         a.prenom = nm;

@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260810h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260810i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260810h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260810i">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -380,8 +380,8 @@
     <form id="edit-form" class="space-y-4" style="max-height:70vh;overflow-y:auto">
       <div class="text-xs font-bold uppercase tracking-wider text-slate-400">Identité</div>
       <div class="grid grid-cols-2 gap-3">
-        <div><div class="field-label">Prénom</div><input class="field-input" id="e-prenom" placeholder="ex. Julie" /></div>
-        <div><div class="field-label">Nom</div><input class="field-input" id="e-nom" placeholder="ex. Martin" /></div>
+        <div><div class="field-label">Prénom</div><input class="field-input" id="e-prenom" placeholder="Prénom" /></div>
+        <div><div class="field-label">Nom</div><input class="field-input" id="e-nom" placeholder="Nom de famille" /></div>
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div><div class="field-label">Date de naissance</div><input class="field-input" id="e-dateNaissance" type="date" /></div>
@@ -491,12 +491,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260810h"></script>
-<script src="../assets/js/supabase-client.js?v=20260810h"></script>
-<script src="../assets/js/data.js?v=20260810h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260810i"></script>
+<script src="../assets/js/supabase-client.js?v=20260810i"></script>
+<script src="../assets/js/data.js?v=20260810i"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/fleet-docs.js?v=20260810h"></script>
-<script src="../assets/js/app.js?v=20260810h"></script>
+<script src="../assets/js/fleet-docs.js?v=20260810i"></script>
+<script src="../assets/js/app.js?v=20260810i"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1614,7 +1614,25 @@
     const apply = (nv) => {
       if (FP.history && FP.history.commit) FP.history.commit();
       const changes = { [field]: nv, manuel: true };
-      if (field !== 'name') changes.name = r.name || (d && d.name) || key;
+      if (field === 'prenom' || field === 'nom') {
+        // On édite le prénom OU le nom de famille → on recompose le nom affiché « Prénom Nom »
+        // pour que le changement se reflète PARTOUT (en-tête, relevés Ulys, recherches). Si le
+        // prénom séparé n'existe pas encore, on le dérive du nom affiché (moins le nom de famille)
+        // pour ne PAS perdre « Eugénie » quand on ajoute juste « TRAN ».
+        const prenomCur = ((r.prenom != null ? r.prenom : (d && d.prenom)) || '');
+        const nomCur = ((r.nom != null ? r.nom : (d && d.nom)) || '');
+        const nameCur = ((r.name != null ? r.name : (d && d.name)) || '');
+        const nom = field === 'nom' ? nv : nomCur;
+        // Prénom effectif : le champ prénom s'il existe, sinon on le dérive du nom affiché en lui
+        // retirant le nom de famille (celui qu'on est en train de poser OU l'ancien) — évite « TRAN TRAN ».
+        let baseP = prenomCur;
+        if (!baseP) { let b = String(nameCur).trim(); const stripN = nom || nomCur; if (stripN && b.toLowerCase().endsWith(stripN.toLowerCase())) b = b.slice(0, b.length - stripN.length).trim(); baseP = b; }
+        const prenom = field === 'prenom' ? nv : baseP;
+        if (prenom && changes.prenom == null) changes.prenom = prenom; // normalise la fiche (prénom séparé rempli)
+        changes.name = [prenom, nom].filter(Boolean).join(' ').trim() || nameCur || key;
+      } else if (field !== 'name') {
+        changes.name = r.name || (d && d.name) || key;
+      }
       upsertCond(key, changes);
       drivers = buildDrivers(); renderKPIs(); renderGrid();
       openDrawer(currentDriverKey);
@@ -1779,8 +1797,18 @@
     const d = drivers.find(x => x.key === key);
     if (!d) return;
     const iso = v => v ? String(v).slice(0, 10) : '';
-    $('e-prenom').value = d.prenom || '';
-    $('e-nom').value = d.nom || '';
+    // Pré-remplissage du prénom : un conducteur créé depuis un relevé (Ulys, amende…) n'a souvent
+    // QUE son « nom affiché » (d.name = « Eugénie »), sans champ prénom séparé. On part alors du nom
+    // affiché pour que le champ ne soit pas vide — l'utilisateur n'a plus qu'à AJOUTER le nom de famille.
+    let _preP = d.prenom || '';
+    const _preN = d.nom || '';
+    if (!_preP && d.name) {
+      let base = String(d.name).trim();
+      if (_preN && base.toLowerCase().endsWith(_preN.toLowerCase())) base = base.slice(0, base.length - _preN.length).trim();
+      _preP = base;
+    }
+    $('e-prenom').value = _preP;
+    $('e-nom').value = _preN;
     $('e-dateNaissance').value = iso(d.dateNaissance);
     $('e-poste').value = d.poste || '';
     $('e-tel').value = d.tel || '';
@@ -1821,9 +1849,17 @@
       permisExpiration: v('e-permisExpiration') || null,
       note: v('e-note') || null,
     };
-    // Nom affiché : si prénom ET nom sont renseignés, on met à jour le titre « Prénom Nom »
-    // (la clé interne du conducteur, elle, ne change pas → aucun lien amende/véhicule cassé).
-    if (patch.prenom && patch.nom) patch.name = `${patch.prenom} ${patch.nom}`;
+    // Nom affiché : on RECOMPOSE toujours « Prénom Nom » dès qu'au moins le prénom est renseigné
+    // (avant, il fallait prénom ET nom → un nom de famille ajouté seul n'apparaissait nulle part :
+    // ni dans l'en-tête, ni dans les relevés Ulys, ni dans les recherches). La clé interne du
+    // conducteur, elle, ne change pas → aucun lien amende/véhicule cassé.
+    let _p = patch.prenom || '';
+    const _n = patch.nom || '';
+    // Si le prénom saisi contient déjà le nom de famille en fin (ex. « Eugénie TRAN » + nom « TRAN »),
+    // on le retire pour ne pas écrire « Eugénie TRAN TRAN ».
+    if (_p && _n && _p.toLowerCase().endsWith(' ' + _n.toLowerCase())) { _p = _p.slice(0, _p.length - _n.length).trim(); patch.prenom = _p || patch.prenom; }
+    const _full = [_p, _n].filter(Boolean).join(' ').trim();
+    if (_full) patch.name = _full;
     if (FP.history && FP.history.commit) FP.history.commit();
     upsertCond(key, patch);
     // Points de permis : override manuel dans les réglages (vide = calcul automatique).
