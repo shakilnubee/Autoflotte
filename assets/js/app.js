@@ -40,24 +40,6 @@ window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStora
   } catch (e) { /* cache illisible : on garde data.js */ }
 })();
 
-// Rafraîchit le cache local (fp_data_cache_v3_<societe>) à partir de l'état EN MÉMOIRE (window.FP_DATA).
-// ⚠️ SOURCE UNIQUE : jusqu'ici le cache n'était réécrit qu'au chargement complet (loadAll). Une édition
-// unitaire (fiche véhicule OU « À compléter » en rafale) mettait à jour mémoire + Supabase mais PAS ce
-// cache → en changeant de page, le 1er rendu partait d'un instantané périmé et l'info paraissait « pas à
-// jour dans l'autre écran » (jusqu'au fp:data-ready). On rappelle ce helper après chaque écriture unitaire
-// pour que les DEUX écrans (Suivi ⇄ fiche) lisent la même donnée fraîche tout de suite.
-window.FP = window.FP || {};
-FP.refreshDataCache = function () {
-  try {
-    const CK = window.FP_CACHE_KEY; const d = window.FP_DATA;
-    if (!CK || !d) return;
-    try { localStorage.setItem(CK, JSON.stringify({ vehicules: d.vehicules, amendes: d.amendes, factures: d.factures, conducteurs: d.conducteurs })); }
-    catch (e) { // quota dépassé : on garde au moins véhicules + amendes + conducteurs (sans factures)
-      try { localStorage.setItem(CK, JSON.stringify({ vehicules: d.vehicules, amendes: d.amendes, conducteurs: d.conducteurs })); } catch (e2) {}
-    }
-  } catch (e) {}
-};
-
 // === Densité d'affichage (compact / confortable) — réglée dans Paramètres, appliquée à TOUTES les pages ===
 (function applyDensity(){ try { if ((localStorage.getItem('fp_density') || '') === 'compact') document.documentElement.classList.add('fp-compact'); } catch (e) {} })();
 
@@ -674,6 +656,23 @@ if (typeof window !== 'undefined') {
   if (window.FP) Object.assign(FP, window.FP); // récupère supabase, db, auth, dbReady, _clientLoaded…
   window.FP = FP;                              // une référence unique, partagée par toutes les pages
 }
+
+// Rafraîchit le cache local (fp_data_cache_v3_<societe>) à partir de l'état EN MÉMOIRE (window.FP_DATA).
+// ⚠️ SOURCE UNIQUE : le cache n'était réécrit qu'au chargement complet (loadAll). Une édition unitaire
+// (fiche véhicule OU « À compléter » en rafale) mettait à jour mémoire + Supabase mais PAS ce cache →
+// en changeant de page, le 1er rendu partait d'un instantané périmé. On rappelle ce helper après chaque
+// écriture unitaire pour que les DEUX écrans (Suivi ⇄ fiche) lisent la même donnée fraîche tout de suite.
+// ⚠️ Doit être défini APRÈS `const FP` (ci-dessus) — sinon ReferenceError (TDZ) qui casse toute l'app.
+FP.refreshDataCache = function () {
+  try {
+    const CK = window.FP_CACHE_KEY; const d = window.FP_DATA;
+    if (!CK || !d) return;
+    try { localStorage.setItem(CK, JSON.stringify({ vehicules: d.vehicules, amendes: d.amendes, factures: d.factures, conducteurs: d.conducteurs })); }
+    catch (e) { // quota dépassé : on garde au moins véhicules + amendes + conducteurs (sans factures)
+      try { localStorage.setItem(CK, JSON.stringify({ vehicules: d.vehicules, amendes: d.amendes, conducteurs: d.conducteurs })); } catch (e2) {}
+    }
+  } catch (e) {}
+};
 
 // === Rôle & droits utilisateur ===
 // 3 niveaux d'accès + le portail salarié :
