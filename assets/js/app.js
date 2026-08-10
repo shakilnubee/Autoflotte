@@ -7100,6 +7100,32 @@ FP.injectGlobalSearch = () => {
   });
 };
 
+// === Bouton bascule Clair / Sombre (injecté juste SOUS le logo, dans toutes les sidebars) ===
+// Utilise FP.darkMode (synchronisé Supabase + localStorage). La sidebar est toujours sombre → texte clair OK.
+FP.injectDarkToggle = () => {
+  document.querySelectorAll('.fp-sidebar').forEach(sb => {
+    if (sb.querySelector('.fp-dark-toggle')) return;
+    const logo = sb.querySelector('.fp-logo');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'fp-dark-toggle';
+    const render = () => {
+      const on = (FP.darkMode && FP.darkMode.get) ? FP.darkMode.get() : (document.body && document.body.classList.contains('fp-dark'));
+      btn.innerHTML = '<span class="fp-dt-ic" aria-hidden="true">' + (on ? '☀️' : '🌙') + '</span><span class="fp-dt-label">' + (on ? 'Mode clair' : 'Mode sombre') + '</span>';
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.title = on ? 'Passer en mode clair' : 'Passer en mode sombre';
+    };
+    render(); btn._render = render;
+    btn.addEventListener('click', () => {
+      try { if (FP.darkMode && FP.darkMode.toggle) FP.darkMode.toggle(); } catch (e) {}
+      // reflète l'état sur TOUTES les sidebars ouvertes (mobile + bureau)
+      document.querySelectorAll('.fp-dark-toggle').forEach(b => { try { b._render && b._render(); } catch (e) {} });
+    });
+    if (logo && logo.parentNode) logo.insertAdjacentElement('afterend', btn);
+    else sb.insertBefore(btn, sb.firstChild);
+  });
+};
+
 FP.searchAll = (q) => {
   if (!q || q.length < 2) return [];
   q = FP.norm(q).trim();
@@ -8182,6 +8208,8 @@ document.addEventListener('DOMContentLoaded', () => {
   FP.applyCustomTexts();
   // Injecter la barre de recherche globale dans toutes les sidebars
   FP.injectGlobalSearch();
+  // Bouton bascule Clair/Sombre juste sous le logo
+  FP.injectDarkToggle();
   // Injecter le bouton déconnexion en bas des sidebars
   FP.injectLogoutButton();
   // Confort transversal : bouton « + » flottant, ouverture directe #add, vue mobile en cartes, tour guidé
