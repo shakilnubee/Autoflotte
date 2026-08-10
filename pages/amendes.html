@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260810i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260810j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260810i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260810j">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -473,11 +473,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260810i"></script>
-<script src="../assets/js/supabase-client.js?v=20260810i"></script>
-<script src="../assets/js/data.js?v=20260810i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260810j"></script>
+<script src="../assets/js/supabase-client.js?v=20260810j"></script>
+<script src="../assets/js/data.js?v=20260810j"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260810i"></script>
+<script src="../assets/js/app.js?v=20260810j"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -715,7 +715,7 @@
       if (state.dateTo && (a.date || '') > state.dateTo) return false;
       // Filtre STRICT par conducteur : sur le prénom RÉEL de l'amende (jamais le commentaire) —
       // sinon un nom cité dans un commentaire d'une autre amende ressortirait à tort.
-      if (state.conducteur && FP.normPrenom(a.prenom) !== FP.normPrenom(state.conducteur)) return false;
+      if (state.conducteur && (FP.condGroupKey || FP.normPrenom)(a.prenom) !== (FP.condGroupKey || FP.normPrenom)(state.conducteur)) return false;
       if (q && !(FP.norm(`${a.prenom} ${a.motif} ${a.numeroAvis} ${a.commentaire}`).includes(q))) return false;
       return true;
     });
@@ -800,8 +800,8 @@
     if (groupByConducteur && rows.length) {
       const par = {};
       rows.forEach(a => {
-        const k = FP.normPrenom(a.prenom) || '—';   // regroupe Jean / JEAN / Jean Dupont (comme le dashboard)
-        if (!par[k]) par[k] = { label: (a.prenom || '—').trim() || '—', n: 0, montant: 0, points: 0 };
+        const k = (FP.condGroupKey || FP.normPrenom)(a.prenom) || '—';   // regroupe Jean / JEAN / Jean Dupont, mais SÉPARE deux homonymes qui ont un nom de famille (comme le dashboard)
+        if (!par[k]) par[k] = { label: (FP.conducteurNomUnifie ? FP.conducteurNomUnifie(a.prenom) : (a.prenom || '—')).trim() || '—', n: 0, montant: 0, points: 0 };
         par[k].n++; par[k].montant += montantDu(a); par[k].points += (Number(a.points) || 0);
       });
       const entries = Object.entries(par).sort((a, b) => b[1].montant - a[1].montant);
@@ -916,7 +916,7 @@
   function setConducteurFilter(name) {
     const nm = (name || '').trim();
     // Re-clic sur le même conducteur = on enlève le filtre
-    const same = !!nm && FP.normPrenom(state.conducteur) === FP.normPrenom(nm);
+    const same = !!nm && (FP.condGroupKey || FP.normPrenom)(state.conducteur) === (FP.condGroupKey || FP.normPrenom)(nm);
     // Filtre STRICT par conducteur (sur le prénom de l'amende, PAS la recherche texte → un nom
     // cité dans un commentaire ne ressort pas). On réinitialise les autres filtres pour être
     // sûr d'afficher TOUTES ses amendes.
@@ -1226,7 +1226,7 @@
     const yr = state.annee;
     const src = data.amendes.filter(a => yr === 'all' || yr == null || anneeOf(a) === String(yr));
     const agg = {};
-    src.forEach(a => { const k = FP.normPrenom(a.prenom) || '—'; if (!agg[k]) agg[k] = { label: (a.prenom || '—').trim() || '—', n: 0, montant: 0, points: 0 }; agg[k].n++; agg[k].montant += montantDu(a); agg[k].points += (Number(a.points) || 0); });
+    src.forEach(a => { const k = (FP.condGroupKey || FP.normPrenom)(a.prenom) || '—'; if (!agg[k]) agg[k] = { label: (FP.conducteurNomUnifie ? FP.conducteurNomUnifie(a.prenom) : (a.prenom || '—')).trim() || '—', n: 0, montant: 0, points: 0 }; agg[k].n++; agg[k].montant += montantDu(a); agg[k].points += (Number(a.points) || 0); });
     const all = Object.entries(agg).sort((a, b) => b[1].n - a[1].n || b[1].montant - a[1].montant);
     const shown = podiumExpanded ? all : all.slice(0, 5);
     const medals = ['🥇', '🥈', '🥉'];
