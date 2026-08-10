@@ -378,6 +378,23 @@ FP.montantDu = (a) => {
   }
   return (a.majoree && a.montantMajore != null && a.montantMajore !== '') ? Number(a.montantMajore) : (Number(a.montant) || 0);
 };
+// ⚠️ HELPER CANONIQUE — l'amende est-elle un FPS (Forfait Post-Stationnement) plutôt qu'un avis de
+// contravention ANTAI ? À UTILISER PARTOUT (règle « une seule source ») pour choisir le BON site de
+// paiement et le BON délai : FPS → stationnement.gouv.fr (RAPO ~3 mois, PAS de désignation ANTAI) ;
+// contravention → amendes.gouv.fr (minoré ~45 j, désignation ANTAI possible).
+// ⚠️ « Stationnement » seul ne suffit PAS : un « stationnement gênant/interdit » est une CONTRAVENTION,
+// pas un FPS. On tranche : (1) mention explicite FPS/forfait post-stationnement → FPS ; sinon
+// (2) présence d'un n° de télépaiement ANTAI → contravention ; sinon (3) « stationnement (payant) »
+// sans mention gênant/interdit → FPS.
+FP.estFps = (a) => {
+  if (!a) return false;
+  const m = (a.motif || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (/forfait\s*post.?stationnement/.test(m) || /\bf\.?p\.?s\.?\b/.test(m)) return true;
+  const tel = (a.numeroTelepaiement || '').toString().replace(/\D/g, '');
+  if (tel.length >= 10) return false; // n° de télépaiement ANTAI présent ⇒ contravention amendes.gouv.fr
+  if (/stationnement/.test(m) && !/(genant|interdit|dangereux|abusif|arret|double|trottoir|passage|livraison|bande|couloir|\bbus\b)/.test(m)) return true;
+  return false;
+};
 // Enregistre (ou efface si val vide) le montant réellement payé d'une amende — réglages par société, partagé entre postes.
 FP.setAmendeMontantPaye = (id, val) => {
   if (!FP.settings || id == null) return;
@@ -467,10 +484,23 @@ FP.leasingLocaleaseAnnuel = function () {
 // ⚠️ HELPER CANONIQUE — coût RESTANT À CHARGE d'une facture de sinistre : 0 si remboursé/pris en charge
 // (sinistreStatut ∈ {rembourse, pec}) ou si c'est un simple devis (sinistreStage ou mots devis/proforma/
 // estimation), sinon le TTC. Même règle que la page Sinistres et le KPI Statistiques.
+// Statut de suivi d'un sinistre (— / attente / pec / rembourse / refuse), SOURCE UNIQUE.
+// Le statut est saisi PAR INCIDENT (clé de groupe sinistreGroupes[id] || id) dans la page Sinistres,
+// mais l'import le pose parfois par id de facture. On résout donc via la clé de groupe D'ABORD,
+// puis repli sur l'id de facture → page, alertes et coûts lisent toujours la même valeur.
+FP.sinistreStatutOf = (f) => {
+  if (!f) return '';
+  try {
+    const s = FP.settings.get();
+    const grp = s.sinistreGroupes || {}, st = s.sinistreStatut || {};
+    const gk = grp[f.id] || f.id;
+    return (st[gk] || st[f.id] || '').toString().toLowerCase();
+  } catch (e) { return ''; }
+};
 FP.coutSinistre = (f) => {
   try {
     if (!f) return 0;
-    const st = ((FP.settings.get().sinistreStatut || {})[f.id] || '').toString().toLowerCase();
+    const st = FP.sinistreStatutOf(f);
     if (st === 'rembourse' || st === 'pec') return 0;
     const stage = ((FP.settings.get().sinistreStage || {})[f.id] || '').toString().toLowerCase();
     const isDevis = stage ? (stage === 'devis') : /\b(devis|proforma|estimation)\b/i.test(((f.description || '') + ' ' + (f.fournisseur || '')));
@@ -502,7 +532,22 @@ FP.resteChargeSinistre = function (factures) {
 // ⚠️ HELPER CANONIQUE — dédoublonnage des factures par n° (comme Statistiques / rapport direction) :
 // deux lignes qui partagent le même numeroFacture ne sont comptées qu'une fois (évite de gonfler les
 // totaux). Les factures sans numéro sont toutes gardées. À utiliser partout où on somme des factures.
-FP.dedupeFactures = (list) => { const seen = new Set(); return (list || []).filter(f => { const k = ((f && f.numeroFacture) || '').toString().toUpperCase(); if (!k) return true; if (seen.has(k)) return false; seen.add(k); return true; }); };
+FP.dedupeFactures = (list) => {
+  const seen = new Set();
+  // SOURCE UNIQUE : même normalisation/règle que FP.dupe pour les factures (n° normalisé — accents
+  // & ponctuation retirés — de longueur ≥ 4 ET même TTC). Sinon un n° court/séquentiel (« 24 ») ou
+  // deux vraies factures au même n° mais montants différents étaient fusionnés à tort (sous-comptage),
+  // et une variante de ponctuation (« FA-2026/01 » vs « FA 2026 01 ») n'était PAS fusionnée (sur-comptage).
+  const norm = (s) => (FP.dupe && FP.dupe._n) ? FP.dupe._n(s) : (s == null ? '' : String(s)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+  const numOf = (v) => (FP.dupe && FP.dupe._num) ? FP.dupe._num(v) : (() => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.')); return isNaN(n) ? null : n; })();
+  return (list || []).filter(f => {
+    const k = norm(f && f.numeroFacture);
+    if (!k || k.length < 4) return true; // n° absent ou trop court → jamais dédoublonné (peut être une 2e vraie facture)
+    const ttc = numOf(f && f.montantTTC);
+    const key = k + '|' + (ttc == null ? '' : ttc);
+    if (seen.has(key)) return false; seen.add(key); return true;
+  });
+};
 // ⚠️ HELPER CANONIQUE — coût d'exploitation d'un mois : factures dédoublonnées par n° + filtre exploit.
 // Même chiffre partout (dashboard, écran mural, rapport direction) — sinon un doublon de n° gonflait le mois.
 FP.coutMois = (data, ym) => (FP.dedupeFactures(((data && data.factures) || [])).filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0));
@@ -528,7 +573,13 @@ FP.EMP_RETOUR_INCONNU = '1900-01-01';
 // « 1900-01-01 » = rendu à une date inconnue, via la case « je ne connais pas la date de retour »).
 // EN COURS = aucune dateRetour du tout. (Ne PAS traiter la sentinelle comme « en cours ».)
 FP.empEnCours = (e) => !(e && e.dateRetour && String(e.dateRetour).slice(0, 10));
-FP.empEnRetard = (e) => { if (!FP.empEnCours(e)) return false; const p = (e && e.dateRetourPrevue) ? String(e.dateRetourPrevue).slice(0, 10) : ''; if (!p) return false; return p < new Date().toISOString().slice(0, 10); };
+// Jours écoulés depuis la date d'emprunt (calendaires, minuit → aujourd'hui).
+FP.empJoursDepuis = (e) => { const d = (e && e.dateEmprunt) ? new Date(String(e.dateEmprunt).slice(0, 10)) : null; if (!d || isNaN(d)) return 0; const t = new Date(); t.setHours(0, 0, 0, 0); return Math.floor((t - d) / 86400000); };
+// SOURCE UNIQUE « emprunt en retard » (règle choisie par l'utilisateur) : en cours ET emprunté
+// depuis plus de X jours (réglable dans Paramètres → Seuils d'alerte, défaut 2). Utilisé par le
+// tableau de bord ET la page Emprunts.
+FP.empRetardJours = () => { try { return FP.notifCfg ? FP.notifCfg().empruntRetardJours : 2; } catch (e) { return 2; } };
+FP.empEnRetard = (e) => FP.empEnCours(e) && FP.empJoursDepuis(e) > FP.empRetardJours();
 // ⚠️ SOURCE UNIQUE — recalcule la fiche véhicule à partir des factures RESTANTES (à appeler après la
 // SUPPRESSION d'une facture, symétrique de FP.applyFactureToVehicule). Évite les « dernière révision /
 // km / pneus » fantômes laissés par une facture supprimée. Ne fait jamais BAISSER le km affiché (v.km),
@@ -536,7 +587,7 @@ FP.empEnRetard = (e) => { if (!FP.empEnCours(e)) return false; const p = (e && e
 FP.recomputeVehiculeFromFactures = function (v, factures) {
   try {
     if (!v || !v.immat) return null;
-    const mine = (factures || []).filter(f => f && FP.estEntretien(f) && (f.vehiculeImmat || '').toUpperCase() === String(v.immat).toUpperCase());
+    const mine = (factures || []).filter(f => f && FP.estEntretien(f) && FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat));
     const patch = {};
     // Dernière révision = date la plus récente parmi les factures d'entretien restantes (sinon vide).
     const dates = mine.map(f => f.date).filter(Boolean).sort();
@@ -934,6 +985,287 @@ FP.conducteurs = {
   }
 };
 
+// ================= INDICATEUR « ENREGISTREMENT EN COURS » (overlay centré, TRÈS visible) =========
+// ⚠️ RÈGLE (consigne explicite) : à CHAQUE enregistrement/import, montrer clairement que ça travaille
+// (spinner « … en cours ») PUIS le résultat (« ✓ … enregistré » / « ✕ échec »), au lieu d'un statut
+// discret en bas de page. Usage :
+//   const b = FP.busy('Enregistrement en cours…');  … ;  b.done('✓ 3 factures enregistrées');
+//   (ou b.fail('Échec : …'))  — b.update('…') pour changer le texte pendant le travail.
+FP.busy = (message) => {
+  let host = document.getElementById('fp-busy');
+  if (!host) {
+    if (!document.getElementById('fp-busy-style')) { const st = document.createElement('style'); st.id = 'fp-busy-style'; st.textContent = '@keyframes fpspin{to{transform:rotate(360deg)}}'; document.head.appendChild(st); }
+    host = document.createElement('div'); host.id = 'fp-busy';
+    host.setAttribute('style', 'position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;background:rgba(15,30,61,.30)');
+    host.innerHTML = '<div role="status" aria-live="polite" style="background:#fff;border-radius:14px;box-shadow:0 24px 60px -18px rgba(15,30,61,.55);padding:22px 26px;min-width:250px;max-width:90vw;text-align:center;color:#0F1E3D"><div id="fp-busy-ico" style="margin-bottom:10px;min-height:30px"></div><div id="fp-busy-msg" style="font-weight:600;line-height:1.45;font-size:.95rem"></div></div>';
+    document.body.appendChild(host);
+  }
+  const spin = '<span style="display:inline-block;width:28px;height:28px;border:3px solid #E2E8F0;border-top-color:#F97316;border-radius:50%;animation:fpspin .7s linear infinite"></span>';
+  const setIco = (h) => { const el = document.getElementById('fp-busy-ico'); if (el) el.innerHTML = h; };
+  const setMsg = (m) => { const el = document.getElementById('fp-busy-msg'); if (el) el.textContent = m || ''; };
+  host.style.display = 'flex'; setIco(spin); setMsg(message || 'Enregistrement en cours…');
+  const close = () => { if (host) host.style.display = 'none'; };
+  return {
+    update: setMsg,
+    done: (m, ms) => { setIco('<span style="color:#16a34a;font-size:32px;line-height:1">✓</span>'); setMsg(m || '✓ Enregistré'); setTimeout(close, ms == null ? 1900 : ms); },
+    fail: (m, ms) => { setIco('<span style="color:#DC2626;font-size:32px;line-height:1">✕</span>'); setMsg(m || "Échec de l'enregistrement"); setTimeout(close, ms == null ? 3800 : ms); },
+    close
+  };
+};
+
+// ================= PRESTATAIRES CARTE CARBURANT / BADGE PÉAGE (nom PAR SOCIÉTÉ, synchronisé) =========
+// ⚠️ MULTI-SOCIÉTÉS : chaque société nomme SON prestataire (comme le leasing). PXP = TotalEnergies / Ulys
+// par défaut ; toute autre société part sur un libellé générique jusqu'à ce qu'elle règle le sien
+// (Paramètres → Société). Stockés dans app_settings (settings.prestataireCarte / .prestataireBadge).
+FP.prestataireCarte = () => { try { const v = FP.settings.get().prestataireCarte; if (v && String(v).trim()) return String(v).trim(); } catch (e) {} return (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? 'TotalEnergies' : 'Carte carburant'; };
+FP.prestataireBadge = () => { try { const v = FP.settings.get().prestataireBadge; if (v && String(v).trim()) return String(v).trim(); } catch (e) {} return (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? 'Ulys' : 'Badge péage'; };
+
+// ===== MULTI-PRESTATAIRES (générique) : Total & Ulys (natifs) + prestataires PERSO ajoutés par l'utilisateur =====
+// Chaque prestataire porte : id, nom, type ('carburant' = carte essence | 'peage' = badge de péage), et
+// numKey = la clé de réglage qui stocke le n° PAR CONDUCTEUR (settings[numKey][condKey]). Ainsi tout nouveau
+// prestataire est « branché » partout automatiquement : champ n° dans la fiche conducteur, colonne dans
+// « Cartes & badges », sous-onglet dans Contrôle. Persos synchronisés dans settings.prestatairesPerso.
+FP.prestataires = () => {
+  const out = [
+    { id: 'total', nom: FP.prestataireCarte(), type: 'carburant', builtin: true, numKey: 'condCarteTotal' },
+    { id: 'ulys',  nom: FP.prestataireBadge(), type: 'peage',     builtin: true, numKey: 'condBadgeUlys' }
+  ];
+  try { const p = FP.settings.get().prestatairesPerso; if (Array.isArray(p)) p.forEach(x => { if (x && x.id && x.nom) out.push({ id: x.id, nom: String(x.nom), type: (x.type === 'peage' ? 'peage' : 'carburant'), builtin: false, numKey: 'condNum_' + x.id }); }); } catch (e) {}
+  return out;
+};
+FP.prestataireById = (id) => FP.prestataires().find(p => p.id === id) || null;
+FP.addPrestataire = (nom, type) => {
+  nom = String(nom || '').trim(); if (!nom) return null;
+  const s = FP.settings.get(); const list = Array.isArray(s.prestatairesPerso) ? s.prestatairesPerso.slice() : [];
+  const base = (nom.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '') || 'presta').slice(0, 14);
+  let id = 'p_' + base, n = 1; const taken = new Set(list.map(x => x.id).concat(['total', 'ulys']));
+  while (taken.has(id)) id = 'p_' + base + (++n);
+  const rec = { id, nom, type: (type === 'peage' ? 'peage' : 'carburant') };
+  list.push(rec); s.prestatairesPerso = list; FP.settings.save(s); return rec;
+};
+FP.removePrestataire = (id) => { if (!id) return; const s = FP.settings.get(); s.prestatairesPerso = (s.prestatairesPerso || []).filter(x => x.id !== id); FP.settings.save(s); };
+// n° d'un prestataire pour un conducteur (généralise numCarteConducteur à N prestataires).
+FP.condNum = (condKey, numKey) => { try { const v = (FP.settings.get()[numKey] || {})[condKey]; if (v) return v; } catch (e) {} return (FP.numCarteConducteur && (numKey === 'condCarteTotal' || numKey === 'condBadgeUlys')) ? (FP.numCarteConducteur(condKey, numKey) || '') : ''; };
+FP.setCondNum = (condKey, numKey, val) => { if (!condKey || !numKey) return; const s = FP.settings.get(); s[numKey] = s[numKey] || {}; val = (val || '').trim(); if (val) s[numKey][condKey] = val; else delete s[numKey][condKey]; FP.settings.save(s); };
+
+// ================= CONGÉS / ABSENCES DES CONDUCTEURS (par société, synchronisé app_settings) =========
+// But : repérer une conso carte carburant PENDANT un congé (interdit). On enregistre les périodes
+// d'absence PAR CONDUCTEUR (clé = key du conducteur). Stockage partagé (tous les postes) :
+//   settings.condConges = { [condKey]: [ { debut:'AAAA-MM-JJ', fin:'AAAA-MM-JJ', motif:'' } ] }.
+FP.getAllConges = () => { try { const m = FP.settings.get().condConges; return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } };
+FP.getConges = (condKey) => { const a = FP.getAllConges()[condKey]; return Array.isArray(a) ? a : []; };
+FP.setConges = (condKey, arr) => {
+  if (!FP.settings || !condKey) return;
+  const s = FP.settings.get(); const m = (s.condConges && typeof s.condConges === 'object') ? s.condConges : {};
+  const clean = (Array.isArray(arr) ? arr : []).filter(c => c && c.debut && c.fin).map(c => ({ debut: String(c.debut).slice(0, 10), fin: String(c.fin).slice(0, 10), motif: c.motif || '' }))
+    .sort((a, b) => String(a.debut).localeCompare(String(b.debut)));
+  if (clean.length) m[condKey] = clean; else delete m[condKey];
+  s.condConges = m; FP.settings.save(s);
+};
+FP.addConge = (condKey, conge) => { if (!conge || !conge.debut || !conge.fin) return; const a = FP.getConges(condKey).slice(); a.push({ debut: conge.debut, fin: conge.fin, motif: conge.motif || '' }); FP.setConges(condKey, a); };
+FP.removeConge = (condKey, idx) => { const a = FP.getConges(condKey).slice(); if (idx >= 0 && idx < a.length) { a.splice(idx, 1); FP.setConges(condKey, a); } };
+// Le conducteur `condKey` est-il en congé à la date ISO (bornes incluses) ? Renvoie le congé couvrant, ou null.
+FP.congeCouvrant = (condKey, dateISO) => {
+  if (!condKey || !dateISO) return null;
+  const d = String(dateISO).slice(0, 10);
+  return FP.getConges(condKey).find(c => c.debut && c.fin && d >= String(c.debut).slice(0, 10) && d <= String(c.fin).slice(0, 10)) || null;
+};
+FP.estEnConge = (condKey, dateISO) => !!FP.congeCouvrant(condKey, dateISO);
+// Un congé du conducteur chevauche-t-il le MOIS `AAAA-MM` ? (pour les conso mensuelles non datées, ex. Ulys).
+FP.congeDansMois = (condKey, mois) => {
+  if (!condKey || !mois) return null;
+  const m = String(mois).slice(0, 7);
+  return FP.getConges(condKey).find(c => c.debut && c.fin && String(c.debut).slice(0, 10) <= m + '-31' && String(c.fin).slice(0, 10) >= m + '-01') || null;
+};
+// Clé conducteur d'une ligne de conso — la plus FIABLE possible, dans l'ordre :
+//   1) n° de CARTE/BADGE lu sur la conso → conducteur qui le porte (lien saisi sur la fiche) ;
+//   2) NOM du conducteur (nom complet puis prénom) ;
+//   3) PLAQUE → chauffeur du véhicule ;
+//   4) repli : prénom normalisé du nom lu.
+// Indispensable : la conso Total/Ulys est rattachée par carte/plaque, pas toujours par un nom qui
+// correspond exactement à la clé du congé. Sans ça, une vraie conso pendant un congé passe inaperçue.
+FP.condKeyDeConso = (t) => {
+  if (!t) return null;
+  const carte = t.carte || t.badge || null;
+  if (carte) {
+    const s = String(carte);
+    // ⚠️ Le badge Ulys est stocké « ULYS-<n°> » : on RETIRE le préfixe « ULYS » avant de comparer au
+    // n° de la fiche (sinon les lettres « ULYS » cassent la comparaison « se termine par » quand la
+    // fiche porte le n° complet alors que le relevé n'affiche que les derniers chiffres).
+    const isUlys = /^ULYS/i.test(s);
+    const num = s.replace(/^ULYS[-_\s]*/i, '');
+    if (isUlys) {
+      try { const c = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(num); if (c && c.key) return c.key; } catch (e) {}
+    } else {
+      try { const c = FP.conducteurParCarteTotal && FP.conducteurParCarteTotal(s); if (c && c.key) return c.key; } catch (e) {}
+      try { const c = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(s); if (c && c.key) return c.key; } catch (e) {}
+    }
+  }
+  const nm = t.conducteur || '';
+  if (nm) { try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(nm) : null; if (c && c.key) return c.key; } catch (e) {} }
+  const pl = t.plaque || null;
+  if (pl) {
+    try {
+      const vehs = (window.FP_DATA && FP_DATA.vehicules) || (window.data && data.vehicules) || [];
+      const v = vehs.find(x => FP.normImmat(x.immat) === FP.normImmat(pl));
+      if (v && v.chauffeur && v.chauffeur !== '—') { const c = FP.conducteurs.find(v.chauffeur); if (c && c.key) return c.key; }
+    } catch (e) {}
+  }
+  return (nm && FP.normPrenom) ? FP.normPrenom(nm) : null;
+};
+// Nom AFFICHÉ *unifié* d'un conducteur, à partir d'un nom brut lu sur un relevé (Total/Ulys/autre)
+// et/ou d'une clé déjà résolue. ⚠️ RÈGLE PROJET (consigne explicite) : une même personne = UN SEUL
+// nom affiché — celui de sa FICHE CONDUCTEUR — quel que soit le libellé du relevé (« ROMUALD » seul
+// vs « Romuald LAMARQUE-BRUNET », « THOMAS HOCQUET » vs « Thomas HOCQUET »). Tout écran qui affiche
+// un nom venant d'une conso/facture DOIT passer par ce helper pour rester unifié partout.
+FP.conducteurNomUnifie = (name, key) => {
+  try {
+    let c = null;
+    if (key) c = FP.conducteurs.list().find(x => x.key === key) || null;
+    if (!c && name) c = FP.conducteurs.find(name);
+    if (!c && key) c = FP.conducteurs.find(key);
+    if (c) return FP.conducteurs.displayName(c);
+  } catch (e) {}
+  return name || key || '';
+};
+// Détecte les consos survenues PENDANT un congé (interdit). `txList` = transactions DATÉES
+// { conducteur (nom), carte, plaque, dateTx:'AAAA-MM-JJ', categorie, montantTtc, produit }. Par défaut
+// on regarde TOUS les types de conso (carburant, péage, boutique, lavage…) ; `opts.categories` restreint.
+FP.consoPendantConge = (txList, opts) => {
+  const o = opts || {}; const cats = (o.categories && o.categories.length) ? o.categories.map(c => String(c).toLowerCase()) : null;
+  const out = [];
+  (txList || []).forEach(t => {
+    if (!t) return;
+    // Tolérant camelCase (FP.db) ET snake_case (lecture brute Supabase) : date_tx / montant_ttc.
+    const dtx = t.dateTx || t.date_tx; if (!dtx) return;
+    const cat = String(t.categorie || '').toLowerCase();
+    const mtt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc);
+    if (cats && cats.indexOf(cat) === -1) return;
+    // Une même personne peut avoir plusieurs « clés » selon comment son nom est écrit (prénom seul,
+    // prénom+nom) ou d'où vient la conso (carte/badge). On teste le congé sous TOUTES les clés
+    // plausibles (la plus fiable d'abord) pour ne RATER aucune conso réellement faite pendant un congé.
+    const cand = [];
+    const k1 = FP.condKeyDeConso(t); if (k1) cand.push(k1);
+    try { const c = FP.conducteurs && FP.conducteurs.find ? FP.conducteurs.find(t.conducteur) : null; if (c && c.key && cand.indexOf(c.key) < 0) cand.push(c.key); } catch (e) {}
+    const np = (FP.normPrenom && t.conducteur) ? FP.normPrenom(t.conducteur) : null;
+    if (np && cand.indexOf(np) < 0) cand.push(np);
+    // + TOUTE clé de congé du MÊME prénom (ex. congé saisi sous la fiche « romuald-lamarque-brunet »
+    //   alors que la conso se résout vers « romuald ») → sinon la conso pendant congé passe inaperçue.
+    if (np) { try { Object.keys(FP.getAllConges()).forEach(k => { if (String(k).split(/[-\s]/)[0] === np && cand.indexOf(k) < 0) cand.push(k); }); } catch (e) {} }
+    let cg = null, key = null;
+    for (const k of cand) { const g = FP.congeCouvrant(k, dtx); if (g) { cg = g; key = k; break; } }
+    // Nom AFFICHÉ = celui de la fiche conducteur (unifié), jamais le libellé brut du relevé.
+    if (cg) out.push({ conducteur: FP.conducteurNomUnifie(t.conducteur, key), conducteurBrut: t.conducteur || '', key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '' });
+  });
+  return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+};
+// Libellé lisible d'une catégorie de conso (carte carburant / péage).
+FP.consoCatLabel = (cat) => ({ carburant: 'plein carburant', peage: 'péage', boutique: 'achat boutique', lavage: 'lavage', parking: 'parking', adblue: 'AdBlue' })[String(cat || '').toLowerCase()] || 'achat';
+
+// ================= RATTACHEMENT CONSO → CONDUCTEUR PAR N° DE CARTE / BADGE =================
+// Chaque conducteur peut porter un n° de carte carburant Total et un n° de badge péage Ulys
+// (réglages `condCarteTotal` / `condBadgeUlys`, par société — cf. fiche conducteur). Ces numéros
+// servent à attribuer la conso des onglets Total Fleet / Ulys à la BONNE personne, par NUMÉRO
+// (fiable) plutôt que par nom (fragile). ⚠️ Retirer un numéro d'une fiche N'EFFACE PAS la conso
+// déjà enregistrée : ça enlève seulement le lien pour les prochains imports / l'affichage.
+FP.normCarte = (s) => (s == null ? '' : String(s)).toUpperCase().replace(/[^A-Z0-9]/g, '');
+// Deux numéros « collent » si l'un se termine par l'autre (un relevé n'affiche souvent que les
+// derniers chiffres de la carte/badge). On exige ≥ 4 caractères communs pour rester fiable.
+FP.carteMatch = (enregistre, lu) => {
+  const a = FP.normCarte(enregistre), b = FP.normCarte(lu);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) < 4) return false;
+  return a.endsWith(b) || b.endsWith(a);
+};
+FP._condParNumero = (settingKey, lu) => {
+  if (!lu || !FP.settings) return null;
+  let map; try { map = FP.settings.get()[settingKey] || {}; } catch (e) { return null; }
+  const b = FP.normCarte(lu); if (!b) return null;
+  // 1) Match EXACT prioritaire (jamais ambigu) : on tranche tout de suite.
+  for (const key in map) { if (FP.normCarte(map[key]) === b) return _condOut(key); }
+  // 2) Match par SUFFIXE (un n° tronqué « …1234 ») : on ne devine PAS si plusieurs cartes
+  //    partagent les mêmes derniers chiffres (2 cartes → 2 conducteurs) — sinon fausse attribution.
+  const partiels = [];
+  for (const key in map) { if (FP.carteMatch(map[key], lu)) partiels.push(key); }
+  if (partiels.length === 1) return _condOut(partiels[0]);
+  return null; // 0 ou ≥2 correspondances partielles → on laisse le repli nom/plaque décider
+  function _condOut(key) { let name = key; try { const c = FP.conducteurs.list().find(x => x.key === key); if (c) name = FP.conducteurs.displayName(c); } catch (e) {} return { key, name }; }
+};
+// Conducteur associé à un n° de carte Total / badge Ulys enregistré sur une fiche conducteur (ou null).
+FP.conducteurParCarteTotal = (lu) => FP._condParNumero('condCarteTotal', lu);
+FP.conducteurParBadgeUlys  = (lu) => FP._condParNumero('condBadgeUlys', lu);
+// Attribution d'une conso Total à partir du n° de carte : 1) fiche CONDUCTEUR (prioritaire) ;
+// 2) fiche VÉHICULE (rubrique Contrats → réglage `vehCarteCarb`) → chauffeur + plaque du véhicule.
+// Renvoie { conducteur, plaque } ou null (on laisse alors le repli nom/plaque habituel).
+FP.attributionCarteTotal = (lu) => {
+  if (!lu) return null;
+  const c = FP.conducteurParCarteTotal(lu);
+  if (c) return { conducteur: c.name, plaque: null };
+  try {
+    const map = FP.settings.get().vehCarteCarb || {};
+    const vehs = (window.FP_DATA && FP_DATA.vehicules) || (window.data && data.vehicules) || [];
+    const b = FP.normCarte(lu);
+    const vehOf = (vid) => vehs.find(x => String(x.id) === String(vid));
+    const outOf = (v) => ({ conducteur: (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : null, plaque: v.immat || null });
+    // 1) Match EXACT prioritaire (jamais ambigu).
+    for (const vid in map) { if (FP.normCarte(map[vid]) === b) { const v = vehOf(vid); if (v) return outOf(v); } }
+    // 2) Match par SUFFIXE : on n'attribue PAS si ≥2 véhicules partagent les mêmes derniers chiffres
+    //    (même garde anti-ambiguïté que FP._condParNumero — sinon fausse attribution plaque/chauffeur).
+    const partiels = [];
+    for (const vid in map) { if (FP.carteMatch(map[vid], lu)) partiels.push(vid); }
+    if (partiels.length === 1) { const v = vehOf(partiels[0]); if (v) return outOf(v); }
+  } catch (e) {}
+  return null;
+};
+// ---- UNE SEULE BRANCHE : le n° de carte Total / badge Ulys se range sur le CONDUCTEUR ----
+// Les fiches VÉHICULE et la rubrique Contrats « Cartes carburant » affichent/éditent le MÊME numéro
+// que la fiche conducteur (celui du chauffeur du véhicule). Ainsi, changer le n° à un endroit le
+// change PARTOUT. Repli sur l'ancien stockage par véhicule si le véhicule n'a pas de chauffeur reconnu.
+FP.CARTE_COND_MAP = { vehCarteCarb: 'condCarteTotal', vehBadge: 'condBadgeUlys' };
+FP.condKeyDuVehicule = (v) => {
+  if (!v || !v.chauffeur || v.chauffeur === '—') return null;
+  try { const c = FP.conducteurs.find(v.chauffeur); return c ? c.key : null; } catch (e) { return null; }
+};
+// Lit le n° d'un véhicule en privilégiant le CONDUCTEUR (source unique), repli sur le n° par véhicule.
+FP.numCarteVehicule = (v, vehKey) => {
+  try {
+    const s = FP.settings.get();
+    const condMapKey = FP.CARTE_COND_MAP[vehKey];
+    const condKey = FP.condKeyDuVehicule(v);
+    if (condKey && condMapKey) { const cv = (s[condMapKey] || {})[condKey]; if (cv) return cv; }
+    return (s[vehKey] || {})[v.id] || '';
+  } catch (e) { return ''; }
+};
+// Écrit un n° de carte/badge édité depuis une fiche véhicule / Contrats : va sur le CONDUCTEUR
+// (chauffeur reconnu), sinon repli sur le stockage par véhicule. Ne concerne QUE les champs "numéro".
+FP.setNumCarteVehicule = (v, vehKey, val) => {
+  const s = FP.settings.get();
+  const condMapKey = FP.CARTE_COND_MAP[vehKey];
+  const condKey = FP.condKeyDuVehicule(v);
+  let k = vehKey, id = v.id;
+  if (condKey && condMapKey) { k = condMapKey; id = condKey; }
+  s[k] = s[k] || {};
+  val = (val || '').trim();
+  if (val) s[k][id] = val; else delete s[k][id];
+  FP.settings.save(s);
+};
+// Lu depuis une fiche CONDUCTEUR : n° enregistré sur le conducteur, sinon repli d'affichage sur un
+// n° saisi par le passé sur un VÉHICULE qu'il conduit (pour que les deux fiches montrent la même
+// valeur avant première édition). condMapKey ∈ { 'condCarteTotal', 'condBadgeUlys' }.
+FP.numCarteConducteur = (condKey, condMapKey) => {
+  try {
+    const s = FP.settings.get();
+    const direct = (s[condMapKey] || {})[condKey]; if (direct) return direct;
+    const vehKey = Object.keys(FP.CARTE_COND_MAP).find(k => FP.CARTE_COND_MAP[k] === condMapKey);
+    if (!vehKey) return '';
+    const map = s[vehKey] || {};
+    const vehs = (window.FP_DATA && FP_DATA.vehicules) || [];
+    for (const v of vehs) { if (map[v.id] && FP.condKeyDuVehicule(v) === condKey) return map[v.id]; }
+    return '';
+  } catch (e) { return ''; }
+};
+
 // Modale « Nouveau conducteur » réutilisable → Promise<conductor|null>. Collecte les infos
 // essentielles puis crée le conducteur (FP.conducteurs.create). Injectée une fois dans le body.
 FP.newConducteurModal = function (prefillName) {
@@ -1129,12 +1461,18 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailExpediteur',     label: "E-mail d'envoi des amendes",       type: 'email', ph: 'ex. contact@masociete.fr' },
   { key: 'mailCopie',          label: 'E-mails en copie (séparés par ,)', type: 'text',  ph: 'ex. compta@masociete.fr, direction@masociete.fr' },
   { key: 'mailDomaineEnvoi',   label: "Domaine d'envoi vérifié (Resend)", type: 'text',  ph: 'ex. resend.masociete.fr — le domaine validé dans Resend (le mail part de <ton adresse>@ce-domaine, réponse vers l’e-mail ci-dessus)' },
+  // Prestataires carte carburant / badge péage PROPRES à la société (comme le loueur). Vide = valeur
+  // par défaut (PXP → TotalEnergies / Ulys ; autre société → libellé générique). Sert aux libellés
+  // partout (fiches, Total Fleet, Ulys) et au rattachement de la conso.
+  { key: 'prestataireCarte',   label: 'Prestataire carte carburant',      type: 'text',  ph: 'ex. TotalEnergies, Shell, BP… (vide = TotalEnergies pour PXP)' },
+  { key: 'prestataireBadge',   label: 'Prestataire badge de péage',       type: 'text',  ph: 'ex. Ulys, Fulli, Bip&Go… (vide = Ulys pour PXP)' },
   // ⚠️ Les LOUEURS (BPCE, Ayvens…) se gèrent dans l'onglet CONTRATS (liste multi-loueurs
   // settings.loueurs), PAS ici. On n'expose donc PAS loueurNom/proprietaireLeasing dans le
   // formulaire Paramètres (les valeurs restent en base pour la rétro-compat / le repli PXP).
   { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom.', default: FP.MAIL_DEFAUT.paiement },
   { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.designation },
   { key: 'mailModeleRelance',    label: "Modèle e-mail — relance",                 type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.relance },
+  { key: 'mailSignature',        label: "Signature (bas des e-mails d'amende)",    type: 'textarea', ph: 'Colle ta signature — texte simple OU le CODE HTML de ta signature Gmail (avec logo/images). Le HTML est envoyé tel quel (le logo s\'affiche). Astuce : Gmail → Paramètres → Signature ; ou clic droit « Inspecter » sur ta signature → copier l\'élément.' },
 ];
 // Contrat d'assurance de la société ACTIVE (assureur + n° de police), paramétrable dans Contrats.
 // Défaut PXP = SWISSLIFE (valeur historique) ; une nouvelle société démarre vide.
@@ -1218,6 +1556,43 @@ FP.societeProfil = () => {
       } catch (e) {}
     };
     if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
+  } catch (e) {}
+})();
+
+// === jsPDF paresseux : chargé À LA DEMANDE (1er export), pas à l'ouverture de la page ===
+// jsPDF + autotable pèsent ~400 Ko et ne servent QU'au clic sur un bouton « Télécharger PDF ».
+// Les charger en <script defer> bloquait l'init de chaque page (DOMContentLoaded attendait le
+// parse de 400 Ko) → navigation ralentie. On les injecte donc dynamiquement (async, non bloquant)
+// à la 1re demande, et on lance un préchargement discret dès que la page est libre (requestIdle).
+// FP.ensureJsPDF() renvoie une promesse résolue quand window.jspdf.jsPDF est prêt.
+FP.ensureJsPDF = function () {
+  if (window._jspdfReady) return window._jspdfReady;
+  if (window.jspdf && window.jspdf.jsPDF) { window._jspdfReady = Promise.resolve(true); return window._jspdfReady; }
+  window._jspdfReady = new Promise((resolve, reject) => {
+    try {
+      const base = location.pathname.indexOf('/pages/') !== -1 ? '../' : './';
+      let ver = '';
+      try { const s = document.querySelector('script[src*="app.js"]'); const m = s && s.src && s.src.match(/\?v=[^"'&]+/); if (m) ver = m[0]; } catch (e) {}
+      const load = (src) => new Promise((res, rej) => {
+        const sc = document.createElement('script'); sc.src = src + ver; sc.async = true;
+        sc.onload = res; sc.onerror = rej; document.head.appendChild(sc);
+      });
+      load(base + 'assets/js/vendor/jspdf.umd.min.js')
+        .then(() => load(base + 'assets/js/vendor/jspdf.plugin.autotable.min.js'))
+        .then(() => resolve(true))
+        .catch(reject);
+    } catch (e) { reject(e); }
+  });
+  return window._jspdfReady;
+};
+// Préchargement discret sur les pages qui ont des exports PDF (marqueur window.FP_PDF), une fois
+// la page interactive → le clic « PDF » est immédiat, sans jamais bloquer le chargement de l'onglet.
+(function preloadJsPDF() {
+  try {
+    if (!window.FP_PDF) return;
+    const kick = () => { try { FP.ensureJsPDF(); } catch (e) {} };
+    if ('requestIdleCallback' in window) requestIdleCallback(kick, { timeout: 2500 });
+    else setTimeout(kick, 1200);
   } catch (e) {}
 })();
 
@@ -1435,6 +1810,13 @@ FP.settings = {
             merged.groupes[k] = { ...merged.groupes[k], ...stored.groupes[k] };
           }
         });
+        // Groupes PERSO créés par l'utilisateur (clés absentes des 8 défauts) : on les ajoute tels
+        // quels. Marqués `custom:true` → l'UI n'autorise la SUPPRESSION que sur ceux-là.
+        Object.keys(stored.groupes).forEach(k => {
+          if (!merged.groupes[k] && stored.groupes[k] && stored.groupes[k].label) {
+            merged.groupes[k] = { label: stored.groupes[k].label, color: stored.groupes[k].color || '#94A3B8', custom: true };
+          }
+        });
       }
       return merged;
     } catch { return JSON.parse(JSON.stringify(this.defaults)); }
@@ -1515,6 +1897,16 @@ FP.settings = {
     Object.entries(s.groupes).forEach(([k, v]) => {
       document.documentElement.style.setProperty(`--grp-${k}`, v.color);
     });
+    // Règles .dot-<k> / .gp-<k> générées pour TOUS les groupes (8 défauts + perso) : ainsi un groupe
+    // personnalisé (ex. « direction ») reçoit sa couleur partout (pastilles, onglets, filtres) sans
+    // toucher chaque page. La feuille de style de base ne définit que les 8 défauts.
+    try {
+      let st = document.getElementById('fp-grp-style');
+      if (!st) { st = document.createElement('style'); st.id = 'fp-grp-style'; (document.head || document.documentElement).appendChild(st); }
+      st.textContent = Object.keys(s.groupes)
+        .filter(k => /^[a-z0-9-]+$/.test(k))                       // clés sûres pour un sélecteur CSS
+        .map(k => `.dot-${k},.gp-${k} .dot{background:var(--grp-${k})}`).join('');
+    } catch (e) {}
     // Couleur de base de la plateforme (sidebar, titres, boutons foncés)
     const pc = (s.platformColor && s.platformColor[0] === '#') ? s.platformColor : '#' + (s.platformColor || this.defaults.platformColor);
     document.documentElement.style.setProperty('--fp-primary', pc);
@@ -1527,15 +1919,73 @@ FP.settings = {
     document.documentElement.style.setProperty('--fp-logo-bg', useWhite ? '#FFFFFF' : '#111111');
     document.documentElement.style.setProperty('--fp-logo-fg', useWhite ? pc : '#FFFFFF');
     document.documentElement.style.setProperty('--fp-logo-border', useWhite ? 'rgba(0,0,0,.18)' : '#000000');
-    // Mode sombre 🌙 — préférence LOCALE (par poste/utilisateur), pas synchronisée
-    if (document.body) { try { document.body.classList.toggle('fp-dark', localStorage.getItem('fp_dark_mode') === '1'); } catch (e) {} }
+    // Mode sombre 🌙 — SYNCHRONISÉ (règle 0-sync) : lu depuis les réglages, cache local pour l'instant.
+    if (document.body) { try { const p = (this.get().prefs || {}); const dk = (p.darkMode != null) ? !!p.darkMode : (localStorage.getItem('fp_dark_mode') === '1'); document.body.classList.toggle('fp-dark', dk); } catch (e) {} }
   },
 };
 
-// Mode sombre = choix propre à CHAQUE utilisateur/poste (stocké en local, jamais partagé).
+// === Graphiques (Chart.js) — couleurs lisibles selon le thème (clair/sombre) ===
+// Encre « primaire » des barres/lignes : navy en clair, bleu clair en sombre (invisible sinon sur
+// fond nuit). Tout graphique dont la couleur de série était #0F1E3D doit passer par FP.chartInk().
+FP.chartInk = () => { try { return (FP.settings && FP.settings.isDark && FP.settings.isDark()) ? '#60A5FA' : '#0F1E3D'; } catch (e) { return '#0F1E3D'; } };
+// Applique aux défauts Chart.js la couleur du TEXTE (axes/légende) et des GRILLES selon le thème.
+FP.setupChartTheme = () => {
+  try {
+    if (!window.Chart || !window.Chart.defaults) return;
+    const dark = FP.settings && FP.settings.isDark && FP.settings.isDark();
+    window.Chart.defaults.color = dark ? '#cbd5e1' : '#475569';
+    window.Chart.defaults.borderColor = dark ? 'rgba(148,163,184,.18)' : 'rgba(15,30,61,.08)';
+  } catch (e) {}
+};
+try { FP.setupChartTheme(); } catch (e) {}
+document.addEventListener('DOMContentLoaded', () => { try { FP.setupChartTheme(); } catch (e) {} });
+document.addEventListener('fp:data-ready', () => { try { FP.setupChartTheme(); } catch (e) {} });
+
+// === Dernier sous-onglet ouvert d'une page (rouvre là où l'utilisateur était) ===
+// RÈGLE (consigne explicite) : chaque page à sous-onglets doit rouvrir sur le DERNIER onglet consulté.
+// Synchronisé (FP.settings → tous les appareils, règle 0-sync). pageKey = id court ('controle'…).
+FP.lastTab = {
+  get(pageKey, def) { try { const m = FP.settings.get().lastTab || {}; return m[pageKey] || def; } catch (e) { return def; } },
+  set(pageKey, tabId) {
+    try {
+      const s = FP.settings.get(); const m = s.lastTab || {};
+      if (m[pageKey] === tabId || !tabId) return; // pas d'écriture inutile
+      m[pageKey] = tabId; s.lastTab = m; FP.settings.save(s);
+    } catch (e) {}
+  },
+};
+
+// ⚠️ RÈGLE 0-sync — PRÉFÉRENCE UTILISATEUR SYNCHRONISÉE (tous les appareils) : stockée dans les réglages
+// (FP.settings → app_settings, par société) sous s.prefs[<clé>], avec localStorage comme simple cache
+// rapide. À utiliser pour TOUT réglage/choix d'affichage (favoris, filtres, ordres, cases, styles…).
+FP.pref = {
+  get(key, dflt) {
+    try { const p = (FP.settings.get().prefs) || {}; if (Object.prototype.hasOwnProperty.call(p, key)) return p[key]; } catch (e) {}
+    try { const v = localStorage.getItem(key); if (v != null) { try { return JSON.parse(v); } catch (e) { return v; } } } catch (e) {}
+    return dflt;
+  },
+  set(key, val) {
+    try { const s = FP.settings.get(); s.prefs = s.prefs || {}; s.prefs[key] = val; FP.settings.save(s); } catch (e) {}
+    try { localStorage.setItem(key, typeof val === 'string' ? val : JSON.stringify(val)); } catch (e) {}
+  },
+  remove(key) {
+    try { const s = FP.settings.get(); if (s.prefs) { delete s.prefs[key]; FP.settings.save(s); } } catch (e) {}
+    try { localStorage.removeItem(key); } catch (e) {}
+  },
+};
+
+// Mode sombre 🌙 — SYNCHRONISÉ sur tous les appareils (via FP.settings.prefs.darkMode) + cache local.
 FP.darkMode = {
-  get() { try { return localStorage.getItem('fp_dark_mode') === '1'; } catch (e) { return false; } },
-  set(v) { try { localStorage.setItem('fp_dark_mode', v ? '1' : '0'); } catch (e) {} if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme(); },
+  get() {
+    try { const p = FP.settings.get().prefs || {}; if (p.darkMode != null) return !!p.darkMode; } catch (e) {}
+    try { return localStorage.getItem('fp_dark_mode') === '1'; } catch (e) { return false; }
+  },
+  set(v) {
+    v = !!v;
+    try { localStorage.setItem('fp_dark_mode', v ? '1' : '0'); } catch (e) {}
+    try { const s = FP.settings.get(); s.prefs = s.prefs || {}; s.prefs.darkMode = v; FP.settings.save(s); } catch (e) {}
+    if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme();
+  },
   toggle() { this.set(!this.get()); return this.get(); },
 };
 
@@ -1708,7 +2158,7 @@ document.addEventListener('fp:data-ready', FP.normalizeVehicleNames); // après 
 document.addEventListener('fp:data-ready', () => { try { FP.userEmail = (localStorage.getItem('fp_email') || '').trim().toLowerCase(); FP.buildJisMenu(); } catch (e) {} });
 
 // Normalisation d'un prénom (1er mot, minuscules, accents conservés) — partagé
-FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase();
+FP.normPrenom = (s) => (s || '').toString().trim().split(/\s+/)[0].toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 // ⚠️ HELPER CANONIQUE — nom COMPLET normalisé (prénom + nom, accents/casse/espaces neutralisés).
 // Sert à distinguer deux homonymes de prénom (« Jean Dupont » ≠ « Jean Martin ») SANS casser le
 // rapprochement historique par prénom seul (qui reste le repli quand la donnée n'a qu'un prénom).
@@ -1774,12 +2224,14 @@ FP.groupeColor = (key) => {
   return (FP.settings.get().groupes[k] || FP.settings.defaults.groupes['non-classe']).color;
 };
 FP.groupeKeys = () => {
-  const allKeys = Object.keys(FP.settings.defaults.groupes);
+  // Toutes les clés = 8 défauts + groupes PERSO (créés dans Paramètres). « non-classe » reste en dernier.
+  const allKeys = Object.keys(FP.settings.get().groupes);
   const order = FP.settings.get().groupeOrder;
-  if (!Array.isArray(order) || !order.length) return allKeys;
+  const lastPin = (arr) => { const a = arr.filter(k => k !== 'non-classe'); if (arr.includes('non-classe')) a.push('non-classe'); return a; };
+  if (!Array.isArray(order) || !order.length) return lastPin(allKeys);
   const valid = order.filter(k => allKeys.includes(k));         // garde uniquement les clés connues
-  const missing = allKeys.filter(k => !valid.includes(k));      // n'oublie aucun groupe
-  return [...valid, ...missing];
+  const missing = allKeys.filter(k => !valid.includes(k));      // n'oublie aucun groupe (dont les perso récents)
+  return lastPin([...valid, ...missing]);
 };
 // Clés de groupes visibles (onglets non masqués), dans l'ordre
 FP.groupeKeysVisible = () => {
@@ -2081,7 +2533,73 @@ FP.notifCfg = () => {
     leasingFinMois: num(n.leasingFinMois, 2),  // anticipation d'alerte « fin de leasing » (mois avant la fin ; défaut 2)
     immobiliseJours: num(n.immobiliseJours, 15), // alerte « véhicule immobilisé » après X jours (défaut 15)
     consoSeuilPct: num(n.consoSeuilPct, 60),   // alerte conso carburant : hausse ≥ X % vs moyenne du véhicule (défaut 60 %)
+    amendeTotalWarn: num(n.amendeTotalWarn, 500),       // amendes à payer : alerte (orange) au-delà de X € dus au total
+    amendeMajorationJours: num(n.amendeMajorationJours, 30), // amende « bientôt majorée » : alerte X jours avant la date limite estimée
+    docAlerteJours: num(n.docAlerteJours, 120),          // permis + pièces d'identité : 1re alerte X j avant expiration (rouge = moitié)
+    carteExpJours: num(n.carteExpJours, 30),             // carte carburant / badge télépéage : alerte X j avant expiration
+    sinistreRelanceJours: num(n.sinistreRelanceJours, 21), // sinistre sans réponse de l'assureur : relancer après X jours
+    empruntRetardJours: num(n.empruntRetardJours, 2),    // emprunt non rendu : considéré « en retard » au-delà de X jours
   };
+};
+
+// ⚠️ SOURCE UNIQUE — Total Fleet : catégorie d'un achat, seuils, et « points à vérifier » (anomalies).
+// Utilisé PARTOUT (page Factures ET page Suivi & alertes) pour ne pas diverger.
+FP.txCat = function (p) {
+  const s = (p || '').toLowerCase();
+  if (/gazole|gasoil|diesel|super|sp\d|sans[- ]?plomb|essence|excellium|premier|adblue|gnr|gpl|e10|e85|b7/.test(s)) return 'carburant';
+  if (/lavage/.test(s)) return 'lavage';
+  if (/parking/.test(s)) return 'parking';
+  if (/aliment|boisson|sandwich|repas|restaur|snack|produit\s*frais|caf[ée]|menu/.test(s)) return 'repas';
+  if (/lubrifiant/.test(s)) return 'boutique';
+  return 'autre';
+};
+FP.tfSeuils = function () {
+  let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {}
+  return {
+    repasJour: Number(s.repasJour) > 0 ? Number(s.repasJour) : 20,
+    autreItem: (s.autreItem === 0 || Number(s.autreItem) > 0) ? Number(s.autreItem) : 20,
+    horsCarbMois: Number(s.horsCarbMois) > 0 ? Number(s.horsCarbMois) : 40,
+  };
+};
+// Anomalies « carte carburant » à partir du détail transaction (total_conso_tx déjà filtré par l'appelant) :
+// >3 pleins/jour, repas > seuil/jour, achat « Autres » (hors carburant) ≥ seuil. Renvoie [{t,mois,facnum,txt,key}].
+FP.totalFleetAnomaliesTx = function (tx) {
+  const lim = FP.tfSeuils(), list = tx || [], anom = [];
+  const dnum = (d) => FP.dateNum ? FP.dateNum(d) : (d || '');
+  const eur = (v) => FP.euro ? FP.euro(v) : (v + ' €');
+  const catOf = (t) => (t && t.produit ? FP.txCat(t.produit) : (t && t.categorie) || 'autre');
+  const pleins = {};
+  list.filter(t => catOf(t) === 'carburant').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = pleins[k] || (pleins[k] = { n: t.conducteur || '—', d: t.date_tx, fac: t.facnum, mois: t.mois, c: 0, items: [] }); o.c += 1; o.items.push({ p: String(t.produit || 'Plein').replace(/\s+/g, ' ').trim(), m: Number(t.montant_ttc) || 0 }); });
+  Object.values(pleins).forEach(o => { if (o.c > 3) { const s = o.items.reduce((x, i) => x + i.m, 0); anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, key: 'pleins|' + o.n + '|' + (o.d || '') + '|' + (o.fac || ''), conducteur: o.n, date: o.d, montant: s, items: o.items, categorie: 'carburant', motif: o.c + ' pleins/jour', txt: `${o.n} · ${dnum(o.d)} : ${o.c} pleins de carburant le MÊME jour pour ${eur(s)} → à vérifier (carte prêtée ? plusieurs véhicules ? carburant revendu ?)` }); } });
+  // DIESEL (gazole) : la flotte roule à l'essence → toute conso de gazole/diesel = à vérifier.
+  // Regroupé par conducteur (clé stable « diesel|nom ») pour rester lisible.
+  // DIESEL / GAZOLE = anomalie (flotte à l'essence). On reconnaît toutes les écritures d'un relevé :
+  // « gazole/gasoil/diesel », mais aussi « B7 » (gazole routier EN590), « GNR » (gazole non routier)
+  // et « GO » (gasoil). L'essence (SP95/98, E10/E85, Super…) n'est PAS concernée.
+  const RE_DIESEL = /gazole|gasoil|gazoil|diesel|\bb7\b|\bgnr\b|\bgo\b/i;
+  const diesel = {};
+  list.filter(t => catOf(t) === 'carburant' && RE_DIESEL.test(t.produit || '')).forEach(t => { const n = t.conducteur || '—'; const o = diesel[n] || (diesel[n] = { n, fac: t.facnum, mois: t.mois, c: 0, s: 0, items: [] }); o.c += 1; o.s += Number(t.montant_ttc) || 0; o.items.push({ p: String(t.produit || 'Gazole').replace(/\s+/g, ' ').trim(), m: Number(t.montant_ttc) || 0, d: t.date_tx }); if (!o.fac) o.fac = t.facnum; if (t.mois) o.mois = t.mois; });
+  Object.values(diesel).forEach(o => anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, key: 'diesel|' + o.n, conducteur: o.n, date: null, montant: o.s, items: o.items, categorie: 'carburant', produit: 'Gazole (diesel)', motif: o.c + ' conso gazole', txt: `${o.n} : ${o.c} conso de GAZOLE (diesel) pour ${eur(o.s)} → à vérifier (la carte carburant est censée être à l'essence)` }));
+  const day = {};
+  list.filter(t => catOf(t) === 'repas').forEach(t => { const k = (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (t.facnum || ''); const o = day[k] || (day[k] = { n: t.conducteur || '—', d: t.date_tx, fac: t.facnum, mois: t.mois, s: 0, prods: [], items: [] }); o.s += Number(t.montant_ttc) || 0; const pp = String(t.produit || '').replace(/\s+/g, ' ').trim(); if (pp && o.prods.indexOf(pp) < 0) o.prods.push(pp); o.items.push({ p: pp || 'Repas', m: Number(t.montant_ttc) || 0 }); });
+  Object.values(day).forEach(o => { if (o.s > lim.repasJour) { const pl = o.prods.join(', '); anom.push({ t: 'warn', mois: o.mois, facnum: o.fac, key: 'repas|' + o.n + '|' + (o.d || '') + '|' + (o.fac || ''), conducteur: o.n, date: o.d, montant: o.s, items: o.items, categorie: 'repas', produit: pl || 'Repas / boissons', motif: pl || 'repas / boissons', txt: `${o.n} · ${dnum(o.d)} : ${eur(o.s)} de repas/boissons${pl ? ' (' + pl + ')' : ''} en une seule journée → à vérifier (seuil ${lim.repasJour} €/jour)` }); } });
+  list.filter(t => catOf(t) === 'autre' && (Number(t.montant_ttc) || 0) >= (lim.autreItem || 0))
+    .sort((a, b) => (Number(b.montant_ttc) || 0) - (Number(a.montant_ttc) || 0))
+    .forEach(t => { const p = String(t.produit || 'Achat').replace(/\s+/g, ' ').trim(); anom.push({ t: 'warn', mois: t.mois, facnum: t.facnum, key: 'autre|' + (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (Number(t.montant_ttc) || 0) + '|' + (t.facnum || ''), conducteur: t.conducteur || '—', date: t.date_tx, montant: Number(t.montant_ttc) || 0, categorie: 'autre', produit: p, motif: p, txt: `${t.conducteur || '—'} · ${dnum(t.date_tx)} : ${p} à ${eur(t.montant_ttc)} (payé avec la carte carburant) → à vérifier` }); });
+  anom.forEach(a => { if (!a.key) a.key = a.t + '|' + (a.facnum || '') + '|' + a.txt; });
+  return anom;
+};
+// Vrai si une anomalie a été archivée (« vérifié »). Reconnaît aussi l'ANCIENNE clé
+// (« warn|<facnum>|<txt> ») pour que ce qui a déjà été archivé ne réapparaisse pas après un changement
+// de clé (ex. diesel devenu « diesel|<nom> »). SOURCE UNIQUE — utilisée par Factures et Suivi & alertes.
+FP.tfAnomArchivee = function (a, ok) {
+  if (!a) return false; ok = ok || {};
+  return !!(ok[a.key] || ok[a.t + '|' + (a.facnum || '') + '|' + a.txt]);
+};
+// Anomalies NON archivées (exclut celles cochées « vérifié » dans les réglages tfAnomOk).
+FP.totalFleetAnomaliesActives = function (tx) {
+  let ok = {}; try { ok = FP.settings.get().tfAnomOk || {}; } catch (e) {}
+  return FP.totalFleetAnomaliesTx(tx).filter(a => !FP.tfAnomArchivee(a, ok));
 };
 // ⚠️ SOURCE UNIQUE — Applique une facture à la fiche du véhicule (km + dernière révision + pneus +
 // rappel « relevé km »). TOUS les chemins qui créent OU éditent une facture DOIVENT passer par ici
@@ -2093,7 +2611,7 @@ FP.applyFactureToVehicule = function (f, vehicules) {
   try {
     if (!f || !f.vehiculeImmat) return null;
     const list = vehicules || (typeof window !== 'undefined' && window.FP_DATA && window.FP_DATA.vehicules) || [];
-    const v = list.find(x => (x.immat || '').toUpperCase() === String(f.vehiculeImmat).toUpperCase());
+    const v = list.find(x => FP.normImmat(x.immat) === FP.normImmat(f.vehiculeImmat));
     if (!v) return null;
     const estEntretien = FP.estEntretien(f);
     const patch = {}; const bits = [];
@@ -2484,6 +3002,119 @@ FP.leasingInfo = (v) => {
            loyer: (c.loyer != null ? Number(c.loyer) : null), avenants: Array.isArray(c.avenants) ? c.avenants : [] };
 };
 
+// ===== HISTORIQUE D'AFFECTATION véhicule ↔ conducteur =====
+// Journal DATÉ de « qui conduit quel véhicule et depuis quand ». Stocké par société
+// dans app_settings (settings.affectations = { [vehId]: [ {conducteur, debut, fin} ] }) —
+// pas de nouvelle table. La dernière entrée avec fin=null = affectation EN COURS.
+// Alimenté automatiquement à chaque changement de conducteur d'un véhicule (fiche véhicule).
+FP.affectations = {
+  _norm(n) { return (n == null ? '' : String(n)).trim(); },
+  all() { const s = FP.settings.get(); return (s.affectations && typeof s.affectations === 'object') ? s.affectations : {}; },
+  forVeh(vehId) { const a = this.all()[vehId]; return Array.isArray(a) ? a.slice() : []; },
+  // Affectation EN COURS (fin === null) d'un véhicule, ou null.
+  courante(vehId) { const o = this.forVeh(vehId).filter(x => !x.fin); return o.length ? o[o.length - 1] : null; },
+  // Garantit qu'une affectation EN COURS existe pour le chauffeur actuel du véhicule. Si aucune n'est
+  // ouverte (véhicules d'avant l'historique, imports…), on en crée une avec pour DATE D'ENTRÉE (par
+  // défaut) la 1re mise en circulation du véhicule. Consigne explicite : toujours afficher une date
+  // d'entrée, même sans date de sortie. Écrit UNE fois (les ouvertures suivantes trouvent l'entrée).
+  // Renvoie l'affectation en cours (existante ou créée), ou null si le véhicule n'a pas de chauffeur.
+  ensureCourante(veh) {
+    if (!veh || veh.id == null) return null;
+    const ch = this._norm(veh.chauffeur);
+    if (!ch || ch === '—') return null;
+    const cur = this.courante(veh.id);
+    if (cur) return cur;                                   // une affectation est déjà ouverte
+    this.addEntry(veh.id, ch, veh.dateMiseEnCirculation || null, null);
+    return this.courante(veh.id);
+  },
+  // Date d'ENTRÉE affichée du chauffeur actuel : début de l'affectation en cours si connu, sinon
+  // (défaut) la 1re mise en circulation du véhicule. 'AAAA-MM-JJ' ou null. Ne mute rien (lecture).
+  debutAffiche(veh) {
+    if (!veh) return null;
+    const cur = this.courante(veh.id);
+    if (cur && cur.debut) return cur.debut;
+    return veh.dateMiseEnCirculation || null;
+  },
+  // Véhicules conduits par un conducteur (par nom, tolérant casse/espaces).
+  forConducteur(nom) {
+    const cible = this._norm(nom).toLowerCase(); if (!cible) return [];
+    const out = []; const map = this.all();
+    Object.keys(map).forEach(vehId => (Array.isArray(map[vehId]) ? map[vehId] : []).forEach(a => {
+      if (this._norm(a.conducteur).toLowerCase() === cible) out.push({ vehId, ...a });
+    }));
+    return out.sort((x, y) => String(y.debut || '').localeCompare(String(x.debut || '')));
+  },
+  // Enregistre un changement de conducteur : ferme l'entrée en cours si le nom change,
+  // en ouvre une nouvelle si un conducteur est désigné. Idempotent (rien si inchangé).
+  record(vehId, nouveauConducteur, dateISO, ancienConducteur) {
+    if (!vehId) return;
+    const nom = this._norm(nouveauConducteur);
+    const vide = !nom || nom === '—';
+    const jour = dateISO || new Date().toISOString().slice(0, 10);
+    const s = FP.settings.get();
+    s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
+    const list = Array.isArray(s.affectations[vehId]) ? s.affectations[vehId] : [];
+    let encours = [...list].reverse().find(x => !x.fin) || null;
+    let changed = false;
+    // Rattrapage : un conducteur était déjà sur la fiche AVANT que l'historique n'existe
+    // (aucune entrée ouverte) → on trace sa sortie pour ne rien perdre au moment du retrait/
+    // changement. Début inconnu (null → affiché « depuis l'origine »).
+    const ancien = this._norm(ancienConducteur);
+    if (!encours && ancien && ancien !== '—' && ancien.toLowerCase() !== (vide ? '' : nom.toLowerCase())) {
+      list.push({ conducteur: ancien, debut: null, fin: jour });
+      changed = true;
+    }
+    const actuel = encours ? this._norm(encours.conducteur) : '';
+    if (actuel !== (vide ? '' : nom)) {   // vrai changement
+      if (encours) { encours.fin = jour; changed = true; } // on clôt l'affectation précédente
+      if (!vide) { list.push({ conducteur: nom, debut: jour, fin: null }); changed = true; }
+    }
+    if (changed) { s.affectations[vehId] = list; FP.settings.save(s); }
+  },
+  // --- Édition manuelle (crayon dans la fiche véhicule) ---
+  // Modifie les dates début/fin d'une entrée (index = position dans le tableau stocké).
+  setEntry(vehId, index, patch) {
+    const s = FP.settings.get();
+    const list = (s.affectations && Array.isArray(s.affectations[vehId])) ? s.affectations[vehId] : null;
+    if (!list || !list[index]) return;
+    if ('debut' in patch) list[index].debut = patch.debut || null;
+    if ('fin' in patch) list[index].fin = patch.fin || null;
+    if ('conducteur' in patch && this._norm(patch.conducteur)) list[index].conducteur = this._norm(patch.conducteur);
+    FP.settings.save(s);
+  },
+  // Supprime une entrée de l'historique (index dans le tableau stocké).
+  removeEntry(vehId, index) {
+    const s = FP.settings.get();
+    const list = (s.affectations && Array.isArray(s.affectations[vehId])) ? s.affectations[vehId] : null;
+    if (!list || !list[index]) return;
+    list.splice(index, 1);
+    if (!list.length) delete s.affectations[vehId];
+    FP.settings.save(s);
+  },
+  // Ajoute une période à la main (backfill : conducteur connu à une date connue).
+  addEntry(vehId, conducteur, debut, fin) {
+    const nom = this._norm(conducteur);
+    if (!vehId || !nom) return;
+    const s = FP.settings.get();
+    s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
+    const list = Array.isArray(s.affectations[vehId]) ? s.affectations[vehId] : [];
+    list.push({ conducteur: nom, debut: debut || null, fin: fin || null });
+    s.affectations[vehId] = list;
+    FP.settings.save(s);
+  },
+  // Renomme un conducteur dans tout l'historique (suit un renommage de fiche).
+  rename(oldName, newName) {
+    const from = this._norm(oldName).toLowerCase(); const to = this._norm(newName);
+    if (!from || !to) return;
+    const s = FP.settings.get(); const map = s.affectations; if (!map || typeof map !== 'object') return;
+    let touched = false;
+    Object.keys(map).forEach(vehId => (Array.isArray(map[vehId]) ? map[vehId] : []).forEach(a => {
+      if (this._norm(a.conducteur).toLowerCase() === from) { a.conducteur = to; touched = true; }
+    }));
+    if (touched) FP.settings.save(s);
+  },
+};
+
 // ===== LOYERS DE LEASING basés sur l'OFFRE (fixe) + AVENANTS (prorata) =====
 // Le loyer d'un contrat vient de l'OFFRE (montant fixe), PAS des factures. Un avenant
 // { date, loyer } change le loyer à partir de sa date → le total est recalculé au prorata.
@@ -2520,6 +3151,38 @@ FP.leasingTotalVerse = (c, upto) => {
     else { const dInMonth = (next - cur) / 86400000, dDone = Math.max(0, (stop - cur) / 86400000); total += loyer * Math.min(1, dDone / dInMonth); break; }
   }
   return Math.round(total * 100) / 100;
+};
+
+// ⚠️ HELPER CANONIQUE — COÛT DE LEASING D'UN VÉHICULE, quelle que soit la provenance du contrat.
+// But : quand l'utilisateur ajoute un contrat (peu importe où), le coût se calcule TOUT SEUL dans le
+// TCO, sans double comptage. Deux stockages existent :
+//   1) contrat « km/forfait » (FP.leasingContrat : LEASING_CONTRATS PXP + overrides éditables) ;
+//   2) contrat LLD saisi dans l'app (settings.localeaseContrats, table « Leasing (LLD) » des Contrats).
+// Règle anti-double-comptage : UN véhicule = UN SEUL contrat. Priorité au forfait S'IL PORTE UN LOYER
+// (offre/override), sinon on prend le contrat LLD retrouvé par la plaque. Si le forfait n'a pas de
+// loyer connu (contrats PXP historiques) ET qu'aucun LLD n'existe → null : le TCO retombe alors sur
+// les factures 'leasing' (comportement inchangé). Renvoie { loyerMois, contrat, source } ou null.
+FP.leasingCoutContrat = (immat) => {
+  const norm = s => FP.normImmat ? FP.normImmat(s) : String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const key = norm(immat); if (!key) return null;
+  // 1) Forfait avec loyer (offre ou override) → fait foi.
+  try {
+    const c1 = FP.leasingContrat ? FP.leasingContrat(immat) : null;
+    if (c1) { const loyer = FP.leasingLoyerCourant ? FP.leasingLoyerCourant(c1) : (c1.loyer != null ? Number(c1.loyer) : null); if (loyer != null) return { loyerMois: loyer, contrat: c1, source: 'forfait' }; }
+  } catch (e) {}
+  // 2) Contrat LLD (Localease/Ayvens…) saisi dans l'app, retrouvé par la plaque.
+  try {
+    const list = FP.settings.get().localeaseContrats;
+    if (Array.isArray(list)) {
+      const it = list.find(c => norm(c.immat) === key);
+      if (it) {
+        const contrat = { debut: it.debut || null, dureeMois: Number(it.dureeMois) || 0, loyer: (it.loyerTTC != null && it.loyerTTC !== '') ? Number(it.loyerTTC) : null, avenants: Array.isArray(it.avenants) ? it.avenants : [] };
+        const loyer = FP.leasingLoyerCourant ? FP.leasingLoyerCourant(contrat) : contrat.loyer;
+        if (loyer != null) return { loyerMois: loyer, contrat, source: 'lld' };
+      }
+    }
+  } catch (e) {}
+  return null;
 };
 
 // Véhicule concerné par le contrôle anti-pollution (utilitaires + camions/engins
@@ -2592,6 +3255,171 @@ FP.decoteVehicule = (v) => {
   return { valeur, ageAnnees: ageY, residuel: res, kmAdj, attendu };
 };
 
+// ===== CENTRE DE DÉCISIONS — recommandations automatiques, triées par impact =====
+// Ne REMPLACE pas les alertes (factuelles, « il se passe X ») : ici on transforme les
+// signaux en DÉCISIONS À PRENDRE, chacune avec une action claire + un impact € estimé,
+// classées par priorité. S'appuie UNIQUEMENT sur les helpers canoniques (santeVehicule,
+// leasingInfo, montantDu, decoteVehicule…) — aucune donnée recalculée à la main.
+//   [{ id, priorite, categorie, icon, titre, detail, action, impact, impactEuro, target }]
+FP.recommandations = (data) => {
+  data = data || { vehicules: [], amendes: [], factures: [], conducteurs: [] };
+  const out = [];
+  const enFlotte = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
+  // Décompte en jours via le helper canonique (minuit-à-minuit) → même valeur que la fiche véhicule
+  // et les Alertes (avant : Math.ceil sur l'instant courant → off-by-one selon l'heure).
+  const j = (d) => FP.joursRestants(d);
+
+  // 1) AMENDES — payer AVANT LA MAJORATION (le vrai saut de prix : forfaitaire → majoré).
+  // ⚠️ Cohérence échéance/économie : la fenêtre est ancrée sur la date où l'amende devient MAJORÉE
+  // (dateLimiteForfaitaire si connue, sinon estimation date + 45 j, 90 j pour un FPS). L'économie
+  // chiffrée = montant MAJORÉ − montant dû (le surcoût évité). Ne JAMAIS croiser la date limite du
+  // minoré avec l'économie du majoré (surestimerait à la fois l'urgence et le gain — cf. revue de code).
+  try {
+    const now = new Date();
+    const risque = (data.amendes || [])
+      .filter(a => a && FP.estAPayer && FP.estAPayer(a) && a.date && !isNaN(new Date(a.date)) && Number(a.montantMajore) > 0)
+      .map(a => {
+        const base = new Date(a.date);
+        const isFps = FP.estFps(a);
+        const lim = a.dateLimiteForfaitaire ? new Date(a.dateLimiteForfaitaire) : (() => { const l = new Date(base); l.setDate(l.getDate() + (isFps ? 90 : 45)); return l; })();
+        const jours = FP.joursRestants(lim); // minuit-à-minuit, cohérent avec Alertes/fiche
+        const du = FP.montantDu ? FP.montantDu(a) : (Number(a.montantTTC) || 0);
+        const maj = Number(a.montantMajore) || 0;
+        const eco = (maj > du) ? (maj - du) : 0;                // surcoût évité en payant avant la majoration
+        return { a, jours, eco };
+      })
+      .filter(x => x.jours >= 0 && x.jours < 30);                // majoration imminente (< 30 j)
+    if (risque.length) {
+      const ecoTot = risque.reduce((s, x) => s + x.eco, 0);
+      const min = Math.min(...risque.map(x => x.jours));
+      out.push({
+        id: 'amendes-minore', priorite: min < 7 ? 95 : 80, categorie: 'Amendes', icon: 'alarm-clock',
+        titre: `Régler ${risque.length} amende${risque.length > 1 ? 's' : ''} avant la majoration`,
+        detail: `La plus urgente : encore ${min} j avant majoration. Passé ce délai, le montant grimpe fortement.`,
+        action: 'Payer maintenant', target: 'amendes.html?filtre=apayer',
+        impactEuro: ecoTot, impact: ecoTot > 0 ? ('≈ ' + FP.euro(ecoTot) + ' de surcoût évité') : 'éviter la majoration',
+      });
+    }
+  } catch (e) {}
+
+  // 2) LEASING — fin de contrat proche : décider restitution ou renouvellement
+  // 3) LEASING — dépassement km projeté : risque de pénalité chiffré
+  enFlotte.forEach(v => {
+    let l = null; try { l = FP.leasingInfo ? FP.leasingInfo(v) : null; } catch (e) {}
+    if (!l) return;
+    if (l.finContrat && !isNaN(l.finContrat)) {
+      const jf = j(l.finContrat);
+      if (jf !== null && jf <= 120) {
+        // Progression de la checklist de restitution (remplie sur la page Contrats)
+        let coches = 0; try { const cl = (FP.settings.get().restitutionChecklist || {})[v.id] || {}; coches = Object.keys(cl).filter(k => cl[k]).length; } catch (e) {}
+        out.push({
+          id: 'leasing-fin-' + v.id, priorite: jf < 0 ? 92 : (jf < 60 ? 78 : 62), categorie: 'Leasing', icon: 'calendar-clock',
+          titre: `${v.immat} — ${jf < 0 ? 'leasing terminé' : 'fin de leasing dans ' + jf + ' j'}`,
+          detail: 'Décider : restituer (préparer l’état des lieux de sortie) ou renouveler / racheter le véhicule.' + (coches ? ` Checklist de restitution : ${coches} point(s) déjà cochés.` : ''),
+          action: 'Préparer la restitution', target: 'contrats.html',
+          impactEuro: 0, impact: 'décision à prendre',
+        });
+      }
+    }
+    if (l.depassementProjete && l.depassementProjete > 0 && l.kmSupp) {
+      const penalite = Math.round(l.depassementProjete * l.kmSupp);
+      if (penalite >= 100) out.push({
+        id: 'leasing-km-' + v.id, priorite: 74, categorie: 'Leasing', icon: 'gauge',
+        titre: `${v.immat} — risque de pénalité kilométrique`,
+        detail: `Projection ${FP.num(l.depassementProjete)} km au-dessus du forfait. Réduire l’usage, réaffecter, ou négocier un avenant km.`,
+        action: 'Voir le contrat', target: 'contrats.html',
+        impactEuro: penalite, impact: '≈ ' + FP.euro(penalite) + ' de pénalité évitable',
+      });
+    }
+  });
+
+  // 4) SANTÉ — véhicules critiques : planifier avant la panne / le refus au CT
+  enFlotte.forEach(v => {
+    let s = null; try { s = FP.santeVehicule ? FP.santeVehicule(v) : null; } catch (e) {}
+    if (!s || s.niveau !== 'critique') return;
+    out.push({
+      id: 'sante-' + v.id, priorite: 70, categorie: 'Entretien', icon: 'heart-pulse',
+      titre: `${v.immat} — véhicule fragile (score ${s.score}/100)`,
+      detail: (s.raisons || []).slice(0, 3).join(' · ') || 'Plusieurs échéances en retard.',
+      action: 'Ouvrir la fiche', target: 'vehicules.html?veh=' + encodeURIComponent(v.id),
+      impactEuro: 0, impact: 'à planifier',
+    });
+  });
+
+  // 5) À VENDRE — véhicules marqués à vendre : valeur estimée, ne pas laisser dormir
+  // (on itère TOUS les véhicules : « à vendre » est considéré hors-flotte par FP.horsFlotte,
+  //  donc absent de `enFlotte` — mais on veut justement le rappeler à la vente.)
+  (data.vehicules || []).forEach(v => {
+    const st = (v.statut || '').toLowerCase();
+    const aVendre = /vendre/.test(st) || (Array.isArray(v.groupes) && v.groupes.includes('a-vendre'));
+    const dejaCede = /vendu|c[ée]d[ée]|hors[\s-]?service|\bhs\b|archiv|restitu/.test(st);
+    if (!aVendre || dejaCede) return;
+    let dec = null; try { dec = FP.decoteVehicule ? FP.decoteVehicule(v) : null; } catch (e) {}
+    out.push({
+      id: 'avendre-' + v.id, priorite: 45, categorie: 'À vendre', icon: 'tag',
+      titre: `${v.immat} — à vendre`,
+      detail: dec ? `Valeur de revente estimée ≈ ${FP.euro(dec.valeur)}. Relancer les acheteurs ou ajuster le prix.` : 'Relancer les acheteurs ou ajuster le prix.',
+      action: 'Voir les véhicules à vendre', target: 'a-vendre.html',
+      impactEuro: dec ? dec.valeur : 0, impact: dec ? ('≈ ' + FP.euro(dec.valeur) + ' à récupérer') : 'à céder',
+    });
+  });
+
+  // 6) CARBURANT — usages de carte suspects à vérifier
+  try {
+    const anoms = FP.cartesAnomalies ? FP.cartesAnomalies(data) : [];
+    if (anoms.length) {
+      out.push({
+        id: 'carte-anomalies', priorite: 66, categorie: 'Carburant', icon: 'credit-card',
+        titre: `${anoms.length} usage${anoms.length > 1 ? 's' : ''} de carte carburant à vérifier`,
+        detail: 'Pleins multiples le même jour ou montants inhabituels détectés — contrôle qu’il n’y a pas d’erreur ou d’abus.',
+        action: 'Voir les anomalies', target: 'contrats.html',
+        impactEuro: 0, impact: 'à contrôler',
+      });
+    }
+  } catch (e) {}
+
+  // Tri : priorité décroissante, puis impact € décroissant
+  out.sort((a, b) => (b.priorite - a.priorite) || ((b.impactEuro || 0) - (a.impactEuro || 0)));
+  return out;
+};
+
+// ===== CARTES CARBURANT — détection d'anomalies / fraude =====
+// Repère les usages suspects des cartes carburant à partir des factures de carburant :
+//  a) plusieurs pleins le MÊME jour sur un même véhicule (carte prêtée / double passage) ;
+//  b) plein au montant anormalement élevé (seuil réglable, défaut 300 € ; doublé pour les gros
+//     véhicules utilitaires/camions). Retourne [] si aucune donnée. Lecture seule.
+//   [{ vehId, immat, type:'doublon-jour'|'plein-eleve', date, montant, label }]
+FP.cartesAnomalies = (data) => {
+  data = data || {};
+  const out = [];
+  const vehByImmat = {};
+  (data.vehicules || []).forEach(v => { if (v && v.immat) vehByImmat[FP.normImmat(v.immat)] = v; });
+  const estCarburant = (f) => { const t = String((f && f.type) || '').toLowerCase(); return t === 'carburant' || (FP.estTotalFleet && FP.estTotalFleet(f) && t !== 'peage'); };
+  const carburants = (data.factures || []).filter(f => f && f.vehiculeImmat && f.date && estCarburant(f));
+  // a) plusieurs pleins le même jour
+  const byVehDay = {};
+  carburants.forEach(f => { const k = FP.normImmat(f.vehiculeImmat) + '|' + String(f.date).slice(0, 10); (byVehDay[k] = byVehDay[k] || []).push(f); });
+  Object.keys(byVehDay).forEach(k => {
+    const list = byVehDay[k]; if (list.length < 2) return;
+    const np = k.split('|')[0], day = k.split('|')[1]; const v = vehByImmat[np]; if (!v) return;
+    const tot = list.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    out.push({ vehId: v.id, immat: v.immat, type: 'doublon-jour', date: day, montant: tot,
+      label: `${list.length} pleins le même jour (${FP.date(day)})${tot ? ' — total ' + FP.euro(tot) : ''}` });
+  });
+  // b) plein anormalement élevé
+  let seuil = 300; try { const s = FP.settings.get(); if (Number(s.pleinSeuilAnormal) > 0) seuil = Number(s.pleinSeuilAnormal); } catch (e) {}
+  carburants.forEach(f => {
+    const m = Number(f.montantTTC) || 0; if (m < seuil) return;
+    const v = vehByImmat[FP.normImmat(f.vehiculeImmat)]; if (!v) return;
+    const gros = /utilit|camion|engin|poids/.test(String(v.categorie || '').toLowerCase());
+    if (gros && m < seuil * 2) return;               // tolérance gros réservoirs
+    out.push({ vehId: v.id, immat: v.immat, type: 'plein-eleve', date: String(f.date).slice(0, 10), montant: m,
+      label: `Plein inhabituel de ${FP.euro(m)} le ${FP.date(f.date)} — à vérifier` });
+  });
+  out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  return out;
+};
+
 FP.buildAlertes = (data) => {
   const out = [];
   const today = new Date();
@@ -2610,10 +3438,13 @@ FP.buildAlertes = (data) => {
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
     const tgt = 'vehicules.html?veh=' + v.id; // ouvre directement la fiche du véhicule
     const mk = 'ct|' + v.id + '|' + v.prochainCT;
+    // Les 3 paliers (rouge / orange / info) se calent sur l'anticipation configurée (ctJours) :
+    // info = ctJours (défaut 90), orange = 2/3, rouge = 1/3 → 30/60/90 par défaut.
+    const _ctI = FP.notifCfg().ctJours, _ctW = Math.round(_ctI * 2 / 3), _ctD = Math.round(_ctI / 3);
     if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < FP.notifCfg().ctJours) out.push({ niveau: 'info', categorie: 'Contrôle technique', message: `CT à venir (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _ctD) out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _ctW) out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _ctI) out.push({ niveau: 'info', categorie: 'Contrôle technique', message: `CT à venir (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
 
   // --- Contrôle anti-pollution (utilitaires / camions diesel) ---
@@ -2627,9 +3458,10 @@ FP.buildAlertes = (data) => {
     const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur ? ' (' + v.chauffeur + ')' : ''}`;
     const tgt = 'vehicules.html?veh=' + v.id;
     const mk = 'pol|' + v.id + '|' + v.antiPollution;
-    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < 30)  out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
-    else if (diff < 60)  out.push({ niveau: 'warn',   categorie: 'Anti-pollution', message: `Anti-pollution à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    const _polI = FP.notifCfg().ctJours, _polW = Math.round(_polI * 2 / 3), _polD = Math.round(_polI / 3);
+    if (diff < 0)         out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution dépassé de ${-diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _polD) out.push({ niveau: 'danger', categorie: 'Anti-pollution', message: `Anti-pollution à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _polW) out.push({ niveau: 'warn',   categorie: 'Anti-pollution', message: `Anti-pollution à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
 
   // --- Relevé kilométrique périodique (rappel tous les X jours, réglable dans Paramètres → Notifications) ---
@@ -2654,25 +3486,30 @@ FP.buildAlertes = (data) => {
         sinceEch = Math.floor((today - echeance) / 86400000);
       }
     }
+    // ⚠️ Liste potentiellement LONGUE (toute la flotte) → on REGROUPE en une seule alerte
+    // dépliable (champ `vehicules` rendu en <details> dans notifications.html), au lieu d'une
+    // carte par véhicule. Deux paquets par urgence : « à faire » (warn) et « à renseigner » (info).
+    const relKmWarn = [], relKmInfo = [];
     (data.vehicules || []).forEach(v => {
       if (horsFlotte(v)) return;
       const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
       const tgt = 'vehicules.html?veh=' + v.id;
-      const mk = 'relevekm|' + v.id; // ignore PAR VÉHICULE
       const last = kmDates[v.immat] ? new Date(kmDates[v.immat]) : null;
       if (debutOk) {
         if (!echeance) return;                       // cycle pas encore commencé
         if (last && last >= echeance) return;        // relevé déjà fait après la dernière échéance
-        out.push({ niveau: sinceEch >= periodeJ * 0.5 ? 'warn' : 'info', categorie: 'Relevé km', message: `Relevé km à faire (échéance il y a ${sinceEch} j)`, detail: veh, sort: -sinceEch, target: tgt, muteKey: mk, vehLabel: veh });
+        (sinceEch >= periodeJ * 0.5 ? relKmWarn : relKmInfo).push({ label: `${veh} — échéance il y a ${sinceEch} j`, target: tgt });
         return;
       }
       // Mode par véhicule (pas de date d'ancrage)
-      if (!last) { out.push({ niveau: 'info', categorie: 'Relevé km', message: 'Relevé km jamais renseigné', detail: veh, sort: 1000, target: tgt, muteKey: mk, vehLabel: veh }); return; }
+      if (!last) { relKmInfo.push({ label: `${veh} — jamais renseigné`, target: tgt }); return; }
       const since = Math.floor((today - last) / 86400000);
       if (since >= periodeJ) {
-        out.push({ niveau: since >= periodeJ * 1.5 ? 'warn' : 'info', categorie: 'Relevé km', message: `Relevé km à faire (dernier il y a ${since} j)`, detail: veh, sort: periodeJ - since, target: tgt, muteKey: mk, vehLabel: veh });
+        (since >= periodeJ * 1.5 ? relKmWarn : relKmInfo).push({ label: `${veh} — dernier il y a ${since} j`, target: tgt });
       }
     });
+    if (relKmWarn.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relKmWarn.length} relevé${relKmWarn.length > 1 ? 's' : ''} km à faire`, detail: 'Kilométrage à mettre à jour (échéance dépassée).', sort: 480, muteKey: 'relevekm-warn', vehicules: relKmWarn });
+    if (relKmInfo.length) out.push({ niveau: 'info', categorie: 'Relevé km', message: `${relKmInfo.length} relevé${relKmInfo.length > 1 ? 's' : ''} km à renseigner`, detail: 'Kilométrage jamais saisi ou à rafraîchir.', sort: 1000, muteKey: 'relevekm-info', vehicules: relKmInfo });
   }
 
   // --- Amendes à payer ---
@@ -2680,7 +3517,7 @@ FP.buildAlertes = (data) => {
   if (amAPayer.length > 0) {
     const totalDu = amAPayer.reduce((s, a) => s + FP.montantDu(a), 0);
     out.push({
-      niveau: totalDu > 500 ? 'warn' : 'info',
+      niveau: totalDu > FP.notifCfg().amendeTotalWarn ? 'warn' : 'info',
       categorie: 'Amendes',
       message: `${amAPayer.length} amende${amAPayer.length > 1 ? 's' : ''} à payer`,
       detail: `${FP.euro(totalDu)} dus au total`,
@@ -2715,12 +3552,12 @@ FP.buildAlertes = (data) => {
       .filter(a => a && FP.estAPayer(a) && a.date && !isNaN(new Date(a.date)))
       .map(a => {
         const base = new Date(a.date);
-        const isFps = /stationnement/i.test(a.motif || '');
+        const isFps = FP.estFps(a);
         const lim = new Date(base); lim.setDate(lim.getDate() + (isFps ? 90 : 45));
         const jours = Math.ceil((lim - maintenant) / 86400000);
         return { a, lim, jours };
       })
-      .filter(x => x.jours < 30)            // bientôt majorée (< 30 j) ou déjà dépassée
+      .filter(x => x.jours < FP.notifCfg().amendeMajorationJours) // bientôt majorée (< X j réglable) ou déjà dépassée
       .sort((x, y) => x.jours - y.jours);
     if (risque.length) {
       const depasse = risque.filter(x => x.jours < 0).length;
@@ -2750,9 +3587,10 @@ FP.buildAlertes = (data) => {
     const detail = `${who} — expire le ${FP.date(c.permisExpiration)}`;
     const tgt = 'conducteurs.html?cond=' + encodeURIComponent(c.key);
     const mk = 'permis|' + c.key + '|' + c.permisExpiration;
-    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis EXPIRÉ depuis ${-diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
-    else if (diff < 60)  out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis expire dans ${diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
-    else if (diff < 120) out.push({ niveau: 'warn',   categorie: 'Permis', message: `Permis à renouveler (${diff}j)`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
+    const _docW = FP.notifCfg().docAlerteJours, _docD = Math.round(_docW / 2); // orange = X j avant, rouge = moitié
+    if (diff < 0)         out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis EXPIRÉ depuis ${-diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
+    else if (diff < _docD) out.push({ niveau: 'danger', categorie: 'Permis', message: `Permis expire dans ${diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
+    else if (diff < _docW) out.push({ niveau: 'warn',   categorie: 'Permis', message: `Permis à renouveler (${diff}j)`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who });
   });
 
   // --- Pièces d'identité (carte d'identité, titre de séjour…) qui expirent (réglages condDocs) ---
@@ -2770,9 +3608,10 @@ FP.buildAlertes = (data) => {
         const detail = `${who} — ${lib} expire le ${FP.date(doc.date)}`;
         const tgt = 'conducteurs.html?cond=' + encodeURIComponent(key);
         const mk = 'cid|' + key + '|' + doc.type + '|' + doc.date;
-        if (diff < 0)        out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} EXPIRÉE depuis ${-diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
-        else if (diff < 60)  out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} expire dans ${diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
-        else if (diff < 120) out.push({ niveau: 'warn',   categorie: "Pièce d'identité", message: `${lib} à renouveler (${diff}j)`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
+        const _docW = FP.notifCfg().docAlerteJours, _docD = Math.round(_docW / 2);
+        if (diff < 0)         out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} EXPIRÉE depuis ${-diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
+        else if (diff < _docD) out.push({ niveau: 'danger', categorie: "Pièce d'identité", message: `${lib} expire dans ${diff}j`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
+        else if (diff < _docW) out.push({ niveau: 'warn',   categorie: "Pièce d'identité", message: `${lib} à renouveler (${diff}j)`, detail, sort: diff, target: tgt, muteKey: mk, vehLabel: who + ' — ' + lib });
       });
     });
   } catch (e) {}
@@ -2881,14 +3720,18 @@ FP.buildAlertes = (data) => {
     const nowYm = new Date().toISOString().slice(0, 7);
     Object.keys(byVeh).forEach(im => {
       const months = Object.keys(byVeh[im]).sort();
-      if (months.length < 4) return;                 // pas assez d'historique
-      const last = months[months.length - 1];
-      if (last === nowYm) return;                    // mois courant incomplet → on prend le dernier mois CLOS
-      const prev = months.slice(0, -1);
+      // On évalue le dernier mois CLOS : le mois courant est incomplet, donc on l'IGNORE au lieu de
+      // sauter le véhicule (bug : avec des cartes carburant mensuelles, presque tout véhicule actif a
+      // une conso le mois courant → l'alerte ne se déclenchait jamais).
+      let idx = months.length - 1;
+      if (months[idx] === nowYm) idx--;              // écarte le mois courant incomplet
+      if (idx < 3) return;                           // besoin d'au moins 3 mois d'historique avant
+      const last = months[idx];
+      const prev = months.slice(0, idx);             // les mois antérieurs au mois évalué
       const avg = prev.reduce((s, m) => s + byVeh[im][m], 0) / prev.length;
       const val = byVeh[im][last];
       if (avg <= 0 || val < 50 || val < avg * seuil) return;
-      const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === im);
+      const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(im));
       if (!v || FP.horsFlotte(v)) return;
       const pct = Math.round((val / avg - 1) * 100);
       out.push({ niveau: 'info', categorie: 'Carburant', message: `${im} : carburant +${pct}% en ${last} (${FP.euro(val)} vs moy. ${FP.euro(avg)})`, detail: 'Dépense inhabituelle — vérifie (gros plein, fuite, usage) ou masque si c\'est normal', sort: 350, target: 'factures.html', muteKey: 'conso|' + v.id, vehLabel: `${v.immat} · ${v.marque} ${v.modele}` });
@@ -2908,8 +3751,8 @@ FP.buildAlertes = (data) => {
         const diff = Math.ceil((dt - t0e) / 86400000);
         const veh = `${v.immat} · ${v.marque} ${v.modele}`;
         const mk = 'exp' + mapKey + '|' + v.id;
-        if (diff < 0)       out.push({ niveau: 'danger', categorie: lib, message: `${lib} EXPIRÉE depuis ${-diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
-        else if (diff < 30) out.push({ niveau: 'warn',   categorie: lib, message: `${lib} expire dans ${diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
+        if (diff < 0)                              out.push({ niveau: 'danger', categorie: lib, message: `${lib} EXPIRÉE depuis ${-diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
+        else if (diff < FP.notifCfg().carteExpJours) out.push({ niveau: 'warn',   categorie: lib, message: `${lib} expire dans ${diff}j (${v.immat})`, detail: veh, sort: diff, target: 'vehicules.html', muteKey: mk, vehLabel: veh });
       });
     });
   } catch (e) {}
@@ -2928,7 +3771,7 @@ FP.buildAlertes = (data) => {
 
   // --- Sinistres en attente de remboursement (rappel de suivi) ---
   const sinStatut = (FP.settings.get().sinistreStatut) || {};
-  const sinAttente = (data.factures || []).filter(f => f.type === 'sinistre' && sinStatut[f.id] === 'attente');
+  const sinAttente = (data.factures || []).filter(f => f.type === 'sinistre' && FP.sinistreStatutOf(f) === 'attente');
   if (sinAttente.length) {
     out.push({ niveau: 'warn', categorie: 'Sinistres', message: `${sinAttente.length} sinistre(s) en attente de remboursement`, detail: "Vérifie si l'assureur t'a remboursé", sort: 500,
       vehicules: sinAttente.map(s => ({ label: `${s.vehiculeImmat || '—'} · ${(s.description || 'sinistre').slice(0, 45)}${s.montantTTC ? ' — ' + FP.euro(s.montantTTC) : ''}`, target: 'sinistres.html' })) });
@@ -2945,22 +3788,28 @@ FP.buildAlertes = (data) => {
     (data.factures || []).forEach(f => {
       if (f.type !== 'sinistre') return;
       const k = gkOf(f.id);
-      const g = incidents[k] || (incidents[k] = { key: k, rep: f, date: f.date || '' });
+      const g = incidents[k] || (incidents[k] = { key: k, rep: f, date: f.date || '', ids: [] });
+      g.ids.push(f.id);                                                         // toutes les lignes de l'incident
       if ((f.date || '') && (!g.date || f.date < g.date)) g.date = f.date;      // date de déclaration = plus ancienne
       if ((!g.rep.vehiculeImmat && f.vehiculeImmat) || (!g.rep.description && f.description)) g.rep = f;
     });
     const today0 = new Date(); today0.setHours(0, 0, 0, 0);
-    const SIN_RELANCE_J = 21; // 3 semaines sans réponse → on relance
+    const SIN_RELANCE_J = FP.notifCfg().sinistreRelanceJours; // délai sans réponse → on relance (défaut 21 j)
+    // Un statut « remboursé / prise en charge / refusé » = l'assureur A répondu → plus « sans réponse ».
+    const RESOLU = new Set(['rembourse', 'pec', 'refuse']);
     const sansReponse = Object.values(incidents).filter(g => {
       const d = sinDoss[g.key] || {};
-      if (d.resp || d.dateReponse || d.dateCloture) return false; // réponse reçue / dossier clos
+      // Résolu si : réponse/clôture dans le dossier, OU statut de suivi = remboursé/PEC/refusé
+      // (sur n'importe quelle ligne de l'incident), OU un montant remboursé a été saisi.
+      const statResolu = RESOLU.has((sinStatut[g.key] || '').toLowerCase()) || (g.ids || []).some(id => RESOLU.has((sinStatut[id] || '').toLowerCase()));
+      if (d.resp || d.dateReponse || d.dateCloture || statResolu || (Number(d.rembourse) || 0) > 0) return false;
       const decl = d.dateDeclaration || g.date;
       const dt = decl ? new Date(decl) : null; if (!dt || isNaN(dt)) return false;
       return Math.floor((today0 - dt) / 86400000) >= SIN_RELANCE_J;
     });
     if (sansReponse.length) {
       sansReponse.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-      out.push({ niveau: 'warn', categorie: 'Sinistres', message: `${sansReponse.length} sinistre(s) sans réponse de l'assureur`, detail: "Relance l'assureur : responsabilité pas encore reçue (> 3 semaines).", sort: 490,
+      out.push({ niveau: 'warn', categorie: 'Sinistres', message: `${sansReponse.length} sinistre(s) sans réponse de l'assureur`, detail: `Relance l'assureur : responsabilité pas encore reçue (> ${SIN_RELANCE_J} j).`, sort: 490,
         vehicules: sansReponse.map(g => ({ label: `${g.rep.vehiculeImmat || '—'} · déclaré ${g.date ? FP.date(g.date) : '?'}${g.rep.description ? ' — ' + String(g.rep.description).slice(0, 40) : ''}`, target: 'sinistres.html' })) });
     }
   } catch (e) { console.warn('[alerte sinistre relance]', e); }
@@ -3000,6 +3849,19 @@ FP.buildAlertes = (data) => {
     }
   } catch (e) {}
 
+  // --- Factures Total (carburant) SANS PDF stocké (upload raté / bucket bloqué) ---
+  // Filet de sécurité : un relevé Total importé doit TOUJOURS avoir son PDF réaffichable.
+  // On regroupe en UNE alerte dépliable → on voit tout de suite s'il manque des PDF.
+  try {
+    const sansPdf = (data.factures || []).filter(f => FP.estTotalFleet(f) && (!f.fileId || /^IMP-/.test(String(f.fileId))));
+    if (sansPdf.length) {
+      out.push({ niveau: 'info', categorie: 'Factures', message: `${sansPdf.length} facture(s) Total sans PDF stocké`,
+        detail: "Le PDF n'a pas pu être enregistré (stockage). Ré-importe les relevés Total pour rattacher les PDF.", sort: 700,
+        target: 'factures.html',
+        vehicules: sansPdf.slice(0, 100).map(f => ({ label: `${f.numeroFacture || f.id} — ${f.date ? FP.date(f.date) : '—'}${f.montantTTC != null ? ' · ' + FP.euro(f.montantTTC) : ''}`, target: 'factures.html' })) });
+    }
+  } catch (e) {}
+
   const order = { danger: 0, warn: 1, info: 2 };
   out.sort((a, b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
   // Masque les alertes que l'utilisateur a explicitement enlevées (par véhicule / échéance)
@@ -3036,7 +3898,10 @@ FP.buildEcheances = (data) => {
   // Barème ALIGNÉ sur buildAlertes (< 30 danger, < 60 warn, sinon info) pour qu'une MÊME
   // échéance ait la même couleur/gravité dans « Alertes » et dans « Renouvellements »/calendrier.
   const niv = (dateStr) => {
-    const diff = Math.ceil((new Date(dateStr) - today) / 86400000);
+    // Décompte via le helper canonique (minuit-à-minuit) → MÊME gravité/couleur qu'Alertes pour une
+    // même échéance (avant : Math.ceil sur une date parsée en UTC → +1 jour en France, couleurs décalées).
+    const diff = FP.joursRestants(dateStr);
+    if (diff == null) return 'info';
     if (diff < 30) return 'danger';
     if (diff < 60) return 'warn';
     return 'info';
@@ -3052,9 +3917,23 @@ FP.buildEcheances = (data) => {
     const tgt = 'vehicules.html?veh=' + v.id;
     if (v.prochainCT && v.prochainCT !== '—' && !FP.ctIgnored(v)) push(v.prochainCT, 'Contrôle technique', 'CT — ' + v.immat, veh, tgt);
     if (FP.concerneAntiPollution(v) && v.antiPollution && v.antiPollution !== '—') push(v.antiPollution, 'Anti-pollution', 'Anti-pollution — ' + v.immat, veh, tgt);
-    // Fin de leasing (BPCE)
+    // Fin de leasing (BPCE forfait) — sinon repli sur le contrat LLD (Localease/Ayvens) saisi dans
+    // l'app, dont le coût est déjà compté ailleurs mais dont la date de fin manquait au calendrier
+    // (rule 0-source). Un seul contrat par véhicule → on n'ajoute le LLD que si BPCE n'a rien donné.
     const l = FP.leasingInfo && FP.leasingInfo(v);
     if (l && l.finContrat && !isNaN(l.finContrat)) push(l.finContrat.toISOString(), 'Leasing', 'Fin leasing — ' + v.immat, veh, 'contrats.html');
+    else {
+      try {
+        const list = FP.settings.get().localeaseContrats;
+        if (Array.isArray(list)) {
+          const it = list.find(c => FP.normImmat(c.immat) === FP.normImmat(v.immat));
+          if (it && it.debut && Number(it.dureeMois) > 0) {
+            const fin = new Date(it.debut);
+            if (!isNaN(fin)) { fin.setMonth(fin.getMonth() + Number(it.dureeMois)); push(fin.toISOString(), 'Leasing', 'Fin leasing — ' + v.immat, veh, 'contrats.html'); }
+          }
+        }
+      } catch (e) {}
+    }
   });
 
   // Permis qui expirent
@@ -3332,6 +4211,14 @@ FP.toast = (msg, opts) => {
     btn.onclick = () => { close(); try { opts.onAction(); } catch (e) {} };
     el.appendChild(btn);
   }
+  // Croix pour fermer soi-même (utile surtout sur téléphone, où le pop-up gêne).
+  if (opts.closable !== false) {
+    const x = document.createElement('button');
+    x.setAttribute('aria-label', 'Fermer'); x.textContent = '✕';
+    x.style.cssText = 'background:transparent;color:rgba(255,255,255,.7);border:none;font-size:1rem;line-height:1;cursor:pointer;flex-shrink:0;padding:.15rem .2rem;margin-left:.1rem';
+    x.onclick = close;
+    el.appendChild(x);
+  }
   if (!document.getElementById('fp-toast-style')) {
     const st = document.createElement('style'); st.id = 'fp-toast-style';
     st.textContent = '@keyframes fp-toast-in{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}';
@@ -3359,7 +4246,9 @@ FP.dialog = function (opts) {
   if (!document.getElementById('fp-dlg-style')) {
     const st = document.createElement('style'); st.id = 'fp-dlg-style';
     st.textContent = [
-      '.fp-dlg-backdrop{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:1.25rem;',
+      // Boîte de dialogue ancrée VERS LE HAUT (plus agréable qu\'en plein milieu d\'écran), et
+      // défilable si le message est long (téléphone).
+      '.fp-dlg-backdrop{position:fixed;inset:0;z-index:100000;display:flex;align-items:flex-start;justify-content:center;padding:1.25rem;padding-top:7vh;overflow-y:auto;',
       'background:rgba(11,18,32,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);animation:fp-dlg-fade .16s ease}',
       '.fp-dlg-card{width:100%;max-width:430px;background:#fff;border:1px solid var(--fp-border,#E3E8F0);border-radius:16px;',
       'box-shadow:0 30px 70px -20px rgba(11,18,32,.5);padding:1.4rem 1.4rem 1.15rem;animation:fp-dlg-pop .22s cubic-bezier(.16,1,.3,1)}',
@@ -3704,11 +4593,82 @@ FP.lienConducteur = function (name, label) {
   return `<a class="fp-lien" href="${FP._pagePrefix()}conducteurs.html?cond=${encodeURIComponent(key)}" title="Voir la fiche conducteur" onclick="event.stopPropagation()">${txt}</a>`;
 };
 
-// Densité d'affichage : bascule compact/confortable (mémorisée, appliquée partout).
-FP.getDensity = () => { try { return (localStorage.getItem('fp_density') || '') === 'compact' ? 'compact' : 'confort'; } catch (e) { return 'confort'; } };
+// Densité d'affichage : bascule compact/confortable — SYNCHRONISÉE (règle 0-sync) via FP.pref
+// (FP.settings → app_settings) + cache local rapide (relu par l'IIFE applyDensity au 1er paint).
+FP.getDensity = () => { try { return FP.pref.get('fp_density', 'confort') === 'compact' ? 'compact' : 'confort'; } catch (e) { return 'confort'; } };
 FP.setDensity = (compact) => {
-  try { localStorage.setItem('fp_density', compact ? 'compact' : 'confort'); } catch (e) {}
+  try { FP.pref.set('fp_density', compact ? 'compact' : 'confort'); } catch (e) {}
   document.documentElement.classList.toggle('fp-compact', !!compact);
+};
+// Ré-applique la densité quand les réglages arrivent d'un autre appareil (fp:data-ready / fp:settings-synced).
+FP.applyDensity = () => { try { document.documentElement.classList.toggle('fp-compact', FP.getDensity() === 'compact'); } catch (e) {} };
+try { window.addEventListener('fp:data-ready', function () { FP.applyDensity(); if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme(); }); } catch (e) {}
+
+// ===== CORBEILLE — restaurer un élément supprimé (véhicule, amende, conducteur, contrat leasing…) =====
+// Chaque suppression peut déposer une COPIE ici (via FP.persist.delete(table,id,record) ou FP.trash.add
+// direct). Stockée par société dans les réglages (settings.corbeille) → SYNCHRONISÉE sur tous les appareils.
+// Restaurer = ré-insérer l'élément dans sa table (ou dans les contrats leasing). Plafonné à 300 entrées.
+FP.trash = {
+  MAX: 300,
+  // Libellés lisibles par table (pour l'affichage dans Paramètres → Corbeille).
+  typeLabel(t) { return ({ vehicules:'Véhicule', amendes:'Amende', conducteurs:'Conducteur', factures:'Facture', documents:'Document', emprunts:'Emprunt', leasing:'Contrat leasing', sinistres:'Sinistre' })[t] || t; },
+  // ⚠️ FILET DE SÉCURITÉ LOCAL (par société) : la corbeille synchronisée (app_settings) est écrite en
+  // ASYNCHRONE ; si on recharge juste après une suppression, la synchro peut ne pas être partie → l'élément
+  // serait perdu. On garde donc EN PLUS une copie locale IMMÉDIATE (localStorage), qui survit au rechargement.
+  // La liste affichée = fusion des deux (dédup par id) → une suppression est TOUJOURS récupérable.
+  _lkey() { try { return 'fp_trash_' + (((FP.activeSociete && FP.activeSociete()) || 'default') + '').toLowerCase(); } catch (e) { return 'fp_trash_default'; } },
+  _local() { try { const a = JSON.parse(localStorage.getItem(this._lkey())); return Array.isArray(a) ? a : []; } catch (e) { return []; } },
+  _saveLocal(arr) { try { localStorage.setItem(this._lkey(), JSON.stringify((arr || []).slice(0, this.MAX))); } catch (e) {} },
+  _synced() { try { const a = FP.settings.get().corbeille; return Array.isArray(a) ? a : []; } catch (e) { return []; } },
+  _all() {
+    const byId = {}; const out = [];
+    [].concat(this._synced(), this._local()).forEach(e => { if (e && e.id && !byId[e.id]) { byId[e.id] = 1; out.push(e); } });
+    return out.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, this.MAX);
+  },
+  // Fabrique un libellé court à partir de l'enregistrement (immat, prénom, n° d'avis…).
+  _label(type, rec) {
+    try {
+      if (!rec || typeof rec !== 'object') return '';
+      if (type === 'vehicules') return [rec.immat, rec.marque, rec.modele].filter(Boolean).join(' ');
+      if (type === 'amendes') return [rec.prenom || rec.conducteur, rec.numeroAvis || rec.avis, (rec.montant != null ? rec.montant : rec.montantTTC) != null ? (rec.montant != null ? rec.montant : rec.montantTTC) + ' €' : ''].filter(Boolean).join(' · ');
+      if (type === 'conducteurs') return rec.name || rec.nom || [rec.prenom, rec.nom].filter(Boolean).join(' ') || rec.key || '';
+      if (type === 'leasing') return [rec.conducteur, rec.immat, rec.marque, rec.modele].filter(Boolean).join(' ');
+      if (type === 'factures') return [rec.fournisseur, rec.numeroFacture || rec.numero, rec.montantTTC != null ? rec.montantTTC + ' €' : ''].filter(Boolean).join(' · ');
+      return rec.immat || rec.nom || rec.name || rec.label || rec.id || '';
+    } catch (e) { return ''; }
+  },
+  add(type, rec, label) {
+    if (!rec) return;
+    const entry = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), type: String(type), rec: JSON.parse(JSON.stringify(rec)), label: String(label || this._label(type, rec) || ''), ts: Date.now() };
+    // 1) Copie locale IMMÉDIATE (garantie même si on recharge tout de suite).
+    try { const l = this._local(); l.unshift(entry); this._saveLocal(l); } catch (e) {}
+    // 2) Copie synchronisée (cross-appareils) — asynchrone, best effort.
+    try { const s = FP.settings.get(); const list = Array.isArray(s.corbeille) ? s.corbeille : []; list.unshift(entry); s.corbeille = list.slice(0, this.MAX); FP.settings.save(s); } catch (e) {}
+  },
+  list() { return this._all(); },
+  remove(id) {
+    try { this._saveLocal(this._local().filter(x => x.id !== id)); } catch (e) {}
+    try { const s = FP.settings.get(); s.corbeille = this._synced().filter(x => x.id !== id); FP.settings.save(s); } catch (e) {}
+  },
+  clear() {
+    try { this._saveLocal([]); } catch (e) {}
+    try { const s = FP.settings.get(); s.corbeille = []; FP.settings.save(s); } catch (e) {}
+  },
+  // Restaure l'élément dans sa table (ou dans les contrats leasing) puis le retire de la Corbeille.
+  async restore(id) {
+    const e = this._all().find(x => x.id === id); if (!e) return false;
+    try {
+      if (e.type === 'leasing') {
+        const s = FP.settings.get(); const list = Array.isArray(s.localeaseContrats) ? s.localeaseContrats : [];
+        list.push(e.rec); s.localeaseContrats = list; FP.settings.save(s);
+      } else {
+        if (FP.persist && FP.persist.insert) FP.persist.insert(e.type, e.rec);
+        else if (FP.db && FP.db.insert) await FP.db.insert(e.type, e.rec);
+      }
+      this.remove(id);
+      return true;
+    } catch (err) { console.warn('[trash restore]', err); return false; }
+  },
 };
 
 FP.persist = {
@@ -3758,7 +4718,10 @@ FP.persist = {
     try { const r = await FP.db.update(table, id, fields); if (r && r.error) throw r.error; this.flush(); }
     catch (e) { this._err(e); this._enqueue({ op: 'update', table, id, fields }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
   },
-  async delete(table, id) {
+  // record (optionnel) = copie complète de l'élément supprimé → déposée dans la Corbeille (FP.trash)
+  // pour pouvoir le RESTAURER depuis Paramètres. Rétro-compatible : sans record, aucune capture.
+  async delete(table, id, record) {
+    try { if (record && FP.trash) FP.trash.add(table, record); } catch (e) {}
     if (!this.available()) { this._enqueue({ op: 'delete', table, id }); return; }
     try { const r = await FP.db.delete(table, id); if (r && r.error) throw r.error; this.flush(); }
     catch (e) { this._err(e); this._enqueue({ op: 'delete', table, id }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
@@ -3901,10 +4864,21 @@ FP.SCAN_PROMPT = [
   "Identifie son type puis extrais les infos. Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour, avec ces cles (mets null si l info est absente) :",
   "docType : un parmi facture, sinistre, permis, carte-identite, carte-grise, assurance, controle-technique, autre.",
   "date : date principale du document au format AAAA-MM-JJ (pour une facture, la date d emission).",
-  "fournisseur : pour une facture, nom de la societe qui EMET la facture (souvent en haut avec un SIREN ou SIRET). Ce n est PAS le client TJMAX.",
+  "fournisseur : pour une facture, la RAISON SOCIALE de la societe qui EMET la facture (le prestataire/vendeur/garage/loueur). Confirme-la de preference par le SIREN, SIRET, n° de TVA ou les mentions legales en bas de page. Si une MARQUE COMMERCIALE (enseigne) differe de la raison sociale (ex enseigne 'Speedy' / raison sociale 'SLV AUTOMOBILE'), donne la RAISON SOCIALE. NE prends JAMAIS comme fournisseur le CLIENT facture (= la societe qui utilise Parc Pilot, celle dont l adresse figure en 'Facture a'/'Client'/'Livre a') : le fournisseur est l EMETTEUR, jamais le destinataire.",
   "numeroFacture, vehiculeImmat (plaque francaise AB-123-CD), km (entier sans espaces).",
   "montantHT, montantTVA, montantTTC (nombres a point decimal).",
-  "description : courte, max 80 caracteres.",
+  "description : tres courte, max 60 caracteres, style 'Revision complete', 'Vidange + filtres', 'Revision + pneus AV', 'Remplacement plaquettes AV', 'Reparation pare-chocs AR', 'Franchise sinistre carrosserie', 'Remplacement pare-brise', 'Diagnostic moteur', 'Loyer LLD - aout 2026'.",
+  "factureType : POUR UNE FACTURE UNIQUEMENT, classe-la dans UN type (un parmi : entretien, reparation, achat, leasing, cession, sinistre, autre). Ne mets JAMAIS 'entretien' par defaut : lis vraiment les prestations et applique ces regles :",
+  "- leasing : loyer d un organisme de credit-bail, LLD (location longue duree) ou LOA (location avec option d achat) (ex BPCE CAR LEASE, ARVAL, ALD, LEASEPLAN) avec 'Loyer', 'Redevance', 'Services', 'Location', ou une 'Periode' mensuelle. LLD comme LOA -> type leasing.",
+  "- entretien : operations PERIODIQUES ou PREVENTIVES (planifiees ou kilometriques) : revision constructeur, vidange, filtres, liquides, bougies, courroie/kit de distribution a l entretien, balais d essuie-glace, PNEUMATIQUES d usure (le remplacement de pneus est un entretien, pas une reparation), geometrie/parallelisme, recharge de climatisation, presentation au controle technique.",
+  "- reparation : suite a une PANNE, un diagnostic de dysfonctionnement ou une piece DEFECTUEUSE. Inclut la MECANIQUE (voyant moteur, recherche de panne, faisceau, bloc optique/phare, batterie HS, demarreur, alternateur, embrayage, suspension/direction : biellettes, rotules, amortisseurs, plaquettes/disques) ET la CARROSSERIE hors accident (pare-chocs, aile, retroviseur, peinture, debosselage). Une facture de CARROSSERIE n est PAS automatiquement un sinistre : sans marqueur de sinistre (voir ci-dessous), une reparation de carrosserie reste 'reparation'.",
+  "- sinistre : UNIQUEMENT si la facture porte un MARQUEUR de sinistre : numero de sinistre/dossier, nom d une compagnie d ASSURANCE, mention d EXPERTISE/expert, FRANCHISE, TIERS implique, ou PRISE EN CHARGE assurance. Un simple bris de glace/pare-brise ou une carrosserie SANS ces marqueurs = 'reparation', pas 'sinistre'.",
+  "- achat : ACHAT / acquisition d un vehicule (bon de commande, facture d achat d un vehicule neuf ou d occasion).",
+  "- cession : VENTE / reprise / cession d un vehicule.",
+  "- autre : frais annexes HORS mecanique et HORS detention directe : debours contravention (amende refacturee), demarches administratives (changement d adresse carte grise), location ponctuelle d un utilitaire (ex location camion 20m3), fournitures diverses. Range aussi ici le CARBURANT et les PEAGES (geres par des imports dedies dans l app : ne les compte pas comme entretien).",
+  "- DEVIS / PROFORMA / ESTIMATION (pas une vraie facture payee) : garde le type reel de la prestation (souvent reparation/sinistre) et commence la description par 'Devis - ' (l app exclut les devis des couts).",
+  "- AVOIR / NOTE DE CREDIT / montant NEGATIF (remboursement du fournisseur) : garde le type reel de la prestation d origine, commence la description par 'Avoir - ' et mets les montants en NEGATIF (montantTTC/HT/TVA precedes d un signe moins).",
+  "En cas de doute entre entretien et reparation : operation planifiee/kilometrique/pneus -> entretien ; depannage/remplacement d une piece tombee en panne -> reparation. Choisis TOUJOURS un type ; si vraiment indeterminable, mets 'autre' (jamais null pour une facture).",
   "AMENDE / AVIS DE CONTRAVENTION / PV - repere precisement :",
   "- numeroAvis : le numero de l avis, libelle 'Numero de l avis de contravention', en general EN HAUT A GAUCHE, ~10 chiffres. Recopie CHAQUE chiffre exactement (ne confonds pas 3 et 8, 0 et 6, 1 et 7).",
   "- CAS PARTICULIER FPS (Forfait de Post-Stationnement = 'Avis de paiement / Forfait de post-stationnement (FPS)', amende de stationnement) : le numero est sur la ligne 'Numero de l avis de paiement' sous la forme [longue reference 14 chiffres en bloc] [numero d avis en cases groupees NN N NNN NNN NNN] [Cle 2 chiffres]. Ex : '21590350100017  26 1 163 072 245  Cle 37'. Pour numeroAvis, prends le bloc en cases groupees SUIVI de la Cle, en CONSERVANT LES ESPACES tels quels -> '26 1 163 072 245 37' (mais SANS le long prefixe '21590350100017'). Mets aussi la Cle seule ('37') dans le champ cle. Pour un FPS : motif = 'Stationnement', points = 0 (un FPS ne retire jamais de point), et montant = 'Le montant du FPS du est egal a : XX euros'.",
@@ -4100,6 +5074,188 @@ FP.scanIA = async function (file, docType, promptOverride, opts) {
     return null;
   }
 };
+// === AGENT IA (tableau de bord) ============================================
+// Construit un résumé COMPACT de la flotte (chiffres agrégés + listes bornées)
+// à partir de FP_DATA et des helpers canoniques. Ce contexte est envoyé à l'IA
+// pour qu'elle réponde aux questions de l'utilisateur AVEC ses vraies données.
+// ⚠️ Tourne côté client, après login (données déjà chargées) — ce n'est PAS data.js
+// (le public) : on peut donc utiliser les vraies valeurs d'exploitation. On évite
+// quand même les PII lourdes inutiles (n° de permis, adresses) pour rester sobre.
+FP.aiContext = function (data) {
+  data = data || (window.FP_DATA || {});
+  const euro = (n) => (FP.euro ? FP.euro(n) : (Math.round(Number(n) || 0) + ' €'));
+  const lines = [];
+  let soc = 'PXP';
+  try { soc = localStorage.getItem('fp_societe') || 'PXP'; if (soc === '__all__') soc = 'Toutes sociétés'; } catch (e) {}
+  const now = new Date();
+  const ym = now.toISOString().slice(0, 7);
+  lines.push('SOCIÉTÉ : ' + soc);
+  lines.push('DATE DU JOUR : ' + now.toISOString().slice(0, 10));
+
+  const vehs = (data.vehicules || []);
+  const actifs = vehs.filter(v => !FP.estVendu(v));
+  const kmTotal = actifs.reduce((s, v) => s + (Number(v.km) || 0), 0);
+  const valeur = actifs.reduce((s, v) => s + (Number(v.valeurAchat) || Number(v.prix) || 0), 0);
+  lines.push('');
+  lines.push('=== PARC ===');
+  lines.push('Véhicules dans la flotte active : ' + actifs.length + ' (total possédés : ' + vehs.length + ')');
+  lines.push('Kilométrage total : ' + (FP.num ? FP.num(kmTotal) : kmTotal) + ' km');
+  if (valeur) lines.push('Valeur estimée du parc : ' + euro(valeur));
+  // Liste des véhicules (bornée) : immat, marque/modèle, km, statut, chauffeur, prochain CT
+  lines.push('Détail des véhicules :');
+  actifs.slice(0, 80).forEach(v => {
+    const parts = [
+      (v.immat || '?'),
+      [v.marque, v.modele].filter(Boolean).join(' '),
+    ];
+    if (v.km) parts.push((FP.num ? FP.num(v.km) : v.km) + ' km');
+    if (v.chauffeur) parts.push('conducteur ' + v.chauffeur);
+    if (v.pool) parts.push('groupe ' + v.pool);
+    if (v.prochainCT && v.prochainCT !== '—') parts.push('CT ' + v.prochainCT);
+    lines.push('- ' + parts.join(' · '));
+  });
+
+  // Amendes à payer
+  const amendes = (data.amendes || []);
+  const aPayer = amendes.filter(a => FP.estAPayer && FP.estAPayer(a));
+  const duTotal = aPayer.reduce((s, a) => s + (FP.montantDu ? FP.montantDu(a) : (Number(a.montant) || 0)), 0);
+  lines.push('');
+  lines.push('=== AMENDES ===');
+  lines.push('Amendes à payer : ' + aPayer.length + ' · total dû ' + euro(duTotal));
+  aPayer.slice()
+    .sort((a, b) => (FP.montantDu(b) - FP.montantDu(a)))
+    .slice(0, 15)
+    .forEach(a => {
+      const who = a.prenom || a.conducteur || '';
+      lines.push('- ' + [a.immat, who, a.date, euro(FP.montantDu(a))].filter(Boolean).join(' · '));
+    });
+
+  // Coûts (mois courant + 12 mois glissants)
+  lines.push('');
+  lines.push('=== COÛTS ===');
+  try { lines.push('Coût du mois en cours (' + ym + ') : ' + euro(FP.coutMois(data, ym))); } catch (e) {}
+  try {
+    let tot12 = 0;
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      tot12 += FP.coutMois(data, d.toISOString().slice(0, 7));
+    }
+    lines.push('Coût d\'exploitation sur 12 mois glissants : ' + euro(tot12));
+  } catch (e) {}
+
+  // Échéances à venir (90 j)
+  try {
+    const ech = (FP.buildEcheances ? FP.buildEcheances(data) : []).filter(e => {
+      const diff = Math.ceil((new Date(e.date) - now) / 86400000);
+      return diff <= 90;
+    });
+    lines.push('');
+    lines.push('=== ÉCHÉANCES (90 prochains jours) ===');
+    if (!ech.length) lines.push('Aucune échéance dans les 90 jours.');
+    ech.slice(0, 25).forEach(e => lines.push('- ' + e.date + ' · ' + e.categorie + ' · ' + (e.label || e.detail || '')));
+  } catch (e) {}
+
+  // Alertes en cours (résumé)
+  try {
+    const al = (FP.buildAlertes ? FP.buildAlertes(data) : []);
+    const nb = { danger: 0, warn: 0, info: 0 };
+    al.forEach(a => { if (nb[a.niveau] != null) nb[a.niveau]++; });
+    lines.push('');
+    lines.push('=== ALERTES ===');
+    lines.push('Urgentes : ' + nb.danger + ' · à prévoir : ' + nb.warn + ' · info : ' + nb.info);
+    al.slice(0, 12).forEach(a => lines.push('- [' + a.niveau + '] ' + a.categorie + ' : ' + a.message + ' (' + (a.detail || '') + ')'));
+  } catch (e) {}
+
+  return lines.join('\n');
+};
+
+// Pose une question en langage naturel à l'IA, en s'appuyant sur le résumé de la
+// flotte (FP.aiContext). Astuce : le relais « scan-doc » attend une IMAGE ; on lui
+// envoie donc un PNG 1×1 transparent + tout le raisonnement dans le prompt texte,
+// sans rien changer côté serveur. Renvoie une string (la réponse) ou null.
+FP._AI_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+FP.askIA = async function (question, opts) {
+  opts = opts || {};
+  question = String(question || '').trim();
+  if (!question) return null;
+  if (!(FP.supabase && FP.supabase.functions)) return null;
+  const ctx = opts.context || FP.aiContext();
+  const prompt = [
+    'Tu es l\'assistant de gestion de flotte « Parc Pilot ». Tu réponds à la question du',
+    'gestionnaire en te basant UNIQUEMENT sur les données de sa flotte fournies ci-dessous.',
+    'Réponds en FRANÇAIS, de façon claire, courte et directe (l\'utilisateur n\'est pas informaticien).',
+    'Donne des chiffres précis quand c\'est pertinent. Si l\'information demandée n\'est PAS dans les',
+    'données, dis-le simplement (« Je n\'ai pas cette information dans tes données ») — n\'INVENTE JAMAIS',
+    'un chiffre, un véhicule, un conducteur ou un montant. N\'ignore pas l\'image jointe : elle est vide',
+    'volontairement, tout est dans ce texte.',
+    '',
+    '===== DONNÉES DE LA FLOTTE =====',
+    ctx,
+    '===== FIN DES DONNÉES =====',
+    '',
+    'QUESTION DU GESTIONNAIRE : ' + question,
+    '',
+    'Réponds STRICTEMENT en JSON, sans texte autour, au format :',
+    '{ "reponse": "<ta réponse en français>" }',
+  ].join('\n');
+  const payload = { fileBase64: FP._AI_PIXEL, mediaType: 'image/png', docType: 'question', prompt, maxTokens: opts.maxTokens || 900 };
+  const names = [...new Set([FP._scanFn, 'Scan-doc', 'scan-doc'].filter(Boolean))];
+  for (const name of names) {
+    try {
+      const { data, error } = await FP.supabase.functions.invoke(name, { body: payload });
+      if (!error && data && data.ok && data.fields) {
+        FP._scanFn = name;
+        const f = data.fields;
+        if (typeof f === 'string') return f;
+        return f.reponse || f.answer || f.text || (typeof f === 'object' ? JSON.stringify(f) : String(f));
+      }
+    } catch (_) { /* essaie le nom suivant */ }
+  }
+  return null;
+};
+
+// ================= SANTÉ DU SERVICE IA (auto-diagnostic) =================
+// But : ne plus jamais échouer EN SILENCE. FP.aiHealth() envoie un mini-appel de test au relais
+// « scan-doc » et renvoie { ok, model, reason }. Sert au bandeau d'alerte (dashboard) et au bouton
+// « Tester l'IA » (Paramètres). FP.aiHealthLabel() traduit la panne en message clair + piste de fix.
+FP._aiErrText = async function (error) {
+  try { if (error && error.context && typeof error.context.json === 'function') { const j = await error.context.json(); if (j && (j.error || j.message)) return j.error || j.message; } } catch (_) {}
+  try { if (error && error.context && typeof error.context.text === 'function') { const t = await error.context.text(); if (t) return String(t).slice(0, 200); } } catch (_) {}
+  return (error && error.message) || 'Erreur du service IA.';
+};
+FP.aiHealth = async function () {
+  if (!(FP.supabase && FP.supabase.functions)) return { ok: false, reason: 'Connexion au serveur indisponible (non connecté ?).' };
+  const payload = { fileBase64: FP._AI_PIXEL, mediaType: 'image/png', docType: 'ping',
+    prompt: 'Test de disponibilité. Ignore l\'image (volontairement vide). Réponds STRICTEMENT en JSON : { "reponse": "ok" }.', maxTokens: 40 };
+  const names = [...new Set([FP._scanFn, 'Scan-doc', 'scan-doc'].filter(Boolean))];
+  let reason = 'Fonction IA « scan-doc » introuvable côté serveur.';
+  for (const name of names) {
+    try {
+      const { data, error } = await FP.supabase.functions.invoke(name, { body: payload });
+      if (error) { reason = await FP._aiErrText(error); continue; }
+      if (data && data.ok) { FP._scanFn = name; return { ok: true, model: data.model || null }; }
+      if (data && data.error) { reason = data.error; continue; }
+      reason = 'Réponse inattendue du service IA.';
+    } catch (e) { reason = (e && e.message) || String(e); }
+  }
+  return { ok: false, reason };
+};
+// Traduit un résultat de FP.aiHealth() en { level, msg, hint } compréhensible (admin).
+FP.aiHealthLabel = function (r) {
+  if (!r) return { level: 'err', msg: 'IA : état inconnu.' };
+  if (r.ok) return { level: 'ok', msg: 'IA opérationnelle' + (r.model ? ' — modèle ' + r.model : '') + '.' };
+  const s = (r.reason || '').toLowerCase();
+  if (/model|modèle|modele|not_found|not found|404|does not exist|unknown model/.test(s))
+    return { level: 'err', msg: 'Modèle Claude invalide ou retiré.', hint: 'Corrige `MODEL` (ou le secret ANTHROPIC_MODEL) dans la fonction scan-doc, puis redéploie.', reason: r.reason };
+  if (/api[_ ]?key|x-api-key|authentication|invalid.*key|unauthorized|401|manquante|permission/.test(s))
+    return { level: 'err', msg: 'Clé API Anthropic manquante ou invalide.', hint: 'Vérifie le secret ANTHROPIC_API_KEY dans Supabase → Edge Functions → Secrets.', reason: r.reason };
+  if (/quota|rate.?limit|overloaded|credit|billing|429|insufficient|exceeded/.test(s))
+    return { level: 'err', msg: 'Quota / crédit Anthropic épuisé (ou surcharge).', hint: 'Vérifie le solde / les limites de ton compte Anthropic.', reason: r.reason };
+  if (/connexion|serveur indisponible|non connecté/.test(s))
+    return { level: 'warn', msg: r.reason };
+  return { level: 'err', msg: 'Service IA indisponible.', hint: r.reason, reason: r.reason };
+};
+
 FP.uploadScan = async function (file, folder, opts) {
   opts = opts || {};
   if (!FP.supabase || !FP.supabase.storage) throw new Error('Stockage indisponible (Supabase non chargé).');
@@ -4160,12 +5316,99 @@ FP.signedScanUrl = async (url, expires) => {
     return (error || !data || !data.signedUrl) ? url : data.signedUrl;
   } catch (e) { return url; }
 };
+// Variante STRICTE : sert à savoir si le document EXISTE VRAIMENT (pour ne pas afficher l'erreur
+// brute « Bucket not found » dans un aperçu). Renvoie : le lien SIGNÉ si l'objet existe ; `null` si
+// l'objet/bucket est INTROUVABLE (erreur createSignedUrl) ; l'URL d'origine si on ne peut pas trancher
+// (Supabase pas encore prêt, ou URL hors bucket « scans »).
+FP.signedScanUrlStrict = async (url, expires) => {
+  try {
+    const path = FP.scanPath(url);
+    if (!path) return url;                                   // pas un fichier du bucket → on ne juge pas
+    if (!(FP.supabase && FP.supabase.storage)) return url;   // pas encore prêt → repli, pas d'erreur
+    const { data, error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).createSignedUrl(path, expires || 3600);
+    if (error || !data || !data.signedUrl) return null;      // objet/bucket manquant → aperçu impossible
+    return data.signedUrl;
+  } catch (e) { return null; }
+};
 // Ouvre un document : lien signé si c'est un fichier du bucket, sinon ouverture normale.
 FP.openScan = (url) => {
   if (!url) return;
   if (!/\/scans\//.test(url)) { window.open(url, '_blank', 'noopener'); return; }
   const w = window.open('', '_blank'); // ouvert TOUT DE SUITE (dans le geste de clic → pas bloqué)
   FP.signedScanUrl(url).then(u => { if (w) { try { w.opener = null; } catch (e) {} w.location = u; } else { location.href = u; } });
+};
+// ⚠️ SOURCE UNIQUE — Ouvre DIRECTEMENT le PDF/document concerné (jamais un aperçu intégré).
+// Accepte : une URL http(s), un chemin du bucket « scans » (→ lien signé), ou un ID Google Drive
+// (→ page /view). TOUT bouton « Voir » de la plateforme DOIT passer par ici pour un comportement
+// identique partout. Ouvre l'onglet DANS le geste de clic (sinon bloqué par le navigateur).
+FP.openPdf = function (ref, emptyMsg) {
+  const raw = String(ref == null ? '' : ref).trim();
+  if (!raw || /^IMP-/i.test(raw)) { if (FP.toast) FP.toast(emptyMsg || 'Aucun PDF disponible'); return false; }
+  const toFinal = (u) => /^https?:\/\//.test(u) ? u : ('https://drive.google.com/file/d/' + u + '/view');
+  const needSign = (/\/scans\//.test(raw) || /\/storage\/v1\/object\//.test(raw)) && FP.signedScanUrl;
+  if (!needSign) { window.open(toFinal(raw), '_blank', 'noopener'); return true; }
+  const w = window.open('', '_blank');
+  FP.signedScanUrl(raw, 600).then(u => { const f = toFinal(u || raw); if (w) { try { w.opener = null; } catch (e) {} w.location = f; } else { window.open(f, '_blank', 'noopener'); } })
+    .catch(() => { const f = toFinal(raw); if (w) w.location = f; else window.open(f, '_blank', 'noopener'); });
+  return true;
+};
+// ⚠️ SOURCE UNIQUE — Génère un VRAI fichier Excel (.xlsx) et le télécharge. Colonnes propres,
+// encodage UTF-8 correct (é, €… sans « signes bizarres »), montants NUMÉRIQUES (typeof number →
+// vraie cellule chiffre). Aucune dépendance : ZIP « store » + CRC32 écrits à la main.
+//   FP.downloadXlsx(nomFichier, entetes[], lignes[][], { sheet })  — une valeur number = cellule
+//   numérique ; sinon texte. À utiliser PARTOUT à la place des exports CSV « moches ».
+FP._xlsxCRC = (() => { let c, t = []; for (let n = 0; n < 256; n++) { c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t; })();
+FP.buildXlsx = function (headers, rows, sheetName) {
+  const CT = FP._xlsxCRC, te = new TextEncoder();
+  const crc32 = (b) => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CT[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const enc = (s) => te.encode(s);
+  const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const colL = (i) => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = (i - (m + 1)) / 26; } return s; };
+  const sheetRows = [];
+  sheetRows.push('<row r="1">' + (headers || []).map((h, c) => `<c r="${colL(c)}1" t="inlineStr" s="1"><is><t xml:space="preserve">${esc(h)}</t></is></c>`).join('') + '</row>');
+  (rows || []).forEach((row, ri) => { const r = ri + 2;
+    sheetRows.push(`<row r="${r}">` + row.map((v, c) => { const ref = colL(c) + r;
+      if (typeof v === 'number' && isFinite(v)) return `<c r="${ref}"><v>${v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+    }).join('') + '</row>');
+  });
+  const nm = String(sheetName || 'Feuille1').replace(/[\\\/\?\*\[\]:]/g, ' ').slice(0, 31) || 'Feuille1';
+  const sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + sheetRows.join('') + '</sheetData></worksheet>';
+  const files = [
+    { name: '[Content_Types].xml', bytes: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>') },
+    { name: '_rels/.rels', bytes: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>') },
+    { name: 'xl/workbook.xml', bytes: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="' + esc(nm) + '" sheetId="1" r:id="rId1"/></sheets></workbook>') },
+    { name: 'xl/_rels/workbook.xml.rels', bytes: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>') },
+    { name: 'xl/styles.xml', bytes: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="1"><fill><patternFill patternType="none"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>') },
+    { name: 'xl/worksheets/sheet1.xml', bytes: enc(sheetXml) },
+  ];
+  // ZIP « store » (aucune compression) + répertoire central + EOCD.
+  const chunks = [], central = []; let off = 0;
+  const u16 = (n) => [n & 255, (n >> 8) & 255], u32 = (n) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255];
+  for (const f of files) {
+    const nameB = enc(f.name), crc = crc32(f.bytes), sz = f.bytes.length;
+    const lh = [].concat(u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0), u32(crc), u32(sz), u32(sz), u16(nameB.length), u16(0));
+    chunks.push(Uint8Array.from(lh), nameB, f.bytes);
+    const ch = [].concat(u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0), u32(crc), u32(sz), u32(sz), u16(nameB.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(off));
+    central.push(Uint8Array.from(ch), nameB);
+    off += lh.length + nameB.length + sz;
+  }
+  let csize = 0; central.forEach(c => csize += c.length);
+  const eocd = [].concat(u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length), u32(csize), u32(off), u16(0));
+  const all = chunks.concat(central, [Uint8Array.from(eocd)]);
+  let tot = 0; all.forEach(a => tot += a.length); const out = new Uint8Array(tot); let p = 0; all.forEach(a => { out.set(a, p); p += a.length; });
+  return out;
+};
+FP.downloadXlsx = function (filename, headers, rows, opts) {
+  opts = opts || {};
+  try {
+    const bytes = FP.buildXlsx(headers, rows, opts.sheet);
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob); const el = document.createElement('a');
+    el.href = url; el.download = String(filename || 'export').replace(/\.xlsx$/i, '') + '.xlsx';
+    document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
+    return true;
+  } catch (e) { console.warn('[downloadXlsx]', e); if (FP.toast) FP.toast('Export Excel impossible.'); return false; }
 };
 // Intercepte les clics sur les liens « Voir / Ouvrir » d'un document → ouverture signée.
 document.addEventListener('click', (e) => {
@@ -4190,7 +5433,20 @@ FP._signMedia = function (el) {
     if (el.dataset.scanSigned === '1') return;
     el.dataset.scanSigned = '1';
     if (/\/object\/sign\//.test(cur)) return; // déjà un lien signé
-    FP.signedScanUrl(cur, 3600).then(u => { if (u && u !== cur) el.setAttribute('src', u); });
+    FP.signedScanUrlStrict(cur, 3600).then(u => {
+      if (u === null) {
+        // Document INTROUVABLE (objet/bucket manquant) : au lieu de laisser l'iframe afficher l'erreur
+        // brute « Bucket not found » (JSON illisible), on remplace par un message propre. Vaut pour
+        // TOUTES les pages (amendes, factures, sinistres, conducteurs…) via le MutationObserver global.
+        const msg = document.createElement('div');
+        msg.className = 'scan-missing';
+        msg.style.cssText = 'padding:1.1rem;text-align:center;color:var(--fp-muted,#64748b);font-size:.85rem;line-height:1.5;border:1px dashed var(--fp-border);border-radius:.55rem;background:var(--fp-surface,#f8fafc)';
+        msg.innerHTML = '📄 Aperçu indisponible — ce document n\'a pas pu être chargé (fichier introuvable). Réimporte-le, ou ouvre-le via « Ouvrir en grand ».';
+        if (el.parentNode) el.parentNode.replaceChild(msg, el);
+        return;
+      }
+      if (u && u !== cur) el.setAttribute('src', u);
+    });
   } catch (e) {}
 };
 FP.hydrateScanMedia = function (root) {
@@ -4340,6 +5596,131 @@ FP.ocr = {
   },
 };
 
+// ================= FACTURES ULYS (péages VINCI) — lecture précise PARTAGÉE =================
+// SOURCE DE VÉRITÉ UNIQUE pour lire un relevé Ulys (règle « une seule source ») : le PDF a une
+// couche texte, mais une lecture standard MÉLANGE les colonnes → montants/prénoms faux. On
+// reconstruit donc les lignes en triant les fragments PAR POSITION (y décroissant puis x), puis on
+// ancre le détail par collaborateur sur le N° DE BADGE. Utilisé par la page Factures (import) ET
+// par le scanner unifié (pages/scanner.html). Ne JAMAIS réimplémenter ailleurs.
+FP.ulys = {
+  MOIS_FR: { janvier:'01',fevrier:'02',mars:'03',avril:'04',mai:'05',juin:'06',juillet:'07',aout:'08',septembre:'09',octobre:'10',novembre:'11',decembre:'12' },
+  num(s){ return parseFloat(String(s).replace(/\s/g,'').replace(',','.')) || 0; },
+  norm(s){ return (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); },
+  slug(s){ return (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,''); },
+  moisLabel(m){ const [y,mo]=(m||'').split('-'); const N=['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo?`${N[+mo]} ${y}`:m; },
+  // Reconstruit le texte du PDF EN LIGNES (tri par position). Repli sur OCR image si pas de couche texte.
+  async pdfToText(file){
+    try {
+      await FP.ocr.loadScript(FP.ocr.PDFJS_CDN);
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = FP.ocr.PDFJS_WORKER;
+      const buf = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+      let text = '';
+      for (let pg=1; pg<=pdf.numPages; pg++){
+        const page = await pdf.getPage(pg);
+        const tc = await page.getTextContent();
+        const items = tc.items.filter(i => i.str && i.str.trim() !== '')
+          .map(i => ({ x: i.transform[4], y: i.transform[5], s: i.str.trim() }));
+        items.sort((a,b) => (b.y - a.y) || (a.x - b.x));   // haut→bas puis gauche→droite
+        const lines = []; let cur = null;
+        for (const it of items){
+          if (!cur || Math.abs(it.y - cur.y) > 2){ cur = { y: it.y, parts: [it] }; lines.push(cur); }
+          else cur.parts.push(it);
+        }
+        for (const ln of lines){ ln.parts.sort((a,b)=>a.x-b.x); text += ln.parts.map(p=>p.s).join(' ') + '\n'; }
+        text += '\n';
+      }
+      return text;
+    } catch(e){ console.warn('[FP.ulys.pdfToText]', e); return ''; }
+  },
+  // Extrait n° / date / période / HT / TVA / TTC + détail par collaborateur (ancré sur le badge).
+  parse(text){
+    const t = String(text || '').replace(/[\u00a0\u202f\u2009]/g, ' ');   // normalise les espaces insecables
+    const N = (s) => this.num(s);
+    const mNum = t.match(/Facture\s*n[°ºo]\s*([A-Z]{1,3}\d{6,})/i);
+    const mEm  = t.match(/[ÉE]mise?\s*le\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+    const numero = mNum ? mNum[1] : null;
+    const emise = mEm ? `${mEm[3]}-${mEm[2]}-${mEm[1]}` : '';
+    let mois = '';
+    const mPer = t.match(/Facture\s+(?:de|d['’])\s*([a-zA-ZéèûôA-ZÀ-Ý]+)\s*(\d{4})/);
+    if (mPer){ const mm = this.MOIS_FR[this.norm(mPer[1])]; if (mm) mois = mPer[2] + '-' + mm; }
+    if (!mois && emise){ const d = new Date(emise); d.setMonth(d.getMonth()-1); mois = d.toISOString().slice(0,7); }
+    // Date de la facture = 1er jour de la PÉRIODE (sinon « janvier » s'afficherait en février).
+    const date = mois ? (mois + '-01') : emise;
+    // Montants : TTC = « NET A PAYER TTC » imprimé avec € ; TVA = 20 % d'une base du récap 1re page ; HT = TTC − TVA.
+    let ht=null, tva=null, ttc=null;
+    const toNums = (s) => (String(s||'').match(/\d[\d\s]*,\d{2}/g)||[]).map(N);
+    const afterNet = t.split(/NET\s*A\s*PAYER\s*TTC/i).slice(1).join(' ') || t;
+    const mTtc = afterNet.match(/(\d[\d\s]*,\d{2})\s*€/) || t.match(/(\d[\d\s]*,\d{2})\s*€/);
+    if (mTtc) ttc = N(mTtc[1]);
+    const page1 = t.split(/Badge n[°ºo]/)[0];
+    const p1nums = toNums(page1);
+    if (ttc == null && p1nums.length) ttc = Math.max.apply(null, p1nums);
+    if (ttc != null){
+      let best = null;
+      for (const b of p1nums) for (const tv of p1nums){
+        if (tv > 0 && Math.abs(b * 0.20 - tv) <= 0.02 && b + tv <= ttc + 0.05){ if (!best || b > best.b) best = { b, tv }; }
+      }
+      if (best){ tva = best.tv; ht = +(ttc - tva).toFixed(2); }
+      else { ht = +(ttc / 1.2).toFixed(2); tva = +(ttc - ht).toFixed(2); }
+    }
+    // Détail par collaborateur, ancré sur le N° DE BADGE (l'ordre des prénoms n'est PAS fiable).
+    const badgeSuffix = (x) => String(x).replace(/\D/g,'').slice(-5);
+    const nameByBadge = {};
+    { const rx = /Badge\s*n[°ºo]\s+([\d ]+\d)\s+([A-Za-zÀ-ÿ][^\n]*?)\s*$/gim; let m;
+      while ((m = rx.exec(t))){ const suf = badgeSuffix(m[1]); const nm = m[2].trim();
+        if (suf && nm && !nameByBadge[suf]) nameByBadge[suf] = nm; } }
+    const conso = [];
+    { const rx = /Total\s+Badge\s+([\d ]+?\d)\s+(\d+)\s*consommation\(s\)\s*([\d\s.,]+?)\s*€\s*TTC\s*([\d\s.,]+?)\s*km/gi; let m;
+      const seenB = new Set();
+      while ((m = rx.exec(t))){
+        const badgeFull = m[1]; const suf = badgeSuffix(badgeFull); if (seenB.has(suf)) continue; seenB.add(suf);
+        // Priorité : conducteur enregistré avec CE badge (fiable) > nom lu à côté sur le PDF > « Badge <suf> ».
+        let cond = null;
+        try { const rc = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(badgeFull); if (rc && rc.name) cond = rc.name; } catch (e) {}
+        conso.push({ conducteur: cond || nameByBadge[suf] || ('Badge ' + suf), nb: parseInt(m[2],10)||0, ttc: N(m[3]), km: N(m[4]) });
+      }
+    }
+    // Détail DATÉ transaction par transaction : le relevé Ulys porte une COLONNE DATE par consommation.
+    // Défensif & indépendant des colonnes : dans le bloc de CHAQUE badge (entre « Badge n° … » et son
+    // « Total Badge »), toute ligne contenant une date JJ/MM/AAAA = une conso ce jour-là (montant =
+    // dernier nombre à 2 décimales de la ligne, best-effort). Sert à repérer une conso pendant un congé.
+    const txConso = [];
+    {
+      const heads = []; const rxHead = /Badge\s*n[°ºo]\s+([\d ]+\d)\s+([A-Za-zÀ-ÿ][^\n]*?)\s*$/gim; let hm;
+      while ((hm = rxHead.exec(t))) heads.push({ end: rxHead.lastIndex, badge: hm[1], nom: hm[2].trim(), i: hm.index });
+      for (let k = 0; k < heads.length; k++){
+        const h = heads[k];
+        let end = (k + 1 < heads.length) ? heads[k + 1].i : t.length;
+        const totIdx = t.indexOf('Total Badge', h.end); if (totIdx >= 0 && totIdx < end) end = totIdx;
+        const block = t.slice(h.end, end);
+        const suf = badgeSuffix(h.badge);
+        let cond = null; try { const rc = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(h.badge); if (rc && rc.name) cond = rc.name; } catch (e) {}
+        cond = cond || nameByBadge[suf] || h.nom || ('Badge ' + suf);
+        // Chaque transaction commence par une date JJ/MM/AAAA. On lit le SEGMENT jusqu'à la date
+        // suivante (robuste au retour à la ligne « entrée / sortie » du péage). Colonnes réelles Ulys :
+        //   … Classe | Tarif € HT | Tarif € TTC | TVA | Km — donc le TTC = le 2e nombre à 2 décimales
+        // (le 1er = HT). Le Km (ex. « 24,6 ») n'a qu'UNE décimale → il n'est pas capté. Pas de « € » sur la ligne.
+        const dre = /(\d{2})\/(\d{2})\/(\d{2,4})/g; const dpos = []; let dm2;
+        while ((dm2 = dre.exec(block))) dpos.push({ i: dm2.index, m: dm2 });
+        for (let j = 0; j < dpos.length; j++) {
+          const m = dpos[j].m; const mo = +m[2], da = +m[1]; if (mo < 1 || mo > 12 || da < 1 || da > 31) continue;
+          let yy = m[3]; if (yy.length === 2) yy = '20' + yy;
+          const dateIso = yy + '-' + m[2] + '-' + m[1];
+          const seg = block.slice(dpos[j].i, (j + 1 < dpos.length ? dpos[j + 1].i : block.length));
+          const amts = (seg.match(/\d[\d\s]*,\d{2}(?!\d)/g) || []).map(N);
+          const montant = amts.length >= 2 ? amts[1] : (amts.length === 1 ? amts[0] : null);
+          txConso.push({ date: dateIso, conducteur: cond, badge: suf, montant });
+        }
+      }
+    }
+    return { numero, date, mois, ht, tva, ttc, conso, txConso };
+  },
+  // Enregistrements prêts pour la base — MÊMES ids/formats que l'import de la page Factures.
+  factureRecord(p){ return { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+this.moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc }; },
+  consoRecord(c, societe){ return { id:'ULYSC-'+c.mois+'-'+this.slug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe: societe||'PXP' }; }
+};
+
 // ================= DÉTECTION DE DOUBLONS (toute la plateforme) =================
 // Un helper unique pour éviter d'ajouter deux fois le même élément (factures, amendes,
 // véhicules, conducteurs, emprunts, sinistres). Chaque table a sa règle d'identité.
@@ -4349,7 +5730,7 @@ FP.ocr = {
 FP.dupe = {
   _n(s){ return (s == null ? '' : String(s)).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ''); },
   _num(v){ if (v == null || v === '') return null; const n = parseFloat(String(v).replace(/\s/g, '').replace(',', '.')); return isNaN(n) ? null : n; },
-  _amtEq(a, b){ const x = this._num(a), y = this._num(b); return x != null && y != null && Math.abs(x - y) < 0.01; },
+  _amtEq(a, b){ const x = this._num(a), y = this._num(b); return x != null && y != null && Math.abs(x - y) <= 0.02; },
   _same(a, b){ return a && b && a === b; },
   find(table, rec, list){
     if (!rec) return null;
@@ -5120,6 +6501,13 @@ FP.history = {
   },
 
   restore(snap) {
+    // État AVANT restauration (en mémoire) → sert à RÉCONCILIER la base : on ne pousse
+    // que ce qui change réellement (aucune écriture inutile).
+    const snapArr = (a) => (Array.isArray(a) ? JSON.parse(JSON.stringify(a)) : []);
+    const before = {
+      vehicules: (window.FP_DATA && window.FP_DATA.vehicules) ? snapArr(window.FP_DATA.vehicules) : [],
+      amendes:   (window.FP_DATA && window.FP_DATA.amendes)   ? snapArr(window.FP_DATA.amendes)   : [],
+    };
     localStorage.setItem(FP.settings._key(), JSON.stringify(snap.settings));
     localStorage.setItem(FP.VEH_OVERRIDES_KEY, JSON.stringify(snap.overrides));
     if (snap.fpData && window.FP_DATA) {
@@ -5132,6 +6520,40 @@ FP.history = {
     FP.settings.applyTheme();
     this.renderAll();
     this.updateUI();
+    // ⚠️ PERSISTER l'annulation/rétablissement DANS SUPABASE (sinon la modif « annulée »
+    // revient au rechargement / sur les autres postes). On pousse les réglages (delta) et on
+    // réconcilie les tables suivies (véhicules, amendes) : upsert des lignes restaurées/modifiées,
+    // suppression des lignes que l'annulation retire. Rien n'est envoyé si Supabase est absent
+    // (mode hors-ligne) — la file FP.persist rejouera plus tard.
+    try { if (FP.settings && FP.settings._pushSettings) FP.settings._pushSettings(snap.settings); } catch (e) {}
+    try { this._persistRestore(before, (snap.fpData || {})); } catch (e) { console.warn('[history._persistRestore]', e); }
+  },
+
+  // Aligne Supabase sur l'état restauré, table par table, SANS écriture inutile :
+  // - ligne présente après mais absente/différente avant → upsert (l'upsert ne touche
+  //   que les colonnes fournies, il n'efface pas les colonnes non mappées) ;
+  // - ligne présente avant mais absente après → delete (annulation d'un ajout).
+  _persistRestore(before, after) {
+    if (!(FP.persist && FP.persist.upsert && FP.persist.delete)) return;
+    const idMap = (arr) => { const m = {}; (arr || []).forEach(x => { if (x && x.id != null) m[x.id] = x; }); return m; };
+    ['vehicules', 'amendes'].forEach((tbl) => {
+      const bMap = idMap(before[tbl]);
+      const aArr = Array.isArray(after[tbl]) ? after[tbl] : null;
+      if (!aArr) return; // table non incluse dans ce snapshot → on n'y touche pas
+      const aMap = idMap(aArr);
+      // Ajouts / modifications à repousser
+      aArr.forEach((row) => {
+        if (!row || row.id == null) return;
+        const prev = bMap[row.id];
+        if (!prev || JSON.stringify(prev) !== JSON.stringify(row)) {
+          try { FP.persist.upsert(tbl, row); } catch (e) {}
+        }
+      });
+      // Lignes retirées par l'annulation → suppression (sans dépôt Corbeille : c'est un undo)
+      Object.keys(bMap).forEach((id) => {
+        if (!aMap[id]) { try { FP.persist.delete(tbl, id); } catch (e) {} }
+      });
+    });
   },
 
   canUndo() { return this.past.length > 0; },
@@ -5589,7 +7011,7 @@ FP.smartAnswers = (q) => {
 
   // 1) « combien de … »
   if (has('combien', 'nombre de', 'nb ')) {
-    if (has('vehicule', 'voiture')) { const n = vehs.filter(v => !/vendu/i.test(v.statut || '')).length; out.push({ icon: '💡', label: `${n} véhicules actifs`, sub: 'dans la flotte', url: pref + 'vehicules.html' }); }
+    if (has('vehicule', 'voiture')) { const n = vehs.filter(v => !FP.estVendu(v)).length; out.push({ icon: '💡', label: `${n} véhicules actifs`, sub: 'dans la flotte', url: pref + 'vehicules.html' }); }
     if (has('amende')) out.push({ icon: '💡', label: `${am.length} amendes`, sub: 'enregistrées', url: pref + 'amendes.html' });
     if (has('facture')) out.push({ icon: '💡', label: `${facts.length} factures`, sub: 'enregistrées', url: pref + 'factures.html' });
     if (has('conducteur', 'chauffeur', 'salarie')) out.push({ icon: '💡', label: `${conds.length} conducteurs`, sub: 'enregistrés', url: pref + 'conducteurs.html' });
@@ -5631,7 +7053,7 @@ FP.smartAnswers = (q) => {
 
   // 5) TVS / CO₂ (totaux flotte)
   if (has('tvs', 'taxe')) { const t = vehs.reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0); out.push({ icon: '🏛️', label: `${eur(t)} — TVS annuelle`, sub: 'estimée sur la flotte', url: pref + 'statistiques.html' }); }
-  if (has('co2', 'carbone', 'emission')) { let g = 0; vehs.forEach(v => { const cat = (v.categorie || '').toLowerCase(); if (/moto|utilit|engin|remorque/.test(cat) || /vendu/i.test(v.statut || '')) return; const c = Number(v.co2); if (/lectri|hydrog/.test((v.carburant || '').toLowerCase())) return; if (Number.isFinite(c) && c > 0) g += c * 15000; }); out.push({ icon: '🌱', label: `${(Math.round(g / 1e5) / 10).toLocaleString('fr-FR')} t CO₂/an`, sub: 'estimation (15 000 km/an)', url: pref + 'statistiques.html' }); }
+  if (has('co2', 'carbone', 'emission')) { let g = 0; vehs.forEach(v => { const cat = (v.categorie || '').toLowerCase(); if (/moto|utilit|engin|remorque/.test(cat) || FP.estVendu(v)) return; const c = Number(v.co2); if (/lectri|hydrog/.test((v.carburant || '').toLowerCase())) return; if (Number.isFinite(c) && c > 0) g += c * 15000; }); out.push({ icon: '🌱', label: `${(Math.round(g / 1e5) / 10).toLocaleString('fr-FR')} t CO₂/an`, sub: 'estimation (15 000 km/an)', url: pref + 'statistiques.html' }); }
 
   const seen = new Set();
   return out.filter(a => { if (seen.has(a.label)) return false; seen.add(a.label); return true; }).slice(0, 4);
@@ -6045,11 +7467,17 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     // Ligne de total (si au moins une colonne a une fonction `sum`) → pied de tableau « TOTAL ».
     let foot = null;
     if (cols.some(c => typeof c.sum === 'function')) {
-      const footRow = ['TOTAL'];
-      cols.forEach(c => {
+      // ⚠️ Le libellé « TOTAL » ne doit PAS aller dans la colonne « # » (8 mm) : il s'y afficherait
+      // à la VERTICALE (une lettre par ligne). On le met dans une cellule FUSIONNÉE (colSpan) qui
+      // couvre le « # » + toutes les colonnes AVANT le 1er total, alignée à droite → il a la place.
+      const firstSumCol = cols.findIndex(c => typeof c.sum === 'function');   // index dans `cols`
+      const span = firstSumCol < 0 ? 1 : firstSumCol + 1;                      // +1 pour la colonne « # »
+      const footRow = [{ content: 'TOTAL', colSpan: span, styles: { halign: 'right', fontStyle: 'bold' } }];
+      cols.forEach((c, idx) => {
+        if (idx < firstSumCol) return;   // déjà couvert par le colSpan du libellé
         if (typeof c.sum === 'function') {
           const t = rows.reduce((s, r) => { const n = Number(c.sum(r)); return s + (isFinite(n) ? n : 0); }, 0);
-          footRow.push(clean(c.fmt ? c.fmt(t) : FP.euro(t)));
+          footRow.push({ content: clean(c.fmt ? c.fmt(t) : FP.euro(t)), styles: { halign: c.align === 'right' ? 'right' : 'left' } });
         } else footRow.push('');
       });
       foot = [footRow];
@@ -6059,7 +7487,7 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       body: rows.map((r, i) => [String(i + 1)].concat(cols.map(c2 => clean(c2.get(r))))),
       foot: foot || undefined,
       footStyles: { fillColor: [241, 245, 249], textColor: [15, 30, 61], fontStyle: 'bold', fontSize: 9, lineColor: [203, 213, 225], lineWidth: 0.1 },
-      startY: 36, margin: { top: 36, left: 10, right: 10 }, theme: 'grid',
+      startY: 36, margin: { top: 36, left: 10, right: 10 }, tableWidth: pageW - 20, theme: 'grid',
       styles: { fontSize: 9, cellPadding: { top: 2.6, right: 3, bottom: 2.6, left: 3 }, textColor: [30, 41, 59], lineColor: [233, 238, 245], lineWidth: 0.1, valign: 'middle' },
       headStyles: { fillColor: [15, 30, 61], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5, lineColor: [15, 30, 61], lineWidth: 0, cellPadding: { top: 3, right: 3, bottom: 3, left: 3 } },
       alternateRowStyles: { fillColor: [247, 249, 252] },
@@ -6084,10 +7512,12 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
 
   function openPreview() {
     const c = ctx(); if (!c) return;
-    if (!window.jspdf || !window.jspdf.jsPDF) { alert('La librairie PDF n\'est pas chargée sur cette page.'); return; }
+    if (!(window.jspdf && window.jspdf.jsPDF)) { FP.ensureJsPDF().then(openPreview).catch(() => alert('La librairie PDF n\'a pas pu être chargée.')); return; }
     const made = makeDoc(c);
     curDoc = made.doc; curName = made.filename;
-    const url = curDoc.output('bloburl');
+    // #view=FitH → le PDF s'ouvre ajusté à la LARGEUR (lisible d'emblée, plus le mini-aperçu à 27 %) ;
+    // navpanes=0 masque le volet de vignettes à gauche → on voit le document en grand.
+    const url = curDoc.output('bloburl') + '#toolbar=1&navpanes=0&view=FitH';
     prev.querySelector('#fp-prev-frame').src = url;
     prev.querySelector('#fp-prev-sub').textContent = '· ' + c.rows.length + ' ligne(s)';
     modal.style.display = 'none';
@@ -6139,7 +7569,7 @@ FP.pdfPreview = function (doc, filename, subtitle) {
   }
   ov._doc = doc; ov._name = filename || 'document.pdf';
   ov.querySelector('#fp-pdfprev-sub').textContent = subtitle || '';
-  ov.querySelector('#fp-pdfprev-frame').src = doc.output('bloburl');
+  ov.querySelector('#fp-pdfprev-frame').src = doc.output('bloburl') + '#toolbar=1&navpanes=0&view=FitH';
   ov.style.display = 'flex';
   if (window.lucide) try { lucide.createIcons(); } catch (e) {}
 };
@@ -6153,7 +7583,12 @@ FP.pdfPreview = function (doc, filename, subtitle) {
 FP.injectDataIO = function (cfg) {
   cfg = cfg || {};
   const cols = (cfg.columns || []).filter(c => c && c.key && !c.readonly);
-  if (!cols.length || typeof cfg.onImport !== 'function') return;
+  // Deux capacités indépendantes : IMPORT (si onImport) et EXPORT Excel (si getRows).
+  // ⚠️ RÈGLE PROJET « tout en Excel » : dès qu'une page fournit getRows, injectDataIO
+  // pose AUTOMATIQUEMENT un bouton « Exporter (Excel) » (.xlsx), partout, pareil.
+  const canImport = typeof cfg.onImport === 'function' && cols.length > 0 && cfg.exportOnly !== true;
+  const canExport = typeof cfg.getRows === 'function' && cfg.export !== false && (cfg.columns || []).length > 0;
+  if (!canImport && !canExport) return;
   const mount = document.querySelector('[data-data-io]');
   if (!mount || mount.dataset.ioReady === '1') return;
   mount.dataset.ioReady = '1';
@@ -6209,7 +7644,40 @@ FP.injectDataIO = function (cfg) {
     return { records, mapped, ignored };
   }
 
-  // --- Bouton + modale ---
+  // --- Bouton EXPORT (Excel .xlsx) — même standard partout (montants = vraies cellules
+  //     numériques, encodage propre, plus de « signes bizarres » du CSV). ---
+  if (canExport) {
+    const numFmt = (FP.csv && FP.csv.numFormat) || null;
+    const expColDefs = (cfg.columns || []).map(c => {
+      const isNum = c.number === true || (numFmt && c.format === numFmt);
+      return {
+        label: c.label, number: isNum, noTotal: c.noTotal === true,
+        value: (r) => {
+          let v = r[c.key];
+          if (isNum) { const n = Number(v); return (v === '' || v == null || !isFinite(n)) ? '' : n; }
+          if (c.format && (!numFmt || c.format !== numFmt)) { try { v = c.format(v, r); } catch (e) {} }
+          if (Array.isArray(v)) v = v.join(', ');
+          return v == null ? '' : v;
+        },
+      };
+    });
+    const expBtn = document.createElement('button');
+    expBtn.type = 'button';
+    expBtn.className = 'btn btn-outline text-sm';
+    expBtn.innerHTML = '<i data-lucide="sheet" class="w-4 h-4"></i> Exporter (Excel)';
+    expBtn.addEventListener('click', () => {
+      let rows = [];
+      try { rows = (cfg.getRows() || []).slice(); } catch (e) { rows = []; }
+      if (!rows.length) { if (FP.toast) FP.toast('Aucune ligne à exporter (vérifie les filtres).'); return; }
+      const baseName = String(cfg.baseName || cfg.filename || 'export').replace(/\.(csv|xlsx|xls)$/i, '');
+      if (FP.exportRows) FP.exportRows(baseName, expColDefs, rows, 'xlsx', { sheetName: cfg.sheetName || 'Export', total: !!cfg.total });
+      else if (FP.toast) FP.toast('Export Excel indisponible.');
+    });
+    mount.appendChild(expBtn);
+  }
+
+  // --- Bouton IMPORT + modale (uniquement si la page fournit onImport) ---
+  if (!canImport) { if (window.lucide) try { lucide.createIcons(); } catch (e) {} return; }
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn btn-outline text-sm';
@@ -6591,6 +8059,9 @@ document.addEventListener('DOMContentLoaded', () => {
   (function backupReminder() {
     try {
       if (!(FP.isCEO && FP.isCEO())) return;
+      // Sur téléphone : pas de rappel de sauvegarde (télécharger un fichier de sauvegarde n'a
+      // pas de sens sur mobile, et le pop-up gêne). Réservé aux écrans larges (ordinateur).
+      try { if (window.matchMedia && window.matchMedia('(max-width: 820px)').matches) return; } catch (e) {}
       if (sessionStorage.getItem('fp_backup_reminded') === '1') return;
       let iso = ''; try { iso = localStorage.getItem('fp_last_backup') || ''; } catch (e) {}
       const stale = !iso || (Date.now() - new Date(iso).getTime()) > 30 * 86400000;

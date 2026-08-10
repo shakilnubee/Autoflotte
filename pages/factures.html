@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")==="1"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Factures — Parc Pilot</title>
 <link rel="manifest" href="../manifest.json">
@@ -15,12 +16,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803f">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809h">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -64,6 +65,7 @@
   .fa-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: fa-spin .7s linear infinite; }
   @keyframes fa-spin { to { transform: rotate(360deg); } }
   .chart-wrap-sm { position: relative; height: 240px; }
+  .tf-anom-hidden { display: none; }
 </style>
 <script>
 (function(){
@@ -80,7 +82,7 @@
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")==="1")document.body.classList.add("fp-dark")}catch(e){}</script>
 
 <div class="flex min-h-screen flex-col md:flex-row">
 
@@ -99,9 +101,10 @@
       <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
       <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
       <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="controle.html" data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
       <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
       <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
-      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
       <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
       <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
       <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
@@ -154,22 +157,30 @@
       <h1 class="text-2xl font-extrabold text-white" style="color:#fff" data-edit-key="factures.title">Factures</h1>
       <p class="text-sm mt-1" style="color:#8598B4" data-edit-key="factures.subtitle">Toutes les factures de la flotte — entretien, leasing, achats, sinistres</p>
     </div>
-    <div class="flex flex-wrap justify-end items-center gap-4 mb-8">
+    <div id="fa-actionbar" class="flex flex-wrap justify-end items-center gap-4 mb-8">
       <div class="flex items-center gap-3">
         <span data-data-io></span>
-        <span id="fa-export-mount"></span>
-        <button class="btn btn-outline text-sm" id="fa-fiche-btn" title="Relevé de dépenses (PDF) des factures affichées"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
-        <span id="fa-recap-mount"></span>
+        <!-- Exports SPÉCIFIQUES à l'onglet Factures → masqués sur les autres sous-onglets (Total Fleet/Ulys
+             ont leurs propres exports). Évite le bug « le bouton exporte les factures alors que je suis sur Total Fleet ». -->
+        <span id="fa-topexports" class="inline-flex items-center gap-3">
+          <span id="fa-export-mount"></span>
+          <button class="btn btn-outline text-sm" id="fa-fiche-btn" title="Relevé de dépenses (PDF) des factures affichées"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
+          <span id="fa-recap-mount"></span>
+        </span>
+        <button class="btn btn-outline text-sm" id="btn-import-lot" title="Déposer plusieurs PDF : l'IA lit chaque facture et la crée automatiquement"><i data-lucide="files" class="w-4 h-4"></i> Importer un lot (PDF)</button>
+        <input type="file" id="fa-lot-file" accept="application/pdf,image/*" multiple class="hidden" />
         <button class="btn btn-dark text-sm" id="btn-import-facture" data-quickadd><i data-lucide="file-up" class="w-4 h-4"></i> Importer une facture</button>
       </div>
     </div>
 
-    <!-- Onglets : Factures / Documents / Total Fleet -->
-    <div style="display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--fp-border)">
+    <!-- Onglets : Factures / Documents / Fournisseurs. Total Fleet & Ulys ont DÉMÉNAGÉ dans la page
+         Contrôle → leurs boutons sont masqués ici (display:none) mais les panneaux restent, affichés
+         par la page Contrôle via une vue intégrée (?embed&tab=total|ulys). -->
+    <div id="fa-tabbar" style="display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--fp-border)">
       <button id="tab-btn-factures" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">Factures</button>
       <button id="tab-btn-documents" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Documents <span style="font-size:11px;font-weight:600">· archives & suivi</span></button>
-      <button id="tab-btn-total" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Total Fleet <span style="font-size:11px;font-weight:600">· carburant & péages</span></button>
-      <button id="tab-btn-ulys" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Ulys <span style="font-size:11px;font-weight:600">· péages</span></button>
+      <button id="tab-btn-total" type="button" style="display:none;padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Total Fleet <span style="font-size:11px;font-weight:600">· carburant & péages</span></button>
+      <button id="tab-btn-ulys" type="button" style="display:none;padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Ulys <span style="font-size:11px;font-weight:600">· péages</span></button>
       <button id="tab-btn-fourn" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Fournisseurs</button>
       <a href="entretiens.html" style="padding:9px 18px;font-size:14px;font-weight:700;text-decoration:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Entretiens <span style="font-size:11px;font-weight:600">· révisions</span></a>
     </div>
@@ -230,7 +241,7 @@
         <span class="text-sm text-slate-600"><i data-lucide="receipt-text" class="w-4 h-4 inline" style="vertical-align:-3px"></i> <b>TVA récupérable</b> <span class="text-xs text-slate-400" id="cp-tva-scope">— toutes années</span></span>
         <span class="font-extrabold text-lg" style="color:#0369a1" id="cp-tva-total">—</span>
       </div>
-      <p class="text-xs text-slate-400 mt-2">Total des factures par année (clique une année pour la sélectionner, ou choisis une période personnalisée). Hors loyers de leasing et sinistres. La <b>TVA récupérable</b> = somme des TVA des factures de la période (utile pour le comptable).</p>
+      <p class="text-xs text-slate-400 mt-2">Total des factures par année (clique une année pour la sélectionner, ou choisis une période personnalisée). Hors loyers de leasing et sinistres. La <b>TVA récupérable</b> = somme des TVA des factures de la période (indicatif, <b>à valider par le comptable</b> : tous les postes ne sont pas récupérables à 100 %, ex. le carburant essence).</p>
     </div>
 
     <!-- Filtres -->
@@ -250,7 +261,7 @@
         </div>
 
         <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
-          <option value="all">Toutes années</option>
+          <option value="all">Toutes les années</option>
           <option value="2026">2026</option>
           <option value="2025">2025</option>
         </select>
@@ -309,7 +320,7 @@
         <div class="flex flex-wrap items-center gap-3">
           <div class="relative flex-1 min-w-[220px]">
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-            <input id="doc-search" type="text" placeholder="Véhicule, type, nom du document…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+            <input id="doc-search" type="text" placeholder="Véhicule, conducteur, type, nom du document…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
           </div>
           <select id="doc-filter-veh" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous véhicules</option></select>
           <select id="doc-filter-type" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous types</option></select>
@@ -336,6 +347,13 @@
 
     <!-- ===== Vue TOTAL FLEET (carburant & péages) ===== -->
     <div id="view-total" class="hidden">
+      <!-- Import (visible partout, y compris intégré dans Contrôle) — accepte un OU plusieurs PDF / ZIP -->
+      <div class="flex flex-wrap items-center gap-2 mb-4">
+        <button type="button" id="tf-import-btn" class="btn btn-dark text-sm"><i data-lucide="file-up" class="w-4 h-4"></i> Importer un relevé Total <span class="text-xs font-normal opacity-80">(un ou plusieurs / ZIP)</span></button>
+      </div>
+      <!-- Statut / aperçu d'import EN HAUT (bien visible dès qu'on importe) -->
+      <div id="tf-import-status" class="hidden mb-3 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
+      <div id="tf-import-preview" class="hidden mb-4"></div>
       <!-- KPIs -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div class="kpi"><div class="kpi-label">Total dépensé (TTC)</div><div class="kpi-value" id="tf-kpi-ttc">—</div><div class="kpi-delta" id="tf-kpi-sub">—</div></div>
@@ -344,15 +362,43 @@
         <div class="kpi"><div class="kpi-label">Nb factures</div><div class="kpi-value" id="tf-kpi-count">—</div><div class="kpi-delta">filtre actif</div></div>
       </div>
       <!-- Consommation par conducteur / véhicule -->
+      <style>
+        .tfview-toggle{display:inline-flex;border:1px solid var(--fp-border);border-radius:9px;overflow:hidden}
+        .tfview-toggle button{padding:6px 11px;font-size:.8rem;font-weight:700;background:#fff;border:none;color:var(--fp-muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+        .tfview-toggle button.active{background:var(--fp-primary);color:#fff}
+        .tf-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px}
+        .tf-cards.hidden{display:none}  /* sinon .tf-cards (chargé après Tailwind) écrase .hidden → cartes + tableau visibles ensemble */
+        .tf-ccard{background:#fff;border:1px solid var(--fp-border);border-radius:14px;box-shadow:0 1px 2px rgba(15,30,61,.05),0 8px 24px -18px rgba(15,30,61,.25);padding:15px 16px;display:flex;flex-direction:column;gap:11px}
+        .tf-ccard .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+        .tf-ccard .nm{font-weight:800;color:var(--fp-primary)}
+        .tf-ccard .tot{font-size:1.28rem;font-weight:800;color:var(--fp-primary);white-space:nowrap}
+        .tf-splbar{display:flex;height:8px;border-radius:5px;overflow:hidden;background:var(--fp-border)}
+        .tf-splbar i{display:block;height:100%}
+        .tf-brk{display:flex;flex-direction:column;gap:5px;font-size:.8rem}
+        .tf-brk .r{display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .tf-brk .r .k{display:inline-flex;align-items:center;gap:6px;color:var(--fp-muted)}
+        .tf-brk .r .k::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--d,#64748B)}
+        .tf-ccard .foot{display:flex;gap:14px;border-top:1px solid var(--fp-border);padding-top:9px;font-size:.72rem;color:var(--fp-muted)}
+        .tf-ccard .foot b{display:block;font-size:.92rem;color:var(--fp-primary);font-weight:800}
+      </style>
       <div class="flex flex-wrap items-center justify-between gap-3 mt-10 mb-3">
         <h3 class="text-lg font-extrabold" style="color: var(--fp-primary)">Consommation par conducteur / véhicule</h3>
         <div class="flex flex-wrap items-center gap-2">
+          <select id="tf-conso-cond" class="text-sm border border-slate-200 rounded-lg px-3 py-2" title="Filtrer un conducteur"><option value="">Tous les conducteurs</option></select>
           <select id="tf-conso-mois" class="text-sm border border-slate-200 rounded-lg px-3 py-2"></select>
           <span class="text-xs text-slate-400">ou période :</span>
           <input type="date" id="tf-conso-from" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Du" />
           <span class="text-xs text-slate-400">→</span>
           <input type="date" id="tf-conso-to" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Au" />
           <button id="tf-conso-clear" type="button" class="hidden text-xs text-slate-500 underline">effacer</button>
+          <span class="w-px h-6 bg-slate-200 mx-1"></span>
+          <span class="tfview-toggle" id="tf-conso-view" title="Changer l'affichage">
+            <button type="button" data-v="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+            <button type="button" data-v="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+          </span>
+          <span class="w-px h-6 bg-slate-200 mx-1"></span>
+          <button id="tf-an-csv" type="button" class="btn btn-outline text-xs" title="Exporter la conso de la période choisie en CSV"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Export CSV</button>
+          <button id="tf-an-pdf" type="button" class="btn btn-dark text-xs" title="Relevé PDF de la période choisie"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Rapport PDF</button>
         </div>
       </div>
       <div class="card overflow-hidden">
@@ -362,7 +408,7 @@
               <th>Conducteur / Véhicule</th>
               <th style="text-align:right">Carburant</th><th style="text-align:right">Litres</th>
               <th style="text-align:right">Boutique / Repas</th><th style="text-align:right">Lavage</th>
-              <th style="text-align:right">Péage / Parking</th>
+              <th style="text-align:right">Péage / Parking</th><th style="text-align:right">Autres</th>
               <th style="text-align:right">HT</th><th style="text-align:right">TVA</th><th style="text-align:right">Total TTC</th>
             </tr></thead>
             <tbody id="tf-conso-tbody"></tbody>
@@ -373,7 +419,72 @@
           <p class="text-slate-500 text-sm" id="tf-conso-empty-msg">Aucun détail de consommation pour ce mois.</p>
         </div>
       </div>
+      <div id="tf-conso-cards" class="tf-cards mt-2 hidden"></div>
       <p class="text-xs text-slate-500 mt-3">Détail reconstitué depuis les factures TotalEnergies (par carte carburant). Les « Frais de gestion » ne sont pas rattachés à un conducteur. Clique sur l'en-tête « Total TTC » pour trier.</p>
+
+      <!-- ===== ANALYSE CONSO (prix/litre, CO₂, répartition, évolution, classement, anomalies) ===== -->
+      <div id="tf-analyse" class="mt-10 hidden">
+        <div class="mb-3">
+          <h3 class="text-lg font-extrabold" style="color: var(--fp-primary)">Analyse de la consommation <span id="tf-an-period" class="text-sm font-semibold text-slate-400"></span></h3>
+        </div>
+        <!-- Chiffres clés enrichis -->
+        <div id="tf-an-stats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5"></div>
+        <div class="grid md:grid-cols-2 gap-5">
+          <!-- Évolution 12 mois -->
+          <div class="card p-4">
+            <div class="font-semibold text-slate-800 mb-3">Évolution sur 12 mois</div>
+            <div id="tf-an-evol"></div>
+          </div>
+          <!-- Répartition -->
+          <div class="card p-4">
+            <div class="font-semibold text-slate-800 mb-3">Répartition des dépenses</div>
+            <div id="tf-an-repart"></div>
+          </div>
+        </div>
+        <div class="grid md:grid-cols-2 gap-5 mt-5">
+          <!-- Classement conducteurs -->
+          <div class="card p-4">
+            <div class="font-semibold text-slate-800 mb-3">Classement conducteurs <span class="text-xs font-normal text-slate-400">(dépense totale)</span></div>
+            <div id="tf-an-rank"></div>
+          </div>
+          <!-- Anomalies -->
+          <div class="card p-4">
+            <div class="font-semibold text-slate-800 mb-3 flex items-center justify-between gap-2">
+              <span class="flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500"></i> Points à vérifier</span>
+              <span class="flex items-center gap-3">
+                <button id="tf-backfill-tx" type="button" class="text-xs text-slate-400 hover:text-teal-600 flex items-center gap-1" title="Relire les relevés Total déjà enregistrés pour reconstruire le détail achat par achat (sans réimport)"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Reconstruire le détail</button>
+                <button id="tf-seuils-btn" type="button" class="text-xs text-slate-400 hover:text-teal-600 flex items-center gap-1" title="Régler les seuils d'alerte"><i data-lucide="settings-2" class="w-3.5 h-3.5"></i> Seuils</button>
+              </span>
+            </div>
+            <div id="tf-seuils" class="hidden mb-3 p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm">
+              <div class="font-medium text-slate-700 mb-2 text-xs uppercase tracking-wide">Seuils d'alerte (carte carburant)</div>
+              <label class="flex items-center justify-between gap-3 mb-2">
+                <span class="text-slate-600">Repas / jour au-delà de</span>
+                <span class="flex items-center gap-1"><input id="ts-repas" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
+              </label>
+              <label class="flex items-center justify-between gap-3 mb-1">
+                <span class="text-slate-600">Achat « Autres » listé au-delà de</span>
+                <span class="flex items-center gap-1"><input id="ts-autre" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
+              </label>
+              <p class="text-[11px] text-slate-400 mb-2">Défaut 20 € : seuls les achats « Autres » notables (bonbonne de gaz…) sont signalés. Mets 0 pour tout voir.</p>
+              <label class="flex items-center justify-between gap-3 mb-3">
+                <span class="text-slate-600">Boutique (hors carburant) / mois au-delà de</span>
+                <span class="flex items-center gap-1"><input id="ts-horscarb" type="number" min="0" step="1" class="w-16 border border-slate-200 rounded px-2 py-1 text-right"> €</span>
+              </label>
+              <div class="flex items-center justify-end gap-2">
+                <button id="ts-reset" type="button" class="text-xs text-slate-500 hover:text-slate-700">Valeurs par défaut</button>
+                <button id="ts-save" type="button" class="text-xs bg-teal-600 text-white rounded px-3 py-1.5 hover:bg-teal-700">Enregistrer</button>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 mb-2">
+              <button id="tf-anom-tab-active" type="button" class="text-xs font-semibold px-2.5 py-1 rounded-full border border-teal-500 bg-teal-500 text-white">À vérifier</button>
+              <button id="tf-anom-tab-arch" type="button" class="text-xs font-semibold px-2.5 py-1 rounded-full border border-slate-200 text-slate-500 hover:border-teal-400">Archivées <span id="tf-anom-arch-n">(0)</span></button>
+            </div>
+            <div id="tf-an-anom"></div>
+          </div>
+        </div>
+        <p class="text-xs text-slate-400 mt-3">Les prix au litre, CO₂ et anomalies sont calculés sur les relevés mensuels par carte. La détection « plein par plein » (plein impossible, week-end, > 3 pleins/jour) nécessitera le relevé <b>transaction par transaction</b> — à activer plus tard.</p>
+      </div>
 
       <!-- Filtres -->
       <div class="card p-4 mb-6">
@@ -382,15 +493,13 @@
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
             <input id="tf-search" type="text" placeholder="N° facture, pays, description…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
           </div>
-          <select id="tf-filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Toutes années</option></select>
+          <select id="tf-filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Toutes les années</option></select>
         </div>
       </div>
 
       <!-- Import d'un relevé Total : déclenché par le bouton « Importer un relevé Total » du HAUT de page
            (plus de bouton en double ici). Le champ fichier + le statut/aperçu restent pour l'import. -->
-      <input type="file" id="tf-import-file" accept="application/pdf" multiple class="hidden" />
-      <div id="tf-import-status" class="hidden mb-3 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
-      <div id="tf-import-preview" class="hidden mb-3"></div>
+      <input type="file" id="tf-import-file" accept="application/pdf,application/zip,application/x-zip-compressed,.zip" multiple class="hidden" />
 
       <!-- Table -->
       <div class="card overflow-hidden">
@@ -413,6 +522,10 @@
 
     <!-- ===== Vue ULYS (péages) — même mise en forme que Total Fleet ===== -->
     <div id="view-ulys" class="hidden">
+      <!-- Import (visible partout, y compris intégré dans Contrôle) — accepte un OU plusieurs PDF -->
+      <div class="flex flex-wrap items-center gap-2 mb-4">
+        <button type="button" id="uls-import-btn" class="btn btn-dark text-sm"><i data-lucide="file-up" class="w-4 h-4"></i> Importer un relevé Ulys <span class="text-xs font-normal opacity-80">(un ou plusieurs)</span></button>
+      </div>
       <!-- KPIs -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div class="kpi"><div class="kpi-label">Total péages (TTC)</div><div class="kpi-value" id="uls-kpi-ttc">—</div><div class="kpi-delta" id="uls-kpi-sub">—</div></div>
@@ -421,10 +534,25 @@
         <div class="kpi"><div class="kpi-label">Nb factures</div><div class="kpi-value" id="uls-kpi-count">—</div><div class="kpi-delta">filtre actif</div></div>
       </div>
 
-      <!-- Consommation par conducteur (péages par badge) — comme Total Fleet -->
+      <!-- Consommation par conducteur (péages par badge) — filtres + exports CÔTE À CÔTE -->
       <div class="flex flex-wrap items-center justify-between gap-3 mt-2 mb-3">
         <h3 class="text-lg font-extrabold" style="color: var(--fp-primary)">Consommation par conducteur</h3>
-        <select id="uls-conso-mois" class="text-sm border border-slate-200 rounded-lg px-3 py-2"></select>
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="uls-conso-mois" class="text-sm border border-slate-200 rounded-lg px-3 py-2"></select>
+          <span class="text-xs text-slate-400">ou période :</span>
+          <input type="date" id="uls-conso-from" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Du" />
+          <span class="text-xs text-slate-400">→</span>
+          <input type="date" id="uls-conso-to" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Au" />
+          <button id="uls-conso-clear" type="button" class="hidden text-xs text-slate-500 underline">effacer</button>
+          <span class="w-px h-6 bg-slate-200 mx-1"></span>
+          <span class="tfview-toggle" id="uls-conso-view" title="Changer l'affichage">
+            <button type="button" data-v="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+            <button type="button" data-v="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+          </span>
+          <span class="w-px h-6 bg-slate-200 mx-1"></span>
+          <button id="uls-an-csv" type="button" class="btn btn-outline text-xs" title="Exporter la conso de la période choisie en CSV"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Export CSV</button>
+          <button id="uls-an-pdf" type="button" class="btn btn-dark text-xs" title="Relevé PDF de la période choisie"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Relevé PDF</button>
+        </div>
       </div>
       <div class="card overflow-hidden mb-2">
         <div class="scrollable">
@@ -436,6 +564,7 @@
         </div>
         <div id="uls-conso-empty" class="hidden p-10 text-center"><p class="text-slate-500 text-sm" id="uls-conso-empty-msg">Aucun détail de consommation pour ce mois.</p></div>
       </div>
+      <div id="uls-conso-cards" class="tf-cards mb-6 hidden"></div>
       <p class="text-xs text-slate-500 mb-6">Détail des péages par conducteur (reconstitué depuis les factures Ulys, par badge).</p>
 
       <!-- Filtres -->
@@ -445,7 +574,7 @@
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
             <input id="uls-search" type="text" placeholder="N° facture, description…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
           </div>
-          <select id="uls-filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Toutes années</option></select>
+          <select id="uls-filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Toutes les années</option></select>
         </div>
       </div>
 
@@ -487,6 +616,10 @@
             <option value="name">Ranger par : Nom (A→Z)</option>
           </select>
           <span class="text-sm text-slate-500" id="fn-count"></span>
+          <span class="tfview-toggle" id="fn-view" title="Changer l'affichage" style="margin-left:auto">
+            <button type="button" data-v="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+            <button type="button" data-v="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+          </span>
         </div>
       </div>
       <div class="card overflow-hidden">
@@ -498,6 +631,7 @@
         </div>
         <div id="fn-empty" class="hidden p-10 text-center"><p class="text-slate-500 text-sm">Aucun fournisseur.</p></div>
       </div>
+      <div id="fn-cards" class="tf-cards mt-3 hidden"></div>
       <p class="text-xs text-slate-500 mt-3"><b>Renommer / fusionner</b> : corrige un doublon (ex. « CAR WORLD » → « CAR WORLD CONSULTING FRANCE ») — toutes les factures sont mises à jour. <b>Supprimer le nom</b> : retire le fournisseur des factures concernées (les factures restent).</p>
     </div>
   </main>
@@ -519,6 +653,17 @@
       <button id="di-save" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Importer</button>
       <p class="text-xs text-slate-400">Le(s) fichier(s) sont enregistrés en ligne et rattachés au véhicule choisi (consultables ici et dans la fiche véhicule).</p>
     </div>
+  </div>
+</div>
+
+<!-- Import en lot de factures PDF : progression + récapitulatif -->
+<div class="modal-backdrop" id="fabulk-modal">
+  <div class="modal p-6" style="max-width:520px">
+    <div class="flex justify-between items-start mb-3">
+      <h2 class="text-lg font-extrabold" style="color:var(--fp-primary)">Import en lot — factures PDF</h2>
+      <button aria-label="Fermer" id="fabulk-close" class="p-1.5 hover:bg-slate-100 rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div id="fabulk-body" class="text-sm"></div>
   </div>
 </div>
 
@@ -592,6 +737,9 @@
         <div><div class="field-label">TVA (€)</div><input class="field-input" type="text" inputmode="decimal" id="fa-tva" placeholder="0" /></div>
         <div><div class="field-label">Montant TTC (€) *</div><input class="field-input" type="text" inputmode="decimal" id="fa-ttc" placeholder="0" required /></div>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#334155;cursor:pointer;background:#F8FAFC;border:1px solid var(--fp-border);border-radius:8px;padding:8px 10px">
+        <input type="checkbox" id="fa-avoir"> C'est un <b>avoir</b> (remboursement du fournisseur) — saisis les montants en positif, ils seront <b>déduits</b> des coûts.
+      </label>
       <div class="grid grid-cols-2 gap-4">
         <div><div class="field-label">Véhicule (plaque)</div><input class="field-input" id="fa-immat" placeholder="ex. GC-885-LB" autocomplete="off" /></div>
         <div><div class="field-label">Kilométrage</div><input class="field-input" type="text" inputmode="numeric" id="fa-km" placeholder="" /></div>
@@ -606,12 +754,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803f"></script>
-<script src="../assets/js/supabase-client.js?v=20260803f"></script>
-<script src="../assets/js/data.js?v=20260803f"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803f"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803f"></script>
-<script src="../assets/js/app.js?v=20260803f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260809h"></script>
+<script src="../assets/js/supabase-client.js?v=20260809h"></script>
+<script src="../assets/js/data.js?v=20260809h"></script>
+  <script>window.FP_PDF=1;</script>
+<script src="../assets/js/app.js?v=20260809h"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -683,7 +830,7 @@
   function rebuildAnneeFilter() {
     const sel = $('filter-annee'); if (!sel) return; const cur = sel.value || 'all';
     const years = [...new Set(factures.map(f => getYear(f.date)).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
-    sel.innerHTML = '<option value="all">Toutes années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    sel.innerHTML = '<option value="all">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
     sel.value = (years.includes(cur) || cur === 'all') ? cur : 'all';
     state.annee = sel.value;
   }
@@ -1015,7 +1162,7 @@
         // ⚠️ Changer le type touche « entretien » : recaler la fiche (retire si plus entretien) puis
         // ré-appliquer (ajoute si devenu entretien). Source unique app.js.
         if (f.vehiculeImmat && FP.recomputeVehiculeFromFactures) {
-          const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === String(f.vehiculeImmat).toUpperCase());
+          const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(f.vehiculeImmat));
           if (v) FP.recomputeVehiculeFromFactures(v, data.factures);
         }
         const maj = syncRevisionVehicule(f);
@@ -1034,11 +1181,11 @@
     if (FP.history && FP.history.commit) FP.history.commit();
     const rm = (arr) => { const i = arr.findIndex(x => x.id === f.id); if (i >= 0) arr.splice(i, 1); };
     rm(data.factures); rm(factures);
-    if (FP.persist) FP.persist.delete('factures', f.id);
+    if (FP.persist) FP.persist.delete('factures', f.id, f); // record → Corbeille (restaurable)
     // ⚠️ Symétrie avec l'ajout : si c'était une facture d'entretien, recaler la fiche véhicule sur les
     // factures RESTANTES (sinon « dernière révision » / km / pneus fantômes). Source unique app.js.
     if (f.vehiculeImmat && FP.recomputeVehiculeFromFactures) {
-      const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === String(f.vehiculeImmat).toUpperCase());
+      const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(f.vehiculeImmat));
       if (v) { const rc = FP.recomputeVehiculeFromFactures(v, data.factures); if (rc && FP.toast) FP.toast('Fiche véhicule recalculée : ' + v.immat); }
     }
     // Nettoie le statut de remboursement éventuel (sinistre) pour ne pas laisser de fantôme
@@ -1052,6 +1199,7 @@
 
   // Import / Export CSV
   FP.injectDataIO({
+    export: false, // export géré par FP.makeExportMenu (Excel + CSV + période) ci-dessous
     filename: `parc-pilot-factures-${new Date().toISOString().slice(0,10)}.csv`,
     table: 'factures', collection: 'factures', idPrefix: 'FA-IMP-',
     columns: [
@@ -1078,6 +1226,7 @@
   //  les chiffres pour les calculs (totaux, KPIs, graphiques).
   // ============================================================
   const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  const JSZIP_CDN     = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'; // dézip des relevés Total (à la demande)
   const PDFJS_CDN     = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
   const PDFJS_WORKER  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
@@ -1243,6 +1392,21 @@
     if (parsed.vehiculeImmat) set('fa-immat', String(parsed.vehiculeImmat).toUpperCase(), 'véhicule');
     set('fa-km', parsed.km, 'km');
     if (fromIA){ set('fa-fournisseur', parsed.fournisseur, 'fournisseur'); set('fa-desc', parsed.description, 'description'); }
+    // Type de facture déterminé par l'IA (entretien/réparation/achat/leasing/cession/sinistre/autre).
+    // On l'applique (en écrasant le défaut « entretien ») pour éviter la correction manuelle systématique.
+    if (fromIA && parsed.factureType){
+      const map = { entretien:'entretien', reparation:'réparation', achat:'achat', leasing:'leasing', cession:'cession', sinistre:'sinistre', autre:'autre' };
+      const key = String(parsed.factureType).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+      const val = map[key];
+      if (val){ const el = $('fa-type'); if (el && el.value !== val){ el.value = val; filled.push('type'); } }
+    }
+    // Avoir détecté par l'IA (montant négatif ou description « Avoir … ») : on coche la case
+    // et on remet les montants en POSITIF (la case les re-passera en négatif à l'enregistrement).
+    if (fromIA && $('fa-avoir') && ((Number(parsed.montantTTC) < 0) || /^\s*avoir/i.test(String(parsed.description || '')))) {
+      $('fa-avoir').checked = true;
+      ['fa-ht','fa-tva','fa-ttc'].forEach(id => { const el = $(id); if (el && el.value) { const nn = parseFloat(String(el.value).replace(',', '.')); if (isFinite(nn)) el.value = Math.abs(nn); } });
+      filled.push('avoir');
+    }
     // Contrôle de cohérence HT + TVA = TTC (à vérifier sur TOUTE facture) : on alerte si l'écart
     // dépasse 2 centimes, pour ne jamais valider des montants incohérents en silence.
     const _ht = num($('fa-ht').value), _tva = num($('fa-tva').value), _ttc = num($('fa-ttc').value);
@@ -1303,6 +1467,7 @@
     ['fa-fournisseur','fa-num','fa-ht','fa-tva','fa-ttc','fa-immat','fa-km','fa-desc'].forEach(id => $(id).value = '');
     $('fa-date').value = new Date().toISOString().slice(0,10);
     $('fa-type').value = 'entretien';
+    if ($('fa-avoir')) $('fa-avoir').checked = false;
     // Import depuis un onglet dédié (ex. Ulys) : on pré-remplit le fournisseur. Le helper `set`
     // ne remplit que les champs VIDES → l'OCR ne l'écrasera pas, et la facture atterrit dans le bon onglet.
     if (opts && opts.fournisseur) $('fa-fournisseur').value = opts.fournisseur;
@@ -1312,12 +1477,90 @@
     lucide.createIcons();
   }
   function closeFactureModal(){ $('facture-modal').classList.remove('open'); }
+
+  // ---- Import en LOT de factures PDF : l'IA lit chaque document et crée la facture ----
+  // (anti-doublon FP.dupe, contrôle HT+TVA=TTC signalé, type deviné par l'IA, PDF stocké en ligne).
+  function faTypeFromIA(ft){
+    if (!ft) return null;
+    const map = { entretien:'entretien', reparation:'réparation', achat:'achat', leasing:'leasing', cession:'cession', sinistre:'sinistre', autre:'autre' };
+    const k = String(ft).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+    return map[k] || null;
+  }
+  async function handleFactureLot(fileList){
+    const allFiles = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) || /^image\//.test(f.type || ''));
+    const modal = $('fabulk-modal'), body = $('fabulk-body');
+    modal.classList.add('open'); lucide.createIcons();
+    if (!allFiles.length){ body.innerHTML = '<p class="text-red-600">Aucun PDF ou image sélectionné.</p>'; return; }
+    // ⚠️ PRÉ-TRI (import en lot = MÊME résultat que l'import 1 par 1) : un relevé TotalEnergies ou Ulys
+    // porte le DÉTAIL par conducteur. On les route vers leur importateur dédié (reconstruction de la
+    // conso par carte/badge) au lieu d'un simple scan de facture — sinon la conso serait perdue.
+    const totalFiles = [], ulysFiles = [], files = [];
+    body.innerHTML = `<div class="inline-flex items-center gap-2"><span class="fa-spin"></span> Analyse de ${allFiles.length} document(s)…</div>`;
+    for (const f of allFiles) {
+      let routed = false;
+      if (window.__facIsTotalStatement) { try { if (await window.__facIsTotalStatement(f)) { totalFiles.push(f); routed = true; } } catch (e) {} }
+      if (!routed && window.__facIsUlysStatement) { try { if (await window.__facIsUlysStatement(f)) { ulysFiles.push(f); routed = true; } } catch (e) {} }
+      if (!routed) files.push(f);
+    }
+    // Total Fleet & Ulys ont DÉMÉNAGÉ dans la page Contrôle → on n'importe plus ces relevés depuis
+    // Factures : on renvoie l'utilisateur vers la page Contrôle (onglet Total Fleet ou Ulys).
+    const routeStatements = () => {
+      const n = totalFiles.length + ulysFiles.length;
+      const dest = totalFiles.length ? 'controle.html?tab=total' : 'controle.html?tab=ulys';
+      body.innerHTML = `<div style="line-height:1.6"><p class="font-semibold text-slate-900 mb-1">🔎 ${n} relevé(s) Total Fleet / Ulys détecté(s)</p>`
+        + `<p class="text-sm text-slate-600">Les relevés carburant &amp; péages se gèrent désormais dans la page <b>Contrôle</b>. Ouvre-la, puis dépose-les dans l'onglet <b>Total Fleet</b> ou <b>Ulys</b> (bouton « Importer un relevé »).</p>`
+        + `<div class="mt-3 flex gap-2"><a href="${dest}" class="btn btn-dark text-sm"><i data-lucide="shield-alert" class="w-4 h-4"></i> Ouvrir la page Contrôle</a><button type="button" id="fabulk-close2" class="btn btn-outline text-sm">Fermer</button></div></div>`;
+      if (window.lucide) lucide.createIcons();
+      const c = $('fabulk-close2'); if (c) c.addEventListener('click', () => modal.classList.remove('open'));
+    };
+    // Cas fréquent : QUE des relevés détaillés → message direct vers Contrôle.
+    if (!files.length && (totalFiles.length || ulysFiles.length)) { routeStatements(); return; }
+    let ok = 0, dupes = 0, warn = 0, fail = 0; const added = [];
+    const line = (extra) => `<div class="inline-flex items-center gap-2"><span class="fa-spin"></span> ${extra}</div><div class="mt-2 text-xs text-slate-500">✓ ${ok} importée(s) · ${dupes} doublon(s) · ${warn} à vérifier · ${fail} illisible(s)</div>`;
+    for (let i = 0; i < files.length; i++){
+      const file = files[i];
+      body.innerHTML = line(`Lecture ${i + 1}/${files.length} : ${escapeHtml(file.name)}…`);
+      let ia = null;
+      try { ia = await FP.scanIA(file, 'facture'); } catch (e) { ia = null; }
+      if (!ia || (ia.montantTTC == null && ia.montantHT == null && !ia.numeroFacture && !ia.fournisseur)) { fail++; continue; }
+      const ht = ia.montantHT != null ? Number(ia.montantHT) : null;
+      const tva = ia.montantTVA != null ? Number(ia.montantTVA) : null;
+      const ttc = ia.montantTTC != null ? Number(ia.montantTTC) : ((ht != null && tva != null) ? +(ht + tva).toFixed(2) : null);
+      const incoherent = (ht != null && tva != null && ttc != null && Math.abs((ht + tva) - ttc) > 0.02);
+      const rec = { date: ia.date || null,
+        vehiculeImmat: ia.vehiculeImmat ? String(ia.vehiculeImmat).toUpperCase().replace(/\s+/g,'') : null,
+        fournisseur: ia.fournisseur || null, numeroFacture: ia.numeroFacture || null, description: ia.description || null,
+        type: faTypeFromIA(ia.factureType) || 'autre', montantHT: ht, montantTVA: tva, montantTTC: ttc,
+        km: ia.km != null ? (parseInt(String(ia.km).replace(/\D/g,''), 10) || null) : null };
+      if (FP.dupe && FP.dupe.find && FP.dupe.find('factures', rec, data.factures)) { dupes++; continue; }
+      let fileId = 'IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), fileName = file.name;
+      try { if (FP.uploadScan){ const url = await FP.uploadScan(file, 'factures'); if (url) fileId = url; } } catch (e) { /* on garde la facture même si l'upload échoue */ }
+      const row = { id: nextFactId(), ...rec, fileId, fileName };
+      try {
+        await FP.persist.insert('factures', row);
+        data.factures.push(row); if (row.type !== 'leasing') factures.push(row);
+        ok++; if (incoherent) warn++; added.push({ row, incoherent });
+      } catch (e) { fail++; }
+    }
+    try { renderKPIs(); renderTable(); renderCharts(); } catch (e) {}
+    body.innerHTML = `<p class="font-semibold text-emerald-700 mb-1">✓ ${ok} facture(s) importée(s)</p>` +
+      `<p class="text-sm text-slate-600">${dupes} doublon(s) ignoré(s)${warn ? ` · <span class="text-amber-600">${warn} à vérifier (HT+TVA ≠ TTC)</span>` : ''}${fail ? ` · <span class="text-red-600">${fail} illisible(s)</span>` : ''}.</p>` +
+      (added.length ? `<div class="mt-3 max-h-52 overflow-auto text-xs border-t border-slate-100 pt-2">${added.map(a => `<div class="py-1 flex justify-between gap-3 ${a.incoherent ? 'text-amber-600' : 'text-slate-600'}"><span class="truncate">${escapeHtml(a.row.fournisseur || '?')} · ${a.row.type}</span><span class="whitespace-nowrap">${a.row.montantTTC != null ? FP.euro(a.row.montantTTC) : '—'}${a.incoherent ? ' ⚠️' : ''}</span></div>`).join('')}</div>` : '') +
+      (fail ? `<p class="text-xs text-slate-400 mt-2">Les documents illisibles peuvent être ajoutés à la main via « Importer une facture ».</p>` : '') +
+      ((totalFiles.length || ulysFiles.length) ? `<div class="mt-3 p-2 rounded-lg text-xs" style="background:#FFF7ED;color:#9A3412;line-height:1.5">🔎 ${[totalFiles.length ? totalFiles.length + ' relevé(s) TotalEnergies' : '', ulysFiles.length ? ulysFiles.length + ' relevé(s) Ulys' : ''].filter(Boolean).join(' + ')} détecté(s) : ils se gèrent dans la page <b>Contrôle</b> → clique ci-dessous pour les y importer.</div>` : '') +
+      `<button id="fabulk-done" class="btn btn-dark text-sm w-full justify-center mt-3">${(totalFiles.length || ulysFiles.length) ? 'Aller à la page Contrôle →' : 'Terminé'}</button>`;
+    lucide.createIcons();
+    const done = $('fabulk-done'); if (done) done.addEventListener('click', () => { if (totalFiles.length || ulysFiles.length) routeStatements(); else modal.classList.remove('open'); });
+    if (ok && FP.toast) FP.toast(ok + ' facture(s) importée(s) ✓');
+  }
   async function saveFacture(ev){
     ev.preventDefault();
     // Normalise « 1 466,48 » / « 1466.48 » → 1466.48
     const num = (n) => { const v = parseFloat(String(n == null ? '' : n).replace(/\s/g, '').replace(',', '.')); return isNaN(v) ? null : v; };
     const ttc = num($('fa-ttc').value);
-    if (ttc == null || ttc <= 0){ $('fa-ttc').focus(); faStatus('Indiquez au moins le montant TTC (il sert aux calculs).', 'error'); return; }
+    // TTC obligatoire et non nul. On AUTORISE un montant NÉGATIF (avoir / note de crédit du fournisseur),
+    // qui vient en déduction dans les totaux ; on bloque seulement l'absence de montant ou un TTC à 0.
+    if (ttc == null || ttc === 0){ $('fa-ttc').focus(); faStatus('Indiquez le montant TTC (négatif pour un avoir).', 'error'); return; }
     // Contrôle systématique HT + TVA = TTC (tolérance 2 cts) — même règle qu'au scan, mais aussi sur une
     // saisie/édition MANUELLE : on ne valide jamais des montants incohérents en silence (cf. CLAUDE.md).
     const _ht = num($('fa-ht').value), _tva = num($('fa-tva').value);
@@ -1336,14 +1579,22 @@
         if (url) { fileId = url; fileName = _faFile.name; }
       } catch (e) { console.warn('[facture upload]', e); }
     }
+    // Avoir : les montants saisis (positifs) sont stockés en NÉGATIF → déduits partout dans les coûts.
+    const isAvoir = $('fa-avoir') && $('fa-avoir').checked;
+    const sgn = isAvoir ? -1 : 1;
+    const sTtc = sgn * Math.abs(ttc);
+    const sHt = _ht != null ? sgn * Math.abs(_ht) : null;
+    const sTva = _tva != null ? sgn * Math.abs(_tva) : null;
+    let desc = $('fa-desc').value.trim();
+    if (isAvoir) desc = /^avoir/i.test(desc) ? desc : ('Avoir – ' + (desc || 'remboursement fournisseur'));
     const newF = {
       id: nextFactId(), date,
       vehiculeImmat: $('fa-immat').value.trim().toUpperCase() || null,
       fournisseur: $('fa-fournisseur').value.trim() || null,
       numeroFacture: $('fa-num').value.trim() || null,
-      description: $('fa-desc').value.trim() || null,
+      description: desc || null,
       type: $('fa-type').value || 'autre',
-      montantHT: _ht, montantTVA: _tva, montantTTC: ttc,
+      montantHT: sHt, montantTVA: sTva, montantTTC: sTtc,
       km: num($('fa-km').value),
       fileId,
       fileName,
@@ -1387,7 +1638,7 @@
   // Export comptable : les factures AFFICHÉES (selon les filtres en cours), ligne par ligne,
   // avec Société (déduite du propriétaire du véhicule) et Mois — Excel/CSV, vue courante ou période.
   (function () {
-    const normP = s => (s || '').toString().toUpperCase().replace(/\s/g, '');
+    const normP = s => FP.normImmat(s); // source unique (retire tirets ET espaces)
     const soc = (immat) => { const map = {}; (window.FP_DATA.vehicules || []).forEach(v => { map[normP(v.immat)] = v; }); const v = map[normP(immat)]; return v ? (v.proprietaire || '') : ''; };
     const num = (v) => (v === null || v === undefined || v === '' || isNaN(v)) ? null : Number(v);
     const colDefs = [
@@ -1466,6 +1717,10 @@
   $('facture-form').addEventListener('submit', saveFacture);
   $('fa-trigger').addEventListener('click', () => $('fa-file').click());
   $('fa-file').addEventListener('change', (e) => { const file = e.target.files && e.target.files[0]; _faFileName = file ? file.name : ''; _faFile = file || null; handleFacture(file); e.target.value = ''; });
+  // Import en lot (plusieurs PDF d'un coup)
+  if ($('btn-import-lot')) $('btn-import-lot').addEventListener('click', () => $('fa-lot-file').click());
+  if ($('fa-lot-file')) $('fa-lot-file').addEventListener('change', (e) => { const fl = e.target.files; if (fl && fl.length) handleFactureLot(fl); e.target.value = ''; });
+  if ($('fabulk-close')) $('fabulk-close').addEventListener('click', () => $('fabulk-modal').classList.remove('open'));
   // #1 : glisser-déposer un PDF/photo sur la zone d'import de facture
   (function(){
     const z = $('fa-trigger'); if (!z) return;
@@ -1648,11 +1903,11 @@
       cibles.forEach(f => {
         const rm = (arr) => { const i = arr.findIndex(x => x.id === f.id); if (i >= 0) arr.splice(i, 1); };
         rm(data.factures); rm(factures);
-        if (FP.persist) FP.persist.delete('factures', f.id);
+        if (FP.persist) FP.persist.delete('factures', f.id, f); // record → Corbeille (restaurable)
         if (f.vehiculeImmat) immats.add(String(f.vehiculeImmat).toUpperCase());
         try { const s = FP.settings.get(); if (s.sinistreStatut && s.sinistreStatut[f.id] != null) { delete s.sinistreStatut[f.id]; FP.settings.save(s); } } catch (e) {}
       });
-      const recalc = () => { if (FP.recomputeVehiculeFromFactures) immats.forEach(im => { const v = (data.vehicules || []).find(x => (x.immat || '').toUpperCase() === im); if (v) FP.recomputeVehiculeFromFactures(v, data.factures); }); };
+      const recalc = () => { if (FP.recomputeVehiculeFromFactures) immats.forEach(im => { const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(im)); if (v) FP.recomputeVehiculeFromFactures(v, data.factures); }); };
       recalc();
       renderKPIs(); renderTable(); renderCharts();
       return () => { // Annuler : ré-insère les factures supprimées
@@ -1740,6 +1995,10 @@
       // Le bouton d'import du HAUT colle au sous-onglet actif (fini la confusion : plus besoin de
       // descendre chercher le bon bouton). Sur « Fournisseurs » (pas d'import), on le masque.
       window._facturesTab = name;
+      // Export comptable / Relevé PDF / Récap par poste = spécifiques aux FACTURES → masqués ailleurs
+      // (Total Fleet a son propre « Export CSV » + « Rapport PDF » dans le panneau Analyse).
+      const _texp = document.getElementById('fa-topexports');
+      if (_texp) _texp.style.display = (name === 'factures') ? '' : 'none';
       const _imp = document.getElementById('btn-import-facture');
       if (_imp) {
         const lbl = { factures: 'Importer une facture', documents: 'Importer une facture', total: 'Importer un relevé Total', ulys: 'Importer un relevé Ulys' }[name];
@@ -1753,7 +2012,32 @@
     $('tab-btn-ulys').addEventListener('click', () => switchTab('ulys'));
     $('tab-btn-fourn').addEventListener('click', () => switchTab('fournisseurs'));
     // Ouverture directe sur un onglet via l'URL (ex. depuis le scanner du tableau de bord : ?tab=ulys)
-    { const _tab = new URLSearchParams(location.search).get('tab'); if (_tab && ['factures','documents','total','ulys','fournisseurs'].includes(_tab)) switchTab(_tab); }
+    // + MODE « EMBED » : la page Contrôle intègre les vues Total Fleet / Ulys via une iframe
+    // (factures.html?embed&tab=total|ulys) → on masque toute la chrome (sidebar, en-tête, autres onglets,
+    // barre d'actions Factures) pour n'afficher QUE le panneau demandé.
+    { const _p = new URLSearchParams(location.search); const _tab = _p.get('tab');
+      if (_p.has('embed')) {
+        document.body.classList.add('fac-embed');
+        const st = document.createElement('style');
+        // On masque la chrome MAIS on GARDE le bouton d'import (#btn-import-facture) que switchTab
+        // renomme « Importer un relevé Total/Ulys » → l'import reste possible depuis la vue intégrée.
+        // Masque la chrome + le bouton « + » flottant (#fp-fab) — la page parente Contrôle a déjà le sien
+        // (sinon on en voit DEUX). On GARDE le bouton d'import (renommé par switchTab).
+        st.textContent = 'body.fac-embed .fp-sidebar,body.fac-embed .fp-cockpit,body.fac-embed #fa-tabbar,body.fac-embed #btn-import-lot,body.fac-embed #fa-topexports,body.fac-embed [data-data-io],body.fac-embed #fp-fab{display:none!important}body.fac-embed #fa-actionbar{margin-bottom:12px!important}body.fac-embed main{padding:1rem 1.2rem!important;max-width:none!important}body.fac-embed{background:#fff}';
+        document.head.appendChild(st);
+        // Le contenu Total Fleet/Ulys (KPIs, conso par conducteur, graphes, « Reconstruire le détail »)
+        // se rend à l'activation de l'onglet ; on le REJOUE une fois les données chargées (sinon panneau vide).
+        if (_tab) { document.addEventListener('fp:data-ready', () => { try { switchTab(_tab); } catch (e) {} }); setTimeout(() => { try { switchTab(_tab); } catch (e) {} }, 1200); }
+        // Hauteur AUTO : on informe la page Contrôle de la hauteur réelle → l'iframe grandit, la page
+        // parente scrolle (plus de scroll imbriqué, tout le contenu — conso, graphes — est visible).
+        const postH = () => { try { parent.postMessage({ fpEmbedHeight: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) }, '*'); } catch (e) {} };
+        window.addEventListener('load', () => setTimeout(postH, 200));
+        document.addEventListener('fp:data-ready', () => setTimeout(postH, 400));
+        setInterval(postH, 1500);
+      }
+      if (_tab && ['factures','documents','total','ulys','fournisseurs'].includes(_tab)) switchTab(_tab); }
+    // Exposé pour l'import en LOT : lui permet de basculer sur l'onglet Total/Ulys quand il route un relevé.
+    window.__facSwitchTab = switchTab;
 
     async function loadDocs(){
       loaded = true;
@@ -1790,7 +2074,7 @@
         if (fv !== 'all' && vehImmat(d.vehiculeId) !== fv) return false;
         if (ft !== 'all' && d.type !== ft) return false;
         if (hideArch && isArchived(d)) return false;
-        if (q){ const s = (vehImmat(d.vehiculeId)+' '+(DL[d.type]||d.type)+' '+(d.label||'')).toLowerCase(); if (!s.includes(q)) return false; }
+        if (q){ const _ch = (vehById(d.vehiculeId)||{}).chauffeur || ''; const s = (vehImmat(d.vehiculeId)+' '+(DL[d.type]||d.type)+' '+(d.label||'')+' '+_ch).toLowerCase(); if (!s.includes(q)) return false; }
         return true;
       });
       const tb = $('doc-tbody');
@@ -1923,8 +2207,10 @@
       const folderImmat = vid => (vid === '__noplate__' ? 'Sans plaque' : vehImmat(vid));
       if (!driveFolder) {
         // Niveau 1 : un dossier par véhicule (documents + factures) + un dossier « Sans plaque »
-        let entries = Object.entries(byVeh).map(([vid, o]) => ({ vid, o, veh: vehById(vid), immat: folderImmat(vid), n: o.docs.length + o.facts.length }));
-        if (q) entries = entries.filter(e => (e.immat + ' ' + (e.veh ? (e.veh.marque + ' ' + e.veh.modele) : '')).toLowerCase().includes(q));
+        const chauffeurOf = veh => (veh && veh.chauffeur && String(veh.chauffeur).trim() && String(veh.chauffeur).trim() !== '—') ? String(veh.chauffeur).trim() : '';
+        let entries = Object.entries(byVeh).map(([vid, o]) => ({ vid, o, veh: vehById(vid), immat: folderImmat(vid), ch: chauffeurOf(vehById(vid)), n: o.docs.length + o.facts.length }));
+        // Recherche : plaque + marque/modèle + PRÉNOM du conducteur (pour retrouver un dossier par son conducteur).
+        if (q) entries = entries.filter(e => (e.immat + ' ' + (e.veh ? (e.veh.marque + ' ' + e.veh.modele) : '') + ' ' + e.ch).toLowerCase().includes(q));
         entries.sort((a, b) => ((a.vid === '__noplate__') - (b.vid === '__noplate__')) || (a.immat || '').localeCompare(b.immat || ''));
         if (!entries.length) { box.innerHTML = '<div class="card">' + (FP.emptyHTML ? FP.emptyHTML({ icon: 'folder-open', title: 'Aucun document', text: 'Utilise « Importer un document » ou « Importer une facture » pour commencer.' }) : 'Aucun document.') + '</div>'; try { if (window.lucide) lucide.createIcons(); } catch (e) {} return; }
         box.innerHTML = `<div style="${GRID}">` + entries.map(e => {
@@ -1936,6 +2222,7 @@
             <i data-lucide="${e.vid === '__noplate__' ? 'folder-search' : 'folder'}" style="width:40px;height:40px;color:${e.vid === '__noplate__' ? '#94a3b8' : '#F59E0B'}"></i>
             <div style="font-family:monospace;font-weight:800;color:#0f1e3d">${escapeHtml(e.immat)}</div>
             <div style="font-size:11px;color:#64748b">${e.vid === '__noplate__' ? 'Non rattachées à un véhicule' : (e.veh ? escapeHtml(e.veh.marque + ' ' + e.veh.modele) : '—')}</div>
+            ${e.ch ? `<div style="font-size:11px;color:#F97316;font-weight:600">${escapeHtml(e.ch)}</div>` : ''}
             <div style="font-size:11px;color:#94a3b8">${e.n} doc${e.n > 1 ? 's' : ''}</div>
           </button>`;
         }).join('') + '</div>';
@@ -2131,7 +2418,7 @@
       const annees = [...new Set(all.map(f => (f.date || '').slice(0,4)).filter(Boolean))].sort().reverse();
       const sel = $('tf-filter-annee');
       if (sel && sel.dataset.filled !== annees.join(',')) {
-        sel.innerHTML = '<option value="all">Toutes années</option>' + annees.map(a => `<option value="${a}">${a}</option>`).join('');
+        sel.innerHTML = '<option value="all">Toutes les années</option>' + annees.map(a => `<option value="${a}">${a}</option>`).join('');
         sel.value = tfState.annee; sel.dataset.filled = annees.join(',');
       }
       const q = FP.norm(tfState.search).trim();
@@ -2179,6 +2466,14 @@
       $('drawer-num').textContent = f.numeroFacture || '—';
       $('drawer-title').textContent = f.description || 'Facture TotalEnergies';
       $('drawer-subtitle').textContent = `${f.fournisseur || 'TotalEnergies'} · ${f.date ? FP.date(f.date) : '—'}`;
+      const url = f.url || (f.fileId && !/^IMP-/.test(f.fileId) ? (/^https?:\/\//.test(f.fileId) ? f.fileId : `https://drive.google.com/file/d/${f.fileId}/view`) : null);
+      // Aperçu intégré du PDF complet : URL directe (Supabase Storage) → embed direct ;
+      // lien Google Drive « /view » → variante « /preview » qui s'affiche dans une iframe.
+      const embed = url ? (/drive\.google\.com/.test(url) ? url.replace(/\/view.*$/, '/preview') : url) : null;
+      const preview = embed
+        ? `<div><div class="field-label">Facture (PDF complet)</div>
+             <iframe src="${esc(embed)}" title="Facture ${esc(f.numeroFacture || '')}" style="width:100%;height:62vh;border:1px solid var(--fp-border);border-radius:.6rem;background:#fff"></iframe></div>`
+        : `<div class="text-sm text-slate-400 bg-slate-50 p-3 rounded-lg">Aucun PDF stocké pour ce relevé (réimporte-le une fois pour l'attacher).</div>`;
       $('drawer-body').innerHTML = `
         <div class="grid grid-cols-3 gap-3">
           <div class="kpi p-3"><div class="kpi-label">HT</div><div class="kpi-value" style="font-size:1rem">${f.montantHT != null ? FP.euroPrecis(f.montantHT) : '—'}</div></div>
@@ -2186,16 +2481,32 @@
           <div class="kpi p-3"><div class="kpi-label">TTC</div><div class="kpi-value" style="font-size:1rem; color: var(--fp-primary)">${f.montantTTC != null ? FP.euroPrecis(f.montantTTC) : '—'}</div></div>
         </div>
         <div><div class="field-label">N° de facture</div><div class="text-sm bg-slate-50 p-3 rounded-lg">${esc(f.numeroFacture || '—')}</div></div>
-        <div><div class="field-label">Date</div><div class="text-sm">${f.date ? FP.date(f.date) : '—'}</div></div>`;
+        <div><div class="field-label">Date</div><div class="text-sm">${f.date ? FP.date(f.date) : '—'}</div></div>
+        ${preview}`;
       const openBtn = $('drawer-open-drive');
-      const url = f.url || (f.fileId && !/^IMP-/.test(f.fileId) ? (/^https?:\/\//.test(f.fileId) ? f.fileId : `https://drive.google.com/file/d/${f.fileId}/view`) : null);
       if (url){ openBtn.href = url; openBtn.style.display = ''; } else { openBtn.removeAttribute('href'); openBtn.style.display = 'none'; }
+      // Bucket privé : l'URL publique ne s'affiche pas → on la remplace par une URL SIGNÉE (async).
+      if (url && /\/storage\/v1\/object\//.test(url) && FP.supabase && FP.supabase.storage) {
+        (async () => {
+          try {
+            const m = /\/storage\/v1\/object\/(?:public\/|sign\/|authenticated\/)?([^/?]+)\/([^?]+)/.exec(url);
+            if (!m) return;
+            const r = await FP.supabase.storage.from(decodeURIComponent(m[1])).createSignedUrl(decodeURIComponent(m[2]), 3600);
+            const signed = r && r.data && (r.data.signedUrl || r.data.signedURL); if (!signed) return;
+            const ifr = $('drawer-body') && $('drawer-body').querySelector('iframe'); if (ifr && ifr.src !== signed) ifr.src = signed;
+            if (openBtn) openBtn.href = signed;
+          } catch (e) {}
+        })();
+      }
       $('drawer').classList.add('open'); $('drawer-backdrop').classList.add('open');
       if (window.lucide) lucide.createIcons();
     }
+    // Exposé pour l'onglet Ulys : MÊME tiroir (aperçu PDF intégré + URL signée) que TotalEnergies.
+    window.__facOpenTfDrawer = openTfDrawer;
     $('tf-tbody').addEventListener('click', (e) => {
       const voir = e.target.closest('[data-tf-voir]');
-      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-tf-voir')); if (f) openTfDrawer(f); return; }
+      // « Voir » = ouvre DIRECTEMENT le PDF dans un nouvel onglet (jamais un pop-up/aperçu intégré) — via le helper unique FP.openPdf.
+      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-tf-voir')); if (f) { if (FP.openPdf) FP.openPdf(f.url || f.fileId, 'Aucun PDF stocké pour ce relevé — réimporte-le une fois pour l\'attacher.'); else openTfDrawer(f); } return; }
       const del = e.target.closest('[data-tf-del]');
       if (del){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === del.getAttribute('data-tf-del')); if (f) deleteTfFacture(f); }
     });
@@ -2219,7 +2530,9 @@
     }
 
     // --- Consommation par conducteur / véhicule (table total_conso) ---
-    let conso = null, consoLoaded = false, consoSortDesc = true;
+    let conso = null, consoTx = null, consoLoaded = false, consoSortDesc = true, _tfAnom = [], _tfAnomByKey = {};
+    // Seuils d'alerte configurables (réglages société). Défauts raisonnables.
+    function tfLimits(){ let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {} return { repasJour: Number(s.repasJour) > 0 ? Number(s.repasJour) : 20, autreItem: (s.autreItem === 0 || Number(s.autreItem) > 0) ? Number(s.autreItem) : 20, horsCarbMois: Number(s.horsCarbMois) > 0 ? Number(s.horsCarbMois) : 40 }; }
     const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
 
     async function loadConso(){
@@ -2235,9 +2548,45 @@
         console.warn('[total_conso] indisponible :', e && (e.message || e));
         conso = null; // table absente → on affiche un message d'aide
       }
+      // Détail transaction par transaction (best-effort : table absente = null → repli mensuel).
+      try {
+        const rt = await FP.supabase.from('total_conso_tx').select('*');
+        if (rt.error) throw rt.error;
+        consoTx = rt.data || [];
+        const _soc = FP.activeSociete ? FP.activeSociete() : null;
+        if (_soc && _soc !== '__all__') consoTx = consoTx.filter(x => !x.societe || x.societe === _soc);
+        // Les conso Ulys (péage) datées vivent aussi dans total_conso_tx (pour le suivi des congés) mais
+        // ne font PAS partie du relevé carte carburant Total → on les exclut des vues « Total Fleet ».
+        consoTx = consoTx.filter(x => !String(x.carte || '').toUpperCase().startsWith('ULYS'));
+      } catch (e) { consoTx = null; }
       renderConso();
+      renderAnalyse();
     }
 
+    function tfCondSel(){ const s = $('tf-conso-cond'); return s ? (s.value || '') : ''; }
+    // Période (mois OU dates) + CONDUCTEUR → { src, label, cond }. Partagée table/analyse/exports.
+    function tfPeriodSrc(){
+      const sel = $('tf-conso-mois');
+      const all = conso || [];
+      const from = $('tf-conso-from').value, to = $('tf-conso-to').value;
+      const dateMode = !!(from || to);
+      const clr = $('tf-conso-clear'); if (clr) clr.classList.toggle('hidden', !dateMode);
+      if (sel){ sel.disabled = dateMode; sel.style.opacity = dateMode ? '0.5' : ''; }
+      let periodSrc, label;
+      if (dateMode){
+        const fromM = from ? from.slice(0, 7) : null, toM = to ? to.slice(0, 7) : null;
+        periodSrc = all.filter(c => (!fromM || (c.mois || '') >= fromM) && (!toM || (c.mois || '') <= toM));
+        label = (from ? FP.date(from) : '…') + ' → ' + (to ? FP.date(to) : '…');
+      } else {
+        const moisDispo = [...new Set(all.map(c => c.mois).filter(Boolean))].sort().reverse();
+        const mois = (sel && sel.value) || moisDispo[0] || '';
+        if (mois === '__all__' || !mois) { periodSrc = all.slice(); label = 'Toutes les périodes'; }
+        else { periodSrc = all.filter(c => c.mois === mois); label = moisLabel(mois); }
+      }
+      const cond = tfCondSel();
+      if (cond){ const vbp = _tfVehBy(); periodSrc = periodSrc.filter(c => _tfName(c, vbp) === cond); label = cond + ' · ' + label; }
+      return { src: periodSrc, label, cond };
+    }
     function renderConso(){
       const sel = $('tf-conso-mois'), tbody = $('tf-conso-tbody'), tfoot = $('tf-conso-tfoot');
       const empty = $('tf-conso-empty'), emptyMsg = $('tf-conso-empty-msg');
@@ -2252,21 +2601,10 @@
         sel.innerHTML = '<option value="__all__">Toutes les périodes</option>' + moisDispo.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join('');
         sel.dataset.filled = moisDispo.join(',');
       }
-      // Période : soit un mois / Toutes (menu déroulant), soit un intervalle de dates (Du → Au).
-      const from = $('tf-conso-from').value, to = $('tf-conso-to').value;
-      const dateMode = !!(from || to);
-      $('tf-conso-clear').classList.toggle('hidden', !dateMode);
-      sel.disabled = dateMode; sel.style.opacity = dateMode ? '0.5' : '';
-      let src, label;
-      if (dateMode){
-        const fromM = from ? from.slice(0,7) : null, toM = to ? to.slice(0,7) : null;
-        src = conso.filter(c => (!fromM || (c.mois||'') >= fromM) && (!toM || (c.mois||'') <= toM));
-        label = (from ? FP.date(from) : '…') + ' → ' + (to ? FP.date(to) : '…');
-      } else {
-        const mois = sel.value || moisDispo[0] || '';
-        if (mois === '__all__'){ src = conso.slice(); label = 'Toutes les périodes'; }
-        else { src = conso.filter(c => c.mois === mois); label = moisLabel(mois); }
-      }
+      // Filtre « Par conducteur » : rempli une fois (noms résolus, triés) + rendu cherchable.
+      { const cs = $('tf-conso-cond'); if (cs && !cs.dataset.filled) { const vbp0 = _tfVehBy(); const names = [...new Set(conso.map(c => _tfName(c, vbp0)).filter(n => n && n !== '—'))].sort((a, b) => a.localeCompare(b)); cs.innerHTML = '<option value="">Tous les conducteurs</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''); cs.dataset.filled = '1'; if (window.FP && FP.searchSelect) { try { FP.searchSelect(cs, { placeholder: 'Conducteur…' }); } catch (e) {} } } }
+      // Période (mois ou dates) + conducteur (source unique tfPeriodSrc) → table, analyse ET exports alignés.
+      const { src, label, cond } = tfPeriodSrc();
 
       // Index des véhicules par plaque (normalisée) → pour retrouver le conducteur
       // quand la ligne de conso n'a qu'une plaque (ex. « GP-333-QJ ») au lieu d'un prénom.
@@ -2285,28 +2623,34 @@
       // ⚠️ On N'ÉCRASE RIEN : on CUMULE. Plusieurs relevés/factures d'une même
       // période sont additionnés par carte (ou par conducteur si pas de carte).
       const KNUM = ['carburant_ttc','litres','boutique_ttc','lavage_ttc','peage_ttc','total_ht','total_tva','total_ttc'];
+      // Un conducteur filtré → on regroupe PAR MOIS (sa conso mois par mois). Sinon par carte/conducteur.
       const groups = new Map();
       for (const c of src){
-        const key = (c.carte && String(c.carte)) || resolveName(c) || c.plaque || c.id;
+        const key = cond ? (c.mois || '—') : ((c.carte && String(c.carte)) || resolveName(c) || c.plaque || c.id);
         let g = groups.get(key);
-        if (!g){ g = { carte:c.carte, conducteur:c.conducteur, plaque:c.plaque, type_vehicule:c.type_vehicule }; KNUM.forEach(k => g[k] = 0); groups.set(key, g); }
+        if (!g){ g = { _month:c.mois, carte:c.carte, conducteur:c.conducteur, plaque:c.plaque, type_vehicule:c.type_vehicule }; KNUM.forEach(k => g[k] = 0); groups.set(key, g); }
         g.conducteur = g.conducteur || c.conducteur;
         g.plaque = g.plaque || c.plaque;
         g.type_vehicule = g.type_vehicule || c.type_vehicule;
         KNUM.forEach(k => g[k] += Number(c[k]) || 0);
       }
       let rows = [...groups.values()];
-      rows.sort((a,b) => consoSortDesc ? (b.total_ttc - a.total_ttc) : (a.total_ttc - b.total_ttc));
+      if (cond) rows.sort((a,b) => String(b._month || '').localeCompare(String(a._month || '')));
+      else rows.sort((a,b) => consoSortDesc ? (b.total_ttc - a.total_ttc) : (a.total_ttc - b.total_ttc));
+      // En-tête 1re colonne : « Mois » quand on filtre un conducteur, sinon « Conducteur / Véhicule ».
+      { const th = document.querySelector('#tf-conso-table thead th:first-child'); if (th) th.textContent = cond ? 'Mois' : 'Conducteur / Véhicule'; }
       empty.classList.toggle('hidden', rows.length > 0);
-      if (!rows.length) { tbody.innerHTML = ''; tfoot.innerHTML = ''; emptyMsg.textContent = 'Aucun détail de consommation pour cette période.'; return; }
+      if (!rows.length) { tbody.innerHTML = ''; tfoot.innerHTML = ''; const _cb = $('tf-conso-cards'); if (_cb) _cb.innerHTML = ''; emptyMsg.textContent = 'Aucun détail de consommation pour cette période.'; applyConsoView(true); return; }
 
       // Si un conducteur a plusieurs véhicules (plusieurs lignes), on garde la plaque.
       const nameCount = {};
       rows.forEach(c => { const n = resolveName(c); if (n) nameCount[n] = (nameCount[n] || 0) + 1; });
       const who = (c) => {
-        const nom = resolveName(c);
+        const brut = resolveName(c);
+        // Nom AFFICHÉ = fiche conducteur (unifié : « ROMUALD » et « Romuald LAMARQUE-BRUNET » → 1 seul nom).
+        const nom = brut && FP.conducteurNomUnifie ? (FP.conducteurNomUnifie(brut) || brut) : brut;
         if (nom) {
-          if (c.plaque && nameCount[nom] > 1) {
+          if (c.plaque && nameCount[brut] > 1) {
             return `<span class="font-semibold">${esc(nom)}</span> <span class="font-mono text-slate-400 text-xs">${esc(c.plaque)}</span>`;
           }
           return `<span class="font-semibold">${esc(nom)}</span>`;
@@ -2314,36 +2658,358 @@
         if (c.plaque) return `<span class="font-mono text-slate-500 text-xs">${esc(c.plaque)}</span>`;
         return '<span class="text-slate-400">—</span>';
       };
+      // Colonne « Autres » (bonbonne de gaz, accessoires, lubrifiant… = ni carburant, ni boutique/repas,
+      // ni lavage, ni péage) depuis le détail transaction, agrégée par la MÊME clé que les lignes. La
+      // « Boutique / Repas » affichée est alors NETTE de ces « autres » (sinon le gaz compterait 2×).
+      const rowKey = (c) => cond ? (c._month || '—') : ((c.carte && String(c.carte)) || resolveName(c) || c.plaque || c.id);
+      // Quand le DÉTAIL transaction est présent, on calcule « Boutique / Repas » et « Autres » depuis les
+      // VRAIES transactions (source fiable), pas depuis la ventilation mensuelle groupée (qui sous-comptait
+      // les repas). Repas/Boutique = alimentation, sandwich, boissons, produit frais, lubrifiant… ;
+      // Autres = uniquement ce qui n'est ni carburant, ni repas/boutique, ni lavage, ni péage (gaz, lave-glace…).
+      const txByKey = {};
+      if (consoTx && consoTx.length) {
+        const _f = $('tf-conso-from').value, _t = $('tf-conso-to').value, _sm = (!_f && !_t) ? ($('tf-conso-mois').value || '') : '', _cs = tfCondSel();
+        consoTx.forEach(t => {
+          if (_f || _t) { const fm = _f ? _f.slice(0, 7) : null, tm = _t ? _t.slice(0, 7) : null; if (fm && (t.mois || '') < fm) return; if (tm && (t.mois || '') > tm) return; }
+          else if (_sm && _sm !== '__all__') { if ((t.mois || '') !== _sm) return; }
+          if (_cs && (t.conducteur || '') !== _cs) return;
+          const cat = t.produit ? txCat(t.produit) : (t.categorie || 'autre');
+          const key = cond ? (t.mois || '—') : ((t.carte && String(t.carte)) || t.conducteur || t.plaque || '—');
+          const o = txByKey[key] || (txByKey[key] = { repas: 0, autre: 0, has: true });
+          const m = Number(t.montant_ttc) || 0;
+          if (cat === 'repas' || cat === 'boutique') o.repas += m;
+          else if (cat === 'autre') o.autre += m;
+        });
+      }
+      const txOf = (c) => txByKey[rowKey(c)];
+      const autreOf = (c) => { const x = txOf(c); return x ? x.autre : 0; };
+      // Avec détail tx : repas réel ; sans détail : ventilation mensuelle « boutique » (repli).
+      const boutiqueNetOf = (c) => { const x = txOf(c); return x ? x.repas : (Number(c.boutique_ttc) || 0); };
       const cell = (v) => v ? FP.euro(v) : '<span class="text-slate-300">—</span>';
       tbody.innerHTML = rows.map(c => `<tr>
-        <td>${who(c)}</td>
+        <td>${cond ? '<span class="font-semibold">' + esc(moisLabel(c._month || '—')) + '</span>' : who(c)}</td>
         <td style="text-align:right">${cell(c.carburant_ttc)}</td>
         <td style="text-align:right" class="text-slate-500">${c.litres ? FP.num(Math.round(c.litres)) + ' L' : '—'}</td>
-        <td style="text-align:right">${cell(c.boutique_ttc)}</td>
+        <td style="text-align:right">${cell(boutiqueNetOf(c))}</td>
         <td style="text-align:right">${cell(c.lavage_ttc)}</td>
         <td style="text-align:right">${cell(c.peage_ttc)}</td>
+        <td style="text-align:right">${cell(autreOf(c))}</td>
         <td style="text-align:right" class="text-slate-500">${cell(c.total_ht)}</td>
         <td style="text-align:right" class="text-slate-500">${cell(c.total_tva)}</td>
         <td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc)}</td>
       </tr>`).join('');
       const sum = (k) => rows.reduce((s,c) => s + (Number(c[k]) || 0), 0);
+      const sumAutre = rows.reduce((s, c) => s + autreOf(c), 0);
+      const sumBoutiqueNet = rows.reduce((s, c) => s + boutiqueNetOf(c), 0);
       tfoot.innerHTML = `<tr style="border-top:2px solid var(--fp-border);font-weight:700;background:#f8fafc">
         <td>Total ${esc(label)}</td>
         <td style="text-align:right">${FP.euro(sum('carburant_ttc'))}</td>
         <td style="text-align:right" class="text-slate-500">${FP.num(Math.round(sum('litres')))} L</td>
-        <td style="text-align:right">${FP.euro(sum('boutique_ttc'))}</td>
+        <td style="text-align:right">${FP.euro(sumBoutiqueNet)}</td>
         <td style="text-align:right">${FP.euro(sum('lavage_ttc'))}</td>
         <td style="text-align:right">${FP.euro(sum('peage_ttc'))}</td>
+        <td style="text-align:right">${FP.euro(sumAutre)}</td>
         <td style="text-align:right">${FP.euro(sum('total_ht'))}</td>
         <td style="text-align:right">${FP.euro(sum('total_tva'))}</td>
         <td style="text-align:right">${FP.euro(sum('total_ttc'))}</td>
       </tr>`;
+      // ===== Vue CARTES (Direction B) — mêmes données, une carte par conducteur (ou par mois si filtré) =====
+      const _cc = { carb:'#F97316', peage:'#2563EB', repas:'#7C3AED', lav:'#0D9488', autre:'#64748B' };
+      const cardsBox = $('tf-conso-cards');
+      if (cardsBox) {
+        cardsBox.innerHTML = rows.map(c => {
+          const nm = cond ? moisLabel(c._month || '—') : (resolveName(c) || c.plaque || '—');
+          const carb = Number(c.carburant_ttc)||0, peage = Number(c.peage_ttc)||0, repas = boutiqueNetOf(c), lav = Number(c.lavage_ttc)||0, autre = autreOf(c);
+          const ttc = Number(c.total_ttc)||0, litres = Number(c.litres)||0, prixL = litres>0 ? carb/litres : 0;
+          const parts = [['carb',carb,'Carburant'],['peage',peage,'Péage / Parking'],['repas',repas,'Boutique / Repas'],['lav',lav,'Lavage'],['autre',autre,'Autres']];
+          const denom = (carb+peage+repas+lav+autre) || 1;
+          const bar = parts.filter(p=>p[1]>0).map(p=>`<i style="width:${(p[1]/denom*100).toFixed(1)}%;background:${_cc[p[0]]}"></i>`).join('');
+          const brk = parts.filter(p=>p[1]>0).map(p=>`<div class="r"><span class="k" style="--d:${_cc[p[0]]}">${p[2]}</span><b>${FP.euro(p[1])}</b></div>`).join('') || '<span class="text-slate-400 text-xs">Aucun détail chiffré</span>';
+          const plaque = (!cond && c.plaque && resolveName(c)) ? ` <span class="font-mono text-slate-400 text-xs">${esc(c.plaque)}</span>` : '';
+          return `<div class="tf-ccard">
+            <div class="top"><span class="nm">${esc(nm)}${plaque}</span><span class="tot">${FP.euro(ttc)}</span></div>
+            <div class="tf-splbar">${bar}</div>
+            <div class="tf-brk">${brk}</div>
+            <div class="foot"><div>Litres<b>${litres?FP.num(Math.round(litres))+' L':'—'}</b></div><div>Prix / L<b>${prixL?prixL.toFixed(3).replace('.',',')+' €':'—'}</b></div><div>HT / TVA<b>${FP.euro(c.total_ht)} / ${FP.euro(c.total_tva)}</b></div></div>
+          </div>`;
+        }).join('');
+      }
+      applyConsoView();
     }
 
-    $('tf-conso-mois').addEventListener('change', renderConso);
-    $('tf-conso-from').addEventListener('change', renderConso);
-    $('tf-conso-to').addEventListener('change', renderConso);
-    $('tf-conso-clear').addEventListener('click', () => { $('tf-conso-from').value = ''; $('tf-conso-to').value = ''; renderConso(); });
+    // Bascule Tableau ⟷ Cartes (mémorisé par société via FP.settings, comme la vue Conducteurs).
+    function applyConsoView(forceTable){
+      let pref = 'table';
+      try { if (window.FP && FP.settings) pref = (FP.settings.get().consoView === 'cards') ? 'cards' : 'table'; } catch (e) {}
+      const v = forceTable ? 'table' : pref;
+      const tbl = $('tf-conso-table'), cardsBox = $('tf-conso-cards');
+      const tableCard = tbl ? tbl.closest('.card') : null;
+      if (tableCard) tableCard.classList.toggle('hidden', v === 'cards');
+      if (cardsBox) cardsBox.classList.toggle('hidden', v !== 'cards');
+      const tg = $('tf-conso-view'); if (tg) tg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.v === pref));
+      if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
+    }
+
+    // ===== ANALYSE CONSO : prix/litre, CO₂, évolution, répartition, classement, anomalies =====
+    const _tfN = x => Number(x) || 0;
+    const _tfNormP = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    function _tfVehBy(){ const m = {}; (window.FP_DATA.vehicules || []).forEach(v => { if (v.immat) m[_tfNormP(v.immat)] = v; }); return m; }
+    function _tfName(c, vbp){
+      // Priorité au n° de carte enregistré sur une fiche conducteur (rattachement fiable, même pour
+      // la conso déjà en base : elle suit la fiche en direct). Sinon nom stocké, puis chauffeur/plaque.
+      if (window.FP && FP.conducteurParCarteTotal && c.carte){ const rc = FP.conducteurParCarteTotal(c.carte); if (rc && rc.name) return rc.name; }
+      if (c.conducteur) return c.conducteur;
+      const v = c.plaque && vbp[_tfNormP(c.plaque)]; if (v && v.chauffeur && v.chauffeur !== '—') return v.chauffeur; return c.plaque || '—';
+    }
+    function renderAnalyse(){
+      const wrap = $('tf-analyse'); if (!wrap) return;
+      if (!conso || !conso.length) { wrap.classList.add('hidden'); return; }
+      wrap.classList.remove('hidden');
+      // Les chiffres, la répartition et le classement suivent la PÉRIODE choisie (mois ou dates).
+      // L'évolution (12 mois) et les anomalies restent sur tout l'historique (contexte / veille).
+      const { src: rows, label: perLabel } = tfPeriodSrc();
+      const perEl = $('tf-an-period'); if (perEl) perEl.textContent = perLabel;
+      const vbp = _tfVehBy();
+      const tot = { carb:0, litres:0, bout:0, lav:0, peage:0, ttc:0, ht:0, tva:0 }, co2Ref = { gazole:2.64, essence:2.31, mixte:2.51 };
+      let co2 = 0;
+      rows.forEach(c => {
+        tot.carb += _tfN(c.carburant_ttc); tot.litres += _tfN(c.litres); tot.bout += _tfN(c.boutique_ttc);
+        tot.lav += _tfN(c.lavage_ttc); tot.peage += _tfN(c.peage_ttc); tot.ttc += _tfN(c.total_ttc);
+        tot.ht += _tfN(c.total_ht); tot.tva += _tfN(c.total_tva);
+        const v = c.plaque && vbp[_tfNormP(c.plaque)]; const carb = ((v && v.carburant) || '').toLowerCase();
+        let f = co2Ref.mixte; if (/gazole|diesel|gasoil/.test(carb)) f = co2Ref.gazole; else if (/essence|sp9|sans plomb/.test(carb)) f = co2Ref.essence; else if (/lectri|hydrog/.test(carb)) f = 0;
+        co2 += _tfN(c.litres) * f;
+      });
+      const prixL = tot.litres > 0 ? tot.carb / tot.litres : 0;
+      const eur = FP.euro;
+      $('tf-an-stats').innerHTML = [
+        ['Litres totaux', FP.num(Math.round(tot.litres)) + ' L', 'carburant consommé'],
+        ['Prix moyen / L', prixL ? (prixL.toFixed(3).replace('.', ',') + ' €') : '—', 'carburant TTC ÷ litres'],
+        ['CO₂ estimé', (Math.round(co2 / 100) / 10).toLocaleString('fr-FR') + ' t', 'depuis les litres (est.)'],
+        ['Péages', eur(tot.peage), Math.round(tot.peage / (tot.ttc || 1) * 100) + ' % du total'],
+      ].map(s => `<div class="kpi"><div class="kpi-label">${s[0]}</div><div class="kpi-value" style="font-size:1.35rem">${s[1]}</div><div class="kpi-delta">${s[2]}</div></div>`).join('');
+      // Évolution 12 mois
+      const byMonth = {}; conso.forEach(c => { if (!c.mois) return; const m = byMonth[c.mois] || (byMonth[c.mois] = { ttc:0, litres:0 }); m.ttc += _tfN(c.total_ttc); m.litres += _tfN(c.litres); });
+      const months = Object.keys(byMonth).sort().slice(-12); const maxT = Math.max(1, ...months.map(m => byMonth[m].ttc));
+      $('tf-an-evol').innerHTML = months.length ? months.map(m => { const v = byMonth[m]; return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="width:74px;font-size:11px;color:#64748b">${moisLabel(m)}</div><div style="flex:1;background:#f1f5f9;border-radius:6px;overflow:hidden;height:15px"><div style="width:${Math.round(v.ttc / maxT * 100)}%;height:100%;background:linear-gradient(90deg,#f97316,#fb923c)"></div></div><div style="width:88px;text-align:right;font-size:12px;font-weight:600">${eur(v.ttc)}</div><div style="width:60px;text-align:right;font-size:11px;color:#94a3b8">${FP.num(Math.round(v.litres))} L</div></div>`; }).join('') : '<p class="text-sm text-slate-400">Pas assez de données.</p>';
+      // Répartition — si le détail transaction est importé, on sépare « Repas » et « Autres »
+      // (bonbonne de gaz, divers) ; sinon on garde le poste groupé « Boutique / repas ».
+      let repasTot = 0, autreTot = 0, hasTxRep = false;
+      if (consoTx && consoTx.length) {
+        const _f = $('tf-conso-from').value, _t = $('tf-conso-to').value;
+        const _sm = (!_f && !_t) ? ($('tf-conso-mois').value || '') : '', _cs = tfCondSel();
+        consoTx.forEach(t => {
+          if (_f || _t) { const fm = _f ? _f.slice(0, 7) : null, tm = _t ? _t.slice(0, 7) : null; if (fm && (t.mois || '') < fm) return; if (tm && (t.mois || '') > tm) return; }
+          else if (_sm && _sm !== '__all__') { if ((t.mois || '') !== _sm) return; }
+          if (_cs && (t.conducteur || '') !== _cs) return;
+          const _c = t.produit ? txCat(t.produit) : (t.categorie || 'autre');
+          if (_c === 'repas' || _c === 'boutique') { repasTot += _tfN(t.montant_ttc); hasTxRep = true; }
+          else if (_c === 'autre') { autreTot += _tfN(t.montant_ttc); hasTxRep = true; }
+        });
+      }
+      const parts = hasTxRep
+        ? [['Carburant', tot.carb, '#f97316'], ['Péage / parking', tot.peage, '#0e7490'], ['Lavage', tot.lav, '#0891b2'], ['Boutique / repas', repasTot, '#8b5cf6'], ['Autres (gaz, divers)', autreTot, '#ec4899']]
+        : [['Carburant', tot.carb, '#f97316'], ['Péage / parking', tot.peage, '#0e7490'], ['Lavage', tot.lav, '#0891b2'], ['Boutique / repas', tot.bout, '#8b5cf6']];
+      const totP = parts.reduce((s, p) => s + p[1], 0) || 1;
+      $('tf-an-repart').innerHTML = parts.map(p => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px"><div style="width:118px;font-size:12px;color:#475569">${p[0]}</div><div style="flex:1;background:#f1f5f9;border-radius:6px;overflow:hidden;height:14px"><div style="width:${Math.round(p[1] / totP * 100)}%;height:100%;background:${p[2]}"></div></div><div style="width:42px;text-align:right;font-size:12px;font-weight:600">${Math.round(p[1] / totP * 100)}%</div><div style="width:78px;text-align:right;font-size:11px;color:#94a3b8">${eur(p[1])}</div></div>`).join('');
+      // Classement conducteurs
+      const byD = {}; rows.forEach(c => { const n = _tfName(c, vbp); const d = byD[n] || (byD[n] = { nom:n, ttc:0, carb:0, litres:0, bout:0 }); d.ttc += _tfN(c.total_ttc); d.carb += _tfN(c.carburant_ttc); d.litres += _tfN(c.litres); d.bout += _tfN(c.boutique_ttc); });
+      const rank = Object.values(byD).sort((a, b) => b.ttc - a.ttc).slice(0, 8); const maxD = Math.max(1, ...rank.map(d => d.ttc));
+      $('tf-an-rank').innerHTML = rank.map((d, i) => { const pl = d.litres > 0 ? d.carb / d.litres : 0; return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><div style="width:16px;font-weight:800;color:#94a3b8">${i + 1}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#0f1e3d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.nom)}</div><div style="background:#f1f5f9;border-radius:5px;overflow:hidden;height:7px;margin-top:2px"><div style="width:${Math.round(d.ttc / maxD * 100)}%;height:100%;background:#f97316"></div></div></div><div style="width:78px;text-align:right;font-size:12px;font-weight:700">${eur(d.ttc)}</div><div style="width:66px;text-align:right;font-size:11px;color:#94a3b8">${pl ? pl.toFixed(2).replace('.', ',') + ' €/L' : ''}</div></div>`; }).join('') || '<p class="text-sm text-slate-400">—</p>';
+      // === POINTS À VÉRIFIER — seuils configurables ; clic → ouvre la facture concernée ===
+      const anom = [];
+      const lim = tfLimits();
+      // Même filtre de période que la vue (mois OU dates), + conducteur.
+      const _from = $('tf-conso-from').value, _to = $('tf-conso-to').value;
+      const _selM = (!_from && !_to) ? ($('tf-conso-mois').value || '') : '';
+      const _condSel = tfCondSel();
+      const _txIn = (t) => {
+        if (_from || _to) { const fm = _from ? _from.slice(0, 7) : null, tm = _to ? _to.slice(0, 7) : null; if (fm && (t.mois || '') < fm) return false; if (tm && (t.mois || '') > tm) return false; }
+        else if (_selM && _selM !== '__all__') { if ((t.mois || '') !== _selM) return false; }
+        return !_condSel || (t.conducteur || '') === _condSel;
+      };
+      if (consoTx && consoTx.length) {
+        // ⚠️ SOURCE UNIQUE : détection (>3 pleins/jour, repas>seuil/jour, achats « Autres ») via le helper
+        //    partagé FP.totalFleetAnomaliesTx → MÊME logique que la page « Suivi & alertes ».
+        FP.totalFleetAnomaliesTx(consoTx.filter(_txIn)).forEach(a => anom.push(a));
+      } else {
+        // Détail pas encore importé → PAS d'amalgame mensuel : une seule invitation à reconstruire le détail.
+        anom.push({ t:'info', txt:'Clique sur « 🔄 Reconstruire le détail » (en haut de cet encart) pour analyser les achats un par un — repas/jour, bonbonnes de gaz, accessoires…' });
+      }
+      // Dépense globale d'un conducteur qui EXPLOSE d'un mois sur l'autre (grosse hausse seulement).
+      const dm = {}; conso.forEach(c => { if (!c.mois) return; const n = _tfName(c, vbp); (dm[n] = dm[n] || {})[c.mois] = (dm[n][c.mois] || 0) + _tfN(c.total_ttc); });
+      Object.keys(dm).forEach(n => { const ms = Object.keys(dm[n]).sort(); if (ms.length < 3) return; const last = ms[ms.length - 1], prev = ms.slice(0, -1); const avg = prev.reduce((s, m) => s + dm[n][m], 0) / prev.length; if (avg > 100 && dm[n][last] > avg * 1.6) anom.push({ t:'info', mois:last, txt:`${n} · ${moisLabel(last)} : ${eur(dm[n][last])} dépensés ce mois-ci vs ${eur(Math.round(avg))} en moyenne → forte hausse, à vérifier` }); });
+      anom.sort((a, b) => (a.t === 'warn' ? 0 : 1) - (b.t === 'warn' ? 0 : 1));
+      // Clé stable par anomalie (pour mémoriser « vérifiée / archivée ») + index par clé (ouverture facture).
+      // ⚠️ NE PAS écraser la clé déjà posée par le helper partagé (ex. diesel = « diesel|<nom> ») :
+      //    sinon l'archivage ne serait PAS reconnu par « Suivi & alertes » (clés différentes).
+      anom.forEach(a => { if (!a.key) a.key = a.t + '|' + (a.facnum || '') + '|' + a.txt; });
+      _tfAnom = anom; _tfAnomByKey = {}; anom.forEach(a => { _tfAnomByKey[a.key] = a; });
+      renderAnomList();
+    }
+    // Anomalies « vérifiées » (archivées) : mémorisées dans les réglages (clé → enregistrement complet,
+    // pour garder l'HISTORIQUE même si la donnée change). Coche verte = archive ; flèche rouge = désarchive.
+    function tfAnomOk(){ try { return FP.settings.get().tfAnomOk || {}; } catch (e) { return {}; } }
+    function tfAnomSaveOk(map){ try { const s = FP.settings.get(); s.tfAnomOk = map; FP.settings.save(s); } catch (e) { if (FP.toast) FP.toast('Enregistrement impossible'); } }
+    let _tfAnomMode = 'active';
+    function renderAnomList(){
+      const box = $('tf-an-anom'); if (!box) return;
+      const okMap = tfAnomOk();
+      const okKeys = Object.keys(okMap);
+      { const n = $('tf-anom-arch-n'); if (n) n.textContent = '(' + okKeys.length + ')'; }
+      // onglets
+      const tA = $('tf-anom-tab-active'), tR = $('tf-anom-tab-arch');
+      if (tA && tR) {
+        const on = 'border-teal-500 bg-teal-500 text-white', off = 'border-slate-200 text-slate-500 hover:border-teal-400';
+        tA.className = 'text-xs font-semibold px-2.5 py-1 rounded-full border ' + (_tfAnomMode === 'active' ? on : off);
+        tR.className = 'text-xs font-semibold px-2.5 py-1 rounded-full border ' + (_tfAnomMode === 'archive' ? on : off);
+      }
+      const dot = (t) => `<span style="color:${t === 'warn' ? '#d97706' : '#64748b'}">●</span>`;
+      if (_tfAnomMode === 'archive') {
+        const recs = okKeys.map(k => okMap[k]).sort((a, b) => (b.okAt || 0) - (a.okAt || 0));
+        if (!recs.length) { box.innerHTML = '<p class="text-sm text-slate-400">Aucune anomalie archivée. Coche la ✓ verte sur un point à vérifier pour l\'archiver.</p>'; if (window.lucide) lucide.createIcons(); return; }
+        box.innerHTML = recs.map(a => `<div data-anom-key="${esc(a.key)}" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f1f5f9;font-size:12.5px;border-radius:6px"><button type="button" data-anom-unok="${esc(a.key)}" title="Désarchiver (remettre à vérifier)" style="flex:none;color:#dc2626;background:none;border:none;cursor:pointer;font-weight:800;font-size:14px">↩</button>${dot(a.t)}<span style="color:#334155;flex:1;cursor:pointer" data-anom-open="1">${esc(a.txt)}${a.okAt ? ' <span style=\"color:#94a3b8\">· vérifié le ' + esc(FP.dateNum(new Date(a.okAt).toISOString().slice(0,10))) + '</span>' : ''}</span><span style="font-size:11px;color:var(--fp-accent);font-weight:700;white-space:nowrap;cursor:pointer" data-anom-open="1">Voir la facture ›</span></div>`).join('');
+        if (window.lucide) lucide.createIcons();
+        return;
+      }
+      // mode « à vérifier » : anomalies calculées NON archivées
+      const active = _tfAnom.filter(a => (FP.tfAnomArchivee ? !FP.tfAnomArchivee(a, okMap) : !okMap[a.key]));
+      if (!active.length) { box.innerHTML = '<p class="text-sm text-emerald-700">✓ Rien à vérifier' + (okKeys.length ? ' (tout est archivé).' : '.') + '</p>'; if (window.lucide) lucide.createIcons(); return; }
+      const row = (a) => `<div data-anom-key="${esc(a.key)}" style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #f1f5f9;font-size:12.5px;border-radius:6px" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"><button type="button" data-anom-ok="${esc(a.key)}" title="Marquer comme vérifié / OK (archive)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:15px">✓</button>${dot(a.t)}<span style="color:#334155;flex:1;cursor:pointer" data-anom-open="1" title="Ouvrir la facture Total concernée">${esc(a.txt)}</span><span style="font-size:11px;color:var(--fp-accent);font-weight:700;white-space:nowrap;cursor:pointer" data-anom-open="1">Voir la facture ›</span></div>`;
+      box.innerHTML = active.map(row).join('')
+        + `<button type="button" id="tf-anom-more" data-open="0" data-total="${active.length}" data-cut="0" style="display:none;margin-top:8px;width:100%;text-align:center;font-size:12px;font-weight:700;color:var(--fp-accent);background:none;border:none;cursor:pointer;padding:6px">Voir tout (${active.length}) ›</button>`;
+      (window.requestAnimationFrame || setTimeout)(fitAnoms);
+      if (window.lucide) lucide.createIcons();
+    }
+    // Réduit la liste des points à vérifier à ce qui TIENT dans la carte (hauteur = carte « Classement »
+    // via la grille), le reste est masqué derrière « Voir tout ». Recalculé au rendu et au redimensionnement.
+    function fitAnoms(){
+      const box = $('tf-an-anom'); if (!box) return;
+      const rows = [].slice.call(box.querySelectorAll('[data-anom-key]'));
+      const btn = box.querySelector('#tf-anom-more');
+      if (!rows.length || !btn) return;
+      rows.forEach(r => r.classList.remove('tf-anom-hidden'));
+      btn.style.display = 'none';
+      // Cible = hauteur du CONTENU de la carte « Classement » (voisine), qui donne la hauteur naturelle
+      // à remplir. (On ne mesure PAS la carte Points à vérifier elle-même : avec toutes les lignes elle
+      // est gonflée et la grille égalise les deux hauteurs → référence faussée.)
+      const rank = document.getElementById('tf-an-rank');
+      const budget = (rank && rank.offsetHeight > 60) ? rank.offsetHeight - 26 /* place du bouton */ : 300;
+      if (budget < 60) return;
+      let used = 0, cut = rows.length;
+      for (let i = 0; i < rows.length; i++){ const h = rows[i].offsetHeight; if (used + h > budget){ cut = Math.max(1, i); break; } used += h; }
+      cut = Math.min(cut, 12); // garde-fou : jamais plus de 12 lignes d'un coup (toggle garanti si longue liste)
+      if (cut >= rows.length) return; // tout rentre → pas de bouton
+      rows.forEach((r, i) => { if (i >= cut) r.classList.add('tf-anom-hidden'); });
+      btn.dataset.open = '0'; btn.dataset.cut = String(cut); btn.dataset.total = String(rows.length);
+      btn.innerHTML = 'Voir tout (' + rows.length + ') ›'; btn.style.display = '';
+    }
+    { let _rt; window.addEventListener('resize', () => { clearTimeout(_rt); _rt = setTimeout(() => { if (!$('view-total').classList.contains('hidden')) fitAnoms(); }, 200); }); }
+    // Export CSV de la conso (relevés mensuels par carte)
+    if ($('tf-an-csv')) $('tf-an-csv').addEventListener('click', () => {
+      const rows = tfPeriodSrc().src; // export = période choisie
+      if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée sur la période'); return; }
+      const cols = ['mois', 'conducteur', 'plaque', 'carte', 'carburant_ttc', 'litres', 'boutique_ttc', 'lavage_ttc', 'peage_ttc', 'total_ht', 'total_tva', 'total_ttc'];
+      const head = ['Mois', 'Conducteur', 'Plaque', 'Carte', 'Carburant TTC', 'Litres', 'Boutique', 'Lavage', 'Péage', 'HT', 'TVA', 'TTC'];
+      const numCols = { carburant_ttc:1, litres:1, boutique_ttc:1, lavage_ttc:1, peage_ttc:1, total_ht:1, total_tva:1, total_ttc:1 };
+      const src = rows.slice().sort((a, b) => String(a.mois).localeCompare(String(b.mois)));
+      // Vrai Excel (.xlsx) : montants en cellules numériques, colonnes propres, encodage correct.
+      if (FP.downloadXlsx) {
+        const data = src.map(c => cols.map(k => { const v = c[k]; if (numCols[k]) { const n = Number(v); return isFinite(n) ? n : ''; } return v == null ? '' : v; }));
+        FP.downloadXlsx('total-fleet-conso', head, data, { sheet: 'Total Fleet' }); return;
+      }
+      const q = v => { const s = String(v == null ? '' : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      const lines = ['sep=;', head.join(';')].concat(src.map(c => cols.map(k => q(c[k])).join(';')));
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'total-fleet-conso.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    });
+    // Rapport PDF (relevé Total Fleet agrégé par conducteur) — via FP.fiche (jsPDF paresseux géré)
+    if ($('tf-an-pdf')) $('tf-an-pdf').addEventListener('click', () => {
+      if (!(FP.fiche && FP.fiche.open)) return;
+      const { src, label, cond } = tfPeriodSrc(); // relevé = période + conducteur choisis
+      if (!src.length) { if (FP.toast) FP.toast('Aucune donnée sur la période'); return; }
+      const vbp = _tfVehBy(); const g = {};
+      // Conducteur filtré → relevé PAR MOIS ; sinon PAR conducteur.
+      src.forEach(c => { const n = cond ? moisLabel(c.mois || '—') : _tfName(c, vbp); const d = g[n] || (g[n] = { nom:n, carb:0, litres:0, peage:0, ht:0, tva:0, ttc:0 }); d.carb += _tfN(c.carburant_ttc); d.litres += _tfN(c.litres); d.peage += _tfN(c.peage_ttc); d.ht += _tfN(c.total_ht); d.tva += _tfN(c.total_tva); d.ttc += _tfN(c.total_ttc); });
+      const rows = cond ? Object.values(g) : Object.values(g).sort((a, b) => b.ttc - a.ttc);
+      FP.fiche.open({ key: 'totalfleet', title: 'Relevé Total Fleet — carburant & péages' + (label && label !== 'Toutes les périodes' ? ' — ' + label : ''), rows, cols: [
+        { id: 'nom', label: cond ? 'Mois' : 'Conducteur / Véhicule', def: true, get: r => r.nom },
+        { id: 'carb', label: 'Carburant', def: true, align: 'right', get: r => FP.euro(r.carb), sum: r => r.carb },
+        { id: 'litres', label: 'Litres', def: true, align: 'right', get: r => FP.num(Math.round(r.litres)) + ' L', sum: r => r.litres, fmt: t => FP.num(Math.round(t)) + ' L' },
+        { id: 'peage', label: 'Péage', def: true, align: 'right', get: r => FP.euro(r.peage), sum: r => r.peage },
+        { id: 'ht', label: 'HT', def: false, align: 'right', get: r => FP.euro(r.ht), sum: r => r.ht },
+        { id: 'tva', label: 'TVA', def: false, align: 'right', get: r => FP.euro(r.tva), sum: r => r.tva },
+        { id: 'ttc', label: 'TTC', def: true, align: 'right', get: r => FP.euro(r.ttc), sum: r => r.ttc },
+      ] });
+    });
+
+    // Onglets « À vérifier » / « Archivées ».
+    if ($('tf-anom-tab-active')) $('tf-anom-tab-active').addEventListener('click', () => { _tfAnomMode = 'active'; renderAnomList(); });
+    if ($('tf-anom-tab-arch')) $('tf-anom-tab-arch').addEventListener('click', () => { _tfAnomMode = 'archive'; renderAnomList(); });
+
+    // Clics dans la liste des points à vérifier : ✓ archive · ↩ désarchive · toggle · ouvrir la facture.
+    if ($('tf-an-anom')) $('tf-an-anom').addEventListener('click', (e) => {
+      // ✓ vert : marquer vérifié (archiver)
+      const ok = e.target.closest('[data-anom-ok]');
+      if (ok) { const key = ok.getAttribute('data-anom-ok'); const a = _tfAnomByKey[key]; if (a) { const m = tfAnomOk(); m[key] = { key, t: a.t, txt: a.txt, mois: a.mois || '', facnum: a.facnum || '', okAt: Date.now() }; tfAnomSaveOk(m); renderAnomList(); if (FP.toast) FP.toast('✓ Archivé'); } return; }
+      // ↩ rouge : désarchiver (remettre à vérifier)
+      const unok = e.target.closest('[data-anom-unok]');
+      if (unok) { const key = unok.getAttribute('data-anom-unok'); const m = tfAnomOk(); delete m[key]; tfAnomSaveOk(m); renderAnomList(); if (FP.toast) FP.toast('Remis à vérifier'); return; }
+      // Toggle « Voir tout / Voir moins »
+      const more = e.target.closest('#tf-anom-more');
+      if (more) {
+        const rows = [].slice.call($('tf-an-anom').querySelectorAll('[data-anom-key]'));
+        const open = more.dataset.open === '1', cut = +(more.dataset.cut || 0);
+        rows.forEach((r, i) => { if (i >= cut) r.classList.toggle('tf-anom-hidden', open); });
+        more.dataset.open = open ? '0' : '1';
+        more.innerHTML = open ? ('Voir tout (' + (more.dataset.total || '') + ') ›') : 'Voir moins ▲';
+        return;
+      }
+      // Ouvrir la facture (clic sur le texte / « Voir la facture »)
+      const el = e.target.closest('[data-anom-key]'); if (!el) return;
+      const key = el.getAttribute('data-anom-key'); const a = _tfAnomByKey[key] || tfAnomOk()[key]; if (!a) return;
+      let fac = a.facnum ? (window.FP_DATA.factures || []).find(f => (f.numeroFacture || '') === a.facnum || f.id === 'TF-' + a.facnum) : null;
+      if (!fac && a.mois) { fac = (window.FP_DATA.factures || []).filter(f => (typeof isTotalFleet === 'function' ? isTotalFleet(f) : true) && (f.date || '').slice(0, 7) === a.mois).sort((x, y) => (Number(y.montantTTC) || 0) - (Number(x.montantTTC) || 0))[0]; }
+      // « Voir la facture » = ouvre DIRECTEMENT le PDF (jamais un aperçu intégré) — helper unique FP.openPdf.
+      if (fac && FP.openPdf) FP.openPdf(fac.url || fac.fileId, 'Aucun PDF stocké pour ce relevé — réimporte-le une fois.');
+      else if (fac && typeof openTfDrawer === 'function') openTfDrawer(fac);
+      else if (FP.toast) FP.toast('Facture introuvable — réimporte le relevé Total.');
+    });
+
+    // === Seuils d'alerte configurables (repas/jour, article « autre », boutique/mois) ===
+    (function () {
+      const btn = $('tf-seuils-btn'), panel = $('tf-seuils'); if (!btn || !panel) return;
+      const canEdit = !FP.canManageSociete || FP.canManageSociete(); // config société = CEO/Admin
+      const fill = () => { const l = tfLimits(); $('ts-repas').value = l.repasJour; $('ts-autre').value = l.autreItem; $('ts-horscarb').value = l.horsCarbMois; };
+      btn.addEventListener('click', () => { const show = panel.classList.contains('hidden'); panel.classList.toggle('hidden'); if (show) fill(); });
+      if (!canEdit) {
+        // Gestionnaire : lecture seule (la config société est réservée CEO/Admin).
+        ['ts-repas', 'ts-autre', 'ts-horscarb'].forEach(id => { const e = $(id); if (e) e.disabled = true; });
+        const s = $('ts-save'); if (s) { s.disabled = true; s.classList.add('opacity-40', 'cursor-not-allowed'); s.title = 'Réservé à l\'administrateur'; }
+        const r = $('ts-reset'); if (r) r.style.display = 'none';
+      }
+      if ($('ts-reset')) $('ts-reset').addEventListener('click', () => { $('ts-repas').value = 20; $('ts-autre').value = 20; $('ts-horscarb').value = 40; });
+      if ($('ts-save')) $('ts-save').addEventListener('click', async () => {
+        if (!canEdit) return;
+        const g = (id, d) => { const v = Number($(id).value); return v > 0 ? v : d; };
+        const seuils = { repasJour: g('ts-repas', 20), autreItem: Math.max(0, Number($('ts-autre').value) || 0), horsCarbMois: g('ts-horscarb', 40) };
+        try { const s = FP.settings.get(); s.tfSeuils = seuils; await FP.settings.save(s); if (FP.toast) FP.toast('Seuils enregistrés ✓'); }
+        catch (e) { if (FP.toast) FP.toast('Enregistrement impossible'); return; }
+        panel.classList.add('hidden'); renderAnalyse();
+      });
+    })();
+    const _tfRerender = () => { renderConso(); renderAnalyse(); };
+    $('tf-conso-cond').addEventListener('change', _tfRerender);
+    $('tf-conso-mois').addEventListener('change', _tfRerender);
+    $('tf-conso-from').addEventListener('change', _tfRerender);
+    $('tf-conso-to').addEventListener('change', _tfRerender);
+    $('tf-conso-clear').addEventListener('click', () => { $('tf-conso-from').value = ''; $('tf-conso-to').value = ''; _tfRerender(); });
+    // Bascule Tableau / Cartes (mémorisée par société) — comme le sélecteur de vue des Conducteurs.
+    { const vt = $('tf-conso-view'); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.consoView = b.dataset.v; FP.settings.save(s); } } catch (e) {} applyConsoView(); })); }
+    if (FP.filterResetButton) FP.filterResetButton($('tf-conso-cond').closest('div'), { onReset: () => {
+      $('tf-conso-mois').value = '__all__'; $('tf-conso-from').value = ''; $('tf-conso-to').value = '';
+      const cs = $('tf-conso-cond'); cs.value = ''; cs.dispatchEvent(new Event('change', { bubbles: true })); // resync searchSelect + re-render
+    } });
     document.querySelector('#tf-conso-table thead th:last-child').style.cursor = 'pointer';
     document.querySelector('#tf-conso-table thead th:last-child').addEventListener('click', () => { consoSortDesc = !consoSortDesc; renderConso(); });
 
@@ -2463,6 +3129,51 @@
       return rows;
     }
 
+    // === DÉTAIL TRANSACTION PAR TRANSACTION (une ligne = un achat) ===
+    // Validé sur une vraie facture Total. Ancre les produits sur leurs libellés connus, prend le
+    // TTC = dernier montant à 2 décimales non suivi d'un chiffre (exclut les PU à 4 décimales).
+    const TX_PROD = /(Gazole(?: Premier| Excellium)?|Super \d+(?: Sans PL)?|SP\d{2}(?: E\d+)?|Bouteille Gaz|Boissons(?: T[A-Z]{1,2})?|Alimentation(?: T[A-Z]{1,2})?|Produit [Ff]rais|Sandwich|Lavage(?: Progr\.? ?\d)?|Parking|AdBlue|GNR|GPL|E85|Lubrifiant|Lave[- ]?glace|Accessoires?|Huile|Ampoule|Balai)/;
+    // Préfixe de STATION à retirer d'un libellé « <n° site/pompe> NOM STATION » (ex. « 79 PAMPRO »)
+    // quand le produit exact n'est pas reconnu → sinon le nom de la station pollue le libellé.
+    const TX_STATION = /^\s*\d{1,4}\s+[A-ZÉÈÀÂÊÎÔÛÇ][A-Z0-9ÉÈÀÂÊÎÔÛÇ'.\-]+(?:\s+[A-Z0-9ÉÈÀÂÊÎÔÛÇ'.\-]{2,})*\s+/;
+    const TX_TTC = /\d[\d ]*[.,]\d{2}(?!\d)/g;
+    // ⚠️ SOURCE UNIQUE : la catégorisation vit dans FP.txCat (app.js), partagée avec « Suivi & alertes ».
+    function txCat(p){ return (window.FP && FP.txCat) ? FP.txCat(p) : 'autre'; }
+    function parseTx(raw, facNum, resolveNom){
+      const t = (raw || '').replace(SP, ' ').replace(/[ \t]+/g, ' ');
+      const idx = t.indexOf('Votre Facture et son détail');
+      const det = idx >= 0 ? t.slice(idx) : t;
+      const supRe = /Total Support (\d+)(?: (\d+))? (.+?) Type véh\. (\d+)/g;
+      const hits = []; let m;
+      while ((m = supRe.exec(det))) hits.push({ i:m.index, end:supRe.lastIndex, carte:m[1], rang:m[2] || '', nom:m[3].trim() });
+      const out = []; let prev = 0, seq = 0;
+      for (const h of hits){
+        const block = det.slice(prev, h.i); prev = h.end;
+        const who = (typeof resolveNom === 'function' ? (resolveNom(h.nom, h.carte) || h.nom) : h.nom);
+        const plaque = isPlaque(h.nom) ? h.nom : null;
+        // ⚠️ Une transaction = « <date6> <heure4> <RÉSEAU> <libellé/produit…> ». Le réseau n'est PAS que
+        // TOTAL/GEIE : il y a aussi les PARTENAIRES (parkings INDIGO, SAEMES, EFFIA…). On capture le RÉSEAU
+        // à PART (groupe 3, mots EN MAJUSCULES) pour que le PRODUIT (groupe 4) reste propre — sinon le repli
+        // prenait « TOTAL TF » comme produit → carburant classé à tort « achat hors carburant ».
+        const txRe = /(\d{6}) (\d{4}) ([A-Z]{2,}(?: [A-Z]{2,})?) (.+?)(?=(?:\d{6} \d{4} [A-Z]{2,})|Total\b|$)/gs;
+        let x;
+        while ((x = txRe.exec(block))){
+          const dmy = x[1], tail = x[4];
+          const nums = tail.match(TX_TTC) || []; if (!nums.length) continue;
+          const ttc = parseFloat(nums[nums.length - 1].replace(/ /g, '').replace(',', '.')); if (!isFinite(ttc)) continue;
+          const pm = tail.match(TX_PROD);
+          // Produit reconnu → on prend le libellé propre. Sinon repli : on retire d'abord le préfixe
+          // de station (« 79 PAMPRO ») puis on garde le début du texte avant le 1er chiffre.
+          const produit = pm ? pm[1].replace(/\s+/g, ' ').trim()
+            : ((tail.replace(TX_STATION, '').trim().split(/\s+\d/)[0] || '').trim().slice(0, 30) || 'Achat');
+          const y = dmy.slice(4, 6), mo = dmy.slice(2, 4), da = dmy.slice(0, 2);
+          out.push({ id: facNum + '-' + (seq++), facnum: facNum, carte: h.carte, conducteur: who, plaque,
+            dateTx: '20' + y + '-' + mo + '-' + da, mois: '20' + y + '-' + mo, produit, categorie: txCat(produit), montantTtc: +ttc.toFixed(2) });
+        }
+      }
+      return out;
+    }
+
     function tfImpStatus(msg, type){
       const el = $('tf-import-status'); el.classList.remove('hidden');
       const colors = { working:'background:#F1F5F9;color:#475569;', ok:'background:#ECFDF5;color:#047857;', error:'background:#FEF2F2;color:#B91C1C;' };
@@ -2475,15 +3186,22 @@
     }
 
     let _pending = null; // { freshF, conso } en attente de confirmation
+    let _pendingTx = []; // détail transaction par transaction en attente
 
-    function showPreview(factures, conso){
+    function showPreview(factures, conso, tx){
+      _pendingTx = tx || [];
       const existing = new Set((window.FP_DATA.factures || []).map(f => (f.numeroFacture || '').toUpperCase()));
       const freshF = factures.filter(r => !existing.has(r.numero.toUpperCase()));
+      // Factures DÉJÀ enregistrées mais SANS PDF (upload raté à un import précédent) → on rattache le PDF
+      // à la ré-importation (sinon le drawer affiche « Aucun PDF stocké » pour toujours).
+      const _byNum = {}; (window.FP_DATA.factures || []).forEach(f => { if (f.numeroFacture) _byNum[String(f.numeroFacture).toUpperCase()] = f; });
+      const _noPdf = (f) => !f || !f.fileId || /^IMP-/.test(f.fileId);
+      const toAttach = factures.filter(r => r._file && existing.has(r.numero.toUpperCase()) && _noPdf(_byNum[r.numero.toUpperCase()]));
       const dupes = factures.length - freshF.length;
       const sumTTC = factures.reduce((s,r)=>s+(r.ttc||0),0);
       const warn = (r) => {
         if (r.ht == null || r.tva == null || r.ttc == null) return ' <span style="color:#B91C1C">! montant manquant</span>';
-        if (Math.abs((r.ht + r.tva) - r.ttc) > 0.05) return ' <span style="color:#B45309">! HT+TVA != TTC</span>';
+        if (Math.abs((r.ht + r.tva) - r.ttc) > 0.02) return ' <span style="color:#B45309">! HT+TVA != TTC</span>';
         return '';
       };
       const facLines = factures.map(r => '<tr style="border-top:1px solid var(--fp-border)">'
@@ -2518,12 +3236,13 @@
 
       const willDo = [];
       if (freshF.length) willDo.push(freshF.length + ' facture(s)');
+      if (toAttach.length) willDo.push(toAttach.length + ' PDF à rattacher');
       if (conso.length) willDo.push('la conso de ' + conso.length + ' carte(s)');
 
-      _pending = { freshF, conso };
+      _pending = { freshF, conso, toAttach };
       // Message clair si rien de NOUVEAU côté factures (cas fréquent : déjà importées)
       if (factures.length && !freshF.length) {
-        tfImpStatus('✓ Ces <b>' + factures.length + ' facture(s)</b> sont <b>déjà enregistrées</b> — rien de nouveau à ajouter (elles sont déjà dans le tableau ci-dessous).', 'ok');
+        tfImpStatus('✓ Ces <b>' + factures.length + ' facture(s)</b> sont <b>déjà enregistrées</b>' + (toAttach.length ? (' — je vais juste <b>rattacher le PDF</b> à ' + toAttach.length + ' d\'entre elles.') : ' — rien de nouveau à ajouter (elles sont déjà dans le tableau ci-dessous).'), 'ok');
       }
       $('tf-import-preview').classList.remove('hidden');
       $('tf-import-preview').innerHTML = facBlock + consoBlock
@@ -2534,15 +3253,31 @@
       if (window.lucide) lucide.createIcons();
       $('tf-import-cancel').addEventListener('click', tfImpReset);
       $('tf-import-confirm').addEventListener('click', commitPending);
+      try { ($('tf-import-status').classList.contains('hidden') ? $('tf-import-preview') : $('tf-import-status')).scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
     }
 
     async function commitPending(){
       if (!_pending) return;
-      const freshF = _pending.freshF, conso = _pending.conso;
+      const freshF = _pending.freshF, conso = _pending.conso, toAttach = _pending.toAttach || [];
       $('tf-import-confirm').disabled = true;
+      // Détail de CE qu'on enregistre, montré dans l'overlay.
+      const _nF = freshF.length, _nC = conso.length, _nTx = (_pendingTx || []).length, _nA = toAttach.length;
+      const _busy = (window.FP && FP.busy) ? FP.busy('Relevé TotalEnergies : ' + _nF + ' facture(s) · ' + _nC + ' carte(s) · ' + _nTx + ' conso datée(s)' + (_nA ? ' · ' + _nA + ' PDF à rattacher' : '') + '…') : null;
       tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement...</span>', 'working');
-      let okF = 0, okC = 0;
+      let okF = 0, okC = 0, okA = 0, attachErr = null, _iF = 0;
+      // Rattache le PDF aux factures déjà enregistrées qui n'en avaient pas.
+      if (_busy && _nA) _busy.update('Rattachement de ' + _nA + ' PDF…');
+      for (const r of toAttach){
+        if (!(r._file && FP.uploadScan)) continue;
+        try {
+          const url = await FP.uploadScan(r._file, 'factures-total', { name: 'TF-' + r.numero });
+          if (!url) { if (!attachErr) attachErr = 'upload sans URL'; continue; }
+          const fac = (window.FP_DATA.factures || []).find(f => (f.numeroFacture || '').toUpperCase() === String(r.numero).toUpperCase());
+          if (fac) { fac.fileId = url; if (r._file) fac.fileName = r._file.name; if (FP.persist && FP.persist.update) await FP.persist.update('factures', fac.id, { fileId: url, fileName: fac.fileName }); okA++; }
+        } catch (e) { console.warn('[tf-import attach PDF]', e); if (!attachErr) attachErr = (e && (e.message || e.error || e)) + ''; }
+      }
       for (const r of freshF){
+        if (_busy) _busy.update('Facture ' + (++_iF) + '/' + _nF + ' · ' + r.numero + ' (' + FP.euro(r.ttc) + ')…');
         // Stocke le PDF d'origine pour pouvoir le rouvrir (bouton « Ouvrir le PDF »)
         let fileUrl = null;
         if (r._file && FP.uploadScan) {
@@ -2556,6 +3291,7 @@
         try { await FP.persist.upsert('factures', newF); okF++; } catch (e) { console.error('[tf-import facture]', e); }
       }
       let consoErr = null;
+      if (_busy && _nC) _busy.update('Conso par carte : ' + _nC + ' à enregistrer…');
       for (const c of conso){
         const row = { id:(c.mois + '-' + c.carte + '-' + c.facNum), mois:c.mois, carte:c.carte, conducteur:c.conducteur || null,
           plaque:c.plaque || null, typeVehicule:c.type_vehicule || null, carburantTtc:c.carburant_ttc,
@@ -2570,11 +3306,26 @@
           okC++;
         } catch (e) { console.error('[tf-import conso]', e); if (!consoErr) consoErr = (e && (e.message || e.details || e.hint)) || String(e); }
       }
+      // Détail transaction par transaction (table total_conso_tx). Best-effort : si la table n'existe
+      // pas encore (SQL non lancé), on ignore silencieusement (les alertes retombent sur le mensuel).
+      let okTx = 0;
+      if (_busy && _nTx) _busy.update('Conso datées (suivi des congés) : ' + _nTx + '…');
+      for (const tr of _pendingTx) {
+        try { const res = (FP.db && FP.db.upsert) ? await FP.db.upsert('total_conso_tx', tr) : null; if (res && res.error) throw res.error; okTx++; }
+        catch (e) { /* table absente ou RLS → silencieux */ break; }
+      }
       $('tf-import-preview').classList.add('hidden');
       if (consoErr) {
         tfImpStatus('⚠️ ' + okF + ' facture(s) enregistrée(s), mais la CONSO par conducteur n\'a PAS pu être sauvegardée : <b>' + esc(consoErr) + '</b><br>Copie-moi ce message.', 'error');
+        if (_busy) _busy.fail('⚠️ Conso non sauvegardée — voir le détail à l\'écran');
+      } else if (attachErr && !okA) {
+        // Le stockage du PDF a échoué (bucket Supabase) → message dédié bien visible + cause probable.
+        tfImpStatus('⚠️ <b>Le PDF n\'a pas pu être stocké.</b> Erreur exacte : <b>' + esc(attachErr) + '</b>'
+          + '<br>Le détail des dépenses fonctionne quand même. Pour l\'aperçu PDF, il faut débloquer le stockage Supabase (bucket « scans »). <b>Copie-moi cette erreur</b> et je te donne le réglage exact.', 'error');
+        if (_busy) _busy.fail('⚠️ PDF non stocké (le détail est enregistré) — voir l\'écran');
       } else {
-        tfImpStatus('<b>✓ Enregistré</b> : ' + okF + ' facture(s) + conso de ' + okC + ' carte(s). Sauvegardé dans la base (visible sur tous les postes).', 'ok');
+        tfImpStatus('<b>✓ Enregistré</b> : ' + okF + ' facture(s)' + (okA ? ' + ' + okA + ' PDF rattaché(s)' : '') + ' + conso de ' + okC + ' carte(s). Sauvegardé dans la base (visible sur tous les postes).', 'ok');
+        if (_busy) _busy.done('✓ Relevé TotalEnergies enregistré — ' + okF + ' facture(s), conso de ' + okC + ' carte(s)');
       }
       _pending = null;
       render();
@@ -2618,8 +3369,31 @@
     }
 
     async function handleReleves(fileList){
-      const files = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
-      if (!files.length){ tfImpReset(); tfImpStatus('Depose un ou plusieurs <b>PDF</b> TotalEnergies (releve et/ou factures detaillees).', 'error'); return; }
+      // ZIP accepté : on le décompresse en mémoire et on ne garde que les FACTURES (FAC*),
+      // en IGNORANT le relevé global (RLP*) → anti double-comptage (cf. règle projet + consigne).
+      let src = Array.from(fileList || []);
+      if (src.some(f => /\.zip$/i.test(f.name) || /zip/i.test(f.type || ''))) {
+        tfImpReset(); tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Décompression des ZIP…</span>', 'working');
+        const expanded = [];
+        for (const f of src) {
+          if (/\.zip$/i.test(f.name) || /zip/i.test(f.type || '')) {
+            try {
+              await loadScript(JSZIP_CDN);
+              const zip = await window.JSZip.loadAsync(f);
+              for (const nm of Object.keys(zip.files)) {
+                const entry = zip.files[nm]; if (entry.dir) continue;
+                if (!/\.pdf$/i.test(nm)) continue;
+                if (/RLP/i.test(nm)) continue; // relevé global → ignoré (on garde les factures FAC)
+                const blob = await entry.async('blob');
+                expanded.push(new File([blob], nm.split('/').pop(), { type: 'application/pdf' }));
+              }
+            } catch (e) { console.warn('[unzip]', f.name, e); }
+          } else { expanded.push(f); }
+        }
+        src = expanded;
+      }
+      const files = src.filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+      if (!files.length){ tfImpReset(); tfImpStatus('Depose un ou plusieurs <b>PDF</b> ou <b>ZIP</b> TotalEnergies (factures detaillees). Le relevé global (RLP) est ignoré automatiquement.', 'error'); return; }
       tfImpReset();
       tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture des PDF…</span>', 'working');
       // Correspondance carte -> conducteur (ne DOIT PAS bloquer l'import si la base tarde/échoue)
@@ -2629,6 +3403,18 @@
 
       const facBySig = new Map();   // numero -> facture (dedup)
       const consoByKey = new Map(); // mois|carte -> conso agregee
+      const txOut = [];             // détail transaction par transaction (achats)
+      // Résolveur de conducteur pour le détail : carte connue → son conducteur ; sinon nom/plaque du PDF.
+      const resolveTxNom = (nom, carte) => {
+        // Priorité absolue : n° de carte enregistré sur une fiche CONDUCTEUR (sinon carte du véhicule).
+        const att = (window.FP && FP.attributionCarteTotal) ? FP.attributionCarteTotal(carte) : null;
+        if (att && att.conducteur) return att.conducteur;
+        const ref = cardMap[String(carte)] || {};
+        if (ref.conducteur) return ref.conducteur;
+        if (nom && !isPlaque(nom)) { const rn = resolveConducteurName(nom); if (rn) return rn; }
+        if (nom && isPlaque(nom)) { const np = String(nom).toUpperCase().replace(/[^A-Z0-9]/g, ''); const v = (window.FP_DATA.vehicules || []).find(x => String(x.immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === np); if (v && v.chauffeur && v.chauffeur !== '—') return v.chauffeur; }
+        return nom || null;
+      };
       const failed = []; let read = 0;
       for (const file of files){
         tfImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture ' + (read + 1) + '/' + files.length + ' : ' + esc(file.name) + '...</span>', 'working');
@@ -2655,6 +3441,8 @@
               a.lavage+=r.lavage; a.total+=r.total; a.ht+=r.ht; a.tva+=r.tva;
               consoByKey.set(key, a);
             }
+            // Détail transaction par transaction (une ligne = un achat) → pour la détection au jour/article.
+            try { for (const tr of parseTx(text, facNum, resolveTxNom)) { tr.mois = mois || tr.mois; txOut.push(tr); } } catch (e) { console.warn('[parseTx]', e); }
           }
           if (!used) failed.push(file.name);
         } catch (err) { console.error(err); failed.push(file.name); }
@@ -2665,10 +3453,11 @@
       const consoOut = Array.from(consoByKey.values()).map(a => {
         const ref = cardMap[String(a.carte)] || {};
         const pdfNom = a.nom || '';
-        // Priorité au nom DÉJÀ enregistré pour cette carte ; sinon on résout le nom du PDF
-        // (« BRAM », « THOMAS H »…) contre les conducteurs connus.
-        let conducteur = ref.conducteur || null;
-        let plaque = ref.plaque || (isPlaque(pdfNom) ? pdfNom : null);
+        // Priorité absolue : n° de carte enregistré sur une fiche CONDUCTEUR (sinon carte du véhicule) ;
+        // puis nom DÉJÀ mémorisé pour cette carte ; sinon on résout le nom du PDF contre les conducteurs.
+        const att = (window.FP && FP.attributionCarteTotal) ? FP.attributionCarteTotal(a.carte) : null;
+        let conducteur = (att && att.conducteur) || ref.conducteur || null;
+        let plaque = (att && att.plaque) || ref.plaque || (isPlaque(pdfNom) ? pdfNom : null);
         if (!conducteur && !isPlaque(pdfNom)) conducteur = resolveConducteurName(pdfNom);
         // Si on n'a qu'une plaque, on tente le chauffeur du véhicule correspondant.
         if (plaque && !conducteur) {
@@ -2690,10 +3479,139 @@
       }
       if (failed.length) tfImpStatus('! ' + failed.length + ' fichier(s) non reconnu(s) (ignore.s) : ' + failed.map(esc).join(', ') + '.', 'error');
       else $('tf-import-status').classList.add('hidden');
-      showPreview(factures, consoOut);
+      showPreview(factures, consoOut, txOut);
     }
 
-    // (Le bouton de dropzone Total a été retiré : l'import se lance via le bouton « Importer un relevé Total » du haut.)
+    // ============================================================
+    //  RECONSTRUIRE LE DÉTAIL (transaction par transaction) SANS RÉIMPORT
+    //  Les relevés Total déjà importés sont stockés (PDF) dans Supabase Storage → on les RELIT
+    //  automatiquement (fetch → pdf.js → parseTx) et on (re)remplit total_conso_tx. Idempotent
+    //  (id de tx stable = n°facture-index → aucun doublon). Aucune manip Supabase pour l'utilisateur.
+    // ============================================================
+    async function fetchPdfBlob(url){
+      // Si c'est une URL Supabase Storage → on télécharge via le SDK (fonctionne même si le bucket
+      // n'est PAS public, car l'utilisateur est authentifié). Sinon repli sur un fetch direct.
+      try {
+        const m = /\/storage\/v1\/object\/(?:public\/|sign\/|authenticated\/)?([^/?]+)\/([^?]+)/.exec(url);
+        if (m && FP.supabase && FP.supabase.storage) {
+          const bucket = decodeURIComponent(m[1]), path = decodeURIComponent(m[2]);
+          const res = await FP.supabase.storage.from(bucket).download(path);
+          if (res && res.data && !res.error) return res.data; // Blob
+        }
+      } catch (e) { /* on tente le fetch direct ci-dessous */ }
+      const resp = await fetch(url); if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp.blob();
+    }
+    async function loadPdfFromUrl(url){
+      const blob = await fetchPdfBlob(url); return loadPdf(blob); // loadPdf accepte tout Blob (arrayBuffer())
+    }
+    async function backfillTx(btn){
+      if (!(FP.db && FP.db.upsert)) { if (FP.toast) FP.toast('Base indisponible.'); return; }
+      // Correspondance carte → conducteur (comme à l'import) pour bien nommer les achats.
+      try { if (!consoLoaded) await loadConso(); } catch (e) {}
+      const cardMap = {}; (conso || []).forEach(c => { if (c.carte) cardMap[String(c.carte)] = c; });
+      const resolveTxNom = (nom, carte) => {
+        // Priorité absolue : n° de carte enregistré sur une fiche CONDUCTEUR (sinon carte du véhicule).
+        const att = (window.FP && FP.attributionCarteTotal) ? FP.attributionCarteTotal(carte) : null;
+        if (att && att.conducteur) return att.conducteur;
+        const ref = cardMap[String(carte)] || {};
+        if (ref.conducteur) return ref.conducteur;
+        if (nom && !isPlaque(nom)) { const rn = resolveConducteurName(nom); if (rn) return rn; }
+        if (nom && isPlaque(nom)) { const np = String(nom).toUpperCase().replace(/[^A-Z0-9]/g, ''); const v = (window.FP_DATA.vehicules || []).find(x => String(x.immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === np); if (v && v.chauffeur && v.chauffeur !== '—') return v.chauffeur; }
+        return nom || null;
+      };
+      // Relevés Total avec un PDF re-téléchargeable (URL http = Supabase Storage) ; on dédoublonne par URL.
+      const rele = (window.FP_DATA.factures || []).filter(f => isTotalFleet(f) && f.fileId && /^https?:\/\//.test(f.fileId));
+      const byUrl = new Map(); rele.forEach(f => { if (!byUrl.has(f.fileId)) byUrl.set(f.fileId, f); });
+      const list = [...byUrl.values()];
+      // ⚠️ NE PAS s'arrêter ici s'il n'y a pas de relevé Total : la reconstruction Ulys (plus bas) DOIT
+      // quand même tourner. (Bug corrigé : un « return » ici empêchait toute reconstruction Ulys quand
+      // la flotte n'avait pas de relevés Total avec PDF stocké → péages toujours en « total du mois ».)
+      const old = btn ? btn.innerHTML : ''; if (btn) { btn.disabled = true; }
+      let okTx = 0, failed = 0, tableMissing = false, done = 0;
+      for (const f of list) {
+        if (btn) btn.innerHTML = 'Lecture ' + (done + 1) + '/' + list.length + '…';
+        try {
+          const pdf = await loadPdfFromUrl(f.fileId);
+          const text = await pdfTextAll(pdf);
+          const fromFac = parseFac(text, f.fileName || '');
+          const facNum = (fromFac && fromFac.numero) || f.numeroFacture || String(f.fileId).replace(/\W+/g, '').slice(-10);
+          const mois = (f.date || '').slice(0, 7) || (fromFac && fromFac.date ? fromFac.date.slice(0, 7) : null);
+          for (const tr of parseTx(text, facNum, resolveTxNom)) {
+            tr.mois = mois || tr.mois;
+            const res = await FP.db.upsert('total_conso_tx', tr);
+            if (res && res.error) { const msg = String((res.error && res.error.message) || res.error); if (/total_conso_tx|relation|exist|schema/i.test(msg)) { tableMissing = true; throw res.error; } throw res.error; }
+            okTx++;
+          }
+        } catch (e) { console.warn('[backfillTx]', f.id, e); if (tableMissing) break; failed++; }
+        done++;
+      }
+      if (btn) { btn.innerHTML = old; btn.disabled = false; }
+      if (tableMissing) {
+        const m = 'Il faut d\'abord créer la table (une seule fois) : dans Supabase → SQL Editor, lance le script « total-conso-tx », puis reclique sur « Reconstruire le détail ».';
+        if (FP.alert) FP.alert(m); else alert(m); return;
+      }
+      // + Reconstruit AUSSI le détail Ulys DATÉ (péages par jour) depuis les PDF Ulys stockés → même
+      // table total_conso_tx (carte « ULYS-… ») pour le suivi des congés. Un seul bouton fait les deux.
+      let okUlys = 0, ulSansPdf = 0, ulReleves = 0, ulTxFound = 0, ulErr = '';
+      try {
+        if (window.FP && FP.ulys && FP.ulys.parse && FP.ulys.pdfToText) {
+          const ulAll = (window.FP_DATA.factures || []).filter(f => isUlys(f));
+          const ul = ulAll.filter(f => f.fileId && /^https?:\/\//.test(f.fileId));
+          ulSansPdf = ulAll.length - ul.length; // relevés Ulys dont le PDF n'est pas stocké (pas relisibles)
+          const byU = new Map(); ul.forEach(f => { if (!byU.has(f.fileId)) byU.set(f.fileId, f); });
+          for (const f of byU.values()) {
+            if (tableMissing) break;
+            if (btn) btn.innerHTML = 'Ulys ' + (++ulReleves) + '/' + byU.size + '…';
+            try {
+              const blob = await fetchPdfBlob(f.fileId);
+              const text = await FP.ulys.pdfToText(blob);
+              const p = FP.ulys.parse(text); const num = p.numero || f.numeroFacture || '';
+              const txs = (p.txConso || []); ulTxFound += txs.length;
+              let i = 0;
+              for (const c of txs) {
+                const seq = i++; if (!c.date || !c.conducteur) continue;
+                const tr = { id: 'ULYSTX-' + num + '-' + (c.badge || '') + '-' + seq, facnum: num, carte: 'ULYS-' + (c.badge || ''),
+                  conducteur: c.conducteur, plaque: null, dateTx: c.date, mois: (c.date || '').slice(0, 7), produit: 'Péage Ulys',
+                  categorie: 'peage', montantTtc: (c.montant != null ? c.montant : 0) };
+                const res = await FP.db.upsert('total_conso_tx', tr);
+                if (res && res.error) { const msg = String((res.error && res.error.message) || res.error); ulErr = msg; if (/total_conso_tx|relation|exist|schema|column|permission|policy|row-level/i.test(msg)) { tableMissing = /relation|exist|schema|column/i.test(msg); throw res.error; } throw res.error; }
+                okUlys++;
+              }
+            } catch (e) { if (!ulErr) ulErr = String((e && (e.message || e)) || e); console.warn('[backfillTx ulys]', f.id, e); if (tableMissing) break; }
+          }
+        }
+      } catch (e) { if (!ulErr) ulErr = String((e && (e.message || e)) || e); console.warn('[backfillTx ulys]', e); }
+      if (btn) { btn.innerHTML = old; btn.disabled = false; }
+      consoLoaded = false; try { await loadConso(); } catch (e) {}
+      renderConso(); renderAnalyse();
+      const parts = [];
+      parts.push(okTx + ' achat(s) Total' + (list.length ? ' sur ' + list.length + ' relevé(s)' : ''));
+      if (okUlys) parts.push(okUlys + ' conso Ulys datées');
+      if (failed) parts.push(failed + ' illisible(s)');
+      const msg = (okTx || okUlys) ? ('✓ Détail reconstruit : ' + parts.join(' · ')) : 'Rien à reconstruire.';
+      if (FP.toast) FP.toast(msg);
+      // DIAGNOSTIC Ulys clair (une pop-up) — pour comprendre EXACTEMENT ce qui s'est passé côté péages :
+      //  - table absente / erreur base → message technique à corriger côté infra ;
+      //  - PDF non stockés → réimporter ; conso lues mais non enregistrées → erreur base affichée.
+      let diag = '';
+      if (tableMissing || (ulErr && /relation|exist|schema|column/i.test(ulErr))) {
+        diag = '⚠️ La table « total_conso_tx » semble absente ou incomplète côté base : le détail daté (Total ET Ulys) ne peut pas être enregistré.\n\nErreur : ' + (ulErr || 'table manquante') + '\n\n(C\'est une opération d\'infra à faire une seule fois — dis-le à ton développeur / à Claude pour lancer le script SQL « total-conso-tx ».)';
+      } else if (okUlys > 0) {
+        diag = '✓ ' + okUlys + ' consommation(s) Ulys datées enregistrées sur ' + ulReleves + ' relevé(s). Rouvre l\'onglet Contrôle : les péages pendant congé s\'affichent aux dates exactes.';
+      } else if (ulSansPdf > 0 && ulReleves === 0) {
+        diag = 'Aucun relevé Ulys avec PDF stocké (' + ulSansPdf + ' sans PDF) : impossible de relire les dates. Réimporte tes relevés Ulys une fois (le PDF sera alors enregistré).';
+      } else if (ulReleves > 0 && ulTxFound === 0) {
+        diag = 'Les ' + ulReleves + ' relevé(s) Ulys ont été relus mais AUCUNE ligne datée n\'a été trouvée dedans (structure du PDF non reconnue). Envoie-moi un de ces relevés pour que j\'adapte la lecture.';
+      } else if (ulReleves > 0 && ulTxFound > 0 && okUlys === 0) {
+        diag = ulTxFound + ' ligne(s) datée(s) lues mais AUCUNE enregistrée — erreur base : ' + (ulErr || 'inconnue') + '.';
+      }
+      if (diag) { if (FP.alert) FP.alert(diag); else alert(diag); }
+    }
+    if ($('tf-backfill-tx')) $('tf-backfill-tx').addEventListener('click', function () { backfillTx(this).catch(e => { console.error('[backfillTx]', e); if (FP.toast) FP.toast('Erreur pendant la reconstruction.'); this.disabled = false; }); });
+
+    // Import Total : bouton dans le panneau (visible aussi dans Contrôle) OU bouton du haut.
+    if ($('tf-import-btn')) $('tf-import-btn').addEventListener('click', () => $('tf-import-file').click());
     $('tf-import-file').addEventListener('change', (e) => {
       // ⚠️ COPIER les fichiers AVANT de vider l'input : e.target.value='' efface la sélection
       // (FileList est vivante) → sinon l'import croit qu'il n'y a aucun fichier.
@@ -2706,20 +3624,43 @@
       });
     });
 
+    // ── Exposé pour l'IMPORT EN LOT : router les relevés TotalEnergies vers CE traitement dédié
+    //    (reconstruction du détail par conducteur) au lieu d'un simple scan de facture. Le détecteur
+    //    lit le TEXTE du PDF et confirme via les MÊMES parseurs (parseConso/parseReleve/parseFac) :
+    //    un simple ticket TotalEnergies (sans détail flotte) ne matche pas → il reste en import normal.
+    FP._importTotalReleves = handleReleves;
+    window.__facIsTotalStatement = async (file) => {
+      try {
+        if (!(file.type === 'application/pdf' || /\.pdf$/i.test(file.name))) return false;
+        const pdf = await loadPdf(file); const text = await pdfTextAll(pdf);
+        if (!/totalenergies|total\s*energies/i.test(text)) return false;
+        return (parseConso(text).length > 0) || (parseReleve(text).length > 0) || !!parseFac(text, file.name);
+      } catch (e) { return false; }
+    };
+
   })();
 
   // ===== Onglet ULYS (péages VINCI) — même présentation que Total Fleet =====
   (function ulysTab(){
     const ust = { search: '', annee: 'all', expanded: false };
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
-    const list = () => (window.FP_DATA.factures || []).filter(isUlys);
+    // Dé-doublonné par n° de facture (comme Total Fleet) → un n° = une seule ligne, KPI = total des
+    // factures affichées, jamais compté deux fois même si la base contient un doublon d'un ancien import.
+    const list = () => {
+      const seen = new Set(), out = [];
+      (window.FP_DATA.factures || []).filter(isUlys).forEach(f => {
+        const k = (f.numeroFacture || f.id || '').toString().toUpperCase();
+        if (k && seen.has(k)) return; if (k) seen.add(k); out.push(f);
+      });
+      return out;
+    };
 
     function render(){
       const all = list();
       const annees = [...new Set(all.map(f => (f.date || '').slice(0,4)).filter(Boolean))].sort().reverse();
       const sel = $('uls-filter-annee');
       if (sel && sel.dataset.filled !== annees.join(',')) {
-        sel.innerHTML = '<option value="all">Toutes années</option>' + annees.map(a => `<option value="${a}">${a}</option>`).join('');
+        sel.innerHTML = '<option value="all">Toutes les années</option>' + annees.map(a => `<option value="${a}">${a}</option>`).join('');
         sel.value = ust.annee; sel.dataset.filled = annees.join(',');
       }
       const q = FP.norm(ust.search).trim();
@@ -2772,7 +3713,9 @@
       (window.FP_DATA.vehicules||[]).forEach(v => add(v.chauffeur));
       return set;
     }
-    function parseUlys(text){
+    // Lecture Ulys = SOURCE UNIQUE FP.ulys (app.js), partagée avec le scanner unifié. On délègue.
+    function parseUlys(text){ if (window.FP && FP.ulys && FP.ulys.parse) return FP.ulys.parse(text); return parseUlysLegacy(text); }
+    function parseUlysLegacy(text){
       const t = text || '';
       const mNum = t.match(/Facture\s*n[°ºo]\s*([A-Z]{1,3}\d{6,})/i);
       const mEm  = t.match(/[ÉE]mise?\s*le\s*(\d{2})\/(\d{2})\/(\d{4})/i);
@@ -2835,6 +3778,7 @@
     // rester sur une seule ligne. La lecture standard (FP.ocr) colle les fragments dans le désordre
     // (colonnes entremêlées) → montants/prénoms illisibles. Repli sur FP.ocr si pas de couche texte.
     async function ulysPdfToText(file){
+      if (window.FP && FP.ulys && FP.ulys.pdfToText) return FP.ulys.pdfToText(file);
       try {
         await FP.ocr.loadScript(FP.ocr.PDFJS_CDN);
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = FP.ocr.PDFJS_WORKER;
@@ -2865,19 +3809,23 @@
       if (!files || !files.length) return;
       if (!(window.FP && FP.ocr)){ ulsImpStatus('Lecteur PDF indisponible.', 'err'); return; }
       ulsImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Lecture de '+files.length+' fichier(s)…</span>', 'working');
-      const fac=[], rows=[];
+      const fac=[], rows=[], tx=[]; let skipped=0;
       for (const f of files){
         try {
           let text = await ulysPdfToText(f);                 // reconstruction par position (lignes)
           if (!text || text.replace(/\s/g,'').length < 80) text = await FP.ocr.fileToText(f, 99); // repli
           const p = parseUlys(text);
-          if (!p.numero || p.ttc == null) continue;
+          if (!p.numero || p.ttc == null) { skipped++; console.warn('[uls-import] non reconnu :', f.name); continue; }
+          p._file = f;                                       // garde le PDF d'origine → stocké au commit (bouton « Voir »)
           fac.push(p);
           p.conso.forEach(c => rows.push(Object.assign({ mois:p.mois, numero:p.numero }, c)));
-        } catch (e){ console.error('[uls-import]', e); }
+          // Détail DATÉ (colonne date des consommations) → alimente total_conso_tx (péage) pour la
+          // détection « conso pendant un congé » à la bonne DATE. Best-effort (dépend du format PDF).
+          (p.txConso || []).forEach((c, i) => tx.push(Object.assign({ mois:p.mois, numero:p.numero, seq:i }, c)));
+        } catch (e){ console.error('[uls-import]', e); skipped++; }
       }
-      if (!fac.length){ ulsImpStatus('Aucune facture Ulys lisible (PDF avec couche texte attendu).', 'err'); return; }
-      _ulsPending = { fac, rows };
+      if (!fac.length){ ulsImpStatus('Aucune facture Ulys lisible' + (skipped ? ' ('+skipped+' fichier(s) non reconnus — le PDF doit avoir une couche texte Ulys/VINCI)' : '') + '.', 'err'); return; }
+      _ulsPending = { fac, rows, tx, skipped };
       const facLines = fac.map(p => `<tr><td style="font-family:monospace">${esc(p.numero)}</td><td>${p.date?FP.date(p.date):'—'}</td><td>${esc(moisLabel(p.mois))}</td><td style="text-align:right">${p.ht!=null?FP.euro(p.ht):'—'}</td><td style="text-align:right">${p.tva!=null?FP.euro(p.tva):'—'}</td><td style="text-align:right;font-weight:700">${FP.euro(p.ttc)}</td></tr>`).join('');
       const collabs = [...new Set(rows.map(c => c.conducteur).filter(Boolean))];
       const withTtc = rows.filter(c => c.ttc != null);
@@ -2908,32 +3856,61 @@
       if (window.lucide) lucide.createIcons();
       $('uls-import-cancel').addEventListener('click', ulsImpReset);
       $('uls-import-confirm').addEventListener('click', commitUlys);
+      // Amène l'aperçu à confirmer EN HAUT de l'écran (sinon il faut scroller pour le voir).
+      try { $('uls-import-preview').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
     }
     async function commitUlys(){
       if (!_ulsPending) return;
       $('uls-import-confirm').disabled = true;
+      // Détail de CE qu'on va enregistrer, montré dans l'overlay (l'utilisateur voit le contenu).
+      const _nF = _ulsPending.fac.length, _nC = (_ulsPending.rows || []).filter(r => r.ttc != null).length, _nTx = (_ulsPending.tx || []).filter(c => c.date && c.conducteur).length;
+      const _busy = (window.FP && FP.busy) ? FP.busy('Relevé Ulys : ' + _nF + ' facture(s) · ' + _nC + ' détail(s) conducteur · ' + _nTx + ' conso datée(s)…') : null;
       ulsImpStatus('<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> Enregistrement…</span>', 'working');
-      let okF=0, okC=0;
+      let okF=0, okC=0, _iF=0;
       for (const p of _ulsPending.fac){
-        const newF = { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc };
+        if (_busy) _busy.update('Facture ' + (++_iF) + '/' + _nF + ' · ' + p.numero + ' (' + FP.euro(p.ttc) + ')…');
+        // Stocke le PDF d'origine (MÊME système que TotalEnergies) → bouton « Voir » = aperçu intégré.
+        const prev = (window.FP_DATA.factures||[]).find(x => x.id === ('ULYS-'+p.numero));
+        let fileUrl = null;
+        if (p._file && FP.uploadScan) { try { fileUrl = await FP.uploadScan(p._file, 'factures-total', { name:'ULYS-'+p.numero }); } catch(e){ console.warn('[uls upload PDF]', e); } }
+        const newF = { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc,
+          fileId: fileUrl || (prev && prev.fileId) || null, fileName: (p._file ? p._file.name : (prev && prev.fileName)) || null };
         const i = (window.FP_DATA.factures||[]).findIndex(x => x.id === newF.id);
         if (i>=0) window.FP_DATA.factures[i]=newF; else window.FP_DATA.factures.push(newF);
         try { await FP.persist.upsert('factures', newF); okF++; } catch(e){ console.error('[uls facture]', e); }
       }
       // Détail par collaborateur : on n'enregistre QUE si un montant fiable a pu être lu (sinon on
       // n'écrit pas de faux « 0 € » — cf. note d'import). Sur le format Ulys entremêlé, c.ttc est null.
+      if (_busy && _nC) _busy.update('Détail par conducteur : ' + _nC + ' à enregistrer…');
       for (const c of _ulsPending.rows){
         if (c.ttc == null) continue;
-        const row = { id:'ULYSC-'+c.mois+'-'+ulsSlug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe:'PXP' };
+        // ⚠️ Société = la société ACTIVE (jamais 'PXP' en dur) sinon le détail Ulys d'une autre
+        // société atterrit chez PXP (fuite inter-sociétés + attribution conso faussée).
+        const row = { id:'ULYSC-'+c.mois+'-'+ulsSlug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe:(FP.activeSociete?FP.activeSociete():'PXP') };
         try { await FP.persist.upsert('ulys_conso', row); okC++; } catch(e){ console.error('[uls conso]', e); }
       }
+      // Détail DATÉ (colonne date des consommations) → total_conso_tx (péage) pour la détection
+      // « conso pendant un congé » à la bonne date. Best-effort : table absente = silencieux (repli mensuel).
+      let okTx = 0;
+      if (_busy && _nTx) _busy.update('Conso datées (pour le suivi des congés) : ' + _nTx + '…');
+      for (const c of (_ulsPending.tx || [])){
+        if (!c.date || !c.conducteur) continue;
+        const tr = { id:'ULYSTX-'+c.numero+'-'+(c.badge||'')+'-'+(c.seq!=null?c.seq:''), facnum:c.numero, carte:'ULYS-'+(c.badge||''),
+          conducteur:c.conducteur, plaque:null, dateTx:c.date, mois:(c.date||'').slice(0,7), produit:'Péage Ulys',
+          categorie:'peage', montantTtc:(c.montant!=null?c.montant:0) };
+        try { const res = (FP.db && FP.db.upsert) ? await FP.db.upsert('total_conso_tx', tr) : null; if (res && res.error) throw res.error; okTx++; }
+        catch (e){ break; }
+      }
       const nbCollab = new Set(_ulsPending.rows.map(r => r.conducteur).filter(Boolean)).size;
-      ulsImpStatus('<b>Enregistré</b> : '+okF+' facture(s) Ulys.' + (okC ? ' Détail de '+okC+' conducteur(s).' : (nbCollab ? ' '+nbCollab+' collaborateur(s) détecté(s) (montant par personne non lu automatiquement sur ce format).' : '')) + ' Visible sur tous les postes.', 'ok');
+      const _skip = _ulsPending.skipped || 0;
+      ulsImpStatus('<b>Enregistré</b> : '+okF+' facture(s) Ulys.' + (okC ? ' Détail de '+okC+' conducteur(s).' : (nbCollab ? ' '+nbCollab+' collaborateur(s) détecté(s) (montant par personne non lu automatiquement sur ce format).' : '')) + (okTx ? ' '+okTx+' conso(s) datée(s) pour le suivi des congés.' : '') + (_skip ? ' <span style="color:#B45309">'+_skip+' fichier(s) non reconnus.</span>' : '') + ' Visible sur tous les postes.', 'ok');
+      if (_busy) _busy.done('✓ Relevé Ulys enregistré — '+okF+' facture(s)' + (okTx ? ', '+okTx+' conso datées' : '') + (_skip ? ' · '+_skip+' non reconnu(s)' : ''));
       $('uls-import-preview').classList.add('hidden'); _ulsPending=null;
       render(); consoLoaded=false; loadConso();
     }
     // (Le bouton de dropzone Ulys a été retiré : l'import se lance via le bouton « Importer un relevé Ulys » du haut.)
     $('uls-import-file').addEventListener('change', (e) => { handleUlysImport(e.target.files); e.target.value=''; });
+    if ($('uls-import-btn')) $('uls-import-btn').addEventListener('click', () => $('uls-import-file').click());
 
     function openUlsDrawer(f){
       $('drawer-num').textContent = f.numeroFacture || '—';
@@ -2974,7 +3951,8 @@
 
     $('uls-tbody').addEventListener('click', (e) => {
       const voir = e.target.closest('[data-uls-voir]');
-      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-uls-voir')); if (f) openUlsDrawer(f); return; }
+      // « Voir » = ouvre DIRECTEMENT le PDF dans un nouvel onglet (jamais un pop-up) — helper unique FP.openPdf.
+      if (voir){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === voir.getAttribute('data-uls-voir')); if (f) { if (FP.openPdf) FP.openPdf(f.url || f.fileId, 'Aucun PDF stocké pour ce relevé Ulys — réimporte-le une fois pour l\'attacher.'); else (window.__facOpenTfDrawer ? window.__facOpenTfDrawer(f) : openUlsDrawer(f)); } return; }
       const del = e.target.closest('[data-uls-del]');
       if (del){ const f = (window.FP_DATA.factures || []).find(x => String(x.id) === del.getAttribute('data-uls-del')); if (f) deleteUlsFacture(f); }
     });
@@ -2995,34 +3973,131 @@
       // ⚠️ Ne compter QUE la conso ADOSSÉE À UNE FACTURE Ulys réellement présente. Une conso orpheline
       // (facture jamais importée, ou supprimée) fausserait le total → à ne PAS compter. On relie par le
       // n° de facture ; à défaut (anciennes lignes sans n°), par le mois d'une facture Ulys existante.
-      const ulsFac = (window.FP_DATA.factures || []).filter(isUlys);
-      const facNums = new Set(ulsFac.map(f => String(f.numeroFacture || '').trim()).filter(Boolean));
-      const facMois = new Set(ulsFac.map(f => (f.date || '').slice(0,7)).filter(Boolean));
-      const backed = conso.filter(c => { const n = String(c.numeroFacture || '').trim(); return n ? facNums.has(n) : facMois.has(c.mois); });
+      const backed = ulsBacked();
       const moisList = [...new Set(backed.map(c => c.mois).filter(Boolean))].sort().reverse();
       const filledKey = 'all,' + moisList.join(',');
       if (sel.dataset.filled !== filledKey) { sel.innerHTML = '<option value="all">Toutes les périodes</option>' + moisList.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join(''); sel.dataset.filled = filledKey; sel.value = 'all'; }
-      const mois = sel.value || 'all';
-      let rows;
-      if (mois === 'all') {
-        const byCond = {};
-        backed.forEach(c => { const k = c.conducteur || '—'; const a = (byCond[k] = byCond[k] || { conducteur:k, nb_trajets:0, km:0, total_ttc:0 }); a.nb_trajets += Number(c.nb_trajets)||0; a.km += Number(c.km)||0; a.total_ttc += Number(c.total_ttc)||0; });
-        rows = Object.values(byCond).sort((a,b) => b.total_ttc - a.total_ttc);
-      } else {
-        rows = backed.filter(c => c.mois === mois).sort((a,b) => (Number(b.total_ttc)||0) - (Number(a.total_ttc)||0));
-      }
+      const { src, label } = ulsPeriod();
+      // ⚠️ ANTI-DOUBLON : une même personne peut être stockée sous 2 orthographes (prénom seul
+      // « Charles » ET nom complet « Charles LENNON ») → mêmes chiffres en double. On garde UNE seule
+      // ligne par (personne, mois, facture), puis on regroupe par PERSONNE (prénom normalisé) en
+      // affichant le nom le plus complet. (Ne PAS sommer les doublons — ce sont les mêmes données.)
+      const _np = (s) => (FP.normPrenom ? FP.normPrenom(s) : String(s || '').trim().toLowerCase());
+      const seenUC = new Set(), dedup = [], bestName = {};
+      src.forEach(c => {
+        const np = _np(c.conducteur);
+        const uk = np + '|' + (c.mois || '') + '|' + (c.numeroFacture || c.numero_facture || '');
+        if (seenUC.has(uk)) return; seenUC.add(uk);
+        dedup.push(c);
+        const cur = bestName[np]; if (!cur || String(c.conducteur || '').length > cur.length) bestName[np] = c.conducteur || '—';
+      });
+      const byCond = {};
+      // Nom AFFICHÉ = fiche conducteur (unifié) ; repli sur le libellé le plus complet du relevé.
+      const _nomUnif = (raw) => (FP.conducteurNomUnifie ? (FP.conducteurNomUnifie(raw) || raw) : raw);
+      dedup.forEach(c => { const np = _np(c.conducteur); const k = np || (c.conducteur || '—'); const a = (byCond[k] = byCond[k] || { conducteur: _nomUnif(bestName[np] || c.conducteur || '—'), nb_trajets:0, km:0, total_ttc:0 }); a.nb_trajets += Number(c.nb_trajets)||0; a.km += Number(c.km)||0; a.total_ttc += Number(c.total_ttc)||0; });
+      const rows = Object.values(byCond).sort((a,b) => b.total_ttc - a.total_ttc);
       empty.classList.toggle('hidden', rows.length > 0);
-      if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation (importe la facture Ulys correspondante).';
+      if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation sur cette période (importe la facture Ulys correspondante).';
       tbody.innerHTML = rows.map(c => `<tr><td>${esc(c.conducteur || '—')}</td><td style="text-align:right">${c.nb_trajets ? c.nb_trajets : '—'}</td><td style="text-align:right">${c.km ? FP.num(c.km) + ' km' : '—'}</td><td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc || 0)}</td></tr>`).join('');
       const tot = rows.reduce((s,c) => s + (Number(c.total_ttc)||0), 0);
       const totKm = rows.reduce((s,c) => s + (Number(c.km)||0), 0);
-      const lbl = mois === 'all' ? 'Toutes les périodes' : moisLabel(mois);
-      tfoot.innerHTML = rows.length ? `<tr style="font-weight:700;border-top:2px solid var(--fp-border)"><td>Total ${lbl}</td><td></td><td style="text-align:right">${totKm ? FP.num(totKm) + ' km' : '—'}</td><td style="text-align:right">${FP.euro(tot)}</td></tr>` : '';
+      tfoot.innerHTML = rows.length ? `<tr style="font-weight:700;border-top:2px solid var(--fp-border)"><td>Total ${esc(label)}</td><td></td><td style="text-align:right">${totKm ? FP.num(totKm) + ' km' : '—'}</td><td style="text-align:right">${FP.euro(tot)}</td></tr>` : '';
+      // ===== Vue CARTES (Direction B) — une carte par conducteur =====
+      const cardsBox = $('uls-conso-cards');
+      if (cardsBox) cardsBox.innerHTML = rows.map(c => {
+        const tr = Number(c.nb_trajets)||0, km = Number(c.km)||0, ttc = Number(c.total_ttc)||0;
+        return `<div class="tf-ccard"><div class="top"><span class="nm">${esc(c.conducteur || '—')}</span><span class="tot">${FP.euro(ttc)}</span></div>
+          <div class="foot"><div>Trajets<b>${tr || '—'}</b></div><div>Km<b>${km ? FP.num(km) + ' km' : '—'}</b></div><div>€ / trajet<b>${tr ? FP.euro(ttc / tr) : '—'}</b></div></div></div>`;
+      }).join('');
+      applyUlsView(!rows.length);
     }
-    $('uls-conso-mois').addEventListener('change', renderConso);
+    // Bascule Tableau / Cartes (même préférence société que Total Fleet : FP.settings.consoView).
+    function applyUlsView(forceTable){
+      let pref = 'table';
+      try { if (window.FP && FP.settings) pref = (FP.settings.get().consoView === 'cards') ? 'cards' : 'table'; } catch (e) {}
+      const v = forceTable ? 'table' : pref;
+      const tbl = $('uls-conso-table'), cardsBox = $('uls-conso-cards');
+      const tableCard = tbl ? tbl.closest('.card') : null;
+      if (tableCard) tableCard.classList.toggle('hidden', v === 'cards');
+      if (cardsBox) cardsBox.classList.toggle('hidden', v !== 'cards');
+      const tg = $('uls-conso-view'); if (tg) tg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.v === pref));
+      if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
+    }
+    // Conso Ulys ADOSSÉE à une facture réellement présente (même règle partout).
+    function ulsBacked(){
+      if (!conso) return [];
+      const ulsFac = (window.FP_DATA.factures || []).filter(isUlys);
+      const facNums = new Set(ulsFac.map(f => String(f.numeroFacture || '').trim()).filter(Boolean));
+      const facMois = new Set(ulsFac.map(f => (f.date || '').slice(0, 7)).filter(Boolean));
+      return conso.filter(c => { const n = String(c.numeroFacture || '').trim(); return n ? facNums.has(n) : facMois.has(c.mois); });
+    }
+    // Période choisie (mois rapide OU dates) → { src, label }. Partagée table + exports.
+    function ulsPeriod(){
+      const sel = $('uls-conso-mois');
+      const from = $('uls-conso-from').value, to = $('uls-conso-to').value;
+      const dateMode = !!(from || to);
+      const clr = $('uls-conso-clear'); if (clr) clr.classList.toggle('hidden', !dateMode);
+      if (sel){ sel.disabled = dateMode; sel.style.opacity = dateMode ? '0.5' : ''; }
+      const backed = ulsBacked();
+      if (dateMode){
+        const fromM = from ? from.slice(0, 7) : null, toM = to ? to.slice(0, 7) : null;
+        return { src: backed.filter(c => (!fromM || (c.mois || '') >= fromM) && (!toM || (c.mois || '') <= toM)),
+                 label: (from ? FP.date(from) : '…') + ' → ' + (to ? FP.date(to) : '…') };
+      }
+      const mois = (sel && sel.value) || 'all';
+      if (mois === 'all') return { src: backed.slice(), label: 'Toutes les périodes' };
+      return { src: backed.filter(c => c.mois === mois), label: moisLabel(mois) };
+    }
+    function ulsExportRows(){ return ulsPeriod().src; }
+    const _ulsRe = () => renderConso();
+    $('uls-conso-mois').addEventListener('change', _ulsRe);
+    $('uls-conso-from').addEventListener('change', _ulsRe);
+    $('uls-conso-to').addEventListener('change', _ulsRe);
+    $('uls-conso-clear').addEventListener('click', () => { $('uls-conso-from').value = ''; $('uls-conso-to').value = ''; renderConso(); });
+    { const vt = $('uls-conso-view'); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.consoView = b.dataset.v; FP.settings.save(s); } } catch (e) {} applyUlsView(); })); }
+    if (FP.filterResetButton) FP.filterResetButton($('uls-conso-mois').closest('div'), { onReset: () => { $('uls-conso-mois').value = 'all'; $('uls-conso-from').value = ''; $('uls-conso-to').value = ''; renderConso(); } });
+    if ($('uls-an-csv')) $('uls-an-csv').addEventListener('click', () => {
+      const rows = ulsExportRows(); if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée à exporter'); return; }
+      const cols = ['mois', 'conducteur', 'numeroFacture', 'nb_trajets', 'km', 'total_ttc'];
+      const head = ['Mois', 'Conducteur', 'N° facture', 'Trajets', 'Km', 'TTC'];
+      const numCols = { nb_trajets:1, km:1, total_ttc:1 };
+      const src = rows.slice().sort((a, b) => String(a.mois).localeCompare(String(b.mois)));
+      if (FP.downloadXlsx) {
+        const data = src.map(c => cols.map(k => { const v = c[k]; if (numCols[k]) { const n = Number(v); return isFinite(n) ? n : ''; } return v == null ? '' : v; }));
+        FP.downloadXlsx('ulys-conso', head, data, { sheet: 'Ulys' }); return;
+      }
+      const q = v => { const s = String(v == null ? '' : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+      const lines = ['sep=;', head.join(';')].concat(src.map(c => cols.map(k => q(c[k])).join(';')));
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ulys-conso.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    });
+    if ($('uls-an-pdf')) $('uls-an-pdf').addEventListener('click', () => {
+      if (!(FP.fiche && FP.fiche.open)) return; const { src: rows, label } = ulsPeriod(); if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée sur la période'); return; }
+      const g = {}; rows.forEach(c => { const n = c.conducteur || '—'; const d = g[n] || (g[n] = { nom:n, trajets:0, km:0, ttc:0 }); d.trajets += Number(c.nb_trajets) || 0; d.km += Number(c.km) || 0; d.ttc += Number(c.total_ttc) || 0; });
+      const list = Object.values(g).sort((a, b) => b.ttc - a.ttc);
+      FP.fiche.open({ key: 'ulys', title: 'Relevé Ulys — péages' + (label && label !== 'Toutes les périodes' ? ' — ' + label : ''), rows: list, cols: [
+        { id: 'nom', label: 'Conducteur', def: true, get: r => r.nom },
+        { id: 'trajets', label: 'Trajets', def: true, align: 'right', get: r => r.trajets ? String(r.trajets) : '—', sum: r => r.trajets, fmt: t => String(Math.round(t)) },
+        { id: 'km', label: 'Km', def: true, align: 'right', get: r => r.km ? FP.num(r.km) + ' km' : '—', sum: r => r.km, fmt: t => FP.num(Math.round(t)) + ' km' },
+        { id: 'ttc', label: 'TTC', def: true, align: 'right', get: r => FP.euro(r.ttc), sum: r => r.ttc },
+      ] });
+    });
 
     window.renderUlys = () => { render(); if (!consoLoaded) loadConso(); else renderConso(); };
     document.addEventListener('fp:data-ready', () => { if (!$('view-ulys').classList.contains('hidden')){ render(); if (consoLoaded) renderConso(); } });
+
+    // ── Exposé pour l'IMPORT EN LOT : router les relevés Ulys vers CE traitement dédié (détail par
+    //    collaborateur ancré sur le badge). Détecteur = lecture texte + parseUlys (n° + TTC présents).
+    FP._importUlysReleves = handleUlysImport;
+    window.__facIsUlysStatement = async (file) => {
+      try {
+        if (!(file.type === 'application/pdf' || /\.pdf$/i.test(file.name))) return false;
+        let text = await ulysPdfToText(file);
+        if (!text || text.replace(/\s/g, '').length < 80) return false; // OCR = trop coûteux juste pour détecter
+        if (!/ulys|vinci\s*autoroute/i.test(text)) return false;
+        const p = parseUlys(text); return !!(p && p.numero && p.ttc != null);
+      } catch (e) { return false; }
+    };
   })();
 
   // ===== Onglet FOURNISSEURS (voir + nettoyer les doublons) =====
@@ -3059,7 +4134,26 @@
           <button class="btn btn-outline" style="padding:4px 9px;font-size:12px" data-fn-rename="${esc(r.name)}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Renommer</button>
           <button class="btn btn-outline" style="padding:4px 9px;font-size:12px;color:#b91c1c" data-fn-del="${esc(r.name)}" title="Retirer le nom des factures">✕</button>
         </td></tr>`).join('');
+      const cardsBox = $('fn-cards');
+      if (cardsBox) cardsBox.innerHTML = rows.map(r => `<div class="tf-ccard">
+        <div class="top"><span class="nm">${esc(r.name)}</span><span class="tot">${FP.euro(r.total)}</span></div>
+        <div class="foot" style="align-items:center;justify-content:space-between">
+          <div>Factures<b>${r.count}</b></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-outline" style="padding:4px 9px;font-size:12px" data-fn-rename="${esc(r.name)}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Renommer</button>
+            <button class="btn btn-outline" style="padding:4px 9px;font-size:12px;color:#b91c1c" data-fn-del="${esc(r.name)}" title="Retirer le nom des factures">✕</button>
+          </div>
+        </div></div>`).join('');
+      applyFnView(rows.length === 0);
       if (window.lucide) lucide.createIcons();
+    }
+    function applyFnView(forceTable){
+      let pref = 'table'; try { if (window.FP && FP.settings) pref = (FP.settings.get().fournView === 'cards') ? 'cards' : 'table'; } catch (e) {}
+      const v = forceTable ? 'table' : pref;
+      const tbl = document.querySelector('#view-fourn table.fp-table'), tableCard = tbl ? tbl.closest('.card') : null, cardsBox = $('fn-cards');
+      if (tableCard) tableCard.classList.toggle('hidden', v === 'cards');
+      if (cardsBox) cardsBox.classList.toggle('hidden', v !== 'cards');
+      const tg = $('fn-view'); if (tg) tg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.v === pref));
     }
     function applyRename(oldName, newName){
       newName = (newName || '').trim();
@@ -3077,12 +4171,16 @@
     }
     $('fn-search').addEventListener('input', (e) => { fnSearch = e.target.value; render(); });
     $('fn-sort').addEventListener('change', (e) => { fnSort = e.target.value; render(); });
-    $('fn-tbody').addEventListener('click', async (e) => {
+    // Actions renommer/supprimer — mêmes boutons en vue Tableau ET en vue Cartes.
+    async function fnAction(e){
       const rn = e.target.closest('[data-fn-rename]');
       if (rn){ const old = rn.dataset.fnRename; const nn = await FP.prompt(`Renommer / fusionner « ${old} » en :`, old); if (nn != null && nn.trim() && nn.trim() !== old){ const k = applyRename(old, nn); alert(`${k} facture(s) mises à jour.`); } return; }
       const dl = e.target.closest('[data-fn-del]');
       if (dl){ const old = dl.dataset.fnDel; if (await FP.confirm(`Retirer le fournisseur « ${old} » de ses factures ?\n(Les factures restent, sans fournisseur.)`)){ applyRename(old, ''); } }
-    });
+    }
+    $('fn-tbody').addEventListener('click', fnAction);
+    if ($('fn-cards')) $('fn-cards').addEventListener('click', fnAction);
+    { const vt = $('fn-view'); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.fournView = b.dataset.v; FP.settings.save(s); } } catch (e) {} applyFnView(); })); }
     window.renderFournisseurs = render;
     document.addEventListener('fp:data-ready', () => { if (!$('view-fourn').classList.contains('hidden')) render(); });
   })();

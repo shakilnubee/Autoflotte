@@ -10,7 +10,14 @@
 // ============================================================
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const MODEL = "claude-sonnet-4-6"; // lecture d'image plus fine (documents difficiles)
+// Modèle Claude utilisé pour lire les documents / répondre à l'assistant.
+// ⚠️ Doit être un identifiant de modèle VALIDE (un ID invalide fait échouer TOUS les appels → « IA à 0 »).
+// Surchargeable sans redéployer via le secret Supabase ANTHROPIC_MODEL (Edge Functions → Secrets).
+// Liste de modèles essayés dans l'ORDRE : on garde le PREMIER accepté par le compte (les autres sont
+// des replis si l'un est retiré/indisponible). Surchargeable via le secret ANTHROPIC_MODEL (un seul
+// nom, ou plusieurs séparés par des virgules).
+const MODELS = (Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-5,claude-haiku-4-5-20251001,claude-3-5-sonnet-20241022,claude-3-5-sonnet-latest")
+  .split(",").map((s) => s.trim()).filter(Boolean);
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -64,7 +71,23 @@ function extractJson(text) {
   try { return JSON.parse(cleaned.slice(a, b + 1)); } catch (_) { return null; }
 }
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  // ⚠️ CORS d'abord (le préflight OPTIONS doit toujours réussir). On RENVOIE EXACTEMENT les en-têtes
+  // que le navigateur demande (Access-Control-Request-Headers) → le preflight passe TOUJOURS, même si
+  // le client ajoute un en-tête inattendu (sinon le navigateur bloque le POST → « Failed to send a request »).
+  if (req.method === "OPTIONS") {
+    const reqH = req.headers.get("Access-Control-Request-Headers") || CORS["Access-Control-Allow-Headers"];
+    return new Response("ok", { headers: { ...CORS, "Access-Control-Allow-Headers": reqH } });
+  }
+  // Filet de sécurité GLOBAL : quoi qu'il arrive, on renvoie une erreur JSON AVEC en-têtes CORS —
+  // jamais un plantage « brut » (sinon le navigateur affiche « Failed to send a request » sans la cause).
+  try {
+    return await handle(req);
+  } catch (e) {
+    return json({ ok: false, error: "Erreur interne de la fonction : " + (e && e.message ? e.message : String(e)) }, 500);
+  }
+});
+
+async function handle(req) {
   if (req.method !== "POST") return json({ error: "method not allowed" }, 405);
   const auth = req.headers.get("Authorization") || "";
   if (!auth.startsWith("Bearer ")) return json({ error: "unauthorized" }, 401);
@@ -74,12 +97,14 @@ Deno.serve(async (req) => {
   {
     const token = auth.replace(/^Bearer\s+/i, "").trim();
     const SUPA = Deno.env.get("SUPABASE_URL"); const ANON = Deno.env.get("SUPABASE_ANON_KEY");
-    if (SUPA && ANON) {
-      try {
-        const u = await fetch(`${SUPA}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: ANON } });
-        if (!u.ok) return json({ error: "unauthorized" }, 401);
-      } catch (_) { return json({ error: "unauthorized" }, 401); }
-    }
+    // FAIL-CLOSED : sans moyen de vérifier le jeton (variables absentes/mal configurées), on REFUSE
+    // au lieu d'ouvrir l'accès — sinon un déploiement sans ces variables transforme la fonction en
+    // proxy IA ouvert facturé sur la clé Anthropic.
+    if (!SUPA || !ANON) return json({ error: "unauthorized" }, 401);
+    try {
+      const u = await fetch(`${SUPA}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: ANON } });
+      if (!u.ok) return json({ error: "unauthorized" }, 401);
+    } catch (_) { return json({ error: "unauthorized" }, 401); }
   }
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) return json({ error: "ANTHROPIC_API_KEY manquante" }, 500);
@@ -102,25 +127,48 @@ Deno.serve(async (req) => {
   let maxTok = 1024;
   const reqTok = Number(payload.maxTokens);
   if (Number.isFinite(reqTok) && reqTok > 1024) maxTok = Math.min(Math.floor(reqTok), 8192);
-  const body = {
-    model: MODEL,
+  const baseBody = {
     max_tokens: maxTok,
     messages: [{ role: "user", content: [fileBlock, { type: "text", text: promptText }] }],
   };
-  let apiRes;
-  try {
-    apiRes = await fetch(ANTHROPIC_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify(body),
-    });
-  } catch (e) {
-    return json({ error: "appel API echoue: " + (e && e.message ? e.message : String(e)) }, 502);
+  console.log("[scan-doc] cle=" + (apiKey ? ("presente(" + apiKey.length + ")") : "ABSENTE") + " · modeles=" + MODELS.join(","));
+  // On essaie chaque modèle dans l'ordre ; on garde le 1er accepté. Un « modèle introuvable » (404)
+  // fait passer au suivant ; toute AUTRE erreur (clé, quota) est renvoyée telle quelle (inutile d'insister).
+  let data = null, usedModel = null, lastErr = "aucun modele disponible", lastStatus = 502;
+  for (const m of MODELS) {
+    let apiRes;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 55000);
+    try {
+      apiRes = await fetch(ANTHROPIC_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ ...baseBody, model: m }),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      const aborted = e && (e.name === "AbortError");
+      lastErr = aborted ? "L'API Claude n'a pas repondu a temps (timeout)." : ("appel API echoue: " + (e && e.message ? e.message : String(e)));
+      console.error("[scan-doc] " + m + " → " + lastErr);
+      continue; // réseau/timeout : on tente le modèle suivant
+    }
+    clearTimeout(timer);
+    const rawText = await apiRes.text();
+    let parsed = null; try { parsed = JSON.parse(rawText); } catch (_) {}
+    console.log("[scan-doc] " + m + " → status=" + apiRes.status);
+    if (apiRes.ok && parsed) { data = parsed; usedModel = m; break; }
+    lastErr = (parsed && parsed.error && parsed.error.message) || ("HTTP " + apiRes.status + " : " + rawText.slice(0, 200));
+    lastStatus = apiRes.status;
+    console.error("[scan-doc] " + m + " KO: " + lastErr);
+    const modelNotFound = apiRes.status === 404 && /model/i.test(lastErr);
+    if (modelNotFound) continue; // ce modèle n'existe pas pour ce compte → suivant
+    // Autre erreur (clé invalide, quota, surcharge…) : inutile d'essayer d'autres modèles.
+    return json({ error: lastErr, status: lastStatus }, 502);
   }
-  const data = await apiRes.json();
-  if (!apiRes.ok) return json({ error: (data && data.error && data.error.message) || "erreur API", status: apiRes.status }, 502);
+  if (!data) return json({ error: "Aucun modele Claude disponible pour ce compte. Derniere erreur : " + lastErr, status: lastStatus }, 502);
   const text = (data.content || []).filter((x) => x.type === "text").map((x) => x.text || "").join("");
   const fields = extractJson(text);
   if (!fields) return json({ ok: false, error: "lecture impossible", raw: text }, 200);
-  return json({ ok: true, fields, model: MODEL }, 200);
-});
+  return json({ ok: true, fields, model: usedModel }, 200);
+}

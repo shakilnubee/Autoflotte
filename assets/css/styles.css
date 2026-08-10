@@ -110,6 +110,10 @@
   --fp-shadow-lg:  0 28px 64px -28px rgba(16,26,45,.34);
   --fp-ease:       cubic-bezier(.22,.61,.36,1);  /* courbe douce commune aux transitions */
   --fp-mono:       ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  /* Identité « cockpit » (même pâte que l'accueil et la connexion) :
+     --fp-title = police d'affichage des titres/gros chiffres ; --fp-label = télémétrie (petits libellés MAJ). */
+  --fp-title:      'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --fp-label:      'Space Mono', ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   /* Couleurs par groupe de véhicules (configurables via Paramètres) */
   --grp-siege:       #F59E0B;
@@ -180,7 +184,7 @@ body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; c
 @keyframes fp-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.4); opacity: .5; } }
 /* Survol : léger relief sur les cartes et KPI (cohérent avec les icônes 3D) */
 .kpi { transition: transform .18s var(--fp-ease), box-shadow .18s var(--fp-ease); }
-.kpi:hover { transform: translateY(-3px); box-shadow: var(--fp-shadow-lg); }
+@media (hover: hover) and (pointer: fine) { .kpi:hover { transform: translateY(-3px); box-shadow: var(--fp-shadow-lg); } }
 .card { transition: box-shadow .18s var(--fp-ease); }
 .card:hover { box-shadow: var(--fp-shadow-lg); }
 @media (prefers-reduced-motion: reduce) { .badge-dot { animation: none; } .kpi:hover { transform: none; } }
@@ -217,13 +221,13 @@ main.flex-1::before { content: ''; position: absolute; top: 0; left: 0; right: 0
 
 /* --- Tableaux --- */
 .fp-table { width: 100%; border-collapse: collapse; }
-.fp-table th { text-align: left; font-size: .68rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 700; color: var(--fp-faint); padding: .65rem .85rem; border-bottom: 1px solid var(--fp-border); background: color-mix(in srgb, var(--fp-bg) 60%, var(--fp-surface)); white-space: nowrap; }
+.fp-table th { text-align: left; font-family: var(--fp-label); font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--fp-faint); padding: .65rem .85rem; border-bottom: 1px solid var(--fp-border); background: color-mix(in srgb, var(--fp-bg) 60%, var(--fp-surface)); white-space: nowrap; }
 .fp-table td { padding: .65rem .85rem; border-bottom: 1px solid var(--fp-border); font-size: .85rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .fp-table tbody tr:hover { background: #F8FAFC; }
 /* Permettre le wrap explicite si une cellule en a besoin */
 .fp-table td.wrap, .fp-table th.wrap { white-space: normal; }
 /* Liens cliquables plaque/conducteur (toute la plateforme) */
-.fp-lien { color: var(--fp-accent); text-decoration: none; cursor: pointer; }
+.fp-lien { color: var(--fp-accent); text-decoration: none; cursor: pointer; white-space: nowrap; }
 .fp-lien:hover { text-decoration: underline; }
 /* Densité COMPACTE (réglable dans Paramètres) : lignes plus serrées sur toutes les pages */
 html.fp-compact .fp-table th { padding: .35rem .7rem; font-size: .68rem; }
@@ -502,9 +506,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus
 
 /* --- KPIs --- */
 .kpi { padding: 1.25rem; border-radius: 1rem; background: var(--fp-surface); border: 1px solid var(--fp-border); box-shadow: var(--fp-shadow); }
-.kpi-label { font-size: .72rem; color: var(--fp-faint); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+.kpi-label { font-family: var(--fp-label); font-size: .68rem; color: var(--fp-faint); text-transform: uppercase; letter-spacing: .09em; font-weight: 700; }
 /* Chiffres KPI : police de la marque (Inter), juste alignés (tabular-nums) — pas de monospace. */
-.kpi-value { font-variant-numeric: tabular-nums; font-size: 1.85rem; font-weight: 700; color: var(--fp-text); margin-top: .35rem; line-height: 1.05; }
+.kpi-value { font-family: var(--fp-title); font-variant-numeric: tabular-nums; font-size: 1.85rem; font-weight: 700; letter-spacing: -.01em; color: var(--fp-text); margin-top: .35rem; line-height: 1.05; }
 .kpi-delta { font-size: .8rem; font-weight: 600; margin-top: .35rem; font-variant-numeric: tabular-nums; }
 .kpi-delta.up   { color: var(--fp-ok); }
 .kpi-delta.down { color: var(--fp-danger); }
@@ -559,6 +563,11 @@ body[data-role="gestionnaire"] .nav-edit-btn { display: none !important; }
 /* ============================================================
    MODE SOMBRE 🌙  (activé via Paramètres → body.fp-dark)
    ============================================================ */
+/* Anti-flash : un script synchrone dans le <head> ajoute .fp-dark à <html> AVANT la 1re peinture
+   (fond sombre + color-scheme:dark) → plus de « frame » clair qui apparaît puis passe en sombre
+   lors d'une navigation. Le contenu, lui, est thémé via body.fp-dark (posé dès l'ouverture du body). */
+html.fp-dark { background: #0b1220 !important; color-scheme: dark; }
+html.fp-dark body { background: #0b1220; }
 body.fp-dark {
   --fp-bg: #0b1220;
   --fp-surface: #1e293b;
@@ -631,6 +640,69 @@ body.fp-dark .fp-table tbody tr:hover { background: #243044; }
 /* Petites pastilles à fond clair */
 body.fp-dark .groupe-pill, body.fp-dark .plate-badge, body.fp-dark .stat-pill { background: #243044; color: var(--fp-text); }
 
+/* ================================================================
+   MODE SOMBRE — surfaces personnalisées à fond CLAIR (cartes, cellules,
+   panneaux propres à chaque page). Elles ne redéfinissent pas leur couleur de
+   texte → en sombre le texte (clair) devenait invisible sur fond clair. On leur
+   donne une surface sombre + texte clair, comme .card. (Audit lisibilité 2026-08)
+   ================================================================ */
+body.fp-dark .guide-hero { background: linear-gradient(180deg,#111a2b 0%,#0b1220 100%) !important; }
+body.fp-dark .quick-tile,
+body.fp-dark .stat-card,
+body.fp-dark .cal-cell,
+body.fp-dark .ech-row,
+body.fp-dark .pipeline-col,
+body.fp-dark .veh-card,
+body.fp-dark .task-card,
+body.fp-dark .driver-card,
+body.fp-dark .fiche-stat,
+body.fp-dark .fiche-card,
+body.fp-dark .viewer,
+body.fp-dark .hidden-cols-popover,
+body.fp-dark .grp-hidden-pop,
+body.fp-dark .ls-card,
+body.fp-dark #cmp-modal .cmp-card,
+body.fp-dark .drop,
+body.fp-dark .fld,
+body.fp-dark .drive-file,
+body.fp-dark .tf-ccard,
+body.fp-dark .fp-ac,
+body.fp-dark .es-card,
+body.fp-dark .es-doc { background: #1e293b !important; color: var(--fp-text); border-color: var(--fp-border); }
+body.fp-dark .cal-cell.muted { background: #172033 !important; }
+/* Cartes d'échéance CT (entretiens) : fonds clairs colorés → texte illisible en sombre. */
+body.fp-dark .ct-card { background: #1e293b !important; color: var(--fp-text); }
+body.fp-dark .ct-card.danger { background: rgba(220,38,38,.20) !important; }
+body.fp-dark .ct-card.warn   { background: rgba(217,119,6,.18) !important; }
+body.fp-dark .ct-card.ok     { background: rgba(22,163,74,.18) !important; }
+body.fp-dark .fld.warn { background: rgba(217,119,6,.18) !important; }
+body.fp-dark .fld.low  { background: rgba(220,38,38,.18) !important; }
+body.fp-dark .cmp-win  { background: rgba(22,163,74,.22) !important; }
+body.fp-dark .pipeline-col .count { background: #243044 !important; }
+/* Textes en couleur primaire définis en STYLE-BLOCK (donc NON éclaircis par la règle inline plus
+   haut) qui se retrouvent sur une surface sombre (cartes ci-dessus) ou sur le fond de page sombre
+   → on les éclaircit. (On NE touche PAS .acc / .ctrl-kpi : leur carte reste claire → déjà lisibles.) */
+body.fp-dark .section-title,
+body.fp-dark .guide-hero h1,
+body.fp-dark details.ctrl-help > summary,
+body.fp-dark .veh-card .price,
+body.fp-dark .ls-card .ls-immat,
+body.fp-dark .ls-card .ls-grid b,
+body.fp-dark .tf-ccard .nm,
+body.fp-dark .tf-ccard .tot,
+body.fp-dark .tf-ccard .foot b { color: var(--fp-text) !important; }
+/* Boîtes / bandeaux à fond clair posés en STYLE INLINE (souvent injectés par JS) : mêmes dégâts →
+   on force une surface sombre. Le texte (hérité / text-slate / inline var(--fp-primary)) redevient
+   clair, donc lisible. Ne cible QUE les fonds clairs connus (jamais une pastille à texte foncé). */
+body.fp-dark [style*="background:#fff" i], body.fp-dark [style*="background: #fff" i],
+body.fp-dark [style*="background:white" i], body.fp-dark [style*="background: white" i],
+body.fp-dark [style*="background:#f8fafc" i], body.fp-dark [style*="background: #f8fafc" i],
+body.fp-dark [style*="background:#fbfcfe" i], body.fp-dark [style*="background: #fbfcfe" i],
+body.fp-dark [style*="background:#fffbeb" i], body.fp-dark [style*="background: #fffbeb" i],
+body.fp-dark [style*="background:#eff6ff" i], body.fp-dark [style*="background: #eff6ff" i],
+body.fp-dark [style*="background:#f0fdf4" i], body.fp-dark [style*="background: #f0fdf4" i],
+body.fp-dark [style*="background:#fef2f2" i], body.fp-dark [style*="background: #fef2f2" i] { background-color: #1e293b !important; }
+
 /* Aperçu Drive (iframe) et logos restent inchangés */
 
 /* ================================================================
@@ -639,7 +711,7 @@ body.fp-dark .groupe-pill, body.fp-dark .plate-badge, body.fp-dark .stat-pill { 
    ================================================================ */
 .fp-display { font-style: italic; font-weight: 900; letter-spacing: -.02em; text-wrap: balance; }
 .fp-mono    { font-family: var(--fp-mono); font-variant-numeric: tabular-nums; }
-.fp-eyebrow { font-size: .7rem; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: var(--fp-faint); }
+.fp-eyebrow { font-family: var(--fp-label); font-size: .68rem; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: var(--fp-faint); }
 
 /* Bandeau cockpit (héros de page) — CLAIR par défaut (fond blanc dégradé + léger halo
    orange), partagé par TOUTES les pages. Redevient sombre en mode nuit (plus bas). */
@@ -649,7 +721,7 @@ body.fp-dark .groupe-pill, body.fp-dark .plate-badge, body.fp-dark .stat-pill { 
   color: var(--fp-text); border: 1px solid var(--fp-border); border-radius: 20px; box-shadow: var(--fp-shadow); }
 .fp-cockpit .fp-eyebrow { color: var(--fp-accent); }
 /* Titre du bandeau cockpit = gros ITALIQUE lourd (écho du logo ParcPilot + des maquettes) */
-.fp-cockpit h1 { font-style: italic; font-weight: 900; letter-spacing: -.025em; font-size: clamp(1.9rem, 3.2vw, 2.6rem); line-height: 1.02; color: var(--fp-primary) !important; }
+.fp-cockpit h1 { font-family: var(--fp-title); font-style: normal; font-weight: 700; letter-spacing: -.025em; font-size: clamp(1.9rem, 3.2vw, 2.6rem); line-height: 1.04; color: var(--fp-primary) !important; }
 .fp-cockpit p { color: var(--fp-muted) !important; }
 .fp-cockpit .fp-mono, .fp-cockpit .fp-display { color: var(--fp-primary); }
 .fp-cockpit .btn-outline { background: var(--fp-surface); border-color: var(--fp-border); color: var(--fp-text); box-shadow: var(--fp-shadow-sm); }
@@ -725,8 +797,12 @@ body.fp-dark ::selection { color: #fff; }
   background: linear-gradient(90deg, var(--fp-accent), var(--fp-accent-2)); pointer-events: none;
   opacity: 0; transform: scaleX(.4); transform-origin: center; transition: opacity .2s var(--fp-ease), transform .2s var(--fp-ease);
 }
-.kpi:hover::after { opacity: 1; transform: scaleX(1); }
-.kpi:hover { box-shadow: var(--fp-shadow-lg), 0 0 0 1px color-mix(in srgb, var(--fp-accent) 20%, transparent); }
+/* Effets de survol UNIQUEMENT sur appareils à pointeur (souris) : sinon, sur mobile,
+   le survol « colle » après un tap → le filet orange restait allumé (bug d'affichage signalé). */
+@media (hover: hover) and (pointer: fine) {
+  .kpi:hover::after { opacity: 1; transform: scaleX(1); }
+  .kpi:hover { box-shadow: var(--fp-shadow-lg), 0 0 0 1px color-mix(in srgb, var(--fp-accent) 20%, transparent); }
+}
 
 /* Cartes & panneaux : bordure qui se teinte au survol (finition premium) */
 .card, .fp-panel { transition: box-shadow .2s var(--fp-ease), transform .2s var(--fp-ease), border-color .2s var(--fp-ease); }
@@ -742,6 +818,20 @@ body.fp-dark ::selection { color: #fff; }
    le mode sombre garde son propre survol défini plus haut */
 body:not(.fp-dark) .fp-table tbody tr { transition: background .12s var(--fp-ease); }
 body:not(.fp-dark) .fp-table tbody tr:hover { background: color-mix(in srgb, var(--fp-accent) 6%, var(--fp-surface)); }
+
+/* Champ de saisie standard « .field-input » — base Parc Pilot (bordé, arrondi) COHÉRENTE PARTOUT.
+   ⚠️ Sans cette base, la remise à zéro Tailwind laisse les .field-input SANS bordure → rendu « plat »
+   (bug corrigé : fenêtres d'édition qui paraissaient non stylées). Le focus/dark sont gérés ci-dessous. */
+.field-input {
+  border: 1px solid var(--fp-border);
+  border-radius: .6rem;
+  padding: .5rem .7rem;
+  font-size: .9rem;
+  background: #fff;
+  color: var(--fp-primary, #0F1E3D);
+  line-height: 1.3;
+  transition: border-color .12s, box-shadow .12s;
+}
 
 /* Champs de saisie : halo d'accent doux au focus (cohérent partout) */
 input:not(.fp-search-input):not(.nav-label-input):focus,
@@ -1233,8 +1323,21 @@ input[type="file"] { font-size: .85rem; color: #64748b; }
 html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 /* 2) Pas de flash gris au tap sur mobile */
 * { -webkit-tap-highlight-color: transparent; }
-/* 3) Cases à cocher & boutons radio aux couleurs Parc Pilot */
-input[type="checkbox"], input[type="radio"] { accent-color: var(--fp-accent, #F97316); }
+/* 3) Cases à cocher & boutons radio aux couleurs Parc Pilot.
+   Agrandies (18px) pour être plus faciles à cliquer/taper — PARTOUT sur la plateforme.
+   Le !important surclasse les tailles « 15px » posées en style inline (sélection de lignes,
+   « Tout sélectionner », etc.). Les interrupteurs de l'app sont des <button>, pas des <input>,
+   donc ils ne sont pas impactés. */
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--fp-accent, #F97316);
+  width: 18px !important;
+  height: 18px !important;
+  cursor: pointer;
+}
+/* Sur écran tactile, on agrandit encore un peu la zone cliquable (sans déformer la case). */
+@media (hover: none) and (pointer: coarse) {
+  input[type="checkbox"], input[type="radio"] { width: 20px !important; height: 20px !important; }
+}
 /* 4) Curseur explicite sur les éléments désactivés */
 button:disabled, [disabled], .btn:disabled, input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; }
 /* 5) Auto-remplissage Chrome : plus de fond jaune (fond blanc + texte lisible) */

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")==="1"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Contrats — Parc Pilot</title>
 <link rel="manifest" href="../manifest.json">
@@ -15,12 +16,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803f">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809h">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -33,6 +34,15 @@
   .drag-handle:active { cursor: grabbing; }
   .contrat-section.dragging { opacity: .45; }
   #contrat-sections.is-dragging .contrat-section { transition: transform .08s; }
+  /* Champs des fenêtres (ajouter / modifier un contrat) — style Parc Pilot (bordé, arrondi, focus accent) */
+  #locadd-modal .field-input, #locadd-modal input:not([type="file"]), #locadd-modal select {
+    width: 100%; border: 1px solid var(--fp-border); border-radius: .6rem; padding: .5rem .7rem;
+    font-size: .9rem; background: #fff; color: var(--fp-primary); transition: border-color .12s, box-shadow .12s;
+  }
+  #locadd-modal .field-input:focus, #locadd-modal input:focus, #locadd-modal select:focus {
+    outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(249,115,22,.15);
+  }
+  #locadd-modal label > span:first-child { display: block; margin-bottom: .15rem; }
 </style>
 <script>
 (function(){
@@ -49,7 +59,7 @@
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")==="1")document.body.classList.add("fp-dark")}catch(e){}</script>
 
 <div class="flex min-h-screen flex-col md:flex-row">
 
@@ -68,9 +78,10 @@
       <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
       <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
       <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="controle.html" data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
       <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
       <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
-      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
       <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
       <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
       <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
@@ -126,6 +137,7 @@
             <span class="text-xs font-semibold" style="color:#8598B4">Filtrer par loueur :</span>
             <select id="leasing-loueur-filter" class="field-input !py-1 !text-sm" style="width:auto;min-width:170px"></select>
           </span>
+          <button id="cmp-open" type="button" class="btn text-sm" style="background:#fff;color:#0B1E3D;border:none;font-weight:700" title="Comparer 2 devis de leasing ou 2 offres d'assurance et savoir lequel choisir"><i data-lucide="scale" class="w-4 h-4"></i> Comparer des devis</button>
           <button id="loueur-add-quick" type="button" class="btn text-sm" style="background:var(--fp-accent);color:#fff;border:none;font-weight:600"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un loueur</button>
         </div>
       </div>
@@ -184,6 +196,23 @@
         <p class="text-xs text-slate-400 mt-2">« Étiquette propriétaire » = la valeur du champ <b>propriétaire</b> des véhicules de ce loueur (dans leur fiche). Chaque véhicule est rattaché au loueur dont l'étiquette correspond à son propriétaire.</p>
       </div>
 
+      <style>
+        .tfview-toggle{display:inline-flex;border:1px solid var(--fp-border);border-radius:9px;overflow:hidden}
+        .tfview-toggle button{padding:6px 11px;font-size:.8rem;font-weight:700;background:#fff;border:none;color:var(--fp-muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+        .tfview-toggle button.active{background:var(--fp-primary);color:#fff}
+        .ls-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+        .ls-cards.hidden{display:none}  /* sinon .ls-cards (chargé après Tailwind) écrase .hidden → cartes + tableau visibles ensemble */
+        .ls-card{background:#fff;border:1px solid var(--fp-border);border-radius:14px;box-shadow:0 1px 2px rgba(15,30,61,.05),0 8px 24px -18px rgba(15,30,61,.25);padding:15px 16px;display:flex;flex-direction:column;gap:12px}
+        .ls-card .ls-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+        .ls-immat{font-family:ui-monospace,monospace;font-weight:800;color:var(--fp-primary)}
+        .ls-veh{font-weight:700}
+        .ls-sub{font-size:.76rem;color:var(--fp-muted)}
+        .ls-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 14px}
+        .ls-grid > div{display:flex;flex-direction:column;gap:1px}
+        .ls-grid .k{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--fp-muted)}
+        .ls-grid b{font-size:.92rem;color:var(--fp-primary);font-weight:800}
+        .ls-actions{display:flex;gap:6px;border-top:1px solid var(--fp-border);padding-top:10px}
+      </style>
       <div id="leasing-bpce-body">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div class="kpi"><div class="kpi-label">Véhicules en leasing</div><div class="kpi-value" id="kpi-bpce-nb">—</div></div>
@@ -197,6 +226,10 @@
           <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
           <input id="search-leasing" type="text" placeholder="Immat., chauffeur, modèle…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
         </div>
+        <span class="tfview-toggle" id="ls-view" title="Changer l'affichage">
+          <button type="button" data-v="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+          <button type="button" data-v="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+        </span>
       </div>
 
       <div class="scrollable">
@@ -222,9 +255,45 @@
           <tbody id="tbody-leasing"></tbody>
         </table>
       </div>
+      <div id="ls-cards" class="ls-cards hidden"></div>
       <p class="text-xs text-slate-500 mt-3" id="leasing-count"></p>
       </div>
       <p id="leasing-bpce-masque" class="text-sm text-slate-400 hidden">Section masquée par le filtre. Choisis <b>« Tous les loueurs »</b> ci-dessus pour la réafficher.</p>
+    </div>
+
+    <!-- Section Cartes carburant & télépéage -->
+    <div class="card p-6 mb-6 contrat-section" data-section="cartes">
+      <div class="section-title">
+        <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
+        <i data-lucide="credit-card" class="w-5 h-5"></i> Cartes carburant &amp; télépéage
+      </div>
+      <p class="text-sm text-slate-600 mb-4">Toutes les cartes carburant et badges télépéage de la flotte, avec le véhicule, le conducteur et l'échéance. Les <b>anomalies d'usage</b> (pleins suspects) sont repérées automatiquement.</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div class="kpi"><div class="kpi-label">Cartes carburant</div><div class="kpi-value" id="kpi-cartes-nb">—</div></div>
+        <div class="kpi"><div class="kpi-label">Badges télépéage</div><div class="kpi-value" id="kpi-badges-nb">—</div></div>
+        <div class="kpi"><div class="kpi-label">Expirent &lt; 60 j</div><div class="kpi-value" id="kpi-cartes-exp" style="color:var(--fp-warn)">—</div></div>
+        <div class="kpi"><div class="kpi-label">Anomalies d'usage</div><div class="kpi-value" id="kpi-cartes-anom" style="color:var(--fp-danger)">—</div></div>
+      </div>
+      <div id="cartes-anom" class="mb-4"></div>
+      <div class="flex flex-wrap items-center gap-3 mb-3">
+        <div class="relative flex-1 min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search-cartes" type="text" placeholder="Immat., conducteur, n° de carte, fournisseur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+        <label class="text-xs text-slate-500 flex items-center gap-1.5" style="white-space:nowrap"><input type="checkbox" id="cartes-only-filled" style="accent-color:var(--fp-accent)"> Seulement les véhicules équipés</label>
+      </div>
+      <div class="scrollable">
+        <table class="fp-table">
+          <thead><tr>
+            <th>Immat.</th><th>Véhicule</th><th>Conducteur</th>
+            <th>Carte carburant (n°)</th><th>Fournisseur</th><th>Exp. carte</th>
+            <th>Badge télépéage (n°)</th><th>Exp. badge</th>
+          </tr></thead>
+          <tbody id="tbody-cartes"></tbody>
+        </table>
+      </div>
+      <p class="text-xs text-slate-500 mt-3" id="cartes-count"></p>
+      <p class="text-xs text-slate-400 mt-1">Modifie une case directement ici : c'est enregistré tout de suite (les mêmes infos apparaissent dans la fiche du véhicule).</p>
     </div>
 
     <!-- Section Leasing Localease (Ayvens) — séparée de BPCE -->
@@ -247,6 +316,10 @@
           <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
           <input id="search-localease" type="text" placeholder="Immat., chauffeur, modèle…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
         </div>
+        <span class="tfview-toggle" id="loc-view" title="Changer l'affichage">
+          <button type="button" data-v="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+          <button type="button" data-v="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+        </span>
       </div>
       <div class="scrollable">
         <table class="fp-table">
@@ -254,10 +327,12 @@
           <tbody id="tbody-localease"></tbody>
         </table>
       </div>
+      <div id="loc-cards" class="ls-cards hidden"></div>
       <p class="text-xs text-slate-500 mt-3">Une même <b>offre</b> peut couvrir 2 véhicules (ex. <b>26MI086362</b> = Samira + David, <b>26AV048042</b> = les 2 « Nouveau collaborateur »). Clique sur « + téléverser » pour <b>enregistrer le PDF du contrat sur Supabase</b> (comme les cartes grises) — consultable depuis tous les postes.</p>
       <input type="file" id="loc-upload-file" accept="application/pdf,image/*" class="hidden" />
       <div class="mt-3 pt-3 border-t border-slate-100">
         <button id="loc-recover-pdf" type="button" class="text-xs font-semibold" style="color:var(--fp-accent)"><i data-lucide="link" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Retrouver les PDF (relier les contrats déjà sur le Drive)</button>
+        <button id="loc-restore-default" type="button" class="text-xs font-semibold ml-4" style="color:var(--fp-accent)"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Restaurer les contrats Ayvens manquants</button>
         <div id="loc-recover-panel" class="hidden mt-3 p-4 rounded-lg" style="background:#FFFBEB;border:1px solid #FDE68A"></div>
       </div>
     </div>
@@ -316,6 +391,43 @@
 
   </main>
 
+  <!-- ============ Comparateur de devis (leasing / assurance) ============ -->
+  <style>
+    #cmp-modal { background:rgba(15,23,42,.5); }
+    #cmp-modal .cmp-card { background:#fff; border-radius:1rem; width:min(1080px,96vw); max-height:92vh; overflow:auto; box-shadow:0 30px 80px rgba(2,6,23,.4); }
+    .cmp-tabbtn { padding:.55rem 1.1rem; border-radius:.7rem; font-weight:700; font-size:.9rem; border:1px solid var(--fp-border); background:#fff; color:#475569; cursor:pointer; }
+    .cmp-tabbtn.on { background:#0B1E3D; color:#fff; border-color:#0B1E3D; }
+    .cmp-grid { display:grid; grid-template-columns:220px repeat(var(--cols,2),1fr); gap:0; font-size:.86rem; }
+    .cmp-grid > div { padding:.55rem .7rem; border-bottom:1px solid #eef1f6; }
+    .cmp-grid .cmp-rowlabel { color:#475569; font-weight:600; background:#fafbfd; }
+    .cmp-grid .cmp-head { font-weight:800; color:#0B1E3D; border-bottom:2px solid #e2e8f0; }
+    .cmp-grid input { width:100%; border:1px solid var(--fp-border); border-radius:.5rem; padding:.4rem .55rem; font-size:.85rem; }
+    .cmp-grid input[type=checkbox]{ width:auto; }
+    .cmp-win { background:#ecfdf5 !important; box-shadow:inset 3px 0 0 #10b981; }
+    .cmp-verdict { background:linear-gradient(135deg,#0B1E3D,#123a63); color:#EAF1FB; border-radius:.9rem; padding:1.1rem 1.25rem; margin-top:1rem; }
+    .cmp-verdict b { color:#fff; }
+    .cmp-badge { display:inline-block; background:#10b981; color:#fff; font-size:.68rem; font-weight:800; padding:2px 8px; border-radius:999px; margin-left:.4rem; vertical-align:middle; }
+  </style>
+  <div id="cmp-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-3">
+    <div class="cmp-card p-5 sm:p-6">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <h2 class="text-xl font-extrabold text-slate-900 flex items-center gap-2"><i data-lucide="scale" class="w-5 h-5" style="color:var(--fp-accent)"></i> Comparateur de devis</h2>
+        <button id="cmp-close" type="button" class="text-slate-400 hover:text-slate-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="flex gap-2 mb-4">
+        <button type="button" class="cmp-tabbtn on" data-cmp-tab="leasing"><i data-lucide="banknote" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Leasing</button>
+        <button type="button" class="cmp-tabbtn" data-cmp-tab="assurance"><i data-lucide="shield-check" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Assurance</button>
+      </div>
+      <p class="text-sm text-slate-500 mb-3" id="cmp-hint"><b>Importe chaque devis</b> (PDF ou photo) : l'IA remplit la colonne toute seule — ou saisis à la main. Parc Pilot calcule le <b>coût total réel</b> et te dit lequel choisir.</p>
+      <div class="flex items-center gap-2 mb-3">
+        <button id="cmp-addcol" type="button" class="btn btn-outline text-xs"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter un devis</button>
+        <button id="cmp-reset" type="button" class="btn btn-outline text-xs"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Réinitialiser</button>
+      </div>
+      <div style="overflow-x:auto"><div id="cmp-table" class="cmp-grid"></div></div>
+      <div id="cmp-verdict" class="cmp-verdict" style="display:none"></div>
+    </div>
+  </div>
+
   <!-- Modal import loyers depuis facture mensuelle du loueur -->
   <div id="leasimport-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
     <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4 shadow-xl">
@@ -367,6 +479,13 @@
     </div>
   </div>
 
+  <!-- Modal : checklist de restitution LLD (compte à rebours 120/90/60/30 j) -->
+  <div id="restit-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
+    <div class="bg-white rounded-xl w-full max-w-lg mx-4 shadow-xl" style="max-height:92vh;overflow-y:auto">
+      <div id="restit-body" class="p-6"></div>
+    </div>
+  </div>
+
   <!-- Modal : ajouter une prime d'assurance (par véhicule) -->
   <div id="prime-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
     <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-xl">
@@ -404,7 +523,7 @@
   <div id="locadd-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
     <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-xl">
       <div class="flex items-center justify-between mb-1">
-        <h3 class="text-lg font-extrabold">Ajouter un contrat de leasing</h3>
+        <h3 id="locadd-title" class="text-lg font-extrabold">Ajouter un contrat de leasing</h3>
         <button id="locadd-close" type="button" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
       </div>
       <p class="text-sm text-slate-500 mb-4">Déposez le contrat (loyer, durée, km lus automatiquement) ou saisissez les infos. Le loyer entre dans le coût mensuel et annuel de la flotte.</p>
@@ -427,6 +546,13 @@
           <label class="block"><span class="text-sm font-medium text-slate-700">Km total</span>
             <input id="locadd-km" type="number" min="0" step="1000" class="field-input w-full mt-1" placeholder="60000"></label>
         </div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block"><span class="text-sm font-medium text-slate-700">Date de début</span>
+            <input id="locadd-debut" type="date" class="field-input w-full mt-1"></label>
+          <label class="block"><span class="text-sm font-medium text-slate-700">Date de fin <span class="text-slate-400">(opt.)</span></span>
+            <input id="locadd-fin" type="date" class="field-input w-full mt-1"></label>
+        </div>
+        <p class="text-xs text-slate-400" style="margin-top:-.35rem">Dates &amp; durée se complètent toutes seules : <b>fin + durée → début</b>, <b>début + durée → fin</b>, ou <b>début + fin → durée</b>.</p>
         <label class="block"><span class="text-sm font-medium text-slate-700">N° d'offre <span class="text-slate-400">(opt.)</span></span>
           <input id="locadd-offre" type="text" class="field-input w-full mt-1" placeholder=""></label>
         <div class="grid grid-cols-2 gap-3">
@@ -452,20 +578,18 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803f"></script>
-<script src="../assets/js/supabase-client.js?v=20260803f"></script>
-<script src="../assets/js/data.js?v=20260803f"></script>
-<script defer src="../assets/js/vendor/jspdf.umd.min.js?v=20260803f"></script>
-<script defer src="../assets/js/vendor/jspdf.plugin.autotable.min.js?v=20260803f"></script>
-<script src="../assets/js/app.js?v=20260803f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260809h"></script>
+<script src="../assets/js/supabase-client.js?v=20260809h"></script>
+<script src="../assets/js/data.js?v=20260809h"></script>
+  <script>window.FP_PDF=1;</script>
+<script src="../assets/js/app.js?v=20260809h"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
   const $ = (id) => document.getElementById(id);
 
   // Labels des groupes fournis par FP.groupeLabel (configurables via /pages/parametres.html)
-  const VEH_INACTIFS = ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 'cédé', 'cede', 'cédée', 'hors service', 'hs', 'archive', 'archivé', 'archivée', 'restitué', 'restitue'];
-  const estActif = v => !VEH_INACTIFS.includes((v && v.statut || '').toString().toLowerCase().trim());
+  const estActif = v => !FP.horsFlotte(v); // source unique (couvre vendu/à vendre/cédé/hors-service/archivé/restitué)
   // Parc POSSÉDÉ (pour TVS + assurance) = tout sauf vendu/vendue — MÊME règle que Statistiques et
   // le dashboard (FP.estVendu). ⚠️ « à vendre » est encore possédé → toujours assuré et taxé (TVS),
   // donc COMPTÉ. (Le reste de la page — leasing — garde estActif : pas de loyer sur un véhicule sorti.)
@@ -500,7 +624,8 @@
   function loueurDeVeh(v) {
     const p = String((v && v.proprietaire) || '').trim().toLowerCase();
     const m = getLoueurs().find(l => String(l.prop || '').trim().toLowerCase() === p && p);
-    return m ? m.nom : ((v && v.proprietaire) || '<span class="text-slate-400">—</span>');
+    // Échappe les valeurs saisies (proprietaire / nom loueur) — anti-XSS stocké (règle 2bis).
+    return m ? FP.esc(m.nom) : ((v && v.proprietaire) ? FP.esc(v.proprietaire) : '<span class="text-slate-400">—</span>');
   }
   // Nom de loueur EN CLAIR (sans HTML) pour un véhicule — sert au filtre par loueur.
   function loueurNomOf(v) {
@@ -551,18 +676,89 @@
   // Suppression DÉFINITIVE d'un véhicule de toute la flotte (comme le bouton Supprimer de la
   // fiche véhicule) : base + mémoire. Renvoie true si supprimé. ⚠️ irréversible.
   function deleteVehiculeFlotte(immat) {
-    const v = (data.vehicules || []).find(x => x.immat === immat);
+    const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(immat));
     if (!v) { alert('Véhicule introuvable dans la flotte.'); return false; }
     // Archive ses documents (sous-dossier « OUT » du dossier plaque, dans Sinistres) avant suppression.
     if (v.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(v.immat);
-    try { if (FP.db && FP.db.delete) FP.db.delete('vehicules', v.id); } catch (e) { console.warn('[del veh]', e); }
+    // ⚠️ Corbeille + purge cache : on passe par FP.persist.delete(record) (capture restaurable),
+    // pas FP.db.delete direct (qui était irréversible et laissait le cache réafficher le véhicule).
+    try { if (FP.persist && FP.persist.delete) FP.persist.delete('vehicules', v.id, v); else if (FP.db && FP.db.delete) FP.db.delete('vehicules', v.id); } catch (e) { console.warn('[del veh]', e); }
+    try { const CK = window.FP_CACHE_KEY; const c = CK && JSON.parse(localStorage.getItem(CK) || 'null'); if (c && Array.isArray(c.vehicules)) { c.vehicules = c.vehicules.filter(x => x.id !== v.id); localStorage.setItem(CK, JSON.stringify(c)); } } catch (e) {}
     const idx = data.vehicules.findIndex(x => x.id === v.id); if (idx >= 0) data.vehicules.splice(idx, 1);
     return true;
   }
   function refreshAllContrats() {
     rebuildLeasingData(); renderKPIs(); renderLeasing(); renderAssurance();
     if (typeof renderLocalease === 'function') renderLocalease();
+    if (typeof renderCartes === 'function') renderCartes();
   }
+
+  // ===== Cartes carburant & télépéage : vue centrale + anomalies (Feature) =====
+  function renderCartes() {
+    const tb = $('tbody-cartes'); if (!tb) return;
+    const st = FP.settings.get();
+    const cc = st.vehCarteCarb || {}, cce = st.vehCarteCarbExp || {}, fc = st.vehFournCarb || {}, bt = st.vehBadge || {}, bte = st.vehBadgeExp || {};
+    const q = (($('search-cartes') && $('search-cartes').value) || '').toLowerCase().trim();
+    const onlyFilled = $('cartes-only-filled') && $('cartes-only-filled').checked;
+    const enFlotte = vehicules.filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
+    const expCell = (iso) => { if (!iso) return '<span class="text-slate-400">—</span>'; const j = FP.joursRestants ? FP.joursRestants(iso) : null; if (j == null) return FP.dateNum(iso); const c = j < 0 ? 'var(--fp-danger)' : (j < 60 ? 'var(--fp-warn)' : '#64748b'); return `<span style="color:${c};font-size:11px;font-weight:600">${j < 0 ? 'expiré' : j < 60 ? j + ' j' : 'OK'}</span>`; };
+    const inp = (k, id, val, type) => `<input class="carte-cell" data-k="${k}" data-id="${id}" ${type ? `type="${type}"` : ''} value="${FP.esc(val || '')}" placeholder="—" style="width:100%;min-width:${type === 'date' ? '128' : '90'}px;border:1px solid var(--fp-border);border-radius:6px;padding:3px 6px;font-size:12.5px">`;
+    // N° de carte / badge = MÊME source que la fiche conducteur (celui du chauffeur du véhicule).
+    const numC = v => FP.numCarteVehicule ? FP.numCarteVehicule(v, 'vehCarteCarb') : (cc[v.id] || '');
+    const numB = v => FP.numCarteVehicule ? FP.numCarteVehicule(v, 'vehBadge') : (bt[v.id] || '');
+    let rows = enFlotte.map(v => ({ v, hasAny: !!(numC(v) || cce[v.id] || fc[v.id] || numB(v) || bte[v.id]) }));
+    if (onlyFilled) rows = rows.filter(r => r.hasAny);
+    if (q) rows = rows.filter(({ v }) => [v.immat, v.marque, v.modele, v.chauffeur, numC(v), fc[v.id], numB(v)].some(x => String(x || '').toLowerCase().includes(q)));
+    tb.innerHTML = rows.map(({ v }) => `
+      <tr>
+        <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
+        <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}</td>
+        <td>${FP.lienConducteur(v.chauffeur)}</td>
+        <td>${inp('vehCarteCarb', v.id, numC(v))}</td>
+        <td>${inp('vehFournCarb', v.id, fc[v.id])}</td>
+        <td>${inp('vehCarteCarbExp', v.id, cce[v.id], 'date')} ${expCell(cce[v.id])}</td>
+        <td>${inp('vehBadge', v.id, numB(v))}</td>
+        <td>${inp('vehBadgeExp', v.id, bte[v.id], 'date')} ${expCell(bte[v.id])}</td>
+      </tr>`).join('') || '<tr><td colspan="8" class="text-slate-400">Aucun véhicule.</td></tr>';
+    const nbC = enFlotte.filter(v => numC(v)).length, nbB = enFlotte.filter(v => numB(v)).length;
+    const exp60 = enFlotte.filter(v => [cce[v.id], bte[v.id]].filter(Boolean).some(iso => { const j = FP.joursRestants ? FP.joursRestants(iso) : null; return j != null && j < 60; })).length;
+    const anoms = FP.cartesAnomalies ? FP.cartesAnomalies({ vehicules, factures: (window.FP_DATA && FP_DATA.factures) || [] }) : [];
+    const setTxt = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+    setTxt('kpi-cartes-nb', nbC); setTxt('kpi-badges-nb', nbB); setTxt('kpi-cartes-exp', exp60); setTxt('kpi-cartes-anom', anoms.length);
+    setTxt('cartes-count', `${rows.length} véhicule(s) affiché(s)`);
+    const anomBox = $('cartes-anom');
+    if (anomBox) anomBox.innerHTML = anoms.length
+      ? `<details class="card p-3" style="border-left:3px solid var(--fp-danger)"><summary class="cursor-pointer font-semibold text-slate-800 flex items-center gap-2"><i data-lucide="alert-triangle" class="w-4 h-4 text-red-600"></i> ${anoms.length} anomalie(s) d'usage détectée(s) <span class="text-xs font-normal text-slate-400">(cliquer pour voir)</span></summary><div class="mt-2 space-y-1">${anoms.map(a => `<a href="vehicules.html?veh=${encodeURIComponent(a.vehId)}" class="block text-sm text-slate-600 hover:text-slate-900 hover:underline">• <span class="font-mono font-semibold">${FP.esc(a.immat)}</span> — ${FP.esc(a.label)}</a>`).join('')}</div><p class="text-xs text-slate-400 mt-2">« Pleins le même jour » ou « plein inhabituel » = à vérifier (carte prêtée, erreur, ou usage anormal).</p></details>`
+      : '';
+    lucide.createIcons();
+  }
+  // Édition inline : enregistre la case modifiée dans les réglages (mêmes clés que la fiche véhicule)
+  if ($('tbody-cartes')) $('tbody-cartes').addEventListener('change', e => {
+    const c = e.target.closest('.carte-cell'); if (!c) return;
+    const k = c.dataset.k;
+    // Les N° de carte/badge se rangent sur le CONDUCTEUR (source unique) si le véhicule a un chauffeur
+    // → changer le n° ici le change PARTOUT (fiche conducteur, fiche véhicule). Fournisseur/expiration = par véhicule.
+    if (FP.CARTE_COND_MAP && FP.CARTE_COND_MAP[k]) {
+      const v = vehicules.find(x => String(x.id) === String(c.dataset.id));
+      if (v) { FP.setNumCarteVehicule(v, k, c.value); if (FP.toast) FP.toast('✓ Enregistré'); renderCartes(); return; }
+    }
+    const s = FP.settings.get(); s[k] = s[k] || {};
+    const val = (c.value || '').trim();
+    if (val) s[k][c.dataset.id] = val; else delete s[k][c.dataset.id];
+    FP.settings.save(s);
+    if (FP.toast) FP.toast('✓ Enregistré');
+    // MAJ légère des compteurs (sans re-render → on garde le focus dans la case éditée)
+    try {
+      const cc = s.vehCarteCarb || {}, bt = s.vehBadge || {}, cce = s.vehCarteCarbExp || {}, bte = s.vehBadgeExp || {};
+      const enF = vehicules.filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
+      const setTxt = (id, val2) => { const el = $(id); if (el) el.textContent = val2; };
+      setTxt('kpi-cartes-nb', enF.filter(v => cc[v.id]).length);
+      setTxt('kpi-badges-nb', enF.filter(v => bt[v.id]).length);
+      setTxt('kpi-cartes-exp', enF.filter(v => [cce[v.id], bte[v.id]].filter(Boolean).some(iso => { const jj = FP.joursRestants ? FP.joursRestants(iso) : null; return jj != null && jj < 60; })).length);
+    } catch (e) {}
+  });
+  if ($('search-cartes')) $('search-cartes').addEventListener('input', () => renderCartes());
+  if ($('cartes-only-filled')) $('cartes-only-filled').addEventListener('change', () => renderCartes());
 
   // Mensualité FIXE estimée = médiane des factures leasing importées (robuste à une 1re facture
   // gonflée par des frais de dossier). Les montants ne changent pas → médiane = vraie mensualité.
@@ -636,7 +832,7 @@
   // Prime d'assurance annuelle de la flotte (un seul montant, saisi par l'utilisateur, sync par société)
   // Primes d'assurance PAR VÉHICULE (importées de l'état de parc), indexées par plaque
   function assurPrimes(){ const s = (FP.settings && FP.settings.get) ? FP.settings.get() : {}; return (s.assurancePrimes && typeof s.assurancePrimes === 'object') ? s.assurancePrimes : {}; }
-  const normPlaque = s => (s || '').toString().toUpperCase().replace(/\s/g, '');
+  const normPlaque = s => FP.normImmat(s); // source unique (retire aussi les tirets, pas que les espaces)
   function vehPrime(v){
     const p = assurPrimes(); const k = normPlaque(v.immat); if (!k) return null;
     for (const key in p) { if (normPlaque(key) === k) return p[key]; }
@@ -999,7 +1195,7 @@
     const q = FP.norm(leasingSearch).trim();
     const rows = [...leasingImmats]
       .map(immat => {
-        const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
+        const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)) || { immat, marque: '?', modele: '', chauffeur: '—' };
         return { v, agg: leasingByVeh[immat] || { count: 0, total: 0, lastDate: '', lastFile: null, amounts: [] } };
       })
       .filter(({ v }) => leasingLoueurFilter === 'all' || leasingLoueurFilter === LOCALEASE_VAL || loueurNomOf(v) === leasingLoueurFilter)
@@ -1008,7 +1204,7 @@
 
     const finContratCell = (l) => {
       if (!l || !l.finContrat || isNaN(l.finContrat)) return '<span class="text-slate-400">—</span>';
-      const diff = Math.ceil((l.finContrat - new Date()) / 86400000);
+      const diff = (FP.joursRestants ? FP.joursRestants(l.finContrat) : Math.ceil((l.finContrat - new Date()) / 86400000));
       const ds = FP.date(l.finContrat.toISOString());
       if (diff < 0)        return `<span style="color:var(--fp-danger);font-weight:700">${ds}</span><br><span class="text-xs" style="color:var(--fp-danger)">terminé (+${-diff}j)</span>`;
       if (diff < 90)       return `<span style="color:var(--fp-danger);font-weight:600">${ds}</span><br><span class="text-xs" style="color:var(--fp-danger)">dans ${diff}j</span>`;
@@ -1054,18 +1250,61 @@
         <td>${moyMens != null && moyMens > 0 ? FP.euroPrecis(moyMens) : '<span class="text-slate-400">—</span>'}</td>
         <td>${(() => { const d = FP.tvsDetail(v); return (d && d.applicable && d.total != null) ? FP.euro(d.total) : '<span class="text-slate-400">—</span>'; })()}</td>
         <td style="white-space:nowrap">
+          ${(() => { const jf = (l && l.finContrat && !isNaN(l.finContrat)) ? (FP.joursRestants ? FP.joursRestants(l.finContrat) : Math.ceil((l.finContrat - new Date()) / 86400000)) : null; const urg = jf !== null && jf <= 120; return `<button type="button" class="btn btn-outline text-xs !px-2" data-restit-lease="${v.immat}" title="Checklist de restitution (compte à rebours 120/90/60/30 j)"${urg ? ' style="border-color:var(--fp-accent);color:var(--fp-accent)"' : ''}><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i></button>`; })()}
           <button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}" title="Modifier le forfait du contrat"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
           <button type="button" class="btn btn-outline text-xs !px-2" data-del-lease="${v.immat}" title="Retirer ce véhicule du leasing"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>
         </td>
       </tr>`;
     }).join('');
 
+    // ===== Vue CARTES (Direction B) — une carte par véhicule en leasing, mêmes chiffres =====
+    const lsBox = $('ls-cards');
+    if (lsBox) lsBox.innerHTML = rows.map(({ v, agg }) => {
+      const l = FP.leasingInfo(v);
+      const cRaw = (window.FP && FP.leasingContrat) ? FP.leasingContrat(v.immat) : null;
+      const offerLoyer = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cRaw) : null;
+      const mens = mensualiteFixe(v.immat), moisT = moisTheoriques(l);
+      const totalOffre = (offerLoyer != null && FP.leasingTotalVerse) ? FP.leasingTotalVerse(cRaw) : null;
+      const totalTheo = (totalOffre != null) ? totalOffre : ((mens != null && moisT != null) ? mens * moisT : agg.total);
+      const moyMens = (offerLoyer != null) ? offerLoyer : ((mens != null) ? mens : (agg.count > 0 ? agg.total / agg.count : null));
+      const tvsD = FP.tvsDetail(v);
+      const jf = (l && l.finContrat && !isNaN(l.finContrat) && FP.joursRestants) ? FP.joursRestants(l.finContrat) : null;
+      const urg = jf !== null && jf <= 120;
+      return `<div class="ls-card">
+        <div class="ls-top">
+          <div><span class="ls-immat">${FP.esc(v.immat)}</span> <span class="ls-veh">${FP.esc(v.marque)} ${FP.esc(v.modele)}</span><br>
+            <span class="ls-sub">${(v.chauffeur && v.chauffeur !== '—') ? FP.esc(v.chauffeur) + ' · ' : ''}${FP.esc(loueurNomOf(v) || 'Leasing')}</span></div>
+          <div>${statutKm(l, v.immat)}</div>
+        </div>
+        <div class="ls-grid">
+          <div><span class="k">Loyer / mois</span><b>${moyMens != null && moyMens > 0 ? FP.euroPrecis(moyMens) : '—'}</b></div>
+          <div><span class="k">Forfait km</span><b>${l ? FP.num(l.kmContrat) + ' km' : '—'}</b></div>
+          <div><span class="k">Km actuel</span><b>${l ? FP.num(l.km) + ' km' : (v.km != null ? FP.num(v.km) + ' km' : '—')}</b></div>
+          <div><span class="k">Fin de contrat</span><b>${finContratCell(l)}</b></div>
+          <div><span class="k">Total versé</span><b>${totalTheo > 0 ? FP.euroPrecis(totalTheo) : '—'}</b></div>
+          <div><span class="k">TVS / an</span><b>${(tvsD && tvsD.applicable && tvsD.total != null) ? FP.euro(tvsD.total) : '—'}</b></div>
+        </div>
+        <div class="ls-actions">
+          <button type="button" class="btn btn-outline text-xs !px-2" data-restit-lease="${v.immat}"${urg ? ' style="border-color:var(--fp-accent);color:var(--fp-accent)"' : ''}><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i> Restitution</button>
+          <button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Forfait</button>
+          <button type="button" class="btn btn-outline text-xs !px-2" data-del-lease="${v.immat}" title="Retirer du leasing"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>
+        </div>
+      </div>`;
+    }).join('');
+    applyLeasingView();
+
     { const nl = getLoueurs().length; $('leasing-count').textContent = `${rows.length} véhicule${rows.length > 1 ? 's' : ''} en leasing` + (nl > 1 ? ` · ${nl} loueurs` : ''); }
 
     // KPIs en haut (même présentation que Localease)
     let mensTotal = 0, engagementTotal = 0, nbAvecLoyer = 0;
     rows.forEach(({ v }) => {
-      const mens = mensualiteFixe(v.immat);
+      // SOURCE UNIQUE du loyer = le loyer d'offre courant (FP.leasingLoyerCourant + avenants),
+      // la médiane des factures ne servant que de repli — même calcul que la colonne « loyer moyen »
+      // de la ligne et que le KPI du haut. (Avant : uniquement la médiane → 2 totaux différents à
+      // l'écran, et 0 pour un véhicule avec loyer d'offre mais sans encore de facture.)
+      const cRaw = (FP.leasingContrat) ? FP.leasingContrat(v.immat) : null;
+      const offerLoyer = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cRaw) : null;
+      const mens = (offerLoyer != null) ? offerLoyer : mensualiteFixe(v.immat);
       if (mens > 0) {
         mensTotal += mens; nbAvecLoyer++;
         const l = FP.leasingInfo(v);
@@ -1097,7 +1336,7 @@
       const out = [];
       vehicules.forEach(v => out.push({ section: 'Assurance', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: (FP.assuranceLabel && FP.assuranceLabel()) || 'Assurance flotte', detail: 'Police flotte', cout: '' }));
       leasingImmats.forEach(immat => {
-        const v = vehicules.find(x => x.immat === immat) || { immat, marque: '?', modele: '', chauffeur: '—' };
+        const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)) || { immat, marque: '?', modele: '', chauffeur: '—' };
         const agg = leasingByVeh[immat] || { count: 0, total: 0, amounts: [] };
         const l = FP.leasingInfo(v); const mens = mensualiteFixe(immat); const moisT = moisTheoriques(l);
         const nbMens = (moisT != null) ? moisT : agg.count;
@@ -1112,7 +1351,7 @@
   let leaseEditImmat = null;
   function openLeaseModal(immat) {
     leaseEditImmat = immat;
-    const v = vehicules.find(x => x.immat === immat) || { immat };
+    const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)) || { immat };
     $('lease-modal-veh').textContent = `${immat} · ${v.marque || ''} ${v.modele || ''}${v.chauffeur && v.chauffeur !== '—' ? ' · ' + v.chauffeur : ''}`;
     const c = FP.leasingContrat(immat) || {};
     const debutStr = c.debut ? (typeof c.debut === 'string' ? c.debut.slice(0, 10) : new Date(c.debut).toISOString().slice(0, 10)) : (v.dateMiseEnCirculation || '');
@@ -1146,7 +1385,88 @@
   function closeLeaseModal() {
     const m = $('lease-modal'); m.classList.add('hidden'); m.classList.remove('flex'); leaseEditImmat = null;
   }
-  $('tbody-leasing').addEventListener('click', async e => {
+  // ===== Checklist de restitution LLD (compte à rebours 120/90/60/30 j) =====
+  const RESTIT_ITEMS = [
+    { k: 'rdv',         stage: 120, label: 'Prévenir le loueur et convenir d’une date de restitution' },
+    { k: 'edl',         stage: 90,  label: 'État des lieux de SORTIE : relevé km + photos sous toutes les faces' },
+    { k: 'km',          stage: 90,  label: 'Rapprocher le kilométrage / négocier le rachat du dépassement' },
+    { k: 'repar',       stage: 60,  label: 'Réparer les dommages facturables (rayures, jantes, pare-brise, pneus usés)' },
+    { k: 'nettoyage',   stage: 30,  label: 'Nettoyage intérieur + extérieur (évite les frais de remise en état)' },
+    { k: 'effets',      stage: 30,  label: 'Retirer effets personnels, badge télépéage et carte carburant du véhicule' },
+    { k: 'cles',        stage: 30,  label: 'Réunir les 2 jeux de clés, la carte grise et le carnet d’entretien' },
+    { k: 'assurance',   stage: 30,  label: 'Prévenir l’assurance (résiliation ou transfert au véhicule remplaçant)' },
+    { k: 'attestation', stage: 0,   label: 'Récupérer l’attestation / le procès-verbal de restitution' },
+  ];
+  const STAGES = [120, 90, 60, 30, 0];
+  function restitState(vehId) { try { const s = FP.settings.get(); return (s.restitutionChecklist && s.restitutionChecklist[vehId]) || {}; } catch (e) { return {}; } }
+  function restitSet(vehId, key, val) { const s = FP.settings.get(); s.restitutionChecklist = s.restitutionChecklist || {}; s.restitutionChecklist[vehId] = s.restitutionChecklist[vehId] || {}; s.restitutionChecklist[vehId][key] = val; FP.settings.save(s); }
+  let restitVehId = null;
+  function openRestit(immat) {
+    const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)); if (!v) return;
+    restitVehId = v.id;
+    const l = FP.leasingInfo ? FP.leasingInfo(v) : null;
+    const fin = (l && l.finContrat && !isNaN(l.finContrat)) ? l.finContrat : null;
+    const jf = fin ? (FP.joursRestants ? FP.joursRestants(fin) : Math.ceil((fin - new Date()) / 86400000)) : null; // source unique (minuit→minuit)
+    const st = restitState(v.id);
+    const done = RESTIT_ITEMS.filter(it => st[it.k]).length;
+    // Bandeau compte à rebours 120/90/60/30/Jour J
+    const ribbon = STAGES.map(m => {
+      const reached = jf !== null && jf <= m;                 // fenêtre entamée
+      const label = m === 0 ? 'Jour J' : m + ' j';
+      const bg = reached ? 'var(--fp-accent)' : '#E2E8F0';
+      const fg = reached ? '#fff' : '#64748b';
+      return `<div style="flex:1;text-align:center"><div style="height:8px;border-radius:9999px;background:${bg}"></div><div style="font-size:10.5px;font-weight:700;color:${fg};margin-top:4px">${label}</div></div>`;
+    }).join('<div style="width:6px"></div>');
+    const finTxt = fin ? FP.dateNum(fin.toISOString ? fin.toISOString() : fin) : '—';
+    const jfTxt = jf === null ? 'date de fin inconnue — renseigne le contrat'
+      : (jf < 0 ? `contrat terminé depuis ${-jf} j` : `dans <b>${jf} j</b>`);
+    const jfColor = jf === null ? '#94a3b8' : (jf < 30 ? 'var(--fp-danger)' : (jf <= 120 ? 'var(--fp-accent)' : '#0e7490'));
+    // Pénalité km projetée (rappel)
+    const pen = (l && l.depassementProjete > 0 && l.kmSupp) ? Math.round(l.depassementProjete * l.kmSupp) : 0;
+    const rows = RESTIT_ITEMS.map(it => {
+      const on = !!st[it.k];
+      const stg = it.stage === 0 ? 'Jour J' : it.stage + ' j avant';
+      return `<label style="display:flex;gap:.6rem;align-items:flex-start;padding:.5rem .2rem;border-bottom:1px solid #f1f5f9;cursor:pointer">
+        <input type="checkbox" data-restit-item="${it.k}" ${on ? 'checked' : ''} style="margin-top:3px;width:16px;height:16px;accent-color:var(--fp-accent)">
+        <span style="flex:1"><span style="font-size:13.5px;color:${on ? '#94a3b8' : '#0f1e3d'};${on ? 'text-decoration:line-through' : ''}">${FP.esc(it.label)}</span>
+        <span style="display:inline-block;font-size:10px;font-weight:700;color:#64748b;background:#f1f5f9;border-radius:9999px;padding:1px 7px;margin-left:6px">${stg}</span></span>
+      </label>`;
+    }).join('');
+    $('restit-body').innerHTML = `
+      <div class="flex items-start justify-between gap-3 mb-1">
+        <div><h3 class="text-lg font-extrabold">Restitution — ${FP.esc(v.immat)}</h3>
+        <p class="text-sm text-slate-500">${FP.esc(v.marque)} ${FP.esc(v.modele)} · Fin de contrat : <b>${finTxt}</b> (${jfTxt})</p></div>
+        <button id="restit-close" type="button" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+      </div>
+      <div style="border:1px solid var(--fp-border);border-radius:.7rem;padding:.7rem .8rem;margin:.8rem 0;background:#fbfcfe">
+        <div class="flex" style="align-items:flex-end">${ribbon}</div>
+        <p class="text-xs mt-2" style="color:${jfColor};font-weight:600">${jf === null ? '⚠️ Renseigne la date de début et la durée du contrat pour activer le compte à rebours.' : (jf < 30 ? '🔴 Dernière ligne droite : boucle les points ci-dessous.' : (jf <= 120 ? '🟠 La restitution approche — commence à préparer le dossier.' : '🟢 Rien d’urgent, mais tu peux déjà anticiper.'))}</p>
+      </div>
+      ${pen ? `<div class="text-xs mb-2 p-2 rounded" style="background:#FEF2F2;color:#991B1B">💡 Dépassement km projeté : pénalité estimée ≈ <b>${FP.euro(pen)}</b>. Négocie un rachat de km ou lève le pied d’ici la fin.</div>` : ''}
+      <div class="flex items-center justify-between mb-1"><span class="text-sm font-bold text-slate-700">Checklist de restitution</span><span class="text-xs font-semibold" style="color:var(--fp-accent)" id="restit-progress">${done}/${RESTIT_ITEMS.length} fait</span></div>
+      <div id="restit-list">${rows}</div>
+      <div class="flex justify-end mt-4"><button id="restit-done" type="button" class="btn btn-dark text-sm">Fermer</button></div>`;
+    const modal = $('restit-modal'); modal.classList.remove('hidden'); modal.classList.add('flex');
+    lucide.createIcons();
+  }
+  function closeRestit() { const m = $('restit-modal'); m.classList.add('hidden'); m.classList.remove('flex'); restitVehId = null; }
+  $('restit-modal').addEventListener('click', e => {
+    if (e.target.id === 'restit-modal' || e.target.id === 'restit-close' || e.target.id === 'restit-done') { closeRestit(); return; }
+    const cb = e.target.closest('[data-restit-item]');
+    if (cb && restitVehId) {
+      restitSet(restitVehId, cb.dataset.restitItem, cb.checked);
+      // Rafraîchit le libellé (barré) + le compteur sans refermer
+      const st = restitState(restitVehId); const done = RESTIT_ITEMS.filter(it => st[it.k]).length;
+      const p = $('restit-progress'); if (p) p.textContent = `${done}/${RESTIT_ITEMS.length} fait`;
+      const lbl = cb.parentElement.querySelector('span span:first-child');
+      if (lbl) { lbl.style.textDecoration = cb.checked ? 'line-through' : ''; lbl.style.color = cb.checked ? '#94a3b8' : '#0f1e3d'; }
+    }
+  });
+
+  // Actions leasing — mêmes boutons en vue Tableau ET en vue Cartes.
+  async function leaseAction(e){
+    const restit = e.target.closest('[data-restit-lease]');
+    if (restit) { openRestit(restit.dataset.restitLease); return; }
     const del = e.target.closest('[data-del-lease]');
     if (del) {
       const immat = del.dataset.delLease;
@@ -1156,7 +1476,27 @@
     }
     const btn = e.target.closest('[data-edit-lease]');
     if (btn) openLeaseModal(btn.dataset.editLease);
-  });
+  }
+  $('tbody-leasing').addEventListener('click', leaseAction);
+  if ($('ls-cards')) $('ls-cards').addEventListener('click', leaseAction);
+  // ⚠️ GÉNÉRIQUE : la vue Tableau/Cartes du leasing gouverne TOUTES les sections de leasing
+  // (BPCE + Localease/LLD, donc tous les loueurs actuels ET futurs — un nouveau loueur atterrit
+  // dans l'une de ces 2 tables et hérite automatiquement du basculement). Une seule préférence
+  // société (FP.settings.leasingView). ⚠️ Si on ajoute un jour une AUTRE table de leasing, l'ajouter ici.
+  const LEASING_VIEWS = [['#leasing-bpce-body table.fp-table', 'ls-cards'], ['[data-section="localease"] table.fp-table', 'loc-cards']];
+  function applyLeasingView(){
+    let v = 'table'; try { if (window.FP && FP.settings) v = (FP.settings.get().leasingView === 'cards') ? 'cards' : 'table'; } catch (e) {}
+    LEASING_VIEWS.forEach(([tblSel, cardsId]) => {
+      const tbl = document.querySelector(tblSel), scroll = tbl ? tbl.closest('.scrollable') : null, cardsBox = document.getElementById(cardsId);
+      const showCards = (v === 'cards') && cardsBox && cardsBox.children.length > 0; // section vide → on garde le tableau (message « aucun »)
+      if (scroll) scroll.classList.toggle('hidden', showCards);
+      if (cardsBox) cardsBox.classList.toggle('hidden', !showCards);
+    });
+    document.querySelectorAll('#ls-view button, #loc-view button').forEach(b => b.classList.toggle('active', b.dataset.v === v));
+    if (window.lucide) { try { lucide.createIcons(); } catch (e) {} }
+  }
+  function setLeasingView(mode){ try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.leasingView = mode; FP.settings.save(s); } } catch (e) {} applyLeasingView(); }
+  ['ls-view', 'loc-view'].forEach(id => { const vt = document.getElementById(id); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => setLeasingView(b.dataset.v))); });
   $('lease-cancel').addEventListener('click', closeLeaseModal);
   $('lease-modal').addEventListener('click', e => { if (e.target.id === 'lease-modal') closeLeaseModal(); });
   $('lease-save').addEventListener('click', () => {
@@ -1211,7 +1551,7 @@
   // Dossier de restitution leasing (PDF) : km, dépassement projeté et pénalité estimée par véhicule.
   if ($('leasing-restit-btn')) $('leasing-restit-btn').addEventListener('click', () => {
     if (!(FP.fiche && FP.fiche.open)) return;
-    const list = [...leasingImmats].map(immat => vehicules.find(x => x.immat === immat)).filter(Boolean)
+    const list = [...leasingImmats].map(immat => vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat))).filter(Boolean)
       .sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
     if (!list.length) { if (FP.toast) FP.toast('Aucun véhicule en leasing.'); return; }
     const info = v => (FP.leasingInfo ? FP.leasingInfo(v) : null);
@@ -1257,8 +1597,8 @@
       const rows = parseLeasingInvoice(text);
       if (!rows.length) { liStatus('❌ Aucune ligne de véhicule reconnue dans ce PDF (format inattendu). Saisis le loyer à la main via « Modifier le forfait ».', 'text-red-600'); return; }
       liParsed = rows.map(r => {
-        const v = vehicules.find(x => (x.immat || '').toUpperCase() === r.immat);
-        const inFleet = !!v || !!FP.LEASING_CONTRATS[r.immat];
+        const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(r.immat)); // match plaque tolérant (source unique)
+        const inFleet = !!v || !!(FP.leasingContrat && FP.leasingContrat(r.immat)); // société-safe (FP.LEASING_CONTRATS brut fuit les autres sociétés)
         const coherent = (r.totalHT == null) || Math.abs(r.ttc - r.totalHT * 1.2) <= 0.05 * r.ttc;
         return { ...r, inFleet, label: v ? `${v.marque || ''} ${v.modele || ''}`.trim() : '', coherent };
       });
@@ -1351,13 +1691,14 @@
   renderKPIs();
   renderAssurance();
   renderLeasing();
+  renderCartes();
 
   // ===== Leasing Localease (Ayvens) — contrats LLD séparés de BPCE =====
   // Prompt de lecture automatique d'une offre/contrat LLD Ayvens (Localease)
   const LOCALEASE_PROMPT = [
     "Lis ce contrat / offre de Location Longue Duree (LLD) Ayvens (ex Localease) de vehicule.",
     "Renvoie UNIQUEMENT un objet JSON valide, sans texte autour, avec ces cles (mets null si absent) :",
-    "loyerTTC : le LOYER MENSUEL total TTC (par mois), nombre a point decimal (ex 414.71). C'est le loyer global incluant services, PAS le seul loyer financier.",
+    "loyerTTC : le LOYER MENSUEL total TTC (par mois), nombre a point decimal (ex 414.71). C'est le loyer global incluant services, PAS le seul loyer financier. Cherche les libelles 'Loyer mensuel', 'Total mensuel TTC', 'Redevance mensuelle', 'Mensualite TTC', 'Loyer TTC/mois'. Prends le montant PAR MOIS (jamais le total du contrat).",
     "dureeMois : la duree du contrat en mois (ex 25).",
     "kmTotal : le kilometrage TOTAL du contrat (ex 50000 ; '50.000 km' -> 50000).",
     "co2 : les grammes de CO2 par km (ex 126).",
@@ -1395,6 +1736,7 @@
   }
   function escC(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function addMonths(iso, n){ const d=new Date(iso); if(isNaN(d)) return null; d.setMonth(d.getMonth()+(+n||0)); return d; }
+  function monthsBetween(aIso, bIso){ const d1=new Date(aIso), d2=new Date(bIso); if(isNaN(d1)||isNaN(d2)) return null; let m=(d2.getFullYear()-d1.getFullYear())*12+(d2.getMonth()-d1.getMonth()); if(d2.getDate()<d1.getDate()) m--; return m; }
   // TVS annuelle estimée via le calcul CENTRAL (app.js) → même barème que fiche véhicule / stats / dashboard.
   // Le carburant est déduit du modèle si absent (Hybrid / électrique / diesel CRDi…), sinon essence.
   function tvsEst(c){
@@ -1432,6 +1774,7 @@
     const tit = $('loc-title'); if (tit) tit.textContent = (leasingLoueurFilter !== 'all' && leasingLoueurFilter !== LOCALEASE_VAL) ? ('Contrats saisis — ' + leasingLoueurFilter) : (estPXP ? 'Leasing — Localease (Ayvens)' : 'Leasing (LLD)');
     const desc = $('loc-desc'); if (desc) desc.textContent = 'Contrats de leasing — loyers mensuels, échéances et documents.';
     const rec = $('loc-recover-pdf'); if (rec) rec.style.display = estPXP ? '' : 'none';
+    { const rd = $('loc-restore-default'); if (rd) rd.style.display = estPXP ? '' : 'none'; }
     const list = getLocalease();
     const tbody = $('tbody-localease'); if (!tbody) return;
     // On garde l'INDEX d'origine (les actions data-loc-* pointent dessus) tout en filtrant par loueur.
@@ -1449,22 +1792,29 @@
     // Recherche (comme BPCE) : ne filtre QUE les lignes affichées, pas les KPIs (totaux du loueur).
     const q = FP.norm(localeaseSearch).trim();
     const shown = q ? matched.filter(({ c }) => FP.norm(`${c.immat || ''} ${c.marque || ''} ${c.modele || ''} ${c.conducteur || ''}`).includes(q)) : matched;
-    tbody.innerHTML = shown.map(({ c, i })=>{
+    const _lc = shown.map(({ c, i })=>{
       const dur = Number(c.dureeMois) || 0;
-      const kmAct = (c.kmActuel != null && c.kmActuel !== '') ? Number(c.kmActuel) : null;
       // Lien AUTO avec l'onglet Véhicules (par prénom/plaque via autoImmatLoc) → on récupère le
       // véhicule lié. Si la date de début n'est pas saisie, on prend sa date de MISE EN CIRCULATION
       // (carte grise) comme début de contrat → Fin + Total versé se calculent tout seuls.
       const autoImmat = c.immat || autoImmatLoc(c);
       const linkedV = autoImmat ? (data.vehicules || []).find(v => normPlaque(v.immat) === normPlaque(autoImmat)) : null;
+      // Km actuel : saisi sur le contrat, SINON on prend le km RÉEL du véhicule lié (exactement comme
+      // BPCE) → la projection et le statut se calculent tout seuls, plus de « contrat non renseigné ».
+      const kmAct = (c.kmActuel != null && c.kmActuel !== '') ? Number(c.kmActuel)
+                   : ((linkedV && linkedV.km != null && linkedV.km !== '') ? Number(linkedV.km) : null);
       const debutSource = c.debut ? 'saisie' : ((linkedV && linkedV.dateMiseEnCirculation) ? 'mec' : null);
       const effDebut = c.debut || (linkedV && linkedV.dateMiseEnCirculation) || '';
+      // Fin effective : date de fin SAISIE (prioritaire) sinon début + durée. Durée effective (mois) pour
+      // la projection = mois entre début et fin quand une fin est saisie, sinon la durée du contrat.
+      const effFinDate = c.fin ? new Date(c.fin) : (effDebut && dur ? addMonths(effDebut, dur) : null);
+      const durEff = (c.fin && effDebut) ? (monthsBetween(effDebut, c.fin) || dur) : dur;
       // Mois écoulés depuis le début (théorique), plafonné à la durée du contrat.
       let moisEcoules = null;
-      if (effDebut){ const d = new Date(effDebut); if (!isNaN(d)){ const now = new Date(); let m = (now.getFullYear()-d.getFullYear())*12 + (now.getMonth()-d.getMonth()); if (now.getDate() < d.getDate()) m--; moisEcoules = Math.max(0, dur ? Math.min(m, dur) : m); } }
+      if (effDebut){ const d = new Date(effDebut); if (!isNaN(d)){ const now = new Date(); let m = (now.getFullYear()-d.getFullYear())*12 + (now.getMonth()-d.getMonth()); if (now.getDate() < d.getDate()) m--; moisEcoules = Math.max(0, durEff ? Math.min(m, durEff) : m); } }
       // Projection km en fin de contrat (extrapolation linéaire) + statut, comme BPCE.
       const rate = (kmAct != null && moisEcoules && moisEcoules > 0) ? kmAct / moisEcoules : null;
-      const proj = (rate != null && dur) ? Math.round(rate * dur) : null;
+      const proj = (rate != null && durEff) ? Math.round(rate * durEff) : null;
       const ratio = (proj != null && c.kmTotal) ? proj / c.kmTotal : null;
       let statutCell = '<span class="text-slate-400 text-xs">contrat non renseigné</span>';
       if (ratio != null){ const pct = Math.round(ratio*100);
@@ -1472,17 +1822,17 @@
         const pen = (ratio > 0.9 && over > 0) ? penaltyHtml(over, c.kmSupp, `data-loc-kmsupp="${i}"`, c.kmTolerance) : '';
         statutCell = ratio > 1 ? `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${pen}` : ratio > 0.9 ? `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${pen}` : `<span class="badge badge-ok">OK (${pct}%)</span>`; }
       else if (c.kmTotal && kmAct != null){ statutCell = `<span class="badge badge-ok">OK (${Math.round(kmAct/c.kmTotal*100)}%)</span>`; }
-      // Début (éditable) et Fin (calculée = début + durée).
+      // Début & Fin — cliquer ouvre la fenêtre d'édition (date-pickers sûrs, plus de saisie libre qui casse tout).
       const debutCell = effDebut
         ? `<span class="cursor-pointer underline decoration-dotted" data-loc-debut="${i}" title="${debutSource === 'mec' ? 'Date de mise en circulation (carte grise) du véhicule lié — cliquer pour saisir la vraie date de début' : 'Modifier la date de début'}">${FP.dateNum(effDebut)}${debutSource === 'mec' ? ' <span class="text-xs text-slate-400">(MEC)</span>' : ''}</span>`
         : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-debut="${i}">+ début</button>`;
-      let finCell = '<span class="text-slate-400">—</span>';
-      if (effDebut){ const fin = addMonths(effDebut, c.dureeMois); if (fin){ const j = Math.round((fin - new Date())/86400000); const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`); finCell = `${FP.dateNum(fin.toISOString().slice(0,10))}<div>${badge}</div>`; } }
+      let finCell = `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-fin="${i}">+ fin</button>`;
+      if (effFinDate && !isNaN(effFinDate)){ const j = (FP.joursRestants ? FP.joursRestants(effFinDate) : Math.round((effFinDate - new Date())/86400000)); const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`); finCell = `<span class="cursor-pointer underline decoration-dotted" data-loc-fin="${i}" title="Modifier la date de fin">${FP.dateNum(effFinDate.toISOString().slice(0,10))}</span><div>${badge}</div>`; }
       // Km actuel (éditable) + reste.
       let kmActCell = (kmAct != null ? FP.num(kmAct) + ' km' : '<span class="text-slate-400">—</span>');
       if (c.kmTotal && kmAct != null){ const reste = c.kmTotal - kmAct; kmActCell += reste<0 ? `<div style="color:#B91C1C;font-weight:700">dépassé ${FP.num(-reste)}</div>` : (reste<5000 ? `<div style="color:#B45309;font-weight:700">reste ${FP.num(reste)}</div>` : `<div class="text-xs text-slate-500">reste ${FP.num(reste)}</div>`); }
       kmActCell += ` <button type="button" data-loc-km="${i}" class="text-xs underline decoration-dotted text-slate-500">${kmAct!=null?'maj':'+ km'}</button>`;
-      const mensPayees = (moisEcoules != null) ? `${moisEcoules}${dur?`<span class="text-xs text-slate-400"> / ${dur}</span>`:''}` : '<span class="text-slate-400">—</span>';
+      const mensPayees = (moisEcoules != null) ? `${moisEcoules}${durEff?`<span class="text-xs text-slate-400"> / ${durEff}</span>`:''}` : '<span class="text-slate-400">—</span>';
       // Total & loyer courant via le MÊME moteur que BPCE (offre + avenants + prorata au jour).
       // Un loyer importé depuis une facture (override par immat) prime sur le loyerTTC du contrat.
       // Début = date saisie sinon date de mise en circulation du véhicule lié (effDebut).
@@ -1491,7 +1841,14 @@
       const _baseLoyer = (_ovL != null && _ovL !== '') ? Number(_ovL) : c.loyerTTC;
       const cNorm = { debut: effDebut, dureeMois: c.dureeMois, loyer: _baseLoyer, avenants: c.avenants };
       const loyerCourant = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cNorm) : (c.loyerTTC || null);
-      const totalVerse = (FP.leasingTotalVerse) ? FP.leasingTotalVerse(cNorm) : ((c.loyerTTC && moisEcoules) ? c.loyerTTC * moisEcoules : null);
+      // Total versé = loyers déjà réglés depuis la date de début AFFICHÉE (effDebut : vraie date saisie,
+      // sinon mise en circulation du véhicule lié). Cohérent avec la date de début montrée sur la ligne
+      // (règle « une seule source »). Quand la date vient du MEC (pas encore saisie à la main), c'est une
+      // ESTIMATION → on la marque « ~ » + info-bulle invitant à saisir la vraie date pour un montant exact.
+      const totalVerse = effDebut && FP.leasingTotalVerse
+        ? FP.leasingTotalVerse({ debut: effDebut, dureeMois: durEff || c.dureeMois, loyer: _baseLoyer, avenants: c.avenants })
+        : null;
+      const totalVerseEst = debutSource === 'mec';
       const docs = Array.isArray(c.docs) ? c.docs : (c.pdfUrl ? [{ url: c.pdfUrl, name: 'Contrat' }] : []);
       const docsHtml = docs.map((d, di) => `<div class="flex items-center gap-1 justify-center" style="margin-bottom:2px;max-width:170px;margin-left:auto;margin-right:auto">
           <a href="${escC(d.url)}" target="_blank" rel="noopener" class="hover:underline" style="color:var(--fp-accent);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escC(d.name || 'Document')}"><i data-lucide="file-text" class="w-3 h-3 inline"></i> ${escC(d.name || 'Document')}</a>
@@ -1506,31 +1863,60 @@
         const inFleet = (data.vehicules || []).some(v => normPlaque(v.immat) === normPlaque(auto));
         return `<span class="cursor-pointer underline decoration-dotted ${c.immat ? '' : 'text-slate-500'}" data-loc-immat="${i}" title="${c.immat ? 'Modifier la plaque' : 'Plaque liée automatiquement depuis la fiche véhicule — cliquer pour forcer'}">${escC(auto)}</span>`
           + (inFleet ? '' : `<div><button type="button" class="btn btn-outline" style="padding:1px 7px;font-size:10.5px;margin-top:3px;color:var(--fp-accent);border-color:#FDBA74" data-loc-tofleet="${i}" title="Ce véhicule n'est pas dans la liste Véhicules — cliquer pour l'y ajouter">➕ flotte</button></div>`); })();
-      // Colonnes IDENTIQUES à BPCE (+ Début de contrat) :
-      return `<tr>
+      // --- Cellules d'affichage, calculées UNE fois et partagées par le Tableau ET les Cartes ---
+      const vehHtml = `${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}${c.offre?`<div class="text-xs text-slate-400">offre ${escC(c.offre)}</div>`:''}`;
+      const condHtml = `<span class="cursor-pointer underline decoration-dotted" data-loc-cond="${i}" title="Affecter / changer le conducteur">${c.conducteur ? escC(c.conducteur) : '<span class="text-slate-400">+ affecter</span>'}</span>`;
+      const loueurTxt = escC((c.loueur || '').toString().trim() || localeaseLabel());
+      const kmTotalHtml = c.kmTotal ? FP.num(c.kmTotal) + ' km' : '<span class="text-slate-400">—</span>';
+      const projHtml = proj != null ? '~' + FP.num(proj) + ' km' : '<span class="text-slate-400">—</span>';
+      const totalVerseHtml = totalVerse != null ? `<span${totalVerseEst ? ' class="cursor-help" title="Estimation basée sur la date de mise en circulation. Clique la date de « Début de contrat » pour saisir la vraie date et obtenir le montant exact."' : ''}>${totalVerseEst ? '~' : ''}${FP.euroPrecis(totalVerse)}</span>` : '<span class="text-slate-400">—</span>';
+      const loyerHtml = loyerCourant != null ? FP.euroPrecis(loyerCourant) : '<span class="text-slate-400">—</span>';
+      const tvsHtml = (() => { const d = (linkedV && FP.tvsDetail) ? FP.tvsDetail(linkedV) : null; const val = (d && d.applicable && d.total != null) ? d.total : tvsEst(c); return FP.euro(val); })();
+      const actionsHtml = `${docsHtml}<button type="button" class="btn btn-outline text-xs !px-2" data-loc-edit="${i}" title="Modifier le contrat (forfait km, durée, loyer, dates…)"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button> <button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px" data-loc-up="${i}" title="Ajouter / téléverser un document"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'doc' : '+ doc'}</button> <button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>`;
+      const tr = `<tr>
         <td class="font-mono">${immatCell}</td>
-        <td>${escC(c.marque)} ${escC(c.modele)}${c.malus?` <span class="text-amber-600 text-xs">· malus ${FP.euro(c.malus)}</span>`:''}${c.offre?`<div class="text-xs text-slate-400">offre ${escC(c.offre)}</div>`:''}</td>
-        <td class="font-medium"><span class="cursor-pointer underline decoration-dotted" data-loc-cond="${i}" title="Affecter / changer le conducteur">${c.conducteur ? escC(c.conducteur) : '<span class="text-slate-400">+ affecter</span>'}</span></td>
-        <td class="text-sm text-slate-600">${escC((c.loueur || '').toString().trim() || localeaseLabel())}</td>
-        <td>${c.kmTotal ? FP.num(c.kmTotal) + ' km' : '<span class="text-slate-400">—</span>'}</td>
+        <td>${vehHtml}</td>
+        <td class="font-medium">${condHtml}</td>
+        <td class="text-sm text-slate-600">${loueurTxt}</td>
+        <td>${kmTotalHtml}</td>
         <td style="text-align:right">${kmActCell}</td>
-        <td style="text-align:right">${proj != null ? '~' + FP.num(proj) + ' km' : '<span class="text-slate-400">—</span>'}</td>
+        <td style="text-align:right">${projHtml}</td>
         <td>${statutCell}</td>
         <td style="text-align:center">${debutCell}</td>
         <td style="text-align:center">${finCell}</td>
-        <td class="font-semibold" style="text-align:right">${totalVerse != null ? FP.euroPrecis(totalVerse) : '<span class="text-slate-400">—</span>'}</td>
-        <td style="text-align:right">${loyerCourant != null ? FP.euroPrecis(loyerCourant) : '<span class="text-slate-400">—</span>'}</td>
-        <td style="text-align:right">${FP.euro(tvsEst(c))}</td>
-        <td style="text-align:center;white-space:nowrap">${docsHtml}<button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px" data-loc-up="${i}" title="Ajouter / téléverser un document"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'doc' : '+ doc'}</button> <button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button></td>
+        <td class="font-semibold" style="text-align:right">${totalVerseHtml}</td>
+        <td style="text-align:right">${loyerHtml}</td>
+        <td style="text-align:right">${tvsHtml}</td>
+        <td style="text-align:center;white-space:nowrap">${actionsHtml}</td>
       </tr>`;
-    }).join('');
+      return { immatCell, vehHtml, condHtml, loueurTxt, kmTotalHtml, kmActCell, projHtml, statutCell, debutCell, finCell, totalVerseHtml, loyerHtml, tvsHtml, actionsHtml, tr };
+    });
+    tbody.innerHTML = _lc.map(b => b.tr).join('');
+    const locBox = $('loc-cards');
+    if (locBox) locBox.innerHTML = _lc.map(b => `<div class="ls-card">
+      <div class="ls-top"><div><span class="ls-immat">${b.immatCell}</span> <span class="ls-veh">${b.vehHtml}</span><br><span class="ls-sub">${b.condHtml} · ${b.loueurTxt}</span></div><div>${b.statutCell}</div></div>
+      <div class="ls-grid">
+        <div><span class="k">Loyer / mois</span><b>${b.loyerHtml}</b></div>
+        <div><span class="k">Forfait km</span><b>${b.kmTotalHtml}</b></div>
+        <div><span class="k">Km actuel</span><b>${b.kmActCell}</b></div>
+        <div><span class="k">Projection fin</span><b>${b.projHtml}</b></div>
+        <div><span class="k">Début</span><b>${b.debutCell}</b></div>
+        <div><span class="k">Fin de contrat</span><b>${b.finCell}</b></div>
+        <div><span class="k">Total versé</span><b>${b.totalVerseHtml}</b></div>
+        <div><span class="k">TVS / an</span><b>${b.tvsHtml}</b></div>
+      </div>
+      <div class="ls-actions" style="flex-wrap:wrap">${b.actionsHtml}</div>
+    </div>`).join('');
+    applyLeasingView();
     if (window.lucide) lucide.createIcons();
   }
 
   // ----- Ajouter UN contrat de leasing (LLD) : dépôt du contrat + lecture auto + total mis à jour -----
-  let _locAddDoc = null, _locAddScan = null;
+  let _locAddDoc = null, _locAddScan = null, _locEditIdx = null;
   function openLocAddModal(){
-    _locAddDoc = null; _locAddScan = null;
+    _locAddDoc = null; _locAddScan = null; _locEditIdx = null;
+    { const t = $('locadd-title'); if (t) t.textContent = 'Ajouter un contrat de leasing'; }
+    { const b = $('locadd-save'); if (b) b.textContent = 'Ajouter'; }
     const sel = $('locadd-veh');
     if (sel) {
       sel.innerHTML = '<option value="">— aucun / à lier plus tard —</option>' + (vehicules || [])
@@ -1546,13 +1932,45 @@
       const def = (leasingLoueurFilter && leasingLoueurFilter !== 'all') ? leasingLoueurFilter : LOCALEASE_VAL;
       lsel.value = [...lsel.options].some(o => o.value === def) ? def : (lsel.options[0] ? lsel.options[0].value : LOCALEASE_VAL);
     }
-    ['locadd-cond','locadd-modele','locadd-loyer','locadd-duree','locadd-km','locadd-offre','locadd-kmsupp','locadd-tol'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+    ['locadd-cond','locadd-modele','locadd-loyer','locadd-duree','locadd-km','locadd-debut','locadd-fin','locadd-offre','locadd-kmsupp','locadd-tol'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+    // Conducteur : combobox des conducteurs DÉJÀ enregistrés (+ « ➕ Créer ») — règle plateforme.
+    { const cinp = $('locadd-cond'); if (cinp && window.FP && FP.conducteurPicker && !cinp.dataset.picker) { cinp.dataset.picker = '1'; try { FP.conducteurPicker(cinp, { onPick: function () {} }); } catch (e) {} } }
     const st = $('locadd-status'); if (st) { st.innerHTML = ''; st.setAttribute('style', ''); }
     const m = $('locadd-modal'); m.classList.remove('hidden'); m.classList.add('flex');
     if (window.lucide) lucide.createIcons();
   }
-  function closeLocAddModal(){ const m = $('locadd-modal'); m.classList.add('hidden'); m.classList.remove('flex'); _locAddDoc = null; _locAddScan = null; }
-  function locAddVehPick(){ const immat = ($('locadd-veh').value || '').trim(); const v = (vehicules || []).find(x => normPlaque(x.immat) === normPlaque(immat)); if (v && !$('locadd-modele').value) $('locadd-modele').value = `${v.marque || ''} ${v.modele || ''}`.trim(); }
+  function closeLocAddModal(){ const m = $('locadd-modal'); m.classList.add('hidden'); m.classList.remove('flex'); _locAddDoc = null; _locAddScan = null; _locEditIdx = null; }
+  // Édition d'un contrat existant : on réutilise la MÊME fenêtre (forfait km, durée, loyer, dates…).
+  function openLocEditModal(i){
+    const list = getLocalease(); const c = list[i]; if (!c) return;
+    openLocAddModal();                 // construit les listes déroulantes + réinitialise
+    _locEditIdx = i;
+    { const t = $('locadd-title'); if (t) t.textContent = 'Modifier le contrat de leasing'; }
+    { const b = $('locadd-save'); if (b) b.textContent = 'Enregistrer'; }
+    const lsel = $('locadd-loueur'); if (lsel) { const want = (c.loueur || '').toString().trim() || LOCALEASE_VAL; if ([...lsel.options].some(o => o.value === want)) lsel.value = want; }
+    const vsel = $('locadd-veh'); if (vsel && c.immat && [...vsel.options].some(o => o.value === c.immat)) { vsel.value = c.immat; try { vsel.dispatchEvent(new Event('change')); } catch (e) {} }
+    const setv = (id, val) => { const el = $(id); if (el) el.value = (val == null ? '' : val); };
+    setv('locadd-cond', c.conducteur);
+    setv('locadd-modele', `${c.marque || ''} ${c.modele || ''}`.trim());
+    setv('locadd-loyer', c.loyerTTC != null ? String(c.loyerTTC).replace('.', ',') : '');
+    setv('locadd-duree', c.dureeMois);
+    setv('locadd-km', c.kmTotal);
+    setv('locadd-debut', c.debut || '');
+    setv('locadd-fin', c.fin || '');
+    setv('locadd-offre', c.offre);
+    setv('locadd-kmsupp', c.kmSupp != null ? String(c.kmSupp).replace('.', ',') : '');
+    setv('locadd-tol', c.kmTolerance);
+    const st = $('locadd-status'); if (st) { st.innerHTML = 'Modifie les infos puis « Enregistrer ». Le document déjà attaché reste en place.'; st.setAttribute('style', 'color:#475569'); }
+  }
+  function locAddVehPick(){
+    const immat = ($('locadd-veh').value || '').trim();
+    const v = (vehicules || []).find(x => normPlaque(x.immat) === normPlaque(immat));
+    if (!v) return;
+    // Reconnaissance de la plaque : on récupère la marque/modèle ET le conducteur de la fiche véhicule
+    // (uniquement si le champ est encore vide, pour ne pas écraser une saisie).
+    if (!$('locadd-modele').value) $('locadd-modele').value = `${v.marque || ''} ${v.modele || ''}`.trim();
+    if (!($('locadd-cond').value || '').trim() && v.chauffeur && v.chauffeur !== '—') $('locadd-cond').value = v.chauffeur;
+  }
   const locNum = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[\s€]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
   async function locAddFileSelected(file){
     if (!file) return;
@@ -1585,12 +2003,42 @@
     if (v) { marque = v.marque || ''; modele = v.modele || ''; }
     else { const mm = ($('locadd-modele').value || '').trim(); const p = mm.split(/\s+/); marque = p.shift() || ''; modele = p.join(' '); }
     const loueurSel = ($('locadd-loueur') && $('locadd-loueur').value) || LOCALEASE_VAL;
+    // Dates : début (date-picker) + fin optionnelle. Si la fin est renseignée, la durée se recalcule.
+    let debutV = (($('locadd-debut') && $('locadd-debut').value) || '').trim() || null;
+    const finV = (($('locadd-fin') && $('locadd-fin').value) || '').trim() || null;
+    let dureeV = parseInt($('locadd-duree').value, 10) || null;
+    if (finV && debutV) { const mb = monthsBetween(debutV, finV); if (mb && mb > 0) dureeV = mb; }             // début + fin → durée
+    else if (finV && !debutV && dureeV) { const d = addMonths(finV, -dureeV); if (d) debutV = d.toISOString().slice(0, 10); } // fin + durée → on déduit le DÉBUT
+    // --- Mode ÉDITION : on met à jour le contrat existant (on préserve docs, km actuel, avenants…) ---
+    if (_locEditIdx != null) {
+      const s = FP.settings.get(); const list = getLocalease(); const c = list[_locEditIdx];
+      if (c) {
+        c.conducteur = ($('locadd-cond').value || '').trim();
+        if (immat) c.immat = immat;                       // ne pas effacer la plaque si le champ est vide
+        c.marque = marque; c.modele = modele;
+        c.loueur = (loueurSel === LOCALEASE_VAL) ? '' : loueurSel;
+        c.loyerTTC = loyer;
+        c.dureeMois = dureeV;
+        c.kmTotal = parseInt($('locadd-km').value, 10) || null;
+        c.debut = debutV;
+        if (finV) c.fin = finV; else delete c.fin;
+        c.offre = ($('locadd-offre').value || '').trim();
+        { const ks = locNum($('locadd-kmsupp').value); if (ks != null && ks > 0) c.kmSupp = ks; else delete c.kmSupp; }
+        { const tl = parseInt($('locadd-tol').value, 10); if (Number.isFinite(tl) && tl > 0) c.kmTolerance = tl; else delete c.kmTolerance; }
+        if (_locAddDoc) { if (!Array.isArray(c.docs)) c.docs = []; c.docs.push({ url: _locAddDoc.url, name: _locAddDoc.name }); c.pdfUrl = c.docs[0].url; }
+        s.localeaseContrats = list; FP.settings.save(s);
+      }
+      closeLocAddModal(); renderLocalease(); renderKPIs();
+      if (FP.toast) FP.toast('✓ Contrat modifié — coûts mis à jour');
+      return;
+    }
     const rec = {
       conducteur: ($('locadd-cond').value || '').trim(), immat: immat || '', marque, modele,
       loueur: (loueurSel === LOCALEASE_VAL) ? '' : loueurSel, // '' = Localease/Ayvens (défaut historique)
-      loyerTTC: loyer, dureeMois: parseInt($('locadd-duree').value, 10) || null, kmTotal: parseInt($('locadd-km').value, 10) || null,
-      offre: ($('locadd-offre').value || '').trim(), docs: _locAddDoc ? [{ url: _locAddDoc.url, name: _locAddDoc.name }] : [],
+      loyerTTC: loyer, dureeMois: dureeV, kmTotal: parseInt($('locadd-km').value, 10) || null,
+      debut: debutV, offre: ($('locadd-offre').value || '').trim(), docs: _locAddDoc ? [{ url: _locAddDoc.url, name: _locAddDoc.name }] : [],
     };
+    if (finV) rec.fin = finV;
     { const ks = locNum($('locadd-kmsupp').value); if (ks != null && ks > 0) rec.kmSupp = ks; }
     { const tl = parseInt($('locadd-tol').value, 10); if (Number.isFinite(tl) && tl > 0) rec.kmTolerance = tl; }
     if (_locAddScan) { const c = locNum(_locAddScan.co2); if (c != null) rec.co2 = Math.round(c); const ml = locNum(_locAddScan.malus); if (ml != null && ml > 0) rec.malus = ml; }
@@ -1603,14 +2051,27 @@
   if ($('locadd-cancel')) $('locadd-cancel').addEventListener('click', closeLocAddModal);
   if ($('locadd-modal')) $('locadd-modal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeLocAddModal(); });
   if ($('locadd-veh')) $('locadd-veh').addEventListener('change', locAddVehPick);
+  // Dates ⇄ durée EN DIRECT : fin + durée → déduit le début ; début + fin → recalcule la durée.
+  function locAddSyncDates(src){
+    const deb = $('locadd-debut'), fin = $('locadd-fin'), dur = $('locadd-duree');
+    if (!deb || !fin || !dur) return;
+    const dv = deb.value || '', fv = fin.value || '', nv = parseInt(dur.value, 10) || 0;
+    if (fv && dv) { const mb = monthsBetween(dv, fv); if (mb && mb > 0) dur.value = mb; }              // les 2 dates → durée
+    else if (fv && !dv && nv > 0) { const d = addMonths(fv, -nv); if (d) deb.value = d.toISOString().slice(0, 10); } // fin + durée → début
+    else if (dv && !fv && nv > 0 && src !== 'fin') { const d = addMonths(dv, nv); if (d) fin.value = d.toISOString().slice(0, 10); } // début + durée → fin
+  }
+  if ($('locadd-fin')) $('locadd-fin').addEventListener('change', () => locAddSyncDates('fin'));
+  if ($('locadd-debut')) $('locadd-debut').addEventListener('change', () => locAddSyncDates('debut'));
+  if ($('locadd-duree')) $('locadd-duree').addEventListener('input', () => locAddSyncDates('duree'));
   if ($('locadd-drop')) $('locadd-drop').addEventListener('click', () => { const inp = $('locadd-file'); if (inp) { inp.value = ''; inp.click(); } });
   if ($('locadd-file')) $('locadd-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) locAddFileSelected(f); });
   if ($('locadd-save')) $('locadd-save').addEventListener('click', saveLocAdd);
 
   let _locUpIdx = null;
-  $('tbody-localease').addEventListener('click', async (e)=>{
+  const locAction = async (e)=>{
     const list = getLocalease();
     const save = () => { const s=FP.settings.get(); s.localeaseContrats=list; FP.settings.save(s); renderLocalease(); };
+    const ed=e.target.closest('[data-loc-edit]'); if(ed){ openLocEditModal(+ed.dataset.locEdit); return; }
     // ➕ flotte : crée le VÉHICULE dans la liste Véhicules à partir du contrat leasing
     // (un véhicule en leasing n'était enregistré que comme contrat, pas dans la table vehicules).
     const tf=e.target.closest('[data-loc-tofleet]'); if(tf){
@@ -1631,12 +2092,13 @@
       return;
     }
     const up=e.target.closest('[data-loc-up]'); if(up){ _locUpIdx=+up.dataset.locUp; const inp=$('loc-upload-file'); inp.value=''; inp.click(); return; }
-    const db=e.target.closest('[data-loc-debut]'); if(db){ const i=+db.dataset.locDebut; const u=await FP.prompt('Date de début / livraison (format AAAA-MM-JJ) :', list[i].debut||''); if(u==null)return; list[i].debut=u.trim()||null; save(); return; }
+    const db=e.target.closest('[data-loc-debut]'); if(db){ openLocEditModal(+db.dataset.locDebut); return; }
+    const fn=e.target.closest('[data-loc-fin]'); if(fn){ openLocEditModal(+fn.dataset.locFin); return; }
     const km=e.target.closest('[data-loc-km]'); if(km){ const i=+km.dataset.locKm; const u=await FP.prompt('Kilométrage actuel du véhicule :', list[i].kmActuel!=null?list[i].kmActuel:''); if(u==null)return; const n=parseInt(String(u).replace(/\D/g,''),10); list[i].kmActuel=Number.isFinite(n)?n:null; save(); return; }
     const ks=e.target.closest('[data-loc-kmsupp]'); if(ks){ const i=+ks.dataset.locKmsupp; const u=await FP.prompt('Coût du km supplémentaire (€/km) — ex. 0,099 :', list[i].kmSupp!=null?String(list[i].kmSupp).replace('.',','):''); if(u==null)return; const n=parseFloat(String(u).replace(/[\s€]/g,'').replace(',','.')); list[i].kmSupp=Number.isFinite(n)&&n>0?n:null; save(); return; }
     const im=e.target.closest('[data-loc-immat]'); if(im){ const i=+im.dataset.locImmat; const u=await FP.prompt('Immatriculation du véhicule :', list[i].immat||''); if(u==null)return; const plaque=u.trim().toUpperCase()||null; list[i].immat=plaque;
       // Auto-affectation du conducteur depuis la fiche véhicule (si la plaque correspond et que le contrat n'a pas encore de conducteur).
-      if(plaque){ const v=(data.vehicules||[]).find(x=>String(x.immat||'').toUpperCase()===plaque); if(v && v.chauffeur && v.chauffeur!=='—' && !String(list[i].conducteur||'').trim()){ list[i].conducteur=v.chauffeur; } }
+      if(plaque){ const v=(data.vehicules||[]).find(x=>FP.normImmat(x.immat)===FP.normImmat(plaque)); if(v && v.chauffeur && v.chauffeur!=='—' && !String(list[i].conducteur||'').trim()){ list[i].conducteur=v.chauffeur; } }
       save(); return; }
     const cd=e.target.closest('[data-loc-cond]'); if(cd){ const i=+cd.dataset.locCond; const td=cd.closest('td'); if(!td) return;
       td.innerHTML=`<input class="field-input" style="font-size:.9rem;padding:.4rem .6rem;width:100%;min-width:150px;border:1px solid var(--fp-accent);border-radius:.5rem" id="loc-cond-edit" autocomplete="off" placeholder="Rechercher ou créer…" value="${escC(list[i].conducteur||'')}">`;
@@ -1646,7 +2108,7 @@
       return; }
     const da=e.target.closest('[data-loc-doc-assur]'); if(da){ const [i,di]=da.dataset.locDocAssur.split(':').map(Number); const c=list[i]||{}; const immat=String(c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):'')||'').toUpperCase(); const doc=(c.docs||[])[di]; if(!doc) return;
       if(!immat){ alert('Lie d\'abord la plaque du contrat (colonne Immatriculation) pour savoir sur quel véhicule ranger le mémo assurance.'); return; }
-      const v=(data.vehicules||[]).find(x=>String(x.immat||'').toUpperCase()===immat); if(!v){ alert('Aucun véhicule de la flotte avec la plaque '+immat+'.'); return; }
+      const v=(data.vehicules||[]).find(x=>FP.normImmat(x.immat)===FP.normImmat(immat)); if(!v){ alert('Aucun véhicule de la flotte avec la plaque '+immat+'.'); return; }
       if(!await FP.confirm(`Déplacer « ${doc.name||'Document'} » vers l'Assurance de la fiche véhicule ${immat} ?`)) return;
       const newDoc={ id:'D'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36), vehiculeId:v.id, type:'assurance', label:(doc.name&&/assur/i.test(doc.name))?doc.name:'Mémo assurance', url:doc.url, driveId:null };
       try{ if(FP.persist&&FP.persist.insert) FP.persist.insert('documents', newDoc); }catch(err){ console.warn('[move assur]',err); }
@@ -1654,8 +2116,11 @@
       if(FP.toast)FP.toast(`Mémo assurance déplacé vers ${immat} ✓`); else alert(`Déplacé vers l'assurance du véhicule ${immat}.`);
       return; }
     const dd=e.target.closest('[data-loc-doc-del]'); if(dd){ const [i,di]=dd.dataset.locDocDel.split(':').map(Number); if(Array.isArray(list[i].docs)){ list[i].docs.splice(di,1); list[i].pdfUrl=list[i].docs[0]?list[i].docs[0].url:null; save(); } return; }
-    const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; const immat=c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):''); if(!await FP.confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${immat?' ('+immat+')':''} ?`)) return; list.splice(i,1); save(); if(immat && (data.vehicules||[]).some(x=>x.immat===immat)){ if(await FP.confirm(`Supprimer AUSSI le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible (leasing, assurance, liste véhicules…).`)){ if(deleteVehiculeFlotte(immat)) refreshAllContrats(); } } if(FP.toast)FP.toast('Contrat supprimé'); return; }
-  });
+    const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; const immat=c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):''); if(!await FP.confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${immat?' ('+immat+')':''} ?`)) return; try{ if(FP.trash) FP.trash.add('leasing', c); }catch(_){} list.splice(i,1); save(); if(immat && (data.vehicules||[]).some(x=>FP.normImmat(x.immat)===FP.normImmat(immat))){ if(await FP.confirm(`Supprimer AUSSI le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible (leasing, assurance, liste véhicules…).`)){ if(deleteVehiculeFlotte(immat)) refreshAllContrats(); } } if(FP.toast)FP.toast('Contrat supprimé'); return; }
+  };
+  // Mêmes actions en vue Tableau ET en vue Cartes.
+  $('tbody-localease').addEventListener('click', locAction);
+  if ($('loc-cards')) $('loc-cards').addEventListener('click', locAction);
   // Téléversement du PDF du contrat vers Supabase (bucket scans, comme les cartes grises)
   $('loc-upload-file').addEventListener('change', async (e)=>{
     const file = e.target.files && e.target.files[0]; e.target.value='';
@@ -1711,6 +2176,19 @@
   function contratOptionsHtml() {
     return getLocalease().map((c, i) => `<option value="${i}">${escC((c.conducteur || '?') + ' — ' + (c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '') || '?') + ' — ' + (c.marque || '') + ' ' + (c.modele || ''))}</option>`).join('');
   }
+  // Restaurer les contrats Ayvens du modèle d'origine qui ne sont plus dans la liste enregistrée.
+  if ($('loc-restore-default')) $('loc-restore-default').addEventListener('click', async () => {
+    if (((FP.activeSociete && FP.activeSociete()) || 'PXP') !== 'PXP') { alert('Restauration réservée à la flotte PXP.'); return; }
+    const norm = s => (s || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const cur = getLocalease();
+    const has = (d) => cur.some(c => norm(c.conducteur) === norm(d.conducteur) && ((d.offre && norm(c.offre) === norm(d.offre)) || norm(c.modele) === norm(d.modele)));
+    const missing = LOCALEASE_DEFAUT.filter(d => !has(d));
+    if (!missing.length) { if (FP.toast) FP.toast('Aucun contrat Ayvens manquant ✓'); else alert('Rien à restaurer — tous les contrats Ayvens du modèle sont présents.'); return; }
+    if (!await FP.confirm(`Restaurer ${missing.length} contrat(s) Ayvens manquant(s) ?\n\n${missing.map(d => '• ' + d.conducteur + ' — ' + d.modele + (d.offre ? ' (' + d.offre + ')' : '')).join('\n')}`)) return;
+    const s = FP.settings.get(); const l = getLocalease(); missing.forEach(d => l.push({ ...d, docs: [] })); s.localeaseContrats = l; FP.settings.save(s);
+    renderLocalease(); renderKPIs();
+    if (FP.toast) FP.toast(`✓ ${missing.length} contrat(s) Ayvens restauré(s)`); else alert(missing.length + ' contrat(s) restauré(s).');
+  });
   if ($('loc-recover-pdf')) $('loc-recover-pdf').addEventListener('click', async () => {
     const panel = $('loc-recover-panel'); if (!panel) return;
     if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }
@@ -1896,8 +2374,304 @@
 
   document.addEventListener('fp:data-ready', () => {
     rebuildLeasingData();
-    renderKPIs(); renderAssurance(); renderLeasing(); renderLocalease();
+    renderKPIs(); renderAssurance(); renderLeasing(); renderLocalease(); renderCartes();
   });
+</script>
+
+<!-- ============ Comparateur de devis : logique ============ -->
+<script>
+(function () {
+  const modal = document.getElementById('cmp-modal');
+  const table = document.getElementById('cmp-table');
+  const verdictBox = document.getElementById('cmp-verdict');
+  const hint = document.getElementById('cmp-hint');
+  if (!modal || !table) return;
+  const euro = (n) => (window.FP && FP.euro) ? FP.euro(n) : (Math.round(Number(n) || 0).toLocaleString('fr-FR') + ' €');
+  const esc = (s) => (window.FP && FP.esc) ? FP.esc(s) : String(s == null ? '' : s);
+  const num = (v) => { const n = parseFloat(String(v == null ? '' : v).replace(/\s/g, '').replace(',', '.').replace(/[^0-9.\-]/g, '')); return isNaN(n) ? 0 : n; };
+
+  // Définition des lignes de chaque comparateur.
+  // type: 'text' | 'num' | 'check' ; sur num : unit affiché ; les 'sum'/'calc' sont dérivés.
+  const SCHEMAS = {
+    leasing: {
+      cols: 2,
+      fields: [
+        { key: 'nom',    label: 'Loueur / offre',            type: 'text', ph: 'ex. Arval, ALD…' },
+        { key: 'loyer',  label: 'Loyer mensuel TTC',         type: 'num',  unit: '€/mois' },
+        { key: 'duree',  label: 'Durée',                     type: 'num',  unit: 'mois' },
+        { key: 'apport', label: '1er loyer / apport',        type: 'num',  unit: '€' },
+        { key: 'frais',  label: 'Frais de dossier',          type: 'num',  unit: '€' },
+        { key: 'kman',   label: 'Km inclus / an',            type: 'num',  unit: 'km' },
+        { key: 'kmsup',  label: 'Prix du km supplémentaire', type: 'num',  unit: '€/km' },
+        { key: 'entretien', label: 'Entretien inclus',       type: 'check' },
+        { key: 'pneus',  label: 'Pneus inclus',              type: 'check' },
+        { key: 'assist', label: 'Assistance / véhicule relais', type: 'check' },
+      ],
+      compute(c) {
+        const total = num(c.apport) + num(c.loyer) * num(c.duree) + num(c.frais);
+        const anneesDuree = num(c.duree) / 12;
+        const kmTotal = num(c.kman) * anneesDuree;
+        const parKm = kmTotal > 0 ? total / kmTotal : 0;
+        return { total, parMois: num(c.duree) > 0 ? total / num(c.duree) : 0, kmTotal, parKm };
+      },
+      rows: [
+        { label: 'Coût total sur la durée', get: (r) => euro(r.total), winner: 'min', val: (r) => r.total, key: 'total' },
+        { label: 'Coût réel par mois',      get: (r) => euro(r.parMois), val: (r) => r.parMois },
+        { label: 'Km inclus au total',      get: (r, c) => r.kmTotal ? Math.round(r.kmTotal).toLocaleString('fr-FR') + ' km' : '—', val: (r) => r.kmTotal, winner: 'max' },
+        { label: 'Coût au km (tout compris)', get: (r) => r.parKm ? r.parKm.toFixed(3).replace('.', ',') + ' €/km' : '—', val: (r) => r.parKm, winner: 'min' },
+      ],
+    },
+    assurance: {
+      cols: 2,
+      fields: [
+        { key: 'nom',      label: 'Assureur / offre',        type: 'text', ph: 'ex. AXA, Swisslife…' },
+        { key: 'prime',    label: 'Prime annuelle TTC',      type: 'num',  unit: '€/an' },
+        { key: 'nbveh',    label: 'Véhicules couverts',      type: 'num',  unit: 'véh.' },
+        { key: 'franchise',label: 'Franchise dommages',      type: 'num',  unit: '€' },
+        { key: 'trisques', label: 'Tous risques',            type: 'check' },
+        { key: 'bris',     label: 'Bris de glace',           type: 'check' },
+        { key: 'vol',      label: 'Vol / incendie',          type: 'check' },
+        { key: 'assist0',  label: 'Assistance 0 km',         type: 'check' },
+        { key: 'relais',   label: 'Véhicule de remplacement',type: 'check' },
+        { key: 'juridique',label: 'Protection juridique',    type: 'check' },
+        { key: 'conduct',  label: 'Garantie du conducteur',  type: 'check' },
+      ],
+      compute(c) {
+        const nb = num(c.nbveh) || 1;
+        const garanties = ['trisques', 'bris', 'vol', 'assist0', 'relais', 'juridique', 'conduct'].filter(k => c[k]).length;
+        return { prime: num(c.prime), parVeh: num(c.prime) / nb, garanties, franchise: num(c.franchise) };
+      },
+      rows: [
+        { label: 'Prime annuelle',        get: (r) => euro(r.prime), val: (r) => r.prime, winner: 'min', key: 'prime' },
+        { label: 'Coût par véhicule / an', get: (r) => euro(r.parVeh), val: (r) => r.parVeh, winner: 'min' },
+        { label: 'Franchise',             get: (r) => r.franchise ? euro(r.franchise) : '—', val: (r) => r.franchise, winner: 'min' },
+        { label: 'Garanties incluses',    get: (r) => r.garanties + ' / 7', val: (r) => r.garanties, winner: 'max' },
+      ],
+    },
+  };
+
+  let mode = 'leasing';
+  const data = { leasing: [{}, {}], assurance: [{}, {}] };
+
+  // Prompts d'extraction IA (un devis PDF/photo → champs du comparateur).
+  const PROMPTS = {
+    leasing: [
+      'Tu lis un DEVIS ou CONTRAT de LEASING automobile (LLD / LOA / crédit-bail). Extrais les',
+      'informations et réponds STRICTEMENT en JSON (aucun texte autour), au format :',
+      '{',
+      '  "nom": "<nom du loueur / société de leasing, ex. Arval, ALD, Ayvens, Leaseplan>",',
+      '  "loyer": <loyer mensuel TTC en euros, nombre>,',
+      '  "duree": <durée du contrat en MOIS, nombre>,',
+      '  "apport": <1er loyer majoré / apport / dépôt en euros, 0 si aucun>,',
+      '  "frais": <frais de dossier / mise en service en euros, 0 si aucun>,',
+      '  "kman": <kilométrage inclus PAR AN, nombre ; si seul le total est donné, divise par la durée en années>,',
+      '  "kmsup": <prix du kilomètre supplémentaire en euros (ex. 0.12), 0 si absent>,',
+      '  "entretien": <true si l\'entretien/révisions est inclus, sinon false>,',
+      '  "pneus": <true si les pneumatiques sont inclus, sinon false>,',
+      '  "assist": <true si assistance ou véhicule de remplacement inclus, sinon false>',
+      '}',
+      'Les montants : prends le TTC. Si une info est absente, mets 0 (nombres) ou false (cases) —',
+      "n'invente jamais. Convertis les nombres au format JSON (point décimal, pas d'espace, pas de €).",
+    ].join('\n'),
+    assurance: [
+      'Tu lis un DEVIS ou CONTRAT d\'ASSURANCE de flotte / automobile. Extrais les informations et',
+      'réponds STRICTEMENT en JSON (aucun texte autour), au format :',
+      '{',
+      '  "nom": "<nom de l\'assureur, ex. AXA, Swisslife, Allianz, Generali>",',
+      '  "prime": <prime annuelle TTC en euros, nombre ; si mensuelle, multiplie par 12>,',
+      '  "nbveh": <nombre de véhicules couverts, 1 si non précisé>,',
+      '  "franchise": <montant de la franchise dommages en euros, 0 si absente>,',
+      '  "trisques": <true si formule tous risques / tous dommages, sinon false>,',
+      '  "bris": <true si bris de glace inclus, sinon false>,',
+      '  "vol": <true si vol et/ou incendie inclus, sinon false>,',
+      '  "assist0": <true si assistance 0 km / dépannage inclus, sinon false>,',
+      '  "relais": <true si véhicule de remplacement / prêt inclus, sinon false>,',
+      '  "juridique": <true si protection juridique incluse, sinon false>,',
+      '  "conduct": <true si garantie du conducteur incluse, sinon false>',
+      '}',
+      'Prends le TTC. Si une info est absente, mets 0 (nombres) ou false (cases) — n\'invente jamais.',
+      "Convertis les nombres au format JSON (point décimal, pas d'espace, pas de €).",
+    ].join('\n'),
+  };
+
+  // Champ fichier partagé + colonne cible courante
+  let importCol = -1;
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'application/pdf,image/*';
+  fileInput.style.display = 'none';
+  document.body.appendChild(fileInput);
+
+  function setImStatus(i, txt, color) {
+    const el = table.querySelector('[data-cmp-imstatus="' + i + '"]');
+    if (el) { el.textContent = txt || ''; if (color) el.style.color = color; }
+  }
+
+  async function importDevis(file, i) {
+    if (!file) return;
+    if (!(window.FP && FP.scanIA)) { setImStatus(i, 'IA indisponible (connexion requise)', '#dc2626'); return; }
+    setImStatus(i, '⏳ Lecture du devis…', '#0B1E3D');
+    let fields = null;
+    try { fields = await FP.scanIA(file, mode === 'leasing' ? 'devis-leasing' : 'devis-assurance', PROMPTS[mode]); }
+    catch (e) { fields = null; }
+    if (!fields || typeof fields !== 'object') { setImStatus(i, '❌ Lecture impossible, réessaie ou saisis à la main', '#dc2626'); return; }
+    // Mappe les champs lus dans la colonne
+    const sch = SCHEMAS[mode];
+    const rec = {};
+    sch.fields.forEach(f => {
+      let v = fields[f.key];
+      if (v == null) return;
+      if (f.type === 'check') rec[f.key] = (v === true || v === 'true' || v === 1 || v === '1' || v === 'oui');
+      else if (f.type === 'num') { const n = num(v); rec[f.key] = n ? String(n) : ''; }
+      else rec[f.key] = String(v);
+    });
+    data[mode][i] = rec;
+    build();
+    setImStatus(i, '✓ Devis importé — vérifie les cases', '#059669');
+  }
+
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files && fileInput.files[0];
+    const i = importCol;
+    fileInput.value = '';
+    if (f && i >= 0) importDevis(f, i);
+  });
+
+  function build() {
+    const sch = SCHEMAS[mode];
+    const cols = data[mode];
+    table.style.setProperty('--cols', cols.length);
+    let html = '';
+    // Ligne d'en-tête
+    html += '<div class="cmp-rowlabel cmp-head"></div>';
+    cols.forEach((c, i) => {
+      html += '<div class="cmp-head" style="position:relative">Devis ' + (i + 1) +
+        (cols.length > 2 ? ' <button type="button" data-cmp-del="' + i + '" title="Retirer" style="position:absolute;right:.4rem;top:.35rem;color:#94a3b8;font-weight:900;cursor:pointer">×</button>' : '') +
+        '<div style="margin-top:.35rem"><button type="button" data-cmp-import="' + i + '" class="btn btn-outline" style="font-size:.72rem;padding:2px 8px;font-weight:700"><i data-lucide="upload" style="width:13px;height:13px;display:inline;vertical-align:-2px"></i> Importer le devis</button><span data-cmp-imstatus="' + i + '" style="display:block;font-size:.68rem;color:#94a3b8;font-weight:600;margin-top:2px"></span></div>' +
+        '</div>';
+    });
+    // Champs de saisie
+    sch.fields.forEach(f => {
+      html += '<div class="cmp-rowlabel">' + esc(f.label) + (f.unit ? ' <span style="color:#94a3b8;font-weight:400">(' + esc(f.unit) + ')</span>' : '') + '</div>';
+      cols.forEach((c, i) => {
+        if (f.type === 'check') {
+          html += '<div style="text-align:center"><input type="checkbox" data-cmp-i="' + i + '" data-cmp-k="' + f.key + '"' + (c[f.key] ? ' checked' : '') + '></div>';
+        } else {
+          html += '<div><input type="text" inputmode="' + (f.type === 'num' ? 'decimal' : 'text') + '" data-cmp-i="' + i + '" data-cmp-k="' + f.key + '" value="' + esc(c[f.key] == null ? '' : c[f.key]) + '"' + (f.ph ? ' placeholder="' + esc(f.ph) + '"' : '') + '></div>';
+        }
+      });
+    });
+    // Lignes calculées
+    const computed = cols.map(c => sch.compute(c));
+    sch.rows.forEach(row => {
+      const vals = computed.map(r => row.val ? row.val(r) : 0);
+      let bestIdx = -1;
+      if (row.winner && vals.some(v => v > 0)) {
+        const nonZero = vals.map((v, i) => ({ v, i })).filter(o => o.v > 0);
+        if (nonZero.length) {
+          bestIdx = (row.winner === 'max')
+            ? nonZero.reduce((a, b) => b.v > a.v ? b : a).i
+            : nonZero.reduce((a, b) => b.v < a.v ? b : a).i;
+        }
+      }
+      html += '<div class="cmp-rowlabel" style="font-weight:700;color:#0B1E3D">' + esc(row.label) + '</div>';
+      computed.forEach((r, i) => {
+        html += '<div class="' + (i === bestIdx ? 'cmp-win' : '') + '" style="font-weight:700">' + row.get(r, cols[i]) + (i === bestIdx ? ' <span class="cmp-badge">✓ mieux</span>' : '') + '</div>';
+      });
+    });
+    table.innerHTML = html;
+    renderVerdict(cols, computed);
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function renderVerdict(cols, computed) {
+    const named = cols.map((c, i) => ({ c, r: computed[i], i })).filter(o => (o.c.nom || '').trim() || primaryVal(o.r) > 0);
+    if (named.length < 2) { verdictBox.style.display = 'none'; return; }
+    const key = mode === 'leasing' ? 'total' : 'prime';
+    const withCost = named.filter(o => primaryVal(o.r) > 0);
+    if (withCost.length < 2) { verdictBox.style.display = 'none'; return; }
+    const cheapest = withCost.reduce((a, b) => primaryVal(b.r) < primaryVal(a.r) ? b : a);
+    const dearest = withCost.reduce((a, b) => primaryVal(b.r) > primaryVal(a.r) ? b : a);
+    const nom = (o) => (o.c.nom || '').trim() || ('Devis ' + (o.i + 1));
+    const ecart = primaryVal(dearest.r) - primaryVal(cheapest.r);
+    let html = '';
+    if (mode === 'leasing') {
+      html = '<b>💡 Le moins cher : ' + esc(nom(cheapest)) + '</b> — coût total ' + euro(cheapest.r.total) +
+        (ecart > 0 ? ' (soit ' + euro(ecart) + ' de moins que ' + esc(nom(dearest)) + ' sur toute la durée)' : '') + '.';
+      // Nuances : km inclus + services
+      const notes = [];
+      const bestKm = withCost.reduce((a, b) => b.r.kmTotal > a.r.kmTotal ? b : a);
+      if (bestKm.i !== cheapest.i && bestKm.r.kmTotal > cheapest.r.kmTotal) {
+        notes.push('⚠️ ' + esc(nom(bestKm)) + ' inclut plus de km (' + Math.round(bestKm.r.kmTotal).toLocaleString('fr-FR') + ' vs ' + Math.round(cheapest.r.kmTotal).toLocaleString('fr-FR') + ') : compare le <b>coût au km</b> si tu roules beaucoup.');
+      }
+      const svc = (o) => ['entretien', 'pneus', 'assist'].filter(k => o.c[k]).length;
+      if (svc(dearest) > svc(cheapest)) notes.push('⚠️ ' + esc(nom(dearest)) + ' inclut plus de services (entretien / pneus / assistance) : à prestations égales l\'écart de prix se réduit.');
+      if (notes.length) html += '<div style="margin-top:.6rem;font-size:.85rem;line-height:1.5;color:#CFE0F7">' + notes.join('<br>') + '</div>';
+    } else {
+      html = '<b>💡 Le moins cher : ' + esc(nom(cheapest)) + '</b> — ' + euro(cheapest.r.prime) + '/an' +
+        (ecart > 0 ? ' (' + euro(ecart) + ' de moins que ' + esc(nom(dearest)) + ')' : '') + '.';
+      const notes = [];
+      const bestCov = withCost.reduce((a, b) => b.r.garanties > a.r.garanties ? b : a);
+      if (bestCov.i !== cheapest.i && bestCov.r.garanties > cheapest.r.garanties) {
+        notes.push('⚠️ ' + esc(nom(bestCov)) + ' couvre plus de garanties (' + bestCov.r.garanties + '/7 vs ' + cheapest.r.garanties + '/7) : le moins cher n\'est pas forcément le mieux couvert.');
+      }
+      if (cheapest.r.franchise > 0 && dearest.r.franchise >= 0 && cheapest.r.franchise > dearest.r.franchise) {
+        notes.push('⚠️ ' + esc(nom(cheapest)) + ' a une franchise plus élevée (' + euro(cheapest.r.franchise) + ') : tu paieras plus en cas de sinistre.');
+      }
+      if (notes.length) html += '<div style="margin-top:.6rem;font-size:.85rem;line-height:1.5;color:#CFE0F7">' + notes.join('<br>') + '</div>';
+    }
+    verdictBox.innerHTML = html;
+    verdictBox.style.display = 'block';
+  }
+  function primaryVal(r) { return mode === 'leasing' ? r.total : r.prime; }
+
+  // Événements
+  table.addEventListener('input', (e) => {
+    const el = e.target.closest('[data-cmp-i]'); if (!el) return;
+    const i = +el.dataset.cmpI, k = el.dataset.cmpK;
+    data[mode][i][k] = (el.type === 'checkbox') ? el.checked : el.value;
+    refreshComputed(); // rebuild lignes calculées + verdict, focus conservé
+  });
+  table.addEventListener('change', (e) => {
+    if (e.target.type === 'checkbox') refreshComputed();
+  });
+  table.addEventListener('click', (e) => {
+    const imp = e.target.closest('[data-cmp-import]');
+    if (imp) { importCol = +imp.dataset.cmpImport; fileInput.click(); return; }
+    const del = e.target.closest('[data-cmp-del]'); if (!del) return;
+    const i = +del.dataset.cmpDel;
+    if (data[mode].length <= 2) return;
+    data[mode].splice(i, 1); build();
+  });
+  function refreshComputed() {
+    const sch = SCHEMAS[mode], cols = data[mode];
+    const computed = cols.map(c => sch.compute(c));
+    // Reconstruit uniquement le bloc des lignes calculées en re-buildant tout mais en gardant les valeurs :
+    // simple et fiable — on rebuild tout sauf qu'on re-focus l'élément courant.
+    const active = document.activeElement;
+    const ai = active && active.dataset ? active.dataset.cmpI : null;
+    const ak = active && active.dataset ? active.dataset.cmpK : null;
+    build();
+    if (ai != null && ak) { const back = table.querySelector('[data-cmp-i="' + ai + '"][data-cmp-k="' + ak + '"]'); if (back && back.focus) { back.focus(); if (back.setSelectionRange && back.value) { try { back.setSelectionRange(back.value.length, back.value.length); } catch (_) {} } } }
+  }
+
+  document.querySelectorAll('[data-cmp-tab]').forEach(b => b.addEventListener('click', () => {
+    mode = b.dataset.cmpTab;
+    document.querySelectorAll('[data-cmp-tab]').forEach(x => x.classList.toggle('on', x === b));
+    hint.innerHTML = mode === 'leasing'
+      ? '<b>Importe chaque devis</b> (PDF ou photo) : l\'IA remplit la colonne toute seule — ou saisis à la main. Parc Pilot calcule le <b>coût total réel</b> (loyers + apport + frais) et le <b>coût au km</b>, puis te dit lequel choisir.'
+      : '<b>Importe chaque offre</b> (PDF ou photo) : l\'IA remplit la colonne toute seule — ou saisis à la main. Parc Pilot compare la <b>prime</b>, la <b>franchise</b> et les <b>garanties</b> — le moins cher n\'est pas toujours le mieux couvert.';
+    build();
+  }));
+  document.getElementById('cmp-addcol').addEventListener('click', () => { if (data[mode].length < 4) { data[mode].push({}); build(); } });
+  document.getElementById('cmp-reset').addEventListener('click', () => { data[mode] = [{}, {}]; build(); });
+  function openM() { modal.classList.remove('hidden'); modal.classList.add('flex'); build(); }
+  function closeM() { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+  document.getElementById('cmp-open').addEventListener('click', openM);
+  document.getElementById('cmp-close').addEventListener('click', closeM);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeM(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeM(); });
+})();
 </script>
 </body>
 </html>

@@ -84,11 +84,11 @@
       return session;
     },
     async signOut() {
-      try { if (window.FP && typeof FP.warp === 'function') FP.warp('Déconnexion'); } catch (e) {}
-      var t0 = Date.now();
+      // Déconnexion : plus d'ancienne transition « hyperspace » — on redirige vers login.html
+      // où la scène d'orage joue un DÉLUGE d'éclairs (drapeau fp_logout_burst lu au chargement).
+      try { sessionStorage.setItem('fp_logout_burst', '1'); } catch (e) {}
       try { await client.auth.signOut(); } catch (e) {}
-      var wait = Math.max(0, 1500 - (Date.now() - t0));   // laisser l'animation tourner ≥ 1,5 s
-      setTimeout(function () { window.location.href = loginPath; }, wait);
+      setTimeout(function () { window.location.href = loginPath; }, 120);
     },
     /** Photo d'avatar de l'utilisateur (cosmétique) — stockée dans user_metadata.avatar_url.
      *  (Pas un champ de sécurité → OK dans user_metadata, contrairement au rôle/société.) */
@@ -320,7 +320,10 @@
       const sig = (d) => {
         const f = (arr, ks) => (arr || []).map(x => ks.map(k => (x[k] ?? '')).join('|')).join(';');
         return f(d.vehicules, ['id','immat','marque','modele','version','km','statut','chauffeur','prochainCT','dateDernierCT','derniereRevision','proprietaire','carburant','co2','puissanceFiscale','dateMiseEnCirculation','valeurAchat','prix','assurance','vin','couleur','boite','prixVente','groupes','categorie','pipelineStatut','autonomie','critAir','antiPollution'])
-             + '#' + f(d.amendes, ['id','statut','montant','montantTTC','montantMinore','montantForfaitaire','montantMajore','majoree','points','date','prenom','motif','numeroAvis'])
+             + '#' + f(d.amendes, ['id','statut','montant','montantTTC','montantMinore','montantForfaitaire','montantMajore','majoree','points','date','prenom','motif','numeroAvis','avisUrl','justifUrl'])
+             // Pièces jointes (tableau d'objets) : sérialisées à part (nombre + ids) pour que l'ajout/
+             // suppression d'un document sur un poste rafraîchisse la section Documents sur les autres.
+             + '#' + (d.amendes || []).map(a => (a.id || '') + ':' + ((a.pieces || []).length) + ':' + ((a.pieces || []).map(p => (p && (p.id || p.url)) || '').join(','))).join(';')
              + '#' + f(d.factures, ['id','montantHT','montantTVA','montantTTC','type','date','vehiculeImmat','fournisseur','numeroFacture','km'])
              + '#' + f(d.conducteurs, ['key','nom','prenom','dateNaissance','poste','tel','email','adresse','permisNumero','permisExpiration','permisObtention']);
       };

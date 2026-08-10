@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")==="1"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Documents à renouveler — Parc Pilot</title>
 <link rel="manifest" href="../manifest.json">
@@ -15,12 +16,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803f">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809h">
 <style>
   .pill-ech { font-size: .72rem; font-weight: 700; padding: .12rem .55rem; border-radius: 9999px; white-space: nowrap; }
   .ech-danger { background:#FEE2E2; color:#991B1B; }
@@ -41,7 +42,7 @@
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")==="1")document.body.classList.add("fp-dark")}catch(e){}</script>
 
 <div class="flex min-h-screen flex-col md:flex-row">
 
@@ -60,9 +61,10 @@
       <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
       <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
       <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="controle.html" data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
       <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
       <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
-      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
       <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
       <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
       <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
@@ -143,23 +145,26 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803f"></script>
-<script src="../assets/js/supabase-client.js?v=20260803f"></script>
-<script src="../assets/js/data.js?v=20260803f"></script>
-<script src="../assets/js/app.js?v=20260803f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260809h"></script>
+<script src="../assets/js/supabase-client.js?v=20260809h"></script>
+<script src="../assets/js/data.js?v=20260809h"></script>
+<script src="../assets/js/app.js?v=20260809h"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
   const data = window.FP_DATA;
   const state = { horizon: '90', cat: 'all', search: '' };
 
-  const joursDe = (iso) => Math.ceil((new Date(iso) - new Date(new Date().toISOString().slice(0,10))) / 86400000);
-  function delaiTxt(j) {
+  const joursDe = (iso) => (FP.joursRestants ? FP.joursRestants(iso) : Math.ceil((new Date(iso) - new Date(new Date().toISOString().slice(0,10))) / 86400000)); // source unique (minuit→minuit)
+  // La COULEUR d'urgence vient du niveau calculé par FP.buildEcheances (source unique : <30 danger,
+  // <60 warn, sinon info) — pas d'un 2e barème local, sinon la même échéance a une couleur différente
+  // ici et dans Alertes. Le texte du délai reste lisible (« Dans X j / mois »).
+  function delaiTxt(j, niveau) {
+    const cls = niveau === 'danger' ? 'ech-danger' : niveau === 'warn' ? 'ech-warn' : 'ech-info';
     if (j < 0) return { cls: 'ech-danger', txt: `Dépassé de ${-j} j` };
     if (j === 0) return { cls: 'ech-danger', txt: "Aujourd'hui" };
-    if (j <= 30) return { cls: 'ech-warn', txt: `Dans ${j} j` };
-    if (j <= 90) return { cls: 'ech-info', txt: `Dans ${j} j` };
-    return { cls: 'ech-info', txt: `Dans ${Math.round(j/30)} mois` };
+    if (j > 90) return { cls, txt: `Dans ${Math.round(j / 30)} mois` };
+    return { cls, txt: `Dans ${j} j` };
   }
   function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -198,7 +203,7 @@
     if (!rows.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); lucide.createIcons(); return; }
     empty.classList.add('hidden');
     tbody.innerHTML = rows.map(e => {
-      const j = joursDe(e.date); const d = delaiTxt(j);
+      const j = joursDe(e.date); const d = delaiTxt(j, e.niveau);
       return `<tr style="cursor:pointer" data-target="${escapeHtml(e.target || '')}">
         <td class="font-semibold whitespace-nowrap">${FP.dateNum(e.date)}</td>
         <td><span class="pill-ech ${d.cls}">${d.txt}</span></td>

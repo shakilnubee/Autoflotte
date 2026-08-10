@@ -78,6 +78,7 @@
 
   <!-- ================= FORMULAIRE (non imprimé) ================= -->
   <div class="noprint">
+    <a href="#" onclick="if(history.length>1){history.back()}else{location.href='kit-commercial.html'};return false" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);text-decoration:none;margin-bottom:8px">← Retour</a>
     <h1>Générateur de contrat</h1>
     <p class="sub">Parc Pilot — outil interne. Remplis, puis « Imprimer / PDF » ou « Envoyer pour signature ».</p>
 
@@ -421,6 +422,8 @@
 
 </div>
 
+<script src="assets/js/vendor/supabase.js?v=20260809h"></script>
+<script src="assets/js/bareme.js?v=20260809h"></script>
 <script>
 var state = { formule:'delegue', recond:'tacite' };
 function $(id){ return document.getElementById(id); }
@@ -431,13 +434,13 @@ function dateFr(iso){ if(!iso) return '—'; var p=iso.split('-'); return p.leng
 function todayFr(){ var d=new Date(); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
 
 // ===== Grille tarifaire (identique au devis) — calcul auto du prix =====
-var PRICING = { paliers:[{max:10,mois:49},{max:30,mois:99},{max:60,mois:189}], entVeh:2.90, delegVeh:15, delegMin:150, mes:149 };
+// Gestion externalisée — barème PARTAGÉ (assets/js/bareme.js, éditable sur bareme.html).
+function BAR(){ return (window.PP_BAREME && PP_BAREME.get) ? PP_BAREME.get() : { minMensuel:590, r1:65, r2:60, r3:54, surDevisMin:80, mes:500, refVeh:65 }; }
+var PRICING = { get min(){ return BAR().minMensuel; }, get mes(){ return BAR().mes; } };
 var priceTouched = { mensuel:false, mes:false };
-function calcMensuel(nb, formule){
-  if (formule === 'delegue') return Math.max(PRICING.delegMin, PRICING.delegVeh * nb);
-  for (var i=0;i<PRICING.paliers.length;i++){ if (nb <= PRICING.paliers[i].max) return PRICING.paliers[i].mois; }
-  return Math.round(PRICING.entVeh * nb); // > 60 véhicules : au véhicule
-}
+function surDevis(nb){ return (window.PP_BAREME && PP_BAREME.surDevis) ? PP_BAREME.surDevis(nb) : (nb>=BAR().surDevisMin); }
+// null = « sur devis » (analyse de la flotte) ; sinon montant mensuel (minimum garanti).
+function calcMensuel(nb, formule){ return (window.PP_BAREME && PP_BAREME.tarifMensuel) ? PP_BAREME.tarifMensuel(nb) : (function(){ var b=BAR(); nb=Math.max(1,nb); if(nb>=b.surDevisMin)return null; if(nb<=9)return b.minMensuel; if(nb<=24)return Math.max(b.minMensuel,b.r1*nb); if(nb<=49)return b.r2*nb; return b.r3*nb; })(); }
 
 function segWire(segId, key){
   document.querySelectorAll('#'+segId+' button').forEach(function(b){
@@ -461,8 +464,9 @@ var fromDevis = false;
   var map = { 'f-soc':d.soc, 'f-forme':d.forme, 'f-siren':d.siren, 'f-adr':d.adr,
               'f-rep':d.rep, 'f-qual':d.qual, 'f-mail':d.mail, 'f-veh':d.veh, 'f-socn':d.socn };
   Object.keys(map).forEach(function(id){ if (map[id]!=null && map[id]!=='' && $(id)) $(id).value = map[id]; });
-  if (d.mensuel!=null && $('f-mensuel')) $('f-mensuel').value = d.mensuel;
-  if (d.mes!=null && $('f-mes')) $('f-mes').value = d.mes;
+  // On reprend EXACTEMENT les montants du devis (et on bloque le recalcul auto pour ne pas les écraser).
+  if (d.mensuel!=null && $('f-mensuel')) { $('f-mensuel').value = d.mensuel; priceTouched.mensuel = true; }
+  if (d.mes!=null && $('f-mes')) { $('f-mes').value = d.mes; priceTouched.mes = true; }
   if (d.duree!=null && $('f-duree')) $('f-duree').value = d.duree;
   if (d.formule){
     state.formule = d.formule;
@@ -504,8 +508,9 @@ function render(){
   var duree = Math.max(1, parseInt(val('f-duree'),10) || 12);
   // Calcul AUTOMATIQUE du prix selon la flotte + la formule (comme le devis),
   // tant que l'utilisateur n'a pas saisi un montant à la main.
-  if (!priceTouched.mensuel) $('f-mensuel').value = calcMensuel(nb, state.formule);
-  if (!priceTouched.mes) $('f-mes').value = (duree >= 12) ? 0 : PRICING.mes;
+  var devisFlotte = surDevis(nb);
+  if (!priceTouched.mensuel) { var cm = calcMensuel(nb, state.formule); $('f-mensuel').value = (cm==null) ? 0 : cm; }
+  if (!priceTouched.mes) $('f-mes').value = PRICING.mes; // mise en service (modifiable ; mettre 0 pour l'offrir)
   var mensuel = Math.max(0, parseFloat(val('f-mensuel')) || 0);
   var mes = Math.max(0, parseFloat(val('f-mes')) || 0);
   var preavis = Math.max(0, parseInt(val('f-preavis'),10) || 0);
@@ -573,12 +578,20 @@ function render(){
         : 'À son terme, il pourra être renouvelé par <b>accord exprès écrit</b> des Parties. À défaut, il prend fin automatiquement. Résiliation anticipée avec préavis de <b>'+preavis+' mois</b>.');
 
   // -- Article 4 : Prix --
-  var prixHtml = 'En contrepartie, le Client verse une redevance de <b>'+euro0(mensuel)+' par mois</b>'
-    + (deleg && nb ? ' (soit environ '+euro0(nb? (mensuel/nb):0)+'/véhicule/mois)' : '') + '.';
-  if (mes > 0) prixHtml += ' Des <b>frais de mise en service de '+euro0(mes)+'</b> (import des données et prise en main) sont facturés une seule fois au démarrage.';
-  else prixHtml += ' La mise en service (import des données et prise en main) est <b>offerte</b>.';
-  var annuel = mensuel*12;
-  prixHtml += ' Soit un montant annuel indicatif de <b>'+euro0(annuel)+'</b>' + (mes>0?' (hors mise en service)':'') + '.';
+  var prixHtml;
+  if (devisFlotte && mensuel === 0) {
+    prixHtml = 'En contrepartie, le Client verse une redevance mensuelle <b>établie après analyse de la flotte</b> ('+nb+' véhicules), sur la base d\'un tarif de référence de <b>'+euro0(BAR().refVeh)+' / véhicule / mois</b>, dégressif selon le volume ; le montant définitif figure à l\'Annexe 1.';
+  } else {
+    prixHtml = 'En contrepartie, le Client verse une redevance de <b>'+euro0(mensuel)+' par mois</b>'
+      + (nb>9 ? ' (soit '+euro0(mensuel/nb)+' / véhicule / mois)' : ' (forfait minimum, jusqu\'à 9 véhicules)') + '.';
+  }
+  if (mes > 0) prixHtml += ' Des <b>frais de mise en service de '+euro0(mes)+'</b> (audit, reprise et intégration de la flotte) sont facturés une seule fois au démarrage.';
+  else prixHtml += ' La mise en service (audit, reprise et intégration de la flotte) est <b>offerte</b>.';
+  if (!(devisFlotte && mensuel === 0)) {
+    var annuel = mensuel*12;
+    prixHtml += ' Soit un montant annuel indicatif de <b>'+euro0(annuel)+'</b>' + (mes>0?' (hors mise en service)':'') + '.';
+  }
+  prixHtml += ' Les <b>prestations ponctuelles</b> non comprises dans le forfait (livraison/récupération de véhicule, restitution, commande, sinistre complexe, contestation d\'amende, audit…) sont facturées en supplément selon le barème en vigueur, ou au temps passé ('+euro0(BAR().tauxHoraire||65)+' / heure).';
   $('o-prix').innerHTML = prixHtml;
 
   // -- Annexe 1 : Conditions particulières (récap commercial auto-rempli) --
@@ -588,9 +601,9 @@ function render(){
     ['Prestation', deleg ? 'Gestion déléguée de flotte (outil inclus)' : 'Abonnement à l\'outil Parc Pilot'],
     ['Nombre de véhicules', String(nb)],
     ['Nombre de sociétés', String(socn)],
-    ['Redevance mensuelle', euro0(mensuel) + ' (net de taxe)'],
+    ['Redevance mensuelle', (devisFlotte && mensuel===0) ? 'Sur devis (après analyse de la flotte)' : euro0(mensuel) + ' (net de taxe)'],
     ['Mise en service', mes > 0 ? euro0(mes) + ' (unique)' : 'Offerte'],
-    ['Montant annuel indicatif', euro0(mensuel*12)],
+    ['Montant annuel indicatif', (devisFlotte && mensuel===0) ? 'Sur devis' : euro0(mensuel*12)],
     ['Durée d\'engagement', duree + ' mois'],
     ['Reconduction', recTacite ? 'Tacite, par périodes de 12 mois' : 'Expresse (accord écrit)'],
     ['Préavis de résiliation', preavis + ' mois'],
@@ -619,6 +632,10 @@ function safeName(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'
 $('btn-dl').addEventListener('click', function(){
   var btn = $('btn-dl'), old = btn.textContent; btn.textContent = 'Génération…'; btn.disabled = true;
   var name = 'Contrat' + (val('f-num') ? '-'+safeName(val('f-num')) : '') + (val('f-soc') ? '-'+safeName(val('f-soc')) : '') + '.pdf';
+  // Remonter en haut de page avant la capture : html2canvas part de la position
+  // de défilement courante ; si on avait scrollé, la 1re page sortait décalée
+  // (grand blanc en tête). Ajustement sûr (ne peut pas vider le PDF).
+  try { window.scrollTo(0, 0); } catch (e) {}
   loadScript('https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js').then(function(){
     return html2pdf().set({
       margin: [10,10,12,10], filename: name,
@@ -657,6 +674,7 @@ segWire('seg-formule','formule');
 segWire('seg-recond','recond');
 
 render();
+window.addEventListener('pp:bareme-ready', render);
 </script>
 </body>
 </html>

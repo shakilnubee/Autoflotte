@@ -16,6 +16,11 @@ update storage.buckets set public = false where id = 'scans';
 -- 2) Politiques d'accès : seuls les utilisateurs CONNECTÉS peuvent lire / déposer / modifier /
 --    supprimer les fichiers du bucket "scans". (La lecture "authenticated" est ce qui permet à
 --    createSignedUrl de fonctionner côté site.)
+-- ⚠️ On supprime AUSSI les anciennes policies PUBLIQUES (scans_read/insert/update) : sans ça, le
+--    rôle "anon" (clé publique) pourrait encore lire les fichiers → la privatisation serait annulée.
+drop policy if exists "scans_read"        on storage.objects;
+drop policy if exists "scans_insert"      on storage.objects;
+drop policy if exists "scans_update"      on storage.objects;
 drop policy if exists "scans_auth_read"   on storage.objects;
 drop policy if exists "scans_auth_insert" on storage.objects;
 drop policy if exists "scans_auth_update" on storage.objects;

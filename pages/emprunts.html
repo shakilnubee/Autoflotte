@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")==="1"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Emprunt véhicule — Parc Pilot</title>
 <link rel="manifest" href="../manifest.json">
@@ -15,12 +16,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803f">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809h">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -38,6 +39,9 @@
   .emp-chip.active .n { background: rgba(255,255,255,.22); }
   .pill-retard { background: #FEE2E2; color: #991B1B; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
   tr.is-retard { background: #FEF2F2; }
+  /* Mode sombre : fond clair → texte illisible → teinte rouge sombre + texte clair. */
+  body.fp-dark tr.is-retard { background: rgba(220,38,38,.20); }
+  body.fp-dark tr.is-retard td { color: #fecaca; }
   /* Menu déroulant personnalisé (aux couleurs de la plateforme) */
   .ac-wrap { position: relative; }
   .ac-panel { position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; background: #fff; border: 1px solid var(--fp-border); border-radius: .6rem; box-shadow: 0 14px 34px -12px rgba(15,30,61,.28); max-height: 240px; overflow-y: auto; z-index: 90; }
@@ -58,7 +62,7 @@
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")==="1")document.body.classList.add("fp-dark")}catch(e){}</script>
 
 <div class="flex min-h-screen flex-col md:flex-row">
 
@@ -77,9 +81,10 @@
       <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
       <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
       <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="controle.html" data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
       <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
       <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
-      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
       <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
       <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
       <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
@@ -138,7 +143,7 @@
     <!-- KPIs -->
     <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
       <div class="kpi"><div class="kpi-label">Emprunts en cours</div><div class="kpi-value" id="kpi-encours" style="color: var(--fp-warn)">—</div></div>
-      <div class="kpi"><div class="kpi-label">Non rendus &gt; 2 j</div><div class="kpi-value" id="kpi-retard" style="color: var(--fp-danger)">—</div></div>
+      <div class="kpi"><div class="kpi-label" id="kpi-retard-lbl">Non rendus &gt; 2 j</div><div class="kpi-value" id="kpi-retard" style="color: var(--fp-danger)">—</div></div>
       <div class="kpi"><div class="kpi-label">Total enregistrés</div><div class="kpi-value" id="kpi-total">—</div></div>
     </div>
 
@@ -332,10 +337,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803f"></script>
-<script src="../assets/js/supabase-client.js?v=20260803f"></script>
-<script src="../assets/js/data.js?v=20260803f"></script>
-<script src="../assets/js/app.js?v=20260803f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260809h"></script>
+<script src="../assets/js/supabase-client.js?v=20260809h"></script>
+<script src="../assets/js/data.js?v=20260809h"></script>
+<script src="../assets/js/app.js?v=20260809h"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -382,7 +387,7 @@
   }
 
   function vehLabel(immat) {
-    const v = (data.vehicules || []).find(x => x.immat === immat);
+    const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(immat));
     return v ? `${v.immat} · ${v.marque} ${v.modele}` : (immat || '—');
   }
 
@@ -446,7 +451,7 @@
     val = (val || '').trim(); if (!val) return '';
     if (val.includes(' · ')) return val.split(' · ')[0].trim().toUpperCase();
     const up = val.toUpperCase();
-    const byImmat = (data.vehicules || []).find(v => (v.immat || '').toUpperCase() === up);
+    const byImmat = (data.vehicules || []).find(v => FP.normImmat(v.immat) === FP.normImmat(up));
     if (byImmat) return byImmat.immat;
     const byText = (data.vehicules || []).find(v => `${v.immat} ${v.marque} ${v.modele}`.toLowerCase().includes(val.toLowerCase()));
     return byText ? byText.immat : val;
@@ -468,8 +473,8 @@
     const d = new Date(dateIso); if (isNaN(d)) return 0;
     return Math.floor((new Date() - d) / 86400000);
   }
-  // En retard = en cours (pas de date de retour) ET emprunté depuis plus de 2 jours
-  function estEnRetard(e) { return !e.dateRetour && joursDepuis(e.dateEmprunt) > 2; }
+  // En retard = source unique FP.empEnRetard (en cours ET emprunté depuis plus de 2 jours)
+  function estEnRetard(e) { return FP.empEnRetard ? FP.empEnRetard(e) : (!e.dateRetour && joursDepuis(e.dateEmprunt) > 2); }
 
   function render() {
     const q = FP.norm(state.search).trim();
@@ -490,6 +495,7 @@
     // Alerte : véhicules non rendus depuis plus de 2 jours
     const retards = cache.filter(estEnRetard).sort((a, b) => joursDepuis(b.dateEmprunt) - joursDepuis(a.dateEmprunt));
     $('kpi-retard').textContent = retards.length;
+    { const seuil = (FP.empRetardJours ? FP.empRetardJours() : 2); const lbl = $('kpi-retard-lbl'); if (lbl) lbl.innerHTML = 'Non rendus &gt; ' + seuil + ' j'; }
     const alertBox = $('emprunt-alert');
     if (retards.length) {
       const liste = retards.slice(0, 6).map(e => `<b>${escapeHtml((e.vehicule || '').toString())}</b> (${escapeHtml(e.emprunteur || '—')}, ${joursDepuis(e.dateEmprunt)} j)`).join(' · ');
@@ -647,9 +653,10 @@
 
   async function delEmprunt(id) {
     if (!(await FP.confirm('Supprimer cet emprunt ?'))) return;
+    const rec = cache.find(x => x.id === id) || null; // capture pour la Corbeille (restaurable)
     cache = cache.filter(x => x.id !== id);
     render();
-    if (dbOn()) FP.persist.delete('emprunts', id); lsSet();
+    if (dbOn()) FP.persist.delete('emprunts', id, rec || undefined); lsSet();
   }
 
   // ============================================================
@@ -872,11 +879,19 @@
       let added = 0, updated = 0;
       records.forEach(rec => {
         if (!rec.id) rec.id = 'E' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-        if (!rec.dateEmprunt) rec.dateEmprunt = null;
-        if (!rec.dateRetour) rec.dateRetour = null;
         const i = cache.findIndex(x => x.id === rec.id);
-        if (i >= 0) { cache[i] = { ...cache[i], ...rec }; updated++; } else { cache.unshift(rec); added++; }
-        if (dbOn()) FP.persist.upsert('emprunts', rec); lsSet();
+        if (i >= 0) {
+          // Mise à jour NON destructive : une case VIDE ne doit pas écraser une valeur existante.
+          Object.keys(rec).forEach(k => { if (k !== 'id' && (rec[k] === '' || rec[k] == null)) delete rec[k]; });
+          cache[i] = { ...cache[i], ...rec }; updated++;
+          if (dbOn()) FP.persist.upsert('emprunts', cache[i]);
+        } else {
+          if (!rec.dateEmprunt) rec.dateEmprunt = null;
+          if (!rec.dateRetour) rec.dateRetour = null;
+          cache.unshift(rec); added++;
+          if (dbOn()) FP.persist.upsert('emprunts', rec);
+        }
+        lsSet();
       });
       sortCache(); render();
       alert(`Import terminé ✓\n${added} ajout(s), ${updated} mise(s) à jour.`);

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")==="1"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Tâches & rappels — Parc Pilot</title>
 <link rel="manifest" href="../manifest.json">
@@ -15,12 +16,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260803f">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260809h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260803f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260809h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260803f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260809h">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -54,7 +55,7 @@
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")==="1")document.body.classList.add("fp-dark")}catch(e){}</script>
 
 <div class="flex min-h-screen flex-col md:flex-row">
 
@@ -73,9 +74,10 @@
       <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
       <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
       <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="controle.html" data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
       <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
       <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
-      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
       <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
       <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
       <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
@@ -122,7 +124,19 @@
         <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)">Tâches &amp; rappels</h1>
         <p class="text-slate-500 text-sm mt-1">Les petites choses à ne pas oublier : changer des pneus, rapporter une clé, prendre un RDV…</p>
       </div>
-      <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle tâche</button>
+      <div class="flex gap-2">
+        <button class="btn btn-outline text-sm" id="btn-cfg-rappels"><i data-lucide="repeat" class="w-4 h-4"></i> Configurer les rappels</button>
+        <button class="btn btn-dark text-sm" id="btn-new" data-quickadd><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle tâche</button>
+      </div>
+    </div>
+
+    <!-- 🔁 Rappels récurrents : à cocher chaque période (mois, trimestre…). Configurables. -->
+    <div class="card p-4 mb-6" id="rappels-card">
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <div class="font-bold flex items-center gap-2" style="color:var(--fp-primary)"><i data-lucide="repeat" class="w-4 h-4"></i> Rappels récurrents <span class="text-xs font-normal text-slate-400">· à cocher chaque période</span></div>
+        <button class="btn btn-outline text-sm" id="btn-cfg-rappels-2"><i data-lucide="settings-2" class="w-4 h-4"></i> Configurer</button>
+      </div>
+      <div id="rappels-list" class="space-y-2"></div>
     </div>
 
     <!-- KPIs -->
@@ -186,10 +200,34 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260803f"></script>
-<script src="../assets/js/supabase-client.js?v=20260803f"></script>
-<script src="../assets/js/data.js?v=20260803f"></script>
-<script src="../assets/js/app.js?v=20260803f"></script>
+<!-- Modal configuration des rappels récurrents -->
+<div class="modal-backdrop" id="modal-rappels">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-extrabold" style="color:var(--fp-primary)">🔁 Rappels récurrents</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="rap-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm text-slate-500 mb-4">Des tâches qui reviennent chaque période (mois, trimestre…). Coche-les quand c'est fait ; elles réapparaissent à la période suivante. Réglages <b>synchronisés sur tous tes appareils</b>.</p>
+    <div id="rap-cfg-list" class="space-y-2 mb-4"></div>
+    <div class="border-t border-slate-200 pt-3">
+      <div class="font-semibold mb-2 text-sm">➕ Ajouter un rappel</div>
+      <div class="space-y-2">
+        <input id="rap-titre" class="field-input" placeholder="Intitulé (ex : Relevé des kilométrages)" autocomplete="off">
+        <div class="grid grid-cols-2 gap-2">
+          <select id="rap-freq" class="field-input"><option value="hebdomadaire">Chaque semaine</option><option value="mensuel" selected>Chaque mois</option><option value="trimestriel">Chaque trimestre</option><option value="annuel">Chaque année</option></select>
+          <input id="rap-lien" class="field-input" placeholder="Page (opt. ex : vehicules.html)" autocomplete="off">
+        </div>
+        <input id="rap-note" class="field-input" placeholder="Note / consigne (optionnel)" autocomplete="off">
+        <button class="btn btn-dark text-sm w-full justify-center" id="rap-add"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/vendor/supabase.js?v=20260809h"></script>
+<script src="../assets/js/supabase-client.js?v=20260809h"></script>
+<script src="../assets/js/data.js?v=20260809h"></script>
+<script src="../assets/js/app.js?v=20260809h"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -214,7 +252,7 @@
 
   function echeanceInfo(t) {
     if (!t.echeance) return null;
-    const j = Math.ceil((new Date(t.echeance) - new Date(todayIso())) / 86400000);
+    const j = FP.joursRestants ? FP.joursRestants(t.echeance) : Math.ceil((new Date(t.echeance) - new Date(todayIso())) / 86400000); // source unique (minuit→minuit)
     if (j < 0) return { cls: 'ech-retard', txt: `En retard de ${-j} j`, retard: true };
     if (j === 0) return { cls: 'ech-retard', txt: "Aujourd'hui", retard: false };
     if (j <= 7) return { cls: 'ech-proche', txt: `Dans ${j} j`, retard: false };
@@ -327,6 +365,18 @@
   $('form-task').addEventListener('submit', saveTask);
   $('search').addEventListener('input', e => { state.search = e.target.value; render(); });
   document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.addEventListener('click', () => { state.filtre = c.dataset.value; render(); }));
+  // Les 3 bulles KPI (À faire / En retard / Terminées) sont cliquables → filtrent la liste.
+  [['kpi-todo', 'actives'], ['kpi-late', 'retard'], ['kpi-done', 'faites']].forEach(([id, f]) => {
+    const el = document.getElementById(id), card = el && el.closest('.kpi');
+    if (!card) return;
+    card.style.cursor = 'pointer'; card.title = 'Cliquer pour voir ces tâches';
+    card.addEventListener('click', () => {
+      state.filtre = f;
+      document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === f));
+      render();
+      try { ($('filters-statut') || card).scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+    });
+  });
   // Bouton « Réinitialiser » de la barre de filtres (retour au filtre par défaut « À faire »).
   if (FP.filterResetButton) FP.filterResetButton($('tache-filterbar'), { onReset: () => {
     state.filtre = 'actives'; state.search = '';
@@ -340,8 +390,103 @@
     const dl = e.target.closest('[data-del]'); if (dl) { delTask(dl.dataset.del); return; }
   });
 
+  // ============ 🔁 RAPPELS RÉCURRENTS (à cocher chaque période) ============
+  // Stockés dans les réglages (synchronisés Supabase) : settings.rappelsPerso (définitions),
+  // settings.rappelsFaits (état « fait » par période). Deux rappels par défaut sont proposés
+  // (relevé km, congés collaborateurs) — GLOBAUX à toutes les sociétés, modifiables/supprimables.
+  const MOISFR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  const FREQ_LBL = { hebdomadaire:'chaque semaine', mensuel:'chaque mois', trimestriel:'chaque trimestre', annuel:'chaque année' };
+  const RAPPELS_DEFAUT = [
+    { id:'km', titre:'Relevé des kilométrages', freq:'mensuel', note:'Mettre à jour le km de chaque véhicule (bouton « MAJ km en lot »).', lien:'vehicules.html', actif:true },
+    { id:'conges', titre:'Congés des collaborateurs', freq:'mensuel', note:'Saisir les congés du mois sur les fiches conducteurs → permet les vérifs de conso pendant congé (page Contrôle).', lien:'conducteurs.html', actif:true }
+  ];
+  function seedRappels(){ const s = FP.settings.get(); if (s.rappelsSeeded) return; if (!Array.isArray(s.rappelsPerso) || !s.rappelsPerso.length) s.rappelsPerso = RAPPELS_DEFAUT.map(r => ({ ...r })); s.rappelsSeeded = true; FP.settings.save(s); }
+  function getRappels(){ const s = FP.settings.get(); return Array.isArray(s.rappelsPerso) ? s.rappelsPerso : []; }
+  function saveRappels(arr){ const s = FP.settings.get(); s.rappelsPerso = arr; FP.settings.save(s); }
+  function getFaits(){ const s = FP.settings.get(); return (s.rappelsFaits && typeof s.rappelsFaits === 'object') ? s.rappelsFaits : {}; }
+  function periodKey(freq, d){ d = d || new Date(); const y = d.getFullYear(), m = d.getMonth();
+    if (freq === 'hebdomadaire'){ const dt = new Date(d); const day = (dt.getDay() + 6) % 7; dt.setDate(dt.getDate() - day); return 'S' + dt.toISOString().slice(0, 10); }
+    if (freq === 'trimestriel') return y + '-T' + (Math.floor(m / 3) + 1);
+    if (freq === 'annuel') return '' + y;
+    return y + '-' + String(m + 1).padStart(2, '0'); }
+  function periodLabel(freq, d){ d = d || new Date(); const y = d.getFullYear(), m = d.getMonth();
+    if (freq === 'hebdomadaire'){ const dt = new Date(d); const day = (dt.getDay() + 6) % 7; dt.setDate(dt.getDate() - day); return 'semaine du ' + FP.date(dt.toISOString().slice(0, 10)); }
+    if (freq === 'trimestriel') return 'T' + (Math.floor(m / 3) + 1) + ' ' + y;
+    if (freq === 'annuel') return '' + y;
+    return MOISFR[m] + ' ' + y; }
+  function rappelDone(id, pk){ const f = getFaits(); return !!(f[id] && f[id][pk]); }
+  function setRappelDone(id, pk, done){ const s = FP.settings.get(); const f = (s.rappelsFaits && typeof s.rappelsFaits === 'object') ? s.rappelsFaits : {}; f[id] = f[id] || {}; if (done) f[id][pk] = todayIso(); else delete f[id][pk]; s.rappelsFaits = f; FP.settings.save(s); }
+
+  function renderRappels(){
+    const box = $('rappels-list'); if (!box) return;
+    const list = getRappels().filter(r => r && r.actif !== false);
+    if (!list.length){ box.innerHTML = '<p class="text-sm text-slate-400">Aucun rappel actif. Clique « Configurer » pour en ajouter.</p>'; return; }
+    box.innerHTML = list.map(r => {
+      const pk = periodKey(r.freq), done = rappelDone(r.id, pk), lbl = periodLabel(r.freq);
+      return `<div class="task-card ${done ? 'done' : ''}" style="padding:.6rem .8rem">
+        <input type="checkbox" class="task-check" data-rap="${escapeHtml(r.id)}" data-pk="${escapeHtml(pk)}" ${done ? 'checked' : ''} title="Cocher quand c'est fait pour cette période">
+        <div class="flex-1 min-w-0">
+          <div class="task-title flex items-center gap-2 flex-wrap">${escapeHtml(r.titre)} <span class="pill-ech ech-ok">🔁 ${escapeHtml(FREQ_LBL[r.freq] || r.freq)} · ${escapeHtml(lbl)}</span></div>
+          ${r.note ? `<div class="text-sm text-slate-500 mt-1 whitespace-pre-line">${escapeHtml(r.note)}</div>` : ''}
+        </div>
+        ${r.lien ? `<a href="${escapeHtml(r.lien)}" class="ta-icon-btn" title="Ouvrir la page concernée"><i data-lucide="external-link" class="w-4 h-4"></i></a>` : ''}
+      </div>`;
+    }).join('');
+    lucide.createIcons();
+  }
+  function renderCfg(){
+    const arr = getRappels(), box = $('rap-cfg-list');
+    if (!arr.length){ box.innerHTML = '<p class="text-sm text-slate-400">Aucun rappel configuré.</p>'; return; }
+    box.innerHTML = arr.map((r, i) => `<div class="flex items-center gap-2 p-2 border rounded-lg" style="border-color:var(--fp-border)">
+      <label class="flex items-center gap-2 flex-1 min-w-0" style="cursor:pointer">
+        <input type="checkbox" class="task-check" data-rap-actif="${i}" ${r.actif !== false ? 'checked' : ''} title="Activer / désactiver">
+        <span class="min-w-0 truncate"><b>${escapeHtml(r.titre)}</b> <span class="text-xs text-slate-400">· ${escapeHtml(FREQ_LBL[r.freq] || r.freq)}${r.lien ? ' · ' + escapeHtml(r.lien) : ''}</span></span>
+      </label>
+      <button class="ta-icon-btn" data-rap-del="${i}" title="Supprimer"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+    </div>`).join('');
+    lucide.createIcons();
+  }
+  function openRappelsCfg(){ renderCfg(); $('modal-rappels').classList.add('open'); }
+  function closeRappelsCfg(){ $('modal-rappels').classList.remove('open'); }
+
+  seedRappels();
+  renderRappels();
+  $('btn-cfg-rappels').addEventListener('click', openRappelsCfg);
+  $('btn-cfg-rappels-2').addEventListener('click', openRappelsCfg);
+  $('rap-close').addEventListener('click', closeRappelsCfg);
+  $('modal-rappels').addEventListener('click', e => { if (e.target === $('modal-rappels')) closeRappelsCfg(); });
+  $('rappels-list').addEventListener('change', e => {
+    const c = e.target.closest('[data-rap]'); if (!c) return;
+    setRappelDone(c.getAttribute('data-rap'), c.getAttribute('data-pk'), c.checked);
+    renderRappels();
+    if (c.checked && FP.celebrate) FP.celebrate();
+  });
+  $('rap-cfg-list').addEventListener('change', e => {
+    const a = e.target.closest('[data-rap-actif]'); if (!a) return;
+    const arr = getRappels(); const i = +a.getAttribute('data-rap-actif'); if (arr[i]) { arr[i].actif = a.checked; saveRappels(arr); renderRappels(); }
+  });
+  $('rap-cfg-list').addEventListener('click', async e => {
+    const d = e.target.closest('[data-rap-del]'); if (!d) return;
+    if (!await FP.confirm('Supprimer ce rappel récurrent ?')) return;
+    const arr = getRappels(); arr.splice(+d.getAttribute('data-rap-del'), 1); saveRappels(arr); renderCfg(); renderRappels();
+  });
+  $('rap-add').addEventListener('click', () => {
+    const titre = $('rap-titre').value.trim(); if (!titre) { $('rap-titre').focus(); return; }
+    const arr = getRappels();
+    arr.push({ id: 'r' + Math.random().toString(36).slice(2, 9), titre, freq: $('rap-freq').value || 'mensuel', note: $('rap-note').value.trim(), lien: $('rap-lien').value.trim(), actif: true });
+    saveRappels(arr);
+    $('rap-titre').value = ''; $('rap-note').value = ''; $('rap-lien').value = ''; $('rap-freq').value = 'mensuel';
+    renderCfg(); renderRappels();
+    if (FP.toast) FP.toast('Rappel ajouté');
+  });
+  // Ouverture directe de la config depuis un lien externe (ex. Paramètres → taches.html?config=1).
+  if (new URLSearchParams(location.search).get('config') === '1') setTimeout(openRappelsCfg, 150);
+  // Ouverture directe du formulaire « Nouvelle tâche » (Dashboard → Raccourcis → taches.html?new=1,
+  // ou #add du bouton « + » flottant).
+  if (new URLSearchParams(location.search).get('new') === '1' || location.hash === '#add') setTimeout(openNew, 150);
+
   render();
-  document.addEventListener('fp:data-ready', render);
+  document.addEventListener('fp:data-ready', () => { render(); renderRappels(); });
 </script>
 </body>
 </html>

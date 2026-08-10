@@ -85,6 +85,24 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
     colonnes inversées). Lire `Badge n° <id> <Nom>` (prénom) et
     `Total Badge <id> <n> consommation(s) <ttc> € TTC <km> km` (trajets + TTC + km), puis relier
     par le n° de badge. Le `Total Contrat` (grand total) est ignoré. Table `ulys_conso`.
+- ⚠️⚠️ **NOUVEAU PRESTATAIRE (carte carburant / badge péage) — MÊME STANDARD DE LECTURE OBLIGATOIRE**
+  (consigne explicite, permanente) : le framework multi-prestataires (Contrôle → ➕ Prestataire ;
+  `FP.prestataires/addPrestataire/condNum` ; sous-onglet + colonne « Cartes & badges » + zone fiche
+  conducteur) est **générique**, mais la **lecture détaillée d'un relevé** est **propre à chaque
+  fournisseur** (Total et Ulys ont chacun leur parseur). Donc **dès qu'un nouveau prestataire (Shell,
+  DKV, AS24, Eurotoll… — y compris pour un NOUVEAU CLIENT/société) fournit de vrais relevés**, il faut
+  lui écrire son parseur **avec EXACTEMENT le même niveau de qualité** que Total/Ulys :
+  (1) **reconstruire les lignes par POSITION** si les colonnes se mélangent (cf. `ulysPdfToText`) ;
+  (2) **montant EXACT par transaction** (jamais un `Math.max`, jamais une somme parasite) + contrôle
+  HT/TVA/TTC ; (3) **libellé produit propre** — retirer les préfixes de **station/lieu** (cf. `TX_STATION`
+  dans `parseTx`) et catégoriser via **`FP.txCat`** (carburant/repas/lavage/parking/autre) ;
+  (4) **alerte diesel/gazole** (flotte essence) via `RE_DIESEL` ; (5) écrire le détail DATÉ dans
+  **`total_conso_tx`** (mêmes champs : `dateTx, montantTtc, categorie, produit, carte/badge, conducteur,
+  plaque`) pour que **la détection conso-pendant-congé ET les anomalies marchent AUTOMATIQUEMENT** ;
+  (6) rattacher au conducteur **par n° de carte/badge** (`FP.condKeyDeConso`), jamais par nom seul ;
+  (7) intégrer au bouton **« Reconstruire le détail »** et à l'**import par lot** (mêmes montants qu'un
+  scan unitaire). Bref : un nouveau prestataire ne doit JAMAIS être un simple « listing de factures » —
+  il doit alimenter tout le pipeline de contrôle comme Total/Ulys.
 
 ## Structure du projet
 
@@ -162,9 +180,12 @@ fleet-app/
 
 0-audit. ⚠️ **PROACTIVITÉ — SIGNALER LES MANQUES & RECALCULER** (consigne explicite de l'utilisateur, qui n'a pas ce réflexe) : à CHAQUE fois qu'on ajoute une idée/fonctionnalité, Claude DOIT **de lui-même** : (1) signaler les éléments complémentaires « qui vont avec » et qu'il faudrait ajouter en même temps (ex. ajouter une prime d'assurance → penser à l'intégrer au **total annuel des primes** ; ajouter un type de coût → l'intégrer au **TCO** et au **coût annuel de la flotte**) ; (2) **recalculer et dire quels totaux/indicateurs sont impactés** (coût annuel Contrats, TCO Statistiques, TVS, dashboard) et les mettre à jour ; (3) faire un mini-**audit** des trous du même genre ailleurs sur la plateforme. Ne jamais livrer une fonctionnalité « isolée » sans vérifier qu'elle est bien prise en compte partout où elle devrait compter.
 
+0-sync. ⚠️⚠️ **TOUTE MODIF / TOUT RÉGLAGE DOIT ÊTRE SYNCHRONISÉ SUR TOUS LES APPAREILS — JAMAIS localStorage SEUL** (consigne explicite, permanente) : dès qu'on stocke un réglage, un paramètre, un barème, un choix utilisateur, il DOIT persister **côté serveur (Supabase)** pour se retrouver sur **tous les appareils** de l'utilisateur connecté, pas seulement sur le navigateur courant. `localStorage` = **cache d'affichage rapide uniquement**, jamais la source. Modèle de référence : `FP.settings` (app_settings par société) et le **barème** (`assets/js/bareme.js` → app_settings id `bareme`, avec `pull()` au chargement + `push()` à l'enregistrement, événement `pp:bareme-ready` pour re-render). Réflexe par défaut sur TOUTE nouvelle donnée réglable : (1) écrire dans Supabase, (2) lire depuis Supabase au chargement, (3) garder localStorage seulement comme cache. Ne JAMAIS livrer un réglage « par navigateur ».
+
 0-source. ⚠️ **UNE SEULE SOURCE DE VÉRITÉ — NE JAMAIS RE-LIRE/RECALCULER UN CONCEPT AUTREMENT QUE LE HELPER CANONIQUE** (classe de bug récurrente) : un même concept (statut « vendu », montant dû d'une amende, forfait/dépassement leasing, normalisation de plaque, de prénom, filtre société, échéance CT/assurance) DOIT être lu/calculé **partout** via le **même helper `FP.*`** — jamais réimplémenté à la main dans une page. Bugs réels vécus : la checklist réclamait le **forfait leasing** via `base[v.immat]` (clé brute) alors que la fiche le trouvait via **`FP.leasingContrat`** (plaque MAJ + overrides) → faux « à compléter » ; un endroit testait `statut !== 'vendu'` (sensible à la casse) au lieu de **`FP.estVendu`** ; des podiums sommaient `a.montant` au lieu du **montant dû** (majoré). **RÈGLE** : avant d'afficher/tester une donnée, chercher s'il existe déjà un helper (`FP.estVendu`, `FP.leasingContrat/leasingInfo`, `FP.loueurOf` (nom du loueur d'un véhicule, multi-loueurs), `FP.normPrenom`, `FP.tvsDetail`, `FP.assuranceLabel`, `FP.montantDu`, `FP.estAPayer` (statut amende « à payer » tolérant accents/espaces/casse), `FP.coutMois`/`FP.dedupeFactures` (coût du mois = factures dédoublonnées par n° + filtre exploit), `FP.coutFactureExploit`, `FP.joursRestants` (décompte en jours calendaires, minuit à minuit)…) et l'utiliser ; si un écran AFFICHE une valeur, tout autre écran/checklist qui la TESTE doit lire la **même source**. Toute checklist « À compléter » (`notifications.html`) doit tester la donnée via la source qui l'affiche réellement.
 
-0bis. ⚠️ **Notifications / alertes** : dès qu'une alerte regroupe **plusieurs éléments**, proposer une **liste dépliable** (`<details>`) avec chaque élément cliquable vers sa fiche — jamais une simple redirection vers une page générique. (Champ `vehicules`/`items` sur l'alerte, rendu en `<details>` dans `notifications.html`.)
+0bis. ⚠️ **Notifications / alertes** : dès qu'une alerte regroupe **plusieurs éléments**, la fondre en **UNE seule alerte** avec une **liste dépliable** (chaque élément cliquable vers sa fiche) — jamais N cartes séparées, jamais une simple redirection vers une page générique. (Champ `vehicules`/`items` sur l'alerte ; rendu dans `notifications.html` : **3 lignes visibles + bouton « Voir tout (N) »** qui déroule le reste sur place — PAS de `<details>` natif, il rend moche.)
+   - ⚠️ **RÈGLE GÉNÉRALE « déplier/replier »** (consigne explicite) : **tout** contrôle qui déroule du contenu (« Voir tout », « Voir plus », « Détails »…) DOIT être un **vrai toggle** qui se **replie** aussi (« Voir moins »). Ne JAMAIS livrer un « Voir tout » à sens unique. Réflexe par défaut sur toute la plateforme.
 
 0bis-2. ⚠️ **Checklist « À compléter » — À MAINTENIR** (consigne explicite) : la page Alertes (`notifications.html`) a un onglet **« 📝 À compléter »** qui liste **TOUTES les infos manquantes** de la plateforme (véhicules, conducteurs, amendes, factures, configuration société), chaque ligne cliquable vers sa fiche. **RÈGLE** : chaque fois qu'on ajoute un **nouveau champ à remplir** ou une **nouvelle entité/fonctionnalité** avec des données à saisir, il FAUT l'ajouter à cette checklist (listes `VEH_FIELDS` / `COND_FIELDS` / `AMENDE_FIELDS` / bloc `cfg` de `renderComplet`, ou une nouvelle section). Le but : l'utilisateur voit toujours, à un seul endroit, tout ce qu'il lui reste à renseigner.
 
@@ -180,6 +201,7 @@ fleet-app/
   - ✅ **Navigation fluide** (façon SPA, sans réécriture) : `@view-transition { navigation: auto; }` dans `styles.css` (+ `view-transition-name: fp-sidebar` pour garder la sidebar fixe) et **Speculation Rules** (prefetch des liens sidebar au survol) injectées par `app.js`. Le re-rendu sur `fp:data-ready` n'a lieu QUE si les données ont changé (signature légère dans `supabase-client.js`).
   - Si on change `data.js`/`app.js`, prévenir l'utilisateur qu'**un seul Ctrl+Maj+R** suffit puis navigation normale (sinon le re-téléchargement à chaque hard-refresh paraît lent).
   - ⚠️ **CACHE-BUSTING OBLIGATOIRE** : les pages chargent `app.js` / `supabase-client.js` / `data.js` avec un suffixe de version `?v=AAAAMMJJx` (ex. `?v=20260610a`). GitHub Pages met le JS en cache ~10 min → sans ce suffixe, après un déploiement le navigateur garde l'**ancien** JS, et surtout en **navigant d'un onglet à l'autre** chaque page recharge le JS périmé (un hard-refresh sur UNE page ne suffit pas). **À CHAQUE modif de `app.js`/`supabase-client.js`/`data.js`, BUMPER le `?v=` partout** (sed sur tous les `.html`). C'était la vraie cause du « flash qui revient malgré le fix ».
+  - ⚠️ **jsPDF PARESSEUX — NE PAS remettre en `<script defer>` sur chaque page** (cause de lenteur à la navigation, corrigé 2026-08-04) : jsPDF + autotable pèsent **~400 Ko** et ne servent QU'au clic sur un bouton « Télécharger PDF ». En `defer`, ils **bloquaient le `DOMContentLoaded`** (donc l'init de la page) à chaque ouverture d'onglet. Désormais chargés **à la demande** : les pages qui exportent posent un marqueur inline `<script>window.FP_PDF=1;</script>` (à la place des anciennes balises jspdf, **AVANT** `app.js`), et **`FP.ensureJsPDF()`** (app.js) les injecte en async (préchargement discret sur `requestIdleCallback` + injection immédiate au 1er clic). Tout point d'export fait `if(!(window.jspdf&&window.jspdf.jsPDF)){ FP.ensureJsPDF().then(<la même fonction>); return; }` (les helpers centraux `FP.fiche`/`openPreview` le font déjà). **Exception : `kit-commercial.html` n'inclut PAS `app.js`** → il garde sa balise `<script src=".../jspdf.umd.min.js">` statique (repli `window.print()`). **Tout NOUVEL export PDF DOIT passer par ce schéma**, jamais rajouter une balise jspdf bloquante.
 
 0quater. ⚠️ **RECHERCHE AU CLAVIER — RÈGLE** (consigne explicite) : **tout** choix de véhicule /
    conducteur / plaque / nom doit être **filtrable en tapant** (jamais un `<select>` déroulant nu
@@ -204,6 +226,16 @@ fleet-app/
    reset générique (vide les champs, selects → `all`, puces « Tous », émet les événements ; compatible
    `FP.searchSelect` qui resync sur `change`). Déjà branché : Sinistres, Factures, Amendes, Entretiens,
    Véhicules, Emprunts. ⚠️ **Toute NOUVELLE barre de filtres DOIT avoir son bouton via `FP.filterResetButton`.**
+
+0sexies. ⚠️ **FILTRE DE PÉRIODE PARTOUT — RÈGLE** (consigne explicite) : dès qu'un écran affiche des
+   **données datées** (conso, coûts, factures, bilans) OU propose un **export / rapport / relevé PDF**,
+   il DOIT toujours offrir **DEUX moyens de choisir la période** : (1) un **filtre rapide par MOIS**
+   (menu déroulant, pour aller vite) **ET** (2) un **intervalle de DATES « Du → Au »** (choix précis).
+   Et surtout : **l'export / le rapport / le PDF exporte la PÉRIODE CHOISIE**, pas tout l'historique —
+   la vue à l'écran et l'export lisent la **même source de période** (un seul helper `…Period()/…Src()`
+   qui renvoie `{ src, label }`, réutilisé par le tableau, l'analyse ET les boutons d'export). Le titre du
+   PDF/CSV rappelle la période. Déjà branché : Total Fleet & Ulys (mois + dates, exports suivent la période).
+   ⚠️ **Tout NOUVEau tableau daté / export / bilan DOIT suivre ce schéma** (jamais un export « tout » figé).
 
 1. **Tailwind précompilé** — pour éviter le délai du CDN à chaque page, Tailwind est compilé en local dans `assets/css/tailwind.css` (les pages le chargent via `<link>`, plus de `cdn.tailwindcss.com`). ⚠️ Après toute modif de classes Tailwind dans le HTML/JS, REBUILD : `npx tailwindcss@3.4.17 -c tailwind.config.js -i assets/css/_tw-input.css -o assets/css/tailwind.css --minify` (sinon les nouvelles classes ne seront pas stylées). ⚠️ **`brochure.html` et `prix.html` utilisent désormais le Tailwind LOCAL** (ajoutés à `content` dans `tailwind.config.js`) → à inclure dans le REBUILD. Seule `logos.html` reste sur le CDN. Ces deux pages sont en **thème sombre « 21st »** via une classe `.sheet-dark` (styles inline, autonomes) ; dans `prix.html` l'**aide-mémoire interne** (`#sheet-interne`) reste volontairement CLAIR et `display:none` (jamais montré au client). Les PDF client sont dans `presentation/` (`Parc-Pilot-Brochure.pdf`, `Parc-Pilot-Tarifs.pdf`) et les boutons **« Télécharger en PDF »** de `brochure.html`/`prix.html` pointent dessus (`<a download>` = beau design en 1 clic). ⚠️ **À REGÉNÉRER quand le contenu de brochure/prix change** (sinon le PDF téléchargé est périmé), via Chromium headless : `"/opt/pw-browsers/chromium-1194/chrome-linux/chrome" --headless=new --no-sandbox --virtual-time-budget=12000 --no-pdf-header-footer --print-to-pdf-no-header --print-to-pdf="presentation/Parc-Pilot-Brochure.pdf" "file://$PWD/brochure.html"` (idem prix.html → Parc-Pilot-Tarifs.pdf). Le mode impression masque les boutons flottants et l'aide-mémoire interne.
 2. **Auth guard** synchrone dans le `<head>` de chaque page protégée (11 pages)
@@ -251,6 +283,13 @@ git push              # Netlify redéploie automatiquement
 ## Pour Claude (nouvelle session)
 
 Si tu reprends ce projet :
+- ⚠️ **UTILISER LES SKILLS SYSTÉMATIQUEMENT** (consigne explicite de l'utilisateur) : dès qu'un
+  skill correspond à la demande, l'invoquer **de toi-même**, sans attendre qu'il le nomme. Réflexe par
+  défaut : **design/UX** (`frontend-design`, `ui-ux-pro-max`), **déploiement** (`deploy`, `rebuild`),
+  **projet** (`parc-pilot-dev`), **graphiques** (`dataviz`), **revue/sécu** (`requesting-code-review`,
+  `security-review`) et tout autre skill pertinent. Les skills de **guidage** (qui chargent juste des
+  instructions) coûtent quasi rien → toujours les prendre. Les skills qui **lancent des agents**
+  (revues, audits) coûtent des crédits réels → les lancer quand c'est utile et le signaler si c'est gros.
 - L'utilisateur parle **français**, garde un ton direct et simple (il n'est pas dev)
 - Il bosse sous **Windows / PowerShell 5.1** (pas Python, pas Node installés)
 - Préfère les solutions **sans terminal** quand possible (UI Supabase, UI Netlify, UI GitHub)
