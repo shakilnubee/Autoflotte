@@ -427,11 +427,16 @@
   async function loadData(){
     const soc = FP.activeSociete ? FP.activeSociete() : null;
     const flt = rows => (soc && soc !== '__all__') ? (rows || []).filter(x => !x.societe || x.societe === soc) : (rows || []);
-    // Les deux lectures EN PARALLÈLE (au lieu de l'une après l'autre) → moitié moins d'attente réseau.
-    const [rt, ru] = await Promise.all([
-      FP.supabase.from('total_conso_tx').select('*').then(r => r, () => ({ data: [] })),
+    // ⚡ On ne charge que les ~24 DERNIERS MOIS de transactions (largement assez pour le contrôle
+    // des congés / anomalies) → divise fortement le volume à télécharger ET à analyser. Repli
+    // AUTOMATIQUE sur tout l'historique si la requête filtrée échoue (colonne absente…) → jamais de
+    // trouvailles vides par erreur. Lectures EN PARALLÈLE (total_conso_tx + ulys_conso).
+    const _d = new Date(); _d.setMonth(_d.getMonth() - 24); const cutoff = _d.toISOString().slice(0, 10);
+    let [rt, ru] = await Promise.all([
+      FP.supabase.from('total_conso_tx').select('*').gte('date_tx', cutoff).then(r => r, () => null),
       FP.supabase.from('ulys_conso').select('*').then(r => r, () => ({ data: [] }))
     ]);
+    if (!rt || rt.error) { rt = await FP.supabase.from('total_conso_tx').select('*').then(r => r, () => ({ data: [] })); }
     _tx = flt(rt && rt.data); _ulys = flt(ru && ru.data);
     _loaded = true;
     _writeCtrlCache();
