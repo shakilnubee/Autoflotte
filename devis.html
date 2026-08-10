@@ -269,14 +269,18 @@ function render(){
     lignes.push({ des:'Gestion de flotte déléguée — logiciel Parc Pilot inclus',
       det:nb+' véhicules · tarif établi après analyse de la flotte', qte:'—', pu:null, total:0, surDevis:true });
   } else {
+    // Ligne présentée PAR VÉHICULE (choix utilisateur) : QTÉ = nb de véhicules, P.U. = coût ANNUEL
+    // par véhicule → QTÉ × P.U. = Total. Le détail rappelle le tarif mensuel par véhicule.
+    var totalAn = loyerMensuel * 12;
+    var puAnVeh = totalAn / nb;
     lignes.push({
       des:'Gestion de flotte déléguée — logiciel Parc Pilot inclus',
       det:(pv==null
-            ? 'Forfait minimum ('+nb+' véhicule'+(nb>1?'s':'')+', jusqu\'à 9)'
+            ? 'Forfait minimum ('+nb+' véhicule'+(nb>1?'s':'')+', jusqu\'à 9) · '+euro0(loyerMensuel)+' / mois'
             : nb+' véhicules × '+euro0(pv)+' / véhicule / mois')
           + (socn>1?' · multi-sociétés ('+socn+')':'')
-          + ' · engagement annuel',
-      qte:qte, pu:loyerMensuel, total:loyerMensuel*qte
+          + ' · engagement 12 mois',
+      qte:nb, pu:puAnVeh, puUnit:'/an', total:totalAn
     });
   }
 
@@ -301,7 +305,7 @@ function render(){
 
   // -- Rendu des lignes --
   var html = lignes.map(function(l){
-    var pu = (l.pu==null) ? '—' : (l.offert ? '<span class="strike">'+euro(l.pu)+'</span>' : euro(l.pu));
+    var pu = (l.pu==null) ? '—' : (l.offert ? '<span class="strike">'+euro(l.pu)+'</span>' : euro(l.pu)+(l.puUnit||''));
     var tot = l.surDevis ? '<span class="tag-ok">Sur devis</span>' : (l.offert ? '<span class="tag-ok">Offert</span>' : euro(l.total));
     return '<tr><td><b>'+esc(l.des)+'</b>'+(l.det?'<div class="d">'+l.det+'</div>':'')+'</td><td class="r">'+l.qte+'</td><td class="r">'+pu+'</td><td class="r">'+tot+'</td></tr>';
   }).join('');
