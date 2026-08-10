@@ -420,7 +420,14 @@
   // total_conso_tx à chaque ouverture de Contrôle). Rafraîchi en arrière-plan à chaque chargement.
   const _ctrlCK = () => { try { return 'fp_ctrl_conso_' + ((FP.activeSociete && FP.activeSociete()) || 'PXP'); } catch (e) { return 'fp_ctrl_conso_PXP'; } };
   function _seedCtrlCache(){ try { const c = JSON.parse(localStorage.getItem(_ctrlCK()) || 'null'); if (c && Array.isArray(c.tx)) { _tx = c.tx; _ulys = Array.isArray(c.ulys) ? c.ulys : []; return true; } } catch (e) {} return false; }
-  function _writeCtrlCache(){ try { localStorage.setItem(_ctrlCK(), JSON.stringify({ tx: _tx, ulys: _ulys })); } catch (e) { /* quota : tant pis, pas de cache */ } }
+  function _writeCtrlCache(){ try {
+    // On ne cache QUE les champs utilisés par buildFindings/consoPendantConge/consoApresDepart →
+    // cache léger qui tient dans le quota localStorage (sinon écriture qui échoue = pas d'affichage
+    // instantané). La lecture live (rows complètes) reste la source ; le cache = 1er rendu rapide.
+    const KEEP = ['id','conducteur','carte','plaque','date_tx','mois','categorie','montant_ttc','produit','facnum','societe'];
+    const slim = a => (a || []).map(r => { const o = {}; for (const k of KEEP) if (r[k] != null) o[k] = r[k]; return o; });
+    localStorage.setItem(_ctrlCK(), JSON.stringify({ tx: slim(_tx), ulys: _ulys }));
+  } catch (e) { /* quota : tant pis, pas de cache */ } }
   async function loadConducteurs(){
     try { const r = await FP.supabase.from('conducteurs').select('*'); if (r && r.data) { const soc = FP.activeSociete ? FP.activeSociete() : null; window.FP_DATA.conducteurs = (soc && soc !== '__all__') ? r.data.filter(c => !c.societe || c.societe === soc) : r.data; } } catch (e) {}
   }
@@ -884,19 +891,25 @@
     sel.innerHTML = '<option value="all">Tous les mois</option>' + [...set].sort().reverse().map(m => { const [y,mo]=m.split('-'); const N=['','janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.']; return `<option value="${m}">${N[+mo]||mo} ${y}</option>`; }).join('');
     if (cur) sel.value = cur;
   }
-  async function boot(){
-    // 1) Affichage INSTANTANÉ depuis le cache local (si Contrôle a déjà été ouvert) — pas d'attente réseau.
-    if (_seedCtrlCache()) { try { _findings = buildFindings(); fillConducteurs(); fillMois(); render(); } catch (e) {} }
-    // 2) Données fraîches. Les conducteurs sont DÉJÀ chargés par le chargement global de l'app
-    //    (window.FP_DATA.conducteurs) → on évite une 2e requête bloquante ; on ne (re)charge que si absents.
-    const jobs = [loadData()];
-    const condsOK = !!(window.FP_DATA && Array.isArray(window.FP_DATA.conducteurs) && window.FP_DATA.conducteurs.length);
-    if (!condsOK) jobs.push(loadConducteurs());
-    await Promise.all(jobs);
-    _findings = buildFindings();
-    fillConducteurs();
-    fillMois();
-    render();
+  function boot(){
+    // ⚡ On laisse la COQUILLE (onglets + KPIs) PEINDRE d'abord, PUIS on calcule/charge. Sinon
+    // buildFindings() (sur le cache) tourne en SYNCHRONE avant le 1er rendu et, avec les transitions
+    // de vue, la page semble « bloquée un instant après le clic ». En différant, Contrôle apparaît
+    // tout de suite et les trouvailles se remplissent juste après.
+    const run = async () => {
+      // 1) Affichage depuis le cache local (si déjà ouvert) — pas d'attente réseau.
+      if (_seedCtrlCache()) { try { _findings = buildFindings(); fillConducteurs(); fillMois(); render(); } catch (e) {} }
+      // 2) Données fraîches. Conducteurs déjà chargés par l'app → on évite une requête bloquante.
+      const jobs = [loadData()];
+      const condsOK = !!(window.FP_DATA && Array.isArray(window.FP_DATA.conducteurs) && window.FP_DATA.conducteurs.length);
+      if (!condsOK) jobs.push(loadConducteurs());
+      await Promise.all(jobs);
+      _findings = buildFindings();
+      fillConducteurs();
+      fillMois();
+      render();
+    };
+    if (window.requestAnimationFrame) requestAnimationFrame(() => setTimeout(run, 0)); else setTimeout(run, 0);
   }
   boot();
   // Recalcule quand les données live arrivent (settings/congés/immat…). On reconstruit aussi les
