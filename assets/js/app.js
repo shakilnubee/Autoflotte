@@ -2288,6 +2288,7 @@ FP.DEFAULT_NAV_LABELS = {
   'amendes.html':      'Amendes',
   'sinistres.html':    'Sinistres',
   'factures.html':     'Factures',
+  'controle.html':     'Contrôle',
   'contrats.html':     'Contrats',
   'budget.html':       'Budget',
   'guide.html':        'Guide',
