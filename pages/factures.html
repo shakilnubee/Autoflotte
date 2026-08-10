@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260810b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260810c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260810b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260810c">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -754,11 +754,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260810b"></script>
-<script src="../assets/js/supabase-client.js?v=20260810b"></script>
-<script src="../assets/js/data.js?v=20260810b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260810c"></script>
+<script src="../assets/js/supabase-client.js?v=20260810c"></script>
+<script src="../assets/js/data.js?v=20260810c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260810b"></script>
+<script src="../assets/js/app.js?v=20260810c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2214,8 +2214,8 @@
         entries.sort((a, b) => ((a.vid === '__noplate__') - (b.vid === '__noplate__')) || (a.immat || '').localeCompare(b.immat || ''));
         if (!entries.length) { box.innerHTML = '<div class="card">' + (FP.emptyHTML ? FP.emptyHTML({ icon: 'folder-open', title: 'Aucun document', text: 'Utilise « Importer un document » ou « Importer une facture » pour commencer.' }) : 'Aucun document.') + '</div>'; try { if (window.lucide) lucide.createIcons(); } catch (e) {} return; }
         box.innerHTML = `<div style="${GRID}">` + entries.map(e => {
-          const soon = e.o.docs.some(d => { const dd = getExp(d.id); return dd && (new Date(dd) - new Date()) / 86400000 < 30 && new Date(dd) >= new Date(); });
-          const expired = e.o.docs.some(d => { const dd = getExp(d.id); return dd && new Date(dd) < new Date(); });
+          const soon = e.o.docs.some(d => { const dd = getExp(d.id); if (!dd) return false; const j = FP.joursRestants(dd); return j != null && j >= 0 && j <= 30; });
+          const expired = e.o.docs.some(d => { const dd = getExp(d.id); if (!dd) return false; const j = FP.joursRestants(dd); return j != null && j < 0; });
           const dot = expired ? '#DC2626' : (soon ? '#F59E0B' : '');
           return `<button type="button" data-folder="${escapeHtml(e.vid)}" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:16px 10px;border:1px solid var(--fp-border);border-radius:12px;background:#fff;cursor:pointer">
             ${dot ? `<span style="position:absolute;top:8px;right:8px;width:9px;height:9px;border-radius:50%;background:${dot}"></span>` : ''}
@@ -2608,7 +2608,7 @@
 
       // Index des véhicules par plaque (normalisée) → pour retrouver le conducteur
       // quand la ligne de conso n'a qu'une plaque (ex. « GP-333-QJ ») au lieu d'un prénom.
-      const normPlaque = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const normPlaque = (s) => FP.normImmat(s); // source unique : helper canonique
       const vehByPlaque = {};
       (window.FP_DATA.vehicules || []).forEach(v => { if (v.immat) vehByPlaque[normPlaque(v.immat)] = v; });
       const resolveName = (c) => {
