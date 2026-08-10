@@ -312,8 +312,12 @@
     names.forEach(k => { const pane = $('pane-' + k); if (pane) pane.classList.toggle('hidden', k !== name); });
     names.forEach(k => { const b = $('tab-' + k); if (b) { b.classList.toggle('active', k === name); b.setAttribute('aria-selected', k === name ? 'true' : 'false'); } });
     // Chargement paresseux des vues intégrées Total Fleet / Ulys (1re ouverture seulement).
-    if (name === 'total') { const f = $('if-total'); if (f && !f.src) f.src = 'factures.html?embed&tab=total'; }
-    if (name === 'ulys')  { const f = $('if-ulys');  if (f && !f.src) f.src = 'factures.html?embed&tab=ulys'; }
+    // ⚠️ Ces iframes chargent une 2e instance de l'app (factures.html?embed) = LOURD. On DIFFÈRE le
+    // chargement (requestIdleCallback) pour que la page Contrôle reste fluide « dès le clic », même si
+    // le dernier onglet mémorisé était Total/Ulys — l'iframe se remplit juste après, sans bloquer.
+    const _lazyFrame = (id, url) => { const f = $(id); if (!f || f.src) return; const go = () => { if (!f.src) f.src = url; }; (window.requestIdleCallback ? requestIdleCallback(go, { timeout: 1200 }) : setTimeout(go, 250)); };
+    if (name === 'total') _lazyFrame('if-total', 'factures.html?embed&tab=total');
+    if (name === 'ulys')  _lazyFrame('if-ulys',  'factures.html?embed&tab=ulys');
     if (name === 'cartes') renderCartes();
     if (/^p_/.test(name)) renderPresta(name);
     if (window.lucide) lucide.createIcons();
@@ -878,8 +882,12 @@
   async function boot(){
     // 1) Affichage INSTANTANÉ depuis le cache local (si Contrôle a déjà été ouvert) — pas d'attente réseau.
     if (_seedCtrlCache()) { try { _findings = buildFindings(); fillConducteurs(); fillMois(); render(); } catch (e) {} }
-    // 2) Données fraîches EN PARALLÈLE (conducteurs + conso) → on reconstruit et on ré-affiche.
-    await Promise.all([loadConducteurs(), loadData()]);
+    // 2) Données fraîches. Les conducteurs sont DÉJÀ chargés par le chargement global de l'app
+    //    (window.FP_DATA.conducteurs) → on évite une 2e requête bloquante ; on ne (re)charge que si absents.
+    const jobs = [loadData()];
+    const condsOK = !!(window.FP_DATA && Array.isArray(window.FP_DATA.conducteurs) && window.FP_DATA.conducteurs.length);
+    if (!condsOK) jobs.push(loadConducteurs());
+    await Promise.all(jobs);
     _findings = buildFindings();
     fillConducteurs();
     fillMois();
