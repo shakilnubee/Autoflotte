@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260810b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260810c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260810b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260810c">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -473,11 +473,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260810b"></script>
-<script src="../assets/js/supabase-client.js?v=20260810b"></script>
-<script src="../assets/js/data.js?v=20260810b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260810c"></script>
+<script src="../assets/js/supabase-client.js?v=20260810c"></script>
+<script src="../assets/js/data.js?v=20260810c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260810b"></script>
+<script src="../assets/js/app.js?v=20260810c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -667,9 +667,12 @@
   }
 
   function statutBadge(s) {
-    if (s === 'payée')     return '<span class="badge badge-ok">Payée</span>';
-    if (s === 'désignée')  return '<span class="badge" style="background:#E0E7FF;color:#3730A3">Désignée</span>';
-    if (s === 'contestée') return '<span class="badge badge-info">Contestée</span>';
+    // Source unique : mêmes helpers tolérants (accents/casse/espaces) que le reste de l'app,
+    // sinon un statut « payee »/« paye » retombait à tort sur « À payer ».
+    const n = (s == null ? '' : String(s)).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if ((FP.estPayee && FP.estPayee({ statut: s })) || n === 'payee' || n === 'paye') return '<span class="badge badge-ok">Payée</span>';
+    if (n === 'designee')  return '<span class="badge" style="background:#E0E7FF;color:#3730A3">Désignée</span>';
+    if (n === 'contestee') return '<span class="badge badge-info">Contestée</span>';
     return '<span class="badge badge-danger">À payer</span>';
   }
 
@@ -1333,7 +1336,7 @@
   // payer avant pour le tarif réduit ; dateLimiteForfaitaire = au-delà, majoré). À défaut, on ESTIME
   // depuis la date de l'amende (FPS ~3 mois ; forfaitaire ~45 j). Affiché seulement si "à payer".
   function majorationInfo(a) {
-    if (!a || a.statut !== 'à payer' || !a.date) return null;
+    if (!a || !(FP.estAPayer ? FP.estAPayer(a) : a.statut === 'à payer') || !a.date) return null;
     const bd = (FP.getAmendeMontants && FP.getAmendeMontants(a.id)) || {};
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const jrs = (d) => (FP.joursRestants ? FP.joursRestants(d) : Math.ceil((new Date(d) - today) / 86400000)); // source unique (minuit→minuit)

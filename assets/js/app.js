@@ -40,6 +40,24 @@ window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStora
   } catch (e) { /* cache illisible : on garde data.js */ }
 })();
 
+// Rafraîchit le cache local (fp_data_cache_v3_<societe>) à partir de l'état EN MÉMOIRE (window.FP_DATA).
+// ⚠️ SOURCE UNIQUE : jusqu'ici le cache n'était réécrit qu'au chargement complet (loadAll). Une édition
+// unitaire (fiche véhicule OU « À compléter » en rafale) mettait à jour mémoire + Supabase mais PAS ce
+// cache → en changeant de page, le 1er rendu partait d'un instantané périmé et l'info paraissait « pas à
+// jour dans l'autre écran » (jusqu'au fp:data-ready). On rappelle ce helper après chaque écriture unitaire
+// pour que les DEUX écrans (Suivi ⇄ fiche) lisent la même donnée fraîche tout de suite.
+window.FP = window.FP || {};
+FP.refreshDataCache = function () {
+  try {
+    const CK = window.FP_CACHE_KEY; const d = window.FP_DATA;
+    if (!CK || !d) return;
+    try { localStorage.setItem(CK, JSON.stringify({ vehicules: d.vehicules, amendes: d.amendes, factures: d.factures, conducteurs: d.conducteurs })); }
+    catch (e) { // quota dépassé : on garde au moins véhicules + amendes + conducteurs (sans factures)
+      try { localStorage.setItem(CK, JSON.stringify({ vehicules: d.vehicules, amendes: d.amendes, conducteurs: d.conducteurs })); } catch (e2) {}
+    }
+  } catch (e) {}
+};
+
 // === Densité d'affichage (compact / confortable) — réglée dans Paramètres, appliquée à TOUTES les pages ===
 (function applyDensity(){ try { if ((localStorage.getItem('fp_density') || '') === 'compact') document.documentElement.classList.add('fp-compact'); } catch (e) {} })();
 
@@ -4742,16 +4760,19 @@ FP.persist = {
   // Chaque écriture : on tente la base ; si ça échoue, on garde en file locale
   // (filet de sécurité) et on renverra automatiquement plus tard.
   async insert(table, row) {
+    if (FP.refreshDataCache) FP.refreshDataCache(); // cache frais tout de suite (source unique inter-pages)
     if (!this.available()) { this._enqueue({ op: 'insert', table, row }); return; }
     try { const r = await FP.db.insert(table, row); if (r && r.error) throw r.error; this.flush(); }
     catch (e) { this._err(e); this._enqueue({ op: 'insert', table, row }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
   },
   async upsert(table, row) {
+    if (FP.refreshDataCache) FP.refreshDataCache();
     if (!this.available()) { this._enqueue({ op: 'upsert', table, row }); return; }
     try { const r = await FP.db.upsert(table, row); if (r && r.error) throw r.error; this.flush(); }
     catch (e) { this._err(e); this._enqueue({ op: 'upsert', table, row }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
   },
   async update(table, id, fields) {
+    if (FP.refreshDataCache) FP.refreshDataCache();
     if (!this.available()) { this._enqueue({ op: 'update', table, id, fields }); return; }
     try { const r = await FP.db.update(table, id, fields); if (r && r.error) throw r.error; this.flush(); }
     catch (e) { this._err(e); this._enqueue({ op: 'update', table, id, fields }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
@@ -4760,6 +4781,7 @@ FP.persist = {
   // pour pouvoir le RESTAURER depuis Paramètres. Rétro-compatible : sans record, aucune capture.
   async delete(table, id, record) {
     try { if (record && FP.trash) FP.trash.add(table, record); } catch (e) {}
+    if (FP.refreshDataCache) FP.refreshDataCache();
     if (!this.available()) { this._enqueue({ op: 'delete', table, id }); return; }
     try { const r = await FP.db.delete(table, id); if (r && r.error) throw r.error; this.flush(); }
     catch (e) { this._err(e); this._enqueue({ op: 'delete', table, id }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
