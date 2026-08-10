@@ -1146,6 +1146,87 @@ FP.conducteurNomUnifie = (name, key) => {
   } catch (e) {}
   return name || key || '';
 };
+
+// ===== RAPPROCHEMENT CONDUCTEURS À L'IMPORT (relevés carburant / péage) =====
+// Écrit un n° de carte/badge sur la fiche conducteur — MÊME source que « Cartes & badges »
+// (settings.condCarteTotal / condBadgeUlys par société) → la conso se rattache ensuite AUTO
+// (par n°), passée ET future. numKey ∈ 'condCarteTotal' | 'condBadgeUlys' (ou clé d'un prestataire).
+FP.setCondNum = function (condKey, numKey, val) {
+  try {
+    if (!condKey || !numKey) return false;
+    const s = FP.settings.get(); s[numKey] = s[numKey] || {};
+    const v = String(val == null ? '' : val).trim();
+    if (v) s[numKey][condKey] = v; else delete s[numKey][condKey];
+    FP.settings.save(s);
+    return true;
+  } catch (e) { return false; }
+};
+// items : [{ name, num, numKey }] (name = nom brut lu sur le relevé ; num = n° carte/badge ; numKey).
+// Renvoie les entrées qui NE correspondent à AUCUNE fiche conducteur (dédupliquées) — donc « à relier ».
+FP.consoNonRattaches = function (items) {
+  const out = [], seen = new Set();
+  (items || []).forEach(it => {
+    if (!it) return;
+    const name = String(it.name || '').trim();
+    let num = String(it.num || '').trim();
+    const numKey = it.numKey || null;
+    if (numKey === 'condBadgeUlys') num = num.replace(/^ULYS[-_\s]*/i, '');
+    if (!name && !num) return;
+    // Déjà rattaché ? (par n° d'abord — le plus fiable — puis par nom, comme FP.condKeyDeConso)
+    let key = null;
+    try {
+      if (num && numKey === 'condBadgeUlys' && FP.conducteurParBadgeUlys) { const c = FP.conducteurParBadgeUlys(num); if (c && c.key) key = c.key; }
+      else if (num && numKey === 'condCarteTotal' && FP.conducteurParCarteTotal) { const c = FP.conducteurParCarteTotal(num); if (c && c.key) key = c.key; }
+    } catch (e) {}
+    if (!key && name) { try { const c = FP.conducteurs.find(name); if (c && c.key) key = c.key; } catch (e) {} }
+    if (key) return; // déjà relié → rien à faire
+    const sig = (numKey || '') + '|' + (num || ('nom:' + FP.norm(name)));
+    if (seen.has(sig)) return; seen.add(sig);
+    out.push({ name, num, numKey });
+  });
+  return out;
+};
+// Panneau « conducteurs à relier » : pour chaque entrée non rattachée, choisir un conducteur
+// existant (recherche au clavier) OU en créer un. Le lien est PERSISTANT (n° écrit sur la fiche).
+// mount = élément DOM ; items = liste brute ; onDone(nbRestant) appelé quand la liste se vide.
+FP.rapprochementPanel = function (mount, items, onDone) {
+  if (!mount) return 0;
+  const esc = FP.esc || (s => String(s == null ? '' : s));
+  const unmatched = FP.consoNonRattaches(items);
+  if (!unmatched.length) { mount.innerHTML = ''; if (onDone) onDone(0); return 0; }
+  const numTxt = it => it.num ? ('n° ' + esc(it.num)) : 'sans n°';
+  mount.innerHTML = '<div class="rap-box" style="border:1px solid #F59E0B;background:#FFFBEB;border-radius:.75rem;padding:14px;margin:12px 0">'
+    + '<div class="rap-head" style="font-weight:800;color:#92400E;margin-bottom:.2rem">⚠️ ' + unmatched.length + ' conducteur(s) du relevé ne correspondent à personne</div>'
+    + '<div class="rap-sub" style="font-size:.85rem;color:#92400E;margin-bottom:.7rem">Relie chacun à un conducteur existant, ou crée sa fiche. La conso passée <b>et</b> future se rattachera alors automatiquement (par n°). Rien n\'est créé sans ton accord.</div>'
+    + '<div class="rap-list" style="display:flex;flex-direction:column;gap:.5rem"></div></div>';
+  const list = mount.querySelector('.rap-list');
+  unmatched.forEach(it => {
+    const row = document.createElement('div');
+    row.className = 'rap-row';
+    row.style.cssText = 'display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;background:#fff;border:1px solid var(--fp-border);border-radius:.6rem;padding:.5rem .65rem';
+    const opts = FP.conducteurs.list().map(c => '<option value="' + esc(c.key) + '">' + esc(FP.conducteurs.displayName(c)) + '</option>').join('');
+    row.innerHTML = '<div style="flex:1;min-width:150px"><b>' + esc(it.name || '(sans nom)') + '</b> <span style="font-size:.78rem;color:var(--fp-muted)">· ' + numTxt(it) + '</span></div>'
+      + '<select class="rap-sel field-input" style="width:230px"><option value="">— Lier à un conducteur… —</option>' + opts + '</select>'
+      + '<button type="button" class="btn btn-outline text-sm rap-new">➕ Créer la fiche</button>';
+    list.appendChild(row);
+    const sel = row.querySelector('.rap-sel');
+    try { if (FP.searchSelect) FP.searchSelect(sel, { placeholder: 'Chercher un conducteur…' }); } catch (e) {}
+    const finalize = (condKey) => {
+      if (!condKey) return;
+      if (it.num && it.numKey) FP.setCondNum(condKey, it.numKey, it.num);
+      if (FP.refreshDataCache) FP.refreshDataCache();
+      row.remove();
+      if (FP.toast) FP.toast('✓ Conducteur rattaché');
+      if (!list.children.length) { mount.innerHTML = ''; if (onDone) onDone(0); }
+    };
+    sel.addEventListener('change', () => { if (sel.value) finalize(sel.value); });
+    row.querySelector('.rap-new').addEventListener('click', () => {
+      Promise.resolve(FP.newConducteurModal(it.name)).then(c => { if (c && c.key) finalize(c.key); });
+    });
+  });
+  return unmatched.length;
+};
+
 // Détecte les consos survenues PENDANT un congé (interdit). `txList` = transactions DATÉES
 // { conducteur (nom), carte, plaque, dateTx:'AAAA-MM-JJ', categorie, montantTtc, produit }. Par défaut
 // on regarde TOUS les types de conso (carburant, péage, boutique, lavage…) ; `opts.categories` restreint.

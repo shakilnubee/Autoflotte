@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260810d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260810e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260810d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260810e">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -421,6 +421,8 @@
       </div>
       <div id="tf-conso-cards" class="tf-cards mt-2 hidden"></div>
       <p class="text-xs text-slate-500 mt-3">Détail reconstitué depuis les factures TotalEnergies (par carte carburant). Les « Frais de gestion » ne sont pas rattachés à un conducteur. Clique sur l'en-tête « Total TTC » pour trier.</p>
+      <!-- Rapprochement : conducteurs des relevés (Total/Ulys) qui ne correspondent à aucune fiche → lier / créer -->
+      <div id="conso-rapproch"></div>
 
       <!-- ===== ANALYSE CONSO (prix/litre, CO₂, répartition, évolution, classement, anomalies) ===== -->
       <div id="tf-analyse" class="mt-10 hidden">
@@ -754,11 +756,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260810d"></script>
-<script src="../assets/js/supabase-client.js?v=20260810d"></script>
-<script src="../assets/js/data.js?v=20260810d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260810e"></script>
+<script src="../assets/js/supabase-client.js?v=20260810e"></script>
+<script src="../assets/js/data.js?v=20260810e"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260810d"></script>
+<script src="../assets/js/app.js?v=20260810e"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2535,6 +2537,23 @@
     function tfLimits(){ let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {} return { repasJour: Number(s.repasJour) > 0 ? Number(s.repasJour) : 20, autreItem: (s.autreItem === 0 || Number(s.autreItem) > 0) ? Number(s.autreItem) : 20, horsCarbMois: Number(s.horsCarbMois) > 0 ? Number(s.horsCarbMois) : 40 }; }
     const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
 
+    // Rapprochement conducteurs : liste les noms/n° des relevés (Total ET Ulys) qui ne correspondent
+    // à AUCUNE fiche → propose de lier à un conducteur existant OU d'en créer un (FP.rapprochementPanel).
+    // Lecture seule ; s'affiche sous le détail conso, et se vide au fur et à mesure des rattachements.
+    window.showConsoRapproch = async function () {
+      const mount = document.getElementById('conso-rapproch');
+      if (!mount || !(window.FP && FP.rapprochementPanel && FP.supabase)) return;
+      const soc = FP.activeSociete ? FP.activeSociete() : null;
+      const inSoc = x => !soc || soc === '__all__' || !x.societe || x.societe === soc;
+      const items = [];
+      try { const r = await FP.supabase.from('total_conso_tx').select('conducteur,carte,societe');
+        (r.data || []).filter(inSoc).forEach(x => { const c = String(x.carte || ''); items.push({ name: x.conducteur, num: c, numKey: /^ULYS/i.test(c) ? 'condBadgeUlys' : 'condCarteTotal' }); }); } catch (e) {}
+      try { const r = await FP.supabase.from('total_conso').select('conducteur,carte,societe');
+        (r.data || []).filter(inSoc).forEach(x => { if (x.conducteur) items.push({ name: x.conducteur, num: String(x.carte || ''), numKey: 'condCarteTotal' }); }); } catch (e) {}
+      try { const r = await FP.supabase.from('ulys_conso').select('conducteur,badge,societe');
+        (r.data || []).filter(inSoc).forEach(x => { if (x.conducteur) items.push({ name: x.conducteur, num: String(x.badge || ''), numKey: 'condBadgeUlys' }); }); } catch (e) {}
+      try { FP.rapprochementPanel(mount, items, function () { try { if (window.renderTotalFleet) window.renderTotalFleet(); } catch (e) {} }); } catch (e) {}
+    };
     async function loadConso(){
       consoLoaded = true;
       try {
@@ -2561,6 +2580,7 @@
       } catch (e) { consoTx = null; }
       renderConso();
       renderAnalyse();
+      try { window.showConsoRapproch && window.showConsoRapproch(); } catch (e) {}
     }
 
     function tfCondSel(){ const s = $('tf-conso-cond'); return s ? (s.value || '') : ''; }
@@ -3965,6 +3985,7 @@
       try { const r = await FP.supabase.from('ulys_conso').select('*'); if (r.error) throw r.error; conso = r.data || []; const _soc = FP.activeSociete ? FP.activeSociete() : null; if (_soc && _soc !== '__all__') conso = conso.filter(x => !x.societe || x.societe === _soc); }
       catch (e) { console.warn('[ulys_conso] indisponible :', e && (e.message || e)); conso = null; }
       renderConso();
+      try { window.showConsoRapproch && window.showConsoRapproch(); } catch (e) {}
     }
     function renderConso(){
       const sel = $('uls-conso-mois'), tbody = $('uls-conso-tbody'), tfoot = $('uls-conso-tfoot');
