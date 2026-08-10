@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810j">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810k">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260810j"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260810k"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260810j">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260810k">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -756,11 +756,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260810j"></script>
-<script src="../assets/js/supabase-client.js?v=20260810j"></script>
-<script src="../assets/js/data.js?v=20260810j"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260810k"></script>
+<script src="../assets/js/supabase-client.js?v=20260810k"></script>
+<script src="../assets/js/data.js?v=20260810k"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260810j"></script>
+<script src="../assets/js/app.js?v=20260810k"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -3304,11 +3304,15 @@
         if (r._file && FP.uploadScan) {
           try { fileUrl = await FP.uploadScan(r._file, 'factures-total', { name: 'TF-' + r.numero }); } catch (e) { console.warn('[tf-import upload PDF]', e); }
         }
-        const newF = { id:'TF-' + r.numero, date:r.date, vehiculeImmat:null, fournisseur:'TotalEnergies',
+        // Ré-import d'un relevé déjà en base (même id TF-numero) : on PRÉSERVE l'affectation manuelle
+        // du véhicule et le PDF déjà stocké (sinon l'upsert les écrasait par null).
+        const prev = (window.FP_DATA.factures||[]).find(x => x.id === ('TF-' + r.numero));
+        const newF = { id:'TF-' + r.numero, date:r.date, vehiculeImmat:(prev && prev.vehiculeImmat) || null, fournisseur:'TotalEnergies',
           numeroFacture:r.numero, description:('Carburant & services flotte — ' + r.paysLabel + ' — releve ' + (r.dmy||'')).trim(),
           type:'carburant', montantHT:r.ht, montantTVA:r.tva, montantTTC:r.ttc,
-          fileId: fileUrl, fileName: r._file ? r._file.name : null };
-        window.FP_DATA.factures.push(newF);
+          fileId: fileUrl || (prev && prev.fileId) || null, fileName: (r._file ? r._file.name : (prev && prev.fileName)) || null };
+        const _iTF = (window.FP_DATA.factures||[]).findIndex(x => x.id === newF.id);
+        if (_iTF>=0) window.FP_DATA.factures[_iTF]=newF; else window.FP_DATA.factures.push(newF);
         try { await FP.persist.upsert('factures', newF); okF++; } catch (e) { console.error('[tf-import facture]', e); }
       }
       let consoErr = null;
@@ -3894,7 +3898,7 @@
         const prev = (window.FP_DATA.factures||[]).find(x => x.id === ('ULYS-'+p.numero));
         let fileUrl = null;
         if (p._file && FP.uploadScan) { try { fileUrl = await FP.uploadScan(p._file, 'factures-total', { name:'ULYS-'+p.numero }); } catch(e){ console.warn('[uls upload PDF]', e); } }
-        const newF = { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc,
+        const newF = { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:(prev && prev.vehiculeImmat) || null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc,
           fileId: fileUrl || (prev && prev.fileId) || null, fileName: (p._file ? p._file.name : (prev && prev.fileName)) || null };
         const i = (window.FP_DATA.factures||[]).findIndex(x => x.id === newF.id);
         if (i>=0) window.FP_DATA.factures[i]=newF; else window.FP_DATA.factures.push(newF);

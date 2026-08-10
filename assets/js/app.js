@@ -994,8 +994,14 @@ FP.conducteurs = {
       const homonymeDiff = this.list().some(c => FP.normPrenom(c.name || c.prenom || c.key) === key && String(c.nom || '').toLowerCase().trim() && String(c.nom || '').toLowerCase().trim() !== nom);
       if (homonymeDiff) { const kf = FP.normNomComplet(name).replace(/\s+/g, '-'); if (kf) key = kf; }
     }
-    const row = { key, name, prenom: info.prenom || null, nom: info.nom || null, tel: info.tel || null, email: info.email || null,
-      poste: info.poste || null, permisNumero: info.permisNumero || null, permisType: info.permisType || null, manuel: true };
+    // ⚠️ SÉCURITÉ DONNÉES : on n'inclut QUE les champs réellement fournis (pas de `|| null`). L'upsert
+    // ne touche que les colonnes présentes → si ce prénom correspond en fait à une fiche DÉJÀ existante
+    // et complète (ex. « ➕ Créer » du picker appelé avec juste {name}), on n'écrase PAS son
+    // tél/email/nom/permis avec des null. Une vraie création n'a de toute façon rien à perdre.
+    const row = { key, name, manuel: true };
+    ['prenom', 'nom', 'tel', 'email', 'poste', 'permisNumero', 'permisType'].forEach(f => {
+      const val = info[f]; if (val != null && String(val).trim() !== '') row[f] = val;
+    });
     try { if (FP.persist && FP.persist.upsert) await FP.persist.upsert('conducteurs', row); } catch (e) { console.warn('[FP.conducteurs.create]', e); }
     try { window.FP_DATA = window.FP_DATA || {}; FP_DATA.conducteurs = FP_DATA.conducteurs || [];
       const ex = FP_DATA.conducteurs.find(c => c.key === key); if (ex) Object.assign(ex, row); else FP_DATA.conducteurs.push(row); } catch (e) {}
@@ -5916,7 +5922,7 @@ FP.ulys = {
     return { numero, date, mois, ht, tva, ttc, conso, txConso };
   },
   // Enregistrements prêts pour la base — MÊMES ids/formats que l'import de la page Factures.
-  factureRecord(p){ return { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+this.moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc }; },
+  factureRecord(p, prev){ return { id:'ULYS-'+p.numero, date:p.date||null, vehiculeImmat:(prev && prev.vehiculeImmat) || null, fournisseur:'Ulys', numeroFacture:p.numero, description:'Péages Ulys — '+this.moisLabel(p.mois), type:'peage', montantHT:p.ht, montantTVA:p.tva, montantTTC:p.ttc }; },
   consoRecord(c, societe){ return { id:'ULYSC-'+c.mois+'-'+this.slug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe: societe||'PXP' }; }
 };
 

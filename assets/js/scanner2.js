@@ -269,7 +269,15 @@
         // Le km ne peut que MONTER : on n'écrit que s'il est supérieur au km connu.
         const kmLu = intv(g('km')); if (kmLu != null && (!(Number(rec.km) > 0) || kmLu >= Number(rec.km))) rec.km = kmLu;
       }
-      if (existing) { try { await FP.persist.update('vehicules', rec.id, rec); } catch (e) { try { await FP.persist.upsert('vehicules', rec); } catch (e2) {} } try { if (window.data && Array.isArray(data.vehicules)) { const i = data.vehicules.findIndex(v => v.id === rec.id); if (i >= 0) data.vehicules[i] = rec; } } catch (e) {} }
+      if (existing) {
+        // ⚠️ SÉCURITÉ DONNÉES : n'envoyer QUE les champs que le scan a réellement changés (diff avec
+        // la copie en mémoire), pas toute la fiche. Sinon, si `existing` venait du snapshot data.js
+        // (chauffeur vidé pour le RGPD), on réécrivait chauffeur='' et on effaçait le conducteur réel.
+        const patch = { id: rec.id };
+        Object.keys(rec).forEach(k => { if (k !== 'id' && rec[k] !== existing[k]) patch[k] = rec[k]; });
+        try { await FP.persist.update('vehicules', rec.id, patch); } catch (e) { try { await FP.persist.upsert('vehicules', patch); } catch (e2) {} }
+        try { if (window.data && Array.isArray(data.vehicules)) { const i = data.vehicules.findIndex(v => v.id === rec.id); if (i >= 0) data.vehicules[i] = rec; } } catch (e) {}
+      }
       else { try { await FP.persist.insert('vehicules', rec); } catch (e) {} try { if (window.data && Array.isArray(data.vehicules)) data.vehicules.push(rec); } catch (e) {} }
       target = { table: 'vehicules', id: rec.id, existing: !!existing };
     }
@@ -415,7 +423,8 @@
     if (!(model && model._ulys && window.FP && FP.ulys)) throw new Error("Aucun relevé Ulys à enregistrer.");
     const soc = societe(); let okF = 0, okC = 0, firstId = null;
     for (const p of (model._ulys.fac || [])) {
-      const rec = FP.ulys.factureRecord(p);
+      const _prevU = (data.factures || []).find(x => x.id === ('ULYS-' + p.numero));
+      const rec = FP.ulys.factureRecord(p, _prevU); // ré-import : préserve l'affectation manuelle du véhicule
       try { const i = (data.factures || []).findIndex(x => x.id === rec.id); if (i >= 0) data.factures[i] = rec; else if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
       try { await FP.persist.upsert('factures', rec); okF++; } catch (e) { console.error('[scan2 ulys facture]', e); }
       if (!firstId) firstId = rec.id;
