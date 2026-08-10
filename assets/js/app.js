@@ -1162,6 +1162,37 @@ FP.consoPendantConge = (txList, opts) => {
 // Libellé lisible d'une catégorie de conso (carte carburant / péage).
 FP.consoCatLabel = (cat) => ({ carburant: 'plein carburant', peage: 'péage', boutique: 'achat boutique', lavage: 'lavage', parking: 'parking', adblue: 'AdBlue' })[String(cat || '').toLowerCase()] || 'achat';
 
+// Détecte les consos survenues APRÈS le DÉPART du conducteur : une carte/badge encore active pour un
+// salarié dont l'affectation (au véhicule) est TERMINÉE avant la date de la conso — signe que la carte
+// n'a pas été désactivée / est utilisée par quelqu'un d'autre. S'appuie sur l'historique d'affectation
+// (FP.affectations) + les transactions datées (total_conso_tx). Renvoie une liste d'anomalies.
+FP.consoApresDepart = (txList) => {
+  const out = [];
+  if (!FP.affectations || !FP.affectations.forConducteur) return out;
+  (txList || []).forEach(t => {
+    if (!t) return;
+    const dtx = t.dateTx || t.date_tx; if (!dtx) return;
+    const key = FP.condKeyDeConso ? FP.condKeyDeConso(t) : null; if (!key) return;
+    const nom = FP.conducteurNomUnifie ? FP.conducteurNomUnifie(t.conducteur, key) : (t.conducteur || key);
+    if (!nom) return;
+    const periodes = FP.affectations.forConducteur(nom);
+    if (!periodes || !periodes.length) return;                    // pas d'historique → on ne juge pas
+    // Une période "couvre" la conso si debut ≤ dtx ≤ (fin ou +∞). Si UNE période ouverte/couvrante existe → OK.
+    const couvre = periodes.some(p => (!p.debut || String(p.debut) <= dtx) && (!p.fin || dtx <= String(p.fin)));
+    if (couvre) return;
+    // Sinon : la conso tombe hors de toute période. Si TOUTES les périodes sont closes AVANT la conso
+    // (le salarié était déjà parti), c'est une conso « après départ ».
+    const fins = periodes.map(p => p.fin).filter(Boolean).map(String).sort();
+    const derniereFin = fins.length ? fins[fins.length - 1] : null;
+    if (derniereFin && dtx > derniereFin) {
+      const mtt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc);
+      out.push({ conducteur: nom, key, date: dtx, montant: mtt, categorie: String(t.categorie || '').toLowerCase(),
+        produit: t.produit, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '', finAffect: derniereFin });
+    }
+  });
+  return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+};
+
 // ================= RATTACHEMENT CONSO → CONDUCTEUR PAR N° DE CARTE / BADGE =================
 // Chaque conducteur peut porter un n° de carte carburant Total et un n° de badge péage Ulys
 // (réglages `condCarteTotal` / `condBadgeUlys`, par société — cf. fiche conducteur). Ces numéros
@@ -5307,12 +5338,24 @@ FP.exportBackup = async function () {
 // On extrait le chemin du fichier et on génère un lien signé (valable quelques minutes),
 // réservé à l'utilisateur connecté. Si le bucket est resté public, le lien d'origine marche
 // quand même (repli) → aucun risque de coupure.
-FP.scanPath = (url) => { const m = String(url || '').match(/\/scans\/([^?]+)/); return m ? decodeURIComponent(m[1]) : null; };
+// Extrait { bucket, path } de N'IMPORTE QUELLE URL Supabase Storage
+// (…/storage/v1/object/(public|sign|authenticated)/<bucket>/<path>), ou du repli legacy « /scans/… ».
+// Renvoie null si l'URL n'est pas un objet Storage (Drive, http externe…). Généralise l'ancien
+// FP.scanPath (limité au bucket « scans ») → gère aussi les factures d'un autre bucket.
+FP._storageRef = (url) => {
+  const s = String(url || '');
+  let m = s.match(/\/storage\/v1\/object\/(?:public\/|sign\/|authenticated\/)?([^/?]+)\/([^?#]+)/);
+  if (m) return { bucket: decodeURIComponent(m[1]), path: decodeURIComponent(m[2]) };
+  m = s.match(/\/scans\/([^?#]+)/);
+  if (m) return { bucket: FP.SCAN_BUCKET, path: decodeURIComponent(m[1]) };
+  return null;
+};
+FP.scanPath = (url) => { const r = FP._storageRef(url); return r ? r.path : null; };
 FP.signedScanUrl = async (url, expires) => {
   try {
-    const path = FP.scanPath(url);
-    if (!path || !(FP.supabase && FP.supabase.storage)) return url;
-    const { data, error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).createSignedUrl(path, expires || 180);
+    const r = FP._storageRef(url);
+    if (!r || !(FP.supabase && FP.supabase.storage)) return url;
+    const { data, error } = await FP.supabase.storage.from(r.bucket).createSignedUrl(r.path, expires || 180);
     return (error || !data || !data.signedUrl) ? url : data.signedUrl;
   } catch (e) { return url; }
 };
@@ -5322,10 +5365,10 @@ FP.signedScanUrl = async (url, expires) => {
 // (Supabase pas encore prêt, ou URL hors bucket « scans »).
 FP.signedScanUrlStrict = async (url, expires) => {
   try {
-    const path = FP.scanPath(url);
-    if (!path) return url;                                   // pas un fichier du bucket → on ne juge pas
+    const r = FP._storageRef(url);
+    if (!r) return url;                                      // pas un fichier Storage → on ne juge pas
     if (!(FP.supabase && FP.supabase.storage)) return url;   // pas encore prêt → repli, pas d'erreur
-    const { data, error } = await FP.supabase.storage.from(FP.SCAN_BUCKET).createSignedUrl(path, expires || 3600);
+    const { data, error } = await FP.supabase.storage.from(r.bucket).createSignedUrl(r.path, expires || 3600);
     if (error || !data || !data.signedUrl) return null;      // objet/bucket manquant → aperçu impossible
     return data.signedUrl;
   } catch (e) { return null; }
@@ -5429,7 +5472,8 @@ document.addEventListener('click', (e) => {
 FP._signMedia = function (el) {
   try {
     const cur = el.getAttribute('src') || '';
-    if (!cur || !/\/scans\//.test(cur)) return;
+    // Tout objet Supabase Storage (n'importe quel bucket), pas seulement « /scans/ » (ex. factures).
+    if (!cur || !(/\/scans\//.test(cur) || /\/storage\/v1\/object\//.test(cur))) return;
     if (el.dataset.scanSigned === '1') return;
     el.dataset.scanSigned = '1';
     if (/\/object\/sign\//.test(cur)) return; // déjà un lien signé
@@ -5451,7 +5495,7 @@ FP._signMedia = function (el) {
 };
 FP.hydrateScanMedia = function (root) {
   const scope = (root && root.querySelectorAll) ? root : document;
-  try { scope.querySelectorAll('img[src*="/scans/"],iframe[src*="/scans/"],embed[src*="/scans/"]').forEach(FP._signMedia); } catch (e) {}
+  try { scope.querySelectorAll('img[src*="/scans/"],iframe[src*="/scans/"],embed[src*="/scans/"],img[src*="/storage/v1/object/"],iframe[src*="/storage/v1/object/"],embed[src*="/storage/v1/object/"]').forEach(FP._signMedia); } catch (e) {}
 };
 try {
   const _isMedia = (n) => n && (n.tagName === 'IMG' || n.tagName === 'IFRAME' || n.tagName === 'EMBED');
