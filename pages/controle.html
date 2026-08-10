@@ -360,9 +360,14 @@
   $('tab-cartes').addEventListener('click', () => switchTab('cartes'));
   renderPrestaTabs();
   // Ouverture : 1) ?tab=… (lien direct) ; 2) sinon le DERNIER sous-onglet consulté ; 3) sinon « Contrôle ».
+  // ⚠️ DIFFÉRÉ (setTimeout 0) : l'ouverture d'un onglet appelle des rendus (renderCartes…) qui utilisent
+  // des variables `let`/`const` déclarées PLUS BAS dans ce script. Les appeler pendant l'exécution
+  // synchrone = temporal dead zone = ReferenceError = page bloquée sur « Chargement… ». En différant,
+  // tout est déjà défini quand l'onglet s'ouvre. + repli sur « Contrôle » en cas d'erreur.
   { const t = new URLSearchParams(location.search).get('tab');
     const last = FP.lastTab ? FP.lastTab.get('controle', 'controle') : 'controle';
-    switchTab(tabNames().includes(t) ? t : (tabNames().includes(last) ? last : 'controle')); }
+    const _target = tabNames().includes(t) ? t : (tabNames().includes(last) ? last : 'controle');
+    setTimeout(function(){ try { switchTab(_target); } catch (e) { console.error('[controle init]', e); try { switchTab('controle'); } catch (_) {} } }, 0); }
 
   // Clics dans les panneaux prestataire : ouvrir une facture / supprimer le prestataire.
   $('presta-panes').addEventListener('click', async (e) => {
