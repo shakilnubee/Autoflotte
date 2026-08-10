@@ -546,10 +546,23 @@
   // Crée/fusionne une ligne et persiste (Supabase si dispo, sinon localStorage)
   function upsertCond(key, changes) {
     let row = condRow(key);
+    const isNew = !row;
     if (!row) { row = { key }; condCache.push(row); }
     Object.assign(row, changes);
     cacheCond();
-    if (FP.persist.available()) FP.persist.upsert('conducteurs', toCondDb(row));
+    if (FP.persist.available()) {
+      if (isNew) {
+        // Fiche inexistante en base (ex. conducteur issu d'une amende) → insertion complète.
+        FP.persist.upsert('conducteurs', toCondDb(row));
+      } else {
+        // ⚠️ SÉCURITÉ DONNÉES (perte d'infos) : on n'envoie QUE les champs réellement modifiés, PAS
+        // la ligne entière. Un upsert de toute la ligne écrasait avec des `null` les champs ABSENTS
+        // de la copie en mémoire (tél/email/permis pas encore synchronisés, cache partiel, purge…) →
+        // toutes les infos « déjà remplies » disparaissaient dès qu'on modifiait un seul champ.
+        const patch = {}; Object.keys(changes).forEach(k => { patch[k] = row[k]; });
+        FP.persist.update('conducteurs', key, patch);
+      }
+    }
     else persistCondToLS();
   }
   function deleteCondRow(key) {
