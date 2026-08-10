@@ -7495,7 +7495,14 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
   function makeDoc(c) {
     const { cols, title, rows, today } = c;
     const jsPDF = window.jspdf.jsPDF;
-    const doc = new jsPDF({ orientation: cols.length > 6 ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+    // ⚠️ LARGEUR DE PAGE ADAPTÉE au nombre de colonnes : le vrai problème du repli (« le prix passe à
+    // la ligne ») vient d'un A4 trop étroit quand on coche BEAUCOUP de colonnes. Ici la page s'ÉLARGIT
+    // proportionnellement → chaque colonne a la place de tenir sur UNE seule ligne. Peu de colonnes =
+    // A4 normal ; beaucoup = page large (on l'imprime « ajusté à la page » ou on la consulte à l'écran).
+    const _nCol0 = cols.length + 1;
+    const _pageH = _nCol0 > 6 ? 210 : 297;                         // A4 paysage (210) sinon portrait (297)
+    const _pageW = _nCol0 <= 6 ? 210 : Math.max(297, 24 + _nCol0 * 34); // ~34 mm par colonne + marges
+    const doc = new jsPDF({ orientation: _pageW >= _pageH ? 'landscape' : 'portrait', unit: 'mm', format: [_pageW, _pageH] });
     const pageW = doc.internal.pageSize.getWidth();
     const drawHeader = () => {
       doc.setFillColor(15, 30, 61); doc.roundedRect(10, 10, pageW - 20, 20, 3, 3, 'F');
@@ -7514,8 +7521,10 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     // de 9 pt se replie sur plusieurs lignes et devient illisible. On réduit progressivement police
     // + marges pour que chaque cellule tienne sur une ligne, tout en restant net pour peu de colonnes.
     const _nc = cols.length + 1;
-    const _fs = _nc > 16 ? 6 : _nc > 13 ? 6.6 : _nc > 10 ? 7.3 : _nc > 7 ? 8.2 : 9;
-    const _pad = _nc > 13 ? 1.5 : _nc > 10 ? 2 : _nc > 7 ? 2.3 : 2.6;
+    // La page s'élargissant avec le nombre de colonnes, la police peut rester LISIBLE (plus besoin de
+    // la réduire à l'extrême). On garde juste un petit ajustement pour beaucoup de colonnes.
+    const _fs = _nc > 12 ? 8 : 9;
+    const _pad = _nc > 12 ? 2 : 2.6;
     const columnStyles = { 0: { halign: 'left', textColor: [148, 163, 184], cellWidth: _nc > 13 ? 9 : 12, cellPadding: { top: _pad, right: 1.2, bottom: _pad, left: 1.6 }, overflow: 'visible' } };
     cols.forEach((col, idx) => { columnStyles[idx + 1] = { halign: col.align === 'right' ? 'right' : 'left', font: col.mono ? 'courier' : 'helvetica' }; });
     // Ligne de total (si au moins une colonne a une fonction `sum`) → pied de tableau « TOTAL ».
@@ -7542,8 +7551,8 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       foot: foot || undefined,
       footStyles: { fillColor: [241, 245, 249], textColor: [15, 30, 61], fontStyle: 'bold', fontSize: 9, lineColor: [203, 213, 225], lineWidth: 0.1 },
       startY: 36, margin: { top: 36, left: 10, right: 10 }, tableWidth: pageW - 20, theme: 'grid',
-      styles: { fontSize: _fs, cellPadding: { top: _pad, right: _pad + 0.4, bottom: _pad, left: _pad + 0.4 }, textColor: [30, 41, 59], lineColor: [233, 238, 245], lineWidth: 0.1, valign: 'middle', overflow: 'linebreak' },
-      headStyles: { fillColor: [15, 30, 61], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: Math.max(6, _fs - 0.5), lineColor: [15, 30, 61], lineWidth: 0, cellPadding: { top: _pad + 0.4, right: _pad + 0.4, bottom: _pad + 0.4, left: _pad + 0.4 } },
+      styles: { fontSize: _fs, cellPadding: { top: _pad, right: _pad + 0.4, bottom: _pad, left: _pad + 0.4 }, textColor: [30, 41, 59], lineColor: [233, 238, 245], lineWidth: 0.1, valign: 'middle', overflow: 'ellipsize' },
+      headStyles: { fillColor: [15, 30, 61], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: Math.max(6.5, _fs - 0.5), lineColor: [15, 30, 61], lineWidth: 0, cellPadding: { top: _pad + 0.4, right: _pad + 0.4, bottom: _pad + 0.4, left: _pad + 0.4 }, overflow: 'linebreak' },
       alternateRowStyles: { fillColor: [247, 249, 252] },
       columnStyles: columnStyles,
       didParseCell: (data) => {
