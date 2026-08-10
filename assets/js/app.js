@@ -763,6 +763,7 @@ FP.searchSelect = function (select, opts) {
     input.placeholder = opts.placeholder || 'Rechercher…';
     wrap.appendChild(input);
     const menu = document.createElement('div');
+    menu.className = 'fp-jsmenu';
     menu.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1px solid var(--fp-border,#E3E8F0);border-radius:.55rem;box-shadow:0 16px 40px -12px rgba(15,30,61,.3);max-height:260px;overflow:auto;display:none';
     document.body.appendChild(menu);
     const norm = s => (window.FP && FP.norm) ? FP.norm(s) : String(s || '').toLowerCase();
@@ -1354,6 +1355,7 @@ FP.conducteurPicker = function (input, opts) {
     const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const norm = s => (FP.norm ? FP.norm(s) : String(s || '').toLowerCase());
     const menu = document.createElement('div');
+    menu.className = 'fp-jsmenu';
     menu.style.cssText = 'position:fixed;z-index:10000;background:#fff;border:1px solid var(--fp-border,#E3E8F0);border-radius:.55rem;box-shadow:0 16px 40px -12px rgba(15,30,61,.3);max-height:260px;overflow:auto;display:none';
     document.body.appendChild(menu);
     const place = () => { const r = input.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 3) + 'px'; menu.style.width = r.width + 'px'; };
