@@ -1138,10 +1138,14 @@ FP.condKeyDeConso = (t) => {
 // un nom venant d'une conso/facture DOIT passer par ce helper pour rester unifié partout.
 FP.conducteurNomUnifie = (name, key) => {
   try {
+    // ⚠️ Chercher parmi TOUS les conducteurs (y compris masqués) et de façon tolérante à l'ordre
+    // du nom — sinon un conducteur masqué (ou un relevé « NOM Prénom ») n'était pas résolu et on
+    // affichait le libellé BRUT du relevé (souvent le prénom seul) au lieu du nom complet de la fiche.
+    const all = (FP.conducteursTous ? FP.conducteursTous() : FP.conducteurs.list()) || [];
     let c = null;
-    if (key) c = FP.conducteurs.list().find(x => x.key === key) || null;
-    if (!c && name) c = FP.conducteurs.find(name);
-    if (!c && key) c = FP.conducteurs.find(key);
+    if (key) c = all.find(x => x.key === key) || null;
+    if (!c && name) { let k = null; try { k = FP.condKeyParNom ? FP.condKeyParNom(name) : null; } catch (e) {} if (k) c = all.find(x => x.key === k) || null; if (!c) { try { c = FP.conducteurs.find(name); } catch (e) {} } }
+    if (!c && key) { let k = null; try { k = FP.condKeyParNom ? FP.condKeyParNom(key) : null; } catch (e) {} if (k) c = all.find(x => x.key === k) || null; }
     if (c) return FP.conducteurs.displayName(c);
   } catch (e) {}
   return name || key || '';
