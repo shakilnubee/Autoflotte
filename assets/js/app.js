@@ -1186,6 +1186,18 @@ FP.condKeyParNom = function (name) {
   }
   return null;
 };
+// Clé de REGROUPEMENT canonique d'un conducteur à partir d'un nom brut (amende, relevé…). Résout vers
+// la VRAIE clé du conducteur enregistré — ce qui DISTINGUE deux homonymes de prénom qui ont chacun leur
+// nom de famille (ex. « Jean DUPONT » ≠ « Jean MARTIN », clés distinctes via FP.conducteurs.create).
+// Repli sur le prénom normalisé quand le nom ne correspond à aucun conducteur (comportement historique).
+// ⚠️ Source UNIQUE : à utiliser partout où on GROUPE des données par conducteur (podiums, filtres…).
+FP.condGroupKey = function (name, key) {
+  try {
+    if (key) { const c = FP.conducteursTous().find(x => x.key === key); if (c) return c.key; }
+    const k = FP.condKeyParNom(name); if (k) return k;
+  } catch (e) {}
+  return FP.normPrenom ? FP.normPrenom(name) : String(name || '').trim().toLowerCase().split(/\s+/)[0];
+};
 FP.consoNonRattaches = function (items) {
   const out = [], seen = new Set();
   (items || []).forEach(it => {
@@ -8025,10 +8037,13 @@ FP.undoToast = (message, onUndo, opts) =>
 // Coordonnées d'un conducteur (par nom/prénom) → { tel, email } depuis la table conducteurs.
 FP.conducteurContact = (name) => {
   try {
-    const norm = (x) => FP.normPrenom ? FP.normPrenom(x) : String(x || '').toLowerCase().trim();
-    const n = norm(name); if (!n) return {};
+    if (!name) return {};
     const list = (window.FP_DATA && Array.isArray(FP_DATA.conducteurs)) ? FP_DATA.conducteurs : [];
-    const c = list.find(c => [c.name, c.prenom, c.key, c.nom].filter(Boolean).map(norm).includes(n));
+    // Résolution surname-aware : on cible la VRAIE fiche via la clé canonique (distingue deux
+    // homonymes de prénom qui ont chacun leur nom de famille — sinon on renvoyait le 1er trouvé).
+    let c = null;
+    try { const k = FP.condGroupKey ? FP.condGroupKey(name) : null; if (k) c = list.find(x => x.key === k) || null; } catch (e) {}
+    if (!c) { const norm = (x) => FP.normPrenom ? FP.normPrenom(x) : String(x || '').toLowerCase().trim(); const n = norm(name); if (n) c = list.find(c => [c.name, c.prenom, c.key, c.nom].filter(Boolean).map(norm).includes(n)) || null; }
     return c ? { tel: c.tel || '', email: c.email || '' } : {};
   } catch (e) { return {}; }
 };
