@@ -1966,6 +1966,10 @@ FP.setupChartTheme = () => {
     const dark = FP.settings && FP.settings.isDark && FP.settings.isDark();
     window.Chart.defaults.color = dark ? '#cbd5e1' : '#475569';
     window.Chart.defaults.borderColor = dark ? 'rgba(148,163,184,.18)' : 'rgba(15,30,61,.08)';
+    // Police plus GRANDE et lisible partout (légendes, axes) — les libellés par défaut (11-12px)
+    // étaient trop petits, surtout les légendes de camemberts.
+    if (window.Chart.defaults.font) window.Chart.defaults.font.size = 13;
+    try { window.Chart.defaults.plugins.legend.labels.font = { size: 13 }; window.Chart.defaults.plugins.legend.labels.boxWidth = 14; window.Chart.defaults.plugins.legend.labels.padding = 12; } catch (e) {}
   } catch (e) {}
 };
 try { FP.setupChartTheme(); } catch (e) {}
@@ -7456,7 +7460,7 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
     const pv = document.createElement('div');
     pv.id = 'fp-fiche-prev';
     pv.style.cssText = 'display:none;position:fixed;inset:0;z-index:81;background:rgba(15,23,42,.6);align-items:center;justify-content:center;padding:16px';
-    pv.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:940px;height:92vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.4);overflow:hidden">'
+    pv.innerHTML = '<div style="background:#fff;border-radius:16px;width:96vw;max-width:1400px;height:94vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.4);overflow:hidden">'
       + '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-bottom:1px solid #eef2f7">'
       + '<div style="font-weight:800;color:#0f172a;font-size:15px">Aperçu <span id="fp-prev-sub" style="color:#64748b;font-weight:500;font-size:13px"></span></div>'
       + '<button id="fp-prev-x" style="background:none;border:none;font-size:24px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button></div>'
@@ -7506,7 +7510,7 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(148, 163, 184);
       const g = 'GESTION DE FLOTTE'; doc.text(g, pageW - 16 - doc.getTextWidth(g), 24);
     };
-    const columnStyles = { 0: { halign: 'left', textColor: [148, 163, 184], cellWidth: 8 } };
+    const columnStyles = { 0: { halign: 'left', textColor: [148, 163, 184], cellWidth: 12, cellPadding: { top: 2.6, right: 1.5, bottom: 2.6, left: 2 }, overflow: 'visible' } };
     cols.forEach((col, idx) => { columnStyles[idx + 1] = { halign: col.align === 'right' ? 'right' : 'left', font: col.mono ? 'courier' : 'helvetica' }; });
     // Ligne de total (si au moins une colonne a une fonction `sum`) → pied de tableau « TOTAL ».
     let foot = null;
@@ -7576,7 +7580,7 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       let saved; try { saved = (FP.settings.get().ficheCols || {})[cur.key]; } catch (e) {}
       if (!saved || !saved.length) saved = cur.cols.filter(c => c.def).map(c => c.id);
       modal.querySelector('#fp-fiche-cols').innerHTML = cur.cols.map(c =>
-        '<label style="display:flex;align-items:center;gap:7px;font-size:13px;color:#334155;padding:4px 6px;border-radius:6px;cursor:pointer"><input type="checkbox" value="' + c.id + '"' + (saved.indexOf(c.id) >= 0 ? ' checked' : '') + ' style="width:15px;height:15px;accent-color:#f97316"> ' + escH(c.label) + '</label>').join('');
+        '<label style="display:flex;align-items:center;gap:7px;font-size:14.5px;color:#334155;padding:5px 6px;border-radius:6px;cursor:pointer"><input type="checkbox" value="' + c.id + '"' + (saved.indexOf(c.id) >= 0 ? ' checked' : '') + ' style="width:16px;height:16px;accent-color:#f97316"> ' + escH(c.label) + '</label>').join('');
       modal.querySelector('#fp-fiche-scope').textContent = cur.rows.length + ' ligne(s)';
       modal.querySelector('#fp-fiche-h').textContent = cur.title;
       modal.querySelector('#fp-fiche-title').value = cur.title;
@@ -7594,7 +7598,7 @@ FP.pdfPreview = function (doc, filename, subtitle) {
     ov = document.createElement('div');
     ov.id = 'fp-pdfprev-ov';
     ov.style.cssText = 'display:none;position:fixed;inset:0;z-index:90;background:rgba(15,23,42,.6);align-items:center;justify-content:center;padding:16px';
-    ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:100%;max-width:940px;height:92vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.4);overflow:hidden">'
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;width:96vw;max-width:1400px;height:94vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.4);overflow:hidden">'
       + '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px;border-bottom:1px solid #eef2f7">'
       + '<div style="font-weight:800;color:#0f172a;font-size:15px">Aperçu <span id="fp-pdfprev-sub" style="color:#64748b;font-weight:500;font-size:13px"></span></div>'
       + '<button id="fp-pdfprev-x" style="background:none;border:none;font-size:24px;color:#94a3b8;cursor:pointer;line-height:1">&times;</button></div>'
