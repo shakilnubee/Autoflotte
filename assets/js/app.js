@@ -1163,6 +1163,25 @@ FP.setCondNum = function (condKey, numKey, val) {
 };
 // items : [{ name, num, numKey }] (name = nom brut lu sur le relevé ; num = n° carte/badge ; numKey).
 // Renvoie les entrées qui NE correspondent à AUCUNE fiche conducteur (dédupliquées) — donc « à relier ».
+// Tous les conducteurs, Y COMPRIS les masqués (la liste standard FP.conducteurs.list() les EXCLUT →
+// un conducteur masqué existait mais paraissait « introuvable » au rapprochement ET à la recherche).
+FP.conducteursTous = function () { try { return (window.FP_DATA && Array.isArray(FP_DATA.conducteurs)) ? FP_DATA.conducteurs.filter(Boolean) : []; } catch (e) { return []; } };
+// Un nom de relevé correspond-il à un conducteur EXISTANT (même masqué) ? Tolérant à l'ordre
+// (« Prénom Nom » ⇄ « Nom Prénom ») et au prénom seul. Renvoie la clé, sinon null.
+FP.condKeyParNom = function (name) {
+  if (!name) return null;
+  try { const c = FP.conducteurs.find(name); if (c && c.key) return c.key; } catch (e) {}
+  const wordsOf = s => new Set(FP.normNomComplet(s).split(' ').filter(Boolean));
+  const nPre = FP.normPrenom(name), nW = wordsOf(name);
+  for (const c of FP.conducteursTous()) {
+    const cPre = FP.normPrenom(c.prenom || c.name || c.key || '');
+    const cW = wordsOf((FP.conducteurs.displayName(c) || '') + ' ' + (c.key || ''));
+    if (nPre && cPre && nPre === cPre) return c.key;   // même prénom
+    if (cPre && nW.has(cPre)) return c.key;             // prénom du conducteur présent dans le libellé du relevé (ordre inversé)
+    if (nPre && cW.has(nPre)) return c.key;             // prénom du relevé présent dans le nom du conducteur
+  }
+  return null;
+};
 FP.consoNonRattaches = function (items) {
   const out = [], seen = new Set();
   (items || []).forEach(it => {
@@ -1172,13 +1191,13 @@ FP.consoNonRattaches = function (items) {
     const numKey = it.numKey || null;
     if (numKey === 'condBadgeUlys') num = num.replace(/^ULYS[-_\s]*/i, '');
     if (!name && !num) return;
-    // Déjà rattaché ? (par n° d'abord — le plus fiable — puis par nom, comme FP.condKeyDeConso)
+    // Déjà rattaché ? (par n° d'abord — le plus fiable — puis par nom, tolérant ordre + masqués)
     let key = null;
     try {
       if (num && numKey === 'condBadgeUlys' && FP.conducteurParBadgeUlys) { const c = FP.conducteurParBadgeUlys(num); if (c && c.key) key = c.key; }
       else if (num && numKey === 'condCarteTotal' && FP.conducteurParCarteTotal) { const c = FP.conducteurParCarteTotal(num); if (c && c.key) key = c.key; }
     } catch (e) {}
-    if (!key && name) { try { const c = FP.conducteurs.find(name); if (c && c.key) key = c.key; } catch (e) {} }
+    if (!key && name) { try { key = FP.condKeyParNom(name); } catch (e) {} }
     if (key) return; // déjà relié → rien à faire
     const sig = (numKey || '') + '|' + (num || ('nom:' + FP.norm(name)));
     if (seen.has(sig)) return; seen.add(sig);
@@ -1204,7 +1223,8 @@ FP.rapprochementPanel = function (mount, items, onDone) {
     const row = document.createElement('div');
     row.className = 'rap-row';
     row.style.cssText = 'display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;background:#fff;border:1px solid var(--fp-border);border-radius:.6rem;padding:.5rem .65rem';
-    const opts = FP.conducteurs.list().map(c => '<option value="' + esc(c.key) + '">' + esc(FP.conducteurs.displayName(c)) + '</option>').join('');
+    // Tous les conducteurs (Y COMPRIS masqués) → un conducteur masqué reste sélectionnable/recherchable.
+    const opts = FP.conducteursTous().map(c => '<option value="' + esc(c.key) + '">' + esc(FP.conducteurs.displayName(c) || c.key) + (c.masque ? ' (masqué)' : '') + '</option>').join('');
     row.innerHTML = '<div style="flex:1;min-width:150px"><b>' + esc(it.name || '(sans nom)') + '</b> <span style="font-size:.78rem;color:var(--fp-muted)">· ' + numTxt(it) + '</span></div>'
       + '<select class="rap-sel field-input" style="width:230px"><option value="">— Lier à un conducteur… —</option>' + opts + '</select>'
       + '<button type="button" class="btn btn-outline text-sm rap-new">➕ Créer la fiche</button>';
