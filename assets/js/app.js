@@ -1337,6 +1337,24 @@ FP.consoPendantConge = (txList, opts) => {
   });
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
 };
+
+// ── UNE SEULE « BRANCHE » pour les trouvailles de contrôle conso ─────────────────────────────
+// Même IDENTITÉ + même STATUT partagés par la page Contrôle ET l'onglet « Suivi & alertes → Points
+// à vérifier ». Ainsi, résoudre une trouvaille d'un côté (justifiée / fraude / classée) la retire
+// AUSSI de l'autre (règle « une seule source de vérité »). `genre` : 'carte' | 'depart' | 'conge'.
+FP.trouvailleId = function (genre, a) {
+  a = a || {};
+  if (genre === 'carte') return 'ca|' + (a.key || '');
+  if (genre === 'depart') return 'dep|' + (a.key || '') + '|' + (a.date || '') + '|' + (a.categorie || '') + '|' + (a.montant || '');
+  return 'cg|' + (a.key || '') + '|' + (a.date || '') + '|' + (a.categorie || '') + '|' + (a.montant || ''); // congé
+};
+FP.controleStatut = function (id) { try { return (FP.settings.get().controleStatuts || {})[id] || ''; } catch (e) { return ''; } };
+FP.setControleStatut = function (id, st) {
+  try { const s = FP.settings.get(); const m = s.controleStatuts || {}; if (st && st !== 'a-verifier') m[id] = st; else delete m[id]; s.controleStatuts = m; FP.settings.save(s); } catch (e) {}
+};
+// Résolue = déjà traitée dans Contrôle (justifiée / fraude / classée) → à SORTIR de « Points à vérifier ».
+FP.trouvailleResolue = function (genre, a) { const st = FP.controleStatut(FP.trouvailleId(genre, a)); return st === 'justifie' || st === 'fraude' || st === 'classe'; };
+
 // Libellé lisible d'une catégorie de conso (carte carburant / péage).
 FP.consoCatLabel = (cat) => ({ carburant: 'plein carburant', peage: 'péage', boutique: 'achat boutique', lavage: 'lavage', parking: 'parking', adblue: 'AdBlue' })[String(cat || '').toLowerCase()] || 'achat';
 

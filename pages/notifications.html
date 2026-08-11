@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260811g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260811g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811h">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -138,11 +138,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260811g"></script>
-<script src="../assets/js/supabase-client.js?v=20260811g"></script>
-<script src="../assets/js/data.js?v=20260811g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260811h"></script>
+<script src="../assets/js/supabase-client.js?v=20260811h"></script>
+<script src="../assets/js/data.js?v=20260811h"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260811g"></script>
+<script src="../assets/js/app.js?v=20260811h"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -640,13 +640,16 @@
     let okMap = {}; try { okMap = FP.settings.get().tfAnomOk || {}; } catch (e) {}
     const presBadge = FP.prestataireBadge ? FP.prestataireBadge() : 'Ulys';
     const lbl = (a) => { if (String(a.categorie || '').toLowerCase() === 'peage' && /^ULYS/i.test(String(a.carte || ''))) return 'péage ' + presBadge; return FP.consoCatLabel ? FP.consoCatLabel(a.categorie) : 'achat'; };
-    return FP.consoPendantConge(_verifTx || []).map(a => {
+    return FP.consoPendantConge(_verifTx || [])
+      .filter(a => !(FP.trouvailleResolue && FP.trouvailleResolue('conge', a))) // déjà traité dans Contrôle → on n'affiche plus (même branche)
+      .map(a => {
       const cg = a.conge || {};
       const key = 'conge|' + (a.key || '') + '|' + a.date + '|' + (a.produit || '') + '|' + (a.montant || '');
+      const cid = FP.trouvailleId ? FP.trouvailleId('conge', a) : ''; // id PARTAGÉ avec la page Contrôle
       const conso = lbl(a);
       const mnt = (a.montant != null && a.montant !== 0) ? " d'un montant de " + (FP.euro ? FP.euro(a.montant) : a.montant) : '';
       const facTxt = a.facnum ? ' · Facture n° ' + a.facnum : '';
-      return { key, t: 'conge', mois: String(a.date || '').slice(0, 7), facnum: a.facnum || '',
+      return { key, cid, t: 'conge', mois: String(a.date || '').slice(0, 7), facnum: a.facnum || '',
         xp: { conducteur: a.conducteur, conso, montant: a.montant, dateConso: a.date, congeDebut: cg.debut, congeFin: cg.fin, facnum: a.facnum || '' },
         txt: `${a.conducteur} — ${conso} le ${FP.date ? FP.date(a.date) : a.date}${mnt} pendant le congé du ${FP.date(cg.debut)} au ${FP.date(cg.fin)}${facTxt}` };
     }).filter(a => !okMap[a.key]);
@@ -660,7 +663,11 @@
     // Les conso Ulys datées vivent aussi dans total_conso_tx (péage) → on les exclut de la détection
     // « carte carburant » (anomalies Total) ; elles ne servent QUE au suivi des congés (congeAnoms).
     const txCard = (_verifTx || []).filter(t => !String(t.carte || '').toUpperCase().startsWith('ULYS'));
-    const card = (window.FP && FP.totalFleetAnomaliesActives) ? FP.totalFleetAnomaliesActives(txCard) : [];
+    let card = (window.FP && FP.totalFleetAnomaliesActives) ? FP.totalFleetAnomaliesActives(txCard) : [];
+    // Même branche que Contrôle : on retire les anomalies déjà traitées là-bas (justifié / fraude / classé)
+    // et on rattache l'id PARTAGÉ (pour que la ✓ ici les classe aussi côté Contrôle).
+    card = card.filter(c => !(FP.trouvailleResolue && FP.trouvailleResolue('carte', c)));
+    card.forEach(c => { c.cid = FP.trouvailleId ? FP.trouvailleId('carte', c) : ''; });
     return card.concat(congeAnoms());
   }
   function hasConges() { try { return Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length > 0; } catch (e) { return false; } }
@@ -703,7 +710,7 @@
         const voir = a.facnum
           ? `<button type="button" data-verif-facture="${esc(a.facnum)}" title="Voir la facture concernée" style="flex:none;font-size:12px;font-weight:700;color:var(--fp-accent);background:#FFF7ED;border:1px solid #FED7AA;border-radius:7px;padding:4px 11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`
           : `<a href="${conge ? 'conducteurs.html' : 'factures.html'}" title="Ouvrir" style="flex:none;color:#94A3B8"><i data-lucide="chevron-right" class="w-4 h-4"></i></a>`;
-        return `<div class="notif lvl-warn" style="align-items:center;gap:8px"><button type="button" data-verif-ok="${esc(a.key)}" title="Marquer vérifié / archiver (même suivi que Factures)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:17px;line-height:1">✓</button><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0"></i><div class="flex-1 min-w-0">${body}</div>${voir}</div>`;
+        return `<div class="notif lvl-warn" style="align-items:center;gap:8px"><button type="button" data-verif-ok="${esc(a.key)}" data-verif-cid="${esc(a.cid || '')}" title="Marquer vérifié / archiver (même suivi que Factures et Contrôle)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:17px;line-height:1">✓</button><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0"></i><div class="flex-1 min-w-0">${body}</div>${voir}</div>`;
       }).join('');
     lucide.createIcons();
   }
@@ -757,10 +764,14 @@
     const ok = e.target.closest('[data-verif-ok]'); if (!ok) return;
     e.preventDefault();
     const key = ok.getAttribute('data-verif-ok');
+    const cid = ok.getAttribute('data-verif-cid') || '';
     const a = verifAnoms().find(x => x.key === key);
     try { const s = FP.settings.get(); const m = s.tfAnomOk || {}; m[key] = a ? { key, t: a.t, txt: a.txt, mois: a.mois || '', facnum: a.facnum || '', okAt: Date.now() } : { key, okAt: Date.now() }; s.tfAnomOk = m; FP.settings.save(s); } catch (er) {}
+    // MÊME BRANCHE que la page Contrôle : on classe aussi la trouvaille côté Contrôle (statut « classé »)
+    // pour que les deux vues restent synchronisées.
+    if (cid && FP.setControleStatut) FP.setControleStatut(cid, 'classe');
     renderVerif();
-    if (window.FP && FP.toast) FP.toast('✓ Archivé (visible aussi dans Factures)');
+    if (window.FP && FP.toast) FP.toast('✓ Archivé (visible aussi dans Factures et Contrôle)');
   }); }
 
   // Bouton « Compléter depuis les cartes grises » : remplit les champs VIDES depuis FP.CG_DATA.
