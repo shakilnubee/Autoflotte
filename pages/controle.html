@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810p">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810q">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260810p"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260810q"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260810p">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260810q">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -203,9 +203,8 @@
 
     <!-- Sous-onglets Total Fleet / Ulys : la vue complète (conso, imports, exports) est intégrée depuis
          Factures en mode « embed » → un seul code source, aucune duplication. Chargée à la 1re ouverture. -->
-    <div id="pane-total" class="hidden">
-      <iframe id="if-total" title="Total Fleet" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff;overflow:hidden"></iframe>
-    </div>
+    <!-- Total Fleet : rendu NATIF (module fleet-views.js) — plus d'iframe. Fallback iframe si le module manque. -->
+    <div id="pane-total" class="hidden"></div>
     <!-- Ulys : rendu NATIF (module fleet-views.js) — plus d'iframe. Fallback iframe si le module manque. -->
     <div id="pane-ulys" class="hidden"></div>
 
@@ -282,12 +281,12 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260810p"></script>
-<script src="../assets/js/supabase-client.js?v=20260810p"></script>
-<script src="../assets/js/data.js?v=20260810p"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260810q"></script>
+<script src="../assets/js/supabase-client.js?v=20260810q"></script>
+<script src="../assets/js/data.js?v=20260810q"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260810p"></script>
-<script src="../assets/js/fleet-views.js?v=20260810p"></script>
+<script src="../assets/js/app.js?v=20260810q"></script>
+<script src="../assets/js/fleet-views.js?v=20260810q"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -316,7 +315,18 @@
     // chargement (requestIdleCallback) pour que la page Contrôle reste fluide « dès le clic », même si
     // le dernier onglet mémorisé était Total/Ulys — l'iframe se remplit juste après, sans bloquer.
     const _lazyFrame = (id, url) => { const f = $(id); if (!f || f.src) return; const go = () => { if (!f.src) f.src = url; }; (window.requestIdleCallback ? requestIdleCallback(go, { timeout: 1200 }) : setTimeout(go, 250)); };
-    if (name === 'total') _lazyFrame('if-total', 'factures.html?embed&tab=total');
+    // Total Fleet : NATIF via le module partagé (fleet-views.js). Repli sur l'iframe si le module n'est pas là.
+    if (name === 'total') {
+      const paneT = $('pane-total');
+      if (window.FP && FP.mountTotal && paneT) {
+        const ok = FP.mountTotal(paneT);
+        if (ok) { try { if (window.renderTotalFleet) window.renderTotalFleet(); } catch (e) {} }
+        else { paneT.innerHTML = '<iframe id="if-total" title="Total Fleet" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>'; _lazyFrame('if-total', 'factures.html?embed&tab=total'); }
+      } else if (paneT) {
+        paneT.innerHTML = '<iframe id="if-total" title="Total Fleet" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>';
+        _lazyFrame('if-total', 'factures.html?embed&tab=total');
+      }
+    }
     // Ulys : NATIF via le module partagé (fleet-views.js). Repli sur l'iframe si le module n'est pas là.
     if (name === 'ulys') {
       const pane = $('pane-ulys');
