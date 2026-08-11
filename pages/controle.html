@@ -466,6 +466,16 @@
     const slim = a => (a || []).map(r => { const o = {}; for (const k of KEEP) if (r[k] != null) o[k] = r[k]; return o; });
     localStorage.setItem(_ctrlCK(), JSON.stringify({ tx: slim(_tx), ulys: _ulys }));
   } catch (e) { /* quota : tant pis, pas de cache */ } }
+  // ⚡⚡ Cache des TROUVAILLES DÉJÀ CALCULÉES (par société). Sur les gros comptes, recalculer
+  // buildFindings() (détecteurs qui balaient TOUTES les consos) prend un temps sensible SURTOUT sur
+  // mobile → gel « au clic sur l'onglet ». On mémorise le résultat : à la visite suivante, on l'affiche
+  // INSTANTANÉMENT (zéro calcul), et on recalcule EN TÂCHE DE FOND (temps mort) sans bloquer.
+  const _findCK = () => { try { return 'fp_ctrl_findings_' + ((FP.activeSociete && FP.activeSociete()) || 'PXP'); } catch (e) { return 'fp_ctrl_findings_PXP'; } };
+  // On stocke la SIGNATURE des données AVEC les trouvailles : à la visite suivante, si les données
+  // fraîches ont la MÊME signature (rien n'a bougé), on NE RECALCULE PAS du tout (pas de gel de fond) —
+  // on garde l'affichage instantané du cache. On ne recalcule que si une conso/un congé/un statut a changé.
+  function _seedFindingsCache(){ try { const c = JSON.parse(localStorage.getItem(_findCK()) || 'null'); if (c && Array.isArray(c.findings)) { _findings = c.findings; _lastBuildSig = c.sig || null; return true; } } catch (e) {} return false; }
+  function _writeFindingsCache(){ try { localStorage.setItem(_findCK(), JSON.stringify({ sig: _lastBuildSig, findings: (_findings || []).slice(0, 4000) })); } catch (e) { /* quota : tant pis */ } }
   async function loadConducteurs(){
     try { const r = await FP.supabase.from('conducteurs').select('*'); if (r && r.data) { const soc = FP.activeSociete ? FP.activeSociete() : null; window.FP_DATA.conducteurs = (soc && soc !== '__all__') ? r.data.filter(c => !c.societe || c.societe === soc) : r.data; } } catch (e) {}
   }
@@ -526,7 +536,7 @@
     cndList.forEach(c => { const np = FP.normPrenom ? FP.normPrenom(dispName(c)) : ''; if (np && !(np in _npIndex)) _npIndex[np] = c; });
     const _canonMemo = new Map();
     const canon = (name, key) => {
-      const mk = (key || '') + ' ' + (name || '');
+      const mk = (key || '') + '\u0000' + (name || '');
       const hit = _canonMemo.get(mk); if (hit) return hit;
       const np = FP.normPrenom ? FP.normPrenom(name) : String(name || '').trim().toLowerCase().split(/\s+/)[0];
       let c = (key && cndByKey[key]) || null;
@@ -888,7 +898,7 @@
   });
   $('ctrl-body').addEventListener('change', (e) => {
     const sel = e.target.closest('[data-statut]');
-    if (sel) { const fid = sel.getAttribute('data-statut'); const f = _findings.find(x=>x.fid===fid); setStatut(fid, sel.value, f && f._def); if (f) f.statut = sel.value; if (FP.toast) FP.toast('Statut : ' + (ST_LABEL[sel.value]||sel.value)); render(); }
+    if (sel) { const fid = sel.getAttribute('data-statut'); const f = _findings.find(x=>x.fid===fid); setStatut(fid, sel.value, f && f._def); if (f) f.statut = sel.value; if (FP.toast) FP.toast('Statut : ' + (ST_LABEL[sel.value]||sel.value)); render(); _writeFindingsCache(); }
   });
 
   async function openFacture(facnum){
@@ -987,13 +997,16 @@
     let cong = 0; try { cong = Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length; } catch (e) {}
     let smLen = 0; try { smLen = JSON.stringify(statutMap()).length; } catch (e) {}
     const cnd = (FP.conducteursTous ? FP.conducteursTous() : ((FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [])).length;
-    return _tx.length + '|' + _ulys.length + '|' + cnd + '|' + cong + '|' + smLen;
+    // + somme des montants (détecte une conso MODIFIÉE, pas seulement ajoutée/supprimée). O(tx), <1 ms.
+    let sum = 0; for (let i = 0; i < _tx.length; i++) { const v = _tx[i]; sum += Number((v && (v.montant_ttc != null ? v.montant_ttc : v.montantTtc)) || 0); }
+    return _tx.length + '|' + _ulys.length + '|' + cnd + '|' + cong + '|' + smLen + '|' + Math.round(sum * 100);
   }
   function rebuild(force){
     const sig = _buildSig();
     if (!force && sig === _lastBuildSig) { render(); return; } // entrées inchangées → simple re-render (léger)
     _lastBuildSig = sig;
     _findings = buildFindings(); fillConducteurs(); fillMois(); render();
+    _writeFindingsCache(); // mémorise le résultat pour un affichage instantané la prochaine fois
   }
   function boot(){
     // ⚡ On laisse la COQUILLE (onglets + KPIs) PEINDRE d'abord, PUIS on calcule/charge. Sinon
@@ -1001,15 +1014,23 @@
     // de vue, la page semble « bloquée un instant après le clic ». En différant, Contrôle apparaît
     // tout de suite et les trouvailles se remplissent juste après.
     const run = async () => {
-      // 1) Affichage depuis le cache local (si déjà ouvert) — pas d'attente réseau.
-      if (_seedCtrlCache()) { try { rebuild(true); } catch (e) {} }
+      // 0) ⚡ TROUVAILLES EN CACHE → affichage INSTANTANÉ, ZÉRO calcul (c'était le gel « au clic »).
+      let shownFromCache = false;
+      if (_seedFindingsCache()) { try { _loaded = true; fillConducteurs(); fillMois(); render(); shownFromCache = true; } catch (e) {} }
+      // 1) Cache des consos brutes (pour le recalcul) — affichage immédiat si pas encore de trouvailles.
+      const hadConsoCache = _seedCtrlCache();
+      if (!shownFromCache && hadConsoCache) { try { rebuild(true); } catch (e) {} }
       // 2) Données fraîches. Conducteurs déjà chargés par l'app → on évite une requête bloquante.
       const jobs = [loadData()];
       const condsOK = !!(window.FP_DATA && Array.isArray(window.FP_DATA.conducteurs) && window.FP_DATA.conducteurs.length);
       if (!condsOK) jobs.push(loadConducteurs());
       await Promise.all(jobs);
-      // Ne RECONSTRUIT que si les données réseau diffèrent du cache déjà affiché (sinon simple render).
-      rebuild(false);
+      // 3) Recalcul avec les données fraîches — mais rebuild(false) NE RECALCULE QUE SI la signature
+      //    des données a changé depuis le cache (sinon simple render, déjà fait → rien). Donc sur une
+      //    visite « rien n'a bougé », AUCUN gel de fond. Différé en temps mort si on a déjà affiché.
+      const recompute = () => { try { rebuild(false); } catch (e) {} };
+      if (shownFromCache) { (window.requestIdleCallback ? requestIdleCallback(recompute, { timeout: 2000 }) : setTimeout(recompute, 60)); }
+      else { rebuild(false); }
     };
     if (window.requestAnimationFrame) requestAnimationFrame(() => setTimeout(run, 0)); else setTimeout(run, 0);
   }
