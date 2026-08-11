@@ -519,14 +519,22 @@
     const cndList = (FP.conducteursTous ? FP.conducteursTous() : ((FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : []));
     const cndByKey = {}; cndList.forEach(c => { cndByKey[c.key] = c; });
     const dispName = (c) => (c && FP.conducteurs && FP.conducteurs.displayName) ? FP.conducteurs.displayName(c) : '';
+    // ⚡ PERF : index prénom→conducteur calculé UNE fois (au lieu d'un cndList.find() par trouvaille,
+    // soit O(trouvailles × conducteurs)) + mémo de canon() par (clé|nom) — sur les gros comptes,
+    // buildFindings passait la majorité de son temps ici. Résultat identique, coût effondré.
+    const _npIndex = {};
+    cndList.forEach(c => { const np = FP.normPrenom ? FP.normPrenom(dispName(c)) : ''; if (np && !(np in _npIndex)) _npIndex[np] = c; });
+    const _canonMemo = new Map();
     const canon = (name, key) => {
+      const mk = (key || '') + ' ' + (name || '');
+      const hit = _canonMemo.get(mk); if (hit) return hit;
       const np = FP.normPrenom ? FP.normPrenom(name) : String(name || '').trim().toLowerCase().split(/\s+/)[0];
       let c = (key && cndByKey[key]) || null;
       if (!c) { try { c = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(name) : null; } catch (e) {} }
-      if (!c && np) { c = cndList.find(x => FP.normPrenom(dispName(x)) === np) || null; }
+      if (!c && np) { c = _npIndex[np] || null; }
       const n = c ? dispName(c) : (name || '');
       const k = (c ? (FP.normPrenom(dispName(c)) || np) : np) || String(name || '').toLowerCase();
-      return { k, n };
+      const res = { k, n }; _canonMemo.set(mk, res); return res;
     };
     // 1) Conso DATÉE pendant un congé (toutes catégories)
     (FP.consoPendantConge ? FP.consoPendantConge(_tx) : []).forEach(a => {
@@ -591,6 +599,13 @@
   // ===== Filtres =====
   // Par défaut on ouvre sur les anomalies « À vérifier » (les éléments à traiter), pas « Tous ».
   const state = { search:'', cond:'all', type:'all', statut:'a-verifier', mois:'all', from:'', to:'', grouped:true, expanded:new Set() };
+  // ⚡ PERF : le rendu ne peint PAS des milliers de lignes d'un coup (c'était un gel de plusieurs
+  // secondes sur les gros comptes). Vue GROUPÉE = les lignes d'un conducteur ne sont construites que
+  // quand on DÉPLIE son groupe (les groupes fermés restent vides). Vue LISTE = plafonnée à FLAT_CAP
+  // avec un vrai bouton « Voir tout / Voir moins ».
+  let _renderGroups = [];      // groupes calculés au dernier rendu (pour remplir un groupe à l'ouverture)
+  let _flatShowAll = false;    // vue liste : l'utilisateur a-t-il demandé « Voir tout » ?
+  const FLAT_CAP = 250;        // nb max de lignes peintes d'emblée en vue liste
   function applyFilters(list){
     const q = state.search.trim().toLowerCase();
     return list.filter(f => {
@@ -722,18 +737,34 @@
     if (state.grouped){
       const byC = {}; all.forEach(f => { const gk = f.gkey || f.conducteur; (byC[gk] = byC[gk] || []).push(f); });
       const groups = Object.keys(byC).map(gk => { const rows = byC[gk]; const n = rows.map(r=>r.conducteur).sort((a,b)=>String(b).length-String(a).length)[0]; return { gk, n, rows, tot:rows.reduce((s,f)=>s+(Number(f.montant)||0),0) }; }).sort((a,b)=>b.tot-a.tot);
+      _renderGroups = groups; // mémorisé pour remplir un groupe À L'OUVERTURE (voir handler data-grp)
       // On garde en mémoire les groupes DÉPLIÉS (par conducteur, clé stable) pour que changer un
       // statut — qui relance render() — ne REFERME pas tout ce qu'on avait ouvert.
-      box.innerHTML = diag + groups.map((g,i)=>{ const open = state.expanded.has(g.gk); return `
+      // ⚡ PERF : un groupe FERMÉ ne construit PAS ses lignes (body vide, `data-filled="0"`). Elles
+      // sont peintes à la 1re ouverture (handler du clic sur l'en-tête) → plus de gel au chargement.
+      box.innerHTML = diag + groups.map((g,i)=>{ const open = state.expanded.has(g.gk);
+        const bodyInner = open ? `<table class="ctrl-tbl">${COLS}<tbody>${g.rows.map(rowHTML).join('')}</tbody></table>` : '';
+        return `
         <div class="mb-2">
           <div class="grp-head" data-grp="${i}" data-grpkey="${esc(g.gk)}">
             <div class="font-semibold text-slate-900">${esc(g.n)} <span class="text-xs text-slate-500">· ${g.rows.length} trouvaille(s)</span></div>
             <div class="flex items-center gap-3"><span class="font-bold" style="color:var(--fp-primary)">${euro(g.tot)}</span><i data-lucide="chevron-down" class="w-4 h-4 text-slate-400" data-chev="${i}"${open?' style="transform:rotate(180deg)"':''}></i></div>
           </div>
-          <div class="${open?'':'hidden'}" data-grpbody="${i}" style="overflow-x:auto"><table class="ctrl-tbl">${COLS}<tbody>${g.rows.map(rowHTML).join('')}</tbody></table></div>
+          <div class="${open?'':'hidden'}" data-grpbody="${i}" data-filled="${open?'1':'0'}" style="overflow-x:auto">${bodyInner}</div>
         </div>`; }).join('');
     } else {
-      box.innerHTML = diag + `<div class="card p-2" style="overflow-x:auto"><table class="ctrl-tbl">${COLS}<tbody>${all.map(rowHTML).join('')}</tbody></table></div>`;
+      // ⚡ PERF : on ne peint que les FLAT_CAP premières lignes ; le reste via « Voir tout » (vrai toggle).
+      const capped = _flatShowAll ? all : all.slice(0, FLAT_CAP);
+      const more = all.length - capped.length;
+      let toggle = '';
+      if (all.length > FLAT_CAP) {
+        toggle = _flatShowAll
+          ? `<div class="text-center mt-3"><button type="button" id="ctrl-flatless" class="btn btn-outline text-sm">Voir moins ↑</button></div>`
+          : `<div class="text-center mt-3"><button type="button" id="ctrl-flatmore" class="btn btn-outline text-sm">Voir tout (${more} de plus) ↓</button> <span class="text-xs text-slate-400">— ${capped.length} affichées sur ${all.length}</span></div>`;
+      }
+      box.innerHTML = diag + `<div class="card p-2" style="overflow-x:auto"><table class="ctrl-tbl">${COLS}<tbody>${capped.map(rowHTML).join('')}</tbody></table></div>` + toggle;
+      const bm = $('ctrl-flatmore'); if (bm) bm.addEventListener('click', () => { _flatShowAll = true; render(); });
+      const bl = $('ctrl-flatless'); if (bl) bl.addEventListener('click', () => { _flatShowAll = false; render(); });
     }
     if (window.lucide) lucide.createIcons();
   }
@@ -841,7 +872,17 @@
 
   $('ctrl-body').addEventListener('click', async (e) => {
     const gh = e.target.closest('[data-grp]');
-    if (gh) { const i = gh.getAttribute('data-grp'); const key = gh.getAttribute('data-grpkey'); const b = document.querySelector('[data-grpbody="'+i+'"]'); const ch = document.querySelector('[data-chev="'+i+'"]'); if (b){ b.classList.toggle('hidden'); const hidden = b.classList.contains('hidden'); if(ch) ch.style.transform = hidden?'':'rotate(180deg)'; if(key){ if(hidden) state.expanded.delete(key); else state.expanded.add(key); } } return; }
+    if (gh) { const i = gh.getAttribute('data-grp'); const key = gh.getAttribute('data-grpkey'); const b = document.querySelector('[data-grpbody="'+i+'"]'); const ch = document.querySelector('[data-chev="'+i+'"]');
+      if (b){
+        b.classList.toggle('hidden'); const hidden = b.classList.contains('hidden');
+        // ⚡ PERF : 1re ouverture → on construit MAINTENANT les lignes de CE groupe (elles n'étaient pas
+        // dans le DOM). Coût borné à un seul conducteur, imperceptible.
+        if (!hidden && b.getAttribute('data-filled') === '0') {
+          const g = _renderGroups[+i];
+          if (g) { b.innerHTML = '<table class="ctrl-tbl">' + COLS + '<tbody>' + g.rows.map(rowHTML).join('') + '</tbody></table>'; b.setAttribute('data-filled', '1'); if (window.lucide) lucide.createIcons(); }
+        }
+        if(ch) ch.style.transform = hidden?'':'rotate(180deg)'; if(key){ if(hidden) state.expanded.delete(key); else state.expanded.add(key); }
+      } return; }
     const fac = e.target.closest('[data-fac]');
     if (fac) { e.preventDefault(); openFacture(fac.getAttribute('data-fac')); return; }
   });
@@ -937,6 +978,23 @@
     sel.innerHTML = '<option value="all">Tous les mois</option>' + [...set].sort().reverse().map(m => { const [y,mo]=m.split('-'); const N=['','janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.']; return `<option value="${m}">${N[+mo]||mo} ${y}</option>`; }).join('');
     if (cur) sel.value = cur;
   }
+  // ⚡ PERF : buildFindings() est le gros calcul (O(transactions)). Sur une visite « cache chaud », il
+  // était relancé 2-3× d'affilée (cache → réseau → fp:data-ready) alors que les données étaient
+  // IDENTIQUES → autant de gels. On calcule une signature légère des entrées ; si rien n'a changé, on
+  // ne RECONSTRUIT PAS (on se contente d'un render(), désormais borné donc quasi gratuit).
+  let _lastBuildSig = null;
+  function _buildSig(){
+    let cong = 0; try { cong = Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length; } catch (e) {}
+    let smLen = 0; try { smLen = JSON.stringify(statutMap()).length; } catch (e) {}
+    const cnd = (FP.conducteursTous ? FP.conducteursTous() : ((FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [])).length;
+    return _tx.length + '|' + _ulys.length + '|' + cnd + '|' + cong + '|' + smLen;
+  }
+  function rebuild(force){
+    const sig = _buildSig();
+    if (!force && sig === _lastBuildSig) { render(); return; } // entrées inchangées → simple re-render (léger)
+    _lastBuildSig = sig;
+    _findings = buildFindings(); fillConducteurs(); fillMois(); render();
+  }
   function boot(){
     // ⚡ On laisse la COQUILLE (onglets + KPIs) PEINDRE d'abord, PUIS on calcule/charge. Sinon
     // buildFindings() (sur le cache) tourne en SYNCHRONE avant le 1er rendu et, avec les transitions
@@ -944,16 +1002,14 @@
     // tout de suite et les trouvailles se remplissent juste après.
     const run = async () => {
       // 1) Affichage depuis le cache local (si déjà ouvert) — pas d'attente réseau.
-      if (_seedCtrlCache()) { try { _findings = buildFindings(); fillConducteurs(); fillMois(); render(); } catch (e) {} }
+      if (_seedCtrlCache()) { try { rebuild(true); } catch (e) {} }
       // 2) Données fraîches. Conducteurs déjà chargés par l'app → on évite une requête bloquante.
       const jobs = [loadData()];
       const condsOK = !!(window.FP_DATA && Array.isArray(window.FP_DATA.conducteurs) && window.FP_DATA.conducteurs.length);
       if (!condsOK) jobs.push(loadConducteurs());
       await Promise.all(jobs);
-      _findings = buildFindings();
-      fillConducteurs();
-      fillMois();
-      render();
+      // Ne RECONSTRUIT que si les données réseau diffèrent du cache déjà affiché (sinon simple render).
+      rebuild(false);
     };
     if (window.requestAnimationFrame) requestAnimationFrame(() => setTimeout(run, 0)); else setTimeout(run, 0);
   }
@@ -967,7 +1023,7 @@
   document.addEventListener('fp:data-ready', () => {
     const cur = _tab; renderPrestaTabs();
     if (!tabNames().includes(cur)) switchTab('controle'); else switchTab(cur);
-    if (_loaded) { _findings = buildFindings(); fillConducteurs(); fillMois(); render(); }
+    if (_loaded) { rebuild(false); } // ne reconstruit que si conducteurs/congés/statuts ont changé
   });
 </script>
 </body>
