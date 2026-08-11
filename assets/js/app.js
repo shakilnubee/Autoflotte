@@ -2102,8 +2102,17 @@ FP.settings = {
     document.documentElement.style.setProperty('--fp-logo-bg', useWhite ? '#FFFFFF' : '#111111');
     document.documentElement.style.setProperty('--fp-logo-fg', useWhite ? pc : '#FFFFFF');
     document.documentElement.style.setProperty('--fp-logo-border', useWhite ? 'rgba(0,0,0,.18)' : '#000000');
-    // Mode sombre 🌙 — SYNCHRONISÉ (règle 0-sync) : lu depuis les réglages, cache local pour l'instant.
-    if (document.body) { try { const p = (this.get().prefs || {}); const dk = (p.darkMode != null) ? !!p.darkMode : (localStorage.getItem('fp_dark_mode') === '1'); document.body.classList.toggle('fp-dark', dk); } catch (e) {} }
+    // Mode sombre 🌙 — SYNCHRONISÉ (règle 0-sync). ⚠️ ANTI-FLASH : le cache local `fp_dark_mode` est la
+    // MÊME source que la garde synchrone du <head> (qui peint la page en sombre AVANT tout). On le lit donc
+    // EN PRIORITÉ ici — sinon la valeur par défaut `prefs.darkMode=false` (avant la synchro serveur)
+    // retirait la classe `fp-dark` posée par la garde → gros flash clair→sombre. Le cache local est tenu
+    // à jour par FP.darkMode.set (écrit localStorage + réglage serveur) → cohérent avec la garde <head>.
+    if (document.body) { try {
+      const ls = localStorage.getItem('fp_dark_mode');
+      const p = (this.get().prefs || {});
+      const dk = (ls === '1' || ls === '0') ? (ls === '1') : !!p.darkMode;
+      document.body.classList.toggle('fp-dark', dk);
+    } catch (e) {} }
   },
 };
 
