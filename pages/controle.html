@@ -826,7 +826,11 @@
     if (!conds.length) { box.innerHTML = '<p class="text-sm text-slate-400 p-3">Aucun conducteur.</p>'; return; }
     // Champs VERROUILLÉS par défaut (anti-modif accidentelle) : ✏️ / double-clic pour éditer,
     // re-verrouillage automatique dès qu'on quitte le champ.
-    const vehImmats = (c) => (data.vehicules || []).filter(v => { try { const cc = v.chauffeur && v.chauffeur !== '—' ? FP.conducteurs.find(v.chauffeur) : null; return cc && cc.key === c.key; } catch (e) { return false; } }).map(v => v.immat).filter(Boolean);
+    // ⚡ PERF : véhicules par conducteur calculés en UN SEUL passage (au lieu d'un filter()+find() PAR
+    // conducteur = quadratique, ~2500 find() → gel à l'ouverture de « Cartes & badges »). Index O(1).
+    const _immatsByKey = {};
+    (data.vehicules || []).forEach(v => { try { const cc = v.chauffeur && v.chauffeur !== '—' ? FP.conducteurs.find(v.chauffeur) : null; if (cc && cc.key && v.immat) (_immatsByKey[cc.key] = _immatsByKey[cc.key] || []).push(v.immat); } catch (e) {} });
+    const vehImmats = (c) => _immatsByKey[c.key] || [];
     const vehLink = (im) => '<a href="vehicules.html?immat=' + encodeURIComponent(im) + '" style="display:inline-block;background:#EEF2FF;color:#3730A3;border-radius:6px;padding:1px 7px;font-size:.78rem;font-weight:700;text-decoration:none;white-space:nowrap;margin:1px 2px 1px 0">' + esc(im) + '</a>';
     const inp = (c, p) => { const num = (FP.condNum ? FP.condNum(c.key, p.numKey) : '') || ''; return '<input class="cb-inp" data-cb-key="' + esc(c.key) + '" data-cb-field="' + esc(p.numKey) + '" value="' + esc(num) + '" placeholder="—" readonly title="Verrouillé — cliquez ✏️ pour modifier" style="' + _cbInpLocked + '">'; };
     if (_cbView === 'table') {
