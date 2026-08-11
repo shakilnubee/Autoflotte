@@ -4142,20 +4142,29 @@ FP.buildEcheances = (data) => {
   const out = [];
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const iso = (d) => { const x = new Date(d); return isNaN(x) ? null : x.toISOString().slice(0, 10); };
-  // Barème ALIGNÉ sur buildAlertes (< 30 danger, < 60 warn, sinon info) pour qu'une MÊME
-  // échéance ait la même couleur/gravité dans « Alertes » et dans « Renouvellements »/calendrier.
-  const niv = (dateStr) => {
+  // Barème ALIGNÉ sur buildAlertes, PAR CATÉGORIE (sinon la MÊME échéance avait 2 couleurs entre
+  // « Alertes » et « Renouvellements »/calendrier) : CT & anti-pollution suivent l'anticipation
+  // `ctJours` (rouge = 1/3, orange = 2/3, défaut 30/60/90) ; permis & pièces d'identité suivent
+  // `docAlerteJours` (rouge = moitié, orange = X j, défaut 60/120). Reste (leasing…) = 30/60 générique.
+  const cfg = FP.notifCfg ? FP.notifCfg() : {};
+  const niv = (dateStr, categorie) => {
     // Décompte via le helper canonique (minuit-à-minuit) → MÊME gravité/couleur qu'Alertes pour une
     // même échéance (avant : Math.ceil sur une date parsée en UTC → +1 jour en France, couleurs décalées).
     const diff = FP.joursRestants(dateStr);
     if (diff == null) return 'info';
-    if (diff < 30) return 'danger';
-    if (diff < 60) return 'warn';
+    let dgr = 30, wrn = 60;
+    if (categorie === 'Contrôle technique' || categorie === 'Anti-pollution') {
+      const i = Number(cfg.ctJours) || 90; dgr = Math.round(i / 3); wrn = Math.round(i * 2 / 3);
+    } else if (categorie === 'Permis' || categorie === "Pièce d'identité") {
+      const w = Number(cfg.docAlerteJours) || 120; wrn = w; dgr = Math.round(w / 2);
+    }
+    if (diff < dgr) return 'danger';
+    if (diff < wrn) return 'warn';
     return 'info';
   };
   const push = (dateStr, categorie, label, detail, target) => {
     const d = iso(dateStr); if (!d) return;
-    out.push({ date: d, categorie, label, detail, niveau: niv(d), target });
+    out.push({ date: d, categorie, label, detail, niveau: niv(d, categorie), target });
   };
 
   (data.vehicules || []).forEach(v => {
@@ -4229,9 +4238,11 @@ FP.rapportDirection = (data) => {
   const kmTotal = actifs.reduce((s, v) => s + (Number(v.km) || 0), 0);
   const valeurParc = actifs.reduce((s, v) => s + (Number(v.valeurAchat) || Number(v.prix) || 0), 0);
 
-  // Factures dédoublonnées par numéro (comme Statistiques / Factures) → chiffres cohérents dans le rapport.
-  const _seenF = new Set();
-  const facts = (data.factures || []).filter(f => { const k = (f.numeroFacture || '').toString().toUpperCase(); if (!k) return true; if (_seenF.has(k)) return false; _seenF.add(k); return true; });
+  // Factures dédoublonnées via le HELPER CANONIQUE FP.dedupeFactures (n° normalisé ≥ 4 car. + même TTC),
+  // exactement comme le dashboard / l'écran mural / Statistiques → chiffres cohérents dans le rapport.
+  // (Avant : dédup maison par « n° en MAJ seul » → sous-comptait 2 vraies factures au même n° et
+  // sur-comptait une variante de ponctuation. Divergence avec le « Coût du mois » du dashboard.)
+  const facts = FP.dedupeFactures(data.factures || []);
   // Coût du mois = coût d'EXPLOITATION (hors leasing/sinistre/achat/cession) — MÊME règle que le
   // dashboard et l'écran mural, sinon le rapport annonçait un montant gonflé par un achat de véhicule.
   const coutMois = facts.filter(f => (f.date || '').slice(0, 7) === ym && FP.coutFactureExploit(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0);
@@ -8135,7 +8146,7 @@ FP.contactChips = (name) => {
   if (!tel && !email) return '';
   const esc = FP.esc || (x => x);
   const chip = (href, icon, txt, lbl) =>
-    `<a href="${href}" class="fp-contact-chip"><i data-lucide="${icon}" style="width:13px;height:13px"></i> ${esc(txt)}</a>`
+    `<a href="${esc(href)}" class="fp-contact-chip"><i data-lucide="${icon}" style="width:13px;height:13px"></i> ${esc(txt)}</a>`
     + `<button type="button" class="fp-contact-copy" data-copy="${esc(txt)}" title="Copier ${lbl}"><i data-lucide="copy" style="width:12px;height:12px"></i></button>`;
   let out = '<span class="fp-contact-wrap">';
   if (tel) out += chip('tel:' + String(tel).replace(/\s+/g, ''), 'phone', tel, 'le téléphone');
@@ -8431,12 +8442,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const results = wrap.querySelector('.fp-search-results');
     const q = input.value.toLowerCase().trim();
     if (q.length < 2) { results.innerHTML = ''; results.classList.remove('open'); return; }
+    // ⚠️ SÉCURITÉ (XSS) : label/sub viennent de données saisies ou lues par OCR/IA (chauffeur,
+    // motif d'amende, fournisseur, description…) → TOUJOURS échapper via FP.esc avant innerHTML.
+    // Sinon une charge stockée `<img onerror=…>` s'exécuterait chez le CEO (toutes sociétés).
+    const _e = FP.esc || (x => x);
     const item = (m) => `
-        <a href="${m.url}" class="fp-search-item">
+        <a href="${_e(m.url)}" class="fp-search-item">
           <span class="fp-search-icon">${m.icon}</span>
           <span class="fp-search-text">
-            <span class="fp-search-label">${m.label}</span>
-            ${m.sub ? `<span class="fp-search-sub">${m.sub}</span>` : ''}
+            <span class="fp-search-label">${_e(m.label)}</span>
+            ${m.sub ? `<span class="fp-search-sub">${_e(m.sub)}</span>` : ''}
           </span>
         </a>`;
     const answers = FP.smartAnswers ? FP.smartAnswers(q) : [];
