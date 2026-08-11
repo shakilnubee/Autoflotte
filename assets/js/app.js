@@ -2140,7 +2140,10 @@ FP.settings = {
     if (document.body) { try {
       const ls = localStorage.getItem('fp_dark_mode');
       const p = (this.get().prefs || {});
-      const dk = (ls === '1' || ls === '0') ? (ls === '1') : !!p.darkMode;
+      // 🏎️ DÉFAUT = SOMBRE (Cockpit). Priorité : choix explicite de l'appareil (localStorage '1'/'0'),
+      // sinon réglage serveur explicite (prefs.darkMode), sinon SOMBRE. Un clair explicite ('0' ou
+      // prefs.darkMode===false) est TOUJOURS respecté ; seul « jamais choisi » bascule en sombre.
+      const dk = (ls === '1' || ls === '0') ? (ls === '1') : (p.darkMode != null ? !!p.darkMode : true);
       document.body.classList.toggle('fp-dark', dk);
     } catch (e) {} }
   },
@@ -2204,7 +2207,8 @@ FP.pref = {
 FP.darkMode = {
   get() {
     try { const p = FP.settings.get().prefs || {}; if (p.darkMode != null) return !!p.darkMode; } catch (e) {}
-    try { return localStorage.getItem('fp_dark_mode') === '1'; } catch (e) { return false; }
+    try { const ls = localStorage.getItem('fp_dark_mode'); if (ls === '1') return true; if (ls === '0') return false; } catch (e) {}
+    return true; // défaut = sombre (Cockpit)
   },
   set(v) {
     v = !!v;
