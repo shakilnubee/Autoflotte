@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810z">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260810z"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260810z">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811a">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -817,13 +817,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260810z"></script>
-<script src="../assets/js/supabase-client.js?v=20260810z"></script>
-<script src="../assets/js/data.js?v=20260810z"></script>
-<script src="../assets/js/fleet-docs.js?v=20260810z"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260810z"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260811a"></script>
+<script src="../assets/js/supabase-client.js?v=20260811a"></script>
+<script src="../assets/js/data.js?v=20260811a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260811a"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260811a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260810z"></script>
+<script src="../assets/js/app.js?v=20260811a"></script>
 <script>
   lucide.createIcons();
 
@@ -2231,10 +2231,37 @@
             </div>
           </div>`;
     }
+    // 🏎️ Carte contrat ALLÉGÉE — véhicule en leasing SANS forfait km saisi (leasingInfo=null) : on
+    // affiche quand même loyer + dates + barre « contrat réalisé » (si dates connues), avec une invite
+    // à compléter le forfait km. Valeurs via FP.leasingCoutContrat (source canonique) — aucun calcul métier.
+    let leaseLight = '';
+    if (!lease) {
+      let lc = null; try { lc = (window.FP && FP.leasingCoutContrat) ? FP.leasingCoutContrat(v.immat) : null; } catch (e) {}
+      if (lc && lc.loyerMois != null) {
+        const c = lc.contrat || {};
+        const _loueur = (FP.loueurOf ? FP.loueurOf(v) : ((FP.societeProfil && FP.societeProfil().loueurNom) || '')) || '';
+        const head = `<div class="flex justify-between"><span class="text-slate-600">${FP.esc(('Leasing ' + _loueur).trim())}</span><span class="font-medium">${FP.euro(lc.loyerMois)}/mois${c.dureeMois ? ' · ' + c.dureeMois + ' mois' : ''}</span></div>`;
+        let prog = '';
+        if (c.debut && c.dureeMois) {
+          const debut = new Date(c.debut); const fin = new Date(debut); fin.setMonth(fin.getMonth() + c.dureeMois);
+          const moisEc = Math.max(0, (Date.now() - debut) / (1000 * 60 * 60 * 24 * 30.44));
+          const pT = Math.max(0, Math.min(100, moisEc / c.dureeMois * 100));
+          const moYr = d => { try { return String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear(); } catch (e) { return '—'; } };
+          prog = `<div class="ct-cockpit"><div class="ct-block">
+              <div class="ct-line"><span>Contrat réalisé</span><b>${Math.round(pT)} %</b></div>
+              <div class="ct-track"><div class="ct-fill" style="width:${pT.toFixed(1)}%;background:linear-gradient(90deg,#94A3B8,#64748B)"></div><div class="ct-today" style="left:${pT.toFixed(1)}%"></div></div>
+              <div class="ct-foot ct-foot-split"><span class="ct-nw">${moYr(debut)}</span><span class="ct-now">aujourd'hui</span><span class="ct-nw">${moYr(fin)}</span></div>
+            </div><div class="ct-note">Forfait km non renseigné — <a href="contrats.html">l'ajouter</a> affiche la barre kilométrage.</div></div>`;
+        } else {
+          prog = `<div class="ct-cockpit"><div class="ct-note">Dates du contrat non renseignées — <a href="contrats.html">compléter dans Contrats</a> pour les barres.</div></div>`;
+        }
+        leaseLight = head + prog;
+      }
+    }
     const leaseHTML = lease ? `
           <div class="flex justify-between"><span class="text-slate-600">${FP.esc(('Forfait leasing ' + ((FP.loueurOf ? FP.loueurOf(v) : ((FP.societeProfil && FP.societeProfil().loueurNom) || '')) || '').toString().trim()).trim())}</span><span class="font-medium">${FP.num(lease.kmContrat)} km / ${lease.dureeMois} mois</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Projection fin de contrat</span><span class="font-medium" style="${leaseColor}">${lease.projectionFin !== null ? '~' + FP.num(lease.projectionFin) + ' km' : 'contrat récent'}${lease.niveau === 'danger' ? ' ⚠️' : ''}</span></div>
-          ${leaseProg}` : '';
+          ${leaseProg}` : leaseLight;
 
     // Helpers pour le drawer
     // Case à cocher éditable : changement sauvegardé immédiatement en localStorage
