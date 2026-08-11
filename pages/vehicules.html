@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260811i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260811i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811j">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -817,13 +817,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260811i"></script>
-<script src="../assets/js/supabase-client.js?v=20260811i"></script>
-<script src="../assets/js/data.js?v=20260811i"></script>
-<script src="../assets/js/fleet-docs.js?v=20260811i"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260811i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260811j"></script>
+<script src="../assets/js/supabase-client.js?v=20260811j"></script>
+<script src="../assets/js/data.js?v=20260811j"></script>
+<script src="../assets/js/fleet-docs.js?v=20260811j"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260811j"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260811i"></script>
+<script src="../assets/js/app.js?v=20260811j"></script>
 <script>
   lucide.createIcons();
 
@@ -3466,7 +3466,10 @@
       const v = targets[i].v;
       if (btn) btn.textContent = `Lecture ${i + 1}/${targets.length}…`;
       try {
-        const resp = await fetch(targets[i].url); if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        // Bucket privé : signer l'URL avant le fetch (l'URL stockée est « …/object/public/… » qui ne
+        // sert plus les fichiers d'un bucket privé) — même correctif que rereadPermisFromUrl.
+        const _cgU = (window.FP && FP.signedScanUrl) ? await FP.signedScanUrl(targets[i].url) : targets[i].url;
+        const resp = await fetch(_cgU); if (!resp.ok) throw new Error('HTTP ' + resp.status);
         const blob = await resp.blob();
         const file = new File([blob], 'cg.' + ((blob.type || '').includes('pdf') ? 'pdf' : 'jpg'), { type: blob.type || 'application/octet-stream' });
         let p = {};
@@ -4272,9 +4275,11 @@
     const fy1 = doc.lastAutoTable.finalY;
     doc.autoTable(Object.assign({}, kvOpts, { startY: cy, margin: { left: W / 2 + 2, right: 12 }, body: specs.slice(half) }));
     cy = Math.max(fy1, doc.lastAutoTable.finalY) + 8;
-    // Historique entretien (factures d'entretien/réparation/révision/pneus)
+    // Historique entretien — MÊME source que le carnet à l'écran : plaque normalisée (FP.normImmat,
+    // sinon une facture stockée « AB123CD » vs véhicule « AB-123-CD » manque au PDF) + FP.estEntretien.
     const CT = ['entretien', 'réparation', 'reparation', 'révision', 'revision', 'pneus'];
-    const hist = (data.factures || []).filter(f => f.vehiculeImmat === v.immat && CT.includes((f.type || '').toLowerCase()))
+    const _sameVeh = f => (FP.normImmat ? FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat) : f.vehiculeImmat === v.immat);
+    const hist = (data.factures || []).filter(f => _sameVeh(f) && (FP.estEntretien ? FP.estEntretien(f) : CT.includes((f.type || '').toLowerCase())))
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     if (hist.length) {
       doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(51, 65, 85); doc.text('HISTORIQUE D\'ENTRETIEN · ' + hist.length, 12, cy); cy += 3;

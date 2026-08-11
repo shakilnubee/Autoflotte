@@ -1096,6 +1096,41 @@ FP.setConges = (condKey, arr) => {
 };
 FP.addConge = (condKey, conge) => { if (!conge || !conge.debut || !conge.fin) return; const a = FP.getConges(condKey).slice(); a.push({ debut: conge.debut, fin: conge.fin, motif: conge.motif || '' }); FP.setConges(condKey, a); };
 FP.removeConge = (condKey, idx) => { const a = FP.getConges(condKey).slice(); if (idx >= 0 && idx < a.length) { a.splice(idx, 1); FP.setConges(condKey, a); } };
+// ── Migration / purge de TOUS les réglages keyés par clé conducteur ──────────────────────────
+// La clé conducteur = FP.normPrenom(nom) : elle CHANGE dès qu'on modifie le prénom. Sans migration,
+// congés, n° de cartes carburant/badges péage, date de sortie et documents deviennent ORPHELINS
+// (fiche vide alors que la donnée existe encore sous l'ancienne clé) — et une suppression + recréation
+// au même prénom ferait hériter les données de l'ancien. `applyRename`/suppression doivent appeler ça.
+FP.condKeyMaps = function () {
+  const keys = ['condConges', 'condSortie', 'condDocs', 'permisMasque', 'condCarteTotal', 'condBadgeUlys'];
+  try { FP.prestataires().forEach(p => { if (p && p.numKey && keys.indexOf(p.numKey) < 0) keys.push(p.numKey); }); } catch (e) {}
+  return keys;
+};
+FP.migrateCondKey = function (oldKey, newKey) {
+  if (!oldKey || !newKey || oldKey === newKey) return;
+  try {
+    const s = FP.settings.get(); let changed = false;
+    FP.condKeyMaps().forEach(mk => {
+      const m = s[mk];
+      if (m && typeof m === 'object' && Object.prototype.hasOwnProperty.call(m, oldKey)) {
+        if (!Object.prototype.hasOwnProperty.call(m, newKey)) m[newKey] = m[oldKey];
+        delete m[oldKey]; changed = true;
+      }
+    });
+    if (changed) FP.settings.save(s);
+  } catch (e) { console.warn('[migrateCondKey]', e); }
+};
+FP.purgeCondKey = function (key) {
+  if (!key) return;
+  try {
+    const s = FP.settings.get(); let changed = false;
+    FP.condKeyMaps().forEach(mk => {
+      const m = s[mk];
+      if (m && typeof m === 'object' && Object.prototype.hasOwnProperty.call(m, key)) { delete m[key]; changed = true; }
+    });
+    if (changed) FP.settings.save(s);
+  } catch (e) { console.warn('[purgeCondKey]', e); }
+};
 // Le conducteur `condKey` est-il en congé à la date ISO (bornes incluses) ? Renvoie le congé couvrant, ou null.
 FP.congeCouvrant = (condKey, dateISO) => {
   if (!condKey || !dateISO) return null;
