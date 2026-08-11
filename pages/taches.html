@@ -218,6 +218,10 @@
           <select id="rap-freq" class="field-input"><option value="hebdomadaire">Chaque semaine</option><option value="mensuel" selected>Chaque mois</option><option value="trimestriel">Chaque trimestre</option><option value="annuel">Chaque année</option></select>
           <input id="rap-lien" class="field-input" placeholder="Page (opt. ex : vehicules.html)" autocomplete="off">
         </div>
+        <div>
+          <label for="rap-date" class="text-xs font-semibold text-slate-500" style="display:block;margin-bottom:3px">📅 Jour du 1er rappel <span class="font-normal">(optionnel — fixe aussi le jour de récurrence)</span></label>
+          <input id="rap-date" type="date" class="field-input">
+        </div>
         <input id="rap-note" class="field-input" placeholder="Note / consigne (optionnel)" autocomplete="off">
         <button class="btn btn-dark text-sm w-full justify-center" id="rap-add"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter</button>
       </div>
@@ -418,16 +422,51 @@
   function rappelDone(id, pk){ const f = getFaits(); return !!(f[id] && f[id][pk]); }
   function setRappelDone(id, pk, done){ const s = FP.settings.get(); const f = (s.rappelsFaits && typeof s.rappelsFaits === 'object') ? s.rappelsFaits : {}; f[id] = f[id] || {}; if (done) f[id][pk] = todayIso(); else delete f[id][pk]; s.rappelsFaits = f; FP.settings.save(s); }
 
+  // --- Jour / date de début du rappel -------------------------------------------------------------
+  // r.dateDebut (AAAA-MM-JJ) = 1er rappel choisi. Il fixe AUSSI le « jour » de récurrence : le rappel
+  // revient chaque période sur ce même jour (jour du mois, jour de semaine, mois+jour…). Avant cette
+  // date, le rappel est « à venir » (il ne réclame pas d'être coché) ; ensuite il revient à chaque période.
+  function pad2(n){ return String(n).padStart(2, '0'); }
+  function midnight(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function daysInMonth(y, m){ return new Date(y, m + 1, 0).getDate(); }
+  function parseIsoDate(s){ const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); if (!m) return null; const d = new Date(+m[1], +m[2] - 1, +m[3]); return isNaN(d) ? null : d; }
+  // Date d'échéance du rappel DANS la période courante, ancrée sur r.dateDebut. null si aucun jour choisi.
+  function dueDateRappel(r, now){
+    const anchor = parseIsoDate(r.dateDebut); if (!anchor) return null;
+    now = midnight(now || new Date()); const y = now.getFullYear(), m = now.getMonth();
+    if (r.freq === 'mensuel'){ const day = anchor.getDate(); return new Date(y, m, Math.min(day, daysInMonth(y, m))); }
+    if (r.freq === 'hebdomadaire'){ const monday = new Date(now); monday.setDate(now.getDate() - ((now.getDay() + 6) % 7)); const d = new Date(monday); d.setDate(monday.getDate() + ((anchor.getDay() + 6) % 7)); return d; }
+    if (r.freq === 'trimestriel'){ const qStart = Math.floor(m / 3) * 3; const mm = qStart + (anchor.getMonth() % 3); return new Date(y, mm, Math.min(anchor.getDate(), daysInMonth(y, mm))); }
+    if (r.freq === 'annuel'){ const mm = anchor.getMonth(); return new Date(y, mm, Math.min(anchor.getDate(), daysInMonth(y, mm))); }
+    return null;
+  }
+  // Statut d'affichage : { notStarted, upcoming, due } selon la date du jour.
+  function statutRappel(r, now){
+    now = midnight(now || new Date());
+    const anchor = parseIsoDate(r.dateDebut);
+    if (!anchor) return { notStarted:false, upcoming:false, due:null };
+    if (now < midnight(anchor)) return { notStarted:true, upcoming:false, due:anchor };
+    const due = dueDateRappel(r, now);
+    return { notStarted:false, upcoming:!!(due && now < due), due };
+  }
+
   function renderRappels(){
     const box = $('rappels-list'); if (!box) return;
     const list = getRappels().filter(r => r && r.actif !== false);
     if (!list.length){ box.innerHTML = '<p class="text-sm text-slate-400">Aucun rappel actif. Clique « Configurer » pour en ajouter.</p>'; return; }
     box.innerHTML = list.map(r => {
       const pk = periodKey(r.freq), done = rappelDone(r.id, pk), lbl = periodLabel(r.freq);
-      return `<div class="task-card ${done ? 'done' : ''}" style="padding:.6rem .8rem">
+      const st = statutRappel(r);
+      // Pastille « jour choisi » : à venir (pas encore le jour) en orange, sinon échéance normale.
+      let jourPill = '';
+      if (!done && st.notStarted) jourPill = `<span class="pill-ech" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">⏳ à partir du ${escapeHtml(FP.date(r.dateDebut))}</span>`;
+      else if (!done && st.upcoming && st.due) jourPill = `<span class="pill-ech" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">🔜 le ${escapeHtml(FP.date(st.due.getFullYear() + '-' + pad2(st.due.getMonth() + 1) + '-' + pad2(st.due.getDate())))}</span>`;
+      else if (r.dateDebut && st.due) jourPill = `<span class="pill-ech ech-proche">📅 à faire · échéance le ${escapeHtml(FP.date(st.due.getFullYear() + '-' + pad2(st.due.getMonth() + 1) + '-' + pad2(st.due.getDate())))}</span>`;
+      const dim = (!done && (st.notStarted || st.upcoming)) ? 'opacity:.62;' : '';
+      return `<div class="task-card ${done ? 'done' : ''}" style="padding:.6rem .8rem;${dim}">
         <input type="checkbox" class="task-check" data-rap="${escapeHtml(r.id)}" data-pk="${escapeHtml(pk)}" ${done ? 'checked' : ''} title="Cocher quand c'est fait pour cette période">
         <div class="flex-1 min-w-0">
-          <div class="task-title flex items-center gap-2 flex-wrap">${escapeHtml(r.titre)} <span class="pill-ech ech-ok">🔁 ${escapeHtml(FREQ_LBL[r.freq] || r.freq)} · ${escapeHtml(lbl)}</span></div>
+          <div class="task-title flex items-center gap-2 flex-wrap">${escapeHtml(r.titre)} <span class="pill-ech ech-ok">🔁 ${escapeHtml(FREQ_LBL[r.freq] || r.freq)} · ${escapeHtml(lbl)}</span>${jourPill}</div>
           ${r.note ? `<div class="text-sm text-slate-500 mt-1 whitespace-pre-line">${escapeHtml(r.note)}</div>` : ''}
         </div>
         ${r.lien ? `<a href="${escapeHtml(r.lien)}" class="ta-icon-btn" title="Ouvrir la page concernée"><i data-lucide="external-link" class="w-4 h-4"></i></a>` : ''}
@@ -438,11 +477,12 @@
   function renderCfg(){
     const arr = getRappels(), box = $('rap-cfg-list');
     if (!arr.length){ box.innerHTML = '<p class="text-sm text-slate-400">Aucun rappel configuré.</p>'; return; }
-    box.innerHTML = arr.map((r, i) => `<div class="flex items-center gap-2 p-2 border rounded-lg" style="border-color:var(--fp-border)">
+    box.innerHTML = arr.map((r, i) => `<div class="flex items-center gap-2 p-2 border rounded-lg flex-wrap" style="border-color:var(--fp-border)">
       <label class="flex items-center gap-2 flex-1 min-w-0" style="cursor:pointer">
         <input type="checkbox" class="task-check" data-rap-actif="${i}" ${r.actif !== false ? 'checked' : ''} title="Activer / désactiver">
         <span class="min-w-0 truncate"><b>${escapeHtml(r.titre)}</b> <span class="text-xs text-slate-400">· ${escapeHtml(FREQ_LBL[r.freq] || r.freq)}${r.lien ? ' · ' + escapeHtml(r.lien) : ''}</span></span>
       </label>
+      <input type="date" class="field-input" style="max-width:150px;padding:5px 8px" data-rap-date="${i}" value="${escapeHtml(r.dateDebut || '')}" title="Jour du 1er rappel — le rappel reviendra ensuite chaque période sur ce jour. Vide = dès le début de chaque période.">
       <button class="ta-icon-btn" data-rap-del="${i}" title="Supprimer"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
     </div>`).join('');
     lucide.createIcons();
@@ -463,8 +503,10 @@
     if (c.checked && FP.celebrate) FP.celebrate();
   });
   $('rap-cfg-list').addEventListener('change', e => {
-    const a = e.target.closest('[data-rap-actif]'); if (!a) return;
-    const arr = getRappels(); const i = +a.getAttribute('data-rap-actif'); if (arr[i]) { arr[i].actif = a.checked; saveRappels(arr); renderRappels(); }
+    const a = e.target.closest('[data-rap-actif]');
+    if (a) { const arr = getRappels(); const i = +a.getAttribute('data-rap-actif'); if (arr[i]) { arr[i].actif = a.checked; saveRappels(arr); renderRappels(); } return; }
+    const dt = e.target.closest('[data-rap-date]');
+    if (dt) { const arr = getRappels(); const i = +dt.getAttribute('data-rap-date'); if (arr[i]) { arr[i].dateDebut = dt.value || ''; saveRappels(arr); renderRappels(); if (FP.toast) FP.toast(dt.value ? ('Rappel le ' + FP.date(dt.value) + ' puis chaque période') : 'Jour du rappel retiré'); } return; }
   });
   $('rap-cfg-list').addEventListener('click', async e => {
     const d = e.target.closest('[data-rap-del]'); if (!d) return;
@@ -474,9 +516,9 @@
   $('rap-add').addEventListener('click', () => {
     const titre = $('rap-titre').value.trim(); if (!titre) { $('rap-titre').focus(); return; }
     const arr = getRappels();
-    arr.push({ id: 'r' + Math.random().toString(36).slice(2, 9), titre, freq: $('rap-freq').value || 'mensuel', note: $('rap-note').value.trim(), lien: $('rap-lien').value.trim(), actif: true });
+    arr.push({ id: 'r' + Math.random().toString(36).slice(2, 9), titre, freq: $('rap-freq').value || 'mensuel', note: $('rap-note').value.trim(), lien: $('rap-lien').value.trim(), dateDebut: $('rap-date').value || '', actif: true });
     saveRappels(arr);
-    $('rap-titre').value = ''; $('rap-note').value = ''; $('rap-lien').value = ''; $('rap-freq').value = 'mensuel';
+    $('rap-titre').value = ''; $('rap-note').value = ''; $('rap-lien').value = ''; $('rap-freq').value = 'mensuel'; $('rap-date').value = '';
     renderCfg(); renderRappels();
     if (FP.toast) FP.toast('Rappel ajouté');
   });
