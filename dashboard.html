@@ -1,0 +1,1884 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")!=="0"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<title>Dashboard — Parc Pilot</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F1E3D">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parc Pilot">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260811e">
+<script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
+  <script defer src="assets/js/lucide.min.js?v=20260811e"></script>
+  <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
+<link rel="stylesheet" href="assets/css/styles.css?v=20260811e">
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+<style>
+  .dash-widget { position: relative; margin-bottom: 1.5rem; }
+  .dash-widget.dragging { opacity: .5; }
+  .widget-bar { display: flex; align-items: center; margin-bottom: .45rem; }
+  .widget-grip { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; color: var(--fp-muted); background: #fff; border: 1px solid var(--fp-border); border-radius: 9999px; padding: .2rem .65rem; cursor: grab; }
+  .widget-grip:hover { color: var(--fp-primary); border-color: var(--fp-accent); }
+  .widget-grip:active { cursor: grabbing; }
+  #dash-widgets.is-dragging .dash-widget { transition: transform .08s; }
+  /* Titres de section renommables (clic pour éditer) */
+  .dash-widget [data-edit-key]:hover { cursor: text; box-shadow: inset 0 -2px 0 0 var(--fp-accent); border-radius: 3px; }
+  /* Spinner du scan de document */
+  .cg-spin { display: inline-block; width: 26px; height: 26px; border: 3px solid var(--fp-accent, #F97316); border-right-color: transparent; border-radius: 50%; animation: cg-spin .7s linear infinite; }
+  @keyframes cg-spin { to { transform: rotate(360deg); } }
+  /* Menus déroulants du scanner : look « maison » (chevron custom, focus orange) */
+  #scan-modal select.field-input {
+    -webkit-appearance: none; -moz-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; background-size: 15px;
+    padding-right: 38px; cursor: pointer; font-weight: 600; color: var(--fp-primary, #1E293B);
+    border-radius: 10px; line-height: 1.3;
+  }
+  #scan-modal select.field-input:hover { border-color: var(--fp-accent, #F97316); }
+  #scan-modal select.field-input:focus { outline: none; border-color: var(--fp-accent, #F97316); box-shadow: 0 0 0 3px rgba(249,115,22,.15); }
+
+  /* === Icônes KPI en relief (3D) === */
+  .kpi-ic {
+    width: 48px; height: 48px; border-radius: 15px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; position: relative;
+    transition: transform .18s ease, box-shadow .18s ease;
+    /* teal par défaut */
+    background: linear-gradient(145deg, #ffffff 0%, #d7f4f9 55%, #b6e9f2 100%);
+    border: 1px solid rgba(8,145,178,.22);
+    box-shadow: 0 8px 16px -8px rgba(8,145,178,.55), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(8,145,178,.16);
+    color: #0e7490;
+  }
+  .kpi-ic svg { width: 23px; height: 23px; stroke-width: 2.3; filter: drop-shadow(0 1.5px 1px rgba(15,30,61,.22)); }
+  .kpi:hover .kpi-ic { transform: translateY(-2px) scale(1.04); box-shadow: 0 12px 22px -8px rgba(8,145,178,.6), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(8,145,178,.18); }
+  .kpi-ic.warn   { background: linear-gradient(145deg, #fffdf5 0%, #fdf0c9 55%, #fbe3a0 100%); border-color: rgba(180,83,9,.22); color: #b45309; box-shadow: 0 8px 16px -8px rgba(217,119,6,.5), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(217,119,6,.16); }
+  .kpi:hover .kpi-ic.warn { box-shadow: 0 12px 22px -8px rgba(217,119,6,.6), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(217,119,6,.18); }
+  .kpi-ic.danger { background: linear-gradient(145deg, #fffafa 0%, #fdd9d9 55%, #fbc2c2 100%); border-color: rgba(185,28,28,.22); color: #b91c1c; box-shadow: 0 8px 16px -8px rgba(220,38,38,.5), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(220,38,38,.16); }
+  .kpi:hover .kpi-ic.danger { box-shadow: 0 12px 22px -8px rgba(220,38,38,.6), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(220,38,38,.18); }
+</style>
+<script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}</script>
+</head>
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")!=="0")document.body.classList.add("fp-dark")}catch(e){}</script>
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <!-- =============== SIDEBAR =============== -->
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="dashboard.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic"><tspan fill="currentColor">Parc</tspan><tspan fill="#F97316">Pilot</tspan></text></svg>
+    </a>
+
+    <nav class="space-y-1">
+      <a href="dashboard.html"           data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="pages/notifications.html" data-nav="notifications.html"><i data-lucide="bell"></i> Suivi &amp; alertes</a>
+      <a href="pages/taches.html" data-nav="taches.html"><i data-lucide="list-todo"></i> Tâches</a>
+      <a href="pages/statistiques.html"  data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="pages/vehicules.html"     data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="pages/emprunts.html" data-nav="emprunts.html"><i data-lucide="key-round"></i> Emprunt véhicule</a>
+      <a href="pages/conducteurs.html"   data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="pages/amendes.html"       data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="pages/sinistres.html"     data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="pages/factures.html"      data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="pages/controle.html" data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
+      <a href="pages/contrats.html"      data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="pages/budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
+      <a href="pages/guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
+      <a href="pages/manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
+      <a href="pages/aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
+      <a href="pages/parametres.html"    data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+      <a href="brochure.html"           data-nav="brochure.html" target="_blank" rel="noopener"><i data-lucide="sparkles"></i> Brochure</a>
+      <a href="prix.html" data-nav="prix.html" target="_blank" rel="noopener"><i data-lucide="badge-euro"></i> Tarifs</a>
+    </nav>
+    <script>/* Sidebar : reconstruit la barre dans son état final AVANT le 1er affichage
+       (barre de recherche, ordre, visibilité, libellés perso, onglet actif). Sinon le JS
+       fait tout ça APRÈS l'affichage → le menu "saute"/clignote. Autonome (localStorage). */
+    (function(){try{
+      var soc=(localStorage.getItem('fp_societe')||'PXP');if(soc==='__all__')soc='PXP';
+      var raw=localStorage.getItem('auto_flotte_settings_'+soc);
+      if(raw==null&&soc==='PXP')raw=localStorage.getItem('auto_flotte_settings');
+      var s=raw?(JSON.parse(raw)||{}):{};
+      var sb=document.querySelector('.fp-sidebar');if(!sb)return;
+      var nav=sb.querySelector('nav');if(!nav)return;
+      if(!sb.querySelector('.fp-global-search')){
+        var w=document.createElement('div');w.className='fp-global-search';
+        w.innerHTML='<div style="position: relative"><span style="position:absolute; left:.65rem; top:50%; transform:translateY(-50%); color:rgba(255,255,255,.5); font-size:.85rem">\u{1F50D}</span><input type="text" class="fp-search-input" placeholder="Rechercher..." /></div><div class="fp-search-results"></div>';
+        sb.insertBefore(w,nav);
+      }
+      var links=[].slice.call(nav.querySelectorAll('a[data-nav]'));if(!links.length)return;
+      if(Array.isArray(s.navOrder)&&s.navOrder.length){
+        var by={};links.forEach(function(a){by[a.dataset.nav]=a;});var ord=[];
+        s.navOrder.forEach(function(k){if(by[k]){ord.push(by[k]);delete by[k];}});
+        links.forEach(function(a){if(by[a.dataset.nav])ord.push(a);});
+        ord.forEach(function(a){nav.appendChild(a);});}
+      if(Array.isArray(s.navHidden)){var h={};s.navHidden.forEach(function(k){h[k]=1;});
+        links.forEach(function(a){if(h[a.dataset.nav]&&a.dataset.nav!=='parametres.html')a.style.display='none';});}
+      var lb=s.sidebarLabels||{};
+      links.forEach(function(a){var t=lb[a.dataset.nav];if(!t)return;
+        for(var i=0;i<a.childNodes.length;i++){var n=a.childNodes[i];if(n.nodeType===3&&n.textContent.trim()){n.textContent=' '+t;break;}}});
+      var _ACC={"guide.html":1,"manuel.html":1,"aide.html":1,"parametres.html":1,"brochure.html":1,"prix.html":1};
+      [].slice.call(nav.querySelectorAll("a[data-nav]")).forEach(function(a){a.style.order=_ACC[a.dataset.nav]?"3":"1";});
+      (function(){function _mkg(id,txt,ord){var d=nav.querySelector('.fp-nav-group[data-grp="'+id+'"]');if(!d){d=document.createElement("div");d.className="fp-nav-group";d.setAttribute("data-grp",id);nav.appendChild(d);}d.textContent=txt;d.style.order=ord;}_mkg("ws","Espace de travail","0");_mkg("ac","Compte","2");})();
+
+      var path=(location.pathname.split('/').pop()||'index').replace(/\.html$/,'');
+      links.forEach(function(a){if((a.dataset.nav||'').replace(/\.html$/,'')===path)a.classList.add('active');});
+    }catch(e){}})();</script>
+
+  </aside>
+
+  <!-- =============== MAIN =============== -->
+  <main class="flex-1 p-6 md:p-10">
+
+    <!-- Header (bandeau cockpit) -->
+    <div class="fp-cockpit mb-8" style="padding:1.4rem 1.6rem">
+      <div class="flex justify-between items-start gap-4 flex-wrap">
+        <div>
+          <img id="soc-logo-img" alt="Logo de la société" loading="lazy" hidden style="height:58px;max-width:220px;object-fit:contain;margin-bottom:10px;border-radius:10px;background:rgba(15,30,61,.04);padding:5px 9px" />
+          <div class="fp-eyebrow" style="margin-bottom:.4rem">Parc Pilot · pilotage de flotte</div>
+          <h1 class="text-xl font-extrabold text-white" style="color:#fff" data-edit-key="dashboard.title">Tableau de bord</h1>
+          <p id="fp-greeting" class="text-sm mt-1" style="color:#C7D2E4;font-weight:600;min-height:1.25em"></p>
+          <p class="text-sm mt-1" style="color:#8598B4" data-edit-key="dashboard.subtitle">Vue d'ensemble de votre flotte</p>
+          <div class="fp-clockrow">
+            <div id="live-clock" class="fp-clock" role="timer" aria-live="off" title="Date et heure en temps réel">
+              <span class="fp-clock-dot" aria-hidden="true"></span>
+              <div class="fp-clock-main">
+                <div class="fp-clock-time"><span id="clk-hm">--:--</span><span id="clk-s" class="fp-clock-sec">:--</span></div>
+                <div id="clk-date" class="fp-clock-date">—</div>
+              </div>
+            </div>
+            <div id="fp-weather" class="fp-weather" hidden>
+              <span class="fp-weather-ico" aria-hidden="true"></span>
+              <div class="fp-weather-main">
+                <div class="fp-weather-temp"><span id="wx-temp">—</span></div>
+                <div class="fp-weather-sub"><span id="wx-label">Météo</span> · Île-de-France</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2.5 flex-wrap justify-end">
+          <div class="relative" id="soc-switch">
+            <button id="soc-btn" class="btn btn-outline text-sm"><i data-lucide="building-2" class="w-4 h-4"></i> <span id="soc-current">PXP</span> <i data-lucide="chevron-down" class="w-4 h-4"></i></button>
+            <div id="soc-menu" class="hidden absolute right-0 mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-sm"></div>
+          </div>
+          <a href="pages/ecran.html" class="btn btn-outline text-sm" title="Affichage plein écran pour l'agence (TV)" onclick="event.preventDefault();var h=this.href;try{FP.warp&&FP.warp('Mode écran');}catch(_){}setTimeout(function(){location.href=h;},1200);"><i data-lucide="monitor" class="w-4 h-4"></i> Mode écran</a>
+          <div class="relative inline-flex items-center gap-1" id="sc-wrap">
+            <button id="sc-btn" class="btn btn-outline text-sm" title="Actions rapides"><i data-lucide="zap" class="w-4 h-4"></i> Raccourcis <i data-lucide="chevron-down" class="w-4 h-4"></i></button>
+            <button id="sc-cfg-btn" class="btn btn-outline text-sm !px-2" title="Personnaliser mes raccourcis"><i data-lucide="settings-2" class="w-4 h-4"></i></button>
+            <div id="sc-menu" class="hidden absolute right-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-lg shadow-xl z-50 py-1 text-sm"></div>
+          </div>
+          <a id="btn-scan-doc" href="pages/scanner.html" class="btn btn-dark text-sm" title="Scanner un document : l'IA détecte le type, le range au bon endroit et vous fait valider avant d'enregistrer"><i data-lucide="scan-line" class="w-4 h-4"></i> Scanner un document</a>
+          <a href="pages/amendes.html?new=1" class="btn btn-outline text-sm"><i data-lucide="ticket" class="w-4 h-4"></i> Ajouter une amende</a>
+          <a href="pages/conducteurs.html?new=1" class="btn btn-outline text-sm"><i data-lucide="user-plus" class="w-4 h-4"></i> Ajouter un conducteur</a>
+          <a href="pages/emprunts.html?new=1" class="btn btn-outline text-sm"><i data-lucide="key-round" class="w-4 h-4"></i> Ajouter un emprunt</a>
+          <a href="pages/vehicules.html?new=1" class="btn btn-primary text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</a>
+        </div>
+      </div>
+      <!-- Recherche directe : plaque · n° de facture · conducteur (réutilise le moteur global FP.searchAll) -->
+      <style>
+        .fp-dash-search { max-width: 720px; margin-top: 1.3rem; }
+        .fp-dash-search .fp-search-input { background: var(--fp-surface); color: var(--fp-text); border: 1px solid var(--fp-border); box-shadow: var(--fp-shadow-sm); padding: .85rem 3.4rem .85rem 2.75rem; font-size: .95rem; border-radius: .85rem; }
+        @media (max-width: 640px){ .fp-dash-search .fp-search-kbd { display: none; } .fp-dash-search .fp-search-input { padding-right: 1rem; } }
+        .fp-dash-search .fp-search-input::placeholder { color: var(--fp-faint); }
+        .fp-dash-search .fp-search-input:focus { border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(249,115,22,.16); }
+        .fp-dash-search .dash-search-ic { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); font-size: 1rem; opacity: .5; pointer-events: none; }
+        .fp-dash-search .fp-search-kbd { position: absolute; right: .7rem; top: 50%; transform: translateY(-50%); font-size: .62rem; font-weight: 700; color: var(--fp-faint); border: 1px solid var(--fp-border); border-radius: 6px; padding: 2px 6px; pointer-events: none; background: var(--fp-bg); }
+      </style>
+      <div class="fp-global-search fp-dash-search">
+        <div style="position:relative">
+          <span class="dash-search-ic" aria-hidden="true">🔍</span>
+          <input type="text" class="fp-search-input" autocomplete="off" placeholder="Rechercher une plaque, un n° de facture, un conducteur…" />
+          <span class="fp-search-kbd" aria-hidden="true">⌘K</span>
+        </div>
+        <div class="fp-search-results"></div>
+      </div>
+    </div>
+
+    <!-- ============ Modals des raccourcis (km lot / km photo / immobilisé / config) ============ -->
+    <div id="sc-modal-cfg" class="sc-ov"><div class="sc-card">
+      <div class="flex items-center justify-between mb-3"><h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2"><i data-lucide="sliders-horizontal" class="w-5 h-5"></i> Choisir mes raccourcis</h3><button type="button" class="sc-x" data-sc-close>&times;</button></div>
+      <p class="text-xs text-slate-500 mb-3">Coche ce que tu veux voir dans le menu « Raccourcis ». Tu peux changer à tout moment.</p>
+      <div id="sc-cfg-list" class="grid sm:grid-cols-2 gap-1.5"></div>
+    </div></div>
+
+    <div id="sc-modal-kmlot" class="sc-ov"><div class="sc-card" style="max-width:560px">
+      <div class="flex items-center justify-between mb-3"><h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2"><i data-lucide="gauge" class="w-5 h-5"></i> Mettre à jour le kilométrage</h3><button type="button" class="sc-x" data-sc-close>&times;</button></div>
+      <p class="text-xs text-slate-500 mb-2">Saisis les nouveaux km (le km ne peut que monter). Laisse vide pour ne pas changer.</p>
+      <input id="sc-kmlot-search" placeholder="Filtrer un véhicule…" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-2">
+      <div id="sc-kmlot-list" style="max-height:52vh;overflow:auto" class="space-y-1"></div>
+      <div class="flex justify-end gap-2 mt-3"><button type="button" class="btn btn-outline text-sm" data-sc-close>Annuler</button><button type="button" id="sc-kmlot-save" class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button></div>
+    </div></div>
+
+    <div id="sc-modal-kmphoto" class="sc-ov"><div class="sc-card">
+      <div class="flex items-center justify-between mb-3"><h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2"><i data-lucide="camera" class="w-5 h-5"></i> Km par photo du compteur</h3><button type="button" class="sc-x" data-sc-close>&times;</button></div>
+      <label class="field-label">Véhicule concerné</label>
+      <select id="sc-kmphoto-veh" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3"></select>
+      <input type="file" id="sc-kmphoto-file" accept="image/*" capture="environment" class="hidden">
+      <button type="button" id="sc-kmphoto-btn" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="camera" class="w-4 h-4"></i> Prendre / choisir la photo</button>
+      <div id="sc-kmphoto-status" class="text-sm mt-3"></div>
+    </div></div>
+
+    <div id="sc-modal-immo" class="sc-ov"><div class="sc-card">
+      <div class="flex items-center justify-between mb-3"><h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2"><i data-lucide="ban" class="w-5 h-5"></i> Marquer un véhicule immobilisé</h3><button type="button" class="sc-x" data-sc-close>&times;</button></div>
+      <p class="text-xs text-slate-500 mb-2">Immobilisé = au garage / hors service. Une alerte apparaîtra s'il le reste trop longtemps (délai réglable dans Paramètres → Notifications).</p>
+      <div id="sc-immo-list" style="max-height:56vh;overflow:auto" class="space-y-1"></div>
+    </div></div>
+
+    <!-- Premiers pas (onboarding) — masqué une fois terminé/masqué, par société -->
+    <div id="onboarding" class="card p-5 mb-6" style="display:none;background:linear-gradient(145deg,#fff,#f0fdfa);border-color:#99f6e4">
+      <div class="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <h3 class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="rocket" class="w-4 h-4" style="color:var(--fp-accent)"></i> Premiers pas</h3>
+          <p class="text-xs text-slate-500 mt-1">Configurez votre flotte en quelques minutes. <span id="onb-count" class="font-semibold text-slate-700"></span></p>
+        </div>
+        <button id="onb-hide" class="text-xs text-slate-400 hover:text-slate-600" title="Masquer ce guide">Masquer ✕</button>
+      </div>
+      <div style="height:8px;background:#e2e8f0;border-radius:9999px;overflow:hidden;margin-bottom:14px"><div id="onb-bar" style="height:100%;width:0;background:linear-gradient(90deg,#14b8a6,#0e7490);border-radius:9999px;transition:width .5s ease"></div></div>
+      <div id="onb-steps" class="grid sm:grid-cols-2 gap-2"></div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <a href="pages/vehicules.html" class="kpi" style="cursor:pointer" title="Voir tous les véhicules">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="kpi-label">Véhicules</div>
+            <div class="kpi-value" id="kpi-vehicules">—</div>
+            <div class="kpi-delta up">↑ 2 ce trimestre</div>
+          </div>
+          <div class="kpi-ic">
+            <i data-lucide="car"></i>
+          </div>
+        </div>
+      </a>
+      <a href="pages/conducteurs.html" class="kpi" style="cursor:pointer" title="Voir tous les conducteurs">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="kpi-label">Conducteurs</div>
+            <div class="kpi-value" id="kpi-conducteurs">—</div>
+            <div class="kpi-delta">de la flotte (véhicule, amende ou manuel)</div>
+          </div>
+          <div class="kpi-ic">
+            <i data-lucide="users"></i>
+          </div>
+        </div>
+      </a>
+      <a href="pages/amendes.html?filtre=apayer" class="kpi" style="cursor:pointer" title="Voir les amendes à payer">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="kpi-label">Amendes à payer</div>
+            <div class="kpi-value" id="kpi-amendes" style="color: var(--fp-warn)">—</div>
+            <div class="kpi-delta" style="color: var(--fp-warn)">restant à régler →</div>
+          </div>
+          <div class="kpi-ic warn">
+            <i data-lucide="ticket"></i>
+          </div>
+        </div>
+      </a>
+      <a href="pages/factures.html?periode=mois" class="kpi" style="cursor:pointer" title="Voir les factures du mois">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="kpi-label">Coûts du mois</div>
+            <div class="kpi-value" id="kpi-couts">—</div>
+            <div id="kpi-couts-spark" class="mt-1" title="Tendance des 6 derniers mois"></div>
+            <div class="kpi-delta">Voir le détail →</div>
+          </div>
+          <div class="kpi-ic">
+            <i data-lucide="euro"></i>
+          </div>
+        </div>
+      </a>
+      <a href="pages/notifications.html" class="kpi" style="cursor:pointer" title="Voir le détail des alertes">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="kpi-label">Alertes</div>
+            <div class="kpi-value" id="kpi-alertes" style="color: var(--fp-danger)">—</div>
+            <div class="kpi-delta" style="color: var(--fp-danger)">à traiter · voir le détail →</div>
+          </div>
+          <div class="kpi-ic danger">
+            <i data-lucide="alert-triangle"></i>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <!-- Indicateurs détaillés (repliés par défaut) -->
+    <div class="mt-4">
+      <div id="details-panel" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+        <div class="kpi">
+          <div class="kpi-label">Km cumulés</div>
+          <div class="kpi-value" id="kpi-km" style="font-size:1.5rem">—</div>
+          <div class="kpi-delta">toute la flotte</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Km moyen / véhicule</div>
+          <div class="kpi-value" id="kpi-km-moyen" style="font-size:1.5rem">—</div>
+          <div class="kpi-delta">moyenne</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Valeur du parc</div>
+          <div class="kpi-value" id="kpi-valeur" style="font-size:1.5rem">—</div>
+          <div class="kpi-delta">somme valeurs d'achat</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">En entretien</div>
+          <div class="kpi-value" id="kpi-entretien" style="font-size:1.5rem; color: var(--fp-warn)">—</div>
+          <div class="kpi-delta">au garage</div>
+        </div>
+        <a href="pages/amendes.html" class="kpi" style="cursor:pointer" title="Voir les amendes à payer">
+          <div class="kpi-label">Amendes à payer (€)</div>
+          <div class="kpi-value" id="kpi-amendes-eur" style="font-size:1.5rem; color: var(--fp-danger)">—</div>
+          <div class="kpi-delta">montant total dû</div>
+        </a>
+        <a href="pages/sinistres.html" class="kpi" style="cursor:pointer" title="Voir les sinistres en attente de remboursement">
+          <div class="kpi-label">Sinistres à rembourser (€)</div>
+          <div class="kpi-value" id="kpi-sin-rembours" style="font-size:1.5rem; color:#b45309">—</div>
+          <div class="kpi-delta">en attente d'assurance</div>
+        </a>
+      </div>
+      <button id="toggle-details" class="text-sm font-semibold inline-flex items-center gap-1.5" style="color: var(--fp-accent)">
+        <i data-lucide="chevron-right" id="details-chevron" class="w-4 h-4"></i> <span id="details-label">Voir les indicateurs détaillés</span>
+      </button>
+    </div>
+
+    <!-- (Assistant IA retiré du tableau de bord à la demande de l'utilisateur.) -->
+
+    <div id="dash-widgets" class="mt-8">
+
+      <!-- Widget : Coûts mensuels -->
+      <div class="dash-widget" data-widget="couts">
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Coûts mensuels</span></div>
+        <div class="grid gap-6">
+          <div class="card p-6">
+            <div class="flex justify-between items-center mb-4">
+              <div>
+                <h3 class="font-bold text-slate-900" data-edit-key="dashboard.w_couts">Coûts mensuels (€)</h3>
+                <p class="text-xs text-slate-500">Entretien + contrats + amendes</p>
+              </div>
+              <select class="text-sm border border-slate-200 rounded-lg px-3 py-1.5">
+                <option>6 derniers mois</option>
+                <option>12 derniers mois</option>
+              </select>
+            </div>
+            <div class="chart-wrap"><canvas id="costsChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widget : Groupes & podium -->
+      <div class="dash-widget" data-widget="repartition">
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Groupes & podium</span></div>
+        <div class="grid lg:grid-cols-2 gap-6">
+          <div class="card p-6">
+            <h3 class="font-bold text-slate-900 mb-4" data-edit-key="dashboard.w_groupes">Véhicules par groupe</h3>
+            <div style="position: relative; height: 260px"><canvas id="groupesChart"></canvas></div>
+          </div>
+          <div class="card p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-bold text-slate-900" data-edit-key="dashboard.w_podium">🏆 Podium conducteurs — amendes 2026</h3>
+              <button id="dash-podium-toggle" class="btn btn-outline text-xs">Voir tout</button>
+            </div>
+            <div id="dash-podium" class="space-y-1" style="max-height:260px;overflow-y:auto"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widget : Alertes & véhicules récents -->
+      <div class="dash-widget" data-widget="alertes">
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Alertes & véhicules</span></div>
+        <div class="grid lg:grid-cols-3 gap-6 items-start">
+          <div class="card p-6">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold text-slate-900" data-edit-key="dashboard.w_alertes">🗓️ À traiter cette semaine</h3>
+              <a href="pages/notifications.html" class="text-sm font-semibold" style="color: var(--fp-accent)">Tout voir →</a>
+            </div>
+            <div class="space-y-2" id="alertes-list"></div>
+          </div>
+
+          <div class="card p-0 lg:col-span-2 overflow-hidden">
+            <div class="flex justify-between items-center p-6 pb-4">
+              <h3 class="font-bold text-slate-900" data-edit-key="dashboard.w_vehicules">Véhicules</h3>
+              <a href="pages/vehicules.html" class="text-sm font-semibold" style="color: var(--fp-accent)">Voir tout →</a>
+            </div>
+            <div class="scrollable">
+              <table class="fp-table">
+                <thead>
+                  <tr>
+                    <th>Immat.</th>
+                    <th>Modèle</th>
+                    <th>Chauffeur</th>
+                    <th>Km</th>
+                    <th>Statut</th>
+                  </tr>
+                </thead>
+                <tbody id="vehicules-tbody"></tbody>
+              </table>
+            </div>
+            <div id="veh-more"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widget : Santé de la flotte -->
+      <div class="dash-widget" data-widget="sante">
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Santé de la flotte</span></div>
+        <div class="card p-6">
+          <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
+            <div>
+              <h3 class="font-bold text-slate-900">🩺 Santé de la flotte</h3>
+              <p class="text-xs text-slate-500">Note /100 selon les échéances (CT, révision, leasing, anti-pollution)</p>
+            </div>
+            <div id="sante-summary" class="flex gap-2 text-xs font-semibold"></div>
+          </div>
+          <div class="flex items-center gap-5 flex-wrap">
+            <div id="sante-donut" class="flex-shrink-0"></div>
+            <div id="sante-list" class="space-y-1 flex-1 min-w-[240px]"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Widget : Véhicules empruntés en ce moment -->
+      <div class="dash-widget" data-widget="emprunts">
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Véhicules empruntés</span></div>
+        <div class="card p-6">
+          <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <div>
+              <h3 class="font-bold text-slate-900">🔑 Véhicules empruntés en ce moment</h3>
+              <p class="text-xs text-slate-500">Qui a un véhicule, non encore rendu</p>
+            </div>
+            <a href="pages/emprunts.html" class="text-xs font-semibold" style="color:var(--fp-accent)">Voir tout →</a>
+          </div>
+          <div id="emprunts-encours-list" class="text-sm text-slate-500"><div class="fp-skel-row"><div class="fp-skel fp-skel-chip"></div><div class="fp-skel fp-skel-line" style="width:80%"></div></div><div class="fp-skel-row"><div class="fp-skel fp-skel-chip"></div><div class="fp-skel fp-skel-line" style="width:62%"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Widget : Trafic Île-de-France (carte live Sytadin / DiRIF) -->
+      <div class="dash-widget" data-widget="trafic">
+        <div class="widget-bar"><span class="widget-grip" draggable="true" title="Déplacer"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Trafic</span></div>
+        <div class="card p-6">
+          <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
+            <div>
+              <h3 class="font-bold text-slate-900">🚦 Trafic Île-de-France</h3>
+              <p class="text-xs text-slate-500 flex items-center gap-3" style="margin-top:2px">
+                <span>Carte en direct</span>
+                <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#22C55E;display:inline-block"></span>fluide</span>
+                <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#F59E0B;display:inline-block"></span>ralenti</span>
+                <span class="inline-flex items-center gap-1"><span style="width:8px;height:8px;border-radius:50%;background:#EF4444;display:inline-block"></span>dense</span>
+              </p>
+            </div>
+            <a href="https://www.sytadin.fr/" target="_blank" rel="noopener" class="btn btn-outline text-xs"><i data-lucide="maximize-2" class="w-3.5 h-3.5"></i> Plein écran</a>
+          </div>
+          <div style="position:relative;width:100%;border-radius:12px;overflow:hidden;border:1px solid #E2E8F0;background:#EEF2F7">
+            <iframe src="https://www.sytadin.fr/" title="Carte du trafic en direct — Île-de-France (Sytadin)" loading="lazy" referrerpolicy="no-referrer" style="width:100%;height:460px;border:0;display:block"></iframe>
+          </div>
+          <p style="font-size:11px;color:#94A3B8;margin-top:8px">Source : Sytadin — DiRIF (Direction des routes Île-de-France) · données temps réel.</p>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+<script src="assets/js/vendor/supabase.js?v=20260811e"></script>
+<script src="assets/js/supabase-client.js?v=20260811e"></script>
+<script src="assets/js/data.js?v=20260811e"></script>
+<script src="assets/js/app.js?v=20260811e"></script>
+<!-- Upsell gestion déléguée : visible uniquement pour les ADMINS clients (ni CEO, ni gestionnaire, ni salarié), masquable -->
+<script>
+(function(){
+  function initUpsell(){
+    try{
+      if(!window.FP || typeof FP.role!=='function') return;
+      if(FP.role()!=='admin') return;
+      if(localStorage.getItem('fp_upsell_deleg_dismiss')==='1') return;
+      var host=document.querySelector('.fp-cockpit');
+      if(!host || document.getElementById('fp-upsell')) return;
+      var b=document.createElement('div');
+      b.id='fp-upsell';
+      b.style.cssText='margin-bottom:1.25rem;border:1px solid rgba(249,115,22,.35);background:linear-gradient(145deg,rgba(249,115,22,.14),rgba(249,115,22,.04));border-radius:16px;padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap';
+      b.innerHTML='<div style="flex:1;min-width:240px">'
+        +'<div style="font-weight:800;color:#fff;font-size:14px">Manque de temps pour gérer votre flotte ?</div>'
+        +'<div style="color:#C7D2E4;font-size:13px;margin-top:2px">Confiez-nous tout : amendes, contrôles, entretiens, relances… Une facture claire, sans embauche. <b style="color:#fff">Sans engagement.</b></div>'
+        +'</div>'
+        +'<a href="mailto:jis.nubee@gmail.com?subject=Gestion%20d%C3%A9l%C3%A9gu%C3%A9e%20de%20ma%20flotte" class="btn btn-primary text-sm" style="white-space:nowrap"><i data-lucide="user-cog" class="w-4 h-4"></i> Découvrir la gestion déléguée</a>'
+        +'<button id="fp-upsell-x" aria-label="Masquer" style="background:transparent;border:none;color:#8598B4;cursor:pointer;font-size:20px;line-height:1;padding:2px 6px">×</button>';
+      host.parentNode.insertBefore(b, host);
+      var x=document.getElementById('fp-upsell-x');
+      if(x) x.addEventListener('click',function(){ b.remove(); try{localStorage.setItem('fp_upsell_deleg_dismiss','1');}catch(e){} });
+      if(window.lucide && lucide.createIcons) lucide.createIcons();
+    }catch(e){}
+  }
+  window.addEventListener('fp:data-ready', initUpsell);
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(initUpsell, 500); });
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
+<script>
+  lucide.createIcons();
+
+  const data = window.FP_DATA;
+
+  // === KPIs ===
+  // Flotte = hors véhicules VENDUS (archivés) → même règle que la page Véhicules
+  // (sinon le total « flotte » du dashboard dépasse celui de la page Véhicules).
+  const flotteActive = data.vehicules.filter(v => !FP.estVendu(v));
+  document.getElementById('kpi-vehicules').textContent = flotteActive.length;
+
+  // Nombre de conducteurs — conducteurs enregistrés (avec véhicule attribué)
+  // + conducteurs ajoutés manuellement sans véhicule attitré (table conducteurs, manuel=true).
+  const baseDriverKeys = FP.driverKeysFromData(data);
+  // Compte = conducteurs avec véhicule + manuels (table conducteurs) − masqués.
+  function condCount(rows) {
+    const keys = new Set(baseDriverKeys);
+    // + conducteurs présents uniquement via une amende ET listés dans le fichier Drive
+    //   (même logique que la page Conducteurs → les deux compteurs concordent)
+    (data.amendes || []).forEach(a => { const k = FP.normPrenom(a.prenom); if (k && FP.DRIVE_CONDUCTEURS.has(k)) keys.add(k); });
+    (rows || []).forEach(r => {
+      if (!r.key) return;
+      if (r.masque) { keys.delete(r.key); return; }   // masqué → retiré du comptage
+      if (r.manuel) keys.add(r.key);                  // manuel (sans véhicule) → compté
+    });
+    return keys.size;
+  }
+  // Premier affichage : on utilise la table conducteurs DÉJÀ présente dans data.js (ou le cache),
+  // donc le bon nombre tout de suite — plus de "43 → 46". La requête live ne fait que confirmer.
+  document.getElementById('kpi-conducteurs').textContent = condCount(data.conducteurs);
+  if (FP.db && FP.db.select) {
+    FP.db.select('conducteurs').then(res => {
+      const rows = (res && res.data) || [];
+      document.getElementById('kpi-conducteurs').textContent = condCount(rows);
+      data.conducteurs = rows;       // pour les alertes "permis qui expire"
+      if (typeof refreshAlertes === 'function') refreshAlertes();
+    }).catch(() => {});
+  }
+
+  // Widget « Véhicules empruntés en ce moment » — les emprunts ne sont pas dans loadAll → requête dédiée.
+  (function empruntsEnCours(){
+    const box = document.getElementById('emprunts-encours-list'); if (!box) return;
+    if (!(FP.db && FP.db.select)) { box.textContent = 'Indisponible hors connexion.'; return; }
+    FP.db.select('emprunts').then(res => {
+      const rows = ((res && res.data) || []).filter(e => !e.dateRetour);
+      if (!rows.length) { box.innerHTML = '<span class="text-slate-500">Aucun véhicule emprunté actuellement.</span>'; return; }
+      const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+      const jours = d => { if (!d) return null; const ms = Date.now() - new Date(d).getTime(); return isFinite(ms) ? Math.max(0, Math.floor(ms / 86400000)) : null; };
+      rows.sort((a, b) => (a.dateEmprunt || '').localeCompare(b.dateEmprunt || '')); // les plus anciens (retards) en haut
+      box.innerHTML = rows.map(e => {
+        const j = jours(e.dateEmprunt); const retard = FP.empEnRetard ? FP.empEnRetard(e) : (j != null && j > 2);
+        return `<a href="pages/emprunts.html" class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded px-1" style="text-decoration:none;color:inherit">
+          <span><b class="font-mono">${esc(e.vehicule || '—')}</b> <span class="text-slate-500">· ${esc(e.emprunteur || '—')}</span></span>
+          <span class="text-xs ${retard ? 'text-red-600 font-semibold' : 'text-slate-400'}">${j != null ? (retard ? '⚠️ ' : '') + 'depuis ' + j + ' j' : ''}</span>
+        </a>`;
+      }).join('');
+      if (window.lucide) lucide.createIcons();
+    }).catch(() => { box.textContent = 'Impossible de charger les emprunts.'; });
+  })();
+
+  // Amendes restant à payer (statut « à payer ») — TOUTES années (l'argent dû reste dû, 2026 comme 2027).
+  const amendesAPayer = (data.amendes || []).filter(a => FP.estAPayer(a)).length;
+  document.getElementById('kpi-amendes').textContent = amendesAPayer;
+
+  // Compteurs « argent » (amendes dues + sinistres en attente de remboursement) — source unique
+  // FP.montantDu / statut sinistre. Nets des remboursements déjà saisis par incident.
+  function fillMoneyKpis() {
+    try {
+      const D = window.FP_DATA || {};
+      const due = (D.amendes || []).filter(a => FP.estAPayer && FP.estAPayer(a)).reduce((s, a) => s + (FP.montantDu ? FP.montantDu(a) : 0), 0);
+      const el1 = document.getElementById('kpi-amendes-eur'); if (el1) el1.textContent = FP.euro(due);
+      const g = (FP.settings && FP.settings.get) ? FP.settings.get() : {};
+      const st = g.sinistreStatut || {}, grp = g.sinistreGroupes || {}, doss = g.sinistreAssurance || {};
+      let rem = 0; const seenK = new Set();
+      (D.factures || []).forEach(f => { if (f.type !== 'sinistre') return; const key = grp[f.id] || f.id; if (st[key] !== 'attente') return; rem += (Number(f.montantTTC) || 0); if (!seenK.has(key)) { seenK.add(key); rem -= (Number((doss[key] || {}).rembourse) || 0); } });
+      const el2 = document.getElementById('kpi-sin-rembours'); if (el2) el2.textContent = FP.euro(Math.max(0, rem));
+    } catch (e) {}
+  }
+
+  // Indicateurs détaillés (section repliable) — sur la flotte active (hors vendus)
+  const kmTotal = flotteActive.reduce((s, v) => s + (v.km || 0), 0);
+  document.getElementById('kpi-km').textContent = FP.num(kmTotal) + ' km';
+  document.getElementById('kpi-km-moyen').textContent = FP.num(flotteActive.length ? Math.round(kmTotal / flotteActive.length) : 0) + ' km';
+  document.getElementById('kpi-valeur').textContent = FP.euro(flotteActive.reduce((s, v) => s + (v.valeurAchat || 0), 0));
+  document.getElementById('kpi-entretien').textContent = flotteActive.filter(v => v.statut === 'entretien').length;
+  fillMoneyKpis();
+
+  // Repli / dépli de la section détaillée — l'état (masqué / affiché) est MÉMORISÉ et réappliqué
+  // à chaque visite (et d'une page à l'autre) : on garde ton dernier choix.
+  (function () {
+    const DKEY = 'fp_dash_details_open';
+    const panel = document.getElementById('details-panel');
+    const chevron = document.getElementById('details-chevron');
+    const label = document.getElementById('details-label');
+    const applyState = (open) => {
+      panel.classList.toggle('hidden', !open);
+      if (chevron) chevron.style.transform = open ? 'rotate(90deg)' : '';
+      if (label) label.textContent = open ? 'Masquer les indicateurs détaillés' : 'Voir les indicateurs détaillés';
+    };
+    // État SYNCHRONISÉ tous appareils (règle 0-sync) via FP.pref + cache local.
+    let saved = false; try { saved = (window.FP && FP.pref) ? FP.pref.get(DKEY, false) === true || FP.pref.get(DKEY, false) === '1' : localStorage.getItem(DKEY) === '1'; } catch (e) {}
+    applyState(saved);
+    document.getElementById('toggle-details').addEventListener('click', () => {
+      const open = panel.classList.contains('hidden'); // masqué actuellement → on ouvre
+      applyState(open);
+      try { if (window.FP && FP.pref) FP.pref.set(DKEY, open); else localStorage.setItem(DKEY, open ? '1' : '0'); } catch (e) {}
+    });
+  })();
+
+  // Coût du mois courant : on EXCLUT les loyers de leasing (comptés dans Contrats) et les sinistres.
+  // Le carburant/péages (Total Fleet) et Ulys sont désormais COMPTÉS (vrai coût d'exploitation),
+  // cohérent avec le TCO de la page Statistiques.
+  const _cn = (s) => (s == null ? '' : s.toString()).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const isUlysF = (f) => FP.estUlys ? FP.estUlys(f) : (_cn(f.type) === 'ulys' || /\bulys\b/.test(_cn(f.fournisseur)));
+  const isTotalFleetF = (f) => FP.estTotalFleet ? FP.estTotalFleet(f) : (!isUlysF(f) && (['carburant','peage'].includes(_cn(f.type)) || /total\s*energies|totalenergies/.test(_cn(f.fournisseur))));
+  // Coût d'EXPLOITATION : on exclut leasing et sinistre, MAIS AUSSI l'achat d'un véhicule
+  // (investissement, pas une charge du mois) et la cession (argent qui RENTRE) — cohérent avec
+  // le TCO de Statistiques (_EXC_TCO = {cession, achat}). Sinon un achat à 28 000 € gonflait le mois.
+  const compteCout = (f) => FP.coutFactureExploit(f);
+  const today = new Date();
+  const currentMonth = today.toISOString().slice(0, 7);
+  // Coût du mois via le helper canonique (factures dédoublonnées par n° + filtre exploit) — même
+  // chiffre que l'écran mural et le rapport de direction.
+  const coutsMois = FP.coutMois(data, currentMonth);
+  document.getElementById('kpi-couts').textContent = FP.euro(coutsMois);
+
+  // Sparkline : coûts (factures TTC) des 6 derniers mois
+  (function () {
+    const spark = document.getElementById('kpi-couts-spark'); if (!spark || !FP.sparklineHTML) return;
+    const months = [];
+    for (let i = 5; i >= 0; i--) { const d = new Date(today.getFullYear(), today.getMonth() - i, 1); months.push(d.toISOString().slice(0, 7)); }
+    const série = months.map(ym => FP.coutMois(data, ym)); // source unique (dédup + filtre exploit), cohérent avec le KPI
+    if (série.some(v => v > 0)) spark.innerHTML = FP.sparklineHTML(série, { width: 110, height: 26, color: '#0e7490' });
+  })();
+
+  // Compteurs animés : les chiffres montent au chargement
+  ['kpi-vehicules', 'kpi-conducteurs', 'kpi-amendes', 'kpi-couts'].forEach(id => {
+    const el = document.getElementById(id); if (el && FP.countUp) FP.countUp(el);
+  });
+
+  // Rapport de direction (one-pager imprimable / PDF)
+  const markRapportVu = () => { try { const s = FP.settings.get(); if (!s.rapportVu) { s.rapportVu = true; FP.settings.save(s); } } catch (e) {} };
+  { const rb = document.getElementById('btn-rapport-dir'); if (rb && FP.rapportDirection) rb.addEventListener('click', () => { FP.rapportDirection(data); markRapportVu(); renderOnboarding(); }); }
+
+  // === Premiers pas (onboarding) — par société, se remplit tout seul, se masque une fois fini ===
+  function renderOnboarding() {
+    const box = document.getElementById('onboarding'); if (!box) return;
+    let s = {}; try { s = FP.settings.get(); } catch (e) {}
+    if (s.onboardingDismissed) { box.style.display = 'none'; return; }
+    const vehs = data.vehicules || [];
+    const hasCond = (data.conducteurs && data.conducteurs.length) || vehs.some(v => v.chauffeur && v.chauffeur !== '—' && String(v.chauffeur).trim());
+    const hasCG = vehs.some(v => v.vin || v.co2 != null || v.puissanceFiscale != null);
+    const hasEch = vehs.some(v => v.prochainCT && v.prochainCT !== '—');
+    const steps = [
+      { done: vehs.length > 0, ic: 'car', label: 'Ajoutez votre premier véhicule', href: 'pages/vehicules.html?new=1' },
+      { done: !!hasCond, ic: 'users', label: 'Renseignez vos conducteurs', href: 'pages/conducteurs.html' },
+      { done: !!hasCG, ic: 'scan-line', label: 'Importez une carte grise (remplissage auto)', href: 'pages/vehicules.html' },
+      { done: !!hasEch, ic: 'calendar-clock', label: 'Vérifiez vos échéances (CT, assurance)', href: 'pages/renouvellements.html' },
+      { done: !!s.rapportVu, ic: 'file-bar-chart-2', label: 'Générez votre rapport de direction', action: 'rapport' },
+    ];
+    const done = steps.filter(x => x.done).length;
+    if (done >= steps.length) { box.style.display = 'none'; return; } // tout fait → on masque
+    box.style.display = '';
+    document.getElementById('onb-count').textContent = `${done}/${steps.length} terminé${done > 1 ? 's' : ''}`;
+    document.getElementById('onb-bar').style.width = Math.round(done / steps.length * 100) + '%';
+    const style = 'display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;text-decoration:none';
+    document.getElementById('onb-steps').innerHTML = steps.map(st => {
+      const badge = `<span style="display:inline-flex;width:22px;height:22px;border-radius:50%;align-items:center;justify-content:center;flex:0 0 auto;background:${st.done ? '#10B981' : '#e2e8f0'};color:${st.done ? '#fff' : '#64748b'};font-size:12px">${st.done ? '✓' : `<i data-lucide="${st.ic}" style="width:13px;height:13px"></i>`}</span>`;
+      const txt = `<span style="font-size:13px;${st.done ? 'color:#94a3b8;text-decoration:line-through' : 'color:#0f1e3d;font-weight:600'}">${st.label}</span>`;
+      if (st.action) return `<button type="button" data-onb-action="${st.action}" style="${style};font:inherit;text-align:left;cursor:pointer">${badge}${txt}</button>`;
+      return `<a href="${st.href}" style="${style}">${badge}${txt}</a>`;
+    }).join('');
+    if (window.lucide && lucide.createIcons) lucide.createIcons();
+  }
+  {
+    const hide = document.getElementById('onb-hide');
+    if (hide) hide.addEventListener('click', () => { try { const s = FP.settings.get(); s.onboardingDismissed = true; FP.settings.save(s); } catch (e) {} const b = document.getElementById('onboarding'); if (b) b.style.display = 'none'; });
+    const steps = document.getElementById('onb-steps');
+    if (steps) steps.addEventListener('click', (e) => { if (e.target.closest('[data-onb-action="rapport"]') && FP.rapportDirection) { FP.rapportDirection(data); markRapportVu(); renderOnboarding(); } });
+  }
+  renderOnboarding();
+
+  // === Alertes générées dynamiquement ===
+  const alertesBox = document.getElementById('alertes-list');
+  let alertesExpanded = false;
+  let alertItems = [];
+  function refreshAlertes() {
+    const alerts = FP.buildAlertes(data);
+    // Tri par urgence : rouge → orange → bleu, puis le plus urgent d'abord (sort croissant).
+    const _rank = { danger: 0, warn: 1, info: 2 };
+    alerts.sort((a, b) => (_rank[a.niveau] - _rank[b.niveau]) || ((a.sort || 0) - (b.sort || 0)));
+    // KPI : nombre critique (rouges + oranges)
+    document.getElementById('kpi-alertes').textContent = alerts.filter(a => a.niveau === 'danger' || a.niveau === 'warn').length;
+    if (FP.countUp) FP.countUp(document.getElementById('kpi-alertes'));
+    alertItems = alerts.map(a => {
+      const cls = a.niveau === 'danger' ? 'alert-danger' : a.niveau === 'warn' ? 'alert-warn' : 'alert-info';
+      const icon = a.niveau === 'danger' ? 'alert-triangle' : a.niveau === 'warn' ? 'bell' : 'info';
+      const color = a.niveau === 'danger' ? 'text-red-600' : a.niveau === 'warn' ? 'text-amber-600' : 'text-blue-600';
+      const hasList = a.vehicules && a.vehicules.length;
+      const tag = (a.target && !hasList) ? 'a' : 'div';
+      const href = (a.target && !hasList) ? ` href="pages/${a.target}"` : '';
+      // Alerte regroupant plusieurs éléments → liste dépliable cliquable (règle 0bis)
+      const list = hasList ? `<details class="mt-1.5">
+          <summary class="text-xs font-semibold cursor-pointer" style="color:var(--fp-accent)">Voir les ${a.vehicules.length} éléments</summary>
+          <div class="mt-1 space-y-1">${a.vehicules.map(x => `<a href="pages/${x.target}" class="block text-xs text-slate-600 hover:text-slate-900 hover:underline" style="text-decoration:none">• ${x.label}</a>`).join('')}</div>
+        </details>` : '';
+      return `<${tag}${href} class="alert ${cls} text-sm" style="text-decoration:none">
+        <i data-lucide="${icon}" class="w-4 h-4 ${color} flex-shrink-0 mt-0.5"></i>
+        <div>
+          <div class="font-semibold">${a.message}</div>
+          ${a.detail ? `<div class="text-xs text-slate-500 mt-0.5">${a.detail}</div>` : ''}
+          ${list}
+        </div>
+      </${tag}>`;
+    });
+    renderAlertes();
+  }
+
+  function renderAlertes() {
+    if (!alertItems.length) {
+      alertesBox.innerHTML = '<p class="text-sm text-slate-500 text-center py-6">Aucune alerte ✓</p>';
+      return;
+    }
+    const shown = alertesExpanded ? alertItems : alertItems.slice(0, 5);
+    let html = shown.join('');
+    if (alertItems.length > 5) {
+      html += `<button id="alertes-toggle" class="w-full text-center text-sm font-semibold mt-2 py-1.5 rounded-lg hover:bg-slate-50" style="color: var(--fp-accent)">${alertesExpanded ? 'Voir moins' : 'Voir tout (' + alertItems.length + ')'}</button>`;
+    }
+    alertesBox.innerHTML = html;
+    const tg = document.getElementById('alertes-toggle');
+    if (tg) tg.addEventListener('click', () => { alertesExpanded = !alertesExpanded; renderAlertes(); lucide.createIcons(); });
+    lucide.createIcons();
+  }
+  refreshAlertes();
+
+  // === Santé de la flotte ===
+  function renderSante() {
+    const box = document.getElementById('sante-list'), sum = document.getElementById('sante-summary');
+    if (!box || !FP.santeVehicule) return;
+    const actifs = (data.vehicules || []).map(v => ({ v, s: FP.santeVehicule(v) })).filter(x => x.s);
+    let bon = 0, surv = 0, crit = 0;
+    actifs.forEach(x => { if (x.s.niveau === 'bon') bon++; else if (x.s.niveau === 'surveiller') surv++; else crit++; });
+    if (sum) sum.innerHTML = `<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:9999px">${bon} OK</span>`
+      + `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:9999px">${surv} à surveiller</span>`
+      + `<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:9999px">${crit} critiques</span>`;
+    // Anneau : part de la flotte « au vert »
+    const donut = document.getElementById('sante-donut');
+    if (donut && FP.donutHTML) {
+      const total = actifs.length || 1;
+      const pctOK = Math.round(bon / total * 100);
+      const dcol = pctOK >= 80 ? '#16a34a' : (pctOK >= 50 ? '#d97706' : '#dc2626');
+      donut.innerHTML = FP.donutHTML(pctOK, { size: 104, stroke: 12, color: dcol, label: pctOK + '%', textColor: dcol, fontSize: 22 })
+        + `<div class="text-center text-xs text-slate-500 mt-1">flotte au vert</div>`;
+    }
+    const aSurv = actifs.filter(x => x.s.niveau !== 'bon').sort((a, b) => a.s.score - b.s.score).slice(0, 8);
+    if (!aSurv.length) { box.innerHTML = '<p class="text-sm text-emerald-700 py-2">✓ Toute la flotte est au vert.</p>'; lucide.createIcons(); return; }
+    const esc = s => (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const color = n => n === 'critique' ? '#dc2626' : '#d97706';
+    box.innerHTML = aSurv.map(({ v, s }) => `
+      <a href="pages/vehicules.html?immat=${encodeURIComponent(v.immat || '')}" class="flex items-center gap-3 py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded px-2 -mx-2" style="text-decoration:none">
+        <span style="font-weight:800;font-size:1.05rem;min-width:2.4rem;text-align:center;color:${color(s.niveau)}">${s.score}</span>
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold text-slate-900 truncate">${esc(v.immat)} · ${esc(v.marque)} ${esc(v.modele)}</div>
+          <div class="text-xs text-slate-500 truncate">${esc(s.raisons.join(' · ')) || '—'}</div>
+        </div>
+        <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
+      </a>`).join('');
+    lucide.createIcons();
+  }
+  renderSante();
+
+  // === Véhicules table ===
+  const vehTbody = document.getElementById('vehicules-tbody');
+  let vehExpanded = false;
+  function rowHtml(v) {
+    const E = FP.esc;
+    return `
+    <tr class="cursor-pointer hover:bg-slate-50 transition-colors" data-veh="${E(v.id)}" title="Voir la fiche de ${E(v.immat)}">
+      <td class="font-mono font-semibold">${E(v.immat)}</td>
+      <td>${E(v.marque)} ${E(v.modele)}</td>
+      <td>${E(v.chauffeur)}</td>
+      <td>${FP.num(v.km)} km</td>
+      <td>${FP.statutBadge(v.statut)}</td>
+    </tr>`;
+  }
+  function renderVehicules() {
+    const list = data.vehicules || [];
+    const shown = vehExpanded ? list : list.slice(0, 5);
+    vehTbody.innerHTML = shown.map(rowHtml).join('');
+    const more = document.getElementById('veh-more');
+    if (list.length > 5) {
+      more.innerHTML = `<button id="veh-toggle" class="w-full text-center text-sm font-semibold py-2.5 border-t border-slate-100 hover:bg-slate-50" style="color: var(--fp-accent)">${vehExpanded ? 'Voir moins' : 'Voir tout (' + list.length + ')'}</button>`;
+      document.getElementById('veh-toggle').addEventListener('click', () => { vehExpanded = !vehExpanded; renderVehicules(); });
+    } else { more.innerHTML = ''; }
+    lucide.createIcons();
+  }
+  renderVehicules();
+  // Clic sur une ligne → ouvre la fiche véhicule sur la page Véhicules
+  vehTbody.addEventListener('click', (e) => {
+    const tr = e.target.closest('tr[data-veh]');
+    if (tr) window.location.href = `pages/vehicules.html?veh=${encodeURIComponent(tr.dataset.veh)}`;
+  });
+
+  // === Charts ===
+  // Coûts mensuels — 6 derniers mois calculés dynamiquement depuis les factures
+  function buildLast6Months() {
+    const out = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const ym = d.toISOString().slice(0, 7);
+      const label = d.toLocaleDateString('fr-FR', { month: 'short' });
+      out.push({ ym, label });
+    }
+    return out;
+  }
+  const months = buildLast6Months();
+  let _chCosts = null, _chGroupes = null; // instances Chart.js — détruites avant chaque re-dessin (fp:data-ready)
+
+  // Graphiques regroupés : Chart.js est chargé en différé → on dessine dès qu'il est prêt,
+  // sans bloquer l'affichage des KPIs (→ navigation fluide, pas de gris).
+  // ⚠️ Recalcule les données à CHAQUE appel + détruit l'ancien graphe → suit les données en direct.
+  function drawDashCharts() {
+  const monthlyTotals = months.map(m => FP.coutMois(data, m.ym)); // source unique (dédup + filtre exploit), cohérent avec le KPI et la sparkline
+  { // sous-titre tendance (variation 1er → dernier mois)
+    const first = monthlyTotals[0], last = monthlyTotals[monthlyTotals.length - 1];
+    const deltaPct = first > 0 ? Math.round(((last - first) / first) * 100) : 0;
+    const deltaEl = document.querySelector('.kpi-delta.up, .kpi-delta.down');
+    if (deltaEl) { deltaEl.className = deltaPct < 0 ? 'kpi-delta down' : 'kpi-delta up'; deltaEl.textContent = `${deltaPct < 0 ? '↓' : '↑'} ${Math.abs(deltaPct)}% vs ${months[0].label}`; }
+  }
+  if (_chCosts) { try { _chCosts.destroy(); } catch (e) {} }
+  const ctx1 = document.getElementById('costsChart').getContext('2d');
+  const g1 = ctx1.createLinearGradient(0, 0, 0, 280);
+  g1.addColorStop(0, 'rgba(249,115,22,0.35)');
+  g1.addColorStop(1, 'rgba(249,115,22,0)');
+  _chCosts = new Chart(ctx1, {
+    type: 'line',
+    data: {
+      labels: months.map(m => m.label),
+      datasets: [{
+        label: 'Coûts (€)',
+        data: monthlyTotals,
+        borderColor: '#F97316', borderWidth: 3, tension: .35,
+        backgroundColor: g1, fill: true,
+        pointBackgroundColor: '#F97316', pointRadius: 4,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => FP.euro(ctx.parsed.y) } } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { grid: { color: '#F1F5F9' }, ticks: { callback: v => FP.euro(v) } }
+      },
+      maintainAspectRatio: false, responsive: true,
+    }
+  });
+
+  // === Camembert : véhicules par groupe ===
+  (function () {
+    const keys = FP.groupeKeys();
+    const counts = keys.map(k => data.vehicules.filter(v => !FP.estVendu(v) && FP.vehGroupes(v).includes(k)).length);
+    // on n'affiche que les groupes non vides
+    const labels = [], values = [], colors = [], shownKeys = [];
+    keys.forEach((k, i) => { if (counts[i] > 0) { labels.push(FP.groupeLabel(k)); values.push(counts[i]); colors.push(FP.groupeColor(k)); shownKeys.push(k); } });
+    const el = document.getElementById('groupesChart');
+    if (_chGroupes) { try { _chGroupes.destroy(); } catch (e) {} }
+    if (el && values.length) {
+      const goToGroupe = (idx) => { if (idx != null && shownKeys[idx]) window.location.href = `pages/vehicules.html?groupe=${encodeURIComponent(shownKeys[idx])}`; };
+      _chGroupes = new Chart(el.getContext('2d'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+        options: {
+          plugins: {
+            legend: { position: 'right', labels: { boxWidth: 14, font: { size: 13 } }, onClick: (e, item) => goToGroupe(item.index) },
+            tooltip: { callbacks: { footer: () => 'Cliquer pour voir les véhicules' } }
+          },
+          onClick: (evt, els) => { if (els.length) goToGroupe(els[0].index); },
+          onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+          maintainAspectRatio: false, responsive: true, cutout: '58%',
+        }
+      });
+    }
+  })();
+  } // fin drawDashCharts
+  if (typeof Chart !== 'undefined') drawDashCharts();
+  else window.addEventListener('DOMContentLoaded', drawDashCharts);
+
+  // === Podium conducteurs — amendes 2026 (recalculable pour le rafraîchissement live) ===
+  const NP_POD = new Set(['siege', 'depot', 'navette', 'vendu', 'x', 'fenwick', '']);
+  // Clé canonique (distingue deux homonymes de prénom qui ont chacun leur nom de famille) — source unique.
+  const _podKey = s => (FP.condGroupKey ? FP.condGroupKey(s) : (FP.normPrenom ? FP.normPrenom(s) : (s || '').toString().trim().split(/\s+/)[0].toLowerCase()));
+  let _podExpanded = false;
+  const _podBox = document.getElementById('dash-podium');
+  const _podBtn = document.getElementById('dash-podium-toggle');
+  const _podEuro = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+  function renderPodiumDash() {
+    const byDriver = {};
+    (data.amendes || []).filter(a => FP.anneeAmende(a) === '2026').forEach(a => {
+      const k = _podKey(a.prenom); if (!k || NP_POD.has(k)) return;
+      // nom = nom COMPLET unifié (prénom + nom de famille si renseigné) pour l'affichage ;
+      // link = clé brute stockée sur l'amende (filtre de la page amendes inchangé).
+      byDriver[k] = byDriver[k] || { nom: (FP.conducteurNomUnifie ? FP.conducteurNomUnifie(a.prenom) : (a.prenom || '').trim()) || (a.prenom || '').trim(), link: (a.prenom || '').trim(), n: 0, montant: 0, points: 0 };
+      byDriver[k].n++; byDriver[k].montant += FP.montantDu(a); byDriver[k].points += (Number(a.points) || 0);
+    });
+    const all = Object.values(byDriver).sort((a, b) => b.n - a.n || b.montant - a.montant);
+    const medals = ['🥇', '🥈', '🥉'];
+    const shown = _podExpanded ? all : all.slice(0, 5);
+    if (_podBox) _podBox.innerHTML = shown.map((d, i) => `
+        <a href="pages/amendes.html?conducteur=${encodeURIComponent(d.link || d.nom)}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50" title="Voir les amendes de ${FP.esc(d.nom)}">
+          <span class="text-lg w-7 text-center flex-shrink-0">${medals[i] || `<span class="text-sm font-bold text-slate-400">${i + 1}</span>`}</span>
+          <span class="flex-1 font-semibold text-slate-800 truncate">${FP.esc(d.nom)}</span>
+          <span class="text-sm text-slate-500 flex-shrink-0">${d.n} · ${_podEuro(d.montant)}${d.points ? ' · −' + d.points + 'pts' : ''}</span>
+        </a>`).join('') || '<p class="text-sm text-slate-400">Aucune amende 2026.</p>';
+    if (_podBtn) { if (all.length <= 5) _podBtn.style.display = 'none'; else { _podBtn.style.display = ''; _podBtn.textContent = _podExpanded ? 'Voir moins' : `Voir tout (${all.length})`; } }
+  }
+  if (_podBtn) _podBtn.addEventListener('click', () => { _podExpanded = !_podExpanded; renderPodiumDash(); });
+  renderPodiumDash();
+
+  // === Widgets déplaçables (glisser-déposer + mémorisation) ===
+  (function () {
+    const KEY = 'auto_flotte_dash_widgets_order';
+    const cont = document.getElementById('dash-widgets');
+    if (!cont) return;
+    // Ordre des widgets SYNCHRONISÉ tous appareils (règle 0-sync) via FP.pref + cache local.
+    function apply() {
+      let o; try { o = (window.FP && FP.pref) ? FP.pref.get(KEY, null) : JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+      if (!Array.isArray(o)) return;
+      o.forEach(k => { const el = cont.querySelector(`.dash-widget[data-widget="${k}"]`); if (el) cont.appendChild(el); });
+    }
+    function save() {
+      const o = [...cont.querySelectorAll('.dash-widget')].map(el => el.dataset.widget);
+      try { if (window.FP && FP.pref) FP.pref.set(KEY, o); else localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) {}
+    }
+    function after(y) {
+      const els = [...cont.querySelectorAll('.dash-widget:not(.dragging)')];
+      return els.reduce((c, ch) => {
+        const b = ch.getBoundingClientRect(); const off = y - b.top - b.height / 2;
+        return (off < 0 && off > c.off) ? { off, el: ch } : c;
+      }, { off: -Infinity }).el;
+    }
+    let drag = null;
+    cont.addEventListener('dragstart', e => {
+      const h = e.target.closest('.widget-grip'); if (!h) return;
+      drag = h.closest('.dash-widget'); drag.classList.add('dragging'); cont.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    cont.addEventListener('dragover', e => {
+      if (!drag) return; e.preventDefault();
+      const a = after(e.clientY);
+      if (a == null) cont.appendChild(drag); else if (a !== drag) cont.insertBefore(drag, a);
+    });
+    cont.addEventListener('dragend', () => {
+      if (!drag) return; drag.classList.remove('dragging'); cont.classList.remove('is-dragging'); drag = null; save();
+    });
+    apply();
+
+    // --- Masquage de blocs (✕) — mémorisé par société (FP.settings.dashHiddenWidgets) ---
+    const hiddenList = () => { try { return (FP.settings.get().dashHiddenWidgets) || []; } catch (e) { return []; } };
+    const setHidden = (arr) => { try { const s = FP.settings.get(); s.dashHiddenWidgets = arr; FP.settings.save(s); } catch (e) {} };
+    const wLabel = (el) => { const g = el.querySelector('.widget-grip'); return g ? g.textContent.trim() : el.dataset.widget; };
+    let restoreBar = null;
+    function renderRestore() {
+      if (restoreBar) { restoreBar.remove(); restoreBar = null; }
+      const h = hiddenList(); if (!h.length) return;
+      const labels = {}; cont.querySelectorAll('.dash-widget').forEach(el => { labels[el.dataset.widget] = wLabel(el); });
+      restoreBar = document.createElement('div');
+      restoreBar.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin-bottom:1rem;font-size:.8rem;color:var(--fp-muted)';
+      restoreBar.innerHTML = '<span style="font-weight:600">Blocs masqués :</span>'
+        + h.map(k => `<button type="button" data-restore="${k}" class="btn btn-outline text-xs" style="padding:2px 8px" title="Réafficher ce bloc">↩ ${labels[k] || k}</button>`).join('')
+        + '<button type="button" data-restore="__all" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font-weight:600">Tout réafficher</button>';
+      restoreBar.addEventListener('click', (e) => { const b = e.target.closest('[data-restore]'); if (!b) return; const k = b.dataset.restore; setHidden(k === '__all' ? [] : hiddenList().filter(x => x !== k)); applyHidden(); });
+      cont.parentNode.insertBefore(restoreBar, cont);
+    }
+    function applyHidden() {
+      const h = hiddenList();
+      cont.querySelectorAll('.dash-widget').forEach(el => { el.style.display = h.includes(el.dataset.widget) ? 'none' : ''; });
+      renderRestore();
+    }
+    cont.querySelectorAll('.dash-widget').forEach(el => {
+      const bar = el.querySelector('.widget-bar'); if (!bar || bar.querySelector('.widget-hide')) return;
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'widget-hide'; b.title = 'Masquer ce bloc'; b.textContent = '✕';
+      b.style.cssText = 'margin-left:auto;background:none;border:none;color:#94a3b8;cursor:pointer;font-size:.9rem;padding:.15rem .45rem;line-height:1';
+      b.addEventListener('click', () => { const h = hiddenList(); if (!h.includes(el.dataset.widget)) { h.push(el.dataset.widget); setHidden(h); applyHidden(); } });
+      bar.appendChild(b);
+    });
+    applyHidden();
+  })();
+
+  // === Sélecteur de société (vue admin multi-flotte) ===
+  (function setupSociete() {
+    const wrap = document.getElementById('soc-switch');
+    if (!wrap) return;
+    // RÉSERVÉ AU CEO : voir/changer de société, « Toutes les sociétés » et « Ajouter une société »
+    // sont des fonctions multi-flotte. Un Admin (ou Gestionnaire) est VERROUILLÉ sur sa société →
+    // le sélecteur est masqué pour tout le monde sauf le CEO (super-admin).
+    const estSuper = FP.isSuperAdmin ? FP.isSuperAdmin() : false;
+    if (!estSuper) { wrap.style.display = 'none'; return; }
+    const cur = FP.activeSociete();
+    const btn = document.getElementById('soc-btn'), menu = document.getElementById('soc-menu'), cs = document.getElementById('soc-current');
+    if (cs) cs.textContent = cur === '__all__' ? 'Toutes' : cur;
+    function render() {
+      const socs = FP.getSocietes();
+      let html = socs.map(s => `<button class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 ${s === cur ? 'font-bold' : ''}" data-soc="${s.replace(/"/g, '&quot;')}"><i data-lucide="building-2" class="w-4 h-4 text-slate-400"></i> ${s}${s === cur ? ' ✓' : ''}</button>`).join('');
+      html += `<button class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 ${cur === '__all__' ? 'font-bold' : ''}" data-soc="__all__"><i data-lucide="layers" class="w-4 h-4 text-slate-400"></i> Toutes les sociétés${cur === '__all__' ? ' ✓' : ''}</button>`;
+      html += `<div class="border-t border-slate-100 my-1"></div>`;
+      html += `<button class="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2" style="color:var(--fp-accent)" id="soc-add"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter une société</button>`;
+      menu.innerHTML = html; lucide.createIcons();
+    }
+    btn.addEventListener('click', (e) => { e.stopPropagation(); render(); menu.classList.toggle('hidden'); });
+    document.addEventListener('click', () => menu.classList.add('hidden'));
+    menu.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (e.target.closest('#soc-add')) {
+        const n = await FP.prompt('Nom de la nouvelle société :');
+        if (!n) return;
+        if (FP.addSociete(n)) { FP.setActiveSociete(n.trim()); try{FP.warp&&FP.warp('Changement de société');}catch(_){} location.reload(); }
+        else alert('Cette société existe déjà.');
+        return;
+      }
+      const b = e.target.closest('[data-soc]');
+      if (b) { FP.setActiveSociete(b.dataset.soc); try{FP.warp&&FP.warp('Changement de société');}catch(_){} location.reload(); }
+    });
+  })();
+
+  // Re-init icons
+  lucide.createIcons();
+
+  // Rafraîchit les KPIs dépendant des données quand Supabase a chargé (live),
+  // sinon le tableau de bord reste sur le cache statique data.js (ex. amendes à payer périmé).
+  document.addEventListener('fp:data-ready', () => {
+    // ⚠️ MÊMES règles que le 1er rendu (sinon le live ré-affiche l'ancien comptage) :
+    // flotte = hors vendus ; amendes à payer = 2026 ; km/valeur sur la flotte active.
+    const fa = (data.vehicules || []).filter(v => !FP.estVendu(v));
+    document.getElementById('kpi-vehicules').textContent = fa.length;
+    const ap = (data.amendes || []).filter(a => FP.estAPayer(a)).length;
+    document.getElementById('kpi-amendes').textContent = ap;
+    const km = fa.reduce((s, v) => s + (v.km || 0), 0);
+    document.getElementById('kpi-km').textContent = FP.num(km) + ' km';
+    document.getElementById('kpi-km-moyen').textContent = FP.num(fa.length ? Math.round(km / fa.length) : 0) + ' km';
+    document.getElementById('kpi-valeur').textContent = FP.euro(fa.reduce((s, v) => s + (v.valeurAchat || 0), 0));
+    document.getElementById('kpi-entretien').textContent = fa.filter(v => v.statut === 'entretien').length;
+    fillMoneyKpis();
+    const cm = new Date().toISOString().slice(0, 7);
+    document.getElementById('kpi-couts').textContent = FP.euro(FP.coutMois(data, cm));
+    // Re-dessine aussi les GRAPHES, la liste véhicules et le podium (sinon ils restaient figés
+    // après un ajout de facture ou une modif d'un autre poste jusqu'à un rechargement manuel).
+    if (typeof drawDashCharts === 'function' && typeof Chart !== 'undefined') { try { drawDashCharts(); } catch (e) {} }
+    if (typeof renderVehicules === 'function') { try { renderVehicules(); } catch (e) {} }
+    if (typeof renderPodiumDash === 'function') { try { renderPodiumDash(); } catch (e) {} }
+    if (typeof refreshAlertes === 'function') refreshAlertes();
+    if (typeof renderSante === 'function') renderSante();
+    if (typeof renderOnboarding === 'function') renderOnboarding();
+  });
+
+  // ============================================================
+  //  Scanner un document → rangement automatique dans la fiche véhicule
+  //  Lecture OCR (FP.ocr) → détection (FP.detectDoc) → upload + enregistrement.
+  // ============================================================
+  (function scanDocFeature() {
+    // 'facture' = destination « liste Factures » ; les autres = « Documents » de la fiche véhicule.
+    const TYPE_LABELS = {
+      'carte-grise': 'Carte grise',
+      'permis': '🪪 Permis (→ conducteur)',
+      'assurance': 'Assurance (carte verte)',
+      'carte-identite': "🪪 Carte d'identité (→ conducteur)",
+      'controle-technique': 'Contrôle technique',
+      'facture': '💶 Facture — achat / divers (→ Factures)',
+      'facture-entretien': '🔧 Facture — garage / entretien / réparation (→ Factures + maj fiche)',
+      'facture-total': '⛽ Facture — carburant / péages TotalEnergies (→ Total Fleet)',
+      'facture-ulys': '🛣️ Facture — péages Ulys / VINCI (→ Ulys)',
+      'sinistre': '🛡️ Sinistre (→ Sinistres)',
+      'pv': 'PV (Procès-verbal)',
+      'contrat': 'Contrat leasing/location',
+      'etat-des-lieux': 'État des lieux',
+      'autre': 'Autre document',
+    };
+    // Pour chaque type : cible (conducteur/vehicule/facture) + champs à afficher.
+    const DOC_DEFS = {
+      'facture':            { target: 'facture',    fields: ['date', 'km', 'amt'] },
+      'facture-total':      { target: 'facture',    fields: ['date', 'km', 'amt'] },
+      'facture-ulys':       { target: 'facture',    fields: ['date', 'amt'] },
+      'facture-entretien':  { target: 'facture',    fields: ['date', 'km', 'amt'] },
+      'sinistre':           { target: 'facture',    fields: ['date', 'amt'] },
+      'controle-technique': { target: 'vehicule',   fields: ['date', 'km'] },
+      'carte-grise':        { target: 'vehicule',   fields: ['date'] },
+      'assurance':          { target: 'vehicule',   fields: ['date'] },
+      'pv':                 { target: 'vehicule',   fields: ['date'] },
+      'contrat':            { target: 'vehicule',   fields: ['date'] },
+      'etat-des-lieux':     { target: 'vehicule',   fields: ['date'] },
+      'permis':             { target: 'conducteur', fields: ['permisType', 'permisNumero', 'permisObtention', 'permisExpiration'], numField: 'permisNumero' },
+      'carte-identite':     { target: 'conducteur', fields: ['idNumero', 'idExpiration'], numField: 'idNumero' },
+      'autre':              { target: 'vehicule',   fields: ['date'] },
+    };
+    const docDef = t => DOC_DEFS[t] || DOC_DEFS['autre'];
+    // Sous-types de facture → catégorie stockée dans `factures.type` (= ce qui range la facture dans
+    // le bon onglet de la page Factures) + fournisseur par défaut. 'facture' = catégorie libre (détectée).
+    // Total Fleet = type carburant/péage ; Ulys = type 'ulys' ; le reste tombe dans la liste Factures.
+    const FACTURE_TYPES = {
+      'facture':           { cat: null,          dest: 'liste Factures',      page: 'factures.html' },
+      'facture-total':     { cat: 'carburant',   four: 'TotalEnergies', dest: 'Total Fleet',  page: 'controle.html?tab=total' },
+      'facture-ulys':      { cat: 'ulys',        four: 'Ulys',          dest: 'Ulys',         page: 'controle.html?tab=ulys' },
+      'facture-entretien': { cat: 'entretien',   dest: 'liste Factures',      page: 'factures.html' },
+    };
+    const isFactureType = t => Object.prototype.hasOwnProperty.call(FACTURE_TYPES, t);
+    // Anti-doublon factures : délègue au helper centralisé FP.dupe (règle durcie : n° + montant,
+    // sinon fournisseur + TTC + date). Construit un enregistrement candidat depuis la ligne scannée.
+    function findDuplicateFacture(r) {
+      const routing = FACTURE_TYPES[r.type] || {};
+      const det = r.det || {};
+      const cand = {
+        numeroFacture: det.numeroFacture || null,
+        fournisseur: det.fournisseur || routing.four || null,
+        montantTTC: Number.isFinite(r.amt) ? r.amt : (Number.isFinite(det.montantTTC) ? det.montantTTC : null),
+        date: r.date || null,
+      };
+      return (window.FP && FP.dupe) ? FP.dupe.find('factures', cand, window.FP_DATA.factures || []) : null;
+    }
+    const $ = id => document.getElementById(id);
+    // Le bouton « Scanner un document » ouvre désormais le scanner unifié (pages/scanner.html, 3 étapes + validation).
+    // L'ancien scanner-modale reste ici en secours (dormant) : il ne s'active plus que si un bouton #btn-scan-doc-classic existe.
+    const btn = $('btn-scan-doc-classic');
+    if (!btn) return;
+
+    // Input fichier caché + modale
+    const file = document.createElement('input');
+    file.type = 'file'; file.accept = 'image/*,application/pdf'; file.multiple = true; file.style.display = 'none';
+    document.body.appendChild(file);
+
+    const modal = document.createElement('div');
+    modal.id = 'scan-modal';
+    modal.setAttribute('style', 'position:fixed;inset:0;z-index:80;display:none;align-items:center;justify-content:center;background:rgba(15,23,42,.55);padding:16px');
+    modal.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:860px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid #E2E8F0">
+        <div style="font-weight:800;color:var(--fp-primary)"><i data-lucide="scan-line" class="w-4 h-4" style="display:inline;vertical-align:-2px"></i> Scanner un document</div>
+        <button id="scan-close" style="border:none;background:transparent;cursor:pointer;color:#94A3B8;font-size:20px;line-height:1">&times;</button>
+      </div>
+      <div id="scan-body" style="padding:18px"></div>
+    </div>`;
+    document.body.appendChild(modal);
+    if (window.lucide) lucide.createIcons();
+
+    const openModal = () => { modal.style.display = 'flex'; };
+    const _objUrls = []; // aperçus PDF/image (libérés à la fermeture)
+    const revokeUrls = () => { _objUrls.splice(0).forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} }); };
+    const previewHtml = (f) => {
+      const u = URL.createObjectURL(f); _objUrls.push(u);
+      const isPdf = f.type === 'application/pdf' || /\.pdf($|\?)/i.test(f.name || '');
+      return isPdf
+        ? `<iframe src="${u}" style="width:100%;height:420px;border:1px solid #E2E8F0;border-radius:8px;background:#fff"></iframe>`
+        : `<img src="${u}" alt="Aperçu du document" loading="lazy" style="display:block;max-width:100%;border:1px solid #E2E8F0;border-radius:8px">`;
+    };
+    const closeModal = () => { modal.style.display = 'none'; revokeUrls(); $('scan-body').innerHTML = ''; file.value = ''; };
+    $('scan-close').addEventListener('click', closeModal);
+    // ⚠️ On NE ferme PAS en cliquant à côté (zone sombre) : trop facile de fermer par erreur
+    // pendant qu'on remplit/efface un champ → on perdait toute la saisie. Fermeture par la ✕.
+
+    const body = () => $('scan-body');
+    const setBody = html => { body().innerHTML = html; if (window.lucide) lucide.createIcons(); };
+
+    btn.addEventListener('click', () => file.click());
+
+    // Lecture OCR de chaque fichier choisi (un ou plusieurs), puis liste récapitulative.
+    file.addEventListener('change', async () => {
+      const files = Array.from(file.files || []);
+      if (!files.length) return;
+      openModal();
+      const items = [];
+      for (let i = 0; i < files.length; i++) {
+        setBody(`<div style="text-align:center;padding:14px 0">
+          <div class="cg-spin" style="margin:0 auto 12px"></div>
+          <div style="font-weight:600;color:#475569">Lecture ${i + 1}/${files.length}…</div>
+          <div style="font-size:12px;color:#94A3B8;margin-top:4px;max-width:320px;margin-left:auto;margin-right:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${FP.esc(files[i].name)}</div>
+        </div>`);
+        let det = { type: 'autre', vehicule: null, immat: null, date: null, km: null };
+        let text = '';
+        let ia = null;
+        // 1) Lecture IA (Haiku) en priorité
+        try { ia = await FP.scanIA(files[i]); } catch (e) { /* IA indispo → OCR */ }
+        if (ia) {
+          const KNOWN = ['facture','sinistre','permis','carte-identite','carte-grise','assurance','controle-technique','autre'];
+          if (ia.docType && KNOWN.includes(ia.docType)) det.type = ia.docType;
+          det.date = ia.date || null;
+          if (ia.controleTechniqueProchain) det.controleTechniqueProchain = ia.controleTechniqueProchain;
+          if (ia.description) det.description = ia.description;
+          if (ia.km != null) det.km = ia.km;
+          if (ia.montantTTC != null) det.montantTTC = ia.montantTTC;
+          if (ia.montantHT != null) det.montantHT = ia.montantHT;
+          if (ia.montantTVA != null) det.montantTVA = ia.montantTVA;
+          if (ia.fournisseur) det.fournisseur = ia.fournisseur;
+          if (ia.numeroFacture) det.numeroFacture = ia.numeroFacture;
+          ['permisNumero','permisType','permisObtention','permisExpiration','idNumero','idExpiration'].forEach(k => { if (ia[k]) det[k] = ia[k]; });
+          if (ia.vehiculeImmat) {
+            const vv = ((window.FP_DATA && window.FP_DATA.vehicules) || []).find(v => (v.immat || '').toUpperCase() === String(ia.vehiculeImmat).toUpperCase());
+            if (vv) { det.vehicule = vv; det.immat = vv.immat; } else { det.immat = String(ia.vehiculeImmat).toUpperCase(); }
+          }
+        } else {
+          // 2) Secours : OCR local + détection par règles
+          try {
+            text = await FP.ocr.fileToText(files[i]);
+            det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
+          } catch (err) { console.error('[scan OCR]', err); }
+        }
+        // Affine le type facture selon le fournisseur → pré-route vers le bon onglet (Total Fleet / Ulys)
+        if (det.type === 'facture' || det.type === 'autre') {
+          const hay = `${det.fournisseur || ''} ${files[i].name || ''} ${text || ''} ${(ia && ia.description) || ''}`.toLowerCase();
+          if (/\bulys\b|vinci\s*autoroute|autoroutes?\s+du\s+sud|\basf\b|cofiroute|escota|sanef|aprr|\barea\b/.test(hay)) det.type = 'facture-ulys';
+          else if (/total\s*energies|totalenergies|total\s*fleet|total\s*card|totalcard/.test(hay)) det.type = 'facture-total';
+        }
+        // Détection du conducteur (nom de fichier + texte OCR + nom lu par l'IA) pour les permis/CI
+        det.conducteur = detectConducteur(files[i].name, text + ' ' + ((ia && ia.personne) || '') + ' ' + ((ia && ia.description) || ''));
+        // Si on a reconnu une personne et aucun véhicule, on suppose un permis
+        if (det.conducteur && det.type === 'autre' && !det.vehicule) det.type = 'permis';
+        items.push({ file: files[i], det });
+      }
+      showBatchForm(items);
+    });
+
+    function vehSelect(id, selId) {
+      const vehs = ((window.FP_DATA && window.FP_DATA.vehicules) || []).slice()
+        .sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+      const sel = vehs.find(v => v.id === selId);
+      const listId = id + '-list';
+      // Champ de saisie + liste filtrable : on tape la plaque pour retrouver le véhicule vite.
+      // La valeur saisie = l'immatriculation (résolue en id du véhicule à l'enregistrement).
+      const opts = vehs.map(v => `<option value="${FP.esc(v.immat || '?')}">${FP.esc(v.immat || '?')} · ${FP.esc(v.marque || '')} ${FP.esc(v.modele || '')}</option>`).join('');
+      return `<input id="${id}" class="field-input" list="${listId}" autocomplete="off" placeholder="Tape la plaque… (ex. AB-123-CD)" value="${FP.esc(sel ? (sel.immat || '') : '')}" style="width:100%">
+        <datalist id="${listId}">${opts}</datalist>`;
+    }
+    function typeSelect(id, selType) {
+      const opts = Object.keys(TYPE_LABELS).map(k => `<option value="${k}" ${selType === k ? 'selected' : ''}>${TYPE_LABELS[k]}</option>`).join('');
+      return `<select id="${id}" class="field-input" style="width:100%">${opts}</select>`;
+    }
+    // Petit libellé au-dessus de chaque champ
+    const fld = (label, inner) => `<label style="display:block"><span style="display:block;font-size:10px;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:#94A3B8;margin-bottom:3px">${label}</span>${inner}</label>`;
+
+    // --- Conducteurs (pour le type « Permis ») ---
+    const stripAcc = s => (s || '').toString().toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    function allDrivers() {
+      const map = new Map();
+      const norm = (window.FP && FP.normPrenom) ? FP.normPrenom : (s => String(s || '').trim().split(/\s+/)[0].toLowerCase());
+      const NON = (window.FP && FP.NON_CHAUFFEURS) ? FP.NON_CHAUFFEURS : [];
+      (window.FP_DATA.conducteurs || []).forEach(c => { if (c.masque) return; const k = c.key || norm(c.name); if (!k) return; map.set(k, { key: k, name: c.name || k, nom: c.nom || '' }); });
+      (window.FP_DATA.vehicules || []).forEach(v => { const n = v.chauffeur; if (!n || NON.includes(n)) return; const k = norm(n); if (!k || map.has(k)) return; map.set(k, { key: k, name: n, nom: '' }); });
+      return [...map.values()].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+    // Devine le conducteur d'après le nom de fichier puis le texte OCR (nom de famille prioritaire)
+    function detectConducteur(filename, ocrText) {
+      const drivers = allDrivers();
+      const hay = stripAcc(filename + ' ' + (ocrText || ''));
+      for (const d of drivers) { const nom = stripAcc(d.nom); if (nom.length >= 3 && hay.includes(nom)) return d; }
+      for (const d of drivers) { const pre = stripAcc(d.name); if (pre.length >= 3 && new RegExp('\\b' + pre + '\\b').test(hay)) return d; }
+      return null;
+    }
+    function condSelect(id, selKey) {
+      const opts = ['<option value="">— Choisir un conducteur —</option>']
+        .concat(allDrivers().map(d => `<option value="${FP.esc(d.key)}" ${selKey === d.key ? 'selected' : ''}>${FP.esc(d.name)}${d.nom ? ' ' + FP.esc(d.nom) : ''}</option>`)).join('');
+      return `<select id="${id}" class="field-input" style="width:100%">${opts}</select>`;
+    }
+    // Pastille de statut : ✓ cible détectée / ⚠ à choisir (selon la cible du type)
+    function badgeHtml(it, type) {
+      const ok = 'color:#047857;font-weight:700;white-space:nowrap';
+      const ko = 'color:#B91C1C;font-weight:700;white-space:nowrap';
+      if (docDef(type).target === 'conducteur') return it.det.conducteur ? `<span style="${ok}">✓ ${FP.esc(it.det.conducteur.name)}</span>` : `<span style="${ko}">⚠ à choisir</span>`;
+      return it.det.vehicule ? `<span style="${ok}">✓ ${FP.esc(it.det.vehicule.immat)}</span>` : `<span style="${ko}">⚠ à choisir</span>`;
+    }
+    // Un champ de saisie selon sa clé
+    function fieldInput(i, key, d) {
+      const inp = (id, attrs, val) => `<input id="${id}" class="field-input" style="width:100%" ${attrs} value="${FP.esc(val == null ? '' : val)}">`;
+      switch (key) {
+        case 'date': return `<div>${fld('Date', inp('b-date-' + i, 'type="date"', d.date))}</div>`;
+        case 'km': return `<div>${fld('Kilométrage', inp('b-km-' + i, 'type="number" placeholder="—"', d.km))}</div>`;
+        case 'amt': return `<div style="grid-column:1 / -1">${fld('Montant TTC (€)', inp('b-amt-' + i, 'type="number" step="0.01" placeholder="—"', d.montantTTC))}</div>`;
+        case 'permisType': return `<div>${fld('Type de permis', inp('b-ptype-' + i, 'placeholder="ex. B"', d.permisType))}</div>`;
+        case 'permisNumero': return `<div>${fld('Numéro *', inp('b-pnum-' + i, 'placeholder="obligatoire"', d.permisNumero))}</div>`;
+        case 'permisObtention': return `<div>${fld("Date d'obtention", inp('b-pobt-' + i, 'type="date"', d.permisObtention))}</div>`;
+        case 'permisExpiration': return `<div>${fld("Date d'expiration", inp('b-pexp-' + i, 'type="date"', d.permisExpiration))}</div>`;
+        case 'idNumero': return `<div>${fld('Numéro *', inp('b-idnum-' + i, 'placeholder="obligatoire"', d.idNumero))}</div>`;
+        case 'idExpiration': return `<div>${fld("Date d'expiration", inp('b-idexp-' + i, 'type="date"', d.idExpiration))}</div>`;
+      }
+      return '';
+    }
+    // Champs selon le type : cible (véhicule ou conducteur) + champs propres au type
+    function rowFields(i, it, type) {
+      const d = it.det, def = docDef(type);
+      const head = def.target === 'conducteur'
+        ? `<div style="grid-column:1 / -1">${fld('Conducteur', condSelect('b-cond-' + i, d.conducteur && d.conducteur.key))}</div>`
+        : `<div style="grid-column:1 / -1">${fld('Véhicule', vehSelect('b-veh-' + i, d.vehicule && d.vehicule.id))}</div>`;
+      return head + def.fields.map(f => fieldInput(i, f, d)).join('');
+    }
+
+    // Liste : une ligne par document, pré-remplie par la détection, corrigeable.
+    function showBatchForm(items) {
+      const rows = items.map((it, i) => {
+        const type = it.det.type;
+        return `<div style="border:1px solid #E2E8F0;border-radius:12px;padding:12px;margin-bottom:10px;background:#FBFCFE">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#334155;margin-bottom:10px">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" title="${FP.esc(it.file.name)}">${FP.esc(it.file.name)}</span>
+            <button id="b-view-${i}" type="button" style="border:1px solid #E2E8F0;background:#fff;border-radius:7px;padding:3px 9px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap">👁 Voir</button>
+            <span id="b-badge-${i}">${badgeHtml(it, type)}</span>
+          </div>
+          <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+            <div id="b-prev-${i}" style="display:none;flex:1 1 340px;min-width:260px"></div>
+            <div style="flex:1 1 320px;min-width:240px">
+              <div style="margin-bottom:8px">${fld('Type de document', typeSelect('b-type-' + i, type))}</div>
+              <div id="b-fields-${i}" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px">${rowFields(i, it, type)}</div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+      setBody(`<div style="font-size:13px;color:#475569;margin-bottom:10px"><b>${items.length}</b> document(s) lu(s). Vérifiez le type et la cible (pré-remplis), puis enregistrez.</div>
+        <div style="max-height:46vh;overflow:auto;margin:0 -2px;padding:0 2px">${rows}</div>
+        <button id="scan-save-all" class="btn btn-dark text-sm w-full justify-center" style="margin-top:14px"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer ${items.length} document(s)</button>
+        <p style="font-size:11px;color:#94A3B8;margin-top:8px">Chaque fichier est stocké en ligne. <b>Permis / carte d'identité</b> → fiche conducteur ; <b>factures</b> → onglet Factures correspondant (Total Fleet, Ulys, liste) ; <b>sinistre</b> → Sinistres ; le reste (carte grise, CT, assurance…) → Documents de la fiche véhicule. CT → met à jour le prochain CT ; un kilométrage plus récent met à jour la fiche.</p>`);
+      // Changer le type recompose les champs (véhicule ↔ conducteur) et la pastille
+      items.forEach((it, i) => {
+        const sel = $('b-type-' + i);
+        if (sel) sel.addEventListener('change', () => {
+          const t = sel.value;
+          const fc = $('b-fields-' + i); if (fc) fc.innerHTML = rowFields(i, it, t);
+          const bg = $('b-badge-' + i); if (bg) bg.innerHTML = badgeHtml(it, t);
+          if (window.lucide) lucide.createIcons();
+        });
+        // Bouton « Voir » : déplie/replie un aperçu du fichier (PDF ou image)
+        const vb = $('b-view-' + i);
+        if (vb) vb.addEventListener('click', () => {
+          const p = $('b-prev-' + i); if (!p) return;
+          if (p.style.display === 'none') {
+            if (!p.dataset.loaded) { p.innerHTML = previewHtml(it.file); p.dataset.loaded = '1'; }
+            p.style.display = 'block'; vb.innerHTML = '✕ Masquer';
+          } else { p.style.display = 'none'; vb.innerHTML = '👁 Voir'; }
+        });
+      });
+      $('scan-save-all').addEventListener('click', () => saveBatch(items));
+    }
+
+    function nextFactId() {
+      let max = 0;
+      (window.FP_DATA.factures || []).forEach(f => { const m = /^FA-(\d+)$/.exec(f.id || ''); if (m) max = Math.max(max, parseInt(m[1], 10)); });
+      return 'FA-' + String(max + 1).padStart(4, '0');
+    }
+
+    async function saveBatch(items) {
+      const val = id => { const el = $(id); return el ? el.value : ''; };
+      const rows = items.map((it, i) => {
+        const type = val('b-type-' + i);
+        const r = { file: it.file, det: it.det, type, target: docDef(type).target };
+        if (r.target === 'conducteur') {
+          r.condKey = val('b-cond-' + i);
+          r.permisType = val('b-ptype-' + i);
+          r.permisNumero = val('b-pnum-' + i);
+          r.permisObtention = val('b-pobt-' + i);
+          r.permisExpiration = val('b-pexp-' + i);
+          r.idNumero = val('b-idnum-' + i);
+          r.idExpiration = val('b-idexp-' + i);
+        } else {
+          // Le champ véhicule contient une plaque saisie/choisie → on la résout en id de véhicule.
+          const _vehVal = (val('b-veh-' + i) || '').trim().toUpperCase();
+          const _vm = _vehVal ? (window.FP_DATA.vehicules || []).find(v => (v.immat || '').toUpperCase() === _vehVal) : null;
+          r.vehId = _vm ? _vm.id : '';
+          r.date = val('b-date-' + i);
+          r.km = parseInt(val('b-km-' + i), 10);
+          r.amt = parseFloat(val('b-amt-' + i));
+        }
+        return r;
+      });
+      // Véhicule obligatoire seulement pour les DOCUMENTS de fiche véhicule (CT, carte grise…).
+      // Les factures (surtout Total Fleet / Ulys, qui couvrent toute la flotte) : véhicule facultatif.
+      const missVeh = rows.filter(r => r.target === 'vehicule' && !r.vehId).length;
+      const missCond = rows.filter(r => r.target === 'conducteur' && !r.condKey).length;
+      const missNum = rows.filter(r => { const nf = docDef(r.type).numField; return nf && !((r[nf] || '').toString().trim()); }).length;
+      if (missVeh) { alert(missVeh + ' document(s) sans véhicule choisi. Sélectionnez un véhicule pour chacun.'); return; }
+      if (missCond) { alert(missCond + ' document(s) sans conducteur choisi. Sélectionnez un conducteur pour chacun.'); return; }
+      if (missNum) { alert(missNum + " document(s) sans numéro d'identification. Le numéro (permis / carte d'identité) est obligatoire."); return; }
+      if (!(window.FP && FP.supabase && FP.uploadScan)) { alert('Connexion requise pour enregistrer en ligne.'); return; }
+
+      const btnAll = $('scan-save-all');
+      btnAll.disabled = true; btnAll.style.opacity = '.7';
+      const done = []; let okN = 0;
+      const openLink = (href) => ` <a href="${href}" style="color:var(--fp-accent,#F97316);font-weight:700;text-decoration:none;white-space:nowrap">→ ouvrir</a>`;
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        btnAll.innerHTML = `⏳ Enregistrement ${i + 1}/${rows.length}…`;
+        try {
+          if (r.type === 'permis') {
+            // → fiche CONDUCTEUR (table conducteurs : scan + infos lues)
+            const url = await FP.uploadScan(r.file, 'permis');
+            const drv = allDrivers().find(d => d.key === r.condKey) || null;
+            // ⚠️ On n'envoie `name` QUE si on a un vrai nom (fiche trouvée) — sinon on laisserait la
+            // clé brute écraser le nom complet déjà en base. L'upsert ne touche que les champs présents.
+            const payload = { key: r.condKey, manuel: true, permisUrl: url, permisFileId: null };
+            if (drv && drv.name) payload.name = drv.name;
+            if (r.permisType) payload.permisType = r.permisType;
+            if (r.permisNumero) payload.permisNumero = r.permisNumero;
+            if (r.permisObtention) payload.permisObtention = r.permisObtention;
+            if (r.permisExpiration) payload.permisExpiration = r.permisExpiration;
+            await FP.persist.upsert('conducteurs', payload);
+            // maj mémoire (évite le « flash » sur la page Conducteurs)
+            const arr = window.FP_DATA.conducteurs || (window.FP_DATA.conducteurs = []);
+            const ex = arr.find(c => c.key === r.condKey);
+            if (ex) Object.assign(ex, payload); else arr.push(payload);
+            // …et on met à jour le cache local de la page Conducteurs → le permis y apparaît
+            // immédiatement, dès la 1ʳᵉ visite (sans attendre le rechargement serveur).
+            try {
+              const ck = 'fp_cond_cache_v2_' + ((localStorage.getItem('fp_societe')) || 'PXP');
+              let cc = []; try { cc = JSON.parse(localStorage.getItem(ck) || '[]') || []; } catch (e) {}
+              const ci = cc.findIndex(c => c.key === r.condKey);
+              if (ci >= 0) Object.assign(cc[ci], payload); else cc.push(payload);
+              localStorage.setItem(ck, JSON.stringify(cc));
+            } catch (e) {}
+            done.push(`• <b>${FP.esc(drv.name || r.condKey)}${drv.nom ? ' ' + FP.esc(drv.nom) : ''}</b> — Permis → fiche conducteur` + openLink('pages/conducteurs.html?cond=' + encodeURIComponent(r.condKey))); okN++;
+            continue;
+          }
+          if (r.target === 'conducteur') {
+            // Doc perso (carte d'identité…) → section « Documents » du conducteur (réglages condDocs)
+            const url = await FP.uploadScan(r.file, 'documents');
+            const drv = allDrivers().find(d => d.key === r.condKey) || { key: r.condKey, name: r.condKey, nom: '' };
+            const label = (TYPE_LABELS[r.type] || 'Document').replace(/\s*\(→.*?\)/, '').replace(/^🪪\s*/, '').trim();
+            const doc = { id: 'DC' + Date.now().toString(36) + i, type: r.type, label, url, date: r.idExpiration || null, numero: r.idNumero || null, createdAt: new Date().toISOString() };
+            const s = FP.settings.get(); s.condDocs = s.condDocs || {}; (s.condDocs[r.condKey] = s.condDocs[r.condKey] || []).push(doc); FP.settings.save(s);
+            done.push(`• <b>${FP.esc(drv.name || r.condKey)}${drv.nom ? ' ' + FP.esc(drv.nom) : ''}</b> — ${FP.esc(label)} → fiche conducteur` + openLink('pages/conducteurs.html?cond=' + encodeURIComponent(r.condKey))); okN++;
+            continue;
+          }
+          // Anti-doublon : si une facture équivalente existe déjà, on ne la ré-importe pas (avant tout upload).
+          if (isFactureType(r.type)) {
+            const dup = findDuplicateFacture(r);
+            if (dup) {
+              const tag = dup.numeroFacture || dup.fournisseur || (dup.montantTTC != null ? FP.euro(dup.montantTTC) : '');
+              done.push(`• ⚠️ <b>${FP.esc(r.file.name)}</b> — facture déjà présente${tag ? ' (' + FP.esc(tag) + ')' : ''} → non ré-importée` + openLink('pages/factures.html'));
+              continue;
+            }
+          }
+          const veh = (window.FP_DATA.vehicules || []).find(v => v.id === r.vehId);
+          const url = await FP.uploadScan(r.file, 'documents');
+
+          if (isFactureType(r.type) || r.type === 'sinistre') {
+            // → table FACTURES. La catégorie (`type`) range la facture dans le bon onglet :
+            //   Total Fleet (carburant/péage) · Ulys (péages) · sinon liste Factures.
+            const isSin = r.type === 'sinistre';
+            const routing = FACTURE_TYPES[r.type] || {};
+            const det = r.det || {};
+            const cat = isSin ? 'sinistre' : (routing.cat || det.factureCategorie || 'autre');
+            const fact = {
+              id: nextFactId(), date: r.date || null,
+              vehiculeImmat: veh ? veh.immat : null,
+              fournisseur: det.fournisseur || routing.four || null,
+              numeroFacture: det.numeroFacture || null,
+              description: det.description || r.file.name || (isSin ? 'Sinistre scanné' : 'Facture scannée'),
+              type: cat,
+              montantHT: Number.isFinite(det.montantHT) ? det.montantHT : null,
+              montantTVA: Number.isFinite(det.montantTVA) ? det.montantTVA : null,
+              montantTTC: Number.isFinite(r.amt) ? r.amt : null,
+              km: Number.isFinite(r.km) ? r.km : null,
+              fileId: url, fileName: r.file.name || null,
+            };
+            await FP.persist.insert('factures', fact);
+            if (window.FP_DATA.factures) window.FP_DATA.factures.push(fact);
+            if (isSin) { // marque le sinistre « en attente de remboursement » pour le suivi
+              const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {}; s.sinistreStatut[fact.id] = 'attente'; FP.settings.save(s);
+            }
+            // ⚠️ SOURCE UNIQUE : la mise à jour de la fiche (km à la hausse + dernière révision + pneus
+            // + rappel « relevé km ») passe par FP.applyFactureToVehicule (app.js). On préserve la
+            // détection « maintenance » du scanner (mots-clés du fichier/description) en traitant la
+            // facture comme entretien pour CETTE synchro si les mots-clés matchent — sans changer le
+            // type réellement enregistré.
+            let majMsg = '';
+            if (!isSin && veh) {
+              const maintTxt = `${det.description || ''} ${r.file.name || ''} ${cat}`.toLowerCase();
+              const isMaint = cat === 'entretien' || cat === 'reparation' || /pneu|vidange|entretien|r[eé]vision|frein|climatisation|distribution|filtre|amortisseur|courroie|plaquette|disque|embrayage/.test(maintTxt);
+              const forSync = { vehiculeImmat: fact.vehiculeImmat, date: fact.date, km: fact.km, type: isMaint ? 'entretien' : fact.type, description: `${det.description || ''} ${r.file.name || ''}` };
+              const rSync = FP.applyFactureToVehicule ? FP.applyFactureToVehicule(forSync, window.FP_DATA.vehicules) : null;
+              if (rSync && rSync.bits && rSync.bits.length) majMsg = ` · fiche maj (${rSync.bits.join(', ')})`;
+            }
+            const dest = isSin ? 'Sinistres (en attente de remboursement)' : (routing.dest || 'liste Factures');
+            const page = isSin ? 'sinistres.html' : (routing.page || 'factures.html');
+            const cible = veh ? `<b>${FP.esc(veh.immat)}</b> — ` : '';
+            let line = `${cible}${isSin ? 'Sinistre' : 'Facture'}${Number.isFinite(r.amt) ? ' ' + FP.euro(r.amt) : ' (montant à compléter)'} → ${dest}` + majMsg;
+            if (r.type === 'facture-ulys') line += ` · <span style="color:#94A3B8">détail par conducteur : utilise l'import Ulys dédié</span>`;
+            done.push('• ' + line + openLink('pages/' + page)); okN++;
+          } else {
+            // → DOCUMENTS de la fiche véhicule
+            const label = (TYPE_LABELS[r.type] || 'Document') + (r.date ? ' ' + r.date.slice(0, 4) : '');
+            await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + i, vehiculeId: r.vehId, type: r.type, label, url, driveId: null });
+            const upd = {};
+            if (r.type === 'controle-technique') {
+              const today = new Date().toISOString().slice(0, 10);
+              const addY = (iso, n) => { const d = new Date(iso); if (isNaN(d)) return null; d.setFullYear(d.getFullYear() + n); return d.toISOString().slice(0, 10); };
+              const insp = r.date || null;
+              let next = (r.det && r.det.controleTechniqueProchain) || null;
+              if (!next && insp) next = insp > today ? insp : addY(insp, 2); // estimation : visite + 2 ans
+              if (next && (!veh || !veh.prochainCT || veh.prochainCT === '—' || next > veh.prochainCT)) upd.prochainCT = next;
+              if (insp && insp <= today && veh && (!veh.dateDernierCT || insp > veh.dateDernierCT)) upd.dateDernierCT = insp;
+            }
+            if (Number.isFinite(r.km) && r.km > 0 && (!veh || !veh.km || r.km > veh.km)) upd.km = r.km;
+            // Carte grise : capte la masse (champ G, ordre de marche) → stationnement Paris,
+            // ET enrichit la fiche véhicule avec les autres infos détectées (uniquement les
+            // champs VIDES — on n'écrase jamais une valeur déjà saisie).
+            if (r.type === 'carte-grise' && r.det && r.vehId) {
+              if (Number.isFinite(r.det.masse)) {
+                try { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; if (!s.vehMasse[r.vehId]) { s.vehMasse[r.vehId] = r.det.masse; FP.settings.save(s); } } catch (e) {}
+              }
+              if (veh) {
+                const champs = ['co2', 'puissanceFiscale', 'carburant', 'categorie', 'vin', 'marque', 'modele', 'dateMiseEnCirculation', 'prochainCT'];
+                for (const k of champs) {
+                  const val = r.det[k];
+                  const cur = veh[k];
+                  const vide = cur == null || cur === '' || cur === '—';
+                  if (val != null && val !== '' && vide) upd[k] = val;
+                }
+              }
+            }
+            if (Object.keys(upd).length) { await FP.persist.update('vehicules', r.vehId, upd); if (veh) Object.assign(veh, upd); }
+            let line = `<b>${veh ? FP.esc(veh.immat) : ''}</b> — ${FP.esc(label)}`;
+            if (upd.prochainCT) line += ` · CT→${FP.dateNum(upd.prochainCT)}`;
+            if (upd.km) line += ` · ${FP.num(upd.km)} km`;
+            done.push('• ' + line + openLink('pages/vehicules.html?veh=' + encodeURIComponent(r.vehId))); okN++;
+          }
+        } catch (err) {
+          console.error('[scan batch]', err);
+          done.push(`• ⚠️ ${FP.esc(r.file.name)} : échec (${FP.esc(err && err.message ? err.message : String(err))})`);
+        }
+      }
+      setBody(`<div style="padding:4px 0">
+        <div style="text-align:center;font-size:30px">✅</div>
+        <div style="text-align:center;font-weight:700;color:#047857;margin:6px 0 10px">${okN}/${rows.length} document(s) rangé(s)</div>
+        <div style="font-size:13px;color:#475569;background:#F8FAFC;border-radius:10px;padding:12px;max-height:40vh;overflow:auto">${done.join('<br>')}</div>
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button id="scan-again" class="btn btn-dark text-sm" style="flex:1;justify-content:center">Scanner d'autres</button>
+          <button id="scan-done" class="btn btn-outline text-sm" style="flex:1;justify-content:center">Fermer</button>
+        </div>
+      </div>`);
+      $('scan-again').addEventListener('click', () => { file.value = ''; file.click(); });
+      $('scan-done').addEventListener('click', closeModal);
+    }
+  })();
+</script>
+<style>
+  .fp-clock { display:inline-flex; align-items:center; gap:12px; margin-top:.65rem;
+    padding:9px 16px 9px 13px; border-radius:14px;
+    background:linear-gradient(135deg, rgba(15,30,61,.045), rgba(15,30,61,.015));
+    border:1px solid rgba(15,30,61,.10);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 6px 16px -10px rgba(16,26,45,.22); }
+  .fp-clock-dot { flex:none; width:9px; height:9px; border-radius:50%; background:#10B981;
+    box-shadow:0 0 0 0 rgba(16,185,129,.55); animation:fp-clock-pulse 2.2s ease-out infinite; }
+  .fp-clock-main { display:flex; flex-direction:column; line-height:1.02; }
+  .fp-clock-time { display:flex; align-items:baseline; gap:1px; color:#0F1E3D;
+    font-weight:800; font-size:23px; letter-spacing:.5px; font-variant-numeric:tabular-nums; }
+  .fp-clock-sec { font-size:13px; font-weight:700; color:#94A3B8; font-variant-numeric:tabular-nums; }
+  .fp-clock-date { margin-top:4px; color:#64748B; font-size:11px; font-weight:600;
+    text-transform:uppercase; letter-spacing:.85px; }
+  .fp-clockrow { display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-top:.65rem; }
+  .fp-clockrow .fp-clock { margin-top:0; }
+  .fp-weather { display:inline-flex; align-items:center; gap:11px; padding:9px 16px 9px 13px;
+    border-radius:14px; background:linear-gradient(135deg, rgba(15,30,61,.045), rgba(15,30,61,.015));
+    border:1px solid rgba(15,30,61,.10);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.6), 0 6px 16px -10px rgba(16,26,45,.22); }
+  .fp-weather[hidden] { display:none; }
+  .fp-weather-ico { flex:none; display:inline-flex; color:#0284C7; }
+  .fp-weather-ico svg { width:26px; height:26px; }
+  .fp-weather-main { display:flex; flex-direction:column; line-height:1.02; }
+  .fp-weather-temp { color:#0F1E3D; font-weight:800; font-size:23px; letter-spacing:.3px; font-variant-numeric:tabular-nums; }
+  .fp-weather-sub { margin-top:4px; color:#64748B; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; }
+  /* Mode nuit : horloge/météo reviennent en verre clair-sur-foncé */
+  body.fp-dark .fp-clock, body.fp-dark .fp-weather { background:linear-gradient(135deg, rgba(255,255,255,.075), rgba(255,255,255,.025)); border-color:rgba(255,255,255,.10); box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 8px 22px -12px rgba(0,0,0,.65); }
+  body.fp-dark .fp-clock-time, body.fp-dark .fp-weather-temp { color:#F1F5F9; }
+  body.fp-dark .fp-clock-date, body.fp-dark .fp-weather-sub { color:#9FB0C9; }
+  body.fp-dark .fp-clock-sec { color:#78899F; }
+  body.fp-dark .fp-weather-ico { color:#BFD3EE; }
+  @keyframes fp-clock-pulse {
+    0%   { box-shadow:0 0 0 0 rgba(52,211,153,.5); }
+    70%  { box-shadow:0 0 0 7px rgba(52,211,153,0); }
+    100% { box-shadow:0 0 0 0 rgba(52,211,153,0); } }
+  @media (prefers-reduced-motion: reduce) { .fp-clock-dot { animation:none; } }
+</style>
+<script>
+  // Horloge date + heure en temps réel (mise à jour chaque seconde).
+  (function () {
+    var hm = document.getElementById('clk-hm');
+    var sec = document.getElementById('clk-s');
+    var dat = document.getElementById('clk-date');
+    if (!hm || !sec || !dat) return;
+    var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+    var last = '';
+    function tick() {
+      var d = new Date();
+      hm.textContent = pad(d.getHours()) + ':' + pad(d.getMinutes());
+      sec.textContent = ':' + pad(d.getSeconds());
+      var jour = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      if (jour !== last) { dat.textContent = jour; last = jour; } // la date ne change qu'une fois/jour
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+</script>
+<script>
+  // Logo de la société (si défini dans Paramètres → Société) dans l'en-tête.
+  (function () {
+    try {
+      var u = (FP.settings.get().profil || {}).logoDataUrl;
+      var el = document.getElementById('soc-logo-img');
+      if (u && el) { el.src = u; el.hidden = false; }
+    } catch (e) {}
+  })();
+
+  // Salutation dynamique (selon l'heure + prénom du compte connecté).
+  (function () {
+    var el = document.getElementById('fp-greeting');
+    if (!el) return;
+    var h = new Date().getHours();
+    var mot = (h >= 5 && h < 18) ? 'Bonjour' : 'Bonsoir';
+    function prenomFromEmail(email) {
+      var local = (email || '').split('@')[0] || '';
+      var first = local.split(/[._-]/)[0] || '';
+      if (!first) return '';
+      return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+    }
+    function paint(nom) { el.textContent = mot + (nom ? ' ' + nom : '') + ' 👋'; }
+    paint('');
+    try {
+      FP.auth.getUser().then(function (u) {
+        if (!u) return;
+        var meta = u.user_metadata || {};
+        var nom = (meta.prenom || meta.first_name || (meta.full_name || meta.name || '').split(' ')[0] || prenomFromEmail(u.email) || '').trim();
+        paint(nom);
+      }).catch(function () {});
+    } catch (e) {}
+  })();
+
+  // Météo Île-de-France en temps réel (Open-Meteo — gratuit, sans clé API).
+  // Coordonnées Paris/Île-de-France par défaut (peut devenir un réglage par société plus tard).
+  (function () {
+    var box = document.getElementById('fp-weather');
+    if (!box) return;
+    var LAT = 48.8566, LON = 2.3522;
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON +
+      '&current=temperature_2m,weather_code,is_day&timezone=Europe%2FParis';
+    // Code météo WMO → { icône Lucide, libellé FR }
+    function wmo(code, day) {
+      var c = Number(code);
+      if (c === 0) return { i: day ? 'sun' : 'moon', t: 'Ciel dégagé' };
+      if (c === 1) return { i: day ? 'sun' : 'moon', t: 'Plutôt dégagé' };
+      if (c === 2) return { i: day ? 'cloud-sun' : 'cloud-moon', t: 'Partiellement nuageux' };
+      if (c === 3) return { i: 'cloud', t: 'Couvert' };
+      if (c === 45 || c === 48) return { i: 'cloud-fog', t: 'Brouillard' };
+      if (c >= 51 && c <= 57) return { i: 'cloud-drizzle', t: 'Bruine' };
+      if (c >= 61 && c <= 67) return { i: 'cloud-rain', t: 'Pluie' };
+      if (c >= 71 && c <= 77) return { i: 'cloud-snow', t: 'Neige' };
+      if (c >= 80 && c <= 82) return { i: 'cloud-rain', t: 'Averses' };
+      if (c === 85 || c === 86) return { i: 'cloud-snow', t: 'Averses de neige' };
+      if (c >= 95) return { i: 'cloud-lightning', t: 'Orage' };
+      return { i: 'cloud', t: 'Météo' };
+    }
+    function load() {
+      fetch(url, { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (d) {
+          var cur = d && d.current; if (!cur) return;
+          var m = wmo(cur.weather_code, cur.is_day !== 0);
+          var t = Math.round(cur.temperature_2m);
+          document.getElementById('wx-temp').textContent = t + '°';
+          document.getElementById('wx-label').textContent = m.t;
+          var ico = box.querySelector('.fp-weather-ico');
+          ico.innerHTML = '<i data-lucide="' + m.i + '"></i>';
+          box.setAttribute('title', m.t + ' · ' + t + '°C · Île-de-France');
+          box.hidden = false;
+          if (window.lucide && lucide.createIcons) lucide.createIcons();
+        })
+        .catch(function () { /* pas de réseau → on laisse la météo masquée, sans erreur visible */ });
+    }
+    load();
+    setInterval(load, 15 * 60 * 1000); // rafraîchit toutes les 15 min
+  })();
+</script>
+
+<!-- ============ Hub « Raccourcis » configurable + MAJ km (lot/photo) + immobilisé ============ -->
+<script>
+(function shortcutsHub(){
+  const $ = (id) => document.getElementById(id);
+  const data = window.FP_DATA || { vehicules: [] };
+  const esc = (s) => (window.FP && FP.esc) ? FP.esc(s) : String(s == null ? '' : s);
+  const vehActifs = () => (data.vehicules || []).filter(v => !(window.FP && FP.estVendu && FP.estVendu(v)));
+  const vehLabel = (v) => `${v.immat || '?'} — ${((v.marque || '') + ' ' + (v.modele || '')).trim()}`;
+
+  // Catalogue des raccourcis disponibles (l'utilisateur choisit lesquels afficher).
+  const SHORTCUTS = [
+    { k: 'km-lot',        i: 'gauge',        t: 'Mettre à jour le km (lot)', run: () => openOv('sc-modal-kmlot', renderKmLot) },
+    { k: 'km-photo',      i: 'camera',       t: 'Km par photo du compteur',  run: () => openOv('sc-modal-kmphoto', renderKmPhoto) },
+    { k: 'immobilise',    i: 'ban',t: 'Marquer un véhicule immobilisé', run: () => openOv('sc-modal-immo', renderImmo) },
+    { k: 'scan-doc',      i: 'scan-line',    t: 'Scanner un document',       run: () => { const b = $('btn-scan-doc'); if (b) b.click(); } },
+    { k: 'new-vehicule',  i: 'car',          t: 'Nouveau véhicule',          run: () => go('pages/vehicules.html#add') },
+    { k: 'new-amende',    i: 'ticket',       t: 'Nouvelle amende',           run: () => go('pages/amendes.html#add') },
+    { k: 'new-facture',   i: 'receipt',      t: 'Nouvelle facture',          run: () => go('pages/factures.html#add') },
+    { k: 'new-sinistre',  i: 'alert-octagon',t: 'Déclarer un sinistre',      run: () => go('pages/sinistres.html#add') },
+    { k: 'new-conducteur',i: 'user-plus',    t: 'Ajouter un conducteur',     run: () => go('pages/conducteurs.html?new=1') },
+    { k: 'new-emprunt',   i: 'key-round',    t: 'Nouvel emprunt',            run: () => go('pages/emprunts.html?new=1') },
+    { k: 'new-tache',     i: 'list-todo',    t: 'Nouvelle tâche',            run: () => go('pages/taches.html?new=1') },
+    { k: 'echeances',     i: 'calendar-clock',t:'Échéances de la semaine',   run: () => go('pages/notifications.html') },
+    { k: 'a-completer',   i: 'clipboard-list',t:'À compléter (infos manquantes)', run: () => go('pages/notifications.html#completer') },
+    { k: 'relance-amendes',i:'mail',         t: 'Relancer les amendes impayées', run: () => go('pages/amendes.html') },
+    { k: 'rapport',       i: 'file-text',    t: 'Rapport direction (PDF)',   run: () => { if (window.FP && FP.rapportDirection) FP.rapportDirection(); else go('pages/statistiques.html'); } },
+    { k: 'sauvegarde',    i: 'download',     t: 'Sauvegarde / export',       run: () => go('pages/parametres.html') },
+    { k: 'recherche',     i: 'search',       t: 'Rechercher une plaque',     run: () => { const inp = document.querySelector('.fp-dash-search .fp-search-input'); if (inp) { inp.scrollIntoView({ behavior: 'smooth', block: 'center' }); inp.focus(); } } },
+    { k: 'mode-ecran',    i: 'monitor',      t: 'Mode écran (TV agence)',    run: () => go('pages/ecran.html') },
+  ];
+  const DEFAULTS = ['km-lot', 'km-photo', 'immobilise', 'scan-doc', 'new-amende', 'echeances', 'a-completer', 'relance-amendes'];
+  const getEnabled = () => { try { const s = FP.settings.get(); return Array.isArray(s.dashShortcuts) ? s.dashShortcuts : DEFAULTS.slice(); } catch (e) { return DEFAULTS.slice(); } };
+  const setEnabled = (arr) => { try { const s = FP.settings.get(); s.dashShortcuts = arr; FP.settings.save(s); } catch (e) {} };
+  const go = (href) => { location.href = href; };
+
+  function renderMenu() {
+    const menu = $('sc-menu'); if (!menu) return;
+    const en = getEnabled();
+    const items = SHORTCUTS.filter(s => en.includes(s.k));
+    menu.innerHTML = items.map(s => `<button type="button" class="sc-menu-item" data-run="${s.k}"><i data-lucide="${s.i}"></i> ${esc(s.t)}</button>`).join('')
+      + `<div style="border-top:1px solid #eef2f7;margin:.3rem 0"></div>`
+      + `<button type="button" class="sc-menu-item" data-run="__cfg" style="color:#64748b"><i data-lucide="sliders-horizontal"></i> Configurer les raccourcis…</button>`;
+    if (window.lucide) lucide.createIcons();
+  }
+  function toggleMenu(open) { const m = $('sc-menu'); if (!m) return; m.classList.toggle('hidden', open === false ? true : (open === true ? false : !m.classList.contains('hidden')) ? true : false); }
+
+  // Ouverture / fermeture générique des overlays .sc-ov
+  function openOv(id, onOpen) { const ov = $(id); if (!ov) return; ov.classList.add('open'); if (onOpen) onOpen(); if (window.lucide) lucide.createIcons(); }
+  function closeOv(ov) { ov.classList.remove('open'); }
+  document.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-sc-close]'); if (x) { const ov = x.closest('.sc-ov'); if (ov) closeOv(ov); return; }
+    const ov = e.target.classList && e.target.classList.contains('sc-ov') ? e.target : null; if (ov) closeOv(ov);
+  });
+
+  // --- Menu Raccourcis (ouvre/ferme + exécute) ---
+  { const btn = $('sc-btn'); if (btn) { renderMenu(); btn.addEventListener('click', (e) => { e.stopPropagation(); $('sc-menu').classList.toggle('hidden'); }); } }
+  { const cb = $('sc-cfg-btn'); if (cb) cb.addEventListener('click', (e) => { e.stopPropagation(); const m = $('sc-menu'); if (m) m.classList.add('hidden'); openOv('sc-modal-cfg', renderCfg); }); }
+  document.addEventListener('click', (e) => { const m = $('sc-menu'); if (m && !m.classList.contains('hidden') && !e.target.closest('#sc-wrap')) m.classList.add('hidden'); });
+  { const m = $('sc-menu'); if (m) m.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-run]'); if (!b) return;
+      m.classList.add('hidden');
+      const k = b.dataset.run;
+      if (k === '__cfg') { openOv('sc-modal-cfg', renderCfg); return; }
+      const sc = SHORTCUTS.find(s => s.k === k); if (sc) sc.run();
+    }); }
+
+  // --- Config : choisir les raccourcis ---
+  function renderCfg() {
+    const box = $('sc-cfg-list'); if (!box) return;
+    const en = getEnabled();
+    box.innerHTML = SHORTCUTS.map(s => `<label class="flex items-center gap-2 p-1.5 rounded hover:bg-slate-50 cursor-pointer text-sm"><input type="checkbox" data-cfg="${s.k}" ${en.includes(s.k) ? 'checked' : ''} style="width:15px;height:15px;accent-color:var(--fp-accent)"> <i data-lucide="${s.i}" class="w-4 h-4 text-slate-400"></i> ${esc(s.t)}</label>`).join('');
+    if (window.lucide) lucide.createIcons();
+  }
+  { const box = $('sc-cfg-list'); if (box) box.addEventListener('change', (e) => {
+      const cb = e.target.closest('[data-cfg]'); if (!cb) return;
+      let en = getEnabled();
+      const k = cb.dataset.cfg;
+      if (cb.checked) { if (!en.includes(k)) en.push(k); } else { en = en.filter(x => x !== k); }
+      // Conserve l'ordre du catalogue pour un affichage stable.
+      en = SHORTCUTS.filter(s => en.includes(s.k)).map(s => s.k);
+      setEnabled(en); renderMenu();
+    }); }
+
+  // --- MAJ km en lot ---
+  function setVehKm(v, newKm, opts) {
+    newKm = Math.round(Number(newKm) || 0);
+    const cur = (window.FP && FP.kmActuel) ? FP.kmActuel(v) : (Number(v.km) || 0);
+    if (!(newKm > cur) && !(opts && opts.force)) return false;
+    v.km = newKm;
+    try { const s = FP.settings.get(); s.kmMajDates = s.kmMajDates || {}; if (v.immat) s.kmMajDates[v.immat] = new Date().toISOString().slice(0, 10); FP.settings.save(s); } catch (e) {}
+    if (window.FP && FP.persist && FP.persist.update) FP.persist.update('vehicules', v.id, { km: newKm });
+    return true;
+  }
+  function renderKmLot() {
+    const box = $('sc-kmlot-list'); if (!box) return;
+    const q = ((($('sc-kmlot-search') || {}).value) || '').toLowerCase().trim();
+    const list = vehActifs().filter(v => !q || (`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur || ''}`.toLowerCase().includes(q)))
+      .sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+    box.innerHTML = list.map(v => {
+      const cur = (window.FP && FP.kmActuel) ? FP.kmActuel(v) : (Number(v.km) || 0);
+      return `<div class="flex items-center gap-2 py-1 border-b border-slate-100">
+        <div class="min-w-0 flex-1"><div class="font-mono text-sm font-semibold truncate">${esc(v.immat || '?')}</div><div class="text-xs text-slate-400 truncate">${esc(((v.marque || '') + ' ' + (v.modele || '')).trim())} · ${(window.FP ? FP.num(cur) : cur)} km</div></div>
+        <input type="number" min="${cur}" step="1" data-kmid="${v.id}" placeholder="${cur}" style="width:120px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:4px 8px;font-size:.85rem"> <span class="text-xs text-slate-400">km</span>
+      </div>`;
+    }).join('') || '<p class="text-sm text-slate-400 py-4 text-center">Aucun véhicule.</p>';
+  }
+  { const s = $('sc-kmlot-search'); if (s) s.addEventListener('input', renderKmLot); }
+  { const btn = $('sc-kmlot-save'); if (btn) btn.addEventListener('click', () => {
+      let n = 0, bad = 0;
+      document.querySelectorAll('#sc-kmlot-list input[data-kmid]').forEach(inp => {
+        const val = inp.value.trim(); if (!val) return;
+        const v = (data.vehicules || []).find(x => x.id === inp.dataset.kmid); if (!v) return;
+        if (setVehKm(v, val)) n++; else bad++;
+      });
+      if (window.FP && FP.toast) FP.toast(n ? `✓ ${n} kilométrage(s) mis à jour${bad ? ` · ${bad} ignoré(s) (km inférieur)` : ''}` : (bad ? 'Aucune mise à jour : le km ne peut que monter.' : 'Rien à enregistrer.'));
+      if (n) closeOv($('sc-modal-kmlot'));
+    }); }
+
+  // --- Km par photo (OCR du compteur via IA) ---
+  function renderKmPhoto() {
+    const sel = $('sc-kmphoto-veh'); if (!sel) return;
+    sel.innerHTML = '<option value="">Choisir un véhicule…</option>' + vehActifs().sort((a, b) => (a.immat || '').localeCompare(b.immat || '')).map(v => `<option value="${v.id}">${esc(vehLabel(v))}</option>`).join('');
+    $('sc-kmphoto-status').innerHTML = '';
+    if (window.FP && FP.searchSelect) FP.searchSelect(sel, { placeholder: 'Choisir un véhicule…' });
+  }
+  { const btn = $('sc-kmphoto-btn'); if (btn) btn.addEventListener('click', () => {
+      const id = ($('sc-kmphoto-veh') || {}).value; if (!id) { $('sc-kmphoto-status').innerHTML = '<span style="color:#dc2626">Choisis d\'abord un véhicule.</span>'; return; }
+      $('sc-kmphoto-file').click();
+    }); }
+  { const file = $('sc-kmphoto-file'); if (file) file.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+      const id = ($('sc-kmphoto-veh') || {}).value; const v = (data.vehicules || []).find(x => x.id === id); if (!v) return;
+      const st = $('sc-kmphoto-status'); st.innerHTML = '⏳ Lecture du compteur…';
+      if (!(window.FP && FP.scanIA)) { st.innerHTML = '<span style="color:#dc2626">Scan IA indisponible (connexion requise).</span>'; return; }
+      const prompt = "Sur cette photo d'un tableau de bord de voiture, lis le COMPTEUR KILOMÉTRIQUE TOTAL (odomètre). Renvoie STRICTEMENT un JSON {\"km\": <entier>} — le kilométrage total en km, sans séparateur ni unité. Ignore le compteur journalier (trip A/B), la vitesse, la température, l'autonomie et l'heure. Si illisible, {\"km\": null}.";
+      let fields = null;
+      try { fields = await FP.scanIA(f, 'facture', prompt); } catch (_) {}
+      const km = fields && (fields.km != null) ? parseInt(String(fields.km).replace(/\D/g, ''), 10) : null;
+      if (!km || !isFinite(km)) { st.innerHTML = '<span style="color:#dc2626">Compteur non lu. Réessaie avec une photo plus nette, ou saisis le km à la main.</span>'; return; }
+      const cur = (window.FP && FP.kmActuel) ? FP.kmActuel(v) : (Number(v.km) || 0);
+      const okConf = window.FP && FP.confirm ? await FP.confirm(`Compteur lu : ${FP.num(km)} km pour ${v.immat}.\nAncien : ${FP.num(cur)} km.\n\nEnregistrer ?`) : confirm(`${km} km — enregistrer ?`);
+      if (!okConf) { st.innerHTML = 'Annulé.'; return; }
+      if (setVehKm(v, km, { force: true })) { st.innerHTML = `<span style="color:#047857">✓ ${FP.num(km)} km enregistrés pour ${esc(v.immat)}.</span>`; if (FP.toast) FP.toast('✓ Km mis à jour : ' + v.immat); }
+    }); }
+
+  // --- Immobilisé (marquer / lever) ---
+  function immoMap() { try { const s = FP.settings.get(); return (s.vehImmobilise && typeof s.vehImmobilise === 'object') ? s.vehImmobilise : {}; } catch (e) { return {}; } }
+  function setImmo(id, on) { try { const s = FP.settings.get(); s.vehImmobilise = s.vehImmobilise || {}; if (on) s.vehImmobilise[id] = { since: new Date().toISOString().slice(0, 10) }; else delete s.vehImmobilise[id]; FP.settings.save(s); } catch (e) {} }
+  function renderImmo() {
+    const box = $('sc-immo-list'); if (!box) return;
+    const m = immoMap();
+    const list = vehActifs().sort((a, b) => { const ia = m[a.id] ? 0 : 1, ib = m[b.id] ? 0 : 1; return ia - ib || (a.immat || '').localeCompare(b.immat || ''); });
+    box.innerHTML = list.map(v => {
+      const im = m[v.id];
+      const since = im ? im.since : '';
+      const jours = since ? Math.max(0, Math.round((Date.now() - new Date(since)) / 86400000)) : 0;
+      return `<div class="flex items-center gap-2 py-1.5 border-b border-slate-100">
+        <div class="min-w-0 flex-1"><div class="font-mono text-sm font-semibold truncate">${esc(v.immat || '?')} ${im ? `<span style="color:#b45309;font-weight:600;font-size:.72rem">· immobilisé depuis ${jours} j</span>` : ''}</div><div class="text-xs text-slate-400 truncate">${esc(((v.marque || '') + ' ' + (v.modele || '')).trim())}</div></div>
+        <button type="button" class="btn ${im ? 'btn-outline' : 'btn-dark'} text-xs" data-immo="${v.id}">${im ? 'Lever' : 'Immobiliser'}</button>
+      </div>`;
+    }).join('') || '<p class="text-sm text-slate-400 py-4 text-center">Aucun véhicule.</p>';
+    if (window.lucide) lucide.createIcons();
+  }
+  { const box = $('sc-immo-list'); if (box) box.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-immo]'); if (!b) return;
+      const id = b.dataset.immo; setImmo(id, !immoMap()[id]); renderImmo();
+      if (window.FP && FP.toast) FP.toast(immoMap()[id] ? '🅿️ Véhicule marqué immobilisé' : 'Immobilisation levée');
+    }); }
+})();
+</script>
+
+<!-- (Assistant IA retiré du tableau de bord à la demande de l'utilisateur.) -->
+</body>
+</html>

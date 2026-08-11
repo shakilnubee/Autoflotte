@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<title>Parc Pilot — Le poste de pilotage de votre flotte automobile</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0F1E3D">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parc Pilot">
+
+<meta name="description" content="Parc Pilot : la plateforme qui centralise véhicules, conducteurs, amendes, entretiens, contrats, TVS et alertes — lecture automatique des documents, en temps réel sur tous les postes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260811e">
+<script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
+  <script defer src="assets/js/lucide.min.js?v=20260811e"></script>
+  <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
+<link rel="stylesheet" href="assets/css/styles.css?v=20260811e">
+<style>
+  /* ===== Effets cockpit (ambiance, derrière le contenu) ===== */
+  .fx-layer{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+  .fx-layer #fx{position:absolute;inset:0}
+  .fx-layer .aurora{position:absolute;border-radius:50%;filter:blur(100px);opacity:.30;will-change:transform}
+  .fx-layer .a1{width:560px;height:560px;background:radial-gradient(circle,#F97316,transparent 70%);top:-180px;right:-150px;animation:fxFloatA 16s ease-in-out infinite}
+  .fx-layer .a2{width:520px;height:520px;background:radial-gradient(circle,#38BDF8,transparent 70%);bottom:-200px;left:-160px;animation:fxFloatB 20s ease-in-out infinite}
+  .fx-layer .a3{width:420px;height:420px;background:radial-gradient(circle,#FB923C,transparent 72%);top:46%;left:60%;animation:fxFloatA 24s ease-in-out infinite reverse}
+  .fx-layer .road{position:absolute;left:-30%;right:-30%;bottom:0;height:46vh;
+    background:repeating-linear-gradient(90deg,transparent 0 89px,rgba(249,115,22,.4) 89px 91px),repeating-linear-gradient(0deg,transparent 0 89px,rgba(56,189,248,.22) 89px 91px);
+    transform:perspective(300px) rotateX(78deg);transform-origin:bottom center;
+    -webkit-mask-image:linear-gradient(to top,#000 2%,transparent 72%);mask-image:linear-gradient(to top,#000 2%,transparent 72%);
+    animation:fxRoad 2.6s linear infinite;opacity:.26}
+  @keyframes fxRoad{from{background-position:0 0,0 0}to{background-position:0 91px,0 91px}}
+  @keyframes fxFloatA{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-40px,30px) scale(1.12)}}
+  @keyframes fxFloatB{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(50px,-30px) scale(1.1)}}
+  @media (prefers-reduced-motion:reduce){ .fx-layer .aurora,.fx-layer .road{animation:none!important} }
+</style>
+<script>
+  try { if (matchMedia('(prefers-reduced-motion: no-preference)').matches) document.documentElement.classList.add('reveal-on'); } catch(e){}
+</script>
+<script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}</script>
+<style>
+  /* ===== IDENTITÉ COCKPIT — accueil (alignée sur la page de connexion) ===== */
+  /* Tout est scopé sous .st (la landing) → aucun impact sur l'app. */
+
+  /* Typo : titres en Space Grotesk, télémétrie en Space Mono */
+  .st .st-h1{font-family:'Space Grotesk',system-ui,sans-serif;letter-spacing:-.022em;font-weight:700}
+  .st .st-h2{font-family:'Space Grotesk',system-ui,sans-serif;letter-spacing:-.018em;font-weight:700}
+  .st .st-h1 .it,.st .st-h2 .it{font-style:normal;background:linear-gradient(100deg,#FCD34D 0%,#FB923C 46%,#F97316 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .st .st-h1 .it{filter:drop-shadow(0 4px 24px rgba(249,115,22,.28))}
+  .st .st-eyebrow{font-family:'Space Mono',ui-monospace,monospace;letter-spacing:.28em;text-transform:uppercase;font-size:11px}
+  .st .st-badge{font-family:'Space Mono',ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;font-size:11px}
+  .st .st-show-lbl{font-family:'Space Mono',ui-monospace,monospace;letter-spacing:.14em}
+  .st .st-stat-lbl{font-family:'Space Mono',ui-monospace,monospace;letter-spacing:.1em}
+  .st .lp-step-num{font-family:'Space Grotesk',system-ui,sans-serif}
+  .st .st-stat{font-family:'Space Grotesk',system-ui,sans-serif;letter-spacing:-.02em}
+
+  /* Bandeau de réassurance (footer) : sécurité, RGPD, chiffrement… */
+  .st .lp-trust-row{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.1rem}
+  .st .lp-trust{display:inline-flex;align-items:center;gap:.4rem;font-size:12px;font-weight:500;color:#CBD6E6;
+    background:rgba(255,255,255,.04);border:1px solid var(--st-line);border-radius:999px;padding:.4rem .75rem;line-height:1}
+  .st .lp-trust i,.st .lp-trust svg{color:#FB923C;flex-shrink:0}
+
+  /* Crochets HUD aux angles du hero (repris de la page de connexion) */
+  .hero-wrap{position:relative}
+  .hero-hud{position:absolute;width:44px;height:44px;pointer-events:none;opacity:0;animation:heroHudIn .7s ease .3s forwards;z-index:2}
+  .hero-hud::before,.hero-hud::after{content:"";position:absolute;background:linear-gradient(90deg,rgba(249,115,22,.7),rgba(56,189,248,.35))}
+  .hero-hud::before{width:100%;height:2px}.hero-hud::after{width:2px;height:100%;background:linear-gradient(180deg,rgba(249,115,22,.7),rgba(56,189,248,.35))}
+  .hero-hud.tl{top:-6px;left:-2px}
+  .hero-hud.tr{top:-6px;right:-2px}.hero-hud.tr::before,.hero-hud.tr::after{right:0}
+  .hero-hud.bl{bottom:-6px;left:-2px}.hero-hud.bl::before{bottom:0}
+  .hero-hud.br{bottom:-6px;right:-2px}.hero-hud.br::before,.hero-hud.br::after{right:0}.hero-hud.br::before{bottom:0}
+  @keyframes heroHudIn{to{opacity:.9}}
+
+  /* Ligne télémétrie sous le hero */
+  .hero-ticker{font-family:'Space Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:rgba(138,160,192,.62);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.45rem .6rem;margin-top:1.5rem;max-width:100%}
+  @media (max-width:520px){ .hero-ticker{font-size:9.5px;letter-spacing:.12em;gap:.35rem .5rem} }
+  .hero-ticker b{color:var(--fp-accent-2,#FB923C);font-weight:700}
+  .hero-ticker .sep{width:4px;height:4px;border-radius:50%;background:rgba(138,160,192,.4)}
+  .hero-ticker .live{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 10px #22c55e;animation:heroBlink 1.6s ease-in-out infinite}
+  @keyframes heroBlink{50%{opacity:.35}}
+
+  /* Bordure néon animée (le liseré qui trace, repris du panneau de connexion) */
+  @property --trace-a{syntax:'<angle>';inherits:false;initial-value:0deg}
+  .neon-trace{position:relative;isolation:isolate}
+  .neon-trace::after{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1.4px;pointer-events:none;z-index:3;
+    background:conic-gradient(from var(--trace-a,0deg),transparent 0 60%,rgba(249,115,22,.95) 76%,rgba(56,189,248,.75) 88%,transparent 96%);
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+    animation:neonTrace 6s linear infinite}
+  @keyframes neonTrace{to{--trace-a:360deg}}
+  @supports not (background:conic-gradient(from 0deg,red,red)){ .neon-trace::after{display:none} }
+
+  @media (prefers-reduced-motion:reduce){
+    .hero-hud{animation:none;opacity:.9}
+    .neon-trace::after{animation:none}
+    .hero-ticker .live{animation:none}
+  }
+</style>
+</head>
+<body>
+<div class="st">
+<div class="st-bg"></div>
+<div class="fx-layer" aria-hidden="true">
+  <canvas id="fx"></canvas>
+  <div class="aurora a1"></div><div class="aurora a2"></div><div class="aurora a3"></div>
+  <div class="road"></div>
+</div>
+
+<!-- ============== NAV ============== -->
+<header id="lp-nav" class="st-nav">
+  <div class="container-fp flex items-center justify-between h-16">
+    <a href="index.html" class="fp-logo text-lg" style="color:#fff">
+      <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic"><tspan fill="currentColor">Parc</tspan><tspan fill="#F97316">Pilot</tspan></text></svg>
+    </a>
+
+    <nav class="hidden md:flex items-center gap-8">
+      <a href="#pourquoi" class="st-navlink">Pourquoi</a>
+      <a href="#modules" class="st-navlink">Ce que ça pilote</a>
+      <a href="#comment" class="st-navlink">Comment ça marche</a>
+      <a href="#formules" class="st-navlink">Formules</a>
+      <a href="brochure.html" class="st-navlink" target="_blank" rel="noopener">Brochure</a>
+      <a href="#faq" class="st-navlink">FAQ</a>
+    </nav>
+
+    <div class="hidden md:flex items-center gap-3">
+      <a href="dashboard.html" class="btn btn-glow text-sm"><i data-lucide="gauge" class="w-4 h-4"></i> Accéder</a>
+    </div>
+
+    <button id="burger" class="md:hidden p-2 text-white" aria-label="Menu">
+      <i data-lucide="menu" class="w-6 h-6"></i>
+    </button>
+  </div>
+  <div id="mobile-menu" class="hidden md:hidden px-5 py-4 space-y-3 text-sm font-medium" style="border-top:1px solid var(--st-line);color:#CBD6E6">
+    <a href="#pourquoi" class="block">Pourquoi</a>
+    <a href="#modules" class="block">Ce que ça pilote</a>
+    <a href="#comment" class="block">Comment ça marche</a>
+    <a href="#formules" class="block">Formules</a>
+    <a href="brochure.html" class="block" target="_blank" rel="noopener">Brochure</a>
+    <a href="#faq" class="block">FAQ</a>
+    <a href="dashboard.html" class="btn btn-glow w-full justify-center mt-2">Accéder à la plateforme</a>
+  </div>
+</header>
+
+<!-- ============== HERO (centré, façon 21st) ============== -->
+<section class="st-hero">
+  <div class="container-fp max-w-4xl mx-auto hero-wrap">
+    <span class="hero-hud tl"></span><span class="hero-hud tr"></span><span class="hero-hud bl"></span><span class="hero-hud br"></span>
+    <span class="st-badge"><span class="dot"></span> Poste de pilotage · <b>Temps réel</b></span>
+    <h1 class="st-h1 mt-6">Toute la flotte,<br><span class="it">sous contrôle.</span></h1>
+    <p class="st-lead mt-6 max-w-2xl mx-auto">
+      Véhicules, amendes, entretiens, contrats, TVS — réunis dans un seul poste de pilotage.
+      Les documents se lisent tout seuls, les échéances vous préviennent, en temps réel sur tous les postes.
+    </p>
+    <div class="mt-9 flex flex-col sm:flex-row gap-3 justify-center">
+      <a href="dashboard.html" class="btn btn-glow"><i data-lucide="gauge" class="w-4 h-4"></i> Ouvrir le poste de pilotage</a>
+      <a href="#" class="st-btn-ghost js-prospect" data-sujet="Démo"><i data-lucide="calendar-check" class="w-4 h-4"></i> Demander une démo</a>
+    </div>
+    <div class="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm st-muted">
+      <span class="flex items-center gap-2"><i data-lucide="shield-check" class="w-4 h-4 fp-text-accent"></i> Données protégées</span>
+      <span class="flex items-center gap-2"><i data-lucide="smartphone" class="w-4 h-4 fp-text-accent"></i> Rien à installer</span>
+      <span class="flex items-center gap-2"><i data-lucide="refresh-cw" class="w-4 h-4 fp-text-accent"></i> Synchro multi-postes</span>
+    </div>
+    <div class="hero-ticker"><span class="live"></span> Système opérationnel <span class="sep"></span> <b>52</b> véhicules <span class="sep"></span> <b>9</b> modules <span class="sep"></span> synchro temps réel</div>
+  </div>
+
+  <!-- Aperçu produit : 3 cartes "verre" -->
+  <div class="container-fp mt-14">
+    <div class="st-showcase reveal">
+      <!-- Santé flotte (jauge) -->
+      <div class="st-glass neon-trace">
+        <div class="st-show-lbl">Santé de la flotte</div>
+        <div class="flex items-center gap-4 mt-3">
+          <div class="lp-gauge-wrap" style="flex-shrink:0">
+            <div class="lp-gauge" style="width:104px;height:104px"></div>
+            <div class="lp-gauge-val"><b style="font-size:1.4rem">92<span style="font-size:.8rem">%</span></b></div>
+          </div>
+          <div class="flex-1 space-y-2">
+            <div class="flex items-center justify-between text-sm"><span class="st-muted">CT à jour</span><b style="color:#34D399">100 %</b></div>
+            <div class="flex items-center justify-between text-sm"><span class="st-muted">Révisions OK</span><b style="color:#34D399">48/52</b></div>
+            <div class="flex items-center justify-between text-sm"><span class="st-muted">À surveiller</span><b style="color:var(--fp-accent-2)">4</b></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alertes en direct -->
+      <div class="st-glass">
+        <div class="st-show-lbl">Alertes en direct</div>
+        <div class="mt-3 space-y-2">
+          <div class="lp-tick"><span class="d" style="background:#EF4444"></span> Contrôle technique — dans 12 jours</div>
+          <div class="lp-tick"><span class="d" style="background:#F59E0B"></span> Permis conducteur — expire bientôt</div>
+          <div class="lp-tick"><span class="d" style="background:#0EA5E9"></span> Fin de leasing — le mois prochain</div>
+        </div>
+      </div>
+
+      <!-- Fiche véhicule -->
+      <div class="st-glass">
+        <div class="st-show-lbl">Fiche véhicule</div>
+        <div class="mt-3">
+          <span class="fp-plate" style="transform:scale(.92);transform-origin:left"><span class="fp-plate-band"><span class="fp-plate-stars">★★★</span><b>F</b></span><span class="fp-plate-num">GE-529-RT</span></span>
+        </div>
+        <div class="grid grid-cols-2 gap-3 mt-4">
+          <div><div class="st-show-lbl">Kilométrage</div><div class="text-xl font-black italic" style="color:#F4F8FF;letter-spacing:-.02em">30 400</div></div>
+          <div><div class="st-show-lbl">Prochaine rév.</div><div class="text-xl font-black italic" style="color:#F4F8FF;letter-spacing:-.02em">38 000</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== POURQUOI (Sans / Avec) ============== -->
+<section id="pourquoi" class="section">
+  <div class="container-fp">
+    <div class="max-w-3xl reveal">
+      <span class="st-eyebrow">Pourquoi Parc Pilot</span>
+      <h2 class="st-h2 mt-3">La flotte, ça se <span class="it">pilote</span> — pas ça se subit</h2>
+      <p class="st-lead mt-4">Le tableur finit toujours par lâcher : une échéance oubliée, une amende non désignée, un coût qu'on ne voit plus. Parc Pilot reprend la main.</p>
+    </div>
+
+    <div class="mt-10 grid md:grid-cols-2 gap-5">
+      <div class="st-vs bad reveal">
+        <h3 style="color:#8598B4">Sans Parc Pilot</h3>
+        <ul>
+          <li><i data-lucide="x"></i> Des tableurs éparpillés, jamais à jour d'un poste à l'autre</li>
+          <li><i data-lucide="x"></i> Des contrôles techniques et révisions qui passent à la trappe</li>
+          <li><i data-lucide="x"></i> Des amendes non désignées à temps — et majorées</li>
+          <li><i data-lucide="x"></i> Des factures ressaisies à la main, avec des erreurs de TVA</li>
+          <li><i data-lucide="x"></i> Aucune vue claire du coût réel de chaque véhicule</li>
+        </ul>
+      </div>
+      <div class="st-vs good reveal d1">
+        <h3 class="fp-text-accent">Avec Parc Pilot</h3>
+        <ul>
+          <li><i data-lucide="check"></i> Une seule source, synchronisée en temps réel partout</li>
+          <li><i data-lucide="check"></i> Chaque échéance vous alerte avant la date</li>
+          <li><i data-lucide="check"></i> Amendes suivies, conducteur désigné, relance par email</li>
+          <li><i data-lucide="check"></i> Documents lus automatiquement, HT/TVA/TTC vérifiés</li>
+          <li><i data-lucide="check"></i> TVS, TCO et coût au km calculés par véhicule</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== BENTO — CE QUE ÇA PILOTE ============== -->
+<section id="modules" class="section">
+  <div class="container-fp">
+    <div class="max-w-3xl reveal">
+      <span class="st-eyebrow">Ce que Parc Pilot pilote</span>
+      <h2 class="st-h2 mt-3">Tout l'atelier, dans un <span class="it">tableau de bord</span></h2>
+      <p class="st-lead mt-4">Chaque tuile est un module. Cliquez pour y aller (connexion requise).</p>
+    </div>
+
+    <div class="lp-bento mt-10">
+      <a href="pages/notifications.html" class="lp-bento-item dark b-2col reveal">
+        <div class="b-ic"><i data-lucide="bell-ring"></i></div>
+        <h3>Alertes d'échéance</h3>
+        <p>CT, anti-pollution, révisions, fins de leasing, permis, anomalies — traqués et signalés à temps.</p>
+        <div class="mt-3">
+          <div class="lp-tick"><span class="d" style="background:#EF4444;box-shadow:0 0 8px #EF4444"></span> Contrôle technique — dans 12 jours</div>
+        </div>
+      </a>
+
+      <a href="pages/vehicules.html" class="lp-bento-item b-2row reveal d1">
+        <div class="b-ic"><i data-lucide="car"></i></div>
+        <h3>Fiche véhicule</h3>
+        <p>Version, km, CT, pneus, autonomie, carte grise, clés, carnet d'entretien.</p>
+        <div class="mt-4">
+          <span class="fp-plate" style="transform:scale(.9);transform-origin:left"><span class="fp-plate-band"><span class="fp-plate-stars">★★★</span><b>F</b></span><span class="fp-plate-num">GE-529-RT</span></span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mt-4">
+          <div><div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Kilométrage</div><div class="text-lg font-black italic" style="letter-spacing:-.02em;color:#F4F8FF">30 400</div></div>
+          <div><div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Prochaine rév.</div><div class="text-lg font-black italic" style="letter-spacing:-.02em;color:#F4F8FF">38 000</div></div>
+        </div>
+      </a>
+
+      <a href="dashboard.html" class="lp-bento-item reveal d2">
+        <div class="b-ic"><i data-lucide="scan-line"></i></div>
+        <h3>Lecture automatique</h3>
+        <p>Photo ou PDF → les champs se remplissent seuls.</p>
+      </a>
+
+      <a href="pages/amendes.html" class="lp-bento-item b-2col reveal">
+        <div class="b-ic"><i data-lucide="ticket"></i></div>
+        <h3>Amendes</h3>
+        <p>Suivi, désignation du conducteur, télépaiement, relance par email.</p>
+        <div class="mt-3 grid grid-cols-3 gap-2 text-xs">
+          <div class="flex items-center gap-1.5"><span class="w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold" style="background:#F59E0B">1</span> Thomas <span class="text-slate-400">280&nbsp;€</span></div>
+          <div class="flex items-center gap-1.5"><span class="w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold" style="background:#94A3B8">2</span> Sarah <span class="text-slate-400">175&nbsp;€</span></div>
+          <div class="flex items-center gap-1.5"><span class="w-4 h-4 rounded-full text-white flex items-center justify-center text-[9px] font-bold" style="background:#B45309">3</span> Karim <span class="text-slate-400">90&nbsp;€</span></div>
+        </div>
+      </a>
+
+      <a href="pages/statistiques.html" class="lp-bento-item reveal d1">
+        <div class="b-ic"><i data-lucide="calculator"></i></div>
+        <h3>TVS & coûts</h3>
+        <p>Taxe 2026, TCO et coût au km, par véhicule.</p>
+      </a>
+
+      <a href="pages/vehicules.html" class="lp-bento-item b-2col reveal">
+        <div class="b-ic"><i data-lucide="layout-grid"></i></div>
+        <h3>Vue par groupe</h3>
+        <div class="mt-3 space-y-2 text-[12px]">
+          <div><div class="flex justify-between mb-1"><span>Commerciaux</span><span class="text-slate-400">18</span></div><div class="b-bar-bg"><div class="b-bar" style="width:100%"></div></div></div>
+          <div><div class="flex justify-between mb-1"><span>Siège</span><span class="text-slate-400">14</span></div><div class="b-bar-bg"><div class="b-bar" style="width:78%"></div></div></div>
+          <div><div class="flex justify-between mb-1"><span>International</span><span class="text-slate-400">9</span></div><div class="b-bar-bg"><div class="b-bar" style="width:50%"></div></div></div>
+        </div>
+      </a>
+
+      <a href="pages/sinistres.html" class="lp-bento-item reveal d1">
+        <div class="b-ic"><i data-lucide="alert-octagon"></i></div>
+        <h3>Sinistres</h3>
+        <p>Accidents, réparations, timeline.</p>
+      </a>
+
+      <a href="pages/contrats.html" class="lp-bento-item reveal d2">
+        <div class="b-ic"><i data-lucide="file-text"></i></div>
+        <h3>Contrats</h3>
+        <p>Assurances & leasings, échéances, km.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============== COMMENT ÇA MARCHE ============== -->
+<section id="comment" class="section">
+  <div class="container-fp">
+    <div class="max-w-3xl reveal">
+      <span class="st-eyebrow">Comment ça marche</span>
+      <h2 class="st-h2 mt-3">Trois gestes, et c'est <span class="it">piloté</span></h2>
+      <p class="st-lead mt-4">Pas de saisie fastidieuse : vous déposez, la plateforme lit, elle vous prévient.</p>
+    </div>
+
+    <div class="mt-10 grid md:grid-cols-3 gap-6">
+      <div class="lp-step p-7 reveal" style="border-radius:18px">
+        <div class="flex items-center gap-3 mb-4"><span class="lp-step-num">1</span><span class="st-eyebrow">Déposez</span></div>
+        <h3 class="text-lg font-bold">Scannez un document</h3>
+        <p class="mt-2 text-sm">Carte grise, avis d'amende, facture ou contrat : une photo ou un PDF suffit. Le scanner reconnaît le type tout seul.</p>
+      </div>
+      <div class="lp-step p-7 reveal d1" style="border-radius:18px">
+        <div class="flex items-center gap-3 mb-4"><span class="lp-step-num">2</span><span class="st-eyebrow">Ça se remplit</span></div>
+        <h3 class="text-lg font-bold">Les champs s'écrivent seuls</h3>
+        <p class="mt-2 text-sm">Montants HT/TVA/TTC, plaques, conducteurs, échéances : tout se range dans le bon module, sans doublon.</p>
+      </div>
+      <div class="lp-step p-7 reveal d2" style="border-radius:18px">
+        <div class="flex items-center gap-3 mb-4"><span class="lp-step-num">3</span><span class="st-eyebrow">Vous êtes prévenu</span></div>
+        <h3 class="text-lg font-bold">Plus rien ne passe à la trappe</h3>
+        <p class="mt-2 text-sm">CT, révision, leasing, permis : Parc Pilot vous alerte avant l'échéance, avec le lien direct vers la fiche.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== GESTION DÉLÉGUÉE (offre unique — sur devis) ============== -->
+<section id="formules" class="section">
+  <div class="container-fp">
+    <div class="max-w-3xl reveal">
+      <span class="st-eyebrow">Votre flotte, gérée pour vous</span>
+      <h2 class="st-h2 mt-3">On <span class="it">pilote votre flotte</span> — vous ne gérez plus rien</h2>
+      <p class="st-lead mt-4">Amendes, entretiens, contrôles, contrats, sinistres, reporting : notre équipe s'en occupe, avec l'outil Parc Pilot inclus. Vous recevez la synthèse, pas la charge.</p>
+    </div>
+
+    <!-- Carte offre : gestion déléguée (sur devis) + « une facture, pas un salaire » -->
+    <div class="mt-10 grid lg:grid-cols-2 gap-5 items-stretch">
+      <div class="st-glass neon-trace p-7 reveal" style="box-shadow:0 0 0 1px var(--fp-accent),0 18px 40px -20px rgba(249,115,22,.5)">
+        <div class="flex items-center justify-between">
+          <div style="width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,var(--fp-accent-2),var(--fp-accent));box-shadow:inset 0 1px 0 rgba(255,255,255,.35)"><i data-lucide="user-cog" class="w-5 h-5" style="color:#fff"></i></div>
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--fp-accent);background:rgba(249,115,22,.14);padding:4px 10px;border-radius:999px">Formule tout compris</span>
+        </div>
+        <h3 class="text-xl font-black mt-4" style="color:#F4F8FF">La gestion déléguée</h3>
+        <p class="st-muted mt-2">Pas le temps, pas de gestionnaire de flotte ? On devient <b style="color:#F4F8FF">votre service flotte externalisé</b>, l'outil compris. Une facture claire — jamais un salarié à recruter.</p>
+        <ul class="mt-4 space-y-2 text-sm st-muted">
+          <li class="flex items-start gap-2"><i data-lucide="check" class="w-4 h-4 fp-text-accent" style="margin-top:2px;flex:none"></i> Amendes, désignations &amp; relances</li>
+          <li class="flex items-start gap-2"><i data-lucide="check" class="w-4 h-4 fp-text-accent" style="margin-top:2px;flex:none"></i> Entretiens, contrôles, contrats, sinistres</li>
+          <li class="flex items-start gap-2"><i data-lucide="check" class="w-4 h-4 fp-text-accent" style="margin-top:2px;flex:none"></i> Reporting mensuel clair — sans rien gérer</li>
+        </ul>
+        <div class="mt-6 flex flex-col sm:flex-row gap-3">
+          <a href="#" class="btn btn-glow js-prospect" data-sujet="Devis"><i data-lucide="calendar-check" class="w-4 h-4"></i> Demander un devis</a>
+          <a href="brochure.html" target="_blank" rel="noopener" class="st-btn-ghost"><i data-lucide="file-text" class="w-4 h-4"></i> Voir la brochure</a>
+        </div>
+        <p class="st-muted text-xs mt-3">Tarif <b style="color:#F4F8FF">sur devis</b>, adapté à votre flotte.</p>
+      </div>
+
+      <!-- Une facture, pas un salaire -->
+      <div class="st-glass p-7 reveal d1" style="display:flex;flex-direction:column;justify-content:center">
+        <span class="st-eyebrow" style="color:var(--fp-accent-2)">Une facture, pas un salaire</span>
+        <div class="mt-4 space-y-1">
+          <div class="flex items-baseline justify-between" style="padding:.55rem 0;border-bottom:1px solid var(--st-line)"><span class="st-muted text-sm">Gestion déléguée</span><span class="font-black" style="color:#F4F8FF;font-size:1.15rem">un forfait clair</span></div>
+          <div class="flex items-baseline justify-between" style="padding:.55rem 0;border-bottom:1px solid var(--st-line)"><span class="st-muted text-sm">Gestionnaire de flotte salarié</span><span class="font-black" style="color:#cbd5e1;font-size:1.15rem">~30 000 €<span class="st-muted" style="font-size:.72rem;font-weight:500">/an</span></span></div>
+          <div class="flex items-baseline justify-between" style="padding:.55rem 0"><span class="st-muted text-sm">Ce que vous économisez</span><span class="font-black" style="color:#34D399;font-size:1.3rem">des milliers d'€/an</span></div>
+        </div>
+        <p class="st-muted text-xs mt-3">Estimation indicative. En prime : les amendes majorées, dépassements de leasing et oublis évités — non chiffrés ici.</p>
+      </div>
+    </div>
+
+    <!-- Ce qu'on gère pour vous -->
+    <div class="max-w-3xl reveal" style="margin-top:3.5rem">
+      <span class="st-eyebrow">Chaque mois, sans que vous y pensiez</span>
+      <h2 class="st-h2 mt-3" style="font-size:1.7rem">Ce qu'on <span class="it">gère pour vous</span></h2>
+    </div>
+    <div class="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div class="st-glass p-5 reveal"><i data-lucide="ticket" class="w-6 h-6 fp-text-accent"></i><h4 class="font-bold mt-3" style="color:#F4F8FF">Amendes &amp; désignations</h4><p class="st-muted text-sm mt-1">Réception, paiement au tarif minoré, désignation du conducteur, relances — zéro majoration oubliée.</p></div>
+      <div class="st-glass p-5 reveal d1"><i data-lucide="wrench" class="w-6 h-6 fp-text-accent"></i><h4 class="font-bold mt-3" style="color:#F4F8FF">Entretiens &amp; contrôles</h4><p class="st-muted text-sm mt-1">Révisions, contrôles techniques, rappels d'échéance planifiés et suivis pour vous.</p></div>
+      <div class="st-glass p-5 reveal d2"><i data-lucide="file-text" class="w-6 h-6 fp-text-accent"></i><h4 class="font-bold mt-3" style="color:#F4F8FF">Contrats &amp; leasing</h4><p class="st-muted text-sm mt-1">Fins de leasing, restitutions, dépassements kilométriques anticipés, assurances à jour.</p></div>
+      <div class="st-glass p-5 reveal"><i data-lucide="receipt" class="w-6 h-6 fp-text-accent"></i><h4 class="font-bold mt-3" style="color:#F4F8FF">Factures &amp; coûts</h4><p class="st-muted text-sm mt-1">Lecture automatique, ventilation par véhicule, TVA récupérable, budget suivi.</p></div>
+      <div class="st-glass p-5 reveal d1"><i data-lucide="alert-octagon" class="w-6 h-6 fp-text-accent"></i><h4 class="font-bold mt-3" style="color:#F4F8FF">Sinistres</h4><p class="st-muted text-sm mt-1">Déclaration, suivi assureur, franchises et remboursements pilotés jusqu'au bout.</p></div>
+      <div class="st-glass p-5 reveal d2"><i data-lucide="bar-chart-3" class="w-6 h-6 fp-text-accent"></i><h4 class="font-bold mt-3" style="color:#F4F8FF">Reporting clair</h4><p class="st-muted text-sm mt-1">Une synthèse mensuelle lisible : coûts, alertes, décisions à prendre. Rien à gérer.</p></div>
+    </div>
+
+    <!-- Comment ça se passe -->
+    <div class="max-w-3xl reveal" style="margin-top:3.5rem">
+      <span class="st-eyebrow">Simple, dès le premier jour</span>
+      <h2 class="st-h2 mt-3" style="font-size:1.7rem">Comment ça <span class="it">se passe</span></h2>
+    </div>
+    <div class="mt-6 grid md:grid-cols-3 gap-4">
+      <div class="st-glass p-6 reveal"><div class="lp-step-num fp-text-accent" style="font-family:'Space Mono',monospace;font-size:.85rem;font-weight:700">01</div><h4 class="font-bold mt-1" style="color:#F4F8FF">On reprend l'existant</h4><p class="st-muted text-sm mt-1">Vous nous transmettez véhicules, conducteurs et documents — on importe et met tout à jour.</p></div>
+      <div class="st-glass p-6 reveal d1"><div class="lp-step-num fp-text-accent" style="font-family:'Space Mono',monospace;font-size:.85rem;font-weight:700">02</div><h4 class="font-bold mt-1" style="color:#F4F8FF">On gère au quotidien</h4><p class="st-muted text-sm mt-1">Amendes, échéances, contrats, sinistres : on traite, on relance, on anticipe.</p></div>
+      <div class="st-glass p-6 reveal d2"><div class="lp-step-num fp-text-accent" style="font-family:'Space Mono',monospace;font-size:.85rem;font-weight:700">03</div><h4 class="font-bold mt-1" style="color:#F4F8FF">Vous recevez la synthèse</h4><p class="st-muted text-sm mt-1">Un point clair chaque mois + un accès à l'outil pour tout voir en temps réel si vous voulez.</p></div>
+    </div>
+
+    <div class="mt-8 text-center reveal">
+      <a href="#" class="btn btn-glow js-prospect" data-sujet="Devis"><i data-lucide="calendar-check" class="w-4 h-4"></i> Demander un devis</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============== LA FLOTTE EN CHIFFRES ============== -->
+<section class="section">
+  <div class="container-fp">
+    <div class="max-w-3xl reveal">
+      <span class="st-eyebrow">La flotte en chiffres</span>
+      <h2 class="st-h2 mt-3">Une plateforme, tout le parc</h2>
+    </div>
+    <div class="mt-10 grid grid-cols-2 md:grid-cols-4 gap-5">
+      <div class="st-glass p-6 reveal"><div class="st-stat" data-count="52">52</div><div class="st-stat-lbl">Véhicules suivis</div></div>
+      <div class="st-glass p-6 reveal d1"><div class="st-stat" data-count="9">9</div><div class="st-stat-lbl">Modules connectés</div></div>
+      <div class="st-glass p-6 reveal d2"><div class="st-stat">Temps réel</div><div class="st-stat-lbl">Sur tous les postes</div></div>
+      <div class="st-glass p-6 reveal d3"><div class="st-stat" data-count="100" data-suffix=" %">100 %</div><div class="st-stat-lbl">Documents lus auto.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FAQ ============== -->
+<section id="faq" class="section">
+  <div class="container-fp max-w-3xl">
+    <div class="reveal">
+      <span class="st-eyebrow">Questions fréquentes</span>
+      <h2 class="st-h2 mt-3">Ce qu'on nous demande souvent</h2>
+    </div>
+    <div class="mt-8 reveal d1">
+      <details class="st-faq">
+        <summary>Mes données sont-elles en sécurité ?<i data-lucide="chevron-down" class="chev w-5 h-5"></i></summary>
+        <div class="faq-body">Oui. Les données personnelles (coordonnées des conducteurs, etc.) ne sont chargées qu'<b>après connexion</b> et restent protégées côté serveur. Chaque société ne voit que ses propres données.</div>
+      </details>
+      <details class="st-faq">
+        <summary>Est-ce que ça marche sur téléphone ?<i data-lucide="chevron-down" class="chev w-5 h-5"></i></summary>
+        <div class="faq-body">Oui. L'interface s'adapte au mobile : menu repliable, tableaux qui défilent, fiches en plein écran. Rien à installer, un simple navigateur suffit.</div>
+      </details>
+      <details class="st-faq">
+        <summary>Peut-on gérer plusieurs sociétés ?<i data-lucide="chevron-down" class="chev w-5 h-5"></i></summary>
+        <div class="faq-body">Oui. Les véhicules et amendes sont propres à chaque société, tandis que l'outil (boutons, mises en page, fonctions) est partagé — vous ne vous perdez pas d'une structure à l'autre.</div>
+      </details>
+      <details class="st-faq">
+        <summary>Les données sont-elles à jour partout ?<i data-lucide="chevron-down" class="chev w-5 h-5"></i></summary>
+        <div class="faq-body">Oui, en temps réel. Une modification faite sur un poste apparaît immédiatement sur les autres — aucun export ni synchronisation manuelle.</div>
+      </details>
+      <details class="st-faq">
+        <summary>Comment les documents sont-ils lus ?<i data-lucide="chevron-down" class="chev w-5 h-5"></i></summary>
+        <div class="faq-body">Vous déposez une photo ou un PDF (carte grise, amende, facture, contrat). La plateforme en extrait les informations, vérifie les montants HT/TVA/TTC et évite les doublons avant d'enregistrer.</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============== CTA FINAL ============== -->
+<section class="section" style="padding-top:0">
+  <div class="container-fp">
+    <div class="st-cta neon-trace reveal">
+      <h2 class="st-h2" style="color:#fff">Prenez les commandes de la flotte</h2>
+      <p class="st-lead mt-4" style="color:#C7D2E4">Connectez-vous pour accéder à toutes les données, en temps réel.</p>
+      <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+        <a href="dashboard.html" class="btn btn-glow"><i data-lucide="gauge" class="w-4 h-4"></i> Ouvrir le poste de pilotage</a>
+        <a href="#" class="st-btn-ghost js-prospect" data-sujet="Démo"><i data-lucide="calendar-check" class="w-4 h-4"></i> Demander une démo</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FOOTER ============== -->
+<footer class="py-14" style="border-top:1px solid var(--st-line)">
+  <div class="container-fp grid md:grid-cols-3 gap-8 text-sm">
+    <div class="md:col-span-2 max-w-sm">
+      <div class="fp-logo text-lg mb-3" style="color:#fff">
+        <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic"><tspan fill="currentColor">Parc</tspan><tspan fill="#F97316">Pilot</tspan></text></svg>
+      </div>
+      <p class="st-muted">Le poste de pilotage de votre flotte automobile. Véhicules, amendes, conducteurs, entretiens, contrats et coûts — centralisés et en temps réel.</p>
+    </div>
+    <div>
+      <h4 class="font-semibold mb-3" style="color:#fff">Aide</h4>
+      <ul class="space-y-2 st-muted">
+        <li><a href="#" class="hover:text-white js-prospect" data-sujet="Contact">Nous contacter</a></li>
+        <li><a href="login.html" class="hover:text-white">Se connecter</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container-fp mt-8 lp-trust-row">
+    <span class="lp-trust"><i data-lucide="shield-check" class="w-4 h-4"></i> Accès sécurisé</span>
+    <span class="lp-trust"><i data-lucide="lock" class="w-4 h-4"></i> Données chiffrées</span>
+    <span class="lp-trust"><i data-lucide="scale" class="w-4 h-4"></i> Conforme RGPD</span>
+    <span class="lp-trust"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Sauvegarde temps réel</span>
+  </div>
+  <div class="container-fp mt-8 pt-6 text-xs flex justify-between flex-wrap gap-3" style="border-top:1px solid var(--st-line);color:#7c8aa0">
+    <div>© 2026 Parc Pilot.</div>
+    <div>Accès sécurisé · Chiffrement · Conforme RGPD · Données en temps réel</div>
+  </div>
+</footer>
+
+</div><!-- /.st -->
+
+<!-- ============== MODALE « Être recontacté » (prospect → JIS/Prospects) ============== -->
+<style>
+  #pp-backdrop{position:fixed; inset:0; z-index:1000; display:none; align-items:center; justify-content:center; padding:1.5rem;
+    background:rgba(5,7,13,.72); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px)}
+  #pp-backdrop.on{display:flex}
+  .pp-card{width:100%; max-width:460px; max-height:92vh; overflow:auto; color:#EAF1FB;
+    background:linear-gradient(180deg, rgba(16,26,46,.98), rgba(10,17,34,.98));
+    border:1px solid rgba(148,175,214,.18); border-radius:1.1rem; padding:1.6rem 1.5rem;
+    box-shadow:0 30px 80px -20px rgba(0,0,0,.8); animation:ppIn .35s cubic-bezier(.16,1,.3,1) both}
+  @keyframes ppIn{from{opacity:0; transform:translateY(14px) scale(.97)} to{opacity:1; transform:none}}
+  .pp-head{display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:.25rem}
+  .pp-title{font-weight:800; font-size:1.35rem; color:#fff; letter-spacing:-.01em}
+  .pp-close{background:none; border:none; color:#8aa0c0; cursor:pointer; padding:.35rem; border-radius:.5rem; line-height:0; transition:color .2s, background .2s}
+  .pp-close:hover{color:#fff; background:rgba(255,255,255,.08)}
+  .pp-sub{font-size:.9rem; color:#8aa0c0; margin-bottom:1.15rem}
+  .pp-field{margin-bottom:1rem}
+  .pp-field label{display:block; font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#8aa0c0; margin-bottom:.4rem}
+  .pp-field input, .pp-field textarea{width:100%; padding:.72rem .9rem; background:rgba(6,11,22,.7); border:1px solid rgba(148,175,214,.18);
+    border-radius:.7rem; font-size:.95rem; color:#EAF1FB; font-family:inherit; transition:border-color .2s, box-shadow .2s, background .2s}
+  .pp-field textarea{min-height:120px; resize:vertical; line-height:1.5}
+  .pp-field input::placeholder, .pp-field textarea::placeholder{color:rgba(138,160,192,.5)}
+  .pp-field input:focus, .pp-field textarea:focus{outline:none; border-color:#F97316; background:rgba(6,11,22,.95);
+    box-shadow:0 0 0 3px rgba(249,115,22,.16)}
+  .pp-ok{background:rgba(34,197,94,.12); border:1px solid rgba(34,197,94,.4); color:#bbf7d0; padding:.85rem; border-radius:.6rem; font-size:.9rem; font-weight:600; margin-bottom:1rem}
+  .pp-err{background:rgba(220,38,38,.14); border:1px solid rgba(248,113,113,.45); color:#fecaca; padding:.65rem .85rem; border-radius:.6rem; font-size:.85rem; margin-bottom:1rem}
+  .pp-hide{display:none}
+  #pp-send{width:100%; display:inline-flex; align-items:center; justify-content:center; gap:.5rem; padding:.85rem 1rem; border:none; border-radius:.7rem; cursor:pointer;
+    font-weight:800; font-size:.98rem; color:#150a02; background:linear-gradient(135deg,#FB923C,#F97316);
+    box-shadow:0 12px 30px -12px rgba(249,115,22,.7); transition:transform .15s, filter .2s}
+  #pp-send:hover{transform:translateY(-2px)} #pp-send:disabled{filter:saturate(.6) brightness(.9); cursor:wait; transform:none}
+</style>
+<div id="pp-backdrop" aria-hidden="true">
+  <div class="pp-card" role="dialog" aria-modal="true" aria-label="Être recontacté">
+    <div class="pp-head">
+      <h2 class="pp-title">Être recontacté</h2>
+      <button type="button" id="pp-close" aria-label="Fermer" class="pp-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="pp-sub">Laissez vos coordonnées et décrivez votre besoin — on vous recontacte rapidement.</p>
+    <div id="pp-ok" class="pp-ok pp-hide">✓ Merci ! Votre demande est bien envoyée. On vous recontacte très vite.</div>
+    <div id="pp-err" class="pp-err pp-hide"></div>
+    <form id="pp-form">
+      <div class="pp-field"><label for="pp-nom">Nom &amp; prénom *</label><input type="text" id="pp-nom" required placeholder="Prénom Nom" autocomplete="name" /></div>
+      <div class="pp-field"><label for="pp-email">E-mail *</label><input type="email" id="pp-email" required placeholder="vous@email.com" autocomplete="email" /></div>
+      <div class="pp-field"><label for="pp-tel">Téléphone</label><input type="tel" id="pp-tel" placeholder="06 12 34 56 78" autocomplete="tel" /></div>
+      <div class="pp-field"><label for="pp-societe">Société</label><input type="text" id="pp-societe" placeholder="Nom de votre société" autocomplete="organization" /></div>
+      <div class="pp-field"><label for="pp-message">Décrivez votre besoin</label><textarea id="pp-message" placeholder="Taille de flotte, ce que vous cherchez, vos contraintes…"></textarea></div>
+      <button type="submit" id="pp-send"><i data-lucide="send" class="w-4 h-4"></i> Envoyer ma demande</button>
+    </form>
+  </div>
+</div>
+
+<script src="assets/js/vendor/supabase.js?v=20260811e"></script>
+<script>
+/* Modale prospect : ouverture depuis les boutons .js-prospect + insertion anonyme dans la table prospects */
+(function(){
+  var backdrop = document.getElementById('pp-backdrop');
+  if (!backdrop) return;
+  var client = null;
+  try { client = supabase.createClient('https://tzjuptlzoywjeigmyfuj.supabase.co', 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq'); } catch (e) {}
+  var okEl = document.getElementById('pp-ok'), errEl = document.getElementById('pp-err');
+  var msg = document.getElementById('pp-message');
+  var open = function(sujet){
+    okEl.classList.add('pp-hide'); errEl.classList.add('pp-hide');
+    // Pré-remplit le besoin selon le bouton cliqué (Démo / Devis / Contact)
+    if (sujet === 'Démo' && !msg.value) msg.value = 'Je souhaite une démonstration de Parc Pilot.';
+    else if (sujet === 'Devis' && !msg.value) msg.value = 'Je souhaite un devis pour Parc Pilot.';
+    backdrop.classList.add('on'); backdrop.setAttribute('aria-hidden','false');
+    if (window.lucide) lucide.createIcons();
+    setTimeout(function(){ document.getElementById('pp-nom').focus(); }, 60);
+  };
+  var close = function(){ backdrop.classList.remove('on'); backdrop.setAttribute('aria-hidden','true'); };
+  document.querySelectorAll('.js-prospect').forEach(function(a){
+    a.addEventListener('click', function(e){ e.preventDefault(); open(a.getAttribute('data-sujet') || ''); });
+  });
+  document.getElementById('pp-close').addEventListener('click', close);
+  backdrop.addEventListener('click', function(e){ if (e.target === backdrop) close(); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && backdrop.classList.contains('on')) close(); });
+  document.getElementById('pp-form').addEventListener('submit', async function(e){
+    e.preventDefault();
+    var sendBtn = document.getElementById('pp-send');
+    okEl.classList.add('pp-hide'); errEl.classList.add('pp-hide');
+    var rec = {
+      nom: document.getElementById('pp-nom').value.trim(),
+      email: document.getElementById('pp-email').value.trim(),
+      tel: document.getElementById('pp-tel').value.trim() || null,
+      societe: document.getElementById('pp-societe').value.trim() || null,
+      message: document.getElementById('pp-message').value.trim() || null,
+    };
+    if (!rec.nom || !rec.email) { errEl.textContent = 'Nom et e-mail sont obligatoires.'; errEl.classList.remove('pp-hide'); return; }
+    if (!client) { errEl.textContent = 'Envoi indisponible — écrivez à jis.nubee@gmail.com.'; errEl.classList.remove('pp-hide'); return; }
+    sendBtn.disabled = true; sendBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Envoi…'; if (window.lucide) lucide.createIcons();
+    var res = await client.from('prospects').insert(rec);
+    sendBtn.disabled = false; sendBtn.innerHTML = '<i data-lucide="send" class="w-4 h-4"></i> Envoyer ma demande'; if (window.lucide) lucide.createIcons();
+    if (res.error) {
+      errEl.textContent = /relation .*prospects.* does not exist|schema cache/i.test(res.error.message || '')
+        ? "Le formulaire n'est pas encore activé côté serveur. Réessayez bientôt (ou écrivez à jis.nubee@gmail.com)."
+        : ('Erreur : ' + (res.error.message || 'envoi impossible') + ' — vous pouvez écrire à jis.nubee@gmail.com.');
+      errEl.classList.remove('pp-hide'); return;
+    }
+    document.getElementById('pp-form').reset();
+    okEl.classList.remove('pp-hide');
+  });
+})();
+</script>
+
+<script src="assets/js/app.js?v=20260811e"></script>
+<script>
+  lucide.createIcons();
+
+  const burger = document.getElementById('burger');
+  if (burger) burger.addEventListener('click', () => document.getElementById('mobile-menu').classList.toggle('hidden'));
+
+  const nav = document.getElementById('lp-nav');
+  const onScroll = () => { if (nav) nav.classList.toggle('is-scrolled', window.scrollY > 8); };
+  onScroll(); addEventListener('scroll', onScroll, { passive: true });
+
+  if (document.documentElement.classList.contains('reveal-on')) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+    const animateCount = (el) => {
+      const target = parseFloat(el.getAttribute('data-count'));
+      if (isNaN(target)) return;
+      const suffix = el.getAttribute('data-suffix') || '';
+      const dur = 1100; const t0 = performance.now();
+      const step = (now) => {
+        const p = Math.min(1, (now - t0) / dur);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(target * eased) + suffix;
+        if (p < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+    const cio = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { animateCount(e.target); cio.unobserve(e.target); } });
+    }, { threshold: 0.5 });
+    document.querySelectorAll('.st-stat[data-count], .lp-stat-num[data-count]').forEach(el => cio.observe(el));
+  }
+
+  // ✦ Tilt 3D interactif (souris fine + mouvement autorisé) — héros + tuiles bento
+  if (matchMedia('(hover:hover) and (pointer:fine)').matches && matchMedia('(prefers-reduced-motion: no-preference)').matches) {
+    const attachTilt = (card, ax, ay, persp, lift) => {
+      let raf = 0;
+      card.addEventListener('mousemove', (e) => {
+        const r = card.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width;
+        const py = (e.clientY - r.top) / r.height;
+        const rx = (0.5 - py) * ax;   // haut/bas
+        const ry = (px - 0.5) * ay;   // gauche/droite
+        card.style.setProperty('--gx', (px * 100) + '%');
+        card.style.setProperty('--gy', (py * 100) + '%');
+        card.style.transition = 'transform .08s ease-out';
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => {
+          card.style.transform = `perspective(${persp}px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateZ(${lift}px)`;
+        });
+        card.classList.add('tilting');
+      });
+      card.addEventListener('mouseleave', () => {
+        cancelAnimationFrame(raf);
+        card.style.transition = '';
+        card.style.transform = '';
+        card.classList.remove('tilting');
+      });
+    };
+    document.querySelectorAll('.st-showcase .st-glass').forEach(c => attachTilt(c, 10, 12, 1100, 6));
+    document.querySelectorAll('.st .lp-bento-item').forEach(c => attachTilt(c, 6, 7, 1000, 4));
+  }
+</script>
+<script>
+/* Particules « flux + sillage » (ambiance accueil) : les points suivent un courant
+   invisible (façon vent) et laissent une traînée lumineuse, comme des véhicules qui
+   tracent leur route. Canvas transparent (clearRect) → les auroras/dégradés du fond
+   restent visibles ; la traînée est dessinée via l'historique de positions de chaque point. */
+(function(){
+  var c=document.getElementById('fx'); if(!c) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var ctx=c.getContext('2d'), W,H,pts=[], DPR=Math.min(2,window.devicePixelRatio||1);
+  function size(){ W=c.width=innerWidth*DPR; H=c.height=innerHeight*DPR; c.style.width=innerWidth+'px'; c.style.height=innerHeight+'px'; }
+  size(); addEventListener('resize', size);
+  var TRAIL=30, N=Math.round(Math.min(85, innerWidth/17));
+  for(var i=0;i<N;i++) pts.push({ x:Math.random()*W, y:Math.random()*H, r:(Math.random()*1.5+.9)*DPR,
+    sp:(.8+Math.random()*.9), c:(i%3===0?'56,189,248':'251,146,60'), hist:[] });
+  var mx=-1e5,my=-1e5; addEventListener('mousemove',function(e){ mx=e.clientX*DPR; my=e.clientY*DPR; });
+  addEventListener('mouseout',function(){ mx=-1e5; my=-1e5; });
+  function ang(x,y,t){ return Math.sin(x*0.0015+t*0.00028)*1.5 + Math.cos(y*0.0017 - t*0.00022)*1.5; }
+  function tick(ts){
+    ctx.clearRect(0,0,W,H); ctx.lineCap='round';
+    for(var i=0;i<pts.length;i++){
+      var p=pts[i], a=ang(p.x,p.y,ts);
+      p.x+=Math.cos(a)*p.sp*DPR; p.y+=Math.sin(a)*p.sp*DPR*.75 - .10*DPR;
+      var dx=p.x-mx, dy=p.y-my, d=Math.sqrt(dx*dx+dy*dy), CUR=150*DPR;
+      if(d<CUR){ p.x+=dx/d*1.3; p.y+=dy/d*1.3; }                 // s'écarte du curseur
+      if(p.x<-20){p.x=W+20;p.hist=[];} if(p.x>W+20){p.x=-20;p.hist=[];}
+      if(p.y<-20){p.y=H+20;p.hist=[];} if(p.y>H+20){p.y=-20;p.hist=[];}
+      p.hist.push(p.x,p.y); if(p.hist.length>TRAIL*2) p.hist.splice(0,2);
+      var h=p.hist, n=h.length/2;                                // traînée dégradée (comète)
+      if(n>1){ for(var k=1;k<n;k++){ var f=k/n; ctx.strokeStyle='rgba('+p.c+','+(f*.65)+')'; ctx.lineWidth=Math.max(.4,p.r*(.35+f*.85));
+        ctx.beginPath(); ctx.moveTo(h[(k-1)*2],h[(k-1)*2+1]); ctx.lineTo(h[k*2],h[k*2+1]); ctx.stroke(); } }
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.283);            // tête lumineuse
+      ctx.shadowColor='rgba('+p.c+',.95)'; ctx.shadowBlur=8*DPR;
+      ctx.fillStyle='rgba('+p.c+',.95)'; ctx.fill(); ctx.shadowBlur=0;
+    }
+    requestAnimationFrame(tick);
+  }
+  tick(0);
+})();
+</script>
+</body>
+</html>

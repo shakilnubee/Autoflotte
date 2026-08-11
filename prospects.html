@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<title>Prospects — Parc Pilot</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260811e">
+<script>window.lucide={createIcons:function(){}};</script>
+<script defer src="assets/js/lucide.min.js?v=20260811e"></script>
+<link rel="stylesheet" href="assets/css/styles.css?v=20260811e">
+<script>
+// Auth guard : page réservée à un utilisateur connecté (le propriétaire JIS).
+(function(){
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace('login.html'); document.documentElement.style.display = 'none'; }
+})();
+</script>
+<style>
+  body { background:#F4F6FA; }
+  .p-card { background:#fff; border:1px solid var(--fp-border); border-radius:.8rem; padding:1.1rem 1.2rem; }
+  .p-card.nouveau { border-left:4px solid var(--fp-accent); }
+  .p-card.traite { opacity:.72; }
+  .badge-n { background:#EF4444;color:#fff;font-size:.7rem;font-weight:800;padding:.1rem .5rem;border-radius:999px }
+</style>
+</head>
+<body>
+  <div class="max-w-3xl mx-auto p-6 md:p-10">
+    <div class="flex items-center justify-between gap-3 mb-2 flex-wrap">
+      <a href="dashboard.html" class="text-sm font-semibold" style="color:var(--fp-accent)"><i data-lucide="arrow-left" class="w-4 h-4 inline"></i> Tableau de bord</a>
+    </div>
+    <h1 class="text-2xl font-extrabold" style="color:var(--fp-primary)">👑 Prospects</h1>
+    <p class="text-slate-500 text-sm mt-1" id="p-sub">Les personnes intéressées qui ont rempli le formulaire de la page de connexion.</p>
+
+    <div class="flex flex-wrap items-center gap-2 mt-5 mb-4" id="p-filters"></div>
+
+    <div id="p-list" class="space-y-3"><div class="fp-skel-row"><div class="fp-skel fp-skel-chip"></div><div class="fp-skel fp-skel-line" style="width:82%"></div></div><div class="fp-skel-row"><div class="fp-skel fp-skel-chip"></div><div class="fp-skel fp-skel-line" style="width:64%"></div></div><div class="fp-skel-row"><div class="fp-skel fp-skel-chip"></div><div class="fp-skel fp-skel-line" style="width:73%"></div></div></div>
+  </div>
+
+  <script src="assets/js/vendor/supabase.js?v=20260811e"></script>
+  <!-- Fenêtres modales « à la sauce Parc Pilot » (remplacent alert/confirm/prompt natifs) -->
+  <script>
+  (function(){
+    function dlg(o){o=o||{};var type=o.type||'confirm',danger=!!o.danger,msg=o.message==null?'':String(o.message);
+      var title=o.title!=null?o.title:(type==='alert'?'Information':(type==='prompt'?'Saisie':'Confirmation'));
+      var okT=o.okText||(type==='alert'?'OK':(danger?'Supprimer':'Confirmer')),caT=o.cancelText||'Annuler';
+      if(!document.getElementById('pp-dlg-style')){var s=document.createElement('style');s.id='pp-dlg-style';
+        s.textContent='.pp-dlg-bk{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:1.25rem;background:rgba(11,18,32,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}.pp-dlg-c{width:100%;max-width:420px;background:#fff;border:1px solid #E3E8F0;border-radius:16px;box-shadow:0 30px 70px -20px rgba(11,18,32,.55);padding:1.4rem;animation:ppp .22s cubic-bezier(.16,1,.3,1)}.pp-dlg-t{font-weight:800;font-size:1.08rem;color:#0B1220;margin-bottom:.25rem}.pp-dlg-m{font-size:.92rem;color:#475569;line-height:1.5;white-space:pre-line;word-wrap:break-word}.pp-dlg-i{width:100%;margin-top:.9rem;padding:.6rem .75rem;border:1px solid #E3E8F0;border-radius:9px;font-size:.95rem;font-family:inherit}.pp-dlg-i:focus{outline:none;border-color:#F97316;box-shadow:0 0 0 3px rgba(249,115,22,.15)}.pp-dlg-a{display:flex;gap:.6rem;justify-content:flex-end;margin-top:1.25rem;flex-wrap:wrap}.pp-dlg-b{border:none;border-radius:9px;padding:.6rem 1.1rem;font-weight:700;font-size:.9rem;cursor:pointer;font-family:inherit}.pp-dlg-x{background:#EEF1F6;color:#0B1220}.pp-dlg-o{background:#F97316;color:#fff}.pp-dlg-o.danger{background:#EF4444}@keyframes ppp{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}';
+        document.head.appendChild(s);}
+      return new Promise(function(res){var bk=document.createElement('div');bk.className='pp-dlg-bk';
+        bk.innerHTML='<div class="pp-dlg-c" role="dialog" aria-modal="true"><div class="pp-dlg-t"></div><div class="pp-dlg-m"></div>'+(type==='prompt'?'<input class="pp-dlg-i" type="text">':'')+'<div class="pp-dlg-a">'+(type!=='alert'?'<button class="pp-dlg-b pp-dlg-x"></button>':'')+'<button class="pp-dlg-b pp-dlg-o'+(danger?' danger':'')+'"></button></div></div>';
+        var card=bk.firstChild;card.querySelector('.pp-dlg-t').textContent=title;card.querySelector('.pp-dlg-m').textContent=msg;
+        var inp=card.querySelector('.pp-dlg-i');if(inp&&o.defaultValue!=null)inp.value=String(o.defaultValue);
+        var okb=card.querySelector('.pp-dlg-o');okb.textContent=okT;var cab=card.querySelector('.pp-dlg-x');if(cab)cab.textContent=caT;
+        document.body.appendChild(bk);
+        function clean(){document.removeEventListener('keydown',onk,true);bk.remove();}
+        function done(v){clean();res(v);}
+        var cancelVal=type==='prompt'?null:(type==='alert'?undefined:false);
+        okb.onclick=function(){done(type==='prompt'?(inp?inp.value:''):true);};
+        if(cab)cab.onclick=function(){done(cancelVal);};
+        bk.addEventListener('click',function(e){if(e.target===bk)done(cancelVal);});
+        function onk(e){if(e.key==='Escape'){e.preventDefault();done(cancelVal);}else if(e.key==='Enter'){e.preventDefault();okb.click();}}
+        document.addEventListener('keydown',onk,true);setTimeout(function(){try{(inp||okb).focus();}catch(e){}},40);
+      });}
+    window.PPconfirm=function(m,o){o=o||{};var a=/supprim|effacer|d[ée]finit|irr[ée]vers|retirer|vider/i.test(String(m||''));return dlg(Object.assign({type:'confirm',message:m,danger:a},o));};
+    window.PPalert=function(m,o){return dlg(Object.assign({type:'alert',message:m},o||{}));};
+    window.PPprompt=function(m,d,o){return dlg(Object.assign({type:'prompt',message:m,defaultValue:d},o||{}));};
+    try{window.alert=function(m){PPalert(m);};}catch(e){}
+  })();
+  </script>
+  <script>
+  (function(){
+    const OWNERS = ['shakil.nubee@projectxparis.fr','jis.nubee@gmail.com'];
+    const client = supabase.createClient('https://tzjuptlzoywjeigmyfuj.supabase.co', 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq');
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const fmt = d => { try { return new Date(d).toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); } catch(e){ return ''; } };
+    // Étapes du pipeline commercial (stockées dans la colonne `statut`, pas de nouvelle colonne).
+    const STAGES = [
+      ['nouveau', 'Nouveau', '#EF4444'],
+      ['contacte', 'Contacté', '#F59E0B'],
+      ['demo', 'Démo faite', '#3B82F6'],
+      ['devis', 'Devis envoyé', '#8B5CF6'],
+      ['gagne', 'Gagné', '#10B981'],
+      ['perdu', 'Perdu', '#94A3B8'],
+    ];
+    const STAGE_LABEL = Object.fromEntries(STAGES.map(s => [s[0], s[1]]));
+    const STAGE_COLOR = Object.fromEntries(STAGES.map(s => [s[0], s[2]]));
+    const stageOf = (p) => { const s = (p.statut || 'nouveau'); if (STAGE_LABEL[s]) return s; if (s === 'traite') return 'gagne'; return 'nouveau'; };
+    let all = [], filter = 'all';
+
+    (async () => {
+      const { data: { session } } = await client.auth.getSession();
+      const email = session && session.user && (session.user.email || '').toLowerCase();
+      if (!email) { window.location.replace('login.html'); return; }
+      if (OWNERS.indexOf(email) === -1) {
+        $('p-list').innerHTML = '<div class="p-card">Accès réservé au propriétaire de la plateforme.</div>';
+        $('p-sub').textContent = '';
+        if (window.lucide) lucide.createIcons();
+        return;
+      }
+      $('p-filters').addEventListener('click', (e) => { const b = e.target.closest('[data-f]'); if (!b) return; filter = b.dataset.f; render(); });
+      $('p-list').addEventListener('click', onClick);
+      $('p-list').addEventListener('change', onChange);
+      load();
+    })();
+
+    async function load(){
+      const { data, error } = await client.from('prospects').select('*').order('created_at', { ascending: false });
+      if (error) {
+        $('p-list').innerHTML = /does not exist|schema cache/i.test(error.message || '')
+          ? '<div class="p-card">La table « prospects » n\'est pas encore créée. Colle le SQL de <code>supabase/prospects.sql</code> dans Supabase (une seule fois), puis recharge.</div>'
+          : ('<div class="p-card">Erreur : ' + esc(error.message) + '</div>');
+        if (window.lucide) lucide.createIcons();
+        return;
+      }
+      all = data || []; render();
+    }
+    function renderFilters(){
+      const counts = {}; all.forEach(p => { const s = stageOf(p); counts[s] = (counts[s] || 0) + 1; });
+      const chip = (f, label, n) => `<button class="filter-chip ${filter === f ? 'active' : ''}" data-f="${f}">${label}${n ? ` <span style="font-weight:800">${n}</span>` : ''}</button>`;
+      let html = chip('all', 'Tous', all.length);
+      STAGES.forEach(([k, label]) => { html += chip(k, label, counts[k] || 0); });
+      $('p-filters').innerHTML = html;
+    }
+    function render(){
+      renderFilters();
+      const list = all.filter(p => filter === 'all' ? true : stageOf(p) === filter)
+        .sort((a, b) => (new Date(b.created_at)) - (new Date(a.created_at)));
+      const nNew = all.filter(p => stageOf(p) === 'nouveau').length;
+      const nEnCours = all.filter(p => ['contacte', 'demo', 'devis'].includes(stageOf(p))).length;
+      const nGagne = all.filter(p => stageOf(p) === 'gagne').length;
+      $('p-sub').innerHTML = all.length
+        ? `${nNew ? `<span class="badge-n">${nNew}</span> nouveau(x) · ` : ''}${nEnCours} en cours · ${nGagne} gagné(s). Fais avancer chaque prospect avec le menu d'étape.`
+        : 'Aucun prospect pour le moment.';
+      if (!list.length) { $('p-list').innerHTML = '<div class="text-sm text-slate-400">Aucun prospect à cette étape.</div>'; if (window.lucide) lucide.createIcons(); return; }
+      $('p-list').innerHTML = list.map(card).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+    function card(p){
+      const st = stageOf(p);
+      const tel = p.tel ? String(p.tel).replace(/\s/g, '') : '';
+      const opts = STAGES.map(([k, label]) => `<option value="${k}" ${st === k ? 'selected' : ''}>${label}</option>`).join('');
+      return `<div class="p-card" data-id="${esc(p.id)}" style="border-left:4px solid ${STAGE_COLOR[st]}">
+        <div class="flex items-start justify-between gap-2 flex-wrap">
+          <div>
+            <div class="font-bold text-slate-900">${esc(p.nom || '—')} ${st === 'nouveau' ? '<span class="badge-n" style="vertical-align:middle">nouveau</span>' : ''}</div>
+            <div class="text-sm text-slate-500 mt-0.5">${esc(p.societe || '')}${p.societe ? ' · ' : ''}${fmt(p.created_at)}</div>
+          </div>
+          <select class="p-stage" title="Faire avancer ce prospect" style="font-size:.8rem;font-weight:700;border:1px solid var(--fp-border);border-radius:8px;padding:4px 8px;color:${STAGE_COLOR[st]};cursor:pointer">${opts}</select>
+        </div>
+        <div class="flex flex-wrap gap-3 mt-2 text-sm">
+          ${p.email ? `<a href="mailto:${esc(p.email)}" class="inline-flex items-center gap-1 hover:underline" style="color:var(--fp-accent)"><i data-lucide="mail" class="w-4 h-4"></i> ${esc(p.email)}</a>` : ''}
+          ${p.tel ? `<a href="tel:${esc(tel)}" class="inline-flex items-center gap-1 hover:underline" style="color:var(--fp-accent)"><i data-lucide="phone" class="w-4 h-4"></i> ${esc(p.tel)}</a>` : ''}
+        </div>
+        ${p.message ? `<div class="text-sm text-slate-700 mt-2 p-2.5 rounded-lg" style="background:#F8FAFC">${esc(p.message)}</div>` : ''}
+        <div class="flex gap-2 mt-3">
+          <button class="btn text-sm text-red-600 hover:bg-red-50" data-act="del"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer</button>
+        </div>
+      </div>`;
+    }
+    async function onChange(e){
+      const sel = e.target.closest('.p-stage'); if (!sel) return;
+      const card = sel.closest('[data-id]'); const id = card && card.getAttribute('data-id'); if (!id) return;
+      const statut = sel.value;
+      const { error } = await client.from('prospects').update({ statut }).eq('id', id);
+      if (error) { alert('Erreur : ' + error.message); return; }
+      const p = all.find(x => x.id === id); if (p) p.statut = statut; render();
+    }
+    async function onClick(e){
+      const btn = e.target.closest('[data-act]'); if (!btn) return;
+      const card = btn.closest('[data-id]'); const id = card && card.getAttribute('data-id'); if (!id) return;
+      if (btn.getAttribute('data-act') === 'del') {
+        if (!await PPconfirm('Supprimer ce prospect ?')) return;
+        const { error } = await client.from('prospects').delete().eq('id', id);
+        if (error) { alert('Erreur : ' + error.message); return; }
+        all = all.filter(p => p.id !== id); render();
+      }
+    }
+  })();
+  </script>
+</body>
+</html>

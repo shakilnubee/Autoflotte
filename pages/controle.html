@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")!=="0"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<title>Contrôle — Parc Pilot</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#0F1E3D">
+<link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parc Pilot">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811e">
+<script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811e"></script>
+  <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811e">
+<style>
+  /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
+  .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
+  .ctrl-tab { display:inline-flex; align-items:center; gap:.5rem; padding:.55rem .95rem; border-radius:.65rem; border:none; background:none; cursor:pointer; font-weight:700; font-size:.9rem; color:var(--fp-muted); white-space:nowrap; transition:background .12s, color .12s, box-shadow .12s; }
+  .ctrl-tab:hover { background:#F1F5F9; color:var(--fp-primary); }
+  .ctrl-tab:focus-visible { outline:2px solid var(--fp-accent); outline-offset:2px; }
+  .ctrl-tab.active { background:var(--fp-primary); color:#fff; box-shadow:0 8px 18px -10px rgba(15,30,61,.55); }
+  .ctrl-tab .sub { font-size:.7rem; font-weight:600; opacity:.72; }
+  .ctrl-tab .cnt { font-size:.7rem; font-weight:800; background:rgba(148,163,184,.22); border-radius:9999px; padding:.02rem .45rem; }
+  .ctrl-tab.active .cnt { background:rgba(255,255,255,.24); }
+  .ctrl-tab i { width:16px; height:16px; }
+  .ctrl-tabsep { align-self:center; width:1px; height:22px; background:var(--fp-border); margin:0 .2rem; }
+  /* ===== Tuiles chiffres ===== */
+  .ctrl-kpi { position:relative; background:#fff; border:1px solid var(--fp-border); border-radius:.85rem; padding:.9rem 1rem .9rem 1.15rem; overflow:hidden; }
+  .ctrl-kpi::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--fp-accent); opacity:.85; }
+  .ctrl-kpi.k-warn::before { background:#F59E0B; } .ctrl-kpi.k-danger::before { background:#DC2626; }
+  .ctrl-kpi .lbl { font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--fp-muted); }
+  .ctrl-kpi .val { font-size:1.4rem; font-weight:800; color:var(--fp-primary); line-height:1.1; margin-top:.2rem; }
+  /* ===== Filtres ===== */
+  .ctrl-frow { display:flex; flex-wrap:wrap; align-items:center; gap:.5rem; }
+  .ctrl-flabel { font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--fp-muted); margin-right:.1rem; }
+  .st-chip { padding:.32rem .75rem; border-radius:9999px; font-size:.78rem; font-weight:600; border:1px solid var(--fp-border); background:#fff; color:var(--fp-muted); cursor:pointer; white-space:nowrap; transition:all .12s; }
+  .st-chip:hover { border-color:var(--fp-primary); color:var(--fp-primary); }
+  .st-chip.active { background:var(--fp-primary); border-color:var(--fp-primary); color:#fff; }
+  .st-badge { font-size:.7rem; font-weight:700; padding:.12rem .55rem; border-radius:9999px; white-space:nowrap; }
+  .st-a-verifier { background:#FEF3C7; color:#92400E; } .st-justifie { background:#DCFCE7; color:#14532D; }
+  .st-fraude { background:#FEE2E2; color:#991B1B; } .st-classe { background:#E2E8F0; color:#475569; }
+  .ctrl-sel { border:1px solid var(--fp-border); border-radius:.5rem; padding:.42rem .6rem; font-size:.85rem; background:#fff; color:#1e293b; }
+  .ctrl-sel:focus { outline:none; border-color:var(--fp-accent); box-shadow:0 0 0 3px rgba(249,115,22,.15); }
+  /* ===== Groupes & tableaux ===== */
+  .grp-head { display:flex; justify-content:space-between; align-items:center; gap:.6rem; padding:.7rem .9rem; background:#F8FAFC; border:1px solid var(--fp-border); border-radius:.6rem; cursor:pointer; transition:background .12s; }
+  .grp-head:hover { background:#EEF2F7; }
+  /* ===== Mode sombre : TOUTES les surfaces claires (classes) de cette page → fond sombre + texte clair ===== */
+  body.fp-dark .ctrl-tabs { background:#182234; }
+  body.fp-dark .ctrl-tab:hover { background:#243044; color:#e6edf6; }
+  body.fp-dark .grp-head { background:#182234; }
+  body.fp-dark .grp-head:hover { background:#243044; }
+  body.fp-dark .ctrl-kpi { background:#1e293b; }
+  /* Les valeurs KPI utilisaient var(--fp-primary) (bleu-nuit, NON éclairci en sombre) et les KPI
+     colorés un brun/rouge foncé → quasi invisibles sur la carte sombre. On les éclaircit. */
+  body.fp-dark .ctrl-kpi .lbl { color:#aab6c6; }
+  body.fp-dark .ctrl-kpi .val { color:#f1f5f9; }
+  body.fp-dark .ctrl-kpi.k-warn .val { color:#fbbf24 !important; }
+  body.fp-dark .ctrl-kpi.k-danger .val { color:#f87171 !important; }
+  body.fp-dark .st-chip { background:#1e293b; color:#cbd5e1; }
+  body.fp-dark .ctrl-sel { background:#1e293b; color:#e6edf6; }
+  body.fp-dark table.ctrl-tbl th { background:#182234; color:#94a3b8; }
+  body.fp-dark table.ctrl-tbl td { border-bottom-color:#243044; }
+  body.fp-dark details.ctrl-help { background:#182234; color:#cbd5e1; }
+  body.fp-dark details.ctrl-help > summary { color:#e6edf6; }
+  body.fp-dark #if-total, body.fp-dark #if-ulys { background:#0b1220 !important; }
+  table.ctrl-tbl { width:100%; border-collapse:collapse; font-size:.85rem; }
+  table.ctrl-tbl th { text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; color:var(--fp-muted); padding:.5rem .6rem; border-bottom:1px solid var(--fp-border); background:#F8FAFC; }
+  table.ctrl-tbl td { padding:.55rem .6rem; border-bottom:1px solid #EEF2F7; vertical-align:middle; }
+  table.ctrl-tbl tbody tr:hover { background:#F8FAFC; }
+  body.fp-dark table.ctrl-tbl tbody tr:hover { background:#182234; } /* survol lisible en sombre */
+  /* ===== Aide dépliable ===== */
+  details.ctrl-help { background:#F8FAFC; border:1px solid var(--fp-border); border-radius:.7rem; padding:.7rem .95rem; font-size:.85rem; color:#475569; line-height:1.55; }
+  details.ctrl-help > summary { cursor:pointer; font-weight:700; color:var(--fp-primary); list-style:none; display:flex; align-items:center; gap:.45rem; }
+  details.ctrl-help > summary::-webkit-details-marker { display:none; }
+  details.ctrl-help > summary::before { content:"▸"; color:var(--fp-accent); transition:transform .15s; }
+  details.ctrl-help[open] > summary::before { transform:rotate(90deg); }
+  details.ctrl-help .help-body { margin-top:.6rem; }
+  /* ===== Cartes & badges — vue CARTES (une carte par conducteur) ===== */
+  .cbview-toggle { display:inline-flex; border:1px solid var(--fp-border); border-radius:9999px; overflow:hidden; background:#fff; }
+  .cbview-toggle button { border:none; background:none; padding:.4rem .85rem; font-size:.82rem; font-weight:700; color:var(--fp-muted); cursor:pointer; display:inline-flex; align-items:center; gap:.35rem; }
+  .cbview-toggle button.active { background:var(--fp-primary); color:#fff; }
+  body.fp-dark .cbview-toggle { background:#1e293b; }
+  body.fp-dark .cbview-toggle button.active { background:var(--fp-accent); color:#0b1220; }
+  .cb-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:.85rem; }
+  .cb-card { background:#fff; border:1px solid var(--fp-border); border-radius:.85rem; padding:.9rem 1rem; box-shadow:0 1px 2px rgba(15,30,61,.05); }
+  body.fp-dark .cb-card { background:#1e293b; border-color:#334155; }
+  .cb-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:.6rem; margin-bottom:.6rem; }
+  .cb-name { font-weight:800; font-size:.98rem; color:var(--fp-primary); }
+  body.fp-dark .cb-name { color:#e6edf6; }
+  .cb-vehs { margin-top:.2rem; display:flex; flex-wrap:wrap; gap:3px; }
+  .cb-gear { flex:none; width:34px; height:34px; border-radius:50%; border:none; background:var(--fp-accent); color:#fff; cursor:pointer; font-size:1rem; display:inline-flex; align-items:center; justify-content:center; box-shadow:0 2px 6px -1px rgba(249,115,22,.5); }
+  .cb-gear:hover { filter:brightness(1.05); }
+  .cb-gear.on { background:#16a34a; box-shadow:0 2px 6px -1px rgba(22,163,74,.5); }
+  /* Libellé AU-DESSUS + numéro en PLEINE LARGEUR dessous → n° complet visible (pas tronqué). */
+  .cb-line { display:flex; flex-direction:column; align-items:stretch; gap:.28rem; padding:.45rem 0; border-top:1px dashed var(--fp-border); }
+  .cb-line:first-child { border-top:none; padding-top:.15rem; }
+  .cb-line-lbl { font-size:.74rem; font-weight:700; color:var(--fp-muted); text-transform:uppercase; letter-spacing:.02em; display:inline-flex; align-items:center; gap:.35rem; }
+  .cb-line .cb-inp { width:100% !important; max-width:none !important; text-align:left !important; font-size:.95rem !important; padding:.4rem .5rem !important; box-sizing:border-box; }
+  /* Par défaut : le numéro s'affiche en TEXTE (pas de champ). Le ✏️ de la carte le rend éditable. */
+  .cb-line .cb-inp[readonly] { border-color:transparent !important; background:transparent !important; color:var(--fp-text) !important; padding-left:0 !important; font-weight:700; cursor:default; font-variant-numeric:tabular-nums; }
+  body.fp-dark .cb-line .cb-inp[readonly] { background:transparent !important; color:#e6edf6 !important; border-color:transparent !important; }
+  .cb-card { min-width:0; }
+</style>
+<script>
+(function(){
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+<script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
+</head>
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")!=="0")document.body.classList.add("fp-dark")}catch(e){}</script>
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../dashboard.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic"><tspan fill="currentColor">Parc</tspan><tspan fill="#F97316">Pilot</tspan></text></svg>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="notifications.html" data-nav="notifications.html"><i data-lucide="bell"></i> Suivi &amp; alertes</a>
+      <a href="taches.html" data-nav="taches.html"><i data-lucide="list-todo"></i> Tâches</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="emprunts.html" data-nav="emprunts.html"><i data-lucide="key-round"></i> Emprunt véhicule</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="controle.html"     data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
+      <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
+      <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+      <a href="../brochure.html"   data-nav="brochure.html" target="_blank" rel="noopener"><i data-lucide="sparkles"></i> Brochure</a>
+      <a href="../prix.html" data-nav="prix.html" target="_blank" rel="noopener"><i data-lucide="badge-euro"></i> Tarifs</a>
+    </nav>
+    <script>/* Sidebar : reconstruit la barre AVANT le 1er affichage. Autonome (localStorage). */
+    (function(){try{
+      var soc=(localStorage.getItem('fp_societe')||'PXP');if(soc==='__all__')soc='PXP';
+      var raw=localStorage.getItem('auto_flotte_settings_'+soc);
+      if(raw==null&&soc==='PXP')raw=localStorage.getItem('auto_flotte_settings');
+      var s=raw?(JSON.parse(raw)||{}):{};
+      var sb=document.querySelector('.fp-sidebar');if(!sb)return;
+      var nav=sb.querySelector('nav');if(!nav)return;
+      if(!sb.querySelector('.fp-global-search')){
+        var w=document.createElement('div');w.className='fp-global-search';
+        w.innerHTML='<div style="position: relative"><span style="position:absolute; left:.65rem; top:50%; transform:translateY(-50%); color:rgba(255,255,255,.5); font-size:.85rem">\u{1F50D}</span><input type="text" class="fp-search-input" placeholder="Rechercher..." /></div><div class="fp-search-results"></div>';
+        sb.insertBefore(w,nav);
+      }
+      var links=[].slice.call(nav.querySelectorAll('a[data-nav]'));if(!links.length)return;
+      if(Array.isArray(s.navOrder)&&s.navOrder.length){
+        var by={};links.forEach(function(a){by[a.dataset.nav]=a;});var ord=[];
+        s.navOrder.forEach(function(k){if(by[k]){ord.push(by[k]);delete by[k];}});
+        links.forEach(function(a){if(by[a.dataset.nav])ord.push(a);});
+        ord.forEach(function(a){nav.appendChild(a);});}
+      if(Array.isArray(s.navHidden)){var h={};s.navHidden.forEach(function(k){h[k]=1;});
+        links.forEach(function(a){if(h[a.dataset.nav]&&a.dataset.nav!=='parametres.html')a.style.display='none';});}
+      var lb=s.sidebarLabels||{};
+      links.forEach(function(a){var t=lb[a.dataset.nav];if(!t)return;
+        for(var i=0;i<a.childNodes.length;i++){var n=a.childNodes[i];if(n.nodeType===3&&n.textContent.trim()){n.textContent=' '+t;break;}}});
+      var _ACC={"guide.html":1,"manuel.html":1,"aide.html":1,"parametres.html":1,"brochure.html":1,"prix.html":1};
+      [].slice.call(nav.querySelectorAll("a[data-nav]")).forEach(function(a){a.style.order=_ACC[a.dataset.nav]?"3":"1";});
+      (function(){function _mkg(id,txt,ord){var d=nav.querySelector('.fp-nav-group[data-grp="'+id+'"]');if(!d){d=document.createElement("div");d.className="fp-nav-group";d.setAttribute("data-grp",id);nav.appendChild(d);}d.textContent=txt;d.style.order=ord;}_mkg("ws","Espace de travail","0");_mkg("ac","Compte","2");})();
+      var path=(location.pathname.split('/').pop()||'index').replace(/\.html$/,'');
+      links.forEach(function(a){if((a.dataset.nav||'').replace(/\.html$/,'')===path)a.classList.add('active');});
+    }catch(e){}})();</script>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="fp-cockpit mb-5" style="padding:1.1rem 1.4rem">
+      <div class="fp-eyebrow" style="margin-bottom:.35rem">Parc Pilot · Contrôle</div>
+      <h1 class="text-2xl font-extrabold text-white" style="color:#fff">Contrôle des consommations</h1>
+      <p class="text-sm mt-1" style="color:#8598B4">Relevés carburant &amp; péages, et suivi des anomalies (conso pendant congé, dépenses suspectes).</p>
+    </div>
+
+    <div id="ctrl-tabbar" class="ctrl-tabs" role="tablist" aria-label="Sections du contrôle" style="overflow-x:auto">
+      <button type="button" id="tab-total" class="ctrl-tab"><i data-lucide="fuel"></i> Total Fleet <span class="sub">carburant &amp; péages</span></button>
+      <button type="button" id="tab-ulys" class="ctrl-tab"><i data-lucide="route"></i> Ulys <span class="sub">péages</span></button>
+      <!-- Les sous-onglets des prestataires PERSO (créés dans « Cartes & badges ») s'insèrent ici, AVANT le séparateur. -->
+      <span class="ctrl-tabsep" id="tab-sep" aria-hidden="true"></span>
+      <button type="button" id="tab-controle" class="ctrl-tab"><i data-lucide="shield-alert"></i> Contrôle <span id="ctrl-count" class="cnt"></span></button>
+      <button type="button" id="tab-cartes" class="ctrl-tab"><i data-lucide="credit-card"></i> Cartes &amp; badges</button>
+    </div>
+
+    <!-- Sous-onglets Total Fleet / Ulys : la vue complète (conso, imports, exports) est intégrée depuis
+         Factures en mode « embed » → un seul code source, aucune duplication. Chargée à la 1re ouverture. -->
+    <!-- Total Fleet : rendu NATIF (module fleet-views.js) — plus d'iframe. Fallback iframe si le module manque. -->
+    <div id="pane-total" class="hidden"></div>
+    <!-- Ulys : rendu NATIF (module fleet-views.js) — plus d'iframe. Fallback iframe si le module manque. -->
+    <div id="pane-ulys" class="hidden"></div>
+
+    <!-- Panneaux des prestataires PERSO (générés dynamiquement, 1 par prestataire créé) -->
+    <div id="presta-panes"></div>
+
+    <!-- Sous-onglet Contrôle (trouvailles) -->
+    <div id="pane-controle">
+      <div id="ctrl-kpis" class="grid gap-3 mb-5" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))"></div>
+
+      <div class="card p-4 mb-5">
+        <div class="ctrl-frow" id="ctrl-filters" style="margin-bottom:.8rem">
+          <span class="ctrl-flabel">Filtrer</span>
+          <select id="ctrl-cond" class="ctrl-sel" aria-label="Conducteur"><option value="all">Tous les conducteurs</option></select>
+          <select id="ctrl-type" class="ctrl-sel" aria-label="Type de conso">
+            <option value="all">Tous types</option>
+            <option value="carburant">Carburant</option>
+            <option value="peage">Péage</option>
+            <option value="repas">Repas / boutique</option>
+            <option value="autre">Autre</option>
+          </select>
+          <select id="ctrl-mois" class="ctrl-sel" aria-label="Mois"><option value="all">Tous les mois</option></select>
+          <input id="ctrl-search" type="text" placeholder="Rechercher un nom…" class="ctrl-sel" aria-label="Rechercher" style="min-width:170px">
+          <span class="ctrl-flabel" style="margin-left:.4rem">Période</span>
+          <input id="ctrl-from" type="date" class="ctrl-sel" aria-label="Du">
+          <span class="text-xs text-slate-400">→</span>
+          <input id="ctrl-to" type="date" class="ctrl-sel" aria-label="au">
+          <button type="button" id="ctrl-reset" class="btn btn-outline text-sm" style="margin-left:auto"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Réinitialiser</button>
+        </div>
+        <div class="ctrl-frow" style="border-top:1px solid var(--fp-border);padding-top:.8rem">
+          <span class="ctrl-flabel">Statut</span>
+          <button type="button" class="st-chip" data-st="all">Tous</button>
+          <button type="button" class="st-chip active" data-st="a-verifier">À vérifier</button>
+          <button type="button" class="st-chip" data-st="justifie">Justifié</button>
+          <button type="button" class="st-chip" data-st="fraude">Fraude</button>
+          <button type="button" class="st-chip" data-st="classe">Classé</button>
+          <span style="flex:1"></span>
+          <button type="button" id="ctrl-group" class="btn btn-outline text-sm"><i data-lucide="users" class="w-4 h-4"></i> <span>Vue par conducteur</span></button>
+          <button type="button" id="ctrl-pdf" class="btn btn-dark text-sm"><i data-lucide="file-down" class="w-4 h-4"></i> PDF</button>
+          <button type="button" id="ctrl-csv" class="btn btn-outline text-sm"><i data-lucide="table" class="w-4 h-4"></i> Excel</button>
+        </div>
+      </div>
+
+      <div id="ctrl-body"><p class="text-sm text-slate-400">Chargement…</p></div>
+    </div>
+
+    <!-- Sous-onglet Cartes & badges : gérer au même endroit les n° carte carburant / badge péage de
+         TOUS les conducteurs (même donnée que la fiche conducteur, synchronisée). -->
+    <div id="pane-cartes" class="hidden">
+      <details class="ctrl-help mb-4">
+        <summary>Comment ça marche — rattacher la conso au bon conducteur</summary>
+        <div class="help-body">
+          Chaque n° <b>rattache automatiquement</b> la conso au bon conducteur (par numéro, pas par nom). C'est la <b>même donnée</b> que la fiche conducteur / la fiche véhicule : la modifier ici la change <b>partout</b>. Vider un champ enlève le lien mais ne supprime pas la conso déjà enregistrée.<br>
+          <span class="text-slate-500">Une colonne par <b>prestataire</b>. Un autre fournisseur de carte carburant ou de badge péage que Total / Ulys ? Clique <b>« ➕ Prestataire »</b> : ça crée son <b>sous-onglet</b> ci-dessus <b>et</b> une colonne ici (donc une zone à remplir sur chaque fiche conducteur).</span><br>
+          <span class="text-slate-500">🔒 Les champs sont <b>verrouillés</b> pour éviter les modifications par erreur : <b>double-clique</b> dessus (ou clique le crayon <b>✏️</b>) pour modifier. Ils se re-verrouillent tout seuls dès que tu quittes le champ.</span>
+        </div>
+      </details>
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <input id="cb-search" type="text" placeholder="🔍 Conducteur…" class="field-input" style="max-width:240px;padding:.45rem .7rem;font-size:.88rem">
+        <label style="display:inline-flex;align-items:center;gap:.4rem;font-size:.82rem;color:#475569;cursor:pointer;user-select:none">
+          <input id="cb-only-num" type="checkbox" style="width:15px;height:15px;cursor:pointer"> Avec un n° attribué seulement
+        </label>
+        <span class="text-xs text-slate-400" id="cb-count"></span>
+        <span style="flex:1"></span>
+        <span class="cbview-toggle" id="cb-view">
+          <button type="button" data-cbv="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+          <button type="button" data-cbv="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+        </span>
+        <button type="button" id="cb-add-presta" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Prestataire</button>
+      </div>
+      <div class="card p-2" style="overflow-x:auto"><div id="cb-body"><p class="text-sm text-slate-400 p-3">Chargement…</p></div></div>
+    </div>
+
+  </main>
+</div>
+
+<script src="../assets/js/vendor/supabase.js?v=20260811e"></script>
+<script src="../assets/js/supabase-client.js?v=20260811e"></script>
+<script src="../assets/js/data.js?v=20260811e"></script>
+<script>window.FP_PDF=1;</script>
+<script src="../assets/js/app.js?v=20260811e"></script>
+<!-- ⚡ fleet-views.js (~160 Ko : Total Fleet + Ulys) N'EST PLUS chargé ici en SYNCHRONE : l'onglet
+     par défaut est « Contrôle » et n'en a pas besoin. Il est injecté à la demande (1re ouverture de
+     Total/Ulys) via ensureFleetViews(), et préchargé en douceur sur temps mort → l'arrivée sur
+     Contrôle ne parse plus 160 Ko inutiles (c'était la latence ressentie). -->
+<script>
+  lucide.createIcons();
+  const data = window.FP_DATA;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  // ⚠️ Contrôle = suivi financier → montants EXACTS (2 décimales), jamais arrondis à l'euro entier
+  // (FP.euro arrondit ; on utilise FP.euroPrecis). Sinon 95,48 € s'affiche « 96 € » → chiffres faux.
+  const euro = (n) => (n == null ? '—' : (FP.euroPrecis ? FP.euroPrecis(n) : (FP.euro ? FP.euro(n) : Number(n).toFixed(2).replace('.', ',') + ' €')));
+  // Dates au format numérique JJ/MM/AAAA partout (trouvailles, détail, diagnostic, exports).
+  const dfr = (d) => d ? (FP.dateNum ? FP.dateNum(d) : (FP.date ? FP.date(d) : d)) : '';
+  // Mois « AAAA-MM » → « MM/AAAA » (pour les lignes sans date exacte, ex. Ulys mensuel).
+  const mfr = (m) => { const p = String(m || '').split('-'); return (p.length >= 2 ? p[1] + '/' + p[0] : (m || '')); };
+
+  // ===== Sous-onglets (dynamiques : Total, Ulys, prestataires PERSO, Contrôle, Cartes) =====
+  let _tab = 'controle';
+  const customPres = () => (FP.prestataires ? FP.prestataires() : []).filter(p => !p.builtin);
+  const tabNames = () => ['total', 'ulys'].concat(customPres().map(p => p.id)).concat(['controle', 'cartes']);
+  // Chargement À LA DEMANDE du module Total Fleet / Ulys (fleet-views.js, ~160 Ko). Idempotent :
+  // ne l'injecte qu'une fois ; renvoie une promesse résolue quand FP.mountTotal est prêt (ou en échec).
+  let _flPromise = null;
+  function ensureFleetViews(){
+    if (window.FP && FP.mountTotal) return Promise.resolve(true);
+    if (_flPromise) return _flPromise;
+    _flPromise = new Promise(res => {
+      try {
+        const s = document.createElement('script');
+        s.src = '../assets/js/fleet-views.js?v=20260811e';
+        s.onload = () => res(!!(window.FP && FP.mountTotal));
+        s.onerror = () => res(false);
+        document.head.appendChild(s);
+      } catch (e) { res(false); }
+    });
+    return _flPromise;
+  }
+  // Monte un onglet Total/Ulys : charge le module au besoin, monte le pane NATIF, différe le calcul
+  // lourd ; repli iframe si le module est indisponible. Garde anti-course : si l'utilisateur a changé
+  // d'onglet entre-temps, on n'écrase rien.
+  function mountFleetPane(tab, paneId, ifId, title, mountFn, renderFn, embedUrl){
+    const pane = $(paneId); if (!pane) return;
+    const iframeFallback = () => {
+      if (_tab !== tab) return;
+      pane.innerHTML = '<iframe id="' + ifId + '" title="' + title + '" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>';
+      _flLazyFrame(ifId, embedUrl);
+    };
+    ensureFleetViews().then(ok => {
+      if (_tab !== tab) return; // l'utilisateur est parti sur un autre onglet → on abandonne
+      if (ok && window.FP && FP[mountFn]) {
+        const mounted = FP[mountFn](pane);
+        if (mounted) { const _go = () => { try { if (window[renderFn]) window[renderFn](); } catch (e) {} }; (window.requestIdleCallback ? requestIdleCallback(_go, { timeout: 800 }) : setTimeout(_go, 30)); }
+        else iframeFallback();
+      } else iframeFallback();
+    });
+  }
+  // Repli iframe paresseux (identique à _lazyFrame de switchTab, mais accessible hors de sa portée).
+  function _flLazyFrame(id, url){ const f = $(id); if (!f || f.src) return; const go = () => { if (!f.src) f.src = url; }; (window.requestIdleCallback ? requestIdleCallback(go, { timeout: 1200 }) : setTimeout(go, 250)); }
+  function switchTab(name){
+    const names = tabNames(); if (names.indexOf(name) < 0) name = 'controle';
+    _tab = name;
+    if (FP.lastTab) FP.lastTab.set('controle', name); // rouvre sur ce sous-onglet la prochaine fois
+    names.forEach(k => { const pane = $('pane-' + k); if (pane) pane.classList.toggle('hidden', k !== name); });
+    names.forEach(k => { const b = $('tab-' + k); if (b) { b.classList.toggle('active', k === name); b.setAttribute('aria-selected', k === name ? 'true' : 'false'); } });
+    // Total Fleet / Ulys : NATIFS via le module partagé (fleet-views.js), chargé À LA DEMANDE
+    // (ensureFleetViews). Repli iframe si le module ne se charge pas. Le mount est DIFFÉRÉ après
+    // l'affichage de la coquille pour ne pas bloquer le clic.
+    if (name === 'total') mountFleetPane('total', 'pane-total', 'if-total', 'Total Fleet', 'mountTotal', 'renderTotalFleet', 'factures.html?embed&tab=total');
+    if (name === 'ulys')  mountFleetPane('ulys',  'pane-ulys',  'if-ulys',  'Ulys',        'mountUlys',  'renderUlys',      'factures.html?embed&tab=ulys');
+    if (name === 'cartes') renderCartes();
+    if (/^p_/.test(name)) renderPresta(name);
+    if (window.lucide) lucide.createIcons();
+  }
+  // Construit les onglets + panneaux des prestataires perso (idempotent : purge puis reconstruit).
+  function renderPrestaTabs(){
+    const bar = $('ctrl-tabbar'), host = $('presta-panes'); if (!bar || !host) return;
+    bar.querySelectorAll('[data-presta-tab]').forEach(el => el.remove());
+    host.querySelectorAll('[data-presta-pane]').forEach(el => el.remove());
+    const before = $('tab-sep') || $('tab-controle');
+    customPres().forEach(p => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.id = 'tab-' + p.id; b.className = 'ctrl-tab'; b.setAttribute('data-presta-tab', p.id);
+      b.innerHTML = '<i data-lucide="' + (p.type === 'peage' ? 'route' : 'fuel') + '"></i> ' + esc(p.nom) + ' <span class="sub">' + (p.type === 'peage' ? 'péages' : 'carburant') + '</span>';
+      b.addEventListener('click', () => switchTab(p.id));
+      bar.insertBefore(b, before);
+      const pane = document.createElement('div'); pane.id = 'pane-' + p.id; pane.className = 'hidden'; pane.setAttribute('data-presta-pane', p.id);
+      host.appendChild(pane);
+    });
+  }
+  // Contenu d'un panneau prestataire perso : ses factures (fournisseur qui matche) + KPIs + gestion.
+  function renderPresta(id){
+    const p = FP.prestataireById ? FP.prestataireById(id) : null; const pane = $('pane-' + id); if (!pane || !p) return;
+    const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+    const pn = norm(p.nom);
+    const facs = (window.FP_DATA.factures || []).filter(f => { const fo = norm(f.fournisseur); return pn && fo && (fo.includes(pn) || pn.includes(fo)); })
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    const ttcOf = f => Number(f.montantTtc != null ? f.montantTtc : (f.montant_ttc != null ? f.montant_ttc : (f.montantTTC || 0))) || 0;
+    const tot = facs.reduce((s, f) => s + ttcOf(f), 0);
+    let nNum = 0; try { (FP.conducteurs.list() || []).forEach(c => { if (FP.condNum && FP.condNum(c.key, p.numKey)) nNum++; }); } catch (e) {}
+    const kpi = (l, v) => '<div class="ctrl-kpi"><div class="lbl">' + l + '</div><div class="val">' + v + '</div></div>';
+    const rows = facs.map(f => {
+      const url = f.url || f.fileId || '';
+      const voir = (url && !/^IMP-/.test(url)) ? '<button type="button" data-pfac="' + esc(f.id || '') + '" class="btn btn-outline" style="padding:2px 9px;font-size:12px"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>' : '';
+      return '<tr><td>' + (f.date ? dfr(f.date) : '—') + '</td><td>' + esc(f.numeroFacture || f.numero_facture || '—') + '</td><td>' + esc(f.fournisseur || '—') + '</td><td style="text-align:right;font-weight:600">' + euro(ttcOf(f)) + '</td><td style="text-align:right">' + voir + '</td></tr>';
+    }).join('');
+    pane.innerHTML =
+      '<div class="grid gap-3 mb-5" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">'
+        + kpi('Type', p.type === 'peage' ? 'Badge péage' : 'Carte carburant') + kpi('Factures', facs.length) + kpi('Total TTC', euro(tot)) + kpi('Conducteurs rattachés', nNum) + '</div>'
+      + '<div class="card p-4 mb-4 text-sm text-slate-600" style="line-height:1.55">Prestataire <b>' + esc(p.nom) + '</b>. Ses factures apparaissent ici (fournisseur reconnu). Les n° de carte/badge se remplissent dans <b>💳 Cartes &amp; badges</b> ou sur chaque <b>fiche conducteur</b> → la conso se rattache alors automatiquement au bon conducteur.</div>'
+      + '<div class="flex flex-wrap items-center gap-2 mb-3"><a href="factures.html" class="btn btn-outline text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Importer une facture</a><span style="flex:1"></span><button type="button" data-rm-presta="' + esc(p.id) + '" class="btn btn-outline text-sm" style="color:#B91C1C;border-color:#FCA5A5"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer ce prestataire</button></div>'
+      + '<div class="card p-2" style="overflow-x:auto"><table class="ctrl-tbl"><thead><tr><th>Date</th><th>N° facture</th><th>Fournisseur</th><th style="text-align:right">Montant TTC</th><th></th></tr></thead><tbody>'
+        + (facs.length ? rows : '<tr><td colspan="5" class="text-slate-400 p-3">Aucune facture reconnue pour ce prestataire pour l\'instant. Importe une facture (le fournisseur doit contenir « ' + esc(p.nom) +' »).</td></tr>')
+        + '</tbody></table></div>';
+    if (window.lucide) lucide.createIcons();
+  }
+  $('tab-total').addEventListener('click', () => switchTab('total'));
+  $('tab-ulys').addEventListener('click', () => switchTab('ulys'));
+  $('tab-controle').addEventListener('click', () => switchTab('controle'));
+  $('tab-cartes').addEventListener('click', () => switchTab('cartes'));
+  renderPrestaTabs();
+  // Ouverture : 1) ?tab=… (lien direct) ; 2) sinon le DERNIER sous-onglet consulté ; 3) sinon « Contrôle ».
+  // ⚠️ DIFFÉRÉ (setTimeout 0) : l'ouverture d'un onglet appelle des rendus (renderCartes…) qui utilisent
+  // des variables `let`/`const` déclarées PLUS BAS dans ce script. Les appeler pendant l'exécution
+  // synchrone = temporal dead zone = ReferenceError = page bloquée sur « Chargement… ». En différant,
+  // tout est déjà défini quand l'onglet s'ouvre. + repli sur « Contrôle » en cas d'erreur.
+  { const t = new URLSearchParams(location.search).get('tab');
+    const last = FP.lastTab ? FP.lastTab.get('controle', 'controle') : 'controle';
+    const _target = tabNames().includes(t) ? t : (tabNames().includes(last) ? last : 'controle');
+    setTimeout(function(){ try { switchTab(_target); } catch (e) { console.error('[controle init]', e); try { switchTab('controle'); } catch (_) {} } }, 0); }
+
+  // Clics dans les panneaux prestataire : ouvrir une facture / supprimer le prestataire.
+  $('presta-panes').addEventListener('click', async (e) => {
+    const rm = e.target.closest('[data-rm-presta]');
+    if (rm) {
+      const id = rm.getAttribute('data-rm-presta'); const p = FP.prestataireById(id);
+      if (!confirm('Supprimer le prestataire « ' + (p ? p.nom : id) + ' » ?\n\nSes factures et les n° déjà saisis ne sont PAS effacés — seul le sous-onglet et la colonne disparaissent.')) return;
+      FP.removePrestataire(id); renderPrestaTabs(); renderCartes(); switchTab('cartes');
+      if (FP.toast) FP.toast('Prestataire supprimé');
+      return;
+    }
+    const pf = e.target.closest('[data-pfac]');
+    if (pf) {
+      e.preventDefault();
+      const f = (window.FP_DATA.factures || []).find(x => String(x.id || '') === pf.getAttribute('data-pfac'));
+      if (!f) return;
+      if (FP.openPdf) FP.openPdf(f.url || f.fileId || '', 'Aucun PDF stocké');
+    }
+  });
+
+  // ➕ Créer un prestataire (nom + type) → crée le sous-onglet + la colonne + la zone fiche conducteur.
+  $('cb-add-presta').addEventListener('click', () => {
+    const nom = (prompt('Nom du nouveau prestataire (ex. Shell, DKV, Eurotoll, AS24)…') || '').trim();
+    if (!nom) return;
+    let type = (prompt('Type ? Tape « carburant » (carte essence) ou « peage » (badge télépéage) :', 'carburant') || '').trim().toLowerCase();
+    type = /peage|péage|badge|autoroute|toll/.test(type) ? 'peage' : 'carburant';
+    const rec = FP.addPrestataire(nom, type); if (!rec) { if (FP.toast) FP.toast('Nom invalide'); return; }
+    renderPrestaTabs(); renderCartes(); switchTab(rec.id);
+    alert('✅ Prestataire « ' + rec.nom + ' » créé.\n\n• Un sous-onglet vient d\'apparaître ici (Contrôle).\n• Une colonne « ' + (type === 'peage' ? 'Badge ' : 'Carte ') + rec.nom + ' » est ajoutée dans « Cartes & badges ».\n• Une zone à remplir apparaît aussi sur CHAQUE fiche conducteur.\n\nRenseigne le n° de carte/badge de chaque conducteur pour que ses consos se rattachent automatiquement.');
+  });
+  // La vue intégrée (Total Fleet / Ulys) nous envoie sa hauteur → on adapte l'iframe (aucun scroll imbriqué).
+  window.addEventListener('message', (e) => {
+    const h = e.data && e.data.fpEmbedHeight; if (!h || h < 300) return;
+    [$('if-total'), $('if-ulys')].forEach(ifr => { if (ifr && ifr.contentWindow === e.source) ifr.style.height = (h + 24) + 'px'; });
+  });
+
+  // ===== Données =====
+  let _tx = [], _ulys = [], _findings = [], _loaded = false;
+  // Cache local du détail conso (par société) → 1er affichage INSTANTANÉ (évite d'attendre le gros
+  // total_conso_tx à chaque ouverture de Contrôle). Rafraîchi en arrière-plan à chaque chargement.
+  const _ctrlCK = () => { try { return 'fp_ctrl_conso_' + ((FP.activeSociete && FP.activeSociete()) || 'PXP'); } catch (e) { return 'fp_ctrl_conso_PXP'; } };
+  function _seedCtrlCache(){ try { const c = JSON.parse(localStorage.getItem(_ctrlCK()) || 'null'); if (c && Array.isArray(c.tx)) { _tx = c.tx; _ulys = Array.isArray(c.ulys) ? c.ulys : []; return true; } } catch (e) {} return false; }
+  function _writeCtrlCache(){ try {
+    // On ne cache QUE les champs utilisés par buildFindings/consoPendantConge/consoApresDepart →
+    // cache léger qui tient dans le quota localStorage (sinon écriture qui échoue = pas d'affichage
+    // instantané). La lecture live (rows complètes) reste la source ; le cache = 1er rendu rapide.
+    const KEEP = ['id','conducteur','carte','plaque','date_tx','mois','categorie','montant_ttc','produit','facnum','societe'];
+    const slim = a => (a || []).map(r => { const o = {}; for (const k of KEEP) if (r[k] != null) o[k] = r[k]; return o; });
+    localStorage.setItem(_ctrlCK(), JSON.stringify({ tx: slim(_tx), ulys: _ulys }));
+  } catch (e) { /* quota : tant pis, pas de cache */ } }
+  // ⚡⚡ Cache des TROUVAILLES DÉJÀ CALCULÉES (par société). Sur les gros comptes, recalculer
+  // buildFindings() (détecteurs qui balaient TOUTES les consos) prend un temps sensible SURTOUT sur
+  // mobile → gel « au clic sur l'onglet ». On mémorise le résultat : à la visite suivante, on l'affiche
+  // INSTANTANÉMENT (zéro calcul), et on recalcule EN TÂCHE DE FOND (temps mort) sans bloquer.
+  const _findCK = () => { try { return 'fp_ctrl_findings_' + ((FP.activeSociete && FP.activeSociete()) || 'PXP'); } catch (e) { return 'fp_ctrl_findings_PXP'; } };
+  // On stocke la SIGNATURE des données AVEC les trouvailles : à la visite suivante, si les données
+  // fraîches ont la MÊME signature (rien n'a bougé), on NE RECALCULE PAS du tout (pas de gel de fond) —
+  // on garde l'affichage instantané du cache. On ne recalcule que si une conso/un congé/un statut a changé.
+  function _seedFindingsCache(){ try { const c = JSON.parse(localStorage.getItem(_findCK()) || 'null'); if (c && Array.isArray(c.findings)) { _findings = c.findings; _lastBuildSig = c.sig || null; return true; } } catch (e) {} return false; }
+  function _writeFindingsCache(){ try { localStorage.setItem(_findCK(), JSON.stringify({ sig: _lastBuildSig, findings: (_findings || []).slice(0, 4000) })); } catch (e) { /* quota : tant pis */ } }
+  async function loadConducteurs(){
+    try { const r = await FP.supabase.from('conducteurs').select('*'); if (r && r.data) { const soc = FP.activeSociete ? FP.activeSociete() : null; window.FP_DATA.conducteurs = (soc && soc !== '__all__') ? r.data.filter(c => !c.societe || c.societe === soc) : r.data; } } catch (e) {}
+  }
+  async function loadData(){
+    const soc = FP.activeSociete ? FP.activeSociete() : null;
+    const flt = rows => (soc && soc !== '__all__') ? (rows || []).filter(x => !x.societe || x.societe === soc) : (rows || []);
+    // ⚡ On ne charge que les ~24 DERNIERS MOIS de transactions (largement assez pour le contrôle
+    // des congés / anomalies) → divise fortement le volume à télécharger ET à analyser. Repli
+    // AUTOMATIQUE sur tout l'historique si la requête filtrée échoue (colonne absente…) → jamais de
+    // trouvailles vides par erreur. Lectures EN PARALLÈLE (total_conso_tx + ulys_conso).
+    const _d = new Date(); _d.setMonth(_d.getMonth() - 24); const cutoff = _d.toISOString().slice(0, 10);
+    // On ne demande QUE les colonnes utiles (payload ~5× plus léger que select('*')) + les 24 derniers
+    // mois. Repli en cascade si la requête échoue → jamais de trouvailles vides par erreur.
+    const COLS = 'id,conducteur,carte,plaque,date_tx,mois,categorie,montant_ttc,produit,facnum,societe';
+    let [rt, ru] = await Promise.all([
+      FP.supabase.from('total_conso_tx').select(COLS).gte('date_tx', cutoff).then(r => (r && !r.error ? r : null), () => null),
+      FP.supabase.from('ulys_conso').select('*').then(r => r, () => ({ data: [] }))
+    ]);
+    if (!rt) { rt = await FP.supabase.from('total_conso_tx').select('*').gte('date_tx', cutoff).then(r => (r && !r.error ? r : null), () => null); }
+    if (!rt) { rt = await FP.supabase.from('total_conso_tx').select('*').then(r => r, () => ({ data: [] })); }
+    _tx = flt(rt && rt.data); _ulys = flt(ru && ru.data);
+    _loaded = true;
+    _writeCtrlCache();
+  }
+
+  // Statut par trouvaille (synchronisé) : settings.controleStatuts[fid] ∈ a-verifier|justifie|fraude|classe.
+  // Compat : une anomalie archivée dans « Points à vérifier » (tfAnomOk) compte comme « classé ».
+  function statutMap(){ try { return FP.settings.get().controleStatuts || {}; } catch (e) { return {}; } }
+  function tfOk(){ try { return FP.settings.get().tfAnomOk || {}; } catch (e) { return {}; } }
+  // def = statut par défaut CALCULÉ de la trouvaille (ex. une anomalie carte déjà archivée dans
+  // « Points à vérifier » a pour défaut « classe »). On ne supprime la clé QUE si le choix retombe
+  // sur ce défaut — sinon un « À vérifier » explicite serait écrasé au prochain rebuild (régression).
+  function setStatut(fid, st, def){ const s = FP.settings.get(); const m = s.controleStatuts || {}; if (st && st !== (def || 'a-verifier')) m[fid] = st; else delete m[fid]; s.controleStatuts = m; FP.settings.save(s); }
+
+  const ST_LABEL = { 'a-verifier':'À vérifier', 'justifie':'Justifié', 'fraude':'Fraude', 'classe':'Classé' };
+
+  // Construit la liste unifiée des trouvailles (congés + anomalies carte), structurée.
+  function buildFindings(){
+    const sm = statutMap(), ok = tfOk();
+    const presBadge = FP.prestataireBadge ? FP.prestataireBadge() : 'Ulys';
+    const catLbl = (cat, carte) => { if (String(cat||'').toLowerCase()==='peage' && /^ULYS/i.test(String(carte||''))) return 'péage ' + presBadge; return FP.consoCatLabel ? FP.consoCatLabel(cat) : (cat||'achat'); };
+    const out = [];
+    // Identité canonique du conducteur (FUSIONNE « ROMUALD » et « Romuald LAMARQUE-BRUNET » → 1 personne).
+    // Clé de fusion = PRÉNOM normalisé (insensible casse/accents) → « ROMUALD », « Romuald LAMARQUE-BRUNET »
+    // et « Romuald » = UNE seule personne. Nom affiché = le nom complet enregistré (ou le plus long vu).
+    // Nom AFFICHÉ = toujours le NOM COMPLET enregistré (Prénom NOM), jamais juste un prénom, dès
+    // qu'un conducteur correspond. On résout par clé (fiable, ex. congé) puis par nom, puis par
+    // prénom (si le relevé ne porte que le prénom → on retrouve le nom complet du conducteur).
+    // Inclut les conducteurs MASQUÉS (FP.conducteursTous) — sinon un « Eugénie » masqué ne serait pas
+    // rapproché et s'afficherait en prénom brut du relevé (incohérent avec conducteurNomUnifie).
+    const cndList = (FP.conducteursTous ? FP.conducteursTous() : ((FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : []));
+    const cndByKey = {}; cndList.forEach(c => { cndByKey[c.key] = c; });
+    const dispName = (c) => (c && FP.conducteurs && FP.conducteurs.displayName) ? FP.conducteurs.displayName(c) : '';
+    // ⚡ PERF : index prénom→conducteur calculé UNE fois (au lieu d'un cndList.find() par trouvaille,
+    // soit O(trouvailles × conducteurs)) + mémo de canon() par (clé|nom) — sur les gros comptes,
+    // buildFindings passait la majorité de son temps ici. Résultat identique, coût effondré.
+    const _npIndex = {};
+    cndList.forEach(c => { const np = FP.normPrenom ? FP.normPrenom(dispName(c)) : ''; if (np && !(np in _npIndex)) _npIndex[np] = c; });
+    const _canonMemo = new Map();
+    const canon = (name, key) => {
+      const mk = (key || '') + '\u0000' + (name || '');
+      const hit = _canonMemo.get(mk); if (hit) return hit;
+      const np = FP.normPrenom ? FP.normPrenom(name) : String(name || '').trim().toLowerCase().split(/\s+/)[0];
+      let c = (key && cndByKey[key]) || null;
+      if (!c) { try { c = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(name) : null; } catch (e) {} }
+      if (!c && np) { c = _npIndex[np] || null; }
+      const n = c ? dispName(c) : (name || '');
+      const k = (c ? (FP.normPrenom(dispName(c)) || np) : np) || String(name || '').toLowerCase();
+      const res = { k, n }; _canonMemo.set(mk, res); return res;
+    };
+    // 1) Conso DATÉE pendant un congé (toutes catégories)
+    (FP.consoPendantConge ? FP.consoPendantConge(_tx) : []).forEach(a => {
+      const cg = a.conge || {}; const cn = canon(a.conducteur, a.key);
+      const fid = 'cg|' + (a.key||'') + '|' + a.date + '|' + (a.categorie||'') + '|' + (a.montant||'');
+      out.push({ fid, genre:'congé', conducteur:cn.n, gkey:cn.k, categorie:a.categorie, type:catLbl(a.categorie,a.carte),
+        date:a.date, montant:a.montant, facnum:a.facnum||'', _plaque:a.plaque||'', detail:'congé : ' + dfr(cg.debut) + ' au ' + dfr(cg.fin),
+        statut: sm[fid] || 'a-verifier' });
+    });
+    // 2) ⛔ ANCIEN repli « Ulys mensuel pendant congé » SUPPRIMÉ (source de FAUSSES accusations).
+    //    Il prenait le TOTAL DU MOIS dès qu'un congé chevauchait le mois — même si les consos étaient
+    //    HORS des dates de congé (ex. un conducteur en congé fin avril, mais ses péages d'avril sont hors congé).
+    //    Désormais on NE signale une conso « pendant congé » QUE si la DATE EXACTE le prouve (section 1,
+    //    via le détail daté total_conso_tx). Si le détail daté d'un mois manque, on préfère ne RIEN
+    //    affirmer plutôt qu'accuser à tort : reconstruis le détail (Total Fleet) pour obtenir les dates.
+    // 3) Anomalies carte (repas élevés, hors carburant, pleins multiples, diesel…)
+    const txCard = _tx.filter(t => !/^ULYS/i.test(String(t.carte||'')));
+    (FP.totalFleetAnomaliesTx ? FP.totalFleetAnomaliesTx(txCard) : []).forEach(a => {
+      const fid = 'ca|' + (a.key||''); const cn = canon(a.conducteur||'—');
+      const def = (FP.tfAnomArchivee && FP.tfAnomArchivee(a, ok)) ? 'classe' : 'a-verifier';
+      const st = sm[fid] || def;
+      // « Conso » = le VRAI libellé lu sur le relevé (ex. « Bouteille Gaz »), pas un générique.
+      const prod = a.produit || '';
+      // Détail CHIFFRÉ : chaque dépense de la journée avec son montant exact (repas, pleins, gazole)
+      // → on voit où est le dépassement et on tranche « justifié / pas » plus facilement.
+      const brk = (Array.isArray(a.items) && a.items.length)
+        ? a.items.map(i => (i.d ? dfr(i.d) + ' ' : '') + (i.p || '') + ' ' + euro(i.m)).join(' · ')
+        : '';
+      const isDiesel = String(a.key || '').indexOf('diesel|') === 0;
+      let type, detail;
+      if (a.categorie === 'repas') { type = 'Repas / boissons'; detail = (brk ? brk + ' — ' : '') + 'total ' + euro(a.montant) + ' sur la journée'; }
+      else if (a.categorie === 'autre') { type = prod || 'Achat'; detail = 'payé avec la carte carburant — à vérifier'; }
+      else if (isDiesel) { type = 'Gazole (diesel)'; detail = (brk ? brk + ' — ' : '') + 'total ' + euro(a.montant) + ' de gazole (flotte à l\'essence)'; }
+      else if (/pleins/.test(a.motif || '')) { type = 'Carburant (pleins multiples)'; detail = (brk ? brk + ' — ' : '') + a.motif; }
+      else { type = prod || catLbl(a.categorie); detail = a.motif || a.txt || 'anomalie carte'; }
+      out.push({ fid, genre:'carte', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre', type,
+        date:a.date||'', mois:a.mois || (a.date ? String(a.date).slice(0,7) : ''),
+        montant:a.montant, facnum:a.facnum||'', detail, statut: st, _def: def });
+    });
+    // 4) Conso APRÈS le départ du conducteur (carte/badge encore active pour un salarié parti).
+    (FP.consoApresDepart ? FP.consoApresDepart(_tx) : []).forEach(a => {
+      const cn = canon(a.conducteur, a.key);
+      const fid = 'dep|' + (a.key||'') + '|' + a.date + '|' + (a.categorie||'') + '|' + (a.montant||'');
+      out.push({ fid, genre:'depart', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre',
+        type: catLbl(a.categorie, a.carte), date:a.date, mois:(a.date?String(a.date).slice(0,7):''),
+        montant:a.montant, facnum:a.facnum||'', _plaque:a.plaque||'',
+        detail:'conso le ' + dfr(a.date) + ' alors que le conducteur a quitté ce véhicule le ' + dfr(a.finAffect),
+        statut: sm[fid] || 'a-verifier' });
+    });
+    // Relie CHAQUE trouvaille à sa/ses VOITURE(S) — même source que les fiches véhicule :
+    // plaque lue sur la conso si présente, sinon le(s) véhicule(s) dont ce conducteur est le chauffeur.
+    const vehsOf = (gkey) => { const set = []; (data.vehicules||[]).forEach(v => { if (v.chauffeur && v.chauffeur !== '—' && FP.normPrenom && FP.normPrenom(v.chauffeur) === gkey) { const im = v.immat; if (im && set.indexOf(im) < 0) set.push(im); } }); return set; };
+    out.forEach(f => {
+      let im = '';
+      if (f._plaque) { const v = (data.vehicules||[]).find(x => FP.normImmat(x.immat) === FP.normImmat(f._plaque)); im = v ? v.immat : f._plaque; }
+      if (!im) { const list = vehsOf(f.gkey); im = list.join(', '); }
+      f.immat = im || '';
+    });
+    return out;
+  }
+
+  // ===== Filtres =====
+  // Par défaut on ouvre sur les anomalies « À vérifier » (les éléments à traiter), pas « Tous ».
+  const state = { search:'', cond:'all', type:'all', statut:'a-verifier', mois:'all', from:'', to:'', grouped:true, expanded:new Set() };
+  // ⚡ PERF : le rendu ne peint PAS des milliers de lignes d'un coup (c'était un gel de plusieurs
+  // secondes sur les gros comptes). Vue GROUPÉE = les lignes d'un conducteur ne sont construites que
+  // quand on DÉPLIE son groupe (les groupes fermés restent vides). Vue LISTE = plafonnée à FLAT_CAP
+  // avec un vrai bouton « Voir tout / Voir moins ».
+  let _renderGroups = [];      // groupes calculés au dernier rendu (pour remplir un groupe à l'ouverture)
+  let _flatShowAll = false;    // vue liste : l'utilisateur a-t-il demandé « Voir tout » ?
+  const FLAT_CAP = 250;        // nb max de lignes peintes d'emblée en vue liste
+  function applyFilters(list){
+    const q = state.search.trim().toLowerCase();
+    return list.filter(f => {
+      if (state.cond !== 'all' && (f.gkey || f.conducteur) !== state.cond) return false; // conducteur choisi
+      if (q && !(String(f.conducteur||'').toLowerCase().includes(q))) return false;
+      if (state.type !== 'all') { const c = String(f.categorie||'').toLowerCase(); if (state.type==='repas' ? !(c==='repas'||c==='boutique') : c !== state.type) return false; }
+      if (state.statut !== 'all' && f.statut !== state.statut) return false;
+      const m = f.mois || String(f.date||'').slice(0,7);
+      if (state.from || state.to) { const fm = state.from?state.from.slice(0,7):null, tm = state.to?state.to.slice(0,7):null; if (fm && m < fm) return false; if (tm && m > tm) return false; }
+      else if (state.mois !== 'all' && m !== state.mois) return false;
+      return true;
+    });
+  }
+
+  // 🔬 Diagnostic par conducteur ayant des congés : dates de congé, conso datées rattachées, et
+  // combien tombent DANS un congé — pour voir précisément pourquoi une conso remonte (ou pas).
+  function congeDiag(){
+    const all = (FP.getAllConges && FP.getAllConges()) || {};
+    const keys = Object.keys(all); if (!keys.length) return '';
+    const byKey = {};
+    (_tx || []).forEach(t => {
+      const dtx = t.dateTx || t.date_tx; if (!dtx) return;
+      const cands = [];
+      try { const k = FP.condKeyDeConso ? FP.condKeyDeConso(t) : null; if (k) cands.push(k); } catch (e) {}
+      try { const c = FP.conducteurs.find(t.conducteur); if (c) cands.push(c.key); } catch (e) {}
+      const np = FP.normPrenom ? FP.normPrenom(t.conducteur) : null;
+      if (np) { cands.push(np); Object.keys(all).forEach(k => { if (String(k).split(/[-\s]/)[0] === np && cands.indexOf(k) < 0) cands.push(k); }); }
+      const kk = cands.find(x => x && all[x]) || cands[0]; if (!kk) return;
+      (byKey[kk] = byKey[kk] || []).push(t);
+    });
+    const rows = keys.map(key => {
+      const c = FP.conducteurs.list().find(x => x.key === key);
+      const nom = c ? FP.conducteurs.displayName(c) : key;
+      const cg = all[key].map(x => dfr(x.debut) + ' → ' + dfr(x.fin)).join(', ');
+      const txs = byKey[key] || [];
+      const inC = txs.filter(t => FP.congeCouvrant(key, t.dateTx || t.date_tx));
+      // Les dépenses PENDANT un congé d'abord (les seules qui comptent), puis les autres, par date.
+      const sample = txs.slice().sort((a,b)=>{
+        const ia = FP.congeCouvrant(key, a.dateTx||a.date_tx)?1:0, ib = FP.congeCouvrant(key, b.dateTx||b.date_tx)?1:0;
+        if (ia!==ib) return ib-ia;
+        return String(b.date_tx||b.dateTx||'').localeCompare(String(a.date_tx||a.dateTx||''));
+      }).slice(0, 25);
+      return { nom, key, cg, nTx: txs.length, nIn: inC.length, sample };
+    }).sort((a,b)=>b.nIn-a.nIn);
+    return '<details class="card p-3 mb-4" style="font-size:.85rem"><summary style="cursor:pointer;font-weight:700">🔬 Vérification des congés — quelles dépenses tombent pendant un congé (' + rows.length + ' conducteur(s))</summary>'
+      + '<div class="mt-2 mb-3 text-xs text-slate-500" style="line-height:1.5;background:#F8FAFC;border:1px solid var(--fp-border);border-radius:.5rem;padding:.55rem .7rem">'
+        + 'ℹ️ <b>Outil de contrôle</b> (rien à cocher ici). Pour chaque conducteur qui a des congés, on liste ses dépenses datées : celles <b style="color:#B91C1C">⛔ en rouge tombent pendant un congé</b> (ce sont elles qui remontent dans les trouvailles ci-dessus) ; les <b class="text-slate-400">grises « hors congé »</b> sont normales, affichées juste pour vérifier. Si tu attends une anomalie qui n\'apparaît pas, c\'est souvent que les <b>dates de congé</b> ne couvrent pas ce jour, ou que le <b>détail du relevé</b> n\'est pas importé.'
+      + '</div>'
+      + '<div style="line-height:1.55">' + rows.map(r =>
+          '<div style="border-top:1px solid #EEF2F7;padding:.45rem 0"><b>' + esc(r.nom) + '</b><br>'
+          + 'Congés : <b>' + (r.cg || '—') + '</b><br>'
+          + 'Dépenses datées : <b>' + r.nTx + '</b> · dont <b style="color:' + (r.nIn ? '#B91C1C' : '#16a34a') + '">' + r.nIn + '</b> pendant un congé'
+          + (!r.nTx ? ' <span class="text-amber-600">→ aucune dépense datée en base pour lui : clique « Reconstruire le détail » (onglet Total Fleet) ou réimporte le relevé détaillé.</span>' : (r.nTx && !r.nIn ? ' <span class="text-emerald-600">→ rien pendant ses congés 👍</span>' : ''))
+          + (r.sample.length ? '<div class="text-xs mt-1" style="max-height:150px;overflow:auto">' + r.sample.map(t => { const d = t.dateTx || t.date_tx; const mt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc); const inc = FP.congeCouvrant(r.key, d); return '<div style="padding:1px 0;color:' + (inc ? '#B91C1C' : '#94A3B8') + '">' + (inc ? '<b>⛔ pendant congé</b> · ' : 'hors congé · ') + dfr(d) + ' · ' + esc(t.produit || t.categorie || '') + ' · ' + euro(mt) + '</div>'; }).join('') + '</div>' : '')
+          + '</div>'
+        ).join('') + '</div></details>';
+  }
+
+  function stBadge(st){ return `<span class="st-badge st-${st}">${ST_LABEL[st]||st}</span>`; }
+  function stSelect(f){
+    return `<select class="ctrl-sel" data-statut="${esc(f.fid)}">` +
+      ['a-verifier','justifie','fraude','classe'].map(v => `<option value="${v}"${f.statut===v?' selected':''}>${ST_LABEL[v]}</option>`).join('') + '</select>';
+  }
+  function voirBtn(f){ return f.facnum ? `<button type="button" data-fac="${esc(f.facnum)}" class="btn btn-outline" style="padding:2px 9px;font-size:12px"><i data-lucide="eye" class="w-3.5 h-3.5"></i></button>` : ''; }
+  function condCell(f){ return `<a href="conducteurs.html" title="Ouvrir les conducteurs" style="color:var(--fp-primary);text-decoration:none;font-weight:600">${esc(f.conducteur)}</a>`; }
+  function vehCell(f){ if (!f.immat) return '<span class="text-slate-400">—</span>'; return f.immat.split(',').map(s=>s.trim()).filter(Boolean).map(im => `<a href="vehicules.html?immat=${encodeURIComponent(im)}" title="Ouvrir la fiche véhicule" style="display:inline-block;background:#EEF2FF;color:#3730A3;border-radius:6px;padding:1px 7px;font-size:.78rem;font-weight:700;text-decoration:none;white-space:nowrap;margin:1px 2px 1px 0">${esc(im)}</a>`).join(''); }
+
+  // Petit MOT qui explique POURQUOI la ligne est signalée (comme le badge « congé »). Chaque
+  // trouvaille en a un : congé, dépassement (repas), gazole (flotte essence), pleins multiples,
+  // achat inhabituel (hors carburant)… Badges à fond clair + texte foncé → lisibles en clair ET sombre.
+  function raisonBadge(f){
+    if (f.genre === 'congé') return ' <span class="st-badge" style="background:#EDE9FE;color:#5B21B6">congé</span>';
+    if (f.genre === 'depart') return ' <span class="st-badge" style="background:#FEE2E2;color:#991B1B">après départ</span>';
+    const cat = String(f.categorie || '').toLowerCase();
+    const t = String(f.type || '').toLowerCase();
+    let label = 'inhabituel', bg = '#FEF3C7', col = '#92400E';
+    if (/gazole|diesel/.test(t)) { label = 'gazole'; bg = '#FEE2E2'; col = '#991B1B'; }
+    else if (/pleins?\s*multiples|plusieurs pleins/.test(t)) { label = 'pleins multiples'; bg = '#FEE2E2'; col = '#991B1B'; }
+    else if (cat === 'repas') { label = 'dépassement'; bg = '#FFEDD5'; col = '#9A3412'; }
+    else if (cat === 'autre' || cat === 'boutique') { label = 'achat inhabituel'; bg = '#FEF3C7'; col = '#92400E'; }
+    return ` <span class="st-badge" style="background:${bg};color:${col}">${label}</span>`;
+  }
+  function rowHTML(f){
+    return `<tr>
+      <td>${condCell(f)}</td>
+      <td>${vehCell(f)}</td>
+      <td>${esc(f.type)}${raisonBadge(f)}</td>
+      <td style="text-align:right;font-weight:600">${euro(f.montant)}</td>
+      <td>${f.date?dfr(f.date):(f.mois?mfr(f.mois):'—')}</td>
+      <td class="text-slate-500" style="font-size:.8rem">${esc(f.detail)}</td>
+      <td>${f.facnum?esc(f.facnum):'—'}</td>
+      <td>${stSelect(f)}</td>
+      <td style="text-align:right">${voirBtn(f)}</td>
+    </tr>`;
+  }
+  const COLS = '<thead><tr><th>Conducteur</th><th>Véhicule</th><th>Conso</th><th style="text-align:right">Montant</th><th>Date</th><th>Détail</th><th>N° facture</th><th>Statut</th><th></th></tr></thead>';
+
+  function render(){
+    const box = $('ctrl-body');
+    if (!_loaded) { box.innerHTML = '<p class="text-sm text-slate-400">Chargement…</p>'; return; }
+    const all = applyFilters(_findings);
+    // KPIs (sur le filtre courant)
+    const tot = all.reduce((s,f)=>s+(Number(f.montant)||0),0);
+    const conducteurs = new Set(all.map(f=>f.gkey||f.conducteur)).size;
+    const fraude = all.filter(f=>f.statut==='fraude').reduce((s,f)=>s+(Number(f.montant)||0),0);
+    const aVerif = all.filter(f=>f.statut==='a-verifier').length;
+    $('ctrl-kpis').innerHTML =
+      `<div class="ctrl-kpi"><div class="lbl">Trouvailles</div><div class="val">${all.length}</div></div>`+
+      `<div class="ctrl-kpi"><div class="lbl">Montant total</div><div class="val">${euro(tot)}</div></div>`+
+      `<div class="ctrl-kpi"><div class="lbl">Conducteurs</div><div class="val">${conducteurs}</div></div>`+
+      `<div class="ctrl-kpi k-warn"><div class="lbl">À vérifier</div><div class="val" style="color:#92400E">${aVerif}</div></div>`+
+      `<div class="ctrl-kpi k-danger"><div class="lbl">Fraude confirmée</div><div class="val" style="color:#991B1B">${euro(fraude)}</div></div>`;
+    $('ctrl-count').textContent = _findings.length ? '· ' + _findings.length : '';
+
+    // Diagnostic : explique POURQUOI il y a peu/pas de trouvailles (au lieu d'une page vide muette).
+    let diag = '';
+    const nConges = Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length;
+    if (!_tx.length && !_ulys.length) {
+      diag = '<div class="card p-3 mb-4" style="border-left:4px solid var(--fp-warn);background:#FFFBEB;font-size:.86rem;line-height:1.55">⚠️ <b>Aucune conso datée en base.</b> La détection « conso pendant un congé » au <b>jour</b> près a besoin du <b>détail transaction par transaction</b> (colonne date des consommations). Ouvre l\'onglet <b>⛽ Total Fleet</b> ci-dessus → bouton <b>« Reconstruire le détail »</b> (ou réimporte le relevé <b>détaillé</b>). ' + (nConges ? '' : 'Et saisis les <b>congés</b> sur les fiches conducteurs.') + '</div>';
+    } else if (!nConges) {
+      diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">ℹ️ <b>' + _tx.length + '</b> conso datée(s) chargée(s), mais <b>aucun congé saisi</b> sur les fiches conducteurs. Renseigne les congés (fiche conducteur → « Congés / absences ») pour détecter les conso faites pendant un congé.</div>';
+    } else if (!_findings.length) {
+      diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">🔎 <b>' + _tx.length + '</b> conso datée(s) et <b>' + nConges + '</b> conducteur(s) avec congé analysés — aucune conso ne tombe dans une période de congé. Si tu en attends (ex. Romuald en juillet), vérifie que <b>ses dates de congé</b> couvrent bien ces jours et que le relevé <b>détaillé</b> de ce mois est importé.</div>';
+    }
+    diag += congeDiag(); // détail conducteur par conducteur (toujours dispo tant qu'il y a des congés)
+
+    if (!all.length) { box.innerHTML = diag + '<div class="card p-6 text-center text-slate-500">Aucune trouvaille pour ce filtre. 👍</div>'; if(window.lucide)lucide.createIcons(); return; }
+
+    if (state.grouped){
+      const byC = {}; all.forEach(f => { const gk = f.gkey || f.conducteur; (byC[gk] = byC[gk] || []).push(f); });
+      const groups = Object.keys(byC).map(gk => { const rows = byC[gk]; const n = rows.map(r=>r.conducteur).sort((a,b)=>String(b).length-String(a).length)[0]; return { gk, n, rows, tot:rows.reduce((s,f)=>s+(Number(f.montant)||0),0) }; }).sort((a,b)=>b.tot-a.tot);
+      _renderGroups = groups; // mémorisé pour remplir un groupe À L'OUVERTURE (voir handler data-grp)
+      // On garde en mémoire les groupes DÉPLIÉS (par conducteur, clé stable) pour que changer un
+      // statut — qui relance render() — ne REFERME pas tout ce qu'on avait ouvert.
+      // ⚡ PERF : un groupe FERMÉ ne construit PAS ses lignes (body vide, `data-filled="0"`). Elles
+      // sont peintes à la 1re ouverture (handler du clic sur l'en-tête) → plus de gel au chargement.
+      box.innerHTML = diag + groups.map((g,i)=>{ const open = state.expanded.has(g.gk);
+        const bodyInner = open ? `<table class="ctrl-tbl">${COLS}<tbody>${g.rows.map(rowHTML).join('')}</tbody></table>` : '';
+        return `
+        <div class="mb-2">
+          <div class="grp-head" data-grp="${i}" data-grpkey="${esc(g.gk)}">
+            <div class="font-semibold text-slate-900">${esc(g.n)} <span class="text-xs text-slate-500">· ${g.rows.length} trouvaille(s)</span></div>
+            <div class="flex items-center gap-3"><span class="font-bold" style="color:var(--fp-primary)">${euro(g.tot)}</span><i data-lucide="chevron-down" class="w-4 h-4 text-slate-400" data-chev="${i}"${open?' style="transform:rotate(180deg)"':''}></i></div>
+          </div>
+          <div class="${open?'':'hidden'}" data-grpbody="${i}" data-filled="${open?'1':'0'}" style="overflow-x:auto">${bodyInner}</div>
+        </div>`; }).join('');
+    } else {
+      // ⚡ PERF : on ne peint que les FLAT_CAP premières lignes ; le reste via « Voir tout » (vrai toggle).
+      const capped = _flatShowAll ? all : all.slice(0, FLAT_CAP);
+      const more = all.length - capped.length;
+      let toggle = '';
+      if (all.length > FLAT_CAP) {
+        toggle = _flatShowAll
+          ? `<div class="text-center mt-3"><button type="button" id="ctrl-flatless" class="btn btn-outline text-sm">Voir moins ↑</button></div>`
+          : `<div class="text-center mt-3"><button type="button" id="ctrl-flatmore" class="btn btn-outline text-sm">Voir tout (${more} de plus) ↓</button> <span class="text-xs text-slate-400">— ${capped.length} affichées sur ${all.length}</span></div>`;
+      }
+      box.innerHTML = diag + `<div class="card p-2" style="overflow-x:auto"><table class="ctrl-tbl">${COLS}<tbody>${capped.map(rowHTML).join('')}</tbody></table></div>` + toggle;
+      const bm = $('ctrl-flatmore'); if (bm) bm.addEventListener('click', () => { _flatShowAll = true; render(); });
+      const bl = $('ctrl-flatless'); if (bl) bl.addEventListener('click', () => { _flatShowAll = false; render(); });
+    }
+    if (window.lucide) lucide.createIcons();
+  }
+
+  // ===== Interactions =====
+  $('ctrl-cond').addEventListener('change', e => { state.cond = e.target.value; render(); });
+  $('ctrl-search').addEventListener('input', e => { state.search = e.target.value; render(); });
+  $('ctrl-type').addEventListener('change', e => { state.type = e.target.value; render(); });
+  $('ctrl-mois').addEventListener('change', e => { state.mois = e.target.value; render(); });
+  $('ctrl-from').addEventListener('change', e => { state.from = e.target.value; render(); });
+  $('ctrl-to').addEventListener('change', e => { state.to = e.target.value; render(); });
+  document.querySelectorAll('#pane-controle .st-chip').forEach(c => c.addEventListener('click', () => {
+    document.querySelectorAll('#pane-controle .st-chip').forEach(x=>x.classList.remove('active')); c.classList.add('active');
+    state.statut = c.dataset.st; render();
+  }));
+  $('ctrl-group').addEventListener('click', () => { state.grouped = !state.grouped; $('ctrl-group').querySelector('span').textContent = state.grouped ? 'Vue par conducteur' : 'Vue liste'; render(); });
+  // ↺ Réinitialiser : remet TOUS les filtres à zéro d'un clic (règle 0quinquies) puis re-render.
+  if ($('ctrl-reset')) $('ctrl-reset').addEventListener('click', () => {
+    state.search = ''; state.cond = 'all'; state.type = 'all'; state.statut = 'all'; state.mois = 'all'; state.from = ''; state.to = '';
+    const set = (id, v) => { const el = $(id); if (el) { el.value = v; el.dispatchEvent(new Event('change')); } }; // 'change' → resync FP.searchSelect
+    set('ctrl-cond', 'all'); set('ctrl-type', 'all'); set('ctrl-mois', 'all');
+    if ($('ctrl-search')) $('ctrl-search').value = '';
+    if ($('ctrl-from')) $('ctrl-from').value = ''; if ($('ctrl-to')) $('ctrl-to').value = '';
+    document.querySelectorAll('#pane-controle .st-chip').forEach(x => x.classList.toggle('active', x.dataset.st === 'all'));
+    render();
+  });
+
+  // ===== Sous-onglet « Cartes & badges » : n° carte carburant / badge péage de TOUS les conducteurs =====
+  let _cbSearch = '', _cbOnlyNum = false, _cbView = 'cards';
+  try { const v = FP.settings.get().cbView; if (v === 'table' || v === 'cards') _cbView = v; } catch (e) {}
+  function setCbView(v){ _cbView = (v === 'table') ? 'table' : 'cards'; try { const s = FP.settings.get(); s.cbView = _cbView; FP.settings.save(s); } catch (e) {} renderCartes(); }
+  // ⚠️ DÉFINIS AVANT renderCartes : la mémoire du dernier onglet peut appeler renderCartes DÈS l'init
+  // (avant la fin du script) → si ces const étaient déclarées plus bas, TDZ = ReferenceError = page
+  // bloquée sur « Chargement… ». (Bug corrigé : c'était la cause du blocage de Cartes & badges.)
+  const _cbInpBase = 'width:150px;text-align:right;border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
+  const _cbInpLocked = _cbInpBase + ';background:#F1F5F9;color:#475569;cursor:pointer';
+  // Un conducteur a-t-il AU MOINS un n° (carte ou badge) attribué chez un prestataire quelconque ?
+  function _cbHasNum(c, pres){ return pres.some(p => String((FP.condNum ? FP.condNum(c.key, p.numKey) : '') || '').trim()); }
+  function renderCartes(){
+    const box = $('cb-body'); if (!box) return;
+    // Une COLONNE par prestataire (Total, Ulys + tout prestataire perso créé dans Contrôle).
+    const pres = (FP.prestataires ? FP.prestataires() : []);
+    let conds = (FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [];
+    const q = _cbSearch.trim().toLowerCase();
+    if (q) conds = conds.filter(c => FP.conducteurs.displayName(c).toLowerCase().includes(q));
+    if (_cbOnlyNum) conds = conds.filter(c => _cbHasNum(c, pres)); // n'afficher que ceux avec un n° attribué
+    conds = conds.slice().sort((a, b) => FP.conducteurs.displayName(a).localeCompare(FP.conducteurs.displayName(b)));
+    $('cb-count').textContent = conds.length + ' conducteur(s)' + (_cbOnlyNum ? ' avec n°' : '');
+    if (!conds.length) { box.innerHTML = '<p class="text-sm text-slate-400 p-3">Aucun conducteur.</p>'; return; }
+    // Champs VERROUILLÉS par défaut (anti-modif accidentelle) : ✏️ / double-clic pour éditer,
+    // re-verrouillage automatique dès qu'on quitte le champ.
+    // ⚡ PERF : véhicules par conducteur calculés en UN SEUL passage (au lieu d'un filter()+find() PAR
+    // conducteur = quadratique, ~2500 find() → gel à l'ouverture de « Cartes & badges »). Index O(1).
+    const _immatsByKey = {};
+    (data.vehicules || []).forEach(v => { try { const cc = v.chauffeur && v.chauffeur !== '—' ? FP.conducteurs.find(v.chauffeur) : null; if (cc && cc.key && v.immat) (_immatsByKey[cc.key] = _immatsByKey[cc.key] || []).push(v.immat); } catch (e) {} });
+    const vehImmats = (c) => _immatsByKey[c.key] || [];
+    const vehLink = (im) => '<a href="vehicules.html?immat=' + encodeURIComponent(im) + '" style="display:inline-block;background:#EEF2FF;color:#3730A3;border-radius:6px;padding:1px 7px;font-size:.78rem;font-weight:700;text-decoration:none;white-space:nowrap;margin:1px 2px 1px 0">' + esc(im) + '</a>';
+    const inp = (c, p) => { const num = (FP.condNum ? FP.condNum(c.key, p.numKey) : '') || ''; return '<input class="cb-inp" data-cb-key="' + esc(c.key) + '" data-cb-field="' + esc(p.numKey) + '" value="' + esc(num) + '" placeholder="—" readonly title="Verrouillé — cliquez ✏️ pour modifier" style="' + _cbInpLocked + '">'; };
+    if (_cbView === 'table') {
+      const th = pres.map(p => '<th style="text-align:right">' + (p.type === 'peage' ? 'Badge ' : 'Carte ') + esc(p.nom) + '</th>').join('');
+      box.innerHTML = '<table class="ctrl-tbl"><thead><tr><th>Conducteur</th><th>Véhicule(s)</th>' + th + '</tr></thead><tbody>'
+        + conds.map(c => {
+            const vs = vehImmats(c);
+            const tds = pres.map(p => '<td style="text-align:right"><span style="display:inline-flex;align-items:center;gap:5px">' + inp(c, p)
+              + '<button type="button" class="cb-edit" title="Modifier" style="border:none;background:none;cursor:pointer;padding:0 2px;font-size:.95rem;line-height:1">✏️</button></span></td>').join('');
+            return '<tr><td><b>' + esc(FP.conducteurs.displayName(c)) + '</b></td>'
+              + '<td>' + (vs.length ? vs.map(vehLink).join('') : '<span class="text-slate-400">—</span>') + '</td>' + tds + '</tr>';
+          }).join('') + '</tbody></table>';
+    } else {
+      // Vue CARTES (par défaut) : une carte par conducteur ; le ✏️ déverrouille tous ses n° d'un coup.
+      box.innerHTML = '<div class="cb-grid">' + conds.map(c => {
+          const vs = vehImmats(c);
+          const lines = pres.map(p => '<div class="cb-line"><span class="cb-line-lbl">' + (p.type === 'peage' ? '🛣️ Badge ' : '⛽ Carte ') + esc(p.nom) + '</span>' + inp(c, p) + '</div>').join('');
+          return '<div class="cb-card"><div class="cb-card-top"><div class="cb-card-id"><div class="cb-name">' + esc(FP.conducteurs.displayName(c)) + '</div>'
+            + '<div class="cb-vehs">' + (vs.length ? vs.map(vehLink).join('') : '<span class="text-slate-400 text-xs">— aucun véhicule</span>') + '</div></div>'
+            + '<button type="button" class="cb-gear" title="Modifier les numéros de ce conducteur">✏️</button></div>'
+            + '<div class="cb-lines">' + lines + '</div></div>';
+        }).join('') + '</div>';
+    }
+    document.querySelectorAll('#cb-view button').forEach(b => b.classList.toggle('active', b.dataset.cbv === _cbView));
+    if (window.lucide) lucide.createIcons();
+  }
+  // ⚠️ MODE SOMBRE : la règle body.fp-dark input force le fond en foncé avec !important → il faut
+  // forcer AUSSI fond + texte en !important, sinon on tape du texte noir sur fond foncé (invisible).
+  const cbUnlock = (el) => { if (!el) return; el.readOnly = false; el.style.setProperty('background', '#fff', 'important'); el.style.setProperty('color', '#111827', 'important'); el.style.cursor = 'text'; el.style.borderColor = 'var(--fp-accent)'; el.focus(); try { el.select(); } catch (e) {} };
+  const cbLock = (el) => { if (!el) return; el.readOnly = true; el.style.background = '#F1F5F9'; el.style.color = '#475569'; el.style.cursor = 'pointer'; el.style.borderColor = 'var(--fp-border)'; };
+  $('cb-search').addEventListener('input', e => { _cbSearch = e.target.value; renderCartes(); });
+  if ($('cb-only-num')) $('cb-only-num').addEventListener('change', e => { _cbOnlyNum = e.target.checked; renderCartes(); });
+  // Bascule Cartes / Tableau (mémorisée par société).
+  if ($('cb-view')) $('cb-view').addEventListener('click', e => { const b = e.target.closest('[data-cbv]'); if (b) setCbView(b.dataset.cbv); });
+  // Déverrouiller : double-clic sur le champ, crayon ✏️ (tableau), ou ✏️ de carte (déverrouille toute la carte).
+  $('cb-body').addEventListener('dblclick', e => { const el = e.target.closest('input.cb-inp'); if (el && el.readOnly) cbUnlock(el); });
+  $('cb-body').addEventListener('click', e => {
+    const gear = e.target.closest('.cb-gear');
+    if (gear) { const card = gear.closest('.cb-card'); if (!card) return; const on = gear.classList.toggle('on'); card.querySelectorAll('input.cb-inp').forEach((el, i) => { if (on) { if (i === 0) cbUnlock(el); else { el.readOnly = false; el.style.setProperty('background', '#fff', 'important'); el.style.setProperty('color', '#111827', 'important'); el.style.cursor = 'text'; el.style.borderColor = 'var(--fp-accent)'; } } else cbLock(el); }); return; }
+    const b = e.target.closest('.cb-edit'); if (!b) return; const el = b.parentNode.querySelector('input.cb-inp'); cbUnlock(el);
+  });
+  // Re-verrouiller dès qu'on quitte le champ (après enregistrement).
+  $('cb-body').addEventListener('focusout', e => { const el = e.target.closest('input.cb-inp'); if (el && !el.readOnly) cbLock(el); });
+  $('cb-body').addEventListener('change', e => {
+    const el = e.target.closest('[data-cb-key]'); if (!el) return;
+    const key = el.getAttribute('data-cb-key'), field = el.getAttribute('data-cb-field');
+    const s = FP.settings.get(); s[field] = s[field] || {};
+    const val = (el.value || '').trim();
+    if (val) s[field][key] = val; else delete s[field][key];
+    FP.settings.save(s);
+    if (FP.toast) FP.toast('✓ Enregistré');
+  });
+
+  $('ctrl-body').addEventListener('click', async (e) => {
+    const gh = e.target.closest('[data-grp]');
+    if (gh) { const i = gh.getAttribute('data-grp'); const key = gh.getAttribute('data-grpkey'); const b = document.querySelector('[data-grpbody="'+i+'"]'); const ch = document.querySelector('[data-chev="'+i+'"]');
+      if (b){
+        b.classList.toggle('hidden'); const hidden = b.classList.contains('hidden');
+        // ⚡ PERF : 1re ouverture → on construit MAINTENANT les lignes de CE groupe (elles n'étaient pas
+        // dans le DOM). Coût borné à un seul conducteur, imperceptible.
+        if (!hidden && b.getAttribute('data-filled') === '0') {
+          const g = _renderGroups[+i];
+          if (g) { b.innerHTML = '<table class="ctrl-tbl">' + COLS + '<tbody>' + g.rows.map(rowHTML).join('') + '</tbody></table>'; b.setAttribute('data-filled', '1'); if (window.lucide) lucide.createIcons(); }
+        }
+        if(ch) ch.style.transform = hidden?'':'rotate(180deg)'; if(key){ if(hidden) state.expanded.delete(key); else state.expanded.add(key); }
+      } return; }
+    const fac = e.target.closest('[data-fac]');
+    if (fac) { e.preventDefault(); openFacture(fac.getAttribute('data-fac')); return; }
+  });
+  $('ctrl-body').addEventListener('change', (e) => {
+    const sel = e.target.closest('[data-statut]');
+    if (sel) { const fid = sel.getAttribute('data-statut'); const f = _findings.find(x=>x.fid===fid); setStatut(fid, sel.value, f && f._def); if (f) f.statut = sel.value; if (FP.toast) FP.toast('Statut : ' + (ST_LABEL[sel.value]||sel.value)); render(); _writeFindingsCache(); }
+  });
+
+  async function openFacture(facnum){
+    const up = String(facnum).toUpperCase();
+    const f = (window.FP_DATA.factures||[]).find(x => String(x.numeroFacture||'').toUpperCase()===up || String(x.id||'').toUpperCase()==='TF-'+up || String(x.id||'').toUpperCase()==='ULYS-'+up);
+    if (!f) { if (FP.toast) FP.toast('Facture ' + facnum + ' introuvable'); return; }
+    if (FP.openPdf) FP.openPdf(f.url || f.fileId || '', 'Aucun PDF stocké — réimporte le relevé');
+  }
+
+  // ===== Exports (suivent le filtre courant) =====
+  // Détail COURT pour l'export (lisible en tableur) : on retire la longue liste d'achats d'une
+  // journée (visible à l'écran) et on garde juste le résumé après « — ». Le montant exact reste
+  // dans sa colonne. → Excel/PDF restent tabulaires et clairs.
+  const exDetail = (f) => {
+    const d = String(f.detail || '');
+    const i = d.indexOf(' — ');
+    if (i > 0 && (f.categorie === 'repas' || f.categorie === 'boutique' || /pleins|gazole|diesel/i.test(d))) return d.slice(i + 3);
+    return d;
+  };
+  const XCOLS = ['Conducteur','Conso','Montant (€)','Date','Détail','N° facture','Statut'];
+  const xrow = (f) => [f.conducteur, f.type + (f.genre==='congé'?' (congé)':''), (f.montant!=null?Number(f.montant).toFixed(2).replace('.',','):''), (f.date?dfr(f.date):(f.mois?mfr(f.mois):'')), exDetail(f), f.facnum, (ST_LABEL[f.statut]||f.statut)];
+  function exportCSV(){
+    const rows = applyFilters(_findings); if (!rows.length) { if(FP.toast)FP.toast('Rien à exporter'); return; }
+    const nom = state.cond !== 'all' ? '-' + String((rows[0]&&rows[0].conducteur)||state.cond).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') : '';
+    // VRAI fichier Excel (.xlsx) : colonnes propres, encodage correct (é/€), MONTANT numérique.
+    if (FP.downloadXlsx) {
+      const headers = ['Conducteur','Conso','Montant (€)','Date','Détail','N° facture','Statut'];
+      const data = rows.map(f => [
+        f.conducteur, f.type + (f.genre==='congé'?' (congé)':''),
+        (f.montant!=null && isFinite(Number(f.montant)) ? Number(Number(f.montant).toFixed(2)) : ''),
+        (f.date?dfr(f.date):(f.mois?mfr(f.mois):'')), exDetail(f), (f.facnum||''), (ST_LABEL[f.statut]||f.statut)
+      ]);
+      FP.downloadXlsx('controle-conso'+nom, headers, data, { sheet: 'Contrôle' + (state.cond!=='all' ? ' — ' + ((rows[0]&&rows[0].conducteur)||'') : '') });
+      return;
+    }
+    // Repli CSV (si le générateur xlsx est indisponible).
+    const q = s => '"' + String(s==null?'':s).replace(/"/g,'""') + '"';
+    const lines = ['sep=;', XCOLS.map(q).join(';')].concat(rows.map(f => xrow(f).map(q).join(';')));
+    const blob = new Blob(['﻿'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob); const el = document.createElement('a'); el.href=url; el.download='controle-conso'+nom+'.csv'; document.body.appendChild(el); el.click(); el.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }
+  function exportPDF(){
+    const rows = applyFilters(_findings); if (!rows.length) { if(FP.toast)FP.toast('Rien à exporter'); return; }
+    if (!(window.jspdf && window.jspdf.jsPDF)) { if (FP.ensureJsPDF) FP.ensureJsPDF().then(exportPDF); return; }
+    const doc = new window.jspdf.jsPDF({ orientation:'landscape' });
+    const W = doc.internal.pageSize.getWidth();
+    const soc = (FP.activeSociete && FP.activeSociete()) || '';
+    const tot = rows.reduce((s,f)=>s+(Number(f.montant)||0),0);
+    // Bandeau « sauce Parc Pilot » : bloc bleu marine + liseré orange + logo texte.
+    doc.setFillColor(15,30,61); doc.rect(0,0,W,26,'F');
+    doc.setFillColor(249,115,22); doc.rect(0,26,W,1.6,'F');
+    doc.setTextColor(255,255,255); doc.setFont(undefined,'bold'); doc.setFontSize(16); doc.text('Parc', 14, 13);
+    doc.setTextColor(249,115,22); doc.text('Pilot', 27.5, 13);
+    // Titre : rappelle le conducteur choisi (export ciblé) ou « tous ».
+    const condSel = state.cond !== 'all' ? (rows[0] && rows[0].conducteur ? rows[0].conducteur : state.cond) : '';
+    doc.setTextColor(255,255,255); doc.setFont(undefined,'normal'); doc.setFontSize(11); doc.text('Contrôle des consommations' + (condSel ? ' — ' + condSel : ' — trouvailles'), 14, 21);
+    doc.setTextColor(200,210,225); doc.setFontSize(8.5);
+    doc.text((soc && soc !== '__all__' ? soc + '     ' : '') + rows.length + ' trouvaille(s)     Total : ' + euro(tot), W - 14, 13, { align:'right' });
+    const body = rows.map(f => [f.conducteur, f.type+(f.genre==='congé'?' (congé)':''), euro(f.montant), (f.date?dfr(f.date):(f.mois?mfr(f.mois):'—')), exDetail(f), f.facnum||'—', (ST_LABEL[f.statut]||f.statut)]);
+    doc.autoTable({ startY:33, head:[['Conducteur','Conso','Montant','Date','Détail','N° facture','Statut']], body,
+      styles:{ fontSize:8, cellPadding:2.5, lineColor:[226,232,240], lineWidth:.1, textColor:[30,41,59] },
+      headStyles:{ fillColor:[15,30,61], textColor:255, fontStyle:'bold' },
+      alternateRowStyles:{ fillColor:[248,250,252] },
+      columnStyles:{ 2:{ halign:'right' }, 4:{ cellWidth:78 } },
+      didParseCell:(d) => { if (d.section==='body' && d.column.index===6) { const v = d.cell.raw||''; if (v==='Fraude') { d.cell.styles.textColor=[153,27,27]; d.cell.styles.fontStyle='bold'; } else if (v==='Justifié') { d.cell.styles.textColor=[21,83,45]; } else if (v==='Classé') { d.cell.styles.textColor=[100,116,139]; } } },
+      margin:{ left:14, right:14 } });
+    const nomF = condSel ? '-' + String(condSel).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') : '';
+    doc.save('parc-pilot-controle-conso'+nomF+'.pdf');
+  }
+  $('ctrl-pdf').addEventListener('click', exportPDF);
+  $('ctrl-csv').addEventListener('click', exportCSV);
+
+  // ===== Init =====
+  // Liste déroulante des conducteurs présents dans les trouvailles (pour un export ciblé, comme les amendes).
+  let _condSearchDone = false;
+  function fillConducteurs(){
+    const map = {}; _findings.forEach(f => { const k = f.gkey || f.conducteur; if (k && !map[k]) map[k] = f.conducteur || k; });
+    const sel = $('ctrl-cond'); if (!sel) return; const cur = sel.value;
+    const opts = Object.keys(map).map(k => ({ k, n: map[k] })).sort((a,b)=>String(a.n).localeCompare(String(b.n)));
+    sel.innerHTML = '<option value="all">Tous les conducteurs</option>' + opts.map(o => `<option value="${esc(o.k)}">${esc(o.n)}</option>`).join('');
+    if (cur && (cur === 'all' || map[cur])) sel.value = cur; else { sel.value = 'all'; state.cond = 'all'; }
+    if (FP.searchSelect && !_condSearchDone) { FP.searchSelect(sel, { placeholder: 'Rechercher un conducteur…' }); _condSearchDone = true; }
+  }
+  function fillMois(){
+    const set = new Set(); _findings.forEach(f => { const m = f.mois || String(f.date||'').slice(0,7); if (m) set.add(m); });
+    const sel = $('ctrl-mois'); const cur = sel.value;
+    sel.innerHTML = '<option value="all">Tous les mois</option>' + [...set].sort().reverse().map(m => { const [y,mo]=m.split('-'); const N=['','janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.']; return `<option value="${m}">${N[+mo]||mo} ${y}</option>`; }).join('');
+    if (cur) sel.value = cur;
+  }
+  // ⚡ PERF : buildFindings() est le gros calcul (O(transactions)). Sur une visite « cache chaud », il
+  // était relancé 2-3× d'affilée (cache → réseau → fp:data-ready) alors que les données étaient
+  // IDENTIQUES → autant de gels. On calcule une signature légère des entrées ; si rien n'a changé, on
+  // ne RECONSTRUIT PAS (on se contente d'un render(), désormais borné donc quasi gratuit).
+  let _lastBuildSig = null;
+  function _buildSig(){
+    let cong = 0; try { cong = Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length; } catch (e) {}
+    let smLen = 0; try { smLen = JSON.stringify(statutMap()).length; } catch (e) {}
+    const cnd = (FP.conducteursTous ? FP.conducteursTous() : ((FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [])).length;
+    // + somme des montants (détecte une conso MODIFIÉE, pas seulement ajoutée/supprimée). O(tx), <1 ms.
+    let sum = 0; for (let i = 0; i < _tx.length; i++) { const v = _tx[i]; sum += Number((v && (v.montant_ttc != null ? v.montant_ttc : v.montantTtc)) || 0); }
+    return _tx.length + '|' + _ulys.length + '|' + cnd + '|' + cong + '|' + smLen + '|' + Math.round(sum * 100);
+  }
+  function rebuild(force){
+    const sig = _buildSig();
+    if (!force && sig === _lastBuildSig) { render(); return; } // entrées inchangées → simple re-render (léger)
+    _lastBuildSig = sig;
+    _findings = buildFindings(); fillConducteurs(); fillMois(); render();
+    _writeFindingsCache(); // mémorise le résultat pour un affichage instantané la prochaine fois
+  }
+  function boot(){
+    // ⚡ On laisse la COQUILLE (onglets + KPIs) PEINDRE d'abord, PUIS on calcule/charge. Sinon
+    // buildFindings() (sur le cache) tourne en SYNCHRONE avant le 1er rendu et, avec les transitions
+    // de vue, la page semble « bloquée un instant après le clic ». En différant, Contrôle apparaît
+    // tout de suite et les trouvailles se remplissent juste après.
+    const run = async () => {
+      // 0) ⚡ TROUVAILLES EN CACHE → affichage INSTANTANÉ, ZÉRO calcul (c'était le gel « au clic »).
+      let shownFromCache = false;
+      if (_seedFindingsCache()) { try { _loaded = true; fillConducteurs(); fillMois(); render(); shownFromCache = true; } catch (e) {} }
+      // 1) Cache des consos brutes (pour le recalcul) — affichage immédiat si pas encore de trouvailles.
+      const hadConsoCache = _seedCtrlCache();
+      if (!shownFromCache && hadConsoCache) { try { rebuild(true); } catch (e) {} }
+      // 2) Données fraîches. Conducteurs déjà chargés par l'app → on évite une requête bloquante.
+      const jobs = [loadData()];
+      const condsOK = !!(window.FP_DATA && Array.isArray(window.FP_DATA.conducteurs) && window.FP_DATA.conducteurs.length);
+      if (!condsOK) jobs.push(loadConducteurs());
+      await Promise.all(jobs);
+      // 3) Recalcul avec les données fraîches — mais rebuild(false) NE RECALCULE QUE SI la signature
+      //    des données a changé depuis le cache (sinon simple render, déjà fait → rien). Donc sur une
+      //    visite « rien n'a bougé », AUCUN gel de fond. Différé en temps mort si on a déjà affiché.
+      const recompute = () => { try { rebuild(false); } catch (e) {} };
+      if (shownFromCache) { (window.requestIdleCallback ? requestIdleCallback(recompute, { timeout: 2000 }) : setTimeout(recompute, 60)); }
+      else { rebuild(false); }
+    };
+    if (window.requestAnimationFrame) requestAnimationFrame(() => setTimeout(run, 0)); else setTimeout(run, 0);
+  }
+  boot();
+  // Préchargement DOUX du module Total/Ulys sur temps mort : ne bloque pas l'arrivée sur Contrôle,
+  // mais rend le 1er clic sur Total Fleet / Ulys quasi instantané (le module est déjà là).
+  try { (window.requestIdleCallback ? requestIdleCallback(() => ensureFleetViews(), { timeout: 4000 }) : setTimeout(() => ensureFleetViews(), 2500)); } catch (e) {}
+  // Recalcule quand les données live arrivent (settings/congés/immat…). On reconstruit aussi les
+  // sous-onglets prestataires (au cas où un prestataire a été créé sur un autre appareil) en gardant
+  // l'onglet courant si possible.
+  document.addEventListener('fp:data-ready', () => {
+    const cur = _tab; renderPrestaTabs();
+    if (!tabNames().includes(cur)) switchTab('controle'); else switchTab(cur);
+    if (_loaded) { rebuild(false); } // ne reconstruit que si conducteurs/congés/statuts ont changé
+  });
+</script>
+</body>
+</html>

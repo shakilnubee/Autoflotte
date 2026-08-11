@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parc Pilot — Générateur de devis</title>
+<style>
+  :root{
+    --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --bg:#f1f5f9;
+    --accent:#f97316; --accent2:#f97316; --ok:#16a34a; --card:#fff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px;display:grid;grid-template-columns:360px 1fr;gap:22px;align-items:start}
+  h1{font-size:20px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+  /* --- Formulaire --- */
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin:0 0 12px}
+  label{display:block;font-size:12px;font-weight:600;color:#334155;margin:12px 0 4px}
+  input,select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-size:14px;color:var(--ink);background:#fff}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .seg{display:flex;gap:6px;margin-top:4px}
+  .seg button{flex:1;padding:8px;border:1px solid var(--line);background:#fff;border-radius:9px;font-size:13px;font-weight:600;color:#475569;cursor:pointer}
+  .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .hint{font-size:11px;color:var(--muted);margin-top:4px}
+  .actions{display:flex;gap:8px;margin-top:16px}
+  .btn{flex:1;padding:11px;border-radius:10px;border:none;font-weight:700;font-size:14px;cursor:pointer}
+  .btn-print{background:var(--ink);color:#fff}
+  .btn-ghost{background:#fff;border:1px solid var(--line);color:#334155}
+  /* --- Devis (aperçu = document imprimable) --- */
+  .doc{background:#fff;border:1px solid var(--line);border-radius:14px;padding:40px 44px;box-shadow:0 1px 3px rgba(15,23,42,.06)}
+  .doc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:22px}
+  .brand{font-size:24px;font-weight:900;letter-spacing:-.02em}
+  .brand span{color:var(--accent)}
+  .brand-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .meta{text-align:right;font-size:12px;color:#334155;line-height:1.7}
+  .meta b{color:var(--ink)}
+  .parties{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:22px;font-size:13px;line-height:1.6}
+  .parties .k{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:3px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);border-bottom:1px solid var(--line);padding:0 8px 8px}
+  th.r,td.r{text-align:right}
+  td{padding:11px 8px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+  td .d{font-size:11px;color:var(--muted);margin-top:2px}
+  .strike{text-decoration:line-through;color:var(--muted)}
+  .tag-ok{color:var(--ok);font-weight:700}
+  .tots{margin-left:auto;width:280px;margin-top:10px;font-size:13px}
+  .tots div{display:flex;justify-content:space-between;padding:5px 8px}
+  .tots .ttc{background:var(--ink);color:#fff;border-radius:9px;font-weight:800;font-size:15px;padding:11px 12px;margin-top:4px}
+  .roi{margin-top:22px;background:linear-gradient(120deg,#fff7ed,#fff);border:1px solid #fed7aa;border-radius:12px;padding:16px 18px}
+  .roi h3{margin:0 0 6px;font-size:13px;color:var(--accent2);display:flex;align-items:center;gap:6px}
+  .roi p{margin:4px 0;font-size:12.5px;color:#334155;line-height:1.55}
+  .roi .big{font-weight:800;color:var(--ink)}
+  .cond{margin-top:22px;font-size:11.5px;color:#475569;line-height:1.6;border-top:1px solid var(--line);padding-top:14px}
+  .sign{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:22px;font-size:12px}
+  .sign .box{border:1px dashed var(--line);border-radius:10px;padding:14px;min-height:80px}
+  .sign .k{font-weight:700;margin-bottom:4px}
+  @media print{
+    body{background:#fff}
+    .wrap{display:block;max-width:none;padding:0}
+    .noprint{display:none!important}
+    .doc{border:none;box-shadow:none;border-radius:0;padding:0}
+  }
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ================= FORMULAIRE (non imprimé) ================= -->
+  <div class="noprint">
+    <a href="#" onclick="if(history.length>1){history.back()}else{location.href='kit-commercial.html'};return false" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--accent);text-decoration:none;margin-bottom:8px">← Retour</a>
+    <h1>Générateur de devis</h1>
+    <p class="sub">Parc Pilot — outil interne. Remplis, puis « Imprimer / PDF ».</p>
+
+    <div class="panel">
+      <h2>Client</h2>
+      <label>Société</label>
+      <input id="f-soc" placeholder="Ex. Transports Dupont">
+      <div class="row">
+        <div><label>Forme juridique</label><input id="f-forme" placeholder="SAS, SARL…"></div>
+        <div><label>SIREN / SIRET</label><input id="f-siren" placeholder="123 456 789"></div>
+      </div>
+      <label>Adresse (siège)</label>
+      <input id="f-adr" placeholder="Adresse du siège social">
+      <div class="row">
+        <div><label>Représentant</label><input id="f-contact" placeholder="Prénom Nom"></div>
+        <div><label>Qualité</label><input id="f-qual" placeholder="Gérant, Président…"></div>
+      </div>
+      <div class="row">
+        <div><label>Email / téléphone</label><input id="f-mail" placeholder="contact@societe.fr"></div>
+        <div><label>N° devis</label><input id="f-num" placeholder="2026-001"></div>
+      </div>
+      <p class="hint">💡 Ces infos serviront aussi à générer le contrat (bouton en bas).</p>
+
+      <h2 style="margin-top:20px">Périmètre</h2>
+      <div class="row">
+        <div><label>Nb de véhicules</label><input id="f-veh" type="number" min="1" value="12"></div>
+        <div><label>Nb de sociétés</label><input id="f-socn" type="number" min="1" value="1"></div>
+      </div>
+
+      <div class="hint" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:8px 10px;margin:10px 0">✅ Gestion déléguée, <b>engagement 12 mois</b> · logiciel Parc Pilot inclus : <b>à partir de 590 €/mois</b>, puis <b>65 €/véhicule</b> (dégressif). · <a href="bareme.html" style="color:#166534;text-decoration:underline;font-weight:700">✏️ Modifier mon barème</a></div>
+
+      <label>Remise commerciale (%)</label>
+      <input id="f-remise" type="number" min="0" max="100" value="0">
+
+      <h2 style="margin-top:20px">Mise en service</h2>
+      <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-top:4px;font-size:13px"><input type="checkbox" id="f-mes-offert" style="width:auto"> Offrir la mise en service</label>
+      <label>Montant mise en service (€)</label>
+      <input id="f-mes-montant" type="number" min="0" step="10">
+      <p class="hint">Audit + reprise + intégration de la flotte. Indicatif : 350 à 1000 € selon la taille/l'état initial.</p>
+
+      <h2 style="margin-top:20px">Options & prestations en supplément</h2>
+      <p class="hint">Coche ce que tu ajoutes au devis — le total augmente automatiquement. (Liste et prix modifiables dans le <a href="bareme.html" style="color:var(--accent);text-decoration:underline;font-weight:700">barème</a>.)</p>
+      <div id="opt-list"></div>
+
+      <div class="actions">
+        <button class="btn" id="btn-dl" style="background:#f97316;color:#fff">⬇ Télécharger le PDF</button>
+        <button class="btn btn-print" onclick="window.print()">Imprimer</button>
+        <button class="btn btn-ghost" onclick="location.reload()">Réinitialiser</button>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btn-contrat" style="background:#0f172a;color:#fff">Générer le contrat →</button>
+      </div>
+      <p class="hint">Reprend toutes les infos de ce devis dans le contrat. Il ne restera qu'à compléter le n° de contrat, la date de début et quelques mentions légales.</p>
+    </div>
+  </div>
+
+  <!-- ================= DOCUMENT DEVIS (imprimé) ================= -->
+  <div class="doc" id="doc">
+    <div class="doc-head">
+      <div>
+        <div class="brand">Parc<span>Pilot</span></div>
+        <div class="brand-sub">Gestion de flotte automobile</div>
+      </div>
+      <div class="meta">
+        <div style="font-size:15px;font-weight:800;color:var(--ink)">DEVIS</div>
+        <div>N° <b id="o-num">—</b></div>
+        <div>Date : <b id="o-date">—</b></div>
+        <div>Validité : <b>30 jours</b></div>
+      </div>
+    </div>
+
+    <div class="parties">
+      <div>
+        <div class="k">Émetteur</div>
+        <div><b>JIS OFFICE PARTNER</b><br>Auto-entrepreneur · Parc Pilot<br>12 chemin du Bel-Air, 93460 Gournay-sur-Marne<br>SIRET : 106 301 898 00016<br>jis.nubee@gmail.com · 06 61 77 97 53</div>
+      </div>
+      <div>
+        <div class="k">Client</div>
+        <div id="o-client">—</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>Désignation</th><th class="r">Qté</th><th class="r">P.U.</th><th class="r">Total</th><th class="r">/ mois</th></tr>
+      </thead>
+      <tbody id="o-lines"></tbody>
+    </table>
+
+    <div class="tots">
+      <div id="o-strow" style="display:none"><span>Sous-total HT</span><span id="o-soustotal">—</span></div>
+      <div id="o-remrow" style="display:none;color:var(--ok)"><span>Remise commerciale</span><span id="o-remise">—</span></div>
+      <div class="ttc"><span>Total à payer</span><span id="o-ttc">—</span></div>
+      <div style="font-size:11px;color:var(--muted);display:block;text-align:right;margin-top:5px">TVA non applicable — art. 293 B du CGI</div>
+      <div style="font-size:11px;color:var(--muted);justify-content:flex-end" id="o-recur"></div>
+    </div>
+
+    <div class="roi">
+      <h3>💡 Votre retour sur investissement</h3>
+      <div id="o-roi"></div>
+    </div>
+
+    <div class="cond" id="o-cond"></div>
+
+    <div class="sign">
+      <div class="box"><div class="k">Bon pour accord — le client</div><div style="color:var(--muted)">Date, signature et cachet</div></div>
+      <div class="box"><div class="k">Parc Pilot</div><div style="color:var(--muted)">JIS OFFICE PARTNER</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="assets/js/vendor/supabase.js?v=20260811e"></script>
+<script src="assets/js/bareme.js?v=20260811e"></script>
+<script>
+// ================= Tarif (HT) — barème PARTAGÉ (assets/js/bareme.js, éditable sur bareme.html) =================
+var FALLBACK = { refVeh:65, minMensuel:590, r1:65, r2:60, r3:54, surDevisMin:80, mes:500, tauxHoraire:65, supplements:[] };
+function BAR(){ return (window.PP_BAREME && PP_BAREME.get) ? PP_BAREME.get() : FALLBACK; }
+function tarifVeh(nb){ return (window.PP_BAREME && PP_BAREME.tarifVeh) ? PP_BAREME.tarifVeh(nb) : null; }
+function tarifMensuel(nb){ return (window.PP_BAREME && PP_BAREME.tarifMensuel) ? PP_BAREME.tarifMensuel(nb) : FALLBACK.minMensuel; }
+function surDevis(nb){ return (window.PP_BAREME && PP_BAREME.surDevis) ? PP_BAREME.surDevis(nb) : (nb>=FALLBACK.surDevisMin); }
+function uniteLabel(u){ return (window.PP_BAREME && PP_BAREME.uniteLabel) ? PP_BAREME.uniteLabel(u) : ''; }
+
+// Estimation ROI (risques évités / an) — hypothèses prudentes
+var ROI_AMENDE = 330;   // 1 amende majorée évitée / an
+var ROI_KMSUPP = 900;   // 1 dépassement leasing évité / an
+var ROI_CT = 135;       // 1 CT/échéance manqué évité / an
+
+var state = { engage:'annuel' };
+var _mesTouched = false; // l'utilisateur a-t-il modifié le montant mise en service à la main ?
+
+function euro(n){ return (Math.round(n*100)/100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' €'; }
+function euro0(n){ return Math.round(n).toLocaleString('fr-FR') + ' €'; }
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s||'').replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+
+// -- Construit la liste des options (cases à cocher) depuis le barème --
+function buildOptions(){
+  var supp = (BAR().supplements) || [];
+  var host = $('opt-list'); if (!host) return;
+  var cur = getOptState(); // conserve cochages/quantités si on reconstruit
+  host.innerHTML = supp.map(function(s){
+    var forfait = (s.unite === 'forfait');
+    var uni = uniteLabel(s.unite);
+    var checked = cur[s.key] ? ' checked' : '';
+    var qty = (cur[s.key] && cur[s.key].qty) ? cur[s.key].qty : 1;
+    return '<div style="border:1px solid var(--line);border-radius:9px;padding:8px 10px;margin:6px 0">'
+      + '<label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;font-weight:600;margin:0;cursor:pointer">'
+      + '<input type="checkbox" class="opt-chk" data-key="'+s.key+'" style="width:auto;margin-top:2px"'+checked+'>'
+      + '<span style="flex:1;color:#334155">'+esc(s.label)+'<span style="display:block;font-weight:400;color:var(--muted);font-size:11px">'+euro0(s.prix)+' '+uni+'</span></span></label>'
+      + '<div class="opt-qtywrap" data-key="'+s.key+'" style="display:'+((cur[s.key]&&!forfait)?'flex':'none')+';align-items:center;gap:6px;margin:6px 0 0 24px;font-size:12px;color:#475569">'
+      + (forfait ? '' : 'Quantité <input type="number" min="1" class="opt-qty" data-key="'+s.key+'" value="'+qty+'" style="width:64px;padding:5px 7px">')
+      + '</div></div>';
+  }).join('');
+  // Événements
+  host.querySelectorAll('.opt-chk').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      var k = cb.dataset.key;
+      var wrap = host.querySelector('.opt-qtywrap[data-key="'+k+'"]');
+      var isForfait = wrap && wrap.querySelector('.opt-qty') == null;
+      if (wrap) wrap.style.display = (cb.checked && !isForfait) ? 'flex' : 'none';
+      render();
+    });
+  });
+  host.querySelectorAll('.opt-qty').forEach(function(q){ q.addEventListener('input', render); });
+}
+// État courant des options (pour reconstruction / lecture)
+function getOptState(){
+  var out = {}; var host = $('opt-list'); if (!host) return out;
+  host.querySelectorAll('.opt-chk').forEach(function(cb){
+    if (cb.checked){ var q = host.querySelector('.opt-qty[data-key="'+cb.dataset.key+'"]'); out[cb.dataset.key] = { qty: q ? Math.max(1, parseInt(q.value,10)||1) : 1 }; }
+  });
+  return out;
+}
+// Lignes d'options sélectionnées (pour le devis)
+function selectedOptions(){
+  var supp = (BAR().supplements) || [];
+  var st = getOptState();
+  return supp.filter(function(s){ return st[s.key]; }).map(function(s){
+    var qty = st[s.key].qty || 1;
+    return { label:s.label, unite:s.unite, prix:s.prix, qte:qty, total:s.prix*qty };
+  });
+}
+
+function render(){
+  var nb = Math.max(1, parseInt($('f-veh').value,10) || 1);
+  var socn = Math.max(1, parseInt($('f-socn').value,10) || 1);
+  var remise = Math.min(100, Math.max(0, parseFloat($('f-remise').value) || 0));
+  var annuel = true; // engagement 12 mois OBLIGATOIRE (plus de formule mensuelle)
+  var devisFlotte = surDevis(nb); // ≥ seuil → tarif sur devis (analyse de la flotte)
+
+  var lignes = [], loyerMensuel = tarifMensuel(nb), pv = tarifVeh(nb);
+  var qte = 12;
+
+  // -- Gestion déléguée : barème partagé (dégressif, minimum garanti) --
+  if (devisFlotte) {
+    lignes.push({ des:'Gestion de flotte déléguée — logiciel Parc Pilot inclus',
+      det:nb+' véhicules · tarif établi après analyse de la flotte', qte:'—', pu:null, total:0, surDevis:true });
+  } else {
+    // Ligne présentée PAR VÉHICULE (choix utilisateur) : QTÉ = nb de véhicules, P.U. = coût ANNUEL
+    // par véhicule → QTÉ × P.U. = Total. Le détail rappelle le tarif mensuel par véhicule.
+    var totalAn = loyerMensuel * 12;
+    var puAnVeh = totalAn / nb;
+    lignes.push({
+      des:'Gestion de flotte déléguée — logiciel Parc Pilot inclus',
+      det:(pv==null
+            ? 'Forfait minimum ('+nb+' véhicule'+(nb>1?'s':'')+', jusqu\'à 9) · '+euro0(loyerMensuel)+' / mois'
+            : nb+' véhicules × '+euro0(pv)+' / véhicule / mois')
+          + (socn>1?' · multi-sociétés ('+socn+')':'')
+          + ' · engagement 12 mois',
+      qte:nb, pu:puAnVeh, puUnit:'/an', total:totalAn,
+      mois:loyerMensuel, moisSub:euro0(loyerMensuel/nb)+' / véh'   // coût mensuel total + par véhicule
+    });
+  }
+
+  // -- Mise en service : montant éditable, offrable via la case à cocher --
+  var mesOfferte = $('f-mes-offert').checked;
+  var MES_PRIX = Math.max(0, parseFloat($('f-mes-montant').value) || 0);
+  lignes.push(mesOfferte
+    ? { des:'Mise en service (audit + reprise + intégration de la flotte)', det:'Offerte', qte:1, pu:MES_PRIX, total:0, offert:true }
+    : { des:'Mise en service (audit + reprise + intégration de la flotte)', det:'Paiement unique au démarrage', qte:1, pu:MES_PRIX, total:MES_PRIX });
+
+  // -- Options / prestations en supplément (ponctuelles) --
+  var opts = selectedOptions();
+  opts.forEach(function(o){
+    lignes.push({ des:o.label, det:'Prestation ponctuelle · '+euro0(o.prix)+' '+uniteLabel(o.unite), qte:o.qte, pu:o.prix, total:o.total, ponctuel:true });
+  });
+
+  // -- Sous-total / remise (la remise NE s'applique PAS aux prestations ponctuelles) --
+  var baseRemisable = lignes.reduce(function(s,l){ return s + ((l.ponctuel||l.offert||l.surDevis)?0:l.total); },0);
+  var totalPonctuel = lignes.reduce(function(s,l){ return s + ((l.ponctuel)?l.total:0); },0);
+  var montantRemise = baseRemisable * (remise/100);
+  var ht = baseRemisable - montantRemise + totalPonctuel;
+
+  // -- Rendu des lignes --
+  var html = lignes.map(function(l){
+    var pu = (l.pu==null) ? '—' : (l.offert ? '<span class="strike">'+euro(l.pu)+'</span>' : euro(l.pu)+(l.puUnit||''));
+    var tot = l.surDevis ? '<span class="tag-ok">Sur devis</span>' : (l.offert ? '<span class="tag-ok">Offert</span>' : euro(l.total));
+    // Colonne « / mois » : coût mensuel de la ligne. Lignes ponctuelles (mise en service, prestations) =
+    // paiement unique → pas de mensuel (« — »). Gestion = total ÷ 12 + rappel du coût par véhicule/mois.
+    var mo = (l.mois==null || !(l.mois>0))
+      ? (l.surDevis ? '<span class="d">sur devis</span>' : '<span class="d" title="Paiement unique">—</span>')
+      : (euro(l.mois)+(l.moisSub?'<div class="d">'+l.moisSub+'</div>':''));
+    return '<tr><td><b>'+esc(l.des)+'</b>'+(l.det?'<div class="d">'+l.det+'</div>':'')+'</td><td class="r">'+l.qte+'</td><td class="r">'+pu+'</td><td class="r">'+tot+'</td><td class="r">'+mo+'</td></tr>';
+  }).join('');
+  if (montantRemise>0) html += '<tr><td><b>Remise commerciale</b><div class="d">'+remise+' % (hors prestations ponctuelles)</div></td><td class="r"></td><td class="r"></td><td class="r" style="color:var(--ok)">− '+euro(montantRemise)+'</td><td class="r" style="color:var(--ok)">− '+euro(montantRemise/12)+'</td></tr>';
+  $('o-lines').innerHTML = html;
+
+  // -- Sous-total HT (avant remise) + remise, affichés au-dessus du total --
+  var sousTotal = baseRemisable + totalPonctuel;
+  var stRow = $('o-strow'), remRow = $('o-remrow');
+  if (montantRemise > 0) {
+    if (stRow) { stRow.style.display = 'flex'; $('o-soustotal').textContent = euro(sousTotal); }
+    if (remRow) { remRow.style.display = 'flex'; $('o-remise').textContent = '− ' + euro(montantRemise) + ' (' + remise + ' %)'; }
+  } else {
+    if (stRow) stRow.style.display = 'none';
+    if (remRow) remRow.style.display = 'none';
+  }
+
+  // -- Total à payer --
+  if (devisFlotte) {
+    $('o-ttc').textContent = (ht>0 ? euro(ht)+' + gestion sur devis' : 'Sur devis');
+  } else {
+    $('o-ttc').textContent = euro(ht);
+  }
+
+  // -- Récurrence (ce que ça coûte "après") --
+  $('o-recur').textContent = devisFlotte ? 'Gestion mensuelle établie après analyse de la flotte'
+    : ('Puis ' + euro(loyerMensuel*12) + ' / an de gestion — soit ' + euro(loyerMensuel) + ' / mois (' + euro0(loyerMensuel/nb) + ' / véhicule / mois)');
+
+  // -- ROI --
+  if (devisFlotte) {
+    $('o-roi').innerHTML = '<p>Tarif de gestion établi <b>après analyse de la flotte</b> ('+nb+' véhicules). '
+      + 'À titre indicatif, le tarif de référence est de <b>'+euro0(BAR().refVeh)+' / véhicule / mois</b>, dégressif au-delà.</p>';
+  } else {
+    var coutAnnuel = loyerMensuel*12;
+    var risqueEvite = ROI_AMENDE + ROI_KMSUPP + ROI_CT;
+    var parVehMois = loyerMensuel / nb;
+    $('o-roi').innerHTML =
+      '<p>Coût annuel de gestion : <span class="big">'+euro0(coutAnnuel)+'</span>, soit <span class="big">'+euro(parVehMois)+' / véhicule / mois</span>.</p>'+
+      '<p>Économies typiques évitées en 1 an : 1 amende majorée (<b>~'+euro0(ROI_AMENDE)+'</b>) + 1 dépassement de leasing (<b>~'+euro0(ROI_KMSUPP)+'</b>) + 1 échéance manquée (<b>~'+euro0(ROI_CT)+'</b>) = <span class="big">~'+euro0(risqueEvite)+'</span>.</p>'+
+      '<p><b>Une seule mésaventure évitée rembourse '+(risqueEvite>=coutAnnuel?'plus que':'l\'essentiel de')+' la gestion annuelle.</b></p>';
+  }
+
+  // -- Conditions --
+  $('o-cond').innerHTML =
+    '<b>Conditions :</b> Prix en euros HT. TVA non applicable, art. 293 B du CGI (auto-entrepreneur). '+
+    'Gestion déléguée facturée mensuellement, <b>engagement 12 mois</b> recommandé ; logiciel Parc Pilot inclus. '+
+    (mesOfferte ? 'Mise en service offerte. ' : 'Mise en service : '+euro0(MES_PRIX)+' (paiement unique au démarrage). ')+
+    'Mises à jour et support inclus. Devis valable 30 jours. '+
+    'Ajout ou retrait de véhicules possible à tout moment (facturé au prorata selon la tranche). '+
+    'Les prestations ponctuelles cochées sont facturées à l\'unité indiquée ; toute autre prestation hors forfait est établie sur devis ou au temps passé ('+euro0(BAR().tauxHoraire)+' / heure).';
+
+  // -- En-tête / client --
+  $('o-num').textContent = $('f-num').value.trim() || '—';
+  $('o-client').innerHTML = '<b>'+ (esc($('f-soc').value)||'—') +'</b>'
+    + ($('f-forme').value? ' <span style="font-weight:600;color:var(--muted)">'+esc($('f-forme').value)+'</span>':'')
+    + ($('f-siren').value? '<br>SIREN/SIRET : '+esc($('f-siren').value):'')
+    + ($('f-adr').value? '<br>'+esc($('f-adr').value):'')
+    + ($('f-contact').value? '<br>'+esc($('f-contact').value)+($('f-qual').value? ' — '+esc($('f-qual').value):''):'')
+    + ($('f-mail').value? '<br>'+esc($('f-mail').value):'')
+    + '<br>'+nb+' véhicule'+(nb>1?'s':'')+(socn>1?' · '+socn+' sociétés':'');
+
+  // -- Mémorise les montants calculés pour passer au générateur de contrat --
+  window.__devisCalc = { mensuel: devisFlotte ? 0 : loyerMensuel, mesAmount: mesOfferte ? 0 : MES_PRIX };
+}
+
+// -- Date du jour (une seule fois, à l'ouverture) --
+(function(){
+  var d = new Date();
+  $('o-date').textContent = String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+})();
+
+// -- Initialise le montant de mise en service depuis le barème (tant que non modifié à la main) --
+function syncMesDefault(){ if (!_mesTouched) $('f-mes-montant').value = BAR().mes; }
+syncMesDefault();
+
+// -- Événements --
+['f-soc','f-forme','f-siren','f-adr','f-contact','f-qual','f-num','f-mail','f-veh','f-socn','f-remise'].forEach(function(id){
+  var el = $(id); if (el) el.addEventListener('input', render);
+});
+$('f-mes-offert').addEventListener('change', render);
+$('f-mes-montant').addEventListener('input', function(){ _mesTouched = true; render(); });
+function bindSeg(segId, key){
+  document.querySelectorAll('#'+segId+' button').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('#'+segId+' button').forEach(function(x){x.classList.remove('on');});
+      b.classList.add('on');
+      state[key] = b.dataset.formule || b.dataset.engage || b.dataset.mes;
+      render();
+    });
+  });
+}
+
+// -- Téléchargement PDF en un clic (html2pdf, chargé à la demande) --
+function loadScript(src){ return new Promise(function(res,rej){ if(window.html2pdf) return res(); var s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); }); }
+function safeName(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w-]+/g,'_').replace(/^_+|_+$/g,''); }
+$('btn-dl').addEventListener('click', function(){
+  var btn = $('btn-dl'), old = btn.textContent; btn.textContent = 'Génération…'; btn.disabled = true;
+  var num = ($('f-num').value||'').trim(), soc = ($('f-soc').value||'').trim();
+  var name = 'Devis' + (num ? '-'+safeName(num) : '') + (soc ? '-'+safeName(soc) : '') + '.pdf';
+  loadScript('https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js').then(function(){
+    return html2pdf().set({
+      margin: [10,10,12,10], filename: name,
+      image: { type:'jpeg', quality:0.98 },
+      html2canvas: { scale:2, useCORS:true, backgroundColor:'#ffffff' },
+      jsPDF: { unit:'mm', format:'a4', orientation:'portrait' },
+      pagebreak: { mode:['css','legacy'] }
+    }).from(document.getElementById('doc')).save();
+  }).catch(function(){ alert("Impossible de générer le PDF (connexion internet requise). Utilise « Imprimer » puis « Enregistrer en PDF »."); })
+    .then(function(){ btn.textContent = old; btn.disabled = false; });
+});
+
+// -- Passerelle vers le générateur de contrat : on transmet toutes les infos saisies --
+function dval(id){ var el=$(id); return el ? (el.value||'').trim() : ''; }
+$('btn-contrat').addEventListener('click', function(){
+  var calc = window.__devisCalc || { mensuel:0, mesAmount:0 };
+  var payload = {
+    soc: dval('f-soc'), forme: dval('f-forme'), siren: dval('f-siren'), adr: dval('f-adr'),
+    rep: dval('f-contact'), qual: dval('f-qual'), mail: dval('f-mail'),
+    veh: dval('f-veh'), socn: dval('f-socn'),
+    formule: 'gestion',
+    mensuel: Math.round(calc.mensuel || 0),
+    mes: Math.round(calc.mesAmount || 0),
+    duree: 12
+  };
+  try { localStorage.setItem('pp_devis_to_contrat', JSON.stringify(payload)); } catch(e){}
+  window.location.href = 'contrat.html';
+});
+
+buildOptions();
+render();
+// Barème synchronisé (autre appareil) reçu → on reconstruit les options et on recalcule.
+window.addEventListener('pp:bareme-ready', function(){ buildOptions(); syncMesDefault(); render(); });
+</script>
+</body>
+</html>

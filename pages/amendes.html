@@ -1,0 +1,2971 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")!=="0"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<title>Amendes — Parc Pilot</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#0F1E3D">
+<link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parc Pilot">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811e">
+<script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811e"></script>
+  <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811e">
+<style>
+  .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+  .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
+  .kpi-link:active { transform: translateY(0); }
+  .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .filter-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: white; }
+  .motif-pill { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 600; background: #F1F5F9; color: var(--fp-text); }
+  .motif-vitesse { background: #FEE2E2; color: #7F1D1D; }
+  .motif-stationnement { background: #FEF3C7; color: #78350F; }
+  .motif-telephone { background: #EDE9FE; color: #4C1D95; }
+  .motif-feu { background: #FECACA; color: #7F1D1D; }
+  .motif-voie { background: #DBEAFE; color: #1E3A8A; }
+  .motif-autre { background: #F1F5F9; color: #475569; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; height: 100dvh; width: 100%; max-width: 600px; background: white; box-shadow: -20px 0 60px -20px rgba(15,30,61,.25); transform: translateX(100%); transition: transform .25s ease; z-index: 60; overflow-y: auto; overflow-x: hidden; }
+  .drawer.open { transform: translateX(0); }
+  .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
+  .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+  .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
+  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(249,115,22,.15); }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.5); display: none; align-items: center; justify-content: center; z-index: 70; padding: 1rem; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: white; border-radius: 1rem; width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto; }
+  .chart-wrap-sm { position: relative; height: 220px; }
+  .podium-tag { display: inline-flex; align-items: center; padding: .12rem .45rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; white-space: nowrap; }
+  .podium-tag.pt-count { background:#EEF2F7; color:#475569; }
+  .podium-tag.pt-montant { background:#F3ECE3; color:var(--fp-primary); }
+  .podium-tag.pt-points { background:#FEE2E2; color:#B91C1C; }
+  /* Mode sombre : fonds clairs → texte illisible (surtout le montant, forcé en clair par la règle
+     globale) → on repasse ces pastilles en fonds sombres avec un texte clair. */
+  body.fp-dark .podium-tag.pt-count { background:#243044; color:#cbd5e1; }
+  body.fp-dark .podium-tag.pt-montant { background:#243044; color:#e6edf6; }
+  body.fp-dark .podium-tag.pt-points { background:rgba(220,38,38,.28); color:#fecaca; }
+  .av-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: av-spin .7s linear infinite; }
+  @keyframes av-spin { to { transform: rotate(360deg); } }
+  /* Actions rapides au survol d'une ligne (payer / copier n° / ouvrir) */
+  #amendes-tbody tr { position: relative; }
+  .row-actions { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; gap: 4px; align-items: center; background: rgba(255,255,255,.97); padding: 3px 5px; border: 1px solid var(--fp-border); border-radius: 9px; box-shadow: 0 6px 16px -8px rgba(15,30,61,.35); z-index: 3; }
+  #amendes-tbody tr:hover .row-actions { display: inline-flex; }
+  .ra-btn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--fp-border); border-radius: 7px; background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  .ra-btn:hover { background: var(--fp-primary); color: white; border-color: var(--fp-primary); }
+  /* Couleur de ligne selon le statut (repérage en un coup d'œil) */
+  #amendes-tbody tr.row-paid { background: #f0fdf4; }       /* payée -> vert très pâle */
+  #amendes-tbody tr.row-overdue { background: #fef2f2; }    /* à payer en retard -> rouge très pâle */
+  #amendes-tbody tr.row-contested { background: #fffbeb; }  /* contestée -> ambre très pâle */
+  /* Mode sombre : ces fonds CLAIRS rendraient le texte (clair) illisible → teintes sombres + texte clair. */
+  body.fp-dark #amendes-tbody tr.row-paid { background: rgba(22,163,74,.20); }
+  body.fp-dark #amendes-tbody tr.row-paid td { color: #bbf7d0; }
+  body.fp-dark #amendes-tbody tr.row-overdue { background: rgba(220,38,38,.22); }
+  body.fp-dark #amendes-tbody tr.row-overdue td { color: #fecaca; }
+  body.fp-dark #amendes-tbody tr.row-contested { background: rgba(217,119,6,.20); }
+  body.fp-dark #amendes-tbody tr.row-contested td { color: #fde68a; }
+  #amendes-tbody tr.row-paid:hover, #amendes-tbody tr.row-overdue:hover, #amendes-tbody tr.row-contested:hover { filter: brightness(.97); }
+  /* #6 : nom du conducteur cliquable pour filtrer */
+  .lien-cond { cursor: pointer; text-decoration: underline dotted transparent; text-underline-offset: 2px; }
+  .lien-cond:hover { color: var(--fp-accent); text-decoration-color: var(--fp-accent); }
+  /* #7 : sélection multiple */
+  .am-bulk-bar { display: none; align-items: center; gap: .75rem; padding: .6rem .9rem; border-radius: .65rem; background: var(--fp-primary); color: #fff; margin-bottom: .75rem; flex-wrap: wrap; }
+  .am-bulk-bar.active { display: flex; }
+  .am-bulk-btn { padding: .35rem .7rem; border-radius: .45rem; font-weight: 600; display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; }
+  .am-bulk-btn:hover { background: rgba(255,255,255,.12); }
+  .am-bulk-btn.danger { color: #FCA5A5; } .am-bulk-btn.danger:hover { background: rgba(220,38,38,.25); color: #FEE2E2; }
+  .am-cb { width: 15px; height: 15px; cursor: pointer; accent-color: var(--fp-accent); vertical-align: middle; margin-right: .55rem; flex-shrink: 0; }
+  /* #1 : zone d'import en surbrillance pendant le glisser-déposer */
+  #av-import.drag-over #av-trigger { border-color: var(--fp-accent); background: rgba(20,184,166,.12); }
+  #amendes-tbody tr.row-selected td { box-shadow: inset 0 0 0 9999px rgba(249,115,22,.06); }
+  #amendes-tbody tr.row-selected td:first-child { box-shadow: inset 3px 0 0 var(--fp-accent), inset 0 0 0 9999px rgba(249,115,22,.06); }
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+<script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
+</head>
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")!=="0")document.body.classList.add("fp-dark")}catch(e){}</script>
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../dashboard.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic"><tspan fill="currentColor">Parc</tspan><tspan fill="#F97316">Pilot</tspan></text></svg>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="notifications.html" data-nav="notifications.html"><i data-lucide="bell"></i> Suivi &amp; alertes</a>
+      <a href="taches.html" data-nav="taches.html"><i data-lucide="list-todo"></i> Tâches</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="emprunts.html" data-nav="emprunts.html"><i data-lucide="key-round"></i> Emprunt véhicule</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="controle.html" data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
+      <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
+      <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+      <a href="../brochure.html"   data-nav="brochure.html" target="_blank" rel="noopener"><i data-lucide="sparkles"></i> Brochure</a>
+      <a href="../prix.html" data-nav="prix.html" target="_blank" rel="noopener"><i data-lucide="badge-euro"></i> Tarifs</a>
+    </nav>
+    <script>/* Sidebar : reconstruit la barre dans son état final AVANT le 1er affichage
+       (barre de recherche, ordre, visibilité, libellés perso, onglet actif). Sinon le JS
+       fait tout ça APRÈS l'affichage → le menu "saute"/clignote. Autonome (localStorage). */
+    (function(){try{
+      var soc=(localStorage.getItem('fp_societe')||'PXP');if(soc==='__all__')soc='PXP';
+      var raw=localStorage.getItem('auto_flotte_settings_'+soc);
+      if(raw==null&&soc==='PXP')raw=localStorage.getItem('auto_flotte_settings');
+      var s=raw?(JSON.parse(raw)||{}):{};
+      var sb=document.querySelector('.fp-sidebar');if(!sb)return;
+      var nav=sb.querySelector('nav');if(!nav)return;
+      if(!sb.querySelector('.fp-global-search')){
+        var w=document.createElement('div');w.className='fp-global-search';
+        w.innerHTML='<div style="position: relative"><span style="position:absolute; left:.65rem; top:50%; transform:translateY(-50%); color:rgba(255,255,255,.5); font-size:.85rem">\u{1F50D}</span><input type="text" class="fp-search-input" placeholder="Rechercher..." /></div><div class="fp-search-results"></div>';
+        sb.insertBefore(w,nav);
+      }
+      var links=[].slice.call(nav.querySelectorAll('a[data-nav]'));if(!links.length)return;
+      if(Array.isArray(s.navOrder)&&s.navOrder.length){
+        var by={};links.forEach(function(a){by[a.dataset.nav]=a;});var ord=[];
+        s.navOrder.forEach(function(k){if(by[k]){ord.push(by[k]);delete by[k];}});
+        links.forEach(function(a){if(by[a.dataset.nav])ord.push(a);});
+        ord.forEach(function(a){nav.appendChild(a);});}
+      if(Array.isArray(s.navHidden)){var h={};s.navHidden.forEach(function(k){h[k]=1;});
+        links.forEach(function(a){if(h[a.dataset.nav]&&a.dataset.nav!=='parametres.html')a.style.display='none';});}
+      var lb=s.sidebarLabels||{};
+      links.forEach(function(a){var t=lb[a.dataset.nav];if(!t)return;
+        for(var i=0;i<a.childNodes.length;i++){var n=a.childNodes[i];if(n.nodeType===3&&n.textContent.trim()){n.textContent=' '+t;break;}}});
+      var _ACC={"guide.html":1,"manuel.html":1,"aide.html":1,"parametres.html":1,"brochure.html":1,"prix.html":1};
+      [].slice.call(nav.querySelectorAll("a[data-nav]")).forEach(function(a){a.style.order=_ACC[a.dataset.nav]?"3":"1";});
+      (function(){function _mkg(id,txt,ord){var d=nav.querySelector('.fp-nav-group[data-grp="'+id+'"]');if(!d){d=document.createElement("div");d.className="fp-nav-group";d.setAttribute("data-grp",id);nav.appendChild(d);}d.textContent=txt;d.style.order=ord;}_mkg("ws","Espace de travail","0");_mkg("ac","Compte","2");})();
+
+      var path=(location.pathname.split('/').pop()||'index').replace(/\.html$/,'');
+      links.forEach(function(a){if((a.dataset.nav||'').replace(/\.html$/,'')===path)a.classList.add('active');});
+    }catch(e){}})();</script>
+    <div class="mt-10 pt-6 border-t border-white/10 text-xs text-slate-300 px-2">
+      <div class="font-semibold text-white mb-1">Données réelles</div>
+      <p>Importées depuis votre fichier / vos scans.</p>
+    </div>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <!-- Header -->
+    <div class="fp-cockpit mb-5" style="padding:1.1rem 1.4rem">
+      <div class="fp-eyebrow" style="margin-bottom:.35rem">Parc Pilot · Amendes</div>
+      <h1 class="text-2xl font-extrabold text-white" style="color:#fff" data-edit-key="amendes.title">Amendes & contraventions</h1>
+      <p class="text-sm mt-1" style="color:#8598B4" data-edit-key="amendes.subtitle">Suivi des contraventions de la flotte — paiement et points</p>
+    </div>
+    <div class="flex flex-wrap justify-end items-center gap-4 mb-8">
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1 mr-1">
+          <button class="btn btn-outline text-sm !px-2.5" data-history-undo title="Annuler (Ctrl+Z)" disabled><i data-lucide="undo-2" class="w-4 h-4"></i></button>
+          <button class="btn btn-outline text-sm !px-2.5" data-history-redo title="Refaire (Ctrl+Y)" disabled><i data-lucide="redo-2" class="w-4 h-4"></i></button>
+        </div>
+        <span data-data-io></span>
+        <span id="am-export-mount"></span>
+        <button class="btn btn-outline text-sm" id="am-fiche-btn" title="Relevé PDF des amendes affichées (ou du conducteur filtré)"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
+        <button class="btn btn-dark text-sm" id="btn-new" data-quickadd><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle amende</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="kpi kpi-link" id="kpi-card-total" title="Voir toutes les amendes"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Total amendes</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-delta" id="kpi-total-sub">—</div>
+      </div><div class="kpi-ic"><i data-lucide="ticket"></i></div></div></div>
+      <div class="kpi kpi-link" id="kpi-card-apayer" title="Voir les amendes à payer"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">À payer</div>
+        <div class="kpi-value" id="kpi-apayer" style="color: var(--fp-danger)">—</div>
+        <div class="kpi-delta" id="kpi-apayer-montant" style="color: var(--fp-danger)">—</div>
+      </div><div class="kpi-ic danger"><i data-lucide="alert-circle"></i></div></div></div>
+      <div class="kpi kpi-link" id="kpi-card-payees" title="Voir les amendes payées"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Payées</div>
+        <div class="kpi-value" id="kpi-payees" style="color: var(--fp-ok)">—</div>
+        <div class="kpi-delta up" id="kpi-payees-montant">—</div>
+      </div><div class="kpi-ic ok"><i data-lucide="check-circle-2"></i></div></div></div>
+      <div class="kpi kpi-link" id="kpi-card-points" title="Voir les amendes avec retrait de points"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Points retirés</div>
+        <div class="kpi-value" id="kpi-points" style="color: var(--fp-warn)">—</div>
+        <div class="kpi-delta">cumul</div>
+      </div><div class="kpi-ic warn"><i data-lucide="minus-circle"></i></div></div></div>
+    </div>
+
+    <!-- Graphes -->
+    <div class="grid lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Répartition par motif</h3>
+        <div class="chart-wrap-sm"><canvas id="motifsChart"></canvas></div>
+      </div>
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold text-slate-900">🏆 Podium des conducteurs <span class="text-xs font-normal text-slate-400">— clique pour filtrer</span></h3>
+          <button id="podium-toggle" class="btn btn-outline text-xs">Voir tout</button>
+        </div>
+        <div id="podium" class="space-y-1" style="max-height:240px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="relative flex-1 min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search" type="text" placeholder="Prénom, motif, n° avis…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+
+        <div class="flex flex-wrap gap-2" id="filters-statut">
+          <button class="filter-chip active" data-value="all">Toutes</button>
+          <button class="filter-chip" data-value="à payer">À payer</button>
+          <button class="filter-chip" data-value="payée">Payées</button>
+          <button class="filter-chip" data-value="désignée">Désignées</button>
+        </div>
+
+        <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Toutes les années</option>
+          <option value="2026">2026</option>
+        </select>
+
+        <select id="filter-motif" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Tous motifs</option>
+        </select>
+
+        <div class="flex items-center gap-1.5">
+          <input id="filter-date-from" type="date" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="À partir du">
+          <span class="text-slate-400 text-sm">→</span>
+          <input id="filter-date-to" type="date" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Jusqu'au">
+        </div>
+
+        <select id="sort-key" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="date">Tri : Date</option>
+          <option value="prenom">Tri : Conducteur</option>
+          <option value="montant">Tri : Montant</option>
+          <option value="points">Tri : Points</option>
+        </select>
+        <button id="sort-dir" class="btn btn-outline text-sm !px-2.5" title="Inverser le sens du tri"><i data-lucide="arrow-down-wide-narrow" class="w-4 h-4"></i></button>
+
+        <button id="reset-filters" class="btn btn-outline text-sm" title="Réinitialiser tous les filtres"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Réinitialiser</button>
+      </div>
+    </div>
+
+    <!-- Résumé dynamique des amendes filtrées -->
+    <div id="filtered-summary" class="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 mb-4 rounded-xl text-white" style="background:var(--fp-primary)">
+      <span class="text-sm"><span id="sum-count" class="font-extrabold text-lg">0</span> amende(s)</span>
+      <span class="text-sm">Total <span id="sum-montant" class="font-extrabold text-lg">0 €</span></span>
+      <span class="text-sm opacity-90">dont à payer <span id="sum-apayer" class="font-bold">0 €</span></span>
+      <span class="text-sm opacity-90"><span id="sum-points" class="font-bold">0</span> points retirés</span>
+      <span id="sum-context" class="text-sm font-medium ml-auto"></span>
+    </div>
+
+    <!-- Drill-down : collaborateurs par légende (motif) -->
+    <div id="drill-info" class="card p-4 mb-4 hidden"></div>
+
+    <!-- #7 : barre d'actions groupées (sélection multiple) -->
+    <div class="am-bulk-bar" id="am-bulk-bar">
+      <span class="font-semibold text-sm"><span id="am-bulk-count">0</span> amende(s) sélectionnée(s)</span>
+      <div class="flex items-center gap-1 flex-wrap" style="margin-left:auto">
+        <button type="button" class="am-bulk-btn" id="am-bulk-fiche"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Relevé PDF</button>
+        <button type="button" class="am-bulk-btn" id="am-bulk-envoi"><i data-lucide="mail" class="w-3.5 h-3.5"></i> Envoyer les demandes de paiement</button>
+        <button type="button" class="am-bulk-btn" id="am-bulk-relance"><i data-lucide="bell" class="w-3.5 h-3.5"></i> Relancer les paiements</button>
+        <button type="button" class="am-bulk-btn" id="am-bulk-pay"><i data-lucide="check" class="w-3.5 h-3.5"></i> Marquer payées</button>
+        <button type="button" class="am-bulk-btn" id="am-bulk-unpay"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Marquer non payées</button>
+        <button type="button" class="am-bulk-btn danger" id="am-bulk-delete"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>
+        <button type="button" class="am-bulk-btn" id="am-bulk-clear"><i data-lucide="x" class="w-3.5 h-3.5"></i> Désélectionner</button>
+      </div>
+    </div>
+
+    <!-- Tout sélectionner (les amendes filtrées) -->
+    <label id="am-select-all-wrap" class="flex items-center gap-2 text-sm text-slate-600 mb-2 select-none" style="width:max-content;cursor:pointer">
+      <input type="checkbox" id="am-select-all" style="width:15px;height:15px;accent-color:var(--fp-accent);cursor:pointer;margin:0" />
+      <span>Tout sélectionner <span class="text-slate-400" id="am-select-all-n"></span></span>
+    </label>
+
+    <!-- Tableau amendes -->
+    <div class="card overflow-hidden">
+      <div class="scrollable">
+        <table class="fp-table" id="amendes-table">
+          <thead></thead>
+          <tbody id="amendes-tbody"><tr><td colspan="20" style="padding:11px 12px"><div class="fp-skel fp-skel-line" style="width:93%"></div></td></tr><tr><td colspan="20" style="padding:11px 12px"><div class="fp-skel fp-skel-line" style="width:87%"></div></td></tr><tr><td colspan="20" style="padding:11px 12px"><div class="fp-skel fp-skel-line" style="width:90%"></div></td></tr><tr><td colspan="20" style="padding:11px 12px"><div class="fp-skel fp-skel-line" style="width:84%"></div></td></tr><tr><td colspan="20" style="padding:11px 12px"><div class="fp-skel fp-skel-line" style="width:89%"></div></td></tr></tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="hidden p-12 text-center">
+        <i data-lucide="ticket-x" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+        <p class="text-slate-500 text-sm" id="empty-msg">Aucune amende ne correspond aux filtres.</p>
+      </div>
+    </div>
+
+    <div class="mt-4 flex items-center gap-3 flex-wrap">
+      <p class="text-xs text-slate-500" id="result-count"></p>
+      <button id="table-more" class="inline-flex items-center gap-1 text-sm font-semibold" style="color: var(--fp-accent); display:none">Cliquez pour tout voir</button>
+      <span class="text-slate-300">·</span>
+      <button id="btn-voir-tout" class="text-xs font-semibold underline" style="color: var(--fp-accent)">Tout voir (toutes les années)</button>
+    </div>
+
+    <!-- Délai de paiement -->
+    <div id="delai-banner" class="hidden items-center gap-3 px-4 py-3 mt-6 mb-6 rounded-xl" style="background:#FEF2F2;border:1px solid #FECACA"></div>
+
+    <!-- Mini-stats par type -->
+    <div class="card p-6 mb-6">
+      <h3 class="font-bold text-slate-900 mb-4">Répartition par type <span class="text-xs font-normal text-slate-400">— clique pour filtrer</span></h3>
+      <div id="type-stats" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+    </div>
+
+    <!-- Évolution mensuelle + Heatmap calendrier (déplacés tout en bas) -->
+    <div class="grid lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Évolution mensuelle 2026</h3>
+        <div class="chart-wrap-sm"><canvas id="moisChart"></canvas></div>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Calendrier des amendes <span class="text-xs font-normal text-slate-400">— clique un jour</span></h3>
+        <div id="heatmap" class="overflow-x-auto"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Drawer fiche amende -->
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<aside class="drawer" id="drawer">
+  <div class="p-6 flex justify-between items-start" style="background:linear-gradient(135deg, var(--fp-primary), var(--fp-primary-2))">
+    <div>
+      <div class="text-xs font-bold uppercase tracking-wider" style="color: var(--fp-accent-2)" id="drawer-id">—</div>
+      <h2 class="text-xl font-extrabold mt-1 text-white" id="drawer-title">—</h2>
+      <p class="text-sm mt-0.5" style="color:#8598B4" id="drawer-subtitle">—</p>
+    </div>
+    <div class="flex items-center gap-1 flex-shrink-0">
+      <button aria-label="Amende précédente" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-prev" title="Amende précédente"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+      <button aria-label="Amende suivante" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-next" title="Amende suivante"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+      <button aria-label="Fermer" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-close">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+  </div>
+  <!-- data-no-fp-drop : dans une fiche amende, le justificatif dépend d'un choix (payer/contester) →
+       on garde les boutons explicites plutôt que de deviner au glisser-déposer. -->
+  <div class="p-6 space-y-5" id="drawer-body" data-no-fp-drop></div>
+  <input type="file" id="justif-file" accept="image/*,application/pdf" class="hidden" />
+  <input type="file" id="piece-file" accept="image/*,application/pdf" class="hidden" />
+  <div class="p-6 border-t border-slate-200 flex flex-wrap gap-2 sticky bottom-0 bg-white z-10" style="box-shadow:0 -6px 16px -10px rgba(15,30,61,.25)">
+    <button class="btn btn-primary text-sm flex-1 justify-center" id="drawer-pay"><i data-lucide="check" class="w-4 h-4"></i> Marquer payée</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-designer" title="Conducteur désigné — l'amende n'est plus à votre charge"><i data-lucide="user-check" class="w-4 h-4"></i> Désigner</button>
+    <button class="btn btn-outline text-sm" id="drawer-relance" title="Envoyer un email de relance au conducteur"><i data-lucide="mail" class="w-4 h-4"></i> Relancer</button>
+    <button class="btn btn-outline text-sm" id="drawer-conteste" title="Marquer cette amende comme contestée"><i data-lucide="gavel" class="w-4 h-4"></i> Contester</button>
+    <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+  </div>
+</aside>
+
+<!-- Modal : Nouvelle amende -->
+<div class="modal-backdrop" id="amende-modal">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold">Nouvelle amende</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="amende-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="amende-form" class="space-y-4">
+      <!-- Alerte doublon (affichée tout en haut, en temps réel pendant la saisie) -->
+      <div id="am-doublon-banner" class="hidden rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800"></div>
+      <!-- Import de l'avis : pré-remplissage automatique des champs -->
+      <div id="av-queue-banner" class="hidden rounded-lg border border-teal-300 bg-teal-50 p-2.5 text-sm text-teal-800 mb-2"></div>
+      <div id="av-import">
+        <input type="file" id="av-file" accept="image/*,application/pdf" class="hidden" multiple />
+        <button type="button" id="av-trigger" class="w-full flex items-center gap-3 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
+          <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
+            <i data-lucide="scan-line" class="w-5 h-5"></i>
+          </span>
+          <span class="flex-1">
+            <span class="block text-sm font-semibold text-slate-800">Importer l'avis (ou plusieurs)</span>
+            <span class="block text-xs text-slate-500">Photo ou PDF — glisse/dépose plusieurs avis pour les enchaîner</span>
+          </span>
+        </button>
+        <div id="av-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
+      </div>
+
+      <div>
+        <div class="field-label">Conducteur *</div>
+        <div class="ac-wrap"><input class="field-input" id="am-prenom" placeholder="Prénom" required autocomplete="off" /></div>
+      </div>
+      <div>
+        <div class="field-label">Motif *</div>
+        <div class="ac-wrap"><input class="field-input" id="am-motif" placeholder="ex. Excès de vitesse, Stationnement…" autocomplete="off" required /></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><div class="field-label">Montant (€) *</div><input class="field-input" type="text" inputmode="decimal" id="am-montant" placeholder="0" required /></div>
+        <div><div class="field-label">Points retirés *</div><input class="field-input" type="number" id="am-points" min="0" step="1" placeholder="0" required /><div class="text-xs text-slate-400 mt-0.5">Calculés selon l'infraction — modifiable</div></div>
+      </div>
+      <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+        <input type="checkbox" id="am-etrangere" class="w-4 h-4 accent-amber-600" />
+        Amende étrangère (pas de retrait de points en France)
+      </label>
+      <div class="grid grid-cols-2 gap-4">
+        <div><div class="field-label">Date *</div><input class="field-input" type="date" id="am-date" required /></div>
+        <div><div class="field-label">Statut *</div>
+          <select class="field-input" id="am-statut" required>
+            <option value="à payer">À payer</option>
+            <option value="payée">Payée</option>
+            <option value="désignée">Désignée (conducteur désigné)</option>
+            <option value="contestée">Contestée</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="field-label">N° d'avis *</div>
+        <input class="field-input" id="am-avis" placeholder="ex. 0012345678" required />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><div class="field-label">N° de télépaiement</div><input class="field-input" id="am-telepaiement" placeholder="ex. 6024329152" autocomplete="off" /></div>
+        <div><div class="field-label">Clé</div><input class="field-input" id="am-cle" placeholder="ex. 46" autocomplete="off" /></div>
+      </div>
+      <div id="am-majoration-box" class="rounded-lg border border-amber-300 bg-amber-50 p-3 space-y-2">
+        <label class="flex items-center gap-2 text-sm font-semibold text-amber-800 cursor-pointer">
+          <input type="checkbox" id="am-is-majoration" class="w-4 h-4 accent-amber-600" />
+          C'est une majoration d'une amende déjà enregistrée
+        </label>
+        <div id="am-majoration-pick" class="hidden space-y-1">
+          <div class="field-label !mb-0">Amende initiale à majorer</div>
+          <select class="field-input" id="am-majoration-parent"></select>
+          <p class="text-xs text-amber-700 leading-snug">Le <b>Montant</b> saisi ci-dessus sera enregistré comme <b>montant majoré</b> de l'amende choisie. Aucune nouvelle ligne n'est créée — la majoration est rattachée à l'amende d'origine.</p>
+        </div>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="amende-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+      </div>
+    </form>
+    <!-- Panneau proposé juste après l'enregistrement : envoi du mail au conducteur -->
+    <div id="am-postsave" class="hidden text-center space-y-3 py-2">
+      <div class="text-green-700 font-bold text-lg"><i data-lucide="check-circle" class="w-5 h-5 inline"></i> Amende enregistrée</div>
+      <div class="text-sm text-slate-600">Envoyer un email au conducteur ?<br><span class="text-xs text-slate-400">Destinataire : le conducteur · plus les adresses en copie configurées</span></div>
+      <div class="grid grid-cols-1 gap-2 text-left">
+        <button type="button" id="ps-paiement" class="btn btn-outline justify-center"><i data-lucide="mail" class="w-4 h-4"></i> Demande de paiement</button>
+        <button type="button" id="ps-designation" class="btn btn-outline justify-center"><i data-lucide="user-check" class="w-4 h-4"></i> Demande de désignation</button>
+        <button type="button" id="ps-skip" class="btn btn-dark justify-center">Fermer sans envoyer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/vendor/supabase.js?v=20260811e"></script>
+<script src="../assets/js/supabase-client.js?v=20260811e"></script>
+<script src="../assets/js/data.js?v=20260811e"></script>
+  <script>window.FP_PDF=1;</script>
+<script src="../assets/js/app.js?v=20260811e"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
+<script>
+  lucide.createIcons();
+  const data = window.FP_DATA;
+  // Cette page n'affiche que les amendes de 2026 (les 2025 sont historiques)
+  // Le filtre est appliqué dans filtered() pour résister au rechargement depuis Supabase
+  // ⚠️ TOLÉRANCE DE TYPE : la colonne `annee` peut revenir en NOMBRE (2026) depuis Supabase
+  // alors que data.js la stocke en CHAÎNE ("2026"). On compare donc toujours via String().
+  // Si `annee` est absente, on retombe sur l'année de la date.
+  const anneeOf = (a) => { const y = a && a.annee; return (y === 0 || y) ? String(y) : ((a && a.date) || '').slice(0, 4); };
+  // ⚠️ Échappement HTML — DÉFINI TÔT car utilisé dès l'init (rebuildMotifFilter, motifPill…).
+  // S'il était déclaré plus bas (const = TDZ), l'appel à l'init plantait toute la page.
+  const escAmende = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // Aperçu inline d'un scan (image -> <img> ; PDF/inconnu -> <iframe>) directement dans le tiroir.
+  function scanPreview(url) {
+    if (!url) return '';
+    const box = 'width:100%;border:1px solid var(--fp-border);border-radius:.55rem;background:#f8fafc;';
+    const safe = encodeURI(url).replace(/'/g, '%27'); // sûr dans un attribut ET dans la chaîne JS de onclick
+    if (/\.(jpe?g|png|webp|gif|bmp)(\?|#|$)/i.test(url)) {
+      return `<img src="${safe}" loading="lazy" style="${box}max-height:380px;object-fit:contain;cursor:zoom-in;display:block" title="Cliquer pour agrandir" onclick="window.open('${safe}','_blank','noopener')">`;
+    }
+    return (window.FP && FP.docFrame) ? FP.docFrame(safe, { height:'420px' }) : `<iframe src="${safe}" loading="lazy" style="${box}height:420px" title="Aperçu du document"></iframe>`;
+  }
+  // === Documents multiples d'une amende (colonne `pieces` : [{id,label,url,date}]) ===
+  // Permet de joindre AUTANT de PDF/photos que nécessaire (avis initial, nouvel avis après
+  // désignation, justificatifs…) — s'ajoutent SANS remplacer l'avis/justificatif existants.
+  const PIECE_SUGGESTIONS = ['Avis initial', 'Avis après désignation', 'Justificatif de désignation', 'Preuve de paiement', 'Autre'];
+  function piecesSectionHTML(a) {
+    const list = Array.isArray(a.pieces) ? a.pieces : [];
+    const has = list.length > 0;
+    const rows = list.map(p => {
+      const isPdf = /\.pdf(\?|#|$)/i.test(p.url || '');
+      return `<div style="border:1px solid var(--fp-border);border-radius:.6rem;background:#fff;margin-bottom:.5rem;overflow:hidden">
+        <div class="flex items-center gap-2 p-2.5">
+          <i data-lucide="${isPdf ? 'file-text' : 'image'}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+          <div class="flex-1 min-w-0">
+            <div class="text-sm font-semibold text-slate-800 truncate">${escAmende(p.label || 'Document')}</div>
+            ${p.date ? `<div class="text-xs text-slate-400">Ajouté le ${FP.date(p.date)}</div>` : ''}
+          </div>
+          <button type="button" class="btn btn-outline text-xs !px-2.5" data-piece-view="${escAmende(p.id || '')}" title="Aperçu"><i data-lucide="eye" class="w-4 h-4"></i> Voir</button>
+          <a href="${escAmende(p.url || '')}" target="_blank" rel="noopener" class="ra-btn" title="Ouvrir dans un onglet"><i data-lucide="external-link" class="w-4 h-4"></i></a>
+          <button type="button" class="ra-btn" data-piece-del="${escAmende(p.id || '')}" title="Supprimer ce document"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
+        </div>
+        <div data-piece-prev="${escAmende(p.id || '')}" style="display:none;padding:0 .6rem .65rem"></div>
+      </div>`;
+    }).join('');
+    // Section mise en ÉVIDENCE dès qu'il y a au moins un document (encadré ambré + compteur).
+    const wrap = has ? 'border:1.5px solid #FCD34D;background:#FFFBEB;border-radius:.75rem;padding:.9rem 1rem' : '';
+    return `<div style="${wrap}">
+      <div class="field-label" style="${has ? 'color:#B45309;display:flex;align-items:center;gap:6px' : ''}">
+        <i data-lucide="paperclip" class="w-4 h-4"></i> Documents${has ? ` · ${list.length}` : ''}
+      </div>
+      <p class="text-xs mb-2" style="color:${has ? '#B45309' : '#94A3B8'}">Avis initial, <b>nouvel avis après désignation</b>, justificatifs… Ajoute autant de PDF/photos que nécessaire (sans effacer l'avis ni le justificatif).</p>
+      ${rows || '<div class="text-xs text-slate-400 mb-2">Aucun document supplémentaire pour l\'instant.</div>'}
+      <button type="button" id="piece-add" class="btn btn-dark text-sm w-full justify-center mt-1"><i data-lucide="paperclip" class="w-4 h-4"></i> Ajouter un document</button>
+    </div>`;
+  }
+  // Aperçu direct (« Voir ») d'un document joint, sous la ligne, sans quitter la fiche.
+  function togglePiecePreview(pid) {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
+    const p = (a.pieces || []).find(x => x.id === pid); if (!p) return;
+    const prev = document.querySelector('#drawer-body [data-piece-prev="' + pid + '"]'); if (!prev) return;
+    if (prev.dataset.loaded !== '1') { prev.innerHTML = scanPreview(p.url); prev.dataset.loaded = '1'; prev.style.display = 'block'; if (window.lucide) lucide.createIcons(); return; }
+    prev.style.display = (prev.style.display === 'none') ? 'block' : 'none';
+  }
+  async function addPiece(file) {
+    if (!file || !state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    let label = await FP.prompt('Nom du document ?\nSuggestions : ' + PIECE_SUGGESTIONS.join(' · '), 'Avis après désignation');
+    if (label === null) return; // annulé
+    label = (label || '').trim() || 'Document';
+    let url = '';
+    try { url = await FP.uploadScan(file, 'pieces', { name: a.numeroAvis ? 'piece-' + a.numeroAvis : 'piece' }) || ''; }
+    catch (e) { console.error(e); alert("Le document n'a pas pu être envoyé. Réessaie."); return; }
+    if (!url) { alert("Le document n'a pas pu être envoyé. Réessaie."); return; }
+    const list = Array.isArray(a.pieces) ? a.pieces.slice() : [];
+    if (list.some(p => p.url === url)) { openDrawer(a.id); return; } // anti-doublon (même fichier)
+    list.push({ id: 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), label, url, date: new Date().toISOString().slice(0, 10) });
+    FP.history.commit();
+    a.pieces = list;
+    FP.persist.update('amendes', a.id, { pieces: list });
+    openDrawer(a.id);
+  }
+  async function deletePiece(pid) {
+    if (!state.currentId || !pid) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a || !Array.isArray(a.pieces)) return;
+    if (!await FP.confirm('Supprimer ce document de l\'amende ?')) return;
+    const list = a.pieces.filter(p => p.id !== pid);
+    FP.history.commit();
+    a.pieces = list;
+    FP.persist.update('amendes', a.id, { pieces: list });
+    openDrawer(a.id);
+  }
+  const DEFAULT_DATE_FROM = ''; // le filtrage par année se fait via le sélecteur (state.annee), pas par une date plancher
+  const state = { search: '', conducteur: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', currentId: null, voirTout: false, tableExpanded: false, selectedIds: new Set(), onlyPoints: false };
+  // Intention du prochain justificatif joint : 'pay' → statut « payée » (preuve de paiement) ;
+  // 'designate' → statut « désignée » (preuve de désignation, exigée pour désigner).
+  let justifIntent = 'pay';
+  const TABLE_LIMIT = 10; // nb d'amendes affichées avant "Cliquez pour tout voir"
+  const $ = (id) => document.getElementById(id);
+
+  // #8 — Mémorise le dernier filtre/tri (par société) et le restaure à la prochaine visite.
+  const AM_FILTERS_KEY = 'fp_amendes_filters_' + (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } })();
+  // Filtres/tri SYNCHRONISÉS tous appareils (règle 0-sync) via FP.pref (app_settings) + cache local.
+  function saveFilters() {
+    const v = { statut: state.statut, motif: state.motif, motifCat: state.motifCat, dateFrom: state.dateFrom, dateTo: state.dateTo, sortKey: state.sortKey, sortDir: state.sortDir, voirTout: state.voirTout };
+    try { if (window.FP && FP.pref) FP.pref.set(AM_FILTERS_KEY, v); else localStorage.setItem(AM_FILTERS_KEY, JSON.stringify(v)); } catch (e) {}
+  }
+  function restoreFilters() {
+    try { const s = (window.FP && FP.pref) ? FP.pref.get(AM_FILTERS_KEY, null) : JSON.parse(localStorage.getItem(AM_FILTERS_KEY) || 'null'); if (s && typeof s === 'object') Object.assign(state, s); } catch (e) {}
+  }
+  function syncFiltersUI() {
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === state.statut));
+    const fm = $('filter-motif'); if (fm) { fm.value = state.motif; if (fm.value !== state.motif) { state.motif = 'all'; fm.value = 'all'; } }
+    if ($('filter-date-from')) $('filter-date-from').value = state.dateFrom || '';
+    if ($('filter-date-to')) $('filter-date-to').value = state.dateTo || '';
+    const sk = $('sort-key'); if (sk) sk.value = state.sortKey;
+    const sd = $('sort-dir'); if (sd) { const i = sd.querySelector('i'); if (i) i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); }
+    const vt = $('btn-voir-tout'); if (vt) vt.textContent = state.annee === 'all' ? 'Filtrer par année' : 'Voir toutes les années';
+  }
+
+  // Catégorise un motif en grande famille (pour les mini-stats et le filtre par type)
+  function categorize(motif) {
+    const m = (motif || '').toLowerCase();
+    if (m.includes('vitesse')) return 'vitesse';
+    if (m.includes('stationnement') || m.includes('arret') || m.includes('arrêt') || m.includes('genant') || m.includes('gênant')) return 'stationnement';
+    if (m.includes('téléphone') || m.includes('telephone')) return 'telephone';
+    if (m.includes('feu')) return 'feu';
+    if (m.includes('voie') || m.includes('circulation') || m.includes('bus')) return 'voie';
+    return 'autre';
+  }
+
+  // Estime l'excès de vitesse (km/h) à partir du texte de l'avis, sinon null
+  function excesVitesse(texte) {
+    if (!texte) return null;
+    const t = texte.toLowerCase().replace(/\s+/g, ' ');
+    let m = t.match(/d[ée]passement[^0-9]{0,20}(\d{1,3})\s*km/);
+    if (m) return parseInt(m[1], 10);
+    const ret = t.match(/vitesse\s+retenue[^0-9]{0,15}(\d{1,3})/);
+    const lim = t.match(/(?:vitesse\s+(?:maximale\s+)?autoris[ée]e|limit[ée]e\s+[àa])[^0-9]{0,15}(\d{1,3})/);
+    if (ret && lim) return Math.max(0, parseInt(ret[1], 10) - parseInt(lim[1], 10));
+    return null;
+  }
+  // Déduit le nombre de points retirés selon l'infraction (null si indéterminable → laissé à l'utilisateur)
+  function pointsRetrait(motif, texte) {
+    const m = (motif || '').toLowerCase();
+    const cat = categorize(motif);
+    if (cat === 'stationnement' || cat === 'voie') return 0;          // pas de retrait de points
+    if (cat === 'telephone') return 3;
+    if (cat === 'feu') return 4;
+    if (cat === 'vitesse') {
+      const exc = excesVitesse(texte);
+      if (exc == null) return null;                                   // excès inconnu → on ne devine pas
+      if (exc < 20) return 1;
+      if (exc < 30) return 2;
+      if (exc < 40) return 3;
+      if (exc < 50) return 4;
+      return 6;
+    }
+    if (m.includes('ceinture')) return 3;
+    if (m.includes('stop') || m.includes('priorit')) return 4;
+    if (m.includes('distance') || m.includes('sécurité') || m.includes('securite')) return 3;
+    if (m.includes('alcool') || m.includes('stupéfiant') || m.includes('stupefiant')) return 6;
+    return null;                                                      // motif inconnu → laisser à l'utilisateur
+  }
+  const CAT_META = {
+    vitesse:        { label: 'Vitesse',       icon: 'gauge',         color: '#DC2626' },
+    stationnement:  { label: 'Stationnement', icon: 'parking-circle', color: '#F59E0B' },
+    telephone:      { label: 'Téléphone',     icon: 'smartphone',    color: '#7C3AED' },
+    feu:            { label: 'Feu rouge',     icon: 'traffic-cone',  color: '#EF4444' },
+    voie:           { label: 'Voie / bus',    icon: 'route',         color: '#1E3A8A' },
+    autre:          { label: 'Autre',         icon: 'circle-dot',    color: '#64748B' },
+  };
+
+  function motifPill(motif) {
+    const m = (motif || '').toLowerCase();
+    let cls = 'motif-autre';
+    if (m.includes('vitesse')) cls = 'motif-vitesse';
+    else if (m.includes('stationnement') || m.includes('arret') || m.includes('genant')) cls = 'motif-stationnement';
+    else if (m.includes('téléphone') || m.includes('telephone')) cls = 'motif-telephone';
+    else if (m.includes('feu')) cls = 'motif-feu';
+    else if (m.includes('voie') || m.includes('circulation') || m.includes('bus')) cls = 'motif-voie';
+    return `<span class="motif-pill ${cls}">${escAmende(motif || '—')}</span>`;
+  }
+
+  function statutBadge(s) {
+    // Source unique : mêmes helpers tolérants (accents/casse/espaces) que le reste de l'app,
+    // sinon un statut « payee »/« paye » retombait à tort sur « À payer ».
+    const n = (s == null ? '' : String(s)).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if ((FP.estPayee && FP.estPayee({ statut: s })) || n === 'payee' || n === 'paye') return '<span class="badge badge-ok">Payée</span>';
+    if (n === 'designee')  return '<span class="badge" style="background:#E0E7FF;color:#3730A3">Désignée</span>';
+    if (n === 'contestee') return '<span class="badge badge-info">Contestée</span>';
+    return '<span class="badge badge-danger">À payer</span>';
+  }
+
+  // Populate motif filter dynamically — reconstruit aussi au chargement Supabase
+  function rebuildMotifFilter() {
+    const sel = $('filter-motif'); if (!sel) return; const cur = sel.value;
+    const motifs = [...new Set(data.amendes.map(a => a.motif).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="all">Tous motifs</option>' + motifs.map(m => `<option value="${escAmende(m)}">${escAmende(m)}</option>`).join('');
+    sel.value = (motifs.includes(cur) || cur === 'all') ? cur : 'all';
+  }
+  rebuildMotifFilter();
+
+  // Remplit le sélecteur d'année avec toutes les années présentes (2026, 2027, …) + « Toutes années ».
+  function fillAnneeFilter() {
+    const sel = $('filter-annee'); if (!sel) return;
+    const years = [...new Set((data.amendes || []).map(anneeOf).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
+    const cur = sel.value;
+    sel.innerHTML = '<option value="all">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    const val = (cur && (cur === 'all' || years.includes(cur))) ? cur : (years[0] || 'all'); // défaut = année la plus récente
+    sel.value = val; state.annee = val;
+  }
+  fillAnneeFilter();
+
+  function filtered() {
+    const q = FP.norm(state.search).trim();
+    return data.amendes.filter(a => {
+      // Filtre par année : celle choisie dans le sélecteur (2026, 2027, …) ou « Toutes années ».
+      if (state.annee !== 'all' && anneeOf(a) !== state.annee) return false;
+      // Filtre par statut (tolérant casse/accents via les helpers — sinon une amende « À payer »
+      // majuscule est comptée par le KPI mais ratée par la puce → compteurs qui divergent).
+      if (state.statut !== 'all') {
+        if (state.statut === 'à payer') { if (!FP.estAPayer(a)) return false; }
+        else if (state.statut === 'payée') { if (!FP.estPayee(a)) return false; }
+        else if (a.statut !== state.statut) return false;
+      }
+      if (state.onlyPoints && !((Number(a.points) || 0) > 0)) return false;
+      if (state.motif !== 'all' && a.motif !== state.motif) return false;
+      if (state.motifCat !== 'all' && categorize(a.motif) !== state.motifCat) return false;
+      if (state.dateFrom && (a.date || '') < state.dateFrom) return false;
+      if (state.dateTo && (a.date || '') > state.dateTo) return false;
+      // Filtre STRICT par conducteur : sur le prénom RÉEL de l'amende (jamais le commentaire) —
+      // sinon un nom cité dans un commentaire d'une autre amende ressortirait à tort.
+      if (state.conducteur && (FP.condGroupKey || FP.normPrenom)(a.prenom) !== (FP.condGroupKey || FP.normPrenom)(state.conducteur)) return false;
+      if (q && !(FP.norm(`${a.prenom} ${a.motif} ${a.numeroAvis} ${a.commentaire}`).includes(q))) return false;
+      return true;
+    });
+  }
+
+  function renderKPIs() {
+    // KPIs sur l'année sélectionnée (ou toutes années)
+    const all = (state.annee === 'all') ? data.amendes.slice() : data.amendes.filter(a => anneeOf(a) === state.annee);
+    const apayer = all.filter(a => FP.estAPayer(a));
+    const payees = all.filter(a => FP.estPayee(a));
+    const points = all.reduce((s, a) => s + (Number(a.points) || 0), 0);
+    const montantApayer = apayer.reduce((s,a) => s + montantDu(a), 0);
+    const montantPayees = payees.reduce((s,a) => s + montantDu(a), 0);
+
+    $('kpi-total').textContent = all.length;
+    $('kpi-total-sub').textContent = FP.euro(all.reduce((s,a) => s + montantDu(a), 0)) + ' au total';
+    $('kpi-apayer').textContent = apayer.length;
+    $('kpi-apayer-montant').textContent = FP.euro(montantApayer) + ' dus';
+    $('kpi-payees').textContent = payees.length;
+    $('kpi-payees-montant').textContent = FP.euro(montantPayees) + ' réglés';
+    $('kpi-points').textContent = points;
+  }
+
+  // === Configuration colonnes (éditables via drag / ✕ / dblclick) ===
+  const AMENDES_COLUMNS = [
+    { key: 'date',         label: 'Date',        defaultWidth: 110, render: a => FP.date(a.date) },
+    { key: 'prenom',       label: 'Conducteur',  defaultWidth: 140, cellCls: 'font-semibold', render: a => a.prenom ? FP.lienConducteur(a.prenom, FP.conducteurNomUnifie ? FP.conducteurNomUnifie(a.prenom) : a.prenom) : '<span class="text-slate-400">—</span>' },
+    { key: 'motif',        label: 'Motif',       defaultWidth: 200, render: a => motifPill(a.motif) },
+    { key: 'montant',      label: 'Montant',     defaultWidth: 110, render: a => { const md = montantDu(a); const disp = md ? FP.euroPrecis(md) : '<span class="text-slate-400">—</span>';
+        return (a.majoree && a.montantMajore)
+          ? `<span class="font-semibold text-red-700" title="Majorée — montant initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}">${disp} <span class="text-[10px]">⚠ maj.</span></span>`
+          : disp; } },
+    { key: 'points',       label: 'Points',      defaultWidth: 80,  render: a => { const p = Number(a.points) || 0; return p > 0 ? `<span class="text-amber-600 font-bold">−${p}</span>` : '<span class="text-amber-500">●</span>'; } },
+    { key: 'numeroAvis',   label: 'N° avis',     defaultWidth: 150, cellCls: 'font-mono text-xs text-slate-500', render: a => escAmende(a.numeroAvis || '—') },
+    { key: 'annee',        label: 'Année',       defaultWidth: 80,  render: a => escAmende(a.annee) || '—' },
+    { key: 'commentaire',  label: 'Commentaire', defaultWidth: 200, render: a => a.commentaire ? `<span title="${escAmende(a.commentaire)}">${escAmende(a.commentaire.slice(0,30))}${a.commentaire.length > 30 ? '…' : ''}</span>` : '—' },
+    { key: 'statut',       label: 'Statut',      defaultWidth: 110, render: a => statutBadge(a.statut) },
+  ];
+
+  let amendesEditor = null; // initialisé après le DOM ready
+
+  function sortRows(arr) {
+    const dir = state.sortDir === 'asc' ? 1 : -1;
+    // PRIORITÉ (toujours, quel que soit le tri choisi) : « à payer » en haut, et les MAJORÉES d'abord.
+    const grpApayer = a => (FP.estAPayer(a) ? 0 : 1);
+    const grpMajore = a => (a.majoree && a.montantMajore ? 0 : 1);
+    return arr.slice().sort((a, b) => {
+      let g = grpApayer(a) - grpApayer(b); if (g) return g;               // à payer avant le reste
+      if (grpApayer(a) === 0) { const m = grpMajore(a) - grpMajore(b); if (m) return m; } // majorées en tête des à payer
+      let r;
+      if (state.sortKey === 'prenom')       r = (a.prenom || '').localeCompare(b.prenom || '', 'fr', { sensitivity: 'base' });
+      else if (state.sortKey === 'montant') r = montantDu(a) - montantDu(b); // trier sur le montant DÛ (= affiché), pas le brut
+      else if (state.sortKey === 'points')  r = (Number(a.points) || 0) - (Number(b.points) || 0);
+      else                                  r = (a.date || '').localeCompare(b.date || '');
+      if (r === 0) r = (a.date || '').localeCompare(b.date || ''); // tie-break par date
+      return r * dir;
+    });
+  }
+
+  function renderSummary(rows) {
+    const sumMontant = rows.reduce((s, a) => s + montantDu(a), 0);
+    const sumApayer = rows.filter(a => FP.estAPayer(a)).reduce((s, a) => s + montantDu(a), 0);
+    const sumPoints = rows.reduce((s, a) => s + (Number(a.points) || 0), 0);
+    $('sum-count').textContent = rows.length;
+    $('sum-montant').textContent = FP.euro(sumMontant);
+    $('sum-apayer').textContent = FP.euro(sumApayer);
+    $('sum-points').textContent = sumPoints;
+
+    const actifs = [];
+    if (state.conducteur) actifs.push('conducteur : ' + state.conducteur);
+    if (state.search.trim()) actifs.push(`« ${state.search.trim()} »`);
+    if (state.motif !== 'all') actifs.push(state.motif);
+    if (state.motifCat !== 'all') actifs.push((CAT_META[state.motifCat] || {}).label || state.motifCat);
+    if (state.statut !== 'all') actifs.push(state.statut);
+    if (state.onlyPoints) actifs.push('avec retrait de points');
+    if (state.dateFrom || state.dateTo) actifs.push(`${state.dateFrom ? FP.date(state.dateFrom) : '…'} → ${state.dateTo ? FP.date(state.dateTo) : '…'}`);
+    $('sum-context').textContent = actifs.length ? '🔎 ' + actifs.join(' · ') : '';
+
+    // Drill-down : qui sont les collaborateurs (par légende) ?
+    const drill = $('drill-info');
+    const groupByConducteur = state.motif !== 'all' || state.motifCat !== 'all' || state.search.trim() || state.dateFrom || state.dateTo;
+    if (groupByConducteur && rows.length) {
+      const par = {};
+      rows.forEach(a => {
+        const k = (FP.condGroupKey || FP.normPrenom)(a.prenom) || '—';   // regroupe Jean / JEAN / Jean Dupont, mais SÉPARE deux homonymes qui ont un nom de famille (comme le dashboard)
+        if (!par[k]) par[k] = { label: (FP.conducteurNomUnifie ? FP.conducteurNomUnifie(a.prenom) : (a.prenom || '—')).trim() || '—', n: 0, montant: 0, points: 0 };
+        par[k].n++; par[k].montant += montantDu(a); par[k].points += (Number(a.points) || 0);
+      });
+      const entries = Object.entries(par).sort((a, b) => b[1].montant - a[1].montant);
+      const legende = state.motif !== 'all' ? state.motif : (state.motifCat !== 'all' ? ((CAT_META[state.motifCat] || {}).label || state.motifCat) : null);
+      const titre = legende ? `Collaborateurs concernés par « ${escAmende(legende)} »` : 'Collaborateurs concernés';
+      drill.innerHTML = `<div class="text-sm font-bold text-slate-900 mb-2">${titre} — ${entries.length} conducteur(s)</div>
+        <div class="flex flex-wrap gap-2">` + entries.map(([k, v]) => `
+          <button type="button" class="drill-chip" data-cond="${(v.label || k).replace(/"/g, '&quot;')}" style="display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .7rem;border-radius:9999px;border:1px solid var(--fp-border);background:white;font-size:.8rem;cursor:pointer">
+            <span class="font-semibold">${escAmende(v.label || k)}</span>
+            <span class="text-slate-500">${v.n} · ${FP.euro(v.montant)}${v.points ? ' · −' + v.points + 'pts' : ''}</span>
+          </button>`).join('') + `</div>`;
+      drill.classList.remove('hidden');
+    } else {
+      drill.classList.add('hidden');
+    }
+  }
+
+  // #7 : barre de sélection multiple (affichée quand ≥1 amende cochée)
+  function updateBulkBar() {
+    const bar = $('am-bulk-bar'); if (!bar) return;
+    const n = state.selectedIds.size;
+    bar.classList.toggle('active', n > 0);
+    const c = $('am-bulk-count'); if (c) c.textContent = n;
+    // Synchro « Tout sélectionner » (coché / partiel / vide) sur les amendes FILTRÉES
+    const all = filtered(); const total = all.length;
+    const selInFilter = all.filter(a => state.selectedIds.has(a.id)).length;
+    const cbAll = $('am-select-all'); const nEl = $('am-select-all-n');
+    if (cbAll) { cbAll.checked = total > 0 && selInFilter === total; cbAll.indeterminate = selInFilter > 0 && selInFilter < total; }
+    if (nEl) nEl.textContent = total ? `(${total})` : '';
+  }
+
+  let drawerOrder = []; // ordre courant (filtré + trié) pour la navigation ‹ › dans le tiroir
+  function renderTable() {
+    saveFilters(); // #8 : mémorise le filtre/tri courant
+    const allRows = sortRows(filtered());
+    drawerOrder = allRows.map(a => a.id);
+    renderSummary(allRows);
+    const tbody = $('amendes-tbody');
+    const empty = $('empty-state');
+    // Limite d'affichage : 10 par défaut, sauf si l'utilisateur a déplié
+    const rows = state.tableExpanded ? allRows : allRows.slice(0, TABLE_LIMIT);
+    if (allRows.length === 0) {
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+      // Message parlant : distingue "aucune donnée chargée" de "filtrée par année/filtres"
+      const msg = $('empty-msg');
+      if (msg) {
+        const total = (data.amendes || []).length;
+        const en2026 = (data.amendes || []).filter(a => anneeOf(a) === '2026').length;
+        if (total === 0) {
+          const soc = (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return '?'; } })();
+          msg.innerHTML = `Aucune amende chargée (société active : <b>${soc}</b>).`;
+        } else if (en2026 === 0) {
+          const annees = [...new Set((data.amendes || []).map(a => anneeOf(a)).filter(Boolean))].sort().join(', ');
+          msg.innerHTML = `ℹ️ <b>${total} amende(s) chargée(s)</b> mais aucune en 2026. Années présentes : <b>${annees || '—'}</b>. (Clique « Tout voir » pour les afficher.)`;
+        } else {
+          msg.textContent = 'Aucune amende ne correspond aux filtres.';
+        }
+      }
+    } else {
+      empty.classList.add('hidden');
+      const visible = amendesEditor ? amendesEditor.getVisibleColumns() : AMENDES_COLUMNS.map(c => c.key);
+      tbody.innerHTML = rows.map(a => {
+        const cellsArr = visible.map(k => {
+          const def = AMENDES_COLUMNS.find(c => c.key === k);
+          if (!def) return '<td></td>';
+          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''} data-col="${k}">${def.render(a)}</td>`;
+        });
+        // Barre d'actions rapides (apparait au survol) injectee dans la derniere cellule
+        const ra = `<div class="row-actions">`
+          + (FP.estPayee(a)
+              ? `<button type="button" class="ra-btn" data-ra="unpay" title="Marquer non payée (revenir en arrière)"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>`
+              : (a.statut !== 'désignée' ? `<button type="button" class="ra-btn" data-ra="pay" title="Marquer payée"><i data-lucide="check" class="w-4 h-4"></i></button>` : ''))
+          + (a.numeroAvis ? `<button type="button" class="ra-btn" data-ra="copy" title="Copier le n° d'avis"><i data-lucide="copy" class="w-4 h-4"></i></button>` : '')
+          + `<button type="button" class="ra-btn" data-ra="open" title="Ouvrir la fiche"><i data-lucide="square-arrow-out-up-right" class="w-4 h-4"></i></button></div>`;
+        if (cellsArr.length) cellsArr[cellsArr.length - 1] = cellsArr[cellsArr.length - 1].replace(/<\/td>$/, ra + '</td>');
+        // #7 : case à cocher de sélection en tête de la 1re cellule
+        const sel = state.selectedIds.has(a.id);
+        if (cellsArr.length) cellsArr[0] = cellsArr[0].replace(/^(<td[^>]*>)/, `$1<input type="checkbox" class="am-cb" data-id="${a.id}"${sel ? ' checked' : ''} title="Sélectionner" />`);
+        // Couleur de ligne selon le statut
+        const stc = FP.estPayee(a) ? 'row-paid'
+          : a.statut === 'contestée' ? 'row-contested'
+          : (FP.estAPayer(a) && a.date && (Date.now() - new Date(a.date)) / 86400000 > 30) ? 'row-overdue' : '';
+        return `<tr class="cursor-pointer ${stc}${sel ? ' row-selected' : ''}" data-id="${a.id}">${cellsArr.join('')}</tr>`;
+      }).join('');
+      updateBulkBar();
+    }
+    // Bouton déplier / replier
+    const moreBtn = $('table-more');
+    if (moreBtn) {
+      if (allRows.length > TABLE_LIMIT) {
+        moreBtn.style.display = '';
+        moreBtn.innerHTML = state.tableExpanded
+          ? '<i data-lucide="chevron-up" class="w-3.5 h-3.5"></i> Réduire (afficher 10)'
+          : `<i data-lucide="chevron-down" class="w-3.5 h-3.5"></i> Cliquez pour tout voir (${allRows.length})`;
+      } else { moreBtn.style.display = 'none'; }
+    }
+    $('result-count').textContent = `${rows.length} amende${rows.length > 1 ? 's' : ''} affichée${rows.length > 1 ? 's' : ''} sur ${allRows.length}`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  // ---------- Filtres pilotés par les graphes ----------
+  function scrollToTable() {
+    const el = document.getElementById('filtered-summary');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function setMotifFilter(motif) {
+    state.motif = (state.motif === motif) ? 'all' : motif; // re-clic = on enlève
+    $('filter-motif').value = state.motif;
+    renderTable(); scrollToTable();
+  }
+  function setConducteurFilter(name) {
+    const nm = (name || '').trim();
+    // Re-clic sur le même conducteur = on enlève le filtre
+    const same = !!nm && (FP.condGroupKey || FP.normPrenom)(state.conducteur) === (FP.condGroupKey || FP.normPrenom)(nm);
+    // Filtre STRICT par conducteur (sur le prénom de l'amende, PAS la recherche texte → un nom
+    // cité dans un commentaire ne ressort pas). On réinitialise les autres filtres pour être
+    // sûr d'afficher TOUTES ses amendes.
+    state.statut = 'all'; state.motif = 'all'; state.motifCat = 'all'; state.onlyPoints = false;
+    state.dateFrom = DEFAULT_DATE_FROM; state.dateTo = ''; state.search = '';
+    state.conducteur = same ? '' : nm;
+    if ($('search')) $('search').value = '';
+    if ($('filter-motif')) $('filter-motif').value = 'all';
+    if ($('filter-date-from')) $('filter-date-from').value = DEFAULT_DATE_FROM;
+    if ($('filter-date-to')) $('filter-date-to').value = '';
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
+    renderTable(); renderCharts(); scrollToTable();
+  }
+  function setMotifCategory(cat) {
+    state.motifCat = (state.motifCat === cat) ? 'all' : cat; // re-clic = on enlève
+    renderTable(); renderCharts(); scrollToTable();
+  }
+  function setDay(iso) {
+    const on = (state.dateFrom === iso && state.dateTo === iso);
+    state.dateFrom = on ? '' : iso; state.dateTo = on ? '' : iso;
+    $('filter-date-from').value = state.dateFrom; $('filter-date-to').value = state.dateTo;
+    renderTable(); renderCharts(); scrollToTable();
+  }
+
+  // Emails conducteurs (pour la relance) — chargés depuis Supabase si dispo
+  const condEmails = {};        // clé EXACTE (key ou nom complet normalisé) → e-mail
+  const condEmailByFirst = {};  // prénom seul → e-mail, MAIS neutralisé si 2 personnes différentes le partagent
+  const AMBIGU = '__AMBIGU__';
+  function lookupEmail(prenom) {
+    const p = (prenom || '').toLowerCase().trim();
+    if (condEmails[p]) return condEmails[p];               // 1) correspondance exacte (jamais ambiguë)
+    const fb = condEmailByFirst[p.split(' ')[0]];          // 2) repli prénom SEULEMENT s'il est unique
+    // ⚠️ Ne JAMAIS deviner sur un prénom partagé par 2 conducteurs (envoi de l'avis + PII au MAUVAIS
+    // destinataire). En cas d'ambiguïté on renvoie '' → le flux d'envoi bloque au lieu de se tromper.
+    return (fb && fb !== AMBIGU) ? fb : '';
+  }
+  if (FP.persist && FP.persist.available && FP.persist.available()) {
+    FP.db.select('conducteurs').then(r => {
+      (r.data || []).forEach(c => {
+        if (!c.email) return;
+        [c.key, c.name].filter(Boolean).forEach(n => {
+          const k = String(n).toLowerCase().trim();
+          condEmails[k] = c.email;
+          const f = k.split(' ')[0];
+          if (condEmailByFirst[f] === undefined) condEmailByFirst[f] = c.email;
+          else if (condEmailByFirst[f] !== c.email) condEmailByFirst[f] = AMBIGU; // homonyme de prénom, e-mail différent
+        });
+      });
+    }).catch(() => {});
+  }
+  // Signature de la société (Paramètres → Société → « Signature »). Peut être du TEXTE ou du HTML
+  // (ta vraie signature Gmail avec logo). On l'ajoute en HTML tel quel dans le mail HTML, et en
+  // version texte (balises retirées) dans le repli texte.
+  function sigRaw() { try { return String(((window.FP && FP.societeProfil) ? FP.societeProfil() : {}).mailSignature || '').trim(); } catch (e) { return ''; } }
+  const _sigIsHtml = s => /<[a-z!][\s\S]*>/i.test(s);   // contient au moins une balise → HTML
+  function sigHtmlBlock() {
+    const s = sigRaw(); if (!s) return '';
+    const h = _sigIsHtml(s) ? s : String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])).replace(/\n/g, '<br>');
+    return '<br><br>' + h;   // séparé du message par une ligne vide
+  }
+  // Version TEXTE du corps (message + signature en texte brut).
+  function withSignature(body) {
+    const s = sigRaw(); if (!s) return body;
+    const t = _sigIsHtml(s)
+      ? s.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/\n{3,}/g, '\n\n').trim()
+      : s;
+    return String(body || '') + '\n\n' + t;
+  }
+  async function ouvrirMail(body, opts) {
+    opts = opts || {};
+    const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
+    // Adresses d'envoi PROPRES À LA SOCIÉTÉ active (profil rempli dans Paramètres → Sociétés).
+    // PXP conserve ses adresses historiques ; une nouvelle société doit les renseigner.
+    const _prof = (window.FP && FP.societeProfil) ? FP.societeProfil() : {};
+    const EXPEDITEUR = _prof.mailExpediteur || '';
+    const COPIE_MAIL = _prof.mailCopie || '';
+    if (!EXPEDITEUR) {
+      alert("Aucune adresse d'envoi n'est configurée pour cette société.\nRenseigne-la dans Paramètres → Sociétés (e-mail d'envoi des amendes).");
+      return;
+    }
+    const to = lookupEmail(a.prenom);
+    const subjectBase = `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`;
+    // Une relance doit arriver DANS LA SUITE du 1er e-mail (même fil). On préfixe « Re: » et,
+    // surtout, on ancre TOUS les e-mails d'une même amende sur un identifiant RACINE déterministe
+    // (dérivé de l'id de l'amende) via les en-têtes RFC References/In-Reply-To → Gmail les regroupe
+    // dans le même fil. Aucun stockage nécessaire (marche pour tous les rôles, gestionnaire inclus).
+    const subject = opts.reply ? ('Re: ' + subjectBase) : subjectBase;
+    const _mailDom = (String(EXPEDITEUR).split('@')[1] || String(_prof.mailDomaineEnvoi || '').replace(/^@/, '') || 'parc-pilot.fr').trim();
+    const _rootId = `<pp-amende-${a.id}@${_mailDom}>`;   // ancre STABLE du fil (dérivée de l'amende)
+    // ⚠️ CHAQUE e-mail a un Message-ID UNIQUE (jamais deux e-mails avec le même Message-ID : sinon
+    // le destinataire — Gmail — dédoublonne et fait DISPARAÎTRE le 2ᵉ). Le rattachement au fil se
+    // fait par References (ancre commune _rootId) + objet identique ; la relance ajoute In-Reply-To.
+    const _ownId = `<pp-amende-${a.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@${_mailDom}>`;
+    const mailHeaders = { 'Message-ID': _ownId, 'References': _rootId };
+    if (opts.reply) mailHeaders['In-Reply-To'] = _rootId;   // relance = réponse au fil
+    // Avis de contravention : PIÈCE JOINTE OBLIGATOIRE (aucun lien dans l'e-mail, aucun accès public).
+    // ⚠️ Règle métier (consigne utilisateur) : on n'envoie JAMAIS une amende sans l'avis en pièce
+    // jointe. Si le PDF ne peut pas être préparé (bug / récupération impossible), on BLOQUE l'envoi et
+    // on le signale — pas d'envoi silencieux sans PJ. Le PDF est joint côté serveur (Resend télécharge
+    // le fichier via un lien signé au moment de l'envoi ; le destinataire n'a besoin d'aucun compte).
+    let attachments;
+    let avisSigned = null;
+    if (a.avisUrl) {
+      if (!(window.FP && FP.signedScanUrl)) {
+        alert("⚠️ Impossible de préparer la pièce jointe (fonction indisponible).\n\nE-mail NON envoyé. Recharge la page (Ctrl+Maj+R) et réessaie.");
+        return;
+      }
+      try { avisSigned = await FP.signedScanUrl(a.avisUrl, 600); } catch (e) { console.warn('[avis PJ]', e); } // 10 min : Resend télécharge la PJ à l'envoi → fenêtre courte = plus sûr si le lien fuit
+      if (!avisSigned) {
+        alert("⚠️ Impossible de joindre l'avis de contravention (le PDF n'a pas pu être récupéré).\n\nE-mail NON envoyé — pour éviter d'envoyer une amende SANS sa pièce jointe. Réessaie dans un instant.");
+        return;
+      }
+      attachments = [{ filename: `avis-${a.numeroAvis || 'contravention'}.pdf`, path: avisSigned }];
+    } else {
+      // Aucun scan d'avis rattaché à l'amende → rien à joindre. Confirmation explicite requise.
+      const sansPJ = await FP.confirm("⚠️ Aucun avis (PDF) n'est rattaché à cette amende → l'e-mail partira SANS pièce jointe.\n\nConseil : ajoute d'abord le scan de l'avis sur la fiche de l'amende (il sera alors joint automatiquement).\n\nOK = envoyer quand même sans PJ · Annuler = ne rien faire.");
+      if (!sansPJ) return;
+    }
+    // Corps du mail : uniquement le texte — plus de lien (seule la pièce jointe fait foi).
+    // On ajoute la SIGNATURE de la société (Paramètres → Société) sur l'envoi AUTOMATIQUE (Resend) :
+    // le repli Gmail, lui, garde la signature Gmail native (sinon on en aurait deux).
+    let fullBody = body;
+    // 1) Envoi AUTOMATIQUE via la fonction Resend (si déployée) — un clic = envoyé.
+    if (to && window.FP && FP.sendEmail) {
+      const sigBody = withSignature(body);   // corps + signature en TEXTE (repli)
+      // Version HTML : le message échappé + la signature HTML brute (logo/images compris).
+      const escH = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      let html = escH(body).replace(/\n/g, '<br>') + sigHtmlBlock();
+      // Plus de lien dans le corps du message : l'avis de contravention est en PIÈCE JOINTE.
+      try {
+        if (FP.toast) FP.toast('Envoi de l\'e-mail…');
+        await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: sigBody, replyTo: EXPEDITEUR, attachments, headers: mailHeaders });
+        if (FP.toast) FP.toast('✓ E-mail envoyé à ' + to); else alert('✓ E-mail envoyé à ' + to);
+        return;
+      } catch (e) {
+        const em = (e && e.message) ? e.message : String(e);
+        console.warn('[sendEmail] échec → repli Gmail', e);
+        // On explique POURQUOI l'envoi auto a échoué (au lieu d'ouvrir Gmail en silence),
+        // puis on propose quand même le repli Gmail.
+        const goGmail = await FP.confirm("❌ L'envoi automatique de l'amende a ÉCHOUÉ :\n\n" + em
+          + "\n\n(Souvent : le domaine de l'adresse d'envoi n'est pas encore « Verified » dans Resend.)\n\n"
+          + (avisSigned ? "⚠️ Le repli Gmail n'attache PAS le PDF tout seul : l'avis va s'ouvrir dans un onglet, glisse-le dans le mail avant d'envoyer.\n\n" : "")
+          + "OK = ouvrir Gmail" + (avisSigned ? " (+ l'avis)" : "") + " pour envoyer à la main · Annuler = ne rien faire.");
+        if (!goGmail) return;
+        // sinon on continue vers le repli Gmail ci-dessous
+      }
+    }
+    // Pas d'adresse pour le destinataire → l'envoi AUTOMATIQUE est impossible (rien tenté côté Resend).
+    if (!to) {
+      const go = await FP.confirm("Ce conducteur n'a pas d'e-mail enregistré → l'envoi automatique est impossible.\n\n"
+        + "Ajoute son adresse dans sa fiche (Conducteurs → Modifier → Email) pour envoyer en un clic.\n\n"
+        + "OK = ouvrir Gmail pour l'envoyer à la main · Annuler = ne rien faire.");
+      if (!go) return;
+    }
+    // 2) Repli : ouvre la fenêtre de rédaction Gmail (comportement d'origine)
+    const url = `https://mail.google.com/mail/?view=cm&fs=1&authuser=${encodeURIComponent(EXPEDITEUR)}`
+      + `&to=${encodeURIComponent(to)}&cc=${encodeURIComponent(COPIE_MAIL)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(fullBody)}`;
+    window.open(url, '_blank', 'noopener');
+    // Gmail ne peut pas attacher le PDF automatiquement → on l'ouvre pour que l'utilisateur le glisse dans le mail.
+    if (avisSigned) { try { window.open(avisSigned, '_blank', 'noopener'); } catch (e) {} }
+  }
+  // Prénom du collaborateur lié à l'amende ouverte
+  function prenomCourant() {
+    const a = data.amendes.find(x => x.id === state.currentId);
+    return (a && a.prenom && a.prenom.trim() && a.prenom.trim() !== '—') ? a.prenom.trim() : '';
+  }
+  // Applique un modèle : remplace {prenom} par le prénom (ou rien, en nettoyant l'espace).
+  function appliquerModele(tpl, p) {
+    return String(tpl).replace(/ ?\{prenom\}/gi, p ? ' ' + p : '');
+  }
+  // Modèle de la société active (Paramètres → Société), sinon texte par défaut.
+  function modeleMail(cle, defaut) {
+    try { const prof = (window.FP && FP.societeProfil) ? FP.societeProfil() : {}; const v = prof[cle]; if (v && String(v).trim()) return String(v); } catch (e) {}
+    return defaut;
+  }
+  // Email 1 — demande de paiement direct (pas de désignation nécessaire)
+  function mailPaiement() {
+    const p = prenomCourant();
+    const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.paiement) || `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`;
+    ouvrirMail(appliquerModele(modeleMail('mailModelePaiement', def), p));
+  }
+  // Email 2 — demande de confirmation pour effectuer la désignation
+  function mailDesignation() {
+    const p = prenomCourant();
+    const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.designation) || `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.`;
+    ouvrirMail(appliquerModele(modeleMail('mailModeleDesignation', def), p));
+  }
+  // Relance : réponse AUTOMATIQUE en UN CLIC, envoyée DANS LE FIL du 1er e-mail (comme si l'e-mail
+  // initial se répondait à lui-même). Pas de fenêtre, pas d'objet à saisir : ouvrirMail({reply:true})
+  // pose In-Reply-To/References = Message-ID racine du 1er e-mail → l'e-mail s'empile dans la conversation.
+  function relanceEmail() {
+    const p = prenomCourant();
+    const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.relance) || `Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`;
+    ouvrirMail(appliquerModele(modeleMail('mailModeleRelance', def), p), { reply: true });
+  }
+
+  // ---------- ENVOI EN LOT (demandes de paiement / relances) sur les amendes sélectionnées ----------
+  const prenomDe = (a) => (a && a.prenom && a.prenom.trim() && a.prenom.trim() !== '—') ? a.prenom.trim() : '';
+  // Envoi AUTOMATIQUE (Resend) pour UNE amende, SANS aucune boîte de dialogue (utilisé par le lot).
+  // Renvoie un statut : 'sent' | 'no-mail' | 'no-pdf' | 'no-config' | 'error'. On ne fait PAS de repli
+  // Gmail ni de confirmation par amende (ce serait 1 popup par ligne) — on collecte et on résume à la fin.
+  async function sendAmendeAuto(a, body, opts) {
+    opts = opts || {};
+    const _prof = (window.FP && FP.societeProfil) ? FP.societeProfil() : {};
+    const EXPEDITEUR = _prof.mailExpediteur || '';
+    const COPIE_MAIL = _prof.mailCopie || '';
+    if (!EXPEDITEUR || !(window.FP && FP.sendEmail)) return 'no-config';
+    const to = lookupEmail(a.prenom);
+    if (!to) return 'no-mail';
+    const subjectBase = `CONTRAVENTION${a.numeroAvis ? ' ' + a.numeroAvis : ''}`;
+    const subject = opts.reply ? ('Re: ' + subjectBase) : subjectBase;
+    const _mailDom = (String(EXPEDITEUR).split('@')[1] || String(_prof.mailDomaineEnvoi || '').replace(/^@/, '') || 'parc-pilot.fr').trim();
+    const _rootId = `<pp-amende-${a.id}@${_mailDom}>`;
+    const _ownId = `<pp-amende-${a.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@${_mailDom}>`;
+    const headers = { 'Message-ID': _ownId, 'References': _rootId };
+    if (opts.reply) headers['In-Reply-To'] = _rootId;
+    // Avis en PIÈCE JOINTE obligatoire : sans PDF on n'envoie JAMAIS (règle métier). En lot, on saute + on signale.
+    let attachments;
+    if (!a.avisUrl) return 'no-pdf';
+    if (!(window.FP && FP.signedScanUrl)) return 'no-pdf';
+    let signed = null; try { signed = await FP.signedScanUrl(a.avisUrl, 600); } catch (e) { console.warn('[bulk avis PJ]', e); }
+    if (!signed) return 'no-pdf';
+    attachments = [{ filename: `avis-${a.numeroAvis || 'contravention'}.pdf`, path: signed }];
+    const sigBody = withSignature(body);   // corps + signature en TEXTE (repli)
+    const escH = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const html = escH(body).replace(/\n/g, '<br>') + sigHtmlBlock();
+    try {
+      await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: sigBody, replyTo: EXPEDITEUR, attachments, headers });
+      return 'sent';
+    } catch (e) { console.warn('[bulk sendEmail]', e); return 'error'; }
+  }
+  async function bulkEnvoiAmendes(ids, mode) {
+    const reply = mode === 'relance';
+    const def = reply
+      ? ((window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.relance) || `Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`)
+      : ((window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.paiement) || `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`);
+    const tpl = modeleMail(reply ? 'mailModeleRelance' : 'mailModelePaiement', def);
+    const list = ids.map(id => data.amendes.find(x => x.id === id)).filter(Boolean);
+    if (!list.length) return;
+    const label = reply ? 'Relancer les paiements' : 'Envoyer les demandes de paiement';
+    const okGo = await FP.confirm(`${label}\n\nEnvoyer ${list.length} e-mail(s) au(x) conducteur(s) sélectionné(s) ?\nChaque e-mail part avec l'avis en pièce jointe. Les amendes sans avis PDF ou sans e-mail conducteur seront ignorées et listées à la fin.`);
+    if (!okGo) return;
+    let sent = 0; const noMail = [], noPdf = [], errs = []; let noConfig = false;
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i];
+      if (FP.toast) FP.toast(`Envoi ${i + 1}/${list.length}…`);
+      const st = await sendAmendeAuto(a, appliquerModele(tpl, prenomDe(a)), { reply });
+      if (st === 'sent') sent++;
+      else if (st === 'no-mail') noMail.push(a);
+      else if (st === 'no-pdf') noPdf.push(a);
+      else if (st === 'no-config') { noConfig = true; break; }
+      else errs.push(a);
+    }
+    if (noConfig) { alert("Aucune adresse d'envoi n'est configurée pour cette société.\nRenseigne-la dans Paramètres → Sociétés (e-mail d'envoi des amendes)."); return; }
+    const lbl = a => `${a.prenom || '?'}${a.numeroAvis ? ' (' + a.numeroAvis + ')' : ''}`;
+    let msg = `✓ ${sent} e-mail(s) envoyé(s).`;
+    if (noMail.length) msg += `\n\n${noMail.length} sans e-mail conducteur (ignorée·s) : ${noMail.slice(0, 8).map(lbl).join(', ')}${noMail.length > 8 ? '…' : ''}`;
+    if (noPdf.length) msg += `\n\n${noPdf.length} sans avis PDF joint (ignorée·s — on n'envoie jamais sans pièce jointe) : ${noPdf.slice(0, 8).map(lbl).join(', ')}${noPdf.length > 8 ? '…' : ''}`;
+    if (errs.length) msg += `\n\n${errs.length} échec·s d'envoi : ${errs.slice(0, 8).map(lbl).join(', ')}${errs.length > 8 ? '…' : ''}`;
+    alert(msg);
+  }
+
+  // ---------- Charts ----------
+  let motifsChart, motifLabels = [];
+  function renderCharts() {
+    if (typeof Chart === 'undefined') return; // Chart.js en différé : dessiné dès qu'il est prêt
+    // Uniquement amendes 2026
+    const amendes2026 = data.amendes.filter(a => anneeOf(a) === '2026');
+    // Motifs
+    const motifsCount = {};
+    amendes2026.forEach(a => {
+      const m = a.motif || 'Autre';
+      motifsCount[m] = (motifsCount[m] || 0) + 1;
+    });
+    const sortedMotifs = Object.entries(motifsCount).sort((a,b) => b[1] - a[1]).slice(0, 8);
+    motifLabels = sortedMotifs.map(([k]) => k);
+    if (motifsChart) motifsChart.destroy();
+    motifsChart = new Chart($('motifsChart'), {
+      type: 'doughnut',
+      data: {
+        labels: sortedMotifs.map(([k]) => k),
+        datasets: [{
+          data: sortedMotifs.map(([,v]) => v),
+          backgroundColor: ['#DC2626', '#F59E0B', '#7C3AED', '#F97316', (FP.chartInk?FP.chartInk():'#0F1E3D'), '#3B82F6', '#FB923C', '#94A3B8'],
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        cutout: '60%',
+        plugins: {
+          legend: { position: 'right', labels: { boxWidth: 14, font: { size: 13 } }, onClick: (e, item) => setMotifFilter(item.text) },
+          tooltip: { callbacks: { footer: () => 'Cliquer pour filtrer' } }
+        },
+        onClick: (evt, els) => { if (els.length) setMotifFilter(motifLabels[els[0].index]); },
+        onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+        maintainAspectRatio: false, responsive: true,
+      }
+    });
+
+    renderExtras(amendes2026);
+  }
+
+  // ---------- Podium des conducteurs (extensible) ----------
+  let podiumExpanded = false;
+  function renderPodium() {
+    // Suit le filtre d'année choisi (au lieu d'être figé sur 2026) : « toutes » = cumul toutes années.
+    const yr = state.annee;
+    const src = data.amendes.filter(a => yr === 'all' || yr == null || anneeOf(a) === String(yr));
+    const agg = {};
+    src.forEach(a => { const k = (FP.condGroupKey || FP.normPrenom)(a.prenom) || '—'; if (!agg[k]) agg[k] = { label: (FP.conducteurNomUnifie ? FP.conducteurNomUnifie(a.prenom) : (a.prenom || '—')).trim() || '—', n: 0, montant: 0, points: 0 }; agg[k].n++; agg[k].montant += montantDu(a); agg[k].points += (Number(a.points) || 0); });
+    const all = Object.entries(agg).sort((a, b) => b[1].n - a[1].n || b[1].montant - a[1].montant);
+    const shown = podiumExpanded ? all : all.slice(0, 5);
+    const medals = ['🥇', '🥈', '🥉'];
+    $('podium').innerHTML = shown.map(([k, v], i) => `
+      <button type="button" data-cond="${(v.label || k).replace(/"/g, '&quot;')}" class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left">
+        <span class="text-lg w-7 text-center flex-shrink-0">${medals[i] || `<span class="text-sm font-bold text-slate-400">${i + 1}</span>`}</span>
+        <span class="flex-1 font-semibold text-slate-800 truncate">${escAmende(v.label || k)}</span>
+        <span class="flex items-center gap-1.5 flex-shrink-0">
+          <span class="podium-tag pt-count" title="Nombre d'amendes">${v.n} amende${v.n > 1 ? 's' : ''}</span>
+          <span class="podium-tag pt-montant" title="Montant total">${FP.euro(v.montant)}</span>
+          ${v.points ? `<span class="podium-tag pt-points" title="Points retirés">−${v.points} pts</span>` : ''}
+        </span>
+      </button>`).join('') || '<p class="text-sm text-slate-400">Aucune donnée.</p>';
+    const btn = $('podium-toggle');
+    if (btn) {
+      if (all.length <= 5) { btn.style.display = 'none'; }
+      else { btn.style.display = ''; btn.textContent = podiumExpanded ? 'Voir moins' : `Voir tout (${all.length})`; }
+    }
+  }
+
+  // ---------- Sections "fun" : types, évolution, heatmap, délai ----------
+  let moisChart;
+  function renderExtras(amendes2026) {
+    // --- Délai de paiement (amendes à payer depuis +30 j) ---
+    const today = new Date();
+    const overdue = amendes2026.filter(a => FP.estAPayer(a) && a.date && ((today - new Date(a.date)) / 86400000) > 30);
+    const banner = $('delai-banner');
+    if (overdue.length) {
+      const tot = overdue.reduce((s, a) => s + montantDu(a), 0);
+      banner.innerHTML = `<i data-lucide="alarm-clock" class="w-5 h-5" style="color:#DC2626"></i>
+        <div class="text-sm" style="color:#7F1D1D"><span class="font-bold">${overdue.length} amende(s)</span> à payer depuis plus de 30 jours (${FP.euro(tot)}) — risque de majoration.</div>
+        <button id="delai-voir" class="btn btn-outline text-xs ml-auto" style="border-color:#FCA5A5;color:#991B1B">Voir</button>`;
+      banner.classList.remove('hidden'); banner.classList.add('flex');
+    } else {
+      banner.classList.add('hidden'); banner.classList.remove('flex');
+    }
+
+    // --- Mini-stats par type ---
+    const catCount = {};
+    amendes2026.forEach(a => { const c = categorize(a.motif); if (!catCount[c]) catCount[c] = { n: 0, montant: 0 }; catCount[c].n++; catCount[c].montant += montantDu(a); });
+    const total = amendes2026.length || 1;
+    $('type-stats').innerHTML = Object.keys(CAT_META).filter(c => catCount[c]).sort((a, b) => catCount[b].n - catCount[a].n).map(c => {
+      const meta = CAT_META[c]; const v = catCount[c]; const pct = Math.round(v.n / total * 100);
+      const on = state.motifCat === c;
+      return `<button type="button" data-cat="${c}" class="text-left rounded-xl p-3 transition" style="border:2px solid ${on ? meta.color : 'var(--fp-border)'};background:${on ? meta.color + '14' : 'white'}">
+        <div class="flex items-center gap-2 mb-1"><i data-lucide="${meta.icon}" class="w-4 h-4" style="color:${meta.color}"></i><span class="text-xs font-semibold text-slate-600">${meta.label}</span></div>
+        <div class="text-2xl font-extrabold" style="color:${meta.color}">${pct}%</div>
+        <div class="text-xs text-slate-500">${v.n} amende(s) · ${FP.euro(v.montant)}</div>
+      </button>`;
+    }).join('') || '<p class="text-sm text-slate-400">Aucune donnée.</p>';
+
+    renderPodium();
+
+    // --- Évolution mensuelle ---
+    // ⚠️ On range par mois de la DATE, mais UNIQUEMENT pour les amendes dont la date est
+    // réellement en 2026. Sinon une amende étiquetée « année 2026 » mais datée déc. 2025
+    // (incohérence de saisie) apparaîtrait à tort dans la courbe de décembre.
+    const mois = Array(12).fill(0); const moisMontant = Array(12).fill(0);
+    amendes2026.forEach(a => { const ds = a.date || ''; if (ds.slice(0, 4) !== '2026') return; const m = parseInt(ds.slice(5, 7), 10) - 1; if (m >= 0 && m < 12) { mois[m]++; moisMontant[m] += montantDu(a); } });
+    const moisLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+    if ($('moisChart')) {
+      if (moisChart) moisChart.destroy();
+      moisChart = new Chart($('moisChart'), {
+        type: 'line',
+        data: { labels: moisLabels, datasets: [{ label: 'Nb amendes', data: mois, borderColor: '#DC2626', backgroundColor: 'rgba(220,38,38,.12)', fill: true, tension: .35, pointRadius: 3, pointBackgroundColor: '#DC2626' }] },
+        options: {
+          plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: (ctx) => 'Montant : ' + FP.euro(moisMontant[ctx.dataIndex]) } } },
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
+          maintainAspectRatio: false, responsive: true,
+        }
+      });
+    }
+
+    renderHeatmap(amendes2026);
+  }
+
+  // --- Heatmap calendrier (style GitHub) ---
+  function renderHeatmap(amendes2026) {
+    if (!$('heatmap')) return;
+    const counts = {};
+    amendes2026.forEach(a => { if (a.date) counts[a.date] = (counts[a.date] || 0) + 1; });
+    const color = (c) => !c ? '#EEF2F7' : c === 1 ? '#FECACA' : c === 2 ? '#F87171' : c === 3 ? '#EF4444' : '#B91C1C';
+    const pad = (n) => String(n).padStart(2, '0');
+    const start = new Date('2026-01-01');
+    const lead = (start.getDay() + 6) % 7; // Lundi = 0
+    let cellsHtml = '';
+    for (let i = 0; i < lead; i++) cellsHtml += `<div style="width:12px;height:12px"></div>`;
+    const monthSpans = []; // pour repères de mois
+    for (let d = new Date(start); d.getFullYear() === 2026; d.setDate(d.getDate() + 1)) {
+      const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      const c = counts[iso] || 0;
+      const sel = (state.dateFrom === iso && state.dateTo === iso) ? 'outline:2px solid var(--fp-primary);outline-offset:1px;' : '';
+      cellsHtml += `<div data-day="${iso}" title="${FP.date(iso)} — ${c} amende(s)" style="width:12px;height:12px;border-radius:3px;background:${color(c)};cursor:pointer;${sel}"></div>`;
+    }
+    $('heatmap').innerHTML = `
+      <div style="display:grid;grid-template-rows:repeat(7,12px);grid-auto-flow:column;gap:3px;width:max-content">${cellsHtml}</div>
+      <div class="flex items-center gap-1.5 mt-3 text-xs text-slate-400">Moins
+        <span style="width:12px;height:12px;border-radius:3px;background:#EEF2F7;display:inline-block"></span>
+        <span style="width:12px;height:12px;border-radius:3px;background:#FECACA;display:inline-block"></span>
+        <span style="width:12px;height:12px;border-radius:3px;background:#F87171;display:inline-block"></span>
+        <span style="width:12px;height:12px;border-radius:3px;background:#EF4444;display:inline-block"></span>
+        <span style="width:12px;height:12px;border-radius:3px;background:#B91C1C;display:inline-block"></span>Plus</div>`;
+    lucide.createIcons();
+  }
+
+  // Échéance de paiement. On PRIVILÉGIE les dates LUES sur l'avis par l'IA (dateLimiteMinore =
+  // payer avant pour le tarif réduit ; dateLimiteForfaitaire = au-delà, majoré). À défaut, on ESTIME
+  // depuis la date de l'amende (FPS ~3 mois ; forfaitaire ~45 j). Affiché seulement si "à payer".
+  function majorationInfo(a) {
+    if (!a || !(FP.estAPayer ? FP.estAPayer(a) : a.statut === 'à payer') || !a.date) return null;
+    const bd = (FP.getAmendeMontants && FP.getAmendeMontants(a.id)) || {};
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const jrs = (d) => (FP.joursRestants ? FP.joursRestants(d) : Math.ceil((new Date(d) - today) / 86400000)); // source unique (minuit→minuit)
+    const isFps = FP.estFps ? FP.estFps(a) : /stationnement/i.test(a.motif || '');
+    // 1) Date limite du tarif MINORÉ lue sur l'avis → payer avant = économie
+    if (bd.dateLimiteMinore) {
+      const dm = new Date(bd.dateLimiteMinore);
+      if (!isNaN(dm) && jrs(dm) >= 0) {
+        const mino = Number(bd.montantMinore) || null, forf = Number(bd.montantForfaitaire) || null;
+        const eco = (mino && forf && forf > mino) ? (forf - mino) : null;
+        return { date: dm, jours: jrs(dm), isFps, kind: 'minore', economie: eco };
+      }
+    }
+    // 2) Date limite FORFAITAIRE lue sur l'avis (au-delà = majoré)
+    if (bd.dateLimiteForfaitaire) {
+      const df = new Date(bd.dateLimiteForfaitaire);
+      if (!isNaN(df)) return { date: df, jours: jrs(df), isFps, kind: 'forfait' };
+    }
+    // 3) Estimation (aucune date lue sur l'avis)
+    const base = new Date(a.date); if (isNaN(base)) return null;
+    const lim = new Date(base); lim.setDate(lim.getDate() + (isFps ? 90 : 45));
+    return { date: lim, jours: jrs(lim), isFps, kind: 'estime' };
+  }
+
+  // ---------- Drawer ----------
+  function openDrawer(id) {
+    const a = data.amendes.find(x => x.id === id);
+    if (!a) return;
+    state.currentId = id;
+    // Flèches ‹ › : mêmes que la fiche véhicule (toujours visibles, grisées aux extrémités)
+    (function setupDrawerNav(){
+      const order = drawerOrder.length ? drawerOrder : sortRows(filtered()).map(x => x.id);
+      const i = order.indexOf(id);
+      const prevId = i > 0 ? order[i - 1] : null;
+      const nextId = (i >= 0 && i < order.length - 1) ? order[i + 1] : null;
+      [['drawer-prev', prevId], ['drawer-next', nextId]].forEach(([bid, tid]) => {
+        const btn = $(bid); if (!btn) return;
+        btn.style.opacity = tid ? '1' : '.3';
+        btn.style.pointerEvents = tid ? 'auto' : 'none';
+      });
+    })();
+    $('drawer-id').textContent = a.id;
+    $('drawer-title').textContent = a.motif || 'Amende';
+    $('drawer-subtitle').textContent = `${(a.prenom ? (FP.conducteurNomUnifie ? FP.conducteurNomUnifie(a.prenom) : a.prenom) : '') || '—'} · ${FP.date(a.date)}`;
+
+    $('drawer-body').innerHTML = `
+      <div style="text-align:center; padding:.2rem 0 .5rem">
+        <div class="kpi-label" style="color:var(--fp-faint)">${FP.estPayee(a) ? 'Montant payé' : (a.majoree && a.montantMajore ? 'Montant majoré (dû)' : 'Montant à payer')}</div>
+        <div style="font-style:italic; font-weight:900; font-size:clamp(2.3rem,8vw,3rem); letter-spacing:-1.5px; line-height:1; margin-top:.3rem; color:${FP.estPayee(a) ? '#15803D' : (a.majoree && a.montantMajore ? '#B91C1C' : 'var(--fp-text)')}">
+          <span id="am-montant-val" class="cursor-pointer hover:underline" title="${FP.estPayee(a) ? 'Cliquer pour ajuster le montant réellement payé' : 'Cliquer pour modifier le montant'}">${montantDu(a) ? FP.euroPrecis(montantDu(a)) : '— €'}</span>
+        </div>
+        ${a.majoree && a.montantMajore ? `<div class="text-xs text-slate-400 mt-1">Initial : ${a.montant ? FP.euroPrecis(a.montant) : '—'}${a.dateMajoration ? ' · majorée le ' + FP.date(a.dateMajoration) : ''}</div>` : ''}
+        ${(() => { const bd = FP.getAmendeMontants ? FP.getAmendeMontants(a.id) : null; if (!bd) return ''; const p = []; if (bd.montantMinore) p.push('minoré ' + FP.euroPrecis(bd.montantMinore)); if (bd.montantForfaitaire) p.push('forfaitaire ' + FP.euroPrecis(bd.montantForfaitaire)); if (bd.montantMajore) p.push('majoré ' + FP.euroPrecis(bd.montantMajore)); if (!p.length) return ''; const dl = bd.dateLimiteForfaitaire ? ' · limite ' + FP.date(bd.dateLimiteForfaitaire) : (bd.dateLimiteMinore ? ' · limite minoré ' + FP.date(bd.dateLimiteMinore) : ''); return `<div class="text-xs text-slate-400 mt-1" title="Les 3 tarifs officiels lus sur l'avis par l'IA">3 tarifs lus : ${p.join(' · ')}${dl}</div>`; })()}
+        ${FP.estPayee(a) ? (() => { const bareme = (a.majoree && a.montantMajore != null && a.montantMajore !== '') ? Number(a.montantMajore) : (Number(a.montant) || 0); const ecart = FP.getAmendeMontantPaye ? FP.getAmendeMontantPaye(a.id) : null; return `<div class="text-xs text-slate-400 mt-1">Montant réellement payé · cliquez pour ajuster${(ecart != null && ecart !== bareme) ? ` (barème : ${FP.euroPrecis(bareme)})` : ''}</div>`; })() : ''}
+        <div class="flex justify-center items-center gap-2 mt-3 flex-wrap">
+          ${statutBadge(a.statut)}
+          ${motifPill(a.motif)}
+          <span class="fp-chip ${(Number(a.points) || 0) > 0 ? 'bad' : 'ghost'}" style="${(Number(a.points) || 0) > 0 ? '' : 'color:var(--fp-muted);background:color-mix(in srgb,var(--fp-muted) 12%,transparent)'}"><span id="am-points-val" class="cursor-pointer" title="Cliquer pour modifier">${(Number(a.points) || 0) > 0 ? '−' + a.points + ' pt' : '0 point'}</span></span>
+        </div>
+      </div>
+      ${(() => {
+        const m = majorationInfo(a); if (!m) return '';
+        const col = m.jours < 0 ? '#b91c1c' : m.jours < 15 ? '#dc2626' : m.jours < 30 ? '#b45309' : (m.kind === 'minore' ? '#047857' : '#0369a1');
+        const bg = m.jours < 15 ? '#fef2f2' : m.jours < 30 ? '#fffbeb' : (m.kind === 'minore' ? '#ecfdf5' : '#eff6ff');
+        const dstr = FP.date(m.date.toISOString());
+        let titre, sub;
+        if (m.kind === 'minore') {
+          titre = m.jours < 0 ? 'Tarif minoré dépassé' : `💶 Payez avant le ${dstr} pour le tarif minoré`;
+          sub = (m.economie ? `Économie ~${FP.euroPrecis(m.economie)}. ` : '') + `Plus que ${Math.max(0, m.jours)} j — date lue sur l'avis.`;
+        } else if (m.kind === 'forfait') {
+          titre = m.jours < 0 ? `Majoration dépassée (depuis ~${-m.jours} j)` : `⏳ Payez avant le ${dstr} pour éviter la majoration`;
+          sub = `Plus que ${Math.max(0, m.jours)} j — date lue sur l'avis.`;
+        } else {
+          titre = m.jours < 0 ? `Majoration probablement dépassée (depuis ~${-m.jours} j)` : `⏳ Plus que ~${m.jours} j avant majoration`;
+          sub = `Limite estimée : ${dstr} · ${m.isFps ? 'FPS ~3 mois' : 'forfaitaire ~45 j'} — vérifiez l'avis`;
+        }
+        return `<div style="background:${bg};border:1px solid var(--fp-border);border-left:4px solid ${col};border-radius:.55rem;padding:.6rem .8rem">
+          <div style="color:${col};font-weight:700;font-size:.9rem">${titre}</div>
+          <div class="text-slate-500" style="font-size:.72rem;margin-top:.15rem">${sub}</div>
+        </div>`;
+      })()}
+      <hr style="border:0; border-top:2px dashed var(--fp-border); margin:.2rem 0">
+
+
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <div class="field-label">Conducteur</div>
+          <input class="field-input" id="am-cond-input" value="${escAmende(a.prenom || '')}" placeholder="Rechercher ou créer…" autocomplete="off" style="font-size:.9rem" />
+        </div>
+        <div>
+          <div class="field-label">Date de l'amende</div>
+          <div id="am-date-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${a.date ? FP.date(a.date) : '<span class="text-slate-400">— ajouter</span>'}</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">Motif</div>
+        <div id="am-motif-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${escAmende(a.motif) || '<span class="text-slate-400">— ajouter</span>'}</div>
+      </div>
+
+      <div>
+        <div class="field-label">Numéro d'avis</div>
+        <div class="flex items-center gap-1">
+          <div id="am-avis-val" class="flex-1 min-w-0 font-mono text-sm bg-slate-50 p-3 rounded-lg cursor-pointer hover:bg-slate-100" style="word-break:break-all" title="Cliquer pour modifier">${escAmende(a.numeroAvis) || '<span class="text-slate-400">— ajouter</span>'}</div>
+          ${a.numeroAvis ? `<button type="button" id="am-avis-copy" class="btn btn-outline !p-2 flex-shrink-0" title="Copier le n° d'avis"><i data-lucide="copy" class="w-4 h-4"></i></button>` : ''}
+        </div>
+      </div>
+
+      <div>
+        <div class="field-label">Paiement en ligne</div>
+        <div class="grid grid-cols-1 gap-3 text-sm">
+          <div>
+            <div class="text-xs text-slate-400 mb-0.5">N° de télépaiement</div>
+            <div class="flex items-center gap-1">
+              <div id="am-tel-val" class="flex-1 min-w-0 font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" style="word-break:break-all" title="Cliquer pour saisir / modifier">${fmtTel(a.numeroTelepaiement) || '<span class="text-slate-400">— ajouter</span>'}</div>
+              ${a.numeroTelepaiement ? `<button type="button" id="am-tel-copy" class="btn btn-outline !p-2 flex-shrink-0" title="Copier le n° de télépaiement"><i data-lucide="copy" class="w-4 h-4"></i></button>` : ''}
+            </div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-400 mb-0.5">Clé</div>
+            <div class="flex items-center gap-1">
+              <div id="am-cle-val" class="flex-1 min-w-0 font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour saisir / modifier">${escAmende(a.cle) || '<span class="text-slate-400">— ajouter</span>'}</div>
+              ${a.cle ? `<button type="button" id="am-cle-copy" class="btn btn-outline !p-2 flex-shrink-0" title="Copier la clé"><i data-lucide="copy" class="w-4 h-4"></i></button>` : ''}
+            </div>
+          </div>
+          ${(() => { const isFps = FP.estFps ? FP.estFps(a) : /stationnement/i.test(a.motif || ''); return `
+          <button type="button" id="am-payer-online" data-fps="${isFps ? '1' : '0'}" class="btn btn-dark text-sm w-full justify-center mt-1">
+            <i data-lucide="external-link" class="w-4 h-4"></i> Payer en ligne ${isFps ? '(FPS · stationnement.gouv.fr)' : '(amendes.gouv.fr)'}
+          </button>
+          <p class="text-xs text-slate-400 mt-1">Ouvre le site officiel de télépaiement${a.numeroTelepaiement ? ' et copie automatiquement le n° de télépaiement' : ''}. ${isFps ? 'FPS = forfait post-stationnement (payé sur stationnement.gouv.fr).' : 'Avis de contravention (payé sur amendes.gouv.fr).'}</p>`; })()}
+        </div>
+        <!-- Accès direct au site officiel PERTINENT selon le type (FPS vs contravention) -->
+        ${(() => { const isFps = FP.estFps ? FP.estFps(a) : /stationnement/i.test(a.motif || ''); return `
+        <div class="mt-3">
+          <div class="text-xs text-slate-400 mb-1.5">Site officiel (nouvel onglet)</div>
+          <div class="flex flex-col gap-2">
+            ${isFps
+              ? `<a href="https://www.stationnement.gouv.fr" target="_blank" rel="noopener" class="btn btn-outline text-sm" style="justify-content:space-between"><span class="inline-flex items-center gap-2"><i data-lucide="external-link" class="w-4 h-4"></i> Payer un FPS (stationnement)</span><span class="text-xs text-slate-400">stationnement.gouv.fr</span></a>`
+              : `<a href="https://www.amendes.gouv.fr" target="_blank" rel="noopener" class="btn btn-outline text-sm" style="justify-content:space-between"><span class="inline-flex items-center gap-2"><i data-lucide="external-link" class="w-4 h-4"></i> Télépaiement des amendes</span><span class="text-xs text-slate-400">amendes.gouv.fr</span></a>
+            <a href="https://www.antai.gouv.fr" target="_blank" rel="noopener" class="btn btn-outline text-sm" style="justify-content:space-between"><span class="inline-flex items-center gap-2"><i data-lucide="external-link" class="w-4 h-4"></i> Désigner un conducteur (ANTAI)</span><span class="text-xs text-slate-400">antai.gouv.fr</span></a>`}
+          </div>
+        </div>`; })()}
+      </div>
+
+      ${(() => { const c = (FP.contactChips && FP.contactChips(a.prenom)) || ''; return c ? `<div><div class="field-label">Contacter le conducteur</div>${c}</div>` : ''; })()}
+
+      ${a.avisUrl ? `
+        <div>
+          <div class="field-label">Scan de l'avis</div>
+          ${scanPreview(a.avisUrl)}
+          <div class="flex gap-2 mt-2">
+            <a href="${escAmende(a.avisUrl)}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
+              <i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir en grand
+            </a>
+            <button type="button" id="avis-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le scan de l'avis"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
+          </div>
+        </div>` : ''}
+
+      <div>
+        <div class="field-label">Justificatif de paiement</div>
+        ${a.justifUrl ? `
+          ${scanPreview(a.justifUrl)}
+          <div class="flex gap-2 mt-2">
+            <a href="${escAmende(a.justifUrl)}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
+              <i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir en grand
+            </a>
+            <button type="button" id="justif-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le justificatif"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
+          </div>
+          <p class="text-xs text-emerald-700 mt-1.5 flex items-center gap-1"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Payée</p>
+        ` : `
+          <button type="button" id="justif-btn" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Joindre un justificatif</button>
+          <p class="text-xs text-slate-400 mt-1.5">Joindre la preuve de paiement passe l'amende en <b>payée</b> automatiquement.</p>
+        `}
+      </div>
+
+      ${piecesSectionHTML(a)}
+
+      <div>
+        <div class="field-label">Envoyer un email au conducteur</div>
+        <div class="grid gap-2">
+          <button type="button" id="mail-paiement" class="btn btn-outline text-sm justify-center"><i data-lucide="mail" class="w-4 h-4"></i> Demande de paiement</button>
+          <button type="button" id="mail-designation" class="btn btn-outline text-sm justify-center"><i data-lucide="user-check" class="w-4 h-4"></i> Demande de désignation</button>
+        </div>
+      </div>
+
+      ${(FP.estFps && FP.estFps(a)) ? '' : `
+      <div>
+        <div class="field-label">Désigner le conducteur (ANTAI)</div>
+        <button type="button" id="am-antai-designer" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="external-link" class="w-4 h-4"></i> Désigner sur ANTAI (site officiel)</button>
+        <p class="text-xs text-slate-400 mt-1">Ouvre <b>antai.gouv.fr</b> — désignation en ligne (cas « représentant légal »)${a.numeroAvis ? " et copie le n° d'avis" : ''}. Prévois l'avis de contravention, l'identité et le <b>n° de permis</b> du conducteur. Délai légal : <b>45 jours</b>.</p>
+      </div>`}
+
+      <div>
+        <div class="field-label">Année</div>
+        <div>${escAmende(a.annee)}</div>
+      </div>
+
+      <div>
+        <div class="field-label">Commentaire</div>
+        <textarea id="am-comment-edit" rows="3" placeholder="Ajouter un commentaire…" class="text-sm" style="width:100%;border:1px solid var(--fp-border);border-radius:.55rem;padding:.6rem .8rem;resize:vertical;background:#fff;font-family:inherit;color:var(--fp-text)">${a.commentaire ? escAmende(a.commentaire) : ''}</textarea>
+        <p class="text-xs text-slate-400 mt-1">Modifiable directement — enregistré quand tu cliques ailleurs.</p>
+      </div>
+    `;
+
+    $('drawer').classList.add('open');
+    $('drawer-backdrop').classList.add('open');
+    (function(){ const dr = $('drawer'); dr.classList.remove('fiche-in'); void dr.offsetWidth; dr.classList.add('fiche-in'); })();
+    justifIntent = 'pay'; // à chaque ouverture, un justificatif joint = preuve de paiement par défaut
+    // Bouton paiement : "Marquer payée" ou, si déjà payée, "Marquer non payée" (revenir en arrière)
+    const payBtn = $('drawer-pay');
+    if (FP.estPayee(a)) {
+      payBtn.style.display = ''; payBtn.onclick = markUnpaid;
+      payBtn.innerHTML = '<i data-lucide="rotate-ccw" class="w-4 h-4"></i> Marquer non payée';
+    } else if (a.statut === 'désignée') {
+      payBtn.style.display = 'none'; payBtn.onclick = null;
+    } else {
+      payBtn.style.display = ''; payBtn.onclick = markPaid;
+      payBtn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Marquer payée';
+    }
+    $('drawer-designer').style.display = (a.statut === 'désignée' || FP.estPayee(a)) ? 'none' : '';
+    { const cb = $('drawer-conteste'); if (cb) cb.style.display = (a.statut === 'contestée' || FP.estPayee(a)) ? 'none' : ''; }
+    // Boutons dynamiques du justificatif (re-rendus à chaque ouverture)
+    const jb = $('justif-btn'); if (jb) jb.onclick = () => { justifIntent = 'pay'; $('justif-file').click(); };
+    const ju = $('justif-unarchive'); if (ju) ju.onclick = unarchiveAmende;
+    const ad = $('avis-del'); if (ad) ad.onclick = () => deleteAmDoc('avisUrl', "le scan de l'avis");
+    const jd = $('justif-del'); if (jd) jd.onclick = () => deleteAmDoc('justifUrl', 'le justificatif');
+    const pAdd = $('piece-add'); if (pAdd) pAdd.onclick = () => $('piece-file').click();
+    document.querySelectorAll('#drawer [data-piece-del]').forEach(b => { b.onclick = () => deletePiece(b.getAttribute('data-piece-del')); });
+    document.querySelectorAll('#drawer [data-piece-view]').forEach(b => { b.onclick = () => togglePiecePreview(b.getAttribute('data-piece-view')); });
+    const mp = $('mail-paiement'); if (mp) mp.onclick = mailPaiement;
+    const md = $('mail-designation'); if (md) md.onclick = mailDesignation;
+    const tv = $('am-tel-val'); if (tv) tv.onclick = () => editAmField(tv, 'numeroTelepaiement', 'text');
+    const cv = $('am-cle-val'); if (cv) cv.onclick = () => editAmField(cv, 'cle', 'text');
+    const mtv = $('am-montant-val'); if (mtv) mtv.onclick = () => (FP.estPayee(a)) ? editPaidAmount(a) : editAmField(mtv, 'montant', 'number');
+    const ptv = $('am-points-val'); if (ptv) ptv.onclick = () => editAmField(ptv, 'points', 'number');
+    // Conducteur : choisir dans la liste existante OU créer un nouveau en tapant le nom
+    // (la plateforme demande alors ses infos). Règle projet — FP.conducteurPicker.
+    if (FP.conducteurPicker && $('am-cond-input')) {
+      FP.conducteurPicker($('am-cond-input'), { onPick: (cond) => {
+        // Nom COMPLET (prénom + nom de famille) — displayName d'abord, sinon repli. Avant, on prenait
+        // cond.name en premier (souvent le prénom seul d'un import Ulys) → le nom de famille était perdu.
+        const nm = (FP.conducteurs.displayName ? FP.conducteurs.displayName(cond) : '') || (cond && (cond.name || cond.prenom)) || '';
+        if (!nm) return;
+        if (FP.history && FP.history.commit) FP.history.commit();
+        a.prenom = nm;
+        FP.persist.update('amendes', a.id, { prenom: nm });
+        $('drawer-subtitle').textContent = `${a.prenom || '—'} · ${FP.date(a.date)}`;
+        renderKPIs(); renderTable();
+        if (FP.toast) FP.toast('Conducteur : ' + nm);
+      } });
+      // À la sortie du champ sans sélection, on réaffiche le conducteur enregistré.
+      $('am-cond-input').addEventListener('blur', () => setTimeout(() => { const el = $('am-cond-input'); if (el) el.value = a.prenom || ''; }, 200));
+    }
+    const dtv = $('am-date-val'); if (dtv) dtv.onclick = () => editAmField(dtv, 'date', 'date');
+    const mfv = $('am-motif-val'); if (mfv) mfv.onclick = () => editAmField(mfv, 'motif', 'text');
+    const avv = $('am-avis-val'); if (avv) avv.onclick = () => editAmField(avv, 'numeroAvis', 'text');
+    const avc = $('am-avis-copy'); if (avc) avc.onclick = () => copierTexte(a.numeroAvis, avc);
+    const tc = $('am-tel-copy'); if (tc) tc.onclick = () => copierTexte((a.numeroTelepaiement || '').replace(/\D/g, ''), tc);
+    const cc = $('am-cle-copy'); if (cc) cc.onclick = () => copierTexte(a.cle, cc);
+    const payOnlineBtn = $('am-payer-online');
+    if (payOnlineBtn) payOnlineBtn.onclick = () => {
+      const isFps = payOnlineBtn.dataset.fps === '1';
+      const num = (a.numeroTelepaiement || '').replace(/\D/g, '');
+      // Copie le n° de télépaiement pour un collage direct sur le site officiel.
+      if (num) { try { if (FP.copy) FP.copy(num); else if (navigator.clipboard) navigator.clipboard.writeText(num); } catch (_) {} }
+      if (FP.toast) FP.toast(num ? '✓ N° de télépaiement copié — collez-le sur le site' : 'Ouverture du site de télépaiement');
+      const url = isFps ? 'https://www.stationnement.gouv.fr/' : 'https://amendes.gouv.fr/';
+      window.open(url, '_blank', 'noopener');
+    };
+    const antaiBtn = $('am-antai-designer');
+    if (antaiBtn) antaiBtn.onclick = () => {
+      // La désignation en ligne se fait sur antai.gouv.fr avec le n° d'avis (dossier) → on le copie.
+      const avis = (a.numeroAvis || '').trim();
+      if (avis) { try { if (FP.copy) FP.copy(avis); else if (navigator.clipboard) navigator.clipboard.writeText(avis); } catch (_) {} }
+      if (FP.toast) FP.toast(avis ? "✓ N° d'avis copié — collez-le sur ANTAI" : 'Ouverture d\'ANTAI');
+      window.open('https://www.antai.gouv.fr/', '_blank', 'noopener');
+    };
+    const cmv = $('am-comment-edit');
+    if (cmv) cmv.onchange = () => {
+      const aa = data.amendes.find(x => x.id === state.currentId); if (!aa) return;
+      const val = cmv.value.trim();
+      if (val === (aa.commentaire || '')) return;
+      FP.history.commit();
+      aa.commentaire = val;
+      renderTable();
+      FP.persist.update('amendes', aa.id, { commentaire: val || null });
+    };
+    lucide.createIcons();
+  }
+  function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
+
+  function nextAmendeId() {
+    let max = 0;
+    data.amendes.forEach(a => { const m = /^AM-(\d+)$/.exec(a.id || ''); if (m) max = Math.max(max, +m[1]); });
+    return 'AM-' + String(max + 1).padStart(4, '0');
+  }
+
+  function markPaid() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    FP.history.commit();
+    a.statut = 'payée'; // reste visible dans « Payées »
+    const id = a.id;
+    setJustifWatch(id, !a.justifUrl); // surveille : payée sans justificatif → alerte (uniquement à partir de maintenant)
+    closeDrawer();
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { statut: 'payée' });
+    if (FP.celebrate) FP.celebrate();
+    if (FP.toast) FP.toast('✓ Amende marquée payée', { actionLabel: 'Annuler', onAction: () => { state.currentId = id; markUnpaid(); } });
+  }
+  // Marque une amende comme CONTESTÉE
+  async function markConteste() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    // Justificatif FACULTATIF : on le propose, mais l'utilisateur peut ignorer cette étape.
+    if (!a.justifUrl) {
+      const wantJustif = await FP.confirm("Joindre une pièce justificative à la contestation ?\n\nOK = joindre un document · Annuler = contester sans justificatif.");
+      if (wantJustif) { justifIntent = 'contest'; $('justif-file').click(); return; }
+    }
+    FP.history.commit();
+    a.statut = 'contestée';
+    const id = a.id;
+    setJustifWatch(id, false); // une amende contestée n'a pas à avoir de justificatif de paiement
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { statut: 'contestée' });
+    openDrawer(id);
+  }
+  // Liste (réglages) des amendes marquées payées SANS justificatif → sert à l'alerte.
+  // On n'y inscrit que les amendes traitées À PARTIR DE MAINTENANT (les anciennes n'y figurent pas).
+  function setJustifWatch(id, on) {
+    const s = FP.settings.get();
+    const arr = Array.isArray(s.amendesJustifWatch) ? s.amendesJustifWatch : [];
+    const has = arr.includes(id);
+    if (on && !has) arr.push(id);
+    else if (!on && has) arr.splice(arr.indexOf(id), 1);
+    else return;
+    s.amendesJustifWatch = arr; FP.settings.save(s);
+  }
+  // Revenir en arrière : repasse une amende payée en "à payer" (et la sort des archives)
+  function markUnpaid() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    FP.history.commit();
+    a.statut = 'à payer'; a.archived = false;
+    const id = a.id;
+    setJustifWatch(id, false);
+    if (FP.setAmendeMontantPaye) FP.setAmendeMontantPaye(id, null); // l'amende n'est plus payée → on efface le montant payé saisi
+    closeDrawer();
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { statut: 'à payer', archived: false });
+    if (FP.toast) FP.toast('↺ Amende remise en « à payer »', { actionLabel: 'Annuler', onAction: () => { state.currentId = id; markPaid(); } });
+  }
+  // Ajuster le montant RÉELLEMENT payé d'une amende payée (remise, arrangement, majoration…).
+  // Stocké dans les réglages par société (pas en base) et pris en compte partout via FP.montantDu.
+  async function editPaidAmount(a) {
+    if (!a) return;
+    const cur = FP.getAmendeMontantPaye ? FP.getAmendeMontantPaye(a.id) : null;
+    const bareme = montantDu(a);
+    const defVal = (cur != null ? cur : bareme);
+    const raw = await FP.prompt('Montant réellement payé (€) :\n\n(Laisse vide pour revenir au montant du barème.)', defVal ? String(defVal).replace('.', ',') : '');
+    if (raw === null) return; // annulé
+    const clean = String(raw).trim().replace(/\s/g, '').replace(',', '.').replace(/[^\d.]/g, '');
+    const val = clean === '' ? null : parseFloat(clean);
+    if (clean !== '' && (isNaN(val) || val < 0)) { alert('Montant invalide.'); return; }
+    FP.history.commit();
+    FP.setAmendeMontantPaye(a.id, val);
+    renderKPIs(); renderTable(); renderCharts();
+    openDrawer(a.id);
+    if (FP.toast) FP.toast(val == null ? '↺ Montant remis au barème' : '💶 Montant payé : ' + FP.euroPrecis(val));
+  }
+  // Justificatif de paiement : joindre un fichier => payée + archivée
+  async function attachJustif(file) {
+    if (!file || !state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    let url = '';
+    try { url = await FP.uploadScan(file, 'justificatifs', { name: a.numeroAvis ? 'justif-' + a.numeroAvis : '' }) || ''; }
+    catch (e) { console.error(e); alert("Le justificatif n'a pas pu être envoyé. Réessaie."); return; }
+    if (!url) { alert("Le justificatif n'a pas pu être envoyé. Réessaie."); return; }
+    const intent = justifIntent; justifIntent = 'pay'; // on consomme l'intention
+    // --- Justificatif de DÉSIGNATION → statut « désignée » (jamais « payée ») ---
+    if (intent === 'designate') {
+      const id0 = a.id;
+      const mention = `Conducteur désigné le ${FP.date(new Date().toISOString().slice(0, 10))}`;
+      const prev = (a.commentaire || '').replace(/^Payée le [^\n]*\n?/i, '').replace(/^Conducteur désigné le [^\n]*\n?/i, '').trim();
+      const newComment = prev ? `${mention}\n${prev}` : mention;
+      FP.history.commit();
+      a.justifUrl = url; a.statut = 'désignée'; a.commentaire = newComment;
+      setJustifWatch(id0, false); // une amende désignée n'a pas à être surveillée « payée sans justif »
+      renderKPIs(); renderTable(); renderCharts();
+      FP.persist.update('amendes', id0, { justifUrl: url, statut: 'désignée', commentaire: newComment });
+      openDrawer(id0);
+      return;
+    }
+    // --- Justificatif de CONTESTATION (facultatif) → statut « contestée » (jamais « payée ») ---
+    if (intent === 'contest') {
+      const id0 = a.id;
+      const mention = `Contestée le ${FP.date(new Date().toISOString().slice(0, 10))}`;
+      const prev = (a.commentaire || '').replace(/^Payée le [^\n]*\n?/i, '').replace(/^Conducteur désigné le [^\n]*\n?/i, '').replace(/^Contestée le [^\n]*\n?/i, '').trim();
+      const newComment = prev ? `${mention}\n${prev}` : mention;
+      FP.history.commit();
+      a.justifUrl = url; a.statut = 'contestée'; a.commentaire = newComment;
+      setJustifWatch(id0, false);
+      renderKPIs(); renderTable(); renderCharts();
+      FP.persist.update('amendes', id0, { justifUrl: url, statut: 'contestée', commentaire: newComment });
+      openDrawer(id0);
+      return;
+    }
+    // Lit le justificatif via l'IA : date de paiement ET montant réellement payé
+    let dpaie = null, mpaye = null;
+    try { const info = await extractJustifInfo(file); dpaie = info.datePaiement; mpaye = info.montantPaye; }
+    catch (e) { console.warn('[justif] lecture', e); }
+
+    const patch = { justifUrl: url, statut: 'payée' };
+    // Montant réellement payé : si le justificatif indique un montant différent du montant
+    // enregistré (ex. réglé avant échéance → minoré), proposer de l'ajuster. On demande TOUJOURS
+    // confirmation (un montant ne doit jamais être modifié en silence sur une lecture automatique)
+    // et on conserve le montant initial dans le commentaire. Réversible via Ctrl+Z.
+    const majored = !!(a.majoree && a.montantMajore);
+    const base = majored ? Number(a.montantMajore) : (Number(a.montant) || 0);
+    let montantNote = '', mpayeOk = null;
+    if (mpaye != null && base && Math.abs(mpaye - base) >= 0.5) {
+      const moins = mpaye < base;
+      const q = `Le justificatif indique ${FP.euroPrecis(mpaye)} payé, au lieu de ${FP.euroPrecis(base)} enregistré`
+        + (moins ? ' (réglé avant échéance ?).' : '.')
+        + `\n\nMettre à jour le montant de l'amende à ${FP.euroPrecis(mpaye)} ?`;
+      if (await FP.confirm(q)) { mpayeOk = mpaye; montantNote = ` · réglée ${FP.euroPrecis(mpaye)} (initial ${FP.euroPrecis(base)})`; }
+    }
+
+    const mention = `Payée le ${FP.date(dpaie || new Date().toISOString().slice(0, 10))}${montantNote}`;
+    // Préserve un éventuel commentaire existant, sans dupliquer la mention "Payée le …"
+    const prev = (a.commentaire || '').replace(/^Payée le [^\n]*\n?/i, '').trim();
+    const newComment = prev ? `${mention}\n${prev}` : mention;
+    patch.commentaire = newComment;
+    FP.history.commit();
+    a.justifUrl = url; a.statut = 'payée'; a.commentaire = newComment;
+    if (mpayeOk != null) {
+      if (majored) { a.montantMajore = mpayeOk; patch.montantMajore = mpayeOk; }
+      else { a.montant = mpayeOk; patch.montant = mpayeOk; }
+    }
+    const id = a.id;
+    setJustifWatch(id, false); // justificatif présent → plus d'alerte
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, patch);
+    if (mpayeOk != null && FP.toast) FP.toast('💶 Montant ajusté à ' + FP.euroPrecis(mpayeOk));
+    openDrawer(id); // rouvre la fiche à jour (lien + commentaire « Payée le … »)
+  }
+  // Lit le justificatif (PDF/image) et tente d'en extraire la date de paiement
+  async function extractDatePaiement(file) {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    let text = '';
+    if (isPdf) {
+      const pdf = await loadPdf(file);
+      text = await pdfText(pdf);
+      if ((text || '').replace(/\s/g, '').length < 30) {
+        await loadScript(TESSERACT_CDN);
+        const canvas = await pdfPageToCanvas(pdf);
+        const worker = await Tesseract.createWorker('fra');
+        const { data } = await worker.recognize(canvas); await worker.terminate();
+        text = data.text;
+      }
+    } else {
+      await loadScript(TESSERACT_CDN);
+      const worker = await Tesseract.createWorker('fra');
+      const { data } = await worker.recognize(file); await worker.terminate();
+      text = data.text;
+    }
+    const t = (text || '').replace(/\s+/g, ' ');
+    let m = t.match(/(?:pai?ement|pay[ée]e?|r[ée]gl[ée]e?|effectu[ée])[^0-9]{0,25}(\d{1,2})[\/.\- ](\d{1,2})[\/.\- ](\d{2,4})/i)
+         || t.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+    if (!m) return null;
+    let y = m[3]; if (y.length === 2) y = '20' + y;
+    return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  }
+  // Prompt IA pour un JUSTIFICATIF de paiement : date payée + montant réellement réglé.
+  const JUSTIF_PROMPT = [
+    "Ce document est un JUSTIFICATIF DE PAIEMENT d une amende / contravention (confirmation de telepaiement amendes.gouv/ANTAI, recu de carte bancaire, virement, ticket, capture d ecran).",
+    "Renvoie UNIQUEMENT un objet JSON valide, sans aucun texte autour, avec ces cles (mets null si l info est absente ou illisible) :",
+    "datePaiement : la date a laquelle le paiement a ete effectue, format AAAA-MM-JJ (jour/mois/annee europeen). C est une date passee ou du jour, JAMAIS future.",
+    "montantPaye : le MONTANT REELLEMENT PAYE en euros, nombre a point decimal sans symbole ni separateur de milliers (ex 35.00). C est le montant debite / regle (libelle souvent 'Montant paye', 'Montant regle', 'Montant de la transaction', 'Total'). En cas de paiement rapide il est MINORE (plus petit que l amende forfaitaire). NE prends JAMAIS comme montant un numero d avis, de transaction, de carte, une reference, un code ou une date.",
+    "IMPORTANT : ne devine ni n invente rien ; une valeur illisible = null.",
+  ].join("\n");
+  // Lit un justificatif de paiement via l'IA (scan-doc) : { datePaiement, montantPaye }.
+  // Secours : OCR local pour la date si l'IA n'a rien renvoyé.
+  async function extractJustifInfo(file) {
+    let datePaiement = null, montantPaye = null;
+    try {
+      const ia = await FP.scanIA(file, 'justificatif', JUSTIF_PROMPT);
+      if (ia) {
+        if (ia.datePaiement) { const d = String(ia.datePaiement).slice(0, 10); if (/^\d{4}-\d{2}-\d{2}$/.test(d)) datePaiement = d; }
+        if (ia.montantPaye != null && ia.montantPaye !== '') {
+          const n = Number(String(ia.montantPaye).replace(',', '.').replace(/[^0-9.]/g, ''));
+          if (isFinite(n) && n > 0) montantPaye = Math.round(n * 100) / 100;
+        }
+      }
+    } catch (e) { console.warn('[justif] IA indisponible', e); }
+    if (!datePaiement) { try { datePaiement = await extractDatePaiement(file); } catch (_) {} }
+    return { datePaiement, montantPaye };
+  }
+  // Copie un texte dans le presse-papier + petit retour visuel sur le bouton
+  function copierTexte(txt, btn) {
+    if (!txt) return;
+    const done = () => { if (!btn) return; const old = btn.innerHTML; btn.innerHTML = '<span style="font-size:.8rem">✓</span>'; setTimeout(() => { btn.innerHTML = old; if (window.lucide) lucide.createIcons(); }, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done).catch(() => { window.prompt('Copier :', txt); });
+    else window.prompt('Copier :', txt);
+  }
+  // Édition au clic d'un champ de l'amende — éditeur maison (FP.cellEditor), pas de prompt
+  function editAmField(el, field, type) {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
+    if (!el || !FP.cellEditor) return;
+    FP.cellEditor(el, a[field] != null ? a[field] : '', type || 'text', {
+      onSave: (nv) => {
+        FP.history.commit();
+        const patch = {};
+        if (type === 'number') {
+          const n = field === 'points' ? (parseInt(nv, 10) || 0) : (nv == null ? null : nv);
+          a[field] = n; patch[field] = n;
+          if (field === 'points') { a.retraitPoints = (n || 0) > 0; patch.retraitPoints = a.retraitPoints; }
+        } else if (type === 'date') {
+          const v = nv || null; a[field] = v; patch[field] = v;
+          if (field === 'date') { a.annee = (v || '').slice(0, 4); patch.annee = a.annee || null; }
+        } else {
+          const v = (nv == null ? '' : String(nv)).trim();
+          a[field] = v || null; patch[field] = v || null;
+        }
+        renderKPIs(); renderTable(); renderCharts();
+        FP.persist.update('amendes', a.id, patch);
+        openDrawer(a.id);
+      },
+      onCancel: () => openDrawer(a.id),
+    });
+  }
+  // Supprime un document de l'amende (scan d'avis / justificatif) : on enlève le lien
+  async function deleteAmDoc(field, label) {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
+    if (!await FP.confirm(`Supprimer ${label} de cette amende ?`)) return;
+    FP.history.commit();
+    a[field] = null;
+    const id = a.id;
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { [field]: null });
+    openDrawer(id);
+  }
+  function unarchiveAmende() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    FP.history.commit();
+    a.archived = false;
+    const id = a.id;
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { archived: false });
+    openDrawer(id);
+  }
+
+  // Désignation du conducteur : l'amende n'est plus à la charge de l'entreprise.
+  // ⚠️ Un justificatif de désignation est OBLIGATOIRE : sans lui, on ne peut pas désigner.
+  function markDesigne() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    if (!a.justifUrl) {
+      // Pas encore de justificatif → on l'exige : ouverture du sélecteur de fichier.
+      // C'est l'upload (intent 'designate') qui passera l'amende en « désignée ».
+      justifIntent = 'designate';
+      alert("Pour marquer cette amende comme « Désignée », joignez d'abord le justificatif de désignation (le document prouvant que le conducteur a été désigné).");
+      $('justif-file').click();
+      return;
+    }
+    // Un justificatif est déjà présent → désignation possible.
+    FP.history.commit();
+    a.statut = 'désignée';
+    const id = a.id;
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.update('amendes', id, { statut: 'désignée' });
+    openDrawer(id);
+  }
+  async function deleteAmende() {
+    if (!state.currentId) return;
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return;
+    if (!await FP.confirm(`Supprimer cette amende (${a.id}) ?`)) return;
+    FP.history.commit();
+    const id = a.id;
+    data.amendes = data.amendes.filter(x => x.id !== id);
+    state.currentId = null;
+    closeDrawer();
+    renderKPIs(); renderTable(); renderCharts();
+    FP.persist.delete('amendes', id, a); // a = enregistrement complet → Corbeille (restaurable)
+  }
+
+  // ---------- Autocomplete stylé (remplace le <datalist> natif, moche) ----------
+  function attachAutocomplete(input, options) {
+    if (!input) return;
+    const wrap = input.closest('.ac-wrap') || input.parentElement;
+    let panel = wrap.querySelector('.ac-panel');
+    if (!panel) { panel = document.createElement('div'); panel.className = 'ac-panel'; wrap.appendChild(panel); }
+    input._acOptions = options || [];
+    let activeIdx = -1;
+
+    function render(showAll) {
+      const q = showAll ? '' : FP.norm(input.value).trim();
+      const list = (input._acOptions || [])
+        .filter(o => !q || FP.norm(o).includes(q))
+        .slice(0, 50);
+      activeIdx = -1;
+      if (!list.length) { panel.classList.remove('open'); panel.innerHTML = ''; return; }
+      panel.innerHTML = list.map((o, i) =>
+        `<div class="ac-item" data-i="${i}" data-val="${o.replace(/"/g, '&quot;')}">${o.replace(/</g, '&lt;')}</div>`
+      ).join('');
+      panel.classList.add('open');
+    }
+    function choose(val) { input.value = val; panel.classList.remove('open'); input.dispatchEvent(new Event('change', { bubbles: true })); }
+
+    // Flèche cliquable pour dérouler / refermer la liste (la liste ne s'ouvre plus toute seule au focus)
+    let arrow = wrap.querySelector('.ac-arrow');
+    if (!arrow) {
+      arrow = document.createElement('button');
+      arrow.type = 'button';
+      arrow.className = 'ac-arrow';
+      arrow.setAttribute('aria-label', 'Afficher la liste');
+      wrap.appendChild(arrow);
+      arrow.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        if (panel.classList.contains('open')) { panel.classList.remove('open'); }
+        else { input.focus(); render(true); }
+      });
+    }
+
+    if (input._acBound) { return; }   // déjà branché : on garde le même comportement
+    input._acBound = true;
+
+    input.addEventListener('input', () => render(false));
+    input.addEventListener('blur', () => setTimeout(() => panel.classList.remove('open'), 150));
+    input.addEventListener('keydown', (e) => {
+      const items = [...panel.querySelectorAll('.ac-item')];
+      if (!panel.classList.contains('open') || !items.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); }
+      else if (e.key === 'Enter') { if (activeIdx >= 0) { e.preventDefault(); choose(items[activeIdx].dataset.val); return; } }
+      else if (e.key === 'Escape') { panel.classList.remove('open'); return; }
+      else return;
+      items.forEach((it, i) => it.classList.toggle('ac-active', i === activeIdx));
+      if (items[activeIdx]) items[activeIdx].scrollIntoView({ block: 'nearest' });
+    });
+    panel.addEventListener('mousedown', (e) => {
+      const it = e.target.closest('.ac-item');
+      if (it) { e.preventDefault(); choose(it.dataset.val); }
+    });
+  }
+
+  // ---------- Majoration : rattacher une majoration à l'amende d'origine ----------
+  // (escAmende est défini tout en haut du script — utilisé dès l'init.)
+  // Montant réellement dû : si l'amende a été majorée, c'est le montant majoré
+  // Source UNIQUE : on délègue à FP.montantDu (majoré si majorée, montant réellement payé si saisi, sinon montant).
+  function montantDu(a) { return FP.montantDu ? FP.montantDu(a) : ((a && a.majoree && a.montantMajore) ? Number(a.montantMajore) : (Number(a && a.montant) || 0)); }
+  function amendeLabel(a) {
+    return `${a.prenom || '?'} · ${FP.date(a.date)} · ${a.motif || '—'} · ${a.montant ? FP.euroPrecis(a.montant) : '—'}${a.numeroAvis ? ' · n°' + a.numeroAvis : ''}`;
+  }
+  function populateMajorationParents(preselectId) {
+    const sel = $('am-majoration-parent'); if (!sel) return;
+    const list = data.amendes.filter(a => !a.majoree).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    sel.innerHTML = list.map(a => `<option value="${a.id}">${escAmende(amendeLabel(a))}</option>`).join('');
+    if (preselectId != null) sel.value = String(preselectId);
+  }
+  // Cherche l'amende d'origine la plus probable pour une majoration (même n° d'avis, sinon même conducteur + motif)
+  function trouverAmendeOrigine(p) {
+    const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
+    const cands = data.amendes.filter(a => !a.majoree);
+    if (p.numeroAvis) { const x = cands.find(a => norm(a.numeroAvis) && norm(a.numeroAvis) === norm(p.numeroAvis)); if (x) return x; }
+    if (p.prenom && p.motif) { const x = cands.find(a => norm(a.prenom) === norm(p.prenom) && norm(a.motif) === norm(p.motif)); if (x) return x; }
+    if (p.prenom && p.date) { const x = cands.find(a => norm(a.prenom) === norm(p.prenom) && a.date === p.date); if (x) return x; }
+    return null;
+  }
+  function setMajorationMode(on, preselectId) {
+    $('am-is-majoration').checked = !!on;
+    $('am-majoration-pick').classList.toggle('hidden', !on);
+    if (on) populateMajorationParents(preselectId);
+    checkDoublonLive();
+  }
+
+  // Cherche un doublon d'amende selon les valeurs saisies (n° d'avis, ou conducteur + date + montant)
+  function findDoublon(prenom, date, montant, numAvis) {
+    const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
+    // Un doublon d'amende n'existe QUE si le N° D'AVIS (clé unique) est identique.
+    // On ne flague JAMAIS sur prénom+date+montant : deux amendes distinctes du même conducteur,
+    // même jour et même montant (ex. 2 stationnements) sont LÉGITIMES — les traiter en doublon
+    // était la cause des fausses alertes « à chaque ajout ».
+    if (numAvis && norm(numAvis).length >= 4) {
+      return data.amendes.find(a => norm(a.numeroAvis) && norm(a.numeroAvis) === norm(numAvis)) || null;
+    }
+    return null;
+  }
+  // Affiche/masque le bandeau de doublon EN HAUT du formulaire, en temps réel pendant la saisie
+  function checkDoublonLive() {
+    const banner = $('am-doublon-banner'); if (!banner) return;
+    if ($('am-is-majoration') && $('am-is-majoration').checked) { banner.classList.add('hidden'); return; }
+    const d = findDoublon($('am-prenom').value.trim(), $('am-date').value, FP.parseMontant($('am-montant').value) || 0, fmtNumeroAvis($('am-avis').value));
+    if (d) {
+      banner.innerHTML = `<b>⚠️ Doublon : cette amende semble déjà enregistrée.</b><br>`
+        + `${escAmende(d.prenom || '?')} · ${FP.date(d.date)} · ${escAmende(d.motif || '—')} · ${d.montant ? FP.euroPrecis(d.montant) : '—'}`
+        + (d.numeroAvis ? ` · n°${escAmende(d.numeroAvis)}` : '');
+      banner.classList.remove('hidden');
+    } else {
+      banner.classList.add('hidden');
+    }
+  }
+
+  // ---------- Nouvelle amende (prompt simple, pas de modal complète) ----------
+  let _avisFile = null; // scan de l'avis sélectionné, envoyé au stockage à l'enregistrement
+  let _scanBreakdown = null; // détail des 3 montants + dates limites lus par l'IA (persisté après insert)
+  // #4 — Import MULTIPLE : file d'attente d'avis. On enchaîne le formulaire avis par avis.
+  let _avisQueue = [];
+  let _avisQueueTotal = 0;
+  function resetAmendeFormFields() {
+    $('am-prenom').value = ''; $('am-motif').value = ''; $('am-montant').value = '';
+    $('am-points').value = '0'; $('am-date').value = new Date().toISOString().slice(0, 10);
+    $('am-statut').value = 'à payer'; $('am-avis').value = '';
+    $('am-telepaiement').value = ''; $('am-cle').value = '';
+    _avisFile = null; _pointsTouched = false;
+    $('am-etrangere').checked = false; $('am-points').removeAttribute('disabled');
+    $('am-is-majoration').checked = false; $('am-majoration-pick').classList.add('hidden');
+    $('am-doublon-banner').classList.add('hidden');
+  }
+  function updateQueueBanner() {
+    const b = $('av-queue-banner'); if (!b) return;
+    if (_avisQueueTotal <= 1) { b.classList.add('hidden'); b.innerHTML = ''; return; }
+    const courant = _avisQueueTotal - _avisQueue.length; // avis affiché (1-based)
+    b.classList.remove('hidden');
+    b.innerHTML = `📥 Import multiple : avis <b>${courant}</b> / <b>${_avisQueueTotal}</b> — vérifie puis <b>Enregistre</b>. <button type="button" id="av-queue-skip" class="underline ml-1">Passer celui-ci</button>`;
+    const sk = $('av-queue-skip'); if (sk) sk.onclick = () => { if (!loadNextQueued()) { _avisQueueTotal = 0; updateQueueBanner(); } };
+  }
+  function startAvisQueue(files) {
+    _avisQueue = Array.from(files);
+    _avisQueueTotal = _avisQueue.length;
+    loadNextQueued();
+  }
+  function loadNextQueued() {
+    if (!_avisQueue.length) { _avisQueueTotal = 0; updateQueueBanner(); return false; }
+    const file = _avisQueue.shift();
+    resetAmendeFormFields();
+    $('amende-form').classList.remove('hidden');
+    $('am-postsave').classList.add('hidden');
+    _avisFile = file;
+    handleAvis(file);
+    updateQueueBanner();
+    return true;
+  }
+  let _pointsTouched = false; // l'utilisateur a-t-il saisi les points à la main ? (sinon on les calcule)
+  // Calcule les points retirés à partir du motif choisi (sauf si l'utilisateur les a saisis lui-même)
+  function autoPointsFromMotif() {
+    if (_pointsTouched) return;
+    if ($('am-etrangere') && $('am-etrangere').checked) return; // amende étrangère : 0 point
+    const pts = pointsRetrait($('am-motif').value.trim(), '');
+    if (pts != null) $('am-points').value = pts;
+  }
+  function openAmendeModal() {
+    // Suggestions conducteurs : chauffeurs des véhicules + prénoms d'amendes existantes
+    const nonPersonnes = (window.FP && FP.NON_CHAUFFEURS) || ['Siège', 'Dépôt', 'Navette', 'VENDU', 'x', 'X', 'Fenwick'];
+    const fromVeh = (data.vehicules || []).map(v => (v.chauffeur || '').trim()).filter(n => n && n !== '—' && !nonPersonnes.includes(n));
+    const fromAmendes = data.amendes.map(a => a.prenom).filter(Boolean);
+    const prenoms = [...new Set([...fromVeh, ...fromAmendes])].sort((a, b) => a.localeCompare(b, 'fr'));
+    const motifsList = [...new Set(data.amendes.map(a => a.motif).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    // Conducteur : choisir dans la liste OU créer en tapant (règle projet). Repli sur l'ancien
+    // autocomplete si le helper global n'est pas encore chargé.
+    if (window.FP && FP.conducteurPicker) FP.conducteurPicker($('am-prenom'));
+    else attachAutocomplete($('am-prenom'), prenoms);
+    attachAutocomplete($('am-motif'), motifsList);
+    $('am-prenom').value = ''; $('am-motif').value = ''; $('am-montant').value = '';
+    $('am-points').value = '0'; $('am-date').value = new Date().toISOString().slice(0, 10);
+    $('am-statut').value = 'à payer'; $('am-avis').value = '';
+    $('am-telepaiement').value = ''; $('am-cle').value = '';
+    _avisFile = null;
+    _pointsTouched = false;
+    $('am-etrangere').checked = false; $('am-points').removeAttribute('disabled');
+    // Réinitialise le bloc majoration
+    populateMajorationParents();
+    $('am-is-majoration').checked = false;
+    $('am-majoration-pick').classList.add('hidden');
+    $('am-doublon-banner').classList.add('hidden');
+    const avSt = $('av-status'); if (avSt) { avSt.classList.add('hidden'); avSt.innerHTML = ''; }
+    $('amende-form').classList.remove('hidden');
+    $('am-postsave').classList.add('hidden');
+    $('amende-modal').classList.add('open');
+    setTimeout(() => $('am-prenom').focus(), 50);
+    lucide.createIcons();
+  }
+  function closeAmendeModal() { _avisQueue = []; _avisQueueTotal = 0; const b = $('av-queue-banner'); if (b) { b.classList.add('hidden'); b.innerHTML = ''; } $('amende-modal').classList.remove('open'); }
+  // Rattache une majoration à l'amende d'origine (met à jour, ne crée pas de doublon)
+  function lierMajoration(parent, montantMaj, dateMaj, numAvisMaj) {
+    FP.history.commit();
+    parent.majoree = true;
+    parent.montantMajore = montantMaj;
+    parent.dateMajoration = dateMaj;
+    if (numAvisMaj) parent.numeroAvisMajore = numAvisMaj;
+    if (parent.statut !== 'payée') parent.statut = 'à payer';
+    _avisFile = null;
+    closeAmendeModal();
+    renderKPIs(); renderTable(); renderCharts();
+    const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
+    FP.persist.update('amendes', parent.id, {
+      majoree: true, montantMajore: montantMaj, dateMajoration: dateOrNull(dateMaj),
+      numeroAvisMajore: numAvisMaj || null, statut: parent.statut
+    });
+  }
+
+  async function saveAmende(ev) {
+    ev.preventDefault();
+    const prenom = $('am-prenom').value.trim();
+    if (!prenom) { $('am-prenom').focus(); return; }
+    const date = $('am-date').value || new Date().toISOString().slice(0, 10);
+    const etrangere = $('am-etrangere').checked; // amende étrangère = pas de retrait de points
+    const points = etrangere ? 0 : (parseInt($('am-points').value, 10) || 0);
+    const montant = Math.max(0, FP.parseMontant($('am-montant').value) || 0); // espace/virgule gérés ; jamais négatif
+    const numAvis = fmtNumeroAvis($('am-avis').value);
+    const norm = s => (s || '').replace(/\s+/g, '').toLowerCase();
+
+    // === Cas 1 : rattacher une MAJORATION à une amende existante ===
+    if ($('am-is-majoration').checked) {
+      const parent = data.amendes.find(a => String(a.id) === String($('am-majoration-parent').value));
+      if (!parent) { alert("Choisissez l'amende d'origine à majorer."); return; }
+      if (!montant) { $('am-montant').focus(); alert('Indiquez le montant majoré dans le champ « Montant ».'); return; }
+      lierMajoration(parent, montant, date, numAvis);
+      return;
+    }
+
+    // === Cas 2 : nouvelle amende — détection doublon / majoration non signalée ===
+    let doublon = findDoublon(prenom, date, montant, numAvis);
+    // Même conducteur + même motif mais montant plus élevé → probablement une majoration
+    const motifSaisi = $('am-motif').value.trim();
+    let majProbable = null;
+    // Suggérer une majoration UNIQUEMENT si le n° d'avis est le MÊME qu'une amende existante et que
+    // le nouveau montant est plus élevé (une majoration porte le même n° d'avis). Sans n° d'avis
+    // identique, on ne suggère rien → plus de fausse alerte « majoration » à chaque 2e amende.
+    if (!doublon && numAvis && norm(numAvis).length >= 4) {
+      majProbable = data.amendes.find(a => !a.majoree && a.numeroAvis && norm(a.numeroAvis) === norm(numAvis)
+        && Number(a.montant) > 0 && montant > Number(a.montant)) || null;
+    }
+    if (majProbable) {
+      const lien = await FP.confirm(`💡 Cela ressemble à une MAJORATION d'une amende déjà enregistrée :\n\n`
+        + `• ${majProbable.prenom || '?'} — ${FP.date(majProbable.date)}\n`
+        + `• ${majProbable.motif || '—'} — ${majProbable.montant ? FP.euroPrecis(majProbable.montant) : '—'}\n\n`
+        + `OK = la rattacher comme majoration (${FP.euroPrecis(montant)})\n`
+        + `Annuler = créer une amende séparée`);
+      if (lien) { lierMajoration(majProbable, montant, date, numAvis); return; }
+    }
+    if (doublon) {
+      const ok = await FP.confirm(`⚠️ Doublon possible : une amende très similaire existe déjà\n\n`
+        + `• ${doublon.prenom || '?'} — ${FP.date(doublon.date)}\n`
+        + `• ${doublon.motif || '—'} — ${doublon.montant ? FP.euroPrecis(doublon.montant) : '—'}\n`
+        + (doublon.numeroAvis ? `• N° d'avis : ${doublon.numeroAvis}\n` : '')
+        + `\nL'ajouter quand même ?`);
+      if (!ok) return;
+    }
+
+    // Envoi du scan de l'avis dans le stockage (pour le revoir plus tard)
+    let avisUrl = '';
+    if (_avisFile) {
+      try {
+        avWorking('Sauvegarde du scan de l\'avis…');
+        avisUrl = await FP.uploadScan(_avisFile, 'avis', { name: numAvis ? 'avis-' + numAvis : '' }) || '';
+        avStatus('<b>✓ Scan de l\'avis enregistré.</b>', 'ok');
+      } catch (err) {
+        console.error(err);
+        avStatus("Le scan n'a pas pu être sauvegardé (l'amende sera quand même enregistrée). Réessayez plus tard.", 'error');
+      }
+    }
+
+    const newA = {
+      id: nextAmendeId(), date, annee: (date || '').slice(0, 4),
+      prenom, numeroAvis: numAvis, motif: $('am-motif').value.trim(),
+      montant, points, retraitPoints: points > 0,
+      numeroTelepaiement: $('am-telepaiement').value.trim(), cle: $('am-cle').value.trim(),
+      statut: $('am-statut').value || 'à payer', commentaire: etrangere ? 'Amende étrangère' : '', avisUrl
+    };
+    // Anti-doublon : même n° d'avis (+ montant), ou même prénom + date + montant.
+    if (FP.dupe && !(await FP.dupe.confirmAdd('amendes', newA, data.amendes))) return;
+    FP.history.commit();
+    data.amendes.push(newA);
+    if (newA.statut === 'payée') setJustifWatch(newA.id, true); // payée sans justificatif dès la création → à surveiller
+    _avisFile = null;
+    renderKPIs(); renderTable(); renderCharts();
+    const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
+    FP.persist.insert('amendes', { ...newA, date: dateOrNull(newA.date), annee: newA.annee || null, numeroAvis: newA.numeroAvis || null, commentaire: newA.commentaire || null, avisUrl: avisUrl || null });
+    // Persiste la ventilation des 3 montants + dates limites lue par l'IA (réglages société, pas de colonne DB).
+    if (_scanBreakdown && FP.setAmendeMontants) { FP.setAmendeMontants(newA.id, _scanBreakdown); _scanBreakdown = null; }
+    // #4 : import multiple en cours -> on enchaîne sur l'avis suivant (sans l'écran e-mail par avis)
+    if (_avisQueueTotal > 1) {
+      const fait = _avisQueueTotal - _avisQueue.length;
+      if (FP.toast) FP.toast(`✓ Amende enregistrée (${fait}/${_avisQueueTotal})`);
+      if (_avisQueue.length > 0) { loadNextQueued(); return; }
+      _avisQueueTotal = 0; updateQueueBanner(); closeAmendeModal();
+      if (FP.toast) FP.toast('✓ Import multiple terminé');
+      return;
+    }
+    showPostSaveMail(newA); // propose d'envoyer l'email au conducteur (sans avoir à rouvrir la fiche)
+  }
+  // Affiche le panneau d'envoi de mail juste après l'enregistrement d'une amende
+  function showPostSaveMail(a) {
+    state.currentId = a.id; // pour que ouvrirMail / prenomCourant ciblent cette amende
+    $('amende-form').classList.add('hidden');
+    $('am-postsave').classList.remove('hidden');
+    lucide.createIcons();
+  }
+
+  // ============================================================
+  //  Import de l'avis → pré-remplissage automatique
+  //  100% navigateur : rien n'est envoyé sur un serveur.
+  //  PDF "natif" : on lit le texte directement (rapide, fiable).
+  //  Photo / PDF scanné : OCR via Tesseract.js (fallback).
+  // ============================================================
+  const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  const PDFJS_CDN     = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+  const PDFJS_WORKER  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[data-lazy="${src}"]`);
+      if (existing) {
+        if (existing.dataset.loaded === '1') return resolve();
+        existing.addEventListener('load', resolve);
+        existing.addEventListener('error', () => reject(new Error('Échec du chargement de ' + src)));
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = src; s.dataset.lazy = src;
+      s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+      s.onerror = () => reject(new Error('Échec du chargement de ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  function avStatus(msg, type){
+    const el = $('av-status');
+    el.classList.remove('hidden');
+    const colors = {
+      working: 'background:#F1F5F9;color:#475569;',
+      ok:      'background:#ECFDF5;color:#047857;',
+      error:   'background:#FEF2F2;color:#B91C1C;',
+    };
+    el.setAttribute('style', colors[type] || colors.working);
+    el.innerHTML = msg;
+  }
+  const avWorking = (txt) => avStatus(`<span class="inline-flex items-center gap-2"><span class="av-spin"></span> ${txt}</span>`, 'working');
+
+  async function loadPdf(file){
+    await loadScript(PDFJS_CDN);
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const buf = await file.arrayBuffer();
+    return window.pdfjsLib.getDocument({ data: buf }).promise;
+  }
+
+  // Lit le texte "natif" d'un PDF (sans OCR) — marche pour les avis téléchargés
+  async function pdfText(pdf){
+    let txt = '';
+    const n = Math.min(pdf.numPages, 3);
+    for (let p = 1; p <= n; p++){
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      txt += content.items.map(it => it.str).join(' ') + '\n';
+    }
+    return txt;
+  }
+
+  // Rend la 1ère page d'un PDF en canvas pour l'OCR
+  async function pdfPageToCanvas(pdf){
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas;
+  }
+
+  const toIsoDate = (d, m, y) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+
+  // Analyse le texte d'un avis de contravention français
+  // Formate le numéro d'avis selon le type :
+  //  - FPS / avis de paiement (14 chiffres) -> "26 2 129 090 123 46"
+  //  - Avis de contravention (ex. 6024329152) -> tout attaché
+  function fmtNumeroAvis(raw) {
+    const d = (raw || '').replace(/\D/g, '');
+    if (!d) return (raw || '').trim();
+    if (d.length === 14) return `${d.slice(0,2)} ${d.slice(2,3)} ${d.slice(3,6)} ${d.slice(6,9)} ${d.slice(9,12)} ${d.slice(12,14)}`;
+    return d; // contravention & autres : chiffres collés
+  }
+
+  function parseAvis(raw){
+    const text = (raw || '').replace(/ /g, ' ');
+    const upper = text.toUpperCase();
+    const out = {};
+
+    // Plaque d'immatriculation — format SIV (AA-123-AA), sinon ancien FNI
+    let m = upper.match(/\b([A-Z]{2})\s*[-\s]\s*([0-9]{3})\s*[-\s]\s*([A-Z]{2})\b/);
+    if (m) out.immat = `${m[1]}-${m[2]}-${m[3]}`;
+    if (!out.immat) {
+      m = upper.match(/\b([0-9]{1,4})\s+([A-Z]{2,3})\s+([0-9]{2,3})\b/);
+      if (m) out.immat = `${m[1]} ${m[2]} ${m[3]}`;
+    }
+
+    // Numéro de l'avis / télépaiement — suite de 9 à 13 chiffres
+    let mn = upper.match(/(?:T[ÉE]L[ÉE]PAIEMENT|AVIS|AMENDE|R[ÉE]F[ÉE]RENCE)[^0-9]{0,30}([0-9][0-9 ]{8,16}[0-9])/);
+    if (mn) out.numeroAvis = fmtNumeroAvis(mn[1]);
+    if (!out.numeroAvis) {
+      const mg = upper.match(/\b([0-9]{10,14})\b/);
+      if (mg) out.numeroAvis = fmtNumeroAvis(mg[1]);
+    }
+
+    // Numéro de télépaiement + clé (pour le paiement en ligne)
+    const mt = upper.match(/T[ÉE]L[ÉE]PAIEMENT[^0-9]{0,25}([0-9][0-9 ]{6,16}[0-9])/);
+    if (mt) out.numeroTelepaiement = mt[1].replace(/\s+/g, '');
+    const mc = upper.match(/CL[ÉE]\s*(?:DE\s*CONTR[ÔO]LE)?\s*[:.\-]?\s*([0-9]{2,3})\b/);
+    if (mc) out.cle = mc[1];
+
+    // Montant à payer — RÈGLE ABSOLUE (mémoire projet) : c'est le MINORÉ, JAMAIS le majoré.
+    // La grille « montant de l'amende » affiche minoré / forfaitaire / majoré → on prend le
+    // PLUS PETIT (le minoré). L'appli décidera de la majoration selon la date, pas l'OCR.
+    // (Repli OCR uniquement — quand l'IA n'a pas pu lire l'avis.)
+    const grabAmts = (txt) => {
+      const re = /([0-9]{1,4}(?:[ .][0-9]{3})*)(?:[.,]([0-9]{2}))?\s*(?:€|EUR(?:OS?)?)/gi;
+      const arr = []; let am;
+      while ((am = re.exec(txt)) !== null) {
+        const v = parseFloat(am[1].replace(/[ .]/g, '') + '.' + (am[2] || '00'));
+        if (!isNaN(v) && v > 0 && v < 10000) arr.push(v);
+      }
+      return arr;
+    };
+    // On cible d'abord la zone qui suit « montant de l'amende » (évite les montants parasites)
+    const zi = text.search(/montant\s+de\s+l['’\s]*amende/i);
+    let list = zi >= 0 ? grabAmts(text.slice(zi, zi + 300)) : [];
+    if (list.length < 2) list = grabAmts(text); // repli : tout le document
+    if (list.length >= 1) out.montant = Math.min(...list);   // le minoré = le plus petit
+    // Document de MAJORATION = un avis SPÉCIFIQUE émis après non-paiement (titre « AVIS DE
+    // MAJORATION »). ⚠️ NE PAS matcher « amende forfaitaire majorée » : cette mention figure
+    // dans la grille de montants (minoré / forfaitaire / MAJORÉ) de TOUT avis normal → sinon
+    // chaque avis ordinaire est pris à tort pour une majoration.
+    out.isMajoration = /avis\s+de\s+majoration/i.test(text);
+    // Montant majoré = le PLUS GROS des montants OFFICIELS de la grille (2 ou 3 montants
+    // captés dans la zone « montant de l'amende »). JAMAIS Math.max de tous les nombres du
+    // document (attrape des références parasites → montants aberrants type 1875).
+    if (list.length >= 2) out.montantMajore = Math.max(...list);
+
+    // Date de l'infraction — près de "commise le" / "infraction" / "le", sinon 1ère date
+    const lines = text.split(/\r?\n/);
+    let dm = null;
+    for (const line of lines) {
+      if (/commise|infraction|constat|relev[ée]/i.test(line)) {
+        const d = line.match(/(\d{1,2})[\/.\- ](\d{1,2})[\/.\- ](\d{4})/);
+        if (d) { dm = d; break; }
+      }
+    }
+    if (!dm) dm = text.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/);
+    if (dm) out.date = toIsoDate(dm[1], dm[2], dm[3]);
+
+    // Motif / nature de l'infraction
+    const motifMap = [
+      [/VITESSE|EXC[ÉE]S|KM\/?H/i, 'Excès de vitesse'],
+      [/STATIONNEMENT|STATIONN/i, 'Stationnement'],
+      [/T[ÉE]L[ÉE]PHONE|PORTABLE/i, 'Téléphone au volant'],
+      [/FEU\s+ROUGE|FEU/i, 'Feu rouge'],
+      [/VOIE\s+(?:DE\s+)?BUS|VOIE\s+R[ÉE]SERV/i, 'Voie réservée'],
+      [/CEINTURE/i, 'Ceinture'],
+      [/STOP/i, 'Non-respect du stop'],
+    ];
+    for (const [rx, label] of motifMap) { if (rx.test(text)) { out.motif = label; break; } }
+
+    // Points retirés — déduits du type d'infraction (et de l'excès de vitesse si lisible)
+    const pts = pointsRetrait(out.motif, text);
+    if (pts != null) out.points = pts;
+
+    return out;
+  }
+
+  // Formate un n° de télépaiement par groupes de 4 chiffres (comme sur l'avis : 3333 8593 2214 71)
+  function fmtTel(s){ return String(s || '').replace(/\D/g, '').replace(/(\d{4})(?=\d)/g, '$1 '); }
+
+  // Barème officiel des points pour excès de vitesse (dépassement = vitesse retenue − limite)
+  function pointsExcesVitesse(retenue, limite){
+    const d = (Number(retenue) || 0) - (Number(limite) || 0);
+    if (!(d > 0)) return null;
+    if (d < 20) return 1;
+    if (d < 30) return 2;
+    if (d < 40) return 3;
+    if (d < 50) return 4;
+    return 6;
+  }
+  // Points retirés selon le motif (motifs courants, hors excès de vitesse). null = inconnu (on ne devine pas).
+  function pointsParMotif(motif){
+    const m = (motif || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (/telephone|portable|tenu en main/.test(m)) return 3;
+    if (/feu rouge|feu tricolore/.test(m)) return 4;
+    if (/\bstop\b/.test(m)) return 4;
+    if (/ceinture/.test(m)) return 3;
+    if (/distance de securite/.test(m)) return 3;
+    if (/sens interdit/.test(m)) return 4;
+    if (/priorite/.test(m)) return 4;
+    if (/stationnement|voie de bus|voie reservee|voie de circulation reservee|arret/.test(m)) return 0;
+    return null;
+  }
+
+  async function handleAvis(file){
+    if (!file) return;
+    try {
+      let parsed = {};
+      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+
+      if (isPdf) {
+        avWorking('Lecture du PDF…');
+        const pdf = await loadPdf(file);
+        const native = await pdfText(pdf);
+        // Si le PDF contient assez de texte natif, pas besoin d'OCR
+        if ((native || '').replace(/\s/g, '').length > 40) {
+          parsed = parseAvis(native);
+        } else {
+          avWorking('PDF scanné — analyse de l\'image… (quelques secondes)');
+          await loadScript(TESSERACT_CDN);
+          const canvas = await pdfPageToCanvas(pdf);
+          const worker = await Tesseract.createWorker('fra');
+          const { data } = await worker.recognize(canvas);
+          await worker.terminate();
+          parsed = parseAvis(data.text);
+        }
+      } else {
+        avWorking('Lecture de l\'avis… (quelques secondes au 1er usage)');
+        await loadScript(TESSERACT_CDN);
+        const worker = await Tesseract.createWorker('fra');
+        const { data } = await worker.recognize(file);
+        await worker.terminate();
+        parsed = parseAvis(data.text);
+      }
+
+      // Lecture IA (Sonnet) PRIORITAIRE : sur un avis dense, l'IA est plus fiable que l'OCR local
+      // pour date / montant / motif / points / plaque / n° d'avis. L'OCR ne sert que de SECOURS
+      // (si l'IA n'a pas trouvé). On GARDE l'OCR pour n° de télépaiement / clé / majoration
+      // (formats précis, critiques pour payer, que l'IA ne lit pas toujours bien).
+      try {
+        const ia = await FP.scanIA(file, 'amende');
+        if (ia) {
+          parsed._ia = true;
+          if (ia.date) parsed.date = ia.date;
+          if (ia.motif) parsed.motif = ia.motif;
+          // Points : on FAIT CONFIANCE à ce que dit l'avis (section « Effet(s) sur le permis ») —
+          // ex. véhicule de société = « n'entraîne pas de retrait de point » = 0. Le barème ne sert
+          // que de SECOURS si l'avis ne précise rien (points absents).
+          if (ia.points != null) {
+            parsed.points = ia.points;
+          } else if (ia.vitesseRetenue != null && ia.vitesseLimite != null) {
+            const p = pointsExcesVitesse(ia.vitesseRetenue, ia.vitesseLimite);
+            if (p != null) parsed.points = p;
+          } else {
+            const pm = pointsParMotif(ia.motif || parsed.motif);
+            if (pm != null) parsed.points = pm;
+          }
+          if (ia.vehiculeImmat) parsed.immat = ia.vehiculeImmat;
+          if (ia.numeroAvis) parsed.numeroAvis = ia.numeroAvis;
+          // Montants officiels lus par l'IA (les 3 tarifs, séparés) — font autorité sur l'OCR.
+          if (ia.montantMinore != null) parsed.montantMinore = ia.montantMinore;
+          if (ia.montantForfaitaire != null) parsed.montantForfaitaire = ia.montantForfaitaire;
+          if (ia.montantMajore != null) parsed.montantMajore = ia.montantMajore;
+          if (ia.dateLimiteMinore) parsed.dateLimiteMinore = ia.dateLimiteMinore;
+          if (ia.dateLimiteForfaitaire) parsed.dateLimiteForfaitaire = ia.dateLimiteForfaitaire;
+          // Mémorise la ventilation lue par l'IA pour la PERSISTER après l'insertion (réglages société,
+          // sans colonne DB). Ne change PAS le montant qui fait foi — c'est juste pour ne rien perdre.
+          _scanBreakdown = {
+            montantMinore: ia.montantMinore, montantForfaitaire: ia.montantForfaitaire, montantMajore: ia.montantMajore,
+            dateLimiteMinore: ia.dateLimiteMinore, dateLimiteForfaitaire: ia.dateLimiteForfaitaire,
+          };
+          // Montant À PAYER = montantTTC de l'IA (= le MINORÉ, sinon le forfaitaire) — JAMAIS le
+          // majoré : c'est l'appli qui décidera de la majoration selon la date. Vaut aussi pour un
+          // ré-import d'un avis déjà enregistré (sinon on affichait un montant aberrant type 1875).
+          if (ia.montantTTC != null) parsed.montant = ia.montantTTC;
+          if (ia.numeroTelepaiement) parsed.numeroTelepaiement = String(ia.numeroTelepaiement).replace(/\D/g, '');
+          if (ia.cle) parsed.cle = String(ia.cle).replace(/\D/g, '');
+          // FPS : le numero d'avis groupe fait 12 chiffres, la cle 2 -> on les combine (14 chiffres)
+          // pour que fmtNumeroAvis l'affiche "26 1 163 072 245 37" (cle incluse, espaces conserves).
+          if (parsed.numeroAvis && parsed.cle) {
+            const _cd = String(parsed.cle).replace(/\D/g, '');
+            const _full = String(parsed.numeroAvis).replace(/\D/g, '');
+            // l'IA renvoie soit le numero groupe seul (12 ch.), soit deja avec la cle (14 ch.) :
+            // on isole le numero d'avis groupe (12 ch.) dans les deux cas.
+            const _ad = (_cd && _full.length === 14 && _full.endsWith(_cd)) ? _full.slice(0, 12) : _full;
+            if (_ad.length === 12 && _cd.length === 2) {           // FPS
+              // N° de telepaiement COMPLET = prefixe (~14 ch.) + numero d'avis groupe (12 ch.) ;
+              // l'IA ne capte souvent que le prefixe -> on recompose le numero entier.
+              const _tp = String(parsed.numeroTelepaiement || '').replace(/\D/g, '');
+              if (_tp && !_tp.includes(_ad)) parsed.numeroTelepaiement = _tp + _ad;
+              parsed.numeroAvis = fmtNumeroAvis(_ad + _cd);        // "26 1 163 072 245 37"
+            }
+          }
+        }
+      } catch (e) { console.warn('[amende IA]', e); }
+
+      const filled = [];
+      // Conducteur : on déduit le chauffeur via la plaque ↔ véhicule
+      if (parsed.immat) {
+        const norm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const veh = data.vehicules && data.vehicules.find(v => norm(v.immat) === norm(parsed.immat));
+        if (veh && veh.chauffeur && !$('am-prenom').value) { $('am-prenom').value = veh.chauffeur; filled.push('conducteur (via la plaque)'); }
+      }
+      if (parsed.motif      && !$('am-motif').value)   { $('am-motif').value   = parsed.motif;      filled.push('motif'); }
+      if (parsed.points != null && !_pointsTouched && !$('am-etrangere').checked) { $('am-points').value = parsed.points; filled.push('points retirés'); }
+      if (parsed.montant    && !$('am-montant').value) { $('am-montant').value = parsed.montant;    filled.push('montant'); }
+      if (parsed.date)      { $('am-date').value    = parsed.date;       filled.push('date'); }
+      if (parsed.numeroAvis && !$('am-avis').value)    { $('am-avis').value    = parsed.numeroAvis; filled.push('n° d\'avis'); }
+      if (parsed.numeroTelepaiement && !$('am-telepaiement').value) { $('am-telepaiement').value = fmtTel(parsed.numeroTelepaiement); filled.push('n° télépaiement'); }
+      if (parsed.cle && !$('am-cle').value) { $('am-cle').value = parsed.cle; filled.push('clé'); }
+
+      // Avis de MAJORATION : on force le montant majoré (le champ a pu être pré-rempli avec le
+      // minoré ci-dessus) et on propose de rattacher à l'amende d'origine.
+      if (parsed.isMajoration) {
+        if (parsed.montantMajore) { $('am-montant').value = parsed.montantMajore; filled.push('montant majoré'); }
+        const origine = trouverAmendeOrigine(parsed);
+        setMajorationMode(true, origine ? origine.id : null);
+        avStatus(
+          `<b>⚠️ Cet avis est une MAJORATION.</b><br>` +
+          (origine
+            ? `Amende d'origine trouvée : <b>${escAmende(amendeLabel(origine))}</b>. Vérifiez puis cliquez « Enregistrer » pour la rattacher.`
+            : `Choisissez l'amende d'origine à majorer dans la liste ci-dessous, puis « Enregistrer ».`),
+          'ok');
+        lucide.createIcons();
+        return;
+      }
+
+      checkDoublonLive(); // alerte immédiate si l'avis importé existe déjà
+      const iaTag = parsed._ia ? ' <span style="font-weight:600">· lu par IA 🤖</span>' : ' <span style="color:#B45309">· lecture locale (IA non disponible)</span>';
+      if (filled.length) {
+        avStatus(`<b>✓ ${filled.length} champ(s) pré-rempli(s)</b> : ${filled.join(', ')}.${iaTag}<br>Vérifiez les valeurs puis complétez le reste (points retirés, statut…).`, 'ok');
+      } else {
+        avStatus("Lecture terminée, mais aucun champ n'a pu être détecté automatiquement. Saisissez les infos à la main — astuce : une photo nette, bien cadrée et droite donne de meilleurs résultats.", 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      avStatus("Impossible de lire le document. Vérifiez votre connexion internet et réessayez, ou saisissez les informations manuellement.", 'error');
+    }
+  }
+
+  $('justif-file').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) attachJustif(file);
+    e.target.value = '';
+  });
+  $('piece-file').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) addPiece(file);
+    e.target.value = '';
+  });
+  $('av-trigger').addEventListener('click', () => $('av-file').click());
+  $('av-file').addEventListener('change', (e) => {
+    const files = e.target.files;
+    if (files && files.length > 1) { startAvisQueue(files); }       // #4 : import multiple
+    else { const file = files && files[0]; _avisFile = file || null; handleAvis(file); }
+    e.target.value = ''; // permet de re-sélectionner le même fichier
+  });
+  // #1 : glisser-déposer un PDF/photo directement sur la zone d'import (un OU plusieurs)
+  (function(){
+    const zone = $('av-import'); if (!zone) return;
+    const stop = e => { e.preventDefault(); e.stopPropagation(); };
+    ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => { stop(e); zone.classList.add('drag-over'); }));
+    zone.addEventListener('dragleave', e => { stop(e); if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', e => { stop(e); zone.classList.remove('drag-over'); const files = e.dataTransfer && e.dataTransfer.files; if (!files || !files.length) return; if (files.length > 1) startAvisQueue(files); else { _avisFile = files[0]; handleAvis(files[0]); } });
+  })();
+  // Case « C'est une majoration » : affiche/masque le choix de l'amende d'origine
+  $('am-is-majoration').addEventListener('change', (e) => setMajorationMode(e.target.checked));
+  // Détection de doublon en temps réel (bandeau en haut du formulaire)
+  ['am-prenom', 'am-date', 'am-montant', 'am-avis'].forEach(id => {
+    $(id).addEventListener('input', checkDoublonLive);
+    $(id).addEventListener('change', checkDoublonLive);
+  });
+  // Points : on retient si l'utilisateur les saisit lui-même, sinon on les calcule depuis le motif
+  $('am-points').addEventListener('input', () => { _pointsTouched = true; });
+  $('am-motif').addEventListener('change', autoPointsFromMotif);
+  $('am-motif').addEventListener('input', autoPointsFromMotif);
+  // Amende étrangère : 0 point, champ points désactivé
+  $('am-etrangere').addEventListener('change', (e) => {
+    if (e.target.checked) { $('am-points').value = '0'; $('am-points').setAttribute('disabled', 'disabled'); }
+    else { $('am-points').removeAttribute('disabled'); }
+  });
+  // Panneau d'envoi de mail proposé juste après l'enregistrement
+  $('ps-paiement').addEventListener('click', () => { mailPaiement(); closeAmendeModal(); });
+  $('ps-designation').addEventListener('click', () => { mailDesignation(); closeAmendeModal(); });
+  $('ps-skip').addEventListener('click', closeAmendeModal);
+
+  // ---------- Import / Export CSV ----------
+  FP.injectDataIO({
+    export: false, // export géré par FP.makeExportMenu (Excel + CSV + période) ci-dessous
+    filename: `parc-pilot-amendes-${new Date().toISOString().slice(0,10)}.csv`,
+    table: 'amendes', collection: 'amendes', idPrefix: 'AM-IMP-',
+    columns: [
+      { key: 'id',          label: 'ID' },
+      { key: 'date',        label: 'Date' },
+      { key: 'annee',       label: 'Année' },
+      { key: 'prenom',      label: 'Conducteur' },
+      { key: 'motif',       label: 'Motif' },
+      { key: 'montant',     label: 'Montant (€)', format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'points',      label: 'Points retirés', format: v => (v ?? 0), parse: v => parseInt(FP.csv.numParse(v) || 0, 10) },
+      { key: 'retraitPoints', label: 'Retrait (O/N)', format: (v, r) => (Number(r.points) > 0 ? 'Oui' : 'Non'), parse: (v, row) => (parseInt(FP.csv.numParse(row['Points retirés']) || 0, 10) > 0) },
+      { key: 'numeroAvis',  label: 'N° avis' },
+      { key: 'statut',      label: 'Statut' },
+      { key: 'commentaire', label: 'Commentaire' },
+    ],
+    getRows: () => filtered(),
+    onChange: () => { renderKPIs(); renderTable(); },
+  });
+
+  // ---------- Wiring ----------
+  $('search').addEventListener('input', e => { state.search = e.target.value; renderTable(); });
+  document.querySelectorAll('#filters-statut .filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.statut = chip.dataset.value;
+      state.onlyPoints = false;
+      renderTable();
+    });
+  });
+  // KPIs cliquables → filtrent le tableau sur la catégorie et défilent jusqu'à lui.
+  function applyKpiFilter(statut, onlyPoints) {
+    // On repart d'une vue propre (année en cours conservée) pour que le tableau
+    // corresponde EXACTEMENT au chiffre affiché sur la carte.
+    state.search = ''; state.motif = 'all'; state.motifCat = 'all';
+    state.dateFrom = DEFAULT_DATE_FROM; state.dateTo = '';
+    state.statut = statut; state.onlyPoints = !!onlyPoints;
+    $('search').value = ''; $('filter-motif').value = 'all';
+    $('filter-date-from').value = DEFAULT_DATE_FROM; $('filter-date-to').value = '';
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === statut));
+    renderTable(); renderCharts(); scrollToTable();
+  }
+  { const c = $('kpi-card-total');  if (c) c.addEventListener('click', () => applyKpiFilter('all', false)); }
+  { const c = $('kpi-card-apayer'); if (c) c.addEventListener('click', () => applyKpiFilter('à payer', false)); }
+  { const c = $('kpi-card-payees'); if (c) c.addEventListener('click', () => applyKpiFilter('payée', false)); }
+  { const c = $('kpi-card-points'); if (c) c.addEventListener('click', () => applyKpiFilter('all', true)); }
+  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderKPIs(); renderTable(); renderPodium(); });
+  $('filter-motif').addEventListener('change', e => { state.motif = e.target.value; renderTable(); });
+  $('filter-date-from').addEventListener('change', e => { state.dateFrom = e.target.value; renderTable(); });
+  $('filter-date-to').addEventListener('change', e => { state.dateTo = e.target.value; renderTable(); });
+  $('sort-key').addEventListener('change', e => { state.sortKey = e.target.value; renderTable(); });
+  $('sort-dir').addEventListener('click', () => {
+    state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+    const i = $('sort-dir').querySelector('i');
+    if (i) { i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); lucide.createIcons(); }
+    renderTable();
+  });
+  $('reset-filters').addEventListener('click', () => {
+    Object.assign(state, { search: '', conducteur: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', onlyPoints: false });
+    $('search').value = ''; if ($('filter-annee')) $('filter-annee').value = 'all'; $('filter-motif').value = 'all'; $('filter-date-from').value = DEFAULT_DATE_FROM; $('filter-date-to').value = ''; $('sort-key').value = 'date';
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
+    renderKPIs(); renderTable(); renderCharts();
+  });
+  $('drill-info').addEventListener('click', e => {
+    const chip = e.target.closest('[data-cond]');
+    if (chip) setConducteurFilter(chip.dataset.cond);
+  });
+  // Clics sur les sections "fun"
+  $('type-stats').addEventListener('click', e => { const b = e.target.closest('[data-cat]'); if (b) setMotifCategory(b.dataset.cat); });
+  // Clic sur un conducteur du podium → filtre la liste des amendes sur cette personne
+  // (reste sur la page Amendes et affiche SES amendes ; re-clic = on enlève le filtre).
+  $('podium').addEventListener('click', e => { const b = e.target.closest('[data-cond]'); if (b) setConducteurFilter(b.dataset.cond); });
+  $('podium-toggle').addEventListener('click', () => { podiumExpanded = !podiumExpanded; renderPodium(); });
+  { const hm = $('heatmap'); if (hm) hm.addEventListener('click', e => { const b = e.target.closest('[data-day]'); if (b) setDay(b.dataset.day); }); }
+  $('delai-banner').addEventListener('click', e => {
+    if (!e.target.closest('#delai-voir')) return;
+    state.statut = 'à payer'; state.sortKey = 'date'; state.sortDir = 'asc'; $('sort-key').value = 'date';
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'à payer'));
+    renderTable(); scrollToTable();
+  });
+  $('drawer-relance').addEventListener('click', relanceEmail);
+  $('drawer-conteste').addEventListener('click', markConteste);
+
+  // Édition par double-clic des cellules
+  const AM_EDITABLE = { date: 'date', annee: 'text', prenom: 'text', motif: 'text', montant: 'number', points: 'number', numeroAvis: 'text', statut: 'select', commentaire: 'text' };
+  // ⚠️ Inclure « désignée » : sinon l'éditeur select n'a aucune option correspondante pour une
+  // amende désignée → il retombe sur l'index 0 (« à payer ») et, au simple blur, la repasse
+  // silencieusement en « à payer » (elle réintègre à tort le total « À payer »).
+  const AM_STATUTS = ['à payer', 'payée', 'contestée', 'désignée'];
+  let _amClickTimer = null;
+  // #7 : cocher / décocher une amende (ne pas ouvrir la fiche)
+  $('amendes-tbody').addEventListener('change', e => {
+    const cb = e.target.closest('.am-cb'); if (!cb) return;
+    const id = cb.dataset.id;
+    if (cb.checked) state.selectedIds.add(id); else state.selectedIds.delete(id);
+    const tr = cb.closest('tr'); if (tr) tr.classList.toggle('row-selected', cb.checked);
+    updateBulkBar();
+  });
+  function bulkStatut(st) {
+    const ids = [...state.selectedIds]; if (!ids.length) return;
+    FP.history.commit();
+    ids.forEach(id => { const a = data.amendes.find(x => x.id === id); if (!a) return; a.statut = st; if (st === 'à payer') { a.archived = false; if (FP.setAmendeMontantPaye) FP.setAmendeMontantPaye(id, null); } FP.persist.update('amendes', id, st === 'à payer' ? { statut: 'à payer', archived: false } : { statut: 'payée' }); });
+    const n = ids.length; state.selectedIds.clear();
+    renderKPIs(); renderTable(); renderCharts();
+    if (FP.toast) FP.toast(`✓ ${n} amende(s) → ${st === 'payée' ? 'payées' : 'à payer'}`);
+  }
+  if ($('am-bulk-envoi')) $('am-bulk-envoi').addEventListener('click', () => { const ids = [...state.selectedIds]; if (ids.length) bulkEnvoiAmendes(ids, 'paiement'); });
+  if ($('am-bulk-relance')) $('am-bulk-relance').addEventListener('click', () => { const ids = [...state.selectedIds]; if (ids.length) bulkEnvoiAmendes(ids, 'relance'); });
+  $('am-bulk-pay').addEventListener('click', () => bulkStatut('payée'));
+  $('am-bulk-unpay').addEventListener('click', () => bulkStatut('à payer'));
+  $('am-bulk-delete').addEventListener('click', async () => {
+    const ids = [...state.selectedIds]; if (!ids.length) return;
+    if (!await FP.confirm(`Supprimer ${ids.length} amende(s) ?`)) return;
+    FP.history.commit();
+    // Capture les amendes supprimées (avec leur position) pour permettre « Annuler ».
+    const removed = [];
+    ids.forEach(id => { const i = data.amendes.findIndex(x => x.id === id); if (i >= 0) { const rec = data.amendes[i]; removed.push({ rec, idx: i }); data.amendes.splice(i, 1); FP.persist.delete('amendes', id, rec); } });
+    const n = ids.length; state.selectedIds.clear();
+    renderKPIs(); renderTable(); renderCharts();
+    const restore = () => {
+      removed.sort((a, b) => a.idx - b.idx).forEach(({ rec, idx }) => { data.amendes.splice(Math.min(idx, data.amendes.length), 0, rec); if (FP.persist) FP.persist.insert('amendes', rec); });
+      renderKPIs(); renderTable(); renderCharts();
+      if (FP.toast) FP.toast(`↺ ${n} amende(s) restaurée(s)`);
+    };
+    if (FP.undoToast) FP.undoToast(`🗑 ${n} amende(s) supprimée(s)`, restore);
+    else if (FP.toast) FP.toast(`🗑 ${n} amende(s) supprimée(s)`);
+  });
+  $('am-bulk-clear').addEventListener('click', () => { state.selectedIds.clear(); renderTable(); });
+  // Tout sélectionner / tout désélectionner (sur les amendes filtrées)
+  $('am-select-all').addEventListener('change', (e) => {
+    const all = filtered();
+    if (e.target.checked) all.forEach(a => state.selectedIds.add(a.id));
+    else all.forEach(a => state.selectedIds.delete(a.id));
+    renderTable();
+  });
+
+  $('amendes-tbody').addEventListener('click', e => {
+    if (e.target.closest('.cell-edit, select, .am-cb')) return;
+    // Actions rapides au survol : interceptees AVANT l'ouverture du tiroir
+    const ra = e.target.closest('[data-ra]');
+    if (ra) {
+      e.stopPropagation();
+      const row = ra.closest('tr[data-id]'); if (!row) return;
+      const id = row.dataset.id, act = ra.dataset.ra;
+      if (act === 'open') openDrawer(id);
+      else if (act === 'copy') { const am = data.amendes.find(x => x.id === id); copierTexte(am && am.numeroAvis, ra); }
+      else if (act === 'pay') { state.currentId = id; markPaid(); }
+      else if (act === 'unpay') { state.currentId = id; markUnpaid(); }
+      return;
+    }
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    const td = e.target.closest('td[data-col]');
+    if (td && AM_EDITABLE[td.dataset.col]) {
+      clearTimeout(_amClickTimer);
+      _amClickTimer = setTimeout(() => openDrawer(tr.dataset.id), 220);
+    } else openDrawer(tr.dataset.id);
+  });
+  $('amendes-tbody').addEventListener('dblclick', e => {
+    clearTimeout(_amClickTimer);
+    const td = e.target.closest('td[data-col]');
+    const tr = e.target.closest('tr[data-id]');
+    if (!td || !tr) return;
+    const field = td.dataset.col, type = AM_EDITABLE[field];
+    if (!type) return;
+    const a = data.amendes.find(x => x.id === tr.dataset.id);
+    if (!a) return;
+    FP.cellEditor(td, a[field], type, {
+      options: type === 'select' ? AM_STATUTS : null,
+      onSave: (nv) => {
+        FP.history.commit();
+        a[field] = nv;
+        const patch = { [field]: nv };
+        // Modifier le nombre de points met aussi à jour le booléen "retrait de points"
+        if (field === 'points') { a.retraitPoints = (Number(nv) || 0) > 0; patch.retraitPoints = a.retraitPoints; }
+        renderKPIs(); renderTable(); renderCharts();
+        FP.persist.update('amendes', a.id, patch);
+      },
+      onCancel: () => renderTable(),
+    });
+  });
+  $('drawer-close').addEventListener('click', closeDrawer);
+  $('drawer-backdrop').addEventListener('click', closeDrawer);
+  // Navigation ‹ › : passer à l'amende précédente / suivante (dans l'ordre filtré affiché)
+  function gotoAdjacentAmende(delta) {
+    if (!state.currentId || !drawerOrder.length) return;
+    const i = drawerOrder.indexOf(state.currentId);
+    if (i < 0) return;
+    const j = i + delta;
+    if (j < 0 || j >= drawerOrder.length) return;
+    openDrawer(drawerOrder[j]);
+  }
+  $('drawer-prev').addEventListener('click', () => gotoAdjacentAmende(-1));
+  $('drawer-next').addEventListener('click', () => gotoAdjacentAmende(1));
+  // (le bouton drawer-pay reçoit son action dans openDrawer : payer / annuler le paiement)
+  $('drawer-designer').addEventListener('click', markDesigne);
+  // Formate le n° d'avis quand on quitte le champ (FPS espacé / contravention attaché)
+  $('am-avis').addEventListener('blur', (e) => { e.target.value = fmtNumeroAvis(e.target.value); });
+  $('table-more').addEventListener('click', () => { state.tableExpanded = !state.tableExpanded; renderTable(); });
+  $('btn-voir-tout').addEventListener('click', () => {
+    // Bascule entre « toutes les années » et l'année la plus récente
+    const years = [...new Set((data.amendes || []).map(anneeOf).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
+    state.annee = (state.annee === 'all') ? (years[0] || 'all') : 'all';
+    const sel = $('filter-annee'); if (sel) sel.value = state.annee;
+    $('btn-voir-tout').textContent = state.annee === 'all' ? 'Filtrer par année' : 'Voir toutes les années';
+    renderKPIs(); renderTable();
+  });
+  $('drawer-delete').addEventListener('click', deleteAmende);
+  $('btn-new').addEventListener('click', openAmendeModal);
+
+  // Export des amendes affichées (filtres en cours) — Excel/CSV, vue courante ou période.
+  if (FP.makeExportMenu) FP.makeExportMenu({
+    mount: '#am-export-mount', label: 'Exporter', sheetName: 'Amendes', total: true,
+    columns: [
+      { label: 'Date',        value: a => a.date || '' },
+      { label: 'Conducteur',  value: a => a.prenom || '' },
+      { label: 'Motif',       value: a => a.motif || '' },
+      { label: 'Montant (€)', value: a => { const v = FP.montantDu(a); return v ? Number(v) : null; }, number: true },
+      { label: 'Majorée',     value: a => a.majoree ? 'oui' : '' },
+      { label: 'Points',      value: a => { const p = Number(a.points); return isNaN(p) ? null : p; }, number: true, noTotal: true },
+      { label: 'N° avis',     value: a => a.numeroAvis || '' },
+      { label: 'Statut',      value: a => a.statut || '' },
+      { label: 'Année',       value: a => a.annee || anneeOf(a) || '' },
+      { label: 'Commentaire', value: a => a.commentaire || '' },
+    ],
+    getRows: () => filtered().slice().sort((x, y) => (x.date || '').localeCompare(y.date || '')),
+    period: { dateOf: a => a.date || '' },
+    baseName: () => 'amendes-' + (state.annee === 'all' ? 'toutes' : state.annee),
+  });
+  // Relevé PDF des amendes — factorisé (bouton du haut = filtres en cours ; barre = sélection).
+  function openAmendesFiche(rows, title) {
+    if (!(FP.fiche && FP.fiche.open)) return;
+    if (!rows.length) { if (FP.toast) FP.toast('Aucune amende à imprimer.'); return; }
+    FP.fiche.open({
+      key: 'amendes',
+      title: title,
+      rows: rows,
+      cols: [
+        { id: 'date',       label: 'Date',       def: true,  get: a => a.date ? FP.dateNum(a.date) : '—' },
+        { id: 'prenom',     label: 'Conducteur', def: true,  get: a => a.prenom || '—' },
+        { id: 'motif',      label: 'Motif',      def: false, get: a => a.motif || '—' },
+        { id: 'montant',    label: 'Montant',    def: true,  align: 'right', get: a => { const v = FP.montantDu(a); return v ? FP.euro(v) : '—'; }, sum: a => FP.montantDu(a) },
+        { id: 'majoree',    label: 'Majorée',    def: false, get: a => a.majoree ? 'Oui' : '' },
+        { id: 'points',     label: 'Points',     def: true,  align: 'right', get: a => { const p = Number(a.points); return (!p || isNaN(p)) ? '—' : String(p); }, sum: a => { const p = Number(a.points); return (!p || isNaN(p)) ? 0 : p; }, fmt: t => String(t) + ' pts' },
+        { id: 'statut',     label: 'Statut',     def: true,  get: a => a.statut || '—', tint: v => /payer|major/i.test(v) ? [220, 38, 38] : /pay/i.test(v) ? [22, 163, 74] : null },
+        { id: 'numeroAvis', label: 'N° avis',    def: false, mono: true, get: a => a.numeroAvis || '—' },
+      ],
+    });
+  }
+  // Bouton du haut : relevé des amendes AFFICHÉES (filtres en cours).
+  if ($('am-fiche-btn')) $('am-fiche-btn').addEventListener('click', () => {
+    const suffix = state.conducteur ? ' — ' + state.conducteur : (state.annee !== 'all' ? ' ' + state.annee : '');
+    openAmendesFiche(sortRows(filtered()), 'Relevé d\'amendes' + suffix);
+  });
+  // Barre de sélection : relevé des amendes COCHÉES uniquement.
+  if ($('am-bulk-fiche')) $('am-bulk-fiche').addEventListener('click', () => {
+    const rows = sortRows(filtered().filter(a => state.selectedIds.has(a.id)));
+    openAmendesFiche(rows, 'Relevé d\'amendes (sélection)');
+  });
+  $('amende-close').addEventListener('click', closeAmendeModal);
+  $('amende-cancel').addEventListener('click', closeAmendeModal);
+  $('amende-modal').addEventListener('click', (e) => { if (e.target.id === 'amende-modal') closeAmendeModal(); });
+  $('amende-form').addEventListener('submit', saveAmende);
+
+  // === Historique : branchement boutons + raccourcis ===
+  FP.history.renderAll = () => {
+    // Re-construire le filtre motif au cas où des amendes auraient changé
+    const newMotifs = [...new Set(data.amendes.map(a => a.motif).filter(Boolean))].sort();
+    const sel = $('filter-motif');
+    const current = sel.value;
+    sel.innerHTML = '<option value="all">Tous motifs</option>' +
+      newMotifs.map(m => `<option value="${m}">${m}</option>`).join('');
+    sel.value = newMotifs.includes(current) || current === 'all' ? current : 'all';
+    renderKPIs(); renderTable(); renderCharts();
+  };
+  document.querySelectorAll('[data-history-undo]').forEach(b => b.addEventListener('click', () => FP.history.undo()));
+  document.querySelectorAll('[data-history-redo]').forEach(b => b.addEventListener('click', () => FP.history.redo()));
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, textarea, [contenteditable]')) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
+    if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); FP.history.undo(); }
+    else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); FP.history.redo(); }
+  });
+  FP.history.updateUI();
+
+  // Init éditeur de colonnes (drag/✕/dblclick) après le DOM
+  amendesEditor = FP.makeColumnEditor({
+    pageKey: 'amendes',
+    columns: AMENDES_COLUMNS,
+    tableEl: $('amendes-table'),
+    hiddenBtnContainer: document.querySelector('main > div.flex.flex-wrap.justify-between > div.flex.items-center'),
+    onChange: () => renderTable(),
+  });
+
+  // Si on arrive depuis une notification (?filtre=apayer), on applique le filtre "À payer"
+  (function applyQueryFilter() {
+    const params = new URLSearchParams(location.search);
+    if (params.get('filtre') === 'apayer') {
+      state.statut = 'à payer';
+      document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'à payer'));
+    }
+  })();
+
+  // Ouverture directe du formulaire « Nouvelle amende » via ?new=1 (bouton du tableau de bord)
+  (function openNewFromQuery() {
+    if (new URLSearchParams(location.search).get('new')) {
+      const b = document.getElementById('btn-new');
+      if (b) setTimeout(() => b.click(), 60);
+    }
+  })();
+
+  // Ouverture directe d'une amende via l'URL (?amende=ID) — depuis la recherche globale
+  (function openAmendeFromQuery() {
+    const id = new URLSearchParams(location.search).get('amende');
+    if (!id) return;
+    const tryOpen = () => { if ((data.amendes || []).some(a => a.id === id)) { openDrawer(id); return true; } return false; };
+    if (!tryOpen()) document.addEventListener('fp:data-ready', tryOpen, { once: true });
+  })();
+
+  // Init
+  restoreFilters();   // #8 : recharge le dernier filtre/tri mémorisé…
+  syncFiltersUI();    // …et remet les contrôles (puces statut, motif, dates, tri) dans cet état
+  renderKPIs();
+  renderTable();
+  renderCharts();
+  // Filtre direct par conducteur via l'URL (?conducteur=Nom) — ex. clic sur le podium du
+  // tableau de bord : on arrive sur Amendes AVEC la liste déjà filtrée sur cette personne.
+  (function filterByConducteurFromQuery() {
+    const nom = new URLSearchParams(location.search).get('conducteur');
+    if (!nom) return;
+    state.search = '';            // évite le comportement "toggle" (ne pas dé-filtrer par erreur)
+    setConducteurFilter(nom);     // filtre + réinitialise les autres filtres + défile jusqu'au tableau
+  })();
+  // Graphiques (Chart.js chargé en différé) dessinés dès qu'il est prêt, sans bloquer l'affichage
+  if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });
+
+  // Rafraîchit quand les données Supabase arrivent (ajouts/suppressions d'autres appareils)
+  document.addEventListener('fp:data-ready', () => { fillAnneeFilter(); rebuildMotifFilter(); renderKPIs(); renderTable(); renderCharts(); });
+</script>
+</body>
+</html>

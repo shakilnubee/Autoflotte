@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")!=="0"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<title>Emprunt véhicule — Parc Pilot</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#0F1E3D">
+<link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parc Pilot">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811e">
+<script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811e"></script>
+  <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811e">
+<style>
+  .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+  .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
+  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(249,115,22,.15); }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.5); display: none; align-items: center; justify-content: center; z-index: 70; padding: 1rem; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: white; border-radius: 1rem; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
+  .pill-encours { background: #FEF3C7; color: #78350F; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
+  .pill-avenir { background: #E0E7FF; color: #3730A3; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
+  .pill-rendu { background: #DCFCE7; color: #14532D; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
+  .emp-chip { padding: .4rem .9rem; border-radius: 9999px; font-size: .82rem; font-weight: 600; border: 1px solid var(--fp-border); background: #fff; color: var(--fp-muted); cursor: pointer; display: inline-flex; align-items: center; gap: .4rem; }
+  .emp-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .emp-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: #fff; }
+  .emp-chip .n { font-size: .72rem; font-weight: 800; background: rgba(0,0,0,.08); border-radius: 9999px; padding: 0 .4rem; }
+  .emp-chip.active .n { background: rgba(255,255,255,.22); }
+  .pill-retard { background: #FEE2E2; color: #991B1B; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 700; }
+  tr.is-retard { background: #FEF2F2; }
+  /* Mode sombre : fond clair → texte illisible → teinte rouge sombre + texte clair. */
+  body.fp-dark tr.is-retard { background: rgba(220,38,38,.20); }
+  body.fp-dark tr.is-retard td { color: #fecaca; }
+  /* Menu déroulant personnalisé (aux couleurs de la plateforme) */
+  .ac-wrap { position: relative; }
+  .ac-panel { position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; background: #fff; border: 1px solid var(--fp-border); border-radius: .6rem; box-shadow: 0 14px 34px -12px rgba(15,30,61,.28); max-height: 240px; overflow-y: auto; z-index: 90; }
+  .ac-item { padding: .55rem .8rem; font-size: .88rem; cursor: pointer; }
+  .ac-item:hover, .ac-item.active { background: rgba(125,94,67,.10); color: var(--fp-primary); }
+  .ac-empty { padding: .55rem .8rem; font-size: .82rem; color: var(--fp-muted); }
+</style>
+<script>
+(function(){
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+<script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
+</head>
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")!=="0")document.body.classList.add("fp-dark")}catch(e){}</script>
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../dashboard.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic"><tspan fill="currentColor">Parc</tspan><tspan fill="#F97316">Pilot</tspan></text></svg>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="notifications.html" data-nav="notifications.html"><i data-lucide="bell"></i> Suivi &amp; alertes</a>
+      <a href="taches.html" data-nav="taches.html"><i data-lucide="list-todo"></i> Tâches</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="emprunts.html"     data-nav="emprunts.html"><i data-lucide="key-round"></i> Emprunt véhicule</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="controle.html" data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
+      <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
+      <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+      <a href="../brochure.html"   data-nav="brochure.html" target="_blank" rel="noopener"><i data-lucide="sparkles"></i> Brochure</a>
+      <a href="../prix.html" data-nav="prix.html" target="_blank" rel="noopener"><i data-lucide="badge-euro"></i> Tarifs</a>
+    </nav>
+    <script>/* Sidebar : reconstruit la barre dans son état final AVANT le 1er affichage
+       (barre de recherche, ordre, visibilité, libellés perso, onglet actif). Sinon le JS
+       fait tout ça APRÈS l'affichage → le menu "saute"/clignote. Autonome (localStorage). */
+    (function(){try{
+      var soc=(localStorage.getItem('fp_societe')||'PXP');if(soc==='__all__')soc='PXP';
+      var raw=localStorage.getItem('auto_flotte_settings_'+soc);
+      if(raw==null&&soc==='PXP')raw=localStorage.getItem('auto_flotte_settings');
+      var s=raw?(JSON.parse(raw)||{}):{};
+      var sb=document.querySelector('.fp-sidebar');if(!sb)return;
+      var nav=sb.querySelector('nav');if(!nav)return;
+      if(!sb.querySelector('.fp-global-search')){
+        var w=document.createElement('div');w.className='fp-global-search';
+        w.innerHTML='<div style="position: relative"><span style="position:absolute; left:.65rem; top:50%; transform:translateY(-50%); color:rgba(255,255,255,.5); font-size:.85rem">\u{1F50D}</span><input type="text" class="fp-search-input" placeholder="Rechercher..." /></div><div class="fp-search-results"></div>';
+        sb.insertBefore(w,nav);
+      }
+      var links=[].slice.call(nav.querySelectorAll('a[data-nav]'));if(!links.length)return;
+      if(Array.isArray(s.navOrder)&&s.navOrder.length){
+        var by={};links.forEach(function(a){by[a.dataset.nav]=a;});var ord=[];
+        s.navOrder.forEach(function(k){if(by[k]){ord.push(by[k]);delete by[k];}});
+        links.forEach(function(a){if(by[a.dataset.nav])ord.push(a);});
+        ord.forEach(function(a){nav.appendChild(a);});}
+      if(Array.isArray(s.navHidden)){var h={};s.navHidden.forEach(function(k){h[k]=1;});
+        links.forEach(function(a){if(h[a.dataset.nav]&&a.dataset.nav!=='parametres.html')a.style.display='none';});}
+      var lb=s.sidebarLabels||{};
+      links.forEach(function(a){var t=lb[a.dataset.nav];if(!t)return;
+        for(var i=0;i<a.childNodes.length;i++){var n=a.childNodes[i];if(n.nodeType===3&&n.textContent.trim()){n.textContent=' '+t;break;}}});
+      var _ACC={"guide.html":1,"manuel.html":1,"aide.html":1,"parametres.html":1,"brochure.html":1,"prix.html":1};
+      [].slice.call(nav.querySelectorAll("a[data-nav]")).forEach(function(a){a.style.order=_ACC[a.dataset.nav]?"3":"1";});
+      (function(){function _mkg(id,txt,ord){var d=nav.querySelector('.fp-nav-group[data-grp="'+id+'"]');if(!d){d=document.createElement("div");d.className="fp-nav-group";d.setAttribute("data-grp",id);nav.appendChild(d);}d.textContent=txt;d.style.order=ord;}_mkg("ws","Espace de travail","0");_mkg("ac","Compte","2");})();
+
+      var path=(location.pathname.split('/').pop()||'index').replace(/\.html$/,'');
+      links.forEach(function(a){if((a.dataset.nav||'').replace(/\.html$/,'')===path)a.classList.add('active');});
+    }catch(e){}})();</script>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="fp-cockpit mb-5" style="padding:1.1rem 1.4rem">
+      <div class="fp-eyebrow" style="margin-bottom:.35rem">Parc Pilot · Emprunts</div>
+      <h1 class="text-2xl font-extrabold text-white" style="color:#fff">Emprunt véhicule</h1>
+      <p class="text-sm mt-1" style="color:#8598B4">Qui a pris quel véhicule, quand, et quand il l'a rendu.</p>
+    </div>
+    <div class="mb-8 flex justify-end items-start gap-3 flex-wrap">
+      <div class="flex items-center gap-3 flex-wrap"><span data-data-io></span>
+        <button class="btn btn-outline text-sm" id="btn-reserve" title="Planifier un véhicule pour une date à venir"><i data-lucide="calendar-plus" class="w-4 h-4"></i> Réserver un véhicule</button>
+        <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouvel emprunt</button>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+      <div class="kpi"><div class="kpi-label">Emprunts en cours</div><div class="kpi-value" id="kpi-encours" style="color: var(--fp-warn)">—</div></div>
+      <div class="kpi"><div class="kpi-label" id="kpi-retard-lbl">Non rendus &gt; 2 j</div><div class="kpi-value" id="kpi-retard" style="color: var(--fp-danger)">—</div></div>
+      <div class="kpi"><div class="kpi-label">Total enregistrés</div><div class="kpi-value" id="kpi-total">—</div></div>
+    </div>
+
+    <!-- Alerte retards -->
+    <div id="emprunt-alert" class="hidden mb-6 rounded-lg border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+      <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"></i>
+      <div class="text-sm text-red-800" id="emprunt-alert-text"></div>
+    </div>
+
+    <!-- Réservations (futures) -->
+    <div class="card p-0 mb-6 overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+        <h2 class="font-bold text-slate-800 flex items-center gap-2"><i data-lucide="calendar-clock" class="w-4 h-4" style="color:var(--fp-accent)"></i> Réservations <span id="resa-count" class="text-xs font-normal text-slate-400"></span></h2>
+        <button class="btn btn-outline !py-1 !px-2.5 text-xs" id="btn-reserve2"><i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i> Réserver</button>
+      </div>
+      <div class="scrollable">
+        <table class="fp-table">
+          <thead><tr><th>Véhicule</th><th>Réservé pour</th><th>Du</th><th>Au</th><th>Statut</th><th></th></tr></thead>
+          <tbody id="tbody-resa"></tbody>
+        </table>
+      </div>
+      <div id="resa-empty" class="hidden p-8 text-center text-slate-500 text-sm">Aucune réservation à venir. Clique sur « Réserver » pour planifier un véhicule.</div>
+    </div>
+
+    <!-- Recherche -->
+    <div class="card p-4 mb-6">
+      <div class="relative">
+        <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+        <input id="search" type="text" placeholder="Rechercher (nom, véhicule…)" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+      </div>
+    </div>
+
+    <!-- Filtres par statut : « En cours » d'abord pour voir qui a un véhicule -->
+    <div class="flex flex-wrap gap-2 mb-4" id="emp-filters">
+      <button type="button" class="emp-chip" data-statut="encours">En cours <span class="n" id="chip-n-encours">0</span></button>
+      <button type="button" class="emp-chip active" data-statut="all">Tous</button>
+      <button type="button" class="emp-chip" data-statut="rendus">Rendus <span class="n" id="chip-n-rendus">0</span></button>
+      <select id="emp-sort-key" class="text-sm border border-slate-200 rounded-lg px-3 py-2" title="Trier">
+        <option value="date">Tri : Date d'emprunt</option>
+        <option value="retour">Tri : Date de retour</option>
+        <option value="vehicule">Tri : Véhicule</option>
+        <option value="emprunteur">Tri : Emprunteur</option>
+      </select>
+      <button id="emp-sort-dir" type="button" class="btn btn-outline text-sm !px-2.5" title="Inverser le sens du tri"><i data-lucide="arrow-down-wide-narrow" class="w-4 h-4"></i></button>
+    </div>
+
+    <!-- Tableau -->
+    <p class="text-xs text-slate-500 mb-2 flex items-center gap-1.5"><i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i> Clique sur une ligne pour modifier l'emprunt (véhicule, emprunteur, date…). Le crayon ✏️ fait pareil.</p>
+    <div class="card overflow-hidden">
+      <div class="scrollable">
+        <table class="fp-table">
+          <thead>
+            <tr>
+              <th>Véhicule</th>
+              <th>Emprunteur</th>
+              <th>Emprunt</th>
+              <th>Retour</th>
+              <th>Rendu par</th>
+              <th>Statut</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div id="empty" class="hidden"><div class="fp-empty"><div class="fp-empty-ic"><i data-lucide="key-round"></i></div><div class="fp-empty-title">Aucun emprunt enregistré</div><div class="text-sm mt-1">Clique sur « Nouvel emprunt » pour en ajouter un.</div></div></div>
+    </div>
+    <div id="emprunt-more" class="mt-3 text-center"></div>
+  </main>
+</div>
+
+<!-- Modal nouvel emprunt -->
+<div class="modal-backdrop" id="modal-new">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold" id="new-title">Nouvel emprunt</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="new-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="form-new" class="space-y-4">
+      <div>
+        <div class="field-label">Véhicule *</div>
+        <input class="field-input" id="f-vehicule" required autocomplete="off" placeholder="Tape une plaque ou un modèle…" />
+      </div>
+      <div>
+        <div class="field-label">Emprunteur (prénom + nom) *</div>
+        <input class="field-input" id="f-emprunteur" placeholder="Tape un nom (ou choisis un existant)" required autocomplete="off" />
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Date d'emprunt *</div>
+          <input class="field-input" type="date" id="f-date" required autocomplete="off" />
+        </div>
+        <div>
+          <div class="field-label">Heure</div>
+          <input class="field-input" type="time" id="f-heure" />
+        </div>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="new-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal retour -->
+<div class="modal-backdrop" id="modal-ret">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold">Retour du véhicule</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="ret-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="form-ret" class="space-y-4">
+      <input type="hidden" id="ret-id" />
+      <label class="flex items-center gap-2 cursor-pointer select-none bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+        <input type="checkbox" id="ret-inconnu" class="w-4 h-4 accent-teal-600" />
+        <span class="text-sm font-medium text-slate-700">Je ne connais pas la date de retour</span>
+      </label>
+      <div class="grid grid-cols-2 gap-4" id="ret-date-wrap">
+        <div>
+          <div class="field-label">Date de remise *</div>
+          <input class="field-input" type="date" id="ret-date" />
+        </div>
+        <div>
+          <div class="field-label">Heure</div>
+          <input class="field-input" type="time" id="ret-heure" />
+        </div>
+      </div>
+      <div>
+        <label class="flex items-center gap-2 cursor-pointer select-none bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mb-2">
+          <input type="checkbox" id="ret-par-inconnu" class="w-4 h-4 accent-teal-600" />
+          <span class="text-sm font-medium text-slate-700">Je ne connais pas le retourneur</span>
+        </label>
+        <div class="field-label">Rendu par <span class="text-slate-400 normal-case font-normal">(si différent de l'emprunteur)</span></div>
+        <input class="field-input" id="ret-par" placeholder="Prénom Nom" autocomplete="off" />
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="ret-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Valider le retour</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal réservation -->
+<div class="modal-backdrop" id="modal-resa">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold" id="resa-title">Réserver un véhicule</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="resa-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="form-resa" class="space-y-4">
+      <div>
+        <div class="field-label">Véhicule *</div>
+        <input class="field-input" id="r-vehicule" required autocomplete="off" placeholder="Tape une plaque ou un modèle…" />
+      </div>
+      <div>
+        <div class="field-label">Réservé pour (prénom + nom) *</div>
+        <input class="field-input" id="r-personne" required autocomplete="off" placeholder="Tape un nom (ou choisis un existant)" />
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Du (date) *</div>
+          <input class="field-input" type="date" id="r-debut" required autocomplete="off" />
+        </div>
+        <div>
+          <div class="field-label">Heure</div>
+          <input class="field-input" type="time" id="r-heure-debut" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label">Au (date) *</div>
+          <input class="field-input" type="date" id="r-fin" required autocomplete="off" />
+        </div>
+        <div>
+          <div class="field-label">Heure</div>
+          <input class="field-input" type="time" id="r-heure-fin" />
+        </div>
+      </div>
+      <div>
+        <div class="field-label">Note <span class="text-slate-400 normal-case font-normal">(optionnel)</span></div>
+        <input class="field-input" id="r-note" placeholder="Motif, lieu…" autocomplete="off" />
+      </div>
+      <div id="resa-conflit" class="hidden text-sm rounded-lg px-3 py-2" style="background:#FEF3C7;color:#92400E"></div>
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="resa-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Réserver</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="../assets/js/vendor/supabase.js?v=20260811e"></script>
+<script src="../assets/js/supabase-client.js?v=20260811e"></script>
+<script src="../assets/js/data.js?v=20260811e"></script>
+<script src="../assets/js/app.js?v=20260811e"></script>
+<script>
+  lucide.createIcons();
+  const $ = (id) => document.getElementById(id);
+  const data = window.FP_DATA;
+  const state = { search: '', voirTout: false, statut: 'all', sortKey: 'date', sortDir: 'desc' };
+  const EMP_LIMIT = 15;
+
+  // ---- Stockage : Supabase si dispo, sinon localStorage ----
+  // Cache local PAR SOCIÉTÉ (sinon les emprunts d'une société s'afficheraient sur une autre)
+  const LS = 'fp_emprunts_' + ((window.FP && FP.activeSociete) ? FP.activeSociete() : 'PXP');
+  let cache = [];
+  const dbOn = () => !!(window.FP && FP.db && FP.supabase);
+  const lsGet = () => { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch { return []; } };
+  const lsSet = () => localStorage.setItem(LS, JSON.stringify(cache));
+  function escapeHtml(s){ return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  // Tri utilisateur de la liste des emprunts (contrôlé par le select #emp-sort-key + le bouton de sens).
+  function sortRowsEmp(arr) {
+    const dir = state.sortDir === 'asc' ? 1 : -1;
+    return arr.slice().sort((a, b) => {
+      let r;
+      if (state.sortKey === 'vehicule') r = String(a.vehicule || '').localeCompare(String(b.vehicule || ''), 'fr', { sensitivity: 'base' });
+      else if (state.sortKey === 'emprunteur') r = String(a.emprunteur || '').localeCompare(String(b.emprunteur || ''), 'fr', { sensitivity: 'base' });
+      else if (state.sortKey === 'retour') { const da = String(a.dateRetour || ''); const db = String(b.dateRetour || ''); r = da.localeCompare(db); }
+      else { const da = String(a.dateEmprunt || ''); const db = String(b.dateEmprunt || ''); r = da.localeCompare(db); }   // date d'emprunt par défaut
+      return r * dir;
+    });
+  }
+  function sortCache() {
+    cache.sort((a, b) => `${b.dateEmprunt||''} ${b.heureEmprunt||''}`.localeCompare(`${a.dateEmprunt||''} ${a.heureEmprunt||''}`));
+  }
+  function load() {
+    // 1) Affichage INSTANTANÉ depuis le cache local (évite la page vide pendant la requête réseau)
+    const local = lsGet();
+    if (local.length) { cache = local; sortCache(); render(); }
+    // 2) Rafraîchit depuis Supabase, puis met le cache local à jour (pour le prochain affichage instantané)
+    if (dbOn()) {
+      FP.db.select('emprunts').then(r => {
+        if (!r.error) { cache = r.data || []; lsSet(); }
+        else if (!cache.length) { cache = local; }
+        sortCache(); render();
+      });
+    } else if (!cache.length) { cache = local; sortCache(); render(); }
+  }
+
+  function vehLabel(immat) {
+    const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(immat));
+    return v ? `${v.immat} · ${v.marque} ${v.modele}` : (immat || '—');
+  }
+  // Nom d'emprunteur / rendu par : ré-unifié à l'affichage (un nom de famille ajouté APRÈS coup sur la
+  // fiche conducteur se reflète ici). Si le nom ne correspond à personne (externe), il est laissé tel quel.
+  function empNom(n) { if (!n) return n; try { return (FP.conducteurNomUnifie ? FP.conducteurNomUnifie(n) : n) || n; } catch (e) { return n; } }
+
+  let _vehOpts = [], _empOpts = [];
+  function fillVehSelect() {
+    _vehOpts = (data.vehicules || []).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
+      .map(v => `${v.immat} · ${v.marque} ${v.modele}`);
+    const names = new Set();
+    cache.forEach(e => { if (e.emprunteur) names.add(e.emprunteur.trim()); });
+    (data.vehicules || []).forEach(v => { if (v.chauffeur && v.chauffeur !== '—') names.add(v.chauffeur.trim()); });
+    if (window.FP && FP.DRIVE_CONDUCTEURS) FP.DRIVE_CONDUCTEURS.forEach(n => names.add(n.charAt(0).toUpperCase() + n.slice(1)));
+    _empOpts = [...names].filter(Boolean).sort((a, b) => a.localeCompare(b, 'fr'));
+  }
+  // Menu déroulant personnalisé (aux couleurs de la plateforme) sur un input
+  function setupAutocomplete(input, getOptions) {
+    const wrap = document.createElement('div'); wrap.className = 'ac-wrap';
+    input.parentNode.insertBefore(wrap, input); wrap.appendChild(input);
+    const panel = document.createElement('div'); panel.className = 'ac-panel'; panel.style.display = 'none';
+    wrap.appendChild(panel);
+    let items = [], active = -1;
+    const hl = () => [...panel.querySelectorAll('.ac-item')].forEach((c, i) => c.classList.toggle('active', i === active));
+    function renderList() {
+      const q = FP.norm(input.value || '').trim();
+      items = (getOptions() || []).filter(o => FP.norm(o).includes(q)).slice(0, 60);
+      active = -1;
+      panel.innerHTML = items.length
+        ? items.map((o, i) => `<div class="ac-item" data-i="${i}">${o.replace(/</g, '&lt;')}</div>`).join('')
+        : '<div class="ac-empty">Aucun résultat — tu peux saisir librement</div>';
+      panel.style.display = 'block';
+    }
+    input.addEventListener('focus', renderList);
+    input.addEventListener('input', renderList);
+    input.addEventListener('blur', () => setTimeout(() => { panel.style.display = 'none'; }, 150));
+    panel.addEventListener('mousedown', (e) => {
+      const it = e.target.closest('.ac-item'); if (!it) return;
+      e.preventDefault();
+      input.value = items[+it.dataset.i];
+      panel.style.display = 'none';
+      input.dispatchEvent(new Event('change'));
+    });
+    input.addEventListener('keydown', (e) => {
+      // Backspace sur un champ vide : sur certains navigateurs ça déclenche un "retour arrière"
+      // qui quitte la page. On neutralise (il n'y a de toute façon rien à effacer).
+      if (e.key === 'Backspace' && !input.value) { e.preventDefault(); return; }
+      // Entrée ne doit JAMAIS soumettre le formulaire depuis ce champ (sinon ça ferme la fenêtre
+      // quand on efface/modifie le nom) : on choisit la suggestion active si dispo, sinon on ferme juste le menu.
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (panel.style.display !== 'none' && active >= 0) { input.value = items[active]; input.dispatchEvent(new Event('change')); }
+        panel.style.display = 'none';
+        return;
+      }
+      if (panel.style.display === 'none') return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active + 1, items.length - 1); hl(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(active - 1, 0); hl(); }
+      else if (e.key === 'Escape') { panel.style.display = 'none'; }
+    });
+  }
+  // Retrouve la plaque depuis la saisie ("AB-123-CD · Marque" ou texte libre)
+  function resolveImmat(val) {
+    val = (val || '').trim(); if (!val) return '';
+    if (val.includes(' · ')) return val.split(' · ')[0].trim().toUpperCase();
+    const up = val.toUpperCase();
+    const byImmat = (data.vehicules || []).find(v => FP.normImmat(v.immat) === FP.normImmat(up));
+    if (byImmat) return byImmat.immat;
+    const byText = (data.vehicules || []).find(v => `${v.immat} ${v.marque} ${v.modele}`.toLowerCase().includes(val.toLowerCase()));
+    return byText ? byText.immat : val;
+  }
+  // Convertit une date saisie (JJ/MM/AAAA ou AAAA-MM-JJ) en AAAA-MM-JJ
+  function parseFrDate(s) {
+    s = (s || '').trim(); if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+    if (m) { let [, d, mo, y] = m; if (y.length === 2) y = '20' + y; return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`; }
+    return null;
+  }
+
+  function dt(d, h) { return d ? (FP.date(d) + (h ? ' à ' + h : '')) : '<span class="text-slate-400">—</span>'; }
+
+  // Nombre de jours depuis l'emprunt (pour un emprunt non rendu)
+  function joursDepuis(dateIso) {
+    if (!dateIso) return 0;
+    const d = new Date(dateIso); if (isNaN(d)) return 0;
+    return Math.floor((new Date() - d) / 86400000);
+  }
+  // En retard = source unique FP.empEnRetard (en cours ET emprunté depuis plus de 2 jours)
+  function estEnRetard(e) { return FP.empEnRetard ? FP.empEnRetard(e) : (!e.dateRetour && joursDepuis(e.dateEmprunt) > 2); }
+
+  function render() {
+    const q = FP.norm(state.search).trim();
+    let rows = cache.filter(e => !q || FP.norm(`${e.vehicule} ${e.emprunteur} ${e.renduPar||''}`).includes(q));
+    // Filtre par onglet de statut
+    if (state.statut === 'encours') rows = rows.filter(e => !e.dateRetour);
+    else if (state.statut === 'rendus') rows = rows.filter(e => !!e.dateRetour);
+    // Tri choisi par l'utilisateur (select #emp-sort-key + bouton de sens) ; par défaut date d'emprunt décroissante.
+    rows = sortRowsEmp(rows);
+    // Les « En cours » (non rendus) restent en tête — tri secondaire STABLE par-dessus le tri utilisateur.
+    rows.sort((a, b) => (a.dateRetour ? 1 : 0) - (b.dateRetour ? 1 : 0));
+    const nEncours = cache.filter(e => !e.dateRetour).length;
+    $('kpi-encours').textContent = nEncours;
+    $('kpi-total').textContent = cache.length;
+    { const c = $('chip-n-encours'); if (c) c.textContent = nEncours; }
+    { const c = $('chip-n-rendus'); if (c) c.textContent = cache.filter(e => !!e.dateRetour).length; }
+    document.querySelectorAll('#emp-filters .emp-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.statut === state.statut));
+    // Alerte : véhicules non rendus depuis plus de 2 jours
+    const retards = cache.filter(estEnRetard).sort((a, b) => joursDepuis(b.dateEmprunt) - joursDepuis(a.dateEmprunt));
+    $('kpi-retard').textContent = retards.length;
+    { const seuil = (FP.empRetardJours ? FP.empRetardJours() : 2); const lbl = $('kpi-retard-lbl'); if (lbl) lbl.innerHTML = 'Non rendus &gt; ' + seuil + ' j'; }
+    const alertBox = $('emprunt-alert');
+    if (retards.length) {
+      const liste = retards.slice(0, 6).map(e => `<b>${escapeHtml((e.vehicule || '').toString())}</b> (${escapeHtml(e.emprunteur || '—')}, ${joursDepuis(e.dateEmprunt)} j)`).join(' · ');
+      $('emprunt-alert-text').innerHTML = `<b>${retards.length} véhicule${retards.length > 1 ? 's' : ''} non rendu${retards.length > 1 ? 's' : ''} depuis plus de 2 jours :</b><br>${liste}${retards.length > 6 ? ` … +${retards.length - 6}` : ''}`;
+      alertBox.classList.remove('hidden');
+    } else {
+      alertBox.classList.add('hidden');
+    }
+    const tbody = $('tbody'), empty = $('empty'), more = $('emprunt-more');
+    if (!rows.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); if (more) more.innerHTML = ''; lucide.createIcons(); return; }
+    empty.classList.add('hidden');
+    const shown = state.voirTout ? rows : rows.slice(0, EMP_LIMIT);
+    if (more) {
+      more.innerHTML = rows.length > EMP_LIMIT
+        ? `<button class="btn btn-outline text-sm" id="emp-toggle">${state.voirTout ? 'Réduire la liste' : `Voir tout (${rows.length})`}</button>`
+        : '';
+    }
+    tbody.innerHTML = shown.map(e => {
+      const rendu = !!e.dateRetour;
+      const retard = estEnRetard(e);
+      return `<tr data-id="${escapeHtml(e.id)}" class="${retard ? 'is-retard' : ''}" style="cursor:pointer" title="Cliquer pour modifier cet emprunt">
+        <td class="font-mono font-semibold">${escapeHtml(vehLabel(e.vehicule))}</td>
+        <td class="font-medium">${escapeHtml(empNom(e.emprunteur) || '—')}</td>
+        <td>${dt(e.dateEmprunt, e.heureEmprunt)}</td>
+        <td>${e.dateRetour === '1900-01-01' ? '<span class="text-slate-500 italic">date inconnue</span>' : dt(e.dateRetour, e.heureRetour)}</td>
+        <td>${rendu ? escapeHtml(empNom(e.renduPar || e.emprunteur)) : '<span class="text-slate-400">—</span>'}</td>
+        <td>${rendu ? '<span class="pill-rendu">Rendu</span>' : (retard ? `<span class="pill-retard">⚠️ Retard ${joursDepuis(e.dateEmprunt)} j</span>` : '<span class="pill-encours">En cours</span>')}</td>
+        <td class="text-right whitespace-nowrap">
+          ${rendu
+            ? `<button class="btn btn-outline !py-1 !px-2.5 text-xs" data-ret="${escapeHtml(e.id)}" title="Corriger le retour"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Retour</button>`
+            : `<button class="btn btn-outline !py-1 !px-2.5 text-xs" data-ret="${escapeHtml(e.id)}"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i> Retour</button>`}
+          <button class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-teal-600" data-edit="${escapeHtml(e.id)}" title="Modifier"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+          <button class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-del="${escapeHtml(e.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+    lucide.createIcons();
+  }
+
+  // ---- Ajout / Édition ----
+  let editingId = null;
+  const frDate = (iso) => { const m = (iso || '').match(/(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
+  function openNew() {
+    editingId = null;
+    $('new-title').textContent = 'Nouvel emprunt';
+    $('form-new').reset();
+    fillVehSelect();
+    const now = new Date();
+    // <input type="date"> attend une valeur ISO AAAA-MM-JJ (l'affichage reste JJ/MM/AAAA + calendrier)
+    $('f-date').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    $('f-heure').value = now.toTimeString().slice(0, 5);
+    $('modal-new').classList.add('open');
+  }
+  function openEdit(id) {
+    const e = cache.find(x => x.id === id); if (!e) return;
+    editingId = id;
+    $('new-title').textContent = "Modifier l'emprunt";
+    $('form-new').reset();
+    fillVehSelect();
+    $('f-vehicule').value = vehLabel(e.vehicule);
+    $('f-emprunteur').value = e.emprunteur || '';
+    $('f-date').value = (e.dateEmprunt || '').slice(0, 10); // ISO pour <input type="date">
+
+    $('f-heure').value = e.heureEmprunt || '';
+    $('modal-new').classList.add('open');
+  }
+  async function addEmprunt(e) {
+    e.preventDefault();
+    const immat = resolveImmat($('f-vehicule').value);
+    const emprunteur = $('f-emprunteur').value.trim();
+    const dateIso = parseFrDate($('f-date').value);
+    if (!immat || !emprunteur || !dateIso) { alert('Véhicule, emprunteur et date d\'emprunt sont obligatoires.'); return; }
+    if (editingId) {
+      const obj = cache.find(x => x.id === editingId); if (!obj) { editingId = null; return; }
+      obj.vehicule = immat;
+      obj.emprunteur = emprunteur;
+      obj.dateEmprunt = dateIso;
+      obj.heureEmprunt = $('f-heure').value || '';
+      editingId = null;
+      $('modal-new').classList.remove('open');
+      sortCache(); render();
+      if (dbOn()) FP.persist.upsert('emprunts', obj); lsSet();
+      return;
+    }
+    const obj = {
+      id: 'E' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      vehicule: immat,
+      emprunteur: emprunteur,
+      dateEmprunt: dateIso,
+      heureEmprunt: $('f-heure').value || '',
+      dateRetour: null, heureRetour: '', renduPar: '',
+    };
+    // Conflit : le véhicule est-il DÉJÀ emprunté (non rendu) ? On avertit (non bloquant).
+    const enCours = cache.find(x => x.vehicule === immat && FP.empEnCours && FP.empEnCours(x));
+    if (enCours) {
+      const ok = await FP.confirm(`⚠️ ${immat} est déjà emprunté par ${enCours.emprunteur || 'quelqu\'un'} (non rendu depuis le ${enCours.dateEmprunt ? FP.dateNum(enCours.dateEmprunt) : '—'}).\n\nCréer quand même un 2ᵉ emprunt en cours ?`);
+      if (!ok) return;
+    }
+    // Anti-doublon : même véhicule + même emprunteur + même date d'emprunt.
+    if (FP.dupe && !(await FP.dupe.confirmAdd('emprunts', obj, cache))) return;
+    cache.unshift(obj);
+    $('modal-new').classList.remove('open');
+    render();
+    if (dbOn()) FP.persist.insert('emprunts', obj); lsSet();
+  }
+
+  // ---- Retour (saisie ou correction) ----
+  // Marqueur interne : "rendu mais date de retour inconnue" (évite de toucher à la base)
+  const RETOUR_INCONNU = '1900-01-01';
+  function toggleRetInconnu() {
+    const on = $('ret-inconnu').checked;
+    $('ret-date-wrap').style.opacity = on ? '.4' : '';
+    $('ret-date').disabled = on;
+    $('ret-heure').disabled = on;
+  }
+  function toggleRetParInconnu() {
+    const on = $('ret-par-inconnu').checked;
+    const inp = $('ret-par');
+    inp.disabled = on;
+    const wrap = inp.closest('.ac-wrap') || inp;
+    wrap.style.opacity = on ? '.4' : '';
+    if (on) inp.value = '';
+  }
+  function openRet(id) {
+    const e = cache.find(x => x.id === id); if (!e) return;
+    $('ret-id').value = id;
+    const inconnu = e.dateRetour === RETOUR_INCONNU;
+    $('ret-inconnu').checked = inconnu;
+    // Si déjà rendu (avec date), on pré-remplit pour corriger ; sinon aujourd'hui
+    $('ret-date').value = (e.dateRetour && !inconnu) ? e.dateRetour : new Date().toISOString().slice(0, 10);
+    $('ret-heure').value = e.heureRetour || new Date().toTimeString().slice(0, 5);
+    const parInconnu = e.renduPar === 'Inconnu';
+    $('ret-par-inconnu').checked = parInconnu;
+    $('ret-par').value = parInconnu ? '' : (e.renduPar || e.emprunteur || '');
+    toggleRetInconnu();
+    toggleRetParInconnu();
+    $('modal-ret').classList.add('open');
+  }
+  function saveRet(ev) {
+    ev.preventDefault();
+    const e = cache.find(x => x.id === $('ret-id').value); if (!e) return;
+    if ($('ret-inconnu').checked) {
+      e.dateRetour = RETOUR_INCONNU;   // marqué rendu, date inconnue
+      e.heureRetour = '';
+    } else {
+      if (!$('ret-date').value) { alert('Indique la date de retour, ou coche « Je ne connais pas la date de retour ».'); return; }
+      e.dateRetour = $('ret-date').value;
+      e.heureRetour = $('ret-heure').value || '';
+    }
+    e.renduPar = $('ret-par-inconnu').checked ? 'Inconnu' : ($('ret-par').value.trim() || e.emprunteur);
+    $('modal-ret').classList.remove('open');
+    render();
+    if (dbOn()) FP.persist.upsert('emprunts', e); lsSet();
+  }
+
+  async function delEmprunt(id) {
+    if (!(await FP.confirm('Supprimer cet emprunt ?'))) return;
+    const rec = cache.find(x => x.id === id) || null; // capture pour la Corbeille (restaurable)
+    cache = cache.filter(x => x.id !== id);
+    render();
+    if (dbOn()) FP.persist.delete('emprunts', id, rec || undefined); lsSet();
+  }
+
+  // ============================================================
+  //  RÉSERVATIONS (futures) — planifier un véhicule pour plus tard.
+  //  Différent de l'emprunt (= tout de suite). Stockées dans les réglages
+  //  partagés (app_settings, synchro multi-postes, par société).
+  // ============================================================
+  function getResas() { try { const r = FP.settings.get().reservations; return Array.isArray(r) ? r : []; } catch { return []; } }
+  function saveResas(arr) { const s = FP.settings.get(); s.reservations = arr; FP.settings.save(s); }
+  const todayIso = () => new Date().toISOString().slice(0, 10);
+  function resaStatut(r) {
+    const t = todayIso();
+    if (r.fin && r.fin < t) return { label: 'Terminée', cls: 'pill-rendu' };
+    if (r.debut && r.debut > t) return { label: 'À venir', cls: 'pill-avenir' };
+    return { label: 'En cours', cls: 'pill-encours' };
+  }
+  // Conflit : autre réservation du même véhicule qui chevauche, ou emprunt en cours
+  function resaConflit(immat, debut, fin, excludeId) {
+    const overlap = getResas().some(r => r.id !== excludeId && r.vehicule === immat && !((fin || debut) < r.debut || debut > (r.fin || r.debut)));
+    const empEnCours = cache.some(e => e.vehicule === immat && !e.dateRetour);
+    return { overlap, empEnCours };
+  }
+  function renderResas() {
+    const t = todayIso();
+    const resas = getResas().filter(r => !r.fin || r.fin >= t).sort((a, b) => (a.debut || '').localeCompare(b.debut || ''));
+    $('resa-count').textContent = resas.length ? `(${resas.length})` : '';
+    const tbody = $('tbody-resa'), empty = $('resa-empty');
+    if (!resas.length) { tbody.innerHTML = ''; empty.classList.remove('hidden'); lucide.createIcons(); return; }
+    empty.classList.add('hidden');
+    tbody.innerHTML = resas.map(r => {
+      const st = resaStatut(r);
+      return `<tr data-resa-id="${escapeHtml(r.id)}" style="cursor:pointer" title="Cliquer pour modifier la réservation">
+        <td class="font-mono font-semibold">${escapeHtml(vehLabel(r.vehicule))}</td>
+        <td class="font-medium">${escapeHtml(r.personne || '—')}</td>
+        <td>${dt(r.debut, r.heureDebut)}</td>
+        <td>${dt(r.fin, r.heureFin)}</td>
+        <td><span class="${st.cls}">${st.label}</span>${r.note ? `<div class="text-xs text-slate-400">${escapeHtml(r.note)}</div>` : ''}</td>
+        <td class="text-right whitespace-nowrap">
+          <button class="btn btn-dark !py-1 !px-2.5 text-xs" data-start="${escapeHtml(r.id)}" title="Le véhicule est pris maintenant : créer l'emprunt"><i data-lucide="play" class="w-3.5 h-3.5"></i> Démarrer</button>
+          <button class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-teal-600" data-resa-edit="${escapeHtml(r.id)}" title="Modifier"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
+          <button class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-resa-del="${escapeHtml(r.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        </td>
+      </tr>`;
+    }).join('');
+    lucide.createIcons();
+  }
+  let editingResaId = null;
+  function checkResaConflit() {
+    const box = $('resa-conflit');
+    const immat = resolveImmat($('r-vehicule').value);
+    const debut = parseFrDate($('r-debut').value), fin = parseFrDate($('r-fin').value) || debut;
+    if (!immat || !debut) { box.classList.add('hidden'); return; }
+    const c = resaConflit(immat, debut, fin, editingResaId);
+    const msgs = [];
+    if (c.overlap) msgs.push('⚠️ Ce véhicule est déjà réservé sur cette période.');
+    if (c.empEnCours) msgs.push('⚠️ Ce véhicule est actuellement emprunté (non rendu).');
+    if (msgs.length) { box.innerHTML = msgs.join('<br>') + '<br><span class="text-xs">Tu peux quand même réserver.</span>'; box.classList.remove('hidden'); }
+    else box.classList.add('hidden');
+  }
+  function openResa() {
+    editingResaId = null;
+    $('resa-title').textContent = 'Réserver un véhicule';
+    $('form-resa').reset();
+    $('resa-conflit').classList.add('hidden');
+    fillVehSelect();
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    $('r-debut').value = tomorrow; $('r-fin').value = tomorrow;
+    $('modal-resa').classList.add('open');
+  }
+  function openEditResa(id) {
+    const r = getResas().find(x => x.id === id); if (!r) return;
+    editingResaId = id;
+    $('resa-title').textContent = 'Modifier la réservation';
+    $('form-resa').reset();
+    fillVehSelect();
+    $('r-vehicule').value = vehLabel(r.vehicule);
+    $('r-personne').value = r.personne || '';
+    $('r-debut').value = (r.debut || '').slice(0, 10);
+    $('r-heure-debut').value = r.heureDebut || '';
+    $('r-fin').value = (r.fin || '').slice(0, 10);
+    $('r-heure-fin').value = r.heureFin || '';
+    $('r-note').value = r.note || '';
+    checkResaConflit();
+    $('modal-resa').classList.add('open');
+  }
+  function saveResa(ev) {
+    ev.preventDefault();
+    const immat = resolveImmat($('r-vehicule').value);
+    const personne = $('r-personne').value.trim();
+    const debut = parseFrDate($('r-debut').value);
+    const fin = parseFrDate($('r-fin').value) || debut;
+    if (!immat || !personne || !debut) { alert('Véhicule, personne et date de début sont obligatoires.'); return; }
+    if (fin && debut && fin < debut) { alert('La date de fin doit être après la date de début.'); return; }
+    const arr = getResas();
+    if (editingResaId) {
+      const r = arr.find(x => x.id === editingResaId);
+      if (r) { Object.assign(r, { vehicule: immat, personne, debut, heureDebut: $('r-heure-debut').value || '', fin, heureFin: $('r-heure-fin').value || '', note: $('r-note').value.trim() }); }
+    } else {
+      arr.push({ id: 'R' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehicule: immat, personne, debut, heureDebut: $('r-heure-debut').value || '', fin, heureFin: $('r-heure-fin').value || '', note: $('r-note').value.trim() });
+    }
+    saveResas(arr);
+    editingResaId = null;
+    $('modal-resa').classList.remove('open');
+    renderResas();
+    if (FP.toast) FP.toast('Réservation enregistrée');
+  }
+  async function delResa(id) {
+    if (!(await FP.confirm('Supprimer cette réservation ?'))) return;
+    saveResas(getResas().filter(x => x.id !== id));
+    renderResas();
+  }
+  // Transforme une réservation en emprunt réel (le véhicule est pris maintenant)
+  async function startEmpruntFromResa(id) {
+    const r = getResas().find(x => x.id === id); if (!r) return;
+    const now = new Date();
+    const obj = {
+      id: 'E' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      vehicule: r.vehicule, emprunteur: r.personne,
+      dateEmprunt: todayIso(), heureEmprunt: now.toTimeString().slice(0, 5),
+      dateRetour: null, heureRetour: '', renduPar: '',
+    };
+    // Anti-doublon : même véhicule + même emprunteur + même date d'emprunt (cf. ajout manuel).
+    if (FP.dupe && !(await FP.dupe.confirmAdd('emprunts', obj, cache))) return;
+    cache.unshift(obj);
+    if (dbOn()) FP.persist.insert('emprunts', obj); lsSet();
+    saveResas(getResas().filter(x => x.id !== id));
+    renderResas(); render();
+    if (FP.toast) FP.toast(`Emprunt démarré pour ${r.personne}`);
+  }
+
+  // ---- Wiring ----
+  $('search').addEventListener('input', e => { state.search = e.target.value; render(); });
+  { const ef = $('emp-filters'); if (ef) ef.addEventListener('click', e => { const b = e.target.closest('.emp-chip'); if (!b) return; state.statut = b.dataset.statut || 'all'; state.voirTout = false; render(); }); }
+  // Tri par colonne (select + bouton de sens).
+  (function () {
+    const sk = document.getElementById('emp-sort-key'), sd = document.getElementById('emp-sort-dir');
+    const syncDir = () => { if (!sd) return; const i = sd.querySelector('i'); if (i) i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); try { if (window.lucide) lucide.createIcons(); } catch (e) {} };
+    if (sk) { sk.value = state.sortKey; sk.addEventListener('change', e => { state.sortKey = e.target.value; render(); }); }
+    if (sd) sd.addEventListener('click', () => { state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc'; syncDir(); render(); });
+    syncDir();
+  })();
+  // Bouton « Réinitialiser » de la barre de filtres (recherche + statut).
+  function resetEmpFilters() {
+    state.search = ''; state.statut = 'all'; state.voirTout = false;
+    state.sortKey = 'date'; state.sortDir = 'desc';
+    if ($('search')) $('search').value = '';
+    if ($('emp-sort-key')) $('emp-sort-key').value = state.sortKey;
+    { const sd = $('emp-sort-dir'), i = sd && sd.querySelector('i'); if (i) { i.setAttribute('data-lucide', 'arrow-down-wide-narrow'); try { if (window.lucide) lucide.createIcons(); } catch (e) {} } }
+    document.querySelectorAll('#emp-filters .emp-chip').forEach(c => c.classList.toggle('active', c.dataset.statut === 'all'));
+    render();
+  }
+  if (FP.filterResetButton) FP.filterResetButton($('emp-filters'), { onReset: resetEmpFilters });
+  $('btn-new').addEventListener('click', openNew);
+  // Ouverture auto du formulaire via ?new=1 (bouton « Ajouter un emprunt » du tableau de bord)
+  if (new URLSearchParams(location.search).get('new')) setTimeout(openNew, 60);
+  $('btn-reserve').addEventListener('click', openResa);
+  $('btn-reserve2').addEventListener('click', openResa);
+  setupAutocomplete($('r-vehicule'), () => _vehOpts);
+  if (window.FP && FP.conducteurPicker) FP.conducteurPicker($('r-personne')); else setupAutocomplete($('r-personne'), () => _empOpts);
+  const closeResa = () => { editingResaId = null; $('modal-resa').classList.remove('open'); };
+  $('resa-close').addEventListener('click', closeResa);
+  $('resa-cancel').addEventListener('click', closeResa);
+  $('form-resa').addEventListener('submit', saveResa);
+  ['r-vehicule', 'r-debut', 'r-fin'].forEach(id => { const el = $(id); if (el) { el.addEventListener('change', checkResaConflit); el.addEventListener('input', checkResaConflit); } });
+  $('tbody-resa').addEventListener('click', e => {
+    const s = e.target.closest('[data-start]'); if (s) { startEmpruntFromResa(s.dataset.start); return; }
+    const ed = e.target.closest('[data-resa-edit]'); if (ed) { openEditResa(ed.dataset.resaEdit); return; }
+    const dl = e.target.closest('[data-resa-del]'); if (dl) { delResa(dl.dataset.resaDel); return; }
+    const tr = e.target.closest('tr[data-resa-id]'); if (tr) openEditResa(tr.dataset.resaId);
+  });
+  $('emprunt-more').addEventListener('click', e => { if (e.target.closest('#emp-toggle')) { state.voirTout = !state.voirTout; render(); } });
+  setupAutocomplete($('f-vehicule'), () => _vehOpts);
+  // Emprunteur / rendu par : choisir dans la liste des conducteurs OU créer en tapant (règle projet).
+  if (window.FP && FP.conducteurPicker) { FP.conducteurPicker($('f-emprunteur')); FP.conducteurPicker($('ret-par')); }
+  else { setupAutocomplete($('f-emprunteur'), () => _empOpts); setupAutocomplete($('ret-par'), () => _empOpts); }
+  const closeNew = () => { editingId = null; $('modal-new').classList.remove('open'); };
+  $('new-close').addEventListener('click', closeNew);
+  $('new-cancel').addEventListener('click', closeNew);
+  // Fermer au clic sur le fond UNIQUEMENT si le clic a commencé ET fini sur le fond
+  // (évite la fermeture quand une sélection de texte déborde sur le fond gris).
+  function backdropClose(modalId, closeFn) {
+    const m = $(modalId); let downOnBg = false;
+    m.addEventListener('mousedown', e => { downOnBg = (e.target === m); });
+    m.addEventListener('click', e => { if (e.target === m && downOnBg) closeFn(); downOnBg = false; });
+  }
+  backdropClose('modal-new', closeNew);
+  $('form-new').addEventListener('submit', addEmprunt);
+  $('ret-inconnu').addEventListener('change', toggleRetInconnu);
+  $('ret-par-inconnu').addEventListener('change', toggleRetParInconnu);
+  $('ret-close').addEventListener('click', () => $('modal-ret').classList.remove('open'));
+  $('ret-cancel').addEventListener('click', () => $('modal-ret').classList.remove('open'));
+  backdropClose('modal-ret', () => $('modal-ret').classList.remove('open'));
+  backdropClose('modal-resa', closeResa);
+  $('form-ret').addEventListener('submit', saveRet);
+  $('tbody').addEventListener('click', e => {
+    const ret = e.target.closest('[data-ret]'); if (ret) { openRet(ret.dataset.ret); return; }
+    const edit = e.target.closest('[data-edit]'); if (edit) { openEdit(edit.dataset.edit); return; }
+    const del = e.target.closest('[data-del]'); if (del) { delEmprunt(del.dataset.del); return; }
+    const tr = e.target.closest('tr[data-id]'); if (tr) { openEdit(tr.dataset.id); }
+  });
+
+  load();
+  renderResas();
+
+  // ---------- Import / Export CSV ----------
+  FP.injectDataIO({
+    filename: `parc-pilot-emprunts-${new Date().toISOString().slice(0,10)}.csv`,
+    columns: [
+      { key: 'id',           label: 'ID' },
+      { key: 'vehicule',     label: 'Véhicule (immat)' },
+      { key: 'emprunteur',   label: 'Emprunteur' },
+      { key: 'dateEmprunt',  label: "Date d'emprunt" },
+      { key: 'heureEmprunt', label: "Heure d'emprunt" },
+      { key: 'dateRetour',   label: 'Date de retour' },
+      { key: 'heureRetour',  label: 'Heure de retour' },
+      { key: 'renduPar',     label: 'Rendu par' },
+    ],
+    getRows: () => cache,
+    onImport: (records) => {
+      let added = 0, updated = 0;
+      records.forEach(rec => {
+        if (!rec.id) rec.id = 'E' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+        const i = cache.findIndex(x => x.id === rec.id);
+        if (i >= 0) {
+          // Mise à jour NON destructive : une case VIDE ne doit pas écraser une valeur existante.
+          Object.keys(rec).forEach(k => { if (k !== 'id' && (rec[k] === '' || rec[k] == null)) delete rec[k]; });
+          cache[i] = { ...cache[i], ...rec }; updated++;
+          if (dbOn()) FP.persist.upsert('emprunts', cache[i]);
+        } else {
+          if (!rec.dateEmprunt) rec.dateEmprunt = null;
+          if (!rec.dateRetour) rec.dateRetour = null;
+          cache.unshift(rec); added++;
+          if (dbOn()) FP.persist.upsert('emprunts', rec);
+        }
+        lsSet();
+      });
+      sortCache(); render();
+      alert(`Import terminé ✓\n${added} ajout(s), ${updated} mise(s) à jour.`);
+    },
+  });
+
+  document.addEventListener('fp:data-ready', () => { fillVehSelect(); render(); renderResas(); });
+</script>
+</body>
+</html>

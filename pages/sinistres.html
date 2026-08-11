@@ -1,0 +1,1739 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")!=="0"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<title>Sinistres — Parc Pilot</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#0F1E3D">
+<link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parc Pilot">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811e">
+<script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811e"></script>
+  <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811e">
+<style>
+  .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
+  .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
+  .timeline-dot { position: absolute; left: -9px; top: 0; width: 16px; height: 16px; border-radius: 50%; background: var(--fp-danger); border: 3px solid white; box-shadow: 0 0 0 1px var(--fp-border); }
+  .timeline-dot.success { background: var(--fp-ok); }
+  .timeline-dot.info { background: var(--fp-primary-2); }
+  .chart-wrap { position: relative; height: 240px; }
+  .sin-chip { padding: .4rem .9rem; border-radius: 9999px; font-size: .82rem; font-weight: 600; border: 1px solid var(--fp-border); background: #fff; color: var(--fp-muted); cursor: pointer; display: inline-flex; align-items: center; gap: .4rem; }
+  .sin-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .sin-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: #fff; }
+  .sin-chip .n { font-size: .72rem; font-weight: 800; background: rgba(0,0,0,.08); border-radius: 9999px; padding: 0 .4rem; }
+  .sin-chip.active .n { background: rgba(255,255,255,.22); }
+  /* Drive sinistres : dossiers par véhicule + vignettes */
+  .drive-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .drive-folder { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 16px 10px; border: 1px solid var(--fp-border); border-radius: 12px; background: linear-gradient(145deg, #fff, #f8fafc); cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s; }
+  .drive-folder:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -14px rgba(15,30,61,.35); border-color: var(--fp-accent); }
+  .drive-folder-ic { width: 42px; height: 42px; color: #F59E0B; margin-bottom: 4px; }
+  .drive-folder-name { font-weight: 800; font-family: monospace; color: #0f1e3d; }
+  body.fp-dark .drive-folder { background: linear-gradient(145deg,#1e293b,#182234); border-color: var(--fp-border); }
+  body.fp-dark .drive-folder-name { color: #e6edf6; }
+  .drive-folder-sub { font-size: 11px; color: #64748b; }
+  .drive-folder-count { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .drive-file { position: relative; border: 1px solid var(--fp-border); border-radius: 10px; overflow: hidden; background: #fff; }
+  .drive-file-preview { display: flex; align-items: center; justify-content: center; height: 112px; background: #f1f5f9; overflow: hidden; }
+  .drive-file-preview img { width: 100%; height: 100%; object-fit: cover; }
+  .drive-file-preview svg { width: 34px; height: 34px; color: #64748b; }
+  .drive-file-name { font-size: 11px; padding: 6px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #334155; }
+  body.fp-dark .drive-file-name { color: #cbd5e1; }
+  .drive-file-del { position: absolute; top: 4px; right: 4px; background: rgba(15,30,61,.72); color: #fff; border: none; border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: 11px; line-height: 22px; padding: 0; }
+  .drive-folder-del { position: absolute; top: 6px; right: 6px; background: rgba(15,30,61,.12); color: #64748b; border: none; border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: 11px; line-height: 22px; padding: 0; opacity: 0; transition: opacity .15s, background .15s, color .15s; }
+  .drive-folder:hover .drive-folder-del { opacity: 1; }
+  .drive-folder-del:hover { background: var(--fp-danger); color: #fff; }
+  .drive-folder-ren { position: absolute; top: 6px; left: 6px; background: rgba(15,30,61,.12); color: #64748b; border: none; border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: 11px; line-height: 22px; padding: 0; opacity: 0; transition: opacity .15s, background .15s, color .15s; }
+  .drive-folder:hover .drive-folder-ren { opacity: 1; }
+  .drive-folder-ren:hover { background: var(--fp-accent); color: #fff; }
+  .fp-btn-sm { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--fp-primary); background: #fff; border: 1px solid var(--fp-border); border-radius: 8px; padding: 7px 12px; cursor: pointer; transition: background .15s, border-color .15s; }
+  .fp-btn-sm:hover { background: rgba(20,184,166,.08); border-color: var(--fp-accent); }
+  .drive-upload { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 150px; border: 2px dashed var(--fp-border); border-radius: 10px; background: #f8fafc; color: #64748b; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .drive-upload:hover { border-color: var(--fp-accent); color: var(--fp-primary); background: rgba(20,184,166,.06); }
+  .drive-file[draggable="true"] { cursor: grab; }
+  .drive-file.fp-dragging { opacity: .4; }
+  .drive-folder.fp-drop-hover, [data-drop-root].fp-drop-hover { outline: 2px dashed var(--fp-accent); outline-offset: 2px; background: rgba(20,184,166,.10); border-radius: 6px; }
+  .drive-upload svg { width: 26px; height: 26px; }
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+<script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
+</head>
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")!=="0")document.body.classList.add("fp-dark")}catch(e){}</script>
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../dashboard.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic"><tspan fill="currentColor">Parc</tspan><tspan fill="#F97316">Pilot</tspan></text></svg>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="notifications.html" data-nav="notifications.html"><i data-lucide="bell"></i> Suivi &amp; alertes</a>
+      <a href="taches.html" data-nav="taches.html"><i data-lucide="list-todo"></i> Tâches</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="emprunts.html" data-nav="emprunts.html"><i data-lucide="key-round"></i> Emprunt véhicule</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="controle.html" data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
+      <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
+      <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+      <a href="../brochure.html"   data-nav="brochure.html" target="_blank" rel="noopener"><i data-lucide="sparkles"></i> Brochure</a>
+      <a href="../prix.html" data-nav="prix.html" target="_blank" rel="noopener"><i data-lucide="badge-euro"></i> Tarifs</a>
+    </nav>
+    <script>/* Sidebar : reconstruit la barre dans son état final AVANT le 1er affichage
+       (barre de recherche, ordre, visibilité, libellés perso, onglet actif). Sinon le JS
+       fait tout ça APRÈS l'affichage → le menu "saute"/clignote. Autonome (localStorage). */
+    (function(){try{
+      var soc=(localStorage.getItem('fp_societe')||'PXP');if(soc==='__all__')soc='PXP';
+      var raw=localStorage.getItem('auto_flotte_settings_'+soc);
+      if(raw==null&&soc==='PXP')raw=localStorage.getItem('auto_flotte_settings');
+      var s=raw?(JSON.parse(raw)||{}):{};
+      var sb=document.querySelector('.fp-sidebar');if(!sb)return;
+      var nav=sb.querySelector('nav');if(!nav)return;
+      if(!sb.querySelector('.fp-global-search')){
+        var w=document.createElement('div');w.className='fp-global-search';
+        w.innerHTML='<div style="position: relative"><span style="position:absolute; left:.65rem; top:50%; transform:translateY(-50%); color:rgba(255,255,255,.5); font-size:.85rem">\u{1F50D}</span><input type="text" class="fp-search-input" placeholder="Rechercher..." /></div><div class="fp-search-results"></div>';
+        sb.insertBefore(w,nav);
+      }
+      var links=[].slice.call(nav.querySelectorAll('a[data-nav]'));if(!links.length)return;
+      if(Array.isArray(s.navOrder)&&s.navOrder.length){
+        var by={};links.forEach(function(a){by[a.dataset.nav]=a;});var ord=[];
+        s.navOrder.forEach(function(k){if(by[k]){ord.push(by[k]);delete by[k];}});
+        links.forEach(function(a){if(by[a.dataset.nav])ord.push(a);});
+        ord.forEach(function(a){nav.appendChild(a);});}
+      if(Array.isArray(s.navHidden)){var h={};s.navHidden.forEach(function(k){h[k]=1;});
+        links.forEach(function(a){if(h[a.dataset.nav]&&a.dataset.nav!=='parametres.html')a.style.display='none';});}
+      var lb=s.sidebarLabels||{};
+      links.forEach(function(a){var t=lb[a.dataset.nav];if(!t)return;
+        for(var i=0;i<a.childNodes.length;i++){var n=a.childNodes[i];if(n.nodeType===3&&n.textContent.trim()){n.textContent=' '+t;break;}}});
+      var _ACC={"guide.html":1,"manuel.html":1,"aide.html":1,"parametres.html":1,"brochure.html":1,"prix.html":1};
+      [].slice.call(nav.querySelectorAll("a[data-nav]")).forEach(function(a){a.style.order=_ACC[a.dataset.nav]?"3":"1";});
+      (function(){function _mkg(id,txt,ord){var d=nav.querySelector('.fp-nav-group[data-grp="'+id+'"]');if(!d){d=document.createElement("div");d.className="fp-nav-group";d.setAttribute("data-grp",id);nav.appendChild(d);}d.textContent=txt;d.style.order=ord;}_mkg("ws","Espace de travail","0");_mkg("ac","Compte","2");})();
+
+      var path=(location.pathname.split('/').pop()||'index').replace(/\.html$/,'');
+      links.forEach(function(a){if((a.dataset.nav||'').replace(/\.html$/,'')===path)a.classList.add('active');});
+    }catch(e){}})();</script>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="fp-cockpit mb-5" style="padding:1.1rem 1.4rem">
+      <div class="fp-eyebrow" style="margin-bottom:.35rem">Parc Pilot · Sinistres</div>
+      <h1 class="text-2xl font-extrabold text-white" style="color:#fff" data-edit-key="sinistres.title">Sinistres</h1>
+      <p class="text-sm mt-1" style="color:#8598B4" data-edit-key="sinistres.subtitle">Tous les sinistres de la flotte — accidents, bris de glace, vols</p>
+    </div>
+    <div class="mb-8 flex justify-end items-center gap-3 flex-wrap">
+      <button class="btn btn-dark text-sm" id="sin-declare-btn" data-quickadd title="Déclarer un nouveau sinistre pas-à-pas (véhicule, lieu, circonstances, constat, photos)"><i data-lucide="clipboard-pen-line" class="w-4 h-4"></i> Déclarer un sinistre</button>
+      <a class="btn btn-outline text-sm" href="../assets/docs/constat-amiable.pdf" download="Constat-amiable-accident.pdf" title="Télécharger un constat amiable vierge (à imprimer / garder dans la boîte à gants)"><i data-lucide="file-down" class="w-4 h-4"></i> Télécharger un constat</a>
+      <label class="btn btn-outline text-sm" style="cursor:pointer" title="Scanner / importer une facture de sinistre (même lecture que le scan du tableau de bord)">
+        <i data-lucide="scan-line" class="w-4 h-4"></i> Ajouter une facture sinistre
+        <input type="file" id="sin-facture-file" accept="image/*,application/pdf" multiple class="hidden">
+      </label>
+      <button class="btn btn-outline text-sm" id="sin-fiche-btn" title="Relevé des sinistres (PDF) — pour l'assureur"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
+      <span data-data-io></span>
+    </div>
+    <div id="sin-facture-status" class="hidden mb-6 text-sm rounded-lg px-4 py-3"></div>
+
+    <!-- Déclaration de sinistre guidée -->
+    <div id="sin-declare-modal" style="position:fixed;inset:0;background:rgba(15,30,61,.5);display:none;align-items:center;justify-content:center;z-index:80;padding:1rem">
+      <div style="background:#fff;border-radius:1rem;max-width:520px;width:100%;max-height:90vh;overflow:auto;padding:1.2rem 1.3rem" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-slate-900 text-lg flex items-center gap-2"><i data-lucide="clipboard-pen-line" class="w-5 h-5" style="color:var(--fp-accent)"></i> Déclarer un sinistre</h3>
+          <button id="sin-declare-close" type="button" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Véhicule concerné *</div>
+            <select id="sd-veh" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full"><option value="">— choisir —</option></select>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><div class="text-xs font-semibold text-slate-500 uppercase mb-1">Date du sinistre</div><input id="sd-date" type="date" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full"></div>
+            <div><div class="text-xs font-semibold text-slate-500 uppercase mb-1">Lieu</div><input id="sd-lieu" type="text" placeholder="Ville, rue, parking…" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full"></div>
+          </div>
+          <div><div class="text-xs font-semibold text-slate-500 uppercase mb-1">Circonstances</div><textarea id="sd-desc" rows="2" placeholder="Que s'est-il passé ? (choc arrière, bris de glace, vol…)" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full"></textarea></div>
+          <div>
+            <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Tiers impliqué <span class="normal-case font-normal text-slate-400">(optionnel — une info par case)</span></div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input id="sd-tiers-plaque" type="text" placeholder="Plaque du tiers" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full">
+              <input id="sd-tiers-assureur" type="text" placeholder="Assureur adverse" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full">
+              <input id="sd-tiers-nom" type="text" placeholder="Conducteur adverse" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-full">
+            </div>
+          </div>
+          <div>
+            <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Constat + photos <span class="normal-case font-normal text-slate-400">(optionnel, plusieurs)</span></div>
+            <input id="sd-files" type="file" accept="image/*,application/pdf,.pdf" multiple class="text-sm w-full">
+            <div id="sd-file-list" class="mt-2 flex flex-col gap-1"></div>
+            <p class="text-xs text-slate-400 mt-1">Dépose le constat amiable et des photos des dommages — rangés dans le dossier du véhicule. L'IA pourra ensuite lire le constat pour la responsabilité. Tu peux retirer un fichier ajouté par erreur avec le ✕.</p>
+          </div>
+          <div id="sd-status" class="text-xs"></div>
+        </div>
+        <div class="flex gap-2 pt-4">
+          <button type="button" class="btn btn-outline flex-1 justify-center" id="sin-declare-cancel">Annuler</button>
+          <button type="button" class="btn btn-dark flex-1 justify-center" id="sin-declare-ok"><i data-lucide="check" class="w-4 h-4"></i> Créer le dossier</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sélecteur de PÉRIODE (pilote TOUTE la page : indicateurs, graphes, liste) -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center gap-3" id="sin-period-bar">
+        <span class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="calendar-range" class="w-4 h-4" style="color:var(--fp-accent)"></i> Période</span>
+        <div class="flex items-center gap-1" id="per-presets">
+          <button type="button" class="per-preset btn btn-outline text-xs" data-preset="all">Tout</button>
+          <button type="button" class="per-preset btn btn-outline text-xs" data-preset="cy">Cette année</button>
+          <button type="button" class="per-preset btn btn-outline text-xs" data-preset="ly">Année dernière</button>
+        </div>
+        <span class="text-slate-300">|</span>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="text-slate-500">Du</span>
+          <input id="filter-from" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Du">
+          <span class="text-slate-500">au</span>
+          <input id="filter-to" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Au">
+          <button id="filter-period-clear" type="button" class="hidden text-xs text-slate-400 hover:text-slate-700" title="Effacer la période">✕ Effacer</button>
+        </div>
+        <span id="per-label" class="text-xs text-slate-400 ml-auto"></span>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Total sinistres</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+      </div><div class="kpi-ic danger"><i data-lucide="alert-octagon"></i></div></div></div>
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Coût total</div>
+        <div class="kpi-value" id="kpi-cout" style="color: var(--fp-danger)">—</div>
+      </div><div class="kpi-ic danger"><i data-lucide="euro"></i></div></div></div>
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Reste à charge</div>
+        <div class="kpi-value" id="kpi-reste" style="color: var(--fp-danger)">—</div>
+        <div class="kpi-delta">coût − remboursé</div>
+      </div><div class="kpi-ic danger"><i data-lucide="hand-coins"></i></div></div></div>
+      <div class="kpi" id="kpi-veh-card" role="button" tabindex="0" title="Cliquer pour lister les véhicules concernés" style="cursor:pointer"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Véhicules concernés</div>
+        <div class="kpi-value" id="kpi-vehicules">—</div>
+        <div class="kpi-delta" style="color:var(--fp-accent)">cliquer pour la liste ›</div>
+      </div><div class="kpi-ic"><i data-lucide="car"></i></div></div></div>
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Sinistres responsables</div>
+        <div class="kpi-value" id="kpi-resp" style="color: var(--fp-warn)">—</div>
+        <div class="kpi-delta">conducteur en tort</div>
+      </div><div class="kpi-ic warn"><i data-lucide="user-round-x"></i></div></div></div>
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label" id="kpi-annee-label">Cette année</div>
+        <div class="kpi-value" id="kpi-annee" style="color: var(--fp-warn)">—</div>
+      </div><div class="kpi-ic warn"><i data-lucide="calendar"></i></div></div></div>
+    </div>
+
+    <!-- Fenêtre « Véhicules concernés » (liste cliquable) -->
+    <div id="kpi-veh-modal" style="position:fixed;inset:0;background:rgba(15,30,61,.5);display:none;align-items:center;justify-content:center;z-index:80;padding:1rem">
+      <div style="background:#fff;border-radius:1rem;max-width:440px;width:100%;max-height:80vh;overflow:auto;padding:1.1rem 1.2rem" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-1"><h3 class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="car" class="w-4 h-4" style="color:var(--fp-accent)"></i> Véhicules concernés</h3><button id="kpi-veh-close" type="button" class="text-slate-400 hover:text-slate-700 text-xl leading-none">&times;</button></div>
+        <p class="text-xs text-slate-400 mb-2">Sur la période affichée. Clique un véhicule pour ouvrir sa fiche.</p>
+        <div id="kpi-veh-list"></div>
+      </div>
+    </div>
+
+    <!-- Graphes -->
+    <div class="grid lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Top véhicules sinistrés (coût)</h3>
+        <div class="chart-wrap"><canvas id="topVehChart"></canvas></div>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Évolution par trimestre</h3>
+        <div class="chart-wrap"><canvas id="trimChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Conducteurs à risque (par nombre de sinistres + responsabilité) -->
+    <div class="card p-6 mb-6">
+      <h3 class="font-bold text-slate-900 flex items-center gap-2 mb-1"><i data-lucide="user-round-x" class="w-4 h-4" style="color:var(--fp-danger)"></i> Conducteurs à risque
+        <span class="text-xs font-normal text-slate-400">— classés par sinistres responsables puis nombre d'accidents</span></h3>
+      <p class="text-xs text-slate-400 mb-3">Le conducteur d'un sinistre = le chauffeur actuel du véhicule concerné. Renseigne la « Responsabilité » dans le dossier assurance de chaque incident pour affiner.</p>
+      <div id="sin-risque"></div>
+      <datalist id="sin-cond-list"></datalist>
+    </div>
+
+    <!-- Photos & documents des sinistres (façon Drive) -->
+    <div class="card p-5 mb-6">
+      <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <h3 class="font-bold text-slate-900 flex items-center gap-2"><i data-lucide="folder-open" class="w-4 h-4" style="color:var(--fp-accent)"></i> Constats, photos &amp; documents <span class="text-xs font-normal text-slate-400">— un dossier (et sous-dossiers) par véhicule : dépose les constats amiables (PDF) et photos de dommages</span></h3>
+        <div id="drive-crumb" class="text-sm text-slate-500"></div>
+      </div>
+      <div id="drive-view"></div>
+    </div>
+
+    <!-- Garages & concessionnaires (prise de RDV + recherche par localisation) -->
+    <div class="card p-5 mb-6">
+      <h3 class="font-bold text-slate-900 flex items-center gap-2 mb-3"><i data-lucide="wrench" class="w-4 h-4" style="color:var(--fp-accent)"></i> Garages &amp; concessionnaires <span class="text-xs font-normal text-slate-400">— prendre RDV pour une réparation</span></h3>
+      <div class="flex flex-wrap items-end gap-2 mb-4 p-3 rounded-lg" style="background:#F8FAFC;border:1px solid var(--fp-border)">
+        <div><div class="field-label">Nom / marque</div><input id="gar-marque" class="field-input" placeholder="ex. Renault, Norauto…" style="min-width:150px" autocomplete="off"></div>
+        <div><div class="field-label">Près de…</div><input id="gar-loc" class="field-input" placeholder="Ville, code postal, adresse…" style="min-width:200px" autocomplete="off"></div>
+        <button id="gar-maps" type="button" class="btn btn-dark text-sm"><i data-lucide="map-pin" class="w-4 h-4"></i> Chercher sur Google Maps</button>
+        <span class="text-xs text-slate-400">Ex. « Renault » + « Paris 15 ». (Laisse le nom vide pour tous les garages.)</span>
+      </div>
+      <div class="flex items-center gap-2 mb-2">
+        <input id="gar-search" class="field-input text-sm" placeholder="Filtrer mes garages (nom, ville…)" style="max-width:280px" autocomplete="off">
+        <span class="text-xs text-slate-400 ml-auto" id="gar-count"></span>
+      </div>
+      <div id="gar-list" class="mb-3"></div>
+      <div class="p-3 rounded-lg" style="background:#F8FAFC;border:1px solid var(--fp-border)">
+        <div class="text-sm font-semibold text-slate-800 mb-2">Ajouter un garage / concessionnaire</div>
+        <div class="grid gap-2" style="grid-template-columns:repeat(2,minmax(0,1fr));max-width:640px">
+          <input id="gar-nom" class="field-input text-sm" placeholder="Nom (ex. Hyundai Paris 15)" autocomplete="off">
+          <input id="gar-ville" class="field-input text-sm" placeholder="Localisation (ville / adresse)" autocomplete="off">
+          <input id="gar-tel" class="field-input text-sm" placeholder="Téléphone (optionnel)" autocomplete="off">
+          <input id="gar-rdv" class="field-input text-sm" placeholder="Lien pour prendre RDV (https://…)" autocomplete="off">
+        </div>
+        <button id="gar-add" type="button" class="btn btn-outline text-sm mt-2"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter</button>
+      </div>
+    </div>
+
+    <!-- Coût par période -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <h3 class="font-bold text-slate-900">Coût des sinistres par période</h3>
+        <div class="flex items-center gap-2 text-sm flex-wrap">
+          <span class="text-slate-500">Période :</span>
+          <input id="cp-from" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Du">
+          <span class="text-slate-400">→</span>
+          <input id="cp-to" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Au">
+          <span id="cp-range-total" class="font-extrabold" style="color:var(--fp-primary)"></span>
+          <button id="cp-clear" class="hidden text-xs text-slate-400 hover:text-slate-700" title="Effacer la période">✕</button>
+          <button id="cp-export" type="button" class="btn btn-outline text-xs" style="padding:3px 8px"><i data-lucide="download" class="w-3.5 h-3.5"></i> Exporter</button>
+        </div>
+      </div>
+      <div id="cp-years" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
+      <p class="text-xs text-slate-400 mt-2">Montant total des sinistres par année (clique une année, ou choisis une période).</p>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center gap-3" id="sin-filterbar">
+        <div class="relative flex-1 min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search" type="text" placeholder="Véhicule, description, fournisseur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+        <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Toutes les années</option>
+        </select>
+        <select id="filter-vehicule" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Tous véhicules</option>
+        </select>
+        <select id="sin-sort-key" class="text-sm border border-slate-200 rounded-lg px-3 py-2" title="Trier">
+          <option value="date">Tri : Date</option>
+          <option value="cost">Tri : Coût</option>
+          <option value="vehicule">Tri : Véhicule</option>
+          <option value="conducteur">Tri : Conducteur</option>
+        </select>
+        <button id="sin-sort-dir" type="button" class="btn btn-outline text-sm !px-2.5" title="Inverser le sens du tri"><i data-lucide="arrow-down-wide-narrow" class="w-4 h-4"></i></button>
+      </div>
+    </div>
+
+    <!-- Liste -->
+    <div>
+      <h3 class="font-bold text-slate-900 mb-4">Sinistres</h3>
+      <!-- Filtres par suivi de remboursement : « En attente » d'abord pour voir ce qui reste à traiter -->
+      <div class="flex flex-wrap gap-2 mb-4" id="sin-filters">
+        <button type="button" class="sin-chip" data-remb="attente">En attente <span class="n" id="sin-n-attente">0</span></button>
+        <button type="button" class="sin-chip active" data-remb="all">Tous</button>
+        <button type="button" class="sin-chip" data-remb="regles">Réglés <span class="n" id="sin-n-regles">0</span></button>
+      </div>
+      <!-- Sélection multiple (barre injectée par FP.bulkSelect) -->
+      <div id="sin-bulk-mount"></div>
+      <div id="timeline" class="grid sm:grid-cols-2 gap-4"></div>
+      <div id="sin-more" class="hidden pt-3 text-center"></div>
+      <div id="empty-state" class="hidden text-center py-8">
+        <i data-lucide="check-circle-2" class="w-12 h-12 mx-auto text-emerald-400 mb-3"></i>
+        <p class="text-slate-500">Aucun sinistre ne correspond aux filtres.</p>
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-500 mt-4" id="result-count"></p>
+  </main>
+</div>
+
+<script src="../assets/js/vendor/supabase.js?v=20260811e"></script>
+<script src="../assets/js/supabase-client.js?v=20260811e"></script>
+<script src="../assets/js/data.js?v=20260811e"></script>
+  <script>window.FP_PDF=1;</script>
+<script src="../assets/js/app.js?v=20260811e"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
+<script>
+  lucide.createIcons();
+  const data = window.FP_DATA;
+  const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  const $ = (id) => document.getElementById(id);
+
+  // Tous les sinistres = factures type=sinistre
+  let sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
+  let sinBulk = null; // barre de sélection multiple (instanciée à l'init)
+  const state = { search: '', annee: 'all', vehicule: 'all', remb: 'all', dateFrom: '', dateTo: '', sortKey: 'date', sortDir: 'desc' };
+  const REGLES = ['rembourse', 'pec', 'refuse'];
+  const rembOf = (g) => { try { return (FP.settings.get().sinistreStatut || {})[g.key] || ''; } catch (e) { return ''; } };
+
+  // Init filtres dynamiques — reconstruits aussi au chargement Supabase (sinon les nouvelles
+  // années / nouveaux véhicules n'apparaissent pas dans les filtres).
+  function rebuildFiltres() {
+    const fillSel = (id, vals, allLabel) => {
+      const sel = $(id); if (!sel) return; const cur = sel.value;
+      sel.innerHTML = `<option value="all">${allLabel}</option>` + vals.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+      sel.value = (vals.includes(cur) || cur === 'all') ? cur : 'all';
+    };
+    const annees = [...new Set(sinistres.map(s => (s.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+    const vehs = [...new Set(sinistres.map(s => s.vehiculeImmat).filter(Boolean))].sort();
+    fillSel('filter-annee', annees, 'Toutes années');
+    fillSel('filter-vehicule', vehs, 'Tous véhicules');
+  }
+  rebuildFiltres();
+
+  function matchFilter(s) {
+    const q = FP.norm(state.search).trim();
+    if (state.annee !== 'all' && !(s.date || '').startsWith(state.annee)) return false;
+    if (state.dateFrom && (s.date || '') < state.dateFrom) return false;
+    if (state.dateTo && (s.date || '') > state.dateTo) return false;
+    if (state.vehicule !== 'all' && s.vehiculeImmat !== state.vehicule) return false;
+    if (q && !(FP.norm(`${s.vehiculeImmat} ${s.description} ${s.fournisseur}`).includes(q))) return false;
+    return true;
+  }
+  function filtered() { return sinistres.filter(matchFilter); }
+
+  // Tri utilisateur de la LISTE des incidents (colonne + sens) — même logique que factures.html.
+  // Opère sur les INCIDENTS regroupés ({ key, rep, cost }), pas sur les factures brutes.
+  function sortRowsSin(arr) {
+    const dir = state.sortDir === 'asc' ? 1 : -1;
+    const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+    const doss = (FP.settings.get().sinistreAssurance) || {};
+    const condOf = g => {
+      const frozen = ((doss[g.key] || {}).conducteur || '').trim();
+      if (frozen) return frozen;
+      const veh = (data.vehicules || []).find(v => FP.normImmat(v.immat) === FP.normImmat(g.rep.vehiculeImmat));
+      return (veh && veh.chauffeur && veh.chauffeur !== '—') ? veh.chauffeur : '';
+    };
+    return arr.slice().sort((a, b) => {
+      let r;
+      if (state.sortKey === 'cost') r = (num(a.cost) ?? -Infinity) - (num(b.cost) ?? -Infinity);
+      else if (state.sortKey === 'vehicule') r = String(a.rep.vehiculeImmat || '').localeCompare(String(b.rep.vehiculeImmat || ''), 'fr', { sensitivity: 'base' });
+      else if (state.sortKey === 'conducteur') r = String(condOf(a) || '').localeCompare(String(condOf(b) || ''), 'fr', { sensitivity: 'base' });
+      else r = String(a.rep.date || '').localeCompare(String(b.rep.date || ''));   // date par défaut
+      if (r === 0) r = String(a.rep.date || '').localeCompare(String(b.rep.date || ''));
+      return r * dir;
+    });
+  }
+
+  // ---------- Association devis ↔ facture (un "incident" = plusieurs documents) ----------
+  // Stockage dans les réglages partagés : sinistreGroupes {idDoc: clé de groupe}, sinistreStage {idDoc: 'devis'|'facture'}.
+  const isGroupKey = (k) => /^grp_/.test(k);
+  function maps() { const s = FP.settings.get(); return { grp: s.sinistreGroupes || {}, stg: s.sinistreStage || {}, st: s.sinistreStatut || {} }; }
+  const groupKeyOf = (id) => maps().grp[id] || id;
+  // Stade d'un document : choix manuel s'il existe, sinon détection auto (mot « devis »/« proforma » dans la description ou le fournisseur)
+  function stageOf(id) {
+    const explicit = maps().stg[id];
+    if (explicit) return explicit;
+    const rec = sinistres.find(x => x.id === id);
+    const txt = FP.norm(`${(rec && rec.description) || ''} ${(rec && rec.fournisseur) || ''}`);
+    return /\b(devis|proforma|estimation)\b/.test(txt) ? 'devis' : 'facture';
+  }
+  // Regroupe une liste de sinistres par incident → [{ key, lines:[…trié par date desc], rep, cost }]
+  function buildGroups(list) {
+    const by = new Map();
+    list.forEach(s => { const k = groupKeyOf(s.id); if (!by.has(k)) by.set(k, []); by.get(k).push(s); });
+    const out = [];
+    by.forEach((lines, key) => {
+      lines.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const nonDevis = lines.filter(l => stageOf(l.id) !== 'devis');
+      const src = nonDevis.length ? nonDevis : lines;
+      const cost = nonDevis.length
+        ? nonDevis.reduce((t, l) => t + (l.montantTTC || 0), 0)
+        : Math.max(0, ...lines.map(l => l.montantTTC || 0));
+      out.push({ key, lines, rep: src[0], cost });
+    });
+    return out;
+  }
+  // Groupes visibles (un groupe apparaît si AU MOINS une de ses lignes passe le filtre) — on ne casse pas un incident.
+  function visibleGroups() {
+    return buildGroups(sinistres).filter(g => g.lines.some(matchFilter))
+      .sort((a, b) => (b.rep.date || '').localeCompare(a.rep.date || ''));
+  }
+  const allGroups = () => buildGroups(sinistres);
+
+  // Y a-t-il une période active (année, ou plage du/au) ?
+  function periodActive() { return state.annee !== 'all' || !!state.dateFrom || !!state.dateTo; }
+  function renderKPIs() {
+    // Les indicateurs suivent la PÉRIODE choisie (sinon = tout l'historique).
+    const groups = visibleGroups();
+    const doss = FP.settings.get().sinistreAssurance || {};
+    $('kpi-total').textContent = groups.length;
+    $('kpi-cout').textContent = FP.euro(groups.reduce((s, g) => s + g.cost, 0));
+    $('kpi-vehicules').textContent = new Set(groups.map(g => g.rep.vehiculeImmat).filter(Boolean)).size;
+    // La carte « Cette année » devient « Sur la période » quand une période est choisie.
+    const cy = new Date().getFullYear().toString();
+    const anneeLbl = $('kpi-annee-label');
+    if (periodActive()) {
+      if (anneeLbl) anneeLbl.textContent = 'Sur la période';
+      $('kpi-annee').textContent = groups.length;
+    } else {
+      if (anneeLbl) anneeLbl.textContent = 'Cette année';
+      $('kpi-annee').textContent = groups.filter(g => (g.rep.date || '').startsWith(cy)).length;
+    }
+    // Reste à charge total = Σ (coût réel incident − remboursé). Coût réel via FP.coutSinistre
+    // (source unique : 0 si le sinistre est « Remboursé »/« Prise en charge » ou un devis) — même
+    // règle que Statistiques/TCO (FP.resteChargeSinistre), sinon un dossier PEC restait à 100 %.
+    const reste = groups.reduce((s, g) => {
+      const coutReel = g.lines.reduce((t, l) => t + FP.coutSinistre(l), 0);
+      return s + Math.max(0, coutReel - (Number((doss[g.key] || {}).rembourse) || 0));
+    }, 0);
+    const resp = groups.filter(g => (doss[g.key] || {}).resp === 'responsable').length;
+    if ($('kpi-reste')) $('kpi-reste').textContent = FP.euro(reste);
+    if ($('kpi-resp')) $('kpi-resp').textContent = resp;
+  }
+
+  // --- Fenêtre « Véhicules concernés » : liste les véhicules de la période, chacun cliquable vers sa fiche ---
+  function vehIdOfImmat(im) {
+    const n = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const key = n(im);
+    const v = ((window.FP_DATA && window.FP_DATA.vehicules) || data.vehicules || []).find(x => n(x.immat) === key);
+    return v ? v.id : null;
+  }
+  function openVehModal() {
+    const groups = visibleGroups();
+    const byVeh = {};
+    groups.forEach(g => { const im = g.rep.vehiculeImmat; if (!im) return; byVeh[im] = (byVeh[im] || 0) + 1; });
+    const entries = Object.entries(byVeh).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    const list = $('kpi-veh-list'); if (!list) return;
+    list.innerHTML = entries.length
+      ? entries.map(([im, nb]) => {
+          const id = vehIdOfImmat(im);
+          const href = id != null ? `vehicules.html?veh=${encodeURIComponent(id)}` : '#';
+          return `<a href="${href}" class="flex items-center justify-between gap-3 px-3 py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg" style="text-decoration:none">
+              <span class="font-mono font-semibold text-slate-800">${escapeHtml(im)}</span>
+              <span class="text-xs text-slate-500">${nb} incident${nb > 1 ? 's' : ''} ›</span>
+            </a>`;
+        }).join('')
+      : '<p class="text-sm text-slate-500 py-2">Aucun véhicule concerné sur la période.</p>';
+    const m = $('kpi-veh-modal'); if (m) { m.style.display = 'flex'; if (window.lucide) lucide.createIcons(); }
+  }
+  (function wireVehModal() {
+    const card = $('kpi-veh-card'), modal = $('kpi-veh-modal'), close = $('kpi-veh-close');
+    if (card) { card.addEventListener('click', openVehModal); card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openVehModal(); } }); }
+    if (modal) modal.addEventListener('click', () => { modal.style.display = 'none'; });
+    if (close) close.addEventListener('click', (e) => { e.stopPropagation(); if (modal) modal.style.display = 'none'; });
+  })();
+
+  // Suivi du remboursement (stocké dans les réglages partagés)
+  const STAT_LABELS = { '': '— suivi remb.', 'attente': '⏳ En attente', 'pec': '🛡️ Prise en charge', 'rembourse': '✓ Remboursé', 'refuse': '✗ Refusé' };
+  const statColor = (cur) => cur === 'rembourse' || cur === 'pec' ? '#047857' : cur === 'attente' ? '#B45309' : cur === 'refuse' ? '#B91C1C' : '#94A3B8';
+  function statutSelect(id) {
+    const cur = (FP.settings.get().sinistreStatut || {})[id] || '';
+    const opts = Object.keys(STAT_LABELS).map(k => `<option value="${k}" ${cur === k ? 'selected' : ''}>${STAT_LABELS[k]}</option>`).join('');
+    return `<select class="sin-stat" data-id="${id}" style="font-size:12px;border:1px solid var(--fp-border);border-radius:8px;padding:4px 6px;color:${statColor(cur)};font-weight:700;cursor:pointer">${opts}</select>`;
+  }
+
+  const STAGE_LABELS = { devis: 'Devis', facture: 'Facture', autre: 'Autre' };
+  const docLink = (fileId, compact) => fileId
+    ? `<a href="${/^https?:\/\//.test(fileId) ? fileId : ('https://drive.google.com/file/d/' + fileId + '/view')}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs hover:underline" style="color: var(--fp-accent)" title="Voir le document"><i data-lucide="file-text" class="w-3.5 h-3.5"></i>${compact ? '' : ' Voir le document'}</a>`
+    : (compact ? '<span class="text-xs text-slate-300" title="Pas de document">—</span>' : '<span></span>');
+  // Bloc d'une ligne (un document) à l'intérieur d'un incident regroupé
+  function lineBlock(line) {
+    const stg = stageOf(line.id);
+    const opts = Object.keys(STAGE_LABELS).map(k => `<option value="${k}" ${stg === k ? 'selected' : ''}>${STAGE_LABELS[k]}</option>`).join('');
+    const montant = line.montantTTC
+      ? `<span class="font-bold text-sm cursor-pointer hover:underline ${stg === 'devis' ? 'text-slate-400 line-through' : 'text-red-600'}" data-sin-edit="${line.id}" data-fld="montantTTC" data-typ="number" data-lbl="Montant TTC (€)" title="Modifier">${FP.euroPrecis(line.montantTTC)}</span>`
+      : '<span class="text-xs text-slate-300 italic cursor-pointer hover:underline" data-sin-edit="' + line.id + '" data-fld="montantTTC" data-typ="number" data-lbl="Montant TTC (€)" title="Ajouter un montant">+ montant</span>';
+    return `
+      <div class="flex items-center justify-between gap-2 mt-2 px-2.5 py-2 rounded-lg" style="background:#f8fafc;border:1px solid var(--fp-border)">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <select class="sin-stage" data-id="${line.id}" style="font-size:11px;border:1px solid var(--fp-border);border-radius:6px;padding:2px 4px;font-weight:700;cursor:pointer">${opts}</select>
+            <span class="text-xs text-slate-500"><span class="cursor-pointer hover:underline" data-sin-edit="${line.id}" data-fld="date" data-typ="date" data-lbl="Date" title="Modifier la date">${FP.date(line.date)}</span> · <span class="cursor-pointer hover:underline" data-sin-edit="${line.id}" data-fld="fournisseur" data-lbl="Fournisseur" title="Modifier">${line.fournisseur ? escapeHtml(line.fournisseur) : 'fournisseur'}</span></span>
+          </div>
+          <div class="text-xs text-slate-600 mt-0.5 truncate cursor-pointer hover:underline" data-sin-edit="${line.id}" data-fld="description" data-lbl="Description" title="Modifier la description">${escapeHtml(line.description || '— description')}</div>
+        </div>
+        <div class="text-right shrink-0 flex items-center gap-2.5">
+          ${montant}
+          ${docLink(line.fileId, true)}
+          <button type="button" data-sin-detach="${line.id}" title="Détacher de l'incident" class="text-slate-400 hover:text-amber-600"><i data-lucide="unlink" class="w-3.5 h-3.5"></i></button>
+          <button type="button" data-sin-del="${line.id}" title="Supprimer ce document" class="text-slate-400 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        </div>
+      </div>`;
+  }
+
+  const SIN_LIMIT = 15;
+  let sinExpanded = false;
+
+  // ---- Suivi d'étapes d'un dossier sinistre (déclaration → réponse assureur → réparation → remboursement → clôture) ----
+  const RESP_LABEL = { 'responsable': 'Responsable', 'non-responsable': 'Non responsable', 'partagee': 'Partagée', 'en-cours': 'En cours' };
+  function sinSteps(g, dv, cur) {
+    const repaired = (g.cost || 0) > 0;
+    const reimbursed = (Number(dv.rembourse) || 0) > 0 || cur === 'rembourse' || cur === 'pec';
+    return [
+      { label: 'Déclaré', done: true, date: g.rep.date },
+      { label: 'Envoyé assurance', done: !!(dv.dateDeclaration || dv.numeroDossier), date: dv.dateDeclaration },
+      { label: 'Réponse assureur', done: !!(dv.resp || dv.dateReponse), date: dv.dateReponse, extra: dv.resp ? RESP_LABEL[dv.resp] : '' },
+      { label: 'Réparation', done: repaired },
+      { label: 'Remboursement', done: reimbursed },
+      { label: 'Clôturé', done: !!dv.dateCloture, date: dv.dateCloture },
+    ];
+  }
+  function sinTimelineHTML(steps) {
+    let curIdx = steps.findIndex(s => !s.done); if (curIdx === -1) curIdx = steps.length - 1;
+    const dt = d => (d && FP.dateNum) ? FP.dateNum(String(d).slice(0, 10)) : '';
+    return '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:2px 0 6px">'
+      + steps.map((s, i) => {
+        const done = s.done, isCur = i === curIdx && !done;
+        const bg = done ? '#047857' : (isCur ? 'var(--fp-accent,#F97316)' : '#E2E8F0');
+        const txtCol = (done || isCur) ? '#334155' : '#94A3B8';
+        return (i ? '<span style="color:#CBD5E1;font-size:11px">›</span>' : '')
+          + `<span style="display:inline-flex;align-items:center;gap:5px">
+              <span style="width:17px;height:17px;border-radius:50%;background:${bg};color:#fff;font-size:9.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${done ? '✓' : (i + 1)}</span>
+              <span style="font-size:11px;font-weight:${isCur ? 800 : 600};color:${txtCol}">${s.label}${s.date ? ` <span style="color:#94A3B8;font-weight:500">${dt(s.date)}</span>` : ''}${s.extra ? ` <span style="color:#047857;font-weight:700">· ${escapeHtml(s.extra)}</span>` : ''}</span>
+            </span>`;
+      }).join('')
+      + '</div>';
+  }
+
+  function renderTimeline() {
+    let groups = visibleGroups();
+    // Onglet de suivi : filtre par statut de remboursement
+    if (state.remb === 'attente') groups = groups.filter(g => rembOf(g) === 'attente');
+    else if (state.remb === 'regles') groups = groups.filter(g => REGLES.includes(rembOf(g)));
+    // TRI : « en attente » toujours EN HAUT, puis non suivis, puis réglés ; par date dans chaque groupe.
+    const prio = g => { const s = rembOf(g); if (s === 'attente') return 0; if (s === '') return 1; if (s === 'pec') return 2; return 3; };
+    // Tri utilisateur (colonne + sens) appliqué DANS chaque niveau de priorité : on trie d'abord
+    // selon le choix (sortRowsSin), puis un tri STABLE par priorité garde « en attente » en haut.
+    groups = sortRowsSin(groups).sort((a, b) => prio(a) - prio(b));
+    // Compteurs + onglet actif
+    { const all = allGroups();
+      const na = $('sin-n-attente'); if (na) na.textContent = all.filter(g => rembOf(g) === 'attente').length;
+      const nr = $('sin-n-regles'); if (nr) nr.textContent = all.filter(g => REGLES.includes(rembOf(g))).length;
+      document.querySelectorAll('#sin-filters .sin-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.remb === state.remb));
+    }
+    const tl = $('timeline');
+    const empty = $('empty-state');
+    const more = $('sin-more');
+    if (groups.length === 0) { tl.innerHTML = ''; empty.classList.remove('hidden'); if (more) { more.classList.add('hidden'); more.innerHTML=''; } }
+    else {
+      empty.classList.add('hidden');
+      const shown = sinExpanded ? groups : groups.slice(0, SIN_LIMIT);
+      if (more) {
+        if (groups.length > SIN_LIMIT) {
+          more.classList.remove('hidden');
+          more.innerHTML = sinExpanded
+            ? `<button id="sin-toggle" class="btn btn-outline text-sm">Réduire la liste</button>`
+            : `<button id="sin-toggle" class="btn btn-outline text-sm">Voir les ${groups.length - SIN_LIMIT} autres incidents</button>`;
+        } else { more.classList.add('hidden'); more.innerHTML = ''; }
+      }
+      tl.innerHTML = shown.map(g => {
+        const s = g.rep;
+        const multi = g.lines.length > 1;
+        const veh = (data.vehicules || []).find(v => FP.normImmat(v.immat) === FP.normImmat(s.vehiculeImmat));
+        const vehInfo = veh ? `${escapeHtml(veh.marque)} ${escapeHtml(veh.modele)}${veh.chauffeur && veh.chauffeur !== '—' ? ' · ' + (FP.lienConducteur ? FP.lienConducteur(veh.chauffeur) : escapeHtml(veh.chauffeur)) : ''}` : (s.vehiculeImmat || '');
+        const cur = (FP.settings.get().sinistreStatut || {})[g.key] || '';
+        const bar = statColor(cur);
+        // Dossier assurance structuré (franchise / remboursé / responsabilité) — par incident
+        const dv = (FP.settings.get().sinistreAssurance || {})[g.key] || {};
+        const respOpts = [['', '—'], ['responsable', 'Responsable'], ['non-responsable', 'Non responsable'], ['partagee', 'Partagée'], ['en-cours', 'En cours']];
+        const coutReel = g.lines.reduce((t, l) => t + FP.coutSinistre(l), 0); // 0 si Remboursé/PEC/devis (source unique)
+        const reste = coutReel - (Number(dv.rembourse) || 0);
+        const vehCh = (veh && veh.chauffeur && veh.chauffeur !== '—') ? veh.chauffeur : '';
+        const _inpCss = 'width:100%;margin-top:2px;font-size:13px;padding:3px 6px;border:1px solid var(--fp-border);border-radius:6px';
+        // Ouverture via FP.openScan (URL signée) : le bucket des scans est privé → un lien public brut
+        // ne s'ouvrirait pas. Repli Google Drive pour un éventuel identifiant Drive hérité.
+        const courrierLien = dv.courrierUrl ? `<button type="button" class="sin-courrier-open" data-url="${escapeHtml(dv.courrierUrl)}" style="display:inline-flex;align-items:center;gap:.25rem;font-size:12px;color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline;margin-left:2px"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Voir le courrier</button>` : '';
+        const dossierPanel = `
+          <details class="mt-2">
+            <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#475569;list-style:none" class="inline-flex items-center gap-1"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Dossier assurance — suivi</summary>
+            ${sinTimelineHTML(sinSteps(g, dv, cur))}
+            <label class="text-xs text-slate-500" style="display:block;margin-top:8px">Conducteur au moment du sinistre <span class="text-slate-400">(figé, sinon = chauffeur actuel)</span><input class="sin-doss" data-key="${g.key}" data-k="conducteur" type="text" value="${escapeHtml(dv.conducteur || '')}" placeholder="${escapeHtml(vehCh || '—')}" style="${_inpCss}"></label>
+            <div class="grid grid-cols-3 gap-2 mt-2">
+              <label class="text-xs text-slate-500">N° dossier assureur<input class="sin-doss" data-key="${g.key}" data-k="numeroDossier" type="text" value="${escapeHtml(dv.numeroDossier || '')}" placeholder="—" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Déclaré à l'assurance le<input class="sin-doss" data-key="${g.key}" data-k="dateDeclaration" type="date" value="${escapeHtml(dv.dateDeclaration || '')}" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Réponse assureur le<input class="sin-doss" data-key="${g.key}" data-k="dateReponse" type="date" value="${escapeHtml(dv.dateReponse || '')}" style="${_inpCss}"></label>
+            </div>
+            <div class="grid grid-cols-3 gap-2 mt-2">
+              <label class="text-xs text-slate-500">Franchise (€)<input class="sin-doss" data-key="${g.key}" data-k="franchise" type="number" value="${dv.franchise ?? ''}" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Remboursé (€)<input class="sin-doss" data-key="${g.key}" data-k="rembourse" type="number" value="${dv.rembourse ?? ''}" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Responsabilité<select class="sin-doss" data-key="${g.key}" data-k="resp" style="${_inpCss}">${respOpts.map(([v, l]) => `<option value="${v}" ${dv.resp === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+            </div>
+            <div class="text-[11px] font-semibold text-slate-400 uppercase mt-3 mb-1">Lieu &amp; tiers impliqué</div>
+            <div class="grid grid-cols-2 gap-2">
+              <label class="text-xs text-slate-500">Lieu du sinistre<input class="sin-doss" data-key="${g.key}" data-k="lieu" type="text" value="${escapeHtml(dv.lieu || '')}" placeholder="—" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Plaque du tiers<input class="sin-doss" data-key="${g.key}" data-k="tiersPlaque" type="text" value="${escapeHtml(dv.tiersPlaque || '')}" placeholder="—" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Assureur adverse<input class="sin-doss" data-key="${g.key}" data-k="tiersAssureur" type="text" value="${escapeHtml(dv.tiersAssureur || '')}" placeholder="—" style="${_inpCss}"></label>
+              <label class="text-xs text-slate-500">Conducteur adverse<input class="sin-doss" data-key="${g.key}" data-k="tiersNom" type="text" value="${escapeHtml(dv.tiersNom || '')}" placeholder="—" style="${_inpCss}"></label>
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <button type="button" class="sin-courrier-btn" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" style="display:inline-flex;align-items:center;gap:.3rem;font-size:12px;font-weight:700;color:#fff;background:var(--fp-accent,#F97316);border:none;border-radius:8px;padding:5px 10px;cursor:pointer" title="Déposer le courrier de l'assureur : l'IA lit la responsabilité, le n° de dossier et la date, et remplit le dossier (tu confirmes la responsabilité)"><i data-lucide="mail-search" class="w-3.5 h-3.5"></i> Scanner le courrier de l'assureur (IA)</button>
+              <input type="file" class="sin-courrier-file hidden" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" data-annee="${escapeHtml((s.date || '').slice(0, 4) || String(new Date().getFullYear()))}" accept="image/*,application/pdf,.pdf">
+              <button type="button" class="sin-constat-btn" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" style="display:inline-flex;align-items:center;gap:.3rem;font-size:12px;font-weight:600;color:var(--fp-accent);background:#fff;border:1px solid var(--fp-border);border-radius:8px;padding:4px 8px;cursor:pointer" title="Déposer le constat amiable : l'IA lit qui est en tort et te le propose (tu confirmes)"><i data-lucide="scan-line" class="w-3.5 h-3.5"></i> Lire le constat (IA)</button>
+              <input type="file" class="sin-constat-file hidden" data-key="${g.key}" data-immat="${escapeHtml(s.vehiculeImmat || '')}" accept="image/*,application/pdf,.pdf">
+              ${courrierLien}
+            </div>
+            <div class="sin-courrier-status text-xs mt-1" data-key="${g.key}"></div>
+            <div class="sin-constat-status text-xs mt-1" data-key="${g.key}"></div>
+            ${g.cost ? `<div class="text-xs text-slate-500 mt-2">Coût ${FP.euroPrecis(g.cost)}${Number(dv.rembourse) ? ` · remboursé ${FP.euroPrecis(dv.rembourse)}` : ''} → <b style="color:${reste > 0 ? '#b45309' : '#047857'}">reste à charge ${FP.euroPrecis(Math.max(0, reste))}</b></div>` : ''}
+            <div class="mt-2">
+              <button type="button" class="sin-cloturer" data-key="${g.key}" style="display:inline-flex;align-items:center;gap:.3rem;font-size:12px;font-weight:700;border-radius:8px;padding:4px 10px;cursor:pointer;${dv.dateCloture ? 'color:#475569;background:#fff;border:1px solid var(--fp-border)' : 'color:#047857;background:#ECFDF5;border:1px solid #A7F3D0'}"><i data-lucide="${dv.dateCloture ? 'rotate-ccw' : 'check-circle-2'}" class="w-3.5 h-3.5"></i> ${dv.dateCloture ? 'Rouvrir le dossier' : 'Clôturer le dossier'}</button>
+            </div>
+          </details>`;
+        // Candidats à associer : autres sinistres du même véhicule pas déjà dans cet incident
+        const candidats = sinistres.filter(c => c.vehiculeImmat === s.vehiculeImmat && groupKeyOf(c.id) !== g.key);
+        const assocPanel = `
+          <div data-assoc-panel="${g.key}" class="hidden mt-3 pt-3" style="border-top:1px dashed var(--fp-border)">
+            ${candidats.length ? `
+              <div class="text-xs text-slate-500 mb-1">Rattacher un autre sinistre de <b>${escapeHtml(s.vehiculeImmat || '')}</b> à cet incident :</div>
+              <div class="flex gap-2">
+                <select class="sin-assoc-pick flex-1" style="font-size:12px;border:1px solid var(--fp-border);border-radius:8px;padding:4px 6px">
+                  ${candidats.map(c => `<option value="${c.id}">${FP.date(c.date)} · ${c.montantTTC ? FP.euroPrecis(c.montantTTC) : 'sans montant'}${c.description ? ' · ' + escapeHtml(c.description.slice(0, 40)) : ''}</option>`).join('')}
+                </select>
+                <button type="button" data-sin-assoc-ok="${g.key}" class="btn btn-primary text-xs">Rattacher</button>
+              </div>` : `<div class="text-xs text-slate-400">Aucun autre sinistre enregistré pour ${escapeHtml(s.vehiculeImmat || 'ce véhicule')}.</div>`}
+          </div>`;
+        return `
+          <div class="card p-4${sinBulk && sinBulk.has(g.key) ? ' row-selected' : ''}" style="border-left:4px solid ${bar}">
+            <div class="flex justify-between items-start gap-2">
+              <div class="flex items-start gap-2 min-w-0">
+                ${sinBulk ? `<label style="padding-top:2px;cursor:pointer" title="Sélectionner cet incident">${sinBulk.cbCell(g.key)}</label>` : ''}
+                <div class="min-w-0">
+                  <div class="font-mono font-extrabold text-slate-900 cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="vehiculeImmat" data-lbl="Plaque du véhicule" title="Cliquer pour modifier">${escapeHtml(s.vehiculeImmat || '—')}</div>
+                  <div class="text-xs text-slate-500 mt-0.5"><span class="cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="date" data-typ="date" data-lbl="Date du sinistre" title="Modifier la date">${FP.date(s.date)}</span>${!multi ? ` · <span class="cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="fournisseur" data-lbl="Fournisseur / réparateur" title="Modifier">${s.fournisseur ? escapeHtml(s.fournisseur) : 'fournisseur'}</span>` : ''}</div>
+                </div>
+              </div>
+              <div class="text-right shrink-0">
+                ${multi
+                  ? (g.cost ? `<div class="font-extrabold text-red-600 text-lg leading-none">${FP.euroPrecis(g.cost)}</div>` : '<div class="text-xs text-slate-400 italic">Sans montant</div>')
+                  : `<div class="font-extrabold text-red-600 text-lg leading-none cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="montantTTC" data-typ="number" data-lbl="Montant TTC (€)" title="Modifier le montant">${g.cost ? FP.euroPrecis(g.cost) : '<span class="text-slate-400 text-sm italic">+ montant</span>'}</div>`}
+                ${multi ? `<div class="text-[11px] text-slate-400 mt-0.5">${g.lines.length} documents</div>` : ''}
+              </div>
+            </div>
+            ${multi
+              ? g.lines.map(lineBlock).join('')
+              : `<div class="text-sm text-slate-700 mt-2 cursor-pointer hover:underline" data-sin-edit="${s.id}" data-fld="description" data-lbl="Description" title="Cliquer pour modifier">${escapeHtml(s.description || '— ajouter une description')}</div>`}
+            ${vehInfo ? `<div class="text-xs text-slate-400 mt-1">${vehInfo}</div>` : ''}
+            <div class="flex items-center justify-between gap-2 mt-3 pt-3" style="border-top:1px solid var(--fp-border)">
+              ${statutSelect(g.key)}
+              <div class="flex items-center gap-3 shrink-0">
+                <button type="button" data-sin-assoc="${g.key}" title="Associer un devis / une facture" class="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"><i data-lucide="link-2" class="w-3.5 h-3.5"></i> Associer</button>
+                ${multi ? '' : docLink(s.fileId, false)}
+                ${multi ? '' : `<button type="button" data-sin-del="${s.id}" title="Supprimer ce sinistre" class="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>`}
+              </div>
+            </div>
+            ${dossierPanel}
+            ${assocPanel}
+          </div>
+        `;
+      }).join('');
+    }
+    const stat = FP.settings.get().sinistreStatut || {};
+    const all = allGroups();
+    const attente = all.filter(g => stat[g.key] === 'attente').length;
+    $('result-count').innerHTML = `${groups.length} incident${groups.length > 1 ? 's' : ''} sur ${all.length}` + (attente ? ` · <b style="color:#B45309">${attente} en attente de remboursement</b>` : '');
+    if (sinBulk) sinBulk.refresh();
+    lucide.createIcons();
+    // ⚠️ Sélecteur conducteur intelligent (choisir OU créer) sur chaque dossier — règle 0quater :
+    // plus de texte libre → plus de nom fantôme qui ne correspond à aucune fiche. Source unique FP.conducteurPicker.
+    document.querySelectorAll('.sin-doss[data-k="conducteur"]').forEach(inp => {
+      if (!FP.conducteurPicker) return;
+      FP.conducteurPicker(inp, { onPick: (c) => {
+        const key = inp.dataset.key;
+        const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
+        const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
+        const name = FP.conducteurs && FP.conducteurs.displayName ? FP.conducteurs.displayName(c) : (c && (c.name || c.prenom) || '');
+        if (name) o.conducteur = name; else delete o.conducteur;
+        if (!Object.keys(o).length) delete s.sinistreAssurance[key];
+        FP.settings.save(s); renderConducteursRisque();
+      } });
+    });
+  }
+
+  // Conducteurs à risque : agrégation par chauffeur (via le véhicule du sinistre) sur les INCIDENTS.
+  function renderConducteursRisque() {
+    const box = $('sin-risque'); if (!box) return;
+    const groups = allGroups();
+    const doss = FP.settings.get().sinistreAssurance || {};
+    const byCond = {};
+    groups.forEach(g => {
+      const immat = g.rep && g.rep.vehiculeImmat;
+      const veh = (data.vehicules || []).find(v => FP.normImmat(v.immat) === FP.normImmat(immat));
+      // Conducteur FIGÉ sur l'incident (dossier assurance) sinon chauffeur actuel du véhicule.
+      const frozen = ((doss[g.key] || {}).conducteur || '').trim();
+      const cond = frozen || (veh && veh.chauffeur && veh.chauffeur !== '—' ? veh.chauffeur : '') || null;
+      if (!cond) return;
+      // ⚠️ Regroupement par conducteur via FP.normPrenom (même source que le podium amendes / dashboard) :
+      // « Jean » et « Jean Dupont » = même personne, pas deux lignes de risque distinctes.
+      const key = FP.normPrenom ? FP.normPrenom(cond) : cond.toLowerCase();
+      const r = byCond[key] || (byCond[key] = { cond, nb: 0, resp: 0, cost: 0 });
+      r.nb++; r.cost += g.cost || 0;
+      if ((doss[g.key] || {}).resp === 'responsable') r.resp++;
+    });
+    const rows = Object.keys(byCond).map(k => ({ ...byCond[k] }))
+      .sort((a, b) => b.resp - a.resp || b.nb - a.nb || b.cost - a.cost);
+    if (!rows.length) { box.innerHTML = '<p class="text-sm text-slate-400">Aucun sinistre attribué à un conducteur pour l\'instant (renseigne un chauffeur sur les véhicules concernés).</p>'; return; }
+    box.innerHTML = '<div class="scrollable"><table class="fp-table"><thead><tr><th>Conducteur</th><th style="text-align:right">Sinistres</th><th style="text-align:right">Responsable</th><th style="text-align:right">Coût total</th><th>Niveau</th></tr></thead><tbody>'
+      + rows.map(r => {
+        const lvl = (r.resp >= 2 || r.nb >= 3) ? ['#FEE2E2', '#B91C1C', '⚠️ Risque élevé']
+          : (r.resp >= 1 || r.nb >= 2) ? ['#FEF3C7', '#92400E', 'À surveiller']
+          : ['#DCFCE7', '#166534', 'OK'];
+        return `<tr>
+          <td class="font-semibold">${FP.lienConducteur ? FP.lienConducteur(r.cond) : escapeHtml(r.cond)}</td>
+          <td style="text-align:right">${r.nb}</td>
+          <td style="text-align:right${r.resp ? ';color:#B91C1C;font-weight:700' : ''}">${r.resp || '—'}</td>
+          <td style="text-align:right">${r.cost ? FP.euroPrecis(r.cost) : '—'}</td>
+          <td><span class="badge" style="background:${lvl[0]};color:${lvl[1]}">${lvl[2]}</span></td>
+        </tr>`;
+      }).join('') + '</tbody></table></div>';
+    // Autocomplétion du champ conducteur (noms connus : conducteurs + chauffeurs des véhicules).
+    const dl = $('sin-cond-list');
+    if (dl) {
+      const names = new Set();
+      (data.conducteurs || []).forEach(c => { const n = ([c.prenom || c.name, c.nom].filter(Boolean).join(' ')).trim() || c.name; if (n) names.add(n); });
+      (data.vehicules || []).forEach(v => { if (v.chauffeur && v.chauffeur !== '—') names.add(v.chauffeur); });
+      dl.innerHTML = [...names].sort().map(n => `<option value="${escapeHtml(n)}">`).join('');
+    }
+    if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+  }
+  function refreshAll() { renderKPIs(); renderTimeline(); renderCharts(); renderConducteursRisque(); coutPeriode.render(); }
+
+  // Rattache un sinistre (memberId) à l'incident de clé groupKey
+  function associate(groupKey, memberId) {
+    const s = FP.settings.get();
+    const grp = s.sinistreGroupes = s.sinistreGroupes || {};
+    const st = s.sinistreStatut = s.sinistreStatut || {};
+    let target = groupKey;
+    if (!isGroupKey(groupKey)) { // l'incident était encore un sinistre seul → on crée un vrai groupe
+      target = 'grp_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+      grp[groupKey] = target;
+      if (st[groupKey]) { st[target] = st[groupKey]; delete st[groupKey]; }
+    }
+    const memberKey = grp[memberId] || memberId;
+    if (isGroupKey(memberKey)) { // le membre était lui-même un groupe → on déplace toutes ses lignes
+      Object.keys(grp).forEach(id => { if (grp[id] === memberKey) grp[id] = target; });
+      if (st[memberKey] && !st[target]) st[target] = st[memberKey];
+      if (st[memberKey]) delete st[memberKey];
+    }
+    grp[memberId] = target;
+    FP.settings.save(s);
+  }
+
+  // Détache une ligne de son incident (et dissout l'incident s'il ne reste qu'une ligne)
+  function detach(lineId) {
+    const s = FP.settings.get();
+    const grp = s.sinistreGroupes = s.sinistreGroupes || {};
+    const st = s.sinistreStatut = s.sinistreStatut || {};
+    const key = grp[lineId]; if (!key) return;
+    delete grp[lineId];
+    const remaining = Object.keys(grp).filter(id => grp[id] === key);
+    if (remaining.length <= 1) {
+      if (remaining.length === 1) { const last = remaining[0]; delete grp[last]; if (st[key]) st[last] = st[key]; }
+      if (st[key]) delete st[key];
+    }
+    FP.settings.save(s);
+  }
+
+  // Nettoie les réglages liés à un sinistre supprimé (groupe + stage + statut)
+  function forgetSinistre(id) {
+    const s = FP.settings.get();
+    const grp = s.sinistreGroupes = s.sinistreGroupes || {};
+    const stg = s.sinistreStage = s.sinistreStage || {};
+    const st = s.sinistreStatut = s.sinistreStatut || {};
+    const assur = s.sinistreAssurance = s.sinistreAssurance || {}; // dossier (franchise/remboursé/resp/conducteur)
+    const key = grp[id];
+    delete grp[id]; delete stg[id];
+    if (key) {
+      const remaining = Object.keys(grp).filter(x => grp[x] === key);
+      if (remaining.length <= 1) {
+        if (remaining.length === 1) { const last = remaining[0]; delete grp[last]; if (st[key]) st[last] = st[key]; if (assur[key]) assur[last] = assur[key]; }
+        if (st[key]) delete st[key];
+        if (assur[key]) delete assur[key]; // ⚠️ nettoyer le dossier assurance orphelin (fantôme dans les réglages)
+      }
+    } else if (st[id]) { delete st[id]; if (assur[id]) delete assur[id]; }
+    FP.settings.save(s);
+  }
+
+  // Changements (statut de remboursement, stade devis/facture)
+  $('timeline').addEventListener('change', (e) => {
+    const sel = e.target.closest('.sin-stat');
+    if (sel) {
+      const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {};
+      if (sel.value) s.sinistreStatut[sel.dataset.id] = sel.value; else delete s.sinistreStatut[sel.dataset.id];
+      FP.settings.save(s); renderTimeline(); return;
+    }
+    const stg = e.target.closest('.sin-stage');
+    if (stg) {
+      const s = FP.settings.get(); s.sinistreStage = s.sinistreStage || {};
+      s.sinistreStage[stg.dataset.id] = stg.value; // choix manuel = prioritaire sur la détection auto
+      FP.settings.save(s); refreshAll(); return;
+    }
+    // Dossier assurance (franchise / remboursé / responsabilité) par incident
+    const doss = e.target.closest('.sin-doss');
+    if (doss) {
+      const key = doss.dataset.key, fld = doss.dataset.k;
+      const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
+      const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
+      let val = doss.value;
+      if (fld === 'franchise' || fld === 'rembourse') { val = (val === '' ? null : parseFloat(String(val).replace(',', '.'))); }
+      if (val === '' || val == null) delete o[fld]; else o[fld] = val;
+      if (!Object.keys(o).length) delete s.sinistreAssurance[key];
+      // ⚠️ refreshAll (pas seulement renderTimeline) : les KPI « Sinistres responsables » / « Reste à charge »
+      // vivent dans renderKPIs → sans ça, le haut de page reste périmé après un changement de dossier.
+      FP.settings.save(s); refreshAll(); return;
+    }
+    // Constat amiable déposé → l'IA lit et PROPOSE la responsabilité (l'utilisateur confirme).
+    const cf = e.target.closest('.sin-constat-file');
+    if (cf) { handleConstatScan(cf); return; }
+    // Courrier de l'assureur déposé → l'IA lit responsabilité + n° dossier + date, remplit le dossier.
+    const crf = e.target.closest('.sin-courrier-file');
+    if (crf) { handleCourrierScan(crf); return; }
+  });
+
+  // Lecture IA d'un constat : propose la responsabilité de NOTRE véhicule (jamais enregistré sans confirmation).
+  async function handleConstatScan(input) {
+    const key = input.dataset.key, immat = input.dataset.immat || '';
+    const file = (input.files || [])[0]; input.value = '';
+    if (!file) return;
+    const statusEl = $('timeline').querySelector(`.sin-constat-status[data-key="${key}"]`);
+    const setSt = (html, color) => { if (statusEl) { statusEl.innerHTML = html; statusEl.style.color = color || 'var(--fp-muted)'; if (window.lucide) lucide.createIcons(); } };
+    // TOUJOURS stocker le constat déposé (le but du « Drive ») — rangé par plaque/année comme le courrier,
+    // même si l'IA ne parvient pas à lire la responsabilité. On garde l'URL dans le dossier (constatUrl).
+    let constatSaved = false;
+    if (FP.uploadScan) {
+      setSt('⏳ Enregistrement du constat…');
+      try {
+        const plaqueSlug = String(immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'sans-plaque';
+        const annee = (input.dataset.annee && /^\d{4}$/.test(input.dataset.annee)) ? input.dataset.annee : String(new Date().getFullYear());
+        const url = await FP.uploadScan(file, `sinistres/${plaqueSlug}/${annee}`);
+        if (url) { const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {}; const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {}; o.constatUrl = url; FP.settings.save(s); constatSaved = true; }
+      } catch (_) {}
+    }
+    const pfx = constatSaved ? '📎 Constat enregistré. ' : '';
+    if (!(window.FP && FP.scanIA && FP.constatPrompt)) { setSt(pfx + '⚠️ Connexion requise pour lire le constat.', constatSaved ? '#0F766E' : '#B91C1C'); return; }
+    setSt(pfx + '⏳ Lecture du constat par l\'IA…');
+    let res = null;
+    try { res = await FP.scanIA(file, 'constat', FP.constatPrompt(immat)); } catch (_) {}
+    if (!res || !res.responsabilite) { setSt(pfx + '⚠️ Lecture impossible. Renseigne la responsabilité à la main.', '#B45309'); return; }
+    const norm = String(res.responsabilite).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const map = { 'responsable': 'responsable', 'non-responsable': 'non-responsable', 'non responsable': 'non-responsable', 'partagee': 'partagee' };
+    const val = map[norm] || '';
+    const labels = { 'responsable': 'Responsable (nous en tort)', 'non-responsable': 'Non responsable', 'partagee': 'Partagée' };
+    const just = res.justification ? ' — ' + FP.esc(res.justification) : '';
+    if (!val) { setSt('🤷 L\'IA n\'a pas pu trancher' + just + '. Renseigne la responsabilité à la main.', '#B45309'); return; }
+    // Pré-remplit le menu Responsabilité SANS enregistrer, puis propose une confirmation.
+    const sel = $('timeline').querySelector(`.sin-doss[data-k="resp"][data-key="${key}"]`);
+    if (sel) sel.value = val;
+    setSt(`🔍 <b>IA propose : ${labels[val]}</b>${just}. <button type="button" class="sin-constat-ok" data-key="${key}" data-val="${val}" style="margin-left:4px;font-size:11px;font-weight:700;color:#fff;background:#047857;border:none;border-radius:6px;padding:2px 8px;cursor:pointer">✓ Enregistrer</button> <span style="color:#94A3B8">ou corrige le menu ci-dessus.</span>`, '#0F766E');
+  }
+
+  // Lecture IA du COURRIER de l'assureur : remplit n° dossier + date + garde le courrier, et PROPOSE
+  // la responsabilité (confirmation, jamais enregistrée en douce). Réutilise le bouton « ✓ Enregistrer ».
+  async function handleCourrierScan(input) {
+    const key = input.dataset.key, immat = input.dataset.immat || '';
+    const file = (input.files || [])[0]; input.value = '';
+    if (!file) return;
+    const setSt = (html, color) => { const el = $('timeline').querySelector(`.sin-courrier-status[data-key="${key}"]`); if (el) { el.innerHTML = html; el.style.color = color || 'var(--fp-muted)'; if (window.lucide) lucide.createIcons(); } };
+    if (!(window.FP && FP.scanIA && FP.courrierAssureurPrompt)) { setSt('⚠️ Connexion requise pour lire le courrier.', '#B91C1C'); return; }
+    setSt('⏳ Lecture du courrier par l\'IA…');
+    let res = null;
+    try { res = await FP.scanIA(file, 'courrier', FP.courrierAssureurPrompt(immat)); } catch (_) {}
+    // On garde le courrier (best-effort), RANGÉ par plaque puis par année → « sinistres/<PLAQUE>/<ANNÉE> ».
+    let url = '';
+    const plaqueSlug = String(immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'sans-plaque';
+    const annee = (input.dataset.annee && /^\d{4}$/.test(input.dataset.annee)) ? input.dataset.annee : String(new Date().getFullYear());
+    try { if (FP.uploadScan) url = await FP.uploadScan(file, `sinistres/${plaqueSlug}/${annee}`) || ''; } catch (_) {}
+    const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
+    const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
+    if (url) o.courrierUrl = url;
+    if (res && res.numeroDossier && String(res.numeroDossier).trim()) o.numeroDossier = String(res.numeroDossier).trim();
+    if (res && res.dateCourrier && /^\d{4}-\d{2}-\d{2}/.test(String(res.dateCourrier))) o.dateReponse = String(res.dateCourrier).slice(0, 10);
+    FP.settings.save(s);
+    // Mise à jour EN PLACE des champs (ne pas re-render : ça refermerait le panneau et masquerait la
+    // confirmation). Les nouveaux champs/timeline/lien se rafraîchissent au prochain rendu de la page.
+    const setVal = (k, v) => { const el = $('timeline').querySelector(`.sin-doss[data-k="${k}"][data-key="${key}"]`); if (el && v != null && v !== '') el.value = v; };
+    if (o.numeroDossier) setVal('numeroDossier', o.numeroDossier);
+    if (o.dateReponse) setVal('dateReponse', o.dateReponse);
+    const norm = res && res.responsabilite ? String(res.responsabilite).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') : '';
+    const map = { 'responsable': 'responsable', 'non-responsable': 'non-responsable', 'non responsable': 'non-responsable', 'partagee': 'partagee' };
+    const val = map[norm] || '';
+    const labels = { 'responsable': 'Responsable (nous en tort)', 'non-responsable': 'Non responsable', 'partagee': 'Partagée' };
+    const just = (res && res.justification) ? ' — ' + FP.esc(res.justification) : '';
+    const lus = [url ? 'courrier enregistré' : '', (res && res.numeroDossier) ? ('n° ' + FP.esc(o.numeroDossier)) : '', (o.dateReponse) ? ('reçu le ' + (FP.dateNum ? FP.dateNum(o.dateReponse) : o.dateReponse)) : ''].filter(Boolean).join(' · ');
+    const prefix = lus ? ('✓ ' + lus + '. ') : '';
+    if (!val) { setSt(prefix + '🤷 L\'IA n\'a pas pu trancher la responsabilité' + just + ' — renseigne-la à la main.', '#B45309'); return; }
+    const sel = $('timeline').querySelector(`.sin-doss[data-k="resp"][data-key="${key}"]`);
+    if (sel) sel.value = val;
+    setSt(prefix + `🔍 <b>IA propose : ${labels[val]}</b>${just}. <button type="button" class="sin-constat-ok" data-key="${key}" data-val="${val}" style="margin-left:4px;font-size:11px;font-weight:700;color:#fff;background:#047857;border:none;border-radius:6px;padding:2px 8px;cursor:pointer">✓ Enregistrer</button> <span style="color:#94A3B8">ou corrige le menu.</span>`, '#0F766E');
+  }
+
+  // Clics : associer / détacher / supprimer
+  $('timeline').addEventListener('click', async (e) => {
+    // Courrier assureur : bouton → ouvre le sélecteur de fichier
+    const crbtn = e.target.closest('.sin-courrier-btn');
+    if (crbtn) { const inp = crbtn.parentElement && crbtn.parentElement.querySelector('.sin-courrier-file'); if (inp) inp.click(); return; }
+    // « Voir le courrier » : ouverture via lien signé (bucket privé), repli Drive pour un id hérité
+    const crOpen = e.target.closest('.sin-courrier-open');
+    if (crOpen) {
+      const u = crOpen.dataset.url || '';
+      if (/^https?:\/\//.test(u)) { if (FP.openScan) FP.openScan(u); else window.open(u, '_blank', 'noopener'); }
+      else if (u) window.open('https://drive.google.com/file/d/' + u + '/view', '_blank', 'noopener');
+      return;
+    }
+    // Clôturer / rouvrir le dossier (pose ou retire la date de clôture)
+    const clo = e.target.closest('.sin-cloturer');
+    if (clo) {
+      const key = clo.dataset.key;
+      const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
+      const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
+      if (o.dateCloture) { delete o.dateCloture; }
+      else { o.dateCloture = new Date().toISOString().slice(0, 10); }
+      if (!Object.keys(o).length) delete s.sinistreAssurance[key];
+      FP.settings.save(s); refreshAll(); return;
+    }
+    // Constat IA : bouton « Lire le constat » → ouvre le sélecteur de fichier
+    const cbtn = e.target.closest('.sin-constat-btn');
+    if (cbtn) { const inp = cbtn.parentElement && cbtn.parentElement.querySelector('.sin-constat-file'); if (inp) inp.click(); return; }
+    // Constat IA : « ✓ Enregistrer » → sauve la responsabilité proposée + met à jour KPI/podium
+    const cok = e.target.closest('.sin-constat-ok');
+    if (cok) {
+      const key = cok.dataset.key, val = cok.dataset.val;
+      const s = FP.settings.get(); s.sinistreAssurance = s.sinistreAssurance || {};
+      const o = s.sinistreAssurance[key] = s.sinistreAssurance[key] || {};
+      if (val) o.resp = val; else delete o.resp;
+      if (!Object.keys(o).length) delete s.sinistreAssurance[key];
+      FP.settings.save(s); renderKPIs(); renderConducteursRisque(); renderTimeline(); return;
+    }
+    const assoc = e.target.closest('[data-sin-assoc]');
+    if (assoc) { const p = $('timeline').querySelector(`[data-assoc-panel="${assoc.dataset.sinAssoc}"]`); if (p) p.classList.toggle('hidden'); return; }
+
+    const ok = e.target.closest('[data-sin-assoc-ok]');
+    if (ok) {
+      const panel = ok.closest('[data-assoc-panel]');
+      const pick = panel && panel.querySelector('.sin-assoc-pick');
+      if (pick && pick.value) { associate(ok.dataset.sinAssocOk, pick.value); refreshAll(); }
+      return;
+    }
+
+    const ed = e.target.closest('[data-sin-edit]');
+    if (ed) { editSinField(ed, ed.dataset.sinEdit, ed.dataset.fld, ed.dataset.typ); return; }
+
+    const det = e.target.closest('[data-sin-detach]');
+    if (det) { detach(det.dataset.sinDetach); refreshAll(); return; }
+
+    const del = e.target.closest('[data-sin-del]');
+    if (del) {
+      const id = del.dataset.sinDel;
+      const s = sinistres.find(x => x.id === id);
+      const label = s ? `${s.vehiculeImmat || ''} · ${FP.date(s.date)}${s.description ? ' — ' + s.description : ''}` : '';
+      if (!await FP.confirm(`Supprimer définitivement ce sinistre ?\n\n${label}`)) return;
+      forgetSinistre(id);
+      let _sinRec = null; if (data.factures) { const i = data.factures.findIndex(f => f.id === id); if (i !== -1) { _sinRec = data.factures[i]; data.factures.splice(i, 1); } }
+      sinistres = sinistres.filter(x => x.id !== id);
+      if (FP.persist) FP.persist.delete('factures', id, _sinRec || undefined); // record → Corbeille (restaurable)
+      refreshAll();
+      return;
+    }
+  });
+
+  // Édition au clic d'un champ d'un sinistre — éditeur maison (FP.cellEditor)
+  function editSinField(el, id, field, type) {
+    const s = sinistres.find(x => x.id === id); if (!s || !el || !FP.cellEditor) return;
+    FP.cellEditor(el, s[field] != null ? s[field] : '', type || 'text', {
+      onSave: (nv) => {
+        const patch = {};
+        if (type === 'number') { const num = (nv == null || nv === '') ? null : nv; s[field] = num; patch[field] = num; }
+        else if (type === 'date') { const v = nv || null; s[field] = v; patch[field] = v; }
+        else { let v = (nv == null ? '' : String(nv)).trim(); if (field === 'vehiculeImmat') v = v.toUpperCase(); s[field] = v || null; patch[field] = v || null; }
+        const df = (data.factures || []).find(x => x.id === id); if (df) df[field] = s[field];
+        if (FP.persist) FP.persist.update('factures', id, patch);
+        refreshAll();
+      },
+      onCancel: () => refreshAll(),
+    });
+  }
+
+  // Charts
+  let _chTop = null, _chTrim = null;
+  function renderCharts() {
+    if (typeof Chart === 'undefined') return; // Chart.js chargé en defer → rendu différé (voir plus bas)
+    const rows = visibleGroups().map(g => ({ vehiculeImmat: g.rep.vehiculeImmat, montantTTC: g.cost, date: g.rep.date }));
+    // Top vehicules
+    const perVeh = {};
+    rows.forEach(s => {
+      const k = s.vehiculeImmat || '—';
+      perVeh[k] = (perVeh[k] || 0) + (s.montantTTC || 0);
+    });
+    const top = Object.entries(perVeh).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    if (_chTop) _chTop.destroy();
+    _chTop = new Chart($('topVehChart'), {
+      type: 'bar',
+      data: { labels: top.map(([k]) => k), datasets: [{ data: top.map(([, v]) => v), backgroundColor: '#DC2626', borderRadius: 4 }] },
+      options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v => v + ' €' } } }, maintainAspectRatio: false, responsive: true }
+    });
+    // Par trimestre
+    const perTrim = {};
+    rows.forEach(s => {
+      const d = new Date(s.date);
+      if (isNaN(d)) return;
+      const tr = `${d.getFullYear()}-T${Math.floor(d.getMonth() / 3) + 1}`;
+      perTrim[tr] = (perTrim[tr] || 0) + 1;
+    });
+    const trims = Object.keys(perTrim).sort();
+    if (_chTrim) _chTrim.destroy();
+    _chTrim = new Chart($('trimChart'), {
+      type: 'bar',
+      data: { labels: trims, datasets: [{ data: trims.map(t => perTrim[t]), backgroundColor: '#F59E0B', borderRadius: 4 }] },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, maintainAspectRatio: false, responsive: true }
+    });
+  }
+
+  $('sin-more').addEventListener('click', e => { if (e.target.closest('#sin-toggle')) { sinExpanded = !sinExpanded; renderTimeline(); } });
+  { const sf = $('sin-filters'); if (sf) sf.addEventListener('click', e => { const b = e.target.closest('.sin-chip'); if (!b) return; state.remb = b.dataset.remb || 'all'; sinExpanded = false; renderTimeline(); }); }
+  $('search').addEventListener('input', e => { state.search = e.target.value; sinExpanded = false; renderTimeline(); });
+  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; sinExpanded = false; refreshAll(); });
+  $('filter-vehicule').addEventListener('change', e => { state.vehicule = e.target.value; sinExpanded = false; renderTimeline(); });
+  // Bouton « Réinitialiser » de la barre de filtres (remet TOUT à zéro : recherche, année, véhicule,
+  // suivi de remboursement, période) puis re-render.
+  function resetSinFilters() {
+    state.search = ''; state.annee = 'all'; state.vehicule = 'all'; state.remb = 'all'; state.dateFrom = ''; state.dateTo = '';
+    if ($('search')) $('search').value = '';
+    if ($('filter-from')) $('filter-from').value = '';
+    if ($('filter-to')) $('filter-to').value = '';
+    if ($('filter-annee')) $('filter-annee').value = 'all';
+    if ($('filter-vehicule')) { $('filter-vehicule').value = 'all'; $('filter-vehicule').dispatchEvent(new Event('change', { bubbles: true })); }
+    document.querySelectorAll('#sin-filters .sin-chip').forEach(ch => ch.classList.toggle('active', ch.dataset.remb === 'all'));
+    state.sortKey = 'date'; state.sortDir = 'desc';
+    if ($('sin-sort-key')) $('sin-sort-key').value = 'date';
+    if ($('sin-sort-dir')) { const i = $('sin-sort-dir').querySelector('i'); if (i) i.setAttribute('data-lucide', 'arrow-down-wide-narrow'); }
+    sinExpanded = false; if (typeof syncPeriodUI === 'function') syncPeriodUI(); refreshAll();
+  }
+  if (FP.filterResetButton) { FP.filterResetButton($('sin-period-bar'), { onReset: resetSinFilters }); FP.filterResetButton($('sin-filterbar'), { onReset: resetSinFilters }); }
+
+  // Tri de la liste des incidents (colonne + sens) — même pattern que factures.html.
+  (function () {
+    const sk = document.getElementById('sin-sort-key'), sd = document.getElementById('sin-sort-dir');
+    const syncDir = () => { if (!sd) return; const i = sd.querySelector('i'); if (i) i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); try { if (window.lucide) lucide.createIcons(); } catch (e) {} };
+    if (sk) { sk.value = state.sortKey; sk.addEventListener('change', e => { state.sortKey = e.target.value; renderTimeline(); }); }
+    if (sd) sd.addEventListener('click', () => { state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc'; syncDir(); renderTimeline(); });
+    syncDir();
+  })();
+
+  // ---------- Sélecteur de PÉRIODE (pilote toute la page) ----------
+  function fmtFr(d) { const p = (d || '').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : (d || ''); }
+  function syncPeriodUI() {
+    const b = $('filter-period-clear'); if (b) b.classList.toggle('hidden', !(state.dateFrom || state.dateTo));
+    const lbl = $('per-label');
+    if (lbl) {
+      if (state.dateFrom || state.dateTo) lbl.textContent = `Affichage : du ${fmtFr(state.dateFrom) || '…'} au ${fmtFr(state.dateTo) || '…'}`;
+      else if (state.annee !== 'all') lbl.textContent = `Affichage : année ${state.annee}`;
+      else lbl.textContent = 'Affichage : tout l\'historique';
+    }
+    // Surligne le preset actif
+    document.querySelectorAll('.per-preset').forEach(btn => {
+      const cy = String(new Date().getFullYear()), ly = String(new Date().getFullYear() - 1);
+      const on = (btn.dataset.preset === 'all' && !periodActive())
+        || (btn.dataset.preset === 'cy' && !state.dateFrom && !state.dateTo && state.annee === cy)
+        || (btn.dataset.preset === 'ly' && !state.dateFrom && !state.dateTo && state.annee === ly);
+      btn.classList.toggle('btn-dark', on);
+      btn.classList.toggle('btn-outline', !on);
+    });
+  }
+  $('filter-from').addEventListener('change', e => { state.dateFrom = e.target.value; state.annee = 'all'; $('filter-annee').value = 'all'; sinExpanded = false; syncPeriodUI(); refreshAll(); });
+  $('filter-to').addEventListener('change', e => { state.dateTo = e.target.value; state.annee = 'all'; $('filter-annee').value = 'all'; sinExpanded = false; syncPeriodUI(); refreshAll(); });
+  $('filter-period-clear').addEventListener('click', () => { state.dateFrom = ''; state.dateTo = ''; $('filter-from').value = ''; $('filter-to').value = ''; sinExpanded = false; syncPeriodUI(); refreshAll(); });
+  $('per-presets').addEventListener('click', (e) => {
+    const b = e.target.closest('.per-preset'); if (!b) return;
+    state.dateFrom = ''; state.dateTo = ''; $('filter-from').value = ''; $('filter-to').value = '';
+    const p = b.dataset.preset;
+    if (p === 'all') state.annee = 'all';
+    else if (p === 'cy') state.annee = String(new Date().getFullYear());
+    else if (p === 'ly') state.annee = String(new Date().getFullYear() - 1);
+    $('filter-annee').value = state.annee;
+    sinExpanded = false; syncPeriodUI(); refreshAll();
+  });
+  // Filtre véhicule CHERCHABLE (taper plaque / marque / modèle) — règle projet.
+  if (FP.searchSelect) FP.searchSelect($('filter-vehicule'), { placeholder: 'Rechercher un véhicule…' });
+
+  // === Ajouter une facture sinistre (scan) — crée une facture type='sinistre', identique au scan du tableau de bord ===
+  (function sinFactureImport(){
+    const inp = $('sin-facture-file'); if (!inp) return;
+    const el = $('sin-facture-status');
+    const setStatus = (html, kind) => { el.classList.remove('hidden'); el.innerHTML = html; el.style.background = kind==='ok'?'#ECFDF5':kind==='err'?'#FEF2F2':'#F1F5F9'; el.style.color = kind==='ok'?'#047857':kind==='err'?'#B91C1C':'#334155'; };
+    const newId = () => 'F-SIN-' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+    inp.addEventListener('change', async () => {
+      const files = [...(inp.files || [])]; inp.value = ''; if (!files.length) return;
+      if (!(window.FP && FP.uploadScan && FP.persist)) { setStatus('Connexion requise pour enregistrer en ligne.', 'err'); return; }
+      setStatus('<span class="inline-flex items-center gap-2">⏳ Lecture de ' + files.length + ' fichier(s)…</span>', 'working');
+      let ok = 0, dup = 0;
+      for (const f of files) {
+        try {
+          let det = {};
+          try { const ia = await FP.scanIA(f, 'facture'); if (ia) det = ia; } catch (_) {}
+          const url = await FP.uploadScan(f, 'documents');
+          const fact = {
+            id: newId(), date: det.date || null, vehiculeImmat: det.vehiculeImmat || null,
+            fournisseur: det.fournisseur || null, numeroFacture: det.numeroFacture || null,
+            description: f.name || 'Facture sinistre', type: 'sinistre',
+            montantHT: Number.isFinite(det.montantHT) ? det.montantHT : null,
+            montantTVA: Number.isFinite(det.montantTVA) ? det.montantTVA : null,
+            montantTTC: Number.isFinite(det.montantTTC) ? det.montantTTC : null,
+            km: Number.isFinite(det.km) ? det.km : null,
+            fileId: url, fileName: f.name || null,
+          };
+          if (FP.dupe && FP.dupe.find('factures', fact, data.factures || [])) { dup++; continue; }
+          await FP.persist.insert('factures', fact);
+          (data.factures = data.factures || []).push(fact);
+          // ⚠️ Source unique : un relevé km lu sur la facture sinistre remonte aussi au véhicule (à la hausse).
+          if (FP.applyFactureToVehicule) FP.applyFactureToVehicule(fact, data.vehicules);
+          const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {}; s.sinistreStatut[fact.id] = 'attente'; FP.settings.save(s);
+          ok++;
+        } catch (e) { console.error('[sin facture import]', e); }
+      }
+      sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
+      refreshAll(); if (typeof renderDrive === 'function') renderDrive();
+      setStatus(`<b>✓ ${ok} facture(s) sinistre ajoutée(s)</b>${dup ? ' · ' + dup + ' doublon(s) ignoré(s)' : ''}. Complète le montant / véhicule sur la ligne si besoin.`, ok ? 'ok' : 'err');
+    });
+  })();
+
+  // === Déclaration de sinistre guidée (formulaire pas-à-pas → crée le dossier + range constat/photos) ===
+  (function sinDeclare(){
+    const modal = $('sin-declare-modal'); if (!modal) return;
+    const setSt = (h, c) => { if ($('sd-status')) { $('sd-status').innerHTML = h || ''; $('sd-status').style.color = c || 'var(--fp-muted)'; } };
+    // Fichiers choisis : on les gère dans un tableau JS (le <input type=file> ne permet pas de retirer
+    // un seul fichier). On peut ainsi enlever une PJ ajoutée par erreur avant de créer le dossier.
+    let sdPicked = [];
+    const renderPicked = () => {
+      const box = $('sd-file-list'); if (!box) return;
+      box.innerHTML = sdPicked.map((f, i) => `<div class="flex items-center justify-between gap-2 text-xs px-2.5 py-1.5 rounded-lg" style="background:var(--fp-surface,#f8fafc);border:1px solid var(--fp-border)">
+        <span class="truncate" style="min-width:0" title="${escapeHtml(f.name)}"><i data-lucide="paperclip" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px;color:var(--fp-accent)"></i> ${escapeHtml(f.name)}</span>
+        <button type="button" data-sd-rm="${i}" title="Retirer cette pièce jointe" class="text-slate-400 hover:text-red-600" style="flex-shrink:0"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>`).join('');
+      if (window.lucide) lucide.createIcons();
+    };
+    if ($('sd-files')) $('sd-files').addEventListener('change', (e) => {
+      const incoming = [...(e.target.files || [])];
+      // évite les doublons (même nom + taille) si on re-sélectionne
+      incoming.forEach(f => { if (!sdPicked.some(g => g.name === f.name && g.size === f.size)) sdPicked.push(f); });
+      e.target.value = ''; // permet de re-choisir le même fichier après un retrait
+      renderPicked();
+    });
+    if ($('sd-file-list')) $('sd-file-list').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-sd-rm]'); if (!b) return;
+      sdPicked.splice(+b.dataset.sdRm, 1); renderPicked();
+    });
+    const open = () => {
+      const sel = $('sd-veh');
+      if (sel) {
+        const vehs = ((window.FP_DATA && FP_DATA.vehicules) || data.vehicules || []).filter(v => !(FP.estVendu && FP.estVendu(v))).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+        sel.innerHTML = '<option value="">— choisir —</option>' + vehs.map(v => `<option value="${escapeHtml(v.immat || '')}">${escapeHtml(v.immat || '?')} — ${escapeHtml((v.marque || '') + ' ' + (v.modele || ''))}</option>`).join('');
+        if (FP.searchSelect && sel.dataset.ssDone !== '1') FP.searchSelect(sel, { placeholder: 'Rechercher un véhicule…' });
+      }
+      if ($('sd-date')) $('sd-date').value = new Date().toISOString().slice(0, 10);
+      ['sd-lieu', 'sd-desc', 'sd-tiers-plaque', 'sd-tiers-assureur', 'sd-tiers-nom'].forEach(id => { if ($(id)) $(id).value = ''; });
+      if ($('sd-files')) $('sd-files').value = '';
+      sdPicked = []; renderPicked();
+      setSt('');
+      modal.style.display = 'flex';
+      if (window.lucide) lucide.createIcons();
+    };
+    const close = () => { modal.style.display = 'none'; };
+    if ($('sin-declare-btn')) $('sin-declare-btn').addEventListener('click', open);
+    if ($('sin-declare-close')) $('sin-declare-close').addEventListener('click', close);
+    if ($('sin-declare-cancel')) $('sin-declare-cancel').addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    if ($('sin-declare-ok')) $('sin-declare-ok').addEventListener('click', async () => {
+      const immat = $('sd-veh') ? $('sd-veh').value.trim() : '';
+      if (!immat) { setSt('⚠️ Choisis un véhicule.', '#B91C1C'); return; }
+      if (!(window.FP && FP.persist)) { setSt('⚠️ Connexion requise pour enregistrer.', '#B91C1C'); return; }
+      const date = ($('sd-date') && $('sd-date').value) || new Date().toISOString().slice(0, 10);
+      const lieu = $('sd-lieu') ? $('sd-lieu').value.trim() : '';
+      const desc = $('sd-desc') ? $('sd-desc').value.trim() : '';
+      // Tiers : une info par case (pas de fourre-tout). Stockées structurées dans le dossier.
+      const tiersPlaque = ($('sd-tiers-plaque') ? $('sd-tiers-plaque').value : '').trim().toUpperCase();
+      const tiersAssureur = ($('sd-tiers-assureur') ? $('sd-tiers-assureur').value : '').trim();
+      const tiersNom = ($('sd-tiers-nom') ? $('sd-tiers-nom').value : '').trim();
+      const tiersSummary = [tiersPlaque && ('plaque ' + tiersPlaque), tiersAssureur && ('assureur ' + tiersAssureur), tiersNom].filter(Boolean).join(', ');
+      const descFull = [desc, lieu ? ('Lieu : ' + lieu) : '', tiersSummary ? ('Tiers : ' + tiersSummary) : ''].filter(Boolean).join(' · ') || 'Sinistre déclaré';
+      const btn = $('sin-declare-ok'); if (btn) btn.disabled = true;
+      setSt('⏳ Création du dossier…');
+      try {
+        const files = sdPicked.slice();
+        let firstUrl = null;
+        for (const f of files) {
+          try {
+            const url = await FP.uploadScan(f, 'documents');
+            if (url) {
+              if (!firstUrl) firstUrl = url;
+              await FP.persist.insert('documents', { id: 'SD' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: immat, type: 'sinistre-doc', label: f.name, url, driveId: null });
+            }
+          } catch (_) {}
+        }
+        const fact = { id: 'F-SIN-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), date, vehiculeImmat: immat, description: descFull, type: 'sinistre', montantTTC: null, fileId: firstUrl, fileName: files[0] ? files[0].name : null };
+        await FP.persist.insert('factures', fact);
+        (data.factures = data.factures || []).push(fact);
+        const s = FP.settings.get(); s.sinistreStatut = s.sinistreStatut || {}; s.sinistreStatut[fact.id] = 'attente';
+        // Dossier : lieu + tiers structurés (chaque info dans son champ)
+        s.sinistreAssurance = s.sinistreAssurance || {};
+        const _dv = s.sinistreAssurance[fact.id] = s.sinistreAssurance[fact.id] || {};
+        if (lieu) _dv.lieu = lieu;
+        if (tiersPlaque) _dv.tiersPlaque = tiersPlaque;
+        if (tiersAssureur) _dv.tiersAssureur = tiersAssureur;
+        if (tiersNom) _dv.tiersNom = tiersNom;
+        FP.settings.save(s);
+        sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
+        refreshAll(); if (typeof renderDrive === 'function') renderDrive();
+        close();
+        if (FP.toast) FP.toast('Dossier sinistre créé — complète le montant quand tu auras la facture.');
+      } catch (e) {
+        console.error('[sin declare]', e);
+        setSt('⚠️ Erreur — réessaie.', '#B91C1C');
+      } finally { if (btn) btn.disabled = false; }
+    });
+  })();
+
+  // Sélection multiple d'incidents (supprime toutes les factures/lignes de chaque incident coché)
+  if (FP.bulkSelect) sinBulk = FP.bulkSelect({
+    mount: 'sin-bulk-mount', tbody: 'timeline', noun: 'incident', nounPlural: 'incidents',
+    getFilteredIds: () => {
+      let gs = visibleGroups();
+      if (state.remb === 'attente') gs = gs.filter(g => rembOf(g) === 'attente');
+      else if (state.remb === 'regles') gs = gs.filter(g => REGLES.includes(rembOf(g)));
+      return gs.map(g => g.key);
+    },
+    onDelete: async (keys) => {
+      const keySet = new Set(keys.map(String));
+      const removed = sinistres.filter(s => keySet.has(String(groupKeyOf(s.id))));
+      const lineIds = removed.map(s => s.id);
+      // Snapshot des réglages liés (groupes, statut, dossier assurance) pour un vrai « Annuler ».
+      const s0 = FP.settings.get();
+      const snap = JSON.parse(JSON.stringify({ sinistreGroupes: s0.sinistreGroupes || {}, sinistreStage: s0.sinistreStage || {}, sinistreStatut: s0.sinistreStatut || {}, sinistreAssurance: s0.sinistreAssurance || {} }));
+      lineIds.forEach(id => {
+        forgetSinistre(id);
+        let _rec = null; if (data.factures) { const i = data.factures.findIndex(f => f.id === id); if (i !== -1) { _rec = data.factures[i]; data.factures.splice(i, 1); } }
+        if (FP.persist) FP.persist.delete('factures', id, _rec || undefined); // record → Corbeille
+      });
+      const rm = new Set(lineIds.map(String));
+      sinistres = sinistres.filter(s => !rm.has(String(s.id)));
+      refreshAll();
+      return () => { // Annuler : ré-insère les sinistres + restaure les réglages liés
+        removed.forEach(f => { data.factures.push(f); if (FP.persist) FP.persist.insert('factures', f); });
+        const s = FP.settings.get();
+        s.sinistreGroupes = Object.assign(s.sinistreGroupes || {}, snap.sinistreGroupes);
+        s.sinistreStage = Object.assign(s.sinistreStage || {}, snap.sinistreStage);
+        s.sinistreStatut = Object.assign(s.sinistreStatut || {}, snap.sinistreStatut);
+        s.sinistreAssurance = Object.assign(s.sinistreAssurance || {}, snap.sinistreAssurance);
+        FP.settings.save(s);
+        sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
+        refreshAll();
+      };
+    },
+  });
+
+  renderKPIs();
+  renderTimeline();
+  renderCharts();
+  renderConducteursRisque();
+  syncPeriodUI();
+  // Chart.js est en defer : s'il n'est pas encore là à l'init, on rend les graphiques dès qu'il l'est.
+  if (typeof Chart === 'undefined') document.addEventListener('DOMContentLoaded', renderCharts);
+  const coutPeriode = FP.coutParPeriode({
+    items: () => allGroups().map(g => ({ date: g.rep.date, montantTTC: g.cost, vehiculeImmat: g.rep.vehiculeImmat })),
+    yearsEl: 'cp-years', fromEl: 'cp-from', toEl: 'cp-to', totalEl: 'cp-range-total', clearEl: 'cp-clear', exportEl: 'cp-export', fileLabel: 'cout-sinistres-par-annee',
+  });
+  coutPeriode.render();
+  // Rafraîchit quand Supabase a chargé (sinon on reste sur le cache data.js)
+  document.addEventListener('fp:data-ready', () => {
+    sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
+    rebuildFiltres();
+    renderKPIs(); renderTimeline(); renderCharts(); coutPeriode.render();
+    if (typeof renderDrive === 'function') renderDrive();
+  });
+
+  // ---------- Drive sinistres : dossiers par véhicule + fichiers (photos/PDF) ----------
+  let sinDocs = [];        // documents type 'sinistre-doc' : { id, vehiculeId(=plaque), label, url }
+  let driveFolder = null;  // plaque du dossier ouvert, ou null (vue dossiers)
+  let driveDossiers = null; // liste des dossiers créés (plaques), persistée dans settings.sinistreDossiers
+  let driveSearch = '';     // filtre de recherche (barre d'outils)
+  let driveSort = 'plaque'; // tri : plaque | plaque-desc | modele | fichiers
+  let driveSub = null;      // sous-dossier ouvert (ex. "2026"), ou null (racine du dossier véhicule)
+  // Sous-dossiers : gérés dans les réglages (aucune colonne SQL). Liste par véhicule +
+  // rattachement de chaque fichier (docId → sous-dossier). Persisté par société.
+  function getSubs(pl){ try { return ((FP.settings.get().sinistreSous) || {})[normPl(pl)] || []; } catch (e) { return []; } }
+  function saveSubs(pl, arr){ try { const s = FP.settings.get(); s.sinistreSous = s.sinistreSous || {}; s.sinistreSous[normPl(pl)] = (arr || []).slice(); FP.settings.save(s); } catch (e) {} }
+  function docSub(id){ try { return ((FP.settings.get().sinistreDocSub) || {})[id] || null; } catch (e) { return null; } }
+  function setDocSub(id, sub){ try { const s = FP.settings.get(); s.sinistreDocSub = s.sinistreDocSub || {}; if (sub) s.sinistreDocSub[id] = sub; else delete s.sinistreDocSub[id]; FP.settings.save(s); } catch (e) {} }
+  function addSub(pl, name){ name = (name || '').trim(); if (!name) return false; const arr = getSubs(pl); if (arr.some(s => s.toLowerCase() === name.toLowerCase())) { alert('Ce sous-dossier existe déjà.'); return false; } arr.push(name); saveSubs(pl, arr); return true; }
+  function renameSub(pl, oldName, newName){
+    newName = (newName || '').trim(); if (!newName || newName === oldName) return;
+    const arr = getSubs(pl);
+    if (arr.some(s => s.toLowerCase() === newName.toLowerCase())) { alert('Ce sous-dossier existe déjà.'); return; }
+    saveSubs(pl, arr.map(s => s === oldName ? newName : s));
+    // réattribue les fichiers de l'ancien nom vers le nouveau
+    try { const s = FP.settings.get(); s.sinistreDocSub = s.sinistreDocSub || {}; Object.keys(s.sinistreDocSub).forEach(id => { if (s.sinistreDocSub[id] === oldName) s.sinistreDocSub[id] = newName; }); FP.settings.save(s); } catch (e) {}
+    if (driveSub === oldName) driveSub = newName;
+  }
+  async function delSub(pl, name){
+    const files = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl) && docSub(d.id) === name);
+    if (files.length){
+      if (!await FP.confirm('Le sous-dossier « ' + name + ' » contient ' + files.length + ' fichier(s). Supprimer le sous-dossier ET ces fichiers ?')) return;
+      files.forEach(d => { if (FP.persist) FP.persist.delete('documents', d.id); setDocSub(d.id, null); });
+      sinDocs = sinDocs.filter(d => !(normPl(d.vehiculeId) === normPl(pl) && files.some(x => x.id === d.id)));
+    } else {
+      if (!await FP.confirm('Supprimer le sous-dossier « ' + name + ' » ?')) return;
+    }
+    saveSubs(pl, getSubs(pl).filter(s => s !== name));
+    if (driveSub === name) driveSub = null;
+    renderDrive();
+  }
+  const normPl = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const isImg = u => /\.(jpe?g|png|gif|webp|heic|bmp)(\?|$)/i.test(u || '');
+  function loadSinDocs(){
+    if (!(window.FP && FP.db && FP.supabase)) { renderDrive(); return; }
+    FP.db.select('documents').then(r => { if (!r.error) { sinDocs = (r.data || []).filter(d => d.type === 'sinistre-doc'); renderDrive(); } }).catch(() => {});
+  }
+  function saveDossiers(){
+    try { const s = FP.settings.get(); s.sinistreDossiers = (driveDossiers || []).slice(); FP.settings.save(s); } catch (e) {}
+  }
+  // Charge la liste des dossiers ; à la 1re ouverture, en crée UN PAR VÉHICULE (pré-prêt).
+  function ensureDossiers(){
+    if (driveDossiers === null){
+      let stored = null;
+      try { stored = FP.settings.get().sinistreDossiers; } catch (e) {}
+      if (Array.isArray(stored)) { driveDossiers = stored.slice(); return; }
+    }
+    // Pas encore de liste enregistrée : on attend d'avoir les véhicules pour semer une 1re fois.
+    if (!Array.isArray(driveDossiers)) driveDossiers = [];
+    const vehs = (data.vehicules || []);
+    if (vehs.length){
+      let stored = null; try { stored = FP.settings.get().sinistreDossiers; } catch (e) {}
+      if (!Array.isArray(stored)){
+        const set = [];
+        vehs.forEach(v => { if (v.immat) set.push(v.immat); });
+        sinistres.forEach(x => { if (x.vehiculeImmat && !set.some(p => normPl(p) === normPl(x.vehiculeImmat))) set.push(x.vehiculeImmat); });
+        driveDossiers = set;
+        saveDossiers();
+      }
+    }
+  }
+  function addDossier(pl){
+    if (!pl) return;
+    ensureDossiers();
+    if (!(driveDossiers || []).some(p => normPl(p) === normPl(pl))){ driveDossiers.push(pl); saveDossiers(); }
+  }
+  async function delDossier(pl){
+    const files = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl));
+    const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
+    const nom = pl + (veh ? (' — ' + veh.marque + ' ' + veh.modele) : '');
+    if (files.length){
+      if (!await FP.confirm('Le dossier « ' + nom + ' » contient ' + files.length + ' fichier(s). Supprimer le dossier ET ces fichiers ?')) return;
+      files.forEach(d => { if (FP.persist) FP.persist.delete('documents', d.id); });
+      sinDocs = sinDocs.filter(d => normPl(d.vehiculeId) !== normPl(pl));
+    } else {
+      if (!await FP.confirm('Supprimer le dossier « ' + nom + ' » ?')) return;
+    }
+    driveDossiers = (driveDossiers || []).filter(p => normPl(p) !== normPl(pl));
+    saveDossiers();
+    if (driveFolder && normPl(driveFolder) === normPl(pl)) driveFolder = null;
+    renderDrive();
+    if (FP.toast) FP.toast('Dossier supprimé');
+  }
+  function driveFolders(){
+    ensureDossiers();
+    const map = new Map(); // normPl -> plaque affichée
+    (driveDossiers || []).forEach(pl => { if (pl) map.set(normPl(pl), pl); });
+    // Sécurité : un dossier qui contient des fichiers reste toujours visible.
+    sinDocs.forEach(d => { if (d.vehiculeId && !map.has(normPl(d.vehiculeId))) map.set(normPl(d.vehiculeId), d.vehiculeId); });
+    return [...map.values()].sort((a, b) => a.localeCompare(b)).map(pl => {
+      const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
+      const n = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl)).length;
+      return { plaque: pl, veh, n };
+    });
+  }
+  function renderDrive(){
+    const view = $('drive-view'), crumb = $('drive-crumb'); if (!view) return;
+    if (!driveFolder){
+      crumb.textContent = '';
+      // Menu "＋ Nouveau dossier" : véhicules qui n'ont pas encore de dossier.
+      const dejaPl = new Set(driveFolders().map(f => normPl(f.plaque)));
+      const optsNew = (data.vehicules || [])
+        .slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
+        .filter(v => v.immat && !dejaPl.has(normPl(v.immat)))
+        .map(v => `<option value="${escapeHtml(v.immat)}">${escapeHtml(v.immat)}${v.marque || v.modele ? ' — ' + escapeHtml((v.marque || '') + ' ' + (v.modele || '')).trim() : ''}</option>`)
+        .join('');
+      const sortOpt = (val, lab) => `<option value="${val}"${driveSort === val ? ' selected' : ''}>${lab}</option>`;
+      const toolbar = `
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <div style="position:relative;flex:1;min-width:200px">
+            <i data-lucide="search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:#94a3b8;pointer-events:none"></i>
+            <input id="drive-search" type="search" placeholder="Rechercher un véhicule (plaque, modèle, conducteur)…" value="${escapeHtml(driveSearch)}" style="width:100%;padding:8px 12px 8px 38px;font-size:14px;border:1px solid var(--fp-border);border-radius:8px;background:#fff">
+          </div>
+          <select id="drive-sort" class="text-sm border rounded-lg px-2 py-2" style="background:#fff" title="Trier">
+            ${sortOpt('plaque', 'Plaque A→Z')}${sortOpt('plaque-desc', 'Plaque Z→A')}${sortOpt('modele', 'Modèle A→Z')}${sortOpt('fichiers', 'Plus de fichiers')}
+          </select>
+          <select id="drive-new-veh" class="text-sm border rounded-lg px-2 py-2" style="background:#fff;max-width:220px" title="Créer un nouveau dossier">
+            <option value="">＋ Nouveau dossier…</option>${optsNew}
+          </select>
+        </div>`;
+      view.innerHTML = toolbar + '<div id="drive-grid-wrap"></div>';
+      renderDriveGrid();
+    } else {
+      const pl = driveFolder;
+      const veh = (data.vehicules || []).find(v => normPl(v.immat) === normPl(pl));
+      const vehLbl = veh ? ' · ' + escapeHtml(veh.marque + ' ' + veh.modele) : '';
+      const allFiles = sinDocs.filter(d => normPl(d.vehiculeId) === normPl(pl));
+      const fileTile = d => {
+        const u = escapeHtml(d.url || '');
+        return `<div class="drive-file" draggable="true" data-file-id="${escapeHtml(d.id)}" title="Glisser vers un sous-dossier pour ranger ce fichier">
+          <a href="${u}" target="_blank" rel="noopener" draggable="false" class="drive-file-preview">${isImg(d.url) ? `<img src="${u}" loading="lazy" draggable="false">` : `<i data-lucide="file-text"></i>`}</a>
+          <div class="drive-file-name" title="${escapeHtml(d.label || '')}">${escapeHtml(d.label || 'fichier')}</div>
+          <button type="button" class="drive-file-del" data-drive-del="${escapeHtml(d.id)}" title="Supprimer">✕</button>
+        </div>`;
+      };
+      const uploadTile = `<button type="button" class="drive-upload" id="drive-add"><i data-lucide="upload-cloud"></i><span>Ajouter des fichiers</span></button>`;
+      const fileInput = '<input type="file" id="drive-file-input" accept="image/*,application/pdf" multiple class="hidden">';
+      if (!driveSub){
+        // Racine du dossier véhicule : sous-dossiers (années) + fichiers non classés
+        crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <b data-drop-root title="Déposer ici = ranger à la racine du dossier">${escapeHtml(pl)}</b>${vehLbl}`;
+        const subs = getSubs(pl).slice().sort((a, b) => b.localeCompare(a)); // années récentes d'abord
+        const subTiles = subs.map(name => {
+          const n = allFiles.filter(d => docSub(d.id) === name).length;
+          return `<div class="drive-folder" data-sub="${escapeHtml(name)}" style="position:relative">
+            <button type="button" class="drive-folder-ren" data-sub-ren="${escapeHtml(name)}" title="Renommer">✎</button>
+            <button type="button" class="drive-folder-del" data-sub-del="${escapeHtml(name)}" title="Supprimer le sous-dossier">✕</button>
+            <i data-lucide="folder" class="drive-folder-ic"></i>
+            <div class="drive-folder-name" style="font-family:inherit">${escapeHtml(name)}</div>
+            <div class="drive-folder-count">${n} fichier${n > 1 ? 's' : ''}</div>
+          </div>`;
+        }).join('');
+        const rootFiles = allFiles.filter(d => !docSub(d.id));
+        view.innerHTML = `<div class="flex items-center gap-2 mb-4"><button type="button" id="drive-new-sub" class="fp-btn-sm"><i data-lucide="folder-plus" class="w-4 h-4"></i> Nouveau sous-dossier</button></div>`
+          + '<div class="drive-grid">' + subTiles + uploadTile + rootFiles.map(fileTile).join('') + '</div>'
+          + fileInput;
+      } else {
+        // Dans un sous-dossier
+        crumb.innerHTML = `<button type="button" id="drive-back" class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit">📁 Dossiers</button> › <button type="button" id="drive-back-plate" data-drop-root class="hover:underline" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;font:inherit" title="Déposer ici = sortir du sous-dossier">${escapeHtml(pl)}</button>${vehLbl} › <b>${escapeHtml(driveSub)}</b>`;
+        const files = allFiles.filter(d => docSub(d.id) === driveSub);
+        view.innerHTML = '<div class="drive-grid">' + uploadTile + files.map(fileTile).join('') + '</div>' + fileInput;
+      }
+    }
+    lucide.createIcons();
+  }
+  // Ne redessine QUE la grille des dossiers (filtre + tri) sans toucher à la barre d'outils
+  // → le focus reste dans le champ de recherche pendant la frappe.
+  function renderDriveGrid(){
+    const wrap = $('drive-grid-wrap'); if (!wrap) return;
+    let fs = driveFolders();
+    const q = normPl(driveSearch);
+    const qraw = driveSearch.trim().toLowerCase();
+    if (qraw){
+      fs = fs.filter(f => normPl(f.plaque).includes(q)
+        || (f.veh && ((f.veh.marque || '') + ' ' + (f.veh.modele || '') + ' ' + (f.veh.chauffeur || '')).toLowerCase().includes(qraw)));
+    }
+    fs.sort((a, b) => {
+      if (driveSort === 'plaque-desc') return b.plaque.localeCompare(a.plaque);
+      if (driveSort === 'modele') return ((a.veh ? a.veh.marque + ' ' + a.veh.modele : 'zzz')).localeCompare(b.veh ? b.veh.marque + ' ' + b.veh.modele : 'zzz') || a.plaque.localeCompare(b.plaque);
+      if (driveSort === 'fichiers') return (b.n - a.n) || a.plaque.localeCompare(b.plaque);
+      return a.plaque.localeCompare(b.plaque);
+    });
+    if (!fs.length){
+      wrap.innerHTML = qraw
+        ? '<div class="text-sm text-slate-500 py-4">Aucun dossier ne correspond à « ' + escapeHtml(driveSearch.trim()) + ' ».</div>'
+        : '<div class="text-sm text-slate-500 py-4">Aucun dossier. Utilise « ＋ Nouveau dossier » pour en créer un.</div>';
+      return;
+    }
+    wrap.innerHTML = '<div class="drive-grid">' + fs.map(f => `
+      <div class="drive-folder" data-folder="${escapeHtml(f.plaque)}" style="position:relative">
+        <button type="button" class="drive-folder-del" data-dossier-del="${escapeHtml(f.plaque)}" title="Supprimer le dossier">✕</button>
+        <i data-lucide="folder" class="drive-folder-ic"></i>
+        <div class="drive-folder-name">${escapeHtml(f.plaque)}</div>
+        <div class="drive-folder-sub">${f.veh ? escapeHtml(f.veh.marque + ' ' + f.veh.modele) : '—'}</div>
+        ${(f.veh && f.veh.chauffeur && String(f.veh.chauffeur).trim() && String(f.veh.chauffeur).trim() !== '—') ? `<div class="drive-folder-sub" style="color:#F97316;font-weight:600">${escapeHtml(String(f.veh.chauffeur).trim())}</div>` : ''}
+        <div class="drive-folder-count">${f.n} fichier${f.n > 1 ? 's' : ''}</div>
+      </div>`).join('') + '</div>';
+    lucide.createIcons();
+  }
+  async function uploadDrive(fileList){
+    const files = Array.from(fileList || []); if (!files.length) return;
+    if (!(window.FP && FP.supabase && FP.uploadScan)){ alert("L'ajout de fichiers nécessite d'être connecté à internet."); return; }
+    const pl = driveFolder; let ok = 0;
+    // Rangement AUTOMATIQUE par année : si aucun sous-dossier n'est ouvert, on classe les constats /
+    // photos dans le sous-dossier de l'ANNÉE COURANTE (créé au besoin). L'utilisateur peut toujours
+    // déplacer ensuite par glisser-déposer, ou choisir un autre sous-dossier avant d'ajouter.
+    let sub = driveSub;
+    if (!sub) { sub = String(new Date().getFullYear()); try { const arr = getSubs(pl); if (!arr.some(x => (x || '').toLowerCase() === sub.toLowerCase())) saveSubs(pl, arr.concat(sub)); } catch (e) {} }
+    const btn = $('drive-add'); if (btn) { btn.style.opacity = '.6'; }
+    for (const f of files){
+      try {
+        const url = await FP.uploadScan(f, 'sinistres/' + normPl(pl));
+        if (url){ const doc = { id: 'SD' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: pl, type: 'sinistre-doc', label: f.name, url, driveId: null };
+          sinDocs.push(doc); if (FP.persist) FP.persist.insert('documents', doc); if (sub) setDocSub(doc.id, sub); ok++; }
+      } catch (e) { console.error('[drive sinistre upload]', e); }
+    }
+    renderDrive();
+    if (FP.toast) FP.toast(`${ok}/${files.length} fichier(s) ajouté(s)`);
+  }
+  async function delDriveDoc(id){
+    if (!await FP.confirm('Supprimer ce fichier ?')) return;
+    sinDocs = sinDocs.filter(d => d.id !== id);
+    if (FP.persist) FP.persist.delete('documents', id);
+    setDocSub(id, null); // nettoie le rattachement sous-dossier
+    renderDrive();
+  }
+  $('drive-view').addEventListener('click', async (e) => {
+    const delD = e.target.closest('[data-dossier-del]'); if (delD){ e.stopPropagation(); delDossier(delD.dataset.dossierDel); return; }
+    const renS = e.target.closest('[data-sub-ren]'); if (renS){ e.stopPropagation(); const old = renS.dataset.subRen; const nv = await FP.prompt('Renommer le sous-dossier :', old); if (nv != null){ renameSub(driveFolder, old, nv); renderDrive(); } return; }
+    const delS = e.target.closest('[data-sub-del]'); if (delS){ e.stopPropagation(); delSub(driveFolder, delS.dataset.subDel); return; }
+    const sub = e.target.closest('[data-sub]'); if (sub){ driveSub = sub.dataset.sub; renderDrive(); return; }
+    if (e.target.closest('#drive-new-sub')){ const nv = await FP.prompt('Nom du sous-dossier (ex. 2026) :', String(new Date().getFullYear())); if (nv != null && addSub(driveFolder, nv)) renderDrive(); return; }
+    const f = e.target.closest('[data-folder]'); if (f){ driveFolder = f.dataset.folder; driveSub = null; renderDrive(); return; }
+    if (e.target.closest('#drive-add')){ const inp = $('drive-file-input'); if (inp) inp.click(); return; }
+    const del = e.target.closest('[data-drive-del]'); if (del){ delDriveDoc(del.dataset.driveDel); return; }
+  });
+  $('drive-view').addEventListener('input', (e) => {
+    const s = e.target.closest('#drive-search'); if (s){ driveSearch = s.value; renderDriveGrid(); }
+  });
+  $('drive-view').addEventListener('change', (e) => {
+    const inp = e.target.closest('#drive-file-input'); if (inp){ uploadDrive(inp.files); return; }
+    const srt = e.target.closest('#drive-sort'); if (srt){ driveSort = srt.value; renderDriveGrid(); return; }
+    const sel = e.target.closest('#drive-new-veh'); if (sel && sel.value){ addDossier(sel.value); driveFolder = sel.value; renderDrive(); }
+  });
+  $('drive-crumb').addEventListener('click', (e) => {
+    if (e.target.closest('#drive-back')){ driveFolder = null; driveSub = null; renderDrive(); return; }
+    if (e.target.closest('#drive-back-plate')){ driveSub = null; renderDrive(); return; }
+  });
+  // --- Glisser-déposer : ranger un fichier dans un sous-dossier (ou le sortir vers la racine) ---
+  // On ne change QUE le sous-dossier (réglages `sinistreDocSub`), jamais le véhicule → aucun risque
+  // sur les données. Cibles de dépôt : un sous-dossier (data-sub) ou le fil d'Ariane racine (data-drop-root).
+  let dragFileId = null;
+  const dropTarget = (t) => t && (t.closest && (t.closest('[data-sub]') || t.closest('[data-drop-root]')));
+  $('drive-view').addEventListener('dragstart', (e) => {
+    const card = e.target.closest('[data-file-id]'); if (!card) return;
+    dragFileId = card.dataset.fileId; card.classList.add('fp-dragging');
+    try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragFileId); } catch (_) {}
+  });
+  const clearDnd = () => { dragFileId = null; document.querySelectorAll('.fp-dragging,.fp-drop-hover').forEach(el => el.classList.remove('fp-dragging','fp-drop-hover')); };
+  $('drive-view').addEventListener('dragend', clearDnd);
+  const onOver = (e) => { if (!dragFileId) return; const t = dropTarget(e.target); if (!t) return; e.preventDefault(); try { e.dataTransfer.dropEffect = 'move'; } catch (_) {} t.classList.add('fp-drop-hover'); };
+  const onLeave = (e) => { const t = dropTarget(e.target); if (t) t.classList.remove('fp-drop-hover'); };
+  const onDrop = (e) => {
+    if (!dragFileId) return;
+    const t = dropTarget(e.target); if (!t) return;
+    e.preventDefault();
+    const sub = t.hasAttribute('data-drop-root') ? null : (t.dataset.sub || null);
+    const id = dragFileId;
+    if ((docSub(id) || null) !== (sub || null)) { setDocSub(id, sub); renderDrive(); if (FP.toast) FP.toast(sub ? ('Rangé dans « ' + sub + ' »') : 'Rangé à la racine du dossier'); }
+    clearDnd();
+  };
+  ['drive-view', 'drive-crumb'].forEach(id => { const el = $(id); if (!el) return; el.addEventListener('dragover', onOver); el.addEventListener('dragleave', onLeave); el.addEventListener('drop', onDrop); });
+  renderDrive();   // affiche les dossiers tout de suite (depuis les sinistres), sans attendre le chargement des fichiers
+  loadSinDocs();   // puis récupère les fichiers déjà stockés et rafraîchit
+
+  // ---------- Garages & concessionnaires (annuaire perso + recherche Google Maps) ----------
+  (function initGarages(){
+    const $g = id => document.getElementById(id);
+    const escG = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    const urlG = u => { u = String(u || '').trim(); if (!u) return ''; if (!/^https?:\/\//i.test(u)) { if (/^[\w.-]+\.[a-z]{2,}/i.test(u)) u = 'https://' + u; else return ''; } return u; };
+    // Référentiel UNIQUE partagé avec Entretiens (FP.getPrestataires) — plus de liste settings.garages séparée.
+    const getGarages = () => { try { return FP.getPrestataires ? FP.getPrestataires() : []; } catch (e) { return []; } };
+    let garSearch = '';
+    function renderGarages(){
+      const el = $g('gar-list'); if (!el) return;
+      const all = getGarages(); const q = FP.norm(garSearch).trim();
+      const cnt = $g('gar-count'); if (cnt) cnt.textContent = all.length ? `${all.length} garage(s)` : '';
+      if (!all.length) { el.innerHTML = '<div class="text-sm text-slate-400">Aucun garage enregistré. Ajoute-en un ci-dessous, ou cherche sur Google Maps.</div>'; return; }
+      const list = all.filter(g => !q || FP.norm(`${g.nom || ''} ${g.ville || ''}`).includes(q));
+      el.innerHTML = list.map(g => { const rdv = urlG(g.rdv);
+        return `<div class="flex items-center gap-2 py-2 border-b border-slate-100">
+          <div class="flex-1 min-w-0"><div class="font-semibold text-slate-800 text-sm">${escG(g.nom || '—')}</div><div class="text-xs text-slate-500">${escG(g.ville || g.adresse || '')}${g.tel ? ' · ' + escG(g.tel) : ''}</div></div>
+          ${g.tel ? `<a href="tel:${escG(String(g.tel).replace(/\s+/g, ''))}" class="btn btn-outline text-xs">Appeler</a>` : ''}
+          ${rdv ? `<a href="${escG(rdv)}" target="_blank" rel="noopener" class="btn btn-dark text-xs"><i data-lucide="calendar-check" class="w-3.5 h-3.5"></i> Prendre RDV</a>` : ''}
+          <button type="button" class="btn btn-outline text-xs !px-2" data-gar-del="${escG(g.id || '')}" title="Supprimer ce garage"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>
+        </div>`; }).join('') || (FP.emptyHTML ? FP.emptyHTML({ icon: 'wrench', title: 'Aucun garage', text: 'Ajoute un garage partenaire pour le retrouver ici.' }) : '<div class="text-sm text-slate-400">Aucun résultat.</div>');
+      if (window.lucide) lucide.createIcons();
+    }
+    if ($g('gar-maps')) $g('gar-maps').addEventListener('click', () => {
+      const marque = ($g('gar-marque') && $g('gar-marque').value || '').trim();
+      const loc = ($g('gar-loc').value || '').trim();
+      const query = encodeURIComponent((marque || 'garage automobile') + (loc ? ' ' + loc : ''));
+      window.open('https://www.google.com/maps/search/?api=1&query=' + query, '_blank', 'noopener');
+    });
+    if ($g('gar-search')) $g('gar-search').addEventListener('input', e => { garSearch = e.target.value; renderGarages(); });
+    if ($g('gar-add')) $g('gar-add').addEventListener('click', () => {
+      const g = { nom: ($g('gar-nom').value || '').trim(), ville: ($g('gar-ville').value || '').trim(), tel: ($g('gar-tel').value || '').trim(), rdv: ($g('gar-rdv').value || '').trim() };
+      if (!g.nom) { alert('Indique au moins le nom du garage.'); return; }
+      if (FP.savePrestataire) FP.savePrestataire(g); // référentiel unique (partagé avec Entretiens)
+      ['gar-nom', 'gar-ville', 'gar-tel', 'gar-rdv'].forEach(id => { const el = $g(id); if (el) el.value = ''; });
+      renderGarages(); if (FP.toast) FP.toast('Garage ajouté ✓');
+    });
+    if ($g('gar-list')) $g('gar-list').addEventListener('click', async e => { const b = e.target.closest('[data-gar-del]'); if (!b) return; const id = b.dataset.garDel; const g = getGarages().find(x => String(x.id) === String(id)); if (!await FP.confirm(`Supprimer « ${(g || {}).nom || ''} » ?`)) return; if (FP.deletePrestataire) FP.deletePrestataire(id); renderGarages(); });
+    renderGarages();
+  })();
+
+  // ---------- Export CSV ----------
+  FP.injectDataIO({
+    exportOnly: true,
+    filename: `parc-pilot-sinistres-${new Date().toISOString().slice(0,10)}.csv`,
+    columns: [
+      { key: 'date',          label: 'Date' },
+      { key: 'vehiculeImmat', label: 'Véhicule' },
+      { key: 'fournisseur',   label: 'Fournisseur' },
+      { key: 'description',   label: 'Description' },
+      { key: 'montantTTC',    label: 'TTC (€)', format: FP.csv.numFormat },
+      { key: 'numeroFacture', label: 'N° facture' },
+      { key: 'fileName',      label: 'Fichier' },
+    ],
+    getRows: () => filtered(),
+  });
+
+  // Relevé PDF des sinistres (aperçu + téléchargement) — pour l'assureur.
+  if (document.getElementById('sin-fiche-btn')) document.getElementById('sin-fiche-btn').addEventListener('click', () => {
+    if (!(FP.fiche && FP.fiche.open)) return;
+    const rows = filtered().slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    FP.fiche.open({
+      key: 'sinistres',
+      title: 'Relevé des sinistres',
+      rows: rows,
+      cols: [
+        { id: 'date',          label: 'Date',        def: true,  get: s => s.date ? FP.dateNum(s.date) : '—' },
+        { id: 'vehiculeImmat', label: 'Véhicule',    def: true,  mono: true, get: s => s.vehiculeImmat || '—' },
+        { id: 'conducteur',    label: 'Conducteur',  def: true,  get: s => { const d = (FP.settings.get().sinistreAssurance || {})[groupKeyOf(s.id)] || {}; if ((d.conducteur || '').trim()) return d.conducteur.trim(); const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(s.vehiculeImmat)); return (v && v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '—'; } },
+        { id: 'fournisseur',   label: 'Garage',      def: true,  get: s => s.fournisseur || '—' },
+        { id: 'description',   label: 'Description', def: false, get: s => s.description || '—' },
+        { id: 'resp',          label: 'Responsabilité', def: true, get: s => { const r = ((FP.settings.get().sinistreAssurance || {})[groupKeyOf(s.id)] || {}).resp; return r ? ({ 'responsable': 'Responsable', 'non-responsable': 'Non responsable', 'partagee': 'Partagée', 'en-cours': 'En cours' }[r] || r) : '—'; }, tint: v => (/responsable/i.test(v) && !/non/i.test(v)) ? [185, 28, 28] : null },
+        { id: 'numeroFacture', label: 'N° facture',  def: false, mono: true, get: s => s.numeroFacture || '—' },
+        { id: 'montantTTC',    label: 'Montant TTC', def: true,  align: 'right', get: s => (s.montantTTC != null && s.montantTTC !== '') ? FP.euroPrecis(s.montantTTC) : '—', sum: s => s.montantTTC, fmt: FP.euroPrecis },
+      ],
+    });
+  });
+</script>
+</body>
+</html>

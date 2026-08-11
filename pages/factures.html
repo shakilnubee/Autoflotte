@@ -1,0 +1,2255 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>try{if(localStorage.getItem("fp_dark_mode")!=="0"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
+<link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
+<title>Factures — Parc Pilot</title>
+<link rel="manifest" href="../manifest.json">
+<meta name="theme-color" content="#0F1E3D">
+<link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parc Pilot">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811e">
+<script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811e"></script>
+  <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811e">
+<style>
+  .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
+  .filter-chip.active { background: var(--fp-primary); border-color: var(--fp-primary); color: white; }
+  .type-pill { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .55rem; border-radius: 9999px; font-size: .72rem; font-weight: 600; background: #F1F5F9; color: var(--fp-text); }
+  .type-entretien { background: #DBEAFE; color: #1E3A8A; }
+  .type-reparation { background: #FEE2E2; color: #7F1D1D; }
+  .type-achat { background: #DCFCE7; color: #14532D; }
+  .type-leasing { background: #EDE9FE; color: #4C1D95; }
+  .type-cession { background: #FEF3C7; color: #78350F; }
+  .type-sinistre { background: #FECACA; color: #7F1D1D; }
+  .type-autre { background: #F1F5F9; color: #475569; }
+  .drawer { position: fixed; top: 0; right: 0; height: 100vh; height: 100dvh; width: 100%; max-width: 600px; background: white; box-shadow: -20px 0 60px -20px rgba(15,30,61,.25); transform: translateX(100%); transition: transform .25s ease; z-index: 60; overflow-y: auto; overflow-x: hidden; }
+  .drawer.open { transform: translateX(0); }
+  /* #1 : zone d'import en surbrillance pendant le glisser-déposer */
+  #fa-trigger.drag-over, #tf-import-trigger.drag-over, #uls-import-trigger.drag-over { border-color: var(--fp-accent); background: rgba(20,184,166,.12); }
+  /* #5 : actions rapides au survol d'une ligne facture */
+  #factures-tbody tr { position: relative; }
+  #factures-tbody .row-actions { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; gap: 4px; align-items: center; background: rgba(255,255,255,.97); padding: 3px 5px; border: 1px solid var(--fp-border); border-radius: 9px; box-shadow: 0 6px 16px -8px rgba(15,30,61,.35); z-index: 3; }
+  #factures-tbody tr:hover .row-actions { display: inline-flex; }
+  #factures-tbody .ra-btn { width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--fp-border); border-radius: 7px; background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
+  #factures-tbody .ra-btn:hover { background: var(--fp-primary); color: white; border-color: var(--fp-primary); }
+  /* Renommage inline des documents dans le Drive */
+  #doc-drive .doc-rename:hover { border-color: var(--fp-border) !important; }
+  #doc-drive .doc-rename:focus { border-color: var(--fp-accent) !important; background: #fff !important; outline: none; }
+  .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
+  .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
+  .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
+  .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(249,115,22,.15); }
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.5); display: none; align-items: center; justify-content: center; z-index: 70; padding: 1rem; }
+  .modal-backdrop.open { display: flex; }
+  /* Autocomplete maison (fournisseur / plaque) — à la place du menu déroulant natif */
+  .fp-ac-wrap { position: relative; }
+  .fp-ac { position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px; background: #fff; border: 1px solid var(--fp-border); border-radius: .6rem; box-shadow: 0 14px 32px -12px rgba(15,30,61,.30); max-height: 220px; overflow-y: auto; padding: 4px; z-index: 90; }
+  .fp-ac.hidden { display: none; }
+  .fp-ac-item { padding: 8px 10px; border-radius: .45rem; font-size: 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fp-ac-item.active, .fp-ac-item:hover { background: var(--fp-accent); color: #fff; }
+  .fp-ac-empty { padding: 8px 10px; font-size: 13px; color: var(--fp-muted); }
+  .modal { background: white; border-radius: 1rem; width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; }
+  .fa-spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: fa-spin .7s linear infinite; }
+  @keyframes fa-spin { to { transform: rotate(360deg); } }
+  .chart-wrap-sm { position: relative; height: 240px; }
+  .tf-anom-hidden { display: none; }
+</style>
+<script>
+(function(){
+  // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
+  var remember = localStorage.getItem('fp_remember_me') === '1';
+  var alive = sessionStorage.getItem('fp_session_alive') === '1';
+  if (!remember && !alive) { localStorage.removeItem('sb-tzjuptlzoywjeigmyfuj-auth-token'); }
+  sessionStorage.setItem('fp_session_alive', '1');
+  // Bloque l'affichage si pas connecté
+  var loginPath = window.location.pathname.indexOf('/pages/') !== -1 ? '../login.html' : 'login.html';
+  var t; try { t = JSON.parse(localStorage.getItem('sb-tzjuptlzoywjeigmyfuj-auth-token')); } catch(e) {}
+  if (!t || !t.access_token || (t.expires_at && t.expires_at * 1000 < Date.now())) { window.location.replace(loginPath); document.documentElement.style.display = 'none'; }
+})();
+</script>
+<script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
+</head>
+<body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")!=="0")document.body.classList.add("fp-dark")}catch(e){}</script>
+
+<div class="flex min-h-screen flex-col md:flex-row">
+
+  <aside class="fp-sidebar p-4 flex-shrink-0">
+    <a href="../dashboard.html" class="fp-logo text-white text-lg mb-8 px-2">
+      <svg width="132" height="30" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot" style="overflow:visible"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic"><tspan fill="currentColor">Parc</tspan><tspan fill="#F97316">Pilot</tspan></text></svg>
+    </a>
+    <nav class="space-y-1">
+      <a href="../dashboard.html" data-nav="dashboard.html"><i data-lucide="layout-dashboard"></i> Tableau de bord</a>
+      <a href="notifications.html" data-nav="notifications.html"><i data-lucide="bell"></i> Suivi &amp; alertes</a>
+      <a href="taches.html" data-nav="taches.html"><i data-lucide="list-todo"></i> Tâches</a>
+      <a href="statistiques.html" data-nav="statistiques.html"><i data-lucide="bar-chart-3"></i> Statistiques</a>
+      <a href="vehicules.html"    data-nav="vehicules.html"><i data-lucide="car"></i> Véhicules</a>
+      <a href="emprunts.html" data-nav="emprunts.html"><i data-lucide="key-round"></i> Emprunt véhicule</a>
+      <a href="conducteurs.html"  data-nav="conducteurs.html"><i data-lucide="users"></i> Conducteurs</a>
+      <a href="amendes.html"      data-nav="amendes.html"><i data-lucide="ticket"></i> Amendes</a>
+      <a href="sinistres.html"    data-nav="sinistres.html"><i data-lucide="alert-octagon"></i> Sinistres</a>
+      <a href="factures.html"     data-nav="factures.html"><i data-lucide="receipt"></i> Factures</a>
+      <a href="controle.html" data-nav="controle.html"><i data-lucide="shield-alert"></i> Contrôle</a>
+      <a href="contrats.html"     data-nav="contrats.html"><i data-lucide="file-text"></i> Contrats</a>
+      <a href="budget.html" data-nav="budget.html"><i data-lucide="piggy-bank"></i> Budget</a>
+      <a href="guide.html"   data-nav="guide.html"><i data-lucide="book-open"></i> Guide/Policy</a>
+      <a href="manuel.html" data-nav="manuel.html"><i data-lucide="book-marked"></i> Manuel</a>
+      <a href="aide.html" data-nav="aide.html"><i data-lucide="life-buoy"></i> Aide</a>
+      <a href="parametres.html"   data-nav="parametres.html"><i data-lucide="settings"></i> Paramètres</a>
+      <a href="../brochure.html"   data-nav="brochure.html" target="_blank" rel="noopener"><i data-lucide="sparkles"></i> Brochure</a>
+      <a href="../prix.html" data-nav="prix.html" target="_blank" rel="noopener"><i data-lucide="badge-euro"></i> Tarifs</a>
+    </nav>
+    <script>/* Sidebar : reconstruit la barre dans son état final AVANT le 1er affichage
+       (barre de recherche, ordre, visibilité, libellés perso, onglet actif). Sinon le JS
+       fait tout ça APRÈS l'affichage → le menu "saute"/clignote. Autonome (localStorage). */
+    (function(){try{
+      var soc=(localStorage.getItem('fp_societe')||'PXP');if(soc==='__all__')soc='PXP';
+      var raw=localStorage.getItem('auto_flotte_settings_'+soc);
+      if(raw==null&&soc==='PXP')raw=localStorage.getItem('auto_flotte_settings');
+      var s=raw?(JSON.parse(raw)||{}):{};
+      var sb=document.querySelector('.fp-sidebar');if(!sb)return;
+      var nav=sb.querySelector('nav');if(!nav)return;
+      if(!sb.querySelector('.fp-global-search')){
+        var w=document.createElement('div');w.className='fp-global-search';
+        w.innerHTML='<div style="position: relative"><span style="position:absolute; left:.65rem; top:50%; transform:translateY(-50%); color:rgba(255,255,255,.5); font-size:.85rem">\u{1F50D}</span><input type="text" class="fp-search-input" placeholder="Rechercher..." /></div><div class="fp-search-results"></div>';
+        sb.insertBefore(w,nav);
+      }
+      var links=[].slice.call(nav.querySelectorAll('a[data-nav]'));if(!links.length)return;
+      if(Array.isArray(s.navOrder)&&s.navOrder.length){
+        var by={};links.forEach(function(a){by[a.dataset.nav]=a;});var ord=[];
+        s.navOrder.forEach(function(k){if(by[k]){ord.push(by[k]);delete by[k];}});
+        links.forEach(function(a){if(by[a.dataset.nav])ord.push(a);});
+        ord.forEach(function(a){nav.appendChild(a);});}
+      if(Array.isArray(s.navHidden)){var h={};s.navHidden.forEach(function(k){h[k]=1;});
+        links.forEach(function(a){if(h[a.dataset.nav]&&a.dataset.nav!=='parametres.html')a.style.display='none';});}
+      var lb=s.sidebarLabels||{};
+      links.forEach(function(a){var t=lb[a.dataset.nav];if(!t)return;
+        for(var i=0;i<a.childNodes.length;i++){var n=a.childNodes[i];if(n.nodeType===3&&n.textContent.trim()){n.textContent=' '+t;break;}}});
+      var _ACC={"guide.html":1,"manuel.html":1,"aide.html":1,"parametres.html":1,"brochure.html":1,"prix.html":1};
+      [].slice.call(nav.querySelectorAll("a[data-nav]")).forEach(function(a){a.style.order=_ACC[a.dataset.nav]?"3":"1";});
+      (function(){function _mkg(id,txt,ord){var d=nav.querySelector('.fp-nav-group[data-grp="'+id+'"]');if(!d){d=document.createElement("div");d.className="fp-nav-group";d.setAttribute("data-grp",id);nav.appendChild(d);}d.textContent=txt;d.style.order=ord;}_mkg("ws","Espace de travail","0");_mkg("ac","Compte","2");})();
+
+      var path=(location.pathname.split('/').pop()||'index').replace(/\.html$/,'');
+      links.forEach(function(a){if((a.dataset.nav||'').replace(/\.html$/,'')===path)a.classList.add('active');});
+    }catch(e){}})();</script>
+    <div class="mt-10 pt-6 border-t border-white/10 text-xs text-slate-300 px-2">
+      <div class="font-semibold text-white mb-1">Données réelles</div>
+      <p>Import depuis Google Drive (factures PDF 2025+).</p>
+    </div>
+  </aside>
+
+  <main class="flex-1 p-6 md:p-10">
+
+    <div class="fp-cockpit mb-5" style="padding:1.1rem 1.4rem">
+      <div class="fp-eyebrow" style="margin-bottom:.35rem">Parc Pilot · Factures</div>
+      <h1 class="text-2xl font-extrabold text-white" style="color:#fff" data-edit-key="factures.title">Factures</h1>
+      <p class="text-sm mt-1" style="color:#8598B4" data-edit-key="factures.subtitle">Toutes les factures de la flotte — entretien, leasing, achats, sinistres</p>
+    </div>
+    <div id="fa-actionbar" class="flex flex-wrap justify-end items-center gap-4 mb-8">
+      <div class="flex items-center gap-3">
+        <span data-data-io></span>
+        <!-- Exports SPÉCIFIQUES à l'onglet Factures → masqués sur les autres sous-onglets (Total Fleet/Ulys
+             ont leurs propres exports). Évite le bug « le bouton exporte les factures alors que je suis sur Total Fleet ». -->
+        <span id="fa-topexports" class="inline-flex items-center gap-3">
+          <span id="fa-export-mount"></span>
+          <button class="btn btn-outline text-sm" id="fa-fiche-btn" title="Relevé de dépenses (PDF) des factures affichées"><i data-lucide="file-text" class="w-4 h-4"></i> Relevé PDF</button>
+          <span id="fa-recap-mount"></span>
+        </span>
+        <button class="btn btn-outline text-sm" id="btn-import-lot" title="Déposer plusieurs PDF : l'IA lit chaque facture et la crée automatiquement"><i data-lucide="files" class="w-4 h-4"></i> Importer un lot (PDF)</button>
+        <input type="file" id="fa-lot-file" accept="application/pdf,image/*" multiple class="hidden" />
+        <button class="btn btn-dark text-sm" id="btn-import-facture" data-quickadd><i data-lucide="file-up" class="w-4 h-4"></i> Importer une facture</button>
+      </div>
+    </div>
+
+    <!-- Onglets : Factures / Documents / Fournisseurs. Total Fleet & Ulys ont DÉMÉNAGÉ dans la page
+         Contrôle → leurs boutons sont masqués ici (display:none) mais les panneaux restent, affichés
+         par la page Contrôle via une vue intégrée (?embed&tab=total|ulys). -->
+    <div id="fa-tabbar" style="display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--fp-border)">
+      <button id="tab-btn-factures" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">Factures</button>
+      <button id="tab-btn-documents" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Documents <span style="font-size:11px;font-weight:600">· archives & suivi</span></button>
+      <button id="tab-btn-total" type="button" style="display:none;padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Total Fleet <span style="font-size:11px;font-weight:600">· carburant & péages</span></button>
+      <button id="tab-btn-ulys" type="button" style="display:none;padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Ulys <span style="font-size:11px;font-weight:600">· péages</span></button>
+      <button id="tab-btn-fourn" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Fournisseurs</button>
+      <a href="entretiens.html" style="padding:9px 18px;font-size:14px;font-weight:700;text-decoration:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Entretiens <span style="font-size:11px;font-weight:600">· révisions</span></a>
+    </div>
+
+    <div id="view-factures">
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Total dépensé</div>
+        <div class="kpi-value" id="kpi-total">—</div>
+        <div class="kpi-delta" id="kpi-total-sub">—</div>
+      </div><div class="kpi-ic"><i data-lucide="euro"></i></div></div></div>
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Nb factures</div>
+        <div class="kpi-value" id="kpi-count">—</div>
+        <div class="kpi-delta">filtre actif</div>
+      </div><div class="kpi-ic"><i data-lucide="receipt"></i></div></div></div>
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Montant moyen</div>
+        <div class="kpi-value" id="kpi-moyen">—</div>
+        <div class="kpi-delta">TTC par facture</div>
+      </div><div class="kpi-ic violet"><i data-lucide="divide"></i></div></div></div>
+      <div class="kpi"><div class="flex justify-between items-start gap-2"><div>
+        <div class="kpi-label">Top fournisseur</div>
+        <div class="kpi-value" id="kpi-topfourn" style="font-size: 1.1rem">—</div>
+        <div class="kpi-delta" id="kpi-topfourn-sub">—</div>
+      </div><div class="kpi-ic warn"><i data-lucide="building-2"></i></div></div></div>
+    </div>
+
+    <!-- Graphes -->
+    <div class="grid lg:grid-cols-2 gap-6 mb-6">
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Dépenses mensuelles (€ TTC)</h3>
+        <div class="chart-wrap-sm"><canvas id="monthlyChart"></canvas></div>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-bold text-slate-900 mb-4">Répartition par type</h3>
+        <div class="chart-wrap-sm"><canvas id="typesChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Coût par période -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <h3 class="font-bold text-slate-900">Coût par période</h3>
+        <div class="flex items-center gap-2 text-sm flex-wrap">
+          <span class="text-slate-500">Période :</span>
+          <input id="cp-from" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Du">
+          <span class="text-slate-400">→</span>
+          <input id="cp-to" type="date" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" title="Au">
+          <span id="cp-range-total" class="font-extrabold" style="color:var(--fp-primary)"></span>
+          <button id="cp-clear" class="hidden text-xs text-slate-400 hover:text-slate-700" title="Effacer la période">✕</button>
+          <button id="cp-export" type="button" class="btn btn-outline text-xs" style="padding:3px 8px"><i data-lucide="download" class="w-3.5 h-3.5"></i> Exporter</button>
+        </div>
+      </div>
+      <div id="cp-years" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
+      <div class="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-slate-100 flex-wrap">
+        <span class="text-sm text-slate-600"><i data-lucide="receipt-text" class="w-4 h-4 inline" style="vertical-align:-3px"></i> <b>TVA récupérable</b> <span class="text-xs text-slate-400" id="cp-tva-scope">— toutes années</span></span>
+        <span class="font-extrabold text-lg" style="color:var(--fp-primary)" id="cp-tva-total">—</span>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Total des factures par année (clique une année pour la sélectionner, ou choisis une période personnalisée). Hors loyers de leasing et sinistres. La <b>TVA récupérable</b> = somme des TVA des factures de la période (indicatif, <b>à valider par le comptable</b> : tous les postes ne sont pas récupérables à 100 %, ex. le carburant essence).</p>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card p-4 mb-6">
+      <div class="flex flex-wrap items-center gap-3" id="fa-filterbar">
+        <div class="relative flex-1 min-w-[220px]">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+          <input id="search" type="text" placeholder="Fournisseur, description, n° facture…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        </div>
+
+        <div class="flex flex-wrap gap-2" id="filters-type">
+          <button class="filter-chip active" data-value="all">Tous</button>
+          <button class="filter-chip" data-value="entretien">Entretien</button>
+          <button class="filter-chip" data-value="réparation">Réparation</button>
+          <button class="filter-chip" data-value="achat">Achat</button>
+          <button class="filter-chip" data-value="autre">Autre</button>
+        </div>
+
+        <select id="filter-annee" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Toutes les années</option>
+          <option value="2026">2026</option>
+          <option value="2025">2025</option>
+        </select>
+
+        <div class="flex items-center gap-1">
+          <input id="filter-mois" type="month" class="text-sm border border-slate-200 rounded-lg px-3 py-2" title="Filtrer sur un mois précis" />
+          <button id="filter-mois-clear" type="button" class="text-xs text-slate-400 hover:text-slate-700 px-1 hidden" title="Effacer le mois">✕</button>
+        </div>
+
+        <select id="filter-vehicule" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Tous véhicules</option>
+        </select>
+
+        <select id="filter-fournisseur" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+          <option value="all">Tous fournisseurs</option>
+        </select>
+
+        <select id="fa-sort-key" class="text-sm border border-slate-200 rounded-lg px-3 py-2" title="Trier les factures">
+          <option value="date">Tri : Date</option>
+          <option value="montantTTC">Tri : Montant TTC</option>
+          <option value="montantHT">Tri : Montant HT</option>
+          <option value="fournisseur">Tri : Fournisseur</option>
+          <option value="numeroFacture">Tri : N° facture</option>
+        </select>
+        <button id="fa-sort-dir" type="button" class="btn btn-outline text-sm !px-2.5" title="Inverser le sens du tri"><i data-lucide="arrow-down-wide-narrow" class="w-4 h-4"></i></button>
+      </div>
+    </div>
+
+    <!-- Doublons potentiels -->
+    <div id="fa-doublons" class="mb-4"></div>
+
+    <!-- Sélection multiple (barre injectée par FP.bulkSelect) -->
+    <div id="fa-bulk-mount"></div>
+
+    <!-- Table -->
+    <div class="card overflow-hidden">
+      <div class="scrollable">
+        <table class="fp-table" id="factures-table">
+          <thead></thead>
+          <tbody id="factures-tbody"></tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="hidden p-12 text-center">
+        <i data-lucide="file-x" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+        <p class="text-slate-500 text-sm">Aucune facture ne correspond aux filtres.</p>
+      </div>
+      <div id="fa-more" class="hidden p-3 text-center border-t border-slate-100"></div>
+    </div>
+
+    <p class="text-xs text-slate-500 mt-4" id="result-count"></p>
+    </div><!-- /view-factures -->
+
+    <!-- ===== Vue DOCUMENTS (archives & suivi) ===== -->
+    <div id="view-documents" class="hidden">
+      <div class="card p-4 mb-6">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="relative flex-1 min-w-[220px]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="doc-search" type="text" placeholder="Véhicule, conducteur, type, nom du document…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+          </div>
+          <select id="doc-filter-veh" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous véhicules</option></select>
+          <select id="doc-filter-type" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous types</option></select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#475569;cursor:pointer"><input type="checkbox" id="doc-hide-arch"> Masquer les archivés</label>
+          <button id="doc-view-toggle" type="button" class="btn btn-outline text-sm" style="margin-left:auto"><i data-lucide="list" class="w-4 h-4"></i> <span id="doc-view-label">Vue liste</span></button>
+          <button id="doc-import-btn" type="button" class="btn btn-dark text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Importer un document</button>
+        </div>
+      </div>
+      <div id="doc-drive"></div>
+      <div id="doc-list-card" class="card overflow-hidden hidden">
+        <div class="scrollable">
+          <table class="fp-table">
+            <thead id="doc-thead"></thead>
+            <tbody id="doc-tbody"></tbody>
+          </table>
+        </div>
+        <div id="doc-empty" class="hidden p-12 text-center">
+          <i data-lucide="folder-open" class="w-12 h-12 mx-auto text-slate-300 mb-3"></i>
+          <p class="text-slate-500 text-sm">Aucun document archivé pour le moment.</p>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 mt-4">Le document le plus récent de chaque type (par véhicule) est marqué <b>« Actuel »</b> ; les versions précédentes — ex. un ancien contrôle technique remplacé — sont conservées et marquées <b>« Archivé »</b>. Rien n'est supprimé automatiquement.</p>
+    </div>
+
+    <!-- ===== Vue TOTAL FLEET (carburant & péages) ===== -->
+    <div id="pane-total" class="hidden"></div>
+
+    <!-- ===== Vue ULYS (péages) — même mise en forme que Total Fleet ===== -->
+    <div id="pane-ulys" class="hidden"></div>
+
+    <!-- ===== Vue FOURNISSEURS (nettoyage des doublons) ===== -->
+    <div id="view-fourn" class="hidden">
+      <div class="card p-4 mb-6">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="relative flex-1 min-w-[220px]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="fn-search" type="text" placeholder="Rechercher un fournisseur…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+          </div>
+          <select id="fn-sort" class="text-sm border border-slate-200 rounded-lg px-3 py-2">
+            <option value="total">Ranger par : Total TTC ↓</option>
+            <option value="count">Ranger par : Nb factures ↓</option>
+            <option value="name">Ranger par : Nom (A→Z)</option>
+          </select>
+          <span class="text-sm text-slate-500" id="fn-count"></span>
+          <span class="tfview-toggle" id="fn-view" title="Changer l'affichage" style="margin-left:auto">
+            <button type="button" data-v="table"><i data-lucide="table" class="w-4 h-4"></i> Tableau</button>
+            <button type="button" data-v="cards"><i data-lucide="layout-grid" class="w-4 h-4"></i> Cartes</button>
+          </span>
+        </div>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="scrollable">
+          <table class="fp-table">
+            <thead><tr><th>Fournisseur</th><th style="text-align:center">Nb factures</th><th style="text-align:right">Total TTC</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody id="fn-tbody"></tbody>
+          </table>
+        </div>
+        <div id="fn-empty" class="hidden p-10 text-center"><p class="text-slate-500 text-sm">Aucun fournisseur.</p></div>
+      </div>
+      <div id="fn-cards" class="tf-cards mt-3 hidden"></div>
+      <p class="text-xs text-slate-500 mt-3"><b>Renommer / fusionner</b> : corrige un doublon (ex. « CAR WORLD » → « CAR WORLD CONSULTING FRANCE ») — toutes les factures sont mises à jour. <b>Supprimer le nom</b> : retire le fournisseur des factures concernées (les factures restent).</p>
+    </div>
+  </main>
+</div>
+
+<!-- Modal : Importer un document (onglet Documents) -->
+<div class="modal-backdrop" id="doc-import-modal">
+  <div class="modal p-6" style="max-width:440px">
+    <div class="flex justify-between items-start mb-4">
+      <h2 class="text-lg font-extrabold" style="color: var(--fp-primary)">Importer un document</h2>
+      <button aria-label="Fermer" id="doc-import-close" class="p-1.5 hover:bg-slate-100 rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="space-y-3">
+      <div><div class="field-label">Véhicule</div><select id="di-veh" class="field-input"></select></div>
+      <div><div class="field-label">Type</div><select id="di-type" class="field-input"></select></div>
+      <div><div class="field-label">Nom (facultatif)</div><input id="di-label" class="field-input" placeholder="ex : Contrôle technique 2026"></div>
+      <div><div class="field-label">Fichier (photo ou PDF)</div><input id="di-file" type="file" accept="image/*,application/pdf" multiple class="field-input" style="padding:8px"></div>
+      <div id="di-detect" class="hidden" style="font-size:12px;border-radius:8px;padding:8px 10px"></div>
+      <button id="di-save" class="btn btn-dark text-sm w-full justify-center"><i data-lucide="upload" class="w-4 h-4"></i> Importer</button>
+      <p class="text-xs text-slate-400">Le(s) fichier(s) sont enregistrés en ligne et rattachés au véhicule choisi (consultables ici et dans la fiche véhicule).</p>
+    </div>
+  </div>
+</div>
+
+<!-- Import en lot de factures PDF : progression + récapitulatif -->
+<div class="modal-backdrop" id="fabulk-modal">
+  <div class="modal p-6" style="max-width:520px">
+    <div class="flex justify-between items-start mb-3">
+      <h2 class="text-lg font-extrabold" style="color:var(--fp-primary)">Import en lot — factures PDF</h2>
+      <button aria-label="Fermer" id="fabulk-close" class="p-1.5 hover:bg-slate-100 rounded-lg"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div id="fabulk-body" class="text-sm"></div>
+  </div>
+</div>
+
+<!-- Drawer fiche facture -->
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<aside class="drawer" id="drawer">
+  <div class="p-6 flex justify-between items-start" style="background:linear-gradient(135deg, var(--fp-primary), var(--fp-primary-2))">
+    <div>
+      <div class="text-xs font-bold uppercase tracking-wider" style="color: var(--fp-accent-2)" id="drawer-num">—</div>
+      <h2 class="text-xl font-extrabold mt-1 text-white" id="drawer-title">—</h2>
+      <p class="text-sm mt-0.5" style="color:#8598B4" id="drawer-subtitle">—</p>
+    </div>
+    <div class="flex items-center gap-1 flex-shrink-0">
+      <button aria-label="Facture précédente" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-prev" title="Facture précédente"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+      <button aria-label="Facture suivante" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-next" title="Facture suivante"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+      <button aria-label="Fermer" class="p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-close">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+  </div>
+  <div class="p-6 space-y-5" id="drawer-body"></div>
+  <div class="p-6 border-t border-slate-200 flex flex-wrap gap-2 sticky bottom-0 bg-white z-10" style="box-shadow:0 -6px 16px -10px rgba(15,30,61,.25)">
+    <a class="btn btn-primary text-sm flex-1 justify-center" id="drawer-open-drive" target="_blank" rel="noopener"><i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir le PDF</a>
+    <button class="btn text-sm text-red-600 hover:bg-red-50 justify-center" id="drawer-delete" title="Supprimer cette facture"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer</button>
+  </div>
+</aside>
+
+<!-- Modal : Importer une facture -->
+<div class="modal-backdrop" id="facture-modal">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-5">
+      <h2 class="text-xl font-extrabold">Importer une facture</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="facture-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <form id="facture-form" class="space-y-4">
+      <!-- Lecture automatique du PDF : remplit les montants tout seuls -->
+      <div id="fa-import">
+        <input type="file" id="fa-file" accept="image/*,application/pdf" class="hidden" />
+        <button type="button" id="fa-trigger" class="w-full flex items-center gap-3 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
+          <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
+            <i data-lucide="scan-line" class="w-5 h-5"></i>
+          </span>
+          <span class="flex-1">
+            <span class="block text-sm font-semibold text-slate-800">Lire le PDF de la facture</span>
+            <span class="block text-xs text-slate-500">Le PDF est lu par l'IA et conservé en ligne (consultable depuis la fiche)</span>
+          </span>
+        </button>
+        <div id="fa-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div><div class="field-label">Fournisseur</div><input class="field-input" id="fa-fournisseur" placeholder="ex. Car World" autocomplete="off" /></div>
+        <div><div class="field-label">Date</div><input class="field-input" type="date" id="fa-date" /></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><div class="field-label">N° de facture</div><input class="field-input" id="fa-num" placeholder="ex. F-2026-466" /></div>
+        <div><div class="field-label">Type</div>
+          <select class="field-input" id="fa-type">
+            <option value="entretien">Entretien</option>
+            <option value="réparation">Réparation</option>
+            <option value="achat">Achat</option>
+            <option value="leasing">Leasing</option>
+            <option value="cession">Cession</option>
+            <option value="sinistre">Sinistre</option>
+            <option value="autre">Autre</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-4">
+        <div><div class="field-label">Montant HT (€)</div><input class="field-input" type="text" inputmode="decimal" id="fa-ht" placeholder="0" /></div>
+        <div><div class="field-label">TVA (€)</div><input class="field-input" type="text" inputmode="decimal" id="fa-tva" placeholder="0" /></div>
+        <div><div class="field-label">Montant TTC (€) *</div><input class="field-input" type="text" inputmode="decimal" id="fa-ttc" placeholder="0" required /></div>
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#334155;cursor:pointer;background:#F8FAFC;border:1px solid var(--fp-border);border-radius:8px;padding:8px 10px;line-height:1.45">
+        <input type="checkbox" id="fa-avoir" style="flex-shrink:0;margin-top:2px"> <span>C'est un <b>avoir</b> (remboursement du fournisseur) — saisis les montants en positif, ils seront <b>déduits</b> des coûts.</span>
+      </label>
+      <div class="grid grid-cols-2 gap-4">
+        <div><div class="field-label">Véhicule (plaque)</div><input class="field-input" id="fa-immat" placeholder="ex. GC-885-LB" autocomplete="off" /></div>
+        <div><div class="field-label">Kilométrage</div><input class="field-input" type="text" inputmode="numeric" id="fa-km" placeholder="" /></div>
+      </div>
+      <div><div class="field-label">Description</div><input class="field-input" id="fa-desc" placeholder="ex. Révision, pneus…" /></div>
+
+      <div class="flex gap-2 pt-2">
+        <button type="button" class="btn btn-outline flex-1 justify-center" id="facture-cancel">Annuler</button>
+        <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="../assets/js/vendor/supabase.js?v=20260811e"></script>
+<script src="../assets/js/supabase-client.js?v=20260811e"></script>
+<script src="../assets/js/data.js?v=20260811e"></script>
+  <script>window.FP_PDF=1;</script>
+<script src="../assets/js/app.js?v=20260811e"></script>
+<script src="../assets/js/fleet-views.js?v=20260811e"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
+<script>
+  lucide.createIcons();
+  const data = window.FP_DATA;
+  const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  // Les factures de leasing sont gérées sur la page Contrats (section Leasing BPCE),
+  // pas dans cette vue qui se concentre sur les vraies factures (entretien, réparation, achat, sinistre, etc.)
+  // Les sinistres ont leur propre page ; le leasing aussi (contrats) → on les sort de la liste Factures
+  // Le carburant / péages TotalEnergies a son propre onglet « Total Fleet » → on les sort aussi de la liste.
+  const _norm = (s) => (s == null ? '' : s.toString()).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  // Péages Ulys (VINCI Autoroutes) : onglet dédié → identifiés par le fournisseur (ou type 'ulys').
+  // Règle centrale partagée (FP.estUlys / FP.estTotalFleet) — même détection que dashboard & stats.
+  const isUlys = (f) => FP.estUlys ? FP.estUlys(f) : (_norm(f.type) === 'ulys' || /\bulys\b/.test(_norm(f.fournisseur)));
+  const isTotalFleet = (f) => FP.estTotalFleet ? FP.estTotalFleet(f) : (!isUlys(f) && (['carburant','peage'].includes(_norm(f.type)) || /total\s*energies|totalenergies/.test(_norm(f.fournisseur))));
+  // Liste de la vue Factures (hors leasing/sinistre/Total Fleet/Ulys). Tableau STABLE (même
+  // référence) reconstruit en place → reste à jour quand Supabase charge ou après un import.
+  const factures = [];
+  function rebuildFactures(){
+    const seen = new Set(), list = [];
+    (data.factures || []).filter(f => f.type !== 'leasing' && f.type !== 'sinistre' && !isTotalFleet(f) && !isUlys(f)).forEach(f => {
+      const k = (f.numeroFacture || '').toString().toUpperCase();
+      if (k && seen.has(k)) return; if (k) seen.add(k); list.push(f); // dé-doublonnage par n° de facture
+    });
+    factures.length = 0; Array.prototype.push.apply(factures, list);
+  }
+  rebuildFactures();
+  const state = { search: '', type: 'all', annee: 'all', mois: 'all', vehicule: 'all', fournisseur: 'all', sortKey: 'date', sortDir: 'desc', currentId: null };
+  let faBulk = null; // barre de sélection multiple (instanciée à l'init)
+  // Tri des factures (par colonne choisie dans le menu « Tri »)
+  function sortRowsFa(arr) {
+    const dir = state.sortDir === 'asc' ? 1 : -1;
+    const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+    return arr.slice().sort((a, b) => {
+      let r;
+      if (state.sortKey === 'montantTTC') r = (num(a.montantTTC) ?? -Infinity) - (num(b.montantTTC) ?? -Infinity);
+      else if (state.sortKey === 'montantHT') r = (num(a.montantHT) ?? -Infinity) - (num(b.montantHT) ?? -Infinity);
+      else if (state.sortKey === 'fournisseur') r = String(a.fournisseur || '').localeCompare(String(b.fournisseur || ''), 'fr', { sensitivity: 'base' });
+      else if (state.sortKey === 'numeroFacture') r = String(a.numeroFacture || '').localeCompare(String(b.numeroFacture || ''), 'fr', { numeric: true, sensitivity: 'base' });
+      else r = String(a.date || '').localeCompare(String(b.date || ''));   // date (défaut)
+      if (r === 0) r = String(a.date || '').localeCompare(String(b.date || '')); // départage stable par date
+      return r * dir;
+    });
+  }
+  const $ = (id) => document.getElementById(id);
+
+  function typePill(t) {
+    const key = (t || 'autre').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const cls = ['entretien','reparation','achat','leasing','cession','sinistre','autre'].includes(key) ? key : 'autre';
+    const label = t ? (t.charAt(0).toUpperCase() + t.slice(1)) : '—';
+    return `<span class="type-pill type-${cls}">${escapeHtml(label)}</span>`;
+  }
+
+  function getYear(date) { return (date || '').slice(0,4); }
+
+  // Populate dynamic filters
+  const vehicules = [...new Set(factures.map(f => f.vehiculeImmat).filter(Boolean))].sort();
+  vehicules.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    $('filter-vehicule').appendChild(opt);
+  });
+  const fournisseurs = [...new Set(factures.map(f => f.fournisseur).filter(Boolean))].sort();
+  fournisseurs.forEach(f => {
+    const opt = document.createElement('option');
+    opt.value = f; opt.textContent = f;
+    $('filter-fournisseur').appendChild(opt);
+  });
+  // Sélecteur d'année dynamique (2026, 2027, … + Toutes années) — comme Amendes / Entretiens.
+  function rebuildAnneeFilter() {
+    const sel = $('filter-annee'); if (!sel) return; const cur = sel.value || 'all';
+    const years = [...new Set(factures.map(f => getYear(f.date)).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
+    sel.innerHTML = '<option value="all">Toutes les années</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
+    sel.value = (years.includes(cur) || cur === 'all') ? cur : 'all';
+    state.annee = sel.value;
+  }
+  rebuildAnneeFilter();
+
+  function filtered() {
+    const q = FP.norm(state.search).trim();
+    return factures.filter(f => {
+      if (state.type !== 'all' && (f.type || 'autre') !== state.type) return false;
+      if (state.annee !== 'all' && getYear(f.date) !== state.annee) return false;
+      if (state.mois !== 'all' && (f.date || '').slice(0,7) !== state.mois) return false;
+      if (state.vehicule !== 'all' && f.vehiculeImmat !== state.vehicule) return false;
+      if (state.fournisseur !== 'all' && f.fournisseur !== state.fournisseur) return false;
+      if (q && !(FP.norm(`${f.fournisseur} ${f.description} ${f.numeroFacture} ${f.vehiculeImmat}`).includes(q))) return false;
+      return true;
+    });
+  }
+
+  function renderKPIs() {
+    const rows = filtered();
+    const totalTTC = rows.reduce((s,f) => s + (f.montantTTC || 0), 0);
+    $('kpi-total').textContent = FP.euro(totalTTC);
+    $('kpi-total-sub').textContent = `sur ${rows.length} facture${rows.length > 1 ? 's' : ''}`;
+    $('kpi-count').textContent = rows.length;
+    $('kpi-moyen').textContent = rows.length > 0 ? FP.euro(totalTTC / rows.length) : '—';
+
+    const fournCount = {};
+    rows.forEach(f => {
+      if (!f.fournisseur) return;
+      fournCount[f.fournisseur] = (fournCount[f.fournisseur] || 0) + (f.montantTTC || 0);
+    });
+    const top = Object.entries(fournCount).sort((a,b) => b[1] - a[1])[0];
+    if (top) {
+      $('kpi-topfourn').textContent = top[0].length > 22 ? top[0].slice(0,20) + '…' : top[0];
+      $('kpi-topfourn-sub').textContent = FP.euro(top[1]);
+    } else {
+      $('kpi-topfourn').textContent = '—';
+      $('kpi-topfourn-sub').textContent = '—';
+    }
+  }
+
+  // === Config colonnes éditables ===
+  const FACTURES_COLUMNS = [
+    { key: 'date',          label: 'Date',         defaultWidth: 110, render: f => FP.date(f.date) },
+    { key: 'vehiculeImmat', label: 'Véhicule',     defaultWidth: 110, cellCls: 'font-mono text-sm', render: f => f.vehiculeImmat ? FP.lienVehicule(f.vehiculeImmat) : '—' },
+    { key: 'fournisseur',   label: 'Fournisseur',  defaultWidth: 220, render: f => escapeHtml(f.fournisseur || '—') },
+    { key: 'description',   label: 'Description',  defaultWidth: 300, render: f => `<span title="${escapeHtml(f.description || '')}">${f.description ? escapeHtml(f.description.slice(0,60)) + (f.description.length > 60 ? '…' : '') : '—'}</span>` },
+    { key: 'type',          label: 'Type',         defaultWidth: 100, render: f => typePill(f.type) },
+    { key: 'montantHT',     label: 'HT',           defaultWidth: 100, render: f => f.montantHT != null ? FP.euroPrecis(f.montantHT) : '<span class="text-slate-400">—</span>' },
+    { key: 'montantTVA',    label: 'TVA',          defaultWidth: 90,  render: f => f.montantTVA != null ? FP.euroPrecis(f.montantTVA) : '<span class="text-slate-400">—</span>' },
+    { key: 'montantTTC',    label: 'Montant TTC',  defaultWidth: 130, cellCls: 'font-semibold', render: f => f.montantTTC ? FP.euroPrecis(f.montantTTC) : '<span class="text-slate-400">—</span>' },
+    { key: 'numeroFacture', label: 'N° facture',   defaultWidth: 130, cellCls: 'font-mono text-xs text-slate-500', render: f => escapeHtml(f.numeroFacture) || '—' },
+    { key: 'km',            label: 'Km',           defaultWidth: 90,  render: f => f.km ? FP.num(f.km) + ' km' : '—' },
+  ];
+
+  let facturesEditor = null;
+
+  const FA_LIMIT = 15;
+  let faExpanded = false;
+  // #5 — Détection de doublons potentiels : même fournisseur + même montant TTC + même date,
+  // OU même n° de facture (non vide) présent plusieurs fois. Purement indicatif (lecture seule).
+  function renderDoublons() {
+    const box = $('fa-doublons'); if (!box) return;
+    const facts = (data.factures || []);
+    const norm = s => FP.norm ? FP.norm(s) : String(s || '').toLowerCase().trim();
+    const groups = {};
+    facts.forEach(f => {
+      const keys = [];
+      const pl = norm(f.vehiculeImmat || ''); // ⚠ un vrai doublon = MÊME véhicule (même plaque)
+      if (!pl) return; // sans plaque, on ne peut pas garantir un doublon → on ignore
+      if (f.montantTTC != null && f.date && f.fournisseur) keys.push('m:' + pl + '|' + norm(f.fournisseur) + '|' + (+f.montantTTC).toFixed(2) + '|' + f.date);
+      if (f.numeroFacture && String(f.numeroFacture).trim()) keys.push('n:' + pl + '|' + norm(f.numeroFacture));
+      keys.forEach(k => { (groups[k] = groups[k] || []).push(f); });
+    });
+    // dédoublonnage des groupes (une facture peut matcher sur montant ET n°) via une signature triée
+    const seen = new Set();
+    const dups = Object.values(groups).filter(g => g.length > 1).filter(g => {
+      const sig = g.map(f => f.fileId || f.id || (f.fournisseur + f.date + f.montantTTC)).sort().join('|');
+      if (seen.has(sig)) return false; seen.add(sig); return true;
+    });
+    if (!dups.length) { box.innerHTML = ''; return; }
+    const groupsHTML = dups.slice(0, 12).map(g => {
+      const f0 = g[0];
+      const entete = `${escapeHtml(f0.fournisseur || '—')} · ${f0.montantTTC != null ? FP.euroPrecis(f0.montantTTC) : ''} · ${f0.date ? FP.dateNum(f0.date) : ''}${f0.numeroFacture ? ' · n° ' + escapeHtml(f0.numeroFacture) : ''}`;
+      const lignes = g.map(f => {
+        const fid = f.fileId || '';
+        const info = [f.date ? FP.dateNum(f.date) : '', f.vehiculeImmat || '', f.numeroFacture ? 'n° ' + f.numeroFacture : '', f.description ? String(f.description).slice(0, 40) : ''].filter(Boolean).map(escapeHtml).join(' · ');
+        return `<button type="button" ${fid ? `data-dup-open="${escapeHtml(fid)}"` : 'disabled'} class="block w-full text-left text-xs px-2 py-1.5 rounded hover:bg-amber-100" style="color:#78350f;${fid ? 'cursor:pointer' : 'opacity:.7;cursor:default'}">${fid ? '🔎 ' : '• '}${info || 'facture'}${fid ? '' : ' <span class=\"text-amber-600\">(saisie manuelle)</span>'}</button>`;
+      }).join('');
+      return `<div class="border border-amber-200 rounded-lg p-2 bg-white/60">
+        <div class="text-sm font-semibold text-amber-900 mb-1">⚠ ${entete} <span class="text-amber-700">(${g.length}×)</span></div>
+        ${lignes}
+      </div>`;
+    }).join('');
+    box.innerHTML = `<details class="card p-4" style="border-color:#FDE68A;background:#FFFBEB">
+      <summary style="cursor:pointer;font-weight:700;color:#92400e;list-style:none" class="flex items-center gap-2">
+        <i data-lucide="copy" class="w-4 h-4"></i> ${dups.length} doublon(s) potentiel(s) détecté(s) — cliquer pour voir lesquels
+      </summary>
+      <div class="mt-3 space-y-2">${groupsHTML}</div>
+      ${dups.length > 12 ? `<div class="text-xs text-amber-700 mt-2">… et ${dups.length - 12} autre(s) groupe(s).</div>` : ''}
+      <div class="text-xs text-amber-700 mt-2">Même fournisseur + montant + date, ou même n° de facture. Clique une ligne 🔎 pour ouvrir la facture et vérifier avant de payer.</div>
+    </details>`;
+    if (window.lucide && lucide.createIcons) lucide.createIcons();
+  }
+  function renderTable() {
+    renderDoublons();
+    const rows = sortRowsFa(filtered());
+    const tbody = $('factures-tbody');
+    const empty = $('empty-state');
+    const more = $('fa-more');
+    if (rows.length === 0) {
+      tbody.innerHTML = '';
+      empty.classList.remove('hidden');
+      if (more) { more.classList.add('hidden'); more.innerHTML = ''; }
+    } else {
+      empty.classList.add('hidden');
+      const visible = facturesEditor ? facturesEditor.getVisibleColumns() : FACTURES_COLUMNS.map(c => c.key);
+      const shown = faExpanded ? rows : rows.slice(0, FA_LIMIT);
+      // Bouton « voir plus / réduire » sous le tableau (au-delà de 15 lignes)
+      if (more) {
+        if (rows.length > FA_LIMIT) {
+          more.classList.remove('hidden');
+          more.innerHTML = faExpanded
+            ? `<button id="fa-toggle" class="btn btn-outline text-sm">Réduire la liste</button>`
+            : `<button id="fa-toggle" class="btn btn-outline text-sm">Voir les ${rows.length - FA_LIMIT} autres factures</button>`;
+        } else { more.classList.add('hidden'); more.innerHTML = ''; }
+      }
+      tbody.innerHTML = shown.map(f => {
+        const cellsArr = visible.map(k => {
+          const def = FACTURES_COLUMNS.find(c => c.key === k);
+          if (!def) return '<td></td>';
+          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''} data-col="${k}">${def.render(f)}</td>`;
+        });
+        // #5 : actions rapides au survol (ouvrir + copier le n° de facture)
+        const ra = `<div class="row-actions">`
+          + (f.numeroFacture ? `<button type="button" class="ra-btn" data-ra="copy" title="Copier le n° de facture"><i data-lucide="copy" class="w-4 h-4"></i></button>` : '')
+          + `<button type="button" class="ra-btn" data-ra="open" title="Ouvrir la fiche"><i data-lucide="square-arrow-out-up-right" class="w-4 h-4"></i></button></div>`;
+        if (cellsArr.length) cellsArr[cellsArr.length - 1] = cellsArr[cellsArr.length - 1].replace(/<\/td>$/, ra + '</td>');
+        // Sélection multiple : case en tête de la 1re cellule
+        if (faBulk && cellsArr.length) cellsArr[0] = cellsArr[0].replace(/^(<td[^>]*>)/, `$1${faBulk.cbCell(f.fileId)}`);
+        return `<tr class="cursor-pointer${faBulk && faBulk.has(f.fileId) ? ' row-selected' : ''}" data-id="${f.fileId}">${cellsArr.join('')}</tr>`;
+      }).join('');
+    }
+    $('result-count').textContent = `${rows.length} facture${rows.length > 1 ? 's' : ''} affichée${rows.length > 1 ? 's' : ''} sur ${factures.length}`;
+    if (faBulk) faBulk.refresh();
+  }
+
+  // Charts
+  let monthlyChart, typesChart;
+  function renderCharts() {
+    if (typeof Chart === 'undefined') return; // Chart.js chargé en différé : dessiné dès qu'il est prêt
+    const rows = filtered();
+
+    // Monthly spend
+    const monthly = {};
+    rows.forEach(f => {
+      const m = (f.date || '').slice(0,7);
+      if (!m) return;
+      monthly[m] = (monthly[m] || 0) + (f.montantTTC || 0);
+    });
+    const months = Object.keys(monthly).sort();
+    if (monthlyChart) monthlyChart.destroy();
+    monthlyChart = new Chart($('monthlyChart'), {
+      type: 'bar',
+      data: {
+        labels: months,
+        datasets: [{
+          data: months.map(m => monthly[m]),
+          backgroundColor: '#F97316',
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 12 } } },
+          y: { grid: { color: '#F1F5F9' }, ticks: { callback: v => v + ' €' } }
+        },
+        maintainAspectRatio: false, responsive: true,
+      }
+    });
+
+    // Types
+    const typesCount = {};
+    rows.forEach(f => {
+      const t = f.type || 'autre';
+      typesCount[t] = (typesCount[t] || 0) + (f.montantTTC || 0);
+    });
+    if (typesChart) typesChart.destroy();
+    typesChart = new Chart($('typesChart'), {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(typesCount),
+        datasets: [{
+          data: Object.values(typesCount),
+          backgroundColor: ['#1E3A8A', '#DC2626', '#16A34A', '#7C3AED', '#F59E0B', '#7F1D1D', '#94A3B8'],
+          borderWidth: 0,
+        }]
+      },
+      options: {
+        cutout: '60%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 14, font: { size: 13 } } } },
+        maintainAspectRatio: false, responsive: true,
+      }
+    });
+  }
+
+  // #14 : aperçu intégré du fichier dans la fiche (PDF Drive en /preview, ou image/PDF stocké)
+  function facturePreviewHTML(f) {
+    const id = f && f.fileId; if (!id || /^IMP-/.test(id)) return '';
+    const box = 'width:100%;border:1px solid var(--fp-border);border-radius:.55rem;background:#f8fafc;margin-top:.5rem;';
+    if (/^https?:\/\//.test(id)) {
+      if (/\.(jpe?g|png|webp|gif|bmp)(\?|#|$)/i.test(id)) return `<img src="${escapeHtml(id)}" loading="lazy" style="${box}max-height:440px;object-fit:contain;display:block">`;
+      return (window.FP && FP.docFrame) ? FP.docFrame(id, { height:'460px' }) : `<iframe src="${escapeHtml(id)}" loading="lazy" style="${box}height:460px"></iframe>`;
+    }
+    const _drv = `https://drive.google.com/file/d/${encodeURIComponent(id)}/preview`;
+    return (window.FP && FP.docFrame) ? FP.docFrame(_drv, { height:'460px' }) : `<iframe src="${_drv}" loading="lazy" style="${box}height:460px"></iframe>`;
+  }
+
+  // Drawer
+  function openDrawer(fileId) {
+    const f = factures.find(x => x.fileId === fileId);
+    if (!f) return;
+    state.currentId = fileId;
+    // Navigation précédente / suivante (suit l'ordre affiché dans le tableau : date décroissante)
+    (function setupDrawerNav(){
+      const liste = filtered().slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const idx = liste.findIndex(x => x.fileId === fileId);
+      const prevId = idx > 0 ? liste[idx - 1].fileId : '';
+      const nextId = (idx >= 0 && idx < liste.length - 1) ? liste[idx + 1].fileId : '';
+      [['drawer-prev', prevId], ['drawer-next', nextId]].forEach(([bid, tid]) => {
+        const btn = $(bid); if (!btn) return;
+        btn.dataset.targetId = tid; btn.style.opacity = tid ? '1' : '.3'; btn.style.pointerEvents = tid ? 'auto' : 'none';
+      });
+    })();
+    $('drawer-num').textContent = f.numeroFacture || '—';
+    $('drawer-title').textContent = f.description || 'Facture';
+    $('drawer-subtitle').textContent = `${f.fournisseur || '—'} · ${FP.date(f.date)}`;
+
+    const empty = '<span class="text-slate-400">— ajouter</span>';
+    $('drawer-body').innerHTML = `
+      <div class="flex justify-between items-center">
+        ${typePill(f.type)}
+        <span id="fa-type-val" class="text-xs underline cursor-pointer text-slate-500" title="Cliquer pour changer le type">modifier le type</span>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3">
+        <div class="kpi p-3"><div class="kpi-label">HT</div><div class="kpi-value" style="font-size:1rem"><span id="fa-ht-val" class="cursor-pointer hover:underline" title="Cliquer pour modifier">${f.montantHT != null ? FP.euroPrecis(f.montantHT) : empty}</span></div></div>
+        <div class="kpi p-3"><div class="kpi-label">TVA</div><div class="kpi-value" style="font-size:1rem"><span id="fa-tva-val" class="cursor-pointer hover:underline" title="Cliquer pour modifier">${f.montantTVA != null ? FP.euroPrecis(f.montantTVA) : empty}</span></div></div>
+        <div class="kpi p-3"><div class="kpi-label">TTC</div><div class="kpi-value" style="font-size:1rem; color: var(--fp-primary)"><span id="fa-ttc-val" class="cursor-pointer hover:underline" title="Cliquer pour modifier">${f.montantTTC != null ? FP.euroPrecis(f.montantTTC) : empty}</span></div></div>
+      </div>
+
+      <div class="fp-panel space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <div><div class="field-label">Véhicule</div><div id="fa-immat-val" class="text-sm font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour modifier">${escapeHtml(f.vehiculeImmat) || empty}</div></div>
+        <div><div class="field-label">Date</div><div id="fa-date-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${f.date ? FP.date(f.date) : empty}</div></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div><div class="field-label">Fournisseur</div><div id="fa-fourn-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour modifier">${escapeHtml(f.fournisseur) || empty}</div></div>
+        <div><div class="field-label">N° de facture</div><div id="fa-num-val" class="text-sm font-mono bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100 truncate" title="Cliquer pour modifier">${escapeHtml(f.numeroFacture) || empty}</div></div>
+      </div>
+
+      <div><div class="field-label">Kilométrage à la facture</div><div id="fa-km-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${f.km ? FP.num(f.km) + ' km' : empty}</div></div>
+
+      <div><div class="field-label">Description</div><div id="fa-desc-val" class="text-sm bg-slate-50 p-2.5 rounded-lg cursor-pointer hover:bg-slate-100" title="Cliquer pour modifier">${f.description ? escapeHtml(f.description) : empty}</div></div>
+
+      <div>
+        <div class="field-label">Fichier source</div>
+        <div class="text-sm bg-slate-50 p-3 rounded-lg break-all">${escapeHtml(f.fileName) || '—'}</div>
+        ${facturePreviewHTML(f)}
+      </div>
+      </div>
+    `;
+    const oc = (id, fn) => { const el = $(id); if (el) el.onclick = () => fn(el); };
+    oc('fa-ht-val', el => editFaField(el, 'montantHT', 'number'));
+    oc('fa-tva-val', el => editFaField(el, 'montantTVA', 'number'));
+    oc('fa-ttc-val', el => editFaField(el, 'montantTTC', 'number'));
+    oc('fa-immat-val', el => editFaField(el, 'vehiculeImmat', 'text'));
+    oc('fa-date-val', el => editFaField(el, 'date', 'date'));
+    oc('fa-fourn-val', el => editFaField(el, 'fournisseur', 'text'));
+    oc('fa-num-val', el => editFaField(el, 'numeroFacture', 'text'));
+    oc('fa-km-val', el => editFaField(el, 'km', 'number'));
+    oc('fa-desc-val', el => editFaField(el, 'description', 'text'));
+    oc('fa-type-val', el => editFaType(el));
+
+    // Bouton "Ouvrir le PDF" : fichier Drive (id) OU fichier stocké en ligne (URL complète, ex. scan).
+    const hasFile = f.fileId && !/^IMP-/.test(f.fileId);
+    const openBtn = $('drawer-open-drive');
+    if (hasFile){ openBtn.href = /^https?:\/\//.test(f.fileId) ? f.fileId : `https://drive.google.com/file/d/${f.fileId}/view`; openBtn.style.display = ''; }
+    else { openBtn.removeAttribute('href'); openBtn.style.display = 'none'; }
+    $('drawer').classList.add('open');
+    $('drawer-backdrop').classList.add('open');
+    (function(){ const dr = $('drawer'); dr.classList.remove('fiche-in'); void dr.offsetWidth; dr.classList.add('fiche-in'); })();
+    lucide.createIcons();
+  }
+  function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
+
+  // Édition au clic d'un champ de la facture — éditeur maison (FP.cellEditor)
+  function editFaField(el, field, type) {
+    const f = factures.find(x => x.fileId === state.currentId); if (!f || !el || !FP.cellEditor) return;
+    FP.cellEditor(el, f[field] != null ? f[field] : '', type || 'text', {
+      onSave: (nv) => {
+        const patch = {};
+        if (type === 'number') { const num = (nv == null || nv === '') ? null : nv; f[field] = num; patch[field] = num; }
+        else if (type === 'date') { const v = nv || null; f[field] = v; patch[field] = v; }
+        else { let v = (nv == null ? '' : String(nv)).trim(); if (field === 'vehiculeImmat') v = v.toUpperCase(); f[field] = v || null; patch[field] = v || null; }
+        if (FP.history && FP.history.commit) FP.history.commit();
+        renderKPIs(); renderTable(); renderCharts();
+        if (FP.persist) FP.persist.update('factures', f.id, patch);
+        // ⚠️ Éditer km/date/type d'une facture doit AUSSI remonter au véhicule (même source unique qu'à la création).
+        const maj = syncRevisionVehicule(f);
+        if (maj && FP.toast) FP.toast('✓ Fiche véhicule mise à jour : ' + maj);
+        openDrawer(f.fileId);
+      },
+      onCancel: () => openDrawer(f.fileId),
+    });
+  }
+  const FA_TYPES_EDIT = ['entretien', 'réparation', 'achat', 'leasing', 'cession', 'sinistre', 'autre'];
+  function editFaType(el) {
+    const f = factures.find(x => x.fileId === state.currentId); if (!f || !el || !FP.cellEditor) return;
+    FP.cellEditor(el, f.type || 'autre', 'select', {
+      options: FA_TYPES_EDIT,
+      onSave: (nv) => {
+        const match = FA_TYPES_EDIT.includes(nv) ? nv : 'autre';
+        f.type = match;
+        if (FP.history && FP.history.commit) FP.history.commit();
+        renderKPIs(); renderTable(); renderCharts();
+        if (FP.persist) FP.persist.update('factures', f.id, { type: match });
+        // ⚠️ Changer le type touche « entretien » : recaler la fiche (retire si plus entretien) puis
+        // ré-appliquer (ajoute si devenu entretien). Source unique app.js.
+        if (f.vehiculeImmat && FP.recomputeVehiculeFromFactures) {
+          const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(f.vehiculeImmat));
+          if (v) FP.recomputeVehiculeFromFactures(v, data.factures);
+        }
+        const maj = syncRevisionVehicule(f);
+        if (maj && FP.toast) FP.toast('✓ Fiche véhicule mise à jour : ' + maj);
+        openDrawer(f.fileId);
+      },
+      onCancel: () => openDrawer(f.fileId),
+    });
+  }
+
+  async function deleteFacture() {
+    const f = factures.find(x => x.fileId === state.currentId);
+    if (!f) return;
+    const label = f.numeroFacture || f.description || 'cette facture';
+    if (!(await FP.confirm(`Supprimer « ${label} » ?\n\nLa facture est retirée définitivement de la base.`))) return;
+    if (FP.history && FP.history.commit) FP.history.commit();
+    const rm = (arr) => { const i = arr.findIndex(x => x.id === f.id); if (i >= 0) arr.splice(i, 1); };
+    rm(data.factures); rm(factures);
+    if (FP.persist) FP.persist.delete('factures', f.id, f); // record → Corbeille (restaurable)
+    // ⚠️ Symétrie avec l'ajout : si c'était une facture d'entretien, recaler la fiche véhicule sur les
+    // factures RESTANTES (sinon « dernière révision » / km / pneus fantômes). Source unique app.js.
+    if (f.vehiculeImmat && FP.recomputeVehiculeFromFactures) {
+      const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(f.vehiculeImmat));
+      if (v) { const rc = FP.recomputeVehiculeFromFactures(v, data.factures); if (rc && FP.toast) FP.toast('Fiche véhicule recalculée : ' + v.immat); }
+    }
+    // Nettoie le statut de remboursement éventuel (sinistre) pour ne pas laisser de fantôme
+    try {
+      const s = FP.settings.get();
+      if (s.sinistreStatut && s.sinistreStatut[f.id] != null) { delete s.sinistreStatut[f.id]; FP.settings.save(s); }
+    } catch (e) {}
+    closeDrawer();
+    renderKPIs(); renderTable(); renderCharts();
+  }
+
+  // Import / Export CSV
+  FP.injectDataIO({
+    export: false, // export géré par FP.makeExportMenu (Excel + CSV + période) ci-dessous
+    filename: `parc-pilot-factures-${new Date().toISOString().slice(0,10)}.csv`,
+    table: 'factures', collection: 'factures', idPrefix: 'FA-IMP-',
+    columns: [
+      { key: 'id',            label: 'ID' },
+      { key: 'date',          label: 'Date' },
+      { key: 'vehiculeImmat', label: 'Véhicule' },
+      { key: 'fournisseur',   label: 'Fournisseur' },
+      { key: 'numeroFacture', label: 'N° facture' },
+      { key: 'description',   label: 'Description' },
+      { key: 'type',          label: 'Type' },
+      { key: 'montantHT',     label: 'HT (€)',  format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'montantTVA',    label: 'TVA (€)', format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'montantTTC',    label: 'TTC (€)', format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'km',            label: 'Km',      format: FP.csv.numFormat, parse: FP.csv.numParse },
+      { key: 'fileName',      label: 'Fichier' },
+    ],
+    getRows: () => filtered(),
+    onChange: () => { renderKPIs(); renderTable(); renderCharts(); },
+  });
+
+  // ============================================================
+  //  Importer une facture → lecture auto des montants (PDF/photo)
+  //  100% navigateur, le PDF n'est PAS conservé : on ne garde que
+  //  les chiffres pour les calculs (totaux, KPIs, graphiques).
+  // ============================================================
+  const TESSERACT_CDN = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  const JSZIP_CDN     = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'; // dézip des relevés Total (à la demande)
+  const PDFJS_CDN     = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+  const PDFJS_WORKER  = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  function loadScript(src){
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[data-lazy="${src}"]`);
+      if (existing) {
+        if (existing.dataset.loaded === '1') return resolve();
+        existing.addEventListener('load', resolve);
+        existing.addEventListener('error', () => reject(new Error('Échec du chargement de ' + src)));
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = src; s.dataset.lazy = src;
+      s.onload = () => { s.dataset.loaded = '1'; resolve(); };
+      s.onerror = () => reject(new Error('Échec du chargement de ' + src));
+      document.head.appendChild(s);
+    });
+  }
+  function faStatus(msg, type){
+    const el = $('fa-status'); el.classList.remove('hidden');
+    const colors = { working:'background:#F1F5F9;color:#475569;', ok:'background:#ECFDF5;color:#047857;', error:'background:#FEF2F2;color:#B91C1C;' };
+    el.setAttribute('style', colors[type] || colors.working);
+    el.innerHTML = msg;
+  }
+  const faWorking = (txt) => faStatus(`<span class="inline-flex items-center gap-2"><span class="fa-spin"></span> ${txt}</span>`, 'working');
+
+  async function loadPdf(file){
+    await loadScript(PDFJS_CDN);
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+    const buf = await file.arrayBuffer();
+    return window.pdfjsLib.getDocument({ data: buf }).promise;
+  }
+  async function pdfText(pdf){
+    let txt = ''; const n = Math.min(pdf.numPages, 4);
+    for (let p = 1; p <= n; p++){ const page = await pdf.getPage(p); const c = await page.getTextContent(); txt += c.items.map(it => it.str).join(' ') + '\n'; }
+    return txt;
+  }
+  async function pdfPageToCanvas(pdf){
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas;
+  }
+
+  // "1 234,56 €" / "1.234,56" / "63,67" → nombre
+  function parseEuro(s){
+    if (!s) return null;
+    s = s.replace(/[^\d.,]/g, '');
+    if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else if (s.includes(',')) s = s.replace(',', '.');
+    const v = parseFloat(s);
+    return isNaN(v) ? null : v;
+  }
+  // Cherche un montant juste après un des libellés donnés
+  function findAmount(text, labels){
+    for (const lab of labels){
+      const re = new RegExp(lab + '[^0-9\\-]{0,40}([0-9][0-9\\s.,]*?(?:,[0-9]{2})?)\\s*(?:€|EUR)?', 'i');
+      const m = text.match(re);
+      if (m){ const v = parseEuro(m[1]); if (v != null && v > 0) return v; }
+    }
+    return null;
+  }
+
+  function parseFacture(raw){
+    const text = (raw || '').replace(/ /g, ' ');
+    const out = {};
+    // Le triplet arithmétique HT + TVA = TTC est LE plus fiable (il s'auto-vérifie) :
+    // on le prend en PRIORITÉ. Sinon seulement, on retombe sur la détection par étiquettes
+    // (qui peut se tromper sur les mises en page type Pennylane / CAR WORLD où les libellés
+    // sont loin des chiffres — ex. attraper le « 1 » de « 1 unité »).
+    const trip = deriveTotals(text);
+    if (trip) {
+      out.montantHT = trip.ht; out.montantTVA = trip.tva; out.montantTTC = trip.ttc;
+    } else {
+      out.montantTTC = findAmount(text, ['Net\\s*à\\s*payer', 'Total\\s*TTC', 'Montant\\s*TTC', 'TOTAL\\s*T\\.?T\\.?C', 'Total\\s*à\\s*payer', 'À\\s*payer', 'Total\\s*général']);
+      out.montantHT  = findAmount(text, ['Total\\s*HT', 'Montant\\s*HT', 'TOTAL\\s*H\\.?T', 'Base\\s*HT']);
+      out.montantTVA = findAmount(text, ['Total\\s*TVA', 'Montant\\s*TVA', 'T\\.?V\\.?A\\.?']);
+      if (out.montantTTC == null && out.montantHT != null && out.montantTVA != null) out.montantTTC = Math.round((out.montantHT + out.montantTVA) * 100) / 100;
+    }
+    // Numéro de facture
+    let m = text.match(/Num[ée]ro\s*[:\-]?\s*([A-Z]{1,4}-?\d[A-Z0-9\-\/]{2,})/i)
+         || text.match(/Facture\s*(?:n[°ºo]|N[°ºO]|#)?\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\/\.]{2,})/i)
+         || text.match(/N[°ºo]\s*(?:de\s*)?facture\s*[:\-]?\s*([A-Z0-9][A-Z0-9\-\/\.]{2,})/i);
+    if (m) out.numeroFacture = m[1].replace(/[.\s]+$/, '');
+    // Date : JJ/MM/AAAA, sinon "12 juin 2026" (en lettres), sinon AAAA-MM-JJ.
+    // On privilégie la date d'émission si elle est repérable.
+    out.date = findDate(text);
+    // Plaque éventuelle
+    const p = text.toUpperCase().match(/\b([A-Z]{2})[-\s]?([0-9]{3})[-\s]?([A-Z]{2})\b/);
+    if (p) out.vehiculeImmat = `${p[1]}-${p[2]}-${p[3]}`;
+    // Kilométrage éventuel ("190 290 KMS", "190290 km")
+    const k = text.match(/(\d[\d\s.]{2,})\s*(?:KMS?|kilom)/i);
+    if (k) { const v = parseInt(k[1].replace(/[\s.]/g, ''), 10); if (!isNaN(v) && v > 0) out.km = v; }
+    // Si TTC introuvable mais HT+TVA présents, on déduit
+    if (out.montantTTC == null && out.montantHT != null && out.montantTVA != null) out.montantTTC = Math.round((out.montantHT + out.montantTVA) * 100) / 100;
+    return out;
+  }
+
+  // Tous les montants en euros du document → triplet (HT, TVA, TTC) tel que HT + TVA = TTC,
+  // en gardant le TTC le plus élevé (= le total de la facture). Marche même si les libellés
+  // sont éloignés des chiffres (mises en page type Pennylane).
+  function deriveTotals(text){
+    const amounts = [...text.matchAll(/([0-9][0-9\s.]*,[0-9]{2})/g)].map(mm => parseEuro(mm[1])).filter(v => v != null && v > 0);
+    if (amounts.length < 3) return null;
+    let best = null;
+    for (let i = 0; i < amounts.length; i++) {
+      for (let j = 0; j < amounts.length; j++) {
+        if (i === j) continue;
+        const ht = amounts[i], tva = amounts[j];
+        if (ht <= tva) continue; // la TVA est presque toujours < HT
+        const ttc = Math.round((ht + tva) * 100) / 100;
+        if (ttc <= ht) continue;
+        if (amounts.some(a => Math.abs(a - ttc) < 0.02)) {
+          if (!best || ttc > best.ttc) best = { ht, tva, ttc };
+        }
+      }
+    }
+    return best;
+  }
+
+  const FR_MONTHS = { janvier:1, février:2, fevrier:2, mars:3, avril:4, mai:5, juin:6, juillet:7, août:8, aout:8, septembre:9, octobre:10, novembre:11, décembre:12, decembre:12 };
+  function findDate(text){
+    // 1) date d'émission explicite (lettres ou chiffres)
+    const emis = text.match(/[ée]mission\s*[:\-]?\s*(\d{1,2})\s+([a-zA-Zûâôéèêà]+)\s+(\d{4})/i)
+              || text.match(/[ée]mission\s*[:\-]?\s*(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/i);
+    if (emis) { const iso = isoFromParts(emis[1], emis[2], emis[3]); if (iso) return iso; }
+    // 2) première date en chiffres JJ/MM/AAAA
+    let d = text.match(/(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/);
+    if (d) return `${d[3]}-${String(d[2]).padStart(2,'0')}-${String(d[1]).padStart(2,'0')}`;
+    // 3) première date en lettres "12 juin 2026"
+    d = text.match(/(\d{1,2})\s+([a-zA-Zûâôéèêà]+)\s+(\d{4})/);
+    if (d) { const iso = isoFromParts(d[1], d[2], d[3]); if (iso) return iso; }
+    // 4) format ISO
+    d = text.match(/(\d{4})-(\d{2})-(\d{2})/); if (d) return `${d[1]}-${d[2]}-${d[3]}`;
+    return undefined;
+  }
+  function isoFromParts(day, month, year){
+    let mo;
+    if (/^\d+$/.test(month)) {
+      mo = parseInt(month, 10);
+    } else {
+      const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      mo = FR_MONTHS[month.toLowerCase()];
+      if (!mo) { const key = Object.keys(FR_MONTHS).find(k => norm(k) === norm(month)); mo = key ? FR_MONTHS[key] : null; }
+    }
+    if (!mo || mo < 1 || mo > 12) return null;
+    return `${year}-${String(mo).padStart(2,'0')}-${String(parseInt(day,10)).padStart(2,'0')}`;
+  }
+
+  // Remplit les champs du formulaire depuis les données lues (IA ou lecteur local)
+  function applyFactureFields(parsed, fromIA){
+    if (!parsed) parsed = {};
+    const filled = [];
+    const set = (id, val, label) => { const el = $(id); if (el && val != null && val !== '' && !el.value){ el.value = val; filled.push(label); } };
+    if (parsed.date){ $('fa-date').value = parsed.date; filled.push('date'); } // écrase la date du jour pré-remplie
+    set('fa-ttc', parsed.montantTTC, 'montant TTC');
+    set('fa-ht',  parsed.montantHT,  'HT');
+    set('fa-tva', parsed.montantTVA, 'TVA');
+    set('fa-num', parsed.numeroFacture, 'n° facture');
+    if (parsed.vehiculeImmat) set('fa-immat', String(parsed.vehiculeImmat).toUpperCase(), 'véhicule');
+    set('fa-km', parsed.km, 'km');
+    if (fromIA){ set('fa-fournisseur', parsed.fournisseur, 'fournisseur'); set('fa-desc', parsed.description, 'description'); }
+    // Type de facture déterminé par l'IA (entretien/réparation/achat/leasing/cession/sinistre/autre).
+    // On l'applique (en écrasant le défaut « entretien ») pour éviter la correction manuelle systématique.
+    if (fromIA && parsed.factureType){
+      const map = { entretien:'entretien', reparation:'réparation', achat:'achat', leasing:'leasing', cession:'cession', sinistre:'sinistre', autre:'autre' };
+      const key = String(parsed.factureType).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+      const val = map[key];
+      if (val){ const el = $('fa-type'); if (el && el.value !== val){ el.value = val; filled.push('type'); } }
+    }
+    // Avoir détecté par l'IA (montant négatif ou description « Avoir … ») : on coche la case
+    // et on remet les montants en POSITIF (la case les re-passera en négatif à l'enregistrement).
+    if (fromIA && $('fa-avoir') && ((Number(parsed.montantTTC) < 0) || /^\s*avoir/i.test(String(parsed.description || '')))) {
+      $('fa-avoir').checked = true;
+      ['fa-ht','fa-tva','fa-ttc'].forEach(id => { const el = $(id); if (el && el.value) { const nn = parseFloat(String(el.value).replace(',', '.')); if (isFinite(nn)) el.value = Math.abs(nn); } });
+      filled.push('avoir');
+    }
+    // Contrôle de cohérence HT + TVA = TTC (à vérifier sur TOUTE facture) : on alerte si l'écart
+    // dépasse 2 centimes, pour ne jamais valider des montants incohérents en silence.
+    const _ht = num($('fa-ht').value), _tva = num($('fa-tva').value), _ttc = num($('fa-ttc').value);
+    let _warn = '';
+    if (_ht != null && _tva != null && _ttc != null && Math.abs((_ht + _tva) - _ttc) > 0.02)
+      _warn = `<br>⚠️ <b>À vérifier</b> : HT (${FP.euroPrecis(_ht)}) + TVA (${FP.euroPrecis(_tva)}) = ${FP.euroPrecis(_ht + _tva)} ≠ TTC (${FP.euroPrecis(_ttc)}).`;
+    if (filled.length) faStatus(`<b>✓ ${fromIA ? 'Lecture IA' : 'Lecture'} — ${filled.length} champ(s)</b> : ${filled.join(', ')}.${fromIA ? '' : '<br>Complétez le fournisseur et le type.'}${_warn}`, _warn ? 'error' : 'ok');
+    else faStatus("Lecture terminée, mais rien n'a pu être détecté. Saisissez les montants à la main (surtout le TTC).", 'error');
+    // ⚠️ Alerte si une info dont le site a besoin manque (date, fournisseur, TTC).
+    try {
+      const rec = { date: $('fa-date').value, fournisseur: $('fa-fournisseur').value, montantTTC: num($('fa-ttc').value) };
+      if (window.FP && FP.importAlert) FP.importAlert('facture', rec, { prefix: 'Facture', where: 'la fiche facture' });
+    } catch (e) {}
+  }
+
+  let _faReading = false;
+  async function handleFacture(file){
+    if (!file || _faReading) return; // ⚠️ garde anti double-lecture (dropzone + input + ouverture) : sinon
+    _faReading = true;               //    deux lectures se chevauchent et l'une écrase le résultat de l'autre.
+    try {
+      // 0) Lecture IA (Haiku via le relais sécurisé) — la meilleure ; sinon on retombe sur le lecteur local.
+      let iaOk = false;
+      try {
+        faWorking('Lecture IA du document…');
+        const ia = await FP.scanIA(file, 'facture');
+        if (ia && Object.keys(ia).length) { applyFactureFields(ia, true); iaOk = true; } // applique même partiel (fournisseur, plaque…)
+        if (ia && (ia.montantTTC != null || ia.montantHT != null || ia.numeroFacture)) return; // montants lus → terminé
+      } catch (_) { /* on complète avec le lecteur local */ }
+      // 1) Lecteur local (texte PDF / OCR) — gratuit, fonctionne hors-ligne
+      try {
+        let parsed = {};
+        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+        if (isPdf){
+          faWorking('Lecture du PDF…');
+          const pdf = await loadPdf(file);
+          const native = await pdfText(pdf);
+          if ((native || '').replace(/\s/g, '').length > 40) parsed = parseFacture(native);
+          else { faWorking('PDF scanné — analyse de l\'image…'); await loadScript(TESSERACT_CDN); const canvas = await pdfPageToCanvas(pdf); const w = await Tesseract.createWorker('fra'); const { data } = await w.recognize(canvas); await w.terminate(); parsed = parseFacture(data.text); }
+        } else {
+          faWorking('Lecture de la facture… (quelques secondes au 1er usage)');
+          await loadScript(TESSERACT_CDN);
+          const w = await Tesseract.createWorker('fra'); const { data } = await w.recognize(file); await w.terminate();
+          parsed = parseFacture(data.text);
+        }
+        applyFactureFields(parsed, false);
+      } catch (err) {
+        console.error(err);
+        // ⚠️ N'affiche PAS l'erreur si des champs ont DÉJÀ été remplis (l'IA a réussi, ou lecture partielle) :
+        // sinon un « Impossible de lire » rouge s'affichait à tort alors que la facture était bien reconnue.
+        const anyFilled = iaOk || ['fa-ttc','fa-ht','fa-tva','fa-num','fa-fournisseur','fa-desc'].some(id => { const el = $(id); return el && String(el.value || '').trim(); });
+        if (!anyFilled) faStatus("Impossible de lire le document. Vérifiez votre connexion internet, ou saisissez les montants manuellement.", 'error');
+      }
+    } finally { _faReading = false; }
+  }
+
+  function nextFactId(){
+    let max = 0;
+    data.factures.forEach(f => { const m = /^FA-(\d+)$/.exec(f.id || ''); if (m) max = Math.max(max, parseInt(m[1], 10)); });
+    return 'FA-' + String(max + 1).padStart(4, '0');
+  }
+  let _faFileName = '';
+  let _faFile = null; // le fichier importé, conservé pour le stocker en ligne à l'enregistrement
+  function openFactureModal(opts){
+    ['fa-fournisseur','fa-num','fa-ht','fa-tva','fa-ttc','fa-immat','fa-km','fa-desc'].forEach(id => $(id).value = '');
+    $('fa-date').value = new Date().toISOString().slice(0,10);
+    $('fa-type').value = 'entretien';
+    if ($('fa-avoir')) $('fa-avoir').checked = false;
+    // Import depuis un onglet dédié (ex. Ulys) : on pré-remplit le fournisseur. Le helper `set`
+    // ne remplit que les champs VIDES → l'OCR ne l'écrasera pas, et la facture atterrit dans le bon onglet.
+    if (opts && opts.fournisseur) $('fa-fournisseur').value = opts.fournisseur;
+    _faFileName = ''; _faFile = null;
+    const st = $('fa-status'); st.classList.add('hidden'); st.innerHTML = '';
+    $('facture-modal').classList.add('open');
+    lucide.createIcons();
+  }
+  function closeFactureModal(){ $('facture-modal').classList.remove('open'); }
+
+  // ---- Import en LOT de factures PDF : l'IA lit chaque document et crée la facture ----
+  // (anti-doublon FP.dupe, contrôle HT+TVA=TTC signalé, type deviné par l'IA, PDF stocké en ligne).
+  function faTypeFromIA(ft){
+    if (!ft) return null;
+    const map = { entretien:'entretien', reparation:'réparation', achat:'achat', leasing:'leasing', cession:'cession', sinistre:'sinistre', autre:'autre' };
+    const k = String(ft).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+    return map[k] || null;
+  }
+  async function handleFactureLot(fileList){
+    const allFiles = Array.from(fileList || []).filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name) || /^image\//.test(f.type || ''));
+    const modal = $('fabulk-modal'), body = $('fabulk-body');
+    modal.classList.add('open'); lucide.createIcons();
+    if (!allFiles.length){ body.innerHTML = '<p class="text-red-600">Aucun PDF ou image sélectionné.</p>'; return; }
+    // ⚠️ PRÉ-TRI (import en lot = MÊME résultat que l'import 1 par 1) : un relevé TotalEnergies ou Ulys
+    // porte le DÉTAIL par conducteur. On les route vers leur importateur dédié (reconstruction de la
+    // conso par carte/badge) au lieu d'un simple scan de facture — sinon la conso serait perdue.
+    const totalFiles = [], ulysFiles = [], files = [];
+    body.innerHTML = `<div class="inline-flex items-center gap-2"><span class="fa-spin"></span> Analyse de ${allFiles.length} document(s)…</div>`;
+    for (const f of allFiles) {
+      let routed = false;
+      if (window.__facIsTotalStatement) { try { if (await window.__facIsTotalStatement(f)) { totalFiles.push(f); routed = true; } } catch (e) {} }
+      if (!routed && window.__facIsUlysStatement) { try { if (await window.__facIsUlysStatement(f)) { ulysFiles.push(f); routed = true; } } catch (e) {} }
+      if (!routed) files.push(f);
+    }
+    // Total Fleet & Ulys ont DÉMÉNAGÉ dans la page Contrôle → on n'importe plus ces relevés depuis
+    // Factures : on renvoie l'utilisateur vers la page Contrôle (onglet Total Fleet ou Ulys).
+    const routeStatements = () => {
+      const n = totalFiles.length + ulysFiles.length;
+      const dest = totalFiles.length ? 'controle.html?tab=total' : 'controle.html?tab=ulys';
+      body.innerHTML = `<div style="line-height:1.6"><p class="font-semibold text-slate-900 mb-1">🔎 ${n} relevé(s) Total Fleet / Ulys détecté(s)</p>`
+        + `<p class="text-sm text-slate-600">Les relevés carburant &amp; péages se gèrent désormais dans la page <b>Contrôle</b>. Ouvre-la, puis dépose-les dans l'onglet <b>Total Fleet</b> ou <b>Ulys</b> (bouton « Importer un relevé »).</p>`
+        + `<div class="mt-3 flex gap-2"><a href="${dest}" class="btn btn-dark text-sm"><i data-lucide="shield-alert" class="w-4 h-4"></i> Ouvrir la page Contrôle</a><button type="button" id="fabulk-close2" class="btn btn-outline text-sm">Fermer</button></div></div>`;
+      if (window.lucide) lucide.createIcons();
+      const c = $('fabulk-close2'); if (c) c.addEventListener('click', () => modal.classList.remove('open'));
+    };
+    // Cas fréquent : QUE des relevés détaillés → message direct vers Contrôle.
+    if (!files.length && (totalFiles.length || ulysFiles.length)) { routeStatements(); return; }
+    let ok = 0, dupes = 0, warn = 0, fail = 0; const added = [];
+    const line = (extra) => `<div class="inline-flex items-center gap-2"><span class="fa-spin"></span> ${extra}</div><div class="mt-2 text-xs text-slate-500">✓ ${ok} importée(s) · ${dupes} doublon(s) · ${warn} à vérifier · ${fail} illisible(s)</div>`;
+    for (let i = 0; i < files.length; i++){
+      const file = files[i];
+      body.innerHTML = line(`Lecture ${i + 1}/${files.length} : ${escapeHtml(file.name)}…`);
+      let ia = null;
+      try { ia = await FP.scanIA(file, 'facture'); } catch (e) { ia = null; }
+      if (!ia || (ia.montantTTC == null && ia.montantHT == null && !ia.numeroFacture && !ia.fournisseur)) { fail++; continue; }
+      const ht = ia.montantHT != null ? Number(ia.montantHT) : null;
+      const tva = ia.montantTVA != null ? Number(ia.montantTVA) : null;
+      const ttc = ia.montantTTC != null ? Number(ia.montantTTC) : ((ht != null && tva != null) ? +(ht + tva).toFixed(2) : null);
+      const incoherent = (ht != null && tva != null && ttc != null && Math.abs((ht + tva) - ttc) > 0.02);
+      const rec = { date: ia.date || null,
+        vehiculeImmat: ia.vehiculeImmat ? String(ia.vehiculeImmat).toUpperCase().replace(/\s+/g,'') : null,
+        fournisseur: ia.fournisseur || null, numeroFacture: ia.numeroFacture || null, description: ia.description || null,
+        type: faTypeFromIA(ia.factureType) || 'autre', montantHT: ht, montantTVA: tva, montantTTC: ttc,
+        km: ia.km != null ? (parseInt(String(ia.km).replace(/\D/g,''), 10) || null) : null };
+      if (FP.dupe && FP.dupe.find && FP.dupe.find('factures', rec, data.factures)) { dupes++; continue; }
+      let fileId = 'IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), fileName = file.name;
+      try { if (FP.uploadScan){ const url = await FP.uploadScan(file, 'factures'); if (url) fileId = url; } } catch (e) { /* on garde la facture même si l'upload échoue */ }
+      const row = { id: nextFactId(), ...rec, fileId, fileName };
+      try {
+        await FP.persist.insert('factures', row);
+        data.factures.push(row); if (row.type !== 'leasing') factures.push(row);
+        ok++; if (incoherent) warn++; added.push({ row, incoherent });
+      } catch (e) { fail++; }
+    }
+    try { renderKPIs(); renderTable(); renderCharts(); } catch (e) {}
+    body.innerHTML = `<p class="font-semibold text-emerald-700 mb-1">✓ ${ok} facture(s) importée(s)</p>` +
+      `<p class="text-sm text-slate-600">${dupes} doublon(s) ignoré(s)${warn ? ` · <span class="text-amber-600">${warn} à vérifier (HT+TVA ≠ TTC)</span>` : ''}${fail ? ` · <span class="text-red-600">${fail} illisible(s)</span>` : ''}.</p>` +
+      (added.length ? `<div class="mt-3 max-h-52 overflow-auto text-xs border-t border-slate-100 pt-2">${added.map(a => `<div class="py-1 flex justify-between gap-3 ${a.incoherent ? 'text-amber-600' : 'text-slate-600'}"><span class="truncate">${escapeHtml(a.row.fournisseur || '?')} · ${a.row.type}</span><span class="whitespace-nowrap">${a.row.montantTTC != null ? FP.euro(a.row.montantTTC) : '—'}${a.incoherent ? ' ⚠️' : ''}</span></div>`).join('')}</div>` : '') +
+      (fail ? `<p class="text-xs text-slate-400 mt-2">Les documents illisibles peuvent être ajoutés à la main via « Importer une facture ».</p>` : '') +
+      ((totalFiles.length || ulysFiles.length) ? `<div class="mt-3 p-2 rounded-lg text-xs" style="background:#FFF7ED;color:#9A3412;line-height:1.5">🔎 ${[totalFiles.length ? totalFiles.length + ' relevé(s) TotalEnergies' : '', ulysFiles.length ? ulysFiles.length + ' relevé(s) Ulys' : ''].filter(Boolean).join(' + ')} détecté(s) : ils se gèrent dans la page <b>Contrôle</b> → clique ci-dessous pour les y importer.</div>` : '') +
+      `<button id="fabulk-done" class="btn btn-dark text-sm w-full justify-center mt-3">${(totalFiles.length || ulysFiles.length) ? 'Aller à la page Contrôle →' : 'Terminé'}</button>`;
+    lucide.createIcons();
+    const done = $('fabulk-done'); if (done) done.addEventListener('click', () => { if (totalFiles.length || ulysFiles.length) routeStatements(); else modal.classList.remove('open'); });
+    if (ok && FP.toast) FP.toast(ok + ' facture(s) importée(s) ✓');
+  }
+  async function saveFacture(ev){
+    ev.preventDefault();
+    // Normalise « 1 466,48 » / « 1466.48 » → 1466.48
+    const num = (n) => { const v = parseFloat(String(n == null ? '' : n).replace(/\s/g, '').replace(',', '.')); return isNaN(v) ? null : v; };
+    const ttc = num($('fa-ttc').value);
+    // TTC obligatoire et non nul. On AUTORISE un montant NÉGATIF (avoir / note de crédit du fournisseur),
+    // qui vient en déduction dans les totaux ; on bloque seulement l'absence de montant ou un TTC à 0.
+    if (ttc == null || ttc === 0){ $('fa-ttc').focus(); faStatus('Indiquez le montant TTC (négatif pour un avoir).', 'error'); return; }
+    // Contrôle systématique HT + TVA = TTC (tolérance 2 cts) — même règle qu'au scan, mais aussi sur une
+    // saisie/édition MANUELLE : on ne valide jamais des montants incohérents en silence (cf. CLAUDE.md).
+    const _ht = num($('fa-ht').value), _tva = num($('fa-tva').value);
+    if (_ht != null && _tva != null && Math.abs((_ht + _tva) - ttc) > 0.02) {
+      const ok = await FP.confirm(`⚠️ Montants incohérents :\nHT ${_ht.toFixed(2)} € + TVA ${_tva.toFixed(2)} € = ${(_ht + _tva).toFixed(2)} €\n≠ TTC ${ttc.toFixed(2)} €\n\nEnregistrer quand même ?`);
+      if (!ok) { $('fa-ht').focus(); faStatus('Vérifiez HT / TVA / TTC (l\'écart doit être ≤ 2 cts).', 'error'); return; }
+    }
+    const date = $('fa-date').value || new Date().toISOString().slice(0,10);
+    // Conserve le PDF en ligne (consultable + relisable plus tard par l'IA).
+    let fileId = 'IMP-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+    let fileName = _faFileName || null;
+    if (_faFile && FP.uploadScan) {
+      try {
+        faWorking('Enregistrement du document en ligne…');
+        const url = await FP.uploadScan(_faFile, 'factures');
+        if (url) { fileId = url; fileName = _faFile.name; }
+      } catch (e) { console.warn('[facture upload]', e); }
+    }
+    // Avoir : les montants saisis (positifs) sont stockés en NÉGATIF → déduits partout dans les coûts.
+    const isAvoir = $('fa-avoir') && $('fa-avoir').checked;
+    const sgn = isAvoir ? -1 : 1;
+    const sTtc = sgn * Math.abs(ttc);
+    const sHt = _ht != null ? sgn * Math.abs(_ht) : null;
+    const sTva = _tva != null ? sgn * Math.abs(_tva) : null;
+    let desc = $('fa-desc').value.trim();
+    if (isAvoir) desc = /^avoir/i.test(desc) ? desc : ('Avoir – ' + (desc || 'remboursement fournisseur'));
+    const newF = {
+      id: nextFactId(), date,
+      vehiculeImmat: $('fa-immat').value.trim().toUpperCase() || null,
+      fournisseur: $('fa-fournisseur').value.trim() || null,
+      numeroFacture: $('fa-num').value.trim() || null,
+      description: desc || null,
+      type: $('fa-type').value || 'autre',
+      montantHT: sHt, montantTVA: sTva, montantTTC: sTtc,
+      km: num($('fa-km').value),
+      fileId,
+      fileName,
+    };
+    // Anti-doublon : ne pas ajouter deux fois la même facture (n° + montant, ou fournisseur+TTC+date).
+    if (FP.dupe && !(await FP.dupe.confirmAdd('factures', newF, data.factures))) return;
+    if (FP.history && FP.history.commit) FP.history.commit();
+    data.factures.push(newF);
+    if (newF.type !== 'leasing') factures.push(newF); // `factures` = vue de cette page (hors leasing)
+    FP.persist.insert('factures', newF);
+    // Entretien / réparation liée à un véhicule → met à jour sa fiche : dernière révision (date)
+    // + km. « Prochaine révision » se recalcule alors toute seule dans la fiche véhicule.
+    const majVeh = syncRevisionVehicule(newF);
+    closeFactureModal();
+    renderKPIs(); renderTable(); renderCharts();
+    if (majVeh) {
+      const note = document.createElement('div');
+      note.setAttribute('style', 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#047857;color:#fff;padding:10px 16px;border-radius:9999px;font-size:13px;z-index:90;box-shadow:0 8px 24px rgba(0,0,0,.25)');
+      note.textContent = '✓ Fiche véhicule mise à jour : ' + majVeh;
+      document.body.appendChild(note); setTimeout(() => note.remove(), 4500);
+    }
+  }
+
+  // Met à jour la fiche du véhicule à partir d'une facture. ⚠️ SOURCE UNIQUE : délègue entièrement
+  // à FP.applyFactureToVehicule (app.js) — toute la logique km/révision/pneus/rappel vit là-bas, un
+  // seul endroit à avoir juste. Renvoie un libellé de ce qui a été mis à jour, ou null.
+  function syncRevisionVehicule(f){
+    const r = FP.applyFactureToVehicule ? FP.applyFactureToVehicule(f, data.vehicules) : null;
+    return r ? r.label : null;
+  }
+
+  $('btn-import-facture').addEventListener('click', () => {
+    // Import contextuel : sur Total Fleet / Ulys, le bouton du haut déclenche l'import DÉDIÉ
+    // (relevé Total / facture Ulys) au lieu du formulaire de facture classique.
+    const tab = window._facturesTab || 'factures';
+    if (tab === 'total') { const t = document.getElementById('tf-import-file'); if (t) { t.click(); return; } }
+    if (tab === 'ulys')  { const t = document.getElementById('uls-import-file'); if (t) { t.click(); return; } }
+    openFactureModal();
+  });
+
+  // Export comptable : les factures AFFICHÉES (selon les filtres en cours), ligne par ligne,
+  // avec Société (déduite du propriétaire du véhicule) et Mois — Excel/CSV, vue courante ou période.
+  (function () {
+    const normP = s => FP.normImmat(s); // source unique (retire tirets ET espaces)
+    const soc = (immat) => { const map = {}; (window.FP_DATA.vehicules || []).forEach(v => { map[normP(v.immat)] = v; }); const v = map[normP(immat)]; return v ? (v.proprietaire || '') : ''; };
+    const num = (v) => (v === null || v === undefined || v === '' || isNaN(v)) ? null : Number(v);
+    const colDefs = [
+      { label: 'Date',        value: r => r.date || '' },
+      { label: 'Mois',        value: r => (r.date || '').slice(0, 7) },
+      { label: 'Société',     value: r => soc(r.vehiculeImmat) },
+      { label: 'Véhicule',    value: r => r.vehiculeImmat || '' },
+      { label: 'Fournisseur', value: r => r.fournisseur || '' },
+      { label: 'N° facture',  value: r => r.numeroFacture || '' },
+      { label: 'Type',        value: r => r.type || '' },
+      { label: 'Description', value: r => r.description || '' },
+      { label: 'HT (€)',      value: r => num(r.montantHT),  number: true },
+      { label: 'TVA (€)',     value: r => num(r.montantTVA), number: true },
+      { label: 'TTC (€)',     value: r => num(r.montantTTC), number: true },
+      { label: 'Km',          value: r => num(r.km),         number: true, noTotal: true },
+    ];
+    FP.makeExportMenu({
+      mount: '#fa-export-mount', label: 'Export comptable', sheetName: 'Factures', total: true, columns: colDefs,
+      getRows: () => filtered().slice().sort((a, b) => (a.date || '').localeCompare(b.date || '')),
+      period: { dateOf: r => r.date || '' },
+      baseName: () => 'factures-comptable-' + (state.mois !== 'all' ? state.mois : (state.annee !== 'all' ? state.annee : 'tout')),
+    });
+    // Relevé de dépenses PDF (aperçu + téléchargement) — factures affichées (filtres en cours).
+    if (document.getElementById('fa-fiche-btn')) document.getElementById('fa-fiche-btn').addEventListener('click', () => {
+      if (!(FP.fiche && FP.fiche.open)) return;
+      const rows = filtered().slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const per = state.mois !== 'all' ? state.mois : (state.annee !== 'all' ? state.annee : '');
+      FP.fiche.open({
+        key: 'factures',
+        title: 'Relevé de dépenses' + (per ? ' — ' + per : ''),
+        rows: rows,
+        cols: [
+          { id: 'date',          label: 'Date',        def: true,  get: f => f.date ? FP.dateNum(f.date) : '—' },
+          { id: 'vehiculeImmat', label: 'Véhicule',    def: true,  mono: true, get: f => f.vehiculeImmat || '—' },
+          { id: 'fournisseur',   label: 'Fournisseur', def: true,  get: f => f.fournisseur || '—' },
+          { id: 'type',          label: 'Type',        def: false, get: f => f.type || '—' },
+          { id: 'description',   label: 'Description',  def: false, get: f => f.description || '—' },
+          { id: 'numeroFacture', label: 'N° facture',  def: false, mono: true, get: f => f.numeroFacture || '—' },
+          { id: 'montantHT',     label: 'HT',          def: false, align: 'right', get: f => (f.montantHT != null && f.montantHT !== '') ? FP.euro(f.montantHT) : '—', sum: f => f.montantHT },
+          { id: 'montantTVA',    label: 'TVA',         def: false, align: 'right', get: f => (f.montantTVA != null && f.montantTVA !== '') ? FP.euro(f.montantTVA) : '—', sum: f => f.montantTVA },
+          { id: 'montantTTC',    label: 'TTC',         def: true,  align: 'right', get: f => (f.montantTTC != null && f.montantTTC !== '') ? FP.euro(f.montantTTC) : '—', sum: f => f.montantTTC },
+          { id: 'km',            label: 'Km',          def: false, align: 'right', get: f => f.km ? FP.num(f.km) + ' km' : '—' },
+        ],
+      });
+    });
+    // Récap comptable PAR POSTE (ventilation HT/TVA/TTC par catégorie) — sur la vue filtrée en cours.
+    FP.makeExportMenu({
+      mount: '#fa-recap-mount', label: 'Récap par poste', sheetName: 'Ventilation', total: true,
+      columns: [
+        { label: 'Poste',       value: r => r.poste },
+        { label: 'Nb factures', value: r => r.nb,  number: true, noTotal: false },
+        { label: 'HT (€)',      value: r => r.ht,  number: true },
+        { label: 'TVA (€)',     value: r => r.tva, number: true },
+        { label: 'TTC (€)',     value: r => r.ttc, number: true },
+      ],
+      getRows: () => {
+        const g = {};
+        filtered().forEach(r => {
+          const k = (r.type && String(r.type).trim()) || 'Autre';
+          const o = g[k] || (g[k] = { poste: k, nb: 0, ht: 0, tva: 0, ttc: 0 });
+          o.nb += 1;
+          o.ht += Number(r.montantHT) || 0;
+          o.tva += Number(r.montantTVA) || 0;
+          o.ttc += Number(r.montantTTC) || 0;
+        });
+        return Object.values(g)
+          .map(o => ({ poste: o.poste, nb: o.nb, ht: Math.round(o.ht * 100) / 100, tva: Math.round(o.tva * 100) / 100, ttc: Math.round(o.ttc * 100) / 100 }))
+          .sort((a, b) => b.ttc - a.ttc);
+      },
+      baseName: () => 'ventilation-postes-' + (state.mois !== 'all' ? state.mois : (state.annee !== 'all' ? state.annee : 'tout')),
+    });
+  })();
+  $('facture-close').addEventListener('click', closeFactureModal);
+  $('facture-cancel').addEventListener('click', closeFactureModal);
+  $('facture-modal').addEventListener('click', (e) => { if (e.target.id === 'facture-modal') closeFactureModal(); });
+  $('facture-form').addEventListener('submit', saveFacture);
+  $('fa-trigger').addEventListener('click', () => $('fa-file').click());
+  $('fa-file').addEventListener('change', (e) => { const file = e.target.files && e.target.files[0]; _faFileName = file ? file.name : ''; _faFile = file || null; handleFacture(file); e.target.value = ''; });
+  // Import en lot (plusieurs PDF d'un coup)
+  if ($('btn-import-lot')) $('btn-import-lot').addEventListener('click', () => $('fa-lot-file').click());
+  if ($('fa-lot-file')) $('fa-lot-file').addEventListener('change', (e) => { const fl = e.target.files; if (fl && fl.length) handleFactureLot(fl); e.target.value = ''; });
+  if ($('fabulk-close')) $('fabulk-close').addEventListener('click', () => $('fabulk-modal').classList.remove('open'));
+  // #1 : glisser-déposer un PDF/photo sur la zone d'import de facture
+  (function(){
+    const z = $('fa-trigger'); if (!z) return;
+    const stop = e => { e.preventDefault(); e.stopPropagation(); };
+    ['dragenter', 'dragover'].forEach(ev => z.addEventListener(ev, e => { stop(e); z.classList.add('drag-over'); }));
+    z.addEventListener('dragleave', e => { stop(e); z.classList.remove('drag-over'); });
+    z.addEventListener('drop', e => { stop(e); z.classList.remove('drag-over'); const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]; if (f) { _faFile = f; _faFileName = f.name; handleFacture(f); } });
+  })();
+
+  // ---- Autocomplete maison (fournisseur + plaque), stylé « à notre sauce » ----
+  function setupAutocomplete(input, optionsFn){
+    if (!input) return;
+    const acEsc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    input.parentElement.classList.add('fp-ac-wrap');
+    const box = document.createElement('div');
+    box.className = 'fp-ac hidden';
+    input.parentElement.appendChild(box);
+    let items = [], active = -1;
+    function paint(){
+      const q = FP.norm(input.value.trim());
+      items = (optionsFn() || []).filter(o => !q || FP.norm(o).includes(q)).slice(0, 8);
+      if (!items.length){ box.classList.add('hidden'); return; }
+      box.innerHTML = items.map((o, i) => `<div class="fp-ac-item${i === active ? ' active' : ''}" data-i="${i}">${acEsc(o)}</div>`).join('');
+      box.classList.remove('hidden');
+    }
+    const pick = (i) => { if (items[i] != null){ input.value = items[i]; } box.classList.add('hidden'); active = -1; };
+    input.addEventListener('input', () => { active = -1; paint(); });
+    input.addEventListener('focus', () => { active = -1; paint(); });
+    input.addEventListener('blur', () => setTimeout(() => box.classList.add('hidden'), 150));
+    input.addEventListener('keydown', (e) => {
+      if (box.classList.contains('hidden')) return;
+      if (e.key === 'ArrowDown'){ e.preventDefault(); active = Math.min(active + 1, items.length - 1); paint(); }
+      else if (e.key === 'ArrowUp'){ e.preventDefault(); active = Math.max(active - 1, 0); paint(); }
+      else if (e.key === 'Enter' && active >= 0){ e.preventDefault(); pick(active); }
+      else if (e.key === 'Escape'){ box.classList.add('hidden'); }
+    });
+    box.addEventListener('mousedown', (e) => { const it = e.target.closest('.fp-ac-item'); if (it) pick(+it.dataset.i); });
+  }
+  setupAutocomplete($('fa-fournisseur'), () => [...new Set((data.factures || []).map(f => f.fournisseur).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')));
+  setupAutocomplete($('fa-immat'), () => [...new Set((data.vehicules || []).map(v => v.immat).filter(Boolean))].sort());
+
+  // Wiring
+  // Bouton « Voir plus / Réduire » sous le tableau
+  $('fa-more').addEventListener('click', e => { if (e.target.closest('#fa-toggle')) { faExpanded = !faExpanded; renderTable(); } });
+  $('search').addEventListener('input', e => { state.search = e.target.value; faExpanded = false; renderKPIs(); renderTable(); renderCharts(); });
+  document.querySelectorAll('#filters-type .filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.type = chip.dataset.value;
+      faExpanded = false; renderKPIs(); renderTable(); renderCharts();
+    });
+  });
+  ['filter-annee','filter-vehicule','filter-fournisseur'].forEach(id => {
+    $(id).addEventListener('change', e => {
+      const key = id.replace('filter-','');
+      state[key] = e.target.value;
+      faExpanded = false; renderKPIs(); renderTable(); renderCharts();
+    });
+  });
+  // Bouton « Réinitialiser » de la barre de filtres (recherche, type, année, mois, véhicule, fournisseur).
+  function resetFactureFilters() {
+    state.search = ''; state.type = 'all'; state.annee = 'all'; state.mois = 'all'; state.vehicule = 'all'; state.fournisseur = 'all';
+    state.sortKey = 'date'; state.sortDir = 'desc';
+    if ($('fa-sort-key')) $('fa-sort-key').value = 'date';
+    { const sd = $('fa-sort-dir'); if (sd) { const i = sd.querySelector('i'); if (i) i.setAttribute('data-lucide', 'arrow-down-wide-narrow'); } }
+    if ($('search')) $('search').value = '';
+    if ($('filter-annee')) $('filter-annee').value = 'all';
+    if ($('filter-mois')) $('filter-mois').value = '';
+    const mc = $('filter-mois-clear'); if (mc) mc.classList.add('hidden');
+    ['filter-vehicule', 'filter-fournisseur'].forEach(id => { const s = $(id); if (s) { s.value = 'all'; s.dispatchEvent(new Event('change', { bubbles: true })); } });
+    document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
+    faExpanded = false; renderKPIs(); renderTable(); renderCharts();
+  }
+  if (FP.filterResetButton) FP.filterResetButton($('fa-filterbar'), { onReset: resetFactureFilters });
+  // Tri des factures : menu « Trier par » + bouton pour inverser le sens (▲ / ▼)
+  (function () {
+    const sk = $('fa-sort-key'), sd = $('fa-sort-dir');
+    const syncDir = () => { if (!sd) return; const i = sd.querySelector('i'); if (i) i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); try { if (window.lucide) lucide.createIcons(); } catch (e) {} };
+    if (sk) { sk.value = state.sortKey; sk.addEventListener('change', e => { state.sortKey = e.target.value; faExpanded = false; renderTable(); }); }
+    if (sd) sd.addEventListener('click', () => { state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc'; syncDir(); faExpanded = false; renderTable(); });
+    syncDir();
+  })();
+  // Sélecteurs de véhicule CHERCHABLES (taper plaque / marque / modèle) — règle projet.
+  if (FP.searchSelect) {
+    FP.searchSelect($('filter-vehicule'), { placeholder: 'Rechercher un véhicule…' });
+    FP.searchSelect($('doc-filter-veh'), { placeholder: 'Rechercher un véhicule…' });
+    FP.searchSelect($('di-veh'), { placeholder: 'Rechercher (plaque, marque, modèle…)' });
+  }
+
+  // Filtre par mois (sélecteur YYYY-MM) + bouton effacer
+  function applyMois(val) {
+    state.mois = val || 'all';
+    $('filter-mois').value = val || '';
+    $('filter-mois-clear').classList.toggle('hidden', !val);
+    if (val) { state.annee = 'all'; $('filter-annee').value = 'all'; } // mois prime sur année
+    renderKPIs(); renderTable(); renderCharts();
+  }
+  $('filter-mois').addEventListener('change', e => applyMois(e.target.value));
+  $('filter-mois-clear').addEventListener('click', () => applyMois(''));
+
+  // Lien « Coûts du mois » du tableau de bord : ?periode=mois → mois courant ; ?mois=YYYY-MM → ce mois
+  (function initPeriode(){
+    const p = new URLSearchParams(location.search);
+    if (p.get('mois')) applyMois(p.get('mois'));
+    else if (p.get('periode') === 'mois') applyMois(new Date().toISOString().slice(0,7));
+  })();
+
+  // Édition par double-clic des cellules
+  const FA_EDITABLE = { date: 'date', vehiculeImmat: 'text', fournisseur: 'text', description: 'text', type: 'select', montantHT: 'number', montantTVA: 'number', montantTTC: 'number', numeroFacture: 'text', km: 'number' };
+  const FA_TYPES = ['entretien', 'réparation', 'achat', 'leasing', 'cession', 'sinistre', 'autre'];
+  let _faClickTimer = null;
+  $('factures-tbody').addEventListener('click', e => {
+    if (e.target.closest('.cell-edit, select')) return;
+    // #5 : actions rapides (ouvrir / copier le n°) interceptées avant l'ouverture
+    const ra = e.target.closest('[data-ra]');
+    if (ra) {
+      e.stopPropagation();
+      const row = ra.closest('tr[data-id]'); if (!row) return;
+      const id = row.dataset.id, act = ra.dataset.ra;
+      if (act === 'open') openDrawer(id);
+      else if (act === 'copy') { const f = factures.find(x => x.fileId === id); const num = f && f.numeroFacture; try { if (navigator.clipboard && num) navigator.clipboard.writeText(num); } catch (_) {} if (FP.toast) FP.toast('✓ N° de facture copié'); }
+      return;
+    }
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    const td = e.target.closest('td[data-col]');
+    if (td && FA_EDITABLE[td.dataset.col]) {
+      clearTimeout(_faClickTimer);
+      _faClickTimer = setTimeout(() => openDrawer(tr.dataset.id), 220);
+    } else openDrawer(tr.dataset.id);
+  });
+  $('factures-tbody').addEventListener('dblclick', e => {
+    clearTimeout(_faClickTimer);
+    const td = e.target.closest('td[data-col]');
+    const tr = e.target.closest('tr[data-id]');
+    if (!td || !tr) return;
+    const field = td.dataset.col, type = FA_EDITABLE[field];
+    if (!type) return;
+    const f = data.factures.find(x => x.fileId === tr.dataset.id); // la ligne porte fileId (cf. data-id)
+    if (!f) return;
+    FP.cellEditor(td, f[field], type, {
+      options: type === 'select' ? FA_TYPES : null,
+      onSave: (nv) => {
+        f[field] = nv;
+        renderKPIs(); renderTable(); renderCharts();
+        FP.persist.update('factures', f.id, { [field]: nv });
+        // ⚠️ km/date/type édités → remonter au véhicule (source unique).
+        const maj = syncRevisionVehicule(f);
+        if (maj && FP.toast) FP.toast('✓ Fiche véhicule mise à jour : ' + maj);
+      },
+      onCancel: () => renderTable(),
+    });
+  });
+  $('drawer-close').addEventListener('click', closeDrawer);
+  $('drawer-prev')?.addEventListener('click', () => { const id = $('drawer-prev').dataset.targetId; if (id) openDrawer(id); });
+  $('drawer-next')?.addEventListener('click', () => { const id = $('drawer-next').dataset.targetId; if (id) openDrawer(id); });
+  $('drawer-backdrop').addEventListener('click', closeDrawer);
+  $('drawer-delete').addEventListener('click', deleteFacture);
+
+  // Init éditeur de colonnes
+  facturesEditor = FP.makeColumnEditor({
+    pageKey: 'factures',
+    columns: FACTURES_COLUMNS,
+    tableEl: $('factures-table'),
+    hiddenBtnContainer: document.querySelector('main > div.flex.flex-wrap.justify-between > div.flex.items-center'),
+    onChange: () => renderTable(),
+  });
+
+  // Sélection multiple (supprimer plusieurs factures d'un coup). Clé = fileId (= data-id des lignes) ;
+  // suppression réelle par f.id, en réutilisant la même logique que deleteFacture (recalage fiche véhicule).
+  if (FP.bulkSelect) faBulk = FP.bulkSelect({
+    mount: 'fa-bulk-mount', tbody: 'factures-tbody', noun: 'facture', nounPlural: 'factures',
+    getFilteredIds: () => filtered().map(f => f.fileId),
+    onDelete: async (fileIds) => {
+      if (FP.history && FP.history.commit) FP.history.commit();
+      const set = new Set(fileIds.map(String));
+      const cibles = factures.filter(f => set.has(String(f.fileId)));
+      const immats = new Set();
+      cibles.forEach(f => {
+        const rm = (arr) => { const i = arr.findIndex(x => x.id === f.id); if (i >= 0) arr.splice(i, 1); };
+        rm(data.factures); rm(factures);
+        if (FP.persist) FP.persist.delete('factures', f.id, f); // record → Corbeille (restaurable)
+        if (f.vehiculeImmat) immats.add(String(f.vehiculeImmat).toUpperCase());
+        try { const s = FP.settings.get(); if (s.sinistreStatut && s.sinistreStatut[f.id] != null) { delete s.sinistreStatut[f.id]; FP.settings.save(s); } } catch (e) {}
+      });
+      const recalc = () => { if (FP.recomputeVehiculeFromFactures) immats.forEach(im => { const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(im)); if (v) FP.recomputeVehiculeFromFactures(v, data.factures); }); };
+      recalc();
+      renderKPIs(); renderTable(); renderCharts();
+      return () => { // Annuler : ré-insère les factures supprimées
+        cibles.forEach(f => { data.factures.push(f); factures.push(f); if (FP.persist) FP.persist.insert('factures', f); });
+        recalc();
+        renderKPIs(); renderTable(); renderCharts();
+      };
+    },
+  });
+
+  // Init : KPIs + tableau tout de suite (affichage rapide → transition fluide). Les graphiques
+  // (Chart.js chargé en différé) se dessinent dès qu'il est prêt, sans bloquer l'affichage.
+  renderKPIs();
+  renderTable();
+  renderCharts();
+  // Coût par période (année + période personnalisée)
+  const coutPeriode = FP.coutParPeriode({
+    // Coût d'EXPLOITATION dédoublonné — MÊME source que le dashboard/écran/Statistiques (FP.coutFactureExploit
+    // exclut leasing/sinistre/achat/cession ; FP.dedupeFactures retire les doublons de n°). Avant : « hors
+    // leasing/sinistre » seul → un ACHAT de véhicule (25 000 €) gonflait le « Coût par période » vs le dashboard.
+    items: () => FP.dedupeFactures(data.factures || []).filter(f => FP.coutFactureExploit(f)),
+    yearsEl: 'cp-years', fromEl: 'cp-from', toEl: 'cp-to', totalEl: 'cp-range-total', clearEl: 'cp-clear', exportEl: 'cp-export', fileLabel: 'cout-factures-par-annee',
+  });
+  coutPeriode.render();
+  // TVA récupérable = somme des TVA des factures d'exploitation (hors leasing/sinistre) sur la période
+  // choisie (mêmes bornes que « Coût par période »). Suit le du/au ; sinon = toutes années.
+  function renderTvaRecap() {
+    try {
+      const from = ($('cp-from') || {}).value || '', to = ($('cp-to') || {}).value || '';
+      const items = (data.factures || []).filter(f => f.type !== 'leasing' && f.type !== 'sinistre');
+      const inRange = items.filter(f => { const d = f.date || ''; if (from && d < from) return false; if (to && d > to) return false; return true; });
+      const tva = inRange.reduce((s, f) => s + (Number(f.montantTVA) || 0), 0);
+      const tot = $('cp-tva-total'); if (tot) tot.textContent = FP.euro(tva);
+      const sc = $('cp-tva-scope'); if (sc) sc.textContent = (from || to) ? `— du ${from ? FP.date(from) : '…'} au ${to ? FP.date(to) : '…'}` : '— toutes années';
+    } catch (e) {}
+  }
+  renderTvaRecap();
+  ['cp-from', 'cp-to'].forEach(id => { const el = $(id); if (el) el.addEventListener('change', renderTvaRecap); });
+  { const y = $('cp-years'); if (y) y.addEventListener('click', () => setTimeout(renderTvaRecap, 0)); }
+  { const c = $('cp-clear'); if (c) c.addEventListener('click', () => setTimeout(renderTvaRecap, 0)); }
+  document.addEventListener('fp:data-ready', () => { coutPeriode.render(); renderTvaRecap(); });
+  // Données Supabase arrivées (ou import) → on reconstruit la liste et on rafraîchit le tableau
+  document.addEventListener('fp:data-ready', () => { rebuildFactures(); rebuildAnneeFilter(); renderKPIs(); renderTable(); renderCharts(); });
+  if (typeof Chart === 'undefined') window.addEventListener('DOMContentLoaded', () => { try { renderCharts(); } catch (e) {} });
+
+  // Doublons : clic sur une ligne 🔎 → ouvre la facture concernée (drawer)
+  { const dupBox = $('fa-doublons'); if (dupBox) dupBox.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-dup-open]'); if (!b) return;
+      const fid = b.dataset.dupOpen; if (fid && typeof openDrawer === 'function') openDrawer(fid);
+    }); }
+
+  // Ouverture directe d'une facture via l'URL (?facture=FILEID) — depuis la recherche globale
+  (function openFactureFromQuery() {
+    const fid = new URLSearchParams(location.search).get('facture');
+    if (!fid) return;
+    const tryOpen = () => { if (factures.some(f => f.fileId === fid)) { openDrawer(fid); return true; } return false; };
+    if (!tryOpen()) document.addEventListener('fp:data-ready', tryOpen, { once: true });
+  })();
+
+  // ===== Onglet DOCUMENTS (archives & suivi) =====
+  (function documentsTab(){
+    const BASE_LABELS = {
+      'controle-technique':'Contrôle technique','pv':'PV (Procès-verbal)','carte-grise':'Carte grise','assurance':'Assurance',
+      'code-cession':'Code / cession','contrat':'Contrat','facture-achat':'Facture','etat-des-lieux':'État des lieux','autre':'Autre',
+    };
+    // Libellés = types de base + types personnalisés créés par l'utilisateur (réglages partagés)
+    const docLabels = () => Object.assign({}, BASE_LABELS, (FP.settings.get().docTypes) || {});
+    let docs = null, loaded = false;
+    const vehImmat = id => { const v = (window.FP_DATA.vehicules||[]).find(x => x.id === id); return v ? v.immat : (id || '?'); };
+    const ts = d => d.createdAt || d.created_at || '';
+
+    function styleTab(btn, active){ btn.style.borderBottomColor = active ? 'var(--fp-accent)' : 'transparent'; btn.style.color = active ? 'var(--fp-primary)' : '#94A3B8'; }
+    function switchTab(name){ // 'factures' | 'documents' | 'total' | 'fournisseurs'
+      $('view-factures').classList.toggle('hidden', name !== 'factures');
+      $('view-documents').classList.toggle('hidden', name !== 'documents');
+      $('pane-total').classList.toggle('hidden', name !== 'total');
+      $('pane-ulys').classList.toggle('hidden', name !== 'ulys');
+      $('view-fourn').classList.toggle('hidden', name !== 'fournisseurs');
+      styleTab($('tab-btn-factures'), name === 'factures');
+      styleTab($('tab-btn-documents'), name === 'documents');
+      styleTab($('tab-btn-total'), name === 'total');
+      styleTab($('tab-btn-ulys'), name === 'ulys');
+      styleTab($('tab-btn-fourn'), name === 'fournisseurs');
+      if (name === 'documents' && !loaded) loadDocs();
+      if (name === 'total' && window.renderTotalFleet) window.renderTotalFleet();
+      if (name === 'ulys' && window.renderUlys) window.renderUlys();
+      if (name === 'fournisseurs' && window.renderFournisseurs) window.renderFournisseurs();
+      // Le bouton d'import du HAUT colle au sous-onglet actif (fini la confusion : plus besoin de
+      // descendre chercher le bon bouton). Sur « Fournisseurs » (pas d'import), on le masque.
+      window._facturesTab = name;
+      // Export comptable / Relevé PDF / Récap par poste = spécifiques aux FACTURES → masqués ailleurs
+      // (Total Fleet a son propre « Export CSV » + « Rapport PDF » dans le panneau Analyse).
+      const _texp = document.getElementById('fa-topexports');
+      if (_texp) _texp.style.display = (name === 'factures') ? '' : 'none';
+      const _imp = document.getElementById('btn-import-facture');
+      if (_imp) {
+        const lbl = { factures: 'Importer une facture', documents: 'Importer une facture', total: 'Importer un relevé Total', ulys: 'Importer un relevé Ulys' }[name];
+        _imp.style.display = lbl ? '' : 'none';
+        if (lbl) { const tn = _imp.lastChild; if (tn && tn.nodeType === 3) tn.textContent = ' ' + lbl; }
+      }
+    }
+    $('tab-btn-factures').addEventListener('click', () => switchTab('factures'));
+    $('tab-btn-documents').addEventListener('click', () => switchTab('documents'));
+    $('tab-btn-total').addEventListener('click', () => switchTab('total'));
+    $('tab-btn-ulys').addEventListener('click', () => switchTab('ulys'));
+    $('tab-btn-fourn').addEventListener('click', () => switchTab('fournisseurs'));
+    // Ouverture directe sur un onglet via l'URL (ex. depuis le scanner du tableau de bord : ?tab=ulys)
+    // + MODE « EMBED » : la page Contrôle intègre les vues Total Fleet / Ulys via une iframe
+    // (factures.html?embed&tab=total|ulys) → on masque toute la chrome (sidebar, en-tête, autres onglets,
+    // barre d'actions Factures) pour n'afficher QUE le panneau demandé.
+    { const _p = new URLSearchParams(location.search); const _tab = _p.get('tab');
+      if (_p.has('embed')) {
+        document.body.classList.add('fac-embed');
+        const st = document.createElement('style');
+        // On masque la chrome MAIS on GARDE le bouton d'import (#btn-import-facture) que switchTab
+        // renomme « Importer un relevé Total/Ulys » → l'import reste possible depuis la vue intégrée.
+        // Masque la chrome + le bouton « + » flottant (#fp-fab) — la page parente Contrôle a déjà le sien
+        // (sinon on en voit DEUX). On GARDE le bouton d'import (renommé par switchTab).
+        st.textContent = 'body.fac-embed .fp-sidebar,body.fac-embed .fp-cockpit,body.fac-embed #fa-tabbar,body.fac-embed #btn-import-lot,body.fac-embed #fa-topexports,body.fac-embed [data-data-io],body.fac-embed #fp-fab{display:none!important}body.fac-embed #fa-actionbar{margin-bottom:12px!important}body.fac-embed main{padding:1rem 1.2rem!important;max-width:none!important}body.fac-embed{background:#fff}';
+        document.head.appendChild(st);
+        // Le contenu Total Fleet/Ulys (KPIs, conso par conducteur, graphes, « Reconstruire le détail »)
+        // se rend à l'activation de l'onglet ; on le REJOUE une fois les données chargées (sinon panneau vide).
+        if (_tab) { document.addEventListener('fp:data-ready', () => { try { switchTab(_tab); } catch (e) {} }); setTimeout(() => { try { switchTab(_tab); } catch (e) {} }, 1200); }
+        // Hauteur AUTO : on informe la page Contrôle de la hauteur réelle → l'iframe grandit, la page
+        // parente scrolle (plus de scroll imbriqué, tout le contenu — conso, graphes — est visible).
+        const postH = () => { try { parent.postMessage({ fpEmbedHeight: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) }, '*'); } catch (e) {} };
+        window.addEventListener('load', () => setTimeout(postH, 200));
+        document.addEventListener('fp:data-ready', () => setTimeout(postH, 400));
+        setInterval(postH, 1500);
+      }
+      if (_tab && ['factures','documents','total','ulys','fournisseurs'].includes(_tab)) switchTab(_tab); }
+    // Exposé pour l'import en LOT : lui permet de basculer sur l'onglet Total/Ulys quand il route un relevé.
+    window.__facSwitchTab = switchTab;
+
+    async function loadDocs(){
+      loaded = true;
+      $('doc-tbody').innerHTML = (FP.skeletonHTML ? FP.skeletonHTML({ type: 'table', cols: 6, count: 4 }) : '<tr><td colspan="6" class="p-6 text-center text-slate-400">Chargement…</td></tr>');
+      try { const r = await FP.db.select('documents'); docs = (r && r.data) || []; }
+      catch(e){ console.error('[documents]', e); docs = []; }
+      const vehs = [...new Set(docs.map(d => vehImmat(d.vehiculeId)))].sort();
+      $('doc-filter-veh').innerHTML = '<option value="all">Tous véhicules</option>' + vehs.map(v => `<option value="${v}">${v}</option>`).join('');
+      const types = [...new Set(docs.map(d => d.type))];
+      $('doc-filter-type').innerHTML = '<option value="all">Tous types</option>' + types.map(t => `<option value="${t}">${docLabels()[t]||t}</option>`).join('');
+      renderDocuments();
+    }
+
+    function renderDocs(){
+      if (!docs) return;
+      const override = (FP.settings.get().docStatus) || {};
+      // Statut AUTO : le + récent de chaque (véhicule,type) = Actuel ; les autres = Archivé.
+      const groups = {};
+      docs.forEach(d => { const k = d.vehiculeId + '|' + d.type; (groups[k] = groups[k] || []).push(d); });
+      const autoArchived = new Set();
+      Object.values(groups).forEach(arr => { arr.sort((a,b) => ts(b).localeCompare(ts(a))); arr.slice(1).forEach(d => autoArchived.add(d.id)); });
+      // Statut effectif : l'override manuel l'emporte sur l'auto.
+      const isArchived = d => override[d.id] === 'archive' ? true : override[d.id] === 'actuel' ? false : autoArchived.has(d.id);
+
+      // Options véhicule / type (réutilisées dans chaque ligne)
+      const DL = docLabels();
+      const vehsAll = (window.FP_DATA.vehicules||[]).slice().sort((a,b)=>(a.immat||'').localeCompare(b.immat||''));
+      const vehOpts = sel => vehsAll.map(v => `<option value="${escapeHtml(v.id)}" ${sel===v.id?'selected':''}>${escapeHtml(v.immat)||'?'}</option>`).join('');
+      const typeOpts = sel => Object.keys(DL).map(t => `<option value="${t}" ${sel===t?'selected':''}>${DL[t]}</option>`).join('') + '<option value="__new__">➕ Créer un type…</option>';
+
+      const q = ($('doc-search').value||'').toLowerCase();
+      const fv = $('doc-filter-veh').value, ft = $('doc-filter-type').value, hideArch = $('doc-hide-arch').checked;
+      const rows = docs.slice().sort((a,b) => ts(b).localeCompare(ts(a))).filter(d => {
+        if (fv !== 'all' && vehImmat(d.vehiculeId) !== fv) return false;
+        if (ft !== 'all' && d.type !== ft) return false;
+        if (hideArch && isArchived(d)) return false;
+        if (q){ const _ch = (vehById(d.vehiculeId)||{}).chauffeur || ''; const s = (vehImmat(d.vehiculeId)+' '+(DL[d.type]||d.type)+' '+(d.label||'')+' '+_ch).toLowerCase(); if (!s.includes(q)) return false; }
+        return true;
+      });
+      const tb = $('doc-tbody');
+      if (!rows.length){ $('doc-thead').innerHTML = ''; tb.innerHTML = ''; $('doc-empty').classList.remove('hidden'); return; }
+      $('doc-empty').classList.add('hidden');
+      const selStyle = 'border:1px solid var(--fp-border);border-radius:6px;padding:3px 6px;font-size:13px;max-width:150px';
+
+      // Définition des colonnes (déplaçables) — l'ordre vient des réglages.
+      const COLS = {
+        veh:   { label:'Véhicule', cell: d => `<td><select class="doc-veh" data-id="${d.id}" style="${selStyle}">${vehOpts(d.vehiculeId)}</select></td>` },
+        type:  { label:'Type',     cell: d => `<td><select class="doc-type" data-id="${d.id}" style="${selStyle}">${typeOpts(d.type)}</select></td>` },
+        label: { label:'Document', cell: d => `<td><input class="doc-label" data-id="${d.id}" value="${(d.label||'').replace(/"/g,'&quot;')}" placeholder="(sans nom)" style="${selStyle};max-width:220px"></td>` },
+        date:  { label:'Ajouté le',cell: d => `<td><input type="date" class="doc-date" data-id="${d.id}" value="${ts(d).slice(0,10)}" style="${selStyle};max-width:140px"></td>` },
+        statut:{ label:'Statut',   cell: d => { const ov = override[d.id] || 'auto'; return `<td><select class="doc-stat" data-id="${d.id}" style="${selStyle};max-width:120px"><option value="auto" ${ov==='auto'?'selected':''}>Auto ${isArchived(d)&&ov==='auto'?'(archivé)':'(actuel)'}</option><option value="actuel" ${ov==='actuel'?'selected':''}>✓ Actuel</option><option value="archive" ${ov==='archive'?'selected':''}>📦 Archivé</option></select></td>`; } },
+      };
+      const order = colOrder();
+
+      // En-tête déplaçable (glisser-déposer gauche/droite)
+      $('doc-thead').innerHTML = '<tr>' + order.map(k =>
+        `<th draggable="true" data-col="${k}" title="Glisser pour déplacer la colonne" style="cursor:grab;user-select:none"><span style="opacity:.4;margin-right:4px">⠿</span>${COLS[k].label}</th>`
+      ).join('') + '<th></th></tr>';
+
+      tb.innerHTML = rows.map(d => {
+        const url = d.url || (d.driveId ? ('https://drive.google.com/file/d/'+d.driveId+'/view') : '');
+        const voir = url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="btn btn-outline" style="padding:4px 10px;font-size:12px"><i data-lucide="eye" class="w-3 h-3"></i> Voir</a>` : '';
+        const cells = order.map(k => COLS[k].cell(d)).join('');
+        return `<tr>${cells}<td style="text-align:right;white-space:nowrap">${voir} <button data-doc-del="${d.id}" class="btn btn-outline" style="padding:4px 9px;font-size:12px;color:#b91c1c" title="Supprimer">✕</button></td></tr>`;
+      }).join('');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    // Ordre des colonnes (réglages partagés) — complété par les colonnes manquantes.
+    const DEFAULT_COLS = ['veh','type','label','date','statut'];
+    function colOrder(){
+      const stored = FP.settings.get().docColsOrder;
+      const o = (Array.isArray(stored) ? stored : []).filter(k => DEFAULT_COLS.includes(k));
+      DEFAULT_COLS.forEach(k => { if (!o.includes(k)) o.push(k); });
+      return o;
+    }
+    // Glisser-déposer des en-têtes pour réordonner les colonnes
+    (function(){
+      const thead = $('doc-thead'); let dragCol = null;
+      thead.addEventListener('dragstart', e => { const th = e.target.closest('th[data-col]'); if (th){ dragCol = th.dataset.col; e.dataTransfer.effectAllowed = 'move'; th.style.opacity = '.4'; } });
+      thead.addEventListener('dragend', e => { const th = e.target.closest('th[data-col]'); if (th) th.style.opacity = ''; });
+      thead.addEventListener('dragover', e => { if (e.target.closest('th[data-col]')) e.preventDefault(); });
+      thead.addEventListener('drop', e => {
+        const th = e.target.closest('th[data-col]'); if (!th || !dragCol) return; e.preventDefault();
+        const target = th.dataset.col; if (target === dragCol) return;
+        const order = colOrder();
+        order.splice(order.indexOf(dragCol), 1);
+        order.splice(order.indexOf(target), 0, dragCol);
+        const s = FP.settings.get(); s.docColsOrder = order; FP.settings.save(s);
+        dragCol = null; renderDocs();
+      });
+    })();
+
+    ['doc-search','doc-filter-veh','doc-filter-type','doc-hide-arch'].forEach(id => { const el = $(id); if (el) el.addEventListener('input', renderDocuments); });
+
+    // ===== Vue « Drive » (dossiers par véhicule → tuiles) + expiration & rappel (#22) =====
+    let driveFolder = null;   // vehiculeId du dossier ouvert
+    let driveYear = null;     // année ouverte à l'intérieur d'un dossier véhicule
+    let docView = 'drive';    // 'drive' | 'list'
+    const getExp = id => { try { return ((FP.settings.get().docExpire) || {})[id] || ''; } catch (e) { return ''; } };
+    const setExp = (id, val) => { try { const s = FP.settings.get(); s.docExpire = s.docExpire || {}; if (val) s.docExpire[id] = val; else delete s.docExpire[id]; FP.settings.save(s); } catch (e) {} };
+    const expBadge = id => {
+      const d = getExp(id); if (!d) return '';
+      const j = FP.joursRestants ? FP.joursRestants(d) : Math.ceil((new Date(d) - new Date()) / 86400000);
+      let c, t;
+      if (j < 0) { c = '#DC2626'; t = 'Expiré'; } else if (j < 30) { c = '#F59E0B'; t = `Expire dans ${j} j`; } else if (j < 90) { c = '#0e7490'; t = `Expire dans ${j} j`; } else { c = '#16a34a'; t = 'À jour'; }
+      return `<span style="font-size:11px;font-weight:700;color:${c}">● ${t}</span>`;
+    };
+    const vehById = id => (window.FP_DATA.vehicules || []).find(v => v.id === id);
+    const docUrl = d => d.url || (d.driveId ? ('https://drive.google.com/file/d/' + d.driveId + '/view') : '');
+    const isImgU = u => /\.(jpe?g|png|gif|webp|heic|bmp)(\?|$)/i.test(u || '');
+
+    // Dossiers = 3 niveaux : véhicules → années (2025, 2026…) → documents + factures de l'année.
+    // Documents (table documents, clé vehiculeId) ET factures importées (table factures, clé
+    // vehiculeImmat) sont regroupés dans le MÊME dossier véhicule, puis rangés par année.
+    const GRID = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px';
+    const yearOf = s => { const m = String(s == null ? '' : s).match(/(20\d{2})/); return m ? m[1] : ''; };
+    const docYear = d => yearOf(d.date) || yearOf(ts(d)) || 'Sans date';
+    const factYear = f => yearOf(f.date) || 'Sans date';
+    const factUrl = f => f.url || (f.fileId ? ('https://drive.google.com/file/d/' + f.fileId + '/view') : '');
+    // Regroupe { vehiculeId: { docs:[], facts:[] } }
+    function driveGroups() {
+      const vehs = window.FP_DATA.vehicules || [];
+      const vidByImmat = {}; vehs.forEach(v => { if (v.immat) vidByImmat[String(v.immat).toUpperCase()] = v.id; });
+      const byVeh = {};
+      (docs || []).forEach(d => { const vid = d.vehiculeId || '__noplate__'; (byVeh[vid] = byVeh[vid] || { docs: [], facts: [] }).docs.push(d); });
+      ((window.FP_DATA.factures) || []).forEach(f => { const vid = vidByImmat[String(f.vehiculeImmat || '').toUpperCase()] || '__noplate__'; (byVeh[vid] = byVeh[vid] || { docs: [], facts: [] }).facts.push(f); });
+      return byVeh;
+    }
+    function docTile(d, DL) {
+      const u = docUrl(d);
+      const prev = u ? (isImgU(u) ? `<img src="${escapeHtml(u)}" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : `<i data-lucide="file-text" style="width:30px;height:30px;color:#64748b"></i>`) : `<i data-lucide="file" style="width:30px;height:30px;color:#cbd5e1"></i>`;
+      return `<div style="position:relative;border:1px solid var(--fp-border);border-radius:12px;overflow:hidden;background:#fff">
+        <a href="${escapeHtml(u) || '#'}" ${u ? 'target="_blank" rel="noopener"' : ''} style="display:flex;align-items:center;justify-content:center;height:100px;background:#f1f5f9">${prev}</a>
+        <button type="button" data-doc-del="${escapeHtml(d.id)}" title="Supprimer" style="position:absolute;top:4px;right:4px;background:rgba(15,30,61,.72);color:#fff;border:none;border-radius:6px;width:22px;height:22px;cursor:pointer">✕</button>
+        <div style="padding:8px">
+          <div style="font-size:11px;font-weight:700;color:var(--fp-accent);text-transform:uppercase">${escapeHtml(DL[d.type] || d.type || 'Document')}</div>
+          <input class="doc-rename" data-id="${escapeHtml(d.id)}" value="${escapeHtml(d.label || '')}" placeholder="Renommer…" title="Cliquer pour renommer" style="width:100%;font-size:12px;color:#334155;border:1px solid transparent;border-radius:6px;padding:2px 5px;background:transparent">
+          <select class="doc-type-tile" data-id="${escapeHtml(d.id)}" title="Type de document" style="width:100%;margin-top:4px;font-size:11px;color:#64748b;border:1px solid var(--fp-border);border-radius:6px;padding:2px 4px;background:#fff">${Object.keys(DL).map(t => `<option value="${t}" ${d.type === t ? 'selected' : ''}>${escapeHtml(DL[t])}</option>`).join('')}</select>
+          <div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <label style="font-size:10px;color:#94a3b8">Expire</label>
+            <input type="date" class="doc-exp" data-id="${escapeHtml(d.id)}" value="${escapeHtml(getExp(d.id))}" style="border:1px solid var(--fp-border);border-radius:6px;padding:1px 4px;font-size:11px">
+          </div>
+          <div style="margin-top:3px">${expBadge(d.id)}</div>
+        </div>
+      </div>`;
+    }
+    // Facture importée : tuile en LECTURE SEULE (la gestion se fait dans l'onglet Factures).
+    function factTile(f) {
+      const u = factUrl(f);
+      const label = [f.fournisseur || 'Facture', (f.montantTTC != null ? FP.euroPrecis(f.montantTTC) : '')].filter(Boolean).join(' · ');
+      const sub = [f.date ? FP.date(f.date) : '', f.numeroFacture ? ('n° ' + f.numeroFacture) : ''].filter(Boolean).join(' · ');
+      return `<div style="position:relative;border:1px solid var(--fp-border);border-radius:12px;overflow:hidden;background:#fff">
+        <a href="${escapeHtml(u) || '#'}" ${u ? 'target="_blank" rel="noopener"' : ''} style="display:flex;align-items:center;justify-content:center;height:100px;background:#ecfeff"><i data-lucide="receipt" style="width:30px;height:30px;color:#0e7490"></i></a>
+        <div style="padding:8px">
+          <div style="font-size:11px;font-weight:700;color:#0e7490;text-transform:uppercase">Facture</div>
+          <div style="font-size:12px;color:#334155;font-weight:600;line-height:1.25">${escapeHtml(label)}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px">${escapeHtml(sub)}</div>
+        </div>
+      </div>`;
+    }
+    function renderDrive() {
+      const box = $('doc-drive'); if (!box || !docs) return;
+      const DL = docLabels();
+      const q = ($('doc-search').value || '').toLowerCase();
+      const byVeh = driveGroups();
+      const folderImmat = vid => (vid === '__noplate__' ? 'Sans plaque' : vehImmat(vid));
+      if (!driveFolder) {
+        // Niveau 1 : un dossier par véhicule (documents + factures) + un dossier « Sans plaque »
+        const chauffeurOf = veh => (veh && veh.chauffeur && String(veh.chauffeur).trim() && String(veh.chauffeur).trim() !== '—') ? String(veh.chauffeur).trim() : '';
+        let entries = Object.entries(byVeh).map(([vid, o]) => ({ vid, o, veh: vehById(vid), immat: folderImmat(vid), ch: chauffeurOf(vehById(vid)), n: o.docs.length + o.facts.length }));
+        // Recherche : plaque + marque/modèle + PRÉNOM du conducteur (pour retrouver un dossier par son conducteur).
+        if (q) entries = entries.filter(e => (e.immat + ' ' + (e.veh ? (e.veh.marque + ' ' + e.veh.modele) : '') + ' ' + e.ch).toLowerCase().includes(q));
+        entries.sort((a, b) => ((a.vid === '__noplate__') - (b.vid === '__noplate__')) || (a.immat || '').localeCompare(b.immat || ''));
+        if (!entries.length) { box.innerHTML = '<div class="card">' + (FP.emptyHTML ? FP.emptyHTML({ icon: 'folder-open', title: 'Aucun document', text: 'Utilise « Importer un document » ou « Importer une facture » pour commencer.' }) : 'Aucun document.') + '</div>'; try { if (window.lucide) lucide.createIcons(); } catch (e) {} return; }
+        box.innerHTML = `<div style="${GRID}">` + entries.map(e => {
+          const soon = e.o.docs.some(d => { const dd = getExp(d.id); if (!dd) return false; const j = FP.joursRestants(dd); return j != null && j >= 0 && j <= 30; });
+          const expired = e.o.docs.some(d => { const dd = getExp(d.id); if (!dd) return false; const j = FP.joursRestants(dd); return j != null && j < 0; });
+          const dot = expired ? '#DC2626' : (soon ? '#F59E0B' : '');
+          return `<button type="button" data-folder="${escapeHtml(e.vid)}" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;padding:16px 10px;border:1px solid var(--fp-border);border-radius:12px;background:#fff;cursor:pointer">
+            ${dot ? `<span style="position:absolute;top:8px;right:8px;width:9px;height:9px;border-radius:50%;background:${dot}"></span>` : ''}
+            <i data-lucide="${e.vid === '__noplate__' ? 'folder-search' : 'folder'}" style="width:40px;height:40px;color:${e.vid === '__noplate__' ? '#94a3b8' : '#F59E0B'}"></i>
+            <div style="font-family:monospace;font-weight:800;color:#0f1e3d">${escapeHtml(e.immat)}</div>
+            <div style="font-size:11px;color:#64748b">${e.vid === '__noplate__' ? 'Non rattachées à un véhicule' : (e.veh ? escapeHtml(e.veh.marque + ' ' + e.veh.modele) : '—')}</div>
+            ${e.ch ? `<div style="font-size:11px;color:#F97316;font-weight:600">${escapeHtml(e.ch)}</div>` : ''}
+            <div style="font-size:11px;color:#94a3b8">${e.n} doc${e.n > 1 ? 's' : ''}</div>
+          </button>`;
+        }).join('') + '</div>';
+      } else if (!driveYear) {
+        // Niveau 2 : sous-dossiers par ANNÉE (créés au fil des documents/factures)
+        const o = byVeh[driveFolder] || { docs: [], facts: [] };
+        const veh = vehById(driveFolder), immat = folderImmat(driveFolder);
+        const byYear = {};
+        o.docs.forEach(d => { const y = docYear(d); byYear[y] = (byYear[y] || 0) + 1; });
+        o.facts.forEach(f => { const y = factYear(f); byYear[y] = (byYear[y] || 0) + 1; });
+        const years = Object.keys(byYear).sort((a, b) => ((a === 'Sans date') - (b === 'Sans date')) || b.localeCompare(a));
+        const head = `<div style="margin-bottom:12px"><button type="button" id="doc-drive-back" class="btn btn-outline text-sm"><i data-lucide="arrow-left" class="w-4 h-4"></i> Tous les dossiers</button> <span style="margin-left:8px;font-weight:700;font-family:monospace">${escapeHtml(immat)}</span> <span style="color:#64748b">${veh ? escapeHtml('· ' + veh.marque + ' ' + veh.modele) : ''}</span></div>`;
+        box.innerHTML = head + (years.length ? `<div style="${GRID}">` + years.map(y => {
+          const n = byYear[y];
+          return `<button type="button" data-year="${escapeHtml(y)}" style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:16px 10px;border:1px solid var(--fp-border);border-radius:12px;background:#fff;cursor:pointer">
+            <i data-lucide="folder" style="width:40px;height:40px;color:#F59E0B"></i>
+            <div style="font-weight:800;color:#0f1e3d">${escapeHtml(y)}</div>
+            <div style="font-size:11px;color:#94a3b8">${n} doc${n > 1 ? 's' : ''}</div>
+          </button>`;
+        }).join('') + '</div>' : '<div class="text-sm text-slate-400">Aucun document.</div>');
+      } else {
+        // Niveau 3 : documents + factures de l'année choisie
+        const o = byVeh[driveFolder] || { docs: [], facts: [] };
+        const veh = vehById(driveFolder), immat = folderImmat(driveFolder);
+        const dY = o.docs.filter(d => docYear(d) === driveYear).sort((a, b) => ts(b).localeCompare(ts(a)));
+        const fY = o.facts.filter(f => factYear(f) === driveYear).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+        const tiles = dY.map(d => docTile(d, DL)).join('') + fY.map(factTile).join('');
+        const head = `<div style="margin-bottom:12px"><button type="button" id="doc-drive-back" class="btn btn-outline text-sm"><i data-lucide="arrow-left" class="w-4 h-4"></i> ${escapeHtml(immat)}</button> <span style="margin-left:8px;font-weight:800">${escapeHtml(driveYear)}</span> <span style="color:#64748b">${veh ? escapeHtml('· ' + veh.marque + ' ' + veh.modele) : ''}</span></div>`;
+        box.innerHTML = head + `<div style="${GRID}">${tiles || '<div class="text-sm text-slate-400">Aucun document.</div>'}</div>`;
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+    function renderDocuments() {
+      if (docView === 'list') { $('doc-list-card').classList.remove('hidden'); $('doc-drive').classList.add('hidden'); renderDocs(); }
+      else { $('doc-list-card').classList.add('hidden'); $('doc-drive').classList.remove('hidden'); renderDrive(); }
+    }
+    $('doc-view-toggle').addEventListener('click', () => {
+      docView = (docView === 'drive') ? 'list' : 'drive';
+      const lbl = $('doc-view-label'); if (lbl) lbl.textContent = (docView === 'drive') ? 'Vue liste' : 'Vue dossiers';
+      renderDocuments();
+    });
+    $('doc-drive').addEventListener('click', async e => {
+      const f = e.target.closest('[data-folder]'); if (f) { driveFolder = f.dataset.folder; driveYear = null; renderDrive(); return; }
+      const y = e.target.closest('[data-year]'); if (y) { driveYear = y.dataset.year; renderDrive(); return; }
+      if (e.target.closest('#doc-drive-back')) { if (driveYear) driveYear = null; else driveFolder = null; renderDrive(); return; }
+      const del = e.target.closest('[data-doc-del]'); if (del && await FP.confirm('Supprimer définitivement ce document ?')) { const id = del.dataset.docDel; if (FP.persist) FP.persist.delete('documents', id); docs = docs.filter(x => x.id !== id); renderDrive(); }
+    });
+    $('doc-drive').addEventListener('change', e => {
+      const exp = e.target.closest('.doc-exp'); if (exp) { setExp(exp.dataset.id, exp.value); renderDrive(); return; }
+      const nm = e.target.closest('.doc-rename'); if (nm) { const d = docs.find(x => x.id === nm.dataset.id); if (d) { d.label = nm.value.trim(); if (FP.persist) FP.persist.update('documents', d.id, { label: d.label }); if (FP.toast) FP.toast('✓ Renommé'); } return; }
+      const ty = e.target.closest('.doc-type-tile'); if (ty) { const d = docs.find(x => x.id === ty.dataset.id); if (d) { d.type = ty.value; if (FP.persist) FP.persist.update('documents', d.id, { type: ty.value }); renderDrive(); } return; }
+    });
+
+    // Édition véhicule / type / statut directement dans la liste
+    $('doc-tbody').addEventListener('change', async e => {
+      const sel = e.target;
+      const id = sel.dataset && sel.dataset.id;
+      if (!id) return;
+      const doc = docs.find(x => x.id === id);
+      if (!doc) return;
+      if (sel.classList.contains('doc-veh')) {
+        doc.vehiculeId = sel.value;
+        if (FP.persist) FP.persist.update('documents', id, { vehiculeId: sel.value });
+        renderDocs();
+      } else if (sel.classList.contains('doc-type')) {
+        if (sel.value === '__new__') {
+          const name = (await FP.prompt('Nom du nouveau type de document :') || '').trim();
+          if (!name) { renderDocs(); return; }
+          let key = 'custom-' + name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,30);
+          if (key === 'custom-') key = 'custom-' + Date.now().toString(36);
+          const s = FP.settings.get(); s.docTypes = s.docTypes || {}; s.docTypes[key] = name; FP.settings.save(s);
+          doc.type = key;
+          if (FP.persist) FP.persist.update('documents', id, { type: key });
+        } else {
+          doc.type = sel.value;
+          if (FP.persist) FP.persist.update('documents', id, { type: sel.value });
+        }
+        renderDocs();
+      } else if (sel.classList.contains('doc-label')) {
+        doc.label = sel.value.trim();
+        if (FP.persist) FP.persist.update('documents', id, { label: doc.label });
+      } else if (sel.classList.contains('doc-date')) {
+        doc.createdAt = sel.value || doc.createdAt;
+        if (FP.persist) FP.persist.update('documents', id, { createdAt: sel.value });
+        renderDocs();
+      } else if (sel.classList.contains('doc-stat')) {
+        const s = FP.settings.get();
+        s.docStatus = s.docStatus || {};
+        if (sel.value === 'auto') delete s.docStatus[id]; else s.docStatus[id] = sel.value;
+        FP.settings.save(s);
+        renderDocs();
+      }
+    });
+
+    $('doc-tbody').addEventListener('click', async e => {
+      const del = e.target.closest('[data-doc-del]');
+      if (del && await FP.confirm('Supprimer définitivement ce document ?')) {
+        const id = del.dataset.docDel;
+        if (FP.persist) FP.persist.delete('documents', id);
+        docs = docs.filter(x => x.id !== id);
+        renderDocs();
+      }
+    });
+
+    // ----- Importer un document depuis l'onglet Documents -----
+    const importModal = $('doc-import-modal');
+    function openImport(){
+      const vehs = (window.FP_DATA.vehicules||[]).slice().sort((a,b)=>(a.immat||'').localeCompare(b.immat||''));
+      $('di-veh').innerHTML = '<option value="">— Choisir un véhicule —</option>' + vehs.map(v=>`<option value="${v.id}">${escapeHtml(v.immat||'?')} · ${escapeHtml(v.marque||'')} ${escapeHtml(v.modele||'')}</option>`).join('');
+      const DL = docLabels();
+      $('di-type').innerHTML = Object.keys(DL).map(t=>`<option value="${t}">${DL[t]}</option>`).join('');
+      $('di-label').value=''; $('di-file').value='';
+      const dd = $('di-detect'); dd.className = 'hidden'; dd.innerHTML = '';
+      importModal.classList.add('open');
+      if (window.lucide) lucide.createIcons();
+    }
+
+    // Détection auto du véhicule (et du type) dès qu'un fichier est choisi
+    $('di-file').addEventListener('change', async () => {
+      const f = $('di-file').files && $('di-file').files[0];
+      const dd = $('di-detect');
+      if (!f || !(window.FP && FP.ocr)) return;
+      dd.className = ''; dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#F1F5F9;color:#475569');
+      dd.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="fa-spin"></span> Lecture du document…</span>';
+      try {
+        const text = await FP.ocr.fileToText(f);
+        const det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
+        const found = [];
+        if (det.vehicule && !$('di-veh').value) { $('di-veh').value = det.vehicule.id; $('di-veh').dispatchEvent(new Event('change')); found.push('véhicule <b>'+det.vehicule.immat+'</b>'); }
+        else if (det.vehicule) found.push('véhicule <b>'+det.vehicule.immat+'</b>');
+        if (det.type && det.type !== 'autre') { $('di-type').value = det.type; found.push('type <b>'+(docLabels()[det.type]||det.type)+'</b>'); }
+        if (found.length) { dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#ECFDF5;color:#047857'); dd.innerHTML = '✓ Détecté : ' + found.join(' · ') + ' · <a href="#" class="di-clear" style="color:#047857;font-weight:700;text-decoration:underline">✕ retirer le fichier</a>'; }
+        else { dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#FEF2F2;color:#B91C1C'); dd.innerHTML = "Véhicule non reconnu sur le document — choisis-le dans la liste. · <a href=\"#\" class=\"di-clear\" style=\"color:#B91C1C;font-weight:700;text-decoration:underline\">✕ retirer le fichier</a>"; }
+      } catch (e) { console.error('[di detect]', e); dd.className='hidden'; }
+    });
+    // Désélectionner le fichier choisi (et la détection)
+    $('di-detect').addEventListener('click', (e) => {
+      const c = e.target.closest('.di-clear'); if (!c) return;
+      e.preventDefault();
+      $('di-file').value = ''; $('di-veh').value = ''; $('di-veh').dispatchEvent(new Event('change'));
+      const dd = $('di-detect'); dd.className = 'hidden'; dd.innerHTML = '';
+    });
+    const closeImport = () => importModal.classList.remove('open');
+    $('doc-import-btn').addEventListener('click', openImport);
+    $('doc-import-close').addEventListener('click', closeImport);
+    importModal.addEventListener('click', e => { if (e.target === importModal) closeImport(); });
+
+    $('di-save').addEventListener('click', async () => {
+      const vehId = $('di-veh').value;
+      const type = $('di-type').value;
+      const label = $('di-label').value.trim();
+      const files = Array.from($('di-file').files || []);
+      if (!vehId) { alert('Choisissez un véhicule.'); return; }
+      if (!files.length) { alert('Choisissez au moins un fichier.'); return; }
+      if (!(window.FP && FP.supabase && FP.uploadScan)) { alert('Connexion requise pour enregistrer en ligne.'); return; }
+      const btn = $('di-save'); const old = btn.innerHTML; btn.disabled = true; btn.style.opacity='.7';
+      try {
+        if (!docs) docs = [];
+        for (let i=0;i<files.length;i++){
+          btn.innerHTML = `⏳ Import ${i+1}/${files.length}…`;
+          const f = files[i];
+          const url = await FP.uploadScan(f, 'documents');
+          const doc = { id:'D'+Date.now().toString(36)+i, vehiculeId:vehId, type, label:(files.length===1?(label||f.name):f.name), url, driveId:null };
+          await FP.persist.insert('documents', doc);
+          doc.createdAt = new Date().toISOString();
+          docs.push(doc);
+        }
+        closeImport(); renderDocuments();
+      } catch (err) {
+        console.error('[doc import]', err);
+        alert("Échec de l'import : " + (err && err.message ? err.message : err));
+      } finally { btn.disabled=false; btn.style.opacity=''; btn.innerHTML=old; if(window.lucide) lucide.createIcons(); }
+    });
+  })();
+
+  // ===== Onglets TOTAL FLEET & ULYS — rendus par le MODULE PARTAGÉ fleet-views.js (UN SEUL code
+  // source, aussi utilisé nativement par la page Contrôle). On les MONTE ici dans #pane-total /
+  // #pane-ulys → cela définit window.renderTotalFleet/renderUlys + les détecteurs d'import par lot
+  // (__facIsTotalStatement…) + FP._importTotal/UlysReleves, exactement comme avant. Le rendu se
+  // fait à l'ouverture de l'onglet (switchTab appelle renderTotalFleet/renderUlys).
+  try { if (window.FP && FP.mountTotal) FP.mountTotal($('pane-total')); } catch (e) { console.error('[mountTotal]', e); }
+  try { if (window.FP && FP.mountUlys)  FP.mountUlys($('pane-ulys'));  } catch (e) { console.error('[mountUlys]', e); }
+
+  // ===== Onglet FOURNISSEURS (voir + nettoyer les doublons) =====
+  (function fournisseursTab(){
+    let fnSearch = '';
+    let fnSort = 'total';
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    function stats(){
+      const m = new Map();
+      (data.factures || []).forEach(f => {
+        const name = (f.fournisseur || '').trim();
+        if (!name) return;
+        const e = m.get(name) || { name, count: 0, total: 0 };
+        e.count++; e.total += (Number(f.montantTTC) || 0);
+        m.set(name, e);
+      });
+      return [...m.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'fr'));
+    }
+    function render(){
+      const all = stats();
+      const q = FP.norm(fnSearch.trim());
+      const rows = all.filter(r => !q || FP.norm(r.name).includes(q));
+      rows.sort((a, b) =>
+        fnSort === 'name'  ? a.name.localeCompare(b.name, 'fr') :
+        fnSort === 'count' ? (b.count - a.count) || a.name.localeCompare(b.name, 'fr') :
+                             (b.total - a.total) || a.name.localeCompare(b.name, 'fr'));
+      $('fn-count').textContent = all.length + ' fournisseur(s)';
+      $('fn-empty').classList.toggle('hidden', rows.length > 0);
+      $('fn-tbody').innerHTML = rows.map(r => `<tr>
+        <td class="font-medium">${esc(r.name)}</td>
+        <td style="text-align:center">${r.count}</td>
+        <td style="text-align:right">${FP.euro(r.total)}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn btn-outline" style="padding:4px 9px;font-size:12px" data-fn-rename="${esc(r.name)}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Renommer</button>
+          <button class="btn btn-outline" style="padding:4px 9px;font-size:12px;color:#b91c1c" data-fn-del="${esc(r.name)}" title="Retirer le nom des factures">✕</button>
+        </td></tr>`).join('');
+      const cardsBox = $('fn-cards');
+      if (cardsBox) cardsBox.innerHTML = rows.map(r => `<div class="tf-ccard">
+        <div class="top"><span class="nm">${esc(r.name)}</span><span class="tot">${FP.euro(r.total)}</span></div>
+        <div class="foot" style="align-items:center;justify-content:space-between">
+          <div>Factures<b>${r.count}</b></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-outline" style="padding:4px 9px;font-size:12px" data-fn-rename="${esc(r.name)}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Renommer</button>
+            <button class="btn btn-outline" style="padding:4px 9px;font-size:12px;color:#b91c1c" data-fn-del="${esc(r.name)}" title="Retirer le nom des factures">✕</button>
+          </div>
+        </div></div>`).join('');
+      applyFnView(rows.length === 0);
+      if (window.lucide) lucide.createIcons();
+    }
+    function applyFnView(forceTable){
+      let pref = 'table'; try { if (window.FP && FP.settings) pref = (FP.settings.get().fournView === 'cards') ? 'cards' : 'table'; } catch (e) {}
+      const v = forceTable ? 'table' : pref;
+      const tbl = document.querySelector('#view-fourn table.fp-table'), tableCard = tbl ? tbl.closest('.card') : null, cardsBox = $('fn-cards');
+      if (tableCard) tableCard.classList.toggle('hidden', v === 'cards');
+      if (cardsBox) cardsBox.classList.toggle('hidden', v !== 'cards');
+      const tg = $('fn-view'); if (tg) tg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.v === pref));
+    }
+    function applyRename(oldName, newName){
+      newName = (newName || '').trim();
+      let n = 0;
+      (data.factures || []).forEach(f => {
+        if ((f.fournisseur || '').trim() === oldName) {
+          f.fournisseur = newName || null;
+          if (FP.persist) FP.persist.update('factures', f.id, { fournisseur: f.fournisseur });
+          n++;
+        }
+      });
+      if (FP.history && FP.history.commit) FP.history.commit();
+      render(); renderKPIs(); renderTable(); renderCharts();
+      return n;
+    }
+    $('fn-search').addEventListener('input', (e) => { fnSearch = e.target.value; render(); });
+    $('fn-sort').addEventListener('change', (e) => { fnSort = e.target.value; render(); });
+    // Actions renommer/supprimer — mêmes boutons en vue Tableau ET en vue Cartes.
+    async function fnAction(e){
+      const rn = e.target.closest('[data-fn-rename]');
+      if (rn){ const old = rn.dataset.fnRename; const nn = await FP.prompt(`Renommer / fusionner « ${old} » en :`, old); if (nn != null && nn.trim() && nn.trim() !== old){ const k = applyRename(old, nn); alert(`${k} facture(s) mises à jour.`); } return; }
+      const dl = e.target.closest('[data-fn-del]');
+      if (dl){ const old = dl.dataset.fnDel; if (await FP.confirm(`Retirer le fournisseur « ${old} » de ses factures ?\n(Les factures restent, sans fournisseur.)`)){ applyRename(old, ''); } }
+    }
+    $('fn-tbody').addEventListener('click', fnAction);
+    if ($('fn-cards')) $('fn-cards').addEventListener('click', fnAction);
+    { const vt = $('fn-view'); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.fournView = b.dataset.v; FP.settings.save(s); } } catch (e) {} applyFnView(); })); }
+    window.renderFournisseurs = render;
+    document.addEventListener('fp:data-ready', () => { if (!$('view-fourn').classList.contains('hidden')) render(); });
+  })();
+</script>
+</body>
+</html>
