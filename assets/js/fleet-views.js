@@ -1278,9 +1278,14 @@
           // de station (« 79 PAMPRO ») puis on garde le début du texte avant le 1er chiffre.
           const produit = pm ? pm[1].replace(/\s+/g, ' ').trim()
             : ((tail.replace(TX_STATION, '').trim().split(/\s+\d/)[0] || '').trim().slice(0, 30) || 'Achat');
+          const cat = txCat(produit);
+          // ⚠️ FRAIS / commissions / abonnements fournisseur (Frais de Gestion, Frais Station, Frais
+          // Parking…) = PAS une conso du collaborateur → on ne crée PAS de transaction (ni conso, ni
+          // « Autres », ni anomalie, ni rapprochement). Les vrais Parking/Lavage restent, eux, gardés.
+          if (cat === 'frais') continue;
           const y = dmy.slice(4, 6), mo = dmy.slice(2, 4), da = dmy.slice(0, 2);
           out.push({ id: facNum + '-' + (seq++), facnum: facNum, carte: h.carte, conducteur: who, plaque,
-            dateTx: '20' + y + '-' + mo + '-' + da, mois: '20' + y + '-' + mo, produit, categorie: txCat(produit), montantTtc: +ttc.toFixed(2) });
+            dateTx: '20' + y + '-' + mo + '-' + da, mois: '20' + y + '-' + mo, produit, categorie: cat, montantTtc: +ttc.toFixed(2) });
         }
       }
       return out;

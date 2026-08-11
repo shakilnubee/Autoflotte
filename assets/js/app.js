@@ -1229,6 +1229,8 @@ FP.consoNonRattaches = function (items) {
     const numKey = it.numKey || null;
     if (numKey === 'condBadgeUlys') num = num.replace(/^ULYS[-_\s]*/i, '');
     if (!name && !num) return;
+    // Un « Frais de gestion / Frais Station… » n'est PAS un conducteur → jamais proposé au rapprochement.
+    if (name && FP.txCat && FP.txCat(name) === 'frais') return;
     // Déjà rattaché ? (par n° d'abord — le plus fiable — puis par nom, tolérant ordre + masqués)
     let key = null;
     try {
@@ -1302,6 +1304,8 @@ FP.consoPendantConge = (txList, opts) => {
   const out = [];
   (txList || []).forEach(t => {
     if (!t) return;
+    // Frais/commissions/abonnements fournisseur = pas une conso du collaborateur → jamais « pendant congé ».
+    if (FP.estFraisConso && FP.estFraisConso(t)) return;
     // Tolérant camelCase (FP.db) ET snake_case (lecture brute Supabase) : date_tx / montant_ttc.
     const dtx = t.dateTx || t.date_tx; if (!dtx) return;
     const cat = String(t.categorie || '').toLowerCase();
@@ -1337,6 +1341,7 @@ FP.consoApresDepart = (txList) => {
   if (!FP.affectations || !FP.affectations.forConducteur) return out;
   (txList || []).forEach(t => {
     if (!t) return;
+    if (FP.estFraisConso && FP.estFraisConso(t)) return; // frais fournisseur = pas une conso du collaborateur
     const dtx = t.dateTx || t.date_tx; if (!dtx) return;
     const key = FP.condKeyDeConso ? FP.condKeyDeConso(t) : null; if (!key) return;
     const nom = FP.conducteurNomUnifie ? FP.conducteurNomUnifie(t.conducteur, key) : (t.conducteur || key);
@@ -2768,12 +2773,28 @@ FP.notifCfg = () => {
 // Utilisé PARTOUT (page Factures ET page Suivi & alertes) pour ne pas diverger.
 FP.txCat = function (p) {
   const s = (p || '').toLowerCase();
-  if (/gazole|gasoil|diesel|super|sp\d|sans[- ]?plomb|essence|excellium|premier|adblue|gnr|gpl|e10|e85|b7/.test(s)) return 'carburant';
+  // ⚠️ FRAIS / COMMISSIONS / ABONNEMENTS ajoutés par le fournisseur (TotalEnergies…) = NE SONT PAS une
+  // conso du collaborateur → catégorie 'frais', EXCLUE partout (conso par conducteur, colonne « Autres »,
+  // anomalies, rapprochement). ⚠️ On ne matche QUE les vrais libellés de frais : « Frais de Gestion »,
+  // « Frais Station », « Frais Parking » (= commission), « Abonnement »… — JAMAIS un vrai « Parking »
+  // consommé, ni « Produit frais » (alimentation, « frais » n'est pas suivi de gestion/station/parking).
+  // Multilingue : NL (beheerskost), DE (Gebühr/Verwaltung). Vérifié EN 1er (priorité sur parking/repas).
+  if (/frais\s+(de\s+)?(gestion|station|parking|carte|service|compte)|abonnement|cotisation|management\s*fee|beheerskost|verwaltingskost|verwaltungsgeb|geb[uü]hr/.test(s)) return 'frais';
+  // Carburant — FR + libellés étrangers (factures IT/DE/NL) : loodvrij/ongelood (NL, sans plomb),
+  // benzine/benzin/benzina (essence NL/DE/IT), gasolio (gazole IT), bleifrei (DE), « Euro 95/98 ».
+  if (/gazole|gasoil|gasolio|diesel|super|sp\d|sans[- ]?plomb|essence|excellium|premier|adblue|gnr|gpl|e10|e85|b7|loodvrij|ongelood|bleifrei|benzine?|benzina|euro\s?9\d/.test(s)) return 'carburant';
   if (/lavage/.test(s)) return 'lavage';
   if (/parking/.test(s)) return 'parking';
   if (/aliment|boisson|sandwich|repas|restaur|snack|produit\s*frais|caf[ée]|menu/.test(s)) return 'repas';
   if (/lubrifiant/.test(s)) return 'boutique';
   return 'autre';
+};
+// Une conso est-elle un FRAIS fournisseur (à exclure) ? Teste la catégorie ET le libellé produit
+// (robuste même sur d'anciennes lignes en base rangées en « autre »). Source unique pour tous les écrans.
+FP.estFraisConso = function (t) {
+  if (!t) return false;
+  if (String(t.categorie || '').toLowerCase() === 'frais') return true;
+  return FP.txCat(t.produit || '') === 'frais';
 };
 FP.tfSeuils = function () {
   let s = {}; try { s = (FP.settings.get().tfSeuils) || {}; } catch (e) {}
