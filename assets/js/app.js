@@ -5565,6 +5565,23 @@ FP.openPdf = function (ref, emptyMsg) {
     .catch(() => { const f = toFinal(raw); if (w) w.location = f; else window.open(f, '_blank', 'noopener'); });
   return true;
 };
+// Aperçu de document INTÉGRÉ (dans un tiroir/modale) avec un SPINNER de chargement BIEN VISIBLE :
+// tant que le PDF/l'image n'est pas affiché, on voit « ⏳ Chargement du document… » ; il disparaît au
+// chargement (onload). Si ça n'a pas chargé après ~15 s, on affiche un repli « ouvrir dans un onglet ».
+// Usage : container.innerHTML = FP.docFrame(url, { height:'460px', title:'Facture 123' });
+FP.docFrame = function (src, opts) {
+  opts = opts || {};
+  const esc = FP.esc || (s => String(s == null ? '' : s));
+  const h = opts.height || '460px';
+  const url = String(src == null ? '' : src);
+  const openTxt = esc(opts.openLabel || 'Ouvrir dans un nouvel onglet');
+  return '<div class="fp-docwrap" style="height:' + esc(h) + '">'
+    + '<div class="fp-docspin"><span class="fp-docspin-ic" aria-hidden="true"></span><span>Chargement du document…</span>'
+    + '<a class="fp-docspin-open" href="' + esc(url) + '" target="_blank" rel="noopener">' + openTxt + ' ↗</a></div>'
+    + '<iframe src="' + esc(url) + '" title="' + esc(opts.title || 'Aperçu du document') + '" loading="eager" '
+    + 'onload="var w=this.closest(&quot;.fp-docwrap&quot;);if(w)w.classList.add(&quot;loaded&quot;)"></iframe>'
+    + '</div>';
+};
 // ⚠️ SOURCE UNIQUE — Génère un VRAI fichier Excel (.xlsx) et le télécharge. Colonnes propres,
 // encodage UTF-8 correct (é, €… sans « signes bizarres »), montants NUMÉRIQUES (typeof number →
 // vraie cellule chiffre). Aucune dépendance : ZIP « store » + CRC32 écrits à la main.
