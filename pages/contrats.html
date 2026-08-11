@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260811b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260811b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811c">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -578,11 +578,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260811b"></script>
-<script src="../assets/js/supabase-client.js?v=20260811b"></script>
-<script src="../assets/js/data.js?v=20260811b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260811c"></script>
+<script src="../assets/js/supabase-client.js?v=20260811c"></script>
+<script src="../assets/js/data.js?v=20260811c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260811b"></script>
+<script src="../assets/js/app.js?v=20260811c"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1211,14 +1211,18 @@
       if (diff < 180)      return `<span style="color:var(--fp-warn);font-weight:600">${ds}</span><br><span class="text-xs" style="color:var(--fp-warn)">~${Math.round(diff / 30)} mois</span>`;
       return `${ds}<br><span class="text-xs text-slate-400">dans ~${Math.round(diff / 30)} mois</span>`;
     };
+    // Mini-barre de progression km (consommé vs contractuel) — visuel « cockpit » directement dans le
+    // tableau Contrats (comme dans la fiche véhicule). % et couleur = mêmes valeurs (FP.leasingInfo).
+    const kmBar = (pctKm, col) => `<div style="height:5px;border-radius:99px;background:var(--fp-border);margin-top:5px;max-width:160px;overflow:hidden"><div style="height:100%;width:${Math.max(0, Math.min(100, pctKm))}%;background:${col};border-radius:99px"></div></div>`;
     const statutKm = (l, immat) => {
       if (!l) return '<span class="text-slate-400 text-xs">contrat non renseigné</span>';
       if (l.projectionFin === null) return '<span class="badge" style="background:#E0E7FF;color:#3730A3">contrat récent</span>';
       const pct = Math.round(l.ratio * 100);
+      const pctKm = l.kmContrat ? (l.km / l.kmContrat * 100) : 0; // consommé réel (pour la barre)
       const pen = (l.niveau === 'danger' || l.niveau === 'warn') ? penaltyHtml(l.depassementProjete, l.kmSupp, immat ? `data-edit-lease="${immat}"` : '', l.kmTolerance) : '';
-      if (l.niveau === 'danger') return `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${pen}`;
-      if (l.niveau === 'warn')   return `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${pen}`;
-      return `<span class="badge badge-ok">OK (${pct}%)</span>`;
+      if (l.niveau === 'danger') return `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${kmBar(pctKm, 'var(--fp-danger)')}${pen}`;
+      if (l.niveau === 'warn')   return `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${kmBar(pctKm, 'var(--fp-warn)')}${pen}`;
+      return `<span class="badge badge-ok">OK (${pct}%)</span>${kmBar(pctKm, 'var(--fp-accent)')}`;
     };
     const tbody = $('tbody-leasing');
     tbody.innerHTML = rows.map(({ v, agg }) => {
