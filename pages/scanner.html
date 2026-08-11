@@ -8,11 +8,11 @@
 <title>Scanner IA — Parc Pilot</title>
 <link rel="manifest" href="../manifest.json">
 <meta name="theme-color" content="#0F1E3D">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810n">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260810o">
 <script>window.lucide={createIcons:function(){}};</script>
-<script defer src="../assets/js/lucide.min.js?v=20260810n"></script>
+<script defer src="../assets/js/lucide.min.js?v=20260810o"></script>
 <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260810n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260810o">
 <style>
   .drop { border:2px dashed var(--fp-border); border-radius:1rem; padding:2.5rem 1.5rem; text-align:center; cursor:pointer; transition:.15s; background:#fff; }
   .drop:hover, .drop.over { border-color:var(--fp-accent); background:#FFF7ED; }
@@ -94,11 +94,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260810n"></script>
-<script src="../assets/js/supabase-client.js?v=20260810n"></script>
-<script src="../assets/js/data.js?v=20260810n"></script>
-<script src="../assets/js/app.js?v=20260810n"></script>
-<script src="../assets/js/scanner2.js?v=20260810n"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260810o"></script>
+<script src="../assets/js/supabase-client.js?v=20260810o"></script>
+<script src="../assets/js/data.js?v=20260810o"></script>
+<script src="../assets/js/app.js?v=20260810o"></script>
+<script src="../assets/js/scanner2.js?v=20260810o"></script>
 <script>
   if (window.lucide) lucide.createIcons();
   var $ = function (id) { return document.getElementById(id); };
@@ -194,12 +194,16 @@
       var key=c[0], libelle=c[1]; var ch = FP2.champ(model, key);
       var v = ch ? (ch.valeur_normalisee!=null&&ch.valeur_normalisee!==''?ch.valeur_normalisee:ch.valeur_originale) : '';
       if(Array.isArray(v)) v = v.join(', ');
+      var hasVal = !(v===''||v==null);
       var conf = ch ? (ch.niveau_confiance||'') : '';
-      var need = ch ? !!ch.verification_humaine_requise : (v===''||v==null);
-      var cls = (conf==='faible'||need) ? 'low' : (conf==='moyen' ? 'warn' : '');
+      var need = !!(ch && ch.verification_humaine_requise);
+      // ⚠️ Un champ VIDE (absent du document) reste NEUTRE — pas de rouge « incertain ». Avant, un champ
+      // vide était surligné rouge (ex. VIN ou Acompte sur une facture d'entretien qui n'en ont pas) → ça
+      // faisait croire qu'il fallait le remplir. Rouge/orange UNIQUEMENT si une valeur lue est incertaine.
+      var cls = !hasVal ? '' : ((conf==='faible'||need) ? 'low' : (conf==='moyen' ? 'warn' : ''));
       var multiline = (key==='description'||key==='mentionsZ'||key==='garanties'||key==='motif');
       var input = multiline ? '<textarea rows="2" data-k="'+key+'">'+esc(v==null?'':v)+'</textarea>' : '<input type="text" data-k="'+key+'" value="'+esc(v==null?'':v)+'">';
-      var confPill = conf ? '<span class="conf '+esc(conf)+'">'+esc(conf)+'</span>' : '';
+      var confPill = (hasVal && conf) ? '<span class="conf '+esc(conf)+'">'+esc(conf)+'</span>' : '';
       var metaBits = []; if(ch&&ch.page) metaBits.push('p.'+ch.page); if(ch&&ch.libelle_document) metaBits.push('« '+ch.libelle_document+' »');
       html += '<div class="fld '+cls+'"><label>'+esc(libelle)+' '+confPill+'</label>'+input+(metaBits.length?'<div class="meta">'+esc(metaBits.join(' · '))+'</div>':'')+'</div>';
     });
