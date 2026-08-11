@@ -286,7 +286,10 @@
 <script src="../assets/js/data.js?v=20260810r"></script>
 <script>window.FP_PDF=1;</script>
 <script src="../assets/js/app.js?v=20260810r"></script>
-<script src="../assets/js/fleet-views.js?v=20260810r"></script>
+<!-- ⚡ fleet-views.js (~160 Ko : Total Fleet + Ulys) N'EST PLUS chargé ici en SYNCHRONE : l'onglet
+     par défaut est « Contrôle » et n'en a pas besoin. Il est injecté à la demande (1re ouverture de
+     Total/Ulys) via ensureFleetViews(), et préchargé en douceur sur temps mort → l'arrivée sur
+     Contrôle ne parse plus 160 Ko inutiles (c'était la latence ressentie). -->
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -304,44 +307,55 @@
   let _tab = 'controle';
   const customPres = () => (FP.prestataires ? FP.prestataires() : []).filter(p => !p.builtin);
   const tabNames = () => ['total', 'ulys'].concat(customPres().map(p => p.id)).concat(['controle', 'cartes']);
+  // Chargement À LA DEMANDE du module Total Fleet / Ulys (fleet-views.js, ~160 Ko). Idempotent :
+  // ne l'injecte qu'une fois ; renvoie une promesse résolue quand FP.mountTotal est prêt (ou en échec).
+  let _flPromise = null;
+  function ensureFleetViews(){
+    if (window.FP && FP.mountTotal) return Promise.resolve(true);
+    if (_flPromise) return _flPromise;
+    _flPromise = new Promise(res => {
+      try {
+        const s = document.createElement('script');
+        s.src = '../assets/js/fleet-views.js?v=20260810r';
+        s.onload = () => res(!!(window.FP && FP.mountTotal));
+        s.onerror = () => res(false);
+        document.head.appendChild(s);
+      } catch (e) { res(false); }
+    });
+    return _flPromise;
+  }
+  // Monte un onglet Total/Ulys : charge le module au besoin, monte le pane NATIF, différe le calcul
+  // lourd ; repli iframe si le module est indisponible. Garde anti-course : si l'utilisateur a changé
+  // d'onglet entre-temps, on n'écrase rien.
+  function mountFleetPane(tab, paneId, ifId, title, mountFn, renderFn, embedUrl){
+    const pane = $(paneId); if (!pane) return;
+    const iframeFallback = () => {
+      if (_tab !== tab) return;
+      pane.innerHTML = '<iframe id="' + ifId + '" title="' + title + '" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>';
+      _flLazyFrame(ifId, embedUrl);
+    };
+    ensureFleetViews().then(ok => {
+      if (_tab !== tab) return; // l'utilisateur est parti sur un autre onglet → on abandonne
+      if (ok && window.FP && FP[mountFn]) {
+        const mounted = FP[mountFn](pane);
+        if (mounted) { const _go = () => { try { if (window[renderFn]) window[renderFn](); } catch (e) {} }; (window.requestIdleCallback ? requestIdleCallback(_go, { timeout: 800 }) : setTimeout(_go, 30)); }
+        else iframeFallback();
+      } else iframeFallback();
+    });
+  }
+  // Repli iframe paresseux (identique à _lazyFrame de switchTab, mais accessible hors de sa portée).
+  function _flLazyFrame(id, url){ const f = $(id); if (!f || f.src) return; const go = () => { if (!f.src) f.src = url; }; (window.requestIdleCallback ? requestIdleCallback(go, { timeout: 1200 }) : setTimeout(go, 250)); }
   function switchTab(name){
     const names = tabNames(); if (names.indexOf(name) < 0) name = 'controle';
     _tab = name;
     if (FP.lastTab) FP.lastTab.set('controle', name); // rouvre sur ce sous-onglet la prochaine fois
     names.forEach(k => { const pane = $('pane-' + k); if (pane) pane.classList.toggle('hidden', k !== name); });
     names.forEach(k => { const b = $('tab-' + k); if (b) { b.classList.toggle('active', k === name); b.setAttribute('aria-selected', k === name ? 'true' : 'false'); } });
-    // Chargement paresseux des vues intégrées Total Fleet / Ulys (1re ouverture seulement).
-    // ⚠️ Ces iframes chargent une 2e instance de l'app (factures.html?embed) = LOURD. On DIFFÈRE le
-    // chargement (requestIdleCallback) pour que la page Contrôle reste fluide « dès le clic », même si
-    // le dernier onglet mémorisé était Total/Ulys — l'iframe se remplit juste après, sans bloquer.
-    const _lazyFrame = (id, url) => { const f = $(id); if (!f || f.src) return; const go = () => { if (!f.src) f.src = url; }; (window.requestIdleCallback ? requestIdleCallback(go, { timeout: 1200 }) : setTimeout(go, 250)); };
-    // Total Fleet : NATIF via le module partagé (fleet-views.js). Repli sur l'iframe si le module n'est pas là.
-    if (name === 'total') {
-      const paneT = $('pane-total');
-      if (window.FP && FP.mountTotal && paneT) {
-        const ok = FP.mountTotal(paneT);
-        // Rendu DIFFÉRÉ (requestIdleCallback) : la structure s'affiche tout de suite, le calcul lourd
-        // (toutes les factures/conso) ne bloque pas l'arrivée sur la page → plus de latence ressentie.
-        if (ok) { const _go = () => { try { if (window.renderTotalFleet) window.renderTotalFleet(); } catch (e) {} }; (window.requestIdleCallback ? requestIdleCallback(_go, { timeout: 800 }) : setTimeout(_go, 30)); }
-        else { paneT.innerHTML = '<iframe id="if-total" title="Total Fleet" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>'; _lazyFrame('if-total', 'factures.html?embed&tab=total'); }
-      } else if (paneT) {
-        paneT.innerHTML = '<iframe id="if-total" title="Total Fleet" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>';
-        _lazyFrame('if-total', 'factures.html?embed&tab=total');
-      }
-    }
-    // Ulys : NATIF via le module partagé (fleet-views.js). Repli sur l'iframe si le module n'est pas là.
-    if (name === 'ulys') {
-      const pane = $('pane-ulys');
-      if (window.FP && FP.mountUlys && pane) {
-        const ok = FP.mountUlys(pane);
-        // Rendu DIFFÉRÉ (voir Total) → l'onglet s'affiche tout de suite, le calcul lourd suit.
-        if (ok) { const _go = () => { try { if (window.renderUlys) window.renderUlys(); } catch (e) {} }; (window.requestIdleCallback ? requestIdleCallback(_go, { timeout: 800 }) : setTimeout(_go, 30)); }
-        else { pane.innerHTML = '<iframe id="if-ulys" title="Ulys" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>'; _lazyFrame('if-ulys', 'factures.html?embed&tab=ulys'); }
-      } else if (pane) {
-        pane.innerHTML = '<iframe id="if-ulys" title="Ulys" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>';
-        _lazyFrame('if-ulys', 'factures.html?embed&tab=ulys');
-      }
-    }
+    // Total Fleet / Ulys : NATIFS via le module partagé (fleet-views.js), chargé À LA DEMANDE
+    // (ensureFleetViews). Repli iframe si le module ne se charge pas. Le mount est DIFFÉRÉ après
+    // l'affichage de la coquille pour ne pas bloquer le clic.
+    if (name === 'total') mountFleetPane('total', 'pane-total', 'if-total', 'Total Fleet', 'mountTotal', 'renderTotalFleet', 'factures.html?embed&tab=total');
+    if (name === 'ulys')  mountFleetPane('ulys',  'pane-ulys',  'if-ulys',  'Ulys',        'mountUlys',  'renderUlys',      'factures.html?embed&tab=ulys');
     if (name === 'cartes') renderCartes();
     if (/^p_/.test(name)) renderPresta(name);
     if (window.lucide) lucide.createIcons();
@@ -944,6 +958,9 @@
     if (window.requestAnimationFrame) requestAnimationFrame(() => setTimeout(run, 0)); else setTimeout(run, 0);
   }
   boot();
+  // Préchargement DOUX du module Total/Ulys sur temps mort : ne bloque pas l'arrivée sur Contrôle,
+  // mais rend le 1er clic sur Total Fleet / Ulys quasi instantané (le module est déjà là).
+  try { (window.requestIdleCallback ? requestIdleCallback(() => ensureFleetViews(), { timeout: 4000 }) : setTimeout(() => ensureFleetViews(), 2500)); } catch (e) {}
   // Recalcule quand les données live arrivent (settings/congés/immat…). On reconstruit aussi les
   // sous-onglets prestataires (au cas où un prestataire a été créé sur un autre appareil) en gardant
   // l'onglet courant si possible.
