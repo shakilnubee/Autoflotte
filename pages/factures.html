@@ -1424,38 +1424,44 @@
     } catch (e) {}
   }
 
+  let _faReading = false;
   async function handleFacture(file){
-    if (!file) return;
-    // 0) Lecture IA (Haiku via le relais sécurisé) — la meilleure ; sinon on retombe sur le lecteur local
+    if (!file || _faReading) return; // ⚠️ garde anti double-lecture (dropzone + input + ouverture) : sinon
+    _faReading = true;               //    deux lectures se chevauchent et l'une écrase le résultat de l'autre.
     try {
-      faWorking('Lecture IA du document…');
-      const ia = await FP.scanIA(file, 'facture');
-      if (ia && (ia.montantTTC != null || ia.montantHT != null || ia.numeroFacture)) {
-        applyFactureFields(ia, true);
-        return;
+      // 0) Lecture IA (Haiku via le relais sécurisé) — la meilleure ; sinon on retombe sur le lecteur local.
+      let iaOk = false;
+      try {
+        faWorking('Lecture IA du document…');
+        const ia = await FP.scanIA(file, 'facture');
+        if (ia && Object.keys(ia).length) { applyFactureFields(ia, true); iaOk = true; } // applique même partiel (fournisseur, plaque…)
+        if (ia && (ia.montantTTC != null || ia.montantHT != null || ia.numeroFacture)) return; // montants lus → terminé
+      } catch (_) { /* on complète avec le lecteur local */ }
+      // 1) Lecteur local (texte PDF / OCR) — gratuit, fonctionne hors-ligne
+      try {
+        let parsed = {};
+        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+        if (isPdf){
+          faWorking('Lecture du PDF…');
+          const pdf = await loadPdf(file);
+          const native = await pdfText(pdf);
+          if ((native || '').replace(/\s/g, '').length > 40) parsed = parseFacture(native);
+          else { faWorking('PDF scanné — analyse de l\'image…'); await loadScript(TESSERACT_CDN); const canvas = await pdfPageToCanvas(pdf); const w = await Tesseract.createWorker('fra'); const { data } = await w.recognize(canvas); await w.terminate(); parsed = parseFacture(data.text); }
+        } else {
+          faWorking('Lecture de la facture… (quelques secondes au 1er usage)');
+          await loadScript(TESSERACT_CDN);
+          const w = await Tesseract.createWorker('fra'); const { data } = await w.recognize(file); await w.terminate();
+          parsed = parseFacture(data.text);
+        }
+        applyFactureFields(parsed, false);
+      } catch (err) {
+        console.error(err);
+        // ⚠️ N'affiche PAS l'erreur si des champs ont DÉJÀ été remplis (l'IA a réussi, ou lecture partielle) :
+        // sinon un « Impossible de lire » rouge s'affichait à tort alors que la facture était bien reconnue.
+        const anyFilled = iaOk || ['fa-ttc','fa-ht','fa-tva','fa-num','fa-fournisseur','fa-desc'].some(id => { const el = $(id); return el && String(el.value || '').trim(); });
+        if (!anyFilled) faStatus("Impossible de lire le document. Vérifiez votre connexion internet, ou saisissez les montants manuellement.", 'error');
       }
-    } catch (_) { /* on bascule sur le lecteur local */ }
-    // 1) Lecteur local (texte PDF / OCR) — gratuit, fonctionne hors-ligne
-    try {
-      let parsed = {};
-      const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-      if (isPdf){
-        faWorking('Lecture du PDF…');
-        const pdf = await loadPdf(file);
-        const native = await pdfText(pdf);
-        if ((native || '').replace(/\s/g, '').length > 40) parsed = parseFacture(native);
-        else { faWorking('PDF scanné — analyse de l\'image…'); await loadScript(TESSERACT_CDN); const canvas = await pdfPageToCanvas(pdf); const w = await Tesseract.createWorker('fra'); const { data } = await w.recognize(canvas); await w.terminate(); parsed = parseFacture(data.text); }
-      } else {
-        faWorking('Lecture de la facture… (quelques secondes au 1er usage)');
-        await loadScript(TESSERACT_CDN);
-        const w = await Tesseract.createWorker('fra'); const { data } = await w.recognize(file); await w.terminate();
-        parsed = parseFacture(data.text);
-      }
-      applyFactureFields(parsed, false);
-    } catch (err) {
-      console.error(err);
-      faStatus("Impossible de lire le document. Vérifiez votre connexion internet, ou saisissez les montants manuellement.", 'error');
-    }
+    } finally { _faReading = false; }
   }
 
   function nextFactId(){
