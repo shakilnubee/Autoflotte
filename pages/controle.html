@@ -71,6 +71,7 @@
   body.fp-dark table.ctrl-tbl td { border-bottom-color:#243044; }
   body.fp-dark details.ctrl-help { background:#182234; color:#cbd5e1; }
   body.fp-dark details.ctrl-help > summary { color:#e6edf6; }
+  body.fp-dark #if-total, body.fp-dark #if-ulys { background:#0b1220 !important; }
   table.ctrl-tbl { width:100%; border-collapse:collapse; font-size:.85rem; }
   table.ctrl-tbl th { text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; color:var(--fp-muted); padding:.5rem .6rem; border-bottom:1px solid var(--fp-border); background:#F8FAFC; }
   table.ctrl-tbl td { padding:.55rem .6rem; border-bottom:1px solid #EEF2F7; vertical-align:middle; }
@@ -200,10 +201,14 @@
       <button type="button" id="tab-cartes" class="ctrl-tab"><i data-lucide="credit-card"></i> Cartes &amp; badges</button>
     </div>
 
-    <!-- Total Fleet / Ulys : la vue complète (conso, imports, exports) vit dans Factures. On l'ouvre
-         DIRECTEMENT en natif (factures.html?tab=…) — plus d'iframe qui rechargeait toute l'app (fini la
-         lenteur, le 2ᵉ « Parc Pilot » sur mobile et le bouton Retour). Un seul code source, aucune
-         duplication. Les onglets Total/Ulys ci-dessus NAVIGUENT vers cette vue native (voir plus bas). -->
+    <!-- Sous-onglets Total Fleet / Ulys : la vue complète (conso, imports, exports) est intégrée depuis
+         Factures en mode « embed » → un seul code source, aucune duplication. Chargée à la 1re ouverture. -->
+    <div id="pane-total" class="hidden">
+      <iframe id="if-total" title="Total Fleet" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff;overflow:hidden"></iframe>
+    </div>
+    <div id="pane-ulys" class="hidden">
+      <iframe id="if-ulys" title="Ulys" scrolling="no" style="width:100%;height:700px;min-height:520px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff;overflow:hidden"></iframe>
+    </div>
 
     <!-- Panneaux des prestataires PERSO (générés dynamiquement, 1 par prestataire créé) -->
     <div id="presta-panes"></div>
@@ -299,17 +304,20 @@
   // ===== Sous-onglets (dynamiques : Total, Ulys, prestataires PERSO, Contrôle, Cartes) =====
   let _tab = 'controle';
   const customPres = () => (FP.prestataires ? FP.prestataires() : []).filter(p => !p.builtin);
-  // Total/Ulys ne sont plus des « panneaux » internes (ils naviguent vers Factures en natif) → hors tabNames.
-  const tabNames = () => customPres().map(p => p.id).concat(['controle', 'cartes']);
+  const tabNames = () => ['total', 'ulys'].concat(customPres().map(p => p.id)).concat(['controle', 'cartes']);
   function switchTab(name){
     const names = tabNames(); if (names.indexOf(name) < 0) name = 'controle';
     _tab = name;
     if (FP.lastTab) FP.lastTab.set('controle', name); // rouvre sur ce sous-onglet la prochaine fois
     names.forEach(k => { const pane = $('pane-' + k); if (pane) pane.classList.toggle('hidden', k !== name); });
     names.forEach(k => { const b = $('tab-' + k); if (b) { b.classList.toggle('active', k === name); b.setAttribute('aria-selected', k === name ? 'true' : 'false'); } });
-    // Total Fleet / Ulys ne sont plus rendus ici (plus d'iframe) : leurs boutons naviguent vers la vue
-    // native de Factures. On désactive donc simplement leur état « actif » quand on est sur un autre onglet.
-    ['total', 'ulys'].forEach(k => { const b = $('tab-' + k); if (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); } });
+    // Chargement paresseux des vues intégrées Total Fleet / Ulys (1re ouverture seulement).
+    // ⚠️ Ces iframes chargent une 2e instance de l'app (factures.html?embed) = LOURD. On DIFFÈRE le
+    // chargement (requestIdleCallback) pour que la page Contrôle reste fluide « dès le clic », même si
+    // le dernier onglet mémorisé était Total/Ulys — l'iframe se remplit juste après, sans bloquer.
+    const _lazyFrame = (id, url) => { const f = $(id); if (!f || f.src) return; const go = () => { if (!f.src) f.src = url; }; (window.requestIdleCallback ? requestIdleCallback(go, { timeout: 1200 }) : setTimeout(go, 250)); };
+    if (name === 'total') _lazyFrame('if-total', 'factures.html?embed&tab=total');
+    if (name === 'ulys')  _lazyFrame('if-ulys',  'factures.html?embed&tab=ulys');
     if (name === 'cartes') renderCartes();
     if (/^p_/.test(name)) renderPresta(name);
     if (window.lucide) lucide.createIcons();
@@ -356,9 +364,8 @@
         + '</tbody></table></div>';
     if (window.lucide) lucide.createIcons();
   }
-  // Total Fleet / Ulys : on OUVRE la vue native de Factures (rapide, pas d'app rechargée dans une iframe).
-  $('tab-total').addEventListener('click', () => { location.href = 'factures.html?tab=total&from=controle'; });
-  $('tab-ulys').addEventListener('click', () => { location.href = 'factures.html?tab=ulys&from=controle'; });
+  $('tab-total').addEventListener('click', () => switchTab('total'));
+  $('tab-ulys').addEventListener('click', () => switchTab('ulys'));
   $('tab-controle').addEventListener('click', () => switchTab('controle'));
   $('tab-cartes').addEventListener('click', () => switchTab('cartes'));
   renderPrestaTabs();
@@ -368,13 +375,9 @@
   // synchrone = temporal dead zone = ReferenceError = page bloquée sur « Chargement… ». En différant,
   // tout est déjà défini quand l'onglet s'ouvre. + repli sur « Contrôle » en cas d'erreur.
   { const t = new URLSearchParams(location.search).get('tab');
-    // Ancien lien direct vers Total/Ulys (?tab=total|ulys) : ces vues sont désormais natives dans Factures.
-    if (t === 'total' || t === 'ulys') { location.replace('factures.html?tab=' + t + '&from=controle'); }
-    else {
-      const last = FP.lastTab ? FP.lastTab.get('controle', 'controle') : 'controle';
-      const _target = tabNames().includes(t) ? t : (tabNames().includes(last) ? last : 'controle');
-      setTimeout(function(){ try { switchTab(_target); } catch (e) { console.error('[controle init]', e); try { switchTab('controle'); } catch (_) {} } }, 0);
-    } }
+    const last = FP.lastTab ? FP.lastTab.get('controle', 'controle') : 'controle';
+    const _target = tabNames().includes(t) ? t : (tabNames().includes(last) ? last : 'controle');
+    setTimeout(function(){ try { switchTab(_target); } catch (e) { console.error('[controle init]', e); try { switchTab('controle'); } catch (_) {} } }, 0); }
 
   // Clics dans les panneaux prestataire : ouvrir une facture / supprimer le prestataire.
   $('presta-panes').addEventListener('click', async (e) => {
@@ -404,6 +407,11 @@
     const rec = FP.addPrestataire(nom, type); if (!rec) { if (FP.toast) FP.toast('Nom invalide'); return; }
     renderPrestaTabs(); renderCartes(); switchTab(rec.id);
     alert('✅ Prestataire « ' + rec.nom + ' » créé.\n\n• Un sous-onglet vient d\'apparaître ici (Contrôle).\n• Une colonne « ' + (type === 'peage' ? 'Badge ' : 'Carte ') + rec.nom + ' » est ajoutée dans « Cartes & badges ».\n• Une zone à remplir apparaît aussi sur CHAQUE fiche conducteur.\n\nRenseigne le n° de carte/badge de chaque conducteur pour que ses consos se rattachent automatiquement.');
+  });
+  // La vue intégrée (Total Fleet / Ulys) nous envoie sa hauteur → on adapte l'iframe (aucun scroll imbriqué).
+  window.addEventListener('message', (e) => {
+    const h = e.data && e.data.fpEmbedHeight; if (!h || h < 300) return;
+    [$('if-total'), $('if-ulys')].forEach(ifr => { if (ifr && ifr.contentWindow === e.source) ifr.style.height = (h + 24) + 'px'; });
   });
 
   // ===== Données =====
