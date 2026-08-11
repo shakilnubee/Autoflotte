@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260811f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260811f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811g">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -681,10 +681,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260811f"></script>
-<script src="../assets/js/supabase-client.js?v=20260811f"></script>
-<script src="../assets/js/data.js?v=20260811f"></script>
-<script src="../assets/js/app.js?v=20260811f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260811g"></script>
+<script src="../assets/js/supabase-client.js?v=20260811g"></script>
+<script src="../assets/js/data.js?v=20260811g"></script>
+<script src="../assets/js/app.js?v=20260811g"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -850,7 +850,22 @@
     const hiddenSet = new Set(FP.settings.get().navHidden || []);
     const alwaysVisible = new Set(FP.NAV_ALWAYS_VISIBLE || ['parametres.html']);
     const form = $('nav-labels-form');
-    const ordered = FP.navKeysOrdered();
+    // ⚠️ N'éditer QUE les VRAIS onglets de la barre latérale : on lit les liens <a data-nav>
+    // réellement présents dans le menu. Certaines pages « regroupées » (Entretiens→Factures,
+    // À vendre→Véhicules, Renouvellements→Suivi & alertes, Calendrier) ont un LIBELLÉ mais AUCUN
+    // lien dans le menu → elles ne doivent pas apparaître ici (ni comme onglet, ni comme « retiré »).
+    const realKeys = new Set(Array.from(document.querySelectorAll('aside a[data-nav], nav a[data-nav]')).map(a => a.dataset.nav).filter(Boolean));
+    let ordered = FP.navKeysOrdered();
+    if (realKeys.size) ordered = ordered.filter(k => realKeys.has(k) || alwaysVisible.has(k));
+    // Nettoyage : purge de navHidden les clés qui ne sont pas de vrais onglets (phantoms).
+    if (realKeys.size) {
+      const cur = FP.settings.get();
+      const clean = (cur.navHidden || []).filter(k => realKeys.has(k) && !alwaysVisible.has(k));
+      if (clean.length !== (cur.navHidden || []).length) {
+        cur.navHidden = clean; FP.settings.save(cur);
+        hiddenSet.clear(); clean.forEach(k => hiddenSet.add(k));
+      }
+    }
     // PRÉSENTS = onglets visibles dans le menu ; RETIRÉS = supprimés du menu (restaurables).
     const present = ordered.filter(k => alwaysVisible.has(k) || !hiddenSet.has(k));
     const removed = ordered.filter(k => hiddenSet.has(k) && !alwaysVisible.has(k));
