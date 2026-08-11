@@ -173,9 +173,9 @@
       </div>
     </div>
 
-    <!-- Onglets : Factures / Documents / Fournisseurs. Total Fleet & Ulys ont DÉMÉNAGÉ dans la page
-         Contrôle → leurs boutons sont masqués ici (display:none) mais les panneaux restent, affichés
-         par la page Contrôle via une vue intégrée (?embed&tab=total|ulys). -->
+    <!-- Onglets : Factures / Documents / Fournisseurs. Total Fleet & Ulys s'ouvrent depuis la page
+         Contrôle (ses onglets naviguent vers ?tab=total|ulys&from=controle) : leurs boutons sont masqués
+         ici (display:none) mais les panneaux + tout le moteur restent, affichés en NATIF sur cette page. -->
     <div id="fa-tabbar" style="display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--fp-border)">
       <button id="tab-btn-factures" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">Factures</button>
       <button id="tab-btn-documents" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Documents <span style="font-size:11px;font-weight:600">· archives & suivi</span></button>
@@ -2013,34 +2013,13 @@
     $('tab-btn-total').addEventListener('click', () => switchTab('total'));
     $('tab-btn-ulys').addEventListener('click', () => switchTab('ulys'));
     $('tab-btn-fourn').addEventListener('click', () => switchTab('fournisseurs'));
-    // Ouverture directe sur un onglet via l'URL (ex. depuis le scanner du tableau de bord : ?tab=ulys)
-    // + MODE « EMBED » : la page Contrôle intègre les vues Total Fleet / Ulys via une iframe
-    // (factures.html?embed&tab=total|ulys) → on masque toute la chrome (sidebar, en-tête, autres onglets,
-    // barre d'actions Factures) pour n'afficher QUE le panneau demandé.
+    // Ouverture directe sur un onglet via l'URL (ex. : ?tab=ulys depuis le scanner du tableau de bord,
+    // ou ?tab=total&from=controle depuis la page Contrôle — les vues Total Fleet / Ulys y sont natives).
     { const _p = new URLSearchParams(location.search); const _tab = _p.get('tab');
-      if (_p.has('embed')) {
-        document.body.classList.add('fac-embed');
-        const st = document.createElement('style');
-        // On masque la chrome MAIS on GARDE le bouton d'import (#btn-import-facture) que switchTab
-        // renomme « Importer un relevé Total/Ulys » → l'import reste possible depuis la vue intégrée.
-        // Masque la chrome + le bouton « + » flottant (#fp-fab) — la page parente Contrôle a déjà le sien
-        // (sinon on en voit DEUX). On GARDE le bouton d'import (renommé par switchTab).
-        st.textContent = 'body.fac-embed .fp-sidebar,body.fac-embed .fp-cockpit,body.fac-embed #fa-tabbar,body.fac-embed #btn-import-lot,body.fac-embed #fa-topexports,body.fac-embed [data-data-io],body.fac-embed #fp-fab{display:none!important}body.fac-embed #fa-actionbar{margin-bottom:12px!important}body.fac-embed main{padding:1rem 1.2rem!important;max-width:none!important}body.fac-embed{background:#fff}';
-        document.head.appendChild(st);
-        // Le contenu Total Fleet/Ulys (KPIs, conso par conducteur, graphes, « Reconstruire le détail »)
-        // se rend à l'activation de l'onglet ; on le REJOUE une fois les données chargées (sinon panneau vide).
-        if (_tab) { document.addEventListener('fp:data-ready', () => { try { switchTab(_tab); } catch (e) {} }); setTimeout(() => { try { switchTab(_tab); } catch (e) {} }, 1200); }
-        // Hauteur AUTO : on informe la page Contrôle de la hauteur réelle → l'iframe grandit, la page
-        // parente scrolle (plus de scroll imbriqué, tout le contenu — conso, graphes — est visible).
-        const postH = () => { try { parent.postMessage({ fpEmbedHeight: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) }, '*'); } catch (e) {} };
-        window.addEventListener('load', () => setTimeout(postH, 200));
-        document.addEventListener('fp:data-ready', () => setTimeout(postH, 400));
-        setInterval(postH, 1500);
-      }
       if (_tab && ['factures','documents','total','ulys','fournisseurs'].includes(_tab)) switchTab(_tab);
       // Ouvert depuis la page Contrôle (onglet Total Fleet / Ulys, désormais natif ici) : on pose un
       // lien de retour clair pour garder le fil (au lieu d'une iframe qui rechargeait toute l'app).
-      if (_p.get('from') === 'controle' && !_p.has('embed')) {
+      if (_p.get('from') === 'controle') {
         const bl = document.createElement('a');
         bl.href = 'controle.html';
         bl.className = 'btn btn-outline text-sm';
