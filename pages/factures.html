@@ -1917,7 +1917,12 @@
     const yearOf = s => { const m = String(s == null ? '' : s).match(/(20\d{2})/); return m ? m[1] : ''; };
     const docYear = d => yearOf(d.date) || yearOf(ts(d)) || 'Sans date';
     const factYear = f => yearOf(f.date) || 'Sans date';
-    const factUrl = f => f.url || (f.fileId ? ('https://drive.google.com/file/d/' + f.fileId + '/view') : '');
+    // ⚠️ fileId peut être une URL COMPLÈTE (facture importée sur le site → coffre Supabase) OU un
+    // vrai id Google Drive (facture liée au Drive). NE PAS emballer une URL http dans un lien Drive
+    // (sinon « .../file/d/https://…/scans/…/view » → chemin corrompu → erreur Google Drive). Même
+    // logique que le bouton « Ouvrir le PDF » de la liste ; le clic sur un lien « /scans/ » est ensuite
+    // intercepté et signé automatiquement (bucket privé).
+    const factUrl = f => f.url || (f.fileId ? (/^https?:\/\//.test(f.fileId) ? f.fileId : 'https://drive.google.com/file/d/' + f.fileId + '/view') : '');
     // Regroupe { vehiculeId: { docs:[], facts:[] } }
     function driveGroups() {
       const vehs = window.FP_DATA.vehicules || [];
