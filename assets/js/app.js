@@ -472,6 +472,8 @@ FP.leasingLocaleaseAnnuel = function () {
     if (!Array.isArray(list)) return 0;
     const ov = FP.getLeasingOverrides ? FP.getLeasingOverrides() : {};
     const mens = list.reduce((s, c) => {
+      // Contrat LLD terminé (échéance connue et dépassée) → on ne projette plus son loyer annuel.
+      if (FP.leasingTermine && FP.leasingTermine(c)) return s;
       const ik = String(c.immat || '').toUpperCase();
       const o = (ik && ov[ik]) ? ov[ik].loyer : null;
       const base = (o != null && o !== '') ? Number(o) : c.loyerTTC;
@@ -728,14 +730,20 @@ FP.chauffeurImmats = () => {
     location.replace(base + 'espace-salarie.html');
   } catch (e) {}
 })();
-// Voit/gère TOUTES les sociétés (sélecteur de société) → réservé au CEO (is_admin=true).
-// Repli si le profil n'est pas encore chargé : comportement admin actuel (sauf gestionnaire/salarié).
-FP.isSuperAdmin = () => { const p = FP.profile; if (p) return p.is_admin === true; return FP.role() !== 'gestionnaire' && FP.role() !== 'chauffeur'; };
-// Peut modifier la CONFIG de la société (Paramètres, contrats, e-mails) → CEO ou Admin client.
-FP.canManageSociete = () => FP.isAdmin();
+// Profil des DROITS confirmé (chargé depuis le cache/serveur) — sert à FERMER par défaut les écrans
+// privilégiés tant qu'on n'a pas la preuve du rôle (évite le « flash » de boutons admin avant que le
+// profil arrive). ⚠️ On NE ferme QUE l'UF sensible (config société, comptes, sélecteur multi-sociétés) :
+// l'usage général garde le repli hors-ligne de FP.role() pour ne pas bloquer un admin déconnecté.
+FP.profileConfirmed = () => !!FP.profile;
+// Voit/gère TOUTES les sociétés (sélecteur de société) → réservé au CEO (is_admin=true), profil CONFIRMÉ.
+// Fail-closed : profil non encore chargé → on N'affiche PAS le sélecteur (il apparaît dès confirmation).
+FP.isSuperAdmin = () => { const p = FP.profile; return !!p && p.is_admin === true; };
+// Peut modifier la CONFIG de la société (Paramètres, contrats, e-mails) → CEO ou Admin client, profil CONFIRMÉ.
+FP.canManageSociete = () => FP.profileConfirmed() && FP.isAdmin();
 // Peut gérer les COMPTES/accès (créer, changer de rôle, supprimer) → CEO (tout) ou Admin (sa société).
 // La portée réelle (une seule société pour l'Admin) est appliquée CÔTÉ SERVEUR par la fonction manage-users.
-FP.canManageUsers = () => FP.isAdmin();
+// Fail-closed : sans profil confirmé, pas de gestion de comptes (le serveur re-vérifie de toute façon).
+FP.canManageUsers = () => FP.profileConfirmed() && FP.isAdmin();
 FP.roleLabel = () => ({ ceo: 'CEO', admin: 'Admin', gestionnaire: 'Gestionnaire', chauffeur: 'Salarié' }[FP.role()] || 'Admin');
 FP.ROLE_LABELS = { ceo: 'CEO', admin: 'Admin', gestionnaire: 'Gestionnaire' };
 // Personnalisation de l'apparence (renommer titres/colonnes/onglets) : autorisée admin + gestionnaire.
@@ -3219,6 +3227,29 @@ FP.leasingContrat = (immat) => {
   if (!merged.kmContrat || !merged.debut) return null;
   return merged;
 };
+
+// ⚠️ HELPER CANONIQUE — échéance (date de fin) d'un contrat de leasing/LLD.
+// `fin` explicite si présente, sinon `debut` + durée (`dureeMois` ou `duree`, en mois).
+// Renvoie un Date, ou null si on ne peut PAS la calculer (ni fin ni début+durée). Une échéance
+// inconnue ne doit JAMAIS être traitée comme « terminé » : on continue alors de compter le loyer.
+FP.leasingEcheance = (c) => {
+  if (!c) return null;
+  if (c.fin) { const f = new Date(c.fin); if (!isNaN(f)) return f; }
+  const debut = c.debut ? new Date(c.debut) : null;
+  const duree = Number(c.dureeMois != null ? c.dureeMois : c.duree);
+  if (!debut || isNaN(debut) || !duree) return null;
+  const f = new Date(debut.getTime()); f.setMonth(f.getMonth() + duree); return f;
+};
+// ⚠️ HELPER CANONIQUE — un contrat est TERMINÉ (loyer à NE PLUS projeter dans les coûts annuels/TCO)
+// uniquement si son échéance est CONNUE et DÉPASSÉE. Échéance inconnue → considéré actif (on compte).
+// Prolonger un contrat = repousser sa date de fin (durée ou `fin`) → il redevient actif AUTOMATIQUEMENT,
+// sans supprimer aucune donnée passée (les loyers déjà réglés restent dans l'historique des factures).
+FP.leasingTermine = (c, when) => {
+  const ech = FP.leasingEcheance(c); if (!ech) return false;
+  const d = when ? new Date(when) : new Date(); d.setHours(0, 0, 0, 0);
+  return ech < d;
+};
+FP.leasingActif = (c, when) => !FP.leasingTermine(c, when);
 
 // Suivi du forfait : rythme autorisé vs réel, projection en fin de contrat,
 // risque de dépassement. Renvoie null si le véhicule n'a pas de contrat connu.

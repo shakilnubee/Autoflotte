@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260811d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260811d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811e">
 <style>
   .pill-ech { font-size: .72rem; font-weight: 700; padding: .12rem .55rem; border-radius: 9999px; white-space: nowrap; }
   .ech-danger { background:#FEE2E2; color:#991B1B; }
@@ -138,10 +138,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260811d"></script>
-<script src="../assets/js/supabase-client.js?v=20260811d"></script>
-<script src="../assets/js/data.js?v=20260811d"></script>
-<script src="../assets/js/app.js?v=20260811d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260811e"></script>
+<script src="../assets/js/supabase-client.js?v=20260811e"></script>
+<script src="../assets/js/data.js?v=20260811e"></script>
+<script src="../assets/js/app.js?v=20260811e"></script>
   <script>window.FP_PDF=1;</script>
 <script>
   lucide.createIcons();
@@ -153,10 +153,33 @@
   const ym = new Date().toISOString().slice(0, 7);
   // localStorage = cache rapide ; la SOURCE partagée est Supabase (app_settings id='jis_billing').
   const loadB = () => { try { return JSON.parse(localStorage.getItem(BKEY) || '{}') || {}; } catch (e) { return {}; } };
+  // Fusion par société : la version serveur fait foi pour les sociétés qu'on N'A PAS touchées, la
+  // version locale gagne pour celles qu'on vient d'éditer. Évite qu'un enregistrement depuis un 2e
+  // appareil n'écrase (last-writer-wins) les prix/états d'autres clients modifiés ailleurs.
+  const mergeBilling = (server, local) => {
+    const out = Object.assign({}, (server && typeof server === 'object') ? server : {});
+    Object.keys(local || {}).forEach(soc => {
+      const s = (out[soc] && typeof out[soc] === 'object') ? out[soc] : {};
+      const l = (local[soc] && typeof local[soc] === 'object') ? local[soc] : {};
+      const rec = Object.assign({}, s, l);                       // champs locaux (prix, actif) par-dessus
+      rec.pay = Object.assign({}, s.pay || {}, l.pay || {});     // paiements : union des mois cochés
+      out[soc] = rec;
+    });
+    return out;
+  };
   const saveB = (b) => {
     try { localStorage.setItem(BKEY, JSON.stringify(b)); } catch (e) {}
-    // Synchro tous appareils (règle 0-sync) — écriture via la file sûre.
-    try { if (window.FP && FP.persist && FP.persist.upsert) FP.persist.upsert('app_settings', { id: DBID, data: b }); } catch (e) {}
+    // Synchro tous appareils (règle 0-sync) — DELTA-MERGE avec la dernière version serveur avant écriture.
+    try {
+      if (!(window.FP && FP.persist && FP.persist.upsert)) return;
+      const doWrite = (merged) => { try { localStorage.setItem(BKEY, JSON.stringify(merged)); } catch (e) {} FP.persist.upsert('app_settings', { id: DBID, data: merged }); };
+      if (window.FP && FP.supabase && FP.supabase.from) {
+        FP.supabase.from('app_settings').select('data').eq('id', DBID).maybeSingle().then(
+          (r) => { const srv = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : {}; doWrite(mergeBilling(srv, b)); },
+          () => doWrite(b)
+        );
+      } else { doWrite(b); }
+    } catch (e) { try { FP.persist.upsert('app_settings', { id: DBID, data: b }); } catch (_) {} }
   };
   // Récupère la facturation depuis le serveur (propriétaire connecté) → cache local → re-render.
   const pullB = () => {
@@ -222,7 +245,9 @@
     const ac = e.target.closest && e.target.closest('.fa-actif');
     const pa = e.target.closest && e.target.closest('.fa-paye');
     if (ac) { const b = loadB(); const soc = ac.dataset.soc; b[soc] = b[soc] || {}; b[soc].actif = ac.checked; saveB(b); render(); }
-    else if (pa) { const b = loadB(); const soc = pa.dataset.soc; b[soc] = b[soc] || {}; b[soc].pay = b[soc].pay || {}; if (pa.checked) b[soc].pay[ym] = true; else delete b[soc].pay[ym]; saveB(b); }
+    // ⚠️ On stocke un `false` EXPLICITE au décochage (pas de delete) : sinon le delta-merge avec le
+    // serveur (union des mois) ferait « ressusciter » un paiement décoché depuis un autre appareil.
+    else if (pa) { const b = loadB(); const soc = pa.dataset.soc; b[soc] = b[soc] || {}; b[soc].pay = b[soc].pay || {}; b[soc].pay[ym] = !!pa.checked; saveB(b); }
   });
   document.addEventListener('click', (e) => {
     const f = e.target.closest && e.target.closest('.fa-fact'); if (!f) return;
