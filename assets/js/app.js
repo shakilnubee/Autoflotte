@@ -1204,7 +1204,23 @@ FP.condGroupKey = function (name, key) {
   } catch (e) {}
   return FP.normPrenom ? FP.normPrenom(name) : String(name || '').trim().toLowerCase().split(/\s+/)[0];
 };
+// « Ignorés » du rapprochement : entrées que l'utilisateur a choisi de NE PAS relier (ex. « Frais de
+// gestion TotalEnergies » qui n'est pas un conducteur). Mémorisés côté serveur (app_settings, règle
+// 0-sync) → l'entrée ne réapparaît plus, sur tous les appareils. Signature = même clé que la liste.
+FP.rapprSig = function (it) {
+  let num = String((it && it.num) || '').trim();
+  const numKey = (it && it.numKey) || '';
+  if (numKey === 'condBadgeUlys') num = num.replace(/^ULYS[-_\s]*/i, '');
+  const name = String((it && it.name) || '').trim();
+  return (numKey) + '|' + (num || ('nom:' + (FP.norm ? FP.norm(name) : name.toLowerCase())));
+};
+FP.rapprIgnored = function () { try { const m = FP.settings.get().rapprIgnore; return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } };
+FP.rapprSetIgnore = function (it, on) {
+  try { const s = FP.settings.get(); const m = (s.rapprIgnore && typeof s.rapprIgnore === 'object') ? s.rapprIgnore : {};
+    const k = FP.rapprSig(it); if (on) m[k] = true; else delete m[k]; s.rapprIgnore = m; FP.settings.save(s); } catch (e) {}
+};
 FP.consoNonRattaches = function (items) {
+  const ignored = FP.rapprIgnored ? FP.rapprIgnored() : {};
   const out = [], seen = new Set();
   (items || []).forEach(it => {
     if (!it) return;
@@ -1222,6 +1238,7 @@ FP.consoNonRattaches = function (items) {
     if (!key && name) { try { key = FP.condKeyParNom(name); } catch (e) {} }
     if (key) return; // déjà relié → rien à faire
     const sig = (numKey || '') + '|' + (num || ('nom:' + FP.norm(name)));
+    if (ignored[sig]) return; // l'utilisateur a choisi de l'ignorer → on ne le propose plus
     if (seen.has(sig)) return; seen.add(sig);
     out.push({ name, num, numKey });
   });
@@ -1249,7 +1266,8 @@ FP.rapprochementPanel = function (mount, items, onDone) {
     const opts = FP.conducteursTous().map(c => '<option value="' + esc(c.key) + '">' + esc(FP.conducteurs.displayName(c) || c.key) + (c.masque ? ' (masqué)' : '') + '</option>').join('');
     row.innerHTML = '<div style="flex:1;min-width:150px"><b>' + esc(it.name || '(sans nom)') + '</b> <span style="font-size:.78rem;color:var(--fp-muted)">· ' + numTxt(it) + '</span></div>'
       + '<select class="rap-sel field-input" style="width:230px"><option value="">— Lier à un conducteur… —</option>' + opts + '</select>'
-      + '<button type="button" class="btn btn-outline text-sm rap-new">➕ Créer la fiche</button>';
+      + '<button type="button" class="btn btn-outline text-sm rap-new">➕ Créer la fiche</button>'
+      + '<button type="button" class="btn btn-outline text-sm rap-ign" title="Ne plus proposer de relier ce nom (mémorisé sur tous tes appareils)">Ignorer</button>';
     list.appendChild(row);
     const sel = row.querySelector('.rap-sel');
     try { if (FP.searchSelect) FP.searchSelect(sel, { placeholder: 'Chercher un conducteur…' }); } catch (e) {}
@@ -1264,6 +1282,13 @@ FP.rapprochementPanel = function (mount, items, onDone) {
     sel.addEventListener('change', () => { if (sel.value) finalize(sel.value); });
     row.querySelector('.rap-new').addEventListener('click', () => {
       Promise.resolve(FP.newConducteurModal(it.name)).then(c => { if (c && c.key) finalize(c.key); });
+    });
+    // Ignorer : mémorise le choix (synchronisé) → cette entrée ne sera plus proposée au rapprochement.
+    row.querySelector('.rap-ign').addEventListener('click', () => {
+      if (FP.rapprSetIgnore) FP.rapprSetIgnore(it, true);
+      row.remove();
+      if (FP.toast) FP.toast('Ignoré — ne sera plus proposé');
+      if (!list.children.length) { mount.innerHTML = ''; if (onDone) onDone(0); }
     });
   });
   return unmatched.length;
