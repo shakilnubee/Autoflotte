@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260811e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260811e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811f">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -198,9 +198,15 @@
       <div class="section-title">
         <i data-lucide="layout-list" class="w-5 h-5"></i> Onglets du menu
       </div>
-      <p class="text-sm text-slate-600 mb-4">Change l'ordre avec les flèches ▲▼ (ou en glissant ⋮⋮), masque un onglet avec l'œil 👁, et renomme-le dans le champ. Les changements s'appliquent au menu de gauche sur toutes les pages.</p>
+      <p class="text-sm text-slate-600 mb-4">Change l'ordre avec les flèches ▲▼ (ou en glissant ⋮⋮), <b>retire un onglet du menu</b> avec la corbeille 🗑, et renomme-le dans le champ. Les changements s'appliquent au menu de gauche sur toutes les pages.</p>
 
       <div id="nav-labels-form"></div>
+
+      <div id="nav-removed-wrap" class="mt-5" style="display:none">
+        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Onglets retirés du menu</div>
+        <p class="text-xs text-slate-400 mb-2">Ces onglets n'apparaissent plus dans le menu de gauche. Clique « Rétablir » pour les remettre.</p>
+        <div id="nav-removed-list" class="space-y-1"></div>
+      </div>
 
       <div class="flex gap-2 mt-5">
         <button class="btn btn-dark text-sm" id="btn-save-nav"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
@@ -675,10 +681,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260811e"></script>
-<script src="../assets/js/supabase-client.js?v=20260811e"></script>
-<script src="../assets/js/data.js?v=20260811e"></script>
-<script src="../assets/js/app.js?v=20260811e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260811f"></script>
+<script src="../assets/js/supabase-client.js?v=20260811f"></script>
+<script src="../assets/js/data.js?v=20260811f"></script>
+<script src="../assets/js/app.js?v=20260811f"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -844,12 +850,15 @@
     const hiddenSet = new Set(FP.settings.get().navHidden || []);
     const alwaysVisible = new Set(FP.NAV_ALWAYS_VISIBLE || ['parametres.html']);
     const form = $('nav-labels-form');
-    form.innerHTML = FP.navKeysOrdered().map(key => {
+    const ordered = FP.navKeysOrdered();
+    // PRÉSENTS = onglets visibles dans le menu ; RETIRÉS = supprimés du menu (restaurables).
+    const present = ordered.filter(k => alwaysVisible.has(k) || !hiddenSet.has(k));
+    const removed = ordered.filter(k => hiddenSet.has(k) && !alwaysVisible.has(k));
+    form.innerHTML = present.map(key => {
       const def = FP.DEFAULT_NAV_LABELS[key];
-      const isHidden = hiddenSet.has(key) && !alwaysVisible.has(key);
       const locked = alwaysVisible.has(key);
       return `
-        <div class="nav-row${isHidden ? ' is-hidden' : ''}" draggable="true" data-nav-key="${key}" data-hidden="${isHidden ? '1' : '0'}">
+        <div class="nav-row" draggable="true" data-nav-key="${key}" data-hidden="0">
           <span class="grp-drag" title="Glisser pour réordonner">⋮⋮</span>
           <span class="nav-move">
             <button type="button" data-move="up" title="Monter">▲</button>
@@ -857,12 +866,25 @@
           </span>
           <span class="text-sm text-slate-500">${def}</span>
           <input class="field-input" type="text" data-nav-key="${key}" value="${(labels[key] || '').replace(/"/g, '&quot;')}" placeholder="${def}" />
-          <button type="button" class="nav-eye" data-hide-toggle ${locked ? 'disabled title="Toujours visible"' : `title="${isHidden ? 'Afficher cet onglet' : 'Masquer cet onglet'}"`}>
-            <i data-lucide="${isHidden ? 'eye-off' : 'eye'}" class="w-4 h-4"></i>
+          <button type="button" class="nav-eye" data-remove ${locked ? 'disabled title="Onglet essentiel — non supprimable"' : 'title="Retirer cet onglet du menu"'}>
+            <i data-lucide="${locked ? 'lock' : 'trash-2'}" class="w-4 h-4"></i>
           </button>
         </div>
       `;
     }).join('');
+    // Zone « Onglets retirés » (avec Rétablir)
+    const wrap = $('nav-removed-wrap'), list = $('nav-removed-list');
+    if (wrap && list) {
+      if (!removed.length) { wrap.style.display = 'none'; list.innerHTML = ''; }
+      else {
+        wrap.style.display = '';
+        list.innerHTML = removed.map(key => `
+          <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" data-removed-key="${key}" style="background:var(--fp-bg);border:1px solid var(--fp-border)">
+            <span class="text-sm text-slate-500">${FP.DEFAULT_NAV_LABELS[key]}${labels[key] ? ' <span class="text-slate-400">(' + labels[key].replace(/</g,'&lt;') + ')</span>' : ''}</span>
+            <button type="button" class="btn btn-outline text-xs" data-restore="${key}"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Rétablir</button>
+          </div>`).join('');
+      }
+    }
     updateNavArrows();
     if (window.lucide) lucide.createIcons();
   }
@@ -878,20 +900,24 @@
     });
   }
 
-  // Lit l'ordre + les noms saisis dans le formulaire et applique au menu de gauche
+  // Lit l'ordre + les noms saisis dans le formulaire et applique au menu de gauche.
+  // ⚠️ Le formulaire ne contient QUE les onglets présents. Les onglets RETIRÉS (navHidden) sont
+  // gérés à part (boutons Retirer/Rétablir) : on les PRÉSERVE ici et on les remet à la fin de l'ordre.
   function applyNavFromForm(withToast) {
     FP.history.commit();
     const current = FP.settings.get();
+    const alwaysVisible = new Set(FP.NAV_ALWAYS_VISIBLE || ['parametres.html']);
     const newLabels = {};
     const order = [];
-    const hidden = [];
     document.querySelectorAll('#nav-labels-form .nav-row').forEach(row => {
       const key = row.dataset.navKey;
       order.push(key);
-      if (row.dataset.hidden === '1') hidden.push(key);
       const val = row.querySelector('input[data-nav-key]').value.trim();
       if (val && val !== FP.DEFAULT_NAV_LABELS[key]) newLabels[key] = val;
     });
+    // Onglets retirés = navHidden actuel (hors « toujours visibles »). Conservés + ajoutés à l'ordre.
+    const hidden = (current.navHidden || []).filter(k => !alwaysVisible.has(k));
+    hidden.forEach(k => { if (order.indexOf(k) === -1) order.push(k); });
     current.sidebarLabels = newLabels;
     current.navOrder = order;
     current.navHidden = hidden;
@@ -1227,20 +1253,29 @@
     updateNavArrows();
     applyNavFromForm(false);
   });
-  // Œil 👁 : masquer / afficher un onglet (appliqué tout de suite)
+  // 🗑 Retirer un onglet du menu (appliqué tout de suite ; il part dans « Onglets retirés »).
+  function setNavHidden(key, hide) {
+    const alwaysVisible = new Set(FP.NAV_ALWAYS_VISIBLE || ['parametres.html']);
+    if (hide && alwaysVisible.has(key)) return;              // onglet essentiel non supprimable
+    FP.history.commit();
+    const cur = FP.settings.get();
+    const set = new Set((cur.navHidden || []).filter(k => !alwaysVisible.has(k)));
+    if (hide) set.add(key); else set.delete(key);
+    cur.navHidden = Array.from(set);
+    FP.settings.save(cur);
+    if (FP.applyNavVisibility) FP.applyNavVisibility();
+    renderNavLabelsForm();
+  }
   $('nav-labels-form').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-hide-toggle]');
+    const btn = e.target.closest('[data-remove]');
     if (!btn || btn.disabled) return;
-    const row = btn.closest('.nav-row');
-    if (!row) return;
-    const nowHidden = row.dataset.hidden !== '1';
-    row.dataset.hidden = nowHidden ? '1' : '0';
-    row.classList.toggle('is-hidden', nowHidden);
-    btn.title = nowHidden ? 'Afficher cet onglet' : 'Masquer cet onglet';
-    btn.innerHTML = `<i data-lucide="${nowHidden ? 'eye-off' : 'eye'}" class="w-4 h-4"></i>`;
-    if (window.lucide) lucide.createIcons();
-    applyNavFromForm(false);
+    const row = btn.closest('.nav-row'); if (!row) return;
+    setNavHidden(row.dataset.navKey, true);
   });
+  { const rl = $('nav-removed-list'); if (rl) rl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-restore]'); if (!btn) return;
+      setNavHidden(btn.dataset.restore, false);
+    }); }
   $('btn-save-societe').addEventListener('click', saveSociete);
   { const sw = $('soc-switch'); if (sw) sw.addEventListener('change', e => switchSociete(e.target.value)); }
   { const nb = $('btn-new-societe'); if (nb) nb.addEventListener('click', newSociete); }

@@ -4882,6 +4882,179 @@ FP.lienConducteur = function (name, label) {
   return `<a class="fp-lien" href="${FP._pagePrefix()}conducteurs.html?cond=${encodeURIComponent(key)}" title="Voir la fiche conducteur" onclick="event.stopPropagation()">${txt}</a>`;
 };
 
+// ============================================================================
+// FP.datePicker — CALENDRIER « futuriste » global (remplace le sélecteur natif de
+// TOUS les <input type=date>). Design : carte vitrée (glass) + accent orange + relief 3D,
+// thème clair ET sombre. On GARDE l'input type=date (sa .value reste ISO yyyy-mm-dd et les
+// events change/input continuent de marcher) : on masque juste le picker natif et on ouvre
+// notre calendrier au clic. Branché par DÉLÉGATION → marche aussi pour les inputs créés
+// dynamiquement (modales). Rien à changer dans les pages.
+// ============================================================================
+FP.datePicker = (function () {
+  const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+  const JOURS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  let pop = null, curInput = null, viewY = 0, viewM = 0, onDoc = null;
+
+  function ensureCSS() {
+    if (document.getElementById('fp-dp-css')) return;
+    const st = document.createElement('style'); st.id = 'fp-dp-css';
+    st.textContent = `
+    /* masque le picker natif mais garde l'input fonctionnel (valeur ISO) */
+    input[type=date]:not([data-no-fpdp])::-webkit-calendar-picker-indicator{opacity:0;display:none;-webkit-appearance:none}
+    input[type=date]:not([data-no-fpdp]){cursor:pointer}
+    .fp-dp{position:fixed;z-index:2147483000;width:288px;padding:14px;border-radius:20px;
+      background:linear-gradient(160deg,rgba(255,255,255,.98),rgba(244,247,252,.98));
+      border:1px solid rgba(255,255,255,.7);color:var(--fp-text,#111A2B);
+      box-shadow:0 24px 60px -18px rgba(11,18,32,.45),0 4px 14px rgba(11,18,32,.12),inset 0 1px 0 rgba(255,255,255,.9);
+      backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);
+      opacity:0;transform:translateY(-8px) scale(.97);transition:opacity .16s ease,transform .18s cubic-bezier(.2,.9,.3,1.3);
+      font-family:inherit}
+    .fp-dp.open{opacity:1;transform:translateY(0) scale(1)}
+    .fp-dp__hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:6px}
+    .fp-dp__title{font-weight:800;font-size:.95rem;letter-spacing:.2px;display:flex;gap:6px;align-items:baseline}
+    .fp-dp__title b{color:var(--fp-accent,#F97316)}
+    .fp-dp__nav{width:30px;height:30px;border:none;border-radius:11px;cursor:pointer;display:grid;place-items:center;
+      background:rgba(11,18,32,.05);color:var(--fp-text,#111A2B);font-size:15px;font-weight:900;transition:.15s;line-height:1}
+    .fp-dp__nav:hover{background:var(--fp-accent,#F97316);color:#fff;transform:translateY(-1px);box-shadow:0 6px 14px -4px rgba(249,115,22,.6)}
+    .fp-dp__grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+    .fp-dp__dow{font-size:.62rem;font-weight:800;text-align:center;color:var(--fp-muted,#5A6577);padding:2px 0 5px;opacity:.8}
+    .fp-dp__day{aspect-ratio:1;border:none;border-radius:11px;cursor:pointer;font-size:.82rem;font-weight:600;
+      background:transparent;color:var(--fp-text,#111A2B);transition:transform .12s,background .12s,box-shadow .12s;position:relative}
+    .fp-dp__day:hover{background:rgba(249,115,22,.14);transform:translateY(-2px)}
+    .fp-dp__day.out{color:var(--fp-muted,#5A6577);opacity:.35}
+    .fp-dp__day.today{box-shadow:inset 0 0 0 1.5px var(--fp-accent,#F97316)}
+    .fp-dp__day.sel{background:linear-gradient(155deg,#FDBA74,#F97316);color:#fff;font-weight:800;
+      box-shadow:0 8px 18px -6px rgba(249,115,22,.75),inset 0 1px 0 rgba(255,255,255,.5);transform:translateY(-1px)}
+    .fp-dp__day.sel:hover{background:linear-gradient(155deg,#FDBA74,#F97316)}
+    .fp-dp__day:disabled{opacity:.2;cursor:not-allowed;transform:none;background:transparent}
+    .fp-dp__ft{display:flex;gap:8px;margin-top:11px}
+    .fp-dp__btn{flex:1;border:none;border-radius:12px;padding:8px 0;font-size:.78rem;font-weight:800;cursor:pointer;transition:.15s}
+    .fp-dp__today{background:rgba(11,18,32,.06);color:var(--fp-text,#111A2B)}
+    .fp-dp__today:hover{background:rgba(11,18,32,.12)}
+    .fp-dp__clear{background:transparent;color:var(--fp-muted,#5A6577);box-shadow:inset 0 0 0 1px var(--fp-border,#E3E8F0)}
+    .fp-dp__clear:hover{color:#dc2626;box-shadow:inset 0 0 0 1px #fecaca}
+    /* ── mode sombre : verre nuit ── */
+    body.fp-dark .fp-dp{background:linear-gradient(160deg,rgba(27,39,64,.98),rgba(19,31,56,.98));
+      border-color:rgba(120,140,180,.18);
+      box-shadow:0 24px 60px -16px rgba(0,0,0,.7),0 3px 12px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06)}
+    body.fp-dark .fp-dp__nav{background:rgba(255,255,255,.06)}
+    body.fp-dark .fp-dp__day:hover{background:rgba(249,115,22,.22)}
+    body.fp-dark .fp-dp__today{background:rgba(255,255,255,.07)}`;
+    document.head.appendChild(st);
+  }
+
+  const iso = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const parse = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); return m ? { y: +m[1], m: +m[2] - 1, d: +m[3] } : null; };
+  const clampAttr = (input, name) => { const p = parse(input.getAttribute(name)); return p ? new Date(p.y, p.m, p.d) : null; };
+
+  function render() {
+    if (!pop || !curInput) return;
+    const sel = parse(curInput.value);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const min = clampAttr(curInput, 'min'), max = clampAttr(curInput, 'max');
+    const first = new Date(viewY, viewM, 1);
+    let startDow = (first.getDay() + 6) % 7; // Lundi = 0
+    const daysInMonth = new Date(viewY, viewM + 1, 0).getDate();
+    const prevDays = new Date(viewY, viewM, 0).getDate();
+    let cells = '';
+    for (let i = 0; i < startDow; i++) { const d = prevDays - startDow + 1 + i; cells += `<button type="button" class="fp-dp__day out" tabindex="-1" data-off="-1" data-d="${d}">${d}</button>`; }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dt = new Date(viewY, viewM, d);
+      const isSel = sel && sel.y === viewY && sel.m === viewM && sel.d === d;
+      const isToday = dt.getTime() === today.getTime();
+      const dis = (min && dt < min) || (max && dt > max);
+      cells += `<button type="button" class="fp-dp__day${isSel ? ' sel' : ''}${isToday ? ' today' : ''}" data-d="${d}"${dis ? ' disabled' : ''}>${d}</button>`;
+    }
+    const total = startDow + daysInMonth; const trail = (7 - (total % 7)) % 7;
+    for (let i = 1; i <= trail; i++) cells += `<button type="button" class="fp-dp__day out" tabindex="-1" data-off="1" data-d="${i}">${i}</button>`;
+    pop.innerHTML = `
+      <div class="fp-dp__hd">
+        <button type="button" class="fp-dp__nav" data-nav="-1" title="Mois précédent">‹</button>
+        <div class="fp-dp__title"><span>${MOIS[viewM]}</span> <b>${viewY}</b></div>
+        <button type="button" class="fp-dp__nav" data-nav="1" title="Mois suivant">›</button>
+      </div>
+      <div class="fp-dp__grid">${JOURS.map(j => `<div class="fp-dp__dow">${j}</div>`).join('')}${cells}</div>
+      <div class="fp-dp__ft">
+        <button type="button" class="fp-dp__btn fp-dp__today" data-today>Aujourd'hui</button>
+        <button type="button" class="fp-dp__btn fp-dp__clear" data-clear>Effacer</button>
+      </div>`;
+  }
+
+  function place() {
+    if (!pop || !curInput) return;
+    const r = curInput.getBoundingClientRect();
+    const w = 288, h = pop.offsetHeight || 320, gap = 8;
+    let left = r.left; let top = r.bottom + gap;
+    if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
+    if (left < 8) left = 8;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - gap); // au-dessus si pas la place
+    pop.style.left = left + 'px'; pop.style.top = top + 'px';
+  }
+
+  function pick(y, m, d) {
+    if (!curInput) return;
+    curInput.value = iso(y, m, d);
+    curInput.dispatchEvent(new Event('input', { bubbles: true }));
+    curInput.dispatchEvent(new Event('change', { bubbles: true }));
+    close();
+  }
+
+  function open(input) {
+    if (!input || input.disabled || input.readOnly) return;
+    ensureCSS();
+    if (pop && curInput === input) { close(); return; }
+    close();
+    curInput = input; input.classList.add('fp-dp-on');
+    const sel = parse(input.value) || (() => { const t = new Date(); return { y: t.getFullYear(), m: t.getMonth(), d: t.getDate() }; })();
+    viewY = sel.y; viewM = sel.m;
+    pop = document.createElement('div'); pop.className = 'fp-dp'; document.body.appendChild(pop);
+    render(); place();
+    requestAnimationFrame(() => pop && pop.classList.add('open'));
+    pop.addEventListener('click', (e) => {
+      const nav = e.target.closest('[data-nav]');
+      if (nav) { viewM += +nav.dataset.nav; if (viewM < 0) { viewM = 11; viewY--; } else if (viewM > 11) { viewM = 0; viewY++; } render(); place(); return; }
+      if (e.target.closest('[data-today]')) { const t = new Date(); pick(t.getFullYear(), t.getMonth(), t.getDate()); return; }
+      if (e.target.closest('[data-clear]')) { pick2clear(); return; }
+      const day = e.target.closest('.fp-dp__day'); if (!day || day.disabled) return;
+      const off = +(day.dataset.off || 0); let y = viewY, m = viewM + off;
+      if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
+      pick(y, m, +day.dataset.d);
+    });
+    onDoc = (e) => { if (pop && !pop.contains(e.target) && e.target !== curInput) close(); };
+    setTimeout(() => { document.addEventListener('mousedown', onDoc, true); }, 0);
+    window.addEventListener('resize', place); window.addEventListener('scroll', place, true);
+  }
+  function pick2clear() { if (!curInput) return; curInput.value = ''; curInput.dispatchEvent(new Event('input', { bubbles: true })); curInput.dispatchEvent(new Event('change', { bubbles: true })); close(); }
+  function close() {
+    if (onDoc) { document.removeEventListener('mousedown', onDoc, true); onDoc = null; }
+    window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true);
+    if (pop) { pop.remove(); pop = null; }
+    curInput = null;
+  }
+
+  // Délégation : on intercepte l'ouverture du picker natif et on ouvre le nôtre.
+  function bind() {
+    ensureCSS();  // masque l'icône native dès le chargement (pas seulement à la 1re ouverture)
+    document.addEventListener('mousedown', (e) => {
+      const inp = e.target.closest && e.target.closest('input[type=date]');
+      if (!inp || inp.disabled || inp.readOnly) return;
+      if (inp.hasAttribute('data-no-fpdp')) return;   // échappatoire si une page veut le natif
+      e.preventDefault();                              // empêche focus + picker natif
+      inp.classList.add('fp-dp-on');
+      open(inp);
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      const inp = e.target;
+      if (inp && inp.matches && inp.matches('input[type=date]') && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown')) {
+        e.preventDefault(); open(inp);
+      }
+      if (e.key === 'Escape' && pop) close();
+    }, true);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind); else bind();
+  return { open, close };
+})();
+
 // Densité d'affichage : bascule compact/confortable — SYNCHRONISÉE (règle 0-sync) via FP.pref
 // (FP.settings → app_settings) + cache local rapide (relu par l'IIFE applyDensity au 1er paint).
 FP.getDensity = () => { try { return FP.pref.get('fp_density', 'confort') === 'compact' ? 'compact' : 'confort'; } catch (e) { return 'confort'; } };
