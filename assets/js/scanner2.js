@@ -62,7 +62,7 @@
     facture_entretien: { label: "Facture / devis entretien", cible: "factures", champs: [
       ["typeDoc", "Type (devis/facture/avoir/ordre de reparation)"], ["numero", "N° de facture"], ["date", "Date d'emission"],
       ["fournisseur", "Fournisseur / garage (emetteur, PAS le client)"], ["siret", "SIRET emetteur"], ["immat", "Immatriculation"],
-      ["vin", "VIN"], ["km", "Kilometrage"], ["description", "Nature de l'intervention (court)"],
+      ["km", "Kilometrage"], ["description", "Nature de l'intervention (court)"],
       ["montantHT", "Total HT"], ["montantTVA", "TVA"], ["montantTTC", "Total TTC"], ["acompte", "Acompte"], ["resteAPayer", "Reste a payer"]
     ]},
     avis_contravention: { label: "Amende / avis", cible: "amendes", champs: [
