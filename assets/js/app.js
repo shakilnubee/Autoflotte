@@ -5584,9 +5584,10 @@ FP.scanIA = async function (file, docType, promptOverride, opts) {
     });
     const mediaType = f.type || (/\.pdf$/i.test(f.name || '') ? 'application/pdf' : 'image/jpeg');
     const payload = { fileBase64: b64, mediaType, docType: docType || 'facture', prompt: promptOverride || FP.SCAN_PROMPT };
-    // Grandes extractions (tableaux : état de parc → une prime par véhicule) : autoriser plus de
-    // jetons en sortie pour ne pas tronquer le JSON (repli serveur = 1024 si non transmis).
-    if (opts.maxTokens) payload.maxTokens = opts.maxTokens;
+    // Jetons de sortie : défaut RELEVÉ à 2048 (le repli serveur était 1024 → un JSON un peu long,
+    // ou un modèle qui ajoute du texte, était TRONQUÉ → JSON invalide → « lecture impossible »).
+    // Les grandes extractions (tableaux) peuvent demander plus via opts.maxTokens (plafonné à 8192).
+    payload.maxTokens = opts.maxTokens || 2048;
     // Le nom de l'Edge Function est sensible à la casse côté serveur. On essaie les variantes
     // courantes (elle est déployée en « Scan-doc »). On teste EN PREMIER le nom qui a déjà marché
     // dans la session (FP._scanFn) → plus d'appel 404 inutile à chaque scan.
@@ -5598,7 +5599,11 @@ FP.scanIA = async function (file, docType, promptOverride, opts) {
         if (!error && data && data.ok && data.fields) { FP._scanFn = name; FP._scanLastErr = ''; return data.fields; }
         // Capture la VRAIE raison (au lieu d'un « null » muet) pour l'afficher à l'utilisateur.
         if (error) { try { FP._scanLastErr = (FP._aiErrText ? await FP._aiErrText(error) : (error.message || '')); } catch (_) { FP._scanLastErr = error.message || ''; } }
-        else if (data && data.error) { FP._scanLastErr = data.error; }
+        else if (data && data.error) {
+          // « lecture impossible » = l'IA a répondu mais le serveur n'a pas su en extraire le JSON.
+          // On joint le DÉBUT de la réponse brute du modèle (data.raw) → diagnostic précis.
+          FP._scanLastErr = data.error + (data.raw ? ' — réponse du modèle : ' + String(data.raw).replace(/\s+/g, ' ').slice(0, 220) : '');
+        }
       } catch (e) { FP._scanLastErr = (e && (e.message || String(e))) || ''; }
     }
     return null;
