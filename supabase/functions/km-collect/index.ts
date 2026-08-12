@@ -48,6 +48,21 @@ async function loadReq(db: ReturnType<typeof createClient>, token: string) {
   return { req: data };
 }
 
+// Charge un QR PERMANENT (collé dans le véhicule) : token → véhicule. Réutilisable (pas d'expiration).
+async function loadQr(db: ReturnType<typeof createClient>, token: string) {
+  const { data, error } = await db.from("km_qr").select("*").eq("token", token).maybeSingle();
+  if (error) throw error;
+  if (!data) return { err: "QR invalide. Demande à ton gestionnaire de flotte d'imprimer le bon QR." };
+  return { qr: data };
+}
+
+// km actuel connu d'un véhicule (colonne vehicules.km).
+async function vehKm(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
+  if (!vehiculeId) return null;
+  const { data: v } = await db.from("vehicules").select("km").eq("id", vehiculeId).maybeSingle();
+  return v && v.km != null ? Number(v.km) : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -55,26 +70,29 @@ Deno.serve(async (req) => {
   if (!db) return json({ error: "Service indisponible (configuration serveur)." }, 500);
 
   try {
-    // ---- GET : le chauffeur ouvre son lien → on lui montre le véhicule concerné ----
+    // ---- GET : le chauffeur ouvre son lien/QR → on lui montre SON véhicule (plaque verrouillée) ----
     if (req.method === "GET") {
-      const token = new URL(req.url).searchParams.get("t") || "";
+      const url = new URL(req.url);
+      const qtok = url.searchParams.get("q") || "";   // QR permanent (collé dans la voiture)
+      const token = url.searchParams.get("t") || "";  // lien e-mail à usage unique
+
+      if (qtok) {
+        const { qr, err } = await loadQr(db, qtok);
+        if (err) return json({ error: err }, 404);
+        const kmConnu = await vehKm(db, qr.vehicule_id);
+        return json({ ok: true, mode: "qr", plaque: qr.plaque || "", chauffeur: "", societe: qr.societe || "", kmConnu, deja: false, kmRecu: null });
+      }
+
       if (!token) return json({ error: "Lien incomplet." }, 400);
       const { req: r, err } = await loadReq(db, token);
       if (err) return json({ error: err }, 404);
-      // km le plus fiable connu (au cas où km_avant serait vide)
       let kmConnu = r.km_avant;
-      if ((kmConnu == null || kmConnu === "") && r.vehicule_id) {
-        const { data: v } = await db.from("vehicules").select("km").eq("id", r.vehicule_id).maybeSingle();
-        if (v && v.km != null) kmConnu = v.km;
-      }
+      if (kmConnu == null || kmConnu === "") kmConnu = await vehKm(db, r.vehicule_id);
       return json({
-        ok: true,
-        plaque: r.plaque || "",
-        chauffeur: r.chauffeur || "",
-        societe: r.societe || "",
+        ok: true, mode: "mail",
+        plaque: r.plaque || "", chauffeur: r.chauffeur || "", societe: r.societe || "",
         kmConnu: kmConnu != null ? Number(kmConnu) : null,
-        deja: !!r.used_at,
-        kmRecu: r.km_recu != null ? Number(r.km_recu) : null,
+        deja: !!r.used_at, kmRecu: r.km_recu != null ? Number(r.km_recu) : null,
       });
     }
 
@@ -82,33 +100,53 @@ Deno.serve(async (req) => {
     if (req.method === "POST") {
       let body: Record<string, unknown> = {};
       try { body = await req.json(); } catch { return json({ error: "Requête invalide." }, 400); }
+      const qtok = String(body.q || "").trim();
       const token = String(body.t || "").trim();
       const km = Math.round(Number(body.km));
-      if (!token) return json({ error: "Lien incomplet." }, 400);
+      if (!qtok && !token) return json({ error: "Lien incomplet." }, 400);
       if (!Number.isFinite(km) || km <= 0 || km > 3000000) {
         return json({ error: "Kilométrage invalide. Saisis un nombre (ex. 45 000)." }, 400);
       }
-      const { req: r, err } = await loadReq(db, token);
-      if (err) return json({ error: err }, 404);
 
-      // On refuse un km ABERRANT (inférieur au km déjà connu) pour ne pas corrompre la fiche.
-      const kmRef = r.km_avant != null ? Number(r.km_avant) : null;
+      // Résout le véhicule concerné selon le mode (QR permanent ou lien e-mail).
+      let vehiculeId: string | null = null, plaque = "", societe = "", chauffeur = "", kmRef: number | null = null;
+      if (qtok) {
+        const { qr, err } = await loadQr(db, qtok);
+        if (err) return json({ error: err }, 404);
+        vehiculeId = qr.vehicule_id; plaque = qr.plaque || ""; societe = qr.societe || "";
+        kmRef = await vehKm(db, vehiculeId);
+      } else {
+        const { req: r, err } = await loadReq(db, token);
+        if (err) return json({ error: err }, 404);
+        vehiculeId = r.vehicule_id; plaque = r.plaque || ""; societe = r.societe || ""; chauffeur = r.chauffeur || "";
+        kmRef = r.km_avant != null ? Number(r.km_avant) : await vehKm(db, vehiculeId);
+      }
+
+      // Refuse un km ABERRANT (inférieur au km déjà connu) pour ne pas corrompre la fiche.
       if (kmRef != null && km < kmRef - 100) {
         return json({ error: `Le kilométrage saisi (${km}) est inférieur au dernier relevé connu (${kmRef}). Vérifie ton compteur.` }, 400);
       }
 
       // 1) Met à jour la fiche véhicule (seulement si le km reçu est supérieur au km actuel).
-      if (r.vehicule_id) {
-        const { data: v } = await db.from("vehicules").select("km").eq("id", r.vehicule_id).maybeSingle();
-        const cur = v && v.km != null ? Number(v.km) : 0;
-        if (km > cur) {
-          await db.from("vehicules").update({ km }).eq("id", r.vehicule_id);
-        }
+      if (vehiculeId) {
+        const cur = (await vehKm(db, vehiculeId)) || 0;
+        if (km > cur) await db.from("vehicules").update({ km }).eq("id", vehiculeId);
       }
-      // 2) Marque la demande comme répondue (idempotent : on écrase si déjà répondu).
-      await db.from("km_requests").update({ km_recu: km, used_at: new Date().toISOString() }).eq("token", token);
 
-      return json({ ok: true, plaque: r.plaque || "", km });
+      // 2) Journalise le relevé.
+      const now = new Date().toISOString();
+      if (qtok) {
+        // QR permanent : chaque scan = une NOUVELLE ligne de relevé (historique par période).
+        await db.from("km_requests").insert({
+          token: "qr-" + crypto.randomUUID(), vehicule_id: vehiculeId, plaque, societe,
+          chauffeur, km_avant: kmRef, km_recu: km, used_at: now, source: "qr",
+        });
+      } else {
+        // Lien e-mail : marque la demande comme répondue (idempotent).
+        await db.from("km_requests").update({ km_recu: km, used_at: now }).eq("token", token);
+      }
+
+      return json({ ok: true, plaque, km });
     }
 
     return json({ error: "Méthode non autorisée." }, 405);

@@ -104,7 +104,13 @@
   var FN = 'https://tzjuptlzoywjeigmyfuj.supabase.co/functions/v1/km-collect';
   var APIKEY = 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq';
   var $ = function (id) { return document.getElementById(id); };
-  var token = new URLSearchParams(location.search).get('t') || '';
+  var params = new URLSearchParams(location.search);
+  var token = params.get('t') || '';          // lien e-mail à usage unique
+  var qr = params.get('q') || '';              // QR permanent collé dans le véhicule
+  var isQr = !!qr && !token;
+  // Paramètre transmis au serveur (t= ou q=) selon le mode.
+  function keyParam() { return isQr ? ('q=' + encodeURIComponent(qr)) : ('t=' + encodeURIComponent(token)); }
+  function keyBody() { return isQr ? { q: qr } : { t: token }; }
 
   function show(id) {
     ['loading', 'form', 'done', 'bad'].forEach(function (k) { $(k).classList.toggle('hide', k !== id); });
@@ -116,10 +122,10 @@
   }
   function headers() { return { 'Content-Type': 'application/json', 'apikey': APIKEY, 'Authorization': 'Bearer ' + APIKEY }; }
 
-  if (!token) { show('bad'); $('bad-sub').textContent = 'Lien incomplet. Ouvre le lien reçu par e-mail.'; return; }
+  if (!token && !qr) { show('bad'); $('bad-sub').textContent = 'Lien incomplet. Scanne le QR de ton véhicule ou ouvre le lien reçu par e-mail.'; return; }
 
   // 1) Charger les infos du véhicule
-  fetch(FN + '?t=' + encodeURIComponent(token), { headers: headers() })
+  fetch(FN + '?' + keyParam(), { headers: headers() })
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
     .then(function (res) {
       var d = res.d || {};
@@ -145,7 +151,8 @@
     $('err').style.display = 'none';
     if (!km || km <= 0) { $('err').textContent = 'Saisis ton kilométrage (un nombre).'; $('err').style.display = 'block'; return; }
     $('send').disabled = true; $('send').innerHTML = '<span class="spin" style="width:18px;height:18px;border-width:2px;vertical-align:-3px"></span> Envoi…';
-    fetch(FN, { method: 'POST', headers: headers(), body: JSON.stringify({ t: token, km: km }) })
+    var _body = keyBody(); _body.km = km;
+    fetch(FN, { method: 'POST', headers: headers(), body: JSON.stringify(_body) })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         var d = res.d || {};

@@ -1126,11 +1126,59 @@ FP.kmCollecte = {
       this._cache = data || [];
       this._byVeh = {};
       this._cache.forEach(r => { if (r.vehicule_id && !this._byVeh[r.vehicule_id]) this._byVeh[r.vehicule_id] = r; });
+      this._reconcileKmDates();   // un relevé reçu (mail/QR) réinitialise le rappel « relevé km à faire »
       return this._cache;
     } catch (e) { console.warn('[kmCollecte.load]', e && (e.message || e)); return []; }
   },
+  // Tous les relevés REÇUS (used_at + km_recu), le plus récent d'abord (mail + QR confondus).
+  recus() { return (this._cache || []).filter(r => r.used_at && r.km_recu != null); },
+  // Relevés reçus d'un véhicule (par id), triés du plus récent au plus ancien.
+  recusDe(v) {
+    if (!v) return [];
+    return this.recus().filter(r => r.vehicule_id === v.id)
+      .sort((a, b) => new Date(b.used_at) - new Date(a.used_at));
+  },
+  // ⚠️ SOURCE UNIQUE — un relevé reçu par mail/QR met à jour le « dernier relevé » (settings.kmMajDates,
+  // clé = immat) pour que l'alerte « relevé km à faire » (buildAlertes) se réinitialise automatiquement,
+  // exactement comme une saisie manuelle. N'écrit qu'en cas de changement réel (converge, pas de boucle).
+  _reconcileKmDates() {
+    try {
+      if (!(FP.settings && FP.persist)) return;
+      const s = FP.settings.get(); const dates = Object.assign({}, s.kmMajDates || {});
+      let changed = false;
+      this.recus().forEach(r => {
+        const im = r.plaque; if (!im) return;
+        const d = String(r.used_at).slice(0, 10);
+        const prev = dates[im] ? String(dates[im]).slice(0, 10) : '';
+        if (!prev || d > prev) { dates[im] = d; changed = true; }
+      });
+      if (changed) { s.kmMajDates = dates; FP.settings.save(s); }
+    } catch (e) {}
+  },
   // Dernière demande connue pour un véhicule (ou null).
   statusFor(v) { try { return (v && this._byVeh[v.id]) || null; } catch (e) { return null; } },
+  // QR PERMANENT du véhicule (collé dans la voiture) : renvoie l'URL, en créant le jeton si besoin.
+  // Le jeton est stocké dans la table km_qr (synchronisé, non devinable) → un seul QR par véhicule, à vie.
+  _qrByVeh: {},
+  async ensureQr(v) {
+    if (!v) return { ok: false, error: 'Véhicule inconnu.' };
+    if (this._qrByVeh[v.id]) return { ok: true, url: this.BASE + '?q=' + this._qrByVeh[v.id] };
+    if (!(window.FP && FP.supabase)) return { ok: false, error: 'Connexion requise.' };
+    try {
+      // 1) jeton existant ?
+      const { data: ex } = await FP.supabase.from('km_qr').select('token').eq('vehicule_id', v.id).limit(1).maybeSingle();
+      if (ex && ex.token) { this._qrByVeh[v.id] = ex.token; return { ok: true, url: this.BASE + '?q=' + ex.token }; }
+      // 2) sinon on le crée
+      const token = (self.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '')
+        : (Date.now().toString(36) + Math.random().toString(36).slice(2, 14));
+      let soc = 'PXP'; try { soc = localStorage.getItem('fp_societe') || 'PXP'; } catch (e) {}
+      const societe = (soc === '__all__') ? (v.societe || 'PXP') : soc;
+      const { error } = await FP.supabase.from('km_qr').insert({ token, vehicule_id: v.id, plaque: v.immat || '', societe });
+      if (error) throw error;
+      this._qrByVeh[v.id] = token;
+      return { ok: true, url: this.BASE + '?q=' + token };
+    } catch (e) { return { ok: false, error: 'QR indisponible : ' + (e.message || e) }; }
+  },
   // E-mail du chauffeur d'un véhicule (via la fiche conducteur — jamais inventé).
   emailDe(v) {
     try {
