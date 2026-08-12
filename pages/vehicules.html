@@ -568,9 +568,7 @@
     <button class="btn btn-outline text-sm flex-1 justify-center" id="drawer-edit"><i data-lucide="pencil" class="w-4 h-4"></i> Modifier</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-pdf" title="Exporter la fiche en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> PDF</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-vente" title="Dossier de vente (PDF) à montrer à un acheteur : photo, caractéristiques, prix, CT, entretien"><i data-lucide="tag" class="w-4 h-4"></i> Vente</button>
-    <button class="btn btn-outline text-sm justify-center" id="drawer-qr" title="QR code à coller dans la boîte à gants (ouvre la fiche du véhicule)"><i data-lucide="qr-code" class="w-4 h-4"></i> QR</button>
-    <button class="btn btn-outline text-sm justify-center" id="drawer-qr-sin" title="QR « Déclarer un sinistre » : le conducteur le scanne après un accident → e-mail pré-rempli (plaque)"><i data-lucide="siren" class="w-4 h-4"></i> QR sinistre</button>
-    <button class="btn btn-outline text-sm justify-center" id="drawer-qr-km" title="QR « Relevé km » à coller DANS la voiture : le chauffeur le scanne → il saisit seulement son kilométrage (véhicule déjà verrouillé, aucun risque d'erreur)"><i data-lucide="gauge" class="w-4 h-4"></i> QR km</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-qr" title="QR UNIQUE à coller dans la voiture : le conducteur le scanne → menu Relevé km · Déclarer un sinistre · Infos du véhicule. Un seul autocollant, permanent."><i data-lucide="qr-code" class="w-4 h-4"></i> QR véhicule</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
@@ -579,10 +577,10 @@
 <div class="modal-backdrop" id="qr-backdrop">
   <div class="modal p-6" style="max-width:380px">
     <div class="flex justify-between items-center mb-4">
-      <h2 class="text-xl font-extrabold" style="color:var(--fp-primary)">QR code véhicule</h2>
+      <h2 class="text-xl font-extrabold" style="color:var(--fp-primary)">QR véhicule</h2>
       <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="qr-close"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
-    <p class="text-sm text-slate-500 mb-3">À coller dans la boîte à gants : un scan ouvre la fiche du véhicule (kilométrage, documents, contact…).</p>
+    <p class="text-sm text-slate-500 mb-3">Un seul QR à coller dans la voiture. Le conducteur le scanne → menu : <b>📏 relevé km</b> · <b>🚨 sinistre</b> · <b>ℹ️ infos du véhicule</b>. Permanent : les nouveautés s'ajoutent au menu sans recoller.</p>
     <div class="flex flex-col items-center gap-2">
       <div id="qr-holder" style="background:#fff;padding:8px;border:1px solid var(--fp-border);border-radius:12px"></div>
       <div id="qr-label" class="text-center font-mono font-bold text-slate-800"></div>
@@ -4397,9 +4395,11 @@
   }
   if ($('drawer-vente')) $('drawer-vente').addEventListener('click', () => { exportVentePDF().catch(e => { console.error(e); alert('Impossible de générer le dossier de vente.'); }); });
 
-  // ---------- QR code véhicule (ouvre la fiche live ; à coller dans la boîte à gants) ----------
-  // Page PUBLIQUE (sans connexion) : n'affiche que des infos véhicule non personnelles (voir carte.html).
-  const QR_BASE = 'https://parc-pilot.fr/carte.html?v=';
+  // ---------- QR UNIQUE du véhicule (menu : Relevé km · Sinistre · Infos) ----------
+  // UN SEUL QR permanent à coller dans la voiture. Scanné → page menu v.html (les 3 parties).
+  // Réutilise le jeton permanent km_qr (FP.kmCollecte.ensureQr) → un seul QR par véhicule, à vie ;
+  // toute action ajoutée plus tard apparaît dans le menu sans jamais recoller le QR.
+  const MENU_BASE = 'https://parc-pilot.fr/v.html?h=';
   let qrCurrent = null;
   function buildQrCanvas(url, scale, margin) {
     const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
@@ -4410,14 +4410,29 @@
     for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (qr.isDark(r, col)) ctx.fillRect((col + m) * s, (r + m) * s, s, s);
     return c;
   }
-  function openQr(v) {
+  // Destinataire e-mail « sinistre » de la société (même logique que l'ancien QR sinistre).
+  function sinistreMailTo(v) {
+    let to = '';
+    try { const p = (FP.societeProfil && FP.societeProfil()) || {}; to = p.email || p.contactEmail || p.mail || ''; } catch (e) {}
+    if (!to && FP.userEmail) to = FP.userEmail;
+    return to;
+  }
+  async function openQr(v) {
     if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
+    if (!(window.FP && FP.kmCollecte && FP.kmCollecte.ensureQr)) { alert('Connexion requise pour générer le QR.'); return; }
+    const b = FP.busy ? FP.busy('Génération du QR…') : null;
+    const r = await FP.kmCollecte.ensureQr(v);           // crée/récupère le jeton permanent (km_qr)
+    if (b) b.close();
+    if (!r.ok) { alert(r.error || 'QR indisponible.'); return; }
+    const token = (FP.kmCollecte._qrByVeh && FP.kmCollecte._qrByVeh[v.id]) || '';
+    if (!token) { alert('QR indisponible.'); return; }
     const immat = v.immat || '';
-    const url = QR_BASE + encodeURIComponent(immat);
+    const to = sinistreMailTo(v);
+    const url = MENU_BASE + encodeURIComponent(token) + (to ? ('&m=' + encodeURIComponent(to)) : '');
     const label = `${immat} · ${v.marque || ''} ${v.modele || ''}`.trim();
     const canvas = buildQrCanvas(url, 6, 4);
     canvas.style.width = '240px'; canvas.style.height = '240px'; canvas.style.imageRendering = 'pixelated';
-    qrCurrent = { immat, label, url };
+    qrCurrent = { immat, label, url, hint: 'Scannez : relevé km · sinistre · infos du véhicule' };
     const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
     $('qr-label').textContent = label;
     $('qr-backdrop').classList.add('open');
@@ -4448,56 +4463,6 @@
     w.document.close();
   }
   $('drawer-qr').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v); });
-  // QR « Déclarer un sinistre » : encode un e-mail pré-rempli (destinataire = contact société /
-  // gestionnaire connecté, sujet + modèle avec la plaque). Le conducteur scanne → son appli mail
-  // s'ouvre déjà remplie. Aucune donnée publique exposée, aucun stockage côté serveur.
-  function openQrSinistre(v) {
-    if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
-    const immat = v.immat || '';
-    let to = '';
-    try { const p = (FP.societeProfil && FP.societeProfil()) || {}; to = p.email || p.contactEmail || p.mail || ''; } catch (e) {}
-    if (!to && FP.userEmail) to = FP.userEmail;
-    const subject = `Déclaration de sinistre — ${immat}`;
-    const body = [
-      `Véhicule : ${immat} (${((v.marque || '') + ' ' + (v.modele || '')).trim()})`,
-      '',
-      'Date et heure du sinistre : ',
-      'Lieu : ',
-      "Circonstances (que s'est-il passé ?) : ",
-      'Tiers impliqué ? (plaque, assureur, nom) : ',
-      'Blessés ? : ',
-      '',
-      'Merci de joindre le constat amiable et des photos des dommages.'
-    ].join('\n');
-    const url = 'mailto:' + encodeURIComponent(to) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-    const canvas = buildQrCanvas(url, 6, 4);
-    canvas.style.width = '240px'; canvas.style.height = '240px'; canvas.style.imageRendering = 'pixelated';
-    qrCurrent = { immat: immat + '-sinistre', label: 'Déclarer un sinistre · ' + immat, url };
-    const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
-    $('qr-label').textContent = 'Déclarer un sinistre · ' + immat;
-    $('qr-backdrop').classList.add('open');
-  }
-  $('drawer-qr-sin').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQrSinistre(v); });
-
-  // QR « Relevé km » PERMANENT à coller dans la voiture : le chauffeur scanne → page verrouillée
-  // sur SON véhicule (plaque affichée non modifiable) → il saisit seulement son km. Le jeton permanent
-  // est créé/récupéré côté serveur (FP.kmCollecte.ensureQr) → un seul QR par véhicule, à vie.
-  async function openQrKm(v) {
-    if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
-    if (!(window.FP && FP.kmCollecte && FP.kmCollecte.ensureQr)) { alert('Connexion requise pour générer le QR.'); return; }
-    const b = FP.busy ? FP.busy('Génération du QR…') : null;
-    const r = await FP.kmCollecte.ensureQr(v);
-    if (b) b.close();
-    if (!r.ok) { alert(r.error || 'QR indisponible.'); return; }
-    const immat = v.immat || '';
-    const canvas = buildQrCanvas(r.url, 6, 4);
-    canvas.style.width = '240px'; canvas.style.height = '240px'; canvas.style.imageRendering = 'pixelated';
-    qrCurrent = { immat, label: 'Relevé km · ' + immat, url: r.url, hint: 'Scannez pour envoyer votre kilométrage' };
-    const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
-    $('qr-label').textContent = 'Relevé km · ' + immat;
-    $('qr-backdrop').classList.add('open');
-  }
-  $('drawer-qr-km').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQrKm(v); });
   $('qr-close').addEventListener('click', () => $('qr-backdrop').classList.remove('open'));
   $('qr-print').addEventListener('click', printQr);
   $('qr-download').addEventListener('click', downloadQr);
