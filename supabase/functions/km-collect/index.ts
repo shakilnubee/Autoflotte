@@ -63,6 +63,101 @@ async function vehKm(db: ReturnType<typeof createClient>, vehiculeId: string | n
   return v && v.km != null ? Number(v.km) : null;
 }
 
+// ---- PORTAIL CONDUCTEUR : données non personnelles d'un véhicule, servies à la page v.html ----
+// Infos véhicule sûres (jamais de PII : pas de chauffeur, pas de VIN).
+async function vehInfo(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
+  if (!vehiculeId) return null;
+  const { data: v } = await db.from("vehicules")
+    .select("marque,modele,carburant,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id")
+    .eq("id", vehiculeId).maybeSingle();
+  return v || null;
+}
+
+// Documents consultables du véhicule (carte grise + mémo + autres), depuis la table `documents`
+// et le champ carte grise du véhicule. On ne renvoie que { label, url }.
+async function vehDocs(db: ReturnType<typeof createClient>, vehiculeId: string | null, veh: Record<string, unknown> | null) {
+  const out: { label: string; url: string; type: string }[] = [];
+  const seen = new Set<string>();
+  // ⚠️ RÈGLE : plus jamais de Google Drive — on n'expose QUE des documents hébergés sur la
+  //    plateforme (Supabase Storage). Tout lien Drive est ignoré (à réimporter sur le site).
+  const isDrive = (u: string) => /drive\.google|docs\.google/i.test(u);
+  const push = (label: string, url: string, type: string) => {
+    const u = String(url || "").trim();
+    if (!u || seen.has(u) || isDrive(u)) return;
+    seen.add(u); out.push({ label: label || "Document", url: u, type: type || "autre" });
+  };
+  // Carte grise portée par le véhicule (champ direct, hébergé plateforme). cg_file_id (Drive) ignoré.
+  if (veh && veh.cg_url) push("Carte grise", String(veh.cg_url), "carte-grise");
+  if (!vehiculeId) return out;
+  const { data } = await db.from("documents").select("type,label,url").eq("vehicule_id", vehiculeId);
+  for (const d of (data || [])) {
+    if (!d || !d.url) continue;
+    if (d.type === "etat-des-lieux") continue;         // les EDL ont leur propre rubrique
+    push(String(d.label || ""), String(d.url), String(d.type || "autre"));
+  }
+  return out;
+}
+
+// Photos « état des lieux » du véhicule. Le SENS est stocké dans `label` ('Entrée'/'Sortie'),
+// il n'y a pas de colonne dédiée (même convention que la fiche véhicule).
+async function vehEdl(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
+  if (!vehiculeId) return [];
+  const { data } = await db.from("documents").select("label,url").eq("vehicule_id", vehiculeId).eq("type", "etat-des-lieux");
+  return (data || []).filter((d: Record<string, unknown>) => d && d.url)
+    .map((d: Record<string, unknown>) => {
+      const lbl = String(d.label || "").toLowerCase();
+      const sens = lbl.startsWith("sort") ? "restitution" : "prise";
+      return { url: String(d.url), sens };
+    });
+}
+
+// Config PORTAIL par société : lue dans app_settings (id = société). Assureur/police + assistance + notice.
+async function portalConfig(db: ReturnType<typeof createClient>, societe: string) {
+  const soc = societe || "PXP";
+  const { data } = await db.from("app_settings").select("data").eq("id", soc).maybeSingle();
+  const s = (data && data.data && typeof data.data === "object") ? data.data as Record<string, unknown> : {};
+  const p = (s.portail && typeof s.portail === "object") ? s.portail as Record<string, unknown> : {};
+  const ass = (s.assuranceContrat && typeof s.assuranceContrat === "object") ? s.assuranceContrat as Record<string, unknown> : {};
+  // PXP : valeurs historiques par défaut (comme FP.assuranceContrat côté client).
+  const assureur = String(ass.assureur || (soc === "PXP" ? "SWISSLIFE" : "")).trim();
+  const police = String(ass.police || (soc === "PXP" ? "011165247/0599" : "")).trim();
+  return {
+    assureur, police,
+    assistanceNumero: String(p.assistanceNumero || "").trim(),
+    assistanceNotice: String(p.assistanceNotice || "").trim(),
+    constatUrl: String(p.constatUrl || "").trim(),
+    reglesTexte: String(p.reglesTexte || "").trim(),
+    reglesLien: String(p.reglesLien || "").trim(),
+  };
+}
+
+// Upload de photos envoyées en base64 (data URL) par le conducteur → bucket public "scans".
+async function uploadPhotos(db: ReturnType<typeof createClient>, photos: unknown, folder: string): Promise<string[]> {
+  const urls: string[] = [];
+  if (!Array.isArray(photos)) return urls;
+  let i = 0;
+  for (const raw of photos.slice(0, 8)) {
+    const s = String(raw || "");
+    const m = s.match(/^data:([^;]+);base64,(.+)$/);
+    if (!m) continue;
+    const mime = m[1] || "image/jpeg";
+    const ext = mime.includes("png") ? "png" : (mime.includes("webp") ? "webp" : (mime.includes("pdf") ? "pdf" : "jpg"));
+    let bytes: Uint8Array;
+    try { bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)); } catch { continue; }
+    if (bytes.length > 8_000_000) continue;              // garde-fou : 8 Mo max par fichier
+    const path = folder + "/" + Date.now().toString(36) + "-" + (i++) + "-" + Math.round(bytes.length % 99991) + "." + ext;
+    const up = await db.storage.from("scans").upload(path, bytes, { contentType: mime, upsert: false });
+    if (up.error) continue;
+    const pub = db.storage.from("scans").getPublicUrl(path);
+    if (pub && pub.data && pub.data.publicUrl) urls.push(pub.data.publicUrl);
+  }
+  return urls;
+}
+
+function genId(prefix: string) {
+  return prefix + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -80,7 +175,23 @@ Deno.serve(async (req) => {
         const { qr, err } = await loadQr(db, qtok);
         if (err) return json({ error: err }, 404);
         const kmConnu = await vehKm(db, qr.vehicule_id);
-        return json({ ok: true, mode: "qr", plaque: qr.plaque || "", chauffeur: "", societe: qr.societe || "", kmConnu, deja: false, kmRecu: null });
+        const base = { ok: true, mode: "qr", plaque: qr.plaque || "", chauffeur: "", societe: qr.societe || "", kmConnu, deja: false, kmRecu: null };
+        // `full=1` (portail v.html) : on joint infos véhicule + documents + EDL + config société.
+        if (url.searchParams.get("full") === "1") {
+          const veh = await vehInfo(db, qr.vehicule_id);
+          const [docs, edl, portal] = await Promise.all([
+            vehDocs(db, qr.vehicule_id, veh),
+            vehEdl(db, qr.vehicule_id),
+            portalConfig(db, qr.societe || "PXP"),
+          ]);
+          const info = veh ? {
+            marque: veh.marque || "", modele: veh.modele || "", carburant: veh.carburant || "",
+            km: veh.km != null ? Number(veh.km) : null,
+            prochainCT: veh.prochain_ct || "", dateMiseEnCirculation: veh.date_mise_en_circulation || "",
+          } : null;
+          return json({ ...base, veh: info, docs, edl, portal });
+        }
+        return json(base);
       }
 
       if (!token) return json({ error: "Lien incomplet." }, 400);
@@ -96,10 +207,53 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ---- POST : le chauffeur envoie son km ----
+    // ---- POST : le chauffeur envoie son km / une déclaration / des photos de restitution ----
     if (req.method === "POST") {
       let body: Record<string, unknown> = {};
       try { body = await req.json(); } catch { return json({ error: "Requête invalide." }, 400); }
+      const action = String(body.action || "").trim();
+
+      // === Déclaration de sinistre / problème (formulaire du portail) ===
+      if (action === "declaration") {
+        const qtok0 = String(body.q || "").trim();
+        if (!qtok0) return json({ error: "QR incomplet." }, 400);
+        const { qr, err } = await loadQr(db, qtok0);
+        if (err) return json({ error: err }, 404);
+        const type = String(body.type || "sinistre").trim() === "probleme" ? "probleme" : "sinistre";
+        const description = String(body.description || "").trim();
+        if (!description) return json({ error: "Décris brièvement ce qui s'est passé." }, 400);
+        const photos = await uploadPhotos(db, body.photos, "declarations/" + (qr.plaque || "veh"));
+        const rec = {
+          id: genId("dc"), vehicule_id: qr.vehicule_id, plaque: qr.plaque || "", societe: qr.societe || "PXP",
+          type, date_incident: String(body.dateIncident || "").slice(0, 120), lieu: String(body.lieu || "").slice(0, 240),
+          description: description.slice(0, 4000), tiers: String(body.tiers || "").slice(0, 600),
+          blesses: String(body.blesses || "").slice(0, 240), photos, statut: "nouveau",
+        };
+        const ins = await db.from("declarations_conducteur").insert(rec);
+        if (ins.error) return json({ error: "Échec de l'enregistrement. Réessaie." }, 500);
+        return json({ ok: true, type, photos: photos.length });
+      }
+
+      // === État des lieux : photos de restitution envoyées par le conducteur ===
+      if (action === "edl") {
+        const qtok0 = String(body.q || "").trim();
+        if (!qtok0) return json({ error: "QR incomplet." }, 400);
+        const { qr, err } = await loadQr(db, qtok0);
+        if (err) return json({ error: err }, 404);
+        const sens = String(body.sens || "restitution").trim() === "prise" ? "prise" : "restitution";
+        const photos = await uploadPhotos(db, body.photos, "etat-des-lieux/" + (qr.plaque || "veh"));
+        if (!photos.length) return json({ error: "Ajoute au moins une photo." }, 400);
+        // Le sens vit dans `label` ('Entrée'/'Sortie') — même convention que la fiche véhicule.
+        const label = sens === "restitution" ? "Sortie" : "Entrée";
+        const rows = photos.map((u) => ({
+          id: genId("D"), vehicule_id: qr.vehicule_id, type: "etat-des-lieux",
+          label, url: u, societe: qr.societe || "PXP",
+        }));
+        const ins = await db.from("documents").insert(rows);
+        if (ins.error) return json({ error: "Échec de l'envoi des photos. Réessaie." }, 500);
+        return json({ ok: true, sens, photos: photos.length });
+      }
+
       const qtok = String(body.q || "").trim();
       const token = String(body.t || "").trim();
       const km = Math.round(Number(body.km));
