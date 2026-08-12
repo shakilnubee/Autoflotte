@@ -21,23 +21,22 @@ ORDER BY column_name;
 
 
 -- ─────────────────────────────────────────────────────────────────────────────────────
--- ÉTAPE 2 — À N'EXÉCUTER QUE si l'étape 1 a montré `autonomie` et/ou `version`.
--- ⚠️ Colle-moi d'abord le résultat de l'étape 1 : selon le TYPE des colonnes (text / int),
---    l'affectation ci-dessous peut nécessiter un cast `::text`. Je te donnerai la version exacte.
+-- ÉTAPE 2 — CAS CONFIRMÉ (diagnostic du 2026-08-12) : SEULE `autonomie` (type text) est en
+-- doublon ; `version` n'existe pas. Toutes les colonnes sont en `text` → aucun cast nécessaire.
 --
--- Principe (SÛR, sans perte) : on privilégie note_pneus/type_pneus (la source lue par l'appli).
--- On recopie autonomie→note_pneus et version→type_pneus UNIQUEMENT là où la cible est vide,
--- pour récupérer d'éventuelles données orphelines, PUIS on supprime les colonnes en doublon.
---
---   -- 2a) Sauvegarde des données orphelines (cible vide) :
---   UPDATE vehicules SET note_pneus = autonomie
---     WHERE (note_pneus IS NULL OR note_pneus::text = '')
---       AND autonomie IS NOT NULL AND autonomie::text <> '';
---   UPDATE vehicules SET type_pneus = version
---     WHERE (type_pneus IS NULL OR type_pneus::text = '')
---       AND version IS NOT NULL AND version::text <> '';
---
---   -- 2b) Suppression des colonnes en doublon (l'appli ne les lit pas) :
---   ALTER TABLE vehicules DROP COLUMN IF EXISTS autonomie;
---   ALTER TABLE vehicules DROP COLUMN IF EXISTS version;
+-- Sûr, sans perte : on récupère l'autonomie orpheline (uniquement dans la colonne en doublon)
+-- vers note_pneus (la source lue par l'appli), PUIS on supprime la colonne en doublon.
 -- ─────────────────────────────────────────────────────────────────────────────────────
+
+-- (Optionnel) Combien de lignes seraient récupérées ? 0 = rien d'orphelin, suppression transparente.
+--   SELECT count(*) FROM vehicules
+--   WHERE (note_pneus IS NULL OR note_pneus = '') AND autonomie IS NOT NULL AND autonomie <> '';
+
+-- 2a) Sauvegarde ZÉRO perte (ne touche note_pneus que s'il est vide) :
+UPDATE vehicules
+SET note_pneus = autonomie
+WHERE (note_pneus IS NULL OR note_pneus = '')
+  AND autonomie IS NOT NULL AND autonomie <> '';
+
+-- 2b) Suppression de la colonne en doublon (l'appli ne la lit pas — elle lit note_pneus) :
+ALTER TABLE vehicules DROP COLUMN IF EXISTS autonomie;
