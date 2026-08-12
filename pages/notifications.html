@@ -339,6 +339,23 @@
 
   // ===== Sous-onglet « À compléter » : TOUTES les infos manquantes de la plateforme =====
   const isEmptyV = (x) => x == null || String(x).trim() === '' || String(x).trim() === '—';
+
+  // Documents des véhicules (table documents) — pour savoir qui a sa carte grise / sa carte mémo
+  // SUR LA PLATEFORME (les liens Google Drive ne comptent pas : règle « plus de Drive »).
+  let _docsMap = {}, _docsLoaded = false;
+  const _isDrive = (u) => /drive\.google|docs\.google/i.test(u || '');
+  function docsOf(id) { return _docsMap[id] || []; }
+  function hasCgPlatform(v) { if (v && v.cgUrl && !_isDrive(v.cgUrl)) return true; if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'carte-grise' && d.url && !_isDrive(d.url)); }
+  function hasMemoDoc(v) { if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'memo' && d.url); }
+  function loadCompletDocs() {
+    if (!(window.FP && FP.db && FP.supabase)) return;
+    FP.db.select('documents').then(r => {
+      if (r.error) return; const m = {};
+      (r.data || []).forEach(d => { if (d && d.vehiculeId) (m[d.vehiculeId] = m[d.vehiculeId] || []).push(d); });
+      _docsMap = m; _docsLoaded = true;
+      try { renderComplet(); } catch (e) {}
+    });
+  }
   function vehMasseEff(v) { try { const s = (FP.settings.get().vehMasse || {})[v.id]; if (s != null && String(s).trim() !== '') return s; } catch (e) {} try { return FP.masseCG && FP.masseCG(v); } catch (e) {} return null; }
   // ⚠️ MÊME source que la fiche véhicule (FP.leasingContrat : normalise la plaque en MAJUSCULES
   // + fusionne base PXP et overrides saisis). Avant, une recherche brute base[v.immat] ratait les
@@ -359,9 +376,10 @@
     { k: 'masse', label: 'Masse (carte grise)', val: v => vehMasseEff(v) },
     { k: 'couleur', label: 'Couleur' },
     { k: 'boite', label: 'Boîte de vitesses' },
-    // Carte grise : doit être HÉBERGÉE SUR LA PLATEFORME (cgUrl) pour être visible dans le QR
-    // conducteur. Absente OU seulement sur Google Drive (cgFileId sans cgUrl) → à (ré)importer.
-    { k: 'carteGrise', label: 'Carte grise à importer sur la plateforme (pour le QR véhicule)', empty: v => isEmptyV(v.cgUrl) },
+    // Carte grise + carte mémo : doivent être HÉBERGÉES SUR LA PLATEFORME (pas Google Drive) pour
+    // apparaître dans le QR conducteur → « Mes documents ». On les remplit par UPLOAD (PDF/photo).
+    { k: 'carteGrise', label: 'Carte grise à importer sur la plateforme (pour le QR véhicule)', empty: v => !hasCgPlatform(v) },
+    { k: 'carteMemo', label: 'Carte mémo à importer sur la plateforme (pour le QR véhicule)', empty: v => !hasMemoDoc(v) },
     // Clés & carte grise : détenteur non renseigné = ni « Siège » ni « Salarié » sélectionné (rubrique « Clés & carte grise » de la fiche).
     { k: 'cleDetenteur', label: 'Détenteur du double de clé', empty: v => !v.cleSiege && !v.cleSalarie },
     { k: 'cgDetenteur', label: 'Détenteur de la carte grise', empty: v => !v.cgOrigSiege && !v.cgOrigSalarie },
@@ -503,6 +521,8 @@
       if (['km', 'puissanceFiscale', 'co2'].indexOf(k) !== -1) return { kind: 'number' };
       if (k === 'masse') return { kind: 'masse' };
       if (k === 'cleDetenteur' || k === 'cgDetenteur') return { kind: 'detenteur' };
+      if (k === 'carteGrise') return { kind: 'file', docType: 'carte-grise' }; // upload PDF/photo (pas de saisie)
+      if (k === 'carteMemo') return { kind: 'file', docType: 'memo' };
       if (k === 'leasing') return { kind: 'fiche' }; // trop spécifique → reste dans la liste (fiche)
       return { kind: 'text' };
     }
@@ -587,12 +607,46 @@
       + `<span>${esc(step.entityLabel)}</span>`;
     document.getElementById('raf-label').textContent = step.field.label;
     const wrap = document.getElementById('raf-input-wrap'); const meta = step.meta;
+    const saveBtn = document.getElementById('raf-save');
+    // Carte grise / carte mémo → on IMPORTE un PDF ou une photo (pas de saisie au clavier).
+    if (meta.kind === 'file') {
+      if (saveBtn) saveBtn.style.display = 'none';
+      wrap.innerHTML = `<input id="raf-file" type="file" accept="image/*,application/pdf" style="display:none">
+        <button type="button" id="raf-file-btn" class="btn btn-dark text-sm" style="width:100%;justify-content:center"><i data-lucide="upload" class="w-4 h-4"></i> Importer un PDF ou une photo</button>
+        <div id="raf-file-status" class="text-xs text-slate-400" style="margin-top:.55rem;text-align:center">Le document sera enregistré sur la plateforme et visible dans le QR conducteur.</div>`;
+      const fb = document.getElementById('raf-file-btn'), fi = document.getElementById('raf-file');
+      if (fb && fi) { fb.addEventListener('click', () => fi.click()); fi.addEventListener('change', () => { if (fi.files && fi.files[0]) rafUploadFile(step, fi.files[0]); }); }
+      if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+      return;
+    }
+    if (saveBtn) saveBtn.style.display = '';
     if (meta.kind === 'select') wrap.innerHTML = `<select id="raf-input" class="field-input" style="width:100%"><option value="">— choisir —</option>${(meta.options || []).map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select>`;
     else if (meta.kind === 'detenteur') wrap.innerHTML = `<select id="raf-input" class="field-input" style="width:100%"><option value="">— choisir —</option><option value="Siège">Siège</option><option value="Salarié">Salarié</option></select>`;
     else { const t = (meta.kind === 'date') ? 'date' : ((meta.kind === 'number' || meta.kind === 'masse') ? 'number' : 'text'); wrap.innerHTML = `<input id="raf-input" type="${t}" class="field-input" style="width:100%">`; }
     const inp = document.getElementById('raf-input');
     if (inp) { inp.focus(); inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); rafSaveNext(); } }); }
     if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+  }
+  // Upload d'une carte grise / carte mémo depuis la rafale → plateforme + rattachement au véhicule.
+  async function rafUploadFile(step, file) {
+    const status = document.getElementById('raf-file-status'), btn = document.getElementById('raf-file-btn');
+    if (!(window.FP && FP.uploadScan)) { if (status) status.textContent = 'Connexion requise.'; return; }
+    if (btn) btn.disabled = true; if (status) status.textContent = 'Envoi…';
+    try {
+      const v = step.entity; const imm = (FP.normImmat ? FP.normImmat(v.immat) : (v.immat || 'veh'));
+      if (step.meta.docType === 'memo') {
+        const url = await FP.uploadScan(file, 'memos/' + imm); if (!url) throw new Error('upload');
+        const doc = { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: v.id, type: 'memo', label: 'Carte mémo', url };
+        if (FP.persist && FP.persist.insert) FP.persist.insert('documents', doc);
+        (_docsMap[v.id] = _docsMap[v.id] || []).push(doc);
+      } else {
+        const url = await FP.uploadScan(file, 'cartes-grises/' + imm); if (!url) throw new Error('upload');
+        v.cgUrl = url;
+        if (FP.persist && FP.persist.update) FP.persist.update('vehicules', v.id, { cgUrl: url });
+        (_docsMap[v.id] = _docsMap[v.id] || []).push({ type: 'carte-grise', url });
+      }
+      rafIdx++; rafShow();
+    } catch (e) { if (status) status.textContent = "Échec de l'envoi. Réessaie."; if (btn) btn.disabled = false; }
   }
   function openRaf() {
     rafList = buildRaf(); rafIdx = 0;
@@ -1077,12 +1131,14 @@
     showTab(['decisions', 'alertes', 'relevekm', 'echeances', 'complet', 'verif'].includes(t) ? t : 'alertes');
   })();
   refreshVerifCount(); // affiche l'onglet « Points à vérifier » seulement s'il y en a
+  loadCompletDocs(); // documents véhicules → savoir qui a sa carte grise / mémo sur la plateforme
   document.addEventListener('fp:data-ready', () => {
     render();
     if (isDecisionsVisible()) renderDecisions();
     if (!document.getElementById('suivi-echeances').classList.contains('hidden')) renderEcheances();
     if (isCompletVisible()) renderComplet();
     if (!document.getElementById('suivi-verif').classList.contains('hidden')) renderVerif();
+    loadCompletDocs();
   });
 
   // Charge les conducteurs (table à part) → alertes "permis qui expire" + onglet « À compléter »

@@ -4984,8 +4984,14 @@
   }
 
   function updateBatchCreateLabel() {
-    const n = _cgBatch.filter(r => r.include).length;
-    $('cg-batch-create-label').textContent = n > 0 ? `Importer les ${n} carte${n > 1 ? 's' : ''} grise${n > 1 ? 's' : ''}` : 'Importer les cartes grises';
+    // Distingue clairement ce que le site va faire : créer de nouvelles fiches vs rattacher à l'existant.
+    const inc = _cgBatch.filter(r => r.include && r.parsed.immat);
+    let nNew = 0, nAtt = 0;
+    inc.forEach(r => { const ex = batchExisting(r.parsed); if (ex) { if (!hasPlatformCg(ex)) nAtt++; } else if (r.parsed.marque && r.parsed.modele) nNew++; });
+    const n = nNew + nAtt;
+    let label = 'Importer les cartes grises';
+    if (n > 0) { const parts = []; if (nNew) parts.push(`créer ${nNew}`); if (nAtt) parts.push(`rattacher ${nAtt}`); label = parts.join(' · '); label = label.charAt(0).toUpperCase() + label.slice(1); }
+    $('cg-batch-create-label').textContent = label;
     $('cg-batch-create').disabled = n === 0;
     $('cg-batch-create').style.opacity = n === 0 ? '.5' : '';
   }
@@ -5055,12 +5061,15 @@
 
   async function createBatchVehicles() {
     const rows = _cgBatch.filter(r => r.include);
-    const invalid = rows.filter(r => !(r.parsed.immat && r.parsed.marque && r.parsed.modele));
+    // Traitable si : correspond à un véhicule EXISTANT (rattachement → l'immat suffit) OU
+    // possède immat + marque + modèle (création d'une nouvelle fiche).
+    const traitable = r => !!r.parsed.immat && (!!batchExisting(r.parsed) || (!!r.parsed.marque && !!r.parsed.modele));
+    const invalid = rows.filter(r => !traitable(r));
     if (invalid.length) {
-      if (!(await FP.confirm(`${invalid.length} ligne(s) n'ont pas d'immatriculation/marque/modèle complets et seront ignorées.\n\nCréer quand même les autres ?`))) return;
+      if (!(await FP.confirm(`${invalid.length} ligne(s) incomplète(s) seront ignorées (immatriculation illisible, ou marque/modèle manquants pour créer une nouvelle fiche).\n\nContinuer ?`))) return;
     }
-    const valides = rows.filter(r => r.parsed.immat && r.parsed.marque && r.parsed.modele);
-    if (!valides.length) { batchProgress("Aucune ligne complète à créer (il faut au minimum immatriculation, marque et modèle).", 'error'); return; }
+    const valides = rows.filter(traitable);
+    if (!valides.length) { batchProgress("Aucune ligne exploitable (il faut au minimum une immatriculation reconnue).", 'error'); return; }
 
     FP.history.commit();
     $('cg-batch-create').disabled = true;
@@ -5088,7 +5097,8 @@
         };
         Object.keys(fill).forEach(k => { const nv = fill[k]; if (nv != null && nv !== '' && isEmptyV(existing[k])) existing[k] = nv; });
         if (Number.isFinite(p.masse)) { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; if (isEmptyV(s.vehMasse[existing.id])) { s.vehMasse[existing.id] = p.masse; FP.settings.save(s); } }
-        const ok = cgUrl ? await persistVehicleUpsert(existing, true) : true;
+        // ⚠️ UPDATE (false) — le véhicule existe déjà ; un INSERT (true) provoquait un conflit de clé.
+        const ok = cgUrl ? await persistVehicleUpsert(existing, false) : true;
         if (ok) attached++; else failed++;
         continue;
       }
@@ -5148,8 +5158,8 @@
     let val = el.value;
     if (k === 'immat') val = val.toUpperCase();
     _cgBatch[+i].parsed[k] = val;
-    // Immat modifiée → recalcule le badge « Rattacher / Nouveau » de cette ligne (sans re-render).
-    if (k === 'immat') { const cell = $('cg-batch-tbody').querySelector('[data-status="' + i + '"]'); if (cell) cell.innerHTML = batchStatusBadge(_cgBatch[+i].parsed); }
+    // Immat modifiée → recalcule le badge « Rattacher / Nouveau » de cette ligne + le libellé du bouton.
+    if (k === 'immat') { const cell = $('cg-batch-tbody').querySelector('[data-status="' + i + '"]'); if (cell) cell.innerHTML = batchStatusBadge(_cgBatch[+i].parsed); updateBatchCreateLabel(); }
   });
   $('cg-batch-all').addEventListener('change', (e) => {
     const on = e.target.checked;
