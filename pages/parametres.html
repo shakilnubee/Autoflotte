@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260812d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260812e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260812d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260812e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260812d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260812e">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -354,6 +354,16 @@
         <div><div class="field-label">Assureur</div><input class="field-input" id="f-assur-assureur" placeholder="ex. AXA, Generali, SwissLife…" /></div>
         <div><div class="field-label">N° de police</div><input class="field-input" id="f-assur-police" placeholder="ex. 0123456789" /></div>
       </div>
+
+      <!-- Portail conducteur (QR véhicule) — infos affichées au conducteur qui scanne le QR de sa voiture -->
+      <div class="section-title mt-6" style="font-size:.95rem"><i data-lucide="qr-code" class="w-4 h-4"></i> Portail conducteur (QR véhicule)</div>
+      <p class="text-sm text-slate-600 mb-3">Le conducteur scanne le QR collé dans sa voiture → il voit sa fiche, ses documents, peut relever son km, déclarer un sinistre et faire un état des lieux. Ces infos sont <b>propres à cette société</b>. Vide = la rubrique ne s'affiche pas.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div><div class="field-label">Numéro assurance / assistance 24/7</div><input class="field-input" id="f-portail-assist" placeholder="ex. 01 23 45 67 89" /></div>
+        <div><div class="field-label">Lien de la notice d'assistance <span class="text-slate-400 font-normal">(sur la plateforme)</span></div><input class="field-input" id="f-portail-notice" placeholder="https://…" /></div>
+        <div class="sm:col-span-2"><div class="field-label">Lien du constat amiable <span class="text-slate-400 font-normal">(optionnel — sinon lien officiel par défaut)</span></div><input class="field-input" id="f-portail-constat" placeholder="https://…" /></div>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">💡 Le <b>même numéro</b> sert pour l'assurance et l'assistance (bouton « Appeler » du portail). L'assureur et le n° de police sont repris du bloc « Assurance » ci-dessus.</p>
 
       <div class="flex gap-2 mt-5">
         <button class="btn btn-dark text-sm" id="btn-save-societe"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
@@ -737,10 +747,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260812d"></script>
-<script src="../assets/js/supabase-client.js?v=20260812d"></script>
-<script src="../assets/js/data.js?v=20260812d"></script>
-<script src="../assets/js/app.js?v=20260812d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260812e"></script>
+<script src="../assets/js/supabase-client.js?v=20260812e"></script>
+<script src="../assets/js/data.js?v=20260812e"></script>
+<script src="../assets/js/app.js?v=20260812e"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1118,6 +1128,11 @@
     const assur = (FP.assuranceContrat ? FP.assuranceContrat() : { assureur: '', police: '' });
     if ($('f-assur-assureur')) $('f-assur-assureur').value = assur.assureur || '';
     if ($('f-assur-police')) $('f-assur-police').value = assur.police || '';
+    // Portail conducteur (QR) — par société.
+    const portail = (s && typeof s === 'object' && FP.settings.get().portail) || {};
+    if ($('f-portail-assist'))  $('f-portail-assist').value  = portail.assistanceNumero || '';
+    if ($('f-portail-notice'))  $('f-portail-notice').value  = portail.assistanceNotice || '';
+    if ($('f-portail-constat')) $('f-portail-constat').value = portail.constatUrl || '';
     renderSocietesUI();
     renderProfilForm();
   }
@@ -1140,6 +1155,15 @@
         ...(current.assuranceContrat || {}),
         assureur: $('f-assur-assureur') ? $('f-assur-assureur').value.trim() : ((current.assuranceContrat || {}).assureur || ''),
         police: $('f-assur-police') ? $('f-assur-police').value.trim() : ((current.assuranceContrat || {}).police || ''),
+      };
+    }
+    // Portail conducteur (QR) — infos affichées au conducteur (par société, synchronisé).
+    if ($('f-portail-assist') || $('f-portail-notice') || $('f-portail-constat')) {
+      current.portail = {
+        ...(current.portail || {}),
+        assistanceNumero: $('f-portail-assist') ? $('f-portail-assist').value.trim() : ((current.portail || {}).assistanceNumero || ''),
+        assistanceNotice: $('f-portail-notice') ? $('f-portail-notice').value.trim() : ((current.portail || {}).assistanceNotice || ''),
+        constatUrl: $('f-portail-constat') ? $('f-portail-constat').value.trim() : ((current.portail || {}).constatUrl || ''),
       };
     }
     FP.settings.save(current);

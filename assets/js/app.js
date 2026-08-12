@@ -2942,6 +2942,31 @@ FP.refreshProspectsBadge = async () => {
 // Rafraîchit le badge quand les données Supabase sont prêtes (le menu peut être bâti avant).
 try { window.addEventListener('fp:data-ready', () => { if (FP.refreshProspectsBadge) FP.refreshProspectsBadge(); }); } catch (e) {}
 
+// Badge rouge « demandes conducteur » (déclarations envoyées depuis le QR véhicule, statut 'nouveau')
+// sur le lien Sinistres du menu. Isolation société = RLS (le compte ne compte que sa société).
+FP.declCondCount = 0;
+FP.refreshDeclCondBadge = async () => {
+  try {
+    if (!FP.supabase) return;
+    const r = await FP.supabase.from('declarations_conducteur').select('id', { count: 'exact', head: true }).eq('statut', 'nouveau');
+    if (r.error) return; // table pas encore créée → pas de badge
+    const count = r.count || 0; FP.declCondCount = count;
+    document.querySelectorAll('a[data-nav="sinistres.html"], .fp-sidebar a[href*="sinistres.html"], aside a[href*="sinistres.html"]').forEach(a => {
+      let b = a.querySelector('.fp-decl-badge');
+      if (!count) { if (b) b.remove(); return; }
+      if (!b) {
+        b = document.createElement('span');
+        b.className = 'fp-decl-badge';
+        b.style.cssText = 'background:#EF4444;color:#fff;font-size:.66rem;font-weight:800;min-width:1.1rem;text-align:center;padding:.05rem .35rem;border-radius:999px;margin-left:auto';
+        a.appendChild(b);
+      }
+      b.title = count + ' demande(s) conducteur en attente';
+      b.textContent = count;
+    });
+  } catch (e) {}
+};
+try { window.addEventListener('fp:data-ready', () => { if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge(); }); } catch (e) {}
+
 // === Bouton « Mémo » : depuis le titre de chaque page → la section correspondante du Manuel ===
 FP.MANUAL_SECTION = {
   'dashboard.html': 's-dashboard', 'notifications.html': 's-alertes', 'taches.html': 's-divers',

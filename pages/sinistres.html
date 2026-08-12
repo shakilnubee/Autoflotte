@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260812d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260812e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260812d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260812e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260812d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260812e">
 <style>
   .timeline-item { position: relative; padding-left: 2.5rem; padding-bottom: 1.5rem; border-left: 2px solid var(--fp-border); }
   .timeline-item:last-child { padding-bottom: 0; border-left-color: transparent; }
@@ -163,6 +163,9 @@
       <span data-data-io></span>
     </div>
     <div id="sin-facture-status" class="hidden mb-6 text-sm rounded-lg px-4 py-3"></div>
+
+    <!-- Demandes envoyées par les conducteurs depuis le QR véhicule (portail conducteur) -->
+    <div id="decl-cond-banner" class="mb-6"></div>
 
     <!-- Déclaration de sinistre guidée -->
     <div id="sin-declare-modal" style="position:fixed;inset:0;background:rgba(15,30,61,.5);display:none;align-items:center;justify-content:center;z-index:80;padding:1rem">
@@ -385,11 +388,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260812d"></script>
-<script src="../assets/js/supabase-client.js?v=20260812d"></script>
-<script src="../assets/js/data.js?v=20260812d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260812e"></script>
+<script src="../assets/js/supabase-client.js?v=20260812e"></script>
+<script src="../assets/js/data.js?v=20260812e"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260812d"></script>
+<script src="../assets/js/app.js?v=20260812e"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1658,6 +1661,92 @@
   loadSinDocs();   // puis récupère les fichiers déjà stockés et rafraîchit
 
   // ---------- Garages & concessionnaires (annuaire perso + recherche Google Maps) ----------
+  // ===== Demandes conducteur (déclarations envoyées depuis le QR véhicule) =====
+  // Table declarations_conducteur (portail v.html). Affichées EN TÊTE de l'onglet Sinistres ;
+  // le gestionnaire peut les marquer traitées ou en faire un vrai sinistre (bouton existant).
+  const DeclCond = {
+    rows: [], showTraites: false,
+    async load() {
+      if (!(window.FP && FP.supabase)) return;
+      try {
+        const r = await FP.supabase.from('declarations_conducteur').select('*').order('created_at', { ascending: false });
+        if (r.error) { return; } // table pas encore créée → silencieux
+        const soc = (FP.activeSociete && FP.activeSociete()) || 'PXP';
+        this.rows = (r.data || []).filter(d => soc === '__all__' ? true : ((d.societe || 'PXP') === soc));
+        this.render();
+        if (window.FP && FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
+      } catch (e) {}
+    },
+    photosHTML(d) {
+      let ph = []; try { ph = Array.isArray(d.photos) ? d.photos : JSON.parse(d.photos || '[]'); } catch (e) { ph = []; }
+      if (!ph.length) return '';
+      return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;margin-top:8px">'
+        + ph.map(u => `<a href="${FP.esc(u)}" target="_blank" rel="noopener"><img loading="lazy" src="${FP.esc(u)}" alt="" style="width:100%;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--fp-border)"></a>`).join('') + '</div>';
+    },
+    cardHTML(d) {
+      const isSin = (d.type || 'sinistre') !== 'probleme';
+      const tag = isSin
+        ? '<span style="background:#FEE2E2;color:#B91C1C;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:800">💥 Sinistre</span>'
+        : '<span style="background:#FEF3C7;color:#92400E;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:800">🔧 Problème</span>';
+      const when = d.created_at ? FP.dateNum(String(d.created_at).slice(0, 10)) : '';
+      const traite = d.statut === 'traite';
+      const line = (lbl, val) => val ? `<div class="text-sm"><span class="text-slate-500">${lbl} :</span> <b>${FP.esc(val)}</b></div>` : '';
+      return `<div style="border:1px solid ${traite ? 'var(--fp-border)' : '#FCA5A5'};border-radius:12px;padding:12px 14px;background:${traite ? '#fff' : '#FFF7F5'}" data-decl="${FP.esc(d.id)}">
+        <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+          <div class="flex items-center gap-2 flex-wrap">${tag}<b class="text-sm">${FP.esc(d.plaque || '')}</b><span class="text-xs text-slate-400">reçu le ${FP.esc(when)}</span>${traite ? '<span class="text-xs" style="color:#16a34a;font-weight:700">✓ traité</span>' : ''}</div>
+        </div>
+        ${line('Quand', d.date_incident)}${line('Lieu', d.lieu)}
+        <div class="text-sm mt-1">${FP.esc(d.description || '')}</div>
+        ${line('Tiers', d.tiers)}${line('Blessés', d.blesses)}
+        ${this.photosHTML(d)}
+        <div class="flex gap-2 mt-3 flex-wrap">
+          ${traite ? '' : `<button type="button" class="btn btn-dark text-xs" data-decl-sin="${FP.esc(d.id)}"><i data-lucide="clipboard-pen-line" class="w-3.5 h-3.5"></i> Créer le sinistre</button>`}
+          ${traite
+            ? `<button type="button" class="btn btn-outline text-xs" data-decl-untraite="${FP.esc(d.id)}">Rouvrir</button>`
+            : `<button type="button" class="btn btn-outline text-xs" data-decl-traite="${FP.esc(d.id)}"><i data-lucide="check" class="w-3.5 h-3.5"></i> Marquer traité</button>`}
+          <button type="button" class="btn text-xs text-red-600 hover:bg-red-50" data-decl-del="${FP.esc(d.id)}" title="Supprimer cette demande"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+        </div>
+      </div>`;
+    },
+    render() {
+      const box = document.getElementById('decl-cond-banner'); if (!box) return;
+      const nouv = this.rows.filter(d => d.statut !== 'traite');
+      const traites = this.rows.filter(d => d.statut === 'traite');
+      if (!this.rows.length) { box.innerHTML = ''; return; }
+      const shown = this.showTraites ? this.rows : nouv;
+      const head = `<div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          <div class="font-extrabold flex items-center gap-2" style="color:var(--fp-primary)"><i data-lucide="inbox" class="w-5 h-5"></i> Demandes conducteur ${nouv.length ? `<span style="background:#EF4444;color:#fff;border-radius:9999px;padding:0 8px;font-size:12px">${nouv.length}</span>` : ''}</div>
+          ${traites.length ? `<button type="button" id="decl-toggle-traites" class="btn btn-outline text-xs">${this.showTraites ? 'Masquer les traités' : `Voir les traités (${traites.length})`}</button>` : ''}
+        </div>`;
+      const body = shown.length ? `<div class="space-y-3">${shown.map(d => this.cardHTML(d)).join('')}</div>`
+        : '<div class="text-sm text-slate-400">Aucune demande en attente. 🎉</div>';
+      box.innerHTML = `<div class="card p-5" style="border-left:4px solid #EF4444">${head}${body}</div>`;
+      if (window.lucide) lucide.createIcons();
+    },
+    async setStatut(id, statut) {
+      try { await FP.supabase.from('declarations_conducteur').update({ statut }).eq('id', id); } catch (e) {}
+      const row = this.rows.find(d => d.id === id); if (row) row.statut = statut;
+      this.render(); if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
+    },
+    async remove(id) {
+      if (!(await FP.confirm('Supprimer définitivement cette demande du conducteur ?'))) return;
+      try { await FP.supabase.from('declarations_conducteur').delete().eq('id', id); } catch (e) {}
+      this.rows = this.rows.filter(d => d.id !== id);
+      this.render(); if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
+    },
+  };
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest && e.target.closest('[data-decl-traite],[data-decl-untraite],[data-decl-del],[data-decl-sin],#decl-toggle-traites');
+    if (!t) return;
+    if (t.id === 'decl-toggle-traites') { DeclCond.showTraites = !DeclCond.showTraites; DeclCond.render(); return; }
+    if (t.hasAttribute('data-decl-traite')) DeclCond.setStatut(t.getAttribute('data-decl-traite'), 'traite');
+    else if (t.hasAttribute('data-decl-untraite')) DeclCond.setStatut(t.getAttribute('data-decl-untraite'), 'nouveau');
+    else if (t.hasAttribute('data-decl-del')) DeclCond.remove(t.getAttribute('data-decl-del'));
+    else if (t.hasAttribute('data-decl-sin')) { const b = document.getElementById('sin-declare-btn'); if (b) b.click(); }
+  });
+  document.addEventListener('fp:data-ready', () => DeclCond.load());
+  if (window.FP && FP.supabase) DeclCond.load();
+
   (function initGarages(){
     const $g = id => document.getElementById(id);
     const escG = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
