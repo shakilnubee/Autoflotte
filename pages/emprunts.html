@@ -135,6 +135,7 @@
     </div>
     <div class="mb-8 flex justify-end items-start gap-3 flex-wrap">
       <div class="flex items-center gap-3 flex-wrap"><span data-data-io></span>
+        <button class="btn btn-outline text-sm" id="btn-dispo" title="Choisir quels véhicules sont disponibles pour l'emprunt (par groupe ou un par un)"><i data-lucide="list-checks" class="w-4 h-4"></i> Véhicules disponibles</button>
         <button class="btn btn-outline text-sm" id="btn-reserve" title="Planifier un véhicule pour une date à venir"><i data-lucide="calendar-plus" class="w-4 h-4"></i> Réserver un véhicule</button>
         <button class="btn btn-dark text-sm" id="btn-new"><i data-lucide="plus" class="w-4 h-4"></i> Nouvel emprunt</button>
       </div>
@@ -337,6 +338,30 @@
   </div>
 </div>
 
+<!-- Modal : véhicules disponibles pour l'emprunt (par groupe + un par un) -->
+<div class="modal-backdrop" id="modal-dispo">
+  <div class="modal p-6" style="max-width:560px">
+    <div class="flex justify-between items-center mb-2">
+      <h2 class="text-xl font-extrabold">Véhicules disponibles pour l'emprunt</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="dispo-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm text-slate-500 mb-4">Coche les <b>groupes</b> et/ou les <b>véhicules</b> qui peuvent être prêtés. Seuls ceux-ci apparaîtront dans « Nouvel emprunt » et « Réserver ». <span class="text-slate-400">Rien de coché = tous les véhicules sont proposés.</span></p>
+    <div class="mb-4">
+      <div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Par groupe</div>
+      <div id="dispo-groupes" class="flex flex-wrap gap-2"></div>
+    </div>
+    <div>
+      <div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Un par un</div>
+      <input id="dispo-search" class="field-input mb-2" placeholder="Filtrer par plaque ou modèle…" autocomplete="off" />
+      <div id="dispo-vehs" style="max-height:280px;overflow-y:auto;border:1px solid var(--fp-border);border-radius:10px;padding:6px"></div>
+    </div>
+    <div class="flex gap-2 pt-4">
+      <button type="button" class="btn btn-outline flex-1 justify-center" id="dispo-cancel">Annuler</button>
+      <button type="button" class="btn btn-dark flex-1 justify-center" id="dispo-save"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <script src="../assets/js/vendor/supabase.js?v=20260812e"></script>
 <script src="../assets/js/supabase-client.js?v=20260812e"></script>
 <script src="../assets/js/data.js?v=20260812e"></script>
@@ -394,9 +419,20 @@
   // fiche conducteur se reflète ici). Si le nom ne correspond à personne (externe), il est laissé tel quel.
   function empNom(n) { if (!n) return n; try { return (FP.conducteurNomUnifie ? FP.conducteurNomUnifie(n) : n) || n; } catch (e) { return n; } }
 
+  // ===== Véhicules DISPONIBLES pour l'emprunt (config par société : groupes + véhicules) =====
+  function empDispoCfg() { const s = FP.settings.get(); return { g: new Set(s.empruntGroupes || []), v: new Set(s.empruntVehs || []) }; }
+  function empHasConfig() { const c = empDispoCfg(); return c.g.size > 0 || c.v.size > 0; }
+  // Renvoie les véhicules prêtables : ceux cochés OU appartenant à un groupe coché. Rien coché = tous.
+  function empDispoVehs() {
+    const all = (data.vehicules || []);
+    if (!empHasConfig()) return all;
+    const c = empDispoCfg();
+    return all.filter(v => c.v.has(v.id) || (Array.isArray(v.groupes) && v.groupes.some(g => c.g.has(g))));
+  }
+
   let _vehOpts = [], _empOpts = [];
   function fillVehSelect() {
-    _vehOpts = (data.vehicules || []).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
+    _vehOpts = empDispoVehs().slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
       .map(v => `${v.immat} · ${v.marque} ${v.modele}`);
     const names = new Set();
     cache.forEach(e => { if (e.emprunteur) names.add(e.emprunteur.trim()); });
@@ -789,6 +825,46 @@
     renderResas(); render();
     if (FP.toast) FP.toast(`Emprunt démarré pour ${r.personne}`);
   }
+
+  // ---- Config « Véhicules disponibles » (modal) ----
+  const _escD = s => (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let _dispoSel = { g: new Set(), v: new Set() };
+  function renderDispoGroupes() {
+    const groupes = (FP.settings.get().groupes) || {};
+    const keys = Object.keys(groupes);
+    $('dispo-groupes').innerHTML = keys.length ? keys.map(k => {
+      const on = _dispoSel.g.has(k), lbl = (groupes[k] && groupes[k].label) || k;
+      return `<button type="button" class="dispo-grp" data-g="${_escD(k)}" style="border:1.5px solid ${on ? '#0f766e' : 'var(--fp-border)'};background:${on ? '#ECFDF5' : '#fff'};color:${on ? '#0f766e' : '#475569'};border-radius:9999px;padding:.35rem .8rem;font-size:.82rem;font-weight:700;cursor:pointer">${on ? '✓ ' : ''}${_escD(lbl)}</button>`;
+    }).join('') : '<span class="text-xs text-slate-400">Aucun groupe défini.</span>';
+  }
+  function renderDispoVehs(q) {
+    const nq = (window.FP && FP.norm) ? FP.norm(q || '') : String(q || '').toLowerCase();
+    const list = (data.vehicules || []).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''))
+      .filter(v => !nq || ((window.FP && FP.norm) ? FP.norm(`${v.immat} ${v.marque} ${v.modele}`) : `${v.immat} ${v.marque} ${v.modele}`.toLowerCase()).includes(nq));
+    $('dispo-vehs').innerHTML = list.length ? list.map(v => {
+      const on = _dispoSel.v.has(v.id);
+      return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer"><input type="checkbox" class="dispo-v" data-id="${_escD(v.id)}" ${on ? 'checked' : ''} style="width:16px;height:16px;accent-color:#0f766e"><span class="text-sm">${_escD(v.immat || '?')} · ${_escD(v.marque || '')} ${_escD(v.modele || '')}</span></label>`;
+    }).join('') : '<div class="text-xs text-slate-400 p-2">Aucun véhicule.</div>';
+  }
+  function openDispo() {
+    const c = empDispoCfg(); _dispoSel = { g: new Set(c.g), v: new Set(c.v) };
+    renderDispoGroupes(); renderDispoVehs(''); if ($('dispo-search')) $('dispo-search').value = '';
+    $('modal-dispo').classList.add('open'); if (window.lucide) lucide.createIcons();
+  }
+  function closeDispo() { $('modal-dispo').classList.remove('open'); }
+  function saveDispo() {
+    const s = FP.settings.get(); s.empruntGroupes = [..._dispoSel.g]; s.empruntVehs = [..._dispoSel.v]; FP.settings.save(s);
+    closeDispo(); fillVehSelect();
+    if (FP.toast) FP.toast('✓ Véhicules disponibles mis à jour');
+  }
+  if ($('btn-dispo')) $('btn-dispo').addEventListener('click', openDispo);
+  if ($('dispo-close')) $('dispo-close').addEventListener('click', closeDispo);
+  if ($('dispo-cancel')) $('dispo-cancel').addEventListener('click', closeDispo);
+  if ($('dispo-save')) $('dispo-save').addEventListener('click', saveDispo);
+  if ($('dispo-search')) $('dispo-search').addEventListener('input', e => renderDispoVehs(e.target.value));
+  if ($('dispo-groupes')) $('dispo-groupes').addEventListener('click', e => { const b = e.target.closest('.dispo-grp'); if (!b) return; const k = b.getAttribute('data-g'); if (_dispoSel.g.has(k)) _dispoSel.g.delete(k); else _dispoSel.g.add(k); renderDispoGroupes(); });
+  if ($('dispo-vehs')) $('dispo-vehs').addEventListener('change', e => { const c = e.target.closest('.dispo-v'); if (!c) return; const id = c.getAttribute('data-id'); if (c.checked) _dispoSel.v.add(id); else _dispoSel.v.delete(id); });
+  if ($('modal-dispo')) $('modal-dispo').addEventListener('click', e => { if (e.target === $('modal-dispo')) closeDispo(); });
 
   // ---- Wiring ----
   $('search').addEventListener('input', e => { state.search = e.target.value; render(); });
