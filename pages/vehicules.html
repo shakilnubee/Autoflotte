@@ -386,6 +386,14 @@
         <span data-data-io></span>
         <span id="veh-export-mount"></span>
         <button class="btn btn-outline text-sm" id="btn-compare" title="Comparer deux véhicules côte à côte"><i data-lucide="scale" class="w-4 h-4"></i> Comparer</button>
+        <div style="position:relative;display:inline-block">
+          <button class="btn btn-outline text-sm" id="btn-import-lot" title="Importer en lot des cartes grises ou des cartes mémo (rattachées aux fiches par immatriculation, sans doublon)"><i data-lucide="upload" class="w-4 h-4"></i> Importer en lot <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i></button>
+          <div id="import-lot-menu" class="hidden" style="position:absolute;right:0;top:110%;z-index:40;background:#fff;border:1px solid var(--fp-border);border-radius:10px;box-shadow:0 12px 30px -12px rgba(15,30,61,.4);min-width:220px;overflow:hidden">
+            <button type="button" id="il-cg" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 flex items-center gap-2"><i data-lucide="file-badge" class="w-4 h-4 text-slate-500"></i> Cartes grises</button>
+            <button type="button" id="il-memo" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 flex items-center gap-2 border-t border-slate-100"><i data-lucide="sticky-note" class="w-4 h-4 text-slate-500"></i> Cartes mémo</button>
+          </div>
+        </div>
+        <input type="file" id="f-cg-top" accept="image/*,application/pdf" class="hidden" multiple />
         <button class="btn btn-dark text-sm" id="btn-new" data-quickadd><i data-lucide="plus" class="w-4 h-4"></i> Nouveau véhicule</button>
       </div>
     </div>
@@ -5265,6 +5273,19 @@
   $('memo-batch-create').addEventListener('click', createBatchMemos);
   if ($('memo-trigger')) $('memo-trigger').addEventListener('click', () => $('f-memo-file').click());
   if ($('f-memo-file')) $('f-memo-file').addEventListener('change', (e) => { const files = Array.from(e.target.files || []); if (files.length) handleMemoBatch(files); e.target.value = ''; });
+
+  // Bouton « Importer en lot » de la barre (visible sans ouvrir « Nouveau véhicule »).
+  (function importLotMenu() {
+    const btn = $('btn-import-lot'), menu = $('import-lot-menu');
+    if (!btn || !menu) return;
+    const close = () => menu.classList.add('hidden');
+    btn.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); });
+    document.addEventListener('click', (e) => { if (!menu.contains(e.target) && e.target !== btn) close(); });
+    if ($('il-cg')) $('il-cg').addEventListener('click', () => { close(); $('f-cg-top').click(); });
+    if ($('il-memo')) $('il-memo').addEventListener('click', () => { close(); $('f-memo-file').click(); });
+    // Depuis la barre, on va TOUJOURS dans l'import en lot (même pour 1 seule carte grise).
+    if ($('f-cg-top')) $('f-cg-top').addEventListener('change', (e) => { const files = Array.from(e.target.files || []); e.target.value = ''; if (files.length) handleCarteGriseBatch(files); });
+  })();
 
   // Scan d'un autre document (CT, PV, facture…) pour compléter la fiche en cours
   async function handleExtraDoc(file){
