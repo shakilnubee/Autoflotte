@@ -360,10 +360,18 @@
       <p class="text-sm text-slate-600 mb-3">Le conducteur scanne le QR collé dans sa voiture → il voit sa fiche, ses documents, peut relever son km, déclarer un sinistre et faire un état des lieux. Ces infos sont <b>propres à cette société</b>. Vide = la rubrique ne s'affiche pas.</p>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div><div class="field-label">Numéro assurance / assistance 24/7</div><input class="field-input" id="f-portail-assist" placeholder="ex. 01 23 45 67 89" /></div>
-        <div><div class="field-label">Lien de la notice d'assistance <span class="text-slate-400 font-normal">(sur la plateforme)</span></div><input class="field-input" id="f-portail-notice" placeholder="https://…" /></div>
-        <div class="sm:col-span-2"><div class="field-label">Lien du constat amiable <span class="text-slate-400 font-normal">(optionnel — sinon lien officiel par défaut)</span></div><input class="field-input" id="f-portail-constat" placeholder="https://…" /></div>
+        <div>
+          <div class="field-label">Notice d'assistance (PDF) <span class="text-slate-400 font-normal">— propre à cette société</span></div>
+          <input type="file" id="portail-notice-file" accept="application/pdf,image/*" class="hidden" />
+          <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" class="btn btn-outline text-sm" id="portail-notice-btn"><i data-lucide="upload" class="w-4 h-4"></i> Importer la notice</button>
+            <a class="btn btn-outline text-sm hidden" id="portail-notice-view" target="_blank" rel="noopener"><i data-lucide="eye" class="w-4 h-4"></i> Voir</a>
+            <button type="button" class="btn text-xs text-red-600 hover:bg-red-50 hidden" id="portail-notice-del"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Retirer</button>
+          </div>
+          <div id="portail-notice-status" class="text-xs text-slate-400 mt-1"></div>
+        </div>
       </div>
-      <p class="text-xs text-slate-400 mt-2">💡 Le <b>même numéro</b> sert pour l'assurance et l'assistance (bouton « Appeler » du portail). L'assureur et le n° de police sont repris du bloc « Assurance » ci-dessus.</p>
+      <p class="text-xs text-slate-400 mt-2">💡 Le <b>même numéro</b> sert pour l'assurance et l'assistance (bouton « Appeler » du portail). L'assureur et le n° de police sont repris du bloc « Assurance » ci-dessus. Le <b>constat amiable</b> proposé au conducteur est celui de Parc Pilot (onglet Sinistres) — rien à configurer.</p>
 
       <div class="flex gap-2 mt-5">
         <button class="btn btn-dark text-sm" id="btn-save-societe"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
@@ -1129,10 +1137,9 @@
     if ($('f-assur-assureur')) $('f-assur-assureur').value = assur.assureur || '';
     if ($('f-assur-police')) $('f-assur-police').value = assur.police || '';
     // Portail conducteur (QR) — par société.
-    const portail = (s && typeof s === 'object' && FP.settings.get().portail) || {};
-    if ($('f-portail-assist'))  $('f-portail-assist').value  = portail.assistanceNumero || '';
-    if ($('f-portail-notice'))  $('f-portail-notice').value  = portail.assistanceNotice || '';
-    if ($('f-portail-constat')) $('f-portail-constat').value = portail.constatUrl || '';
+    const portail = (FP.settings.get().portail) || {};
+    if ($('f-portail-assist')) $('f-portail-assist').value = portail.assistanceNumero || '';
+    if (window._paintPortailNotice) window._paintPortailNotice();
     renderSocietesUI();
     renderProfilForm();
   }
@@ -1157,14 +1164,9 @@
         police: $('f-assur-police') ? $('f-assur-police').value.trim() : ((current.assuranceContrat || {}).police || ''),
       };
     }
-    // Portail conducteur (QR) — infos affichées au conducteur (par société, synchronisé).
-    if ($('f-portail-assist') || $('f-portail-notice') || $('f-portail-constat')) {
-      current.portail = {
-        ...(current.portail || {}),
-        assistanceNumero: $('f-portail-assist') ? $('f-portail-assist').value.trim() : ((current.portail || {}).assistanceNumero || ''),
-        assistanceNotice: $('f-portail-notice') ? $('f-portail-notice').value.trim() : ((current.portail || {}).assistanceNotice || ''),
-        constatUrl: $('f-portail-constat') ? $('f-portail-constat').value.trim() : ((current.portail || {}).constatUrl || ''),
-      };
+    // Portail conducteur (QR) — le numéro (la notice est enregistrée à l'upload, on la préserve).
+    if ($('f-portail-assist')) {
+      current.portail = { ...(current.portail || {}), assistanceNumero: $('f-portail-assist').value.trim() };
     }
     FP.settings.save(current);
     const wel = $('onboard-welcome'); if (wel) wel.style.display = 'none'; // onboarding terminé
@@ -2250,6 +2252,37 @@
       };
       reader.readAsDataURL(f);
       e.target.value = '';
+    });
+    paint();
+  })();
+
+  // Portail conducteur : upload de la NOTICE d'assistance (PDF) → stockage plateforme, par société.
+  (function initPortailNotice() {
+    const g = id => document.getElementById(id);
+    const btn = g('portail-notice-btn'), file = g('portail-notice-file'), view = g('portail-notice-view'), del = g('portail-notice-del'), status = g('portail-notice-status');
+    if (!btn) return;
+    async function paint() {
+      let url = ''; try { url = ((FP.settings.get().portail) || {}).assistanceNotice || ''; } catch (e) {}
+      if (url) {
+        if (view) { view.classList.remove('hidden'); try { view.href = (FP.signedScanUrl ? await FP.signedScanUrl(url, 3600) : url); } catch (e) { view.href = url; } }
+        if (del) del.classList.remove('hidden');
+        if (status) status.textContent = 'Notice enregistrée ✓';
+      } else {
+        if (view) view.classList.add('hidden');
+        if (del) del.classList.add('hidden');
+        if (status) status.textContent = 'Aucune notice pour cette société.';
+      }
+    }
+    window._paintPortailNotice = paint;
+    function saveUrl(url) { const s = FP.settings.get(); s.portail = (s.portail && typeof s.portail === 'object') ? s.portail : {}; if (url) s.portail.assistanceNotice = url; else delete s.portail.assistanceNotice; FP.settings.save(s); paint(); }
+    btn.addEventListener('click', () => file && file.click());
+    if (del) del.addEventListener('click', () => saveUrl(''));
+    if (file) file.addEventListener('change', async (e) => {
+      const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+      if (!(window.FP && FP.uploadScan)) { if (status) status.textContent = 'Connexion requise.'; return; }
+      if (status) status.textContent = 'Envoi…';
+      try { const url = await FP.uploadScan(f, 'notices'); if (!url) throw new Error('upload'); saveUrl(url); }
+      catch (er) { if (status) status.textContent = "Échec de l'envoi. Réessaie."; }
     });
     paint();
   })();

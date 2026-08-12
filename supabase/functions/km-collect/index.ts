@@ -68,9 +68,37 @@ async function vehKm(db: ReturnType<typeof createClient>, vehiculeId: string | n
 async function vehInfo(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
   if (!vehiculeId) return null;
   const { data: v } = await db.from("vehicules")
-    .select("marque,modele,carburant,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id")
+    .select("marque,modele,carburant,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur")
     .eq("id", vehiculeId).maybeSingle();
   return v || null;
+}
+
+// Signe une URL Supabase Storage (bucket privé) pour qu'elle soit ouvrable depuis la page publique.
+// Les URLs non-Storage (déjà publiques) sont renvoyées telles quelles.
+async function signUrl(db: ReturnType<typeof createClient>, url: string) {
+  const u = String(url || "");
+  const m = u.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/]+)\/([^?]+)/);
+  if (!m) return url;
+  let path = m[2]; try { path = decodeURIComponent(path); } catch { /* garde */ }
+  try {
+    const { data } = await db.storage.from(m[1]).createSignedUrl(path, 3600);
+    return (data && data.signedUrl) ? data.signedUrl : url;
+  } catch { return url; }
+}
+
+// Conducteur (prénom / nom / poste) rattaché au véhicule, retrouvé par le nom « chauffeur » du véhicule.
+function _norm(s: string) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, ""); }
+async function vehConducteur(db: ReturnType<typeof createClient>, chauffeur: string, societe: string) {
+  const name = String(chauffeur || "").trim();
+  if (!name || name === "—") return null;
+  const { data } = await db.from("conducteurs").select("prenom,nom,poste,name").eq("societe", societe || "PXP");
+  const key = _norm(name);
+  const hit = (data || []).find((c: Record<string, unknown>) => {
+    const full = _norm(String(c.prenom || "") + String(c.nom || ""));
+    return full === key || _norm(String(c.name || "")) === key;
+  });
+  if (!hit) return { prenom: name.split(" ")[0] || name, nom: name.split(" ").slice(1).join(" "), poste: "" };
+  return { prenom: String(hit.prenom || ""), nom: String(hit.nom || ""), poste: String(hit.poste || "") };
 }
 
 // Documents consultables du véhicule (carte grise + mémo + autres), depuis la table `documents`
@@ -118,6 +146,8 @@ async function portalConfig(db: ReturnType<typeof createClient>, societe: string
   const s = (data && data.data && typeof data.data === "object") ? data.data as Record<string, unknown> : {};
   const p = (s.portail && typeof s.portail === "object") ? s.portail as Record<string, unknown> : {};
   const ass = (s.assuranceContrat && typeof s.assuranceContrat === "object") ? s.assuranceContrat as Record<string, unknown> : {};
+  const prof = (s.profil && typeof s.profil === "object") ? s.profil as Record<string, unknown> : {};
+  const socObj = (s.societe && typeof s.societe === "object") ? s.societe as Record<string, unknown> : {};
   // PXP : valeurs historiques par défaut (comme FP.assuranceContrat côté client).
   const assureur = String(ass.assureur || (soc === "PXP" ? "SWISSLIFE" : "")).trim();
   const police = String(ass.police || (soc === "PXP" ? "011165247/0599" : "")).trim();
@@ -128,6 +158,8 @@ async function portalConfig(db: ReturnType<typeof createClient>, societe: string
     constatUrl: String(p.constatUrl || "").trim(),
     reglesTexte: String(p.reglesTexte || "").trim(),
     reglesLien: String(p.reglesLien || "").trim(),
+    logo: String(prof.logoDataUrl || "").trim(),          // logo société (data URL) pour l'en-tête du portail
+    societeNom: String(socObj.nom || "").trim(),
   };
 }
 
@@ -179,17 +211,22 @@ Deno.serve(async (req) => {
         // `full=1` (portail v.html) : on joint infos véhicule + documents + EDL + config société.
         if (url.searchParams.get("full") === "1") {
           const veh = await vehInfo(db, qr.vehicule_id);
-          const [docs, edl, portal] = await Promise.all([
+          const [docs0, edl0, portal, conducteur] = await Promise.all([
             vehDocs(db, qr.vehicule_id, veh),
             vehEdl(db, qr.vehicule_id),
             portalConfig(db, qr.societe || "PXP"),
+            vehConducteur(db, veh ? String(veh.chauffeur || "") : "", qr.societe || "PXP"),
           ]);
+          // Bucket privé → on SIGNE les URLs pour qu'elles s'ouvrent depuis la page publique.
+          const docs = await Promise.all(docs0.map(async (d) => ({ ...d, url: await signUrl(db, d.url) })));
+          const edl = await Promise.all(edl0.map(async (e) => ({ ...e, url: await signUrl(db, e.url) })));
+          if (portal.assistanceNotice) portal.assistanceNotice = await signUrl(db, portal.assistanceNotice);
           const info = veh ? {
             marque: veh.marque || "", modele: veh.modele || "", carburant: veh.carburant || "",
             km: veh.km != null ? Number(veh.km) : null,
             prochainCT: veh.prochain_ct || "", dateMiseEnCirculation: veh.date_mise_en_circulation || "",
           } : null;
-          return json({ ...base, veh: info, docs, edl, portal });
+          return json({ ...base, veh: info, docs, edl, portal, conducteur });
         }
         return json(base);
       }
