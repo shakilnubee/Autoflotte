@@ -775,7 +775,7 @@
       <h2 class="text-xl font-extrabold" id="cg-batch-title">Import en lot — cartes grises</h2>
       <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="cg-batch-close"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
-    <p class="text-sm text-slate-500 mb-3">Chaque carte grise lue devient un véhicule. Vérifie / corrige les champs détectés, décoche ceux que tu ne veux pas créer, puis valide. La lecture se fait dans ton navigateur (rien n'est envoyé sur un serveur).</p>
+    <p class="text-sm text-slate-500 mb-3">Dépose <b>autant de cartes grises que tu veux</b>. Pour chacune, Parc Pilot regarde l'immatriculation : <b>🔗 déjà connue</b> → la carte grise est <b>rattachée à la fiche existante</b> (aucun doublon) ; <b>➕ nouvelle</b> → une <b>fiche est créée</b>. La carte grise est <b>enregistrée sur la plateforme</b> (visible aussi dans le QR conducteur). Corrige les champs détectés si besoin, décoche les lignes à ignorer, puis valide.</p>
     <div id="cg-batch-progress" class="text-xs rounded-lg px-3 py-2 mb-3" style="background:#F1F5F9;color:#475569;"></div>
     <div class="overflow-x-auto">
       <table class="w-full text-sm border-collapse" id="cg-batch-table">
@@ -783,6 +783,7 @@
           <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
             <th class="py-2 pr-2"><input type="checkbox" id="cg-batch-all" class="accent-teal-600 w-4 h-4" checked title="Tout cocher/décocher"></th>
             <th class="py-2 pr-2">Fichier</th>
+            <th class="py-2 pr-2">État</th>
             <th class="py-2 pr-2">Immat *</th>
             <th class="py-2 pr-2">Marque *</th>
             <th class="py-2 pr-2">Modèle *</th>
@@ -798,7 +799,7 @@
     </div>
     <div class="flex gap-2 pt-4">
       <button type="button" class="btn btn-outline flex-1 justify-center" id="cg-batch-cancel">Annuler</button>
-      <button type="button" class="btn btn-dark flex-1 justify-center" id="cg-batch-create"><i data-lucide="check" class="w-4 h-4"></i> <span id="cg-batch-create-label">Créer les véhicules</span></button>
+      <button type="button" class="btn btn-dark flex-1 justify-center" id="cg-batch-create"><i data-lucide="check" class="w-4 h-4"></i> <span id="cg-batch-create-label">Importer les cartes grises</span></button>
     </div>
   </div>
 </div>
@@ -4881,6 +4882,24 @@
   // ============================================================
   let _cgBatch = []; // [{ file, parsed:{immat,marque,...}, include:true }]
 
+  // Une carte grise « déjà sur la plateforme » = un lien de stockage NON Drive (règle : plus de Drive).
+  const hasPlatformCg = v => !!(v && v.cgUrl && !/drive\.google|docs\.google/i.test(v.cgUrl));
+  // Véhicule existant correspondant à l'immat lue (source unique : anti-doublon FP.dupe → immatriculation).
+  function batchExisting(p) {
+    if (!p || !p.immat) return null;
+    try { if (FP.dupe && FP.dupe.find) return FP.dupe.find('vehicules', { immat: p.immat }, data.vehicules) || null; } catch (e) {}
+    const nm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return data.vehicules.find(v => nm(v.immat) === nm(p.immat)) || null;
+  }
+  // Badge « 🔗 Rattacher » (immat déjà connue) ou « ➕ Nouveau » (fiche à créer).
+  function batchStatusBadge(p) {
+    if (!p || !p.immat) return '<span class="text-xs text-slate-400">—</span>';
+    const ex = batchExisting(p);
+    if (!ex) return '<span class="text-xs font-bold" style="color:#2563eb;white-space:nowrap" title="Immatriculation inconnue : une nouvelle fiche véhicule sera créée">➕ Nouveau</span>';
+    if (hasPlatformCg(ex)) return '<span class="text-xs font-bold" style="color:#64748B;white-space:nowrap" title="La carte grise est déjà sur la plateforme pour ce véhicule : rien à faire (pas de doublon)">✓ Déjà à jour</span>';
+    return '<span class="text-xs font-bold" style="color:#0f766e;white-space:nowrap" title="Immatriculation déjà connue : la carte grise sera rattachée à la fiche existante (aucun doublon)">🔗 Rattacher</span>';
+  }
+
   function batchProgress(msg, type) {
     const el = $('cg-batch-progress');
     const colors = { working: 'background:#F1F5F9;color:#475569;', ok: 'background:#ECFDF5;color:#047857;', error: 'background:#FEF2F2;color:#B91C1C;' };
@@ -4899,6 +4918,7 @@
       return `<tr class="border-b border-slate-100 ${incomplete ? 'bg-amber-50/50' : ''}" data-row="${i}">
         <td class="py-1.5 pr-2 align-middle"><input type="checkbox" class="cgb-inc accent-teal-600 w-4 h-4" data-i="${i}" ${row.include ? 'checked' : ''}></td>
         <td class="py-1.5 pr-2 align-middle text-xs text-slate-500 max-w-[120px] truncate" title="${esc(row.file.name)}">${esc(row.file.name)}${incomplete ? ' <span class="text-amber-600" title="Champs manquants">⚠</span>' : ''}</td>
+        <td class="py-1.5 pr-2 align-middle" data-status="${i}">${batchStatusBadge(p)}</td>
         <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs font-mono" style="min-width:96px" data-i="${i}" data-k="immat" value="${esc(p.immat)}" placeholder="AB-123-CD"></td>
         <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs" style="min-width:90px" data-i="${i}" data-k="marque" value="${esc(p.marque)}"></td>
         <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs" style="min-width:90px" data-i="${i}" data-k="modele" value="${esc(p.modele)}"></td>
@@ -4914,7 +4934,7 @@
 
   function updateBatchCreateLabel() {
     const n = _cgBatch.filter(r => r.include).length;
-    $('cg-batch-create-label').textContent = n > 0 ? `Créer les ${n} véhicule${n > 1 ? 's' : ''}` : 'Créer les véhicules';
+    $('cg-batch-create-label').textContent = n > 0 ? `Importer les ${n} carte${n > 1 ? 's' : ''} grise${n > 1 ? 's' : ''}` : 'Importer les cartes grises';
     $('cg-batch-create').disabled = n === 0;
     $('cg-batch-create').style.opacity = n === 0 ? '.5' : '';
   }
@@ -4993,14 +5013,39 @@
 
     FP.history.commit();
     $('cg-batch-create').disabled = true;
-    let done = 0, failed = 0, skipped = 0;
+    const isEmptyV = x => x == null || String(x).trim() === '' || String(x).trim() === '—';
+    const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+    const nm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    let done = 0, attached = 0, already = 0, failed = 0;
     for (let i = 0; i < valides.length; i++) {
       const p = valides[i].parsed;
+      const existing = batchExisting(p);
+
+      // ===== Immatriculation DÉJÀ connue → on RATTACHE la carte grise à la fiche (jamais de doublon) =====
+      if (existing) {
+        if (hasPlatformCg(existing)) { already++; continue; } // déjà sur la plateforme → rien à faire
+        batchProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Rattachement ${i + 1}/${valides.length} — ${p.immat}…</span>`, 'working');
+        let cgUrl = '';
+        try { cgUrl = await FP.uploadScan(valides[i].file, 'cartes-grises') || ''; } catch (e) { console.error('[batch upload]', e); }
+        if (cgUrl) existing.cgUrl = cgUrl;
+        // Complète UNIQUEMENT les champs encore vides (non destructif — on n'écrase jamais l'existant).
+        const fill = {
+          vin: (p.vin || '').toUpperCase(), co2: num(p.co2), puissanceFiscale: num(p.puissanceFiscale),
+          dateMiseEnCirculation: p.dateMiseEnCirculation, prochainCT: p.prochainCT,
+          carburant: (FP.normCarburant ? FP.normCarburant(p.carburant) : p.carburant),
+          categorie: (p.categorie && String(p.categorie).trim()) || '',
+        };
+        Object.keys(fill).forEach(k => { const nv = fill[k]; if (nv != null && nv !== '' && isEmptyV(existing[k])) existing[k] = nv; });
+        if (Number.isFinite(p.masse)) { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; if (isEmptyV(s.vehMasse[existing.id])) { s.vehMasse[existing.id] = p.masse; FP.settings.save(s); } }
+        const ok = cgUrl ? await persistVehicleUpsert(existing, true) : true;
+        if (ok) attached++; else failed++;
+        continue;
+      }
+
+      // ===== Immatriculation NOUVELLE → on CRÉE la fiche =====
       batchProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Création ${i + 1}/${valides.length} — ${p.immat}…</span>`, 'working');
-      // Upload du scan (facultatif : on continue même en cas d'échec)
       let cgUrl = '';
       try { cgUrl = await FP.uploadScan(valides[i].file, 'cartes-grises') || ''; } catch (e) { console.error('[batch upload]', e); }
-      const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
       const newV = {
         id: nextVehId(),
         immat: String(p.immat).toUpperCase(),
@@ -5016,7 +5061,6 @@
       };
       // Modèle identique à un véhicule déjà renseigné → on reprend les specs communes
       // (catégorie, carburant, CO2, puissance, version, DIN) que la carte grise ne donne pas.
-      const nm = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
       const twin = data.vehicules.find(v => v.id !== newV.id && nm(v.marque) === nm(newV.marque) && nm(v.modele) === nm(newV.modele) && (v.categorie || v.carburant || v.co2 != null));
       if (twin) {
         if (!newV.categorie || newV.categorie === 'Berline') newV.categorie = twin.categorie || newV.categorie;
@@ -5029,16 +5073,19 @@
       const masseVal = Number.isFinite(p.masse) ? p.masse : (twin ? (FP.settings.get().vehMasse || {})[twin.id] : null);
       if (masseVal) { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; s.vehMasse[newV.id] = masseVal; FP.settings.save(s); }
       if (cgUrl) newV.cgUrl = cgUrl;
-      // Anti-doublon : immatriculation déjà présente → on ne recrée pas le véhicule.
-      if (FP.dupe && FP.dupe.find('vehicules', newV, data.vehicules)) { skipped++; continue; }
       data.vehicules.push(newV);
       const ok = await persistVehicleUpsert(newV, true);
       if (ok) done++; else { failed++; }
     }
     renderKPIs(); renderTabBar(); renderTable();
-    const skipMsg = skipped ? ` · ${skipped} doublon(s) ignoré(s) (immatriculation déjà présente)` : '';
-    if (failed) batchProgress(`<b>${done} véhicule(s) créé(s)</b>, mais ${failed} n'ont pas pu être enregistrés en base (voir console). Ils restent visibles localement.${skipMsg}`, 'error');
-    else { batchProgress(`<b>✓ ${done} véhicule(s) créé(s) et enregistré(s).</b>${skipMsg}`, 'ok'); setTimeout(closeBatchModal, 1200); }
+    if ($('drawer').classList.contains('open') && state.editingId) openDrawer(state.editingId);
+    const parts = [];
+    if (done) parts.push(`${done} fiche(s) créée(s)`);
+    if (attached) parts.push(`${attached} carte(s) grise(s) rattachée(s) à une fiche existante`);
+    if (already) parts.push(`${already} déjà à jour`);
+    const bilan = parts.length ? parts.join(' · ') : 'Rien à faire';
+    if (failed) batchProgress(`<b>${bilan}</b>, mais ${failed} n'ont pas pu être enregistrés en base (voir console).`, 'error');
+    else { batchProgress(`<b>✓ ${bilan}.</b>`, 'ok'); setTimeout(closeBatchModal, 1600); }
   }
 
   // Délégation : édition des champs + cases à cocher dans le tableau d'import en lot
@@ -5050,6 +5097,8 @@
     let val = el.value;
     if (k === 'immat') val = val.toUpperCase();
     _cgBatch[+i].parsed[k] = val;
+    // Immat modifiée → recalcule le badge « Rattacher / Nouveau » de cette ligne (sans re-render).
+    if (k === 'immat') { const cell = $('cg-batch-tbody').querySelector('[data-status="' + i + '"]'); if (cell) cell.innerHTML = batchStatusBadge(_cgBatch[+i].parsed); }
   });
   $('cg-batch-all').addEventListener('change', (e) => {
     const on = e.target.checked;
