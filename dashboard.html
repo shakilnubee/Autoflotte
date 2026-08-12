@@ -282,6 +282,22 @@
       <div id="onb-steps" class="grid sm:grid-cols-2 gap-2"></div>
     </div>
 
+    <!-- Alerte AUTO : service IA indisponible (admin uniquement, testé en silence 1×/jour) -->
+    <div id="ia-down-banner" class="card p-4 mb-6" style="display:none;background:linear-gradient(145deg,#fff,#fff7ed);border-color:#fed7aa">
+      <div class="flex items-start gap-3">
+        <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0" style="color:#ea580c;margin-top:2px"></i>
+        <div class="flex-1 min-w-0">
+          <div class="font-bold text-slate-900">Scanner IA momentanément indisponible</div>
+          <div id="ia-down-msg" class="text-sm text-slate-600 mt-0.5"></div>
+          <div class="text-xs text-slate-400 mt-1">Les scans se font en lecture locale (limitée) en attendant. Tu peux tester/réparer ci-dessous.</div>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <a href="pages/parametres.html" class="btn btn-dark text-xs"><i data-lucide="activity" class="w-3.5 h-3.5"></i> Ouvrir Paramètres → Données</a>
+            <button type="button" id="ia-down-dismiss" class="btn btn-outline text-xs">Masquer aujourd'hui</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- KPIs -->
     <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
       <a href="pages/vehicules.html" class="kpi" style="cursor:pointer" title="Voir tous les véhicules">
@@ -1938,5 +1954,49 @@
 </script>
 
 <!-- (Assistant IA retiré du tableau de bord à la demande de l'utilisateur.) -->
+
+<!-- Surveillance AUTO du service IA : teste en silence 1×/jour (admin), prévient SEULEMENT si en panne.
+     But : ne plus découvrir une panne IA « en plein scan » — on est alerté dès l'ouverture du tableau
+     de bord, avec la vraie raison. Aucun appel si déjà testé aujourd'hui (throttle localStorage). -->
+<script>
+(function iaHealthBanner(){
+  function today(){ return new Date().toISOString().slice(0,10); }
+  function show(msg){
+    var b=document.getElementById('ia-down-banner'); if(!b) return;
+    var m=document.getElementById('ia-down-msg'); if(m) m.textContent = msg || 'Le service IA ne répond pas.';
+    b.style.display='';
+    try{ if(window.lucide) lucide.createIcons(); }catch(e){}
+  }
+  function run(){
+    try{
+      if(!(window.FP && FP.aiHealth && FP.isAdmin && FP.isAdmin())) return;      // admin/CEO uniquement
+      var t=today();
+      if(localStorage.getItem('fp_ia_health_dismiss')===t) return;               // « masqué aujourd'hui »
+      if(localStorage.getItem('fp_ia_health_day')===t){                          // déjà testé aujourd'hui
+        if(localStorage.getItem('fp_ia_health_ok')==='0') show(localStorage.getItem('fp_ia_health_msg')||'');
+        return;
+      }
+      FP.aiHealth().then(function(r){
+        localStorage.setItem('fp_ia_health_day', t);
+        if(r && r.ok){ localStorage.setItem('fp_ia_health_ok','1'); return; }
+        var lab = FP.aiHealthLabel ? FP.aiHealthLabel(r) : null;
+        var msg = (lab && (lab.msg + (lab.hint ? ' — ' + lab.hint : ''))) || (r && r.reason) || 'Service IA indisponible.';
+        localStorage.setItem('fp_ia_health_ok','0');
+        localStorage.setItem('fp_ia_health_msg', msg);
+        show(msg);
+      }).catch(function(){});
+    }catch(e){}
+  }
+  document.addEventListener('click', function(e){
+    if(e.target && e.target.closest && e.target.closest('#ia-down-dismiss')){
+      localStorage.setItem('fp_ia_health_dismiss', today());
+      var b=document.getElementById('ia-down-banner'); if(b) b.style.display='none';
+    }
+  });
+  // Le rôle vient du profil (chargé en async) → on tente après un court délai + à l'arrivée des données.
+  setTimeout(run, 2500);
+  document.addEventListener('fp:data-ready', function(){ setTimeout(run, 800); });
+})();
+</script>
 </body>
 </html>
