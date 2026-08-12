@@ -5692,7 +5692,11 @@ FP.aiContext = function (data) {
 // flotte (FP.aiContext). Astuce : le relais « scan-doc » attend une IMAGE ; on lui
 // envoie donc un PNG 1×1 transparent + tout le raisonnement dans le prompt texte,
 // sans rien changer côté serveur. Renvoie une string (la réponse) ou null.
-FP._AI_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+// ⚠️ Image « vide » envoyée pour les appels SANS document (test de santé IA + questions de l'assistant).
+// NE PAS remettre un pixel 1×1 : l'API Anthropic a durci sa validation et REJETTE les images 1×1
+// (« Could not process image ») → faux « IA indisponible » + assistant cassé, alors que le code n'a
+// pas bougé (c'est le fournisseur qui a changé). On envoie donc une vraie petite image blanche 120×120.
+FP._AI_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAIAAAC2BqGFAAAArElEQVR42u3QMQEAAAwCIPuX1hbbAxFIOREFokUjWrRoRItGtGjRiBaNaNGiES0a0aJFI1o0okWLRrRoRIsWjWjRiBYtGtGiES1aNKJFI1q0aESLRrRo0YgWjWjRohEtGtGiRSNaNKJFi0a0aESLFo1o0YgWLRrRohEtWjSiRSNatGhEi0a0aNGIFo1o0aIRLRrRokUjWjSiRYtGtGhEixaNaNGIFi0a0aIR/W9X9yEZOQxh8QAAAABJRU5ErkJggg==';
 FP.askIA = async function (question, opts) {
   opts = opts || {};
   question = String(question || '').trim();
