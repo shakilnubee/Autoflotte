@@ -464,30 +464,52 @@ FP.primeVeh = (v) => {
 FP.assuranceAnnuelle = (vehicules) => (vehicules || []).filter(v => !FP.estVendu(v)).reduce((s, v) => s + FP.primeVeh(v), 0);
 
 // ============================================================================
-// AVANTAGE EN NATURE (AEN) — méthode FORFAIT (barème URSSAF). Le barème est NATIONAL (même pour
-// toutes les sociétés) ; le montant dépend du véhicule (acheté/loué, prix/loyer, énergie, carburant
-// fourni ou non, âge). ⚠️ Les taux sont RÉGLABLES (settings.aen, synchronisés par société) car
-// l'URSSAF les révise — défauts = barème 2025 (mise à disposition depuis le 01/02/2025), à vérifier.
-// Source unique : tout affichage AEN passe par FP.aenDetail. ============================================
+// AVANTAGE EN NATURE (AEN) — méthode FORFAIT (barème URSSAF, national). DEUX barèmes coexistent :
+//  • ANCIEN  (véhicule mis à disposition AVANT le 01/02/2025) : acheté 9 %/6 %, loué 30 %, abatt. élec 50 %.
+//  • NOUVEAU (mis à disposition DEPUIS le 01/02/2025 — réforme) : acheté 15 %/10 %, loué 50 %, abatt. élec 70 %.
+// PP choisit AUTOMATIQUEMENT le bon barème selon la DATE DE MISE À DISPOSITION (début d'affectation au
+// conducteur, sinon 1re mise en circulation), avec override possible par véhicule (settings.aenBareme[id]
+// ∈ 'ancien'|'nouveau'). Taux 100 % réglables (settings.aen, synchronisés). Source unique = FP.aenDetail.
 FP.AEN_DEFAULTS = {
   actif: true,
-  tauxAcheteMoins5: 15,   // % du prix d'achat TTC, véhicule acheté de MOINS de 5 ans
-  tauxAchetePlus5: 10,    // % du prix d'achat TTC, véhicule acheté de 5 ans et plus
-  supplAchatCarb: 5,      // +points si l'employeur paie le carburant (acheté) → 20 / 15
-  tauxLoue: 50,           // % du coût global annuel (loyer + assurance), véhicule loué (LLD/LOA)
-  supplLoueCarb: 17,      // +points si carburant fourni (loué) → 67
-  carburantFourni: true,  // l'employeur fournit le carburant (global ; la plupart des flottes à carte carburant)
-  inclureAssurance: true, // inclure la prime d'assurance dans le coût global annuel du véhicule loué
-  abattementElec: 70,     // % d'abattement pour véhicule 100% électrique
-  plafondElecAnnuel: 4582 // plafond annuel de l'abattement électrique (€)
+  carburantFourni: true,   // l'employeur fournit le carburant (global ; flottes à carte carburant)
+  inclureAssurance: true,  // inclure la prime d'assurance dans le coût global annuel du véhicule loué
+  bascule: '2025-02-01',   // date charnière ancien ↔ nouveau barème
+  ancien:  { tauxAcheteMoins5: 9,  tauxAchetePlus5: 6,  supplAchatCarb: 3,  tauxLoue: 30, supplLoueCarb: 10, abattementElec: 50, plafondElecAnnuel: 1964 },
+  nouveau: { tauxAcheteMoins5: 15, tauxAchetePlus5: 10, supplAchatCarb: 5,  tauxLoue: 50, supplLoueCarb: 17, abattementElec: 70, plafondElecAnnuel: 4582 }
 };
-FP.aenConfig = () => { try { return Object.assign({}, FP.AEN_DEFAULTS, (FP.settings.get().aen || {})); } catch (e) { return Object.assign({}, FP.AEN_DEFAULTS); } };
+FP.aenConfig = () => {
+  try {
+    const s = FP.settings.get().aen || {};
+    const c = Object.assign({}, FP.AEN_DEFAULTS, s);
+    c.ancien = Object.assign({}, FP.AEN_DEFAULTS.ancien, s.ancien || {});
+    c.nouveau = Object.assign({}, FP.AEN_DEFAULTS.nouveau, s.nouveau || {});
+    return c;
+  } catch (e) { const c = Object.assign({}, FP.AEN_DEFAULTS); c.ancien = Object.assign({}, FP.AEN_DEFAULTS.ancien); c.nouveau = Object.assign({}, FP.AEN_DEFAULTS.nouveau); return c; }
+};
+// Date de mise à DISPOSITION au salarié (≈ début d'affectation ; repli sur 1re mise en circulation).
+FP.aenDateMiseADispo = (v) => {
+  try { if (FP.affectations && FP.affectations.debutAffiche) { const d = FP.affectations.debutAffiche(v); if (d) { const dd = new Date(d); if (!isNaN(dd)) return dd; } } } catch (e) {}
+  if (v && v.dateMiseEnCirculation) { const dd = new Date(v.dateMiseEnCirculation); if (!isNaN(dd)) return dd; }
+  return null;
+};
+// Quel barème pour ce véhicule ? Override par véhicule prioritaire, sinon selon la date vs bascule.
+FP.aenBaremePour = (v, cfg) => {
+  cfg = cfg || FP.aenConfig();
+  try { const ov = (FP.settings.get().aenBareme || {})[v && v.id]; if (ov === 'ancien' || ov === 'nouveau') return ov; } catch (e) {}
+  const d = FP.aenDateMiseADispo(v);
+  const bascule = new Date(cfg.bascule || '2025-02-01');
+  if (d && !isNaN(d) && !isNaN(bascule) && d < bascule) return 'ancien';
+  return 'nouveau';
+};
 // Renvoie le détail AEN d'un véhicule, ou null si non calculable / non concerné.
-//   { applicable, method:'acheté'|'loué', elec, base, taux, brutAnnuel, abattement, netAnnuel, netMensuel, reason? }
+//   { applicable, method:'acheté'|'loué', bareme:'ancien'|'nouveau', elec, base, taux, brutAnnuel, abattement, netAnnuel, netMensuel, reason? }
 FP.aenDetail = (v) => {
   if (!v || (FP.estVendu && FP.estVendu(v))) return null;
   const cfg = FP.aenConfig();
   if (!cfg.actif) return null;
+  const bareme = FP.aenBaremePour(v, cfg);
+  const b = cfg[bareme] || FP.AEN_DEFAULTS[bareme];
   const carbFourni = !!cfg.carburantFourni;
   const elec = (FP.normCarburant ? FP.normCarburant(v.carburant) : v.carburant) === 'Électrique';
   const c = FP.leasingContrat ? FP.leasingContrat(v.immat) : null;
@@ -495,30 +517,30 @@ FP.aenDetail = (v) => {
   if (c && (!FP.leasingActif || FP.leasingActif(c))) {
     const info = FP.leasingInfo ? FP.leasingInfo(v) : null;
     const loyer = (info && info.loyer != null) ? info.loyer : (c.loyer != null ? Number(c.loyer) : null);
-    if (loyer == null || !(loyer > 0)) return { applicable: false, method: 'loué', elec, reason: "loyer inconnu" };
+    if (loyer == null || !(loyer > 0)) return { applicable: false, method: 'loué', bareme, elec, reason: "loyer inconnu" };
     loyerAnnuel = loyer * 12;
     const assur = cfg.inclureAssurance ? (FP.primeVeh ? (FP.primeVeh(v) || 0) : 0) : 0;
     base = loyerAnnuel + assur;
-    taux = Number(cfg.tauxLoue) + (carbFourni ? Number(cfg.supplLoueCarb) : 0);
+    taux = Number(b.tauxLoue) + (carbFourni ? Number(b.supplLoueCarb) : 0);
     method = 'loué';
   } else {
     const val = Number(v.valeurAchat) || 0;
-    if (!(val > 0)) return { applicable: false, method: 'acheté', elec, reason: "valeur d'achat inconnue" };
+    if (!(val > 0)) return { applicable: false, method: 'acheté', bareme, elec, reason: "valeur d'achat inconnue" };
     base = val;
     const mec = v.dateMiseEnCirculation ? new Date(v.dateMiseEnCirculation) : null;
     const ageAns = (mec && !isNaN(mec)) ? (Date.now() - mec.getTime()) / (365.25 * 864e5) : null;
     const moins5 = (ageAns == null || ageAns < 5);
-    taux = (moins5 ? Number(cfg.tauxAcheteMoins5) : Number(cfg.tauxAchetePlus5)) + (carbFourni ? Number(cfg.supplAchatCarb) : 0);
+    taux = (moins5 ? Number(b.tauxAcheteMoins5) : Number(b.tauxAchetePlus5)) + (carbFourni ? Number(b.supplAchatCarb) : 0);
     method = 'acheté';
   }
   const brutAnnuel = base * taux / 100;
   let abattement = 0;
-  if (elec && Number(cfg.abattementElec) > 0) {
-    abattement = brutAnnuel * Number(cfg.abattementElec) / 100;
-    if (Number(cfg.plafondElecAnnuel) > 0 && abattement > Number(cfg.plafondElecAnnuel)) abattement = Number(cfg.plafondElecAnnuel);
+  if (elec && Number(b.abattementElec) > 0) {
+    abattement = brutAnnuel * Number(b.abattementElec) / 100;
+    if (Number(b.plafondElecAnnuel) > 0 && abattement > Number(b.plafondElecAnnuel)) abattement = Number(b.plafondElecAnnuel);
   }
   const netAnnuel = Math.max(0, brutAnnuel - abattement);
-  return { applicable: true, method, elec, base, taux, brutAnnuel, abattement, netAnnuel, netMensuel: netAnnuel / 12, carbFourni, loyerAnnuel };
+  return { applicable: true, method, bareme, elec, base, taux, brutAnnuel, abattement, netAnnuel, netMensuel: netAnnuel / 12, carbFourni, loyerAnnuel };
 };
 // Total AEN annuel de la flotte (véhicules AVEC conducteur affecté = usage privé possible).
 FP.aenAnnuelFlotte = (vehicules) => (vehicules || []).reduce((s, v) => {
