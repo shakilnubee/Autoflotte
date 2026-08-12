@@ -1105,6 +1105,114 @@ FP.conducteurs = {
   }
 };
 
+// ================= COLLECTE DU KILOMÉTRAGE PAR E-MAIL =================================
+// L'admin/gestionnaire envoie au chauffeur un e-mail avec un LIEN PERSONNEL (token secret).
+// Le chauffeur clique → mini-formulaire public (km.html) → saisit son km → l'Edge Function
+// `km-collect` (service_role) enregistre le relevé et met à jour vehicules.km.
+// Source unique de statut = table km_requests (chargée par FP.kmCollecte.load()).
+FP.kmCollecte = {
+  BASE: 'https://parc-pilot.fr/km.html', // page publique du formulaire (domaine principal)
+  _byVeh: {},   // vehicule_id -> dernière demande (pour le statut sur les fiches)
+  _cache: null,
+  // Charge les demandes de la société (pour afficher « demande envoyée / km reçu » sur les fiches).
+  async load() {
+    try {
+      if (!(window.FP && FP.supabase)) return [];
+      let soc = 'PXP'; try { soc = localStorage.getItem('fp_societe') || 'PXP'; } catch (e) {}
+      let q = FP.supabase.from('km_requests').select('*').order('created_at', { ascending: false });
+      if (soc && soc !== '__all__') q = q.eq('societe', soc);
+      const { data, error } = await q;
+      if (error) throw error;
+      this._cache = data || [];
+      this._byVeh = {};
+      this._cache.forEach(r => { if (r.vehicule_id && !this._byVeh[r.vehicule_id]) this._byVeh[r.vehicule_id] = r; });
+      return this._cache;
+    } catch (e) { console.warn('[kmCollecte.load]', e && (e.message || e)); return []; }
+  },
+  // Dernière demande connue pour un véhicule (ou null).
+  statusFor(v) { try { return (v && this._byVeh[v.id]) || null; } catch (e) { return null; } },
+  // E-mail du chauffeur d'un véhicule (via la fiche conducteur — jamais inventé).
+  emailDe(v) {
+    try {
+      const nm = v && v.chauffeur && String(v.chauffeur).trim();
+      if (!nm || nm === '—') return '';
+      const c = FP.conducteurs.find(nm);
+      return (c && String(c.email || '').trim()) || '';
+    } catch (e) { return ''; }
+  },
+  // Contenu de l'e-mail (branded, avec la plaque et le bouton vers le formulaire).
+  _mail(v, link) {
+    let nomSoc = ''; try { nomSoc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
+    const plaque = FP.esc ? FP.esc(v.immat || '') : (v.immat || '');
+    const marque = FP.esc ? FP.esc(((v.marque || '') + ' ' + (v.modele || '')).trim()) : ((v.marque || '') + ' ' + (v.modele || '')).trim();
+    const prenom = (v.chauffeur ? String(v.chauffeur).trim().split(/\s+/)[0] : '');
+    const subject = 'Relevé kilométrique' + (plaque ? ' — ' + plaque : '');
+    const html = ''
+      + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
+      + '<div style="background:linear-gradient(135deg,#0B1220,#1E293B);color:#fff;padding:20px 22px;border-radius:14px 14px 0 0">'
+      + '<div style="font-weight:900;font-style:italic;font-size:17px">Parc P<span style="color:#F97316">i</span>lot</div>'
+      + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:8px">Relevé kilométrique demandé</div>'
+      + '</div>'
+      + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px">'
+      + '<p style="margin:0 0 12px">' + (prenom ? 'Bonjour ' + FP.esc(prenom) + ',' : 'Bonjour,') + '</p>'
+      + '<p style="margin:0 0 16px;line-height:1.5">Merci d\'indiquer le <b>kilométrage actuel</b> de votre véhicule'
+      + (plaque ? ' <b>' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + '. C\'est rapide : un clic, un nombre, terminé.</p>'
+      + '<p style="text-align:center;margin:22px 0">'
+      + '<a href="' + link + '" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">Indiquer mon kilométrage →</a>'
+      + '</p>'
+      + '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">Si le bouton ne fonctionne pas, copiez ce lien : <br>' + link + '</p>'
+      + (nomSoc ? '<p style="margin:18px 0 0;font-size:13px;color:#64748B">' + FP.esc(nomSoc) + '</p>' : '')
+      + '</div></div>';
+    const text = (prenom ? 'Bonjour ' + prenom + ',\n\n' : 'Bonjour,\n\n')
+      + 'Merci d\'indiquer le kilométrage actuel de votre véhicule' + (plaque ? ' ' + (v.immat || '') : '') + '.\n'
+      + 'Cliquez sur ce lien : ' + link + '\n\n' + (nomSoc || 'Parc Pilot');
+    return { subject, html, text };
+  },
+  // Envoie une demande pour UN véhicule. → { ok, error?, link? }
+  async send(v, opts) {
+    opts = opts || {};
+    if (!v) return { ok: false, error: 'Véhicule inconnu.' };
+    if (!(window.FP && FP.supabase && FP.sendEmail)) return { ok: false, error: 'Connexion requise (envoi en ligne).' };
+    const email = (opts.email || this.emailDe(v)).trim();
+    if (!email) return { ok: false, error: "Pas d'e-mail enregistré pour le chauffeur de ce véhicule." };
+    const token = (self.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '')
+      : (Date.now().toString(36) + Math.random().toString(36).slice(2, 14));
+    let soc = 'PXP'; try { soc = localStorage.getItem('fp_societe') || 'PXP'; } catch (e) {}
+    const societe = (soc === '__all__') ? (v.societe || 'PXP') : soc;
+    const kmAvant = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || null);
+    const days = Number(opts.expireJours) || 21;
+    const row = {
+      token, vehicule_id: v.id, plaque: v.immat || '', societe,
+      chauffeur: v.chauffeur || '', email,
+      km_avant: (kmAvant != null && Number.isFinite(Number(kmAvant))) ? Math.round(Number(kmAvant)) : null,
+      sent_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + days * 864e5).toISOString()
+    };
+    try { const { error } = await FP.supabase.from('km_requests').insert(row); if (error) throw error; }
+    catch (e) { return { ok: false, error: 'Enregistrement impossible : ' + (e.message || e) }; }
+    const link = this.BASE + '?t=' + token;
+    const mail = this._mail(v, link);
+    try { await FP.sendEmail({ to: email, subject: mail.subject, html: mail.html, text: mail.text }); }
+    catch (e) { return { ok: false, error: "Demande créée mais l'e-mail n'est pas parti : " + (e.message || e), link }; }
+    try { this._byVeh[v.id] = row; if (Array.isArray(this._cache)) this._cache.unshift(row); } catch (e) {}
+    return { ok: true, link, email };
+  },
+  // Envoie à une LISTE de véhicules. → { sent:[], skipped:[{v,reason}], failed:[{v,error}] }
+  async sendBatch(list, onProgress) {
+    const res = { sent: [], skipped: [], failed: [] };
+    list = (list || []);
+    for (let i = 0; i < list.length; i++) {
+      const v = list[i];
+      const email = this.emailDe(v);
+      if (!email) { res.skipped.push({ v, reason: "pas d'e-mail" }); if (onProgress) onProgress(i + 1, list.length); continue; }
+      const r = await this.send(v, { email });
+      if (r.ok) res.sent.push(v); else res.failed.push({ v, error: r.error });
+      if (onProgress) onProgress(i + 1, list.length);
+    }
+    return res;
+  }
+};
+
 // ================= INDICATEUR « ENREGISTREMENT EN COURS » (overlay centré, TRÈS visible) =========
 // ⚠️ RÈGLE (consigne explicite) : à CHAQUE enregistrement/import, montrer clairement que ça travaille
 // (spinner « … en cours ») PUIS le résultat (« ✓ … enregistré » / « ✕ échec »), au lieu d'un statut

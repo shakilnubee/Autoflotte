@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260812a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260812b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260812a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260812b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260812a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260812b">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -458,7 +458,8 @@
           <option>Utilitaire</option>
         </select>
 
-        <button id="btn-completer-cg" class="btn btn-outline text-sm ml-auto" title="Lire les cartes grises déjà stockées et remplir automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates)"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Compléter depuis les cartes grises</button>
+        <button id="btn-km-mail" class="btn btn-outline text-sm ml-auto" title="Envoyer par e-mail à chaque chauffeur (du groupe affiché) une demande de relevé kilométrique — il répond en un clic"><i data-lucide="mail" class="w-4 h-4"></i> Demander le km par mail</button>
+        <button id="btn-completer-cg" class="btn btn-outline text-sm" title="Lire les cartes grises déjà stockées et remplir automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates)"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Compléter depuis les cartes grises</button>
         <button id="btn-fiche-groupe" class="btn btn-outline text-sm" title="Télécharger la liste des véhicules du groupe affiché (ou Tous) en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> Télécharger la fiche</button>
       </div>
     </div>
@@ -817,13 +818,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260812a"></script>
-<script src="../assets/js/supabase-client.js?v=20260812a"></script>
-<script src="../assets/js/data.js?v=20260812a"></script>
-<script src="../assets/js/fleet-docs.js?v=20260812a"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260812a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260812b"></script>
+<script src="../assets/js/supabase-client.js?v=20260812b"></script>
+<script src="../assets/js/data.js?v=20260812b"></script>
+<script src="../assets/js/fleet-docs.js?v=20260812b"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260812b"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260812a"></script>
+<script src="../assets/js/app.js?v=20260812b"></script>
 <script>
   lucide.createIcons();
 
@@ -2391,6 +2392,8 @@
         <div class="kpi p-3"><div class="kpi-label">Prochaine révision (est.)</div><div class="kpi-value" style="font-size:1rem;${revColor}">${revProchaine}${rev.niveau ? ' ⚠️' : ''}</div></div>
       </div>
 
+      ${(window.FP && FP.kmCollecte) ? kmcBlockHTML(v) : ''}
+
       <div class="fp-panel">
         <div class="field-label">Coût total (entretien, réparation, sinistres à charge)</div>
         <div class="text-2xl font-extrabold" style="color: var(--fp-primary)">${FP.euro(coutGrandTotal)}</div>
@@ -2549,6 +2552,8 @@
     if (m && FP.alertes) { e.preventDefault(); FP.alertes.masquer(m.dataset.vehMute, m.dataset.vehLabel); if (state.editingId) openDrawer(state.editingId); return; }
     const u = e.target.closest('[data-veh-unmute]');
     if (u && FP.alertes) { e.preventDefault(); FP.alertes.reafficher(u.dataset.vehUnmute); if (state.editingId) openDrawer(state.editingId); return; }
+    const k = e.target.closest('[data-kmc-ask]');
+    if (k) { e.preventDefault(); askKmChauffeur(k.getAttribute('data-kmc-ask')); return; }
   });
 
   // ---------- Bouton "Enlever le conducteur" du véhicule ----------
@@ -2638,6 +2643,55 @@
     cur.groupesHidden = (cur.groupesHidden || []).filter(x => x !== k);
     FP.settings.save(cur);
     renderTabBar(); renderKPIs(); renderTable();
+  }
+
+  // === Collecte du kilométrage par e-mail (bouton + statut dans la fiche) ===
+  // Bloc affiché sous « Entretien & échéances » : demander au chauffeur son km par e-mail.
+  function kmcBlockHTML(v) {
+    try {
+      const peutEnvoyer = (FP.isAdmin && FP.isAdmin()) || (FP.isGestionnaire && FP.isGestionnaire());
+      if (!peutEnvoyer) return '';
+      const nm = v.chauffeur && String(v.chauffeur).trim();
+      if (!nm || nm === '—') return '';
+      const email = FP.kmCollecte.emailDe(v);
+      const st = FP.kmCollecte.statusFor(v);
+      let statutHtml = '';
+      if (st) {
+        if (st.used_at) {
+          statutHtml = `<div class="text-xs" style="color:#15803D;margin-top:4px">✅ Km reçu le ${FP.dateNum(st.used_at)}${st.km_recu != null ? ' : <b>' + FP.num(st.km_recu) + ' km</b>' : ''}</div>`;
+        } else if (st.sent_at) {
+          statutHtml = `<div class="text-xs text-slate-500" style="margin-top:4px">⏳ Demande envoyée le ${FP.dateNum(st.sent_at)} — en attente de réponse</div>`;
+        }
+      }
+      const dis = email ? '' : 'opacity:.55;cursor:not-allowed';
+      const hint = email
+        ? `<span class="text-xs text-slate-400">→ ${FP.esc(email)}</span>`
+        : `<span class="text-xs text-amber-600">Aucun e-mail pour ${FP.esc(nm)} — complète sa fiche conducteur</span>`;
+      return `<div class="fp-panel" style="margin-top:.5rem">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <div class="field-label" style="margin-bottom:2px">Relevé kilométrique</div>
+            ${hint}
+            ${statutHtml}
+          </div>
+          <button type="button" class="btn btn-outline text-sm" data-kmc-ask="${v.id}" style="${dis}" ${email ? '' : 'disabled'}>
+            <i data-lucide="mail" class="w-4 h-4"></i> ${st && st.used_at ? 'Redemander le km' : 'Demander le km'}
+          </button>
+        </div>
+      </div>`;
+    } catch (e) { return ''; }
+  }
+  async function askKmChauffeur(id) {
+    const v = data.vehicules.find(x => x.id === id);
+    if (!v) return;
+    const email = FP.kmCollecte.emailDe(v);
+    if (!email) { if (FP.toast) FP.toast("⚠️ Pas d'e-mail pour ce chauffeur — complète sa fiche conducteur."); return; }
+    if (FP.confirm && !(await FP.confirm(`Envoyer une demande de kilométrage à ${FP.esc(v.chauffeur)} (${FP.esc(email)}) ?`))) return;
+    const b = FP.busy ? FP.busy('Envoi de la demande…') : null;
+    const r = await FP.kmCollecte.send(v);
+    if (r.ok) { if (b) b.done('📩 Demande envoyée à ' + email); else if (FP.toast) FP.toast('📩 Demande envoyée à ' + email); }
+    else { if (b) b.fail('⚠️ ' + (r.error || 'Échec')); else alert(r.error || 'Échec'); }
+    if (drawerVehId === v.id && $('drawer').classList.contains('open')) openDrawer(v.id);
   }
 
   // === Persistance Supabase (les ajouts/suppressions sont enregistrés partout) ===
@@ -3503,6 +3557,36 @@
       + (onDrive.length ? `\n${onDrive.length} sur Google Drive (non lisibles par le site) → à re-scanner à la main.` : ''));
   }
   { const b = $('btn-completer-cg'); if (b) b.addEventListener('click', () => { completerDepuisCG().catch(e => { console.error(e); alert('Erreur pendant la complétion.'); const btn = $('btn-completer-cg'); if (btn) btn.disabled = false; }); }); }
+
+  // === Demander le km par mail (LOT) : au groupe affiché (ou à la sélection cochée) ===
+  { const b = $('btn-km-mail'); if (b) {
+    const peutEnvoyer = (FP.isAdmin && FP.isAdmin()) || (FP.isGestionnaire && FP.isGestionnaire());
+    if (!peutEnvoyer || !(window.FP && FP.kmCollecte)) { b.style.display = 'none'; }
+    else b.addEventListener('click', () => askKmLot().catch(e => { console.error(e); alert('Erreur pendant l\'envoi.'); }));
+  } }
+  async function askKmLot() {
+    // Portée : sélection cochée en priorité, sinon le groupe affiché (non vendus).
+    const sel = data.vehicules.filter(v => state.selectedIds.has(v.id));
+    const grp = state.groupe;
+    let base = sel.length ? sel
+      : data.vehicules.filter(v => grp === 'all' ? !FP.estVendu(v) : FP.vehGroupes(v).includes(grp));
+    base = base.filter(v => !FP.estVendu(v) && v.chauffeur && String(v.chauffeur).trim() && String(v.chauffeur).trim() !== '—');
+    const avecMail = base.filter(v => FP.kmCollecte.emailDe(v));
+    const sansMail = base.filter(v => !FP.kmCollecte.emailDe(v));
+    if (!base.length) { alert('Aucun véhicule avec un chauffeur dans ce périmètre.'); return; }
+    if (!avecMail.length) { alert('Aucun chauffeur n\'a d\'e-mail enregistré (complète les fiches conducteurs).'); return; }
+    const portee = sel.length ? `${avecMail.length} véhicule(s) sélectionné(s)` : (grp === 'all' ? `${avecMail.length} véhicule(s)` : `${avecMail.length} véhicule(s) du groupe « ${FP.groupeLabel(grp)} »`);
+    let msg = `Envoyer une demande de relevé kilométrique par e-mail à ${portee} ?`;
+    if (sansMail.length) msg += `\n\n⚠️ ${sansMail.length} chauffeur(s) sans e-mail seront ignorés (${sansMail.slice(0, 4).map(v => v.chauffeur).join(', ')}${sansMail.length > 4 ? '…' : ''}).`;
+    if (FP.confirm && !(await FP.confirm(msg))) return;
+    const bz = FP.busy ? FP.busy('Envoi des demandes… 0/' + avecMail.length) : null;
+    const res = await FP.kmCollecte.sendBatch(avecMail, (done, total) => { if (bz) bz.update('Envoi des demandes… ' + done + '/' + total); });
+    const okN = res.sent.length, koN = res.failed.length;
+    const resume = `📩 ${okN} demande(s) envoyée(s)` + (koN ? ` · ⚠️ ${koN} échec(s)` : '') + (sansMail.length ? ` · ${sansMail.length} sans e-mail ignoré(s)` : '');
+    if (bz) { if (koN) bz.fail(resume); else bz.done(resume); }
+    else if (FP.toast) FP.toast(resume);
+    try { if (drawerVehId && $('drawer').classList.contains('open')) openDrawer(drawerVehId); } catch (e) {}
+  }
 
   { const b = $('btn-fiche-groupe'); if (b) b.addEventListener('click', () => {
       // Si des véhicules sont COCHÉS → la fiche ne prend QUE ceux-là (priorité à la sélection).
@@ -5083,6 +5167,16 @@
     renderTable();
     openVehFromUrl(); // au cas où le véhicule n'existait pas encore avant Supabase
   });
+
+  // Statuts de collecte km (demande envoyée / km reçu) : chargés une fois puis la fiche
+  // ouverte est rafraîchie pour afficher « ✅ km reçu » / « ⏳ en attente ».
+  (function loadKmCollecte() {
+    if (!(window.FP && FP.kmCollecte && FP.kmCollecte.load)) return;
+    const go = () => FP.kmCollecte.load().then(() => {
+      try { if (drawerVehId && $('drawer').classList.contains('open')) openDrawer(drawerVehId); } catch (e) {}
+    });
+    if (FP.supabase) go(); else document.addEventListener('fp:data-ready', go, { once: true });
+  })();
 </script>
 </body>
 </html>
