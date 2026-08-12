@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260811n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260811m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260811n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260811m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260811n">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -358,6 +358,31 @@
       <div class="flex gap-2 mt-5">
         <button class="btn btn-dark text-sm" id="btn-save-societe"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
       </div>
+
+      <!-- Avantage en Nature (AEN) — barème forfaitaire réglable (URSSAF, national) -->
+      <div class="section-title mt-8" style="font-size:.95rem"><i data-lucide="badge-euro" class="w-4 h-4"></i> Avantage en Nature (AEN)</div>
+      <p class="text-sm text-slate-600 mb-1">Barème <b>forfaitaire</b> pour calculer l'avantage en nature des véhicules de fonction — affiché sur chaque fiche véhicule (net mensuel/annuel).</p>
+      <p class="text-xs text-slate-400 mb-3">⚠️ Défauts = barème <b>2025</b> (mise à disposition depuis le 01/02/2025). L'URSSAF révise ces taux : vérifie/ajuste selon ton cas (<a href="https://www.urssaf.fr" target="_blank" rel="noopener" style="color:var(--fp-accent);text-decoration:underline">urssaf.fr</a>). Barème <b>national</b>, identique pour toutes les sociétés — tu ne fais qu'ajuster si la loi change.</p>
+      <div class="flex flex-wrap gap-4 mb-3 text-sm">
+        <label class="inline-flex items-center gap-2"><input type="checkbox" id="aen-actif"> Calcul AEN activé</label>
+        <label class="inline-flex items-center gap-2"><input type="checkbox" id="aen-carb"> L'employeur fournit le carburant</label>
+        <label class="inline-flex items-center gap-2"><input type="checkbox" id="aen-assur"> Inclure l'assurance (véhicule loué)</label>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div><div class="field-label">Acheté &lt; 5 ans (%)</div><input class="field-input" id="aen-a5m" type="number" min="0" step="1"></div>
+        <div><div class="field-label">Acheté ≥ 5 ans (%)</div><input class="field-input" id="aen-a5p" type="number" min="0" step="1"></div>
+        <div><div class="field-label">+ carburant acheté (points)</div><input class="field-input" id="aen-ac" type="number" min="0" step="1"></div>
+        <div><div class="field-label">Loué (%)</div><input class="field-input" id="aen-l" type="number" min="0" step="1"></div>
+        <div><div class="field-label">+ carburant loué (points)</div><input class="field-input" id="aen-lc" type="number" min="0" step="1"></div>
+        <div class="hidden md:block"></div>
+        <div><div class="field-label">Abattement électrique (%)</div><input class="field-input" id="aen-elec" type="number" min="0" max="100" step="1"></div>
+        <div><div class="field-label">Plafond abatt. élec (€/an)</div><input class="field-input" id="aen-plaf" type="number" min="0" step="1"></div>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button class="btn btn-dark text-sm" id="btn-save-aen"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer le barème AEN</button>
+        <button class="btn btn-outline text-sm" id="btn-reset-aen"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Barème par défaut</button>
+      </div>
+      <div id="aen-save-status" class="text-xs mt-2"></div>
     </div>
 
     <!-- Section Données -->
@@ -681,10 +706,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260811m"></script>
-<script src="../assets/js/supabase-client.js?v=20260811m"></script>
-<script src="../assets/js/data.js?v=20260811m"></script>
-<script src="../assets/js/app.js?v=20260811m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260811n"></script>
+<script src="../assets/js/supabase-client.js?v=20260811n"></script>
+<script src="../assets/js/data.js?v=20260811n"></script>
+<script src="../assets/js/app.js?v=20260811n"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1292,6 +1317,40 @@
       setNavHidden(btn.dataset.restore, false);
     }); }
   $('btn-save-societe').addEventListener('click', saveSociete);
+
+  // ---------- Barème Avantage en Nature (AEN) — réglages société (synchronisés) ----------
+  (function aenConfigUI(){
+    const F = { actif:'aen-actif', carb:'aen-carb', assur:'aen-assur', a5m:'aen-a5m', a5p:'aen-a5p', ac:'aen-ac', l:'aen-l', lc:'aen-lc', elec:'aen-elec', plaf:'aen-plaf' };
+    if (!$(F.actif)) return; // section absente (rôle sans accès)
+    function fill(){
+      const c = (FP.aenConfig ? FP.aenConfig() : (FP.AEN_DEFAULTS || {}));
+      $(F.actif).checked = !!c.actif; $(F.carb).checked = !!c.carburantFourni; $(F.assur).checked = !!c.inclureAssurance;
+      $(F.a5m).value = c.tauxAcheteMoins5; $(F.a5p).value = c.tauxAchetePlus5; $(F.ac).value = c.supplAchatCarb;
+      $(F.l).value = c.tauxLoue; $(F.lc).value = c.supplLoueCarb; $(F.elec).value = c.abattementElec; $(F.plaf).value = c.plafondElecAnnuel;
+    }
+    fill();
+    document.addEventListener('fp:data-ready', fill); // recharge après sync serveur
+    const num = (id, def) => { const v = Number($(id).value); return Number.isFinite(v) && v >= 0 ? v : def; };
+    { const b = $('btn-save-aen'); if (b) b.addEventListener('click', () => {
+      const st = $('aen-save-status'); const set = (h,c)=>{ if(st){st.innerHTML=h; st.style.color=c||'var(--fp-muted)';} };
+      if (FP.canManageSociete && !FP.canManageSociete()) { set('⚠️ Réservé à l\'administrateur.', '#B91C1C'); return; }
+      const D = FP.AEN_DEFAULTS || {};
+      const aen = {
+        actif: $(F.actif).checked, carburantFourni: $(F.carb).checked, inclureAssurance: $(F.assur).checked,
+        tauxAcheteMoins5: num(F.a5m, D.tauxAcheteMoins5), tauxAchetePlus5: num(F.a5p, D.tauxAchetePlus5), supplAchatCarb: num(F.ac, D.supplAchatCarb),
+        tauxLoue: num(F.l, D.tauxLoue), supplLoueCarb: num(F.lc, D.supplLoueCarb),
+        abattementElec: num(F.elec, D.abattementElec), plafondElecAnnuel: num(F.plaf, D.plafondElecAnnuel)
+      };
+      try { FP.history && FP.history.commit && FP.history.commit(); const s = FP.settings.get(); s.aen = aen; FP.settings.save(s); set('✓ Barème AEN enregistré (synchronisé sur tous tes appareils).', '#15803D'); }
+      catch (e) { set('⚠️ Échec de l\'enregistrement.', '#B91C1C'); }
+    }); }
+    { const r = $('btn-reset-aen'); if (r) r.addEventListener('click', async () => {
+      if (FP.confirm && !(await FP.confirm('Remettre le barème AEN par défaut (2025) ?'))) return;
+      try { const s = FP.settings.get(); delete s.aen; FP.settings.save(s); } catch(e){}
+      fill(); const st=$('aen-save-status'); if(st){ st.textContent='↺ Barème par défaut rétabli (pense à Enregistrer).'; st.style.color='var(--fp-muted)'; }
+    }); }
+  })();
+
   { const sw = $('soc-switch'); if (sw) sw.addEventListener('change', e => switchSociete(e.target.value)); }
   { const nb = $('btn-new-societe'); if (nb) nb.addEventListener('click', newSociete); }
   { const db = $('btn-del-societe'); if (db) db.addEventListener('click', deleteSociete); }
