@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260812e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260812f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260812e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260812f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260812e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260812f">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -140,11 +140,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260812e"></script>
-<script src="../assets/js/supabase-client.js?v=20260812e"></script>
-<script src="../assets/js/data.js?v=20260812e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260812f"></script>
+<script src="../assets/js/supabase-client.js?v=20260812f"></script>
+<script src="../assets/js/data.js?v=20260812f"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260812e"></script>
+<script src="../assets/js/app.js?v=20260812f"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -347,6 +347,8 @@
   function docsOf(id) { return _docsMap[id] || []; }
   function hasCgPlatform(v) { if (v && v.cgUrl && !_isDrive(v.cgUrl)) return true; if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'carte-grise' && d.url && !_isDrive(d.url)); }
   function hasMemoDoc(v) { if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'memo' && d.url); }
+  // État des lieux « fait » = coché sur la fiche OU au moins un document/photo d'état des lieux enregistré.
+  function hasEdl(v) { if (v && v.etatDesLieux) return true; if (!_docsLoaded) return true; return docsOf(v.id).some(d => d && d.type === 'etat-des-lieux' && d.url); }
   function loadCompletDocs() {
     if (!(window.FP && FP.db && FP.supabase)) return;
     FP.db.select('documents').then(r => {
@@ -380,6 +382,7 @@
     // apparaître dans le QR conducteur → « Mes documents ». On les remplit par UPLOAD (PDF/photo).
     { k: 'carteGrise', label: 'Carte grise à importer sur la plateforme (pour le QR véhicule)', empty: v => !hasCgPlatform(v) },
     { k: 'carteMemo', label: 'Carte mémo à importer sur la plateforme (pour le QR véhicule)', empty: v => !hasMemoDoc(v) },
+    { k: 'etatDesLieux', label: 'État des lieux à enregistrer (photos ou document signé)', empty: v => !hasEdl(v) },
     // Clés & carte grise : détenteur non renseigné = ni « Siège » ni « Salarié » sélectionné (rubrique « Clés & carte grise » de la fiche).
     { k: 'cleDetenteur', label: 'Détenteur du double de clé', empty: v => !v.cleSiege && !v.cleSalarie },
     { k: 'cgDetenteur', label: 'Détenteur de la carte grise', empty: v => !v.cgOrigSiege && !v.cgOrigSalarie },
@@ -523,6 +526,7 @@
       if (k === 'cleDetenteur' || k === 'cgDetenteur') return { kind: 'detenteur' };
       if (k === 'carteGrise') return { kind: 'file', docType: 'carte-grise' }; // upload PDF/photo (pas de saisie)
       if (k === 'carteMemo') return { kind: 'file', docType: 'memo' };
+      if (k === 'etatDesLieux') return { kind: 'file', docType: 'etat-des-lieux' }; // état des lieux signé (PDF/photo)
       if (k === 'leasing') return { kind: 'fiche' }; // trop spécifique → reste dans la liste (fiche)
       return { kind: 'text' };
     }
@@ -639,6 +643,15 @@
         const doc = { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: v.id, type: 'memo', label: 'Carte mémo', url };
         if (FP.persist && FP.persist.insert) FP.persist.insert('documents', doc);
         (_docsMap[v.id] = _docsMap[v.id] || []).push(doc);
+      } else if (step.meta.docType === 'etat-des-lieux') {
+        // État des lieux signé → document 'etat-des-lieux' (sens 'Entrée' = prise), visible fiche + QR.
+        const url = await FP.uploadScan(file, 'etat-des-lieux/' + imm); if (!url) throw new Error('upload');
+        const doc = { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: v.id, type: 'etat-des-lieux', label: 'Entrée', url };
+        if (FP.persist && FP.persist.insert) FP.persist.insert('documents', doc);
+        (_docsMap[v.id] = _docsMap[v.id] || []).push(doc);
+        // Coche aussi « état des lieux fait » sur la fiche.
+        v.etatDesLieux = true;
+        if (FP.persist && FP.persist.update) FP.persist.update('vehicules', v.id, { etatDesLieux: true });
       } else {
         const url = await FP.uploadScan(file, 'cartes-grises/' + imm); if (!url) throw new Error('upload');
         v.cgUrl = url;

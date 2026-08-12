@@ -4486,9 +4486,13 @@ FP.buildAlertes = (data) => {
 
   const order = { danger: 0, warn: 1, info: 2 };
   out.sort((a, b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
+  // TOUTE alerte doit pouvoir être ignorée (bouton « Ignorer » + section masquées en bas) : on
+  // pose une clé de repli (basée sur le contenu) sur celles qui n'en ont pas. Elle reparaît si son
+  // contenu change vraiment (ex. nouveau montant / nouvelle échéance) — comportement voulu.
+  out.forEach(a => { if (!a.muteKey) { const base = (a.categorie || '') + '|' + (a.message || ''); a.muteKey = 'gen|' + base.slice(0, 90); } });
   // Masque les alertes que l'utilisateur a explicitement enlevées (par véhicule / échéance)
   const masquees = (FP.settings.get().alertesMasquees) || [];
-  return masquees.length ? out.filter(a => !a.muteKey || !masquees.includes(a.muteKey)) : out;
+  return masquees.length ? out.filter(a => !masquees.includes(a.muteKey)) : out;
 };
 
 // Masquer / réafficher une alerte (clé liée au véhicule + échéance : reparaît si l'échéance change)
