@@ -1680,8 +1680,14 @@
     photosHTML(d) {
       let ph = []; try { ph = Array.isArray(d.photos) ? d.photos : JSON.parse(d.photos || '[]'); } catch (e) { ph = []; }
       if (!ph.length) return '';
+      // Bucket privé → on signe les URLs après le rendu (data-signsrc, cf. signPhotos).
       return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;margin-top:8px">'
-        + ph.map(u => `<a href="${FP.esc(u)}" target="_blank" rel="noopener"><img loading="lazy" src="${FP.esc(u)}" alt="" style="width:100%;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--fp-border)"></a>`).join('') + '</div>';
+        + ph.map(u => `<a data-signsrc="${FP.esc(u)}" target="_blank" rel="noopener"><img loading="lazy" data-signsrc="${FP.esc(u)}" alt="" style="width:100%;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--fp-border)"></a>`).join('') + '</div>';
+    },
+    async signPhotos(box) {
+      if (!(box && window.FP && FP.signedScanUrl)) return;
+      const els = box.querySelectorAll('[data-signsrc]');
+      for (const el of els) { try { const s = await FP.signedScanUrl(el.getAttribute('data-signsrc'), 3600); if (el.tagName === 'IMG') el.src = s; else el.setAttribute('href', s); } catch (e) {} }
     },
     cardHTML(d) {
       const isSin = (d.type || 'sinistre') !== 'probleme';
@@ -1722,6 +1728,7 @@
         : '<div class="text-sm text-slate-400">Aucune demande en attente. 🎉</div>';
       box.innerHTML = `<div class="card p-5" style="border-left:4px solid #EF4444">${head}${body}</div>`;
       if (window.lucide) lucide.createIcons();
+      this.signPhotos(box);
     },
     async setStatut(id, statut) {
       try { await FP.supabase.from('declarations_conducteur').update({ statut }).eq('id', id); } catch (e) {}
