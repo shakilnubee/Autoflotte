@@ -632,6 +632,19 @@
         </button>
         <div id="cg-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
 
+        <!-- Import cartes mémo en lot : rattachées aux fiches existantes par immatriculation -->
+        <input type="file" id="f-memo-file" accept="image/*,application/pdf" class="hidden" multiple />
+        <button type="button" id="memo-trigger" class="w-full flex items-center gap-3 p-3 mt-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
+          <span class="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-teal-50" style="color: var(--fp-accent)">
+            <i data-lucide="sticky-note" class="w-5 h-5"></i>
+          </span>
+          <span class="flex-1">
+            <span class="block text-sm font-semibold text-slate-800">Importer des cartes mémo (en lot)</span>
+            <span class="block text-xs text-slate-500">Rattachées à la bonne fiche par immatriculation · visibles dans le QR conducteur</span>
+          </span>
+        </button>
+        <div id="memo-status" class="hidden mt-2 text-xs leading-relaxed rounded-lg px-3 py-2"></div>
+
         <!-- Scanner un autre document (CT, PV…) pour compléter la fiche -->
         <input type="file" id="f-doc-file" accept="image/*,application/pdf" class="hidden" />
         <button type="button" id="doc-scan-trigger" class="w-full flex items-center gap-3 p-3 mt-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-teal-500 hover:bg-teal-50/40 transition text-left">
@@ -804,6 +817,35 @@
   </div>
 </div>
 
+<!-- =============== MODAL IMPORT EN LOT (cartes mémo) =============== -->
+<div class="modal-backdrop" id="memo-batch-backdrop">
+  <div class="modal p-6" style="max-width: 760px">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-xl font-extrabold" id="memo-batch-title">Import en lot — cartes mémo</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="memo-batch-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm text-slate-500 mb-3">Dépose <b>autant de cartes mémo que tu veux</b>. Chaque mémo est <b>rattaché à la bonne fiche</b> d'après l'<b>immatriculation</b> (lue dans le nom du fichier, sinon corrige-la). Il est <b>enregistré sur la plateforme</b> et apparaît dans le <b>QR conducteur → Mes documents</b>. Aucun doublon.</p>
+    <div id="memo-batch-progress" class="text-xs rounded-lg px-3 py-2 mb-3" style="background:#F1F5F9;color:#475569;"></div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm border-collapse" id="memo-batch-table">
+        <thead>
+          <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
+            <th class="py-2 pr-2"><input type="checkbox" id="memo-batch-all" class="accent-teal-600 w-4 h-4" checked title="Tout cocher/décocher"></th>
+            <th class="py-2 pr-2">Fichier</th>
+            <th class="py-2 pr-2">État</th>
+            <th class="py-2 pr-2">Immatriculation</th>
+          </tr>
+        </thead>
+        <tbody id="memo-batch-tbody"></tbody>
+      </table>
+    </div>
+    <div class="flex gap-2 pt-4">
+      <button type="button" class="btn btn-outline flex-1 justify-center" id="memo-batch-cancel">Annuler</button>
+      <button type="button" class="btn btn-dark flex-1 justify-center" id="memo-batch-create"><i data-lucide="check" class="w-4 h-4"></i> <span id="memo-batch-create-label">Rattacher les cartes mémo</span></button>
+    </div>
+  </div>
+</div>
+
 <!-- =============== VISIONNEUSE DOCUMENT (aperçu Drive) =============== -->
 <div class="modal-backdrop" id="viewer-backdrop">
   <div class="viewer">
@@ -909,6 +951,7 @@
   const DOCS_KEY = 'fp_veh_documents'; // fallback local si Supabase indisponible
   const DOC_TYPES = [
     { key: 'carte-grise',         label: 'Carte grise',              icon: 'file-badge' },
+    { key: 'memo',                label: 'Carte mémo',               icon: 'sticky-note' },
     { key: 'assurance',           label: 'Assurance (carte verte)',  icon: 'shield' },
     { key: 'controle-technique',  label: 'Contrôle technique',       icon: 'wrench' },
     { key: 'pv',                  label: 'PV (Procès-verbal)',        icon: 'clipboard-check' },
@@ -5108,6 +5151,120 @@
   $('cg-batch-close').addEventListener('click', closeBatchModal);
   $('cg-batch-cancel').addEventListener('click', closeBatchModal);
   $('cg-batch-create').addEventListener('click', createBatchVehicles);
+
+  // ================= IMPORT EN LOT — CARTES MÉMO =================
+  // Un mémo se RATTACHE à une fiche existante par immatriculation (jamais de doublon). Pas de
+  // création de fiche depuis un mémo seul (contrairement à la carte grise) : immat inconnue = à corriger.
+  let _memoBatch = []; // [{ file, immat, include:true }]
+
+  // Insertion silencieuse d'un document (sans rouvrir le tiroir à chaque fichier — pour le lot).
+  function addVehDocSilent(vehId, type, label, url) {
+    const doc = { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: vehId, type, label, url, driveId: driveIdFromUrl(url) };
+    if (docsCache) { docsCache.push(doc); try { localStorage.setItem(DOCS_CACHE_KEY, JSON.stringify(docsCache)); } catch (e) {} }
+    else { const all = lsGetAllDocs(); (all[vehId] = all[vehId] || []).push(doc); localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
+    if (FP.persist.available()) FP.persist.insert('documents', doc);
+    return doc;
+  }
+  // Extrait une immatriculation du NOM de fichier (format SIV AB-123-CD, sinon ancien FNI 1234 AB 56).
+  function plateFromName(name) {
+    const s = String(name || '').toUpperCase().replace(/\.[A-Z0-9]+$/, '');
+    let m = s.match(/([A-Z]{2})[\s\-_]?(\d{3})[\s\-_]?([A-Z]{2})/);
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
+    m = s.match(/(\d{1,4})[\s\-_]?([A-Z]{2,3})[\s\-_]?(\d{2})/);
+    if (m) return m[1] + ' ' + m[2] + ' ' + m[3];
+    return '';
+  }
+  const _nmImmat = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  function vehByImmat(immat) { if (!immat) return null; const k = _nmImmat(immat); return data.vehicules.find(v => _nmImmat(v.immat) === k) || null; }
+  function memoHasAlready(veh) { try { return getVehDocs(veh.id).some(d => d.type === 'memo'); } catch (e) { return false; } }
+  function memoStatusBadge(row) {
+    if (!row.immat) return '<span class="text-xs font-bold" style="color:#b45309;white-space:nowrap" title="Aucune immatriculation détectée : saisis-la pour rattacher le mémo">⚠ Immat ?</span>';
+    const v = vehByImmat(row.immat);
+    if (!v) return '<span class="text-xs font-bold" style="color:#b45309;white-space:nowrap" title="Aucun véhicule avec cette immatriculation : importe d\'abord sa carte grise, ou corrige l\'immat">⚠ Véhicule introuvable</span>';
+    if (memoHasAlready(v)) return '<span class="text-xs font-bold" style="color:#64748B;white-space:nowrap" title="Ce véhicule a déjà une carte mémo : pas de doublon">✓ Déjà présent</span>';
+    return '<span class="text-xs font-bold" style="color:#0f766e;white-space:nowrap" title="Le mémo sera rattaché à la fiche de ' + (v.immat || '') + '">🔗 Rattacher</span>';
+  }
+  function memoProgress(msg, type) {
+    const el = $('memo-batch-progress');
+    const colors = { working: 'background:#F1F5F9;color:#475569;', ok: 'background:#ECFDF5;color:#047857;', error: 'background:#FEF2F2;color:#B91C1C;' };
+    el.setAttribute('style', colors[type] || colors.working); el.innerHTML = msg;
+  }
+  function updateMemoCreateLabel() {
+    const n = _memoBatch.filter(r => r.include && vehByImmat(r.immat) && !memoHasAlready(vehByImmat(r.immat))).length;
+    $('memo-batch-create-label').textContent = n > 0 ? `Rattacher ${n} carte${n > 1 ? 's' : ''} mémo` : 'Rattacher les cartes mémo';
+    $('memo-batch-create').disabled = n === 0; $('memo-batch-create').style.opacity = n === 0 ? '.5' : '';
+  }
+  function renderMemoRows() {
+    const esc = s => (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    $('memo-batch-tbody').innerHTML = _memoBatch.map((row, i) => `
+      <tr class="border-b border-slate-100" data-row="${i}">
+        <td class="py-1.5 pr-2 align-middle"><input type="checkbox" class="memb-inc accent-teal-600 w-4 h-4" data-i="${i}" ${row.include ? 'checked' : ''}></td>
+        <td class="py-1.5 pr-2 align-middle text-xs text-slate-500 max-w-[200px] truncate" title="${esc(row.file.name)}">${esc(row.file.name)}</td>
+        <td class="py-1.5 pr-2 align-middle" data-mstatus="${i}">${memoStatusBadge(row)}</td>
+        <td class="py-1.5 pr-2"><input class="field-input !py-1 !text-xs font-mono" style="min-width:110px" data-i="${i}" data-mk="immat" value="${esc(row.immat)}" placeholder="AB-123-CD"></td>
+      </tr>`).join('');
+    updateMemoCreateLabel();
+  }
+  async function handleMemoBatch(files) {
+    _memoBatch = files.map(f => ({ file: f, immat: plateFromName(f.name), include: true }));
+    $('memo-batch-title').textContent = `Import en lot — ${files.length} carte${files.length > 1 ? 's' : ''} mémo`;
+    renderMemoRows();
+    $('memo-batch-backdrop').classList.add('open');
+    lucide.createIcons();
+    const sansImmat = _memoBatch.filter(r => !r.immat);
+    if (sansImmat.length && window.FP && FP.scanIA) {
+      // Repli IA : lit l'immatriculation des mémos dont le nom de fichier ne la contient pas.
+      for (let i = 0; i < _memoBatch.length; i++) {
+        if (_memoBatch[i].immat) continue;
+        memoProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Lecture de l'immatriculation ${i + 1}/${_memoBatch.length}…</span>`, 'working');
+        try { const ai = await FP.scanIA(_memoBatch[i].file); if (ai && ai.immat) _memoBatch[i].immat = String(ai.immat).toUpperCase(); } catch (e) {}
+        renderMemoRows();
+      }
+    }
+    const pretes = _memoBatch.filter(r => vehByImmat(r.immat) && !memoHasAlready(vehByImmat(r.immat))).length;
+    memoProgress(`<b>${pretes}</b> mémo(s) prêt(s) à être rattaché(s). Corrige les immatriculations « introuvables » si besoin, puis valide.`, pretes ? 'ok' : 'working');
+  }
+  function closeMemoModal() { $('memo-batch-backdrop').classList.remove('open'); _memoBatch = []; }
+  async function createBatchMemos() {
+    const rows = _memoBatch.filter(r => r.include);
+    FP.history.commit();
+    $('memo-batch-create').disabled = true;
+    let attached = 0, already = 0, notfound = 0, failed = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]; const veh = vehByImmat(row.immat);
+      if (!veh) { notfound++; continue; }
+      if (memoHasAlready(veh)) { already++; continue; }
+      memoProgress(`<span class="inline-flex items-center gap-2"><span class="cg-spin"></span> Rattachement ${i + 1}/${rows.length} — ${veh.immat}…</span>`, 'working');
+      let url = '';
+      try { url = await FP.uploadScan(row.file, 'memos/' + _nmImmat(veh.immat)) || ''; } catch (e) { console.error('[memo upload]', e); }
+      if (!url) { failed++; continue; }
+      try { addVehDocSilent(veh.id, 'memo', 'Carte mémo', url); attached++; } catch (e) { failed++; }
+    }
+    renderTable();
+    if ($('drawer').classList.contains('open') && state.editingId) openDrawer(state.editingId);
+    const parts = [];
+    if (attached) parts.push(`${attached} carte(s) mémo rattachée(s)`);
+    if (already) parts.push(`${already} déjà présent(s)`);
+    if (notfound) parts.push(`${notfound} sans véhicule (immat à corriger)`);
+    const bilan = parts.length ? parts.join(' · ') : 'Rien à faire';
+    if (failed) memoProgress(`<b>${bilan}</b>, mais ${failed} échec(s) d'envoi (voir console).`, 'error');
+    else { memoProgress(`<b>✓ ${bilan}.</b>`, 'ok'); if (attached) setTimeout(closeMemoModal, 1600); }
+  }
+  $('memo-batch-tbody').addEventListener('input', (e) => {
+    const el = e.target;
+    if (el.classList.contains('memb-inc')) { _memoBatch[+el.dataset.i].include = el.checked; updateMemoCreateLabel(); return; }
+    if (el.dataset.mk === 'immat') {
+      const i = +el.dataset.i; _memoBatch[i].immat = el.value.toUpperCase();
+      const cell = $('memo-batch-tbody').querySelector('[data-mstatus="' + i + '"]'); if (cell) cell.innerHTML = memoStatusBadge(_memoBatch[i]);
+      updateMemoCreateLabel();
+    }
+  });
+  $('memo-batch-all').addEventListener('change', (e) => { const on = e.target.checked; _memoBatch.forEach(r => r.include = on); renderMemoRows(); });
+  $('memo-batch-close').addEventListener('click', closeMemoModal);
+  $('memo-batch-cancel').addEventListener('click', closeMemoModal);
+  $('memo-batch-create').addEventListener('click', createBatchMemos);
+  if ($('memo-trigger')) $('memo-trigger').addEventListener('click', () => $('f-memo-file').click());
+  if ($('f-memo-file')) $('f-memo-file').addEventListener('change', (e) => { const files = Array.from(e.target.files || []); if (files.length) handleMemoBatch(files); e.target.value = ''; });
 
   // Scan d'un autre document (CT, PV, facture…) pour compléter la fiche en cours
   async function handleExtraDoc(file){
