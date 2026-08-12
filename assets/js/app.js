@@ -3018,6 +3018,7 @@ FP.notifCfg = () => {
     revAlerteJours: num(n.revAlerteJours, 30), // alerte révision quand il reste ≤ X jours (avant l'échéance mois)
     releveKmJours: num(n.releveKmJours, 45),   // rappel « relevé km » : tous les X jours (défaut 45 = 1 mois et demi)
     releveKmDebut: (typeof n.releveKmDebut === 'string' && n.releveKmDebut.trim()) ? n.releveKmDebut.trim() : '', // date d'ancrage du cycle (optionnelle)
+    releveKmRelanceJours: num(n.releveKmRelanceJours, 7), // demande de km envoyée par mail sans réponse : relancer après X jours (défaut 7)
     leasingFinMois: num(n.leasingFinMois, 2),  // anticipation d'alerte « fin de leasing » (mois avant la fin ; défaut 2)
     immobiliseJours: num(n.immobiliseJours, 15), // alerte « véhicule immobilisé » après X jours (défaut 15)
     consoSeuilPct: num(n.consoSeuilPct, 60),   // alerte conso carburant : hausse ≥ X % vs moyenne du véhicule (défaut 60 %)
@@ -4037,6 +4038,27 @@ FP.buildAlertes = (data) => {
     });
     if (relKmWarn.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relKmWarn.length} relevé${relKmWarn.length > 1 ? 's' : ''} km à faire`, detail: 'Kilométrage à mettre à jour (échéance dépassée).', sort: 480, muteKey: 'relevekm-warn', vehicules: relKmWarn });
     if (relKmInfo.length) out.push({ niveau: 'info', categorie: 'Relevé km', message: `${relKmInfo.length} relevé${relKmInfo.length > 1 ? 's' : ''} km à renseigner`, detail: 'Kilométrage jamais saisi ou à rafraîchir.', sort: 1000, muteKey: 'relevekm-info', vehicules: relKmInfo });
+
+    // RELANCE : demande de km ENVOYÉE PAR MAIL au chauffeur mais SANS réponse depuis X jours.
+    // Source = table km_requests (chargée par FP.kmCollecte.load() sur la page). Si non chargée,
+    // le cache est vide → aucune alerte (pas d'erreur). Chaque ligne renvoie vers la fiche véhicule.
+    try {
+      const relanceJours = nc.releveKmRelanceJours || 7;
+      const byVeh = (FP.kmCollecte && FP.kmCollecte._byVeh) || {};
+      const relances = [];
+      (data.vehicules || []).forEach(v => {
+        if (horsFlotte(v)) return;
+        const r = byVeh[v.id];
+        if (!r || r.used_at || !r.sent_at) return;              // pas de demande, ou déjà répondue
+        if (r.expires_at && new Date(r.expires_at) < today) return; // lien expiré → inutile de relancer ce lien
+        const sent = new Date(r.sent_at); if (isNaN(sent)) return;
+        const j = Math.floor((today - sent) / 86400000);
+        if (j < relanceJours) return;
+        const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
+        relances.push({ label: `${veh} — envoyée il y a ${j} j, sans réponse`, target: 'vehicules.html?veh=' + v.id });
+      });
+      if (relances.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relances.length} relance${relances.length > 1 ? 's' : ''} relevé km`, detail: 'Demande envoyée par mail, sans réponse du chauffeur — rouvre la fiche pour renvoyer.', sort: 470, muteKey: 'relevekm-relance', vehicules: relances });
+    } catch (e) {}
   }
 
   // --- Amendes à payer ---
