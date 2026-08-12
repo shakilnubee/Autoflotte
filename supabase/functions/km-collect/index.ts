@@ -226,7 +226,8 @@ Deno.serve(async (req) => {
             km: veh.km != null ? Number(veh.km) : null,
             prochainCT: veh.prochain_ct || "", dateMiseEnCirculation: veh.date_mise_en_circulation || "",
           } : null;
-          return json({ ...base, veh: info, docs, edl, portal, conducteur });
+          // ⚠️ La page v.html lit `portail` (français) → on émet cette clé (pas `portal`).
+          return json({ ...base, veh: info, docs, edl, portail: portal, conducteur });
         }
         return json(base);
       }
