@@ -5562,8 +5562,18 @@ FP.scanIA = async function (file, docType, promptOverride, opts) {
     // (sinon l'API refuse l'image ou le transfert échoue). Les PDF passent tels quels.
     let f = file;
     if (/^image\//i.test(file.type || '') && FP.compressImage) {
-      // Résolution plus haute pour l'OCR des documents denses (avis d'amende : montant/n° en petit)
-      try { f = await FP.compressImage(file, { maxSide: 2200, quality: 0.85 }); } catch (_) { f = file; }
+      // ⚠️ L'API Claude REDIMENSIONNE de toute façon les images au-delà de ~1568 px / ~1,15 Mpx :
+      // envoyer plus GROS n'améliore PAS la lecture et ALOURDIT le transfert (risque de rejet
+      // « Could not process image » sur les gros fichiers). On vise donc ~1600 px (résolution réellement
+      // utilisée par l'IA) → payload plus léger ET même finesse pour le montant/n° d'avis.
+      try { f = await FP.compressImage(file, { maxSide: 1600, quality: 0.82 }); } catch (_) { f = file; }
+    }
+    // Sécurité format : Claude n'accepte que jpeg/png/gif/webp. Un HEIC/HEIF/TIFF/BMP non converti
+    // (navigateur qui n'a pas pu le décoder) serait rejeté → on le signale plutôt que d'échouer en silence.
+    const okType = /^image\/(jpe?g|png|gif|webp)$/i.test(f.type || '') || /pdf$/i.test(f.type || '') || /\.pdf$/i.test(f.name || '');
+    if (!okType && /^image\//i.test(f.type || '')) {
+      FP._scanLastErr = 'Format d\'image « ' + (f.type || '?') + ' » non lisible par l\'IA (utilise JPG/PNG, ou un PDF).';
+      return null;
     }
     // base64 (sans le préfixe data:)
     const b64 = await new Promise((resolve, reject) => {
@@ -5581,14 +5591,19 @@ FP.scanIA = async function (file, docType, promptOverride, opts) {
     // courantes (elle est déployée en « Scan-doc »). On teste EN PREMIER le nom qui a déjà marché
     // dans la session (FP._scanFn) → plus d'appel 404 inutile à chaque scan.
     const names = [...new Set([FP._scanFn, 'Scan-doc', 'scan-doc'].filter(Boolean))];
+    FP._scanLastErr = '';
     for (const name of names) {
       try {
         const { data, error } = await FP.supabase.functions.invoke(name, { body: payload });
-        if (!error && data && data.ok && data.fields) { FP._scanFn = name; return data.fields; }
-      } catch (_) { /* essaie le nom suivant */ }
+        if (!error && data && data.ok && data.fields) { FP._scanFn = name; FP._scanLastErr = ''; return data.fields; }
+        // Capture la VRAIE raison (au lieu d'un « null » muet) pour l'afficher à l'utilisateur.
+        if (error) { try { FP._scanLastErr = (FP._aiErrText ? await FP._aiErrText(error) : (error.message || '')); } catch (_) { FP._scanLastErr = error.message || ''; } }
+        else if (data && data.error) { FP._scanLastErr = data.error; }
+      } catch (e) { FP._scanLastErr = (e && (e.message || String(e))) || ''; }
     }
     return null;
   } catch (e) {
+    FP._scanLastErr = (e && (e.message || String(e))) || '';
     console.warn('[FP.scanIA] indisponible :', e && (e.message || e));
     return null;
   }
