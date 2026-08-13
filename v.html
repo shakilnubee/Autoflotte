@@ -333,7 +333,9 @@
   if (!token) { show('v-bad', t('head_title')); $('bad-sub').textContent = t('bad_incomplete'); return; }
 
   // ---- Chargement ----
-  fetch(FN + '?q=' + encodeURIComponent(token) + '&full=1', { headers: headers() })
+  // ⚠️ no-store : les URLs de documents/notice sont SIGNÉES (expirent) → il ne faut JAMAIS servir une
+  // réponse en cache (sinon un lien signé périmé → « erreur » au clic sur la Notice).
+  fetch(FN + '?q=' + encodeURIComponent(token) + '&full=1', { headers: headers(), cache: 'no-store' })
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
     .then(function (res) {
       var d = res.d || {};
@@ -409,8 +411,17 @@
     var call = p.assistanceNumero ? '<a class="btn call" href="tel:' + esc(p.assistanceNumero.replace(/\s/g, '')) + '">📞 ' + esc(t('b_call')) + '</a>' : '';
     var notice = p.assistanceNotice ? '<a class="btn" href="' + esc(p.assistanceNotice) + '" target="_blank" rel="noopener">📘 ' + esc(t('b_notice_assist')) + '</a>' : '';
     var constat = '<a class="btn" href="' + esc(p.constatUrl || CONSTAT_DEFAUT) + '" target="_blank" rel="noopener">📄 ' + esc(t('b_constat')) + '</a>';
+    // Infos assurance du véhicule (assureur + n° de police) — utiles à avoir sous les yeux au moment
+    // de déclarer/remplir le constat, en plus de la fiche « Mes documents ».
+    var assBox = (p.assureur || p.police)
+      ? '<div class="box"><h4>🛡️ ' + esc(t('d_ass')) + '</h4>'
+        + (p.assureur ? '<div class="kv"><span class="k">' + esc(t('d_assureur')) + '</span><span class="v">' + esc(p.assureur) + '</span></div>' : '')
+        + (p.police ? '<div class="kv"><span class="k">' + esc(t('d_police')) + '</span><span class="v">' + esc(p.police) + '</span></div>' : '')
+        + '</div>'
+      : '';
     $('sin-intro').innerHTML =
-      '<div class="box" style="background:#FFF7F5;border-color:#FECdcd">'
+      assBox
+      + '<div class="box" style="background:#FFF7F5;border-color:#FECdcd">'
       + '<h4>' + esc(t('s_how')) + '&nbsp;?</h4>'
       + '<p class="muted" style="margin:.2rem 0 .6rem">' + t('s_howtxt') + '</p>'
       + '<div style="font-weight:800;font-size:.9rem;margin-bottom:.2rem">' + esc(t('s_accident')) + '</div>'
