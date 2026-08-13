@@ -3022,7 +3022,10 @@ FP.refreshDeclCondBadge = async () => {
     if (!FP.supabase) return;
     const r = await FP.supabase.from('declarations_conducteur').select('id', { count: 'exact', head: true }).eq('statut', 'nouveau');
     if (r.error) return; // table pas encore créée → pas de badge
-    const count = r.count || 0; FP.declCondCount = count;
+    const count = r.count || 0; const changed = (count !== FP.declCondCount); FP.declCondCount = count;
+    // Le compteur arrive en ASYNC après fp:data-ready → on prévient les vues d'alertes de se re-rendre
+    // (dashboard « À traiter », page Suivi & alertes) pour que l'alerte « demande conducteur » apparaisse.
+    if (changed) { try { window.dispatchEvent(new CustomEvent('fp:decl-count', { detail: { count } })); } catch (e) {} }
     document.querySelectorAll('a[data-nav="sinistres.html"], .fp-sidebar a[href*="sinistres.html"], aside a[href*="sinistres.html"]').forEach(a => {
       let b = a.querySelector('.fp-decl-badge');
       if (!count) { if (b) b.remove(); return; }
@@ -4553,6 +4556,59 @@ FP.buildAlertes = (data) => {
         detail: "Le PDF n'a pas pu être enregistré (stockage). Ré-importe les relevés Total pour rattacher les PDF.", sort: 700,
         target: 'factures.html',
         vehicules: sansPdf.slice(0, 100).map(f => ({ label: `${f.numeroFacture || f.id} — ${f.date ? FP.date(f.date) : '—'}${f.montantTTC != null ? ' · ' + FP.euro(f.montantTTC) : ''}`, target: 'factures.html' })) });
+    }
+  } catch (e) {}
+
+  // --- Déclarations conducteur (sinistre / problème signalé depuis le QR véhicule) à traiter ---
+  // Source = FP.declCondCount (compteur des lignes declarations_conducteur en statut 'nouveau',
+  // rafraîchi par FP.refreshDeclCondBadge sur fp:data-ready puis fp:decl-count → re-render).
+  try {
+    const nDecl = FP.declCondCount || 0;
+    if (nDecl > 0) {
+      out.push({
+        niveau: 'danger', categorie: 'Sinistres',
+        message: nDecl > 1 ? `${nDecl} demandes conducteur à traiter` : `1 demande conducteur à traiter`,
+        detail: 'Sinistre ou problème signalé depuis le QR véhicule — à traiter dans Sinistres.',
+        sort: -100, target: 'sinistres.html',
+        // Clé incluant le nombre → si une NOUVELLE déclaration arrive, l'alerte réapparaît même si ignorée.
+        muteKey: 'declcond|' + nDecl,
+      });
+    }
+  } catch (e) {}
+
+  // --- Conducteurs sans e-mail (indispensable pour le relevé km par mail et l'envoi d'amendes) ---
+  // Regroupé en UNE alerte dépliable (règle 0bis), ignorable. On ne compte QUE les conducteurs
+  // rattachés à un véhicule ACTIF (ceux qu'on contacte réellement), et on se garde du « flash »
+  // du cache (data.js masque les e-mails) : on n'affiche l'alerte que si au moins un e-mail est chargé.
+  try {
+    const conds = (data.conducteurs || []).filter(c => c && !c.masque);
+    if (conds.some(c => c.email)) {                       // données live chargées (sinon cache PII-strippé)
+      const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+      const byName = {};
+      conds.forEach(c => {
+        const full = norm((c.prenom || '') + (c.nom || '')); if (full) byName[full] = c;
+        const nm2 = norm(c.name); if (nm2 && !byName[nm2]) byName[nm2] = c;
+      });
+      const seen = {}; const sansMail = [];
+      (data.vehicules || []).forEach(v => {
+        if (horsFlotte(v)) return;
+        const nm = v.chauffeur && String(v.chauffeur).trim();
+        if (!nm || nm === '—') return;
+        const c = byName[norm(nm)] || null;
+        const key = (c && c.key) || norm(nm);
+        if (seen[key]) return; seen[key] = 1;
+        const mail = c ? String(c.email || '').trim() : '';
+        if (mail) return;                                  // e-mail présent → rien à signaler
+        const nom = c ? ([c.prenom, c.nom].filter(Boolean).join(' ') || c.name || nm) : nm;
+        const tgt = (c && c.key) ? ('conducteurs.html?cond=' + encodeURIComponent(c.key)) : 'conducteurs.html';
+        sansMail.push({ label: `${nom} — ${v.immat}`, target: tgt });
+      });
+      if (sansMail.length) out.push({
+        niveau: 'info', categorie: 'Conducteurs',
+        message: `${sansMail.length} conducteur${sansMail.length > 1 ? 's' : ''} sans e-mail`,
+        detail: "Sans e-mail, pas de relevé km par mail ni d'envoi d'amende — ajoute-le dans sa fiche.",
+        sort: 900, muteKey: 'cond-noemail', vehicules: sansMail,
+      });
     }
   } catch (e) {}
 
