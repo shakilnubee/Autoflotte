@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260813c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260813d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260813c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260813d">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -340,10 +340,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260813c"></script>
-<script src="../assets/js/supabase-client.js?v=20260813c"></script>
-<script src="../assets/js/data.js?v=20260813c"></script>
-<script src="../assets/js/app.js?v=20260813c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260813d"></script>
+<script src="../assets/js/supabase-client.js?v=20260813d"></script>
+<script src="../assets/js/data.js?v=20260813d"></script>
+<script src="../assets/js/app.js?v=20260813d"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -415,6 +415,7 @@
     let ctSoon = 0, ctLate = 0;
     (data.vehicules || []).forEach(v => {
       if (horsFlotteCT(v)) return; // exclut vendus / à vendre / hors service (comme Suivi & alertes)
+      if (FP.ctIgnored && FP.ctIgnored(v)) return; // CT ignoré (véhicule étranger exempté) — comme partout ailleurs
       if (!v.prochainCT || v.prochainCT === '—') return;
       const d = new Date(v.prochainCT);
       const diff = FP.joursRestants ? FP.joursRestants(v.prochainCT) : Math.ceil((d - today) / (1000*60*60*24)); // source unique (minuit→minuit)
@@ -428,7 +429,7 @@
   function renderCTList() {
     const today = new Date();
     const items = (data.vehicules || [])
-      .filter(v => v.prochainCT && v.prochainCT !== '—' && !horsFlotteCT(v))
+      .filter(v => v.prochainCT && v.prochainCT !== '—' && !horsFlotteCT(v) && !(FP.ctIgnored && FP.ctIgnored(v)))
       .map(v => {
         const d = new Date(v.prochainCT);
         const diff = FP.joursRestants ? FP.joursRestants(v.prochainCT) : Math.ceil((d - today) / (1000*60*60*24)); // source unique (minuit→minuit)
@@ -455,7 +456,7 @@
       `;
     }).join('');
 
-    $('ct-summary').textContent = `${items.length} véhicule${items.length > 1 ? 's' : ''} le${items.length > 1 ? 's' : ''} plus urgent${items.length > 1 ? 's' : ''} / ${(data.vehicules || []).filter(v => v.prochainCT && v.prochainCT !== '—' && !horsFlotteCT(v)).length} avec CT planifié`;
+    $('ct-summary').textContent = `${items.length} véhicule${items.length > 1 ? 's' : ''} le${items.length > 1 ? 's' : ''} plus urgent${items.length > 1 ? 's' : ''} / ${(data.vehicules || []).filter(v => v.prochainCT && v.prochainCT !== '—' && !horsFlotteCT(v) && !(FP.ctIgnored && FP.ctIgnored(v))).length} avec CT planifié`;
     lucide.createIcons();
   }
 

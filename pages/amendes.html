@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260813c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260813d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260813c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260813d">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -473,11 +473,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260813c"></script>
-<script src="../assets/js/supabase-client.js?v=20260813c"></script>
-<script src="../assets/js/data.js?v=20260813c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260813d"></script>
+<script src="../assets/js/supabase-client.js?v=20260813d"></script>
+<script src="../assets/js/data.js?v=20260813d"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260813c"></script>
+<script src="../assets/js/app.js?v=20260813d"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2385,18 +2385,21 @@
     };
     // On cible d'abord la zone qui suit « montant de l'amende » (évite les montants parasites)
     const zi = text.search(/montant\s+de\s+l['’\s]*amende/i);
-    let list = zi >= 0 ? grabAmts(text.slice(zi, zi + 300)) : [];
-    if (list.length < 2) list = grabAmts(text); // repli : tout le document
-    if (list.length >= 1) out.montant = Math.min(...list);   // le minoré = le plus petit
+    // Montants de la GRILLE officielle (zone « montant de l'amende ») — c'est la seule source fiable
+    // pour le MAJORÉ (le plus gros). On les garde à part du repli « tout le document ».
+    const zoneList = zi >= 0 ? grabAmts(text.slice(zi, zi + 300)) : [];
+    let list = zoneList.slice();
+    if (list.length < 2) list = grabAmts(text); // repli : tout le document — POUR LE MINORÉ SEULEMENT
+    if (list.length >= 1) out.montant = Math.min(...list);   // le minoré = le plus petit (min = sûr même sur tout le doc)
     // Document de MAJORATION = un avis SPÉCIFIQUE émis après non-paiement (titre « AVIS DE
     // MAJORATION »). ⚠️ NE PAS matcher « amende forfaitaire majorée » : cette mention figure
     // dans la grille de montants (minoré / forfaitaire / MAJORÉ) de TOUT avis normal → sinon
     // chaque avis ordinaire est pris à tort pour une majoration.
     out.isMajoration = /avis\s+de\s+majoration/i.test(text);
-    // Montant majoré = le PLUS GROS des montants OFFICIELS de la grille (2 ou 3 montants
-    // captés dans la zone « montant de l'amende »). JAMAIS Math.max de tous les nombres du
-    // document (attrape des références parasites → montants aberrants type 1875).
-    if (list.length >= 2) out.montantMajore = Math.max(...list);
+    // Montant majoré = le PLUS GROS des montants de la GRILLE UNIQUEMENT (zone « montant de l'amende »).
+    // ⚠️ JAMAIS Math.max de tout le document (attrape des références parasites → aberrations type 1875) :
+    // si la zone n'a pas ≥ 2 montants, on laisse `montantMajore` à null plutôt que maxer le doc entier.
+    if (zoneList.length >= 2) out.montantMajore = Math.max(...zoneList);
 
     // Date de l'infraction — près de "commise le" / "infraction" / "le", sinon 1ère date
     const lines = text.split(/\r?\n/);

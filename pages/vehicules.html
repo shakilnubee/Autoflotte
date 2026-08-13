@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260813c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260813d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260813c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260813d">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -868,13 +868,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260813c"></script>
-<script src="../assets/js/supabase-client.js?v=20260813c"></script>
-<script src="../assets/js/data.js?v=20260813c"></script>
-<script src="../assets/js/fleet-docs.js?v=20260813c"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260813c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260813d"></script>
+<script src="../assets/js/supabase-client.js?v=20260813d"></script>
+<script src="../assets/js/data.js?v=20260813d"></script>
+<script src="../assets/js/fleet-docs.js?v=20260813d"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260813d"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260813c"></script>
+<script src="../assets/js/app.js?v=20260813d"></script>
 <script>
   lucide.createIcons();
 
@@ -2218,14 +2218,16 @@
     // FP.coutSinistre (0 si remboursé/pec/devis, sinon TTC).
     const ANNEE = String(new Date().getFullYear());
     const sameVeh = f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat);
-    const facturesAnnee = (data.factures || []).filter(f => sameVeh(f) && (f.date || '').startsWith(ANNEE) && FP.estEntretien(f));
-    const sinistresAnnee = (data.factures || []).filter(f => sameVeh(f) && (f.date || '').startsWith(ANNEE) && (f.type || '').toLowerCase() === 'sinistre');
+    // Factures du véhicule DÉDOUBLONNÉES (même règle que « coût au km » plus bas / dashboard) — sinon
+    // une facture ré-importée (même n° + TTC) était comptée 2× dans « coût de l'année » et l'historique.
+    const vehFacts = FP.dedupeFactures((data.factures || []).filter(sameVeh));
+    const facturesAnnee = vehFacts.filter(f => (f.date || '').startsWith(ANNEE) && FP.estEntretien(f));
+    const sinistresAnnee = vehFacts.filter(f => (f.date || '').startsWith(ANNEE) && (f.type || '').toLowerCase() === 'sinistre');
     const coutSinistres = sinistresAnnee.reduce((s, f) => s + FP.coutSinistre(f), 0);
     const coutTotal = facturesAnnee.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0) + coutSinistres;
-    // Coût par année : entretien/réparation + sinistres à charge (même règles)
+    // Coût par année : entretien/réparation + sinistres à charge (même règles, dédoublonné)
     const coutByYear = {};
-    (data.factures || []).forEach(f => {
-      if (!sameVeh(f)) return;
+    vehFacts.forEach(f => {
       const y = (f.date || '').slice(0, 4); if (!/^\d{4}$/.test(y)) return;
       let amount = 0;
       if (FP.estEntretien(f)) amount = Number(f.montantTTC) || 0;

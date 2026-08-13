@@ -26,7 +26,9 @@ const CORS = {
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, "Content-Type": "application/json" },
+    // no-store : la réponse contient des URLs SIGNÉES qui expirent → jamais de cache navigateur
+    // (sinon un lien signé périmé donne une « erreur » au clic sur un document / la notice).
+    headers: { ...CORS, "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 }
 
@@ -81,7 +83,7 @@ async function signUrl(db: ReturnType<typeof createClient>, url: string) {
   if (!m) return url;
   let path = m[2]; try { path = decodeURIComponent(path); } catch { /* garde */ }
   try {
-    const { data } = await db.storage.from(m[1]).createSignedUrl(path, 3600);
+    const { data } = await db.storage.from(m[1]).createSignedUrl(path, 86400); // 24 h : marge si la page reste ouverte
     return (data && data.signedUrl) ? data.signedUrl : url;
   } catch { return url; }
 }

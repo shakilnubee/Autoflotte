@@ -705,8 +705,14 @@ FP.loueurOf = (v) => {
   let list = []; try { const s = FP.settings.get(); if (Array.isArray(s.loueurs)) list = s.loueurs; } catch (e) {}
   const m = pl ? (list || []).find(l => l && String(l.prop || '').trim().toLowerCase() === pl) : null;
   if (m && m.nom) return String(m.nom).trim();
-  if (p) return p;
   const prof = FP.societeProfil ? FP.societeProfil() : {};
+  // Loueur du profil (ex. PXP → propriétaire « BPCE », loueurNom « BPCE Car Lease ») : si le
+  // propriétaire du véhicule correspond à l'étiquette propriétaire du profil, on renvoie le NOM
+  // COMPLET du loueur — MÊME libellé que la liste Contrats (avant : la fiche/l'export montraient
+  // « BPCE » et l'écran « BPCE Car Lease »). Inerte hors PXP (propProfil vide → pas de fuite).
+  const propProfil = String(prof.proprietaireLeasing || prof.loueurNom || '').trim().toLowerCase();
+  if (pl && propProfil && pl === propProfil && prof.loueurNom) return String(prof.loueurNom).trim();
+  if (p) return p;
   return String(prof.loueurNom || '').trim();
 };
 
@@ -1191,7 +1197,6 @@ FP.kmCollecte = {
   // Contenu de l'e-mail (branded, avec la plaque et le bouton vers le formulaire).
   _mail(v, link) {
     let nomSoc = ''; try { nomSoc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
-    let logo = ''; try { logo = (FP.settings.get().profil || {}).logoDataUrl || ''; } catch (e) {}
     const plaque = FP.esc ? FP.esc(v.immat || '') : (v.immat || '');
     const marque = FP.esc ? FP.esc(((v.marque || '') + ' ' + (v.modele || '')).trim()) : ((v.marque || '') + ' ' + (v.modele || '')).trim();
     // Conducteur : prénom + nom + poste (via la fiche conducteur, comme le QR).
@@ -1205,7 +1210,7 @@ FP.kmCollecte = {
     const T = (L === 'en')
       ? { subject: 'Mileage reading', hi: 'Hello', title: 'Mileage reading requested', ask1: 'Please provide the <b>current mileage</b> of your vehicle', ask2: '. It only takes a second: one tap, one number, done.', btn: 'Enter my mileage →', fb: 'If the button does not work, copy this link:', askTxt: 'Please provide the current mileage of your vehicle', clickTxt: 'Open this link:' }
       : { subject: 'Relevé kilométrique', hi: 'Bonjour', title: 'Relevé kilométrique demandé', ask1: "Merci d'indiquer le <b>kilométrage actuel</b> de votre véhicule", ask2: ". C'est rapide : un clic, un nombre, terminé.", btn: 'Indiquer mon kilométrage →', fb: 'Si le bouton ne fonctionne pas, copiez ce lien :', askTxt: "Merci d'indiquer le kilométrage actuel de votre véhicule", clickTxt: 'Cliquez sur ce lien :' };
-    const subject = T.subject + (plaque ? ' — ' + plaque : '');
+    const subject = T.subject + (v.immat ? ' — ' + v.immat : '');   // sujet = texte brut (pas d'échappement HTML)
     const socName = nomSoc ? FP.esc(nomSoc) : '';
     // Plaque façon immatriculation (table = compatible e-mail), forcée sur UNE seule ligne.
     const plateBadge = plaque ? ('<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
@@ -2018,19 +2023,8 @@ FP.condLangue = function (nameOrCond) {
     return (v === 'en' || v === 'anglais' || v === 'english') ? 'en' : 'fr';
   } catch (e) { return 'fr'; }
 };
-// Définit la langue d'un conducteur (persistée côté serveur → tous les appareils).
-FP.condLangueSet = async function (nameOrCond, lang) {
-  try {
-    const k = FP._condLangKey(nameOrCond);
-    if (!k) return false;
-    const s = FP.settings.get();
-    const map = Object.assign({}, s.condLangues || {});
-    map[k] = (String(lang || '').toLowerCase() === 'en') ? 'en' : 'fr';
-    s.condLangues = map;
-    await FP.settings.save(s);
-    return true;
-  } catch (e) { console.warn('[condLangueSet]', e && (e.message || e)); return false; }
-};
+// (La langue d'un conducteur est écrite directement dans s.condLangues[key] par la fiche
+//  conducteur, via FP.settings.save — pas besoin d'un setter dédié.)
 
 FP.MAIL_DEFAUT = {
   paiement: `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`,
@@ -3020,7 +3014,12 @@ FP.declCondCount = 0;
 FP.refreshDeclCondBadge = async () => {
   try {
     if (!FP.supabase) return;
-    const r = await FP.supabase.from('declarations_conducteur').select('id', { count: 'exact', head: true }).eq('statut', 'nouveau');
+    // Portée société : la RLS renvoie TOUTES les sociétés au CEO → on filtre explicitement sur la
+    // société active (comme filterSociete ailleurs), sinon le badge/alerte additionne toutes les sociétés.
+    let _soc = '__all__'; try { _soc = (FP.activeSociete && FP.activeSociete()) || '__all__'; } catch (e) {}
+    let _q = FP.supabase.from('declarations_conducteur').select('id', { count: 'exact', head: true }).eq('statut', 'nouveau');
+    if (_soc && _soc !== '__all__') _q = _q.eq('societe', _soc);
+    const r = await _q;
     if (r.error) return; // table pas encore créée → pas de badge
     const count = r.count || 0; const changed = (count !== FP.declCondCount); FP.declCondCount = count;
     // Le compteur arrive en ASYNC après fp:data-ready → on prévient les vues d'alertes de se re-rendre
@@ -4466,13 +4465,26 @@ FP.buildAlertes = (data) => {
     if (dbl.length) out.push({ niveau: 'warn', categorie: 'Amendes', message: `${dbl.length} amende(s) peut-être payée(s) en double`, detail: "Même n° d'avis réglé plusieurs fois — vérifie / demande le remboursement", sort: 420, vehicules: dbl });
   } catch (e) {}
 
-  // --- Sinistres en attente de remboursement (rappel de suivi) ---
-  const sinStatut = (FP.settings.get().sinistreStatut) || {};
-  const sinAttente = (data.factures || []).filter(f => f.type === 'sinistre' && FP.sinistreStatutOf(f) === 'attente');
-  if (sinAttente.length) {
-    out.push({ niveau: 'warn', categorie: 'Sinistres', message: `${sinAttente.length} sinistre(s) en attente de remboursement`, detail: "Vérifie si l'assureur t'a remboursé", sort: 500,
-      vehicules: sinAttente.map(s => ({ label: `${s.vehiculeImmat || '—'} · ${(s.description || 'sinistre').slice(0, 45)}${s.montantTTC ? ' — ' + FP.euro(s.montantTTC) : ''}`, target: 'sinistres.html' })) });
-  }
+  // --- Sinistres en attente de remboursement (rappel de suivi) — REGROUPÉ PAR INCIDENT ---
+  // Un incident peut avoir plusieurs factures (clé de groupe settings.sinistreGroupes[id] || id) :
+  // on compte les INCIDENTS, pas les factures (sinon un incident à 3 factures = « 3 en attente »).
+  try {
+    const sinGrp = (FP.settings.get().sinistreGroupes) || {};
+    const gk = id => sinGrp[id] || id;
+    const att = {};
+    (data.factures || []).forEach(f => {
+      if (f.type !== 'sinistre' || FP.sinistreStatutOf(f) !== 'attente') return;
+      const k = gk(f.id);
+      const g = att[k] || (att[k] = { rep: f, ttc: 0 });
+      g.ttc += (+f.montantTTC || 0);
+      if ((!g.rep.vehiculeImmat && f.vehiculeImmat) || (!g.rep.description && f.description)) g.rep = f;
+    });
+    const attList = Object.values(att);
+    if (attList.length) {
+      out.push({ niveau: 'warn', categorie: 'Sinistres', message: `${attList.length} sinistre(s) en attente de remboursement`, detail: "Vérifie si l'assureur t'a remboursé", sort: 500,
+        vehicules: attList.map(g => ({ label: `${g.rep.vehiculeImmat || '—'} · ${(g.rep.description || 'sinistre').slice(0, 45)}${g.ttc ? ' — ' + FP.euro(g.ttc) : ''}`, target: 'sinistres.html' })) });
+    }
+  } catch (e) {}
 
   // --- Sinistres SANS réponse de l'assureur depuis longtemps → relancer l'assureur ---
   // Un incident = une clé de groupe (settings.sinistreGroupes[id] || id). « Pas de réponse » = ni
@@ -4582,7 +4594,10 @@ FP.buildAlertes = (data) => {
   // du cache (data.js masque les e-mails) : on n'affiche l'alerte que si au moins un e-mail est chargé.
   try {
     const conds = (data.conducteurs || []).filter(c => c && !c.masque);
-    if (conds.some(c => c.email)) {                       // données live chargées (sinon cache PII-strippé)
+    // Anti-flash : le cache RGPD (data.js, repo public) masque e-mails ET noms. On se base sur la
+    // présence d'un NOM (jamais vide en live) pour savoir que les données sont chargées — ainsi une
+    // société qui n'a AUCUN e-mail saisi (mais des conducteurs nommés) voit bien l'alerte.
+    if (conds.some(c => c.prenom || c.nom || c.name)) {
       const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
       const byName = {};
       conds.forEach(c => {
@@ -5516,7 +5531,9 @@ FP.datePicker = (function () {
       // Input ENVELOPPÉ dans un <label> : un tap sur le texte/marge du label (pas pile sur l'input)
       // ne renvoyait aucun input → notre calendrier ne s'ouvrait pas et le picker NATIF s'ouvrait à la
       // place (comportement incohérent / « le calendrier bug »). On résout le label vers son input date.
-      if (!inp && e.target.closest) {
+      // ...SAUF si le tap vise déjà un autre contrôle interactif du label (checkbox, bouton, autre
+      // input…) : dans ce cas on ne détourne pas vers l'input date (évite de voler le clic).
+      if (!inp && e.target.closest && !e.target.closest('input,button,select,textarea,a')) {
         const lbl = e.target.closest('label');
         if (lbl) inp = lbl.querySelector('input[type=date]:not([data-no-fpdp])');
       }
@@ -8054,9 +8071,15 @@ FP.smartAnswers = (q) => {
       return (imm && (raw.includes(imm) || (immc.length >= 4 && compact.includes(immc)))) || (mod.length >= 4 && raw.includes(mod));
     });
     if (v) {
-      const total = facts.filter(f => f.vehiculeImmat && FP.norm(f.vehiculeImmat) === FP.norm(v.immat)).reduce((s, f) => s + (+f.montantTTC || 0), 0);
-      const nb = facts.filter(f => f.vehiculeImmat && FP.norm(f.vehiculeImmat) === FP.norm(v.immat)).length;
-      out.push({ icon: '💶', label: `${eur(total)} — coût total ${v.immat}`, sub: `${v.marque || ''} ${v.modele || ''} · ${nb} facture${nb > 1 ? 's' : ''}`.trim(), url: pref + 'vehicules.html?veh=' + encodeURIComponent(v.id) });
+      // MÊME source que la fiche véhicule : plaque normalisée (tirets retirés) + factures
+      // dédoublonnées + filtre exploitation (sinon 0 € si la plaque est stockée compactée,
+      // ou gonflé par un achat/leasing/sinistre).
+      const dedup = FP.dedupeFactures ? FP.dedupeFactures(facts) : facts;
+      const key = FP.normImmat ? FP.normImmat(v.immat) : FP.norm(v.immat);
+      const vf = dedup.filter(f => f.vehiculeImmat && (FP.normImmat ? FP.normImmat(f.vehiculeImmat) : FP.norm(f.vehiculeImmat)) === key && (FP.coutFactureExploit ? FP.coutFactureExploit(f) : true));
+      const total = vf.reduce((s, f) => s + (+f.montantTTC || 0), 0);
+      const nb = vf.length;
+      out.push({ icon: '💶', label: `${eur(total)} — coût d'exploitation ${v.immat}`, sub: `${v.marque || ''} ${v.modele || ''} · ${nb} facture${nb > 1 ? 's' : ''}`.trim(), url: pref + 'vehicules.html?veh=' + encodeURIComponent(v.id) });
     }
   }
 
