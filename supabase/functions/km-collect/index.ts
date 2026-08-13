@@ -99,8 +99,34 @@ async function vehConducteur(db: ReturnType<typeof createClient>, chauffeur: str
     const full = _norm(String(c.prenom || "") + String(c.nom || ""));
     return full === key || _norm(String(c.name || "")) === key;
   });
-  if (!hit) return { prenom: name.split(" ")[0] || name, nom: name.split(" ").slice(1).join(" "), poste: "", key: "" };
-  return { prenom: String(hit.prenom || ""), nom: String(hit.nom || ""), poste: String(hit.poste || ""), key: String(hit.key || "") };
+  if (!hit) return { prenom: name.split(" ")[0] || name, nom: name.split(" ").slice(1).join(" "), poste: "", name, key: "" };
+  // Un conducteur peut n'avoir que `name` (prénom/nom vides) → on dérive prénom/nom du nom complet,
+  // sinon le portail n'affichait AUCUN nom (bandeau conducteur absent).
+  let prenom = String(hit.prenom || ""), nom = String(hit.nom || "");
+  const full = String(hit.name || "").trim();
+  if (!prenom && !nom && full) { const parts = full.split(/\s+/); prenom = parts[0] || ""; nom = parts.slice(1).join(" "); }
+  return { prenom, nom, poste: String(hit.poste || ""), name: full || (prenom + " " + nom).trim(), key: String(hit.key || "") };
+}
+
+// Conducteur ACTUEL du véhicule : le champ `chauffeur` du véhicule, sinon l'affectation EN COURS
+// (settings.affectations[vehId] = [{conducteur, debut, fin}]) — sinon un véhicule affecté via
+// l'historique mais sans champ chauffeur n'affichait pas de nom sur le portail.
+async function chauffeurActuel(db: ReturnType<typeof createClient>, vehiculeId: string | null, societe: string, vehChauffeur: string) {
+  const direct = String(vehChauffeur || "").trim();
+  if (direct && direct !== "—") return direct;
+  if (!vehiculeId) return "";
+  try {
+    const { data } = await db.from("app_settings").select("data").eq("id", societe || "PXP").maybeSingle();
+    const s = (data && data.data && typeof data.data === "object") ? data.data as Record<string, unknown> : {};
+    const affAll = (s.affectations && typeof s.affectations === "object") ? s.affectations as Record<string, unknown> : {};
+    const aff = affAll[vehiculeId];
+    if (!Array.isArray(aff) || !aff.length) return "";
+    const withNom = (aff as Record<string, unknown>[]).filter((a) => a && a.conducteur);
+    const encours = withNom.filter((a) => !a.fin);
+    const pick = (encours.length ? encours : withNom)
+      .sort((a, b) => String(b.debut || "").localeCompare(String(a.debut || "")))[0];
+    return pick ? String(pick.conducteur || "").trim() : "";
+  } catch { return ""; }
 }
 
 // Langue d'un conducteur (par son nom + société) via la carte app_settings.condLangues. 'fr' par défaut.
@@ -234,11 +260,13 @@ Deno.serve(async (req) => {
         // `full=1` (portail v.html) : on joint infos véhicule + documents + EDL + config société.
         if (url.searchParams.get("full") === "1") {
           const veh = await vehInfo(db, qr.vehicule_id);
+          // Nom du conducteur : champ `chauffeur` du véhicule, sinon l'affectation en cours (historique).
+          const chauffeurNom = await chauffeurActuel(db, qr.vehicule_id, qr.societe || "PXP", veh ? String(veh.chauffeur || "") : "");
           const [docs0, edl0, portal, conducteur] = await Promise.all([
             vehDocs(db, qr.vehicule_id, veh),
             vehEdl(db, qr.vehicule_id),
             portalConfig(db, qr.societe || "PXP"),
-            vehConducteur(db, veh ? String(veh.chauffeur || "") : "", qr.societe || "PXP"),
+            vehConducteur(db, chauffeurNom, qr.societe || "PXP"),
           ]);
           // Bucket privé → on SIGNE les URLs pour qu'elles s'ouvrent depuis la page publique.
           const docs = await Promise.all(docs0.map(async (d) => ({ ...d, url: await signUrl(db, d.url) })));
