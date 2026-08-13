@@ -4113,6 +4113,21 @@ FP.cartesAnomalies = (data) => {
   return out;
 };
 
+// ── Suivi km par véhicule (activable/désactivable) ──────────────────────────────────────────
+// Par défaut TOUS les véhicules sont suivis. Un véhicule « décoché » n'est plus relancé pour son km
+// (ni alerte « relevé km à faire/relance », ni compteur « manquants », ni envoi groupé). Synchronisé
+// (app_settings.kmSuiviExclus = { [vehId]: true }). Se règle depuis la fiche véhicule OU la page Alertes
+// → Relevé KM (« Configurer ») — les deux écrivent le MÊME réglage (liés automatiquement).
+FP.kmSuivi = (v) => { try { const id = v && v.id; if (!id) return true; const ex = FP.settings.get().kmSuiviExclus || {}; return !ex[id]; } catch (e) { return true; } };
+FP.kmSuiviSet = (v, on) => {
+  try {
+    const id = v && v.id; if (!id) return;
+    const s = FP.settings.get(); const ex = Object.assign({}, s.kmSuiviExclus || {});
+    if (on) delete ex[id]; else ex[id] = true;
+    s.kmSuiviExclus = ex; FP.settings.save(s);
+  } catch (e) { console.warn('[kmSuiviSet]', e && (e.message || e)); }
+};
+
 FP.buildAlertes = (data) => {
   const out = [];
   const today = new Date();
@@ -4185,6 +4200,7 @@ FP.buildAlertes = (data) => {
     const relKmWarn = [], relKmInfo = [];
     (data.vehicules || []).forEach(v => {
       if (horsFlotte(v)) return;
+      if (FP.kmSuivi && !FP.kmSuivi(v)) return;      // véhicule décoché du suivi km → pas d'alerte
       const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
       const tgt = 'vehicules.html?veh=' + v.id;
       const last = kmDates[v.immat] ? new Date(kmDates[v.immat]) : null;
@@ -4213,6 +4229,7 @@ FP.buildAlertes = (data) => {
       const relances = [];
       (data.vehicules || []).forEach(v => {
         if (horsFlotte(v)) return;
+        if (FP.kmSuivi && !FP.kmSuivi(v)) return;      // véhicule décoché du suivi km → pas de relance
         const r = byVeh[v.id];
         if (!r || r.used_at || !r.sent_at) return;              // pas de demande, ou déjà répondue
         if (r.expires_at && new Date(r.expires_at) < today) return; // lien expiré → inutile de relancer ce lien

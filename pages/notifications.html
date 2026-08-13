@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260813i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260813j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260813i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260813j">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -140,11 +140,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260813i"></script>
-<script src="../assets/js/supabase-client.js?v=20260813i"></script>
-<script src="../assets/js/data.js?v=20260813i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260813j"></script>
+<script src="../assets/js/supabase-client.js?v=20260813j"></script>
+<script src="../assets/js/data.js?v=20260813j"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260813i"></script>
+<script src="../assets/js/app.js?v=20260813j"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -686,7 +686,9 @@
     const cfg = (FP.notifCfg ? FP.notifCfg() : {});
     const seuil = cfg.releveKmJours || 45;
     const today = new Date();
-    const vehs = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
+    // On ne suit QUE les véhicules cochés (FP.kmSuivi) : les décochés n'apparaissent pas ici,
+    // ne comptent pas dans « manquants » et ne reçoivent pas de demande.
+    const vehs = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)) && (!FP.kmSuivi || FP.kmSuivi(v)));
     return vehs.map(v => {
       const readings = (KC && KC.recusDe) ? KC.recusDe(v) : [];
       const last = readings[0] || null;
@@ -719,6 +721,7 @@
     const okPct = Math.round(cnt.ajour / total * 100);
     const manquants = cnt.relancer + cnt.jamais;
     const avecMail = rows.filter(r => r.statut !== 'ajour' && r.email).length;
+    const nonSuivi = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)) && FP.kmSuivi && !FP.kmSuivi(v)).length;
 
     // Ordre : ce qui demande une action d'abord (jamais, relancer, attente), puis à jour.
     const ordre = { jamais: 0, relancer: 1, attente: 2, ajour: 3 };
@@ -854,16 +857,78 @@
           <div class="rk-head">
             <div class="rk-title"><i data-lucide="gauge" class="w-5 h-5" style="color:var(--fp-accent)"></i> Suivi des relevés <span style="font-weight:400;color:var(--fp-muted);font-size:.85rem">— ${rows.length} véhicule(s)</span></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="rk-btn" id="rk-config" title="Choisir quels véhicules sont suivis pour le km (décocher = ne plus demander)"><i data-lucide="list-checks" class="w-4 h-4"></i> Configurer${nonSuivi ? ` (${nonSuivi} non suivi${nonSuivi > 1 ? 's' : ''})` : ''}</button>
               ${avecMail ? `<button class="rk-btn" id="rk-ask-all"><i data-lucide="send" class="w-4 h-4"></i> Demander aux manquants (${avecMail})</button>` : ''}
             </div>
           </div>
-          <p style="font-size:.8rem;color:var(--fp-muted);margin:2px 0 14px">« À jour » = relevé reçu il y a ≤ ${seuil} j. Clique une ligne pour voir l'historique et le km par période. Le QR à coller dans chaque voiture se génère depuis la fiche véhicule (bouton « QR km »).</p>
+          <p style="font-size:.8rem;color:var(--fp-muted);margin:2px 0 14px">« À jour » = relevé reçu il y a ≤ ${seuil} j. Clique une ligne pour voir l'historique et le km par période. Le QR à coller dans chaque voiture se génère depuis la fiche véhicule (bouton « QR km »). <b>Décoche un véhicule</b> (bouton « Configurer » ou dans sa fiche) pour ne plus jamais demander son km.</p>
           <div class="rk-list">
             ${loading ? '<div class="rk-empty">Chargement des relevés…</div>' : (sorted.length ? sorted.map(rowHTML).join('') : '<div class="rk-empty">Aucun véhicule en flotte.</div>')}
           </div>
         </div>
       </div>`;
     if (window.lucide) lucide.createIcons();
+  }
+
+  // Modal « Configurer » : cocher/décocher les véhicules suivis pour le km. Écrit le MÊME réglage
+  // (FP.kmSuiviSet → app_settings.kmSuiviExclus) que le bouton de la fiche véhicule → automatiquement lié.
+  function openKmConfig() {
+    const E = (s) => FP.esc ? FP.esc(s) : String(s == null ? '' : s);
+    const flotte = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)))
+      .slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+    const byId = (id) => flotte.find(v => String(v.id) === String(id));
+    const rowHtml = (v) => {
+      const on = !FP.kmSuivi || FP.kmSuivi(v);
+      const ch = (v.chauffeur && v.chauffeur !== '—') ? E(v.chauffeur) : '—';
+      return `<label style="display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid var(--fp-border);cursor:pointer">
+        <input type="checkbox" class="km-cfg-cb" data-id="${E(v.id)}" ${on ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--fp-accent);flex:none">
+        <span style="flex:1;min-width:0">
+          <span style="font-family:monospace;font-weight:700">${E(v.immat || '—')}</span>
+          <span style="color:var(--fp-muted);font-size:.85rem"> · ${E(v.marque || '')} ${E(v.modele || '')}</span>
+          <span style="display:block;color:var(--fp-muted);font-size:.78rem">${ch}</span>
+        </span>
+      </label>`;
+    };
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(15,30,61,.5)">
+      <div style="padding:16px 18px;border-bottom:1px solid var(--fp-border);display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="font-weight:800;font-size:1.05rem">Suivre le km de quels véhicules&nbsp;?</div>
+        <button id="km-cfg-x" style="border:none;background:#f1f5f9;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:1.1rem;line-height:1">✕</button>
+      </div>
+      <div style="padding:10px 14px;border-bottom:1px solid var(--fp-border);display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input id="km-cfg-search" placeholder="Rechercher…" style="flex:1;min-width:140px;padding:8px 10px;border:1px solid var(--fp-border);border-radius:8px">
+        <button class="btn btn-outline text-xs" id="km-cfg-all">Tout cocher</button>
+        <button class="btn btn-outline text-xs" id="km-cfg-none">Tout décocher</button>
+      </div>
+      <div id="km-cfg-list" style="overflow:auto;padding:2px 14px">${flotte.map(rowHtml).join('') || '<p style="color:var(--fp-muted);padding:16px">Aucun véhicule.</p>'}</div>
+      <div style="padding:12px 16px;border-top:1px solid var(--fp-border);text-align:right">
+        <button class="btn btn-dark" id="km-cfg-done">Terminé</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const close = () => { ov.remove(); renderRelevekm(); render(); };
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov || e.target.closest('#km-cfg-x') || e.target.closest('#km-cfg-done')) { close(); return; }
+      const cb = e.target.closest('.km-cfg-cb');
+      if (cb) { const v = byId(cb.getAttribute('data-id')); if (v && FP.kmSuiviSet) FP.kmSuiviSet(v, cb.checked); return; }
+      const all = e.target.closest('#km-cfg-all'), none = e.target.closest('#km-cfg-none');
+      if (all || none) {
+        const on = !!all;
+        // Une seule écriture pour tout le lot (au lieu d'un save par case).
+        const s = FP.settings.get(); const ex = Object.assign({}, s.kmSuiviExclus || {});
+        flotte.forEach(v => { if (on) delete ex[v.id]; else ex[v.id] = true; });
+        s.kmSuiviExclus = ex; FP.settings.save(s);
+        ov.querySelectorAll('.km-cfg-cb').forEach(c => { c.checked = on; });
+        return;
+      }
+    });
+    const srch = ov.querySelector('#km-cfg-search');
+    if (srch) srch.addEventListener('input', () => {
+      const q = (FP.norm ? FP.norm(srch.value) : srch.value.toLowerCase()).trim();
+      ov.querySelectorAll('#km-cfg-list label').forEach(l => { const t = FP.norm ? FP.norm(l.textContent) : l.textContent.toLowerCase(); l.style.display = (!q || t.includes(q)) ? '' : 'none'; });
+    });
+    setTimeout(() => { try { srch && srch.focus(); } catch (e) {} }, 50);
   }
 
   // Interactions de l'onglet Relevé KM : déplier une ligne, enregistrer les réglages, demander le km.
@@ -883,6 +948,8 @@
       catch (err) { if (st) { st.textContent = '⚠️ Échec.'; st.style.color = '#B91C1C'; } }
       return;
     }
+    // Configurer les véhicules suivis (cocher / décocher)
+    if (e.target.closest('#rk-config')) { openKmConfig(); return; }
     // Demander à tous les manquants (mail)
     if (e.target.closest('#rk-ask-all')) {
       const KC = window.FP && FP.kmCollecte; if (!KC) return;
