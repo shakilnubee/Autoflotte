@@ -1200,36 +1200,44 @@ FP.kmCollecte = {
     const cNom = (cond && cond.nom) || '';
     const fullName = ((cPrenom || '') + ' ' + (cNom || '')).trim() || String(v.chauffeur || '').trim();
     const cPoste = (cond && cond.poste) || '';
-    const subject = 'Relevé kilométrique' + (plaque ? ' — ' + plaque : '');
-    // Logo société (best-effort : certaines messageries demandent « afficher les images »).
-    const socLogoImg = logo ? '<img src="' + logo + '" alt="' + FP.esc(nomSoc || 'Logo') + '" style="max-height:40px;max-width:160px;display:block;margin-bottom:10px;background:#fff;border-radius:6px;padding:4px 6px">' : '';
-    // Plaque façon immatriculation (table = compatible e-mail).
-    const plateBadge = plaque ? ('<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate"><tr>'
-      + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:10px;padding:7px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
-      + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:5px 12px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0">' + plaque + '</td>'
+    // Langue du conducteur → e-mail en français ou en anglais.
+    const L = (FP.condLangue ? FP.condLangue(cond || v.chauffeur) : 'fr');
+    const T = (L === 'en')
+      ? { subject: 'Mileage reading', hi: 'Hello', title: 'Mileage reading requested', ask1: 'Please provide the <b>current mileage</b> of your vehicle', ask2: '. It only takes a second: one tap, one number, done.', btn: 'Enter my mileage →', fb: 'If the button does not work, copy this link:', askTxt: 'Please provide the current mileage of your vehicle', clickTxt: 'Open this link:' }
+      : { subject: 'Relevé kilométrique', hi: 'Bonjour', title: 'Relevé kilométrique demandé', ask1: "Merci d'indiquer le <b>kilométrage actuel</b> de votre véhicule", ask2: ". C'est rapide : un clic, un nombre, terminé.", btn: 'Indiquer mon kilométrage →', fb: 'Si le bouton ne fonctionne pas, copiez ce lien :', askTxt: "Merci d'indiquer le kilométrage actuel de votre véhicule", clickTxt: 'Cliquez sur ce lien :' };
+    const subject = T.subject + (plaque ? ' — ' + plaque : '');
+    const socName = nomSoc ? FP.esc(nomSoc) : '';
+    // Plaque façon immatriculation (table = compatible e-mail), forcée sur UNE seule ligne.
+    const plateBadge = plaque ? ('<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
+      + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px;white-space:nowrap">F</td>'
+      + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0;white-space:nowrap">' + plaque + '</td>'
       + '</tr></table>') : '';
     const html = ''
       + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
-      + '<div style="background:linear-gradient(135deg,#0B1220,#1E293B);color:#fff;padding:20px 22px;border-radius:14px 14px 0 0">'
-      + socLogoImg
-      + '<div style="font-weight:900;font-style:italic;font-size:17px">Parc P<span style="color:#F97316">i</span>lot</div>'
-      + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:8px">Relevé kilométrique demandé</div>'
+      // ── En-tête bleu : marque Parc Pilot + société, titre, puis conducteur (prénom/nom + poste) et plaque ──
+      + '<div style="background:linear-gradient(135deg,#0B1220,#1E293B);color:#fff;padding:22px 24px;border-radius:14px 14px 0 0">'
+      + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+      + '<td style="font-weight:900;font-style:italic;font-size:16px;color:#fff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</td>'
+      + (socName ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:600;vertical-align:middle">' + socName + '</td>' : '')
+      + '</tr></table>'
+      + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25">' + T.title + '</div>'
+      + (fullName ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#fff">' + FP.esc(fullName) + '</div>' : '')
+      + (cPoste ? '<div style="font-size:13px;color:#94A3B8;margin-top:3px;font-weight:600">' + FP.esc(cPoste) + '</div>' : '')
+      + (plateBadge ? '<div style="margin-top:14px;white-space:nowrap">' + plateBadge + '</div>' : '')
       + '</div>'
+      // ── Corps blanc : demande + bouton ──
       + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px">'
-      + '<p style="margin:0 0 2px">' + (fullName ? 'Bonjour ' + FP.esc(fullName) + ',' : 'Bonjour,') + '</p>'
-      + (cPoste ? '<p style="margin:0 0 12px;font-size:13px;color:#64748B">' + FP.esc(cPoste) + '</p>' : '<div style="height:8px"></div>')
-      + (plateBadge ? '<div style="margin:4px 0 14px">' + plateBadge + '</div>' : '')
-      + '<p style="margin:0 0 16px;line-height:1.5">Merci d\'indiquer le <b>kilométrage actuel</b> de votre véhicule'
-      + (plaque ? ' <b>' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + '. C\'est rapide : un clic, un nombre, terminé.</p>'
+      + '<p style="margin:0 0 16px">' + T.hi + (cPrenom ? ' ' + FP.esc(cPrenom) : '') + ',</p>'
+      + '<p style="margin:0 0 16px;line-height:1.5">' + T.ask1
+      + (plaque ? ' <b>' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + T.ask2 + '</p>'
       + '<p style="text-align:center;margin:22px 0">'
-      + '<a href="' + link + '" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">Indiquer mon kilométrage →</a>'
+      + '<a href="' + link + '" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">' + T.btn + '</a>'
       + '</p>'
-      + '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">Si le bouton ne fonctionne pas, copiez ce lien : <br>' + link + '</p>'
-      + (nomSoc ? '<p style="margin:18px 0 0;font-size:13px;color:#64748B">' + FP.esc(nomSoc) + '</p>' : '')
+      + '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">' + T.fb + '<br>' + link + '</p>'
       + '</div></div>';
-    const text = (fullName ? 'Bonjour ' + fullName + ',\n\n' : 'Bonjour,\n\n')
-      + 'Merci d\'indiquer le kilométrage actuel de votre véhicule' + (plaque ? ' ' + (v.immat || '') : '') + '.\n'
-      + 'Cliquez sur ce lien : ' + link + '\n\n' + (nomSoc || 'Parc Pilot');
+    const text = (fullName ? T.hi + ' ' + fullName + ',\n\n' : T.hi + ',\n\n')
+      + T.askTxt + (plaque ? ' ' + (v.immat || '') : '') + '.\n'
+      + T.clickTxt + ' ' + link + '\n\n' + (nomSoc || 'Parc Pilot');
     return { subject, html, text };
   },
   // Envoie une demande pour UN véhicule. → { ok, error?, link? }
@@ -1984,10 +1992,54 @@ document.addEventListener('fp:data-ready', () => {
 });
 // Modèles d'e-mail par défaut (amende) — source UNIQUE, réutilisée par amendes.html ET
 // pré-affichée dans Paramètres pour que l'utilisateur les voie et puisse les personnaliser.
+// Langue de communication d'un conducteur ('fr' par défaut, 'en' si sa fiche est en anglais).
+// Accepte un objet conducteur OU un nom (retrouvé via FP.conducteurs.find). Sert aux e-mails et au QR.
+// Clé stable d'un conducteur (pour la carte des langues) : sa `key`, sinon prénom+nom normalisé.
+FP._condLangKey = function (nameOrCond) {
+  try {
+    let c = (nameOrCond && typeof nameOrCond === 'object') ? nameOrCond
+      : ((FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(nameOrCond) : null);
+    if (c && c.key) return String(c.key);
+    const base = (c && ((c.prenom || '') + ' ' + (c.nom || '')).trim()) || (typeof nameOrCond === 'string' ? nameOrCond : '');
+    return (FP.normPrenom ? FP.normPrenom(base) : String(base || '').trim().toLowerCase());
+  } catch (e) { return ''; }
+};
+FP.condLangue = function (nameOrCond) {
+  try {
+    let c = (nameOrCond && typeof nameOrCond === 'object') ? nameOrCond
+      : ((FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(nameOrCond) : null);
+    // 1) Colonne `langue` de la fiche (si la base la porte un jour).
+    const l = c && String(c.langue || '').trim().toLowerCase();
+    if (l) return (l === 'en' || l === 'anglais' || l === 'english') ? 'en' : 'fr';
+    // 2) Carte synchronisée (app_settings.condLangues) — réglable depuis la fiche, sans SQL.
+    const map = (FP.settings && FP.settings.get && (FP.settings.get().condLangues || {})) || {};
+    const k = FP._condLangKey(c || nameOrCond);
+    const v = k && map[k] && String(map[k]).trim().toLowerCase();
+    return (v === 'en' || v === 'anglais' || v === 'english') ? 'en' : 'fr';
+  } catch (e) { return 'fr'; }
+};
+// Définit la langue d'un conducteur (persistée côté serveur → tous les appareils).
+FP.condLangueSet = async function (nameOrCond, lang) {
+  try {
+    const k = FP._condLangKey(nameOrCond);
+    if (!k) return false;
+    const s = FP.settings.get();
+    const map = Object.assign({}, s.condLangues || {});
+    map[k] = (String(lang || '').toLowerCase() === 'en') ? 'en' : 'fr';
+    s.condLangues = map;
+    await FP.settings.save(s);
+    return true;
+  } catch (e) { console.warn('[condLangueSet]', e && (e.message || e)); return false; }
+};
+
 FP.MAIL_DEFAUT = {
   paiement: `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`,
   designation: `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.`,
   relance: `Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`,
+  // Versions ANGLAISES (envoyées aux conducteurs dont la langue est « English »).
+  paiement_en: `Hello {prenom},\n\nUnless I'm mistaken, this is your vehicle.\nCould you please pay this fine and send me the receipt?\n\nThank you in advance.`,
+  designation_en: `Hello {prenom},\n\nUnless I'm mistaken, this is your vehicle.\nCould you confirm so that I can complete the driver designation?\n\nPlease do NOT pay the fine.\n\nBest regards.`,
+  relance_en: `Hello {prenom},\n\nJust a quick reminder about the fine below.\nThank you.`,
 };
 // Champs du profil société (rendu générique : le formulaire de Paramètres itère dessus).
 // Un champ avec `default` est PRÉ-REMPLI avec ce texte quand la valeur est vide (l'utilisateur le voit).
@@ -2006,6 +2058,10 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModelePaiement',   label: "Modèle e-mail — demande de paiement",     type: 'textarea', ph: 'Écris {prenom} pour insérer le prénom.', default: FP.MAIL_DEFAUT.paiement },
   { key: 'mailModeleDesignation',label: "Modèle e-mail — demande de désignation",  type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.designation },
   { key: 'mailModeleRelance',    label: "Modèle e-mail — relance",                 type: 'textarea', ph: 'Écris {prenom}.', default: FP.MAIL_DEFAUT.relance },
+  // Versions ANGLAISES (utilisées pour les conducteurs en langue « English »).
+  { key: 'mailModelePaiement_en',   label: "E-mail EN — payment request",      type: 'textarea', ph: 'Use {prenom} for the first name.', default: FP.MAIL_DEFAUT.paiement_en, lang: 'en' },
+  { key: 'mailModeleDesignation_en',label: "E-mail EN — driver designation",   type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.designation_en, lang: 'en' },
+  { key: 'mailModeleRelance_en',    label: "E-mail EN — reminder",             type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.relance_en, lang: 'en' },
   { key: 'mailSignature',        label: "Signature (bas des e-mails d'amende)",    type: 'textarea', ph: 'Colle ta signature — texte simple OU le CODE HTML de ta signature Gmail (avec logo/images). Le HTML est envoyé tel quel (le logo s\'affiche). Astuce : Gmail → Paramètres → Signature ; ou clic droit « Inspecter » sur ta signature → copier l\'élément.' },
 ];
 // Contrat d'assurance de la société ACTIVE (assureur + n° de police), paramétrable dans Contrats.
