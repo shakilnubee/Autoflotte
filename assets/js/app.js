@@ -1241,7 +1241,7 @@ FP.kmCollecte = {
       + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px">'
       + '<p style="margin:0 0 16px">' + T.hi + (cPrenom ? ' ' + FP.esc(cPrenom) : '') + ',</p>'
       + '<p style="margin:0 0 16px;line-height:1.5">' + T.ask1
-      + (plaque ? ' <b>' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + T.ask2 + '</p>'
+      + (plaque ? ' <b style="white-space:nowrap">' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + T.ask2 + '</p>'
       + '<p style="text-align:center;margin:22px 0">'
       + '<a href="' + link + '" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">' + T.btn + '</a>'
       + '</p>'

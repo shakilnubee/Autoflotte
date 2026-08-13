@@ -95,6 +95,19 @@
   .spin { display:inline-block; width:22px; height:22px; border:3px solid #CBD5E1; border-top-color:var(--accent); border-radius:50%; animation:sp .7s linear infinite; }
   @keyframes sp { to { transform:rotate(360deg); } }
   .hide { display:none !important; }
+  /* Visionneuse plein écran (états des lieux) : on reste dans le portail, on fait défiler les photos */
+  .lb { position:fixed; inset:0; z-index:2147483600; background:rgba(8,12,22,.95); display:none; flex-direction:column; }
+  .lb.open { display:flex; }
+  .lb-top { display:flex; align-items:center; justify-content:space-between; padding:.9rem 1rem; color:#fff; font-weight:800; font-size:.9rem; gap:.6rem; }
+  .lb-top .r { display:flex; gap:.6rem; align-items:center; }
+  .lb-dl { color:#fff; text-decoration:none; font-size:.85rem; font-weight:800; background:rgba(255,255,255,.14); padding:.4rem .7rem; border-radius:9999px; }
+  .lb-x { background:rgba(255,255,255,.14); border:none; color:#fff; width:38px; height:38px; border-radius:50%; font-size:1.15rem; cursor:pointer; line-height:1; }
+  .lb-stage { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; touch-action:pan-y; }
+  .lb-stage img { max-width:100%; max-height:100%; object-fit:contain; -webkit-user-select:none; user-select:none; }
+  .lb-nav { position:absolute; top:50%; transform:translateY(-50%); background:rgba(255,255,255,.16); border:none; color:#fff; width:46px; height:46px; border-radius:50%; font-size:1.6rem; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .lb-prev { left:.6rem; } .lb-next { right:.6rem; }
+  .lb-nav:disabled { opacity:.22; cursor:default; }
+  .gal a img { cursor:zoom-in; }
 </style>
 </head>
 <body>
@@ -196,6 +209,22 @@
       </div>
     </div>
     <div class="foot"><span data-i18n="foot">Parc Pilot — gestion de flotte · </span><span id="soc-foot"></span></div>
+  </div>
+
+  <!-- Visionneuse plein écran (états des lieux) -->
+  <div class="lb" id="lightbox">
+    <div class="lb-top">
+      <span id="lb-count">1 / 1</span>
+      <span class="r">
+        <a class="lb-dl" id="lb-open-new" target="_blank" rel="noopener">↗</a>
+        <button class="lb-x" id="lb-close" type="button" aria-label="Fermer">✕</button>
+      </span>
+    </div>
+    <div class="lb-stage" id="lb-stage">
+      <button class="lb-nav lb-prev" id="lb-prev" type="button" aria-label="Précédent">‹</button>
+      <img id="lb-img" src="" alt="">
+      <button class="lb-nav lb-next" id="lb-next" type="button" aria-label="Suivant">›</button>
+    </div>
   </div>
 
 <script>
@@ -438,17 +467,22 @@
 
   // ---- États des lieux ----
   var edlPhotos = [];
+  var edlImgs = [];          // liste ordonnée des URLs d'images (prise puis restitution) pour la visionneuse
   function renderEdl() {
     var edl = DATA.edl || [];
     var prise = edl.filter(function (e) { return e.sens === 'prise'; });
     var resti = edl.filter(function (e) { return e.sens === 'restitution'; });
+    edlImgs = [];
     function gal(list) {
       if (!list.length) return '<p class="muted">' + esc(t('edl_none')) + '</p>';
       return '<div class="gal">' + list.map(function (e) {
-        var isImg = /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i.test(e.url);
-        return isImg
-          ? '<a href="' + esc(e.url) + '" target="_blank" rel="noopener"><img loading="lazy" src="' + esc(e.url) + '" alt=""></a>'
-          : '<a class="edl-doc" href="' + esc(e.url) + '" target="_blank" rel="noopener">' + esc(t('edl_viewdoc')) + '</a>';
+        var isImg = /^data:image\//i.test(e.url) || /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i.test(e.url);
+        if (isImg) {
+          var idx = edlImgs.length; edlImgs.push(e.url);
+          // data-lb : ouvre la visionneuse interne (défilement) au lieu du lien Supabase brut.
+          return '<a class="lb-open" data-lb="' + idx + '" href="' + esc(e.url) + '" target="_blank" rel="noopener"><img loading="lazy" src="' + esc(e.url) + '" alt=""></a>';
+        }
+        return '<a class="edl-doc" href="' + esc(e.url) + '" target="_blank" rel="noopener">' + esc(t('edl_viewdoc')) + '</a>';
       }).join('') + '</div>';
     }
     $('edl-body').innerHTML =
@@ -498,8 +532,41 @@
       .catch(function () { cb(false, { error: t('err_conn') }); });
   }
 
+  // ===== Visionneuse plein écran (états des lieux) : défilement des photos, sans quitter le portail =====
+  var lbIdx = 0;
+  function lbShow() {
+    var url = edlImgs[lbIdx] || '';
+    $('lb-img').src = url;
+    var nu = $('lb-open-new'); if (nu) nu.href = url;
+    $('lb-count').textContent = (lbIdx + 1) + ' / ' + edlImgs.length;
+    $('lb-prev').disabled = lbIdx <= 0;
+    $('lb-next').disabled = lbIdx >= edlImgs.length - 1;
+  }
+  function lbOpen(i) { if (!edlImgs.length) return; lbIdx = Math.max(0, Math.min(edlImgs.length - 1, i | 0)); lbShow(); $('lightbox').classList.add('open'); }
+  function lbClose() { $('lightbox').classList.remove('open'); $('lb-img').src = ''; }
+  function lbNav(d) { var n = lbIdx + d; if (n < 0 || n >= edlImgs.length) return; lbIdx = n; lbShow(); }
+  $('lb-close').addEventListener('click', lbClose);
+  $('lb-prev').addEventListener('click', function () { lbNav(-1); });
+  $('lb-next').addEventListener('click', function () { lbNav(1); });
+  // Tap sur le fond (hors image / flèches) = fermer
+  $('lightbox').addEventListener('click', function (e) { if (e.target === $('lightbox') || e.target === $('lb-stage')) lbClose(); });
+  // Balayage gauche/droite pour passer à la photo suivante/précédente
+  (function () {
+    var x0 = null;
+    $('lb-stage').addEventListener('touchstart', function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+    $('lb-stage').addEventListener('touchend', function (e) { if (x0 == null) return; var dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 40) lbNav(dx < 0 ? 1 : -1); }, { passive: true });
+  })();
+  document.addEventListener('keydown', function (e) {
+    if (!$('lightbox').classList.contains('open')) return;
+    if (e.key === 'Escape') lbClose();
+    else if (e.key === 'ArrowLeft') lbNav(-1);
+    else if (e.key === 'ArrowRight') lbNav(1);
+  });
+
   // ===== Wiring =====
   document.addEventListener('click', function (e) {
+    var lb = e.target.closest && e.target.closest('.lb-open');
+    if (lb) { e.preventDefault(); lbOpen(+lb.getAttribute('data-lb')); return; }
     var go = e.target.closest && e.target.closest('[data-go]');
     if (go) { route(go.getAttribute('data-go')); return; }
     if (e.target.closest && e.target.closest('[data-back]')) { goMenu(); return; }
