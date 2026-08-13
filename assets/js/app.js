@@ -1219,6 +1219,9 @@ FP.kmCollecte = {
       : { subject: 'Relevé kilométrique', hi: 'Bonjour', title: 'Relevé kilométrique demandé', ask1: "Merci d'indiquer le <b>kilométrage actuel</b> de votre véhicule", ask2: ". C'est rapide : un clic, un nombre, terminé.", btn: 'Indiquer mon kilométrage →', fb: 'Si le bouton ne fonctionne pas, copiez ce lien :', askTxt: "Merci d'indiquer le kilométrage actuel de votre véhicule", clickTxt: 'Cliquez sur ce lien :' };
     const subject = T.subject + (v.immat ? ' — ' + v.immat : '');   // sujet = texte brut (pas d'échappement HTML)
     const socName = nomSoc ? FP.esc(nomSoc) : '';
+    // Logo société HÉBERGÉ (URL http) — jamais le data-URI (cassé dans les e-mails). Rempli par
+    // FP.hostSocieteLogo() appelé dans send() AVANT la construction du mail.
+    let logoUrl = ''; try { const lu = (FP.settings.get().profil || {}).logoUrl; if (/^https?:\/\//.test(String(lu || ''))) logoUrl = String(lu); } catch (e) {}
     // Plaque façon immatriculation (table = compatible e-mail), forcée sur UNE seule ligne.
     const plateBadge = plaque ? ('<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
       + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px;white-space:nowrap">F</td>'
@@ -1229,8 +1232,12 @@ FP.kmCollecte = {
       // ── En-tête bleu : marque Parc Pilot + société, titre, puis conducteur (prénom/nom + poste) et plaque ──
       + '<div style="background:linear-gradient(135deg,#0B1220,#1E293B);color:#fff;padding:22px 24px;border-radius:14px 14px 0 0">'
       + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
-      + '<td style="font-weight:900;font-style:italic;font-size:16px;color:#fff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</td>'
-      + (socName ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:600;vertical-align:middle">' + socName + '</td>' : '')
+      // Logo de la société (comme le QR) si hébergé, sinon la marque Parc Pilot en texte.
+      + '<td style="vertical-align:middle">' + (logoUrl
+        ? '<img src="' + logoUrl + '" alt="' + (socName || 'Logo') + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
+        : '<span style="font-weight:900;font-style:italic;font-size:16px;color:#fff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>') + '</td>'
+      + '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">'
+      + (logoUrl ? 'Parc P<span style="color:#F97316">i</span>lot' : socName) + '</td>'
       + '</tr></table>'
       + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25">' + T.title + '</div>'
       + (fullName ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#fff">' + FP.esc(fullName) + '</div>' : '')
@@ -1275,6 +1282,9 @@ FP.kmCollecte = {
     try { const { error } = await FP.supabase.from('km_requests').insert(row); if (error) throw error; }
     catch (e) { return { ok: false, error: 'Enregistrement impossible : ' + (e.message || e) }; }
     const link = this.BASE + '?t=' + token;
+    // Héberge le logo société (URL http) AVANT de bâtir le mail (data-URI = cassé dans les e-mails).
+    // 1er envoi = upload + cache dans profil.logoUrl ; envois suivants = lecture directe du cache.
+    try { if (FP.hostSocieteLogo) await FP.hostSocieteLogo(); } catch (e) {}
     const mail = this._mail(v, link);
     try { await FP.sendEmail({ to: email, subject: mail.subject, html: mail.html, text: mail.text }); }
     catch (e) { return { ok: false, error: "Demande créée mais l'e-mail n'est pas parti : " + (e.message || e), link }; }
@@ -6317,6 +6327,42 @@ FP._storageRef = (url) => {
   return null;
 };
 FP.scanPath = (url) => { const r = FP._storageRef(url); return r ? r.path : null; };
+// Logo de la société HÉBERGÉ (URL http) pour les e-mails : les clients mail (Gmail…) NE rendent PAS
+// les images en data-URI (le logo apparaissait cassé). On téléverse donc le logo (profil.logoDataUrl)
+// dans le stockage et on met en cache une URL signée longue durée dans profil.logoUrl (synchronisé).
+// Renvoie l'URL hébergée ('' si aucun logo). Le SVG est rasterisé en PNG (les e-mails ne rendent pas le SVG).
+FP.hostSocieteLogo = async function () {
+  try {
+    const s = FP.settings.get(); const prof = (s.profil && typeof s.profil === 'object') ? s.profil : {};
+    if (/^https?:\/\//.test(String(prof.logoUrl || ''))) return prof.logoUrl;   // déjà hébergé (cache)
+    const dataUri = String(prof.logoDataUrl || '');
+    const m = dataUri.match(/^data:([^;]+);base64,(.+)$/);
+    if (!m || !(FP.supabase && FP.supabase.storage)) return '';
+    let mime = m[1] || 'image/png', blob;
+    if (/svg/i.test(mime)) {
+      blob = await new Promise((res) => {
+        const im = new Image();
+        im.onload = () => { const W = im.naturalWidth || 240, H = im.naturalHeight || 80; const c = document.createElement('canvas'); c.width = W * 2; c.height = H * 2; c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); c.toBlob(function (b) { res(b); }, 'image/png'); };
+        im.onerror = () => res(null); im.src = dataUri;
+      });
+      mime = 'image/png';
+      if (!blob) return '';
+    } else {
+      const bin = atob(m[2]); const arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      blob = new Blob([arr], { type: mime });
+    }
+    const ext = mime.includes('png') ? 'png' : (mime.includes('webp') ? 'webp' : 'jpg');
+    let soc = 'PXP'; try { soc = localStorage.getItem('fp_societe') || 'PXP'; } catch (e) {} if (soc === '__all__') soc = 'PXP';
+    const slug = String(soc).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'soc';
+    const path = 'logos/' + slug + '.' + ext;
+    const up = await FP.supabase.storage.from(FP.SCAN_BUCKET).upload(path, blob, { upsert: true, contentType: mime });
+    if (up && up.error) { console.warn('[hostSocieteLogo upload]', up.error); return ''; }
+    const { data } = await FP.supabase.storage.from(FP.SCAN_BUCKET).createSignedUrl(path, 315360000); // ~10 ans
+    const url = (data && data.signedUrl) || '';
+    if (url) { const s2 = FP.settings.get(); s2.profil = (s2.profil && typeof s2.profil === 'object') ? s2.profil : {}; s2.profil.logoUrl = url; FP.settings.save(s2); }
+    return url;
+  } catch (e) { console.warn('[hostSocieteLogo]', e && (e.message || e)); return ''; }
+};
 FP.signedScanUrl = async (url, expires) => {
   try {
     const r = FP._storageRef(url);
