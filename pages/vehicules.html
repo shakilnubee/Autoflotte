@@ -987,6 +987,7 @@
     if (docsCache) docsCache.push(doc);
     else { const all = lsGetAllDocs(); (all[vehId] = all[vehId] || []).push(doc); localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
     if (docsCache) { try { localStorage.setItem(DOCS_CACHE_KEY, JSON.stringify(docsCache)); } catch (e) {} }
+    window.__docImportGuard = Date.now(); // anti clic-fantôme vers la fiche conducteur après re-rendu
     openDrawer(vehId);
     if (FP.persist.available()) FP.persist.insert('documents', doc);
   }
@@ -4096,6 +4097,14 @@
   $('viewer-close').addEventListener('click', closeViewer);
   $('viewer-backdrop').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeViewer(); });
 
+  // Garde-fou : dans les ~1,5 s qui suivent un import de document, on neutralise tout clic (fantôme)
+  // sur un lien conducteur/véhicule — c'était la cause du « ça m'emmène sur la page conducteur ».
+  document.addEventListener('click', (e) => {
+    if (!window.__docImportGuard || Date.now() - window.__docImportGuard > 1500) return;
+    const a = e.target.closest && e.target.closest('a.fp-lien, a[href*="conducteurs.html"], a[href*="vehicules.html?"]');
+    if (a) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
+
   // Ajout / suppression / consultation de documents dans la fiche véhicule
   $('drawer-body').addEventListener('click', async (e) => {
     // Bouton « Voir » d'un document stocké (bucket privé) → on SIGNE l'URL avant d'ouvrir.
@@ -4193,6 +4202,10 @@
       return;
     }
     if (e.target.closest('#doc-add')) {
+      e.preventDefault(); e.stopPropagation();
+      // Garde-fou : après un import de document, on bloque toute navigation ACCIDENTELLE vers la
+      // fiche conducteur (un clic « fantôme » sur le lien du chauffeur après re-rendu du tiroir).
+      window.__docImportGuard = Date.now();
       const body = $('drawer-body');
       const btn = e.target.closest('#doc-add');
       const type = body.querySelector('#doc-type').value;
@@ -4265,6 +4278,7 @@
             alert("Échec de l'import de « " + file.name + " » : " + (err && err.message ? err.message : err));
           }
         }
+        window.__docImportGuard = Date.now(); // ré-arme le garde-fou au moment du re-rendu (clic fantôme)
         openDrawer(vehId); // ré-affiche (documents archivés + champs complétés)
         if (allGot.size) {
           const note = document.createElement('div');
