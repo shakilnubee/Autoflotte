@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260812g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260812g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260813c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260812g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260813c">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -473,11 +473,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260812g"></script>
-<script src="../assets/js/supabase-client.js?v=20260812g"></script>
-<script src="../assets/js/data.js?v=20260812g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260813c"></script>
+<script src="../assets/js/supabase-client.js?v=20260813c"></script>
+<script src="../assets/js/data.js?v=20260813c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260812g"></script>
+<script src="../assets/js/app.js?v=20260813c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1088,21 +1088,33 @@
     return String(tpl).replace(/ ?\{prenom\}/gi, p ? ' ' + p : '');
   }
   // Modèle de la société active (Paramètres → Société), sinon texte par défaut.
-  function modeleMail(cle, defaut) {
-    try { const prof = (window.FP && FP.societeProfil) ? FP.societeProfil() : {}; const v = prof[cle]; if (v && String(v).trim()) return String(v); } catch (e) {}
+  // Bilingue : si le conducteur (prénom) est en anglais → variante EN (custom `<cle>_en`,
+  // sinon défaut EN), sinon FR. La langue vit dans la fiche conducteur (FP.condLangue).
+  function modeleMail(cle, defaut, prenom) {
+    let prof = {}; try { prof = (window.FP && FP.societeProfil) ? FP.societeProfil() : {}; } catch (e) {}
+    const en = !!(window.FP && FP.condLangue && FP.condLangue(prenom) === 'en');
+    if (en) {
+      const custom = prof[cle + '_en'];
+      if (custom && String(custom).trim()) return String(custom);
+      const base = cle.replace(/^mailModele/, '').toLowerCase();  // paiement / designation / relance
+      const defEn = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT[base + '_en']);
+      if (defEn && String(defEn).trim()) return String(defEn);
+    }
+    const v = prof[cle];
+    if (v && String(v).trim()) return String(v);
     return defaut;
   }
   // Email 1 — demande de paiement direct (pas de désignation nécessaire)
   function mailPaiement() {
     const p = prenomCourant();
     const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.paiement) || `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`;
-    ouvrirMail(appliquerModele(modeleMail('mailModelePaiement', def), p));
+    ouvrirMail(appliquerModele(modeleMail('mailModelePaiement', def, p), p));
   }
   // Email 2 — demande de confirmation pour effectuer la désignation
   function mailDesignation() {
     const p = prenomCourant();
     const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.designation) || `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.`;
-    ouvrirMail(appliquerModele(modeleMail('mailModeleDesignation', def), p));
+    ouvrirMail(appliquerModele(modeleMail('mailModeleDesignation', def, p), p));
   }
   // Relance : réponse AUTOMATIQUE en UN CLIC, envoyée DANS LE FIL du 1er e-mail (comme si l'e-mail
   // initial se répondait à lui-même). Pas de fenêtre, pas d'objet à saisir : ouvrirMail({reply:true})
@@ -1110,7 +1122,7 @@
   function relanceEmail() {
     const p = prenomCourant();
     const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.relance) || `Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`;
-    ouvrirMail(appliquerModele(modeleMail('mailModeleRelance', def), p), { reply: true });
+    ouvrirMail(appliquerModele(modeleMail('mailModeleRelance', def, p), p), { reply: true });
   }
 
   // ---------- ENVOI EN LOT (demandes de paiement / relances) sur les amendes sélectionnées ----------
@@ -1153,7 +1165,7 @@
     const def = reply
       ? ((window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.relance) || `Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`)
       : ((window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.paiement) || `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`);
-    const tpl = modeleMail(reply ? 'mailModeleRelance' : 'mailModelePaiement', def);
+    const cle = reply ? 'mailModeleRelance' : 'mailModelePaiement';
     const list = ids.map(id => data.amendes.find(x => x.id === id)).filter(Boolean);
     if (!list.length) return;
     const label = reply ? 'Relancer les paiements' : 'Envoyer les demandes de paiement';
@@ -1163,6 +1175,8 @@
     for (let i = 0; i < list.length; i++) {
       const a = list[i];
       if (FP.toast) FP.toast(`Envoi ${i + 1}/${list.length}…`);
+      // Modèle résolu PAR amende → respecte la langue de chaque conducteur (FR/EN).
+      const tpl = modeleMail(cle, def, prenomDe(a));
       const st = await sendAmendeAuto(a, appliquerModele(tpl, prenomDe(a)), { reply });
       if (st === 'sent') sent++;
       else if (st === 'no-mail') noMail.push(a);

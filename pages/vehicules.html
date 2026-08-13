@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260812g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260812g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260813c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260812g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260813c">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -868,13 +868,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260812g"></script>
-<script src="../assets/js/supabase-client.js?v=20260812g"></script>
-<script src="../assets/js/data.js?v=20260812g"></script>
-<script src="../assets/js/fleet-docs.js?v=20260812g"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260812g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260813c"></script>
+<script src="../assets/js/supabase-client.js?v=20260813c"></script>
+<script src="../assets/js/data.js?v=20260813c"></script>
+<script src="../assets/js/fleet-docs.js?v=20260813c"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260813c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260812g"></script>
+<script src="../assets/js/app.js?v=20260813c"></script>
 <script>
   lucide.createIcons();
 
@@ -4511,13 +4511,86 @@
     $('qr-label').textContent = label;
     $('qr-backdrop').classList.add('open');
   }
+  // Le PNG téléchargé reprend EXACTEMENT le même modèle que l'impression :
+  // logo société + « Société — PLAQUE » + QR + plaque + modèle + astuce, sur une carte.
+  function roundRectPath(ctx, x, y, w, h, r) {
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return; }
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function wrapLines(ctx, text, maxW) {
+    const words = String(text || '').split(' '); const lines = []; let line = '';
+    for (let i = 0; i < words.length; i++) {
+      const t = line ? line + ' ' + words[i] : words[i];
+      if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = words[i]; } else line = t;
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+  function renderQrCard(cb) {
+    if (!qrCurrent) { cb(null); return; }
+    let socNom = ''; try { const s = FP.settings.get(); socNom = (s.societe && s.societe.nom) || ''; } catch (e) {}
+    if (!socNom) { try { const a = FP.activeSociete && FP.activeSociete(); socNom = (a && a !== '__all__') ? a : ''; } catch (e) {} }
+    let logo = ''; try { logo = (FP.settings.get().profil || {}).logoDataUrl || ''; } catch (e) {}
+    const titre = (socNom ? socNom + ' — ' : '') + (qrCurrent.immat || '');
+    const modele = (qrCurrent.label || '').replace(qrCurrent.immat || '', '').replace(/^[\s·•-]+/, '').trim();
+    const hint = qrCurrent.hint || 'Scannez pour ouvrir la fiche du véhicule';
+    const qrc = buildQrCanvas(qrCurrent.url, 12, 4);
+    const draw = (logoImg) => {
+      const R = 2;                                   // supersampling → PNG bien net
+      const W = 720 * R;
+      const padX = 56 * R, padTop = 46 * R, padBottom = 42 * R, gap = 16 * R;
+      const socSize = 30 * R, plateSize = 52 * R, modSize = 24 * R, hintSize = 21 * R;
+      const qrSize = Math.min(W - padX * 2, 500 * R);
+      let logoH = 0, logoW = 0;
+      if (logoImg && logoImg.naturalWidth) {
+        const maxH = 60 * R, maxW = 300 * R;
+        const sc = Math.min(maxH / logoImg.naturalHeight, maxW / logoImg.naturalWidth, 1);
+        logoH = logoImg.naturalHeight * sc; logoW = logoImg.naturalWidth * sc;
+      }
+      const tmp = document.createElement('canvas').getContext('2d');
+      tmp.font = '500 ' + hintSize + 'px Inter,Arial,sans-serif';
+      const hintLines = wrapLines(tmp, hint, W - padX * 2);
+      let H = padTop;
+      if (logoH) H += logoH + gap;
+      H += socSize + Math.round(gap * 1.5);
+      H += qrSize + Math.round(gap * 1.3);
+      H += plateSize + gap;
+      if (modele) H += modSize + Math.round(gap * 0.8);
+      H += hintLines.length * Math.round(hintSize * 1.3) + padBottom;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = '#0f1e3d'; ctx.lineWidth = 3 * R;
+      roundRectPath(ctx, 6 * R, 6 * R, W - 12 * R, H - 12 * R, 18 * R); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      let cy = padTop;
+      if (logoH) { ctx.drawImage(logoImg, (W - logoW) / 2, cy, logoW, logoH); cy += logoH + gap; }
+      ctx.fillStyle = '#0f1e3d'; ctx.font = '800 ' + socSize + 'px Inter,Arial,sans-serif';
+      ctx.fillText(titre, W / 2, cy); cy += socSize + Math.round(gap * 1.5);
+      ctx.drawImage(qrc, (W - qrSize) / 2, cy, qrSize, qrSize); cy += qrSize + Math.round(gap * 1.3);
+      ctx.fillStyle = '#0f1e3d'; ctx.font = '900 ' + plateSize + 'px monospace';
+      ctx.fillText(qrCurrent.immat || '', W / 2, cy); cy += plateSize + gap;
+      if (modele) { ctx.fillStyle = '#64748b'; ctx.font = '600 ' + modSize + 'px Inter,Arial,sans-serif'; ctx.fillText(modele, W / 2, cy); cy += modSize + Math.round(gap * 0.8); }
+      ctx.fillStyle = '#94a3b8'; ctx.font = '500 ' + hintSize + 'px Inter,Arial,sans-serif';
+      const lh = Math.round(hintSize * 1.3);
+      hintLines.forEach((ln, i) => ctx.fillText(ln, W / 2, cy + i * lh));
+      cb(c);
+    };
+    if (logo) { const im = new Image(); im.onload = () => draw(im); im.onerror = () => draw(null); im.src = logo; }
+    else draw(null);
+  }
   function downloadQr() {
     if (!qrCurrent) return;
-    buildQrCanvas(qrCurrent.url, 12, 4).toBlob(b => {
-      const a = document.createElement('a'); a.href = URL.createObjectURL(b);
-      a.download = 'qr-' + (qrCurrent.immat || 'vehicule') + '.png'; a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1500);
-    }, 'image/png');
+    renderQrCard(canvas => {
+      const target = canvas || buildQrCanvas(qrCurrent.url, 12, 4);
+      target.toBlob(b => {
+        const a = document.createElement('a'); a.href = URL.createObjectURL(b);
+        a.download = 'qr-' + (qrCurrent.immat || 'vehicule') + '.png'; a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+      }, 'image/png');
+    });
   }
   function printQr() {
     if (!qrCurrent) return;
