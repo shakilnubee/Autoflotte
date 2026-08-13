@@ -1086,7 +1086,9 @@
     const builtin = builtinDocs(v);
     // Les photos « état des lieux » ont leur propre galerie (edlSectionHTML) → on les exclut de la liste.
     const docs = getVehDocs(v.id).filter(d => d.type !== 'etat-des-lieux');
-    const typeOptions = DOC_TYPES.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+    // « Assurance (carte verte) » et « Carte mémo » faisaient doublon → on ne propose que « Carte mémo »
+    // dans le menu (le type 'assurance' reste reconnu pour AFFICHER les anciens documents déjà ajoutés).
+    const typeOptions = DOC_TYPES.filter(t => t.key !== 'assurance').map(t => `<option value="${t.key}">${t.label}</option>`).join('');
     const builtinRows = builtin.map(d => builtinDocRowHTML(d, v.id)).join('');
     const linkRows = docs.length ? docs.map(docRowHTML).join('') : '';
     const rows = (builtinRows + linkRows) || '<p class="text-sm text-slate-500">Aucun document pour le moment.</p>';
@@ -4203,6 +4205,9 @@
         return;
       }
       const vehId = state.editingId;
+      // Types qui ne sont NI un contrôle technique NI une facture → on stocke juste le fichier,
+      // sans lecture IA « facture » (inutile pour un mémo/assurance/carte grise, et évite tout effet de bord).
+      const SKIP_IA = new Set(['carte-grise', 'memo', 'assurance', 'code-cession', 'contrat', 'etat-des-lieux']);
       btn.disabled = true; btn.style.opacity = '.7';
       (async () => {
         const allGot = new Set();
@@ -4213,7 +4218,7 @@
             const url = await FP.uploadScan(file, 'documents');
             addVehDoc(vehId, type, (files.length === 1 ? (label || file.name) : file.name), url); // archive (re-rend la fiche)
             // Lecture → complète/maj la fiche (IA prioritaire, fiable même sur un scan sans texte ; repli OCR local)
-            try {
+            if (!SKIP_IA.has(type)) try {
               let ia = null;
               try { ia = await FP.scanIA(file, type === 'controle-technique' ? 'controle-technique' : 'facture'); } catch (e) {}
               let det = {};
