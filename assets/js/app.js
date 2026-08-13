@@ -1191,18 +1191,34 @@ FP.kmCollecte = {
   // Contenu de l'e-mail (branded, avec la plaque et le bouton vers le formulaire).
   _mail(v, link) {
     let nomSoc = ''; try { nomSoc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
+    let logo = ''; try { logo = (FP.settings.get().profil || {}).logoDataUrl || ''; } catch (e) {}
     const plaque = FP.esc ? FP.esc(v.immat || '') : (v.immat || '');
     const marque = FP.esc ? FP.esc(((v.marque || '') + ' ' + (v.modele || '')).trim()) : ((v.marque || '') + ' ' + (v.modele || '')).trim();
-    const prenom = (v.chauffeur ? String(v.chauffeur).trim().split(/\s+/)[0] : '');
+    // Conducteur : prénom + nom + poste (via la fiche conducteur, comme le QR).
+    let cond = null; try { cond = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(v.chauffeur) : null; } catch (e) {}
+    const cPrenom = (cond && cond.prenom) || (v.chauffeur ? String(v.chauffeur).trim().split(/\s+/)[0] : '');
+    const cNom = (cond && cond.nom) || '';
+    const fullName = ((cPrenom || '') + ' ' + (cNom || '')).trim() || String(v.chauffeur || '').trim();
+    const cPoste = (cond && cond.poste) || '';
     const subject = 'Relevé kilométrique' + (plaque ? ' — ' + plaque : '');
+    // Logo société (best-effort : certaines messageries demandent « afficher les images »).
+    const socLogoImg = logo ? '<img src="' + logo + '" alt="' + FP.esc(nomSoc || 'Logo') + '" style="max-height:40px;max-width:160px;display:block;margin-bottom:10px;background:#fff;border-radius:6px;padding:4px 6px">' : '';
+    // Plaque façon immatriculation (table = compatible e-mail).
+    const plateBadge = plaque ? ('<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate"><tr>'
+      + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:10px;padding:7px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
+      + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:5px 12px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0">' + plaque + '</td>'
+      + '</tr></table>') : '';
     const html = ''
       + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
       + '<div style="background:linear-gradient(135deg,#0B1220,#1E293B);color:#fff;padding:20px 22px;border-radius:14px 14px 0 0">'
+      + socLogoImg
       + '<div style="font-weight:900;font-style:italic;font-size:17px">Parc P<span style="color:#F97316">i</span>lot</div>'
       + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:8px">Relevé kilométrique demandé</div>'
       + '</div>'
       + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px">'
-      + '<p style="margin:0 0 12px">' + (prenom ? 'Bonjour ' + FP.esc(prenom) + ',' : 'Bonjour,') + '</p>'
+      + '<p style="margin:0 0 2px">' + (fullName ? 'Bonjour ' + FP.esc(fullName) + ',' : 'Bonjour,') + '</p>'
+      + (cPoste ? '<p style="margin:0 0 12px;font-size:13px;color:#64748B">' + FP.esc(cPoste) + '</p>' : '<div style="height:8px"></div>')
+      + (plateBadge ? '<div style="margin:4px 0 14px">' + plateBadge + '</div>' : '')
       + '<p style="margin:0 0 16px;line-height:1.5">Merci d\'indiquer le <b>kilométrage actuel</b> de votre véhicule'
       + (plaque ? ' <b>' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + '. C\'est rapide : un clic, un nombre, terminé.</p>'
       + '<p style="text-align:center;margin:22px 0">'
@@ -1211,7 +1227,7 @@ FP.kmCollecte = {
       + '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">Si le bouton ne fonctionne pas, copiez ce lien : <br>' + link + '</p>'
       + (nomSoc ? '<p style="margin:18px 0 0;font-size:13px;color:#64748B">' + FP.esc(nomSoc) + '</p>' : '')
       + '</div></div>';
-    const text = (prenom ? 'Bonjour ' + prenom + ',\n\n' : 'Bonjour,\n\n')
+    const text = (fullName ? 'Bonjour ' + fullName + ',\n\n' : 'Bonjour,\n\n')
       + 'Merci d\'indiquer le kilométrage actuel de votre véhicule' + (plaque ? ' ' + (v.immat || '') : '') + '.\n'
       + 'Cliquez sur ce lien : ' + link + '\n\n' + (nomSoc || 'Parc Pilot');
     return { subject, html, text };
