@@ -1040,7 +1040,7 @@
     const t = DOC_TYPES.find(x => x.key === doc.type) || DOC_TYPES[DOC_TYPES.length - 1];
     // Document stocké dans Supabase (lien direct) ou ancien lien Google Drive
     const viewBtn = doc.url
-      ? `<a href="${escapeHtml(sanitizeUrl(doc.url))}" target="_blank" rel="noopener" class="btn btn-outline !py-1 !px-2.5 text-xs"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</a>`
+      ? `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-open="${escapeHtml(sanitizeUrl(doc.url))}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`
       : `<button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-view="${escapeHtml(doc.drive)}" data-doc-title="${escapeHtml(doc.label)}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`;
     // La carte grise « lien Drive » est supprimable (utile si un doublon apparaît après un scan)
     const delBtn = vehId
@@ -1070,13 +1070,14 @@
 
   function docRowHTML(doc){
     const t = DOC_TYPES.find(x => x.key === doc.type) || DOC_TYPES[DOC_TYPES.length - 1];
-    const href = escapeHtml(sanitizeUrl(doc.url));
+    const url = escapeHtml(sanitizeUrl(doc.url));
     return `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm" data-doc-id="${escapeHtml(doc.id)}">
       <i data-lucide="${t.icon}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
       <div class="flex-1 min-w-0">
-        <a href="${href}" target="_blank" rel="noopener" class="font-medium hover:underline truncate block" style="color: var(--fp-accent)">${escapeHtml(doc.label || t.label)}</a>
+        <div class="font-medium truncate">${escapeHtml(doc.label || t.label)}</div>
         <div class="text-xs text-slate-500">${t.label}${(doc.date || doc.createdAt) ? ' · ajouté le ' + FP.dateNum((doc.date || doc.createdAt).slice(0, 10)) : ''}</div>
       </div>
+      <button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-open="${url}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>
       <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-doc-del="${escapeHtml(doc.id)}" title="Supprimer ce document"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
     </div>`;
   }
@@ -4095,6 +4096,15 @@
 
   // Ajout / suppression / consultation de documents dans la fiche véhicule
   $('drawer-body').addEventListener('click', async (e) => {
+    // Bouton « Voir » d'un document stocké (bucket privé) → on SIGNE l'URL avant d'ouvrir.
+    const open = e.target.closest('[data-doc-open]');
+    if (open) {
+      e.preventDefault();
+      let url = open.getAttribute('data-doc-open');
+      try { if (window.FP && FP.signedScanUrl) url = await FP.signedScanUrl(url, 3600); } catch (e2) {}
+      if (url) window.open(url, '_blank', 'noopener');
+      return;
+    }
     const view = e.target.closest('[data-doc-view]');
     if (view) { openViewer(view.dataset.docView, view.dataset.docTitle); return; }
     // ↺ Réafficher un document intégré masqué (fonctionne même hors mode édition)
