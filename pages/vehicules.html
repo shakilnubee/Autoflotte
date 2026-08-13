@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260813i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260813j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260813i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260813j">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -868,13 +868,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260813i"></script>
-<script src="../assets/js/supabase-client.js?v=20260813i"></script>
-<script src="../assets/js/data.js?v=20260813i"></script>
-<script src="../assets/js/fleet-docs.js?v=20260813i"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260813i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260813j"></script>
+<script src="../assets/js/supabase-client.js?v=20260813j"></script>
+<script src="../assets/js/data.js?v=20260813j"></script>
+<script src="../assets/js/fleet-docs.js?v=20260813j"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260813j"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260813i"></script>
+<script src="../assets/js/app.js?v=20260813j"></script>
 <script>
   lucide.createIcons();
 
@@ -2611,6 +2611,19 @@
     if (u && FP.alertes) { e.preventDefault(); FP.alertes.reafficher(u.dataset.vehUnmute); if (state.editingId) openDrawer(state.editingId); return; }
     const k = e.target.closest('[data-kmc-ask]');
     if (k) { e.preventDefault(); askKmChauffeur(k.getAttribute('data-kmc-ask')); return; }
+    // Suivre / ne plus suivre le km de ce véhicule (même réglage que la page Alertes → Relevé KM).
+    const ks = e.target.closest('[data-kmc-suivi]');
+    if (ks) {
+      e.preventDefault();
+      const v = data.vehicules.find(x => x.id === ks.getAttribute('data-kmc-suivi'));
+      if (v && FP.kmSuiviSet) {
+        const now = !FP.kmSuivi || FP.kmSuivi(v);
+        FP.kmSuiviSet(v, !now);              // bascule
+        if (FP.toast) FP.toast(now ? '🔕 Km non suivi pour ' + (v.immat || 'ce véhicule') : '🔔 Suivi du km réactivé');
+        if (state.editingId) openDrawer(state.editingId);
+      }
+      return;
+    }
   });
 
   // ---------- Bouton "Enlever le conducteur" du véhicule ----------
@@ -2712,7 +2725,9 @@
       if (!nm || nm === '—') return '';
       const email = FP.kmCollecte.emailDe(v);
       const st = FP.kmCollecte.statusFor(v);
+      const suivi = !FP.kmSuivi || FP.kmSuivi(v);
       let statutHtml = '';
+      if (!suivi) statutHtml += '<div class="text-xs" style="color:#B45309;margin-top:4px">🔕 Km non suivi — ce véhicule n\'est plus relancé.</div>';
       if (st) {
         if (st.used_at) {
           statutHtml = `<div class="text-xs" style="color:#15803D;margin-top:4px">✅ Km reçu le ${FP.dateNum(st.used_at)}${st.km_recu != null ? ' : <b>' + FP.num(st.km_recu) + ' km</b>' : ''}</div>`;
@@ -2731,9 +2746,14 @@
             ${hint}
             ${statutHtml}
           </div>
-          <button type="button" class="btn btn-outline text-sm" data-kmc-ask="${v.id}" style="${dis}" ${email ? '' : 'disabled'}>
-            <i data-lucide="mail" class="w-4 h-4"></i> ${st && st.used_at ? 'Redemander le km' : 'Demander le km'}
-          </button>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" class="btn btn-outline text-sm" data-kmc-suivi="${v.id}" title="${suivi ? 'Ne plus jamais demander le km de ce véhicule' : 'Réactiver le suivi du km de ce véhicule'}">
+              ${suivi ? '🔕 Ne plus suivre le km' : '🔔 Suivre le km'}
+            </button>
+            <button type="button" class="btn btn-outline text-sm" data-kmc-ask="${v.id}" style="${dis}" ${email ? '' : 'disabled'}>
+              <i data-lucide="mail" class="w-4 h-4"></i> ${st && st.used_at ? 'Redemander le km' : 'Demander le km'}
+            </button>
+          </div>
         </div>
       </div>`;
     } catch (e) { return ''; }
@@ -3627,7 +3647,7 @@
     const grp = state.groupe;
     let base = sel.length ? sel
       : data.vehicules.filter(v => grp === 'all' ? !FP.estVendu(v) : FP.vehGroupes(v).includes(grp));
-    base = base.filter(v => !FP.estVendu(v) && v.chauffeur && String(v.chauffeur).trim() && String(v.chauffeur).trim() !== '—');
+    base = base.filter(v => !FP.estVendu(v) && (!FP.kmSuivi || FP.kmSuivi(v)) && v.chauffeur && String(v.chauffeur).trim() && String(v.chauffeur).trim() !== '—');
     const avecMail = base.filter(v => FP.kmCollecte.emailDe(v));
     const sansMail = base.filter(v => !FP.kmCollecte.emailDe(v));
     if (!base.length) { alert('Aucun véhicule avec un chauffeur dans ce périmètre.'); return; }
