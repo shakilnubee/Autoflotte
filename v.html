@@ -424,8 +424,13 @@
     if (docs.length) {
       html += docs.map(function (dc) {
         var emo = /grise/i.test(dc.type) ? '🚗' : (/assur/i.test(dc.type) ? '🛡️' : (/techni/i.test(dc.type) ? '🔧' : '📄'));
-        return '<div class="docrow"><div class="di">' + emo + '</div><div class="dn">' + esc(dc.label || 'Document') + '</div>'
-          + '<a class="btn" href="' + esc(dc.url) + '" target="_blank" rel="noopener">👁️ ' + esc(t('b_view')) + '</a></div>';
+        // Une PHOTO (carte grise/mémo prise en photo) s'ouvre dans la visionneuse interne (zoom, rapide) ;
+        // un PDF garde l'ouverture NATIVE du navigateur (meilleur lecteur PDF sur mobile).
+        var isImg = /^data:image\//i.test(dc.url) || /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i.test(dc.url);
+        var viewBtn = isImg
+          ? '<button type="button" class="btn lb-open" data-lb-url="' + esc(dc.url) + '">👁️ ' + esc(t('b_view')) + '</button>'
+          : '<a class="btn" href="' + esc(dc.url) + '" target="_blank" rel="noopener">👁️ ' + esc(t('b_view')) + '</a>';
+        return '<div class="docrow"><div class="di">' + emo + '</div><div class="dn">' + esc(dc.label || 'Document') + '</div>' + viewBtn + '</div>';
       }).join('');
     } else {
       html += '<p class="muted">' + esc(t('d_none')) + '</p>';
@@ -533,18 +538,22 @@
   }
 
   // ===== Visionneuse plein écran (états des lieux) : défilement des photos, sans quitter le portail =====
-  var lbIdx = 0;
+  var lbIdx = 0, lbList = [];
   function lbShow() {
-    var url = edlImgs[lbIdx] || '';
+    var url = lbList[lbIdx] || '';
     $('lb-img').src = url;
     var nu = $('lb-open-new'); if (nu) nu.href = url;
-    $('lb-count').textContent = (lbIdx + 1) + ' / ' + edlImgs.length;
+    var multi = lbList.length > 1;
+    $('lb-count').textContent = (lbIdx + 1) + ' / ' + lbList.length;
+    $('lb-count').style.visibility = multi ? 'visible' : 'hidden';
+    $('lb-prev').style.display = multi ? '' : 'none';
+    $('lb-next').style.display = multi ? '' : 'none';
     $('lb-prev').disabled = lbIdx <= 0;
-    $('lb-next').disabled = lbIdx >= edlImgs.length - 1;
+    $('lb-next').disabled = lbIdx >= lbList.length - 1;
   }
-  function lbOpen(i) { if (!edlImgs.length) return; lbIdx = Math.max(0, Math.min(edlImgs.length - 1, i | 0)); lbShow(); $('lightbox').classList.add('open'); }
+  function lbOpen(list, i) { lbList = list || []; if (!lbList.length) return; lbIdx = Math.max(0, Math.min(lbList.length - 1, i | 0)); lbShow(); $('lightbox').classList.add('open'); }
   function lbClose() { $('lightbox').classList.remove('open'); $('lb-img').src = ''; }
-  function lbNav(d) { var n = lbIdx + d; if (n < 0 || n >= edlImgs.length) return; lbIdx = n; lbShow(); }
+  function lbNav(d) { var n = lbIdx + d; if (n < 0 || n >= lbList.length) return; lbIdx = n; lbShow(); }
   $('lb-close').addEventListener('click', lbClose);
   $('lb-prev').addEventListener('click', function () { lbNav(-1); });
   $('lb-next').addEventListener('click', function () { lbNav(1); });
@@ -566,7 +575,13 @@
   // ===== Wiring =====
   document.addEventListener('click', function (e) {
     var lb = e.target.closest && e.target.closest('.lb-open');
-    if (lb) { e.preventDefault(); lbOpen(+lb.getAttribute('data-lb')); return; }
+    if (lb) {
+      e.preventDefault();
+      var single = lb.getAttribute('data-lb-url');
+      if (single) lbOpen([single], 0);                       // document image isolé (Mes documents)
+      else lbOpen(edlImgs, +lb.getAttribute('data-lb'));     // galerie états des lieux
+      return;
+    }
     var go = e.target.closest && e.target.closest('[data-go]');
     if (go) { route(go.getAttribute('data-go')); return; }
     if (e.target.closest && e.target.closest('[data-back]')) { goMenu(); return; }
