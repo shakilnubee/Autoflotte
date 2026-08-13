@@ -21,6 +21,9 @@
   .eyebrow { font-size:.68rem; font-weight:800; letter-spacing:.14em; text-transform:uppercase; color:#8598B4; }
   .logo { font-weight:900; font-style:italic; font-size:1.05rem; letter-spacing:-.02em; }
   .logo .o { color:var(--accent); }
+  .lang { position:absolute; top:1rem; right:1rem; display:inline-flex; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.2); border-radius:9999px; overflow:hidden; }
+  .lang button { border:none; background:transparent; color:#8598B4; font-weight:800; font-size:.72rem; padding:.28rem .6rem; cursor:pointer; letter-spacing:.03em; }
+  .lang button.on { background:var(--accent); color:#fff; }
   .title { font-size:1.4rem; font-weight:900; font-style:italic; letter-spacing:-.02em; margin:.7rem 0 .1rem; color:#fff; }
   .sub { color:#8598B4; font-size:.92rem; }
   .plate { display:inline-flex; align-items:stretch; font-weight:800; letter-spacing:2px; color:#0b0b0b; background:#fff; border:2.5px solid #0b0b0b; border-radius:8px; overflow:hidden; line-height:1; margin-top:1rem; box-shadow:0 6px 16px -8px rgba(0,0,0,.5); }
@@ -63,22 +66,26 @@
   <div class="wrap">
     <div class="card">
       <div class="head">
+        <div class="lang" id="lang-switch">
+          <button type="button" data-lang="fr">FR</button>
+          <button type="button" data-lang="en">EN</button>
+        </div>
         <div class="logo"><svg width="118" height="27" viewBox="0 0 154 36" xmlns="http://www.w3.org/2000/svg" aria-label="Parc Pilot"><line x1="2" y1="10" x2="24" y2="10" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><line x1="0" y1="18" x2="28" y2="18" stroke="#F97316" stroke-width="3" stroke-linecap="round"/><line x1="6" y1="26" x2="22" y2="26" stroke="#FB923C" stroke-width="3" stroke-linecap="round"/><text x="34" y="26" font-size="20" font-weight="900" font-style="italic" fill="#fff">Parc</text><text x="86" y="26" font-size="20" font-weight="900" font-style="italic" fill="#F97316">Pilot</text></svg></div>
-        <div class="title">Relevé kilométrique</div>
+        <div class="title" id="title">Relevé kilométrique</div>
         <div class="sub" id="sub">Merci de communiquer le kilométrage de votre véhicule.</div>
         <div id="plate-wrap"></div>
       </div>
       <div class="body">
-        <button id="km-back" class="kback" style="display:none" onclick="(function(){var q=new URLSearchParams(location.search).get('q');if(q)location.href='v.html?h='+encodeURIComponent(q);else history.back();})()">‹ Retour</button>
+        <button id="km-back" class="kback" style="display:none" onclick="(function(){var p=new URLSearchParams(location.search);var q=p.get('q');if(q)location.href='v.html?h='+encodeURIComponent(q);else history.back();})()">‹ <span id="back-lbl">Retour</span></button>
         <!-- État : chargement -->
         <div id="loading" class="center" style="padding:1.5rem 0"><span class="spin"></span></div>
 
         <!-- État : formulaire -->
         <div id="form" class="hide">
-          <label class="f" for="km">Kilométrage actuel au compteur</label>
+          <label class="f" for="km" id="km-label">Kilométrage actuel au compteur</label>
           <div class="kmknown" id="kmknown"></div>
           <input id="km" type="number" inputmode="numeric" min="1" step="1" placeholder="ex. 45000" autocomplete="off">
-          <div class="unit">kilomètres</div>
+          <div class="unit" id="unit">kilomètres</div>
           <div class="msg err" id="err"></div>
           <button class="go" id="send">Envoyer mon kilométrage</button>
         </div>
@@ -86,19 +93,19 @@
         <!-- État : merci -->
         <div id="done" class="center hide">
           <div class="big-emoji">✅</div>
-          <div class="ok-title">Merci !</div>
+          <div class="ok-title" id="done-title">Merci !</div>
           <div class="sub" style="color:var(--muted)" id="done-sub">Votre kilométrage a bien été enregistré.</div>
         </div>
 
         <!-- État : lien invalide -->
         <div id="bad" class="center hide">
           <div class="big-emoji">⛓️‍💥</div>
-          <div class="ok-title">Lien indisponible</div>
+          <div class="ok-title" id="bad-title">Lien indisponible</div>
           <div class="sub" style="color:var(--muted)" id="bad-sub">Ce lien n'est plus valide.</div>
         </div>
       </div>
     </div>
-    <div class="foot">Parc Pilot — gestion de flotte · <span id="soc-foot"></span></div>
+    <div class="foot"><span id="foot-lbl">Parc Pilot — gestion de flotte · </span><span id="soc-foot"></span></div>
   </div>
 
 <script>
@@ -110,13 +117,71 @@
   var token = params.get('t') || '';          // lien e-mail à usage unique
   var qr = params.get('q') || '';              // QR permanent collé dans le véhicule
   var isQr = !!qr && !token;
+
+  // ============ Traductions FR / EN ============
+  var STR = {
+    fr: {
+      title: 'Relevé kilométrique', sub: 'Merci de communiquer le kilométrage de votre véhicule.',
+      back: 'Retour', label: 'Kilométrage actuel au compteur', unit: 'kilomètres', km_ph: 'ex. 45000',
+      send: 'Envoyer mon kilométrage', sending: 'Envoi…',
+      done_title: 'Merci !', done_sub: 'Votre kilométrage a bien été enregistré.',
+      bad_title: 'Lien indisponible', bad_sub: 'Ce lien n\'est plus valide.',
+      foot: 'Parc Pilot — gestion de flotte · ',
+      hello: function (n) { return 'Bonjour ' + n + ', merci d\'indiquer le kilométrage de votre véhicule.'; },
+      already: function (v) { return 'Vous avez déjà répondu (<b>' + v + ' km</b>). Vous pouvez corriger si besoin.'; },
+      lastknown: function (v) { return 'Dernier kilométrage connu : <b>' + v + ' km</b>'; },
+      saved: function (v) { return 'Kilométrage enregistré : <b>' + v + ' km</b>. Vous pouvez fermer cette page.'; },
+      incomplete: 'Lien incomplet. Scanne le QR de ton véhicule ou ouvre le lien reçu par e-mail.',
+      invalid: 'Ce lien n\'est plus valide.', conn: 'Connexion impossible. Réessaie dans un instant.',
+      needkm: 'Saisis ton kilométrage (un nombre).', sendfail: 'Échec de l\'envoi. Réessaie.', conn2: 'Connexion impossible. Réessaie.'
+    },
+    en: {
+      title: 'Mileage reading', sub: 'Please provide your vehicle\'s mileage.',
+      back: 'Back', label: 'Current odometer reading', unit: 'kilometres', km_ph: 'e.g. 45000',
+      send: 'Submit my mileage', sending: 'Sending…',
+      done_title: 'Thank you!', done_sub: 'Your mileage has been recorded.',
+      bad_title: 'Link unavailable', bad_sub: 'This link is no longer valid.',
+      foot: 'Parc Pilot — fleet management · ',
+      hello: function (n) { return 'Hello ' + n + ', please enter your vehicle\'s mileage.'; },
+      already: function (v) { return 'You have already replied (<b>' + v + ' km</b>). You can correct it if needed.'; },
+      lastknown: function (v) { return 'Last known mileage: <b>' + v + ' km</b>'; },
+      saved: function (v) { return 'Mileage recorded: <b>' + v + ' km</b>. You can close this page.'; },
+      incomplete: 'Incomplete link. Scan your vehicle\'s QR code or open the link you received by email.',
+      invalid: 'This link is no longer valid.', conn: 'Connection failed. Please try again shortly.',
+      needkm: 'Enter your mileage (a number).', sendfail: 'Sending failed. Please try again.', conn2: 'Connection failed. Please try again.'
+    }
+  };
+  // Langue : ?lang= (depuis le portail) → préférence enregistrée → serveur (plus bas) → FR.
+  var LANG = 'fr';
+  var urlLang = (params.get('lang') || '').toLowerCase();
+  var savedLang = null; try { savedLang = localStorage.getItem('pp_lang'); } catch (e) {}
+  if (urlLang === 'en' || urlLang === 'fr') LANG = urlLang;
+  else if (savedLang === 'en' || savedLang === 'fr') LANG = savedLang;
+  var manual = !!(urlLang || savedLang);      // langue déjà fixée par l'utilisateur ?
+  function t(k) { return STR[LANG][k]; }
+  function localeNb() { return LANG === 'en' ? 'en-GB' : 'fr-FR'; }
+  function applyStaticI18n() {
+    document.documentElement.lang = LANG;
+    $('title').textContent = t('title');
+    $('km-label').textContent = t('label');
+    $('unit').textContent = t('unit');
+    $('back-lbl').textContent = t('back');
+    $('foot-lbl').textContent = t('foot');
+    $('km').setAttribute('placeholder', t('km_ph'));
+    if (!$('send').disabled) $('send').textContent = t('send');
+    $('done-title').textContent = t('done_title');
+    $('bad-title').textContent = t('bad_title');
+    document.querySelectorAll('#lang-switch button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-lang') === LANG); });
+  }
+
   // Bouton « Retour » vers le portail conducteur quand on arrive via le QR du véhicule.
-  if (isQr) { var _bk = document.getElementById('km-back'); if (_bk) _bk.style.display = 'inline-flex'; }
-  // Paramètre transmis au serveur (t= ou q=) selon le mode.
+  if (isQr) { var _bk = $('km-back'); if (_bk) _bk.style.display = 'inline-flex'; }
   function keyParam() { return isQr ? ('q=' + encodeURIComponent(qr)) : ('t=' + encodeURIComponent(token)); }
   function keyBody() { return isQr ? { q: qr } : { t: token }; }
 
+  var lastState = 'loading';   // pour re-render les sous-titres au changement de langue
   function show(id) {
+    lastState = id;
     ['loading', 'form', 'done', 'bad'].forEach(function (k) { $(k).classList.toggle('hide', k !== id); });
   }
   function esc(s) { return String(s == null ? '' : s).replace(/[<>&"]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]; }); }
@@ -126,50 +191,67 @@
   }
   function headers() { return { 'Content-Type': 'application/json', 'apikey': APIKEY, 'Authorization': 'Bearer ' + APIKEY }; }
 
-  if (!token && !qr) { show('bad'); $('bad-sub').textContent = 'Lien incomplet. Scanne le QR de ton véhicule ou ouvre le lien reçu par e-mail.'; return; }
+  // État courant du véhicule (pour re-afficher les sous-titres à la bascule de langue)
+  var CUR = { chauffeur: '', kmConnu: null, deja: false, kmRecu: null };
+  function paintForm() {
+    if (CUR.chauffeur) $('sub').textContent = t('hello')(String(CUR.chauffeur).split(' ')[0]);
+    else $('sub').textContent = t('sub');
+    if (CUR.deja && CUR.kmRecu != null) { $('kmknown').innerHTML = t('already')(Number(CUR.kmRecu).toLocaleString(localeNb())); }
+    else if (CUR.kmConnu != null) { $('kmknown').innerHTML = t('lastknown')(Number(CUR.kmConnu).toLocaleString(localeNb())); }
+    else { $('kmknown').innerHTML = ''; }
+  }
+
+  // Sélecteur de langue
+  $('lang-switch').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-lang]'); if (!b) return;
+    LANG = b.getAttribute('data-lang') === 'en' ? 'en' : 'fr'; manual = true;
+    try { localStorage.setItem('pp_lang', LANG); } catch (err) {}
+    applyStaticI18n();
+    if (lastState === 'form') paintForm();
+  });
+
+  applyStaticI18n();
+
+  if (!token && !qr) { show('bad'); applyStaticI18n(); $('bad-sub').textContent = t('incomplete'); return; }
 
   // 1) Charger les infos du véhicule
   fetch(FN + '?' + keyParam(), { headers: headers() })
     .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
     .then(function (res) {
       var d = res.d || {};
-      if (!res.ok || !d.ok) { show('bad'); $('bad-sub').textContent = d.error || 'Ce lien n\'est plus valide.'; return; }
+      if (!res.ok || !d.ok) { show('bad'); $('bad-sub').textContent = d.error || t('invalid'); return; }
+      // Langue du conducteur (serveur) si l'utilisateur n'a rien choisi manuellement.
+      if (!manual && d.langue === 'en') { LANG = 'en'; applyStaticI18n(); }
       if (d.plaque) $('plate-wrap').innerHTML = plateHTML(d.plaque);
       if (d.societe) { $('soc-foot').textContent = d.societe; }
-      if (d.chauffeur) $('sub').textContent = 'Bonjour ' + d.chauffeur.split(' ')[0] + ', merci d\'indiquer le kilométrage de votre véhicule.';
-      // Déjà répondu ? On le dit mais on autorise une correction.
-      if (d.deja && d.kmRecu != null) {
-        $('kmknown').innerHTML = 'Vous avez déjà répondu (<b>' + Number(d.kmRecu).toLocaleString('fr-FR') + ' km</b>). Vous pouvez corriger si besoin.';
-        $('km').value = d.kmRecu;
-      } else if (d.kmConnu != null) {
-        $('kmknown').innerHTML = 'Dernier kilométrage connu : <b>' + Number(d.kmConnu).toLocaleString('fr-FR') + ' km</b>';
-      }
-      show('form');
+      CUR.chauffeur = d.chauffeur || ''; CUR.kmConnu = d.kmConnu; CUR.deja = !!d.deja; CUR.kmRecu = d.kmRecu;
+      if (d.deja && d.kmRecu != null) $('km').value = d.kmRecu;
+      show('form'); paintForm();
       setTimeout(function () { $('km').focus(); }, 150);
     })
-    .catch(function () { show('bad'); $('bad-sub').textContent = 'Connexion impossible. Réessaie dans un instant.'; });
+    .catch(function () { show('bad'); $('bad-sub').textContent = t('conn'); });
 
   // 2) Envoyer le km
   function submit() {
     var km = parseInt(($('km').value || '').replace(/[^0-9]/g, ''), 10);
     $('err').style.display = 'none';
-    if (!km || km <= 0) { $('err').textContent = 'Saisis ton kilométrage (un nombre).'; $('err').style.display = 'block'; return; }
-    $('send').disabled = true; $('send').innerHTML = '<span class="spin" style="width:18px;height:18px;border-width:2px;vertical-align:-3px"></span> Envoi…';
+    if (!km || km <= 0) { $('err').textContent = t('needkm'); $('err').style.display = 'block'; return; }
+    $('send').disabled = true; $('send').innerHTML = '<span class="spin" style="width:18px;height:18px;border-width:2px;vertical-align:-3px"></span> ' + esc(t('sending'));
     var _body = keyBody(); _body.km = km;
     fetch(FN, { method: 'POST', headers: headers(), body: JSON.stringify(_body) })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         var d = res.d || {};
         if (!res.ok || !d.ok) {
-          $('send').disabled = false; $('send').textContent = 'Envoyer mon kilométrage';
-          $('err').textContent = d.error || 'Échec de l\'envoi. Réessaie.'; $('err').style.display = 'block'; return;
+          $('send').disabled = false; $('send').textContent = t('send');
+          $('err').textContent = d.error || t('sendfail'); $('err').style.display = 'block'; return;
         }
-        $('done-sub').innerHTML = 'Kilométrage enregistré : <b>' + Number(d.km).toLocaleString('fr-FR') + ' km</b>. Vous pouvez fermer cette page.';
+        $('done-sub').innerHTML = t('saved')(Number(d.km).toLocaleString(localeNb()));
         show('done');
       })
       .catch(function () {
-        $('send').disabled = false; $('send').textContent = 'Envoyer mon kilométrage';
-        $('err').textContent = 'Connexion impossible. Réessaie.'; $('err').style.display = 'block';
+        $('send').disabled = false; $('send').textContent = t('send');
+        $('err').textContent = t('conn2'); $('err').style.display = 'block';
       });
   }
   $('send').addEventListener('click', submit);

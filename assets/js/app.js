@@ -5512,7 +5512,14 @@ FP.datePicker = (function () {
   function bind() {
     ensureCSS();  // masque l'icône native dès le chargement (pas seulement à la 1re ouverture)
     document.addEventListener('mousedown', (e) => {
-      const inp = e.target.closest && e.target.closest('input[type=date]');
+      let inp = e.target.closest && e.target.closest('input[type=date]');
+      // Input ENVELOPPÉ dans un <label> : un tap sur le texte/marge du label (pas pile sur l'input)
+      // ne renvoyait aucun input → notre calendrier ne s'ouvrait pas et le picker NATIF s'ouvrait à la
+      // place (comportement incohérent / « le calendrier bug »). On résout le label vers son input date.
+      if (!inp && e.target.closest) {
+        const lbl = e.target.closest('label');
+        if (lbl) inp = lbl.querySelector('input[type=date]:not([data-no-fpdp])');
+      }
       if (!inp || inp.disabled || inp.readOnly) return;
       if (inp.hasAttribute('data-no-fpdp')) return;   // échappatoire si une page veut le natif
       e.preventDefault();                              // empêche focus + picker natif

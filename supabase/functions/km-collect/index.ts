@@ -91,14 +91,32 @@ function _norm(s: string) { return String(s || "").toLowerCase().normalize("NFD"
 async function vehConducteur(db: ReturnType<typeof createClient>, chauffeur: string, societe: string) {
   const name = String(chauffeur || "").trim();
   if (!name || name === "—") return null;
-  const { data } = await db.from("conducteurs").select("prenom,nom,poste,name").eq("societe", societe || "PXP");
+  const { data } = await db.from("conducteurs").select("prenom,nom,poste,name,key").eq("societe", societe || "PXP");
   const key = _norm(name);
   const hit = (data || []).find((c: Record<string, unknown>) => {
     const full = _norm(String(c.prenom || "") + String(c.nom || ""));
     return full === key || _norm(String(c.name || "")) === key;
   });
-  if (!hit) return { prenom: name.split(" ")[0] || name, nom: name.split(" ").slice(1).join(" "), poste: "" };
-  return { prenom: String(hit.prenom || ""), nom: String(hit.nom || ""), poste: String(hit.poste || "") };
+  if (!hit) return { prenom: name.split(" ")[0] || name, nom: name.split(" ").slice(1).join(" "), poste: "", key: "" };
+  return { prenom: String(hit.prenom || ""), nom: String(hit.nom || ""), poste: String(hit.poste || ""), key: String(hit.key || "") };
+}
+
+// Langue d'un conducteur (par son nom + société) via la carte app_settings.condLangues. 'fr' par défaut.
+async function condLangueDe(db: ReturnType<typeof createClient>, societe: string, chauffeur: string) {
+  const name = String(chauffeur || "").trim();
+  if (!name || name === "—") return "fr";
+  const soc = societe || "PXP";
+  const [{ data: st }, { data: cs }] = await Promise.all([
+    db.from("app_settings").select("data").eq("id", soc).maybeSingle(),
+    db.from("conducteurs").select("key,prenom,nom,name").eq("societe", soc),
+  ]);
+  const map = (st && st.data && (st.data as Record<string, unknown>).condLangues && typeof (st.data as Record<string, unknown>).condLangues === "object")
+    ? (st.data as Record<string, Record<string, unknown>>).condLangues : {};
+  const key = _norm(name);
+  const hit = (cs || []).find((c: Record<string, unknown>) => _norm(String(c.prenom || "") + String(c.nom || "")) === key || _norm(String(c.name || "")) === key);
+  const ck = hit && (hit as Record<string, unknown>).key;
+  const lv = ck ? String((map as Record<string, unknown>)[ck as string] || "").toLowerCase() : "";
+  return (lv === "en" || lv === "english" || lv === "anglais") ? "en" : "fr";
 }
 
 // Documents consultables du véhicule (carte grise + mémo + autres), depuis la table `documents`
@@ -160,6 +178,9 @@ async function portalConfig(db: ReturnType<typeof createClient>, societe: string
     reglesLien: String(p.reglesLien || "").trim(),
     logo: String(prof.logoDataUrl || "").trim(),          // logo société (data URL) pour l'en-tête du portail
     societeNom: String(socObj.nom || "").trim(),
+    // Carte des langues par conducteur (clé conducteur → 'fr'/'en') — sert à afficher le portail
+    // dans la langue du conducteur. Consommée côté serveur puis retirée avant l'envoi au client.
+    condLangues: (s.condLangues && typeof s.condLangues === "object") ? s.condLangues as Record<string, unknown> : {},
   };
 }
 
@@ -226,8 +247,15 @@ Deno.serve(async (req) => {
             km: veh.km != null ? Number(veh.km) : null,
             prochainCT: veh.prochain_ct || "", dateMiseEnCirculation: veh.date_mise_en_circulation || "",
           } : null;
+          // Langue du conducteur (carte condLangues côté société) → le portail s'affiche en FR ou EN.
+          const langMap = (portal as Record<string, unknown>).condLangues as Record<string, unknown> || {};
+          const ck = conducteur && (conducteur as Record<string, unknown>).key;
+          const lv = ck ? String(langMap[ck as string] || "").toLowerCase() : "";
+          const langue = (lv === "en" || lv === "english" || lv === "anglais") ? "en" : "fr";
+          delete (portal as Record<string, unknown>).condLangues;   // pas besoin de l'exposer au client
+          const conducteur2 = conducteur ? { ...conducteur, langue } : { langue };
           // ⚠️ La page v.html lit `portail` (français) → on émet cette clé (pas `portal`).
-          return json({ ...base, veh: info, docs, edl, portail: portal, conducteur });
+          return json({ ...base, veh: info, docs, edl, portail: portal, conducteur: conducteur2, langue });
         }
         return json(base);
       }
@@ -237,11 +265,12 @@ Deno.serve(async (req) => {
       if (err) return json({ error: err }, 404);
       let kmConnu = r.km_avant;
       if (kmConnu == null || kmConnu === "") kmConnu = await vehKm(db, r.vehicule_id);
+      const langue = await condLangueDe(db, r.societe || "PXP", r.chauffeur || "");  // e-mail dans la langue du conducteur
       return json({
         ok: true, mode: "mail",
         plaque: r.plaque || "", chauffeur: r.chauffeur || "", societe: r.societe || "",
         kmConnu: kmConnu != null ? Number(kmConnu) : null,
-        deja: !!r.used_at, kmRecu: r.km_recu != null ? Number(r.km_recu) : null,
+        deja: !!r.used_at, kmRecu: r.km_recu != null ? Number(r.km_recu) : null, langue,
       });
     }
 
