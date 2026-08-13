@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260813c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260813d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260813c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260813d">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -140,11 +140,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260813c"></script>
-<script src="../assets/js/supabase-client.js?v=20260813c"></script>
-<script src="../assets/js/data.js?v=20260813c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260813d"></script>
+<script src="../assets/js/supabase-client.js?v=20260813d"></script>
+<script src="../assets/js/data.js?v=20260813d"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260813c"></script>
+<script src="../assets/js/app.js?v=20260813d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -408,7 +408,10 @@
     { k: 'permisExpiration', label: 'Expiration permis', skip: c => { const d = String(c.permisObtention || '').slice(0, 10); return !(d && d >= '2013-01-19'); } },
   ];
   const AMENDE_FIELDS = [
-    { k: 'prenom', label: 'Conducteur à attribuer' }, { k: 'montant', label: 'Montant' },
+    { k: 'prenom', label: 'Conducteur à attribuer' },
+    // Montant : on lit la MÊME source que la fiche (FP.montantDu = total dû, majoré/minoré) — sinon une
+    // majoration (base `montant` vide, seul `montantMajore` renseigné) était signalée « manquante » à tort.
+    { k: 'montant', label: 'Montant', empty: a => !(FP.montantDu ? FP.montantDu(a) : a.montant) },
     { k: 'numeroAvis', label: "N° d'avis" }, { k: 'motif', label: 'Motif' }, { k: 'date', label: 'Date' },
   ];
   // Renvoie les champs manquants sous forme [{k,label}]. Si ignPrefix est fourni, on saute
@@ -732,7 +735,7 @@
       const S = RK_STATUT[r.statut];
       const v = r.v;
       const km = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
-      const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '<span style="color:var(--fp-muted)">— sans chauffeur</span>';
+      const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? FP.esc(v.chauffeur) : '<span style="color:var(--fp-muted)">— sans chauffeur</span>';
       const lastTxt = r.lastDate
         ? `${FP.dateNum(r.last.used_at)} <span class="rk-since">(il y a ${r.daysSince} j · ${rkChannel(r.last)})</span>`
         : '<span style="color:var(--fp-muted)">jamais</span>';

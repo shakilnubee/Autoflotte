@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260813d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260813c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260813d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260813c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260813d">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -503,12 +503,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260813c"></script>
-<script src="../assets/js/supabase-client.js?v=20260813c"></script>
-<script src="../assets/js/data.js?v=20260813c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260813d"></script>
+<script src="../assets/js/supabase-client.js?v=20260813d"></script>
+<script src="../assets/js/data.js?v=20260813d"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260813c"></script>
-<script src="../assets/js/fleet-views.js?v=20260813c"></script>
+<script src="../assets/js/app.js?v=20260813d"></script>
+<script src="../assets/js/fleet-views.js?v=20260813d"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -884,6 +884,7 @@
     const f = factures.find(x => x.fileId === state.currentId); if (!f || !el || !FP.cellEditor) return;
     FP.cellEditor(el, f[field] != null ? f[field] : '', type || 'text', {
       onSave: (nv) => {
+        const oldImmat = f.vehiculeImmat;   // ⚠️ capturé AVANT l'écrasement (réassignation de plaque)
         const patch = {};
         if (type === 'number') { const num = (nv == null || nv === '') ? null : nv; f[field] = num; patch[field] = num; }
         else if (type === 'date') { const v = nv || null; f[field] = v; patch[field] = v; }
@@ -893,6 +894,19 @@
         if (FP.persist) FP.persist.update('factures', f.id, patch);
         // ⚠️ Éditer km/date/type d'une facture doit AUSSI remonter au véhicule (même source unique qu'à la création).
         const maj = syncRevisionVehicule(f);
+        // Édition SYMÉTRIQUE de la suppression : on RECALCULE les fiches véhicule concernées depuis les
+        // factures (sinon une correction reste fantôme). Réassignation de plaque → recalcule l'ANCIEN
+        // véhicule (retire la révision/km/pneus laissés) ; correction km/date/type → recalcule le
+        // véhicule courant (une baisse de km redescend enfin l'échéance de révision).
+        try {
+          const recompute = (immat) => {
+            if (!immat || !FP.recomputeVehiculeFromFactures) return;
+            const vv = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(immat));
+            if (vv) FP.recomputeVehiculeFromFactures(vv, data.factures);
+          };
+          if (field === 'vehiculeImmat' && oldImmat && FP.normImmat(oldImmat) !== FP.normImmat(f.vehiculeImmat || '')) recompute(oldImmat);
+          if (field === 'km' || field === 'date' || field === 'type' || field === 'vehiculeImmat') recompute(f.vehiculeImmat);
+        } catch (e) {}
         if (maj && FP.toast) FP.toast('✓ Fiche véhicule mise à jour : ' + maj);
         openDrawer(f.fileId);
       },
