@@ -124,7 +124,14 @@ document.addEventListener('keydown', (e) => {
     return out;
   }
   let openAtDown = [];
-  document.addEventListener('mousedown', (e) => { openAtDown = openZones(e.target); }, true);
+  document.addEventListener('mousedown', (e) => {
+    // ⚠️ Pop-ups flottants ancrés au <body> (calendrier .fp-dp, menus .fp-jsmenu de FP.searchSelect /
+    // FP.conducteurPicker) : ils sont HORS du .drawer dans le DOM mais en font logiquement partie.
+    // Sans ça, choisir une date dans le calendrier = « clic en dehors de la fiche » → la fiche se
+    // fermait (bug : « je choisis une date et ça ferme la page »). On ne mémorise donc RIEN à fermer.
+    if (e.target && e.target.closest && e.target.closest('.fp-dp, .fp-jsmenu')) { openAtDown = []; return; }
+    openAtDown = openZones(e.target);
+  }, true);
   document.addEventListener('click', (e) => {
     if (!openAtDown.length) return;
     const snap = openAtDown; openAtDown = [];
