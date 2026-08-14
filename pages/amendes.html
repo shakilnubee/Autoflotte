@@ -560,7 +560,21 @@
     list.push({ id: 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), label, url, date: new Date().toISOString().slice(0, 10) });
     FP.history.commit();
     a.pieces = list;
-    FP.persist.update('amendes', a.id, { pieces: list });
+    const patch = { pieces: list };
+    // Si le document ajouté est un JUSTIFICATIF DE DÉSIGNATION (libellé « justif… » / « désign… ») et que
+    // l'amende est encore À PAYER → on la passe automatiquement en « désignée » (traitée), comme le bouton
+    // « Désigner ». L'utilisateur n'a plus besoin d'un 2ᵉ justificatif : le sien est reconnu.
+    if (/d[ée]sign|justif/i.test(label) && a.statut !== 'désignée' && (!FP.estAPayer || FP.estAPayer(a))) {
+      const mention = `Conducteur désigné le ${FP.date(new Date().toISOString().slice(0, 10))}`;
+      const prev = (a.commentaire || '').replace(/^Payée le [^\n]*\n?/i, '').replace(/^Conducteur désigné le [^\n]*\n?/i, '').trim();
+      a.statut = 'désignée';
+      a.commentaire = prev ? `${mention}\n${prev}` : mention;
+      patch.statut = a.statut; patch.commentaire = a.commentaire;
+      if (typeof setJustifWatch === 'function') setJustifWatch(a.id, false);
+      if (FP.toast) FP.toast('✅ Amende désignée (justificatif reçu)');
+    }
+    FP.persist.update('amendes', a.id, patch);
+    renderKPIs(); renderTable(); renderCharts();
     openDrawer(a.id);
   }
   async function deletePiece(pid) {
@@ -1911,13 +1925,22 @@
     openDrawer(id);
   }
 
+  // Un justificatif de DÉSIGNATION est-il attaché ? → soit le champ dédié `justifUrl`, soit une PIÈCE
+  // jointe (« Ajouter un document ») libellée comme un justificatif / une désignation. Les deux systèmes
+  // comptent : sinon un justif ajouté en pièce n'était pas reconnu et « Désigner » le redemandait.
+  function aJustifDesignation(a) {
+    if (!a) return false;
+    if (a.justifUrl) return true;
+    return Array.isArray(a.pieces) && a.pieces.some(p => /d[ée]sign|justif/i.test(String((p && p.label) || '')));
+  }
+
   // Désignation du conducteur : l'amende n'est plus à la charge de l'entreprise.
   // ⚠️ Un justificatif de désignation est OBLIGATOIRE : sans lui, on ne peut pas désigner.
   function markDesigne() {
     if (!state.currentId) return;
     const a = data.amendes.find(x => x.id === state.currentId);
     if (!a) return;
-    if (!a.justifUrl) {
+    if (!aJustifDesignation(a)) {
       // Pas encore de justificatif → on l'exige : ouverture du sélecteur de fichier.
       // C'est l'upload (intent 'designate') qui passera l'amende en « désignée ».
       justifIntent = 'designate';
