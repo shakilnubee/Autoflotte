@@ -831,7 +831,18 @@
     // mot → « megane ») ne correspond alors PAS à la clé de la fiche → le véhicule apparaissait sur une
     // carte à part et la fiche affichait « 0 véhicule ». On aligne donc véhicules/affectations/amendes
     // sur la même clé que la table conducteurs. Repli automatique sur normPrenom si aucun conducteur.
-    const gkey = (name) => (FP.condGroupKey ? FP.condGroupKey(name) : normPrenom(name));
+    // Clés de conducteurs MASQUÉS (supprimés/archivés). On ne doit JAMAIS rattacher un véhicule ou une
+    // amende ACTIFS à une clé masquée (sinon la carte réapparaît, ou pire, disparaît quand le filtre la
+    // retire). Si la clé canonique tombe sur une fiche masquée, on retombe sur le prénom normalisé.
+    const maskedKeys = new Set((condCache || []).filter(r => r && r.masque && r.key).map(r => r.key));
+    const rawKey = (name) => (FP.condGroupKey ? FP.condGroupKey(name) : normPrenom(name));
+    // gkey (véhicules/affectations ACTIFS) : si la clé canonique tombe sur une fiche masquée, on retombe
+    // sur le prénom → un conducteur qui roule encore n'est jamais avalé par un doublon masqué.
+    const gkey = (name) => {
+      let k = rawKey(name);
+      if (k && maskedKeys.has(k)) { const np = normPrenom(name); if (np && !maskedKeys.has(np)) k = np; }
+      return k;
+    };
     // Depuis vehicules
     (data.vehicules || []).forEach(v => {
       const cleanName = (v.chauffeur || '').trim();
@@ -857,14 +868,15 @@
         if (!d.vehicules.some(x => x.id === v.id)) d.vehicules.push(v);
       });
     }
-    // Depuis amendes : match par conducteur (clé canonique, tolérante aux homonymes).
-    // On n'ATTACHE l'amende qu'aux conducteurs déjà connus (véhicule) ou présents dans
-    // le fichier Drive. Une nouvelle personne (emprunteur) ne crée pas de fiche.
+    // Depuis amendes : clé canonique BRUTE (pas de repli anti-masquage) — une amende HISTORIQUE ne doit
+    // JAMAIS faire réapparaître un conducteur supprimé/archivé (ex. Mona partie de l'entreprise) : sa clé
+    // reste la clé masquée → elle sera filtrée plus bas. On n'attache qu'aux conducteurs connus ou Drive.
     (data.amendes || []).forEach(a => {
-      const key = gkey(a.prenom);
+      const key = rawKey(a.prenom);
       if (!key) return;
       if (!map.has(key)) {
-        if (!DRIVE_CONDUCTEURS.has(normPrenom(a.prenom))) return; // hors fichier Drive → pas de fiche conducteur
+        if (maskedKeys.has(key)) return;                            // conducteur masqué → pas de carte
+        if (!DRIVE_CONDUCTEURS.has(normPrenom(a.prenom))) return;   // hors fichier Drive → pas de fiche conducteur
         map.set(key, { name: (a.prenom || '').trim(), key, vehicules: [], amendes: [] });
       }
       map.get(key).amendes.push(a);
@@ -888,11 +900,10 @@
       FICHE_F.forEach(f => { if (r[f] != null && r[f] !== '') d[f] = r[f]; });
     });
 
-    // Masqués : on retire la carte SAUF si l'entrée porte encore des véhicules ou des amendes actifs
-    // (on ne « perd » jamais quelqu'un qui conduit encore un véhicule — ex. une clé masquée qui
-    // rejoignait, via la clé de regroupement, un véhicule affecté faisait disparaître le conducteur).
-    const actif = d => (d.vehicules && d.vehicules.length) || (d.amendes && d.amendes.length);
-    let list = Array.from(map.values()).filter(d => !masques.includes(d.key) || actif(d));
+    // Masqués : TOUJOURS retirés (supprimer/archiver un conducteur doit marcher, même s'il garde des
+    // amendes historiques — ex. Mona, partie de l'entreprise). Un véhicule ACTIF ne peut plus rejoindre
+    // une clé masquée (cf. gkey ci-dessus) → un conducteur qui roule encore n'est jamais masqué par erreur.
+    let list = Array.from(map.values()).filter(d => !masques.includes(d.key));
 
     // ⚠️ FUSION DES PROFILS ÉCLATÉS (même personne apparue 2× sous des clés différentes — ex. une
     // fiche « megane-da-costa » + un reliquat « megane » créés par un ancien renommage de prénom).
