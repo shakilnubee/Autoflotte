@@ -65,6 +65,23 @@ async function vehKm(db: ReturnType<typeof createClient>, vehiculeId: string | n
   return v && v.km != null ? Number(v.km) : null;
 }
 
+// Date (AAAA-MM-JJ) du DERNIER relevé RÉELLEMENT reçu pour ce véhicule (mail ou QR, used_at non-null).
+// Les anciens km connus (avant cette fonctionnalité) n'ont pas de relevé daté → renvoie null : la date
+// n'apparaît donc qu'à partir du PROCHAIN relevé (demande explicite de l'utilisateur).
+async function dernierReleveDate(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
+  if (!vehiculeId) return null;
+  try {
+    const { data } = await db.from("km_requests")
+      .select("used_at")
+      .eq("vehicule_id", vehiculeId)
+      .not("used_at", "is", null)
+      .order("used_at", { ascending: false })
+      .limit(1);
+    const r = Array.isArray(data) && data[0];
+    return (r && r.used_at) ? String(r.used_at).slice(0, 10) : null;
+  } catch { return null; }
+}
+
 // ---- PORTAIL CONDUCTEUR : données non personnelles d'un véhicule, servies à la page v.html ----
 // Infos véhicule sûres (jamais de PII : pas de chauffeur, pas de VIN).
 async function vehInfo(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
@@ -256,7 +273,8 @@ Deno.serve(async (req) => {
         const { qr, err } = await loadQr(db, qtok);
         if (err) return json({ error: err }, 404);
         const kmConnu = await vehKm(db, qr.vehicule_id);
-        const base = { ok: true, mode: "qr", plaque: qr.plaque || "", chauffeur: "", societe: qr.societe || "", kmConnu, deja: false, kmRecu: null };
+        const kmDate = await dernierReleveDate(db, qr.vehicule_id);
+        const base = { ok: true, mode: "qr", plaque: qr.plaque || "", chauffeur: "", societe: qr.societe || "", kmConnu, kmDate, deja: false, kmRecu: null };
         // `full=1` (portail v.html) : on joint infos véhicule + documents + EDL + config société.
         if (url.searchParams.get("full") === "1") {
           const veh = await vehInfo(db, qr.vehicule_id);
@@ -296,10 +314,11 @@ Deno.serve(async (req) => {
       let kmConnu = r.km_avant;
       if (kmConnu == null || kmConnu === "") kmConnu = await vehKm(db, r.vehicule_id);
       const langue = await condLangueDe(db, r.societe || "PXP", r.chauffeur || "");  // e-mail dans la langue du conducteur
+      const kmDate = await dernierReleveDate(db, r.vehicule_id);
       return json({
         ok: true, mode: "mail",
         plaque: r.plaque || "", chauffeur: r.chauffeur || "", societe: r.societe || "",
-        kmConnu: kmConnu != null ? Number(kmConnu) : null,
+        kmConnu: kmConnu != null ? Number(kmConnu) : null, kmDate,
         deja: !!r.used_at, kmRecu: r.km_recu != null ? Number(r.km_recu) : null, langue,
       });
     }
