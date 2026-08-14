@@ -824,6 +824,16 @@
 
   // Construit la liste des conducteurs depuis vehicules + amendes
   function buildDrivers() {
+    // ⚠️ SOURCE UNIQUE : FP.condGroupKey (via condKeyParNom) lit FP_DATA.conducteurs, alors que cette page
+    // met à jour condCache (rename, suppression, upsert). Sans synchro, la résolution nom→clé travaillait
+    // sur l'état PRÉCÉDENT → doublons transitoires. On recopie donc condCache (à jour) dans FP_DATA avant
+    // de résoudre les clés. (On ne touche pas FP_DATA tant que condCache est vide = avant chargement.)
+    try {
+      if (Array.isArray(condCache) && condCache.length && window.FP_DATA && Array.isArray(FP_DATA.conducteurs)) {
+        FP_DATA.conducteurs.length = 0;
+        condCache.forEach(r => FP_DATA.conducteurs.push(r));
+      }
+    } catch (e) {}
     const map = new Map();
     // Clé de REGROUPEMENT canonique (source UNIQUE : FP.condGroupKey) : résout un nom brut vers la VRAIE
     // clé du conducteur enregistré. ⚠️ Indispensable pour les HOMONYMES : deux « Mégane » de noms de
@@ -918,6 +928,10 @@
         if (group.length === 1) { out.push(group[0]); return; }
         const distinctNoms = [...new Set(group.map(d => String(d.nom || '').trim().toLowerCase()).filter(Boolean))];
         if (distinctNoms.length >= 2) { group.forEach(d => out.push(d)); return; } // homonymes réels → séparés
+        // Deux fiches EXPLICITES (créées à la main) de même prénom = potentiellement 2 personnes distinctes :
+        // on ne les fusionne PAS automatiquement (l'utilisateur tranche). On ne soude que des « coquilles »
+        // (entrées auto issues d'un véhicule/amende au prénom nu) dans UNE fiche identifiée.
+        if (group.filter(d => d.manual).length >= 2) { group.forEach(d => out.push(d)); return; }
         // 0 ou 1 nom distinct → même personne : on fusionne dans l'entrée la plus riche
         const score = d => (d.vehicules ? d.vehicules.length : 0) * 100 + (d.amendes ? d.amendes.length : 0) * 10
           + FICHE_F.reduce((s, f) => s + (d[f] != null && d[f] !== '' ? 1 : 0), 0) + (d.manual ? 1 : 0);
@@ -1241,7 +1255,7 @@
     items.forEach(d => {
       if (d.vehicules.length + d.amendes.length > 0) upsertCond(d.key, { masque: true, manuel: false, name: condRow(d.key) ? condRow(d.key).name : d.name });
       else deleteCondRow(d.key);
-      unassignVehiclesOf(d.key); // ← retire aussi le conducteur de son/ses véhicule(s)
+      unassignVehiclesOf(d.key, d); // ← retire aussi le conducteur de son/ses véhicule(s)
       condDocsRemove(d.key);     // ← purge ses documents perso
     });
     state.selected.clear();
@@ -1503,16 +1517,25 @@
 
   function closeDrawer() { $('drawer').classList.remove('open'); $('drawer-backdrop').classList.remove('open'); }
 
-  // Retire un conducteur de tous ses véhicules (vide le champ « chauffeur ») + enregistre.
-  function unassignVehiclesOf(key) {
+  // Retire un conducteur de tous ses véhicules (vide le champ « chauffeur ») + clôt ses affectations.
+  // ⚠️ On itère les véhicules RÉELLEMENT liés (driver.vehicules calculé par buildDrivers via la clé
+  // canonique) — sinon un conducteur à clé composée (homonyme « megane-da-costa ») n'était pas détecté
+  // par un simple normPrenom(chauffeur)===key, son véhicule n'était pas libéré, et la carte réapparaissait.
+  // Repli (sans driver) : match par clé de regroupement canonique, jamais le seul prénom.
+  function unassignVehiclesOf(key, driver) {
     let n = 0;
-    (window.FP_DATA.vehicules || []).forEach(v => {
-      if (v.chauffeur && normPrenom(v.chauffeur) === key) {
+    const vehs = (driver && Array.isArray(driver.vehicules) && driver.vehicules.length)
+      ? driver.vehicules
+      : (window.FP_DATA.vehicules || []).filter(v => v.chauffeur && (FP.condGroupKey ? FP.condGroupKey(v.chauffeur) : normPrenom(v.chauffeur)) === key);
+    vehs.forEach(v => {
+      const avaitChauffeur = v.chauffeur && v.chauffeur !== '—';
+      if (avaitChauffeur) {
         v.chauffeur = '';
-        try { if (FP.affectations) FP.affectations.record(v.id, ''); } catch (e) {} // clôt l'affectation en cours
         if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.update('vehicules', v.id, { chauffeur: '' });
         n++;
       }
+      // Clôt l'affectation en cours dans TOUS les cas (y compris véhicule lié uniquement par l'historique).
+      try { if (FP.affectations) FP.affectations.record(v.id, ''); } catch (e) {}
     });
     return n;
   }
@@ -1528,7 +1551,7 @@
       if (!(await FP.confirm(`« ${d.name} » est lié à ${d.vehicules.length} véhicule(s) et ${d.amendes.length} amende(s).\n\nLe retirer de la liste des conducteurs et de son/ses véhicule(s) ?\n(Les véhicules et amendes ne sont PAS supprimés, juste désassociés.)`))) return;
       upsertCond(key, { masque: true, manuel: false, name: (condRow(key) && condRow(key).name) || d.name });
     }
-    unassignVehiclesOf(key); // ← retire le conducteur de son/ses véhicule(s)
+    unassignVehiclesOf(key, d); // ← retire le conducteur de son/ses véhicule(s)
     condDocsRemove(key);     // ← purge ses documents perso (CI…) pour ne pas laisser d'orphelin
     drivers = buildDrivers();
     closeDrawer();
@@ -1552,18 +1575,25 @@
     if (!d) { $('rename-backdrop').classList.remove('open'); return; }
     const newName = ($('rename-input').value || '').trim();
     if (!newName || newName === d.name) { $('rename-backdrop').classList.remove('open'); return; }
-    const newKey = normPrenom(newName);
+    // Nouvelle clé = prénom seul (rétro-compat), SAUF si un AUTRE conducteur porte déjà cette clé prénom
+    // → clé prénom-nom (comme FP.conducteurs.create) pour NE PAS écraser/fusionner deux personnes.
+    let newKey = normPrenom(newName);
+    if (newKey !== key) {
+      const other = condCache.find(r => r.key === newKey && r.key !== key);
+      if (other) { const kf = (FP.normNomComplet ? FP.normNomComplet(newName) : newName.toLowerCase()).replace(/\s+/g, '-'); if (kf && kf !== newKey) newKey = kf; }
+    }
     FP.history && FP.history.commit && FP.history.commit();
     let nbVeh = 0, nbAm = 0;
-    // 1) Véhicules dont le chauffeur correspond à ce conducteur
-    (data.vehicules || []).forEach(v => {
-      if (normPrenom(v.chauffeur) === key) { v.chauffeur = newName; nbVeh++; if (FP.persist.available()) FP.persist.update('vehicules', v.id, { chauffeur: newName }); }
+    // 1) Véhicules RÉELLEMENT liés à ce conducteur (driver.vehicules via la clé canonique) — couvre les
+    // clés composées (homonymes) qu'un simple normPrenom(chauffeur)===key ratait → plus de doublon.
+    (d.vehicules || []).forEach(v => {
+      if (v.chauffeur && v.chauffeur !== '—' && v.chauffeur !== newName) { v.chauffeur = newName; nbVeh++; if (FP.persist.available()) FP.persist.update('vehicules', v.id, { chauffeur: newName }); }
     });
     // Historique d'affectation : suit le renommage (garde les périodes cohérentes)
     try { if (FP.affectations) FP.affectations.rename(d.name, newName); } catch (e) {}
-    // 2) Amendes au prénom de ce conducteur
-    (data.amendes || []).forEach(a => {
-      if (normPrenom(a.prenom) === key) { a.prenom = newName; nbAm++; if (FP.persist.available()) FP.persist.update('amendes', a.id, { prenom: newName }); }
+    // 2) Amendes RÉELLEMENT liées à ce conducteur (driver.amendes) — idem, couvre les clés composées.
+    (d.amendes || []).forEach(a => {
+      if ((a.prenom || '').trim() && a.prenom !== newName) { a.prenom = newName; nbAm++; if (FP.persist.available()) FP.persist.update('amendes', a.id, { prenom: newName }); }
     });
     // 3) Fiche conducteur : on garde toutes les infos ; si la clé change, on migre la ligne
     const row = condRow(key);
@@ -1900,7 +1930,7 @@
       permisType: null, permisNumero: null, permisObtention: null, permisExpiration: null, permisUrl: null, permisFileId: null,
     });
     // 2) Libère les véhicules + purge les documents perso scannés (permis, CI…).
-    unassignVehiclesOf(key);
+    unassignVehiclesOf(key, d);
     condDocsRemove(key);
     // 2bis) Purge AUSSI le store local legacy (PXP) : sa fiche « manuelle » et son permis scanné y
     // vivent encore et seraient ré-injectés au rechargement → on les retire pour que la purge RGPD tienne.
