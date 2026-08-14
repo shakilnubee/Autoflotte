@@ -130,6 +130,7 @@
       hello: function (n) { return 'Bonjour ' + n + ', merci d\'indiquer le kilométrage de votre véhicule.'; },
       already: function (v) { return 'Vous avez déjà répondu (<b>' + v + ' km</b>). Vous pouvez corriger si besoin.'; },
       lastknown: function (v) { return 'Dernier kilométrage connu : <b>' + v + ' km</b>'; },
+      on: function (d) { return ' <span style="opacity:.65">(relevé le ' + d + ')</span>'; },
       saved: function (v) { return 'Kilométrage enregistré : <b>' + v + ' km</b>. Vous pouvez fermer cette page.'; },
       incomplete: 'Lien incomplet. Scanne le QR de ton véhicule ou ouvre le lien reçu par e-mail.',
       invalid: 'Ce lien n\'est plus valide.', conn: 'Connexion impossible. Réessaie dans un instant.',
@@ -145,6 +146,7 @@
       hello: function (n) { return 'Hello ' + n + ', please enter your vehicle\'s mileage.'; },
       already: function (v) { return 'You have already replied (<b>' + v + ' km</b>). You can correct it if needed.'; },
       lastknown: function (v) { return 'Last known mileage: <b>' + v + ' km</b>'; },
+      on: function (d) { return ' <span style="opacity:.65">(recorded on ' + d + ')</span>'; },
       saved: function (v) { return 'Mileage recorded: <b>' + v + ' km</b>. You can close this page.'; },
       incomplete: 'Incomplete link. Scan your vehicle\'s QR code or open the link you received by email.',
       invalid: 'This link is no longer valid.', conn: 'Connection failed. Please try again shortly.',
@@ -192,12 +194,21 @@
   function headers() { return { 'Content-Type': 'application/json', 'apikey': APIKEY, 'Authorization': 'Bearer ' + APIKEY }; }
 
   // État courant du véhicule (pour re-afficher les sous-titres à la bascule de langue)
-  var CUR = { chauffeur: '', kmConnu: null, deja: false, kmRecu: null };
+  var CUR = { chauffeur: '', kmConnu: null, deja: false, kmRecu: null, kmDate: null };
+  // Date ISO (AAAA-MM-JJ) → format lisible localisé (JJ/MM/AAAA en FR, JJ Mon AAAA en EN).
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso)); if (!m) return '';
+    try { return new Date(m[1] + '-' + m[2] + '-' + m[3] + 'T00:00:00').toLocaleDateString(localeNb(), { day: '2-digit', month: 'short', year: 'numeric' }); }
+    catch (e) { return m[3] + '/' + m[2] + '/' + m[1]; }
+  }
   function paintForm() {
     if (CUR.chauffeur) $('sub').textContent = t('hello')(String(CUR.chauffeur).split(' ')[0]);
     else $('sub').textContent = t('sub');
+    // Suffixe « (relevé le …) » — n'apparaît qu'à partir du 1er relevé daté (les anciens n'ont pas de date).
+    var dateSfx = CUR.kmDate ? t('on')(fmtDate(CUR.kmDate)) : '';
     if (CUR.deja && CUR.kmRecu != null) { $('kmknown').innerHTML = t('already')(Number(CUR.kmRecu).toLocaleString(localeNb())); }
-    else if (CUR.kmConnu != null) { $('kmknown').innerHTML = t('lastknown')(Number(CUR.kmConnu).toLocaleString(localeNb())); }
+    else if (CUR.kmConnu != null) { $('kmknown').innerHTML = t('lastknown')(Number(CUR.kmConnu).toLocaleString(localeNb())) + dateSfx; }
     else { $('kmknown').innerHTML = ''; }
   }
 
@@ -224,7 +235,7 @@
       if (!manual && d.langue === 'en') { LANG = 'en'; applyStaticI18n(); }
       if (d.plaque) $('plate-wrap').innerHTML = plateHTML(d.plaque);
       if (d.societe) { $('soc-foot').textContent = d.societe; }
-      CUR.chauffeur = d.chauffeur || ''; CUR.kmConnu = d.kmConnu; CUR.deja = !!d.deja; CUR.kmRecu = d.kmRecu;
+      CUR.chauffeur = d.chauffeur || ''; CUR.kmConnu = d.kmConnu; CUR.deja = !!d.deja; CUR.kmRecu = d.kmRecu; CUR.kmDate = d.kmDate || null;
       if (d.deja && d.kmRecu != null) $('km').value = d.kmRecu;
       show('form'); paintForm();
       setTimeout(function () { $('km').focus(); }, 150);
