@@ -364,7 +364,9 @@
       // « Charles » ET nom complet « Charles LENNON ») → mêmes chiffres en double. On garde UNE seule
       // ligne par (personne, mois, facture), puis on regroupe par PERSONNE (prénom normalisé) en
       // affichant le nom le plus complet. (Ne PAS sommer les doublons — ce sont les mêmes données.)
-      const _np = (s) => (FP.normPrenom ? FP.normPrenom(s) : String(s || '').trim().toLowerCase());
+      // Clé canonique par PERSONNE (FP.condGroupKey) : dédoublonne « Charles » ⇄ « Charles LENNON » mais
+      // SÉPARE deux homonymes de prénom (badges distincts) → plus de conso cumulée sur une seule ligne.
+      const _np = (s) => (FP.condGroupKey ? FP.condGroupKey(s) : (FP.normPrenom ? FP.normPrenom(s) : String(s || '').trim().toLowerCase()));
       const seenUC = new Set(), dedup = [], bestName = {};
       src.forEach(c => {
         const np = _np(c.conducteur);
