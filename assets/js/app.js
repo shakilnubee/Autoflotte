@@ -1193,12 +1193,23 @@ FP.kmCollecte = {
     } catch (e) { return { ok: false, error: 'QR indisponible : ' + (e.message || e) }; }
   },
   // E-mail du chauffeur d'un véhicule (via la fiche conducteur — jamais inventé).
+  // ⚠️ ANTI-HOMONYME : si le champ chauffeur est un PRÉNOM NU partagé par plusieurs conducteurs avec des
+  // e-mails DIFFÉRENTS, on ne peut pas trancher → on ne renvoie RIEN (pas d'envoi au mauvais salarié).
+  // Même garde que l'envoi d'amendes (sentinelle AMBIGU). Un nom complet lève l'ambiguïté.
   emailDe(v) {
     try {
       const nm = v && v.chauffeur && String(v.chauffeur).trim();
       if (!nm || nm === '—') return '';
       const c = FP.conducteurs.find(nm);
-      return (c && String(c.email || '').trim()) || '';
+      if (!c) return '';
+      if (String(nm).split(/\s+/).length === 1 && FP.normPrenom) {
+        const k = FP.normPrenom(nm);
+        const emails = [...new Set((FP.conducteursTous ? FP.conducteursTous() : [])
+          .filter(x => x && !x.masque && FP.normPrenom(x.prenom || x.name || x.key) === k && String(x.email || '').trim())
+          .map(x => String(x.email).trim().toLowerCase()))];
+        if (emails.length >= 2) return '';   // prénom nu ambigu → bloque l'envoi
+      }
+      return String(c.email || '').trim() || '';
     } catch (e) { return ''; }
   },
   // Contenu de l'e-mail (branded, avec la plaque et le bouton vers le formulaire).
@@ -1234,7 +1245,7 @@ FP.kmCollecte = {
       + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
       // Logo de la société (comme le QR) si hébergé, sinon la marque Parc Pilot en texte (repli).
       + '<td style="vertical-align:middle">' + (logoUrl
-        ? '<img src="' + logoUrl + '" alt="' + (socName || 'Logo') + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
+        ? '<img src="' + FP.esc(logoUrl) + '" alt="' + (socName || 'Logo') + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
         : '<span style="font-weight:900;font-style:italic;font-size:16px;color:#fff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>') + '</td>'
       // Pas de mention « Parc Pilot » quand le logo société est présent (redondant). Sinon on met
       // le nom de la société à droite pour équilibrer l'en-tête.
@@ -2791,10 +2802,16 @@ FP.NON_CHAUFFEURS = ['Siège', 'Dépôt', 'Navette', 'VENDU', 'x', 'X', 'Fenwick
 // (emprunteur ponctuel, ancien conducteur…), conformément à la demande.
 FP.driverKeysFromData = (data) => {
   const keys = new Set();
+  const gk = (nm) => (FP.condGroupKey ? FP.condGroupKey(nm) : FP.normPrenom(nm));  // même clé que la page Conducteurs
   (data.vehicules || []).forEach(v => {
-    const name = (v.chauffeur || '').trim();
+    let name = (v.chauffeur || '').trim();
+    // Repli sur l'affectation EN COURS quand le champ chauffeur est vide (même logique que buildDrivers)
+    // → un conducteur assigné uniquement via l'historique est bien compté (plus de sous-comptage).
+    if ((!name || name === '—') && FP.affectations && FP.affectations.courante) {
+      try { const cur = FP.affectations.courante(v.id); if (cur && cur.conducteur) name = String(cur.conducteur).trim(); } catch (e) {}
+    }
     if (!name || name === '—' || FP.NON_CHAUFFEURS.includes(name)) return;
-    const k = FP.normPrenom(name); if (k) keys.add(k);
+    const k = gk(name); if (k) keys.add(k);
   });
   return keys;
 };
