@@ -825,11 +825,18 @@
   // Construit la liste des conducteurs depuis vehicules + amendes
   function buildDrivers() {
     const map = new Map();
+    // Clé de REGROUPEMENT canonique (source UNIQUE : FP.condGroupKey) : résout un nom brut vers la VRAIE
+    // clé du conducteur enregistré. ⚠️ Indispensable pour les HOMONYMES : deux « Mégane » de noms de
+    // famille différents ont des clés prénom+nom (« megane-da-costa ») ; un simple normPrenom (premier
+    // mot → « megane ») ne correspond alors PAS à la clé de la fiche → le véhicule apparaissait sur une
+    // carte à part et la fiche affichait « 0 véhicule ». On aligne donc véhicules/affectations/amendes
+    // sur la même clé que la table conducteurs. Repli automatique sur normPrenom si aucun conducteur.
+    const gkey = (name) => (FP.condGroupKey ? FP.condGroupKey(name) : normPrenom(name));
     // Depuis vehicules
     (data.vehicules || []).forEach(v => {
       const cleanName = (v.chauffeur || '').trim();
       if (!cleanName || cleanName === '—' || (FP.NON_CHAUFFEURS || []).includes(cleanName)) return;
-      const key = normPrenom(cleanName);
+      const key = gkey(cleanName);
       if (!key) return;
       if (!map.has(key)) map.set(key, { name: cleanName, key, vehicules: [], amendes: [] });
       map.get(key).vehicules.push(v);
@@ -843,22 +850,22 @@
         let cur = null; try { cur = FP.affectations.courante(v.id); } catch (e) {}
         const nm = cur && cur.conducteur && String(cur.conducteur).trim();
         if (!nm || nm === '—' || (FP.NON_CHAUFFEURS || []).includes(nm)) return;
-        const key = normPrenom(nm);
+        const key = gkey(nm);
         if (!key) return;
         if (!map.has(key)) map.set(key, { name: nm, key, vehicules: [], amendes: [] });
         const d = map.get(key);
         if (!d.vehicules.some(x => x.id === v.id)) d.vehicules.push(v);
       });
     }
-    // Depuis amendes : match par prénom (case-insensitive, premier mot).
+    // Depuis amendes : match par conducteur (clé canonique, tolérante aux homonymes).
     // On n'ATTACHE l'amende qu'aux conducteurs déjà connus (véhicule) ou présents dans
     // le fichier Drive. Une nouvelle personne (emprunteur) ne crée pas de fiche.
     (data.amendes || []).forEach(a => {
-      const key = normPrenom(a.prenom);
+      const key = gkey(a.prenom);
       if (!key) return;
       if (!map.has(key)) {
-        if (!DRIVE_CONDUCTEURS.has(key)) return; // hors fichier Drive → pas de fiche conducteur
-        map.set(key, { name: a.prenom.trim(), key, vehicules: [], amendes: [] });
+        if (!DRIVE_CONDUCTEURS.has(normPrenom(a.prenom))) return; // hors fichier Drive → pas de fiche conducteur
+        map.set(key, { name: (a.prenom || '').trim(), key, vehicules: [], amendes: [] });
       }
       map.get(key).amendes.push(a);
     });
