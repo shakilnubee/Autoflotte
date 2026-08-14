@@ -888,10 +888,64 @@
       FICHE_F.forEach(f => { if (r[f] != null && r[f] !== '') d[f] = r[f]; });
     });
 
+    let list = Array.from(map.values()).filter(d => !masques.includes(d.key));
+
+    // ⚠️ FUSION DES PROFILS ÉCLATÉS (même personne apparue 2× sous des clés différentes — ex. une
+    // fiche « megane-da-costa » + un reliquat « megane » créés par un ancien renommage de prénom).
+    // On regroupe par PRÉNOM normalisé et on fusionne, SAUF quand 2 noms de famille DISTINCTS existent
+    // (vrais homonymes → on garde séparé, cas ambigu laissé tel quel). Répare l'existant + évite que
+    // Mégane s'affiche en double « 0 véhicule ».
+    (function coalesce() {
+      const groups = new Map();
+      const out = [];
+      list.forEach(d => { const p = normPrenom(d.name || d.prenom || d.key); if (!p) { out.push(d); return; } (groups.get(p) || groups.set(p, []).get(p)).push(d); });
+      groups.forEach(group => {
+        if (group.length === 1) { out.push(group[0]); return; }
+        const distinctNoms = [...new Set(group.map(d => String(d.nom || '').trim().toLowerCase()).filter(Boolean))];
+        if (distinctNoms.length >= 2) { group.forEach(d => out.push(d)); return; } // homonymes réels → séparés
+        // 0 ou 1 nom distinct → même personne : on fusionne dans l'entrée la plus riche
+        const score = d => (d.vehicules ? d.vehicules.length : 0) * 100 + (d.amendes ? d.amendes.length : 0) * 10
+          + FICHE_F.reduce((s, f) => s + (d[f] != null && d[f] !== '' ? 1 : 0), 0) + (d.manual ? 1 : 0);
+        group.sort((a, b) => score(b) - score(a));
+        const main = group[0];
+        for (let i = 1; i < group.length; i++) {
+          const g = group[i];
+          (g.vehicules || []).forEach(v => { if (!main.vehicules.some(x => x.id === v.id)) main.vehicules.push(v); });
+          (g.amendes || []).forEach(a => { if (!main.amendes.some(x => x.id === a.id)) main.amendes.push(a); });
+          FICHE_F.forEach(f => { if ((main[f] == null || main[f] === '') && g[f] != null && g[f] !== '') main[f] = g[f]; });
+          if (!main.name && g.name) main.name = g.name;
+        }
+        out.push(main);
+      });
+      list = out;
+    })();
+
     // Masqués : retirés de la liste (sans supprimer véhicules/amendes)
-    return Array.from(map.values())
-      .filter(d => !masques.includes(d.key))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }
+
+  // Quand on modifie le PRÉNOM (ou le nom) d'un conducteur via la fiche, on PROPAGE le nouveau nom
+  // affiché à ses véhicules (champ chauffeur), ses amendes et son historique d'affectation — SANS
+  // changer la clé interne. Sinon le champ chauffeur gardait l'ancien nom, la clé de regroupement
+  // divergeait et le véhicule partait sur une 2ᵉ carte (« 0 véhicule »). Idempotent.
+  function cascadeName(key, newName) {
+    newName = (newName || '').trim();
+    const d = drivers.find(x => x.key === key);
+    if (!d || !newName) return;
+    (d.vehicules || []).forEach(v => {
+      const ch = (v.chauffeur || '').trim();
+      if (ch && ch !== '—' && ch !== newName) {
+        v.chauffeur = newName;
+        try { if (FP.persist.available()) FP.persist.update('vehicules', v.id, { chauffeur: newName }); } catch (e) {}
+      }
+    });
+    (d.amendes || []).forEach(a => {
+      if ((a.prenom || '').trim() && a.prenom !== newName) {
+        a.prenom = newName;
+        try { if (FP.persist.available()) FP.persist.update('amendes', a.id, { prenom: newName }); } catch (e) {}
+      }
+    });
+    try { if (FP.affectations && d.name && d.name !== newName) FP.affectations.rename(d.name, newName); } catch (e) {}
   }
 
   // Points de permis RESTANTS (sur 12) : override MANUEL (réglages) s'il existe, sinon calcul
@@ -1694,6 +1748,8 @@
       } else if (field !== 'name') {
         changes.name = r.name || (d && d.name) || key;
       }
+      // Le nom affiché change → on répercute sur véhicules/amendes/affectations (évite le doublon).
+      if ((field === 'prenom' || field === 'nom' || field === 'name') && changes.name) cascadeName(key, changes.name);
       upsertCond(key, changes);
       drivers = buildDrivers(); renderKPIs(); renderGrid();
       openDrawer(currentDriverKey);
@@ -1923,6 +1979,8 @@
     const _full = [_p, _n].filter(Boolean).join(' ').trim();
     if (_full) patch.name = _full;
     if (FP.history && FP.history.commit) FP.history.commit();
+    // Le nom affiché change → répercuter sur véhicules/amendes/affectations (évite le doublon).
+    if (patch.name) cascadeName(key, patch.name);
     upsertCond(key, patch);
     // Points de permis : override manuel dans les réglages (vide = calcul automatique).
     const pv = v('e-points');
