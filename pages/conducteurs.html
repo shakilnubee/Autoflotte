@@ -834,6 +834,22 @@
       if (!map.has(key)) map.set(key, { name: cleanName, key, vehicules: [], amendes: [] });
       map.get(key).vehicules.push(v);
     });
+    // Depuis les AFFECTATIONS en cours : un véhicule dont le champ « chauffeur » est vide mais
+    // qui a une affectation courante (fin === null) doit quand même apparaître chez ce conducteur.
+    if (FP.affectations && FP.affectations.courante) {
+      (data.vehicules || []).forEach(v => {
+        const cleanName = (v.chauffeur || '').trim();
+        if (cleanName && cleanName !== '—') return; // déjà lié par le champ chauffeur
+        let cur = null; try { cur = FP.affectations.courante(v.id); } catch (e) {}
+        const nm = cur && cur.conducteur && String(cur.conducteur).trim();
+        if (!nm || nm === '—' || (FP.NON_CHAUFFEURS || []).includes(nm)) return;
+        const key = normPrenom(nm);
+        if (!key) return;
+        if (!map.has(key)) map.set(key, { name: nm, key, vehicules: [], amendes: [] });
+        const d = map.get(key);
+        if (!d.vehicules.some(x => x.id === v.id)) d.vehicules.push(v);
+      });
+    }
     // Depuis amendes : match par prénom (case-insensitive, premier mot).
     // On n'ATTACHE l'amende qu'aux conducteurs déjà connus (véhicule) ou présents dans
     // le fichier Drive. Une nouvelle personne (emprunteur) ne crée pas de fiche.
