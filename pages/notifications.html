@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260814c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260814c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260817a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260814c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260817a">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -140,11 +140,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260814c"></script>
-<script src="../assets/js/supabase-client.js?v=20260814c"></script>
-<script src="../assets/js/data.js?v=20260814c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260817a"></script>
+<script src="../assets/js/supabase-client.js?v=20260817a"></script>
+<script src="../assets/js/data.js?v=20260817a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260814c"></script>
+<script src="../assets/js/app.js?v=20260817a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -714,6 +714,8 @@
 
     const cfg = (FP.notifCfg ? FP.notifCfg() : {});
     const seuil = cfg.releveKmJours || 45, relance = cfg.releveKmRelanceJours || 7;
+    // Gestionnaire + admin + CEO peuvent corriger/saisir le km manuellement.
+    const canEditKm = (FP.isAdmin && FP.isAdmin()) || (FP.isGestionnaire && FP.isGestionnaire());
     const rows = rkBuildRows();
     const cnt = { ajour: 0, attente: 0, relancer: 0, jamais: 0 };
     rows.forEach(r => cnt[r.statut]++);
@@ -778,6 +780,12 @@
         <div class="rk-detail" hidden>
           <div class="rk-detail-head">Historique des relevés <span style="color:var(--fp-muted);font-weight:400">(du plus récent au plus ancien)</span></div>
           ${hist}
+          ${canEditKm ? `<div class="rk-edit">
+            <label for="rk-km-${esc(v.id)}">Corriger / saisir le km</label>
+            <input id="rk-km-${esc(v.id)}" type="number" min="1" step="1" inputmode="numeric" placeholder="ex. ${km || 45000}" data-rk-km="${esc(v.id)}">
+            <button type="button" class="rk-btn" data-rk-km-save="${esc(v.id)}"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+            <span class="rk-km-st" data-rk-km-st="${esc(v.id)}"></span>
+          </div>` : ''}
         </div>
       </div>`;
     };
@@ -832,6 +840,10 @@
         .rk-hdate{min-width:86px;color:var(--fp-muted)} .rk-delta{color:#15803D;font-weight:700}
         .rk-hchan{margin-left:auto;font-size:.72rem;color:var(--fp-muted)}
         .rk-empty{color:var(--fp-muted);text-align:center;padding:26px}
+        .rk-edit{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px dashed var(--fp-border)}
+        .rk-edit label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fp-muted)}
+        .rk-edit input{width:130px;padding:8px 10px;border:1px solid var(--fp-border);border-radius:9px;background:var(--fp-surface,#fff);color:var(--fp-primary);font-size:.92rem}
+        .rk-km-st{font-size:.8rem;font-weight:700}
       </style>
       <div class="rk-wrap">
         <div class="rk-tiles">
@@ -973,6 +985,27 @@
       const r = await KC.send(v);
       if (r.ok) { if (b) b.done('📩 Demande envoyée à ' + r.email); } else { if (b) b.fail('⚠️ ' + (r.error || 'Échec')); }
       renderRelevekm();
+      return;
+    }
+    // Saisie / correction manuelle du km (source unique FP.kmCollecte.saisieManuelle → fiche + historique + à jour)
+    const kmSave = e.target.closest('[data-rk-km-save]');
+    if (kmSave) {
+      e.stopPropagation();
+      const KC = window.FP && FP.kmCollecte; if (!KC) return;
+      const id = kmSave.getAttribute('data-rk-km-save');
+      const v = (data.vehicules || []).find(x => x.id === id); if (!v) return;
+      const inp = document.querySelector('[data-rk-km="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+      const st = document.querySelector('[data-rk-km-st="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+      const km = inp ? Math.round(Number(inp.value)) : NaN;
+      if (!Number.isFinite(km) || km <= 0) { if (st) { st.textContent = 'Entre un km valide.'; st.style.color = '#B91C1C'; } return; }
+      const cur = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
+      if (km < cur && FP.confirm && !(await FP.confirm(`Le km saisi (${FP.num(km)}) est INFÉRIEUR au km actuel (${FP.num(cur)}). Confirmer la correction à la baisse ?`))) return;
+      if (st) { st.textContent = 'Enregistrement…'; st.style.color = 'var(--fp-muted)'; }
+      kmSave.disabled = true;
+      const r = await KC.saisieManuelle(v, km);
+      kmSave.disabled = false;
+      if (r.ok) { if (st) { st.textContent = '✓ Enregistré (synchronisé).'; st.style.color = '#15803D'; } renderRelevekm(); render(); }
+      else if (st) { st.textContent = '⚠️ ' + (r.error || 'Échec'); st.style.color = '#B91C1C'; }
       return;
     }
     // Déplier / replier l'historique d'une ligne

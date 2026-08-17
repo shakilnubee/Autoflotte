@@ -311,8 +311,11 @@ Deno.serve(async (req) => {
       if (!token) return json({ error: "Lien incomplet." }, 400);
       const { req: r, err } = await loadReq(db, token);
       if (err) return json({ error: err }, 404);
-      let kmConnu = r.km_avant;
-      if (kmConnu == null || kmConnu === "") kmConnu = await vehKm(db, r.vehicule_id);
+      // ⚠️ TOUJOURS À JOUR : on montre le km LIVE de la fiche véhicule (comme le QR permanent), pour
+      // refléter les corrections manuelles / relevés reçus APRÈS l'envoi du mail. Repli sur km_avant
+      // (valeur figée à l'envoi) uniquement si la fiche n'a pas de km.
+      let kmConnu = await vehKm(db, r.vehicule_id);
+      if (kmConnu == null || kmConnu === "") kmConnu = r.km_avant;
       const langue = await condLangueDe(db, r.societe || "PXP", r.chauffeur || "");  // e-mail dans la langue du conducteur
       const kmDate = await dernierReleveDate(db, r.vehicule_id);
       return json({
