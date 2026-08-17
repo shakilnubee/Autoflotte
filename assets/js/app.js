@@ -469,6 +469,12 @@ FP.primeVeh = (v) => {
 };
 // ⚠️ HELPER CANONIQUE — total annuel des primes d'assurance du parc POSSÉDÉ (exclut les vendus).
 FP.assuranceAnnuelle = (vehicules) => (vehicules || []).filter(v => !FP.estVendu(v)).reduce((s, v) => s + FP.primeVeh(v), 0);
+// ⚠️ HELPER CANONIQUE — total annuel TVS de la flotte POSSÉDÉE (exclut les vendus, MÊME périmètre
+// que FP.assuranceAnnuelle). tvsDetail renvoie déjà 0 si non applicable (élec, hors-catégorie…).
+// À utiliser PARTOUT où l'on somme la TVS de la flotte (dashboard, budget, stats, contrats, écran,
+// recherche) — un seul périmètre, plus de reduce recopié à la main dans chaque page.
+FP.tvsAnnuelleFlotte = (vehicules) => (vehicules || []).filter(v => !FP.estVendu(v))
+  .reduce((s, v) => { const d = FP.tvsDetail(v); return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0);
 
 // ============================================================================
 // AVANTAGE EN NATURE (AEN) — méthode FORFAIT (barème URSSAF, national). DEUX barèmes coexistent :
@@ -4051,6 +4057,19 @@ FP.decoteVehicule = (v) => {
   return { valeur, ageAnnees: ageY, residuel: res, kmAdj, attendu };
 };
 
+// Valeur de revente ESTIMÉE — source unique (a-vendre : KPI + pipeline ; simulateur véhicule).
+// Priorité : décote calculée (FP.decoteVehicule), sinon repli 70% de la valeur d'achat.
+// Renvoie null si aucune donnée (ni décote calculable, ni valeur d'achat) — au page de gérer
+// son défaut d'affichage. ⚠️ Le repli est 70% PARTOUT (avant : 50% dans le simulateur → incohérent).
+FP.valeurRevente = (v) => {
+  if (!v) return null;
+  const c = FP.decoteVehicule(v);
+  if (c) return c.valeur;
+  const achat = Number(v.valeurAchat);
+  if (Number.isFinite(achat) && achat > 0) return Math.round((achat * 0.7) / 50) * 50;
+  return null;
+};
+
 // ===== CENTRE DE DÉCISIONS — recommandations automatiques, triées par impact =====
 // Ne REMPLACE pas les alertes (factuelles, « il se passe X ») : ici on transforme les
 // signaux en DÉCISIONS À PRENDRE, chacune avec une action claire + un impact € estimé,
@@ -4914,7 +4933,7 @@ FP.rapportDirection = (data) => {
   const topCouts = Object.entries(byVeh).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const topMax = topCouts.length ? topCouts[0][1] : 0;
 
-  const tvsTotal = actifs.reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0);
+  const tvsTotal = FP.tvsAnnuelleFlotte(vehs);
   let co2G = 0; actifs.forEach(v => { const carb = (v.carburant || '').toLowerCase(); if (/lectri|hydrog/.test(carb)) return; const c = Number(v.co2); if (Number.isFinite(c) && c > 0) co2G += c * 15000; });
   const co2T = co2G / 1e6;
   const nbElec = actifs.filter(v => /lectri|hydrog|hybrid/.test((v.carburant || '').toLowerCase())).length;
@@ -8278,7 +8297,7 @@ FP.smartAnswers = (q) => {
   });
 
   // 5) TVS / CO₂ (totaux flotte)
-  if (has('tvs', 'taxe')) { const t = vehs.reduce((s, v) => { const d = FP.tvsDetail ? FP.tvsDetail(v) : null; return s + (d && d.applicable && d.total != null ? d.total : 0); }, 0); out.push({ icon: '🏛️', label: `${eur(t)} — TVS annuelle`, sub: 'estimée sur la flotte', url: pref + 'statistiques.html' }); }
+  if (has('tvs', 'taxe')) { const t = FP.tvsAnnuelleFlotte(vehs); out.push({ icon: '🏛️', label: `${eur(t)} — TVS annuelle`, sub: 'estimée sur la flotte', url: pref + 'statistiques.html' }); }
   if (has('co2', 'carbone', 'emission')) { let g = 0; vehs.forEach(v => { const cat = (v.categorie || '').toLowerCase(); if (/moto|utilit|engin|remorque/.test(cat) || FP.estVendu(v)) return; const c = Number(v.co2); if (/lectri|hydrog/.test((v.carburant || '').toLowerCase())) return; if (Number.isFinite(c) && c > 0) g += c * 15000; }); out.push({ icon: '🌱', label: `${(Math.round(g / 1e5) / 10).toLocaleString('fr-FR')} t CO₂/an`, sub: 'estimation (15 000 km/an)', url: pref + 'statistiques.html' }); }
 
   const seen = new Set();
