@@ -2546,6 +2546,20 @@ FP.settings = {
           const changedHere = JSON.stringify(obj[k]) !== JSON.stringify(base[k]);
           if (changedHere) { if (Object.prototype.hasOwnProperty.call(obj, k)) merged[k] = obj[k]; else delete merged[k]; }
         });
+        // ⚠️ FILET DE SÉCURITÉ « logo » : le logo société est un gros dataURL qui peut MANQUER dans le
+        // cache local. Une sauvegarde ne doit JAMAIS l'effacer du serveur par accident. On ne retire le
+        // logo que si CE poste l'avait ET l'a volontairement retiré (présent dans `base`, absent d'`obj`).
+        // Sinon (le poste ne l'a jamais eu localement), on RESTAURE celui du serveur.
+        try {
+          const baseHadLogo = base && base.profil && base.profil.logoDataUrl;
+          if (remote.profil && remote.profil.logoDataUrl && !baseHadLogo && (!merged.profil || !merged.profil.logoDataUrl)) {
+            merged.profil = Object.assign({}, merged.profil || {}, { logoDataUrl: remote.profil.logoDataUrl });
+          }
+          const baseHadLogoUrl = base && base.profil && base.profil.logoUrl;
+          if (remote.profil && remote.profil.logoUrl && !baseHadLogoUrl && (!merged.profil || !merged.profil.logoUrl)) {
+            merged.profil = Object.assign({}, merged.profil || {}, { logoUrl: remote.profil.logoUrl });
+          }
+        } catch (e) {}
         self._serverSnap = JSON.parse(JSON.stringify(merged));
         // Le local se met à jour vers la fusion (il récupère aussi les changements de l'autre poste).
         try { localStorage.setItem(self._key(), JSON.stringify(merged)); } catch (_) {}
