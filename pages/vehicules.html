@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260814c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260814c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260817a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260814c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260817a">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -466,7 +466,7 @@
           <option>Utilitaire</option>
         </select>
 
-        <button id="btn-km-mail" class="btn btn-outline text-sm ml-auto" title="Envoyer par e-mail à chaque chauffeur (du groupe affiché) une demande de relevé kilométrique — il répond en un clic"><i data-lucide="mail" class="w-4 h-4"></i> Demander le km par mail</button>
+        <button id="btn-km-mail" class="btn btn-outline text-sm ml-auto" title="Envoyer par e-mail une demande de relevé kilométrique aux chauffeurs du groupe affiché QUI N'ONT PAS ENCORE RÉPONDU (les véhicules déjà à jour sont ignorés) — le chauffeur répond en un clic"><i data-lucide="mail" class="w-4 h-4"></i> Demander le km par mail</button>
         <button id="btn-completer-cg" class="btn btn-outline text-sm" title="Lire les cartes grises déjà stockées et remplir automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates)"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Compléter depuis les cartes grises</button>
         <button id="btn-fiche-groupe" class="btn btn-outline text-sm" title="Télécharger la liste des véhicules du groupe affiché (ou Tous) en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> Télécharger la fiche</button>
       </div>
@@ -868,13 +868,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260814c"></script>
-<script src="../assets/js/supabase-client.js?v=20260814c"></script>
-<script src="../assets/js/data.js?v=20260814c"></script>
-<script src="../assets/js/fleet-docs.js?v=20260814c"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260814c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260817a"></script>
+<script src="../assets/js/supabase-client.js?v=20260817a"></script>
+<script src="../assets/js/data.js?v=20260817a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260817a"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260817a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260814c"></script>
+<script src="../assets/js/app.js?v=20260817a"></script>
 <script>
   lucide.createIcons();
 
@@ -3648,12 +3648,18 @@
     let base = sel.length ? sel
       : data.vehicules.filter(v => grp === 'all' ? !FP.estVendu(v) : FP.vehGroupes(v).includes(grp));
     base = base.filter(v => !FP.estVendu(v) && (!FP.kmSuivi || FP.kmSuivi(v)) && v.chauffeur && String(v.chauffeur).trim() && String(v.chauffeur).trim() !== '—');
-    const avecMail = base.filter(v => FP.kmCollecte.emailDe(v));
-    const sansMail = base.filter(v => !FP.kmCollecte.emailDe(v));
     if (!base.length) { alert('Aucun véhicule avec un chauffeur dans ce périmètre.'); return; }
-    if (!avecMail.length) { alert('Aucun chauffeur n\'a d\'e-mail enregistré (complète les fiches conducteurs).'); return; }
+    // ⚠️ On ne relance QUE ceux qui n'ont pas répondu : les véhicules déjà « à jour »
+    // (relevé reçu récemment) sont automatiquement ignorés (helper canonique FP.kmCollecte.aJour).
+    const dejaAJour = base.filter(v => FP.kmCollecte.aJour && FP.kmCollecte.aJour(v));
+    const aRelancer = base.filter(v => !(FP.kmCollecte.aJour && FP.kmCollecte.aJour(v)));
+    const avecMail = aRelancer.filter(v => FP.kmCollecte.emailDe(v));
+    const sansMail = aRelancer.filter(v => !FP.kmCollecte.emailDe(v));
+    if (!aRelancer.length) { alert(`Tous les véhicules de ce périmètre sont déjà à jour (${dejaAJour.length} relevé(s) reçu(s) récemment) — personne à relancer. ✅`); return; }
+    if (!avecMail.length) { alert('Aucun chauffeur à relancer n\'a d\'e-mail enregistré (complète les fiches conducteurs).'); return; }
     const portee = sel.length ? `${avecMail.length} véhicule(s) sélectionné(s)` : (grp === 'all' ? `${avecMail.length} véhicule(s)` : `${avecMail.length} véhicule(s) du groupe « ${FP.groupeLabel(grp)} »`);
     let msg = `Envoyer une demande de relevé kilométrique par e-mail à ${portee} ?`;
+    if (dejaAJour.length) msg += `\n\n✅ ${dejaAJour.length} véhicule(s) déjà à jour (a déjà répondu) seront ignorés — on ne relance que ceux sans réponse.`;
     if (sansMail.length) msg += `\n\n⚠️ ${sansMail.length} chauffeur(s) sans e-mail seront ignorés (${sansMail.slice(0, 4).map(v => v.chauffeur).join(', ')}${sansMail.length > 4 ? '…' : ''}).`;
     if (FP.confirm && !(await FP.confirm(msg))) return;
     const bz = FP.busy ? FP.busy('Envoi des demandes… 0/' + avecMail.length) : null;

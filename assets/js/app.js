@@ -1151,6 +1151,17 @@ FP.kmCollecte = {
     return this.recus().filter(r => r.vehicule_id === v.id)
       .sort((a, b) => new Date(b.used_at) - new Date(a.used_at));
   },
+  // ⚠️ SOURCE UNIQUE — « à jour » = un relevé a été REÇU il y a ≤ releveKmJours (même définition que
+  // l'onglet Alertes → Relevé KM, statut « ajour »). Sert à ne relancer QUE ceux qui n'ont pas répondu.
+  aJour(v) {
+    try {
+      const last = this.recusDe(v)[0];
+      if (!last || !last.used_at) return false;
+      const seuil = (FP.notifCfg ? (FP.notifCfg().releveKmJours || 45) : 45);
+      const days = Math.floor((Date.now() - new Date(last.used_at)) / 86400000);
+      return days <= seuil;
+    } catch (e) { return false; }
+  },
   // ⚠️ SOURCE UNIQUE — un relevé reçu par mail/QR met à jour le « dernier relevé » (settings.kmMajDates,
   // clé = immat) pour que l'alerte « relevé km à faire » (buildAlertes) se réinitialise automatiquement,
   // exactement comme une saisie manuelle. N'écrit qu'en cas de changement réel (converge, pas de boucle).
@@ -1170,6 +1181,35 @@ FP.kmCollecte = {
   },
   // Dernière demande connue pour un véhicule (ou null).
   statusFor(v) { try { return (v && this._byVeh[v.id]) || null; } catch (e) { return null; } },
+  // ⚠️ SAISIE MANUELLE du km par le gestionnaire (correction directe, sans passer par le chauffeur).
+  // Écrit un relevé « reçu » (source 'manuel') dans km_requests → il apparaît dans l'historique et
+  // marque le véhicule « à jour », ET met à jour la fiche véhicule (colonne km). Source unique = comme
+  // un relevé mail/QR. Le gestionnaire fait autorité : la valeur saisie remplace le km (même à la baisse
+  // pour corriger une faute de frappe).
+  async saisieManuelle(v, km) {
+    if (!v) return { ok: false, error: 'Véhicule inconnu.' };
+    km = Math.round(Number(km));
+    if (!Number.isFinite(km) || km <= 0 || km > 3000000) return { ok: false, error: 'Kilométrage invalide.' };
+    if (!(window.FP && FP.supabase)) return { ok: false, error: 'Connexion requise.' };
+    let soc = 'PXP'; try { soc = localStorage.getItem('fp_societe') || 'PXP'; } catch (e) {}
+    const societe = (soc === '__all__') ? (v.societe || 'PXP') : soc;
+    const kmAvant = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || null);
+    const now = new Date().toISOString();
+    const token = 'man-' + ((self.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '') : (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)));
+    const row = {
+      token, vehicule_id: v.id, plaque: v.immat || '', societe, chauffeur: v.chauffeur || '',
+      km_avant: (kmAvant != null && Number.isFinite(Number(kmAvant))) ? Math.round(Number(kmAvant)) : null,
+      km_recu: km, used_at: now, source: 'manuel'
+    };
+    try {
+      const { error } = await FP.supabase.from('km_requests').insert(row); if (error) throw error;
+      // Met à jour la fiche véhicule (le gestionnaire fait autorité, correction possible à la hausse OU à la baisse).
+      try { const { error: e2 } = await FP.supabase.from('vehicules').update({ km }).eq('id', v.id); if (!e2) v.km = km; } catch (e) {}
+      try { if (Array.isArray(this._cache)) this._cache.unshift(row); this._byVeh[v.id] = row; } catch (e) {}
+      this._reconcileKmDates();
+      return { ok: true, km };
+    } catch (e) { return { ok: false, error: 'Échec de l\'enregistrement : ' + (e.message || e) }; }
+  },
   // QR PERMANENT du véhicule (collé dans la voiture) : renvoie l'URL, en créant le jeton si besoin.
   // Le jeton est stocké dans la table km_qr (synchronisé, non devinable) → un seul QR par véhicule, à vie.
   _qrByVeh: {},
