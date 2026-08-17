@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260817a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260817b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260817a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260817b">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -140,11 +140,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260817a"></script>
-<script src="../assets/js/supabase-client.js?v=20260817a"></script>
-<script src="../assets/js/data.js?v=20260817a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260817b"></script>
+<script src="../assets/js/supabase-client.js?v=20260817b"></script>
+<script src="../assets/js/data.js?v=20260817b"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260817a"></script>
+<script src="../assets/js/app.js?v=20260817b"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -943,6 +943,76 @@
     setTimeout(() => { try { srch && srch.focus(); } catch (e) {} }, 50);
   }
 
+  // Corriger la/les facture(s) d'entretien qui « bloquent » un km trop bas (plancher kmDernierReleve).
+  // L'utilisateur voit EXACTEMENT quelle facture pose problème (fournisseur, date, n°, km) et corrige son km
+  // ici même (ou le vide), puis le relevé manuel est enregistré. Source unique : FP.recomputeVehiculeFromFactures
+  // recale la fiche véhicule (km de dernière révision) à partir des factures restantes.
+  function openKmBlockersModal(v, targetKm, onDone) {
+    const E = (s) => FP.esc ? FP.esc(s) : String(s == null ? '' : s);
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:16px';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:16px;max-width:600px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(15,30,61,.5)';
+    ov.appendChild(box);
+    const close = () => ov.remove();
+    function correct(f, newKm) {
+      f.km = newKm;
+      try { if (FP.persist) FP.persist.update('factures', f.id, { km: newKm }); } catch (e) {}
+      try { if (FP.recomputeVehiculeFromFactures) FP.recomputeVehiculeFromFactures(v, (window.FP_DATA && FP_DATA.factures) || []); } catch (e) {}
+      draw();
+    }
+    async function saveReleve() {
+      const KC = window.FP && FP.kmCollecte; if (!KC) return;
+      const r = await KC.saisieManuelle(v, targetKm);
+      close();
+      if (onDone) onDone(r);
+    }
+    function draw() {
+      const blockers = FP.blockingRevisionFactures ? FP.blockingRevisionFactures(v, targetKm) : [];
+      const rows = blockers.map(f => `
+        <div class="kb-row" data-fid="${E(f.id)}" style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:11px 0;border-bottom:1px solid var(--fp-border)">
+          <div style="flex:1;min-width:140px">
+            <div style="font-weight:700">${E(f.fournisseur || f.description || "Facture d'entretien")}</div>
+            <div style="font-size:.8rem;color:var(--fp-muted)">${f.date ? FP.dateNum(f.date) : 'sans date'}${f.numeroFacture ? ' · n° ' + E(f.numeroFacture) : ''} · <b style="color:#B91C1C">${FP.num(f.km)} km</b></div>
+          </div>
+          <input type="number" min="0" step="1" placeholder="km réel" class="kb-input" style="width:110px;padding:8px 10px;border:1px solid var(--fp-border);border-radius:9px">
+          <button class="rk-btn kb-fix" type="button" style="padding:8px 12px">Corriger</button>
+          <button class="rk-btn ghost kb-clear" type="button" style="padding:8px 12px">Vider le km</button>
+        </div>`).join('');
+      box.innerHTML = `
+        <div style="padding:16px 18px;border-bottom:1px solid var(--fp-border);display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div style="font-weight:800;font-size:1.05rem">🔧 Une facture bloque ce km</div>
+          <button class="kb-x" style="border:none;background:#f1f5f9;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:1.1rem;line-height:1">✕</button>
+        </div>
+        <div style="padding:14px 18px;overflow:auto">
+          <p style="font-size:.9rem;color:var(--fp-primary);margin:0 0 12px;line-height:1.5">Tu veux mettre <b>${FP.num(targetKm)} km</b> sur <b>${E(v.immat || '')}</b>, mais une <b>facture d'entretien</b> indique un km <b>plus élevé</b> — l'appli empêche le compteur de descendre sous le km de la <b>dernière révision</b>. Corrige (ou vide) le km de cette facture pour débloquer :</p>
+          ${blockers.length ? rows : '<div style="padding:14px;border-radius:12px;background:rgba(21,128,61,.1);color:#15803D;font-weight:700">✓ Plus aucune facture ne bloque — tu peux enregistrer le relevé.</div>'}
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid var(--fp-border);display:flex;justify-content:space-between;gap:10px">
+          <button class="rk-btn ghost kb-cancel" type="button">Annuler</button>
+          <button class="rk-btn kb-save" type="button" ${blockers.length ? 'disabled' : ''}>Enregistrer le relevé (${FP.num(targetKm)} km)</button>
+        </div>`;
+      if (window.lucide) lucide.createIcons();
+    }
+    box.addEventListener('click', (e) => {
+      if (e.target.closest('.kb-x') || e.target.closest('.kb-cancel')) { close(); return; }
+      if (e.target.closest('.kb-save')) { saveReleve(); return; }
+      const fix = e.target.closest('.kb-fix'), clr = e.target.closest('.kb-clear');
+      if (fix || clr) {
+        const row = e.target.closest('.kb-row'); if (!row) return;
+        const f = ((window.FP_DATA && FP_DATA.factures) || []).find(x => String(x.id) === String(row.getAttribute('data-fid')));
+        if (!f) return;
+        if (clr) { correct(f, null); return; }
+        const nk = Math.round(Number(row.querySelector('.kb-input').value));
+        if (!Number.isFinite(nk) || nk < 0) { alert('Entre un km valide (ou clique « Vider le km »).'); return; }
+        correct(f, nk);
+      }
+    });
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    draw();
+    document.body.appendChild(ov);
+  }
+
   // Interactions de l'onglet Relevé KM : déplier une ligne, enregistrer les réglages, demander le km.
   document.getElementById('suivi-relevekm').addEventListener('click', async (e) => {
     // Enregistrer les réglages
@@ -999,7 +1069,17 @@
       const km = inp ? Math.round(Number(inp.value)) : NaN;
       if (!Number.isFinite(km) || km <= 0) { if (st) { st.textContent = 'Entre un km valide.'; st.style.color = '#B91C1C'; } return; }
       const cur = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
-      if (km < cur && FP.confirm && !(await FP.confirm(`Le km saisi (${FP.num(km)}) est INFÉRIEUR au km actuel (${FP.num(cur)}). Confirmer la correction à la baisse ?`))) return;
+      if (km < cur) {
+        // Le compteur ne peut pas descendre sous le km de la dernière révision (plancher kmDernierReleve).
+        // Si une FACTURE d'entretien maintient ce plancher, on montre laquelle et on la corrige sur place.
+        const blockers = FP.blockingRevisionFactures ? FP.blockingRevisionFactures(v, km) : [];
+        if (blockers.length) {
+          if (st) { st.textContent = ''; }
+          openKmBlockersModal(v, km, () => { renderRelevekm(); render(); });
+          return;
+        }
+        if (FP.confirm && !(await FP.confirm(`Le km saisi (${FP.num(km)}) est INFÉRIEUR au km actuel (${FP.num(cur)}). Confirmer la correction à la baisse ?`))) return;
+      }
       if (st) { st.textContent = 'Enregistrement…'; st.style.color = 'var(--fp-muted)'; }
       kmSave.disabled = true;
       const r = await KC.saisieManuelle(v, km);

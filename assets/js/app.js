@@ -1181,6 +1181,20 @@ FP.kmCollecte = {
   },
   // Dernière demande connue pour un véhicule (ou null).
   statusFor(v) { try { return (v && this._byVeh[v.id]) || null; } catch (e) { return null; } },
+  // Factures d'entretien qui « bloquent » un km trop bas : leur km dépasse le km visé, donc elles
+  // maintiennent le plancher kmDernierReleve (= max km d'entretien, cf. FP.recomputeVehiculeFromFactures).
+  // Renvoie la liste triée du km le + haut. Sert à dire à l'utilisateur QUELLE facture corriger.
+  blockingRevisionFactures(v, kmSeuil, factures) {
+    try {
+      if (!v || !v.immat) return [];
+      const list = factures || (window.FP_DATA && FP_DATA.factures) || [];
+      const seuil = Number(kmSeuil) || 0;
+      return list.filter(f => f && FP.estEntretien && FP.estEntretien(f)
+        && FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat)
+        && Number(f.km) > seuil)
+        .sort((a, b) => Number(b.km) - Number(a.km));
+    } catch (e) { return []; }
+  },
   // ⚠️ SAISIE MANUELLE du km par le gestionnaire (correction directe, sans passer par le chauffeur).
   // Écrit un relevé « reçu » (source 'manuel') dans km_requests → il apparaît dans l'historique et
   // marque le véhicule « à jour », ET met à jour la fiche véhicule (colonne km). Source unique = comme
