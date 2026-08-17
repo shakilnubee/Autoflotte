@@ -2627,41 +2627,61 @@ FP.settings = {
     // Sans point de référence (pas encore chargé depuis le serveur) OU sans Supabase : comportement
     // d'avant (on écrit le blob local tel quel). Aucun risque de régression.
     if (!base || !(FP.supabase && FP.supabase.from)) { this._serverSnap = null; plainUpsert(obj); return; }
-    (async () => {
+    // Fusion « delta » : on repart de la version FRAÎCHE du serveur et on n'y applique QUE les clés que
+    // CE poste a changées depuis son dernier sync (obj vs base). Les modifs d'un AUTRE poste sont
+    // préservées ; une suppression reste une suppression (pas de « resurrection »).
+    const applyDelta = (remote) => {
+      const merged = { ...remote };
+      const keys = new Set([...Object.keys(obj), ...Object.keys(base)]);
+      keys.forEach(k => {
+        const changedHere = JSON.stringify(obj[k]) !== JSON.stringify(base[k]);
+        if (changedHere) { if (Object.prototype.hasOwnProperty.call(obj, k)) merged[k] = obj[k]; else delete merged[k]; }
+      });
+      // ⚠️ FILET DE SÉCURITÉ « logo » : le logo société est un gros dataURL qui peut MANQUER dans le
+      // cache local. Une sauvegarde ne doit JAMAIS l'effacer du serveur par accident. On ne retire le
+      // logo que si CE poste l'avait ET l'a volontairement retiré (présent dans `base`, absent d'`obj`).
+      // Sinon (le poste ne l'a jamais eu localement), on RESTAURE celui du serveur.
       try {
-        const r = await FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
-        const remote = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : null;
-        if (!remote) { self._serverSnap = JSON.parse(JSON.stringify(obj)); plainUpsert(obj); return; }
-        // On repart de la version FRAÎCHE du serveur, et on n'y applique QUE les clés que CE poste a
-        // changées depuis son dernier sync (obj vs base) : ajout/màj = on pose notre valeur ;
-        // suppression = on retire la clé. → les modifs d'un AUTRE poste sont préservées, et une
-        // suppression reste une suppression (pas de « resurrection »).
-        const merged = { ...remote };
-        const keys = new Set([...Object.keys(obj), ...Object.keys(base)]);
-        keys.forEach(k => {
-          const changedHere = JSON.stringify(obj[k]) !== JSON.stringify(base[k]);
-          if (changedHere) { if (Object.prototype.hasOwnProperty.call(obj, k)) merged[k] = obj[k]; else delete merged[k]; }
-        });
-        // ⚠️ FILET DE SÉCURITÉ « logo » : le logo société est un gros dataURL qui peut MANQUER dans le
-        // cache local. Une sauvegarde ne doit JAMAIS l'effacer du serveur par accident. On ne retire le
-        // logo que si CE poste l'avait ET l'a volontairement retiré (présent dans `base`, absent d'`obj`).
-        // Sinon (le poste ne l'a jamais eu localement), on RESTAURE celui du serveur.
-        try {
-          const baseHadLogo = base && base.profil && base.profil.logoDataUrl;
-          if (remote.profil && remote.profil.logoDataUrl && !baseHadLogo && (!merged.profil || !merged.profil.logoDataUrl)) {
-            merged.profil = Object.assign({}, merged.profil || {}, { logoDataUrl: remote.profil.logoDataUrl });
-          }
-          const baseHadLogoUrl = base && base.profil && base.profil.logoUrl;
-          if (remote.profil && remote.profil.logoUrl && !baseHadLogoUrl && (!merged.profil || !merged.profil.logoUrl)) {
-            merged.profil = Object.assign({}, merged.profil || {}, { logoUrl: remote.profil.logoUrl });
-          }
-        } catch (e) {}
-        self._serverSnap = JSON.parse(JSON.stringify(merged));
-        // Le local se met à jour vers la fusion (il récupère aussi les changements de l'autre poste).
-        try { localStorage.setItem(self._key(), JSON.stringify(merged)); } catch (_) {}
-        plainUpsert(merged);
+        const baseHadLogo = base && base.profil && base.profil.logoDataUrl;
+        if (remote.profil && remote.profil.logoDataUrl && !baseHadLogo && (!merged.profil || !merged.profil.logoDataUrl)) {
+          merged.profil = Object.assign({}, merged.profil || {}, { logoDataUrl: remote.profil.logoDataUrl });
+        }
+        const baseHadLogoUrl = base && base.profil && base.profil.logoUrl;
+        if (remote.profil && remote.profil.logoUrl && !baseHadLogoUrl && (!merged.profil || !merged.profil.logoUrl)) {
+          merged.profil = Object.assign({}, merged.profil || {}, { logoUrl: remote.profil.logoUrl });
+        }
+      } catch (e) {}
+      return merged;
+    };
+    const commit = (merged) => {
+      self._serverSnap = JSON.parse(JSON.stringify(merged));
+      // Le local se met à jour vers la fusion (il récupère aussi les changements de l'autre poste).
+      try { localStorage.setItem(self._key(), JSON.stringify(merged)); } catch (_) {}
+    };
+    (async () => {
+      // Compare-and-swap sur la colonne `rev` (cf. supabase/app_settings-concurrence.sql) : on n'écrit
+      // QUE si personne n'a écrit depuis notre lecture. Sinon (rev a bougé) on relit + refusionne +
+      // réessaie → ferme la fenêtre de course entre le SELECT et l'UPDATE. Tout échec → écriture simple.
+      const MAX = 4;
+      try {
+        for (let attempt = 0; attempt < MAX; attempt++) {
+          const r = await FP.supabase.from('app_settings').select('data, rev').eq('id', id).maybeSingle();
+          if (r && r.error) throw r.error;
+          const remote = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : null;
+          const remoteRev = (r && r.data && typeof r.data.rev === 'number') ? r.data.rev : null;
+          if (!remote) { self._serverSnap = JSON.parse(JSON.stringify(obj)); plainUpsert(obj); return; } // pas encore de ligne → insert simple
+          const merged = applyDelta(remote);
+          if (remoteRev === null) { commit(merged); plainUpsert(merged); return; } // colonne rev absente → fusion sans CAS (comme avant)
+          // Écrit seulement si rev inchangé ; .select() renvoie les lignes réellement modifiées.
+          const w = await FP.supabase.from('app_settings').update({ data: merged }).eq('id', id).eq('rev', remoteRev).select('id');
+          if (w && w.error) throw w.error;
+          if (w && Array.isArray(w.data) && w.data.length > 0) { commit(merged); return; } // CAS réussi
+          // 0 ligne modifiée = un autre poste a écrit entre-temps → on reboucle (relit rev + refusionne).
+        }
+        // Contention persistante après MAX essais : dernier recours = écriture simple fusionnée best-effort.
+        plainUpsert(obj);
       } catch (e) {
-        // Base momentanément injoignable / erreur : repli sur l'écriture simple (comme avant).
+        // rev absent (SQL pas appliqué) / base injoignable / erreur : repli EXACT sur le comportement d'avant.
         plainUpsert(obj);
       }
     })();
