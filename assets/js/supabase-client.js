@@ -199,6 +199,26 @@
   const PK_BY_TABLE = { conducteurs: 'key' };
   function pkColumn(table) { return PK_BY_TABLE[table] || 'id'; }
 
+  // Récupère TOUTES les lignes d'une table en PAGINANT. PostgREST/Supabase plafonne une réponse à
+  // ~1000 lignes : sans pagination, au-delà de 1000 factures/amendes les totaux (coûts, TVA, TCO)
+  // seraient SILENCIEUSEMENT tronqués. On boucle par pages de 1000 via .range() jusqu'à la dernière
+  // page (renvoie < 1000). Comportement identique tant qu'une table tient sous 1000 lignes.
+  async function fetchAllRows(table, orderCol) {
+    const PAGE = 1000;
+    let from = 0, out = [];
+    for (;;) {
+      let q = client.from(table).select('*');
+      if (orderCol) q = q.order(orderCol, { ascending: true });
+      const res = await q.range(from, from + PAGE - 1);
+      if (res.error) return { data: null, error: res.error };
+      const rows = res.data || [];
+      out = out.concat(rows);
+      if (rows.length < PAGE) break; // dernière page atteinte
+      from += PAGE;
+    }
+    return { data: out, error: null };
+  }
+
   // ===== API publique =====
   FP.db = {
     /** Charge les 3 tables et retourne { vehicules, amendes, factures } en camelCase */
@@ -206,10 +226,10 @@
       // Tri explicite par id : sans ça, PostgreSQL renvoie les lignes dans l'ordre
       // du tas (heap), et toute ligne modifiée passe en dernier → ordre instable.
       const [v, a, f, c] = await Promise.all([
-        client.from('vehicules').select('*').order('id', { ascending: true }),
-        client.from('amendes').select('*').order('id', { ascending: true }),
-        client.from('factures').select('*').order('id', { ascending: true }),
-        client.from('conducteurs').select('*'),
+        fetchAllRows('vehicules', 'id'),
+        fetchAllRows('amendes', 'id'),
+        fetchAllRows('factures', 'id'),
+        fetchAllRows('conducteurs', null),
       ]);
       const errors = [v.error, a.error, f.error].filter(Boolean); // conducteurs non bloquant (compteur)
       if (errors.length) {
@@ -244,10 +264,10 @@
     async select(table) {
       // Trier par la VRAIE clé primaire (conducteurs → "key", sinon "id") : sinon un ORDER BY id
       // sur une table sans colonne "id" renvoyait un 400 (visible dans la console) avant le repli.
-      let res = await client.from(table).select('*').order(pkColumn(table), { ascending: true });
+      let res = await fetchAllRows(table, pkColumn(table)); // paginé (évite la troncature > 1000 lignes)
       // Filet de sécurité : si malgré tout le tri échoue (colonne absente), on réessaie sans tri.
       if (res.error && /column .* does not exist/i.test(res.error.message || '')) {
-        res = await client.from(table).select('*');
+        res = await fetchAllRows(table, null);
       }
       if (res.error) { console.error(`[FP.db.select ${table}]`, res.error); return { data: [], error: res.error }; }
       return { data: filterSociete((res.data || []).map(toClient)), error: null };
