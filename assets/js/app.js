@@ -468,7 +468,20 @@ FP.primeVeh = (v) => {
   } catch (e) { return 0; }
 };
 // ⚠️ HELPER CANONIQUE — total annuel des primes d'assurance du parc POSSÉDÉ (exclut les vendus).
-FP.assuranceAnnuelle = (vehicules) => (vehicules || []).filter(v => !FP.estVendu(v)).reduce((s, v) => s + FP.primeVeh(v), 0);
+// Logique (identique à Contrats/Budget) : si des primes PAR VÉHICULE sont saisies et couvrent au
+// moins un véhicule possédé (somme > 0) → on somme ces primes ; SINON on retombe sur la prime
+// « flotte » globale saisie à la main (settings.assurancePrimeAnnuelle). Avant, ce helper ne
+// sommait que les primes par véhicule → il renvoyait 0 quand seule la prime flotte était saisie.
+FP.assuranceAnnuelle = (vehicules) => {
+  const s = (FP.settings && FP.settings.get) ? (FP.settings.get() || {}) : {};
+  const primes = (s.assurancePrimes && typeof s.assurancePrimes === 'object') ? s.assurancePrimes : {};
+  const owned = (vehicules || []).filter(v => !FP.estVendu(v));
+  if (Object.keys(primes).length) {
+    let t = 0; owned.forEach(v => { t += FP.primeVeh(v); });
+    if (t > 0) return t;
+  }
+  const flotte = Number(s.assurancePrimeAnnuelle); return Number.isFinite(flotte) ? flotte : 0;
+};
 // ⚠️ HELPER CANONIQUE — total annuel TVS de la flotte POSSÉDÉE (exclut les vendus, MÊME périmètre
 // que FP.assuranceAnnuelle). tvsDetail renvoie déjà 0 si non applicable (élec, hors-catégorie…).
 // À utiliser PARTOUT où l'on somme la TVS de la flotte (dashboard, budget, stats, contrats, écran,
