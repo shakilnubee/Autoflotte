@@ -266,6 +266,53 @@ fleet-app/
    indispo. Ex. de référence : le bouton `#kc-dl` de `kit-commercial.html` (parcourt le DOM et rend en
    texte jsPDF). Ne JAMAIS livrer une page imprimable sans son téléchargement direct.
 
+## ⚖️ RÈGLES PERMANENTES DE DÉVELOPPEMENT (consigne explicite — s'appliquent à CHAQUE demande)
+
+But : Parc Pilot doit devenir **autonome, fiable, cohérent, maintenable, administrable depuis l'app** (à terme, plus besoin de dev pour les réglages courants). Ces 42 règles sont **permanentes** et priment.
+
+1. **NE RIEN CASSER (priorité absolue)** : jamais supprimer une feature / modifier une logique métier non demandée / casser une automatisation / changer un comportement en silence / supprimer une donnée / toucher Supabase (tables, colonnes, RLS, policies, auth, permissions, migrations, triggers) — **sans accord explicite**. Ne JAMAIS résoudre un bug en supprimant la feature ou en la simplifiant en douce.
+2. **DANS LE DOUTE, DEMANDER AVANT** (intention, règle métier, impact, suppression, migration, action irréversible, 2 solutions aux conséquences différentes). Expliquer : (1) ce que j'ai découvert, (2) le doute, (3) les conséquences, (4) ma reco → puis demander. Pas de question pour un détail technique évident/sans conséquence métier.
+3. **ANALYSER AVANT DE MODIFIER** : lire le code, comprendre l'existant, chercher dépendances + occurrences similaires, repérer impacts/risques, vérifier s'il existe déjà une source/helper, puis choisir la modif la + simple et sûre. Jamais coder sans comprendre.
+4. **SOURCE UNIQUE DE VÉRITÉ** : une info/règle/calcul = défini UNE fois (helper/constante/config/composant) — couleurs, statuts, km, QR, TCO, conso, catégories, échéances, seuils, alertes, permissions, formatage…
+5. **PROPAGATION GLOBALE** : ne jamais modifier QUE l'endroit cité — chercher partout où c'est affiché/calculé/imprimé/téléchargé/exporté/importé/envoyé/mobile/desktop/modale/tableau/fiche/dashboard/PDF/PNG/automatisation. Se demander : « un AUTRE endroit doit-il refléter ce changement ? ».
+6. **CHERCHER PAR FONCTIONNALITÉ, pas par mot** (QR → qrcode, canvas, toDataURL, renderQrCard, print, download, PNG, export…).
+7. **RÉUTILISER LES COMPOSANTS** : vérifier si un similaire existe avant d'en créer un ; préférer un composant configurable (boutons, modales, badges, tableaux, filtres, formulaires, sélecteurs…).
+8. **DÉTECTER LES DOUBLONS** (autre nom/composant/page/ancien fichier). Si 2 systèmes font la même chose → le signaler ; centraliser si simple/sans risque, sinon demander avant.
+9. **NE PAS CODER EN DUR ce qui devrait être configurable** (couleurs, délais, statuts, catégories, seuils, textes métier, alertes, types de docs, modèles). Centraliser quand ça a du sens.
+10. **ADMINISTRABLE DEPUIS PARC PILOT** : se demander si l'admin devrait pouvoir le régler lui-même (Paramètres/Administration) plutôt que via un dev. Ne pas transformer une règle en paramètre si ça implique une grosse modif DB sans accord.
+11. **AUTOMATISER** : si l'info existe déjà (conducteur, société, immat, km, établissement), la réutiliser — préremplissage / calcul / déduction / récupération / synchro auto.
+12. **NE JAMAIS REDEMANDER une info déjà connue** : récupérer/proposer/préremplir/synchroniser plutôt que double saisie.
+13. **CALCULS CENTRALISÉS** (TCO, conso, coût/km, carburant, budget, écarts, km, coûts mensuels, maintenance, KPI) : écran = dashboard = exports = PDF donnent EXACTEMENT le même résultat.
+14. **DATES/ÉCHÉANCES CENTRALISÉES** (CT, entretien, assurance, restitution LLD, docs, permis, contrats) : une seule logique valide/bientôt/urgent/expiré.
+15. **HISTORIQUE** : ne pas écraser en silence une info historique utile (conducteur, affectation, km, statut, entretien, sinistre, docs). Si ça touche la DB → demander avant.
+16. **INTÉGRITÉ DES DONNÉES LIÉES** : avant modif/suppression, chercher les dépendances (un véhicule est lié à conducteur/factures/entretiens/sinistres/amendes/docs/km/contrats/QR/stats). Jamais traiter une entité isolément.
+17. **FAVORISER L'ARCHIVAGE** vs suppression définitive (véhicules, users, conducteurs, docs, sociétés, contrats). Ne pas changer la logique de suppression actuelle sans accord.
+18. **TESTER LE PARCOURS COMPLET**, pas juste le bouton (QR : créer→afficher→télécharger→imprimer→scanner ; sinistre : créer→modifier→doc→consulter→clôturer→historique ; etc.).
+19. **ÉCRAN/IMPRESSION/PDF/PNG/EXPORT** = même donnée + même moteur métier ; seul le format de sortie change, jamais la logique.
+20. **COHÉRENCE UI/UX** : une même action (Modifier, Supprimer, Télécharger, Imprimer, Sauvegarder, Annuler, Archiver, Filtrer) se comporte pareil partout ; composants similaires = apparence/comportement cohérents.
+21. **DESIGN SYSTEM CENTRALISÉ** (couleurs, typo, espacements, radius, ombres, boutons, badges, cartes, tableaux, états, animations) — pas de valeurs visuelles arbitraires répétées.
+22. **RESPONSIVE OBLIGATOIRE** (grand écran, laptop, tablette, mobile) : vérifier débordements, tableaux, modales, boutons, menus, formulaires, textes, cards.
+23. **GÉRER TOUS LES ÉTATS** (chargement, succès, erreur, aucune donnée, partielles, accès refusé, fichier manquant, lent, action en cours) — jamais d'écran vide/incompréhensible.
+24. **FEEDBACK UTILISATEUR** : toute action importante = retour visible (sauvegardé, supprimé, envoyé, importé, téléchargé, erreur, en cours). (cf. overlay « … en cours » puis « ✓/✕ ».)
+25. **ANTI DOUBLE-ACTION** : protéger/désactiver pendant l'async (double création/envoi/sauvegarde/import/suppression/génération).
+26. **VALIDER LES DONNÉES** avant enregistrement (valeurs négatives impossibles, dates incohérentes, km, champs obligatoires, doublons, format, fichiers, valeurs aberrantes). Ne pas changer les règles métier existantes sans accord.
+27. **PERMISSIONS COHÉRENTES partout** : masquer un bouton ≠ sécurité ; une restriction doit tenir sur toute page/modale/API/bouton oublié (rôles CEO/Admin/Gestionnaire/Chauffeur via `FP.role`).
+28. **SUPABASE — PRUDENCE MAX** : avant de toucher tables/colonnes/index/migrations/RLS/policies/storage/auth/fonctions/triggers, expliquer ; dans le doute DEMANDER ; jamais de migration destructrice/irréversible automatique.
+29. **NE JAMAIS CASSER LES AUTOMATISATIONS** : ne pas renommer/supprimer en silence champs/statuts/fonctions/événements/routes/données/triggers utilisés par une automatisation.
+30. **PERFORMANCE** : éviter requêtes inutiles, gros fetch sans pagination, recalculs/re-renders inutiles, images non optimisées, requêtes dupliquées ; partager les données communes proprement.
+31. **PENSER À L'ÉCHELLE** (×10 véhicules/docs/users, multi-sociétés/établissements) sans over-engineering.
+32. **FILTRES/RECHERCHES COHÉRENTS** (véhicule, conducteur, société, établissement, statut, période, catégorie) — une seule interprétation par filtre.
+33. **EXPORTS FIABLES** : PDF/Excel/CSV/rapport = mêmes données et calculs que l'écran, jamais une valeur calculée autrement.
+34. **AUCUNE DONNÉE FICTIVE EN PROD** (mocks, exemples, fallback, faux users/véhicules) — vérifier qu'ils ne restent pas actifs.
+35. **PAS DE TODO SILENCIEUX** (TODO/FIXME/implémentation temporaire/feature partielle/code mort) — le signaler clairement.
+36. **CORRIGER LA CAUSE RACINE**, pas le symptôme : trouver la cause, pourquoi elle existe, si elle est ailleurs, la correction minimale correcte. Éviter d'empiler des conditions spéciales fragiles. ⚠️ Si un changement semble **sans effet**, LIRE TOUT le mécanisme (un plafond/cache/autre code le neutralise) au lieu de re-régler la même valeur à l'aveugle.
+37. **PRÉVENIR LES RÉGRESSIONS** : après une modif importante, vérifier les features proches ; tests si dispo, **syntaxe des scripts inline** (`node --check` / `new Function`), build, console. « Ça compile » ≠ terminé.
+38. **IMPACT MÉTIER AVANT TECHNIQUE** : « supprimer un véhicule » ≠ `DELETE` — penser historique/docs/entretiens/sinistres/amendes/conducteurs/stats/contrats.
+39. **CHANGEMENTS PETITS ET SÛRS** : ciblés, lisibles, réutilisables, par petites étapes. Pas de gros refactor non demandé (si nécessaire → expliquer + demander).
+40. **WORKFLOW avant chaque tâche** : (1) Analyse (compris/fichiers/impacts/risques), (2) Recherche globale des occurrences liées, (3) Vérifier si une source commune existe, (4) Modif la + sûre, (5) Vérifs (syntaxe/build/tests), (6) Cohérence (pas d'ancienne version ailleurs), (7) Compte rendu (modifié quoi/où/centralisé/pas touché volontairement/points à surveiller).
+41. **QUESTION FINALE** : « si le proprio fait la même action via une autre page/bouton/export/appareil/parcours, obtient-il exactement le comportement attendu ? » Si non/incertain → continuer l'analyse.
+42. **OBJECTIF FINAL** : donnée unique → logique centralisée → composants réutilisables → propagation auto → automatisations → administration depuis l'app → tests → fiabilité. Rendre l'app progressivement + autonome, **sans jamais mettre en danger l'existant**.
+
 ## Workflow Git
 
 ```powershell
