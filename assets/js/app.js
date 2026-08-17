@@ -658,6 +658,24 @@ FP.estPayee = (a) => { const s = ((a && a.statut) || '').toString().trim().toLow
 // reparation). À utiliser PARTOUT (carnet fiche, page Entretiens, coût véhicule, budget, alertes) — sinon
 // une facture typée « reparation » (sans accent) apparaît sur un écran et pas sur l'autre.
 FP.estEntretien = (f) => { const t = ((f && f.type) || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); return t === 'entretien' || t === 'reparation'; };
+// ⚠️ SOURCE UNIQUE — « Dépensé {année} » d'un véhicule = entretien/réparation (factures DÉDOUBLONNÉES)
+// + sinistres à charge (FP.coutSinistre). Utilisé par la fiche véhicule À L'ÉCRAN et dans son PDF pour
+// afficher EXACTEMENT le même montant (sinon le PDF sur-comptait les doublons et ignorait les sinistres).
+FP.coutExploitAnnee = (v, annee, factures) => {
+  try {
+    if (!v) return 0;
+    const list = factures || (window.FP_DATA && FP_DATA.factures) || [];
+    const an = String(annee);
+    const mine = FP.dedupeFactures(list.filter(f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat)));
+    let tot = 0;
+    mine.forEach(f => {
+      if (!String(f.date || '').startsWith(an)) return;
+      if (FP.estEntretien(f)) tot += Number(f.montantTTC) || 0;
+      else if (String(f.type || '').toLowerCase() === 'sinistre') tot += (FP.coutSinistre ? FP.coutSinistre(f) : 0);
+    });
+    return tot;
+  } catch (e) { return 0; }
+};
 // ⚠️ HELPER CANONIQUE — kilométrage RÉEL d'un véhicule : le max entre le km à jour et le km de la dernière
 // révision (le véhicule ne peut pas rouler moins que son dernier relevé). À utiliser partout où on AFFICHE
 // « km actuel », pour que même des données non réconciliées (data.js figé) montrent la bonne valeur.
