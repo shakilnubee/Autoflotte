@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260817d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260817e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260817d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260817e">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -307,10 +307,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260817d"></script>
-<script src="../assets/js/supabase-client.js?v=20260817d"></script>
-<script src="../assets/js/data.js?v=20260817d"></script>
-<script src="../assets/js/app.js?v=20260817d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260817e"></script>
+<script src="../assets/js/supabase-client.js?v=20260817e"></script>
+<script src="../assets/js/data.js?v=20260817e"></script>
+<script src="../assets/js/app.js?v=20260817e"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -579,7 +579,7 @@
       return ded.filter(f => isUsage(f) && !_sinT(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0)
         + (FP.resteChargeSinistre ? FP.resteChargeSinistre(ded) : 0);
     })();
-    const totalKm = data.vehicules.reduce((s, v) => s + (v.km || 0), 0);
+    const totalKm = data.vehicules.reduce((s, v) => s + (FP.kmActuel ? FP.kmActuel(v) : (v.km || 0)), 0); // km compteur (source unique FP.kmActuel)
     $('kpi-perkm').textContent = totalKm > 0 ? FP.euroPrecis(usageAllTime / totalKm) : '—';
     // Top dépense = la plus grosse facture D'USAGE (entretien/répa/leasing/sinistre) —
     // on EXCLUT l'achat du véhicule (prix d'acquisition, affiché à part) ainsi que
@@ -731,7 +731,9 @@
       }
       const total = factTotal + assur + tvs + amendes;
       // €/km : coût cumulé ÷ km compteur cumulé → n'a de sens qu'en « toutes années » ; sinon 0 (« — »).
-      return { id: v.id, immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, fact: factTotal, assur, tvs, amendes, total, perKm: (annee === 'all' && v.km > 0) ? total / v.km : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
+      // Dénominateur = FP.kmActuel (source unique, comme la fiche véhicule), pas v.km brut.
+      const kmA = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
+      return { id: v.id, immat: v.immat, modele: `${v.marque} ${v.modele}`.trim(), km: v.km, fact: factTotal, assur, tvs, amendes, total, perKm: (annee === 'all' && kmA > 0) ? total / kmA : 0, nb: fv.length, achatDate: achatF ? achatF.date : '' };
     }).sort((a, b) => b.total - a.total);
     renderTcoTable();
     renderPodiumPerKm(annee);
