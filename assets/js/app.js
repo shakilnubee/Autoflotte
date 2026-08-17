@@ -645,6 +645,35 @@ FP.leasingMensuelFlotte = (data) => {
 };
 // Coût annuel leasing total = BPCE (× 12) + Localease/Ayvens (déjà annuel). Source unique flotte.
 FP.leasingAnnuelFlotte = (data) => FP.leasingMensuelFlotte(data) * 12 + (FP.leasingLocaleaseAnnuel ? FP.leasingLocaleaseAnnuel() : 0);
+
+// ⚠️ SOURCE UNIQUE — dépendances d'un véhicule (factures / amendes / emprunts en cours) avant
+// suppression, pour un AVERTISSEMENT identique partout (fiche véhicule ET Contrats).
+FP.vehiculeDependances = (v, data) => {
+  data = data || {};
+  const nk = FP.normImmat((v && v.immat) || '');
+  const nbFactures = (data.factures || []).filter(f => FP.normImmat(f.vehiculeImmat) === nk).length;
+  const nbAmendes = (data.amendes || []).filter(a => FP.normImmat(a.vehiculeImmat || a.plaque || a.immatriculation) === nk).length;
+  let nbEmpOuverts = 0;
+  try {
+    const EK = 'fp_emprunts_' + ((FP.activeSociete) ? FP.activeSociete() : 'PXP');
+    const emps = JSON.parse(localStorage.getItem(EK) || '[]');
+    if (Array.isArray(emps)) nbEmpOuverts = emps.filter(e => e && FP.normImmat(e.vehicule) === nk && (FP.empEnCours ? FP.empEnCours(e) : !e.dateRetour)).length;
+  } catch (e) {}
+  return { nbFactures, nbAmendes, nbEmpOuverts };
+};
+// Message de confirmation de suppression d'un véhicule — IDENTIQUE partout. Précise ce qui est
+// conservé, ce qui reste rattaché, les emprunts ouverts à clôturer, et que la suppression va en
+// Corbeille (restaurable) — jamais « irréversible » puisque FP.persist.delete/FP.trash la capture.
+FP.vehiculeDeleteMessage = (v, data) => {
+  const d = FP.vehiculeDependances(v, data);
+  const nom = [v && v.marque, v && v.modele].filter(Boolean).join(' ');
+  let msg = `Supprimer le véhicule ${(v && v.immat) || ''}${nom ? ` (${nom})` : ''} ?`;
+  if (d.nbFactures > 0) msg += `\n\n⚠️ ${d.nbFactures} facture(s) liées : CONSERVÉES (les dépenses ont eu lieu → elles restent dans l'historique et les totaux de coût).`;
+  if (d.nbAmendes > 0) msg += `\n\n⚠️ ${d.nbAmendes} amende(s) resteront rattachées à cette plaque (véhicule disparu).`;
+  if (d.nbEmpOuverts > 0) msg += `\n\n⛔ ${d.nbEmpOuverts} emprunt(s) EN COURS (non rendus) : pense à les clôturer d'abord, sinon ils resteront ouverts.`;
+  msg += `\n\nLe véhicule part en Corbeille (restaurable). Astuce : pour retirer un véhicule vendu en gardant tout tracé, utilise plutôt le statut « vendu » (ne supprime rien).`;
+  return msg;
+};
 // ⚠️ HELPER CANONIQUE — coût RESTANT À CHARGE d'une facture de sinistre : 0 si remboursé/pris en charge
 // (sinistreStatut ∈ {rembourse, pec}) ou si c'est un simple devis (sinistreStage ou mots devis/proforma/
 // estimation), sinon le TTC. Même règle que la page Sinistres et le KPI Statistiques.
