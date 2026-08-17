@@ -4411,7 +4411,7 @@
     if (!qrCurrent) { cb(null); return; }
     let socNom = ''; try { const s = FP.settings.get(); socNom = (s.societe && s.societe.nom) || ''; } catch (e) {}
     if (!socNom) { try { const a = FP.activeSociete && FP.activeSociete(); socNom = (a && a !== '__all__') ? a : ''; } catch (e) {} }
-    let logo = ''; try { logo = (FP.settings.get().profil || {}).logoDataUrl || ''; } catch (e) {}
+    let logo = ''; try { const _p = FP.settings.get().profil || {}; logo = _p.logoDataUrl || _p.logoUrl || ''; } catch (e) {}
     const titre = (socNom ? socNom + ' — ' : '') + (qrCurrent.immat || '');
     const modele = (qrCurrent.label || '').replace(qrCurrent.immat || '', '').replace(/^[\s·•-]+/, '').trim();
     const hint = qrCurrent.hint || 'Scannez pour ouvrir la fiche du véhicule';
@@ -4458,7 +4458,7 @@
       hintLines.forEach((ln, i) => ctx.fillText(ln, W / 2, cy + i * lh));
       cb(c);
     };
-    if (logo) { const im = new Image(); im.onload = () => draw(im); im.onerror = () => draw(null); im.src = logo; }
+    if (logo) { const im = new Image(); if (!/^data:/i.test(logo)) { try { im.crossOrigin = 'anonymous'; } catch (e) {} } im.onload = () => draw(im); im.onerror = () => draw(null); im.src = logo; }
     else draw(null);
   }
   function downloadQr() {
@@ -4472,23 +4472,35 @@
       }, 'image/png');
     });
   }
-  // ⚠️ UNE SEULE SOURCE : « Imprimer » réutilise EXACTEMENT la même carte que le PNG (renderQrCard).
-  // Les deux sorties sont donc pixel pour pixel identiques — toute modif de la carte s'applique aux DEUX
-  // automatiquement (plus de mise en page dupliquée qui finit par diverger).
+  // « Imprimer » : carte HTML autonome. Le logo passe par une balise <img> (rendu FIABLE, y compris
+  // pour un logo hébergé) — l'approche 100% canvas ne garantissait pas le logo. Mise en page identique
+  // au PNG (logo 120px, titre société — plaque, QR, modèle, astuce) → format portrait confirmé.
   function printQr() {
     if (!qrCurrent) return;
-    renderQrCard(canvas => {
-      const src = (canvas || buildQrCanvas(qrCurrent.url, 12, 4)).toDataURL('image/png');
-      const esc = s => (s || '').toString().replace(/</g, '&lt;');
-      const w = window.open('', '_blank');
-      if (!w) { alert('Autorise les fenêtres pop-up pour imprimer.'); return; }
-      w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>QR ' + esc(qrCurrent.immat) + '</title>'
-        + '<style>@page{margin:12mm}html,body{margin:0}body{text-align:center;padding:24px;background:#fff}'
-        + 'img{width:330px;max-width:100%;height:auto}</style></head>'
-        + '<body><img src="' + src + '" alt="QR ' + esc(qrCurrent.immat) + '">'
-        + '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print()},300)}</scr' + 'ipt></body></html>');
-      w.document.close();
-    });
+    const png = buildQrCanvas(qrCurrent.url, 12, 4).toDataURL('image/png');
+    const esc = s => (s || '').toString().replace(/</g, '&lt;');
+    let socNom = ''; try { const s = FP.settings.get(); socNom = (s.societe && s.societe.nom) || ''; } catch (e) {}
+    if (!socNom) { try { const a = FP.activeSociete && FP.activeSociete(); socNom = (a && a !== '__all__') ? a : ''; } catch (e) {} }
+    let logo = ''; try { const p = FP.settings.get().profil || {}; logo = p.logoDataUrl || p.logoUrl || ''; } catch (e) {}
+    const titre = (socNom ? esc(socNom) + ' — ' : '') + esc(qrCurrent.immat);
+    const modele = (qrCurrent.label || '').replace(qrCurrent.immat || '', '').replace(/^[\s·•-]+/, '').trim();
+    const w = window.open('', '_blank');
+    if (!w) { alert('Autorise les fenêtres pop-up pour imprimer.'); return; }
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>QR ' + esc(qrCurrent.immat) + '</title>'
+      + '<style>body{font-family:Inter,Arial,sans-serif;text-align:center;padding:40px;color:#0f1e3d}'
+      + '.card{display:inline-block;border:2px solid #0f1e3d;border-radius:16px;padding:22px 28px 24px}'
+      + '.logo{max-height:120px;max-width:320px;object-fit:contain;margin-bottom:14px}'
+      + '.soc{font-size:16px;font-weight:800;margin:2px 0 14px}'
+      + 'img.qr{width:280px;height:280px;image-rendering:pixelated}'
+      + '.mod{color:#64748b;font-size:13px;margin-top:10px;font-weight:600}.hint{margin-top:8px;font-size:12px;color:#94a3b8}</style></head>'
+      + '<body><div class="card">'
+      + (logo ? '<div><img class="logo" src="' + logo + '" alt="logo"></div>' : '')
+      + '<div class="soc">' + titre + '</div>'
+      + '<img class="qr" src="' + png + '" alt="Aperçu" loading="lazy">'
+      + (modele ? '<div class="mod">' + esc(modele) + '</div>' : '')
+      + '<div class="hint">' + esc(qrCurrent.hint || 'Scannez pour ouvrir la fiche du véhicule') + '</div></div>'
+      + '<scr' + 'ipt>window.onload=function(){setTimeout(function(){window.print()},250)}</scr' + 'ipt></body></html>');
+    w.document.close();
   }
   $('drawer-qr').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v); });
   $('qr-close').addEventListener('click', () => $('qr-backdrop').classList.remove('open'));
