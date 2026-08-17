@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260817h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260817i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260817h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260817i">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -845,13 +845,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260817h"></script>
-<script src="../assets/js/supabase-client.js?v=20260817h"></script>
-<script src="../assets/js/data.js?v=20260817h"></script>
-<script src="../assets/js/fleet-docs.js?v=20260817h"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260817h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260817i"></script>
+<script src="../assets/js/supabase-client.js?v=20260817i"></script>
+<script src="../assets/js/data.js?v=20260817i"></script>
+<script src="../assets/js/fleet-docs.js?v=20260817i"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260817i"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260817h"></script>
+<script src="../assets/js/app.js?v=20260817i"></script>
 <script>
   lucide.createIcons();
 
@@ -3081,29 +3081,10 @@
     if (!state.editingId) return;
     const v = data.vehicules.find(x => x.id === state.editingId);
     if (!v) return;
-    // Compter les factures liées : elles sont CONSERVÉES (dépenses réellement engagées → restent dans
-    // l'historique et les totaux, comme en comptabilité). On prévient juste l'utilisateur.
-    const up = (v.immat || '').toUpperCase();
-    const nk = FP.normImmat(up);
-    const nbFact = (data.factures || []).filter(f => FP.normImmat(f.vehiculeImmat) === nk).length;
-    // Amendes rattachées (par plaque) — restent dans l'historique mais pointeront vers un véhicule disparu.
-    const nbAmendes = (data.amendes || []).filter(a => FP.normImmat(a.vehiculeImmat || a.plaque || a.immatriculation) === nk).length;
-    // Emprunts EN COURS (non rendus) sur cette plaque — resteraient « ouverts » indéfiniment. Lecture du
-    // cache emprunts de la société (même clé que la page Emprunts) pour prévenir l'utilisateur.
-    let nbEmpOuverts = 0;
-    try {
-      const EK = 'fp_emprunts_' + ((window.FP && FP.activeSociete) ? FP.activeSociete() : 'PXP');
-      const emps = JSON.parse(localStorage.getItem(EK) || '[]');
-      if (Array.isArray(emps)) nbEmpOuverts = emps.filter(e => e && FP.normImmat(e.vehicule) === nk && (FP.empEnCours ? FP.empEnCours(e) : !e.dateRetour)).length;
-    } catch (e) {}
-    let msg = `Supprimer le véhicule ${v.immat} (${v.marque} ${v.modele}) ?`;
-    if (nbFact > 0) {
-      msg += `\n\n⚠️ ${nbFact} facture(s) sont liées à ce véhicule. Elles seront CONSERVÉES `
-        + `(les dépenses ont eu lieu → elles restent dans l'historique et les totaux de coût). `;
-    }
-    if (nbAmendes > 0) msg += `\n\n⚠️ ${nbAmendes} amende(s) resteront rattachées à cette plaque (véhicule disparu).`;
-    if (nbEmpOuverts > 0) msg += `\n\n⛔ ${nbEmpOuverts} emprunt(s) EN COURS (non rendus) sur ce véhicule : pense à les clôturer d'abord, sinon ils resteront ouverts.`;
-    msg += `\n\nAstuce : pour retirer un véhicule vendu en gardant tout tracé, utilise plutôt le statut « vendu » (ne supprime rien).`;
+    // Message de confirmation IDENTIQUE partout (fiche + Contrats) : factures conservées, amendes
+    // rattachées, emprunts ouverts, Corbeille restaurable, astuce statut « vendu ». Source unique.
+    const msg = FP.vehiculeDeleteMessage ? FP.vehiculeDeleteMessage(v, data)
+      : `Supprimer le véhicule ${v.immat} (${v.marque} ${v.modele}) ?\n\nIl part en Corbeille (restaurable).`;
     if (!(await FP.confirm(msg))) return;
     FP.history.commit();
     // Archive ses documents (sous-dossier « OUT » dans son dossier plaque) AVANT de le retirer.
