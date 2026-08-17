@@ -597,6 +597,54 @@ FP.leasingLocaleaseAnnuel = function () {
     return mens * 12;
   } catch (e) { return 0; }
 };
+// ⚠️ HELPERS CANONIQUES — leasing de la flotte (mêmes règles que la page Contrats, qui reste la
+// référence). Objectif : que Budget/Statistiques comptent le leasing EXACTEMENT comme Contrats
+// (avant, Budget ne voyait que les véhicules avec une offre de loyer → il ratait ceux détectés par
+// le PROPRIÉTAIRE (loueur) ou par repli sur la MÉDIANE des factures 'leasing').
+// Loueurs de leasing configurés (settings.loueurs + repli profil société).
+FP.leasingLoueurs = () => {
+  let list = [];
+  try { const s = FP.settings.get(); if (Array.isArray(s.loueurs)) list = s.loueurs; } catch (e) {}
+  list = (list || []).filter(l => l && (String(l.nom || '').trim() || String(l.prop || '').trim()));
+  const prof = (FP.societeProfil ? FP.societeProfil() : {}) || {};
+  const propProfil = String(prof.proprietaireLeasing || prof.loueurNom || '').trim();
+  if (propProfil) {
+    const couvert = list.some(l => String(l.prop || '').trim().toLowerCase() === propProfil.toLowerCase());
+    if (!couvert) list = [...list, { nom: prof.loueurNom || 'Leasing', prop: propProfil }];
+  }
+  if (list.length) return list;
+  if (prof.loueurNom) return [{ nom: prof.loueurNom, prop: propProfil }];
+  return [];
+};
+// Étiquettes « propriétaire » qui désignent un véhicule en leasing.
+FP.leasingProps = () => FP.leasingLoueurs().map(l => String(l.prop || '').trim().toLowerCase()).filter(Boolean);
+// Loyer mensuel BPCE total de la flotte (offre courante sinon médiane des factures 'leasing'). HORS Localease.
+FP.leasingMensuelFlotte = (data) => {
+  data = data || {};
+  const actifs = (data.vehicules || []).filter(v => !FP.horsFlotte(v));
+  const byVeh = {};
+  (data.factures || []).filter(f => f.type === 'leasing').forEach(f => {
+    const k = f.vehiculeImmat; if (!k) return;
+    (byVeh[k] = byVeh[k] || []); if ((f.montantTTC || 0) > 0) byVeh[k].push(f.montantTTC);
+  });
+  const median = arr => { if (!arr || !arr.length) return null; const s = [...arr].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const props = FP.leasingProps();
+  const immats = new Set([
+    ...actifs.filter(v => { const p = String(v.proprietaire || '').trim().toLowerCase(); return p && props.includes(p); }).map(v => v.immat),
+    ...Object.keys(byVeh),
+  ]);
+  let mens = 0;
+  immats.forEach(immat => {
+    const c = FP.leasingContrat ? FP.leasingContrat(immat) : null;
+    if (c && FP.leasingTermine && FP.leasingTermine(c)) return; // contrat fini → plus de loyer projeté
+    const off = (c && FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(c) : null;
+    const m = (off != null) ? off : median(byVeh[immat]);
+    if (m > 0) mens += m;
+  });
+  return mens;
+};
+// Coût annuel leasing total = BPCE (× 12) + Localease/Ayvens (déjà annuel). Source unique flotte.
+FP.leasingAnnuelFlotte = (data) => FP.leasingMensuelFlotte(data) * 12 + (FP.leasingLocaleaseAnnuel ? FP.leasingLocaleaseAnnuel() : 0);
 // ⚠️ HELPER CANONIQUE — coût RESTANT À CHARGE d'une facture de sinistre : 0 si remboursé/pris en charge
 // (sinistreStatut ∈ {rembourse, pec}) ou si c'est un simple devis (sinistreStage ou mots devis/proforma/
 // estimation), sinon le TTC. Même règle que la page Sinistres et le KPI Statistiques.
