@@ -4014,7 +4014,7 @@ FP.santeVehicule = (v) => {
   if (l && l.niveau === 'danger') { score -= 18; raisons.push('Dépassement km leasing'); }
   else if (l && l.niveau === 'warn') { score -= 7; raisons.push('Km leasing à surveiller'); }
   if (l && l.finContrat && !isNaN(l.finContrat)) {
-    const jf = Math.ceil((l.finContrat - new Date()) / 86400000);
+    const jf = FP.joursRestants ? FP.joursRestants(l.finContrat) : Math.ceil((l.finContrat - new Date()) / 86400000);
     if (jf < 0) { score -= 12; raisons.push('Leasing terminé'); }
     else if (jf < 90) { score -= 7; raisons.push(`Fin leasing dans ${jf} j`); }
   }
@@ -4084,7 +4084,7 @@ FP.recommandations = (data) => {
         const eco = (maj > du) ? (maj - du) : 0;                // surcoût évité en payant avant la majoration
         return { a, jours, eco };
       })
-      .filter(x => x.jours >= 0 && x.jours < 30);                // majoration imminente (< 30 j)
+      .filter(x => x.jours >= 0 && x.jours < (FP.notifCfg ? FP.notifCfg().amendeMajorationJours : 30)); // majoration imminente (délai réglable, cf. notifCfg)
     if (risque.length) {
       const ecoTot = risque.reduce((s, x) => s + x.eco, 0);
       const min = Math.min(...risque.map(x => x.jours));
@@ -4388,7 +4388,7 @@ FP.buildAlertes = (data) => {
         const base = new Date(a.date);
         const isFps = FP.estFps(a);
         const lim = new Date(base); lim.setDate(lim.getDate() + (isFps ? 90 : 45));
-        const jours = Math.ceil((lim - maintenant) / 86400000);
+        const jours = FP.joursRestants ? FP.joursRestants(lim) : Math.ceil((lim - maintenant) / 86400000);
         return { a, lim, jours };
       })
       .filter(x => x.jours < FP.notifCfg().amendeMajorationJours) // bientôt majorée (< X j réglable) ou déjà dépassée
