@@ -4567,17 +4567,21 @@
     const qrc = buildQrCanvas(qrCurrent.url, 12, 4);
     const draw = (logoImg) => {
       const R = 2;                                   // supersampling → PNG bien net
-      const W = 720 * R;
       const padX = 56 * R, padTop = 46 * R, padBottom = 42 * R, gap = 16 * R;
       const socSize = 30 * R, modSize = 24 * R, hintSize = 21 * R;
-      const qrSize = Math.min(W - padX * 2, 500 * R);
+      const qrSize = 480 * R;                         // QR à taille fixe
+      const tmp = document.createElement('canvas').getContext('2d');
+      // ⚠️ Largeur du canvas AU PLUS PRÈS du contenu (QR + titre) → même FORMAT PORTRAIT que l'impression.
+      // (Avant : W fixe à 720 → grandes marges latérales → la carte PNG paraissait quasi carrée.)
+      tmp.font = '800 ' + socSize + 'px Inter,Arial,sans-serif';
+      const titleW = tmp.measureText(titre || '').width;
+      const W = Math.max(qrSize + padX * 2, Math.ceil(titleW) + padX * 2);
       let logoH = 0, logoW = 0;
       if (logoImg && logoImg.naturalWidth) {
-        const maxH = 150 * R, maxW = 420 * R;
+        const maxH = 150 * R, maxW = Math.min(420 * R, W - padX * 2);
         const sc = Math.min(maxH / logoImg.naturalHeight, maxW / logoImg.naturalWidth, 1);
         logoH = logoImg.naturalHeight * sc; logoW = logoImg.naturalWidth * sc;
       }
-      const tmp = document.createElement('canvas').getContext('2d');
       tmp.font = '500 ' + hintSize + 'px Inter,Arial,sans-serif';
       const hintLines = wrapLines(tmp, hint, W - padX * 2);
       let H = padTop;
