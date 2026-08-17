@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260817b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260817c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260817b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260817c">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -868,13 +868,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260817b"></script>
-<script src="../assets/js/supabase-client.js?v=20260817b"></script>
-<script src="../assets/js/data.js?v=20260817b"></script>
-<script src="../assets/js/fleet-docs.js?v=20260817b"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260817b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260817c"></script>
+<script src="../assets/js/supabase-client.js?v=20260817c"></script>
+<script src="../assets/js/data.js?v=20260817c"></script>
+<script src="../assets/js/fleet-docs.js?v=20260817c"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260817c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260817b"></script>
+<script src="../assets/js/app.js?v=20260817c"></script>
 <script>
   lucide.createIcons();
 
@@ -2221,10 +2221,9 @@
     // Factures du véhicule DÉDOUBLONNÉES (même règle que « coût au km » plus bas / dashboard) — sinon
     // une facture ré-importée (même n° + TTC) était comptée 2× dans « coût de l'année » et l'historique.
     const vehFacts = FP.dedupeFactures((data.factures || []).filter(sameVeh));
-    const facturesAnnee = vehFacts.filter(f => (f.date || '').startsWith(ANNEE) && FP.estEntretien(f));
-    const sinistresAnnee = vehFacts.filter(f => (f.date || '').startsWith(ANNEE) && (f.type || '').toLowerCase() === 'sinistre');
-    const coutSinistres = sinistresAnnee.reduce((s, f) => s + FP.coutSinistre(f), 0);
-    const coutTotal = facturesAnnee.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0) + coutSinistres;
+    // ⚠️ « Dépensé {année} » = helper unique FP.coutExploitAnnee (dédup entretien + sinistres à charge) —
+    // MÊME nombre que la fiche PDF (bandeau « Dépensé »), plus aucun recalcul divergent.
+    const coutTotal = FP.coutExploitAnnee(v, ANNEE, data.factures);
     // Coût par année : entretien/réparation + sinistres à charge (même règles, dédoublonné)
     const coutByYear = {};
     vehFacts.forEach(f => {
@@ -4340,8 +4339,10 @@
     const tvsDet = FP.tvsDetail(v);
     const tvsTxt = tvsDet.applicable ? (tvsDet.total != null ? clean(FP.euro(tvsDet.total)) : 'CO2 a completer') : 'Non soumis';
     const annPdf = String(new Date().getFullYear());
-    const fAll = (data.factures || []).filter(f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat) && FP.estEntretien(f));
-    const coutAnn = fAll.filter(f => (f.date || '').startsWith(annPdf)).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+    // ⚠️ Même « Dépensé {année} » que la fiche à l'écran (helper unique : dédup entretien + sinistres).
+    const coutAnn = FP.coutExploitAnnee(v, annPdf, data.factures);
+    // Carnet d'entretien DÉDOUBLONNÉ (comme l'écran) — sinon une facture ré-importée apparaissait 2×.
+    const fAll = FP.dedupeFactures((data.factures || []).filter(f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat) && FP.estEntretien(f)));
     const carnet = fAll.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const W = doc.internal.pageSize.getWidth();
@@ -4387,7 +4388,7 @@
     // Bandeau coût d'entretien
     doc.setFillColor(255, 247, 237); doc.setDrawColor(254, 215, 170); doc.roundedRect(12, cy - 6, W - 24, 13, 2, 2, 'FD');
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(154, 52, 18);
-    doc.text("COUT D'ENTRETIEN " + annPdf, 17, cy + 1.5);
+    doc.text('DEPENSE ' + annPdf, 17, cy + 1.5);
     doc.setFontSize(15); doc.setTextColor(234, 88, 12);
     const cvTxt = clean(FP.euro(coutAnn)); doc.text(cvTxt, W - 17 - doc.getTextWidth(cvTxt), cy + 2.2);
     cy += 15;
