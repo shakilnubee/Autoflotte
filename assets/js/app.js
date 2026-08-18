@@ -2277,7 +2277,9 @@ FP.societeProfil = () => {
   const base = (soc === 'PXP')
     ? { mailExpediteur: 'shakil.nubee@projectxparis.fr',
         mailCopie: 'shakil.nubee@projectxparis.fr,mallaury.herembert@projectxparis.fr',
-        mailDomaineEnvoi: 'resend.projectxparis.fr',
+        // ⚠️ Domaine d'envoi = le domaine VÉRIFIÉ dans Resend = projectxparis.fr (PAS le sous-domaine
+        // technique « resend.projectxparis.fr » des enregistrements DNS, qui n'est que le Return-Path).
+        mailDomaineEnvoi: 'projectxparis.fr',
         loueurNom: 'BPCE Car Lease', proprietaireLeasing: 'BPCE' }
     : { mailExpediteur: '', mailCopie: '', mailDomaineEnvoi: '', loueurNom: '', proprietaireLeasing: '' };
   // Seules les valeurs NON vides saisies écrasent la base (une base PXP ne se vide pas par accident).
