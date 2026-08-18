@@ -4145,6 +4145,53 @@ FP.santeVehicule = (v) => {
   return { score, niveau, raisons };
 };
 
+// ⚠️ SOURCE UNIQUE — Score de SUIVI d'un CONDUCTEUR (0-100), pendant de santeVehicule. Ce n'est PAS
+// une sanction : c'est un indicateur pour prioriser le suivi (amendes, points perdus, montants dus,
+// sinistres sur ses véhicules, permis). `d` = agrégat conducteur { amendes[], vehicules[],
+// permisExpiration? } ; `data` sert aux sinistres (factures type 'sinistre', coût réel via coutSinistre).
+//   { score, niveau: 'bon'|'surveiller'|'prioritaire', raisons[] } | null
+FP.santeConducteur = (d, data) => {
+  if (!d) return null;
+  data = data || {};
+  let score = 100; const raisons = [];
+  const amendes = Array.isArray(d.amendes) ? d.amendes : [];
+  if (amendes.length) { score -= Math.min(30, amendes.length * 6); raisons.push(`${amendes.length} amende${amendes.length > 1 ? 's' : ''}`); }
+  const points = amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
+  if (points > 0) { score -= Math.min(30, points * 3); raisons.push(`${points} point${points > 1 ? 's' : ''} retiré${points > 1 ? 's' : ''}`); }
+  const dus = amendes.filter(a => FP.estAPayer && FP.estAPayer(a)).reduce((s, a) => s + (FP.montantDu ? FP.montantDu(a) : (Number(a.montantTTC) || 0)), 0);
+  if (dus > 0) { score -= Math.min(15, 5 + Math.floor(dus / 100)); raisons.push(`${FP.euro ? FP.euro(dus) : dus + ' €'} à payer`); }
+  // Sinistres sur ses véhicules : incidents groupés par fenêtre de 30 j (comme la fiche conducteur).
+  const immats = (Array.isArray(d.vehicules) ? d.vehicules : []).map(v => v && v.immat).filter(Boolean);
+  if (immats.length) {
+    const ni = (x) => FP.normImmat ? FP.normImmat(x) : String(x || '').toUpperCase();
+    const set = new Set(immats.map(ni));
+    const sins = (data.factures || []).filter(f => (f.type || '').toLowerCase() === 'sinistre' && f.vehiculeImmat && set.has(ni(f.vehiculeImmat)) && (FP.coutSinistre ? FP.coutSinistre(f) > 0 : (Number(f.montantTTC) || 0) > 0));
+    const groups = {}; sins.forEach(f => { (groups[f.vehiculeImmat] = groups[f.vehiculeImmat] || []).push(f); });
+    let nInc = 0;
+    Object.values(groups).forEach(fs => {
+      fs.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+      let lastT = null;
+      fs.forEach(f => { const t = f.date ? new Date(f.date).getTime() : 0; if (lastT == null || (t - lastT) > 30 * 86400000) nInc++; lastT = t; });
+    });
+    if (nInc) { score -= Math.min(30, nInc * 10); raisons.push(`${nInc} sinistre${nInc > 1 ? 's' : ''}`); }
+  }
+  // Permis
+  const exp = d.permisExpiration;
+  if (exp && FP.joursRestants) {
+    const j = FP.joursRestants(exp);
+    if (j != null) {
+      if (j < 0) { score -= 25; raisons.push('Permis expiré'); }
+      else if (j < 30) { score -= 12; raisons.push(`Permis expire dans ${j} j`); }
+      else if (j < 60) { score -= 6; raisons.push(`Permis expire dans ${j} j`); }
+    }
+  }
+  score = Math.max(0, Math.min(100, score));
+  const niveau = score >= 80 ? 'bon' : (score >= 55 ? 'surveiller' : 'prioritaire');
+  return { score, niveau, raisons };
+};
+FP.santeConducteurLabel = (niveau) => niveau === 'prioritaire' ? 'Prioritaire' : (niveau === 'surveiller' ? 'À surveiller' : 'Bon');
+FP.santeConducteurColor = (niveau) => niveau === 'prioritaire' ? '#dc2626' : (niveau === 'surveiller' ? '#d97706' : '#16a34a');
+
 // Estimation INDICATIVE de la valeur de revente d'un véhicule (décote).
 // Repose sur la valeur d'achat, l'âge (mise en circulation) et le kilométrage.
 //   { valeur, ageAnnees, residuel, kmAdj, attendu } | null si données insuffisantes
