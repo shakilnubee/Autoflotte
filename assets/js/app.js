@@ -4192,6 +4192,63 @@ FP.santeConducteur = (d, data) => {
 FP.santeConducteurLabel = (niveau) => niveau === 'prioritaire' ? 'Prioritaire' : (niveau === 'surveiller' ? 'À surveiller' : 'Bon');
 FP.santeConducteurColor = (niveau) => niveau === 'prioritaire' ? '#dc2626' : (niveau === 'surveiller' ? '#d97706' : '#16a34a');
 
+// ⚠️ SOURCE UNIQUE — CHRONOLOGIE consolidée d'un CONDUCTEUR : véhicules pris/rendus (affectations),
+// amendes, sinistres sur ses véhicules — daté et trié du plus récent au plus ancien. (La chronologie
+// VÉHICULE existe déjà côté page, vehTimelineHTML.) `d` = agrégat conducteur { name, amendes[],
+// vehicules[] } ; `data` = { vehicules, factures }. Réutilise les helpers canoniques.
+FP.timelineConducteur = (d, data) => {
+  if (!d) return [];
+  data = data || {};
+  const ev = [];
+  const ni = (x) => FP.normImmat ? FP.normImmat(x) : String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const byId = {}; (data.vehicules || []).forEach(v => { if (v && v.id != null) byId[v.id] = v.immat || ''; });
+  const immats = new Set((Array.isArray(d.vehicules) ? d.vehicules : []).map(v => v && v.immat).filter(Boolean).map(ni));
+  // Affectations du conducteur (véhicules pris / rendus)
+  try {
+    const nom = d.name || d.prenom || d.key;
+    const affs = (FP.affectations && FP.affectations.forConducteur) ? FP.affectations.forConducteur(nom) : [];
+    affs.forEach(a => {
+      const pl = byId[a.vehId] || '';
+      if (a.debut) ev.push({ date: a.debut, cat: 'affectation', icon: 'car', color: '#2563eb', titre: `Prise du véhicule${pl ? ' ' + pl : ''}` });
+      if (a.fin) ev.push({ date: a.fin, cat: 'affectation', icon: 'car', color: '#64748b', titre: `Restitution${pl ? ' ' + pl : ''}` });
+    });
+  } catch (e) {}
+  // Amendes du conducteur
+  (Array.isArray(d.amendes) ? d.amendes : []).forEach(a => {
+    ev.push({ date: a.date, cat: 'amende', icon: 'ticket', color: '#e11d48', titre: 'Amende' + (a.motif ? ' — ' + a.motif : ''), detail: (a.vehiculeImmat || a.plaque || ''), montant: FP.montantDu ? FP.montantDu(a) : (Number(a.montantTTC) || 0) });
+  });
+  // Sinistres à coût réel sur ses véhicules
+  (data.factures || []).forEach(f => {
+    if (!f || (f.type || '').toLowerCase() !== 'sinistre' || !f.vehiculeImmat || !immats.has(ni(f.vehiculeImmat))) return;
+    if (FP.coutSinistre && !(FP.coutSinistre(f) > 0)) return;
+    ev.push({ date: f.date, cat: 'sinistre', icon: 'alert-octagon', color: '#dc2626', titre: 'Sinistre', detail: f.vehiculeImmat || '', montant: FP.coutSinistre ? FP.coutSinistre(f) : (Number(f.montantTTC) || 0) });
+  });
+  return ev.filter(e => e.date).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+};
+// Rendu HTML d'une chronologie (liste d'événements de FP.timelineVehicule). opts.limit → replie via
+// FP.clampList (« Voir tout / Voir moins »). Style aligné au site (pastille colorée + fil vertical).
+FP.timelineHTML = (events, opts) => {
+  opts = opts || {};
+  if (!events || !events.length) return '<p class="text-sm text-slate-400 py-2">Aucun événement daté pour l’instant.</p>';
+  const esc = FP.esc ? FP.esc : (s) => String(s == null ? '' : s);
+  const rows = events.map(e => {
+    const m = (e.montant != null && e.montant > 0) ? `<span style="font-weight:700;white-space:nowrap;color:#0f172a">${FP.euro ? FP.euro(e.montant) : e.montant}</span>` : '';
+    const d = FP.date ? FP.date(e.date) : e.date;
+    return `<div style="display:flex;gap:.65rem;align-items:stretch">
+      <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:center">
+        <span style="width:26px;height:26px;border-radius:50%;background:${e.color}1a;color:${e.color};display:flex;align-items:center;justify-content:center"><i data-lucide="${e.icon}" style="width:14px;height:14px"></i></span>
+        <span style="flex:1;width:2px;background:#e2e8f0;margin-top:3px;min-height:8px"></span>
+      </div>
+      <div style="flex:1;min-width:0;padding-bottom:.85rem">
+        <div style="display:flex;justify-content:space-between;gap:.5rem"><span style="font-weight:600;color:#0f172a">${esc(e.titre)}</span>${m}</div>
+        <div style="font-size:.72rem;color:#94a3b8">${d}${e.detail ? ' · ' + esc(e.detail) : ''}</div>
+      </div>
+    </div>`;
+  });
+  const body = (opts.limit && FP.clampList) ? FP.clampList(rows, opts.limit) : rows.join('');
+  return `<div class="fp-timeline">${body}</div>`;
+};
+
 // Estimation INDICATIVE de la valeur de revente d'un véhicule (décote).
 // Repose sur la valeur d'achat, l'âge (mise en circulation) et le kilométrage.
 //   { valeur, ageAnnees, residuel, kmAdj, attendu } | null si données insuffisantes
