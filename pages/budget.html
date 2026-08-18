@@ -124,6 +124,12 @@
       <div class="kpi"><div class="flex justify-between items-start gap-2"><div><div class="kpi-label">Écart</div><div class="kpi-value" id="kpi-ecart">—</div><div class="kpi-delta" id="kpi-ecart-sub">reste / dépassement</div></div><div class="kpi-ic" id="kpi-ecart-ic"><i data-lucide="scale"></i></div></div></div>
     </div>
 
+    <!-- Explication automatique de l'écart -->
+    <div class="card p-5 mb-6" id="bud-explain-card" style="display:none">
+      <h3 class="font-bold text-slate-900 mb-2 flex items-center gap-2"><i data-lucide="sparkles" class="w-4 h-4" style="color:var(--fp-accent)"></i> Pourquoi cet écart&nbsp;?</h3>
+      <div id="bud-explain" class="space-y-2 text-sm text-slate-700"></div>
+    </div>
+
     <!-- Tableau prévu vs réel -->
     <div class="card overflow-hidden mb-6">
       <div class="p-5 pb-1"><h3 class="font-bold text-slate-900">Prévu vs réel par poste</h3>
@@ -304,13 +310,53 @@
     if (sel) { sel.innerHTML = arr.map(y => `<option value="${y}">${y}</option>`).join(''); sel.value = arr.includes(year) ? year : arr[0]; year = sel.value; }
   }
 
+  // Explication EN CLAIR de l'écart : vs budget (postes en dépassement) + vs année précédente
+  // (plus fortes hausses). Mêmes chiffres que le tableau (postesData) → cohérence garantie.
+  function renderExplain(postesData, yearN1) {
+    const parts = [];
+    // 1) vs BUDGET (postes avec un prévu saisi)
+    const withBud = postesData.filter(p => p.prevu > 0);
+    const totPrevu = withBud.reduce((s, p) => s + p.prevu, 0);
+    if (totPrevu > 0) {
+      const totReelB = withBud.reduce((s, p) => s + p.reel, 0);
+      const ec = totReelB - totPrevu; // >0 = dépassement
+      if (ec > 0) {
+        const overs = withBud.filter(p => p.reel > p.prevu).map(p => ({ label: p.label, d: p.reel - p.prevu })).sort((a, b) => b.d - a.d);
+        parts.push(`<div>💸 <b style="color:var(--fp-danger)">Dépassement de ${euro(ec)}</b> vs budget${overs.length ? `, surtout : ${overs.slice(0, 3).map(o => `<b>${o.label}</b> +${euro(o.d)}`).join(', ')}` : ''}.</div>`);
+      } else {
+        parts.push(`<div>✅ <b style="color:#059669">Sous le budget de ${euro(-ec)}</b> — marge encore disponible.</div>`);
+      }
+    }
+    // 2) vs ANNÉE PRÉCÉDENTE (postes historiques uniquement)
+    const hist = postesData.filter(p => !p.annuel && p.reelN1 != null);
+    const totN = hist.reduce((s, p) => s + p.reel, 0);
+    const totN1 = hist.reduce((s, p) => s + (p.reelN1 || 0), 0);
+    if (totN1 > 0 && Math.abs(totN - totN1) >= 1) {
+      const dv = totN - totN1;
+      const pct = Math.round(dv / totN1 * 100);
+      const hausses = hist.map(p => ({ label: p.label, d: p.reel - (p.reelN1 || 0) })).filter(x => x.d > 0).sort((a, b) => b.d - a.d);
+      const col = dv >= 0 ? 'var(--fp-danger)' : '#059669';
+      parts.push(`<div>📊 Vs ${yearN1} : <b style="color:${col}">${dv >= 0 ? '+' : '−'}${euro(Math.abs(dv))} (${dv >= 0 ? '+' : ''}${pct}%)</b>${dv > 0 && hausses.length ? `, surtout : ${hausses.slice(0, 3).map(h => `<b>${h.label}</b> +${euro(h.d)}`).join(', ')}` : ''}.</div>`);
+    }
+    const card = $('bud-explain-card'), box = $('bud-explain');
+    if (!parts.length) { card.style.display = 'none'; box.innerHTML = ''; return; }
+    card.style.display = '';
+    box.innerHTML = parts.join('');
+  }
+
   function render() {
     const bud = getBudget(year);
+    const yearN1 = String(Number(year) - 1);
     let totPrevu = 0, totReel = 0;
+    const postesData = [];
     const rows = POSTES.map(p => {
       const prevu = Number(bud[p.key]) || 0;
       const reel = Math.round(p.reel(year) || 0);
       totPrevu += prevu; totReel += reel;
+      // N-1 uniquement pour les postes HISTORIQUES (factures/amendes) — les postes « annuel »
+      // (leasing/assurance/TVS) viennent de la config actuelle, pas d'un historique daté.
+      const reelN1 = p.annuel ? null : Math.round(p.reel(yearN1) || 0);
+      postesData.push({ label: p.label, annuel: !!p.annuel, prevu, reel, reelN1 });
       const ecart = prevu - reel; // >0 = reste ; <0 = dépassement
       const pct = prevu > 0 ? Math.min(100, Math.round(reel / prevu * 100)) : (reel > 0 ? 100 : 0);
       const over = prevu > 0 && reel > prevu;
@@ -332,6 +378,8 @@
     $('kpi-ecart').textContent = totPrevu ? ((ecTot < 0 ? '−' : '+') + euro(Math.abs(ecTot))) : '—';
     $('kpi-ecart').style.color = ecTot < 0 ? 'var(--fp-danger)' : '#059669';
     $('kpi-ecart-sub').textContent = totPrevu ? (ecTot < 0 ? 'dépassement' : 'reste disponible') : 'définis un budget';
+
+    renderExplain(postesData, yearN1);
 
     // Prévision de trésorerie 12 mois : sorties connues (leasing/assurance/TVS) + estim. carburant/entretien du budget.
     const leas = Math.round(leasingTotal()), assur = Math.round(assuranceTotal()), tvs = Math.round(tvsTotal());
