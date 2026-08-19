@@ -466,6 +466,21 @@ FP.persistFacture = async (rec) => {
     }
   }
 };
+// Charge SheetJS (lecture Excel .xlsx/.xls/.csv) À LA DEMANDE (comme jsPDF). Renvoie une promesse
+// résolue quand window.XLSX est prêt (false si échec). Réutilisé par les imports par lot (notes de
+// frais, état de parc…). Source unique → un seul chargeur pour toute la plateforme.
+FP.ensureXLSX = () => {
+  if (window.XLSX) return Promise.resolve(true);
+  if (FP._xlsxP) return FP._xlsxP;
+  FP._xlsxP = new Promise((res) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    sc.onload = () => res(!!window.XLSX);
+    sc.onerror = () => { FP._xlsxP = null; res(false); };
+    document.head.appendChild(sc);
+  });
+  return FP._xlsxP;
+};
 // Détection carburant / péages — UNE seule règle partagée (dashboard, factures, statistiques) :
 // par TYPE (carburant/peage/ulys) OU par FOURNISSEUR (Ulys, TotalEnergies). Avant, un carburant
 // sans type mais avec le bon fournisseur était compté à un endroit et pas à l'autre.
@@ -7894,10 +7909,16 @@ FP.applyCustomNavLabels = () => {
 // Pour rendre un élément éditable : ajouter data-edit-key="page.title|page.subtitle|..."
 // Le texte par défaut est mémorisé au 1er chargement (ne pas hardcoder dans une map séparée).
 FP.applyCustomTexts = () => {
-  const custom = FP.settings.get().customTexts || {};
+  const s = FP.settings.get();
+  const custom = s.customTexts || {};
+  const navLabels = s.sidebarLabels || {};
   document.querySelectorAll('[data-edit-key]').forEach(el => {
     const key = el.dataset.editKey;
     if (!el.dataset.editDefault) el.dataset.editDefault = el.textContent.trim();
+    // Le TITRE de page « X.title » partage la MÊME source que l'onglet « X.html » (libellé sidebar,
+    // aussi éditable dans Paramètres). Renommer l'un mémorise pour l'autre → un seul nom partout.
+    const navKey = /\.title$/.test(key) ? key.replace(/\.title$/, '') + '.html' : null;
+    if (navKey && navLabels[navKey]) { el.textContent = navLabels[navKey]; return; }
     if (custom[key]) el.textContent = custom[key];
     else el.textContent = el.dataset.editDefault;
   });
@@ -7928,13 +7949,28 @@ FP.startTextEdit = (el) => {
     if (save) {
       const newText = el.textContent.trim();
       const current = FP.settings.get();
-      const texts = { ...(current.customTexts || {}) };
-      if (newText && newText !== defaultText) texts[key] = newText;
-      else delete texts[key];
-      try { if (FP.history && FP.history.commit) FP.history.commit(); } catch {}
-      current.customTexts = texts;
-      FP.settings.save(current);
-      if (!newText) el.textContent = defaultText;
+      const navKey = /\.title$/.test(key) ? key.replace(/\.title$/, '') + '.html' : null;
+      if (navKey) {
+        // Titre de page = MÊME nom que l'onglet (source unique) → on écrit le libellé d'onglet
+        // (sidebarLabels) : ça met à jour la sidebar ET le champ « Onglets » des Paramètres.
+        const def = (FP.DEFAULT_NAV_LABELS && FP.DEFAULT_NAV_LABELS[navKey]) || defaultText;
+        const labels = { ...(current.sidebarLabels || {}) };
+        if (newText && newText !== def) labels[navKey] = newText; else delete labels[navKey];
+        try { if (FP.history && FP.history.commit) FP.history.commit(); } catch {}
+        current.sidebarLabels = labels;
+        if (current.customTexts) delete current.customTexts[key]; // évite toute divergence
+        FP.settings.save(current);
+        if (!newText) el.textContent = def;
+        try { FP.applyCustomNavLabels(); } catch (e) {}
+      } else {
+        const texts = { ...(current.customTexts || {}) };
+        if (newText && newText !== defaultText) texts[key] = newText;
+        else delete texts[key];
+        try { if (FP.history && FP.history.commit) FP.history.commit(); } catch {}
+        current.customTexts = texts;
+        FP.settings.save(current);
+        if (!newText) el.textContent = defaultText;
+      }
     } else {
       el.textContent = originalText;
     }

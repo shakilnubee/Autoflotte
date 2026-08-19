@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260819d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260819e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260819d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260819e">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -173,10 +173,10 @@
       </div>
     </div>
 
-    <!-- Navigation entre sous-onglets via le MENU DÉROULANT de la sidebar (chaque sous-onglet = sa
-         page). La barre interne est MASQUÉE (display:none) mais conservée : ses boutons pilotent
-         encore switchTab (via ?tab=…). Total Fleet & Ulys vivent dans Contrôle. -->
-    <div id="fa-tabbar" style="display:none">
+    <!-- Barre d'onglets (switcher rapide) — DOUBLE avec le menu déroulant de la sidebar : les deux
+         mènent à la même vue (chaque sous-onglet affiche UNIQUEMENT son contenu). Total Fleet & Ulys
+         vivent dans Contrôle. -->
+    <div id="fa-tabbar" style="display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--fp-border);flex-wrap:wrap">
       <button id="tab-btn-factures" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">Factures</button>
       <button id="tab-btn-notesfrais" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Notes de frais <span style="font-size:11px;font-weight:600">· dépenses justifiées</span></button>
       <button id="tab-btn-documents" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Documents <span style="font-size:11px;font-weight:600">· archives & suivi</span></button>
@@ -394,8 +394,8 @@
             <h2 class="text-base font-extrabold" style="color:var(--fp-primary)">Ajouter une note de frais</h2>
             <p class="text-xs text-slate-500">Une dépense payée par un collaborateur (essence, péage, lavage, parking…). Elle est rattachée au véhicule et <b>comptée dans son coût</b>.</p>
           </div>
-          <button id="nf-import-btn" type="button" class="btn btn-outline text-sm flex-shrink-0"><i data-lucide="scan-line" class="w-4 h-4"></i> Importer des justificatifs</button>
-          <input type="file" id="nf-import-file" accept="image/*,application/pdf" multiple class="hidden" />
+          <button id="nf-import-btn" type="button" class="btn btn-outline text-sm flex-shrink-0"><i data-lucide="scan-line" class="w-4 h-4"></i> Importer (justificatifs ou Excel/CSV)</button>
+          <input type="file" id="nf-import-file" accept="image/*,application/pdf,.csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" multiple class="hidden" />
         </div>
         <div id="nf-import-status" class="hidden text-sm mb-2" style="padding:10px 12px;border-radius:10px"></div>
         <div class="grid md:grid-cols-3 gap-3 mt-4">
@@ -575,12 +575,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260819d"></script>
-<script src="../assets/js/supabase-client.js?v=20260819d"></script>
-<script src="../assets/js/data.js?v=20260819d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260819e"></script>
+<script src="../assets/js/supabase-client.js?v=20260819e"></script>
+<script src="../assets/js/data.js?v=20260819e"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260819d"></script>
-<script src="../assets/js/fleet-views.js?v=20260819d"></script>
+<script src="../assets/js/app.js?v=20260819e"></script>
+<script src="../assets/js/fleet-views.js?v=20260819e"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2452,6 +2452,64 @@
       "plaque : une immatriculation de véhicule si elle figure sur le justificatif (format FR), sinon null.",
       "Ne confonds jamais le MONTANT avec un numéro de ticket, de TVA intra, de téléphone ou une heure."
     ].join("\n");
+    // Construit + persiste une note de frais depuis des champs déjà extraits. Renvoie 'ok'|'dup'.
+    async function nfAddNote(o){
+      const cat = (['carburant', 'peage', 'lavage', 'parking', 'repas', 'autre'].includes(String(o.cat || '').toLowerCase())) ? String(o.cat).toLowerCase() : 'autre';
+      let ht = num(o.ht), tva = num(o.tva);
+      const ttc = num(o.ttc);
+      if (ht != null && tva != null && Math.abs((ht + tva) - ttc) > 0.02) { ht = null; tva = null; }
+      const rec = {
+        id: nextFactId(), date: o.date,
+        vehiculeImmat: o.plaque ? String(o.plaque).toUpperCase().replace(/\s/g, '') : null,
+        conducteur: o.cond ? String(o.cond).slice(0, 80) : null,
+        fournisseur: o.fournisseur ? String(o.fournisseur).slice(0, 80) : 'Note de frais',
+        description: o.desc ? String(o.desc).slice(0, 120) : (o.fournisseur ? String(o.fournisseur).slice(0, 80) : (NF_CATS[cat] || 'Note de frais').replace(/^[^ ]+ /, '')),
+        type: 'note-frais', source: 'note-frais', categorie: cat,
+        montantHT: ht, montantTVA: tva, montantTTC: ttc,
+        km: null, fileId: o.fileId || null, fileName: o.fileName || null,
+      };
+      if (FP.dupe && FP.dupe.find && FP.dupe.find('factures', rec, data.factures)) return 'dup';
+      data.factures.push(rec);
+      try { if (FP.persistFacture) await FP.persistFacture(rec); else FP.persist.insert('factures', rec); } catch (err) { console.error('[nf import save]', err); }
+      return 'ok';
+    }
+    // Un fichier est-il un tableur (Excel/CSV) ? (par extension ou type MIME)
+    const isSheetFile = (f) => /\.(xlsx|xls|csv)$/i.test(f.name || '') || /spreadsheet|ms-excel|officedocument|csv/i.test(f.type || '');
+    // Repère une colonne par mots-clés dans la ligne d'en-tête (normalisée).
+    function colIndex(headers, keys){ for (let i = 0; i < headers.length; i++) { const h = FP.norm(headers[i]); if (keys.some(k => h === k || h.includes(k))) return i; } return -1; }
+    // Convertit une matrice (lignes de cellules) en notes de frais. En-têtes FR souples.
+    async function importSheet(file, show){
+      const okX = await (FP.ensureXLSX ? FP.ensureXLSX() : Promise.resolve(false));
+      if (!okX || !window.XLSX) { show('⚠️ Lecture Excel indisponible (connexion requise).', '#FEF2F2'); return { ok: 0, dup: 0, fail: 1 }; }
+      let matrix = [];
+      try { const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' }); const sh = wb.Sheets[wb.SheetNames[0]]; matrix = XLSX.utils.sheet_to_json(sh, { header: 1, blankrows: false, defval: '' }); }
+      catch (e) { console.error('[nf sheet]', e); show('⚠️ Fichier illisible.', '#FEF2F2'); return { ok: 0, dup: 0, fail: 1 }; }
+      if (!matrix.length) return { ok: 0, dup: 0, fail: 0 };
+      const headers = (matrix[0] || []).map(x => String(x || ''));
+      const ci = {
+        date: colIndex(headers, ['date']),
+        ttc: colIndex(headers, ['montant ttc', 'ttc', 'montant', 'total', 'prix']),
+        ht: colIndex(headers, ['ht', 'montant ht']),
+        tva: colIndex(headers, ['tva']),
+        cond: colIndex(headers, ['conducteur', 'collaborateur', 'salarie', 'nom', 'employe']),
+        cat: colIndex(headers, ['categorie', 'type', 'nature']),
+        plaque: colIndex(headers, ['plaque', 'immatriculation', 'immat', 'vehicule']),
+        desc: colIndex(headers, ['libelle', 'commercant', 'description', 'objet', 'detail']),
+      };
+      // Mapping catégorie texte → clé interne.
+      const catKey = (v) => { const s = FP.norm(v); if (/carburant|essence|gazole|diesel|gasoil/.test(s)) return 'carburant'; if (/peage|autoroute|sanef|ulys|vinci/.test(s)) return 'peage'; if (/lavage/.test(s)) return 'lavage'; if (/parking|stationnement/.test(s)) return 'parking'; if (/repas|restaurant|resto|dejeuner/.test(s)) return 'repas'; return s ? 'autre' : ''; };
+      let ok = 0, dup = 0, fail = 0;
+      for (let r = 1; r < matrix.length; r++) {
+        const row = matrix[r] || [];
+        const cell = (i) => i >= 0 ? row[i] : '';
+        const iso = toISO(cell(ci.date));
+        const ttc = num(cell(ci.ttc));
+        if (!iso || !ttc || ttc <= 0) { if ((row.join('') || '').trim()) fail++; continue; }
+        const res = await nfAddNote({ date: iso, ttc, ht: cell(ci.ht), tva: cell(ci.tva), cat: catKey(cell(ci.cat)), cond: cell(ci.cond), plaque: cell(ci.plaque), desc: cell(ci.desc) });
+        if (res === 'dup') dup++; else ok++;
+      }
+      return { ok, dup, fail };
+    }
     if ($('nf-import-btn') && $('nf-import-file')) {
       $('nf-import-btn').addEventListener('click', () => $('nf-import-file').click());
       $('nf-import-file').addEventListener('change', async (e) => {
@@ -2459,41 +2517,29 @@
         if (!files.length) return;
         const box = $('nf-import-status');
         const show = (html, color) => { if (box) { box.classList.remove('hidden'); box.style.background = color || '#F0F9FF'; box.innerHTML = html; } };
-        if (!FP.scanIA) { show('⚠️ Lecture IA indisponible (connexion requise).', '#FEF2F2'); return; }
         let ok = 0, dup = 0, fail = 0;
         for (let i = 0; i < files.length; i++) {
           const file = files[i];
           show(`Lecture ${i + 1}/${files.length} — <b>${esc(file.name)}</b>…`, '#F0F9FF');
+          if (isSheetFile(file)) {
+            // Tableur Excel/CSV : lignes structurées (date, montant, conducteur, catégorie, plaque…).
+            const r = await importSheet(file, show); ok += r.ok; dup += r.dup; fail += r.fail;
+            continue;
+          }
+          // Justificatif image/PDF : lecture IA.
+          if (!FP.scanIA) { fail++; continue; }
           let fields = null;
           try { fields = await FP.scanIA(file, 'facture', NF_SCAN_PROMPT, { maxTokens: 1024 }); } catch (err) { console.error('[nf import scan]', err); }
           if (!fields) { fail++; continue; }
-          const iso = toISO(fields.date || '');
-          const ttc = num(fields.montantTTC);
+          const iso = toISO(fields.date || ''); const ttc = num(fields.montantTTC);
           if (!iso || !ttc || ttc <= 0) { fail++; continue; }
           let fileId = null, fileName = null;
           try { if (FP.uploadScan) { const url = await FP.uploadScan(file, 'factures'); if (url) { fileId = url; fileName = file.name; } } } catch (err) {}
-          const cat = (['carburant', 'peage', 'lavage', 'parking', 'repas', 'autre'].includes(String(fields.categorie || '').toLowerCase())) ? String(fields.categorie).toLowerCase() : 'autre';
-          const plaque = fields.plaque ? String(fields.plaque).toUpperCase().replace(/\s/g, '') : null;
-          const rec = {
-            id: nextFactId(), date: iso,
-            vehiculeImmat: plaque || null,
-            conducteur: null,
-            fournisseur: fields.fournisseur ? String(fields.fournisseur).slice(0, 80) : 'Note de frais',
-            description: (fields.fournisseur ? String(fields.fournisseur).slice(0, 80) : (NF_CATS[cat] || 'Note de frais').replace(/^[^ ]+ /, '')),
-            type: 'note-frais', source: 'note-frais', categorie: cat,
-            montantHT: num(fields.montantHT), montantTVA: num(fields.montantTVA), montantTTC: ttc,
-            km: null, fileId, fileName,
-          };
-          // Contrôle cohérence HT+TVA=TTC (tolérance 2 cts) — on n'écrase pas, on garde le TTC lu.
-          if (rec.montantHT != null && rec.montantTVA != null && Math.abs((rec.montantHT + rec.montantTVA) - rec.montantTTC) > 0.02) { rec.montantHT = null; rec.montantTVA = null; }
-          // Anti-doublon (fournisseur + TTC + date) — sans confirmation en mode lot : on saute silencieusement.
-          if (FP.dupe && FP.dupe.find && FP.dupe.find('factures', rec, data.factures)) { dup++; continue; }
-          data.factures.push(rec);
-          try { if (FP.persistFacture) await FP.persistFacture(rec); else FP.persist.insert('factures', rec); } catch (err) { console.error('[nf import save]', err); }
-          ok++;
+          const res = await nfAddNote({ date: iso, ttc, ht: fields.montantHT, tva: fields.montantTVA, cat: fields.categorie, plaque: fields.plaque, fournisseur: fields.fournisseur, fileId, fileName });
+          if (res === 'dup') dup++; else ok++;
         }
         rebuildFactures(); render(); renderKPIs(); renderTable();
-        show(`✓ Import terminé : <b>${ok}</b> note(s) créée(s)` + (dup ? ` · ${dup} doublon(s) ignoré(s)` : '') + (fail ? ` · <span style="color:#b91c1c">${fail} illisible(s)</span>` : '') + '.', '#F0FDF4');
+        show(`✓ Import terminé : <b>${ok}</b> note(s) créée(s)` + (dup ? ` · ${dup} doublon(s) ignoré(s)` : '') + (fail ? ` · <span style="color:#b91c1c">${fail} ligne(s)/fichier(s) ignoré(s)</span>` : '') + '.', '#F0FDF4');
         if (FP.toast) FP.toast(`✓ ${ok} note(s) de frais importée(s)`);
       });
     }
