@@ -4569,9 +4569,14 @@ FP.buildAlertes = (data) => {
         if (horsFlotte(v)) return;
         if (FP.kmSuivi && !FP.kmSuivi(v)) return;      // véhicule décoché du suivi km → pas de relance
         const r = byVeh[v.id];
-        if (!r || r.used_at || !r.sent_at) return;              // pas de demande, ou déjà répondue
+        if (!r || r.used_at || !r.sent_at) return;              // pas de demande, ou déjà répondue (ce lien)
         if (r.expires_at && new Date(r.expires_at) < today) return; // lien expiré → inutile de relancer ce lien
         const sent = new Date(r.sent_at); if (isNaN(sent)) return;
+        // ⚠️ Répondu AUTREMENT après l'envoi (QR permanent, saisie manuelle, autre lien) → le chauffeur
+        // a bien donné son km même si CE lien-ci n'a pas de used_at → ne pas relancer.
+        const repondu = (FP.kmCollecte && FP.kmCollecte.recus ? FP.kmCollecte.recus() : [])
+          .some(x => x.vehicule_id === v.id && x.used_at && new Date(x.used_at).getTime() >= sent.getTime());
+        if (repondu) return;
         const j = Math.floor((today - sent) / 86400000);
         if (j < relanceJours) return;
         const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
