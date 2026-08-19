@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260819b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260819c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260819b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260819c">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -172,7 +172,19 @@
       </div>
     </div>
 
-    <p class="text-xs text-slate-500 mb-3 flex items-center gap-1.5"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Glisse une section par sa poignée pour changer l'ordre — l'ordre est mémorisé.</p>
+    <style>
+      #contrat-tabbar .ctab { display:inline-flex; align-items:center; gap:7px; padding:10px 20px; font-size:14px; font-weight:700; background:none; border:none; border-bottom:2px solid transparent; color:#94A3B8; cursor:pointer; transition:color .15s, border-color .15s, transform .12s; }
+      #contrat-tabbar .ctab:hover { color:var(--fp-primary); transform:translateY(-1px); }
+      #contrat-tabbar .ctab.active { color:var(--fp-primary); border-bottom-color:var(--fp-accent); }
+      #contrat-tabbar .ctab.active i { color:var(--fp-accent); }
+      body.fp-dark #contrat-tabbar .ctab.active { color:#fff; }
+    </style>
+    <!-- Onglets Leasing / Assurance : chaque onglet affiche UNIQUEMENT ses sections (séparation nette). -->
+    <div id="contrat-tabbar" style="display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--fp-border)">
+      <button id="ctab-leasing" type="button" class="ctab"><i data-lucide="banknote" class="w-4 h-4"></i> Leasing</button>
+      <button id="ctab-assurance" type="button" class="ctab"><i data-lucide="shield-check" class="w-4 h-4"></i> Assurance</button>
+    </div>
+    <p class="text-xs text-slate-500 mb-3 flex items-center gap-1.5" id="contrat-drag-hint"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i> Glisse une section par sa poignée pour changer l'ordre — l'ordre est mémorisé.</p>
     <div id="contrat-sections">
 
     <!-- Section Leasing -->
@@ -567,11 +579,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260819b"></script>
-<script src="../assets/js/supabase-client.js?v=20260819b"></script>
-<script src="../assets/js/data.js?v=20260819b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260819c"></script>
+<script src="../assets/js/supabase-client.js?v=20260819c"></script>
+<script src="../assets/js/data.js?v=20260819c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260819b"></script>
+<script src="../assets/js/app.js?v=20260819c"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1696,19 +1708,32 @@
   renderLeasing();
   renderCartes();
 
-  // Lien direct ?tab=leasing / ?tab=assurance (menu déroulant de la sidebar) → défiler jusqu'à la
-  // section + surbrillance brève. Contrats est une page à sections (pas d'onglets), donc on scrolle.
-  try {
-    const _dt = new URLSearchParams(location.search).get('tab');
-    const _secKey = { leasing: 'leasing', assurance: 'assurance', localease: 'localease' }[_dt || ''];
-    if (_secKey) setTimeout(() => {
-      const el = document.querySelector('.contrat-section[data-section="' + _secKey + '"]');
-      if (!el) return;
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      el.style.transition = 'box-shadow .4s'; el.style.boxShadow = '0 0 0 3px var(--fp-accent)';
-      setTimeout(() => { el.style.boxShadow = ''; }, 1600);
-    }, 140);
-  } catch (e) {}
+  // ===== Onglets Leasing / Assurance : chaque onglet n'affiche QUE ses sections (séparation nette). =====
+  // Leasing = sections leasing (BPCE) + localease (Ayvens/LLD). Assurance = section assurance.
+  const CONTRAT_TABS = { leasing: ['leasing', 'localease'], assurance: ['assurance'] };
+  function switchContratTab(name){
+    if (!CONTRAT_TABS[name]) name = 'leasing';
+    document.querySelectorAll('#contrat-sections .contrat-section').forEach(sec => {
+      const key = sec.getAttribute('data-section');
+      sec.style.display = CONTRAT_TABS[name].includes(key) ? '' : 'none';
+    });
+    const bl = document.getElementById('ctab-leasing'), ba = document.getElementById('ctab-assurance');
+    if (bl) bl.classList.toggle('active', name === 'leasing');
+    if (ba) ba.classList.toggle('active', name === 'assurance');
+    // Filtre « par loueur » + astuce de réorganisation = pertinents seulement sur Leasing.
+    const lw = document.getElementById('leasing-loueur-filter-wrap'); if (lw) lw.style.display = (name === 'leasing') ? '' : 'none';
+    const dh = document.getElementById('contrat-drag-hint'); if (dh) dh.style.display = (name === 'leasing') ? '' : 'none';
+    try { if (FP.lastTab) FP.lastTab.set('contrats', name); } catch (e) {}
+    if (window.lucide) lucide.createIcons();
+  }
+  { const bl = document.getElementById('ctab-leasing'), ba = document.getElementById('ctab-assurance');
+    if (bl) bl.addEventListener('click', () => switchContratTab('leasing'));
+    if (ba) ba.addEventListener('click', () => switchContratTab('assurance'));
+    // Ouverture : 1) ?tab=… (lien direct sidebar) ; 2) dernier onglet ; 3) Leasing.
+    let _ct = ''; try { _ct = new URLSearchParams(location.search).get('tab') || ''; } catch (e) {}
+    if (_ct === 'localease') _ct = 'leasing';
+    if (!CONTRAT_TABS[_ct]) { try { _ct = (FP.lastTab && FP.lastTab.get('contrats', 'leasing')) || 'leasing'; } catch (e) { _ct = 'leasing'; } }
+    switchContratTab(CONTRAT_TABS[_ct] ? _ct : 'leasing'); }
 
   // ===== Leasing Localease (Ayvens) — contrats LLD séparés de BPCE =====
   // Prompt de lecture automatique d'une offre/contrat LLD Ayvens (Localease)
