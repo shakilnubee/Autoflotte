@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260819c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260819d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260819c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260819d">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -200,6 +200,7 @@
       <span class="ctrl-tabsep" id="tab-sep" aria-hidden="true"></span>
       <button type="button" id="tab-controle" class="ctrl-tab"><i data-lucide="shield-alert"></i> Contrôle <span id="ctrl-count" class="cnt"></span></button>
       <button type="button" id="tab-cartes" class="ctrl-tab"><i data-lucide="credit-card"></i> Cartes &amp; badges</button>
+      <button type="button" id="tab-relevekm" class="ctrl-tab"><i data-lucide="gauge"></i> Relevé KM <span class="sub">kilométrages</span></button>
     </div>
 
     <!-- Sous-onglets Total Fleet / Ulys : la vue complète (conso, imports, exports) est intégrée depuis
@@ -211,6 +212,9 @@
 
     <!-- Sanef (péages flux libre) : justificatifs par passage → import par lot (OCR) → regroupement mensuel. -->
     <div id="pane-sanef" class="hidden"></div>
+
+    <!-- Relevé KM : vue intégrée depuis « Suivi & alertes » (?embed&tab=relevekm) — un seul code source. -->
+    <div id="pane-relevekm" class="hidden"></div>
 
     <!-- Panneaux des prestataires PERSO (générés dynamiquement, 1 par prestataire créé) -->
     <div id="presta-panes"></div>
@@ -285,11 +289,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260819c"></script>
-<script src="../assets/js/supabase-client.js?v=20260819c"></script>
-<script src="../assets/js/data.js?v=20260819c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260819d"></script>
+<script src="../assets/js/supabase-client.js?v=20260819d"></script>
+<script src="../assets/js/data.js?v=20260819d"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260819c"></script>
+<script src="../assets/js/app.js?v=20260819d"></script>
 <!-- ⚡ fleet-views.js (~160 Ko : Total Fleet + Ulys) N'EST PLUS chargé ici en SYNCHRONE : l'onglet
      par défaut est « Contrôle » et n'en a pas besoin. Il est injecté à la demande (1re ouverture de
      Total/Ulys) via ensureFleetViews(), et préchargé en douceur sur temps mort → l'arrivée sur
@@ -310,7 +314,7 @@
   // ===== Sous-onglets (dynamiques : Total, Ulys, prestataires PERSO, Contrôle, Cartes) =====
   let _tab = 'controle';
   const customPres = () => (FP.prestataires ? FP.prestataires() : []).filter(p => !p.builtin);
-  const tabNames = () => ['total', 'ulys', 'sanef'].concat(customPres().map(p => p.id)).concat(['controle', 'cartes']);
+  const tabNames = () => ['total', 'ulys', 'sanef'].concat(customPres().map(p => p.id)).concat(['controle', 'cartes', 'relevekm']);
   // Chargement À LA DEMANDE du module Total Fleet / Ulys (fleet-views.js, ~160 Ko). Idempotent :
   // ne l'injecte qu'une fois ; renvoie une promesse résolue quand FP.mountTotal est prêt (ou en échec).
   let _flPromise = null;
@@ -320,7 +324,7 @@
     _flPromise = new Promise(res => {
       try {
         const s = document.createElement('script');
-        s.src = '../assets/js/fleet-views.js?v=20260819c';
+        s.src = '../assets/js/fleet-views.js?v=20260819d';
         s.onload = () => res(!!(window.FP && FP.mountTotal));
         s.onerror = () => res(false);
         document.head.appendChild(s);
@@ -361,6 +365,7 @@
     if (name === 'total') mountFleetPane('total', 'pane-total', 'if-total', 'Total Fleet', 'mountTotal', 'renderTotalFleet', 'factures.html?embed&tab=total');
     if (name === 'ulys')  mountFleetPane('ulys',  'pane-ulys',  'if-ulys',  'Ulys',        'mountUlys',  'renderUlys',      'factures.html?embed&tab=ulys');
     if (name === 'sanef') renderSanef();
+    if (name === 'relevekm') mountRelevekm();
     if (name === 'cartes') renderCartes();
     if (/^p_/.test(name)) renderPresta(name);
     if (window.lucide) lucide.createIcons();
@@ -596,9 +601,23 @@
   }
   function renderSanef(){ _snRender(); }
 
+  // ===================== RELEVÉ KM (vue intégrée depuis « Suivi & alertes ») =====================
+  // Un seul code source : on affiche l'onglet Relevé KM de notifications.html en mode embed (chrome
+  // masquée). Hauteur auto via postMessage (comme Total Fleet/Ulys). Retiré de « Suivi & alertes ».
+  function mountRelevekm(){
+    const pane = $('pane-relevekm'); if (!pane || pane.dataset.built) return;
+    pane.dataset.built = '1';
+    pane.innerHTML = '<iframe id="if-relevekm" title="Relevé KM" scrolling="no" style="width:100%;height:760px;min-height:560px;border:1px solid var(--fp-border);border-radius:.7rem;background:#fff"></iframe>';
+    const f = pane.querySelector('#if-relevekm');
+    const go = () => { if (f && !f.src) f.src = 'notifications.html?embed&tab=relevekm'; };
+    (window.requestIdleCallback ? requestIdleCallback(go, { timeout: 800 }) : setTimeout(go, 30));
+    window.addEventListener('message', (e) => { try { if (f && e.source === f.contentWindow && e.data && e.data.fpEmbedHeight) f.style.height = Math.max(560, e.data.fpEmbedHeight + 24) + 'px'; } catch (_) {} });
+  }
+
   $('tab-total').addEventListener('click', () => switchTab('total'));
   $('tab-ulys').addEventListener('click', () => switchTab('ulys'));
   $('tab-sanef').addEventListener('click', () => switchTab('sanef'));
+  $('tab-relevekm').addEventListener('click', () => switchTab('relevekm'));
   $('tab-controle').addEventListener('click', () => switchTab('controle'));
   $('tab-cartes').addEventListener('click', () => switchTab('cartes'));
   renderPrestaTabs();

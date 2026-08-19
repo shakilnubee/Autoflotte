@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260819c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260819d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260819c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260819d">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -115,13 +115,15 @@
       <h1 class="text-2xl font-extrabold text-white" style="color:#fff">Suivi &amp; alertes</h1>
       <p class="text-sm mt-1" style="color:#8598B4">Le détail des alertes de ta flotte — ce qui demande ton attention.</p>
     </div>
-    <div class="mb-8 flex justify-end">
+    <div class="mb-8 flex justify-end" id="notif-topbar">
       <a href="calendrier.html" class="btn btn-outline text-sm"><i data-lucide="calendar-days" class="w-4 h-4"></i> Vue calendrier</a>
     </div>
 
-    <div class="flex gap-1 border-b border-slate-200 mb-6" style="overflow-x:auto">
+    <div class="flex gap-1 border-b border-slate-200 mb-6" id="notif-tabbar" style="overflow-x:auto">
       <button type="button" id="tab-alertes" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">🔔 Alertes</button>
-      <button type="button" id="tab-relevekm" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📏 Relevé KM</button>
+      <!-- Relevé KM a DÉMÉNAGÉ dans Contrôle → bouton masqué ici (plus dans « Suivi & alertes »). Le
+           contenu reste (affiché en embed depuis Contrôle via ?embed&tab=relevekm). -->
+      <button type="button" id="tab-relevekm" style="display:none;padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📏 Relevé KM</button>
       <button type="button" id="tab-verif" style="display:none;padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔎 Points à vérifier <span id="tab-verif-n"></span></button>
       <button type="button" id="tab-echeances" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔄 Renouvellements</button>
       <button type="button" id="tab-complet" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📝 À compléter</button>
@@ -140,11 +142,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260819c"></script>
-<script src="../assets/js/supabase-client.js?v=20260819c"></script>
-<script src="../assets/js/data.js?v=20260819c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260819d"></script>
+<script src="../assets/js/supabase-client.js?v=20260819d"></script>
+<script src="../assets/js/data.js?v=20260819d"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260819c"></script>
+<script src="../assets/js/app.js?v=20260819d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1326,6 +1328,22 @@
   (function initTab() {
     const t = new URLSearchParams(location.search).get('tab');
     showTab(['decisions', 'alertes', 'relevekm', 'echeances', 'complet', 'verif'].includes(t) ? t : 'alertes');
+  })();
+  // ===== Mode EMBED : la page Contrôle intègre l'onglet « Relevé KM » via une iframe
+  // (notifications.html?embed&tab=relevekm). On masque toute la chrome (sidebar, en-tête, barre
+  // d'onglets, bouton calendrier, FAB) → ne reste que le contenu Relevé KM. Hauteur renvoyée au parent.
+  (function notifEmbed() {
+    try {
+      if (!new URLSearchParams(location.search).has('embed')) return;
+      document.body.classList.add('notif-embed');
+      const st = document.createElement('style');
+      st.textContent = 'body.notif-embed .fp-sidebar,body.notif-embed .fp-cockpit,body.notif-embed #notif-topbar,body.notif-embed #notif-tabbar,body.notif-embed #fp-fab{display:none!important}body.notif-embed main{padding:1rem 1.2rem!important;max-width:none!important}body.notif-embed{background:#fff}';
+      document.head.appendChild(st);
+      const postH = () => { try { parent.postMessage({ fpEmbedHeight: Math.max(document.body.scrollHeight, document.documentElement.scrollHeight) }, '*'); } catch (e) {} };
+      window.addEventListener('load', () => setTimeout(postH, 200));
+      document.addEventListener('fp:data-ready', () => setTimeout(postH, 400));
+      setInterval(postH, 1500);
+    } catch (e) {}
   })();
   refreshVerifCount(); // affiche l'onglet « Points à vérifier » seulement s'il y en a
   loadCompletDocs(); // documents véhicules → savoir qui a sa carte grise / mémo sur la plateforme

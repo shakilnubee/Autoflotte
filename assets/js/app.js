@@ -3211,9 +3211,10 @@ FP.NAV_SUBMENUS = {
   'controle.html': [
     { label: 'Total Fleet', tab: 'total' },
     { label: 'Ulys', tab: 'ulys' },
+    { label: 'Sanef', tab: 'sanef' },
     { label: 'Contrôle', tab: 'controle' },
     { label: 'Cartes & badges', tab: 'cartes' },
-    { label: 'Relevé KM', tab: 'relevekm', page: 'notifications.html' },
+    { label: 'Relevé KM', tab: 'relevekm' },
   ],
   'contrats.html': [
     { label: 'Leasing', tab: 'leasing' },
@@ -3224,6 +3225,7 @@ FP.NAV_SUBMENUS = {
     { label: 'Notes de frais', tab: 'notesfrais' },
     { label: 'Documents', tab: 'documents' },
     { label: 'Fournisseurs', tab: 'fourn' },
+    { label: 'Entretiens', page: 'entretiens.html' },
   ],
   'notifications.html': [
     { label: 'Alertes', tab: 'alertes' },
@@ -3267,8 +3269,9 @@ FP.applyNavSubmenus = () => {
           const tl = (targetKey === navKey) ? link : nav.querySelector('a[data-nav="' + targetKey + '"]');
           if (tl && tl.getAttribute('href')) base = tl.getAttribute('href').split('?')[0].split('#')[0];
           else if (targetKey !== navKey) { const h = link.getAttribute('href') || navKey; const dir = h.includes('/') ? h.slice(0, h.lastIndexOf('/') + 1) : ''; base = dir + targetKey; }
-          const href = base + '?tab=' + encodeURIComponent(s.tab);
-          return `<a class="fp-subnav-item" href="${href}" data-subtab="${s.tab}" data-page="${targetKey}">${FP.esc ? FP.esc(s.label) : s.label}</a>`;
+          // Item sans `tab` (ex. Entretiens = page autonome) → lien direct sans ?tab.
+          const href = s.tab ? (base + '?tab=' + encodeURIComponent(s.tab)) : base;
+          return `<a class="fp-subnav-item" href="${href}" data-subtab="${s.tab || ''}" data-page="${targetKey}">${FP.esc ? FP.esc(s.label) : s.label}</a>`;
         }).join('') + '</div>';
         link.after(box);
         box.style.order = link.style.order || '1';   // reste collé sous son parent (grille flex par ordre)
