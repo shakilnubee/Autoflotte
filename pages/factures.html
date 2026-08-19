@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260817r">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260817r"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260819a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260817r">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260819a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -173,14 +173,13 @@
       </div>
     </div>
 
-    <!-- Onglets : Factures / Documents / Fournisseurs. Total Fleet & Ulys ont DÉMÉNAGÉ dans la page
-         Contrôle → leurs boutons sont masqués ici (display:none) mais les panneaux restent, affichés
-         par la page Contrôle via une vue intégrée (?embed&tab=total|ulys). -->
+    <!-- Onglets : Factures / Notes de frais / Documents / Fournisseurs / Entretiens.
+         Total Fleet & Ulys vivent dans la page Contrôle (qui affiche les panneaux #pane-total / #pane-ulys
+         via une vue intégrée ?embed&tab=total|ulys) → PLUS de boutons ici (doublon supprimé). -->
     <div id="fa-tabbar" style="display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--fp-border)">
       <button id="tab-btn-factures" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">Factures</button>
+      <button id="tab-btn-notesfrais" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Notes de frais <span style="font-size:11px;font-weight:600">· dépenses justifiées</span></button>
       <button id="tab-btn-documents" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Documents <span style="font-size:11px;font-weight:600">· archives & suivi</span></button>
-      <button id="tab-btn-total" type="button" style="display:none;padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Total Fleet <span style="font-size:11px;font-weight:600">· carburant & péages</span></button>
-      <button id="tab-btn-ulys" type="button" style="display:none;padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Ulys <span style="font-size:11px;font-weight:600">· péages</span></button>
       <button id="tab-btn-fourn" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Fournisseurs</button>
       <a href="entretiens.html" style="padding:9px 18px;font-size:14px;font-weight:700;text-decoration:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Entretiens <span style="font-size:11px;font-weight:600">· révisions</span></a>
     </div>
@@ -383,6 +382,64 @@
       <div id="fn-cards" class="tf-cards mt-3 hidden"></div>
       <p class="text-xs text-slate-500 mt-3"><b>Renommer / fusionner</b> : corrige un doublon (ex. « CAR WORLD » → « CAR WORLD CONSULTING FRANCE ») — toutes les factures sont mises à jour. <b>Supprimer le nom</b> : retire le fournisseur des factures concernées (les factures restent).</p>
     </div>
+
+    <!-- ===== Vue NOTES DE FRAIS : dépenses réglées par un collaborateur (essence, péage, lavage,
+         parking…) sans facture fournisseur globale. Enregistrées comme factures (type « autre ») →
+         elles COMPTENT dans le coût du véhicule / TCO comme n'importe quelle dépense. ===== -->
+    <div id="view-notesfrais" class="hidden">
+      <div class="card p-5 mb-6">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-teal-50" style="color:var(--fp-accent)"><i data-lucide="receipt-text" class="w-5 h-5"></i></span>
+          <div>
+            <h2 class="text-base font-extrabold" style="color:var(--fp-primary)">Ajouter une note de frais</h2>
+            <p class="text-xs text-slate-500">Une dépense payée par un collaborateur (essence, péage, lavage, parking…). Elle est rattachée au véhicule et <b>comptée dans son coût</b>.</p>
+          </div>
+        </div>
+        <div class="grid md:grid-cols-3 gap-3 mt-4">
+          <div><div class="field-label">Date *</div><input class="field-input" type="text" inputmode="numeric" data-mask="date" id="nf-date" placeholder="JJ/MM/AAAA" /></div>
+          <div><div class="field-label">Catégorie *</div>
+            <select class="field-input" id="nf-cat">
+              <option value="carburant">⛽ Carburant / essence</option>
+              <option value="peage">🛣️ Péage</option>
+              <option value="lavage">🚿 Lavage</option>
+              <option value="parking">🅿️ Parking</option>
+              <option value="repas">🍽️ Repas</option>
+              <option value="autre">📎 Autre</option>
+            </select>
+          </div>
+          <div><div class="field-label">Montant TTC (€) *</div><input class="field-input" type="text" inputmode="decimal" data-mask="amount" id="nf-ttc" placeholder="0" /></div>
+        </div>
+        <div class="grid md:grid-cols-3 gap-3 mt-3">
+          <div><div class="field-label">Véhicule (plaque)</div><select class="field-input" id="nf-veh"></select></div>
+          <div><div class="field-label">Conducteur</div><input class="field-input" id="nf-cond" placeholder="Nom du collaborateur" autocomplete="off" /></div>
+          <div><div class="field-label">Kilométrage (option.)</div><input class="field-input" type="text" inputmode="numeric" data-mask="int" id="nf-km" placeholder="" /></div>
+        </div>
+        <div class="grid md:grid-cols-3 gap-3 mt-3">
+          <div class="md:col-span-2"><div class="field-label">Libellé / commerçant (option.)</div><input class="field-input" id="nf-desc" placeholder="ex. Station Total A6, Parking Gare…" /></div>
+          <div><div class="field-label">Justificatif (photo/PDF)</div><input class="field-input" type="file" id="nf-file" accept="image/*,application/pdf" style="padding:7px" /></div>
+        </div>
+        <div class="flex items-center gap-3 mt-4">
+          <button id="nf-save" type="button" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Enregistrer la note de frais</button>
+          <span id="nf-status" class="text-xs"></span>
+        </div>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="flex flex-wrap items-center gap-3 p-4 border-b border-slate-100">
+          <div class="relative flex-1 min-w-[220px]">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+            <input id="nf-search" type="text" placeholder="Rechercher (véhicule, conducteur, catégorie…)" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+          </div>
+          <span class="text-sm text-slate-500" id="nf-total"></span>
+        </div>
+        <div class="scrollable">
+          <table class="fp-table">
+            <thead><tr><th>Date</th><th>Catégorie</th><th>Véhicule</th><th>Conducteur</th><th>Libellé</th><th style="text-align:right">Montant TTC</th><th>Justif.</th><th></th></tr></thead>
+            <tbody id="nf-tbody"></tbody>
+          </table>
+        </div>
+        <div id="nf-empty" class="hidden p-10 text-center"><p class="text-slate-500 text-sm">Aucune note de frais. Ajoute-en une ci-dessus.</p></div>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -503,12 +560,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260817r"></script>
-<script src="../assets/js/supabase-client.js?v=20260817r"></script>
-<script src="../assets/js/data.js?v=20260817r"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260819a"></script>
+<script src="../assets/js/supabase-client.js?v=20260819a"></script>
+<script src="../assets/js/data.js?v=20260819a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260817r"></script>
-<script src="../assets/js/fleet-views.js?v=20260817r"></script>
+<script src="../assets/js/app.js?v=20260819a"></script>
+<script src="../assets/js/fleet-views.js?v=20260819a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1750,19 +1807,22 @@
     const vehImmat = id => { const v = (window.FP_DATA.vehicules||[]).find(x => x.id === id); return v ? v.immat : (id || '?'); };
     const ts = d => d.createdAt || d.created_at || '';
 
-    function styleTab(btn, active){ btn.style.borderBottomColor = active ? 'var(--fp-accent)' : 'transparent'; btn.style.color = active ? 'var(--fp-primary)' : '#94A3B8'; }
-    function switchTab(name){ // 'factures' | 'documents' | 'total' | 'fournisseurs'
+    function styleTab(btn, active){ if (!btn) return; btn.style.borderBottomColor = active ? 'var(--fp-accent)' : 'transparent'; btn.style.color = active ? 'var(--fp-primary)' : '#94A3B8'; }
+    function switchTab(name){ // 'factures' | 'notesfrais' | 'documents' | 'total' | 'ulys' | 'fournisseurs'
       $('view-factures').classList.toggle('hidden', name !== 'factures');
+      { const vn = $('view-notesfrais'); if (vn) vn.classList.toggle('hidden', name !== 'notesfrais'); }
       $('view-documents').classList.toggle('hidden', name !== 'documents');
-      $('pane-total').classList.toggle('hidden', name !== 'total');
+      $('pane-total').classList.toggle('hidden', name !== 'total');   // panneaux gardés (embed Contrôle)
       $('pane-ulys').classList.toggle('hidden', name !== 'ulys');
       $('view-fourn').classList.toggle('hidden', name !== 'fournisseurs');
       styleTab($('tab-btn-factures'), name === 'factures');
+      styleTab($('tab-btn-notesfrais'), name === 'notesfrais');
       styleTab($('tab-btn-documents'), name === 'documents');
-      styleTab($('tab-btn-total'), name === 'total');
+      styleTab($('tab-btn-total'), name === 'total');   // no-op si bouton retiré (styleTab null-safe)
       styleTab($('tab-btn-ulys'), name === 'ulys');
       styleTab($('tab-btn-fourn'), name === 'fournisseurs');
       if (name === 'documents' && !loaded) loadDocs();
+      if (name === 'notesfrais' && window.renderNotesFrais) window.renderNotesFrais();
       if (name === 'total' && window.renderTotalFleet) window.renderTotalFleet();
       if (name === 'ulys' && window.renderUlys) window.renderUlys();
       if (name === 'fournisseurs' && window.renderFournisseurs) window.renderFournisseurs();
@@ -1781,9 +1841,8 @@
       }
     }
     $('tab-btn-factures').addEventListener('click', () => switchTab('factures'));
+    { const _bn = $('tab-btn-notesfrais'); if (_bn) _bn.addEventListener('click', () => switchTab('notesfrais')); }
     $('tab-btn-documents').addEventListener('click', () => switchTab('documents'));
-    $('tab-btn-total').addEventListener('click', () => switchTab('total'));
-    $('tab-btn-ulys').addEventListener('click', () => switchTab('ulys'));
     $('tab-btn-fourn').addEventListener('click', () => switchTab('fournisseurs'));
     // Ouverture directe sur un onglet via l'URL (ex. depuis le scanner du tableau de bord : ?tab=ulys)
     // + MODE « EMBED » : la page Contrôle intègre les vues Total Fleet / Ulys via une iframe
@@ -1809,7 +1868,7 @@
         document.addEventListener('fp:data-ready', () => setTimeout(postH, 400));
         setInterval(postH, 1500);
       }
-      if (_tab && ['factures','documents','total','ulys','fournisseurs'].includes(_tab)) switchTab(_tab); }
+      if (_tab && ['factures','notesfrais','documents','total','ulys','fournisseurs'].includes(_tab)) switchTab(_tab); }
     // Exposé pour l'import en LOT : lui permet de basculer sur l'onglet Total/Ulys quand il route un relevé.
     window.__facSwitchTab = switchTab;
 
@@ -2184,6 +2243,112 @@
   // fait à l'ouverture de l'onglet (switchTab appelle renderTotalFleet/renderUlys).
   try { if (window.FP && FP.mountTotal) FP.mountTotal($('pane-total')); } catch (e) { console.error('[mountTotal]', e); }
   try { if (window.FP && FP.mountUlys)  FP.mountUlys($('pane-ulys'));  } catch (e) { console.error('[mountUlys]', e); }
+
+  // ===== Onglet NOTES DE FRAIS : dépenses collaborateur → enregistrées comme factures (type « autre »,
+  // source « note-frais ») pour COMPTER dans le coût véhicule / TCO. Anti-doublon FP.dupe. =====
+  (function notesFraisTab(){
+    const NF_CATS = { carburant:'⛽ Carburant', peage:'🛣️ Péage', lavage:'🚿 Lavage', parking:'🅿️ Parking', repas:'🍽️ Repas', autre:'📎 Autre' };
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    // Parseur nombre local (« 1 234,56 » → 1234.56). null si vide/invalide.
+    const num = (n) => { const v = parseFloat(String(n == null ? '' : n).replace(/\s/g, '').replace(/ /g, '').replace(',', '.')); return isNaN(v) ? null : v; };
+    // JJ/MM/AAAA (masque) → ISO AAAA-MM-JJ. Accepte aussi déjà-ISO. Renvoie '' si invalide.
+    const toISO = (v) => { const s = String(v || '').trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
+    let nfSearch = '';
+    // Peuple les options du sélecteur véhicule (le wrap « recherche au clavier » se fait UNE fois).
+    function fillVehSelect(){
+      const sel = $('nf-veh'); if (!sel) return;
+      const cur = sel.value;
+      const vehs = (data.vehicules || []).slice().filter(v => !(FP.estVendu && FP.estVendu(v))).sort((a,b)=>(a.immat||'').localeCompare(b.immat||''));
+      sel.innerHTML = '<option value="">— Aucun / non lié —</option>' + vehs.map(v => `<option value="${esc(v.immat)}">${esc(v.immat)}${v.marque ? ' · ' + esc(v.marque) + ' ' + esc(v.modele||'') : ''}</option>`).join('');
+      if (cur) sel.value = cur;
+      if (!sel.dataset.ssWrapped) { sel.dataset.ssWrapped = '1'; try { if (FP.searchSelect) FP.searchSelect(sel, { placeholder: 'Rechercher un véhicule…' }); } catch (e) {} }
+    }
+    try { if (FP.conducteurPicker && $('nf-cond')) FP.conducteurPicker($('nf-cond'), {}); } catch (e) {}
+    fillVehSelect();
+    document.addEventListener('fp:data-ready', () => { fillVehSelect(); if (window._facturesTab === 'notesfrais') render(); });
+
+    function list(){ return (data.factures || []).filter(f => f.source === 'note-frais'); }
+    function render(){
+      const tb = $('nf-tbody'); if (!tb) return;
+      const q = FP.norm(nfSearch.trim());
+      const rows = list().filter(f => {
+        if (!q) return true;
+        const s = FP.norm([f.vehiculeImmat, f.conducteur, NF_CATS[f.categorie] || f.categorie, f.description].join(' '));
+        return s.includes(q);
+      }).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+      $('nf-empty').classList.toggle('hidden', rows.length > 0);
+      const tot = rows.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+      $('nf-total').textContent = rows.length ? `${rows.length} note(s) · ${FP.euro(tot)}` : '';
+      tb.innerHTML = rows.map(f => `<tr>
+        <td style="white-space:nowrap">${FP.dateNum ? FP.dateNum(f.date) : esc(f.date)}</td>
+        <td>${esc(NF_CATS[f.categorie] || f.categorie || '—')}</td>
+        <td class="font-mono">${f.vehiculeImmat ? FP.lienVehicule(f.vehiculeImmat) : '<span class="text-slate-400">—</span>'}</td>
+        <td>${f.conducteur ? FP.lienConducteur(f.conducteur) : '<span class="text-slate-400">—</span>'}</td>
+        <td>${esc(f.description || '')}</td>
+        <td style="text-align:right;font-weight:700">${FP.euro(Number(f.montantTTC) || 0)}</td>
+        <td>${(f.fileId && /^https?:/.test(f.fileId)) ? `<a href="${esc(f.fileId)}" target="_blank" rel="noopener" class="text-teal-600 hover:underline" title="Voir le justificatif"><i data-lucide="paperclip" class="w-4 h-4" style="display:inline"></i></a>` : '<span class="text-slate-300">—</span>'}</td>
+        <td style="text-align:right"><button class="btn btn-outline" style="padding:3px 8px;font-size:12px;color:#b91c1c" data-nf-del="${esc(f.id)}" title="Supprimer">✕</button></td>
+      </tr>`).join('');
+      try { lucide.createIcons(); } catch (e) {}
+    }
+    window.renderNotesFrais = render;
+
+    if ($('nf-search')) $('nf-search').addEventListener('input', e => { nfSearch = e.target.value; render(); });
+    if ($('nf-tbody')) $('nf-tbody').addEventListener('click', async (e) => {
+      const del = e.target.closest('[data-nf-del]'); if (!del) return;
+      const id = del.getAttribute('data-nf-del');
+      const f = (data.factures || []).find(x => String(x.id) === String(id)); if (!f) return;
+      if (!confirm('Supprimer cette note de frais ?')) return;
+      if (FP.history && FP.history.commit) FP.history.commit();
+      const idx = data.factures.indexOf(f); if (idx >= 0) data.factures.splice(idx, 1);
+      try { if (FP.persist && FP.persist.delete) FP.persist.delete('factures', f.id, f); } catch (err) { console.error('[nf del]', err); }
+      rebuildFactures(); render(); renderKPIs(); renderTable();
+      if (FP.toast) FP.toast('✓ Supprimée');
+    });
+
+    const saveBtn = $('nf-save');
+    if (saveBtn) saveBtn.addEventListener('click', async () => {
+      const st = $('nf-status');
+      const setStatus = (msg, ok) => { if (st) { st.textContent = msg; st.style.color = ok ? '#047857' : '#b91c1c'; } };
+      const iso = toISO($('nf-date').value);
+      const ttc = num($('nf-ttc').value);
+      if (!iso) { setStatus('Date invalide (JJ/MM/AAAA).', false); return; }
+      if (!ttc || ttc <= 0) { setStatus('Montant TTC requis.', false); return; }
+      saveBtn.disabled = true; setStatus('Enregistrement…', true);
+      let fileId = null, fileName = null;
+      const file = $('nf-file').files && $('nf-file').files[0];
+      if (file && FP.uploadScan) { try { const url = await FP.uploadScan(file, 'factures'); if (url) { fileId = url; fileName = file.name; } } catch (e) { /* on garde la note même si l'upload échoue */ } }
+      const cat = $('nf-cat').value || 'autre';
+      const desc = $('nf-desc').value.trim() || (NF_CATS[cat] || 'Note de frais').replace(/^[^ ]+ /, '');
+      const rec = {
+        id: nextFactId(), date: iso,
+        vehiculeImmat: ($('nf-veh').value || '').trim().toUpperCase() || null,
+        conducteur: $('nf-cond').value.trim() || null,
+        fournisseur: 'Note de frais',
+        description: desc,
+        type: 'autre',              // compte dans le TCO (FP.coutFactureExploit), hors sweep Total Fleet/Ulys
+        source: 'note-frais',
+        categorie: cat,
+        montantHT: null, montantTVA: null, montantTTC: ttc,
+        km: num($('nf-km').value),
+        fileId, fileName,
+      };
+      // Anti-doublon central (fournisseur + TTC + date).
+      if (FP.dupe && !(await FP.dupe.confirmAdd('factures', rec, data.factures))) { saveBtn.disabled = false; setStatus('', true); return; }
+      if (FP.history && FP.history.commit) FP.history.commit();
+      data.factures.push(rec);
+      try { FP.persist.insert('factures', rec); } catch (e) { console.error('[nf save]', e); }
+      // Rattache le km au véhicule si fourni (source unique = FP.applyFactureToVehicule).
+      let majVeh = null; try { const r = FP.applyFactureToVehicule ? FP.applyFactureToVehicule(rec, data.vehicules) : null; majVeh = r ? r.label : null; } catch (e) {}
+      rebuildFactures(); render(); renderKPIs(); renderTable();
+      // Réinitialise le formulaire (garde la date + catégorie pour saisir vite plusieurs notes).
+      $('nf-ttc').value = ''; $('nf-desc').value = ''; $('nf-km').value = ''; if ($('nf-file')) $('nf-file').value = '';
+      saveBtn.disabled = false;
+      setStatus('✓ Note de frais enregistrée' + (majVeh ? ' · ' + majVeh : ''), true);
+      if (FP.toast) FP.toast('✓ Note de frais ajoutée');
+      setTimeout(() => setStatus('', true), 4000);
+    });
+  })();
 
   // ===== Onglet FOURNISSEURS (voir + nettoyer les doublons) =====
   (function fournisseursTab(){
