@@ -301,6 +301,10 @@
       // Anti-doublon central (règle plateforme) : n° + TTC, sinon fournisseur+TTC+date.
       if (FP.dupe && FP.dupe.confirmAdd && !(await FP.dupe.confirmAdd('factures', rec, data.factures || []))) return { table: 'factures', id: null, annule: true };
       await FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
+      // Propager le km (et dernière révision / pneus) à la fiche véhicule — MÊME helper canonique que
+      // la page Factures (km à la hausse uniquement, persiste tout seul). Sans ça, un km lu sur la
+      // facture n'arrivait jamais dans la fiche véhicule.
+      try { if (FP.applyFactureToVehicule) FP.applyFactureToVehicule(rec, data.vehicules); } catch (e) {}
       target = { table: 'factures', id: rec.id };
     }
     else if (cible === 'sinistres') {
