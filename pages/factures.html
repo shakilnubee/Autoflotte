@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260819c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260819d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260819c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260819d">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -173,10 +173,10 @@
       </div>
     </div>
 
-    <!-- Onglets : Factures / Notes de frais / Documents / Fournisseurs / Entretiens.
-         Total Fleet & Ulys vivent dans la page Contrôle (qui affiche les panneaux #pane-total / #pane-ulys
-         via une vue intégrée ?embed&tab=total|ulys) → PLUS de boutons ici (doublon supprimé). -->
-    <div id="fa-tabbar" style="display:flex;gap:4px;margin-bottom:22px;border-bottom:1px solid var(--fp-border)">
+    <!-- Navigation entre sous-onglets via le MENU DÉROULANT de la sidebar (chaque sous-onglet = sa
+         page). La barre interne est MASQUÉE (display:none) mais conservée : ses boutons pilotent
+         encore switchTab (via ?tab=…). Total Fleet & Ulys vivent dans Contrôle. -->
+    <div id="fa-tabbar" style="display:none">
       <button id="tab-btn-factures" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">Factures</button>
       <button id="tab-btn-notesfrais" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Notes de frais <span style="font-size:11px;font-weight:600">· dépenses justifiées</span></button>
       <button id="tab-btn-documents" type="button" style="padding:9px 18px;font-size:14px;font-weight:700;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">Documents <span style="font-size:11px;font-weight:600">· archives & suivi</span></button>
@@ -441,6 +441,7 @@
           <label class="text-xs text-slate-500 flex items-center gap-1">Du <input id="nf-conso-from" type="date" class="text-sm border border-slate-200 rounded-lg px-2 py-1.5"></label>
           <label class="text-xs text-slate-500 flex items-center gap-1">Au <input id="nf-conso-to" type="date" class="text-sm border border-slate-200 rounded-lg px-2 py-1.5"></label>
           <button id="nf-conso-clear" type="button" class="text-xs text-slate-400 hover:text-slate-700 px-1 hidden" title="Effacer la période">✕</button>
+          <select id="nf-cond-filter" class="text-sm border border-slate-200 rounded-lg px-2 py-2" title="Filtrer par conducteur"><option value="all">Tous les conducteurs</option></select>
           <span class="text-sm text-slate-500" id="nf-total" style="margin-left:auto"></span>
           <button id="nf-export-pdf" type="button" class="btn btn-outline text-xs" title="Exporter la période affichée en PDF"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> PDF</button>
           <button id="nf-export-csv" type="button" class="btn btn-outline text-xs" title="Exporter la période affichée en CSV"><i data-lucide="table" class="w-3.5 h-3.5"></i> CSV</button>
@@ -574,12 +575,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260819c"></script>
-<script src="../assets/js/supabase-client.js?v=20260819c"></script>
-<script src="../assets/js/data.js?v=20260819c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260819d"></script>
+<script src="../assets/js/supabase-client.js?v=20260819d"></script>
+<script src="../assets/js/data.js?v=20260819d"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260819c"></script>
-<script src="../assets/js/fleet-views.js?v=20260819c"></script>
+<script src="../assets/js/app.js?v=20260819d"></script>
+<script src="../assets/js/fleet-views.js?v=20260819d"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2335,18 +2336,32 @@
       }
       return { src: base, label };
     }
-    // Lignes visibles = période ∩ recherche texte, triées date décroissante.
+    // Lignes visibles = période ∩ conducteur choisi ∩ recherche texte, triées date décroissante.
     function nfRows(){
       const q = FP.norm(nfSearch.trim());
+      const cf = ($('nf-cond-filter') && $('nf-cond-filter').value) || 'all';
       return nfPeriod().src.filter(f => {
+        if (cf !== 'all' && FP.norm(f.conducteur || '') !== cf) return false;
         if (!q) return true;
         const s = FP.norm([f.vehiculeImmat, f.conducteur, NF_CATS[f.categorie] || f.categorie, f.description].join(' '));
         return s.includes(q);
       }).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
     }
+    // Remplit le filtre conducteur : conducteurs DÉJÀ enregistrés (table conducteurs) + ceux présents
+    // sur des notes. Valeur = nom normalisé (FP.norm) pour matcher malgré casse/accents.
+    function fillCondFilter(){
+      const sel = $('nf-cond-filter'); if (!sel) return;
+      const cur = sel.value;
+      const names = new Map(); // normalisé → libellé affiché
+      try { (FP.conducteurs && FP.conducteurs.list ? FP.conducteurs.list() : []).forEach(c => { const nm = FP.conducteurs.displayName ? FP.conducteurs.displayName(c) : (c.name || c.prenom || c.key); if (nm) names.set(FP.norm(nm), nm); }); } catch (e) {}
+      list().forEach(f => { if (f.conducteur) { const k = FP.norm(f.conducteur); if (!names.has(k)) names.set(k, f.conducteur); } });
+      const opts = [...names.entries()].sort((a, b) => a[1].localeCompare(b[1], 'fr'));
+      sel.innerHTML = '<option value="all">Tous les conducteurs</option>' + opts.map(([k, lbl]) => `<option value="${k}">${FP.esc ? FP.esc(lbl) : lbl}</option>`).join('');
+      if (cur && (cur === 'all' || names.has(cur))) sel.value = cur;
+    }
     function render(){
       const tb = $('nf-tbody'); if (!tb) return;
-      fillMois();
+      fillMois(); fillCondFilter();
       const rows = nfRows();
       $('nf-empty').classList.toggle('hidden', rows.length > 0);
       const tot = rows.reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
@@ -2367,9 +2382,15 @@
 
     if ($('nf-search')) $('nf-search').addEventListener('input', e => { nfSearch = e.target.value; render(); });
     // Contrôles de période → re-render (l'export lit la même source nfPeriod()).
-    ['nf-conso-mois', 'nf-conso-from', 'nf-conso-to'].forEach(id => { const el = $(id); if (el) el.addEventListener('change', render); });
+    ['nf-conso-mois', 'nf-conso-from', 'nf-conso-to', 'nf-cond-filter'].forEach(id => { const el = $(id); if (el) el.addEventListener('change', render); });
     if ($('nf-conso-clear')) $('nf-conso-clear').addEventListener('click', () => { if ($('nf-conso-from')) $('nf-conso-from').value = ''; if ($('nf-conso-to')) $('nf-conso-to').value = ''; if ($('nf-conso-mois')) $('nf-conso-mois').value = 'all'; render(); });
 
+    // Libellé d'export = période + conducteur choisi (l'export suit EXACTEMENT les filtres à l'écran).
+    function nfExportLabel(){
+      const cf = $('nf-cond-filter');
+      const cond = (cf && cf.value !== 'all') ? (cf.options[cf.selectedIndex] ? cf.options[cf.selectedIndex].textContent : '') : '';
+      return cond ? (nfPeriod().label + ' · ' + cond) : nfPeriod().label;
+    }
     // ===== Export de la PÉRIODE AFFICHÉE (PDF / CSV) — mêmes lignes que l'écran (nfRows). =====
     function exportRowsData(){
       return nfRows().map(f => ({
@@ -2383,7 +2404,7 @@
     }
     if ($('nf-export-csv')) $('nf-export-csv').addEventListener('click', () => {
       const rows = exportRowsData(); if (!rows.length) { if (FP.toast) FP.toast('Aucune note sur la période.'); return; }
-      const per = nfPeriod().label;
+      const per = nfExportLabel();
       const head = ['Date', 'Catégorie', 'Véhicule', 'Conducteur', 'Libellé', 'Montant TTC (€)'];
       const esc2 = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
       const lines = [head.map(esc2).join(';')].concat(rows.map(r => [r.date, r.cat, r.veh, r.cond, r.desc, String(r.ttc).replace('.', ',')].map(esc2).join(';')));
@@ -2395,7 +2416,7 @@
     if ($('nf-export-pdf')) $('nf-export-pdf').addEventListener('click', function exportNfPdf(){
       const rows = exportRowsData(); if (!rows.length) { if (FP.toast) FP.toast('Aucune note sur la période.'); return; }
       if (!(window.jspdf && window.jspdf.jsPDF)) { if (FP.ensureJsPDF) FP.ensureJsPDF().then(exportNfPdf); return; }
-      const per = nfPeriod().label;
+      const per = nfExportLabel();
       const doc = new window.jspdf.jsPDF();
       const W = doc.internal.pageSize.getWidth();
       doc.setFillColor(15, 30, 61); doc.rect(0, 0, W, 24, 'F');
