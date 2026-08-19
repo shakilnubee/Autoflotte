@@ -3168,6 +3168,146 @@ FP.applyNavGroups = () => {
   });
 };
 
+// ⚠️ SOUS-MENUS DÉPLIANTS de la sidebar — certains onglets ont des SOUS-ONGLETS. Cliquer l'onglet
+// parent DÉPLIE la liste (il ne navigue pas) ; cliquer un sous-item ouvre la page DIRECTEMENT sur ce
+// sous-onglet via ?tab=<clé> (lu par la page au chargement). Auto-déplié quand on est déjà sur la page.
+// Source UNIQUE (plus de doublons : chaque sous-onglet n'apparaît qu'à un seul endroit du menu).
+// Chaque item : { label, tab, page? }. `page` (optionnel) = page cible DIFFÉRENTE du parent
+// (cross-lien : le contenu reste sur sa page, seul l'ENTRÉE du menu bouge → aucun chemin cassé).
+FP.NAV_SUBMENUS = {
+  'controle.html': [
+    { label: 'Total Fleet', tab: 'total' },
+    { label: 'Ulys', tab: 'ulys' },
+    { label: 'Contrôle', tab: 'controle' },
+    { label: 'Cartes & badges', tab: 'cartes' },
+    { label: 'Relevé KM', tab: 'relevekm', page: 'notifications.html' },
+  ],
+  'contrats.html': [
+    { label: 'Leasing', tab: 'leasing' },
+    { label: 'Assurance', tab: 'assurance' },
+  ],
+  'factures.html': [
+    { label: 'Factures', tab: 'factures' },
+    { label: 'Notes de frais', tab: 'notesfrais' },
+    { label: 'Documents', tab: 'documents' },
+    { label: 'Fournisseurs', tab: 'fourn' },
+  ],
+  'notifications.html': [
+    { label: 'Alertes', tab: 'alertes' },
+    { label: 'Renouvellements', tab: 'echeances' },
+    { label: 'À compléter', tab: 'complet' },
+    { label: 'Décisions', tab: 'decisions' },
+  ],
+};
+FP.applyNavSubmenus = () => {
+  try {
+    const curPage = (location.pathname.split('/').pop() || 'dashboard.html');
+    // Bascule du sous-menu par DÉLÉGATION (posée UNE seule fois) : robuste aux reconstructions et au
+    // réordonnancement du menu (applyNavOrder déplace les <a> par appendChild). On lit toujours la box
+    // ACTUELLE (link.nextElementSibling) → pas de closure périmée, pas d'écouteurs empilés.
+    if (!FP._navSubToggleInstalled) {
+      FP._navSubToggleInstalled = true;
+      document.addEventListener('click', (e) => {
+        const link = e.target.closest && e.target.closest('aside nav a[data-nav]');
+        if (!link) return;
+        const box = link.nextElementSibling;
+        if (!box || !box.classList || !box.classList.contains('fp-subnav')) return; // pas de sous-menu → nav normale
+        e.preventDefault();
+        const open = box.classList.toggle('open'); link.classList.toggle('sub-open', open);
+      }, true);
+    }
+    document.querySelectorAll('aside nav').forEach(nav => {
+      // Idempotence : on repart propre (retire boxes + chevrons existants) avant de reconstruire.
+      nav.querySelectorAll('.fp-subnav').forEach(b => b.remove());
+      nav.querySelectorAll('.fp-nav-chev').forEach(c => c.remove());
+      Object.keys(FP.NAV_SUBMENUS).forEach(navKey => {
+        const link = nav.querySelector('a[data-nav="' + navKey + '"]');
+        if (!link) return;
+        const subs = FP.NAV_SUBMENUS[navKey];
+        const box = document.createElement('div'); box.className = 'fp-subnav'; box.dataset.for = navKey;
+        // Base du lien = href RÉEL de la page cible dans CETTE sidebar (gère le préfixe « pages/ » sur les
+        // pages racine et son absence sous /pages/). Cross-lien : si `page` diffère, on prend le href du
+        // lien de destination ; sinon celui du parent.
+        box.innerHTML = '<div class="fp-subnav-inner">' + subs.map(s => {
+          const targetKey = s.page || navKey;
+          let base = navKey;
+          const tl = (targetKey === navKey) ? link : nav.querySelector('a[data-nav="' + targetKey + '"]');
+          if (tl && tl.getAttribute('href')) base = tl.getAttribute('href').split('?')[0].split('#')[0];
+          else if (targetKey !== navKey) { const h = link.getAttribute('href') || navKey; const dir = h.includes('/') ? h.slice(0, h.lastIndexOf('/') + 1) : ''; base = dir + targetKey; }
+          const href = base + '?tab=' + encodeURIComponent(s.tab);
+          return `<a class="fp-subnav-item" href="${href}" data-subtab="${s.tab}" data-page="${targetKey}">${FP.esc ? FP.esc(s.label) : s.label}</a>`;
+        }).join('') + '</div>';
+        link.after(box);
+        box.style.order = link.style.order || '1';   // reste collé sous son parent (grille flex par ordre)
+        // Chevron indicateur (le clic parent est géré par la délégation ci-dessus).
+        const chev = document.createElement('span'); chev.className = 'fp-nav-chev'; chev.setAttribute('aria-hidden', 'true'); chev.textContent = '▸';
+        link.appendChild(chev);
+        // Sur la page concernée : déplié + sous-onglet actif surligné.
+        if (curPage === navKey) {
+          box.classList.add('open'); link.classList.add('sub-open');
+          let active = ''; try { active = new URLSearchParams(location.search).get('tab') || ''; } catch (e) {}
+          if (!active && FP.lastTab && FP.lastTab.get) { try { active = FP.lastTab.get(navKey.replace('.html', '')) || ''; } catch (e) {} }
+          box.querySelectorAll('.fp-subnav-item').forEach(a => a.classList.toggle('active', a.dataset.subtab === active));
+        }
+      });
+    });
+  } catch (e) {}
+};
+
+// ⚠️ SAISIE SIMPLIFIÉE PARTOUT — masques de saisie automatiques (consigne : « je tape juste les
+// chiffres, la date se remplit toute seule »). Moteur GLOBAL par DÉLÉGATION (couvre aussi les champs
+// ajoutés dynamiquement : tableaux, modales, drawers). Trois masques :
+//   • date   : on tape 8 chiffres → « JJ/MM/AAAA » (les / s'insèrent tout seuls).
+//   • amount : montant € — n'autorise que chiffres/espace/,/. en direct ; regroupe les milliers au blur
+//              (uniquement ≥ 1000 → un taux « 0,16 » ou un CO₂ « 104 » n'est PAS modifié).
+//   • int    : entier (km, points…) — chiffres uniquement.
+// Détection : attribut data-mask explicite ; sinon AUTO et SÛR → placeholder « JJ/MM/AAAA » ⇒ date,
+// inputmode="decimal" ⇒ amount. On NE TOUCHE JAMAIS aux <input type="date"> natifs (déjà OK).
+FP.initInputMasks = () => {
+  if (FP._inputMasksOn) return; FP._inputMasksOn = true;
+  const detect = (el) => {
+    if (!el || el.tagName !== 'INPUT') return '';
+    if (el.dataset && el.dataset.mask) return el.dataset.mask;
+    const t = (el.getAttribute('type') || 'text').toLowerCase();
+    if (t !== 'text' && t !== 'tel' && t !== '') return ''; // laisse date/number/email… natifs tranquilles
+    const ph = el.getAttribute('placeholder') || '';
+    if (/jj\s*\/\s*mm\s*\/\s*aaaa|dd\s*\/\s*mm\s*\/\s*yyyy/i.test(ph)) return 'date';
+    // ⚠️ Montant : SEULEMENT sur data-mask="amount" EXPLICITE (le regroupement des milliers casserait
+    // tout parseur qui lit la valeur avec Number()/parseFloat() sans retirer les espaces — « 1 234 » → NaN).
+    // On n'auto-détecte donc PAS via inputmode. Le masque date, lui, est sûr (placeholder JJ/MM/AAAA).
+    return '';
+  };
+  const setVal = (el, v) => { const atEnd = el.selectionStart === el.value.length; el.value = v; if (atEnd) { try { el.selectionStart = el.selectionEnd = v.length; } catch (e) {} } };
+  const maskDate = (el) => {
+    const d = el.value.replace(/\D/g, '').slice(0, 8);
+    let out = d;
+    if (d.length >= 5) out = d.slice(0, 2) + '/' + d.slice(2, 4) + '/' + d.slice(4);
+    else if (d.length >= 3) out = d.slice(0, 2) + '/' + d.slice(2);
+    if (out !== el.value) setVal(el, out);
+  };
+  const maskInt = (el) => { const v = el.value.replace(/\D/g, ''); if (v !== el.value) setVal(el, v); };
+  const maskAmountLive = (el) => { const v = el.value.replace(/[^\d.,\s]/g, ''); if (v !== el.value) setVal(el, v); };
+  const groupAmount = (el) => {
+    const raw = el.value.trim(); if (!raw) return;
+    const cleaned = raw.replace(/\s/g, '');
+    const dec = (cleaned.match(/[.,]/) ? cleaned.slice(cleaned.search(/[.,]/) + 1).replace(/[.,]/g, '') : '');
+    const intPart = (cleaned.match(/[.,]/) ? cleaned.slice(0, cleaned.search(/[.,]/)) : cleaned).replace(/[.,]/g, '');
+    if (!/^\d+$/.test(intPart)) return;                 // pas un nombre propre → on ne touche pas
+    if (intPart.length < 4) return;                     // < 1000 : rien à regrouper (taux, CO₂, petits €)
+    const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const sep = /,/.test(cleaned) ? ',' : (/\./.test(cleaned) ? ',' : '');
+    const out = grouped + (dec ? ',' + dec : '');
+    if (out !== el.value) el.value = out;
+  };
+  document.addEventListener('input', (e) => {
+    const m = detect(e.target); if (!m) return;
+    if (m === 'date') maskDate(e.target);
+    else if (m === 'int') maskInt(e.target);
+    else if (m === 'amount') maskAmountLive(e.target);
+  }, true);
+  document.addEventListener('focusout', (e) => { if (detect(e.target) === 'amount') groupAmount(e.target); }, true);
+};
+
 // Sous-onglets de l'onglet privé « JIS » (tous des pages autonomes → nouvel onglet).
 FP.JIS_PAGES = [
   { file: 'prospects.html',    label: 'Prospects (pipeline)',  icon: 'user-plus' },
@@ -3357,6 +3497,7 @@ FP.enableNavReorder = () => {
       dragKey = null;
       FP.applyNavOrder();
       FP.applyNavGroups();
+      FP.applyNavSubmenus();
     });
     nav.addEventListener('dragend', () => { clear(); dragKey = null; });
   });
@@ -9492,10 +9633,13 @@ document.addEventListener('DOMContentLoaded', () => {
   FP.applyNavOrder();
   FP.applyNavVisibility();
   FP.applyNavGroups(); // intitulés de section (Espace de travail / Compte)
+  FP.applyNavSubmenus(); // sous-menus dépliants (Contrôle, Contrats, Factures, Suivi & alertes)
   FP.buildJisMenu();   // onglet privé « JIS » (propriétaire uniquement)
   if (_isAdmin) FP.enableNavReorder(); // glisser-déposer des onglets (admin only)
   // Appliquer les textes éditables custom (titres, sous-titres)
   FP.applyCustomTexts();
+  // Saisie simplifiée partout : masques date/montant/entier (délégation → couvre aussi le dynamique)
+  FP.initInputMasks();
   // Injecter la barre de recherche globale dans toutes les sidebars
   FP.injectGlobalSearch();
   // Bouton bascule Clair/Sombre juste sous le logo
