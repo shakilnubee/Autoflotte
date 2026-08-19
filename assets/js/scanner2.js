@@ -7,6 +7,12 @@
    ============================================================ */
 (function () {
   const FP2 = {};
+  // ⚠️ `data` = le magasin de données LIVE de l'app (mêmes tableaux que window.FP_DATA, mutés en place
+  // par supabase-client). Contrairement aux pages de l'app, pages/scanner.html ne définit PAS de global
+  // `data` → les références `data.factures`/`data.amendes` de l'enregistrement lançaient « data is not
+  // defined » et bloquaient la validation d'une facture/amende. On l'alias donc sur FP_DATA (repli vide).
+  const data = (typeof window !== 'undefined' && window.FP_DATA) ? window.FP_DATA : { vehicules: [], amendes: [], factures: [], conducteurs: [] };
+  try { if (typeof window !== 'undefined' && !window.data) window.data = data; } catch (e) {} // les gardes « window.data && … » passent aussi → cache mémoire synchronisé
   const J = a => a.join('\n');
   const esc = s => (window.FP && FP.esc) ? FP.esc(s) : String(s == null ? '' : s);
 
