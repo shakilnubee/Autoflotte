@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260819a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260819b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260819a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260819b">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -195,6 +195,7 @@
     <div id="ctrl-tabbar" class="ctrl-tabs" role="tablist" aria-label="Sections du contrôle" style="overflow-x:auto">
       <button type="button" id="tab-total" class="ctrl-tab"><i data-lucide="fuel"></i> Total Fleet <span class="sub">carburant &amp; péages</span></button>
       <button type="button" id="tab-ulys" class="ctrl-tab"><i data-lucide="route"></i> Ulys <span class="sub">péages</span></button>
+      <button type="button" id="tab-sanef" class="ctrl-tab"><i data-lucide="milestone"></i> Sanef <span class="sub">péages flux libre</span></button>
       <!-- Les sous-onglets des prestataires PERSO (créés dans « Cartes & badges ») s'insèrent ici, AVANT le séparateur. -->
       <span class="ctrl-tabsep" id="tab-sep" aria-hidden="true"></span>
       <button type="button" id="tab-controle" class="ctrl-tab"><i data-lucide="shield-alert"></i> Contrôle <span id="ctrl-count" class="cnt"></span></button>
@@ -207,6 +208,9 @@
     <div id="pane-total" class="hidden"></div>
     <!-- Ulys : rendu NATIF (module fleet-views.js) — plus d'iframe. Fallback iframe si le module manque. -->
     <div id="pane-ulys" class="hidden"></div>
+
+    <!-- Sanef (péages flux libre) : justificatifs par passage → import par lot (OCR) → regroupement mensuel. -->
+    <div id="pane-sanef" class="hidden"></div>
 
     <!-- Panneaux des prestataires PERSO (générés dynamiquement, 1 par prestataire créé) -->
     <div id="presta-panes"></div>
@@ -281,11 +285,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260819a"></script>
-<script src="../assets/js/supabase-client.js?v=20260819a"></script>
-<script src="../assets/js/data.js?v=20260819a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260819b"></script>
+<script src="../assets/js/supabase-client.js?v=20260819b"></script>
+<script src="../assets/js/data.js?v=20260819b"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260819a"></script>
+<script src="../assets/js/app.js?v=20260819b"></script>
 <!-- ⚡ fleet-views.js (~160 Ko : Total Fleet + Ulys) N'EST PLUS chargé ici en SYNCHRONE : l'onglet
      par défaut est « Contrôle » et n'en a pas besoin. Il est injecté à la demande (1re ouverture de
      Total/Ulys) via ensureFleetViews(), et préchargé en douceur sur temps mort → l'arrivée sur
@@ -306,7 +310,7 @@
   // ===== Sous-onglets (dynamiques : Total, Ulys, prestataires PERSO, Contrôle, Cartes) =====
   let _tab = 'controle';
   const customPres = () => (FP.prestataires ? FP.prestataires() : []).filter(p => !p.builtin);
-  const tabNames = () => ['total', 'ulys'].concat(customPres().map(p => p.id)).concat(['controle', 'cartes']);
+  const tabNames = () => ['total', 'ulys', 'sanef'].concat(customPres().map(p => p.id)).concat(['controle', 'cartes']);
   // Chargement À LA DEMANDE du module Total Fleet / Ulys (fleet-views.js, ~160 Ko). Idempotent :
   // ne l'injecte qu'une fois ; renvoie une promesse résolue quand FP.mountTotal est prêt (ou en échec).
   let _flPromise = null;
@@ -316,7 +320,7 @@
     _flPromise = new Promise(res => {
       try {
         const s = document.createElement('script');
-        s.src = '../assets/js/fleet-views.js?v=20260819a';
+        s.src = '../assets/js/fleet-views.js?v=20260819b';
         s.onload = () => res(!!(window.FP && FP.mountTotal));
         s.onerror = () => res(false);
         document.head.appendChild(s);
@@ -356,6 +360,7 @@
     // l'affichage de la coquille pour ne pas bloquer le clic.
     if (name === 'total') mountFleetPane('total', 'pane-total', 'if-total', 'Total Fleet', 'mountTotal', 'renderTotalFleet', 'factures.html?embed&tab=total');
     if (name === 'ulys')  mountFleetPane('ulys',  'pane-ulys',  'if-ulys',  'Ulys',        'mountUlys',  'renderUlys',      'factures.html?embed&tab=ulys');
+    if (name === 'sanef') renderSanef();
     if (name === 'cartes') renderCartes();
     if (/^p_/.test(name)) renderPresta(name);
     if (window.lucide) lucide.createIcons();
@@ -402,8 +407,182 @@
         + '</tbody></table></div>';
     if (window.lucide) lucide.createIcons();
   }
+  // ===================== SANEF (péages flux libre) — import par passage + regroupement =====================
+  // Chaque justificatif de passage → 1 facture (type 'peage', fournisseur 'Sanef', source 'sanef') qui
+  // COMPTE dans le TCO. La vue regroupe par MOIS (sous-totaux). Import IA (FP.scanIA), période + export.
+  const _snNum = (n) => { const v = parseFloat(String(n == null ? '' : n).replace(/\s/g, '').replace(',', '.')); return isNaN(v) ? null : v; };
+  const _snISO = (v) => { const s = String(v || '').trim(); if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
+  const _snMoisLabel = (m) => { const p = String(m || '').split('-'); const N = ['', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']; return p[1] ? `${N[+p[1]]} ${p[0]}` : String(m || ''); };
+  const _snList = () => ((window.FP_DATA && window.FP_DATA.factures) || []).filter(f => (String(f.fournisseur || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') === 'sanef') || f.source === 'sanef');
+  let _snSearch = '';
+  // Période choisie : intervalle Du→Au s'il est renseigné (prime), sinon mois, sinon tout. {src,label}.
+  function _snPeriod(){
+    const from = ($('sanef-from') && $('sanef-from').value) || '', to = ($('sanef-to') && $('sanef-to').value) || '';
+    const dateMode = !!(from || to);
+    const sel = $('sanef-mois'); if (sel) sel.disabled = dateMode;
+    const clr = $('sanef-clear'); if (clr) clr.classList.toggle('hidden', !dateMode && (!sel || sel.value === 'all'));
+    let base = _snList(), label = 'Toutes les périodes';
+    if (dateMode) { base = base.filter(f => (!from || (f.date || '') >= from) && (!to || (f.date || '') <= to)); label = (from ? dfr(from) : '…') + ' → ' + (to ? dfr(to) : '…'); }
+    else { const m = sel ? sel.value : 'all'; if (m && m !== 'all') { base = base.filter(f => String(f.date || '').slice(0, 7) === m); label = _snMoisLabel(m); } }
+    return { src: base, label };
+  }
+  function _snRows(){
+    const q = String(_snSearch || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return _snPeriod().src.filter(f => {
+      if (!q) return true;
+      const s = (String(f.vehiculeImmat || '') + ' ' + String(f.description || '')).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      return s.includes(q);
+    }).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  }
+  function _snRender(){
+    const pane = $('pane-sanef'); if (!pane) return;
+    // Coquille + câblage (une seule fois).
+    if (!pane.dataset.built) {
+      pane.dataset.built = '1';
+      pane.innerHTML =
+        '<div class="card p-4 mb-4">'
+        + '<div class="flex items-start gap-2 flex-wrap">'
+        + '<div class="flex-1" style="min-width:220px"><div class="font-extrabold" style="color:var(--fp-primary)">Sanef — péages flux libre</div>'
+        + '<div class="text-sm text-slate-500 mt-0.5">Importe tes <b>justificatifs de passage</b> (photo/PDF, plusieurs d\'un coup). Chaque passage est lu par l\'IA, rattaché au véhicule et <b>compté dans le coût</b>. La vue regroupe par mois.</div></div>'
+        + '<button id="sanef-import-btn" type="button" class="btn btn-dark text-sm"><i data-lucide="scan-line" class="w-4 h-4"></i> Importer des passages</button>'
+        + '<input type="file" id="sanef-import-file" accept="image/*,application/pdf" multiple class="hidden">'
+        + '</div><div id="sanef-import-status" class="hidden text-sm mt-3" style="padding:10px 12px;border-radius:10px"></div></div>'
+        + '<div class="card overflow-hidden">'
+        + '<div class="flex flex-wrap items-center gap-2 p-3 border-b border-slate-100">'
+        + '<input id="sanef-search" type="text" placeholder="Rechercher (plaque, section…)" class="text-sm border border-slate-200 rounded-lg px-3 py-2" style="flex:1;min-width:180px">'
+        + '<select id="sanef-mois" class="text-sm border border-slate-200 rounded-lg px-2 py-2"><option value="all">Tous les mois</option></select>'
+        + '<label class="text-xs text-slate-500 flex items-center gap-1">Du <input id="sanef-from" type="date" class="text-sm border border-slate-200 rounded-lg px-2 py-1.5"></label>'
+        + '<label class="text-xs text-slate-500 flex items-center gap-1">Au <input id="sanef-to" type="date" class="text-sm border border-slate-200 rounded-lg px-2 py-1.5"></label>'
+        + '<button id="sanef-clear" type="button" class="text-xs text-slate-400 hover:text-slate-700 px-1 hidden" title="Effacer la période">✕</button>'
+        + '<span id="sanef-total" class="text-sm text-slate-500" style="margin-left:auto"></span>'
+        + '<button id="sanef-pdf" type="button" class="btn btn-outline text-xs"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> PDF</button>'
+        + '<button id="sanef-csv" type="button" class="btn btn-outline text-xs"><i data-lucide="table" class="w-3.5 h-3.5"></i> CSV</button>'
+        + '</div>'
+        + '<div style="overflow-x:auto"><table class="ctrl-tbl" style="width:100%"><thead><tr><th>Date</th><th>Véhicule</th><th>Section / trajet</th><th style="text-align:right">Montant TTC</th><th>Justif.</th><th></th></tr></thead><tbody id="sanef-tbody"></tbody></table></div>'
+        + '<div id="sanef-empty" class="hidden p-8 text-center text-slate-400 text-sm">Aucun passage Sanef. Clique « Importer des passages ».</div>'
+        + '</div>';
+      // Câblage
+      $('sanef-import-btn').addEventListener('click', () => $('sanef-import-file').click());
+      $('sanef-import-file').addEventListener('change', (e) => { const fs = Array.from(e.target.files || []); e.target.value = ''; if (fs.length) _snImport(fs); });
+      $('sanef-search').addEventListener('input', (e) => { _snSearch = e.target.value; _snRenderTable(); });
+      ['sanef-mois', 'sanef-from', 'sanef-to'].forEach(id => { const el = $(id); if (el) el.addEventListener('change', _snRenderTable); });
+      $('sanef-clear').addEventListener('click', () => { $('sanef-from').value = ''; $('sanef-to').value = ''; $('sanef-mois').value = 'all'; _snRenderTable(); });
+      $('sanef-csv').addEventListener('click', () => _snExport('csv'));
+      $('sanef-pdf').addEventListener('click', () => _snExport('pdf'));
+      $('sanef-tbody').addEventListener('click', async (e) => {
+        const del = e.target.closest('[data-sn-del]'); if (!del) return;
+        const f = _snList().find(x => String(x.id) === String(del.getAttribute('data-sn-del'))); if (!f) return;
+        if (!confirm('Supprimer ce passage Sanef ?')) return;
+        if (FP.history && FP.history.commit) FP.history.commit();
+        const arr = window.FP_DATA.factures, idx = arr.indexOf(f); if (idx >= 0) arr.splice(idx, 1);
+        try { if (FP.persist && FP.persist.delete) FP.persist.delete('factures', f.id, f); } catch (err) {}
+        _snRenderTable(); if (FP.toast) FP.toast('✓ Supprimé');
+      });
+    }
+    _snRenderTable();
+  }
+  // Remplit le menu mois + le tableau (regroupé par mois avec sous-totaux) + total période.
+  function _snRenderTable(){
+    const sel = $('sanef-mois');
+    if (sel) { const cur = sel.value; const mois = [...new Set(_snList().map(f => String(f.date || '').slice(0, 7)).filter(Boolean))].sort().reverse(); sel.innerHTML = '<option value="all">Tous les mois</option>' + mois.map(m => `<option value="${m}">${_snMoisLabel(m)}</option>`).join(''); if (cur && (cur === 'all' || mois.includes(cur))) sel.value = cur; }
+    const rows = _snRows();
+    const tb = $('sanef-tbody'); if (!tb) return;
+    const empty = $('sanef-empty'); if (empty) empty.classList.toggle('hidden', rows.length > 0);
+    const ttcOf = f => Number(f.montantTTC != null ? f.montantTTC : (f.montant_ttc || 0)) || 0;
+    const tot = rows.reduce((s, f) => s + ttcOf(f), 0);
+    if ($('sanef-total')) $('sanef-total').textContent = rows.length ? `${rows.length} passage(s) · ${euro(tot)}` : '';
+    // Regroupement mensuel : ligne de sous-total au changement de mois.
+    let html = '', curMois = null, moisSum = 0, moisCount = 0;
+    const flush = () => { if (curMois != null) html += `<tr style="background:#F8FAFC"><td colspan="3" style="font-weight:700;color:var(--fp-primary)">${_snMoisLabel(curMois)} — ${moisCount} passage(s)</td><td style="text-align:right;font-weight:800;color:var(--fp-primary)">${euro(moisSum)}</td><td colspan="2"></td></tr>`; };
+    rows.forEach(f => {
+      const m = String(f.date || '').slice(0, 7);
+      if (m !== curMois) { flush(); curMois = m; moisSum = 0; moisCount = 0; }
+      moisSum += ttcOf(f); moisCount++;
+      const url = f.fileId || f.url || '';
+      const voir = (url && /^https?:/.test(url)) ? `<a href="${esc(url)}" target="_blank" rel="noopener" title="Justificatif"><i data-lucide="paperclip" class="w-4 h-4" style="display:inline"></i></a>` : '<span class="text-slate-300">—</span>';
+      html += `<tr><td style="white-space:nowrap">${f.date ? dfr(f.date) : '—'}</td><td class="font-mono">${f.vehiculeImmat ? FP.lienVehicule(f.vehiculeImmat) : '<span class="text-slate-400">—</span>'}</td><td>${esc((f.description || '').replace(/^Péage Sanef\s*—?\s*/i, '') || '—')}</td><td style="text-align:right;font-weight:600">${euro(ttcOf(f))}</td><td>${voir}</td><td style="text-align:right"><button class="btn btn-outline" style="padding:2px 8px;font-size:12px;color:#b91c1c" data-sn-del="${esc(f.id)}" title="Supprimer">✕</button></td></tr>`;
+    });
+    flush();
+    tb.innerHTML = html;
+    if (window.lucide) lucide.createIcons();
+  }
+  const SANEF_PROMPT = [
+    "Tu lis un JUSTIFICATIF de passage au PÉAGE d'autoroute (souvent flux libre, type Sanef/Bip&Go).",
+    "Renvoie UNIQUEMENT un objet JSON valide (aucun texte autour), avec ces clés (null si absent) :",
+    "date : la date du passage au format AAAA-MM-JJ.",
+    "montantTTC : le montant TOTAL payé TTC, nombre à point décimal (ex 12.40). JAMAIS un numéro de transaction/contrat.",
+    "montantHT : le HT si présent, sinon null. montantTVA : la TVA en euros si présente, sinon null.",
+    "plaque : l'immatriculation du véhicule (format français) si elle figure, sinon null.",
+    "gare : le libellé de la section / trajet / portique / entrée-sortie si présent, sinon null.",
+    "Ne confonds jamais le montant avec un numéro de transaction, de badge, de contrat ou une heure."
+  ].join("\n");
+  async function _snImport(files){
+    const box = $('sanef-import-status');
+    const show = (h, c) => { if (box) { box.classList.remove('hidden'); box.style.background = c || '#F0F9FF'; box.innerHTML = h; } };
+    if (!FP.scanIA) { show('⚠️ Lecture IA indisponible (connexion requise).', '#FEF2F2'); return; }
+    // Anti-doublon Sanef = signature COMPLÈTE (date + montant + section + plaque). Un vrai passage
+    // identique existe (même tronçon, même prix) → on NE bloque PAS sur (montant+date) seuls ; seule
+    // la ré-importation d'un justificatif strictement identique est ignorée.
+    const _sig = f => [String(f.date || ''), Math.round((Number(f.montantTTC) || 0) * 100), String(f.description || ''), String(f.vehiculeImmat || '')].join('|');
+    const _seen = new Set(_snList().map(_sig));
+    let ok = 0, dup = 0, fail = 0;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      show(`Lecture ${i + 1}/${files.length} — <b>${esc(file.name)}</b>…`, '#F0F9FF');
+      let fields = null;
+      try { fields = await FP.scanIA(file, 'facture', SANEF_PROMPT, { maxTokens: 1024 }); } catch (e) { console.error('[sanef scan]', e); }
+      if (!fields) { fail++; continue; }
+      const iso = _snISO(fields.date || ''), ttc = _snNum(fields.montantTTC);
+      if (!iso || !ttc || ttc <= 0) { fail++; continue; }
+      let fileId = null, fileName = null;
+      try { if (FP.uploadScan) { const u = await FP.uploadScan(file, 'factures'); if (u) { fileId = u; fileName = file.name; } } } catch (e) {}
+      const plaque = fields.plaque ? String(fields.plaque).toUpperCase().replace(/\s/g, '') : null;
+      const id = 'SANEF-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      let ht = _snNum(fields.montantHT), tva = _snNum(fields.montantTVA);
+      if (ht != null && tva != null && Math.abs((ht + tva) - ttc) > 0.02) { ht = null; tva = null; }
+      const rec = {
+        id, date: iso, vehiculeImmat: plaque || null,
+        fournisseur: 'Sanef', numeroFacture: id,
+        description: 'Péage Sanef' + (fields.gare ? ' — ' + String(fields.gare).slice(0, 60) : ''),
+        type: 'peage', source: 'sanef', categorie: 'peage', conducteur: null,
+        montantHT: ht, montantTVA: tva, montantTTC: ttc, km: null, fileId, fileName,
+      };
+      if (_seen.has(_sig(rec))) { dup++; continue; } _seen.add(_sig(rec));
+      window.FP_DATA.factures.push(rec);
+      try { if (FP.persistFacture) await FP.persistFacture(rec); else if (FP.persist) FP.persist.insert('factures', rec); } catch (e) { console.error('[sanef save]', e); }
+      ok++;
+    }
+    _snRenderTable();
+    show(`✓ Import terminé : <b>${ok}</b> passage(s)` + (dup ? ` · ${dup} doublon(s) ignoré(s)` : '') + (fail ? ` · <span style="color:#b91c1c">${fail} illisible(s)</span>` : '') + '.', '#F0FDF4');
+    if (FP.toast) FP.toast(`✓ ${ok} passage(s) Sanef importé(s)`);
+  }
+  function _snExport(kind){
+    const rows = _snRows(); if (!rows.length) { if (FP.toast) FP.toast('Aucun passage sur la période.'); return; }
+    const per = _snPeriod().label;
+    const ttcOf = f => Number(f.montantTTC != null ? f.montantTTC : (f.montant_ttc || 0)) || 0;
+    const data = rows.map(f => ({ date: f.date ? dfr(f.date) : '', veh: f.vehiculeImmat || '', sec: (f.description || '').replace(/^Péage Sanef\s*—?\s*/i, ''), ttc: ttcOf(f) }));
+    const tot = data.reduce((s, r) => s + r.ttc, 0);
+    if (kind === 'csv') {
+      const e2 = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+      const lines = [['Date', 'Véhicule', 'Section', 'Montant TTC (€)'].map(e2).join(';')].concat(data.map(r => [r.date, r.veh, r.sec, String(r.ttc).replace('.', ',')].map(e2).join(';')));
+      lines.push(['', '', 'TOTAL', String(tot.toFixed(2)).replace('.', ',')].map(e2).join(';'));
+      const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'sanef-' + per.replace(/[^\w]+/g, '-') + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+      return;
+    }
+    if (!(window.jspdf && window.jspdf.jsPDF)) { if (FP.ensureJsPDF) FP.ensureJsPDF().then(() => _snExport('pdf')); return; }
+    const doc = new window.jspdf.jsPDF(); const W = doc.internal.pageSize.getWidth();
+    doc.setFillColor(15, 30, 61); doc.rect(0, 0, W, 24, 'F'); doc.setFillColor(249, 115, 22); doc.rect(0, 24, W, 1.6, 'F');
+    doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text('Parc Pilot — Péages Sanef', 14, 11);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text('Période : ' + per, 14, 18);
+    doc.autoTable({ startY: 31, head: [['Date', 'Véhicule', 'Section / trajet', 'Montant TTC']], body: data.map(r => [r.date, r.veh, r.sec, euro(r.ttc)]), foot: [['', '', 'TOTAL', euro(tot)]], styles: { fontSize: 8, cellPadding: 2.5 }, headStyles: { fillColor: [15, 30, 61], textColor: 255 }, footStyles: { fillColor: [237, 240, 245], textColor: [15, 30, 61], fontStyle: 'bold' }, alternateRowStyles: { fillColor: [248, 250, 252] }, columnStyles: { 3: { halign: 'right' } }, margin: { left: 14, right: 14 } });
+    doc.save('sanef-' + per.replace(/[^\w]+/g, '-') + '.pdf');
+  }
+  function renderSanef(){ _snRender(); }
+
   $('tab-total').addEventListener('click', () => switchTab('total'));
   $('tab-ulys').addEventListener('click', () => switchTab('ulys'));
+  $('tab-sanef').addEventListener('click', () => switchTab('sanef'));
   $('tab-controle').addEventListener('click', () => switchTab('controle'));
   $('tab-cartes').addEventListener('click', () => switchTab('cartes'));
   renderPrestaTabs();
