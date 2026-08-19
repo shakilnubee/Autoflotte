@@ -323,6 +323,9 @@
         && ((rec.montantTTC != null && f.montantTTC != null && Math.abs((+f.montantTTC) - (+rec.montantTTC)) <= 0.02) || String(f.description || '') === String(rec.description || '')));
       if (_dupSin && FP.confirm && !(await FP.confirm('Un sinistre identique semble déjà exister (même véhicule, même date). L\'ajouter quand même ?'))) return { table: 'factures', id: null, annule: true };
       await FP.persist.insert('factures', rec); try { if (window.data && Array.isArray(data.factures)) data.factures.push(rec); } catch (e) {}
+      // Statut de remboursement par défaut = « en attente » (comme l'import sinistre de la page Sinistres)
+      // → l'incident est compté dans le suivi « en attente de remboursement » dès sa création.
+      try { const s = FP.settings.get(); s.sinistreStatut = (s.sinistreStatut && typeof s.sinistreStatut === 'object') ? s.sinistreStatut : {}; if (!s.sinistreStatut[rec.id]) { s.sinistreStatut[rec.id] = 'attente'; FP.settings.save(s); } } catch (e) {}
       target = { table: 'factures', id: rec.id };
     }
     else if (cible === 'amendes') {
@@ -339,9 +342,13 @@
       // Conducteur : déduit via la plaque → chauffeur du véhicule (comme la page Amendes).
       let prenom = '';
       try { const veh = (data.vehicules || []).find(v => (FP.normImmat ? FP.normImmat(v.immat) : String(v.immat || '').toUpperCase()) === immat); if (veh && veh.chauffeur) prenom = veh.chauffeur; } catch (e) {}
+      // Points retirés : lus par l'IA sur l'avis (FPS = 0, ne retire jamais de point). Sans ça, une
+      // amende scannée n'alimentait PAS le compteur de points (KPI, colonne, podium conducteur, total flotte).
+      const pts = (t === 'forfait_post_stationnement') ? 0 : intv(g('points'));
       const rec = { id: uid('A'), societe: societe(), numeroAvis: g('numeroAvis') || g('numeroFps') || '',
         numeroTelepaiement: g('numeroTelepaiement') || '', prenom, date: dateAm, annee: (dateAm || '').slice(0, 4),
         motif: g('motif') || (t === 'forfait_post_stationnement' ? 'Stationnement (FPS)' : ''),
+        points: pts, retraitPoints: (Number(pts) || 0) > 0,
         montant, statut: 'à payer', avisUrl: model._fileUrl || null };  // avis scanné rattaché → bouton « Voir » sur la fiche amende
       // Anti-doublon central (règle plateforme) : n° d'avis + montant, sinon prénom+date+montant.
       if (FP.dupe && FP.dupe.confirmAdd && !(await FP.dupe.confirmAdd('amendes', rec, data.amendes || []))) return { table: 'amendes', id: null, annule: true };
