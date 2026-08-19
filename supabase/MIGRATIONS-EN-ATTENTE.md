@@ -56,11 +56,35 @@ conducteurs. Lancer la phase 1 ne coûte rien mais ne sert que si on fait la pha
 
 ---
 
+---
+
+## 3) `factures-notes-de-frais-columns.sql` — Notes de frais + import Sanef ⭐ RECOMMANDÉ
+
+**À quoi ça sert.** Les nouvelles fonctions **« Notes de frais »** (onglet Factures) et
+**import Sanef** (Contrôle → Sanef) rangent chaque dépense comme une facture, avec 3
+infos en plus : **d'où elle vient** (`source` = note-frais / sanef), **sa catégorie**
+(`categorie` = carburant / péage / lavage / parking / repas / autre) et **qui l'a payée**
+(`conducteur`). Ce script ajoute ces 3 **colonnes** à la table `factures`.
+
+**Sans danger.** 100 % additif (colonnes nullables + un index), ne supprime/ne renomme
+**rien**. Contient son ROLLBACK.
+
+**Faut-il vraiment le lancer ?** **Oui, recommandé.** L'appli est **tolérante** : même
+sans ce script, une note de frais est enregistrée et **compte dans le TCO** (le
+discriminateur vit dans la colonne `type` qui existe déjà). MAIS **la catégorie et le
+conducteur ne seront pas mémorisés** tant que les colonnes n'existent pas (ils
+réapparaîtront « Autre » / vides au rechargement). Après le script : **tout est stocké
+et synchronisé** sur tous tes appareils. → **À lancer une fois avant d'utiliser
+sérieusement les notes de frais / Sanef.**
+
+---
+
 ### En résumé
 | Script | Danger | Effet immédiat | Vraie valeur | Priorité |
 |--------|--------|----------------|--------------|----------|
 | `app_settings-concurrence.sql` | Aucun (additif) | Aucun (socle) | Après phase 2 code | Moyenne (si multi-admin) |
 | `conducteurs-id-stable.sql` | Aucun (additif) | Aucun (socle) | Après phase 2 code | Faible |
+| `factures-notes-de-frais-columns.sql` | Aucun (additif) | **Oui** (métadonnées notes de frais/Sanef) | Dès le lancement | **Recommandée** |
 
 Dis-moi si tu veux qu'on enchaîne une **phase 2** (je la ferai par petites étapes,
 testables, sans casser l'existant).

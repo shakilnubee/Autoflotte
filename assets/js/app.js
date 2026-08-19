@@ -440,6 +440,32 @@ FP.anneeAmende = (a) => { if (!a) return ''; const y = a.annee; if (y != null &&
 // pas une charge d'exploitation). À utiliser PARTOUT (dashboard, écran mural, rapport direction)
 // pour que « Coût du mois » affiche le même chiffre. `exclureType` réutilisable seul.
 FP.coutFactureExploit = (f) => { const t = String((f && f.type) || '').toLowerCase(); return t !== 'leasing' && t !== 'sinistre' && t !== 'achat' && t !== 'cession'; };
+// ⚠️ INSERTION FACTURE TOLÉRANTE aux colonnes optionnelles (source/categorie/conducteur) — celles-ci
+// n'existent qu'après la migration `supabase/factures-notes-de-frais-columns.sql`. Si la base refuse
+// une colonne inconnue (schema cache / column does not exist), on RÉESSAIE sans ces colonnes → la
+// facture est TOUJOURS enregistrée (elle compte dans le TCO ; le discriminateur vit dans `type` /
+// `fournisseur` qui existent toujours). Les métadonnées se rempliront une fois la migration passée.
+// À utiliser pour tout ajout de facture porteuse de source/categorie/conducteur (notes de frais, Sanef).
+FP.FACTURE_OPT_COLS = ['source', 'categorie', 'conducteur'];
+FP.persistFacture = async (rec) => {
+  if (!(FP.db && FP.db.insert && FP.supabase)) { try { FP.persist.insert('factures', rec); } catch (e) {} return; }
+  try {
+    const r = await FP.db.insert('factures', rec);
+    if (r && r.error) throw r.error;
+    if (FP.refreshDataCache) FP.refreshDataCache();
+  } catch (e) {
+    const msg = String((e && (e.message || e.details || e.code)) || '').toLowerCase();
+    const hasOpt = FP.FACTURE_OPT_COLS.some(k => rec[k] != null);
+    if (hasOpt && /(column|schema cache|could not find|does not exist|pgrst)/.test(msg)) {
+      const core = Object.assign({}, rec); FP.FACTURE_OPT_COLS.forEach(k => delete core[k]);
+      try { const r2 = await FP.db.insert('factures', core); if (r2 && r2.error) throw r2.error; if (FP.refreshDataCache) FP.refreshDataCache(); }
+      catch (e2) { try { FP.persist.insert('factures', core); } catch (_) {} }
+      if (!FP._factureOptWarned) { FP._factureOptWarned = true; console.warn('[factures] colonnes source/categorie/conducteur absentes — exécuter supabase/factures-notes-de-frais-columns.sql pour tout enregistrer (métadonnées + multi-appareils).'); }
+    } else {
+      try { FP.persist.insert('factures', rec); } catch (_) {} // erreur réseau → file d'attente (réessai auto)
+    }
+  }
+};
 // Détection carburant / péages — UNE seule règle partagée (dashboard, factures, statistiques) :
 // par TYPE (carburant/peage/ulys) OU par FOURNISSEUR (Ulys, TotalEnergies). Avant, un carburant
 // sans type mais avec le bon fournisseur était compté à un endroit et pas à l'autre.
