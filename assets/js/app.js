@@ -483,6 +483,143 @@ FP.ensureXLSX = () => {
 };
 
 // ============================================================================================
+// QR VÉHICULE — module PARTAGÉ (source UNIQUE). Génère EXACTEMENT la même carte QR que la fiche
+// véhicule (buildCanvas + card), et permet d'exporter TOUS les QR en un PDF. Utilisé par
+// vehicules.html (QR d'un véhicule) ET conducteurs.html (« Télécharger tous les QR »). Une seule
+// source → PNG / impression / PDF groupé pixel-cohérents.
+// ============================================================================================
+FP.qr = {
+  MENU_BASE: 'https://parc-pilot.fr/v.html?h=',
+  _libP: null,
+  ensureLib() {
+    if (window.qrcode) return Promise.resolve(true);
+    if (this._libP) return this._libP;
+    this._libP = new Promise((res) => {
+      const pfx = /\/pages\//.test(location.pathname) ? '../' : '';
+      const s = document.createElement('script'); s.src = pfx + 'assets/js/vendor/qrcode.js';
+      s.onload = () => res(!!window.qrcode); s.onerror = () => { this._libP = null; res(false); };
+      document.head.appendChild(s);
+    });
+    return this._libP;
+  },
+  // QR brut (carré noir & blanc). `qrcode` doit être chargé (ensureLib).
+  buildCanvas(url, scale, margin) {
+    const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
+    const n = qr.getModuleCount(), s = scale || 10, m = (margin == null ? 4 : margin);
+    const size = (n + m * 2) * s;
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size, size); ctx.fillStyle = '#000';
+    for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (qr.isDark(r, col)) ctx.fillRect((col + m) * s, (r + m) * s, s, s);
+    return c;
+  },
+  _roundRect(ctx, x, y, w, h, r) {
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); return; }
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  },
+  _wrap(ctx, text, maxW) {
+    const words = String(text || '').split(' '); const lines = []; let line = '';
+    for (let i = 0; i < words.length; i++) { const t = line ? line + ' ' + words[i] : words[i]; if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = words[i]; } else line = t; }
+    if (line) lines.push(line); return lines;
+  },
+  // Carte QR de marque (logo société + plaque + modèle + QR + astuce). `qrData` = {immat,label,url,hint}.
+  // Appelle cb(canvas). MÊME rendu que la fiche véhicule (copie fidèle de renderQrCard).
+  card(qrData, cb) {
+    if (!qrData || !qrData.url) { cb(null); return; }
+    let logo = ''; try { const _p = FP.settings.get().profil || {}; logo = _p.logoDataUrl || _p.logoUrl || ''; } catch (e) {}
+    const titre = (qrData.immat || '');
+    const modele = (qrData.label || '').replace(qrData.immat || '', '').replace(/^[\s·•-]+/, '').trim();
+    const hint = qrData.hint || 'Scannez pour ouvrir la fiche du véhicule';
+    const qrc = this.buildCanvas(qrData.url, 12, 4);
+    const draw = (logoImg) => {
+      const R = 2;
+      const padX = 56 * R, padTop = 46 * R, padBottom = 42 * R, gap = 16 * R;
+      const socSize = 30 * R, modSize = 24 * R, hintSize = 21 * R;
+      const qrSize = 480 * R;
+      const tmp = document.createElement('canvas').getContext('2d');
+      tmp.font = '800 ' + socSize + 'px Inter,Arial,sans-serif';
+      const titleW = tmp.measureText(titre || '').width;
+      const W = Math.max(qrSize + padX * 2, Math.ceil(titleW) + padX * 2);
+      let logoH = 0, logoW = 0;
+      if (logoImg && logoImg.naturalWidth) {
+        const maxH = 200 * R, maxW = Math.min(420 * R, W - padX * 2);
+        const sc = Math.min(maxH / logoImg.naturalHeight, maxW / logoImg.naturalWidth);
+        logoH = logoImg.naturalHeight * sc; logoW = logoImg.naturalWidth * sc;
+      }
+      tmp.font = '500 ' + hintSize + 'px Inter,Arial,sans-serif';
+      const hintLines = this._wrap(tmp, hint, W - padX * 2);
+      let H = padTop;
+      if (logoH) H += logoH + Math.round(gap * 2.3);
+      H += socSize + Math.round(modele ? gap * 0.55 : gap * 1.6);
+      if (modele) H += modSize + Math.round(gap * 0.6);
+      H += qrSize + Math.round(gap * 1.3);
+      H += hintLines.length * Math.round(hintSize * 1.3) + padBottom;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = '#0f1e3d'; ctx.lineWidth = 3 * R;
+      this._roundRect(ctx, 6 * R, 6 * R, W - 12 * R, H - 12 * R, 18 * R); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      let cy = padTop;
+      if (logoH) { ctx.drawImage(logoImg, (W - logoW) / 2, cy, logoW, logoH); cy += logoH + Math.round(gap * 2.3); }
+      ctx.fillStyle = '#0f1e3d'; ctx.font = '800 ' + socSize + 'px Inter,Arial,sans-serif';
+      ctx.fillText(titre, W / 2, cy); cy += socSize + Math.round(modele ? gap * 0.55 : gap * 1.6);
+      if (modele) { ctx.fillStyle = '#64748b'; ctx.font = '600 ' + modSize + 'px Inter,Arial,sans-serif'; ctx.fillText(modele, W / 2, cy); cy += modSize + Math.round(gap * 0.6); }
+      ctx.drawImage(qrc, (W - qrSize) / 2, cy, qrSize, qrSize); cy += qrSize + Math.round(gap * 1.3);
+      ctx.fillStyle = '#94a3b8'; ctx.font = '500 ' + hintSize + 'px Inter,Arial,sans-serif';
+      const lh = Math.round(hintSize * 1.3);
+      hintLines.forEach((ln, i) => ctx.fillText(ln, W / 2, cy + i * lh));
+      cb(c);
+    };
+    const _startDraw = (src) => { if (!src) { draw(null); return; } const im = new Image(); im.onload = () => draw(im); im.onerror = () => draw(null); im.src = src; };
+    if (logo && !/^data:/i.test(logo)) {
+      fetch(logo, { mode: 'cors' }).then(r => r.blob()).then(b => { const fr = new FileReader(); fr.onload = () => _startDraw(fr.result); fr.onerror = () => _startDraw(null); fr.readAsDataURL(b); }).catch(() => _startDraw(null));
+    } else { _startDraw(logo); }
+  },
+  // Récupère les données QR d'un véhicule (jeton permanent km_qr). Renvoie {immat,label,url,hint} ou null.
+  async dataFor(v) {
+    if (!(window.FP && FP.kmCollecte && FP.kmCollecte.ensureQr)) return null;
+    const r = await FP.kmCollecte.ensureQr(v);
+    if (!r || !r.ok) return null;
+    const token = (FP.kmCollecte._qrByVeh && FP.kmCollecte._qrByVeh[v.id]) || '';
+    if (!token) return null;
+    const immat = v.immat || '';
+    return { immat, label: `${immat} · ${v.marque || ''} ${v.modele || ''}`.trim(), url: this.MENU_BASE + encodeURIComponent(token), hint: 'Scannez : véhicule · km · documents · sinistre · état des lieux' };
+  },
+  // Exporte TOUS les QR (un par page A4) dans un seul PDF — MÊME carte que l'impression/PNG unitaire.
+  async downloadAllPdf(vehs, opts) {
+    opts = opts || {};
+    const okLib = await this.ensureLib();
+    if (!okLib) { alert('Librairie QR indisponible (connexion requise).'); return; }
+    if (!(window.jspdf && window.jspdf.jsPDF)) { if (FP.ensureJsPDF) { await FP.ensureJsPDF(); } }
+    if (!(window.jspdf && window.jspdf.jsPDF)) { alert('Générateur PDF indisponible.'); return; }
+    const list = (vehs || []).filter(v => v && v.immat && !(FP.estVendu && FP.estVendu(v)) && !(FP.horsFlotte && FP.horsFlotte(v)));
+    if (!list.length) { alert('Aucun véhicule à exporter.'); return; }
+    const busy = FP.busy ? FP.busy('Génération des QR… 0/' + list.length) : null;
+    const doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
+    const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight();
+    let added = 0, fail = 0;
+    for (let i = 0; i < list.length; i++) {
+      if (busy) busy.update('Génération des QR… ' + (i + 1) + '/' + list.length);
+      const v = list[i];
+      let d = null; try { d = await this.dataFor(v); } catch (e) {}
+      if (!d) { fail++; continue; }
+      const canvas = await new Promise(res => { try { this.card(d, res); } catch (e) { res(null); } });
+      const cnv = canvas || this.buildCanvas(d.url, 12, 4);
+      const img = cnv.toDataURL('image/png');
+      const ratio = cnv.height / cnv.width;
+      const mW = Math.min(120, pw - 30), mH = mW * ratio;   // carte centrée, largeur ≤ 120 mm
+      const finalH = Math.min(mH, ph - 30), finalW = finalH / ratio;
+      if (added > 0) doc.addPage();
+      doc.addImage(img, 'PNG', (pw - finalW) / 2, (ph - finalH) / 2, finalW, finalH);
+      added++;
+    }
+    if (!added) { if (busy) busy.fail('Aucun QR généré.'); else alert('Aucun QR généré.'); return; }
+    doc.save('qr-vehicules' + (opts.suffix ? '-' + opts.suffix : '') + '.pdf');
+    if (busy) busy.done('✓ ' + added + ' QR exporté(s)' + (fail ? ' · ' + fail + ' échec(s)' : ''));
+  }
+};
+
+// ============================================================================================
 // RELEVÉ KM — module PARTAGÉ (source unique). Rend le suivi complet des relevés km dans un
 // conteneur donné + câble ses interactions. Utilisé nativement par la page Contrôle (sous-onglet
 // « Relevé KM »). Zéro iframe, zéro cross-page. `opts.onChange` (optionnel) = rappel après une
