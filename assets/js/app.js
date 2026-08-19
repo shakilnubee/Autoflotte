@@ -3153,7 +3153,14 @@ FP.applyNavOrder = () => {
     const ordered = [];
     order.forEach(k => { if (byKey[k]) { ordered.push(byKey[k]); delete byKey[k]; } });
     links.forEach(a => { if (byKey[a.dataset.nav]) ordered.push(a); }); // onglets non listés à la fin
-    ordered.forEach(a => nav.appendChild(a)); // ré-insère dans le nouvel ordre
+    ordered.forEach(a => {
+      nav.appendChild(a); // ré-insère dans le nouvel ordre
+      // ⚠️ Emporte le sous-menu déplié (.fp-subnav) juste APRÈS son parent : sinon, comme on déplace
+      // les <a> à la fin par appendChild, la box restait à son ancienne position et « flottait » en
+      // haut de la sidebar (bug visuel signalé). On la recolle immédiatement sous son onglet.
+      const box = nav.querySelector('.fp-subnav[data-for="' + (a.dataset.nav || '').replace(/"/g, '') + '"]');
+      if (box) nav.appendChild(box);
+    });
   });
 };
 // Onglets toujours visibles (on ne peut pas masquer Paramètres, sinon plus moyen de revenir)
@@ -7873,15 +7880,8 @@ FP.applyCustomNavLabels = () => {
       span = document.createElement('span');
       span.className = 'nav-label';
       a.appendChild(span);
-      if (FP.canPersonnaliser()) { // renommage d'onglet (admin + gestionnaire)
-        const editBtn = document.createElement('button');
-        editBtn.type = 'button';
-        editBtn.className = 'nav-edit-btn';
-        editBtn.title = 'Renommer cet onglet';
-        editBtn.textContent = '✎';
-        editBtn.dataset.navEdit = navKey;
-        a.appendChild(editBtn);
-      }
+      // ⚠️ Renommage RETIRÉ de la sidebar (demande utilisateur) : le renommage des onglets se fait
+      // UNIQUEMENT dans Paramètres → « Onglets » (formulaire nav-labels-form). Plus de crayon ✎ ici.
     }
     span.textContent = label;
   });

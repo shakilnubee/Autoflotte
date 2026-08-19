@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260819b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260819c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260819b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260819c">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -413,13 +413,17 @@
           <div><div class="field-label">Montant TTC (€) *</div><input class="field-input" type="text" inputmode="decimal" data-mask="amount" id="nf-ttc" placeholder="0" /></div>
         </div>
         <div class="grid md:grid-cols-3 gap-3 mt-3">
-          <div><div class="field-label">Véhicule (plaque)</div><select class="field-input" id="nf-veh"></select></div>
-          <div><div class="field-label">Conducteur</div><input class="field-input" id="nf-cond" placeholder="Nom du collaborateur" autocomplete="off" /></div>
+          <div><div class="field-label">Montant HT (€)</div><input class="field-input" type="text" inputmode="decimal" data-mask="amount" id="nf-ht" placeholder="0" /></div>
+          <div><div class="field-label">TVA (€)</div><input class="field-input" type="text" inputmode="decimal" data-mask="amount" id="nf-tva" placeholder="0" /></div>
           <div><div class="field-label">Kilométrage (option.)</div><input class="field-input" type="text" inputmode="numeric" data-mask="int" id="nf-km" placeholder="" /></div>
         </div>
         <div class="grid md:grid-cols-3 gap-3 mt-3">
-          <div class="md:col-span-2"><div class="field-label">Libellé / commerçant (option.)</div><input class="field-input" id="nf-desc" placeholder="ex. Station Total A6, Parking Gare…" /></div>
-          <div><div class="field-label">Justificatif (photo/PDF)</div><input class="field-input" type="file" id="nf-file" accept="image/*,application/pdf" style="padding:7px" /></div>
+          <div><div class="field-label">Véhicule (plaque)</div><select class="field-input" id="nf-veh"></select></div>
+          <div><div class="field-label">Conducteur</div><input class="field-input" id="nf-cond" placeholder="Nom du collaborateur" autocomplete="off" /></div>
+          <div><div class="field-label">Libellé / commerçant (option.)</div><input class="field-input" id="nf-desc" placeholder="ex. Station Total A6…" /></div>
+        </div>
+        <div class="grid md:grid-cols-3 gap-3 mt-3">
+          <div class="md:col-span-3"><div class="field-label">Justificatif (photo/PDF) — <span style="color:var(--fp-accent);font-weight:700">lu par l'IA</span></div><input class="field-input" type="file" id="nf-file" accept="image/*,application/pdf" style="padding:7px" /><div id="nf-file-status" class="hidden text-xs mt-1"></div></div>
         </div>
         <div class="flex items-center gap-3 mt-4">
           <button id="nf-save" type="button" class="btn btn-dark text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Enregistrer la note de frais</button>
@@ -570,12 +574,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260819b"></script>
-<script src="../assets/js/supabase-client.js?v=20260819b"></script>
-<script src="../assets/js/data.js?v=20260819b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260819c"></script>
+<script src="../assets/js/supabase-client.js?v=20260819c"></script>
+<script src="../assets/js/data.js?v=20260819c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260819b"></script>
-<script src="../assets/js/fleet-views.js?v=20260819b"></script>
+<script src="../assets/js/app.js?v=20260819c"></script>
+<script src="../assets/js/fleet-views.js?v=20260819c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2279,6 +2283,27 @@
     fillVehSelect();
     document.addEventListener('fp:data-ready', () => { fillVehSelect(); if (window._facturesTab === 'notesfrais') render(); });
 
+    // OCR à l'ajout d'un justificatif dans le formulaire manuel : l'IA lit le reçu et PRÉREMPLIT
+    // les champs vides (date, HT, TVA, TTC, catégorie, commerçant, plaque). L'utilisateur vérifie.
+    if ($('nf-file')) $('nf-file').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0]; if (!file) return;
+      const st = $('nf-file-status');
+      const show = (t, c) => { if (st) { st.classList.remove('hidden'); st.textContent = t; st.style.color = c || '#0369a1'; } };
+      if (!FP.scanIA) return;
+      show('🔎 Lecture du justificatif par l\'IA…');
+      let fields = null;
+      try { fields = await FP.scanIA(file, 'facture', NF_SCAN_PROMPT, { maxTokens: 1024 }); } catch (err) { console.error('[nf ocr]', err); }
+      if (!fields) { show('Lecture impossible — remplis à la main.', '#b91c1c'); return; }
+      const iso = toISO(fields.date || ''); if (iso && $('nf-date') && !$('nf-date').value) { const p = iso.split('-'); $('nf-date').value = `${p[2]}/${p[1]}/${p[0]}`; }
+      const putAmt = (id, v) => { const n = num(v); if (n != null && $(id) && !$(id).value) $(id).value = String(n).replace('.', ','); };
+      putAmt('nf-ttc', fields.montantTTC); putAmt('nf-ht', fields.montantHT); putAmt('nf-tva', fields.montantTVA);
+      const cat = String(fields.categorie || '').toLowerCase();
+      if (['carburant', 'peage', 'lavage', 'parking', 'repas', 'autre'].includes(cat) && $('nf-cat')) $('nf-cat').value = cat;
+      if (fields.fournisseur && $('nf-desc') && !$('nf-desc').value) $('nf-desc').value = String(fields.fournisseur).slice(0, 80);
+      if (fields.plaque && $('nf-veh')) { const pl = String(fields.plaque).toUpperCase().replace(/\s/g, ''); const opt = Array.from($('nf-veh').options).find(o => String(o.value).replace(/\s/g, '') === pl); if (opt) { $('nf-veh').value = opt.value; try { $('nf-veh').dispatchEvent(new Event('change')); } catch (_) {} } }
+      show('✓ Champs préremplis par l\'IA — vérifie puis Enregistre.', '#047857');
+    });
+
     // Discriminateur = `type:'note-frais'` (colonne toujours présente → survit sans migration) ; on
     // accepte aussi l'ancien marqueur `source` par sécurité.
     function list(){ return (data.factures || []).filter(f => f.type === 'note-frais' || f.source === 'note-frais'); }
@@ -2478,6 +2503,9 @@
       if (file && FP.uploadScan) { try { const url = await FP.uploadScan(file, 'factures'); if (url) { fileId = url; fileName = file.name; } } catch (e) { /* on garde la note même si l'upload échoue */ } }
       const cat = $('nf-cat').value || 'autre';
       const desc = $('nf-desc').value.trim() || (NF_CATS[cat] || 'Note de frais').replace(/^[^ ]+ /, '');
+      let ht = num($('nf-ht') && $('nf-ht').value), tva = num($('nf-tva') && $('nf-tva').value);
+      // Contrôle HT + TVA = TTC (tolérance 2 cts) — on alerte mais on n'empêche pas (montants saisis).
+      if (ht != null && tva != null && Math.abs((ht + tva) - ttc) > 0.02) { setStatus('⚠️ HT + TVA ≠ TTC — vérifie les montants (enregistré quand même).', false); }
       const rec = {
         id: nextFactId(), date: iso,
         vehiculeImmat: ($('nf-veh').value || '').trim().toUpperCase() || null,
@@ -2487,7 +2515,7 @@
         type: 'note-frais',         // discriminateur (colonne toujours présente) ; compte dans le TCO
         source: 'note-frais',       // métadonnée (colonne optionnelle → migration)
         categorie: cat,
-        montantHT: null, montantTVA: null, montantTTC: ttc,
+        montantHT: ht, montantTVA: tva, montantTTC: ttc,
         km: num($('nf-km').value),
         fileId, fileName,
       };
@@ -2500,7 +2528,7 @@
       let majVeh = null; try { const r = FP.applyFactureToVehicule ? FP.applyFactureToVehicule(rec, data.vehicules) : null; majVeh = r ? r.label : null; } catch (e) {}
       rebuildFactures(); render(); renderKPIs(); renderTable();
       // Réinitialise le formulaire (garde la date + catégorie pour saisir vite plusieurs notes).
-      $('nf-ttc').value = ''; $('nf-desc').value = ''; $('nf-km').value = ''; if ($('nf-file')) $('nf-file').value = '';
+      $('nf-ttc').value = ''; $('nf-ht').value = ''; $('nf-tva').value = ''; $('nf-desc').value = ''; $('nf-km').value = ''; if ($('nf-file')) $('nf-file').value = ''; if ($('nf-file-status')) $('nf-file-status').classList.add('hidden');
       saveBtn.disabled = false;
       setStatus('✓ Note de frais enregistrée' + (majVeh ? ' · ' + majVeh : ''), true);
       if (FP.toast) FP.toast('✓ Note de frais ajoutée');

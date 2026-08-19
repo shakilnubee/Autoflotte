@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260819c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260819b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260819c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260819b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260819c">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -285,11 +285,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260819b"></script>
-<script src="../assets/js/supabase-client.js?v=20260819b"></script>
-<script src="../assets/js/data.js?v=20260819b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260819c"></script>
+<script src="../assets/js/supabase-client.js?v=20260819c"></script>
+<script src="../assets/js/data.js?v=20260819c"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260819b"></script>
+<script src="../assets/js/app.js?v=20260819c"></script>
 <!-- ⚡ fleet-views.js (~160 Ko : Total Fleet + Ulys) N'EST PLUS chargé ici en SYNCHRONE : l'onglet
      par défaut est « Contrôle » et n'en a pas besoin. Il est injecté à la demande (1re ouverture de
      Total/Ulys) via ensureFleetViews(), et préchargé en douceur sur temps mort → l'arrivée sur
@@ -320,7 +320,7 @@
     _flPromise = new Promise(res => {
       try {
         const s = document.createElement('script');
-        s.src = '../assets/js/fleet-views.js?v=20260819b';
+        s.src = '../assets/js/fleet-views.js?v=20260819c';
         s.onload = () => res(!!(window.FP && FP.mountTotal));
         s.onerror = () => res(false);
         document.head.appendChild(s);
@@ -507,14 +507,18 @@
     if (window.lucide) lucide.createIcons();
   }
   const SANEF_PROMPT = [
-    "Tu lis un JUSTIFICATIF de passage au PÉAGE d'autoroute (souvent flux libre, type Sanef/Bip&Go).",
-    "Renvoie UNIQUEMENT un objet JSON valide (aucun texte autour), avec ces clés (null si absent) :",
-    "date : la date du passage au format AAAA-MM-JJ.",
-    "montantTTC : le montant TOTAL payé TTC, nombre à point décimal (ex 12.40). JAMAIS un numéro de transaction/contrat.",
-    "montantHT : le HT si présent, sinon null. montantTVA : la TVA en euros si présente, sinon null.",
-    "plaque : l'immatriculation du véhicule (format français) si elle figure, sinon null.",
-    "gare : le libellé de la section / trajet / portique / entrée-sortie si présent, sinon null.",
-    "Ne confonds jamais le montant avec un numéro de transaction, de badge, de contrat ou une heure."
+    "Tu lis un document de PÉAGE d'autoroute (Sanef / Bip&Go / flux libre). Il peut s'agir d'UN seul",
+    "justificatif de passage OU d'un RELEVÉ mensuel listant PLUSIEURS passages.",
+    "Renvoie UNIQUEMENT un objet JSON valide (aucun texte autour), de la forme :",
+    '{ "plaque": <immatriculation du véhicule si commune à tout le document, sinon null>,',
+    '  "passages": [ { "date": "AAAA-MM-JJ", "montantTTC": <nombre>, "montantHT": <nombre|null>,',
+    '                  "montantTVA": <nombre|null>, "plaque": <immat de CE passage|null>,',
+    '                  "gare": <section/trajet/portique|null> }, ... ] }',
+    "Règles : mets DANS 'passages' une entrée par passage (pour un seul reçu = 1 entrée).",
+    "montantTTC = le montant réellement payé TTC de CE passage (nombre à point décimal, ex 12.40) —",
+    "JAMAIS un numéro de transaction/badge/contrat, un total cumulé, ni une heure. Si un HT et une TVA",
+    "figurent, renseigne-les (HT+TVA doit ≈ TTC). 'gare' = libellé de la section (ex 'A1 Senlis→Paris').",
+    "Ne prends PAS le TOTAL GÉNÉRAL du relevé comme un passage : ne liste que les lignes de passage."
   ].join("\n");
   async function _snImport(files){
     const box = $('sanef-import-status');
@@ -525,32 +529,44 @@
     // la ré-importation d'un justificatif strictement identique est ignorée.
     const _sig = f => [String(f.date || ''), Math.round((Number(f.montantTTC) || 0) * 100), String(f.description || ''), String(f.vehiculeImmat || '')].join('|');
     const _seen = new Set(_snList().map(_sig));
-    let ok = 0, dup = 0, fail = 0;
+    const cleanPl = p => p ? String(p).toUpperCase().replace(/\s/g, '') : null;
+    let ok = 0, dup = 0, fail = 0, seq = 0;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       show(`Lecture ${i + 1}/${files.length} — <b>${esc(file.name)}</b>…`, '#F0F9FF');
       let fields = null;
-      try { fields = await FP.scanIA(file, 'facture', SANEF_PROMPT, { maxTokens: 1024 }); } catch (e) { console.error('[sanef scan]', e); }
+      try { fields = await FP.scanIA(file, 'facture', SANEF_PROMPT, { maxTokens: 3000 }); } catch (e) { console.error('[sanef scan]', e); }
       if (!fields) { fail++; continue; }
-      const iso = _snISO(fields.date || ''), ttc = _snNum(fields.montantTTC);
-      if (!iso || !ttc || ttc <= 0) { fail++; continue; }
+      // Un document peut contenir 1 passage (reçu) OU plusieurs (relevé mensuel) → on lit un TABLEAU.
+      // Repli : si l'IA renvoie l'ancien format « à plat », on le traite comme 1 passage.
+      let passages = Array.isArray(fields.passages) ? fields.passages : null;
+      if (!passages) passages = (fields.date || fields.montantTTC) ? [fields] : [];
+      if (!passages.length) { fail++; continue; }
+      const docPlaque = cleanPl(fields.plaque);
+      // Upload du justificatif UNE fois par fichier (partagé par tous ses passages).
       let fileId = null, fileName = null;
       try { if (FP.uploadScan) { const u = await FP.uploadScan(file, 'factures'); if (u) { fileId = u; fileName = file.name; } } } catch (e) {}
-      const plaque = fields.plaque ? String(fields.plaque).toUpperCase().replace(/\s/g, '') : null;
-      const id = 'SANEF-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      let ht = _snNum(fields.montantHT), tva = _snNum(fields.montantTVA);
-      if (ht != null && tva != null && Math.abs((ht + tva) - ttc) > 0.02) { ht = null; tva = null; }
-      const rec = {
-        id, date: iso, vehiculeImmat: plaque || null,
-        fournisseur: 'Sanef', numeroFacture: id,
-        description: 'Péage Sanef' + (fields.gare ? ' — ' + String(fields.gare).slice(0, 60) : ''),
-        type: 'peage', source: 'sanef', categorie: 'peage', conducteur: null,
-        montantHT: ht, montantTVA: tva, montantTTC: ttc, km: null, fileId, fileName,
-      };
-      if (_seen.has(_sig(rec))) { dup++; continue; } _seen.add(_sig(rec));
-      window.FP_DATA.factures.push(rec);
-      try { if (FP.persistFacture) await FP.persistFacture(rec); else if (FP.persist) FP.persist.insert('factures', rec); } catch (e) { console.error('[sanef save]', e); }
-      ok++;
+      let anyOk = false;
+      for (const p of passages) {
+        const iso = _snISO(p.date || ''), ttc = _snNum(p.montantTTC);
+        if (!iso || !ttc || ttc <= 0) { continue; }
+        const plaque = cleanPl(p.plaque) || docPlaque;
+        const id = 'SANEF-' + Date.now().toString(36) + '-' + (seq++).toString(36) + Math.random().toString(36).slice(2, 5);
+        let ht = _snNum(p.montantHT), tva = _snNum(p.montantTVA);
+        if (ht != null && tva != null && Math.abs((ht + tva) - ttc) > 0.02) { ht = null; tva = null; }
+        const rec = {
+          id, date: iso, vehiculeImmat: plaque || null,
+          fournisseur: 'Sanef', numeroFacture: id,
+          description: 'Péage Sanef' + (p.gare ? ' — ' + String(p.gare).slice(0, 60) : ''),
+          type: 'peage', source: 'sanef', categorie: 'peage', conducteur: null,
+          montantHT: ht, montantTVA: tva, montantTTC: ttc, km: null, fileId, fileName,
+        };
+        if (_seen.has(_sig(rec))) { dup++; continue; } _seen.add(_sig(rec));
+        window.FP_DATA.factures.push(rec);
+        try { if (FP.persistFacture) await FP.persistFacture(rec); else if (FP.persist) FP.persist.insert('factures', rec); } catch (e) { console.error('[sanef save]', e); }
+        ok++; anyOk = true;
+      }
+      if (!anyOk) fail++;
     }
     _snRenderTable();
     show(`✓ Import terminé : <b>${ok}</b> passage(s)` + (dup ? ` · ${dup} doublon(s) ignoré(s)` : '') + (fail ? ` · <span style="color:#b91c1c">${fail} illisible(s)</span>` : '') + '.', '#F0FDF4');
