@@ -3229,7 +3229,7 @@ FP.NAV_SUBMENUS = {
     { label: 'Sanef', tab: 'sanef' },
     { label: 'Contrôle', tab: 'controle' },
     { label: 'Cartes & badges', tab: 'cartes' },
-    { label: 'Relevé KM', tab: 'relevekm' },
+    { label: 'Relevé KM', tab: 'relevekm', page: 'notifications.html' },
   ],
   'contrats.html': [
     { label: 'Leasing', tab: 'leasing' },
@@ -3239,7 +3239,7 @@ FP.NAV_SUBMENUS = {
     { label: 'Factures', tab: 'factures' },
     { label: 'Notes de frais', tab: 'notesfrais' },
     { label: 'Documents', tab: 'documents' },
-    { label: 'Fournisseurs', tab: 'fourn' },
+    { label: 'Fournisseurs', tab: 'fournisseurs' },
     { label: 'Entretiens', page: 'entretiens.html' },
   ],
   'notifications.html': [
@@ -3258,6 +3258,23 @@ FP.applyNavSubmenus = () => {
     if (!FP._navSubToggleInstalled) {
       FP._navSubToggleInstalled = true;
       document.addEventListener('click', (e) => {
+        // (1) Clic sur un SOUS-ONGLET : si on est DÉJÀ sur sa page ET que la page expose un aiguilleur
+        // (window.__fpSetTab), on bascule EN PLACE (aucun rechargement → zéro latence) au lieu de
+        // recharger toute la page. Sinon navigation normale (autre page).
+        const item = e.target.closest && e.target.closest('.fp-subnav-item');
+        if (item) {
+          const cur = (location.pathname.split('/').pop() || 'dashboard.html');
+          const tab = item.dataset.subtab || '';
+          if (tab && item.dataset.page === cur && typeof window.__fpSetTab === 'function') {
+            e.preventDefault();
+            try { window.__fpSetTab(tab); } catch (err) { location.href = item.getAttribute('href'); return; }
+            try { history.replaceState(null, '', '?tab=' + encodeURIComponent(tab)); } catch (_) {}
+            const bx = item.closest('.fp-subnav');
+            if (bx) bx.querySelectorAll('.fp-subnav-item').forEach(a => a.classList.toggle('active', a === item));
+          }
+          return; // sinon on laisse le lien naviguer normalement
+        }
+        // (2) Clic sur l'ONGLET PARENT : déplie/replie la liste (ne navigue pas).
         const link = e.target.closest && e.target.closest('aside nav a[data-nav]');
         if (!link) return;
         const box = link.nextElementSibling;
@@ -3273,7 +3290,16 @@ FP.applyNavSubmenus = () => {
       Object.keys(FP.NAV_SUBMENUS).forEach(navKey => {
         const link = nav.querySelector('a[data-nav="' + navKey + '"]');
         if (!link) return;
-        const subs = FP.NAV_SUBMENUS[navKey];
+        let subs = FP.NAV_SUBMENUS[navKey];
+        // Contrôle : on ajoute dynamiquement les prestataires PERSO (créés dans « Cartes & badges »)
+        // pour qu'ils restent accessibles depuis le menu déroulant (la barre d'onglets interne étant
+        // masquée). Insérés juste avant « Contrôle ».
+        if (navKey === 'controle.html' && FP.prestataires) {
+          try {
+            const perso = FP.prestataires().filter(p => !p.builtin).map(p => ({ label: p.nom, tab: p.id }));
+            if (perso.length) { subs = subs.slice(); const iCtrl = subs.findIndex(s => s.tab === 'controle'); subs.splice(iCtrl < 0 ? subs.length : iCtrl, 0, ...perso); }
+          } catch (e) {}
+        }
         const box = document.createElement('div'); box.className = 'fp-subnav'; box.dataset.for = navKey;
         // Base du lien = href RÉEL de la page cible dans CETTE sidebar (gère le préfixe « pages/ » sur les
         // pages racine et son absence sous /pages/). Cross-lien : si `page` diffère, on prend le href du
