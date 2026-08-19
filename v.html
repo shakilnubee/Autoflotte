@@ -266,7 +266,7 @@
       sin_notified: 'Ton gestionnaire de flotte est prévenu automatiquement.',
       sin_sent_title: 'Déclaration envoyée', sin_sent_sub: 'Ton gestionnaire de flotte a bien reçu ta déclaration.', btn_backmenu: 'Retour au menu',
       edl_prise: 'À la prise du véhicule', edl_resti: 'Restitution', edl_none: 'Rien d\'enregistré.',
-      edl_add: 'Ajouter des photos de restitution', btn_photo: '📷 Photo', btn_sendphotos: 'Envoyer mes photos', edl_viewdoc: '📄 Voir le document signé',
+      edl_add: 'Ajouter des photos de restitution', edl_addgen: 'Ajouter des photos', btn_photo: '📷 Photo', btn_sendphotos: 'Envoyer mes photos', edl_viewdoc: '📄 Voir le document signé',
       bad_title: 'Lien indisponible', bad_sub: 'Ce QR n\'est plus valide.',
       bad_incomplete: 'QR incomplet. Scanne le QR collé dans ton véhicule.', bad_conn: 'Connexion impossible. Réessaie dans un instant.',
       foot: 'Parc Pilot — gestion de flotte · ',
@@ -298,7 +298,7 @@
       sin_notified: 'Your fleet manager is notified automatically.',
       sin_sent_title: 'Report sent', sin_sent_sub: 'Your fleet manager has received your report.', btn_backmenu: 'Back to menu',
       edl_prise: 'At handover', edl_resti: 'Return', edl_none: 'Nothing recorded.',
-      edl_add: 'Add return photos', btn_photo: '📷 Photo', btn_sendphotos: 'Send my photos', edl_viewdoc: '📄 View signed document',
+      edl_add: 'Add return photos', edl_addgen: 'Add photos', btn_photo: '📷 Photo', btn_sendphotos: 'Send my photos', edl_viewdoc: '📄 View signed document',
       bad_title: 'Link unavailable', bad_sub: 'This QR code is no longer valid.',
       bad_incomplete: 'Incomplete QR code. Scan the QR code stuck in your vehicle.', bad_conn: 'Connection failed. Please try again shortly.',
       foot: 'Parc Pilot — fleet management · ',
@@ -472,6 +472,7 @@
 
   // ---- États des lieux ----
   var edlPhotos = [];
+  var edlSens = 'prise';     // moment choisi pour l'ajout de photos : 'prise' (remise) ou 'restitution' (rendu)
   var edlImgs = [];          // liste ordonnée des URLs d'images (prise puis restitution) pour la visionneuse
   function renderEdl() {
     var edl = DATA.edl || [];
@@ -493,7 +494,12 @@
     $('edl-body').innerHTML =
       '<div class="box"><h4>📥 ' + esc(t('edl_prise')) + '</h4>' + gal(prise) + '</div>'
       + '<div class="box"><h4>📤 ' + esc(t('edl_resti')) + '</h4>' + gal(resti)
-      + '<label class="f">' + esc(t('edl_add')) + '</label>'
+      + '<label class="f">' + esc(t('edl_addgen')) + '</label>'
+      // Choix du moment : « À la prise » (remise du véhicule) OU « Restitution » (rendu).
+      + '<div class="seg" id="edl-sens-seg" style="display:flex;gap:8px;margin:.2rem 0 .7rem">'
+      +   '<button type="button" class="btn edl-sens-btn' + (edlSens === 'prise' ? ' dark' : '') + '" data-sens="prise" style="flex:1">📥 ' + esc(t('edl_prise')) + '</button>'
+      +   '<button type="button" class="btn edl-sens-btn' + (edlSens === 'restitution' ? ' dark' : '') + '" data-sens="restitution" style="flex:1">📤 ' + esc(t('edl_resti')) + '</button>'
+      + '</div>'
       + '<div class="btnrow"><button type="button" class="btn" id="edl-cam">' + esc(t('btn_photo')) + '</button><button type="button" class="btn" id="edl-pick">' + esc(t('btn_gallery')) + '</button></div>'
       + '<input id="edl-file-cam" type="file" accept="image/*" capture="environment" class="hide">'
       + '<input id="edl-file" type="file" accept="image/*" multiple class="hide">'
@@ -637,20 +643,29 @@
 
   // États des lieux — inputs photo
   function wireEdl() {
+    // Segmented control « À la prise / Restitution » → choisit le sens envoyé.
+    var seg = $('edl-sens-seg');
+    if (seg) seg.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('.edl-sens-btn') : null; if (!b) return;
+      edlSens = b.getAttribute('data-sens') === 'restitution' ? 'restitution' : 'prise';
+      seg.querySelectorAll('.edl-sens-btn').forEach(function (x) { x.classList.toggle('dark', x === b); });
+    });
     $('edl-cam').addEventListener('click', function () { $('edl-file-cam').click(); });
     $('edl-pick').addEventListener('click', function () { $('edl-file').click(); });
     function edlAdd(inp) { addFiles(inp.files, edlPhotos, function () { $('edl-thumbs').innerHTML = thumbsHTML(edlPhotos); }); inp.value = ''; }
     $('edl-file-cam').addEventListener('change', function () { edlAdd(this); });
     $('edl-file').addEventListener('change', function () { edlAdd(this); });
+    $('edl-thumbs').addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('[data-rm]') : null; if (!b) return; edlPhotos.splice(+b.getAttribute('data-rm'), 1); $('edl-thumbs').innerHTML = thumbsHTML(edlPhotos); });
     $('edl-send').addEventListener('click', function () {
       $('edl-err').style.display = 'none';
       if (!edlPhotos.length) { $('edl-err').textContent = t('err_addphoto'); $('edl-err').style.display = 'block'; return; }
+      var sens = edlSens;
       $('edl-send').disabled = true; $('edl-send').textContent = t('sending');
-      postJSON({ action: 'edl', q: token, sens: 'restitution', photos: edlPhotos }, function (ok, d) {
+      postJSON({ action: 'edl', q: token, sens: sens, photos: edlPhotos }, function (ok, d) {
         $('edl-send').disabled = false; $('edl-send').textContent = t('btn_sendphotos');
         if (!ok) { $('edl-err').textContent = d.error || t('err_sendfail'); $('edl-err').style.display = 'block'; return; }
-        // Ajoute localement les nouvelles photos à la galerie restitution.
-        edlPhotos.forEach(function (u) { DATA.edl.push({ url: u, sens: 'restitution' }); });
+        // Ajoute localement les nouvelles photos à la bonne galerie (prise ou restitution).
+        edlPhotos.forEach(function (u) { DATA.edl.push({ url: u, sens: sens }); });
         renderEdl();
       });
     });
