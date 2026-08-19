@@ -481,6 +481,392 @@ FP.ensureXLSX = () => {
   });
   return FP._xlsxP;
 };
+
+// ============================================================================================
+// RELEVÉ KM — module PARTAGÉ (source unique). Rend le suivi complet des relevés km dans un
+// conteneur donné + câble ses interactions. Utilisé nativement par la page Contrôle (sous-onglet
+// « Relevé KM »). Zéro iframe, zéro cross-page. `opts.onChange` (optionnel) = rappel après une
+// modif (pour rafraîchir d'autres vues éventuelles). Dépendances : FP.kmCollecte, FP.notifCfg,
+// FP.settings, FP.kmSuivi/kmSuiviSet, FP.kmActuel, FP.horsFlotte, FP.blockingRevisionFactures…
+// ============================================================================================
+FP.releveKm = (function () {
+  const RK_STATUT = {
+    ajour:    { label: 'À jour',      bg: 'rgba(21,128,61,.12)',  fg: '#15803D', dot: '#22C55E' },
+    attente:  { label: 'En attente',  bg: 'rgba(180,83,9,.12)',   fg: '#B45309', dot: '#F59E0B' },
+    relancer: { label: 'À relancer',  bg: 'rgba(194,65,12,.14)',  fg: '#C2410C', dot: '#FB923C' },
+    jamais:   { label: 'Jamais reçu', bg: 'rgba(185,28,28,.12)',  fg: '#B91C1C', dot: '#EF4444' },
+  };
+  const rkChannel = (r) => (r && r.source === 'qr' ? 'QR scanné' : 'E-mail');
+  const esc = (s) => (FP.esc ? FP.esc(s) : String(s == null ? '' : s));
+  const D = () => window.FP_DATA || { vehicules: [] };
+  let _box = null, _onChange = null;
+  const changed = () => { paint(); if (_onChange) { try { _onChange(); } catch (e) {} } };
+
+  function rkBuildRows() {
+    const KC = window.FP && FP.kmCollecte;
+    const cfg = (FP.notifCfg ? FP.notifCfg() : {});
+    const seuil = cfg.releveKmJours || 45;
+    const today = new Date();
+    const vehs = (D().vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)) && (!FP.kmSuivi || FP.kmSuivi(v)));
+    return vehs.map(v => {
+      const readings = (KC && KC.recusDe) ? KC.recusDe(v) : [];
+      const last = readings[0] || null;
+      const stt = (KC && KC.statusFor) ? KC.statusFor(v) : null;
+      const pending = (stt && stt.sent_at && !stt.used_at) ? stt : null;
+      const lastDate = last ? new Date(last.used_at) : null;
+      const daysSince = lastDate ? Math.floor((today - lastDate) / 86400000) : null;
+      let statut;
+      if (lastDate && daysSince <= seuil) statut = 'ajour';
+      else if (pending) statut = 'attente';
+      else if (last) statut = 'relancer';
+      else statut = 'jamais';
+      const email = (KC && KC.emailDe) ? KC.emailDe(v) : '';
+      return { v, readings, last, pending, lastDate, daysSince, statut, email };
+    });
+  }
+
+  function paint() {
+    const box = _box; if (!box) return;
+    const KC = window.FP && FP.kmCollecte;
+    if (KC && KC.load && KC._cache == null) { box.dataset.loading = '1'; KC.load().then(() => paint()); }
+    const loading = KC && KC._cache == null;
+    const cfg = (FP.notifCfg ? FP.notifCfg() : {});
+    const seuil = cfg.releveKmJours || 45, relance = cfg.releveKmRelanceJours || 7;
+    const canEditKm = (FP.isAdmin && FP.isAdmin()) || (FP.isGestionnaire && FP.isGestionnaire());
+    const rows = rkBuildRows();
+    const cnt = { ajour: 0, attente: 0, relancer: 0, jamais: 0 };
+    rows.forEach(r => cnt[r.statut]++);
+    const total = rows.length || 1;
+    const okPct = Math.round(cnt.ajour / total * 100);
+    const manquants = cnt.relancer + cnt.jamais;
+    const avecMail = rows.filter(r => r.statut !== 'ajour' && r.email).length;
+    const nonSuivi = (D().vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)) && FP.kmSuivi && !FP.kmSuivi(v)).length;
+    const ordre = { jamais: 0, relancer: 1, attente: 2, ajour: 3 };
+    const sorted = rows.slice().sort((a, b) => (ordre[a.statut] - ordre[b.statut]) || (a.v.immat || '').localeCompare(b.v.immat || ''));
+    const tile = (val, lbl, grad, accent) => `
+      <div class="rk-tile" style="background:${grad}">
+        <div class="rk-tile-val">${val}</div>
+        <div class="rk-tile-lbl">${lbl}</div>
+        <div class="rk-tile-bar" style="background:${accent}"></div>
+      </div>`;
+    const rowHTML = (r) => {
+      const S = RK_STATUT[r.statut];
+      const v = r.v;
+      const km = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
+      const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? esc(v.chauffeur) : '<span style="color:var(--fp-muted)">— sans chauffeur</span>';
+      const lastTxt = r.lastDate
+        ? `${FP.dateNum(r.last.used_at)} <span class="rk-since">(il y a ${r.daysSince} j · ${rkChannel(r.last)})</span>`
+        : '<span style="color:var(--fp-muted)">jamais</span>';
+      const pendTxt = r.pending ? ` · <span style="color:#B45309">demande envoyée le ${FP.dateNum(r.pending.sent_at)}</span>` : '';
+      let hist = '';
+      if (r.readings.length) {
+        hist = r.readings.map((rd, i) => {
+          const older = r.readings[i + 1];
+          let delta = '';
+          if (older && rd.km_recu != null && older.km_recu != null) {
+            const dk = Number(rd.km_recu) - Number(older.km_recu);
+            const dj = Math.max(1, Math.round((new Date(rd.used_at) - new Date(older.used_at)) / 86400000));
+            delta = ` <span class="rk-delta">+${FP.num(dk)} km en ${dj} j</span>`;
+          }
+          return `<div class="rk-hrow"><span class="rk-hdate">${FP.dateNum(rd.used_at)}</span><b>${FP.num(rd.km_recu)} km</b>${delta}<span class="rk-hchan">${rkChannel(rd)}</span></div>`;
+        }).join('');
+      } else { hist = '<div class="rk-hrow" style="color:var(--fp-muted)">Aucun relevé reçu pour l\'instant.</div>'; }
+      const actionBtn = (r.statut !== 'ajour' && r.email)
+        ? `<button type="button" class="rk-ask" data-rk-ask="${esc(v.id)}" title="Envoyer une demande de relevé à ${esc(r.email)}"><i data-lucide="mail" class="w-3.5 h-3.5"></i> Demander</button>`
+        : (r.statut !== 'ajour' ? '<span class="rk-noemail" title="Pas d\'e-mail chauffeur">✉︎ pas d\'e-mail</span>' : '');
+      return `<div class="rk-item" data-rk-veh="${esc(v.id)}">
+        <div class="rk-main" data-rk-toggle="${esc(v.id)}">
+          <span class="rk-dot" style="background:${S.dot}"></span>
+          <div class="rk-idcol">
+            <a href="vehicules.html?veh=${encodeURIComponent(v.id)}" class="rk-plate" onclick="event.stopPropagation()">${esc(v.immat || '?')}</a>
+            <span class="rk-model">${esc((v.marque || '') + ' ' + (v.modele || ''))}</span>
+          </div>
+          <div class="rk-chauf">${chauffeur}</div>
+          <div class="rk-km">${FP.num(km)} km</div>
+          <div class="rk-last">${lastTxt}${pendTxt}</div>
+          <span class="rk-pill" style="background:${S.bg};color:${S.fg}">${S.label}</span>
+          <div class="rk-actions">${actionBtn}<i data-lucide="chevron-down" class="w-4 h-4 rk-chev"></i></div>
+        </div>
+        <div class="rk-detail" hidden>
+          <div class="rk-detail-head">Historique des relevés <span style="color:var(--fp-muted);font-weight:400">(du plus récent au plus ancien)</span></div>
+          ${hist}
+          ${canEditKm ? `<div class="rk-edit">
+            <label for="rk-km-${esc(v.id)}">Corriger / saisir le km</label>
+            <input id="rk-km-${esc(v.id)}" type="number" min="1" step="1" inputmode="numeric" placeholder="ex. ${km || 45000}" data-rk-km="${esc(v.id)}">
+            <button type="button" class="rk-btn" data-rk-km-save="${esc(v.id)}"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+            <span class="rk-km-st" data-rk-km-st="${esc(v.id)}"></span>
+          </div>` : ''}
+        </div>
+      </div>`;
+    };
+    box.innerHTML = `
+      <style>
+        .rk-wrap{display:flex;flex-direction:column;gap:18px}
+        .rk-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+        @media(max-width:720px){.rk-tiles{grid-template-columns:repeat(2,1fr)}}
+        .rk-tile{position:relative;border-radius:16px;padding:18px 18px 22px;color:#fff;overflow:hidden;box-shadow:0 18px 40px -22px rgba(11,18,32,.85),inset 0 1px 0 rgba(255,255,255,.08);transition:transform .15s}
+        .rk-tile:hover{transform:translateY(-2px)}
+        .rk-tile-val{font-size:2.1rem;font-weight:900;line-height:1;letter-spacing:-.02em}
+        .rk-tile-lbl{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:rgba(255,255,255,.72);margin-top:8px}
+        .rk-tile-bar{position:absolute;left:0;bottom:0;height:4px;width:100%}
+        .rk-card{background:var(--fp-surface,#fff);border:1px solid var(--fp-border);border-radius:16px;padding:18px 20px;box-shadow:0 12px 30px -24px rgba(15,30,61,.5)}
+        .rk-cfg{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end}
+        .rk-cfg .f{display:flex;flex-direction:column;gap:5px}
+        .rk-cfg label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fp-muted)}
+        .rk-cfg input{width:150px;padding:8px 10px;border:1px solid var(--fp-border);border-radius:9px;background:var(--fp-surface,#fff);color:var(--fp-primary);font-size:.92rem}
+        .rk-btn{display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:10px;border:none;cursor:pointer;font-weight:800;font-size:.86rem;background:linear-gradient(135deg,#0B1220,#1E293B);color:#fff;box-shadow:0 12px 26px -14px rgba(11,18,32,.8);transition:transform .12s}
+        .rk-btn:hover{transform:translateY(-1px)} .rk-btn.ghost{background:transparent;color:var(--fp-primary);border:1px solid var(--fp-border);box-shadow:none}
+        .rk-btn:disabled{opacity:.5;cursor:default;transform:none}
+        .rk-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:2px}
+        .rk-title{font-weight:900;font-size:1.05rem;color:var(--fp-primary);display:flex;align-items:center;gap:8px}
+        .rk-list{display:flex;flex-direction:column;gap:8px}
+        .rk-item{border:1px solid var(--fp-border);border-radius:13px;overflow:hidden;background:var(--fp-surface,#fff);transition:box-shadow .15s,border-color .15s}
+        .rk-item:hover{box-shadow:0 10px 26px -20px rgba(15,30,61,.55)}
+        .rk-main{display:grid;grid-template-columns:14px 1.4fr 1.2fr .8fr 1.8fr auto auto;gap:12px;align-items:center;padding:12px 14px;cursor:pointer}
+        @media(max-width:900px){.rk-main{grid-template-columns:14px 1fr auto;grid-auto-rows:auto}.rk-chauf,.rk-km,.rk-last{grid-column:2/4;font-size:.85rem}}
+        .rk-dot{width:11px;height:11px;border-radius:50%;box-shadow:0 0 0 4px rgba(0,0,0,.04)}
+        .rk-idcol{display:flex;flex-direction:column;gap:1px;min-width:0}
+        .rk-plate{font-weight:800;color:var(--fp-primary);text-decoration:none;font-family:ui-monospace,monospace}
+        .rk-plate:hover{color:var(--fp-accent);text-decoration:underline}
+        .rk-model{font-size:.76rem;color:var(--fp-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .rk-chauf{font-size:.9rem;color:var(--fp-primary);min-width:0;overflow:hidden;text-overflow:ellipsis}
+        .rk-km{font-weight:700;color:var(--fp-primary);white-space:nowrap}
+        .rk-last{font-size:.85rem;color:var(--fp-primary)} .rk-since{color:var(--fp-muted)}
+        .rk-pill{padding:4px 11px;border-radius:9999px;font-size:.74rem;font-weight:800;white-space:nowrap}
+        .rk-actions{display:flex;align-items:center;gap:10px}
+        .rk-ask{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;border:1px solid var(--fp-border);background:var(--fp-surface,#fff);color:var(--fp-primary);font-weight:700;font-size:.78rem;cursor:pointer}
+        .rk-ask:hover{border-color:var(--fp-accent);color:var(--fp-accent)}
+        .rk-noemail{font-size:.72rem;color:#B45309}
+        .rk-chev{color:var(--fp-muted);transition:transform .18s}
+        .rk-item.open .rk-chev{transform:rotate(180deg)}
+        .rk-detail{padding:4px 16px 14px 37px;border-top:1px dashed var(--fp-border);background:rgba(148,163,184,.05)}
+        .rk-detail-head{font-size:.76rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fp-muted);margin:10px 0 6px}
+        .rk-hrow{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:.88rem;color:var(--fp-primary);border-bottom:1px solid rgba(148,163,184,.14)}
+        .rk-hrow:last-child{border-bottom:none}
+        .rk-hdate{min-width:86px;color:var(--fp-muted)} .rk-delta{color:#15803D;font-weight:700}
+        .rk-hchan{margin-left:auto;font-size:.72rem;color:var(--fp-muted)}
+        .rk-empty{color:var(--fp-muted);text-align:center;padding:26px}
+        .rk-edit{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px dashed var(--fp-border)}
+        .rk-edit label{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fp-muted)}
+        .rk-edit input{width:130px;padding:8px 10px;border:1px solid var(--fp-border);border-radius:9px;background:var(--fp-surface,#fff);color:var(--fp-primary);font-size:.92rem}
+        .rk-km-st{font-size:.8rem;font-weight:700}
+      </style>
+      <div class="rk-wrap">
+        <div class="rk-tiles">
+          ${tile(okPct + '%', 'Flotte à jour', 'linear-gradient(135deg,#0B1220,#1E293B)', '#22C55E')}
+          ${tile(cnt.ajour, 'Relevés à jour', 'linear-gradient(135deg,#064E3B,#0F766E)', '#34D399')}
+          ${tile(cnt.attente, 'En attente de réponse', 'linear-gradient(135deg,#7C2D12,#B45309)', '#FBBF24')}
+          ${tile(manquants, 'Manquants / à relancer', 'linear-gradient(135deg,#7F1D1D,#9F1239)', '#FB7185')}
+        </div>
+        <div class="rk-card">
+          <div class="rk-head" style="margin-bottom:12px"><div class="rk-title"><i data-lucide="sliders-horizontal" class="w-5 h-5" style="color:var(--fp-accent)"></i> Réglages des rappels km</div></div>
+          <div class="rk-cfg">
+            <div class="f"><label>Rappel « à faire » tous les (jours)</label><input id="rk-seuil" type="number" min="1" step="1" value="${seuil}"></div>
+            <div class="f"><label>Relance si sans réponse (jours)</label><input id="rk-relance" type="number" min="1" step="1" value="${relance}"></div>
+            <div class="f"><label>Date de début du cycle (option.)</label><input id="rk-debut" type="date" value="${cfg.releveKmDebut || ''}"></div>
+            <button class="rk-btn" id="rk-save"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
+            <span id="rk-save-st" style="font-size:.8rem;color:var(--fp-muted)"></span>
+          </div>
+          <p style="font-size:.78rem;color:var(--fp-muted);margin:10px 0 0">Synchronisé sur tous tes appareils. Ces réglages pilotent les alertes « relevé km à faire » et « relance ». Tu peux aussi les modifier dans Paramètres → Configuration.</p>
+        </div>
+        <div class="rk-card">
+          <div class="rk-head">
+            <div class="rk-title"><i data-lucide="gauge" class="w-5 h-5" style="color:var(--fp-accent)"></i> Suivi des relevés <span style="font-weight:400;color:var(--fp-muted);font-size:.85rem">— ${rows.length} véhicule(s)</span></div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="rk-btn" id="rk-config" title="Choisir quels véhicules sont suivis pour le km (décocher = ne plus demander)"><i data-lucide="list-checks" class="w-4 h-4"></i> Configurer${nonSuivi ? ` (${nonSuivi} non suivi${nonSuivi > 1 ? 's' : ''})` : ''}</button>
+              ${avecMail ? `<button class="rk-btn" id="rk-ask-all"><i data-lucide="send" class="w-4 h-4"></i> Demander aux manquants (${avecMail})</button>` : ''}
+            </div>
+          </div>
+          <p style="font-size:.8rem;color:var(--fp-muted);margin:2px 0 14px">« À jour » = relevé reçu il y a ≤ ${seuil} j. Clique une ligne pour voir l'historique et le km par période. Le QR à coller dans chaque voiture se génère depuis la fiche véhicule (bouton « QR km »). <b>Décoche un véhicule</b> pour ne plus jamais demander son km.</p>
+          <div class="rk-list">
+            ${loading ? '<div class="rk-empty">Chargement des relevés…</div>' : (sorted.length ? sorted.map(rowHTML).join('') : '<div class="rk-empty">Aucun véhicule en flotte.</div>')}
+          </div>
+        </div>
+      </div>`;
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function openKmConfig() {
+    const E = esc;
+    const flotte = (D().vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v))).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
+    const byId = (id) => flotte.find(v => String(v.id) === String(id));
+    const rowHtml = (v) => {
+      const on = !FP.kmSuivi || FP.kmSuivi(v);
+      const ch = (v.chauffeur && v.chauffeur !== '—') ? E(v.chauffeur) : '—';
+      return `<label style="display:flex;align-items:center;gap:10px;padding:9px 6px;border-bottom:1px solid var(--fp-border);cursor:pointer">
+        <input type="checkbox" class="km-cfg-cb" data-id="${E(v.id)}" ${on ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--fp-accent);flex:none">
+        <span style="flex:1;min-width:0"><span style="font-family:monospace;font-weight:700">${E(v.immat || '—')}</span><span style="color:var(--fp-muted);font-size:.85rem"> · ${E(v.marque || '')} ${E(v.modele || '')}</span><span style="display:block;color:var(--fp-muted);font-size:.78rem">${ch}</span></span>
+      </label>`;
+    };
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;max-height:82vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(15,30,61,.5)">
+      <div style="padding:16px 18px;border-bottom:1px solid var(--fp-border);display:flex;align-items:center;justify-content:space-between;gap:10px"><div style="font-weight:800;font-size:1.05rem">Suivre le km de quels véhicules&nbsp;?</div><button id="km-cfg-x" style="border:none;background:#f1f5f9;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:1.1rem;line-height:1">✕</button></div>
+      <div style="padding:10px 14px;border-bottom:1px solid var(--fp-border);display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input id="km-cfg-search" placeholder="Rechercher…" style="flex:1;min-width:140px;padding:8px 10px;border:1px solid var(--fp-border);border-radius:8px"><button class="btn btn-outline text-xs" id="km-cfg-all">Tout cocher</button><button class="btn btn-outline text-xs" id="km-cfg-none">Tout décocher</button></div>
+      <div id="km-cfg-list" style="overflow:auto;padding:2px 14px">${flotte.map(rowHtml).join('') || '<p style="color:var(--fp-muted);padding:16px">Aucun véhicule.</p>'}</div>
+      <div style="padding:12px 16px;border-top:1px solid var(--fp-border);text-align:right"><button class="btn btn-dark" id="km-cfg-done">Terminé</button></div>
+    </div>`;
+    document.body.appendChild(ov);
+    const close = () => { ov.remove(); changed(); };
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov || e.target.closest('#km-cfg-x') || e.target.closest('#km-cfg-done')) { close(); return; }
+      const cb = e.target.closest('.km-cfg-cb');
+      if (cb) { const v = byId(cb.getAttribute('data-id')); if (v && FP.kmSuiviSet) FP.kmSuiviSet(v, cb.checked); return; }
+      const all = e.target.closest('#km-cfg-all'), none = e.target.closest('#km-cfg-none');
+      if (all || none) {
+        const on = !!all;
+        const s = FP.settings.get(); const ex = Object.assign({}, s.kmSuiviExclus || {});
+        flotte.forEach(v => { if (on) delete ex[v.id]; else ex[v.id] = true; });
+        s.kmSuiviExclus = ex; FP.settings.save(s);
+        ov.querySelectorAll('.km-cfg-cb').forEach(c => { c.checked = on; });
+        return;
+      }
+    });
+    const srch = ov.querySelector('#km-cfg-search');
+    if (srch) srch.addEventListener('input', () => {
+      const q = (FP.norm ? FP.norm(srch.value) : srch.value.toLowerCase()).trim();
+      ov.querySelectorAll('#km-cfg-list label').forEach(l => { const t = FP.norm ? FP.norm(l.textContent) : l.textContent.toLowerCase(); l.style.display = (!q || t.includes(q)) ? '' : 'none'; });
+    });
+    setTimeout(() => { try { srch && srch.focus(); } catch (e) {} }, 50);
+  }
+
+  function openKmBlockersModal(v, targetKm, onDone) {
+    const E = esc;
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:16px';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:16px;max-width:600px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(15,30,61,.5)';
+    ov.appendChild(box);
+    const close = () => ov.remove();
+    function correct(f, newKm) {
+      f.km = newKm;
+      try { if (FP.persist) FP.persist.update('factures', f.id, { km: newKm }); } catch (e) {}
+      try { if (FP.recomputeVehiculeFromFactures) FP.recomputeVehiculeFromFactures(v, (window.FP_DATA && FP_DATA.factures) || []); } catch (e) {}
+      draw();
+    }
+    async function saveReleve() {
+      const KC = window.FP && FP.kmCollecte; if (!KC) return;
+      const r = await KC.saisieManuelle(v, targetKm);
+      close();
+      if (onDone) onDone(r);
+    }
+    function draw() {
+      const blockers = FP.blockingRevisionFactures ? FP.blockingRevisionFactures(v, targetKm) : [];
+      const rowsB = blockers.map(f => `
+        <div class="kb-row" data-fid="${E(f.id)}" style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:11px 0;border-bottom:1px solid var(--fp-border)">
+          <div style="flex:1;min-width:140px"><div style="font-weight:700">${E(f.fournisseur || f.description || "Facture d'entretien")}</div><div style="font-size:.8rem;color:var(--fp-muted)">${f.date ? FP.dateNum(f.date) : 'sans date'}${f.numeroFacture ? ' · n° ' + E(f.numeroFacture) : ''} · <b style="color:#B91C1C">${FP.num(f.km)} km</b></div></div>
+          <input type="number" min="0" step="1" placeholder="km réel" class="kb-input" style="width:110px;padding:8px 10px;border:1px solid var(--fp-border);border-radius:9px">
+          <button class="rk-btn kb-fix" type="button" style="padding:8px 12px">Corriger</button>
+          <button class="rk-btn ghost kb-clear" type="button" style="padding:8px 12px">Vider le km</button>
+        </div>`).join('');
+      box.innerHTML = `
+        <div style="padding:16px 18px;border-bottom:1px solid var(--fp-border);display:flex;align-items:center;justify-content:space-between;gap:10px"><div style="font-weight:800;font-size:1.05rem">🔧 Une facture bloque ce km</div><button class="kb-x" style="border:none;background:#f1f5f9;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:1.1rem;line-height:1">✕</button></div>
+        <div style="padding:14px 18px;overflow:auto"><p style="font-size:.9rem;color:var(--fp-primary);margin:0 0 12px;line-height:1.5">Tu veux mettre <b>${FP.num(targetKm)} km</b> sur <b>${E(v.immat || '')}</b>, mais une <b>facture d'entretien</b> indique un km <b>plus élevé</b> — l'appli empêche le compteur de descendre sous le km de la <b>dernière révision</b>. Corrige (ou vide) le km de cette facture pour débloquer :</p>${blockers.length ? rowsB : '<div style="padding:14px;border-radius:12px;background:rgba(21,128,61,.1);color:#15803D;font-weight:700">✓ Plus aucune facture ne bloque — tu peux enregistrer le relevé.</div>'}</div>
+        <div style="padding:12px 16px;border-top:1px solid var(--fp-border);display:flex;justify-content:space-between;gap:10px"><button class="rk-btn ghost kb-cancel" type="button">Annuler</button><button class="rk-btn kb-save" type="button" ${blockers.length ? 'disabled' : ''}>Enregistrer le relevé (${FP.num(targetKm)} km)</button></div>`;
+      if (window.lucide) lucide.createIcons();
+    }
+    box.addEventListener('click', (e) => {
+      if (e.target.closest('.kb-x') || e.target.closest('.kb-cancel')) { close(); return; }
+      if (e.target.closest('.kb-save')) { saveReleve(); return; }
+      const fix = e.target.closest('.kb-fix'), clr = e.target.closest('.kb-clear');
+      if (fix || clr) {
+        const row = e.target.closest('.kb-row'); if (!row) return;
+        const f = ((window.FP_DATA && FP_DATA.factures) || []).find(x => String(x.id) === String(row.getAttribute('data-fid')));
+        if (!f) return;
+        if (clr) { correct(f, null); return; }
+        const nk = Math.round(Number(row.querySelector('.kb-input').value));
+        if (!Number.isFinite(nk) || nk < 0) { alert('Entre un km valide (ou clique « Vider le km »).'); return; }
+        correct(f, nk);
+      }
+    });
+    ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+    draw();
+    document.body.appendChild(ov);
+  }
+
+  function wire(box) {
+    box.addEventListener('click', async (e) => {
+      if (e.target.closest('#rk-save')) {
+        const st = box.querySelector('#rk-save-st');
+        if (!(window.FP && FP.settings)) { if (st) st.textContent = 'Réglages indisponibles.'; return; }
+        if (FP.canManageSociete && !FP.canManageSociete()) { if (st) { st.textContent = '⚠️ Réservé à l\'administrateur.'; st.style.color = '#B91C1C'; } return; }
+        const gi = id => { const el = box.querySelector('#' + id); return el ? el.value : ''; };
+        const s = FP.settings.get() || {}; s.notif = Object.assign({}, s.notif || {}, {
+          releveKmJours: Math.max(1, parseInt(gi('rk-seuil'), 10) || 45),
+          releveKmRelanceJours: Math.max(1, parseInt(gi('rk-relance'), 10) || 7),
+          releveKmDebut: gi('rk-debut') || ''
+        });
+        try { FP.settings.save(s); if (st) { st.textContent = '✓ Enregistré (synchronisé).'; st.style.color = '#15803D'; } if (_onChange) _onChange(); }
+        catch (err) { if (st) { st.textContent = '⚠️ Échec.'; st.style.color = '#B91C1C'; } }
+        return;
+      }
+      if (e.target.closest('#rk-config')) { openKmConfig(); return; }
+      if (e.target.closest('#rk-ask-all')) {
+        const KC = window.FP && FP.kmCollecte; if (!KC) return;
+        const cibles = rkBuildRows().filter(r => r.statut !== 'ajour' && r.email).map(r => r.v);
+        if (!cibles.length) return;
+        if (FP.confirm && !(await FP.confirm(`Envoyer une demande de relevé km à ${cibles.length} chauffeur(s) par e-mail ?`))) return;
+        const b = FP.busy ? FP.busy('Envoi… 0/' + cibles.length) : null;
+        const res = await KC.sendBatch(cibles, (d, t) => { if (b) b.update('Envoi… ' + d + '/' + t); });
+        if (b) { const m = `📩 ${res.sent.length} envoyée(s)` + (res.failed.length ? ` · ${res.failed.length} échec(s)` : ''); res.failed.length ? b.fail(m) : b.done(m); }
+        paint();
+        return;
+      }
+      const ask = e.target.closest('[data-rk-ask]');
+      if (ask) {
+        e.stopPropagation();
+        const KC = window.FP && FP.kmCollecte; if (!KC) return;
+        const v = (D().vehicules || []).find(x => x.id === ask.getAttribute('data-rk-ask'));
+        if (!v) return;
+        const b = FP.busy ? FP.busy('Envoi de la demande…') : null;
+        const r = await KC.send(v);
+        if (r.ok) { if (b) b.done('📩 Demande envoyée à ' + r.email); } else { if (b) b.fail('⚠️ ' + (r.error || 'Échec')); }
+        paint();
+        return;
+      }
+      const kmSave = e.target.closest('[data-rk-km-save]');
+      if (kmSave) {
+        e.stopPropagation();
+        const KC = window.FP && FP.kmCollecte; if (!KC) return;
+        const id = kmSave.getAttribute('data-rk-km-save');
+        const v = (D().vehicules || []).find(x => x.id === id); if (!v) return;
+        const inp = box.querySelector('[data-rk-km="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+        const st = box.querySelector('[data-rk-km-st="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
+        const km = inp ? Math.round(Number(inp.value)) : NaN;
+        if (!Number.isFinite(km) || km <= 0) { if (st) { st.textContent = 'Entre un km valide.'; st.style.color = '#B91C1C'; } return; }
+        const cur = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
+        if (km < cur) {
+          const blockers = FP.blockingRevisionFactures ? FP.blockingRevisionFactures(v, km) : [];
+          if (blockers.length) { if (st) { st.textContent = ''; } openKmBlockersModal(v, km, () => { changed(); }); return; }
+          if (FP.confirm && !(await FP.confirm(`Le km saisi (${FP.num(km)}) est INFÉRIEUR au km actuel (${FP.num(cur)}). Confirmer la correction à la baisse ?`))) return;
+        }
+        if (st) { st.textContent = 'Enregistrement…'; st.style.color = 'var(--fp-muted)'; }
+        kmSave.disabled = true;
+        const r = await KC.saisieManuelle(v, km);
+        kmSave.disabled = false;
+        if (r.ok) { if (st) { st.textContent = '✓ Enregistré (synchronisé).'; st.style.color = '#15803D'; } changed(); }
+        else if (st) { st.textContent = '⚠️ ' + (r.error || 'Échec'); st.style.color = '#B91C1C'; }
+        return;
+      }
+      const tog = e.target.closest('[data-rk-toggle]');
+      if (tog) {
+        const item = tog.closest('.rk-item'); if (!item) return;
+        const det = item.querySelector('.rk-detail');
+        if (det) { det.hidden = !det.hidden; item.classList.toggle('open', !det.hidden); }
+      }
+    });
+  }
+
+  return {
+    mount(container, opts) {
+      if (!container) return;
+      _box = container; _onChange = (opts && opts.onChange) || null;
+      if (!container.dataset.rkWired) { container.dataset.rkWired = '1'; wire(container); }
+      paint();
+    }
+  };
+})();
+
 // Détection carburant / péages — UNE seule règle partagée (dashboard, factures, statistiques) :
 // par TYPE (carburant/peage/ulys) OU par FOURNISSEUR (Ulys, TotalEnergies). Avant, un carburant
 // sans type mais avec le bon fournisseur était compté à un endroit et pas à l'autre.
@@ -3229,7 +3615,7 @@ FP.NAV_SUBMENUS = {
     { label: 'Sanef', tab: 'sanef' },
     { label: 'Contrôle', tab: 'controle' },
     { label: 'Cartes & badges', tab: 'cartes' },
-    { label: 'Relevé KM', tab: 'relevekm', page: 'notifications.html' },
+    { label: 'Relevé KM', tab: 'relevekm' },
   ],
   'contrats.html': [
     { label: 'Leasing', tab: 'leasing' },
