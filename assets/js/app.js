@@ -4066,18 +4066,24 @@ try { window.addEventListener('fp:data-ready', () => { if (FP.refreshProspectsBa
 
 // Badge rouge « demandes conducteur » (déclarations envoyées depuis le QR véhicule, statut 'nouveau')
 // sur le lien Sinistres du menu. Isolation société = RLS (le compte ne compte que sa société).
-FP.declCondCount = 0;
+FP.declCondCount = 0; FP.declCondSinCount = 0; FP.declCondEdlCount = 0;
 FP.refreshDeclCondBadge = async () => {
   try {
     if (!FP.supabase) return;
     // Portée société : la RLS renvoie TOUTES les sociétés au CEO → on filtre explicitement sur la
     // société active (comme filterSociete ailleurs), sinon le badge/alerte additionne toutes les sociétés.
     let _soc = '__all__'; try { _soc = (FP.activeSociete && FP.activeSociete()) || '__all__'; } catch (e) {}
-    let _q = FP.supabase.from('declarations_conducteur').select('id', { count: 'exact', head: true }).eq('statut', 'nouveau');
+    // On lit id+type (uniquement les 'nouveau', peu nombreux) pour distinguer sinistres/problèmes des
+    // envois d'état des lieux → deux alertes distinctes, un seul badge (total).
+    let _q = FP.supabase.from('declarations_conducteur').select('id,type').eq('statut', 'nouveau');
     if (_soc && _soc !== '__all__') _q = _q.eq('societe', _soc);
     const r = await _q;
     if (r.error) return; // table pas encore créée → pas de badge
-    const count = r.count || 0; const changed = (count !== FP.declCondCount); FP.declCondCount = count;
+    const _rows = r.data || [];
+    const count = _rows.length;
+    FP.declCondEdlCount = _rows.filter(x => String(x.type || '') === 'etat_lieux').length;
+    FP.declCondSinCount = count - FP.declCondEdlCount;
+    const changed = (count !== FP.declCondCount); FP.declCondCount = count;
     // Le compteur arrive en ASYNC après fp:data-ready → on prévient les vues d'alertes de se re-rendre
     // (dashboard « À traiter », page Suivi & alertes) pour que l'alerte « demande conducteur » apparaisse.
     if (changed) { try { window.dispatchEvent(new CustomEvent('fp:decl-count', { detail: { count } })); } catch (e) {} }
@@ -4096,6 +4102,16 @@ FP.refreshDeclCondBadge = async () => {
   } catch (e) {}
 };
 try { window.addEventListener('fp:data-ready', () => { if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge(); }); } catch (e) {}
+// Rafraîchissement LIVE : un conducteur peut envoyer un sinistre / des photos d'état des lieux PENDANT
+// que le gestionnaire a l'app ouverte sur un AUTRE onglet. Sans ça, le badge + l'alerte n'apparaissaient
+// qu'au prochain chargement de page (d'où « quand je ne suis pas dessus je ne le vois pas »). On re-vérifie
+// à intervalle + au retour sur l'onglet ; refreshDeclCondBadge ne (re)dispatch fp:decl-count QUE si le
+// compte a changé → aucun re-render inutile.
+try {
+  setInterval(() => { if (FP.refreshDeclCondBadge && !document.hidden) FP.refreshDeclCondBadge(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && FP.refreshDeclCondBadge) FP.refreshDeclCondBadge(); });
+  window.addEventListener('focus', () => { if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge(); });
+} catch (e) {}
 
 // === Bouton « Mémo » : depuis le titre de chaque page → la section correspondante du Manuel ===
 FP.MANUAL_SECTION = {
@@ -5767,19 +5783,32 @@ FP.buildAlertes = (data) => {
     }
   } catch (e) {}
 
-  // --- Déclarations conducteur (sinistre / problème signalé depuis le QR véhicule) à traiter ---
-  // Source = FP.declCondCount (compteur des lignes declarations_conducteur en statut 'nouveau',
-  // rafraîchi par FP.refreshDeclCondBadge sur fp:data-ready puis fp:decl-count → re-render).
+  // --- Déclarations conducteur (envoyées depuis le QR véhicule) à traiter ---
+  // Source = FP.refreshDeclCondBadge (lignes declarations_conducteur en statut 'nouveau', par société),
+  // rafraîchi sur fp:data-ready, en LIVE (intervalle + retour d'onglet) puis fp:decl-count → re-render.
+  // On sépare 2 alertes : sinistres/problèmes (rouge) et photos d'état des lieux reçues (info).
   try {
-    const nDecl = FP.declCondCount || 0;
-    if (nDecl > 0) {
+    const nSin = FP.declCondSinCount || 0;
+    if (nSin > 0) {
       out.push({
         niveau: 'danger', categorie: 'Sinistres',
-        message: nDecl > 1 ? `${nDecl} demandes conducteur à traiter` : `1 demande conducteur à traiter`,
+        message: nSin > 1 ? `${nSin} demandes conducteur à traiter` : `1 demande conducteur à traiter`,
         detail: 'Sinistre ou problème signalé depuis le QR véhicule — à traiter dans Sinistres.',
         sort: -100, target: 'sinistres.html',
         // Clé incluant le nombre → si une NOUVELLE déclaration arrive, l'alerte réapparaît même si ignorée.
-        muteKey: 'declcond|' + nDecl,
+        muteKey: 'declcond|' + nSin,
+      });
+    }
+  } catch (e) {}
+  try {
+    const nEdl = FP.declCondEdlCount || 0;
+    if (nEdl > 0) {
+      out.push({
+        niveau: 'info', categorie: 'États des lieux',
+        message: nEdl > 1 ? `${nEdl} envois de photos d'état des lieux` : `1 envoi de photos d'état des lieux`,
+        detail: 'Un conducteur a envoyé des photos d\'état des lieux depuis le QR véhicule — à consulter dans Sinistres (Demandes conducteur).',
+        sort: -90, target: 'sinistres.html',
+        muteKey: 'decledl|' + nEdl,
       });
     }
   } catch (e) {}
