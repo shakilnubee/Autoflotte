@@ -110,12 +110,20 @@ function _norm(s: string) { return String(s || "").toLowerCase().normalize("NFD"
 async function vehConducteur(db: ReturnType<typeof createClient>, chauffeur: string, societe: string) {
   const name = String(chauffeur || "").trim();
   if (!name || name === "—") return null;
-  const { data } = await db.from("conducteurs").select("prenom,nom,poste,name,key").eq("societe", societe || "PXP");
+  const rows = ((await db.from("conducteurs").select("prenom,nom,poste,name,key").eq("societe", societe || "PXP")).data || []) as Record<string, unknown>[];
   const key = _norm(name);
-  const hit = (data || []).find((c: Record<string, unknown>) => {
-    const full = _norm(String(c.prenom || "") + String(c.nom || ""));
-    return full === key || _norm(String(c.name || "")) === key;
-  });
+  // 1) Correspondance sur le NOM COMPLET (prénom+nom OU champ `name`).
+  let hit = rows.find((c) => _norm(String(c.prenom || "") + String(c.nom || "")) === key || _norm(String(c.name || "")) === key);
+  // 2) Repli : le champ `chauffeur` du véhicule est SOUVENT juste le PRÉNOM (ex. « Shakil ») alors que la
+  //    fiche conducteur porte le nom complet (« Shakil Nubeebaccus ») → l'égalité stricte échouait et le
+  //    poste n'apparaissait pas. On retrouve alors le conducteur par son prénom (1er mot du chauffeur).
+  if (!hit) {
+    const first = _norm((name.split(/\s+/)[0]) || name);
+    if (first) {
+      hit = rows.find((c) => _norm(String(c.prenom || "")) === first)
+         || rows.find((c) => { const f = _norm(String(c.prenom || "") + String(c.nom || "")) || _norm(String(c.name || "")); return !!f && f.indexOf(first) === 0; });
+    }
+  }
   if (!hit) return { prenom: name.split(" ")[0] || name, nom: name.split(" ").slice(1).join(" "), poste: "", name, key: "" };
   // Un conducteur peut n'avoir que `name` (prénom/nom vides) → on dérive prénom/nom du nom complet,
   // sinon le portail n'affichait AUCUN nom (bandeau conducteur absent).
