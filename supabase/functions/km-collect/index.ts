@@ -167,7 +167,14 @@ async function vehAmendes(db: ReturnType<typeof createClient>, societe: string, 
     const montant = (majoree && a.montant_majore != null && a.montant_majore !== "") ? Number(a.montant_majore) : (Number(a.montant) || 0);
     out.push({ numeroAvis: String(a.numero_avis || ""), montant: isFinite(montant) ? montant : 0, date: String(a.date || ""), motif: String(a.motif || ""), statut: String(a.statut || "") });
   }
-  out.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  // Tri : amendes NON PAYÉES d'abord, puis le reste — et dans chaque groupe, de la + récente à la + ancienne.
+  // « payée » (statut normalisé commençant par « pay ») = payée ; « à payer » → « apayer » (n'y matche pas).
+  const isPaid = (s: unknown) => /^pay/.test(_norm(String(s || "")));
+  out.sort((x, y) => {
+    const px = isPaid(x.statut) ? 1 : 0, py = isPaid(y.statut) ? 1 : 0;
+    if (px !== py) return px - py;
+    return String(y.date).localeCompare(String(x.date));
+  });
   return out;
 }
 

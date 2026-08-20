@@ -428,7 +428,10 @@
     var total = 0;
     var rows = list.map(function (a) {
       var m = Number(a.montant) || 0; total += m;
-      var paid = /pay/i.test(a.statut || '');
+      // Payée = statut commençant par « pay » APRÈS normalisation (payée/payé). ⚠️ « à payer » → « apayer »
+      // ne doit PAS matcher : /pay/i attrapait « payer » et marquait à tort une amende à payer comme payée.
+      var _st = (a.statut || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+      var paid = /^pay/.test(_st);
       var badge = paid ? '<span style="color:#16a34a;font-weight:700">' + esc(t('amd_paid')) + '</span>' : '<span style="color:#b45309;font-weight:700">' + esc(t('amd_due')) + '</span>';
       return '<div class="box" style="margin-bottom:.55rem">'
         + '<div class="kv"><span class="k">' + esc(t('amd_amount')) + '</span><span class="v" style="font-weight:800">' + eur(m) + '</span></div>'
