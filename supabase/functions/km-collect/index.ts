@@ -233,10 +233,13 @@ async function vehDocs(db: ReturnType<typeof createClient>, vehiculeId: string |
   // Carte grise portée par le véhicule (champ direct, hébergé plateforme). cg_file_id (Drive) ignoré.
   if (veh && veh.cg_url) push("Carte grise", String(veh.cg_url), "carte-grise");
   if (!vehiculeId) return out;
+  // ⚠️ Le conducteur ne voit QUE la carte grise et la carte mémo (pas de PV, contrat, facture,
+  //    code de cession, « autre »… — docs internes réservés au gestionnaire).
+  const ALLOWED_PORTAL = new Set(["carte-grise", "memo"]);
   const { data } = await db.from("documents").select("type,label,url").eq("vehicule_id", vehiculeId);
   for (const d of (data || [])) {
     if (!d || !d.url) continue;
-    if (d.type === "etat-des-lieux") continue;         // les EDL ont leur propre rubrique
+    if (!ALLOWED_PORTAL.has(String(d.type || ""))) continue;
     push(String(d.label || ""), String(d.url), String(d.type || "autre"));
   }
   return out;
