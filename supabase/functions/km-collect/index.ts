@@ -125,6 +125,21 @@ async function vehConducteur(db: ReturnType<typeof createClient>, chauffeur: str
   return { prenom, nom, poste: String(hit.poste || ""), name: full || (prenom + " " + nom).trim(), key: String(hit.key || "") };
 }
 
+// ⚠️ Masses en service (champ G, kg) lues sur les cartes grises de la flotte — MÊME source que
+// `FP.MASSE_CG` dans assets/js/app.js (la fiche véhicule). Sert au badge « stationnement Paris » du
+// portail pour qu'il affiche EXACTEMENT le même verdict que la fiche. ⚠️ À garder en phase avec app.js.
+const MASSE_CG: Record<string, number> = {
+  "GC-885-LB": 2395, "GT-565-XR": 1885, "GD-056-CR": 2040, "GE-349-FZ": 2040, "HG-763-VP": 1825,
+  "GR-745-LR": 1012, "FF-304-GL": 2215, "FF-777-XK": 2139, "GP-795-YL": 1505, "GW-075-EZ": 1505,
+  "GW-087-EZ": 1505, "GW-173-JV": 1505, "FJ-607-QH": 1505, "FZ-301-YZ": 1505, "GY-860-FG": 1815,
+  "GP-333-QJ": 1505, "HH-464-LQ": 2015, "GT-818-LC": 1710, "HB-844-DE": 2015, "HB-733-DE": 2015,
+  "GA-313-PK": 2990, "FR-141-MP": 1760, "GA-333-PZ": 1639, "FS-224-PB": 1390, "FZ-501-YZ": 1416,
+  "HH-458-LQ": 2015, "GR-585-HP": 1358, "GR-302-HP": 1358, "HF-477-XW": 1650, "HJ-804-VM": 2117,
+  "GH-994-AR": 1395, "ET-095-LV": 1621, "ED-160-TZ": 1758, "FT-338-AJ": 1395, "GE-948-WY": 1446,
+  "GR-019-ZG": 1358, "GR-467-HP": 1358, "HE-739-WP": 1505, "GP-232-WF": 1505, "HJ-285-FL": 1625,
+  "HJ-181-RN": 1782, "HG-709-CH": 2015, "HF-749-VD": 1265, "HH-613-KE": 2015, "GM-548-QA": 1395,
+};
+
 // Amendes DU CONDUCTEUR (pour le portail « Mes amendes ») : montant + n° d'avis + date + motif,
 // SANS PDF ni pièce jointe. Rattachées par le prénom/nom du conducteur (normalisé). Le montant renvoyé
 // est le montant DÛ (majoré si l'amende est marquée majorée, sinon le montant courant).
@@ -313,8 +328,9 @@ Deno.serve(async (req) => {
           const docs = await Promise.all(docs0.map(async (d) => ({ ...d, url: await signUrl(db, d.url) })));
           const edl = await Promise.all(edl0.map(async (e) => ({ ...e, url: await signUrl(db, e.url) })));
           if (portal.assistanceNotice) portal.assistanceNotice = await signUrl(db, portal.assistanceNotice);
-          // Masse en service (champ G) pour le calcul du stationnement Paris : réglage société
-          // (settings.vehMasse[vehId]) sinon repli par modèle (masses connues de la flotte).
+          // Masse en service (champ G) pour le stationnement Paris — MÊME ordre de source que la fonction
+          // vehMasse() de la fiche véhicule : (1) réglage société vehMasse[vehId] ; (2) table MASSE_CG
+          // (= FP.masseCG, cartes grises de la flotte) ; (3) repli par modèle. → verdict identique à la fiche.
           let masseKg: number | null = null;
           try {
             const { data: setRow } = await db.from("app_settings").select("data").eq("id", qr.societe || "PXP").maybeSingle();
@@ -322,6 +338,7 @@ Deno.serve(async (req) => {
             const raw = vm && qr.vehicule_id ? vm[qr.vehicule_id] : null;
             if (raw != null && raw !== "") masseKg = Number(raw);
           } catch (_) { /* pas de masse réglée */ }
+          if (masseKg == null) { const k = String(qr.plaque || "").toUpperCase().trim(); if (MASSE_CG[k] != null) masseKg = MASSE_CG[k]; }
           if (masseKg == null && veh) {
             const mod = String(veh.modele || "").toUpperCase();
             const KNOWN: Record<string, number> = { "SEAL U": 2102, "ATTO 3": 1750 };
