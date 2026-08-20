@@ -1107,7 +1107,22 @@
     if (docsCache) return docsCache.filter(d => d.vehiculeId === id);
     return lsGetAllDocs()[id] || [];
   }
+  // ⚠️ UN SEUL document par catégorie ADMINISTRATIVE : ajouter une nouvelle carte grise (etc.) REMPLACE
+  // l'ancienne au lieu d'empiler des doublons. Les catégories qui peuvent légitimement être multiples
+  // (état des lieux, PV, autre) ne sont PAS concernées.
+  const SINGLE_DOC_TYPES = new Set(['carte-grise', 'memo', 'assurance', 'controle-technique', 'code-cession', 'contrat', 'facture-achat']);
   async function addVehDoc(vehId, type, label, url) {
+    // Remplacement : on retire les documents existants de la MÊME catégorie (base + cache) avant d'ajouter.
+    let replaced = false;
+    if (SINGLE_DOC_TYPES.has(type)) {
+      const existing = getVehDocs(vehId).filter(d => d && d.type === type);
+      for (const old of existing) {
+        if (docsCache) docsCache = docsCache.filter(d => d.id !== old.id);
+        else { const all = lsGetAllDocs(); all[vehId] = (all[vehId] || []).filter(d => d.id !== old.id); localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
+        if (FP.persist.available()) FP.persist.delete('documents', old.id);
+        replaced = true;
+      }
+    }
     const doc = { id: 'D' + Date.now().toString(36), vehiculeId: vehId, type, label, url, driveId: driveIdFromUrl(url) };
     if (docsCache) docsCache.push(doc);
     else { const all = lsGetAllDocs(); (all[vehId] = all[vehId] || []).push(doc); localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
@@ -1115,6 +1130,7 @@
     window.__docImportGuard = Date.now(); // anti clic-fantôme vers la fiche conducteur après re-rendu
     openDrawer(vehId);
     if (FP.persist.available()) FP.persist.insert('documents', doc);
+    if (replaced && FP.toast) { try { FP.toast('Document remplacé (un seul par catégorie).'); } catch (e) {} }
   }
   async function delVehDoc(vehId, docId) {
     if (docsCache) docsCache = docsCache.filter(d => d.id !== docId);

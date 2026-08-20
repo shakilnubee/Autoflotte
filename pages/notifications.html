@@ -361,6 +361,40 @@
       try { renderComplet(); } catch (e) {}
     });
   }
+  // ⚠️ DOUBLONS DE DOCUMENTS : un seul document par catégorie est attendu (carte grise, carte mémo —
+  // les seuls que le conducteur voit sur le QR). On détecte les véhicules qui en ont PLUSIEURS de la
+  // même catégorie (données historiques d'avant la règle « un par catégorie ») → l'utilisateur garde
+  // le bon et supprime les autres, directement depuis « À compléter ».
+  const DUP_DOC_TYPES = [{ k: 'carte-grise', label: 'Carte grise' }, { k: 'memo', label: 'Carte mémo' }];
+  function dupDocGroups() {
+    if (!_docsLoaded) return [];
+    const actifs = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
+    const groups = [];
+    actifs.forEach(v => DUP_DOC_TYPES.forEach(t => {
+      const ds = docsOf(v.id).filter(d => d && d.type === t.k && d.url && !_isDrive(d.url));
+      if (ds.length >= 2) groups.push({ veh: v, typeLabel: t.label, docs: ds });
+    }));
+    return groups;
+  }
+  function dupDocsHTML(groups) {
+    if (!groups || !groups.length) return '';
+    const rows = groups.map(g => {
+      const items = g.docs.map((d, i) => `<div class="flex items-center justify-between gap-2" style="background:#fff;border:1px solid var(--fp-border);border-radius:8px;padding:6px 10px;margin-top:4px">
+          <span class="text-sm text-slate-600" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 ${esc(d.label || (g.typeLabel + ' ' + (i + 1)))}</span>
+          <span class="flex gap-3 flex-shrink-0">
+            <button type="button" data-dupdoc-open="${esc(d.url)}" class="text-xs font-semibold" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;white-space:nowrap">👁 Voir</button>
+            <button type="button" data-dupdoc-del="${esc(d.id)}" class="text-xs font-semibold text-red-600" style="background:none;border:none;cursor:pointer;white-space:nowrap">🗑 Supprimer</button>
+          </span></div>`).join('');
+      return `<div class="notif" style="flex-direction:column;align-items:stretch;text-decoration:none">
+          <div class="flex items-center justify-between gap-2">
+            <a href="vehicules.html?veh=${encodeURIComponent(g.veh.id)}" class="font-semibold text-slate-900" style="text-decoration:none">${esc(g.veh.immat || '?')} · ${esc(((g.veh.marque || '') + ' ' + (g.veh.modele || '')).trim())}</a>
+            <span class="badge badge-danger" style="white-space:nowrap">${g.docs.length} × ${esc(g.typeLabel)}</span>
+          </div>${items}</div>`;
+    }).join('');
+    return `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="copy" class="w-5 h-5"></i> Documents en double <span class="badge badge-danger">${groups.length}</span></h2>
+      <p class="text-sm text-slate-500 mb-2" style="max-width:840px">Un seul document par catégorie est attendu. Ouvre chaque document, garde le bon et <b>supprime les autres</b>.</p>
+      <div class="space-y-2" style="max-width:840px">${rows}</div></div>`;
+  }
   function vehMasseEff(v) { try { const s = (FP.settings.get().vehMasse || {})[v.id]; if (s != null && String(s).trim() !== '') return s; } catch (e) {} try { return FP.masseCG && FP.masseCG(v); } catch (e) {} return null; }
   // ⚠️ MÊME source que la fiche véhicule (FP.leasingContrat : normalise la plaque en MAJUSCULES
   // + fusionne base PXP et overrides saisis). Avant, une recherche brute base[v.immat] ratait les
@@ -493,7 +527,8 @@
     } catch (e) {}
     const cfgHTML = cfg.length ? `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5"></i> Configuration société <span class="badge badge-danger">${cfg.length}</span></h2><div class="space-y-2" style="max-width:840px">`
       + cfg.map(c => `<a href="${esc(c.target)}" class="notif" style="text-decoration:none"><div class="flex-1 min-w-0"><div class="font-semibold text-slate-900">${esc(c.label)}</div></div><span class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap">Compléter →</span></a>`).join('') + `</div></div>` : '';
-    const total = vehItems.length + condItems.length + amItems.length + cfg.length;
+    const dupG = dupDocGroups();
+    const total = vehItems.length + condItems.length + amItems.length + cfg.length + dupG.length;
     const rafN = buildRaf().length;
     const intro = total ? `<div class="mb-5 flex items-center gap-3 flex-wrap">
         <p class="text-sm text-slate-500" style="margin:0">${total} élément(s) à compléter. Clique une ligne pour la remplir, ou enchaîne-les toutes :</p>
@@ -513,7 +548,7 @@
           <button type="button" id="complet-restore" class="text-xs mt-1" style="color:#64748b;background:none;border:none;cursor:pointer;text-decoration:underline">Tout réafficher</button>
         </div>
       </details>` : '';
-    box.innerHTML = intro + cgFillBanner() + cfgHTML
+    box.innerHTML = intro + cgFillBanner() + dupDocsHTML(dupG) + cfgHTML
       + sectionCompHTML('Véhicules à compléter', 'car', vehItems)
       + sectionCompHTML('Conducteurs à compléter', 'users', condItems)
       + sectionCompHTML('Amendes à compléter', 'ticket', amItems)
@@ -1295,6 +1330,28 @@
         if (more.hasAttribute('hidden')) { more.removeAttribute('hidden'); vt.textContent = 'Réduire ↑'; }
         else { more.setAttribute('hidden', ''); vt.textContent = vt.dataset.voirtout; }
       }
+      return;
+    }
+    // 👁 Voir un document en double (bucket privé → URL signée avant ouverture)
+    const dOpen = e.target.closest('[data-dupdoc-open]');
+    if (dOpen) {
+      e.preventDefault(); e.stopPropagation();
+      let url = dOpen.getAttribute('data-dupdoc-open');
+      try { if (window.FP && FP.signedScanUrl) url = await FP.signedScanUrl(url, 3600); } catch (e2) {}
+      if (url) window.open(url, '_blank', 'noopener');
+      return;
+    }
+    // 🗑 Supprimer un document en double (base + cache local) puis re-render
+    const dDel = e.target.closest('[data-dupdoc-del]');
+    if (dDel) {
+      e.preventDefault(); e.stopPropagation();
+      const id = dDel.dataset.dupdocDel;
+      if (!(window.FP && FP.confirm ? await FP.confirm('Supprimer ce document ? (Il disparaît aussi du QR conducteur.)') : confirm('Supprimer ce document ?'))) return;
+      try { if (FP.persist && FP.persist.delete) FP.persist.delete('documents', id); else if (FP.db && FP.db.delete) FP.db.delete('documents', id); } catch (e2) {}
+      // Retire du cache mémoire + du cache local partagé avec la fiche véhicule (fp_docs_cache_v1_<soc>).
+      Object.keys(_docsMap).forEach(k => { _docsMap[k] = (_docsMap[k] || []).filter(d => d && d.id !== id); });
+      try { const ck = 'fp_docs_cache_v1_' + (localStorage.getItem('fp_societe') || 'PXP'); const c = JSON.parse(localStorage.getItem(ck) || 'null'); if (Array.isArray(c)) localStorage.setItem(ck, JSON.stringify(c.filter(d => d && d.id !== id))); } catch (e2) {}
+      renderComplet();
       return;
     }
     // ✕ sur un tag → ignorer ce champ pour cet élément (persistant, par société)
