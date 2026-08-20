@@ -5832,10 +5832,20 @@ FP.buildAlertes = (data) => {
       // retrouvait jamais sa fiche et passait à tort pour « sans e-mail » alors que l'e-mail existe.
       const nfull = s => (FP.normNomComplet ? FP.normNomComplet(s || '') : norm(s));
       const npre  = s => (FP.normPrenom ? FP.normPrenom(s || '') : norm(String(s || '').split(/\s+/)[0]));
+      const wordsOf = s => new Set(nfull(s).split(' ').filter(Boolean));
+      const dispOf = c => { try { return FP.conducteurs.displayName ? FP.conducteurs.displayName(c) : ([c.prenom, c.nom].filter(Boolean).join(' ') || c.name || c.key || ''); } catch (e) { return ([c.prenom, c.nom].filter(Boolean).join(' ') || c.name || ''); } };
+      // Résolution, la MÊME que FP.condKeyParNom mais sur les données LIVE : (1) nom complet exact,
+      // (2) recoupement fort de mots ≥2 → tolère l'ordre inversé « Nom Prénom » et un mot en trop
+      // (ex. « Jérémie DEPAUX » ⇄ fiche « Depaux Jérémie »), (3) repli prénom seul s'il est unique.
       const resolve = (name) => {
         try {
           const f = nfull(name);
-          if (f && f.indexOf(' ') !== -1) { const ex = conds.find(c => nfull(FP.conducteurs.displayName(c)) === f); if (ex) return ex; }
+          if (f && f.indexOf(' ') !== -1) { const ex = conds.find(c => nfull(dispOf(c)) === f); if (ex) return ex; }
+          const nW = wordsOf(name);
+          if (nW.size >= 2) {
+            const bw = conds.find(c => { const cW = wordsOf(dispOf(c) + ' ' + (c.nom || '') + ' ' + (c.prenom || '')); return cW.size >= 2 && [...cW].filter(w => nW.has(w)).length >= 2; });
+            if (bw) return bw;
+          }
           const k = npre(name); if (!k) return null;
           const m = conds.filter(c => npre(c.name || c.prenom || c.key) === k);
           return m.length === 1 ? m[0] : null;   // prénom ambigu (homonymes) → non résolu

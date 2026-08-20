@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820m">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260820m"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260820m">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -307,10 +307,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820l"></script>
-<script src="../assets/js/supabase-client.js?v=20260820l"></script>
-<script src="../assets/js/data.js?v=20260820l"></script>
-<script src="../assets/js/app.js?v=20260820l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260820m"></script>
+<script src="../assets/js/supabase-client.js?v=20260820m"></script>
+<script src="../assets/js/data.js?v=20260820m"></script>
+<script src="../assets/js/app.js?v=20260820m"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -724,10 +724,13 @@
       const tvs = tvsAn * _years;
       // Amendes du conducteur (par PRÉNOM), comptées UNE seule fois même s'il a plusieurs véhicules,
       // et au montant DÛ (majoré si l'amende est majorée).
-      const drv = FP.normPrenom(v.chauffeur);
+      // ⚠️ SOURCE UNIQUE (rule 0-source) : on GROUPE par conducteur via FP.condGroupKey (résout la vraie
+      // clé → distingue deux homonymes de prénom « Jean DUPONT » ≠ « Jean MARTIN », repli prénom sinon),
+      // et non par FP.normPrenom brut qui fusionnait leurs amendes. Même clé que les podiums amendes/dashboard.
+      const drv = FP.condGroupKey ? FP.condGroupKey(v.chauffeur) : FP.normPrenom(v.chauffeur);
       let amendes = 0;
       if (drv && !_seenDrv.has(drv)) {
-        amendes = amAll.filter(a => FP.normPrenom(a.prenom) === drv)
+        amendes = amAll.filter(a => (FP.condGroupKey ? FP.condGroupKey(a.prenom) : FP.normPrenom(a.prenom)) === drv)
           .reduce((s, a) => s + (FP.montantDu ? FP.montantDu(a) : ((a.majoree && +a.montantMajore) ? +a.montantMajore : (+a.montant || 0))), 0);
         _seenDrv.add(drv);
       }
