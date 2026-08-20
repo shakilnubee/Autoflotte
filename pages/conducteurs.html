@@ -2692,5 +2692,48 @@
     else openCondFromUrl();
   });
 </script>
+<script>
+/* ===== Fiche véhicule en GRAND POP-UP (réutilise la VRAIE fiche véhicule via ?embed=1) =====
+   Un clic sur un véhicule (fiche conducteur ou liste) ouvre la fiche véhicule COMPLÈTE et
+   ÉDITABLE dans un pop-up, sans quitter la page conducteur. C'est le MÊME code que la page
+   Véhicules (aucune divergence). Ctrl/Cmd/Maj/clic-milieu gardent « ouvrir dans un nouvel onglet ». */
+(function(){
+  function boxEl(){ return document.getElementById('veh-fiche-modal'); }
+  function openVeh(immat){
+    var bd = boxEl();
+    if(!bd){
+      bd = document.createElement('div'); bd.id = 'veh-fiche-modal';
+      bd.style.cssText = 'position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;padding:2vh 2vw;background:rgba(11,18,32,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);opacity:0;transition:opacity .2s ease';
+      bd.innerHTML = '<div class="vfm-box" style="width:min(1040px,100%);height:min(94vh,940px);background:var(--fp-surface,#fff);border-radius:24px;overflow:hidden;position:relative;box-shadow:0 40px 120px -30px rgba(0,0,0,.6);transform:scale(.97);transition:transform .22s cubic-bezier(.22,.61,.36,1)"><iframe title="Fiche véhicule" style="display:block;width:100%;height:100%;border:0"></iframe></div>';
+      document.body.appendChild(bd);
+      bd.addEventListener('click', function(e){ if(e.target === bd) closeVeh(); });
+    }
+    var ifr = bd.querySelector('iframe');
+    ifr.src = 'vehicules.html?embed=1&immat=' + encodeURIComponent(immat);
+    bd.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(function(){ bd.style.opacity = '1'; var b = bd.querySelector('.vfm-box'); if(b) b.style.transform = 'scale(1)'; });
+  }
+  function closeVeh(){
+    var bd = boxEl(); if(!bd) return;
+    bd.style.opacity = '0'; var b = bd.querySelector('.vfm-box'); if(b) b.style.transform = 'scale(.97)';
+    document.body.style.overflow = '';
+    setTimeout(function(){ bd.style.display = 'none'; var i = bd.querySelector('iframe'); if(i) i.src = 'about:blank'; }, 220);
+  }
+  window.FP_openVehModal = openVeh; window.FP_closeVehModal = closeVeh;
+  // Le pop-up (iframe) demande sa fermeture (bouton ✕ ou Échap dans la fiche véhicule).
+  window.addEventListener('message', function(e){ if(e && e.data === 'fp-fiche-close') closeVeh(); });
+  document.addEventListener('keydown', function(e){ var bd = boxEl(); if(e.key === 'Escape' && bd && bd.style.display !== 'none') closeVeh(); });
+  // Interception des liens « vehicules.html?immat=… » → pop-up (sans quitter la page conducteur).
+  document.addEventListener('click', function(e){
+    if(e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return; // laisse « ouvrir dans un nouvel onglet »
+    var a = e.target.closest && e.target.closest('a[href^="vehicules.html?immat="]');
+    if(!a) return;
+    var m = /[?&]immat=([^&]+)/.exec(a.getAttribute('href') || ''); if(!m) return;
+    e.preventDefault(); e.stopPropagation();
+    openVeh(decodeURIComponent(m[1]));
+  }, true);
+})();
+</script>
 </body>
 </html>
