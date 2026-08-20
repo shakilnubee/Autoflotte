@@ -1208,8 +1208,14 @@ FP.leasingMensuelFlotte = (data) => {
     ...actifs.filter(v => { const p = String(v.proprietaire || '').trim().toLowerCase(); return p && props.includes(p); }).map(v => v.immat),
     ...Object.keys(byVeh),
   ]);
+  // ⚠️ ANTI-DOUBLE-COMPTAGE : les plaques ayant un contrat LLD (settings.localeaseContrats) sont déjà
+  // comptées par FP.leasingLocaleaseAnnuel → on les EXCLUT ici (sinon leur loyer, aussi présent en
+  // factures 'leasing', serait compté deux fois dans le total Budget/Contrats).
+  const lldSet = new Set();
+  try { (FP.settings.get().localeaseContrats || []).forEach(c => { const k = FP.normImmat(c && c.immat || ''); if (k) lldSet.add(k); }); } catch (e) {}
   let mens = 0;
   immats.forEach(immat => {
+    if (lldSet.has(FP.normImmat(immat || ''))) return; // déjà compté par leasingLocaleaseAnnuel
     const c = FP.leasingContrat ? FP.leasingContrat(immat) : null;
     if (c && FP.leasingTermine && FP.leasingTermine(c)) return; // contrat fini → plus de loyer projeté
     const off = (c && FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(c) : null;

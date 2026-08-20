@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260820f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260820f">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -585,11 +585,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820e"></script>
-<script src="../assets/js/supabase-client.js?v=20260820e"></script>
-<script src="../assets/js/data.js?v=20260820e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260820f"></script>
+<script src="../assets/js/supabase-client.js?v=20260820f"></script>
+<script src="../assets/js/data.js?v=20260820f"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260820e"></script>
+<script src="../assets/js/app.js?v=20260820f"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -810,15 +810,22 @@
 
     // Leasing = BPCE (factures) + Localease/Ayvens (contrats LLD) — sinon le total sous-estime le coût réel.
     let mensTotal = 0;
+    let loc = []; try { loc = getLocalease(); } catch (e) { loc = []; } // getLocalease défini plus bas → TDZ possible au 1er appel
+    // ⚠️ ANTI-DOUBLE-COMPTAGE : une plaque ayant un contrat LLD est comptée dans `locMens` → on l'EXCLUT
+    // du calcul BPCE ci-dessous (sinon son loyer, aussi présent en factures 'leasing', compterait 2×).
+    const lldSet = new Set();
+    loc.forEach(c => { const k = FP.normImmat((c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '')) || ''); if (k) lldSet.add(k); });
     // Loyer mensuel BPCE = loyer de l'OFFRE (fixe, + avenant courant) si saisi, sinon repli médiane factures.
+    let bpceCount = 0;
     leasingImmats.forEach(immat => {
+      if (lldSet.has(FP.normImmat(immat || ''))) return; // déjà compté côté LLD
+      bpceCount++;
       const cR = (FP.leasingContrat) ? FP.leasingContrat(immat) : null;
       if (cR && FP.leasingTermine && FP.leasingTermine(cR)) return; // contrat fini → plus de loyer projeté
       const off = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cR) : null;
       const moy = (off != null) ? off : mensualiteFixe(immat);
       if (moy > 0) mensTotal += moy;
     });
-    let loc = []; try { loc = getLocalease(); } catch (e) { loc = []; } // getLocalease défini plus bas → TDZ possible au 1er appel
     const locMens = loc.reduce((s, c) => {
       if (FP.leasingTermine && FP.leasingTermine(c)) return s;        // contrat LLD fini → plus de loyer projeté
       const ik = (c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '') || '').toUpperCase();
@@ -829,7 +836,7 @@
     }, 0);
     mensTotal += locMens;
 
-    $('kpi-leasing').textContent = leasingImmats.size + loc.length;
+    $('kpi-leasing').textContent = bpceCount + loc.length;
     $('kpi-mens-leasing').textContent = FP.euro(mensTotal);
     // Coût annuel RÉEL = leasing (BPCE + Localease) + primes d'assurance + TVS annuelle de la flotte.
     $('kpi-annuel').textContent = FP.euro(mensTotal * 12 + assurPrime() + fleetTVS());

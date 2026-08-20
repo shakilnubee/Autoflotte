@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260820f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260820f">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -340,10 +340,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820e"></script>
-<script src="../assets/js/supabase-client.js?v=20260820e"></script>
-<script src="../assets/js/data.js?v=20260820e"></script>
-<script src="../assets/js/app.js?v=20260820e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260820f"></script>
+<script src="../assets/js/supabase-client.js?v=20260820f"></script>
+<script src="../assets/js/data.js?v=20260820f"></script>
+<script src="../assets/js/app.js?v=20260820f"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -410,8 +410,10 @@
     { const sub = $('kpi-total-sub'); if (sub) sub.textContent = (state.annee && state.annee !== 'all') ? ('année ' + state.annee) : 'toutes années'; }
     $('kpi-cout').textContent = FP.euro(total);
 
-    // CT échéances depuis vehicules
+    // CT échéances depuis vehicules — anticipation = réglage `ctJours` (source unique, comme Alertes),
+    // plus de seuil « 90 » codé en dur : si l'admin change ctJours dans Paramètres, ce compteur suit.
     const today = new Date();
+    const _ctI = (FP.notifCfg ? Number(FP.notifCfg().ctJours) : 90) || 90;
     let ctSoon = 0, ctLate = 0;
     (data.vehicules || []).forEach(v => {
       if (horsFlotteCT(v)) return; // exclut vendus / à vendre / hors service (comme Suivi & alertes)
@@ -420,7 +422,7 @@
       const d = new Date(v.prochainCT);
       const diff = FP.joursRestants ? FP.joursRestants(v.prochainCT) : Math.ceil((d - today) / (1000*60*60*24)); // source unique (minuit→minuit)
       if (diff < 0) ctLate++;
-      else if (diff < 90) ctSoon++;
+      else if (diff < _ctI) ctSoon++;
     });
     $('kpi-ct').textContent = ctSoon;
     $('kpi-ct-retard').textContent = ctLate;
@@ -438,12 +440,16 @@
       .sort((a,b) => a.diff - b.diff)
       .slice(0, 9); // top 9 most urgent (retard ou proche)
 
+    // Paliers d'urgence = MÊME barème que Alertes/Renouvellements : rouge < ctJours/3, orange < ctJours×2/3
+    // (défaut 30/60/90), calé sur le réglage `ctJours` — plus de 30/90 codés en dur (couleurs cohérentes partout).
+    const _ctI = (FP.notifCfg ? Number(FP.notifCfg().ctJours) : 90) || 90;
+    const _ctW = Math.round(_ctI * 2 / 3), _ctD = Math.round(_ctI / 3);
     $('ct-list').innerHTML = items.map(({ v, diff }) => {
       let cls = 'ok', icon = 'check-circle-2', txt;
-      if (diff < 0)        { cls = 'danger'; icon = 'alert-triangle'; txt = `Dépassé de ${-diff}j`; }
-      else if (diff < 30)  { cls = 'danger'; icon = 'alert-triangle'; txt = `Dans ${diff}j`; }
-      else if (diff < 90)  { cls = 'warn';   icon = 'bell';           txt = `Dans ${diff}j`; }
-      else                 { cls = 'ok';     icon = 'check-circle-2'; txt = `Dans ${diff}j`; }
+      if (diff < 0)         { cls = 'danger'; icon = 'alert-triangle'; txt = `Dépassé de ${-diff}j`; }
+      else if (diff < _ctD) { cls = 'danger'; icon = 'alert-triangle'; txt = `Dans ${diff}j`; }
+      else if (diff < _ctW) { cls = 'warn';   icon = 'bell';           txt = `Dans ${diff}j`; }
+      else                  { cls = 'ok';     icon = 'check-circle-2'; txt = `Dans ${diff}j`; }
       return `
         <div class="ct-card ${cls}">
           <div class="flex items-center justify-between">

@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260820f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260820f">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -968,13 +968,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820e"></script>
-<script src="../assets/js/supabase-client.js?v=20260820e"></script>
-<script src="../assets/js/data.js?v=20260820e"></script>
-<script src="../assets/js/fleet-docs.js?v=20260820e"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260820e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260820f"></script>
+<script src="../assets/js/supabase-client.js?v=20260820f"></script>
+<script src="../assets/js/data.js?v=20260820f"></script>
+<script src="../assets/js/fleet-docs.js?v=20260820f"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260820f"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260820e"></script>
+<script src="../assets/js/app.js?v=20260820f"></script>
 <script>
   lucide.createIcons();
 
@@ -1938,7 +1938,7 @@
             <button aria-label="${fav ? 'Retirer des favoris' : 'Épingler en favori'}" class="p-1.5 hover:bg-slate-100 rounded ${fav ? 'text-amber-500' : 'text-slate-300 hover:text-amber-500'}" data-action="fav" data-id="${v.id}" title="${fav ? 'Retirer des favoris' : 'Épingler en favori'}">
               <i data-lucide="star" class="w-4 h-4${fav ? ' icon-fav-on' : ''}"></i>
             </button>
-            <button aria-label="Copier l'immatriculation" class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700" data-action="copy" data-immat="${v.immat || ''}" title="Copier l'immatriculation">
+            <button aria-label="Copier l'immatriculation" class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700" data-action="copy" data-immat="${escapeHtml(v.immat || '')}" title="Copier l'immatriculation">
               <i data-lucide="copy" class="w-4 h-4"></i>
             </button>
             <button aria-label="Ouvrir la fiche" class="p-1.5 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-700" data-action="open" data-id="${v.id}" title="Ouvrir la fiche">
@@ -3053,6 +3053,9 @@
       if (isNew) { res = await FP.db.insert('vehicules', vehToDb(v)); }
       else { const { id, ...fields } = vehToDb(v); res = await FP.db.update('vehicules', v.id, fields); }
       if (res && res.error) throw res.error;
+      // Rafraîchit le cache local (fp_data_cache_v3_<soc>) tout de suite → pas de flash de valeur
+      // périmée en changeant d'onglet (le cache n'était sinon réécrit qu'au prochain loadAll).
+      try { FP.refreshDataCache && FP.refreshDataCache(); } catch (e) {}
       return true;
     } catch (err) {
       console.error('[persistVehicle]', err);
@@ -3100,6 +3103,8 @@
         if (ok) { if (FP.removeVehicleOverride) FP.removeVehicleOverride(v.id, f); }
         else if (FP.saveVehicleOverride) FP.saveVehicleOverride(v.id, { [f]: v[f] });
       });
+      // Écriture serveur OK → rafraîchit le cache local tout de suite (pas de flash périmé à la navigation).
+      if (ok) { try { FP.refreshDataCache && FP.refreshDataCache(); } catch (e) {} }
       // ⚠️ Ne PAS échouer en silence : si l'écriture serveur a raté, prévenir l'utilisateur
       // (la valeur est gardée sur cet appareil et re-tentée, mais elle n'est pas encore partagée).
       if (!ok) { try { (FP.notifyError || FP.toast || alert)('⚠ Modification gardée sur cet appareil mais non synchronisée au serveur — vérifiez la connexion (réessai automatique).'); } catch (e) {} }

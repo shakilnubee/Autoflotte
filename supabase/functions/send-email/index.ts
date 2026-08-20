@@ -43,12 +43,13 @@ Deno.serve(async (req) => {
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
     if (!token) return json({ error: "Non connecté." }, 401);
     const SUPA = Deno.env.get("SUPABASE_URL"); const ANON = Deno.env.get("SUPABASE_ANON_KEY");
-    if (SUPA && ANON) {
-      try {
-        const u = await fetch(`${SUPA}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: ANON } });
-        if (!u.ok) return json({ error: "Session expirée — reconnecte-toi." }, 401);
-      } catch (_) { return json({ error: "Non autorisé." }, 401); }
-    }
+    // ⚠️ FAIL-CLOSED : si l'environnement ne permet pas de valider le jeton, on REFUSE (comme scan-doc).
+    // Sinon un déploiement où ces variables manquent transformerait la fonction en relais d'envoi ouvert.
+    if (!SUPA || !ANON) return json({ error: "Non autorisé (validation impossible)." }, 401);
+    try {
+      const u = await fetch(`${SUPA}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: ANON } });
+      if (!u.ok) return json({ error: "Session expirée — reconnecte-toi." }, 401);
+    } catch (_) { return json({ error: "Non autorisé." }, 401); }
   }
 
   const key = Deno.env.get("RESEND_API_KEY");

@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260820f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260820f">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -307,10 +307,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820e"></script>
-<script src="../assets/js/supabase-client.js?v=20260820e"></script>
-<script src="../assets/js/data.js?v=20260820e"></script>
-<script src="../assets/js/app.js?v=20260820e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260820f"></script>
+<script src="../assets/js/supabase-client.js?v=20260820f"></script>
+<script src="../assets/js/data.js?v=20260820f"></script>
+<script src="../assets/js/app.js?v=20260820f"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -536,10 +536,10 @@
     $('sin-periode').textContent = (annee === 'all') ? 'toutes années' : annee;
     const sins = fact.filter(f => (f.type || '').toLowerCase() === 'sinistre');
     const { count, perImmat } = clusterAccidents(sins);
-    // Coût = comme la page Sinistres, on EXCLUT les devis (choix manuel sinistreStage, sinon mot « devis/proforma/estimation »)
-    const _stg = (FP.settings && FP.settings.get) ? (FP.settings.get().sinistreStage || {}) : {};
-    const isDevis = (f) => { const m = _stg[f.id]; if (m) return m === 'devis'; return /\b(devis|proforma|estimation)\b/i.test(((f.description || '') + ' ' + (f.fournisseur || ''))); };
-    const cout = sins.filter(f => !isDevis(f)).reduce((s, f) => s + (+f.montantTTC || 0), 0);
+    // Coût = MÊME source que la page Sinistres : helper canonique FP.coutSinistre (0 pour un devis ET
+    // pour un sinistre pris en charge / remboursé). Avant : montantTTC brut sans annuler PEC/remboursé
+    // → le KPI Coût des Statistiques divergeait de la page Sinistres pour un incident pris en charge.
+    const cout = sins.reduce((s, f) => s + (FP.coutSinistre ? FP.coutSinistre(f) : (+f.montantTTC || 0)), 0);
     const condCount = {};
     Object.entries(perImmat).forEach(([immat, c]) => {
       let ch = immatChauffeur[immat] || '';
@@ -684,7 +684,9 @@
       // proratisé au nombre de mois actifs (avant : loyer×12 systématique → leasing FANTÔME pour un
       // contrat terminé ou pas encore commencé l'année choisie).
       let _leasing = 0;
-      if (_hasOffer) {
+      // ⚠️ Véhicule VENDU : on n'impute plus son loyer (comme l'assurance et la TVS ci-dessous, mises à 0
+      // pour un vendu). Sinon incohérence interne au TCO (leasing compté mais pas assurance/TVS).
+      if (_hasOffer && !FP.estVendu(v)) {
         if (annee === 'all') { _leasing = FP.leasingTotalVerse(_leasC) || 0; }
         else {
           const _cDebut = (_leasC && _leasC.debut) ? new Date(_leasC.debut) : null;
