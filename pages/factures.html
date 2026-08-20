@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260820g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260820g">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -575,12 +575,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820f"></script>
-<script src="../assets/js/supabase-client.js?v=20260820f"></script>
-<script src="../assets/js/data.js?v=20260820f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260820g"></script>
+<script src="../assets/js/supabase-client.js?v=20260820g"></script>
+<script src="../assets/js/data.js?v=20260820g"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260820f"></script>
-<script src="../assets/js/fleet-views.js?v=20260820f"></script>
+<script src="../assets/js/app.js?v=20260820g"></script>
+<script src="../assets/js/fleet-views.js?v=20260820g"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -961,6 +961,15 @@
         if (type === 'number') { const num = (nv == null || nv === '') ? null : nv; f[field] = num; patch[field] = num; }
         else if (type === 'date') { const v = nv || null; f[field] = v; patch[field] = v; }
         else { let v = (nv == null ? '' : String(nv)).trim(); if (field === 'vehiculeImmat') v = v.toUpperCase(); f[field] = v || null; patch[field] = v || null; }
+        // Contrôle systématique HT + TVA = TTC (même règle qu'au scan / à la saisie manuelle) : éditer
+        // un seul montant dans la fiche ne doit pas laisser passer un triplet incohérent en silence.
+        // Alerte non bloquante (la valeur est déjà appliquée) — cf. CLAUDE.md « TOUTE facture ».
+        if (field === 'montantHT' || field === 'montantTVA' || field === 'montantTTC') {
+          const _ht = Number(f.montantHT), _tva = Number(f.montantTVA), _ttc = Number(f.montantTTC);
+          if ([_ht, _tva, _ttc].every(Number.isFinite) && Math.abs((_ht + _tva) - _ttc) > 0.02 && FP.toast) {
+            FP.toast(`⚠️ HT ${_ht.toFixed(2)} + TVA ${_tva.toFixed(2)} = ${(_ht + _tva).toFixed(2)} € ≠ TTC ${_ttc.toFixed(2)} € — à vérifier`);
+          }
+        }
         if (FP.history && FP.history.commit) FP.history.commit();
         renderKPIs(); renderTable(); renderCharts();
         if (FP.persist) FP.persist.update('factures', f.id, patch);
@@ -1780,7 +1789,10 @@
   function renderTvaRecap() {
     try {
       const from = ($('cp-from') || {}).value || '', to = ($('cp-to') || {}).value || '';
-      const items = (data.factures || []).filter(f => f.type !== 'leasing' && f.type !== 'sinistre');
+      // Dédoublonnage par n° (même helper que « Coût par période ») → une facture au même numéro ne
+      // compte pas sa TVA deux fois. On garde le périmètre TVA propre (hors leasing/sinistre ; l'achat
+      // reste inclus car sa TVA est récupérable — donc PAS FP.coutFactureExploit qui exclut l'achat).
+      const items = (FP.dedupeFactures ? FP.dedupeFactures(data.factures || []) : (data.factures || [])).filter(f => f.type !== 'leasing' && f.type !== 'sinistre');
       const inRange = items.filter(f => { const d = f.date || ''; if (from && d < from) return false; if (to && d > to) return false; return true; });
       const tva = inRange.reduce((s, f) => s + (Number(f.montantTVA) || 0), 0);
       const tot = $('cp-tva-total'); if (tot) tot.textContent = FP.euro(tva);

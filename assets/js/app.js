@@ -1379,14 +1379,21 @@ FP.empEnRetard = (e) => FP.empEnCours(e) && FP.empJoursDepuis(e) > FP.empRetardJ
 FP.recomputeVehiculeFromFactures = function (v, factures) {
   try {
     if (!v || !v.immat) return null;
-    const mine = (factures || []).filter(f => f && FP.estEntretien(f) && FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat));
+    const nk = FP.normImmat(v.immat);
+    const mine = (factures || []).filter(f => f && FP.estEntretien(f) && FP.normImmat(f.vehiculeImmat) === nk);
+    // ⚠️ SYMÉTRIE avec FP.applyFactureToVehicule : le km relevé s'applique depuis N'IMPORTE QUELLE
+    // facture (pas seulement l'entretien). On recalcule donc kmDernierReleve sur TOUTES les factures
+    // restantes du véhicule — sinon supprimer/éditer une facture d'entretien ferait RÉGRESSER le km
+    // relevé alors qu'une facture non-entretien (carburant, péage…) porte un km plus élevé → échéance
+    // de révision (FP.revisionInfo, ancrée sur kmDernierReleve) faussée.
+    const allMine = (factures || []).filter(f => f && FP.normImmat(f.vehiculeImmat) === nk);
     const patch = {};
     // Dernière révision = date la plus récente parmi les factures d'entretien restantes (sinon vide).
     const dates = mine.map(f => f.date).filter(Boolean).sort();
     const derniere = dates.length ? dates[dates.length - 1] : null;
     if ((v.derniereRevision || null) !== (derniere || null)) { v.derniereRevision = derniere; patch.derniereRevision = derniere; }
-    // Km de révision = max km parmi les factures d'entretien restantes (sinon vide).
-    const kms = mine.map(f => Number(f.km)).filter(n => Number.isFinite(n) && n > 0);
+    // Km relevé = max km parmi TOUTES les factures restantes (même périmètre qu'apply), sinon vide.
+    const kms = allMine.map(f => Number(f.km)).filter(n => Number.isFinite(n) && n > 0);
     const kmRev = kms.length ? Math.max(...kms) : null;
     if ((Number(v.kmDernierReleve) || null) !== (kmRev || null)) { v.kmDernierReleve = kmRev; patch.kmDernierReleve = kmRev; }
     // Date pneus = date la plus récente parmi les factures d'entretien « pneu » restantes (sinon vide).
