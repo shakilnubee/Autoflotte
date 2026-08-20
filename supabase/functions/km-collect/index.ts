@@ -446,6 +446,18 @@ Deno.serve(async (req) => {
         }));
         const ins = await db.from("documents").insert(rows);
         if (ins.error) return json({ error: "Échec de l'envoi des photos. Réessaie." }, 500);
+        // Notifie le gestionnaire : on enregistre AUSSI une « demande conducteur » (type 'etat_lieux',
+        // statut 'nouveau') dans declarations_conducteur → même badge + alerte + inbox que les sinistres.
+        // Aucune donnée dupliquée côté fiche : les photos restent dans `documents` (section État des lieux),
+        // cette ligne ne sert qu'à alerter (mêmes URLs, réutilisées pour l'aperçu). Best-effort.
+        try {
+          await db.from("declarations_conducteur").insert({
+            id: genId("dc"), vehicule_id: qr.vehicule_id, plaque: qr.plaque || "", societe: qr.societe || "PXP",
+            type: "etat_lieux",
+            description: `${photos.length} photo(s) d'état des lieux — ${label === "Sortie" ? "restitution" : "prise en main"}`,
+            photos, statut: "nouveau",
+          });
+        } catch (_e) { /* la table d'alerte peut manquer : l'envoi des photos réussit quand même */ }
         return json({ ok: true, sens, photos: photos.length });
       }
 
