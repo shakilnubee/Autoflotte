@@ -2281,9 +2281,17 @@
         if (_loyer == null) { const _lz = (window.FP && FP.leasingInfo) ? FP.leasingInfo(v) : null; if (_lz && _lz.loyer != null) _loyer = _lz.loyer; }
         if (_loyer != null) items.splice(3, 0, ['Loyer', FP.euro(_loyer) + '/mois', null, null, '']);
       } catch (e) {}
-      // Tuiles supplémentaires pour remplir l'en-tête : coût/km + coût de l'année (valeurs déjà calculées)
-      try { if (typeof coutKm === 'number' && isFinite(coutKm) && coutKm > 0) items.push(['Coût / km', coutKm.toFixed(3).replace('.', ',') + ' €', null, null, '']); } catch (e) {}
-      try { if (typeof coutTotal === 'number') items.push(['Coût ' + ANNEE, FP.euro(coutTotal), null, null, '']); } catch (e) {}
+      // Tuiles supplémentaires pour remplir l'en-tête : coût de l'année + coût/km.
+      // ⚠️ Recalculés LOCALEMENT ici (mêmes helpers que le corps) : les const coutTotal/coutKm/ANNEE
+      // de openDrawer sont déclarées PLUS BAS → y référer ici lèverait une ReferenceError (TDZ) avalée
+      // par le try/catch, et les tuiles ne s'affichaient jamais.
+      try { const _an = String(new Date().getFullYear()); const _ca = FP.coutExploitAnnee ? FP.coutExploitAnnee(v, _an, data.factures) : null; if (typeof _ca === 'number') items.push(['Coût ' + _an, FP.euro(_ca), null, null, '']); } catch (e) {}
+      try {
+        const _sv = f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat);
+        const _tot = FP.dedupeFactures((data.factures || []).filter(f => _sv(f) && FP.coutFactureExploit && FP.coutFactureExploit(f))).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
+        const _km = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
+        if (_km > 0 && _tot > 0) items.push(['Coût / km', (_tot / _km).toFixed(3).replace('.', ',') + ' €', null, null, '']);
+      } catch (e) {}
       try { const _au = (v.autonomie != null && v.autonomie !== '') ? String(v.autonomie) : ''; if (_au) items.push(['Autonomie', _au + (/\d$/.test(_au) ? ' km' : ''), null, null, '']); } catch (e) {}
       box.innerHTML = items.map(([k, val, df, dt, code]) => {
         const inner = df
