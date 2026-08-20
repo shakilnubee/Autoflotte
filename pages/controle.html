@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260820f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260820f">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -289,11 +289,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820e"></script>
-<script src="../assets/js/supabase-client.js?v=20260820e"></script>
-<script src="../assets/js/data.js?v=20260820e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260820f"></script>
+<script src="../assets/js/supabase-client.js?v=20260820f"></script>
+<script src="../assets/js/data.js?v=20260820f"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260820e"></script>
+<script src="../assets/js/app.js?v=20260820f"></script>
 <!-- ⚡ fleet-views.js (~160 Ko : Total Fleet + Ulys) N'EST PLUS chargé ici en SYNCHRONE : l'onglet
      par défaut est « Contrôle » et n'en a pas besoin. Il est injecté à la demande (1re ouverture de
      Total/Ulys) via ensureFleetViews(), et préchargé en douceur sur temps mort → l'arrivée sur
@@ -324,7 +324,7 @@
     _flPromise = new Promise(res => {
       try {
         const s = document.createElement('script');
-        s.src = '../assets/js/fleet-views.js?v=20260820e';
+        s.src = '../assets/js/fleet-views.js?v=20260820f';
         s.onload = () => res(!!(window.FP && FP.mountTotal));
         s.onerror = () => res(false);
         document.head.appendChild(s);
@@ -682,7 +682,14 @@
   }
   async function loadData(){
     const soc = FP.activeSociete ? FP.activeSociete() : null;
-    const flt = rows => (soc && soc !== '__all__') ? (rows || []).filter(x => !x.societe || x.societe === soc) : (rows || []);
+    // ⚠️ Isolation multi-sociétés (MÊME règle que notifications.html) : une ligne conso héritée SANS
+    // `societe` (données historiques) appartient à PXP — ne JAMAIS la traiter comme « appartient à tout
+    // le monde », sinon elle fuite dans le Contrôle de CHAQUE société (noms de conducteurs d'une autre boîte).
+    const flt = rows => {
+      if (!(soc && soc !== '__all__')) return rows || [];
+      const s = String(soc).toLowerCase();
+      return (rows || []).filter(x => x.societe ? String(x.societe).toLowerCase() === s : s === 'pxp');
+    };
     // ⚡ On ne charge que les ~24 DERNIERS MOIS de transactions (largement assez pour le contrôle
     // des congés / anomalies) → divise fortement le volume à télécharger ET à analyser. Repli
     // AUTOMATIQUE sur tout l'historique si la requête filtrée échoue (colonne absente…) → jamais de
