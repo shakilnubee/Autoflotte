@@ -1636,14 +1636,17 @@
       ? driver.vehicules
       : (window.FP_DATA.vehicules || []).filter(v => v.chauffeur && (FP.condGroupKey ? FP.condGroupKey(v.chauffeur) : normPrenom(v.chauffeur)) === key);
     vehs.forEach(v => {
-      const avaitChauffeur = v.chauffeur && v.chauffeur !== '—';
-      if (avaitChauffeur) {
+      const oldName = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
+      if (oldName) {
         v.chauffeur = '';
         if (FP.persist && FP.persist.available && FP.persist.available()) FP.persist.update('vehicules', v.id, { chauffeur: '' });
         n++;
       }
-      // Clôt l'affectation en cours dans TOUS les cas (y compris véhicule lié uniquement par l'historique).
-      try { if (FP.affectations) FP.affectations.record(v.id, ''); } catch (e) {}
+      // Clôt l'affectation en cours ET garantit que le SORTANT reste dans l'historique du véhicule :
+      // on passe son nom comme « ancien conducteur » → si aucune affectation ouverte n'existait
+      // (données anciennes), le rattrapage de record() crée quand même une entrée close à son nom.
+      // Ainsi, quand un NOUVEAU conducteur fait l'état des lieux du même véhicule, le sortant reste visible.
+      try { if (FP.affectations) FP.affectations.record(v.id, '', null, oldName); } catch (e) {}
     });
     return n;
   }
