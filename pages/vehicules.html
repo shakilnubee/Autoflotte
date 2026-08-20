@@ -112,6 +112,21 @@
   /* KPIs : grille large 3 colonnes + liseré orange */
   #drawer .relative #drawer-readouts { grid-template-columns: repeat(3, minmax(0,1fr)) !important; max-width: none !important; }
   #drawer .relative #drawer-readouts > div { border-top: 3px solid var(--fp-accent); }
+  /* Bandeau « instruments » (échéances · coût mensuel · santé) */
+  .fp-insights { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; }
+  @media (max-width: 900px) { .fp-insights { grid-template-columns: 1fr; } }
+  .fp-insights .ins-card { background: var(--fp-surface); border: 1px solid var(--fp-border); border-radius: 14px; padding: 12px 14px; box-shadow: var(--fp-shadow-sm); border-top: 3px solid var(--fp-accent); }
+  .fp-insights .ins-ech { border-top-color: var(--fp-data); }
+  .fp-insights .ins-cost { border-top-color: var(--fp-accent); }
+  .fp-insights .ins-sante { border-top-color: var(--fp-ok); }
+  .ins-h { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--fp-muted); margin-bottom: 8px; }
+  .ins-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ins-chip { font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 999px; background: color-mix(in srgb, var(--c, #16a34a) 13%, transparent); color: var(--c, #16a34a); border: 1px solid color-mix(in srgb, var(--c, #16a34a) 32%, transparent); }
+  .ins-none { font-size: 12.5px; color: var(--fp-faint); }
+  .ins-big { font-family: var(--fp-title); font-weight: 800; font-size: 1.5rem; color: var(--fp-text); line-height: 1.1; }
+  .ins-unit { font-size: .9rem; font-weight: 600; color: var(--fp-muted); margin-left: 2px; }
+  .ins-sub { font-size: 12px; color: var(--fp-muted); margin-top: 3px; }
+  .fp-emoji { margin-right: .18rem; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.3)); font-style: normal; }
   /* Logos de marque agrandis dans l'en-tête */
   #drawer-logo { min-height: 56px; }
   #drawer-logo svg { height: 52px !important; width: auto !important; max-width: 200px; }
@@ -560,6 +575,7 @@
         <button id="btn-km-mail" class="btn btn-outline text-sm ml-auto" title="Envoyer par e-mail une demande de relevé kilométrique aux chauffeurs du groupe affiché QUI N'ONT PAS ENCORE RÉPONDU (les véhicules déjà à jour sont ignorés) — le chauffeur répond en un clic"><i data-lucide="mail" class="w-4 h-4"></i> Demander le km par mail</button>
         <button id="btn-completer-cg" class="btn btn-outline text-sm" title="Lire les cartes grises déjà stockées et remplir automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates)"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Compléter depuis les cartes grises</button>
         <button id="btn-fiche-groupe" class="btn btn-outline text-sm" title="Télécharger la liste des véhicules du groupe affiché (ou Tous) en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> Télécharger la fiche</button>
+        <button id="btn-qr-all" class="btn btn-outline text-sm" title="Télécharger un PDF avec le QR de CHAQUE véhicule de la flotte (même carte que la fiche véhicule)"><i data-lucide="qr-code" class="w-4 h-4"></i> Tous les QR (PDF)</button>
       </div>
     </div>
 
@@ -643,6 +659,7 @@
           <div id="drawer-tech"></div>
         </div>
       </div>
+      <div id="drawer-insights" class="fp-insights"></div>
     </div>
   </div>
 
@@ -2701,7 +2718,83 @@
       const _wrap = document.createElement('div'); _wrap.className = 'veh-cols';
       _cols.forEach(c => _wrap.appendChild(c));
       _body.appendChild(_wrap); // _techEl reste en 1er (les autres ont été déplacés) → technique en haut
+      // Emoji 3D devant chaque titre de rubrique (repère visuel, type maquette)
+      const _emojiFor = (t) => {
+        t = (t || '').toLowerCase();
+        if (/assurance|administratif/.test(t)) return '🛡️';
+        if (/cl[eé]s?\b|carte grise/.test(t)) return '🔑';
+        if (/document/.test(t)) return '🗂️';
+        if (/technique/.test(t)) return '🔧';
+        if (/pneu/.test(t)) return '🛞';
+        if (/co[uû]t|budget/.test(t)) return '💶';
+        if (/kilom[eé]tr|relev[eé]/.test(t)) return '🧭';
+        if (/entretien|r[eé]vision|[eé]ch[eé]ance/.test(t)) return '🛠️';
+        if (/[eé]tat des lieux/.test(t)) return '📸';
+        if (/collaborateur|conducteur|affectation/.test(t)) return '👤';
+        if (/chronolog|historique/.test(t)) return '🕒';
+        if (/sinistre/.test(t)) return '💥';
+        if (/simulateur|remplacer|conserver/.test(t)) return '🔄';
+        if (/restitution/.test(t)) return '📦';
+        if (/note|journal/.test(t)) return '📝';
+        if (/alerte/.test(t)) return '🔔';
+        return '📌';
+      };
+      const _addEmoji = (card) => {
+        if (!card) return;
+        const h = card.querySelector('.fiche-title, .font-semibold.border-b, .field-label, summary, h3, h4') || card.querySelector('.font-semibold');
+        if (!h || h.querySelector('.fp-emoji')) return;
+        const e = _emojiFor(h.textContent || ''); if (!e) return;
+        const s = document.createElement('span'); s.className = 'fp-emoji'; s.textContent = e + ' ';
+        h.insertBefore(s, h.firstChild);
+      };
+      _addEmoji(_techEl); _rest.forEach(_addEmoji);
     } catch (e) { /* repli : fiche en une colonne si la réorganisation échoue */ }
+
+    // ===== Bandeau « instruments » utile dans l'en-tête : échéances · coût mensuel · santé =====
+    try {
+      const _ins = $('drawer-insights');
+      if (_ins) {
+        const _echItems = [];
+        const _pushEch = (label, dateStr) => {
+          if (!dateStr || dateStr === '—') return;
+          const j = FP.joursRestants ? FP.joursRestants(dateStr) : null;
+          if (j === null || j === undefined) return;
+          const col = j < 0 ? '#dc2626' : (j < 30 ? '#ea580c' : (j < 60 ? '#d97706' : '#16a34a'));
+          const txt = j < 0 ? `en retard ${-j} j` : (j === 0 ? "aujourd'hui" : `dans ${j} j`);
+          _echItems.push(`<span class="ins-chip" style="--c:${col}">${label} · <b>${FP.dateNum(dateStr)}</b> · ${txt}</span>`);
+        };
+        if (v.prochainCT && v.prochainCT !== '—' && !(FP.ctIgnored && FP.ctIgnored(v))) _pushEch('CT', v.prochainCT);
+        try { if (rev && rev.prochaineDate) _pushEch('Révision', rev.prochaineDate.toISOString().slice(0, 10)); } catch (e2) {}
+        if (v.antiPollution && v.antiPollution !== '—') _pushEch('Anti-poll.', v.antiPollution);
+        try { const _fc = (typeof lease !== 'undefined' && lease && FP.leasingEcheance) ? FP.leasingEcheance(lease) : null; if (_fc && !isNaN(_fc)) _pushEch('Fin leasing', _fc.toISOString().slice(0, 10)); } catch (e2) {}
+        const _echHTML = _echItems.length ? _echItems.join('') : '<span class="ins-none">Aucune échéance connue</span>';
+
+        let _loyerM = 0; try { const _cc = FP.leasingCoutContrat ? FP.leasingCoutContrat(v.immat) : null; if (_cc && _cc.loyerMois) _loyerM = Number(_cc.loyerMois) || 0; } catch (e2) {}
+        const _assurM = (FP.primeVeh ? (FP.primeVeh(v) || 0) : 0) / 12;
+        const _entM = (typeof coutTotal === 'number' ? coutTotal : 0) / 12;
+        const _totM = _loyerM + _assurM + _entM;
+        const _parts = [];
+        if (_loyerM) _parts.push('loyer ' + FP.euro(_loyerM));
+        if (_assurM) _parts.push('assur. ' + FP.euro(_assurM));
+        if (_entM) _parts.push('entretien ' + FP.euro(_entM));
+        const _costHTML = `<div class="ins-big">${FP.euro(_totM)}<span class="ins-unit">/mois</span></div><div class="ins-sub">${_parts.join(' · ') || '—'}</div>`;
+
+        let _santeHTML = '<div class="ins-sub">—</div>';
+        try {
+          const _s = FP.santeVehicule ? FP.santeVehicule(v) : null;
+          if (_s) {
+            const _col = _s.niveau === 'bon' ? '#16a34a' : (_s.niveau === 'surveiller' ? '#d97706' : '#dc2626');
+            const _lbl = _s.niveau === 'bon' ? 'Bon' : (_s.niveau === 'surveiller' ? 'À surveiller' : 'Critique');
+            _santeHTML = `<div class="ins-big" style="color:${_col}">${_s.score}<span class="ins-unit">/100</span></div><div class="ins-sub">${_lbl}${_s.raisons && _s.raisons.length ? ' · ' + FP.esc(_s.raisons[0]) : ''}</div>`;
+          }
+        } catch (e2) {}
+
+        _ins.innerHTML =
+          `<div class="ins-card ins-ech"><div class="ins-h">📅 Échéances à venir</div><div class="ins-chips">${_echHTML}</div></div>`
+          + `<div class="ins-card ins-cost"><div class="ins-h">💶 Coût mensuel estimé</div>${_costHTML}</div>`
+          + `<div class="ins-card ins-sante"><div class="ins-h">❤️ Santé du véhicule</div>${_santeHTML}</div>`;
+      }
+    } catch (e) {}
 
     $('drawer').classList.add('open');
     $('drawer-backdrop').classList.add('open');
@@ -3663,6 +3756,14 @@
       const label = grp === 'all' ? 'Liste des véhicules' : ('Véhicules — ' + FP.groupeLabel(grp));
       const list = data.vehicules.filter(v => grp === 'all' ? !FP.estVendu(v) : FP.vehGroupes(v).includes(grp));
       openFicheModal(list, label);
+    }); }
+  // « Tous les QR (PDF) » — un PDF avec le QR de CHAQUE véhicule de la flotte (liste LIVE complète,
+  // pas seulement ceux qui ont un conducteur). Même carte QR que l'impression/PNG de la fiche.
+  { const b = $('btn-qr-all'); if (b) b.addEventListener('click', () => {
+      if (!(window.FP && FP.qr && FP.qr.downloadAllPdf)) { alert('Module QR indisponible — recharge la page (Ctrl+Maj+R).'); return; }
+      const vehs = (data.vehicules || []).filter(v => !FP.estVendu || !FP.estVendu(v)); // exclut les vendus
+      if (!vehs.length) { alert('Aucun véhicule.'); return; }
+      FP.qr.downloadAllPdf(vehs);
     }); }
   { const b = $('bulk-fiche'); if (b) b.addEventListener('click', () => {
       const list = data.vehicules.filter(v => state.selectedIds.has(v.id));
