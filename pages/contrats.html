@@ -892,7 +892,7 @@
         <td>${FP.lienConducteur(v.chauffeur)}</td>
         <td><div class="flex flex-wrap gap-1">${FP.vehGroupes(v).map(k => `<span class="groupe-pill gp-${k}"><span class="dot"></span>${FP.groupeLabel(k)}</span>`).join('')}</div></td>
         <td><span class="badge ${pr ? 'badge-ok' : (hasPerVeh ? 'badge-warn' : 'badge-ok')}">${pr ? 'Couvert' : (hasPerVeh ? 'Prime manquante' : 'Couvert')}</span></td>
-        <td style="text-align:right;cursor:pointer" data-assur-edit="${v.immat || ''}" title="Cliquer pour modifier la prime (€/an TTC)">${cout} <i data-lucide="pencil" class="w-3 h-3 inline text-slate-300" style="vertical-align:-1px"></i></td>
+        <td style="text-align:right;cursor:pointer" data-assur-edit="${v.immat || ''}" title="Cliquer pour modifier la prime (€/an TTC)">${cout} <i data-lucide="pencil" class="w-3 h-3 inline text-slate-300" style="vertical-align:-1px"></i>${(pr && pr.docUrl) ? ` <button type="button" data-assur-doc="${escC(pr.docUrl)}" onclick="event.stopPropagation()" title="Voir le document de la prime (${escC(pr.docName || 'PDF')})" style="background:none;border:none;cursor:pointer;color:var(--fp-accent);font-size:11.5px;font-weight:600">📄 PDF</button>` : ''}</td>
       </tr>`;
     }).join('');
     if (window.lucide) try { lucide.createIcons(); } catch (e) {}
@@ -1915,8 +1915,14 @@
           <button type="button" data-loc-doc-assur="${i}:${di}" class="text-slate-300 hover:text-teal-600 flex-shrink-0" title="Déplacer vers l'Assurance de la fiche véhicule (mémo assurance)" style="font-size:12px;line-height:1">🛡</button>
           <button type="button" data-loc-doc-del="${i}:${di}" class="text-slate-300 hover:text-red-600 flex-shrink-0" title="Supprimer ce document" style="font-size:12px;line-height:1">✕</button>
         </div>`).join('');
+      // Bouton « Restitution » (comme BPCE) si la plaque du contrat est un véhicule de la flotte :
+      // ouvre la même checklist 120/90/60/30 j (FP.leasingInfo gère aussi les contrats LLD).
+      const _restitImmat = c.immat || autoImmatLoc(c);
+      const _restitInFleet = _restitImmat && (data.vehicules || []).some(v => normPlaque(v.immat) === normPlaque(_restitImmat));
+      const restitBtn = _restitInFleet ? ` <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px;margin-top:2px" data-loc-restit="${escC(_restitImmat)}" title="Checklist de restitution (compte à rebours 120/90/60/30 j)"><i data-lucide="clipboard-check" class="w-3 h-3"></i> Restitution</button>` : '';
       const lienCell = docsHtml
         + `<button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px;margin-top:2px" data-loc-up="${i}"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'Ajouter un doc' : '+ téléverser'}</button>`
+        + restitBtn
         + ` <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px;margin-top:2px" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3 h-3 text-red-600"></i></button>`;
       const immatCell = (() => { const auto = c.immat || autoImmatLoc(c);
         if (!auto) return `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-immat="${i}">+ plaque</button>`;
@@ -2175,6 +2181,7 @@
       c.docs.splice(di,1); c.pdfUrl=c.docs[0]?c.docs[0].url:null; save();
       if(FP.toast)FP.toast(`Mémo assurance déplacé vers ${immat} ✓`); else alert(`Déplacé vers l'assurance du véhicule ${immat}.`);
       return; }
+    const rs=e.target.closest('[data-loc-restit]'); if(rs){ if(typeof openRestit==='function') openRestit(rs.dataset.locRestit); return; }
     const dd=e.target.closest('[data-loc-doc-del]'); if(dd){ const [i,di]=dd.dataset.locDocDel.split(':').map(Number); if(Array.isArray(list[i].docs)){ list[i].docs.splice(di,1); list[i].pdfUrl=list[i].docs[0]?list[i].docs[0].url:null; save(); } return; }
     const del=e.target.closest('[data-loc-del]'); if(del){ const i=+del.dataset.locDel; const c=list[i]||{}; const immat=c.immat||(typeof autoImmatLoc==='function'?autoImmatLoc(c):''); if(!await FP.confirm(`Supprimer ce contrat Localease${c.conducteur?' de '+c.conducteur:''}${immat?' ('+immat+')':''} ?`)) return; try{ if(FP.trash) FP.trash.add('leasing', c); }catch(_){} list.splice(i,1); save(); if(immat && (data.vehicules||[]).some(x=>FP.normImmat(x.immat)===FP.normImmat(immat))){ if(await FP.confirm(`Supprimer AUSSI le véhicule « ${immat} » de TOUTE la flotte ?\n\n⚠️ Irréversible (leasing, assurance, liste véhicules…).`)){ if(deleteVehiculeFlotte(immat)) refreshAllContrats(); } } if(FP.toast)FP.toast('Contrat supprimé'); return; }
   };
@@ -2379,6 +2386,16 @@
   if ($('prime-save')) $('prime-save').addEventListener('click', savePrime);
   // Édition inline de la prime au clic dans le tableau assurance (modifier / vider une prime).
   if ($('tbody-assurance')) $('tbody-assurance').addEventListener('click', (e) => {
+    // 📄 Voir le document de la prime (bucket privé → URL signée avant ouverture).
+    const doc = e.target.closest('[data-assur-doc]');
+    if (doc) {
+      e.preventDefault(); e.stopPropagation();
+      const url = doc.getAttribute('data-assur-doc');
+      Promise.resolve((window.FP && FP.signedScanUrl) ? FP.signedScanUrl(url, 3600) : url)
+        .then(u => { if (u) window.open(u, '_blank', 'noopener'); })
+        .catch(() => { if (url) window.open(url, '_blank', 'noopener'); });
+      return;
+    }
     const td = e.target.closest('[data-assur-edit]'); if (!td || td.querySelector('input')) return;
     const immat = td.dataset.assurEdit; if (!immat) return;
     const k = normPlaque(immat);
