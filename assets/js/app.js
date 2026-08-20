@@ -10458,7 +10458,7 @@ FP.vehModal = (function () {
     if (!bd) {
       bd = document.createElement('div'); bd.id = 'fp-veh-modal';
       bd.style.cssText = 'position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;padding:2vh 2vw;background:rgba(11,18,32,.6);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);opacity:0;transition:opacity .2s ease';
-      bd.innerHTML = '<div class="fp-vm-box" style="width:96vw;max-width:1500px;height:95vh;background:var(--fp-surface,#fff);border-radius:20px;overflow:hidden;position:relative;box-shadow:0 50px 130px -30px rgba(0,0,0,.7);transform:scale(.98);transition:transform .22s cubic-bezier(.22,.61,.36,1)"><iframe title="Fiche véhicule" style="display:block;width:100%;height:100%;border:0"></iframe></div>';
+      bd.innerHTML = '<div class="fp-vm-box" style="width:98vw;max-width:1600px;height:96vh;background:var(--fp-surface,#fff);border-radius:22px;overflow:hidden;position:relative;box-shadow:0 50px 130px -30px rgba(0,0,0,.7);transform:scale(.98);transition:transform .22s cubic-bezier(.22,.61,.36,1)"><iframe title="Fiche véhicule" style="display:block;width:100%;height:100%;border:0"></iframe></div>';
       document.body.appendChild(bd);
       bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
     }
