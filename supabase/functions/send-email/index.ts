@@ -38,17 +38,20 @@ Deno.serve(async (req) => {
 
   // ⚠️ SÉCURITÉ : seul un utilisateur CONNECTÉ peut envoyer un e-mail (sinon un tiers pourrait
   // envoyer des mails « au nom de » la société). On valide le jeton auprès de Supabase.
-  // (SUPABASE_URL / SUPABASE_ANON_KEY sont injectés automatiquement dans les Edge Functions.)
+  // (SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY sont injectés automatiquement.)
+  const SUPA = Deno.env.get("SUPABASE_URL"); const ANON = Deno.env.get("SUPABASE_ANON_KEY");
+  let callerId = "";
   {
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
     if (!token) return json({ error: "Non connecté." }, 401);
-    const SUPA = Deno.env.get("SUPABASE_URL"); const ANON = Deno.env.get("SUPABASE_ANON_KEY");
     // ⚠️ FAIL-CLOSED : si l'environnement ne permet pas de valider le jeton, on REFUSE (comme scan-doc).
     // Sinon un déploiement où ces variables manquent transformerait la fonction en relais d'envoi ouvert.
     if (!SUPA || !ANON) return json({ error: "Non autorisé (validation impossible)." }, 401);
     try {
       const u = await fetch(`${SUPA}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: ANON } });
       if (!u.ok) return json({ error: "Session expirée — reconnecte-toi." }, 401);
+      const uj = await u.json().catch(() => null);
+      callerId = (uj && (uj.id || (uj.user && uj.user.id))) || "";
     } catch (_) { return json({ error: "Non autorisé." }, 401); }
   }
 
@@ -63,6 +66,45 @@ Deno.serve(async (req) => {
     msg = await req.json();
   } catch {
     return json({ error: "Corps JSON invalide" }, 400);
+  }
+
+  // ⚠️ SCOPING SERVEUR DU FROM (anti-usurpation inter-sociétés) : un compte NON-CEO ne peut envoyer
+  // QUE depuis l'adresse d'envoi de SA société — déterminée CÔTÉ SERVEUR (profiles + app_settings),
+  // jamais depuis le payload (qu'un appel forgé pourrait mettre à l'adresse d'une autre société). Le
+  // CEO garde un `from` libre : il agit légitimement au nom de toutes les sociétés. Fidèle au calcul
+  // du client (mailExpediteur + domaine d'envoi vérifié + nom société) → invisible pour un envoi
+  // légitime, il ne corrige qu'un `from` étranger. Repli sûr : config absente → EMAIL_FROM.
+  const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (callerId && SERVICE) {
+    try {
+      const rest = (path: string) => fetch(`${SUPA}/rest/v1/${path}`, { headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` } }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      const profRows = await rest(`profiles?id=eq.${encodeURIComponent(callerId)}&select=is_admin,role,societe`);
+      const me = Array.isArray(profRows) ? profRows[0] : null;
+      const isCEO = !!(me && me.is_admin); // source de vérité = profiles (jamais user_metadata)
+      if (!isCEO) {
+        const soc = (me && me.societe) || "";
+        let allowedFrom = "", replyTo = "";
+        if (soc) {
+          const setRows = await rest(`app_settings?id=eq.${encodeURIComponent(String(soc))}&select=data`);
+          const data = (Array.isArray(setRows) && setRows[0] && setRows[0].data) || {};
+          const p = (data.profil && typeof data.profil === "object") ? data.profil : {};
+          const exp = String(p.mailExpediteur || "").trim();
+          if (exp) {
+            const dom = String(p.mailDomaineEnvoi || "").trim().replace(/^@/, "");
+            const fromAddr = dom ? (exp.split("@")[0] + "@" + dom) : exp;
+            let nom = (data.societe && data.societe.nom) || "";
+            nom = String(nom).replace(/[<>"]/g, "").trim();
+            if (/^parc\s*pilot$/i.test(nom)) nom = "";
+            allowedFrom = nom ? `${nom} <${fromAddr}>` : fromAddr;
+            replyTo = exp;
+          }
+        }
+        // On IMPOSE le from de la société (ou le secret EMAIL_FROM si non configurée) : le `from` du
+        // payload est ignoré pour un non-CEO → plus d'envoi « au nom de » une autre société.
+        msg.from = allowedFrom || "";
+        if (replyTo && !msg.replyTo) msg.replyTo = replyTo;
+      }
+    } catch (_) { /* lecture impossible (infra) → comportement standard : repli EMAIL_FROM ci-dessous */ }
   }
 
   // Expéditeur : si le site fournit `from` (adresse de la société), on l'utilise ; sinon le
