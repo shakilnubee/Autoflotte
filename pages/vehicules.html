@@ -77,16 +77,28 @@
     border-color: color-mix(in srgb, var(--fp-accent) 40%, var(--fp-border)) !important; }
 
   /* ===== CORPS : 3 COLONNES (organisation type maquette) — scroll VERTICAL, jamais latéral ===== */
-  #drawer-body { padding: 1.5rem; }
-  .veh-cols { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; }
+  /* Corps sur fond gris-bleu Parc Pilot → les bulles blanches ressortent (moins « tout blanc ») */
+  #drawer-body { padding: 1.5rem; background: var(--fp-bg); }
+  /* Fiche technique = bulle PRINCIPALE, pleine largeur, en HAUT ; liste sur 2-3 colonnes (compacte) */
+  .veh-tech-top { margin-bottom: 16px; border-top: 3px solid var(--fp-accent) !important; }
+  @media (min-width: 720px)  { .veh-tech-top .text-sm { column-count: 2; column-gap: 40px; } }
+  @media (min-width: 1200px) { .veh-tech-top .text-sm { column-count: 3; } }
+  .veh-tech-top .text-sm > * { break-inside: avoid; }
+  .veh-cols { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
   @media (min-width: 760px)  { .veh-cols { grid-template-columns: 1fr 1fr; } }
   @media (min-width: 1140px) { .veh-cols { grid-template-columns: repeat(3, 1fr); } }
-  .veh-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .veh-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
   .veh-col > * { background: var(--fp-surface); border: 1px solid var(--fp-border); border-radius: 1rem;
-    padding: 1rem 1.15rem; box-shadow: var(--fp-shadow);
+    padding: 1rem 1.15rem; box-shadow: var(--fp-shadow); border-top: 3px solid var(--fp-accent);
     transition: transform .2s var(--fp-ease), box-shadow .2s var(--fp-ease), border-color .2s var(--fp-ease); }
   .veh-col > *:hover { transform: translateY(-2px); box-shadow: var(--fp-shadow-lg);
     border-color: color-mix(in srgb, var(--fp-accent) 24%, var(--fp-border)); }
+  /* Accent de couleur PAR colonne (sauce Parc Pilot) : cyan · orange · vert */
+  .veh-cols > .veh-col:nth-child(1) > * { border-top-color: var(--fp-data); }
+  .veh-cols > .veh-col:nth-child(2) > * { border-top-color: var(--fp-accent); }
+  .veh-cols > .veh-col:nth-child(3) > * { border-top-color: var(--fp-ok); }
+  /* Titres de section un peu plus marqués */
+  .veh-col .font-semibold.border-b, .veh-tech-top .font-semibold.border-b { color: var(--fp-primary) !important; border-color: var(--fp-border) !important; }
   /* Logos de marque agrandis dans l'en-tête */
   #drawer-logo { min-height: 56px; }
   #drawer-logo svg { height: 52px !important; width: auto !important; max-width: 200px; }
@@ -2649,7 +2661,12 @@
       if (_sh) { _sh.innerHTML = ''; if (_statusEl) _sh.appendChild(_statusEl); }
       // La fiche technique RESTE dans le corps (bulle pleine) → la barre de forfait km leasing
       // s'affiche entièrement (plus de découpe en bas). Répartition du reste en 3 colonnes.
-      const _rest = Array.prototype.slice.call(_body.children);
+      const _rest0 = Array.prototype.slice.call(_body.children);
+      // Fiche TECHNIQUE = bulle PRINCIPALE, pleine largeur, EN HAUT (liste sur plusieurs colonnes).
+      let _techEl = null;
+      _rest0.forEach(el => { const h = el.querySelector && el.querySelector('.font-semibold'); if (h && h.textContent.trim() === 'Technique') _techEl = el; });
+      if (_techEl) _techEl.classList.add('veh-tech-top');
+      const _rest = _rest0.filter(el => el !== _techEl);
       const _colFor = (el) => {
         const h = el.querySelector('.font-semibold, .fiche-title, .field-label, summary, h3, h4');
         const t = ((h ? h.textContent : el.textContent) || '').toLowerCase();
@@ -2660,10 +2677,10 @@
       };
       const _cols = [document.createElement('div'), document.createElement('div'), document.createElement('div')];
       _cols.forEach(c => c.className = 'veh-col');
-      _rest.forEach(el => _cols[_colFor(el)].appendChild(el));
+      _rest.forEach(el => _cols[_colFor(el)].appendChild(el)); // détache de _body
       const _wrap = document.createElement('div'); _wrap.className = 'veh-cols';
       _cols.forEach(c => _wrap.appendChild(c));
-      _body.innerHTML = ''; _body.appendChild(_wrap);
+      _body.appendChild(_wrap); // _techEl reste en 1er (les autres ont été déplacés) → technique en haut
     } catch (e) { /* repli : fiche en une colonne si la réorganisation échoue */ }
 
     $('drawer').classList.add('open');
