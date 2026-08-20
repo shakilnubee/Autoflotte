@@ -1713,6 +1713,7 @@
         ${this.photosHTML(d)}
         <div class="flex gap-2 mt-3 flex-wrap">
           ${traite ? '' : `<button type="button" class="btn btn-dark text-xs" data-decl-sin="${FP.esc(d.id)}"><i data-lucide="clipboard-pen-line" class="w-3.5 h-3.5"></i> Créer le sinistre</button>`}
+          <button type="button" class="btn btn-outline text-xs" data-decl-pdf="${FP.esc(d.id)}" title="Générer un rapport PDF (avec photos) à envoyer à l'assurance"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Rapport PDF</button>
           ${traite
             ? `<button type="button" class="btn btn-outline text-xs" data-decl-untraite="${FP.esc(d.id)}">Rouvrir</button>`
             : `<button type="button" class="btn btn-outline text-xs" data-decl-traite="${FP.esc(d.id)}"><i data-lucide="check" class="w-3.5 h-3.5"></i> Marquer traité</button>`}
@@ -1747,14 +1748,79 @@
       this.rows = this.rows.filter(d => d.id !== id);
       this.render(); if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
     },
+    // Rapport PDF (à envoyer à l'assurance) : infos société + détails du sinistre + photos intégrées.
+    async exportPdf(id, btn) {
+      const d = this.rows.find(x => x.id === id); if (!d) return;
+      if (!(window.jspdf && window.jspdf.jsPDF) && FP.ensureJsPDF) { await FP.ensureJsPDF(); }
+      if (!(window.jspdf && window.jspdf.jsPDF)) { alert('Générateur PDF indisponible.'); return; }
+      const oldHtml = btn ? btn.innerHTML : '';
+      if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Génération…'; }
+      try {
+        const doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
+        const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight();
+        const M = 15; let y = M;
+        const isSin = (d.type || 'sinistre') !== 'probleme';
+        let soc = ''; try { const s = FP.settings.get(); soc = (s.societe && s.societe.nom) || ''; } catch (e) {}
+        let ass = {}; try { ass = FP.assuranceContrat ? FP.assuranceContrat() : {}; } catch (e) {}
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(15, 30, 61);
+        doc.text(isSin ? 'Rapport de sinistre' : "Rapport d'incident", M, y); y += 7;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90, 100, 120);
+        if (soc) { doc.text(soc, M, y); y += 5; }
+        doc.text('Édité le ' + FP.date(new Date().toISOString().slice(0, 10)), M, y); y += 8;
+        doc.setDrawColor(225, 229, 236); doc.line(M, y, pw - M, y); y += 7;
+        const row = (lbl, val) => {
+          if (!val) return;
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(120, 130, 150);
+          doc.text(String(lbl).toUpperCase(), M, y);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(20, 26, 43);
+          const lines = doc.splitTextToSize(String(val), pw - 2 * M - 42);
+          doc.text(lines, M + 42, y);
+          y += Math.max(6, lines.length * 5.2);
+          if (y > ph - M) { doc.addPage(); y = M; }
+        };
+        row('Type', isSin ? 'Sinistre / accident' : 'Panne / problème');
+        row('Véhicule', d.plaque || '—');
+        if (ass.assureur) row('Assureur', ass.assureur + (ass.police ? ' — police ' + ass.police : ''));
+        row('Reçu le', d.created_at ? FP.date(String(d.created_at).slice(0, 10)) : '');
+        row('Date incident', d.date_incident || '');
+        row('Lieu', d.lieu || '');
+        row('Description', d.description || '');
+        row('Tiers impliqué', d.tiers || '');
+        row('Blessés', d.blesses || '');
+        y += 4;
+        let phArr = []; try { phArr = Array.isArray(d.photos) ? d.photos : JSON.parse(d.photos || '[]'); } catch (e) { phArr = []; }
+        if (phArr.length) {
+          if (y > ph - 45) { doc.addPage(); y = M; }
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(15, 30, 61);
+          doc.text('Photos (' + phArr.length + ')', M, y); y += 6;
+          for (const rawUrl of phArr) {
+            let src = rawUrl; try { if (FP.signedScanUrl) src = await FP.signedScanUrl(rawUrl, 3600); } catch (e) {}
+            let dataUrl = null;
+            try { const r = await fetch(src); const b = await r.blob(); dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); }); } catch (e) { continue; }
+            if (!dataUrl) continue;
+            let props; try { props = doc.getImageProperties(dataUrl); } catch (e) { continue; }
+            const maxW = pw - 2 * M, maxH = 115;
+            let w = maxW, h = w * props.height / props.width; if (h > maxH) { h = maxH; w = h * props.width / props.height; }
+            if (y + h > ph - M) { doc.addPage(); y = M; }
+            const fmt = /^data:image\/png/i.test(dataUrl) ? 'PNG' : 'JPEG';
+            try { doc.addImage(dataUrl, fmt, M, y, w, h); } catch (e) { continue; }
+            y += h + 6;
+          }
+        }
+        const clean = s => String(s || '').replace(/[^A-Za-z0-9]/g, '');
+        doc.save(((isSin ? 'sinistre' : 'incident') + '-' + clean(d.plaque) + '-' + String(d.created_at || '').slice(0, 10) + '.pdf').replace(/-+/g, '-'));
+      } catch (e) { alert('Échec de la génération du PDF : ' + (e && e.message || e)); }
+      finally { if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; } }
+    },
   };
   document.addEventListener('click', (e) => {
-    const t = e.target.closest && e.target.closest('[data-decl-traite],[data-decl-untraite],[data-decl-del],[data-decl-sin],#decl-toggle-traites');
+    const t = e.target.closest && e.target.closest('[data-decl-traite],[data-decl-untraite],[data-decl-del],[data-decl-sin],[data-decl-pdf],#decl-toggle-traites');
     if (!t) return;
     if (t.id === 'decl-toggle-traites') { DeclCond.showTraites = !DeclCond.showTraites; DeclCond.render(); return; }
     if (t.hasAttribute('data-decl-traite')) DeclCond.setStatut(t.getAttribute('data-decl-traite'), 'traite');
     else if (t.hasAttribute('data-decl-untraite')) DeclCond.setStatut(t.getAttribute('data-decl-untraite'), 'nouveau');
     else if (t.hasAttribute('data-decl-del')) DeclCond.remove(t.getAttribute('data-decl-del'));
+    else if (t.hasAttribute('data-decl-pdf')) DeclCond.exportPdf(t.getAttribute('data-decl-pdf'), t);
     else if (t.hasAttribute('data-decl-sin')) { const b = document.getElementById('sin-declare-btn'); if (b) b.click(); }
   });
   document.addEventListener('fp:data-ready', () => DeclCond.load());

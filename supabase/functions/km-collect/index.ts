@@ -125,6 +125,29 @@ async function vehConducteur(db: ReturnType<typeof createClient>, chauffeur: str
   return { prenom, nom, poste: String(hit.poste || ""), name: full || (prenom + " " + nom).trim(), key: String(hit.key || "") };
 }
 
+// Amendes DU CONDUCTEUR (pour le portail « Mes amendes ») : montant + n° d'avis + date + motif,
+// SANS PDF ni pièce jointe. Rattachées par le prénom/nom du conducteur (normalisé). Le montant renvoyé
+// est le montant DÛ (majoré si l'amende est marquée majorée, sinon le montant courant).
+async function vehAmendes(db: ReturnType<typeof createClient>, societe: string, conducteur: Record<string, unknown> | null) {
+  if (!conducteur) return [];
+  const { data } = await db.from("amendes").select("*").eq("societe", societe || "PXP");
+  if (!Array.isArray(data)) return [];
+  const keys = new Set<string>();
+  const add = (s: unknown) => { const n = _norm(String(s || "")); if (n) keys.add(n); };
+  add(conducteur.prenom); add(conducteur.name); add(String(conducteur.prenom || "") + String(conducteur.nom || ""));
+  if (!keys.size) return [];
+  const out: Array<Record<string, unknown>> = [];
+  for (const a of data as Array<Record<string, unknown>>) {
+    const ap = _norm(String(a.prenom || ""));
+    if (!ap || !keys.has(ap)) continue;
+    const majoree = a.majoree === true || a.majoree === "true";
+    const montant = (majoree && a.montant_majore != null && a.montant_majore !== "") ? Number(a.montant_majore) : (Number(a.montant) || 0);
+    out.push({ numeroAvis: String(a.numero_avis || ""), montant: isFinite(montant) ? montant : 0, date: String(a.date || ""), motif: String(a.motif || ""), statut: String(a.statut || "") });
+  }
+  out.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  return out;
+}
+
 // Conducteur ACTUEL du véhicule : le champ `chauffeur` du véhicule, sinon l'affectation EN COURS
 // (settings.affectations[vehId] = [{conducteur, debut, fin}]) — sinon un véhicule affecté via
 // l'historique mais sans champ chauffeur n'affichait pas de nom sur le portail.
@@ -318,8 +341,10 @@ Deno.serve(async (req) => {
           const langue = (lv === "en" || lv === "english" || lv === "anglais") ? "en" : "fr";
           delete (portal as Record<string, unknown>).condLangues;   // pas besoin de l'exposer au client
           const conducteur2 = conducteur ? { ...conducteur, langue } : { langue };
+          // Amendes du conducteur (montant + n° d'avis) pour l'onglet « Mes amendes » du portail (sans PDF).
+          const amendes = await vehAmendes(db, qr.societe || "PXP", conducteur as Record<string, unknown> | null);
           // ⚠️ La page v.html lit `portail` (français) → on émet cette clé (pas `portal`).
-          return json({ ...base, veh: info, docs, edl, portail: portal, conducteur: conducteur2, langue });
+          return json({ ...base, veh: info, docs, edl, portail: portal, conducteur: conducteur2, amendes, langue });
         }
         return json(base);
       }
