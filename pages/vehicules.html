@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260820i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260820i">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -993,13 +993,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820h"></script>
-<script src="../assets/js/supabase-client.js?v=20260820h"></script>
-<script src="../assets/js/data.js?v=20260820h"></script>
-<script src="../assets/js/fleet-docs.js?v=20260820h"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260820h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260820i"></script>
+<script src="../assets/js/supabase-client.js?v=20260820i"></script>
+<script src="../assets/js/data.js?v=20260820i"></script>
+<script src="../assets/js/fleet-docs.js?v=20260820i"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260820i"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260820h"></script>
+<script src="../assets/js/app.js?v=20260820i"></script>
 <script>
   lucide.createIcons();
 
@@ -1133,11 +1133,26 @@
     if (replaced && FP.toast) { try { FP.toast('Document remplacé (un seul par catégorie).'); } catch (e) {} }
   }
   async function delVehDoc(vehId, docId) {
+    // Corbeille 7 jours (restaurable) AVANT de retirer de la liste live.
+    try { const _d = getVehDocs(vehId).find(d => d && d.id === docId); if (_d && FP.docTrash) FP.docTrash.add(_d); } catch (e) {}
     if (docsCache) docsCache = docsCache.filter(d => d.id !== docId);
     else { const all = lsGetAllDocs(); all[vehId] = (all[vehId] || []).filter(d => d.id !== docId); localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
     if (docsCache) { try { localStorage.setItem(DOCS_CACHE_KEY, JSON.stringify(docsCache)); } catch (e) {} }
     openDrawer(vehId);
     if (FP.persist.available()) FP.persist.delete('documents', docId);
+  }
+  // Restaure un document depuis la corbeille (le ré-insère dans la table + cache, retire de la corbeille).
+  async function restoreVehDoc(docId) {
+    const entry = (FP.docTrash ? FP.docTrash.list() : []).find(x => x && x.doc && x.doc.id === docId);
+    if (!entry) return;
+    const doc = entry.doc;
+    if (docsCache) docsCache.push(doc);
+    else { const all = lsGetAllDocs(); (all[doc.vehiculeId] = all[doc.vehiculeId] || []).push(doc); localStorage.setItem(DOCS_KEY, JSON.stringify(all)); }
+    if (docsCache) { try { localStorage.setItem(DOCS_CACHE_KEY, JSON.stringify(docsCache)); } catch (e) {} }
+    if (FP.persist.available()) FP.persist.insert('documents', doc);
+    if (FP.docTrash) FP.docTrash.remove(docId);
+    if (FP.toast) { try { FP.toast('Document restauré ✓'); } catch (e) {} }
+    openDrawer(doc.vehiculeId);
   }
   function loadVehDocs() {
     if (!(window.FP && FP.db && FP.supabase)) return;
@@ -1246,11 +1261,25 @@
           </div>`).join('')}
         </div>
       </details>` : '';
+    // 🗑 Corbeille documents (restaurable 7 jours) — supprimer un doc le range ici, puis l'app le purge.
+    const trashB = (FP.docTrash ? FP.docTrash.list(v.id) : []);
+    const corbeilleHTML = trashB.length ? `<details class="mt-3">
+        <summary class="cursor-pointer text-xs font-semibold text-slate-500 flex items-center gap-2" style="user-select:none"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-slate-400"></i> Corbeille — ${trashB.length} document(s) <span class="font-normal text-slate-400">(restaurable 7 j)</span></summary>
+        <div class="mt-2 space-y-1">
+          ${trashB.map(x => { const d = x.doc || {}; const jr = Math.max(0, FP.docTrash.RET_DAYS - Math.floor((Date.now() - x.deletedAt) / 86400000)); return `<div class="flex items-center justify-between gap-3" style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:5px 9px">
+            <span class="text-xs text-slate-600" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(d.label || d.type || 'Document')} <span class="text-slate-400">· ${jr} j restant(s)</span></span>
+            <span class="flex gap-2 flex-shrink-0">
+              <button type="button" class="text-xs font-semibold" data-doc-restore="${escapeHtml(d.id)}" style="color:var(--fp-accent);background:none;border:none;cursor:pointer;white-space:nowrap">↺ Restaurer</button>
+              <button type="button" class="text-xs font-semibold text-red-600" data-doc-purge="${escapeHtml(d.id)}" style="background:none;border:none;cursor:pointer;white-space:nowrap">Supprimer</button>
+            </span></div>`; }).join('')}
+        </div>
+      </details>` : '';
     return `
       <div>
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Documents (${count})</div>
         <div class="mt-3">${rows}</div>
         ${hiddenHTML}
+        ${corbeilleHTML}
         <div class="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
           <div class="field-label !mb-0">Ajouter un document</div>
           <select id="doc-type" class="field-input">${typeOptions}</select>
@@ -4327,6 +4356,17 @@
     // ↺ Réafficher un document intégré masqué (fonctionne même hors mode édition)
     const bUnhide = e.target.closest('[data-builtin-unhide]');
     if (bUnhide) { unhideBuiltinDoc(bUnhide.dataset.builtinUnhide, bUnhide.dataset.builtinUnhideKey); openDrawer(bUnhide.dataset.builtinUnhide); return; }
+    // ↺ Restaurer un document de la corbeille (fonctionne même hors mode édition)
+    const dRes = e.target.closest('[data-doc-restore]');
+    if (dRes) { restoreVehDoc(dRes.dataset.docRestore); return; }
+    // Supprimer DÉFINITIVEMENT un document de la corbeille
+    const dPurge = e.target.closest('[data-doc-purge]');
+    if (dPurge) {
+      const id = dPurge.dataset.docPurge;
+      const entry = (FP.docTrash ? FP.docTrash.list() : []).find(x => x && x.doc && x.doc.id === id);
+      if (entry && await FP.confirm('Supprimer définitivement ce document de la corbeille ?')) { if (FP.docTrash) FP.docTrash.remove(id); openDrawer(entry.doc.vehiculeId); }
+      return;
+    }
     if (!state.editingId) return;
     const del = e.target.closest('[data-doc-del]');
     if (del) {

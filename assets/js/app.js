@@ -1479,6 +1479,42 @@ FP.refreshDataCache = function () {
   } catch (e) {}
 };
 
+// ===== CORBEILLE DOCUMENTS (rétention 7 jours) =====
+// Un document supprimé (fiche véhicule OU alerte « doublons ») n'est plus effacé sèchement : on le
+// range 7 jours dans une corbeille SYNCHRONISÉE par société (app_settings.docTrash) → restaurable
+// depuis la fiche. Passé 7 jours, l'entrée est purgée automatiquement (le fichier de stockage, lui,
+// reste — il n'est plus référencé). Aucune manip Supabase : tout vit dans les réglages société.
+FP.docTrash = {
+  RET_DAYS: 7,
+  _all() { try { const t = FP.settings.get().docTrash; return Array.isArray(t) ? t : []; } catch (e) { return []; } },
+  // Purge les entrées de plus de 7 jours. Renvoie la liste encore valide.
+  purge() {
+    try {
+      const now = Date.now(), lim = this.RET_DAYS * 86400000;
+      const all = this._all();
+      const keep = all.filter(x => x && x.deletedAt && (now - x.deletedAt) < lim);
+      if (keep.length !== all.length) { const s = FP.settings.get(); s.docTrash = keep; FP.settings.save(s); }
+      return keep;
+    } catch (e) { return this._all(); }
+  },
+  // Range un document en corbeille (copie complète : type, url, label, vehiculeId…).
+  add(doc) {
+    try {
+      if (!doc) return;
+      const s = FP.settings.get();
+      const list = Array.isArray(s.docTrash) ? s.docTrash.slice() : [];
+      list.push({ doc: doc, deletedAt: Date.now() });
+      s.docTrash = list; FP.settings.save(s);
+    } catch (e) {}
+  },
+  // Liste (purgée) — optionnellement filtrée par véhicule.
+  list(vehId) { const l = this.purge(); return vehId ? l.filter(x => x && x.doc && x.doc.vehiculeId === vehId) : l; },
+  // Retire une entrée de la corbeille (après restauration OU suppression définitive).
+  remove(docId) { try { const s = FP.settings.get(); s.docTrash = this._all().filter(x => !(x && x.doc && x.doc.id === docId)); FP.settings.save(s); } catch (e) {} },
+};
+// Purge auto au chargement (le « site supprime au bout de 7 j »).
+try { if (FP.settings && FP.settings.get) FP.docTrash.purge(); } catch (e) {}
+
 // === Rôle & droits utilisateur ===
 // 3 niveaux d'accès + le portail salarié :
 //   • 'ceo'          → super-admin (toi) : TOUTES les sociétés, tous les droits, gère les comptes.
