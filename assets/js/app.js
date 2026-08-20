@@ -1789,9 +1789,13 @@ FP.conducteurs = {
       const exact = list.find(c => FP.normNomComplet(FP.conducteurs.displayName(c)) === full);
       if (exact) return exact;
     }
-    // 2) repli historique : match par prénom seul (préserve les liens des données ne portant qu'un prénom)
+    // 2) repli par prénom seul (données ne portant qu'un prénom). ⚠️ HOMONYMES : si PLUSIEURS
+    // conducteurs portent ce prénom, on ne peut PAS départager sans nom de famille → on renvoie null
+    // (au lieu de choisir le PREMIER au hasard, ce qui fusionnait « Mégane X » et « Mégane Y » sur une
+    // seule fiche). Comportement inchangé quand le prénom est unique (cas courant).
     const k = FP.normPrenom(name || ''); if (!k) return null;
-    return list.find(c => FP.normPrenom(c.name || c.prenom || c.key) === k) || null;
+    const matches = list.filter(c => FP.normPrenom(c.name || c.prenom || c.key) === k);
+    return matches.length === 1 ? matches[0] : null;
   },
   async create(info) {
     info = info || {};
@@ -2288,11 +2292,20 @@ FP.condKeyParNom = function (name) {
   try { const c = FP.conducteurs.find(name); if (c && c.key) return c.key; } catch (e) {}
   const wordsOf = s => new Set(FP.normNomComplet(s).split(' ').filter(Boolean));
   const nPre = FP.normPrenom(name), nW = wordsOf(name);
-  for (const c of FP.conducteursTous()) {
+  const all = FP.conducteursTous();
+  // ⚠️ HOMONYMES : combien de conducteurs portent CE prénom ? Si plusieurs, un match sur le prénom
+  // SEUL choisirait le premier au hasard (fusion « Mégane X » / « Mégane Y ») → on l'interdit alors,
+  // et seul un match par NOM COMPLET (≥2 mots communs) départage. Repli générique sinon (condGroupKey).
+  let sameFirst = 0; for (const c of all) { if (nPre && FP.normPrenom(c.prenom || c.name || c.key || '') === nPre) sameFirst++; }
+  const ambigu = sameFirst > 1;
+  for (const c of all) {
     const cPre = FP.normPrenom(c.prenom || c.name || c.key || '');
     const cW = wordsOf((FP.conducteurs.displayName(c) || '') + ' ' + (c.key || ''));
-    if (nPre && cPre && nPre === cPre) return c.key;   // même prénom
-    if (cPre && nW.has(cPre)) return c.key;             // prénom du conducteur présent dans le libellé du relevé (ordre inversé)
+    // Match FORT par nom complet (prénom + nom présents des deux côtés) : sûr même avec des homonymes.
+    if (cW.size >= 2 && [...cW].filter(w => nW.has(w)).length >= 2) return c.key;
+    if (ambigu) continue;                               // prénom ambigu → pas de match par prénom seul
+    if (nPre && cPre && nPre === cPre) return c.key;    // même prénom (unique)
+    if (cPre && nW.has(cPre)) return c.key;             // prénom du conducteur présent dans le libellé (ordre inversé)
     if (nPre && cW.has(nPre)) return c.key;             // prénom du relevé présent dans le nom du conducteur
   }
   return null;
