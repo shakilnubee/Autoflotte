@@ -1103,10 +1103,18 @@ FP.aenDetail = (v) => {
   const carbFourni = !!cfg.carburantFourni;
   const elec = (FP.normCarburant ? FP.normCarburant(v.carburant) : v.carburant) === 'Électrique';
   const c = FP.leasingContrat ? FP.leasingContrat(v.immat) : null;
+  // ⚠️ SOURCE UNIQUE du loyer : FP.leasingCoutContrat couvre le forfait ET les contrats LLD saisis
+  // dans l'onglet Contrats (localeaseContrats — Ayvens/Localease/BPCE…). L'AEN doit lire le loyer
+  // au MÊME endroit que le KPI « Loyer » de l'en-tête, sinon un véhicule dont le loyer est renseigné
+  // dans Contrats affichait à tort « loyer inconnu ».
+  const cc = FP.leasingCoutContrat ? FP.leasingCoutContrat(v.immat) : null;
+  const cActif = c && (!FP.leasingActif || FP.leasingActif(c));
   let base = 0, taux = 0, method, loyerAnnuel = null;
-  if (c && (!FP.leasingActif || FP.leasingActif(c))) {
+  if (cActif || cc) {
     const info = FP.leasingInfo ? FP.leasingInfo(v) : null;
-    const loyer = (info && info.loyer != null) ? info.loyer : (c.loyer != null ? Number(c.loyer) : null);
+    const loyer = (cc && cc.loyerMois != null) ? Number(cc.loyerMois)
+                : (info && info.loyer != null) ? info.loyer
+                : (c && c.loyer != null) ? Number(c.loyer) : null;
     if (loyer == null || !(loyer > 0)) return { applicable: false, method: 'loué', bareme, elec, reason: "loyer inconnu" };
     loyerAnnuel = loyer * 12;
     const assur = cfg.inclureAssurance ? (FP.primeVeh ? (FP.primeVeh(v) || 0) : 0) : 0;
