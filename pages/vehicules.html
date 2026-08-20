@@ -31,6 +31,25 @@
   .drawer.open { transform: translateX(0); }
   .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,30,61,.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 55; }
   .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  /* ===== MODE EMBED : la MÊME fiche véhicule réutilisée en GRAND POP-UP depuis la fiche conducteur =====
+     (même code, mêmes handlers → aucune divergence). On masque le chrome de la page et on transforme
+     le tiroir en pop-up centré « A1 » : en-tête cockpit + corps en colonnes (bulles). */
+  body.fp-embed { overflow: hidden; background: transparent; }
+  body.fp-embed > .flex { display: none !important; }
+  body.fp-embed #drawer-backdrop { display: none !important; }
+  body.fp-embed #fp-fab, body.fp-embed .fp-fab, body.fp-embed .fp-mobile-bar,
+  body.fp-embed .fp-sidebar-backdrop,
+  body.fp-embed [id*="tour"], body.fp-embed [class*="onboard"], body.fp-embed [id*="nouveaut"] { display: none !important; }
+  body.fp-embed .drawer { position: fixed; inset: 0; margin: 0; width: 100%; max-width: 100%; height: 100%;
+    transform: none !important; border-radius: 0; box-shadow: none; display: flex; flex-direction: column; z-index: 1; transition: none; }
+  body.fp-embed .drawer > .relative { flex: none; }
+  body.fp-embed #drawer-body { flex: 1 1 auto; overflow: auto; min-height: 0; }
+  body.fp-embed .drawer > .p-6.border-t { flex: none; }
+  @media (min-width: 820px) {
+    body.fp-embed #drawer-body { column-count: 2; column-gap: 16px; }
+    body.fp-embed #drawer-body > * { break-inside: avoid; margin: 0 0 16px !important; display: block; }
+  }
+  @media (min-width: 1240px) { body.fp-embed #drawer-body { column-count: 3; } }
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
   .field-input:focus { outline: none; border-color: var(--fp-accent); box-shadow: 0 0 0 3px rgba(249,115,22,.15); }
@@ -294,6 +313,17 @@
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("../sw.js").catch(function(){});});}</script>
 </head>
 <body class="bg-slate-50"><script>try{if(localStorage.getItem("fp_dark_mode")!=="0")document.body.classList.add("fp-dark")}catch(e){}</script>
+<script>/* MODE EMBED (?embed=1) : la fiche véhicule est réutilisée en pop-up depuis la fiche conducteur.
+   On tague le body au plus tôt (évite le flash du chrome) et on branche fermer/Échap sur la page parente. */
+(function(){try{
+  if(new URLSearchParams(location.search).get('embed')!=='1')return;
+  document.body.classList.add('fp-embed');
+  document.addEventListener('click',function(e){
+    var c=e.target.closest&&e.target.closest('#drawer-close');
+    if(c){e.preventDefault();e.stopPropagation();try{parent.postMessage('fp-fiche-close','*');}catch(_){}}
+  },true);
+  window.addEventListener('keydown',function(e){if(e.key==='Escape'){try{parent.postMessage('fp-fiche-close','*');}catch(_){}}});
+}catch(e){}})();</script>
 
 <div class="flex min-h-screen flex-col md:flex-row">
 
@@ -414,12 +444,6 @@
     </div>
 
     <!-- Modal : simulateur « conserver ou remplacer ? » -->
-    <div id="sim-ov" class="fiche-ov">
-      <div class="fiche-card" style="max-width:660px;max-height:92vh;overflow-y:auto">
-        <div id="sim-content"></div>
-      </div>
-    </div>
-
     <!-- Onglets par groupe (rendus dynamiquement depuis FP.settings) -->
     <div class="group-tabs" id="group-tabs"></div>
 
@@ -557,6 +581,13 @@
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
+
+<!-- Simulateur « conserver ou remplacer » — overlay au niveau body (fonctionne aussi en mode embed/pop-up) -->
+<div id="sim-ov" class="fiche-ov">
+  <div class="fiche-card" style="max-width:660px;max-height:92vh;overflow-y:auto">
+    <div id="sim-content"></div>
+  </div>
+</div>
 
 <!-- =============== MODAL QR CODE =============== -->
 <div class="modal-backdrop" id="qr-backdrop">
