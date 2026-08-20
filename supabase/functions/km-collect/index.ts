@@ -87,7 +87,7 @@ async function dernierReleveDate(db: ReturnType<typeof createClient>, vehiculeId
 async function vehInfo(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
   if (!vehiculeId) return null;
   const { data: v } = await db.from("vehicules")
-    .select("marque,modele,carburant,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur")
+    .select("marque,modele,carburant,co2,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur")
     .eq("id", vehiculeId).maybeSingle();
   return v || null;
 }
@@ -290,8 +290,24 @@ Deno.serve(async (req) => {
           const docs = await Promise.all(docs0.map(async (d) => ({ ...d, url: await signUrl(db, d.url) })));
           const edl = await Promise.all(edl0.map(async (e) => ({ ...e, url: await signUrl(db, e.url) })));
           if (portal.assistanceNotice) portal.assistanceNotice = await signUrl(db, portal.assistanceNotice);
+          // Masse en service (champ G) pour le calcul du stationnement Paris : réglage société
+          // (settings.vehMasse[vehId]) sinon repli par modèle (masses connues de la flotte).
+          let masseKg: number | null = null;
+          try {
+            const { data: setRow } = await db.from("app_settings").select("data").eq("id", qr.societe || "PXP").maybeSingle();
+            const vm = (setRow && setRow.data && (setRow.data as Record<string, unknown>).vehMasse) as Record<string, unknown> | undefined;
+            const raw = vm && qr.vehicule_id ? vm[qr.vehicule_id] : null;
+            if (raw != null && raw !== "") masseKg = Number(raw);
+          } catch (_) { /* pas de masse réglée */ }
+          if (masseKg == null && veh) {
+            const mod = String(veh.modele || "").toUpperCase();
+            const KNOWN: Record<string, number> = { "SEAL U": 2102, "ATTO 3": 1750 };
+            for (const k in KNOWN) { if (mod.includes(k)) { masseKg = KNOWN[k]; break; } }
+          }
           const info = veh ? {
             marque: veh.marque || "", modele: veh.modele || "", carburant: veh.carburant || "",
+            co2: veh.co2 != null && veh.co2 !== "" ? Number(veh.co2) : null,
+            masse: masseKg,
             km: veh.km != null ? Number(veh.km) : null,
             prochainCT: veh.prochain_ct || "", dateMiseEnCirculation: veh.date_mise_en_circulation || "",
           } : null;
