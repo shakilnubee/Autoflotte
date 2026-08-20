@@ -5824,22 +5824,34 @@ FP.buildAlertes = (data) => {
     // société qui n'a AUCUN e-mail saisi (mais des conducteurs nommés) voit bien l'alerte.
     if (conds.some(c => c.prenom || c.nom || c.name)) {
       const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
-      const byName = {};
-      conds.forEach(c => {
-        const full = norm((c.prenom || '') + (c.nom || '')); if (full) byName[full] = c;
-        const nm2 = norm(c.name); if (nm2 && !byName[nm2]) byName[nm2] = c;
-      });
+      // ⚠️ SOURCE UNIQUE (rule 0-source) : on résout le conducteur d'un véhicule EXACTEMENT comme
+      // FP.conducteurs.find (nom complet, sinon prénom seul s'il est unique) — MAIS sur les données
+      // LIVE passées ici (data.conducteurs = cache live AVEC e-mails), pas FP_DATA (data.js, e-mails
+      // masqués RGPD → aurait fait clignoter « tout le monde sans e-mail »). Avant, on ne comparait que
+      // le NOM COMPLET → un véhicule dont le chauffeur n'a qu'un PRÉNOM (« Shakil », « Andrea »…) ne
+      // retrouvait jamais sa fiche et passait à tort pour « sans e-mail » alors que l'e-mail existe.
+      const nfull = s => (FP.normNomComplet ? FP.normNomComplet(s || '') : norm(s));
+      const npre  = s => (FP.normPrenom ? FP.normPrenom(s || '') : norm(String(s || '').split(/\s+/)[0]));
+      const resolve = (name) => {
+        try {
+          const f = nfull(name);
+          if (f && f.indexOf(' ') !== -1) { const ex = conds.find(c => nfull(FP.conducteurs.displayName(c)) === f); if (ex) return ex; }
+          const k = npre(name); if (!k) return null;
+          const m = conds.filter(c => npre(c.name || c.prenom || c.key) === k);
+          return m.length === 1 ? m[0] : null;   // prénom ambigu (homonymes) → non résolu
+        } catch (e) { return null; }
+      };
       const seen = {}; const sansMail = [];
       (data.vehicules || []).forEach(v => {
         if (horsFlotte(v)) return;
         const nm = v.chauffeur && String(v.chauffeur).trim();
         if (!nm || nm === '—') return;
-        const c = byName[norm(nm)] || null;
+        const c = resolve(nm);
         const key = (c && c.key) || norm(nm);
         if (seen[key]) return; seen[key] = 1;
         const mail = c ? String(c.email || '').trim() : '';
         if (mail) return;                                  // e-mail présent → rien à signaler
-        const nom = c ? ([c.prenom, c.nom].filter(Boolean).join(' ') || c.name || nm) : nm;
+        const nom = c ? ((FP.conducteurs.displayName && FP.conducteurs.displayName(c)) || [c.prenom, c.nom].filter(Boolean).join(' ') || c.name || nm) : nm;
         const tgt = (c && c.key) ? ('conducteurs.html?cond=' + encodeURIComponent(c.key)) : 'conducteurs.html';
         sansMail.push({ label: `${nom} — ${v.immat}`, target: tgt });
       });
