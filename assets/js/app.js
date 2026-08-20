@@ -10437,3 +10437,57 @@ document.addEventListener('DOMContentLoaded', () => {
   const menu = document.getElementById('mobile-menu');
   if (burger && menu) burger.addEventListener('click', () => menu.classList.toggle('hidden'));
 });
+
+/* =====================================================================================
+   FICHE VÉHICULE EN GRAND POP-UP — réutilisable depuis TOUTE la plateforme
+   -------------------------------------------------------------------------------------
+   Un clic sur une plaque / un lien véhicule (n'importe quelle page : conducteurs, amendes,
+   sinistres, contrats, contrôle, statistiques, tâches, dashboard, alertes…) ouvre la fiche
+   véhicule COMPLÈTE et ÉDITABLE dans un pop-up quasi plein écran. On réutilise la vraie page
+   `vehicules.html?embed=1` → EXACTEMENT le même code, mêmes handlers → aucune divergence.
+   Sur la page Véhicules elle-même (tiroir natif) et dans le pop-up (mode embed), on ne
+   ré-intercepte pas. Ctrl/Cmd/Maj/clic-milieu gardent « ouvrir dans un nouvel onglet ».
+   ===================================================================================== */
+FP.vehModal = (function () {
+  function inEmbed() { try { return new URLSearchParams(location.search).get('embed') === '1'; } catch (e) { return false; } }
+  function onVehPage() { return /vehicules\.html$/i.test((location.pathname || '')); }
+  function vehPath() { return (location.pathname || '').indexOf('/pages/') !== -1 ? 'vehicules.html' : 'pages/vehicules.html'; }
+  function boxEl() { return document.getElementById('fp-veh-modal'); }
+  function open(query) { // query = 'immat=<enc>' ou 'veh=<enc>'
+    var bd = boxEl();
+    if (!bd) {
+      bd = document.createElement('div'); bd.id = 'fp-veh-modal';
+      bd.style.cssText = 'position:fixed;inset:0;z-index:10000;display:none;align-items:center;justify-content:center;padding:2vh 2vw;background:rgba(11,18,32,.6);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);opacity:0;transition:opacity .2s ease';
+      bd.innerHTML = '<div class="fp-vm-box" style="width:96vw;max-width:1500px;height:95vh;background:var(--fp-surface,#fff);border-radius:20px;overflow:hidden;position:relative;box-shadow:0 50px 130px -30px rgba(0,0,0,.7);transform:scale(.98);transition:transform .22s cubic-bezier(.22,.61,.36,1)"><iframe title="Fiche véhicule" style="display:block;width:100%;height:100%;border:0"></iframe></div>';
+      document.body.appendChild(bd);
+      bd.addEventListener('click', function (e) { if (e.target === bd) close(); });
+    }
+    var ifr = bd.querySelector('iframe');
+    ifr.src = vehPath() + '?embed=1&' + query;
+    bd.style.display = 'flex'; document.body.style.overflow = 'hidden';
+    requestAnimationFrame(function () { bd.style.opacity = '1'; var b = bd.querySelector('.fp-vm-box'); if (b) b.style.transform = 'scale(1)'; });
+  }
+  function close() {
+    var bd = boxEl(); if (!bd) return;
+    bd.style.opacity = '0'; var b = bd.querySelector('.fp-vm-box'); if (b) b.style.transform = 'scale(.98)';
+    document.body.style.overflow = '';
+    setTimeout(function () { bd.style.display = 'none'; var i = bd.querySelector('iframe'); if (i) i.src = 'about:blank'; }, 220);
+  }
+  function wire() {
+    if (window.__fpVehModalWired) return; window.__fpVehModalWired = true;
+    if (inEmbed()) return;                       // dans le pop-up lui-même : rien
+    window.addEventListener('message', function (e) { if (e && e.data === 'fp-fiche-close') close(); });
+    document.addEventListener('keydown', function (e) { var bd = boxEl(); if (e.key === 'Escape' && bd && bd.style.display !== 'none') close(); });
+    document.addEventListener('click', function (e) {
+      if (e.button || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;   // laisse « ouvrir dans un nouvel onglet »
+      var a = e.target.closest && e.target.closest('a[href*="vehicules.html?immat="],a[href*="vehicules.html?veh="]');
+      if (!a) return;
+      if (onVehPage()) return;                   // sur la page Véhicules : tiroir natif
+      var m = /[?&](immat|veh)=([^&#]+)/.exec(a.getAttribute('href') || ''); if (!m) return;
+      e.preventDefault(); e.stopPropagation();
+      open(m[1] + '=' + m[2]);
+    }, true);
+  }
+  return { open: open, close: close, wire: wire };
+})();
+try { if (document.readyState !== 'loading') FP.vehModal.wire(); else document.addEventListener('DOMContentLoaded', function () { FP.vehModal.wire(); }); } catch (e) {}
