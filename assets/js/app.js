@@ -592,7 +592,10 @@ FP.qr = {
     if (!okLib) { alert('Librairie QR indisponible (connexion requise).'); return; }
     if (!(window.jspdf && window.jspdf.jsPDF)) { if (FP.ensureJsPDF) { await FP.ensureJsPDF(); } }
     if (!(window.jspdf && window.jspdf.jsPDF)) { alert('Générateur PDF indisponible.'); return; }
-    const list = (vehs || []).filter(v => v && v.immat && !(FP.estVendu && FP.estVendu(v)) && !(FP.horsFlotte && FP.horsFlotte(v)));
+    // On exporte EXACTEMENT la liste fournie par l'appelant (déjà filtrée côté page) → ne pas
+    // re-filtrer ici sur horsFlotte, sinon les « à vendre » / restitués / HS étaient exclus à tort
+    // (l'utilisateur veut le QR de TOUTE la flotte affichée, pas seulement les véhicules « actifs »).
+    const list = (vehs || []).filter(v => v && v.immat);
     if (!list.length) { alert('Aucun véhicule à exporter.'); return; }
     const busy = FP.busy ? FP.busy('Génération des QR… 0/' + list.length) : null;
     const doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
@@ -1919,7 +1922,11 @@ FP.kmCollecte = {
     if (!(window.FP && FP.supabase)) return { ok: false, error: 'Connexion requise.' };
     try {
       // 1) jeton existant ?
-      const { data: ex } = await FP.supabase.from('km_qr').select('token').eq('vehicule_id', v.id).limit(1).maybeSingle();
+      // ⚠️ limit(1) sans maybeSingle : maybeSingle LÈVE une erreur si un véhicule a >1 jeton km_qr
+      //    (doublon) → l'insert suivant échouait sur la contrainte et le QR était « raté ». On prend
+      //    simplement le 1er jeton existant.
+      const { data: exRows } = await FP.supabase.from('km_qr').select('token').eq('vehicule_id', v.id).limit(1);
+      const ex = Array.isArray(exRows) ? exRows[0] : exRows;
       if (ex && ex.token) { this._qrByVeh[v.id] = ex.token; return { ok: true, url: this.BASE + '?q=' + ex.token }; }
       // 2) sinon on le crée
       const token = (self.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '')
