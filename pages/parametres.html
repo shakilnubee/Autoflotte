@@ -1514,7 +1514,7 @@
           cand = { date, fournisseur: rec.fournisseur || null, numeroFacture: rec.numeroFacture || null,
             description: rec.description || null, type: normFactType(rec.type),
             montantHT: ht, montantTVA: tva, montantTTC: ttc,
-            vehiculeImmat: rec.vehiculeImmat ? String(rec.vehiculeImmat).toUpperCase().replace(/\s+/g, '') : null,
+            vehiculeImmat: rec.vehiculeImmat ? (FP.normImmat ? FP.normImmat(rec.vehiculeImmat) : String(rec.vehiculeImmat).toUpperCase().replace(/\s+/g, '')) : null,
             km: rec.km != null ? (parseInt(String(rec.km).replace(/\D/g, ''), 10) || null) : null };
         } else {
           const prenom = rec.prenom || rec.nom; if (!prenom) { invalid++; continue; }
@@ -1740,9 +1740,12 @@
     if (!(window.FP && FP.db && FP.supabase)) { st.style.color = '#DC2626'; st.textContent = 'Supabase non connecté — recharge la page (Ctrl+Shift+R).'; return; }
     st.style.color = 'var(--fp-muted)'; st.textContent = 'Envoi en cours…';
     try {
-      const res = await FP.db.upsert('app_settings', { id: FP.settings._dbId(), data: FP.settings.get() });
-      if (res && res.error) throw res.error;
-      st.style.color = '#16A34A'; st.textContent = '✓ Réglages envoyés au serveur. Sur les autres PC : Ctrl + Shift + R.';
+      // ⚠️ Passe par le chemin SÛR (FP.settings.save = fusion « delta » + compare-and-swap `rev`) au lieu
+      // d'un upsert BRUT du blob entier : sinon ce bouton pouvait écraser les réglages qu'un AUTRE poste
+      // vient d'enregistrer (dernier qui écrit gagne). Les réglages se synchronisent déjà tout seuls à
+      // chaque modif ; ce bouton ne sert qu'à forcer un renvoi immédiat — sans écraser personne.
+      await FP.settings.save(FP.settings.get());
+      st.style.color = '#16A34A'; st.textContent = '✓ Réglages synchronisés. Sur les autres PC : Ctrl + Shift + R.';
     } catch (e) { st.style.color = '#DC2626'; st.textContent = 'Échec : ' + (e.message || e); }
   });
   // Diagnostic en clair (sans console) : librairie ? client ? accès réel à la base ?
