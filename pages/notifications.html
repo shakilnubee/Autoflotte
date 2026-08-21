@@ -503,6 +503,48 @@
       <p id="cg-fill-status" class="text-xs text-slate-500 mt-2"></p>
     </div>`;
   }
+  // === PDF manquants (contrats de leasing + primes d'assurance) ============================
+  // Même sources que la page Contrats : Ayvens = settings.localeaseContrats[].docs ; BPCE =
+  // settings.leasingDocs[IMMAT] ; primes d'assurance = settings.assurancePrimes[immat].docUrl.
+  // But : signaler dans « À compléter » les véhicules leasing sans PDF de contrat et les primes
+  // d'assurance saisies sans PDF joint (chaque ligne mène à contrats.html pour déposer le fichier).
+  function pdfManquants(actifs) {
+    const items = [];
+    let s = {}; try { s = (FP.settings && FP.settings.get) ? (FP.settings.get() || {}) : {}; } catch (e) {}
+    const loc = Array.isArray(s.localeaseContrats) ? s.localeaseContrats : [];
+    const locByImmat = {};
+    loc.forEach(c => { const k = c && c.immat ? FP.normImmat(c.immat) : ''; if (k) locByImmat[k] = c; });
+    const leasingDocs = (s.leasingDocs && typeof s.leasingDocs === 'object') ? s.leasingDocs : {};
+    const LBL_CONTRAT = { k: 'contratPdf', label: 'PDF du contrat de leasing manquant', target: 'contrats.html' };
+    // (1) Véhicules leasing de la flotte sans PDF de contrat
+    (actifs || []).forEach(v => {
+      if (!estLeasing(v)) return;
+      const k = FP.normImmat(v.immat);
+      const locC = k ? locByImmat[k] : null;
+      const hasDoc = locC ? (Array.isArray(locC.docs) && locC.docs.length > 0)
+        : (Array.isArray(leasingDocs[String(v.immat || '').toUpperCase()]) && leasingDocs[String(v.immat || '').toUpperCase()].length > 0);
+      if (!hasDoc) items.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), [LBL_CONTRAT], 'contrats.html', ''));
+    });
+    // (2) Contrats Ayvens/Localease non rattachés à un véhicule de la flotte, sans PDF
+    loc.forEach(c => {
+      const k = c && c.immat ? FP.normImmat(c.immat) : '';
+      if (k && (actifs || []).some(v => FP.normImmat(v.immat) === k)) return; // déjà traité en (1)
+      const hasDoc = Array.isArray(c.docs) && c.docs.length > 0;
+      if (!hasDoc) items.push(compItem(`${c.immat || c.conducteur || 'Contrat leasing'} · ${(c.marque || '')} ${(c.modele || '')}`.trim(), [LBL_CONTRAT], 'contrats.html', ''));
+    });
+    // (3) Primes d'assurance saisies (montant TTC) mais sans PDF joint
+    const primes = (s.assurancePrimes && typeof s.assurancePrimes === 'object') ? s.assurancePrimes : {};
+    Object.keys(primes).forEach(key => {
+      const p = primes[key] || {};
+      const hasAmount = p.ttc != null && String(p.ttc).trim() !== '';
+      if (!hasAmount || p.docUrl) return;
+      const k = FP.normImmat(key);
+      const v = (actifs || []).find(x => FP.normImmat(x.immat) === k);
+      const nom = v ? `${v.immat} · ${(v.marque || '')} ${(v.modele || '')}`.trim() : key;
+      items.push(compItem(nom, [{ k: 'primePdf', label: "PDF de la prime d'assurance manquant", target: 'contrats.html' }], 'contrats.html', ''));
+    });
+    return items;
+  }
   function renderComplet() {
     const box = document.getElementById('suivi-complet'); if (!box) return;
     const actifs = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
@@ -527,8 +569,9 @@
     } catch (e) {}
     const cfgHTML = cfg.length ? `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5"></i> Configuration société <span class="badge badge-danger">${cfg.length}</span></h2><div class="space-y-2" style="max-width:840px">`
       + cfg.map(c => `<a href="${esc(c.target)}" class="notif" style="text-decoration:none"><div class="flex-1 min-w-0"><div class="font-semibold text-slate-900">${esc(c.label)}</div></div><span class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap">Compléter →</span></a>`).join('') + `</div></div>` : '';
+    const pdfItems = pdfManquants(actifs);
     const dupG = dupDocGroups();
-    const total = vehItems.length + condItems.length + amItems.length + cfg.length + dupG.length;
+    const total = vehItems.length + condItems.length + amItems.length + cfg.length + dupG.length + pdfItems.length;
     const rafN = buildRaf().length;
     const intro = total ? `<div class="mb-5 flex items-center gap-3 flex-wrap">
         <p class="text-sm text-slate-500" style="margin:0">${total} élément(s) à compléter. Clique une ligne pour la remplir, ou enchaîne-les toutes :</p>
@@ -552,6 +595,7 @@
       + sectionCompHTML('Véhicules à compléter', 'car', vehItems)
       + sectionCompHTML('Conducteurs à compléter', 'users', condItems)
       + sectionCompHTML('Amendes à compléter', 'ticket', amItems)
+      + sectionCompHTML('Documents / PDF à compléter', 'file-text', pdfItems)
       + restoreHTML;
     lucide.createIcons();
   }
