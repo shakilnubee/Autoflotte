@@ -854,7 +854,10 @@
     function applyConsoView(forceTable){
       let pref = 'table';
       try { if (window.FP && FP.settings) pref = (FP.settings.get().consoView === 'cards') ? 'cards' : 'table'; } catch (e) {}
-      const v = forceTable ? 'table' : pref;
+      let v = forceTable ? 'table' : pref;
+      // 📱 MOBILE : la table conso (10 colonnes) est illisible sur téléphone → vue CARTES d'office
+      // (sauf forceTable = liste vide). Sur grand écran, le choix de l'utilisateur est respecté.
+      try { if (!forceTable && window.matchMedia && window.matchMedia('(max-width: 768px)').matches) v = 'cards'; } catch (e) {}
       const tbl = $('tf-conso-table'), cardsBox = $('tf-conso-cards');
       const tableCard = tbl ? tbl.closest('.card') : null;
       if (tableCard) tableCard.classList.toggle('hidden', v === 'cards');
@@ -1120,6 +1123,7 @@
     $('tf-conso-clear').addEventListener('click', () => { $('tf-conso-from').value = ''; $('tf-conso-to').value = ''; _tfRerender(); });
     // Bascule Tableau / Cartes (mémorisée par société) — comme le sélecteur de vue des Conducteurs.
     { const vt = $('tf-conso-view'); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.consoView = b.dataset.v; FP.settings.save(s); } } catch (e) {} applyConsoView(); })); }
+    try { const _mqC = window.matchMedia('(max-width: 768px)'); (_mqC.addEventListener ? _mqC.addEventListener('change', () => applyConsoView()) : _mqC.addListener(() => applyConsoView())); } catch (e) {}
     if (FP.filterResetButton) FP.filterResetButton($('tf-conso-cond').closest('div'), { onReset: () => {
       $('tf-conso-mois').value = '__all__'; $('tf-conso-from').value = ''; $('tf-conso-to').value = '';
       const cs = $('tf-conso-cond'); cs.value = ''; cs.dispatchEvent(new Event('change', { bubbles: true })); // resync searchSelect + re-render
