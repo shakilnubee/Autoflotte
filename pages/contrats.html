@@ -329,13 +329,14 @@
       </div>
       <p class="text-sm text-slate-600 mb-4">Police couvrant les véhicules de la flotte. <span class="text-slate-400">Paramétrable par société.</span></p>
       <div id="assur-config" class="hidden mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-        <div class="flex flex-wrap items-end gap-4">
-          <div><div class="field-label !mb-1">Assureur</div><input id="assur-assureur" class="field-input" style="width:200px" placeholder="ex. SWISSLIFE, AXA…" /></div>
-          <div><div class="field-label !mb-1">N° de police</div><input id="assur-police" class="field-input" style="width:200px" placeholder="ex. 123456789/00" /></div>
+        <div class="font-semibold text-slate-800 text-sm mb-2">Assureurs de la société</div>
+        <div id="assureurs-rows" class="space-y-2"></div>
+        <div class="flex items-center gap-3 mt-3 flex-wrap">
+          <button id="assureur-add" type="button" class="btn btn-outline text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un assureur</button>
           <button id="assur-config-save" type="button" class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
-          <button id="assur-apply" type="button" class="btn btn-outline text-sm" title="Écrire cet assureur dans la fiche de tous les véhicules actifs de la société"><i data-lucide="link" class="w-4 h-4"></i> Appliquer à la flotte</button>
+          <button id="assur-apply" type="button" class="btn btn-outline text-sm" title="Écrire le 1er assureur dans la fiche de tous les véhicules actifs de la société"><i data-lucide="link" class="w-4 h-4"></i> Appliquer à la flotte</button>
         </div>
-        <p id="assur-config-status" class="text-xs mt-2 text-slate-400">« Appliquer à la flotte » met à jour le champ Assurance dans la fiche de chaque véhicule actif de cette société.</p>
+        <p id="assur-config-status" class="text-xs mt-2 text-slate-400">Rattache chaque véhicule à son assureur via la colonne <b>Assureur</b> du tableau. « Appliquer à la flotte » écrit le 1er assureur dans la fiche des véhicules.</p>
       </div>
       <div class="flex flex-wrap items-end gap-6 mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
         <div>
@@ -352,6 +353,10 @@
         </div>
       </div>
       <div id="assur-import-status" class="hidden text-sm mb-3" style="padding:10px 12px;border-radius:10px"></div>
+      <div id="assur-filter-wrap" class="flex items-center gap-2 mb-3" style="display:none">
+        <span class="text-xs text-slate-500 font-semibold">Assureur :</span>
+        <select id="assur-filter" class="field-input !py-1 !text-sm" style="width:auto;min-width:160px"></select>
+      </div>
       <div class="scrollable">
         <table class="fp-table">
           <thead>
@@ -359,6 +364,7 @@
               <th>Immat.</th>
               <th>Véhicule</th>
               <th>Chauffeur</th>
+              <th>Assureur</th>
               <th>Groupe</th>
               <th>Statut</th>
               <th style="text-align:right">Coût annuel/véh.</th>
@@ -879,6 +885,37 @@
     for (const key in p) { if (normPlaque(key) === k) return p[key]; }
     return null;
   }
+  // ===== Multi-assureurs (par société), comme les loueurs pour le leasing =====
+  // Liste d'assureurs { id, nom, police } dans settings.assureurs ; rattachement par véhicule dans
+  // settings.assureurVeh[plaque] = id. Le 1er assureur reste stocké aussi dans settings.assuranceContrat
+  // (rétro-compat : FP.assuranceLabel + export). Les TOTAUX ne changent pas (prime = somme par véhicule).
+  function getAssureurs(){
+    const s = (FP.settings && FP.settings.get) ? FP.settings.get() : {};
+    let list = Array.isArray(s.assureurs) ? s.assureurs.filter(a => a && (a.nom || a.police)) : null;
+    if (!list || !list.length) { const c = s.assuranceContrat || {}; list = (c.assureur || c.police) ? [{ id: 'a1', nom: c.assureur || '', police: c.police || '' }] : []; }
+    return list.map((a, i) => ({ id: a.id || ('a' + (i + 1)), nom: String(a.nom || '').trim(), police: String(a.police || '').trim() }));
+  }
+  function assureurVehMap(){ const s = (FP.settings && FP.settings.get) ? FP.settings.get() : {}; return (s.assureurVeh && typeof s.assureurVeh === 'object') ? s.assureurVeh : {}; }
+  function assureurIdOf(v){ const m = assureurVehMap(); const k = normPlaque(v.immat); for (const key in m) { if (normPlaque(key) === k) return m[key]; } return null; }
+  function assureurOf(v){ const list = getAssureurs(); const id = assureurIdOf(v); let a = id ? list.find(x => x.id === id) : null; if (!a) a = list[0] || null; return a; }
+  function assureurLabel(v){ const a = assureurOf(v); return a ? (a.nom || a.police || '—') : '—'; }
+  function setAssureurVeh(immat, id){ const s = FP.settings.get(); s.assureurVeh = (s.assureurVeh && typeof s.assureurVeh === 'object') ? s.assureurVeh : {}; const k = normPlaque(immat); for (const key in s.assureurVeh) { if (normPlaque(key) === k) delete s.assureurVeh[key]; } if (id) s.assureurVeh[immat] = id; FP.settings.save(s); }
+  function assureurRowHTML(nom, police, id){ return `<div class="flex items-center gap-2 flex-wrap" data-assureur-row${id ? ` data-aid="${escC(id)}"` : ''}>
+      <input data-a-nom placeholder="Assureur (ex. AXA)" class="field-input" style="width:190px" value="${escC(nom || '')}">
+      <input data-a-police placeholder="N° de police" class="field-input" style="width:190px" value="${escC(police || '')}">
+      <button type="button" class="text-red-500 hover:text-red-700" data-a-del title="Retirer cet assureur"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+    </div>`; }
+  function renderAssureursRows(){ const box = $('assureurs-rows'); if (!box) return; const list = getAssureurs(); box.innerHTML = (list.length ? list : [{ nom: '', police: '', id: '' }]).map(a => assureurRowHTML(a.nom, a.police, a.id)).join(''); if (window.lucide) try { lucide.createIcons(); } catch (e) {} }
+  let assurFilter = 'all';
+  function populateAssurFilter(list){
+    const sel = $('assur-filter'); const wrap = $('assur-filter-wrap'); if (!sel) return;
+    list = list || getAssureurs();
+    if (wrap) wrap.style.display = (list.length > 1) ? '' : 'none';   // filtre utile seulement si ≥2 assureurs
+    const cur = assurFilter;
+    sel.innerHTML = `<option value="all">Tous les assureurs</option>` + list.map(a => `<option value="${escC(a.id)}">${escC(a.nom || a.police || a.id)}</option>`).join('');
+    sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
+    assurFilter = sel.value;
+  }
   // Total annuel : si des primes par véhicule existent, on somme celles des véhicules de la plateforme ;
   // sinon on retombe sur la prime « flotte » saisie à la main.
   function assurPrime(){
@@ -906,16 +943,31 @@
     const parVeh = (prime && n) ? prime / n : 0;
     const tbody = $('tbody-assurance');
     const missing = [];
-    tbody.innerHTML = vehicules.map(v => {
+    const assList = getAssureurs();
+    // Options du sélecteur d'assureur par véhicule (mêmes pour toutes les lignes).
+    const assOpts = (curId) => `<option value="">— non défini —</option>` + assList.map(a => `<option value="${escC(a.id)}"${a.id === curId ? ' selected' : ''}>${escC(a.nom || a.police || a.id)}</option>`).join('');
+    // Filtre par assureur (barre au-dessus du tableau).
+    populateAssurFilter(assList);
+    const flt = assurFilter;
+    tbody.innerHTML = vehicules.filter(v => {
+      if (flt === 'all') return true;
+      const id = assureurIdOf(v) || (assList[0] ? assList[0].id : '');
+      return flt === '__none__' ? !assureurIdOf(v) && !assList.length : (id === flt);
+    }).map(v => {
       const pr = vehPrime(v);
       if (!pr && !FP.horsFlotte(v)) missing.push(v);
       const cout = pr && Number.isFinite(pr.ttc) ? FP.euro(pr.ttc)
         : (hasPerVeh ? '<span class="text-amber-600 font-semibold">à compléter</span>' : (parVeh ? FP.euro(parVeh) : '—'));
+      const curAid = assureurIdOf(v) || '';
+      const assCell = assList.length
+        ? `<select data-assureur-sel="${escC(v.immat || '')}" class="field-input !py-1 !text-xs" style="min-width:120px" onclick="event.stopPropagation()">${assOpts(curAid)}</select>`
+        : `<span class="text-slate-400 text-xs">à configurer</span>`;
       return `
       <tr>
         <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
         <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}</td>
         <td>${FP.lienConducteur(v.chauffeur)}</td>
+        <td>${assCell}</td>
         <td><div class="flex flex-wrap gap-1">${FP.vehGroupes(v).map(k => `<span class="groupe-pill gp-${k}"><span class="dot"></span>${FP.groupeLabel(k)}</span>`).join('')}</div></td>
         <td><span class="badge ${pr ? 'badge-ok' : (hasPerVeh ? 'badge-warn' : 'badge-ok')}">${pr ? 'Couvert' : (hasPerVeh ? 'Prime manquante' : 'Couvert')}</span></td>
         <td style="text-align:right;cursor:pointer" data-assur-edit="${v.immat || ''}" title="Cliquer pour modifier la prime (€/an TTC)">${cout} <i data-lucide="pencil" class="w-3 h-3 inline text-slate-300" style="vertical-align:-1px"></i>${(pr && pr.docUrl) ? ` <button type="button" data-assur-doc="${escC(pr.docUrl)}" onclick="event.stopPropagation()" title="Voir le document de la prime (${escC(pr.docName || 'PDF')})" style="background:none;border:none;cursor:pointer;color:var(--fp-accent);font-size:11.5px;font-weight:600">📄 PDF</button>` : ''} <button type="button" data-assur-attach="${v.immat || ''}" onclick="event.stopPropagation()" title="${(pr && pr.docUrl) ? 'Remplacer' : 'Joindre'} le PDF de la prime de ce véhicule" style="background:none;border:none;cursor:pointer;color:var(--fp-muted);font-size:11.5px">📎</button></td>
@@ -2393,20 +2445,35 @@
     const s = FP.settings.get(); s.assurancePrimeAnnuelle = Number.isFinite(val) ? val : 0; FP.settings.save(s);
     renderAssurance(); renderKPIs();
   });
-  // --- Configuration du contrat d'assurance (assureur + n° de police), par société ---
+  // --- Configuration des assureurs (multi-assureurs + n° de police), par société ---
   if ($('assur-edit')) $('assur-edit').addEventListener('click', () => {
     const box = $('assur-config'); if (!box) return;
-    const c = (FP.assuranceContrat ? FP.assuranceContrat() : { assureur: '', police: '' });
-    if ($('assur-assureur')) $('assur-assureur').value = c.assureur || '';
-    if ($('assur-police')) $('assur-police').value = c.police || '';
+    renderAssureursRows();
     box.classList.toggle('hidden');
   });
+  if ($('assureur-add')) $('assureur-add').addEventListener('click', () => {
+    const box = $('assureurs-rows'); if (!box) return;
+    box.insertAdjacentHTML('beforeend', assureurRowHTML('', '', ''));
+    if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+  });
+  if ($('assureurs-rows')) $('assureurs-rows').addEventListener('click', (e) => {
+    const del = e.target.closest('[data-a-del]'); if (!del) return;
+    const row = del.closest('[data-assureur-row]'); if (row) row.remove();
+  });
   if ($('assur-config-save')) $('assur-config-save').addEventListener('click', () => {
+    const rows = Array.from(document.querySelectorAll('#assureurs-rows [data-assureur-row]'));
+    const list = rows.map((r, i) => ({
+      id: r.getAttribute('data-aid') || ('a' + (i + 1)),
+      nom: (r.querySelector('[data-a-nom]') ? r.querySelector('[data-a-nom]').value : '').trim(),
+      police: (r.querySelector('[data-a-police]') ? r.querySelector('[data-a-police]').value : '').trim(),
+    })).filter(a => a.nom || a.police);
     const s = FP.settings.get();
-    s.assuranceContrat = { assureur: ($('assur-assureur').value || '').trim(), police: ($('assur-police').value || '').trim() };
+    s.assureurs = list;
+    // Rétro-compat : le 1er assureur reste dans assuranceContrat (FP.assuranceLabel, export, titre).
+    s.assuranceContrat = list.length ? { assureur: list[0].nom, police: list[0].police } : { assureur: '', police: '' };
     FP.settings.save(s);
-    renderAssurInfo();
-    const st = $('assur-config-status'); if (st) { st.textContent = '✓ Assureur enregistré. Utilise « Appliquer à la flotte » pour mettre à jour les fiches véhicules.'; st.style.color = '#059669'; }
+    renderAssurInfo(); renderAssurance();
+    const st = $('assur-config-status'); if (st) { st.textContent = `✓ ${list.length} assureur(s) enregistré(s).`; st.style.color = '#059669'; }
   });
   if ($('assur-apply')) $('assur-apply').addEventListener('click', async () => {
     const label = (FP.assuranceLabel && FP.assuranceLabel()) || '';
@@ -2483,6 +2550,14 @@
   if ($('prime-drop')) $('prime-drop').addEventListener('click', () => { const inp = $('prime-file'); if (inp) { inp.value = ''; inp.click(); } });
   if ($('prime-file')) $('prime-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) primeFileSelected(f); });
   if ($('prime-save')) $('prime-save').addEventListener('click', savePrime);
+  // Filtre par assureur + rattachement d'un véhicule à son assureur (colonne « Assureur »).
+  if ($('assur-filter')) $('assur-filter').addEventListener('change', (e) => { assurFilter = e.target.value; renderAssurance(); });
+  if ($('tbody-assurance')) $('tbody-assurance').addEventListener('change', (e) => {
+    const sel = e.target.closest('[data-assureur-sel]'); if (!sel) return;
+    setAssureurVeh(sel.getAttribute('data-assureur-sel'), sel.value || '');
+    if (FP.toast) FP.toast('Assureur du véhicule mis à jour ✓');
+    renderAssurance();
+  });
   // Édition inline de la prime au clic dans le tableau assurance (modifier / vider une prime).
   if ($('tbody-assurance')) $('tbody-assurance').addEventListener('click', (e) => {
     // 📄 Voir le document de la prime (bucket privé → URL signée avant ouverture).
