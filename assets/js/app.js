@@ -6945,7 +6945,19 @@ FP.datePicker = (function () {
       const p = parseTyped(tf.value);
       if (p) { viewY = p.y; viewM = p.m; }   // le calendrier suit ce qu'on tape (sans re-render : on ne perd pas le focus du champ)
     });
-    onDoc = (e) => { if (pop && !pop.contains(e.target) && e.target !== curInput) close(); };
+    // Clic EN DEHORS = valider la saisie manuelle (comme Entrée) puis fermer — pas besoin d'appuyer sur
+    // Entrée. Si le champ « écrire à la main » contient une date valide non encore appliquée, on l'applique.
+    onDoc = (e) => {
+      if (!(pop && !pop.contains(e.target) && e.target !== curInput)) return;
+      try {
+        const tf = pop.querySelector('.fp-dp__type');
+        if (tf && String(tf.value).trim() && curInput) {
+          const p = parseTyped(tf.value);
+          if (p && iso(p.y, p.m, p.d) !== curInput.value) { pick(p.y, p.m, p.d); return; }
+        }
+      } catch (err) {}
+      close();
+    };
     setTimeout(() => { document.addEventListener('mousedown', onDoc, true); }, 0);
     window.addEventListener('resize', place); window.addEventListener('scroll', place, true);
   }
