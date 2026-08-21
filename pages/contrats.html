@@ -471,6 +471,8 @@
           <label class="block"><span class="text-sm font-medium text-slate-700">Tolérance km <span class="text-slate-400">— opt.</span></span>
             <input id="lease-tol" type="number" min="0" step="500" class="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500" placeholder="ex. 2000"></label>
         </div>
+        <label class="block"><span class="text-sm font-medium text-slate-700">Malus écologique (€ TTC) <span class="text-slate-400">— opt., s'il figure sur l'offre</span></span>
+          <input id="lease-malus" type="number" min="0" step="1" class="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500" placeholder="ex. 2240"></label>
         <div>
           <div class="flex items-center justify-between"><span class="text-sm font-medium text-slate-700">Avenants (changement de loyer)</span>
             <button id="lease-avenant-add" type="button" class="text-xs font-semibold" style="color:var(--fp-accent)">+ Ajouter un avenant</button></div>
@@ -1350,7 +1352,7 @@
       return `
       <tr>
         <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
-        <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}</td>
+        <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}${(cRaw && cRaw.malus) ? ` <span class="text-amber-600 text-xs">· malus ${FP.euro(cRaw.malus)}</span>` : ''}</td>
         <td>${(v.chauffeur && v.chauffeur !== '—') ? (FP.lienConducteur(v.chauffeur) + ` <button type="button" data-veh-cond="${FP.esc(v.immat)}" title="Changer le conducteur" style="background:none;border:none;cursor:pointer;color:var(--fp-muted);font-size:12px;vertical-align:1px">✏️</button>`) : `<button type="button" data-veh-cond="${FP.esc(v.immat)}" class="text-slate-400" style="background:none;border:none;cursor:pointer;text-decoration:underline dotted;font-size:.82rem">+ affecter</button>`}</td>
         <td>${loueurDeVeh(v)}</td>
         <td>${l ? FP.num(l.kmContrat) + ' km' : '<span class="text-slate-400">—</span>'}</td>
@@ -1386,7 +1388,7 @@
       const urg = jf !== null && jf <= 120;
       return `<div class="ls-card">
         <div class="ls-top">
-          <div><span class="ls-immat">${FP.lienVehicule(v.immat)}</span> <span class="ls-veh">${FP.esc(v.marque)} ${FP.esc(v.modele)}</span><br>
+          <div><span class="ls-immat">${FP.lienVehicule(v.immat)}</span> <span class="ls-veh">${FP.esc(v.marque)} ${FP.esc(v.modele)}</span>${(cRaw && cRaw.malus) ? ` <span class="text-amber-600 text-xs">· malus ${FP.euro(cRaw.malus)}</span>` : ''}<br>
             <span class="ls-sub">${(v.chauffeur && v.chauffeur !== '—') ? FP.lienConducteur(v.chauffeur) + ' · ' : ''}${FP.esc(loueurNomOf(v) || 'Leasing')}</span></div>
           <div>${statutKm(l, v.immat)}</div>
         </div>
@@ -1487,6 +1489,7 @@
     $('lease-kmsupp').value = (c.kmSupp != null) ? c.kmSupp : '';
     $('lease-tol').value = (c.kmTolerance != null) ? c.kmTolerance : '';
     $('lease-loyer').value = (c.loyer != null && c.loyer !== '') ? c.loyer : '';
+    if ($('lease-malus')) $('lease-malus').value = (c.malus != null && c.malus !== '') ? c.malus : '';
     renderAvenantRows(Array.isArray(c.avenants) ? c.avenants : []);
     const m = $('lease-modal'); m.classList.remove('hidden'); m.classList.add('flex');
   }
@@ -1677,8 +1680,9 @@
     const kmsupp = $('lease-kmsupp').value !== '' ? parseFloat($('lease-kmsupp').value) : null;
     const tol = $('lease-tol').value !== '' ? parseInt($('lease-tol').value, 10) : null;
     const loyer = $('lease-loyer').value !== '' ? parseFloat($('lease-loyer').value) : null;
+    const malus = ($('lease-malus') && $('lease-malus').value !== '') ? parseFloat($('lease-malus').value) : null;
     if (!km || !debut) { alert('Renseigne au moins le forfait km et la date de début.'); return; }
-    FP.saveLeasingOverride(leaseEditImmat, { kmContrat: km, dureeMois: duree, debut, kmSupp: kmsupp, kmTolerance: (tol != null && !isNaN(tol)) ? tol : null, loyer: (loyer != null && !isNaN(loyer)) ? loyer : null, avenants: collectAvenants() });
+    FP.saveLeasingOverride(leaseEditImmat, { kmContrat: km, dureeMois: duree, debut, kmSupp: kmsupp, kmTolerance: (tol != null && !isNaN(tol)) ? tol : null, loyer: (loyer != null && !isNaN(loyer)) ? loyer : null, malus: (malus != null && !isNaN(malus)) ? malus : null, avenants: collectAvenants() });
     closeLeaseModal(); renderKPIs(); renderLeasing();
   });
   if ($('lease-avenant-add')) $('lease-avenant-add').addEventListener('click', () => { $('lease-avenants').insertAdjacentHTML('beforeend', avenantRowHTML('', '')); });
