@@ -455,7 +455,12 @@
   <div id="lease-modal" class="fixed inset-0 z-50 hidden items-center justify-center" style="background:rgba(15,23,42,.45)">
     <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 shadow-xl">
       <h3 class="text-lg font-extrabold mb-1">Forfait du contrat leasing</h3>
-      <p class="text-sm text-slate-500 mb-4" id="lease-modal-veh"></p>
+      <p class="text-sm text-slate-500 mb-3" id="lease-modal-veh"></p>
+      <div class="mb-4 p-3 rounded-lg bg-slate-50 border border-slate-200">
+        <button id="lease-scan-offre" type="button" class="btn btn-outline text-sm"><i data-lucide="file-search" class="w-4 h-4"></i> 📄 Lire l'offre (PDF) pour pré-remplir</button>
+        <input id="lease-scan-file" type="file" accept="application/pdf" class="hidden">
+        <div id="lease-scan-status" class="text-xs mt-1 text-slate-400">Dépose le PDF de l'offre du loueur → le malus, le loyer, le forfait km et la durée sont lus automatiquement (à vérifier).</div>
+      </div>
       <div class="space-y-3">
         <label class="block"><span class="text-sm font-medium text-slate-700">Loyer de base — offre (TTC/mois)</span>
           <input id="lease-loyer" type="number" min="0" step="0.01" class="w-full mt-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-teal-500" placeholder="ex. 587.03"></label>
@@ -1491,7 +1496,9 @@
     $('lease-loyer').value = (c.loyer != null && c.loyer !== '') ? c.loyer : '';
     if ($('lease-malus')) $('lease-malus').value = (c.malus != null && c.malus !== '') ? c.malus : '';
     renderAvenantRows(Array.isArray(c.avenants) ? c.avenants : []);
+    if ($('lease-scan-status')) { $('lease-scan-status').textContent = "Dépose le PDF de l'offre du loueur → malus, loyer, forfait km et durée lus automatiquement (à vérifier)."; $('lease-scan-status').style.color = ''; }
     const m = $('lease-modal'); m.classList.remove('hidden'); m.classList.add('flex');
+    if (window.lucide) try { lucide.createIcons(); } catch (e) {}
   }
   function avenantRowHTML(date, loyer) {
     return `<div class="flex items-center gap-2" data-avenant-row>
@@ -1687,6 +1694,51 @@
   });
   if ($('lease-avenant-add')) $('lease-avenant-add').addEventListener('click', () => { $('lease-avenants').insertAdjacentHTML('beforeend', avenantRowHTML('', '')); });
   if ($('lease-avenants')) $('lease-avenants').addEventListener('click', (e) => { const d = e.target.closest('[data-av-del]'); if (d) { const r = d.closest('[data-avenant-row]'); if (r) r.remove(); } });
+
+  // ---------- Lecture AUTO d'une offre de leasing (PDF) → pré-remplit le forfait (malus, loyer, km, durée) ----------
+  // Le malus écologique, le loyer, le forfait km et la durée figurent sur le PDF de l'offre du loueur
+  // (ex. BPCE : « Malus écologique à percevoir de 2240 € »). On lit le texte du PDF et on extrait ces
+  // valeurs par motif, puis on remplit les champs de la fenêtre (l'utilisateur vérifie avant d'enregistrer).
+  function parseOfferText(text){
+    const t = String(text || '').replace(/ /g, ' ');
+    const parseFR = s => { const n = Number(String(s).replace(/[\s.]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
+    const out = { malus: null, loyer: null, kmContrat: null, dureeMois: null };
+    let m;
+    // Malus : priorité au motif explicite « … percevoir de <montant> € » (fiable), sinon repli générique.
+    m = /malus[^\d]{0,40}?percevoir\s*de\s*([\d][\d\s.]*(?:,\d+)?)\s*€/i.exec(t)
+      || /malus\s*(?:[ée]cologique)?[^\d]{0,20}?([\d][\d\s.]*(?:,\d+)?)\s*€/i.exec(t);
+    if (m) { const v = parseFR(m[1]); if (v != null && v >= 0 && v < 100000) out.malus = v; }
+    // Loyer TTC : nombre juste avant « Montant TTC » (proche de « Loyer »).
+    m = /([\d][\d\s.]*,\d{2})\s*€?\s*montant\s*ttc/i.exec(t);
+    if (m) { const v = parseFR(m[1]); if (v != null && v > 0 && v < 20000) out.loyer = v; }
+    // Forfait km (5 000–500 000).
+    m = /([\d][\d\s.]{3,})\s*km\b/i.exec(t);
+    if (m) { const v = parseFR(m[1]); if (v != null && v >= 5000 && v <= 500000) out.kmContrat = v; }
+    // Durée en mois (6–72).
+    m = /(\d{1,2})\s*mois/i.exec(t);
+    if (m) { const d = +m[1]; if (d >= 6 && d <= 72) out.dureeMois = d; }
+    return out;
+  }
+  if ($('lease-scan-offre')) $('lease-scan-offre').addEventListener('click', () => { const inp = $('lease-scan-file'); if (inp) { inp.value = ''; inp.click(); } });
+  if ($('lease-scan-file')) $('lease-scan-file').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    const st = $('lease-scan-status'); const show = (msg, col) => { if (st) { st.textContent = msg; st.style.color = col || ''; } };
+    try {
+      show('⏳ Lecture de l\'offre…', '#475569');
+      await liLoadScript(LI_PDFJS); window.pdfjsLib.GlobalWorkerOptions.workerSrc = LI_WORKER;
+      const buf = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+      let text = ''; const n = Math.min(pdf.numPages, 6);
+      for (let p = 1; p <= n; p++) { const pg = await pdf.getPage(p); const c = await pg.getTextContent(); text += c.items.map(it => it.str).join(' ') + '\n'; }
+      const off = parseOfferText(text);
+      const filled = [];
+      if (off.malus != null && $('lease-malus')) { $('lease-malus').value = off.malus; filled.push('malus ' + FP.euro(off.malus)); }
+      if (off.loyer != null && !($('lease-loyer').value || '').trim()) { $('lease-loyer').value = off.loyer; filled.push('loyer'); }
+      if (off.kmContrat != null && !($('lease-km').value || '').trim()) { $('lease-km').value = off.kmContrat; filled.push('forfait km'); }
+      if (off.dureeMois != null && (!($('lease-duree').value || '').trim() || $('lease-duree').value === '36')) { $('lease-duree').value = off.dureeMois; filled.push('durée'); }
+      show(filled.length ? ('✓ Lu : ' + filled.join(' · ') + '. Vérifie puis Enregistrer.') : 'Rien lu automatiquement — saisis à la main (le format de l\'offre n\'est pas reconnu).', filled.length ? '#047857' : '#B45309');
+    } catch (err) { console.warn('[lease offer scan]', err); show('Impossible de lire ce PDF.', '#B91C1C'); }
+  });
 
   // ---------- Import des loyers EXACTS depuis la facture mensuelle du loueur (BPCE…) ----------
   // On lit chaque ligne de la facture (immat + montant TTC) et on remplit le loyer exact de chaque
