@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820m">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820m"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260820n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820m">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260820n">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -581,11 +581,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820m"></script>
-<script src="../assets/js/supabase-client.js?v=20260820m"></script>
-<script src="../assets/js/data.js?v=20260820m"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260820n"></script>
+<script src="../assets/js/supabase-client.js?v=20260820n"></script>
+<script src="../assets/js/data.js?v=20260820n"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260820m"></script>
+<script src="../assets/js/app.js?v=20260820n"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -641,6 +641,20 @@
   // les autres réglages leasing. But : pouvoir voir/téléverser le contrat AUSSI pour les véhicules BPCE.
   function bpceDocs(immat){ try { const m = FP.settings.get().leasingDocs || {}; const k = String(immat || '').toUpperCase(); return Array.isArray(m[k]) ? m[k] : []; } catch (e) { return []; } }
   function setBpceDocs(immat, list){ const s = FP.settings.get(); s.leasingDocs = (s.leasingDocs && typeof s.leasingDocs === 'object') ? s.leasingDocs : {}; const k = String(immat || '').toUpperCase(); if (list && list.length) s.leasingDocs[k] = list; else delete s.leasingDocs[k]; FP.settings.save(s); }
+  // Affecter / changer le conducteur d'un véhicule EN LEASING dérivé (BPCE) directement depuis la table :
+  // le « conducteur » d'une ligne BPCE = le CHAUFFEUR du véhicule (≠ Ayvens où c'est un champ du contrat).
+  // On écrit donc dans la fiche véhicule + on trace l'historique d'affectation (mêmes helpers que la fiche,
+  // source unique) + on met à jour le cache local. Parité avec « + affecter » des lignes Ayvens.
+  function setVehChauffeur(immat, name){
+    const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(immat)); if (!v) return false;
+    const old = v.chauffeur; const val = (name && String(name).trim()) || '—';
+    if (FP.normNomComplet && FP.normNomComplet(old || '') === FP.normNomComplet(val === '—' ? '' : val)) return false; // pas de changement réel
+    v.chauffeur = val;
+    try { if (FP.persist && FP.persist.upsert) FP.persist.upsert('vehicules', { id: v.id, chauffeur: v.chauffeur }); else if (FP.db && FP.db.upsert) FP.db.upsert('vehicules', { id: v.id, chauffeur: v.chauffeur }); } catch (e) { console.warn('[set chauffeur]', e); }
+    try { if (FP.affectations && FP.affectations.record) FP.affectations.record(v.id, v.chauffeur, null, old); } catch (e) {}
+    try { const CK = window.FP_CACHE_KEY; const c = CK && JSON.parse(localStorage.getItem(CK) || 'null'); if (c && Array.isArray(c.vehicules)) { const cv = c.vehicules.find(x => x.id === v.id); if (cv) { cv.chauffeur = v.chauffeur; localStorage.setItem(CK, JSON.stringify(c)); } } } catch (e) {}
+    return true;
+  }
   function bpceDocsHtml(immat){
     const docs = bpceDocs(immat);
     const links = docs.map((d, di) => `<div class="flex items-center gap-1" style="margin-bottom:2px;max-width:170px">
@@ -1285,7 +1299,7 @@
       <tr>
         <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
         <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}</td>
-        <td>${FP.lienConducteur(v.chauffeur)}</td>
+        <td>${(v.chauffeur && v.chauffeur !== '—') ? (FP.lienConducteur(v.chauffeur) + ` <button type="button" data-veh-cond="${FP.esc(v.immat)}" title="Changer le conducteur" style="background:none;border:none;cursor:pointer;color:var(--fp-muted);font-size:12px;vertical-align:1px">✏️</button>`) : `<button type="button" data-veh-cond="${FP.esc(v.immat)}" class="text-slate-400" style="background:none;border:none;cursor:pointer;text-decoration:underline dotted;font-size:.82rem">+ affecter</button>`}</td>
         <td>${loueurDeVeh(v)}</td>
         <td>${l ? FP.num(l.kmContrat) + ' km' : '<span class="text-slate-400">—</span>'}</td>
         <td>${l ? FP.num(l.km) + ' km' : (v.km != null ? FP.num(v.km) + ' km' : '<span class="text-slate-400">—</span>')}</td>
@@ -1541,6 +1555,18 @@
 
   // Actions leasing — mêmes boutons en vue Tableau ET en vue Cartes.
   async function leaseAction(e){
+    // Affecter / changer le conducteur d'une ligne BPCE (= chauffeur du véhicule) — parité avec Ayvens.
+    const vCond = e.target.closest('[data-veh-cond]');
+    if (vCond) {
+      const immat = vCond.dataset.vehCond; const td = vCond.closest('td'); if (!td) return;
+      const cur = (() => { const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(immat)); return (v && v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : ''; })();
+      td.innerHTML = `<input class="field-input" style="font-size:.9rem;padding:.4rem .6rem;width:100%;min-width:150px;border:1px solid var(--fp-accent);border-radius:.5rem" id="veh-cond-edit" autocomplete="off" placeholder="Rechercher ou créer…" value="${FP.esc(cur)}">`;
+      const inp = document.getElementById('veh-cond-edit'); if (!inp) return; inp.focus(); if (inp.select) inp.select();
+      const apply = (nm) => { if (setVehChauffeur(immat, nm)) { rebuildLeasingData(); renderKPIs(); renderLeasing(); if (FP.toast) FP.toast('Conducteur affecté ✓'); } else { renderLeasing(); } };
+      if (FP.conducteurPicker) FP.conducteurPicker(inp, { onPick: (c) => apply((c && FP.conducteurs && FP.conducteurs.displayName) ? FP.conducteurs.displayName(c) : inp.value.trim()) });
+      inp.addEventListener('blur', () => setTimeout(() => { if (document.getElementById('veh-cond-edit') === inp) apply(inp.value.trim()); }, 200));
+      return;
+    }
     const bUp = e.target.closest('[data-bpce-up]');
     if (bUp) { bpceUpload(bUp.dataset.bpceUp); return; }
     const bDoc = e.target.closest('[data-bpce-doc]');
