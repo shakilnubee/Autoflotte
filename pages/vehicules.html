@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820n">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820o">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820n"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260820o"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820n">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260820o">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -993,13 +993,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820n"></script>
-<script src="../assets/js/supabase-client.js?v=20260820n"></script>
-<script src="../assets/js/data.js?v=20260820n"></script>
-<script src="../assets/js/fleet-docs.js?v=20260820n"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260820n"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260820o"></script>
+<script src="../assets/js/supabase-client.js?v=20260820o"></script>
+<script src="../assets/js/data.js?v=20260820o"></script>
+<script src="../assets/js/fleet-docs.js?v=20260820o"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260820o"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260820n"></script>
+<script src="../assets/js/app.js?v=20260820o"></script>
 <script>
   lucide.createIcons();
 
@@ -1428,9 +1428,28 @@
   // avec leur période — CONSERVÉE même après avoir retiré le conducteur de la fiche.
   // Chaque ligne est éditable (crayon) : corriger les dates début/fin, ou supprimer/ajouter
   // une période à la main (backfill des dates qu'on connaît).
+  // Km parcourus PENDANT une affectation = km de la restitution (Sortie) − km de la prise (Entrée),
+  // lus dans les états des lieux datés (getInspections) qui tombent dans la période [début, fin].
+  // Période en cours (pas de fin) : on prend le km ACTUEL du véhicule comme borne haute.
+  function kmParcouruAffect(v, a) {
+    try {
+      const insp = (getInspections(v.id) || []).filter(x => x && Number.isFinite(+x.km) && x.date);
+      if (!insp.length) return null;
+      const inP = (d) => (!a.debut || d >= a.debut) && (!a.fin || d <= a.fin);
+      const entries = insp.filter(x => x.sens !== 'Sortie' && inP(x.date)).sort((p, q) => String(p.date).localeCompare(q.date));
+      const exits = insp.filter(x => x.sens === 'Sortie' && inP(x.date)).sort((p, q) => String(p.date).localeCompare(q.date));
+      const entryKm = entries.length ? +entries[0].km : null;                 // première PRISE de la période
+      let exitKm = exits.length ? +exits[exits.length - 1].km : null;         // dernière RESTITUTION
+      if (!a.fin && exitKm == null && Number.isFinite(+v.km)) exitKm = +v.km;  // en cours → km actuel
+      if (entryKm == null || exitKm == null) return null;
+      const diff = exitKm - entryKm;
+      return diff >= 0 ? diff : null;
+    } catch (e) { return null; }
+  }
   function affectRowsHTML(vehId, editIdx) {
     // On garde l'INDEX d'origine (position dans le tableau stocké) pour l'édition,
     // puis on trie une copie par date décroissante pour l'affichage.
+    const _vAff = (data.vehicules || []).find(x => x.id === vehId) || null;
     const raw = (FP.affectations ? FP.affectations.forVeh(vehId) : []);
     const items = raw.map((a, i) => ({ a, i }))
       .sort((x, y) => String(y.a.debut || y.a.fin || '').localeCompare(String(x.a.debut || x.a.fin || '')));
@@ -1453,6 +1472,9 @@
       const enCours = !a.fin;
       const debut = a.debut ? FP.dateNum(a.debut) : '<span class="text-slate-400">depuis l’origine</span>';
       const periode = enCours ? `depuis ${a.debut ? FP.dateNum(a.debut) : '—'}` : `${debut} → ${FP.dateNum(a.fin)}`;
+      // Km parcourus pendant cette période (états des lieux prise → restitution).
+      const kmP = _vAff ? kmParcouruAffect(_vAff, a) : null;
+      const kmBadge = (kmP != null && kmP > 0) ? `<span class="text-xs" style="font-weight:700;color:var(--fp-primary)" title="Kilomètres parcourus pendant l'affectation (restitution − prise, d'après les états des lieux)">${FP.num(kmP)} km parcourus</span>` : '';
       return `<div class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-100" data-affect-row="${i}">
         <div class="flex items-center gap-2 min-w-0">
           <span style="width:9px;height:9px;border-radius:50%;flex:none;background:${enCours ? '#16a34a' : '#94a3b8'}"></span>
@@ -1460,6 +1482,7 @@
           ${enCours ? '<span style="font-size:.66rem;font-weight:700;color:#fff;background:#16a34a;border-radius:9999px;padding:1px 8px">actuel</span>' : ''}
         </div>
         <div class="flex items-center gap-2 whitespace-nowrap">
+          ${kmBadge}
           <span class="text-xs text-slate-500">${periode}</span>
           <button type="button" class="text-slate-400 hover:text-slate-700" data-affect-edit="${i}" title="Corriger les dates"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
         </div>
