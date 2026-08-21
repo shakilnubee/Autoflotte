@@ -446,19 +446,49 @@ Deno.serve(async (req) => {
         }));
         const ins = await db.from("documents").insert(rows);
         if (ins.error) return json({ error: "Échec de l'envoi des photos. Réessaie." }, 500);
+        // Kilométrage au compteur saisi par le conducteur (optionnel) : on le range dans l'HISTORIQUE du
+        // véhicule (même stockage que l'état des lieux du gestionnaire : app_settings.inspections[vehId]),
+        // et on remonte le km COURANT du véhicule s'il est plus élevé (jamais vers le bas). → la frise
+        // chronologique affiche « État des lieux · Entrée/Sortie — <km> km » automatiquement.
+        const kmEdl = Math.round(Number(body.km));
+        const kmValid = Number.isFinite(kmEdl) && kmEdl > 0 && kmEdl <= 3000000;
+        if (kmValid) {
+          try {
+            const kmRef = await vehKm(db, qr.vehicule_id);
+            if (kmRef == null || kmEdl > kmRef) await db.from("vehicules").update({ km: kmEdl }).eq("id", qr.vehicule_id);
+          } catch (_e) { /* maj km best-effort */ }
+        }
+        // Inspection datée (frise véhicule) — créée pour CHAQUE envoi conducteur (avec ou sans km).
+        // La fusion « delta » côté client (rev) préserve cet ajout serveur lors des sauvegardes suivantes.
+        try {
+          const soc = qr.societe || "PXP";
+          const cur = await db.from("app_settings").select("data").eq("id", soc).maybeSingle();
+          const d = (cur.data && cur.data.data && typeof cur.data.data === "object") ? cur.data.data : {};
+          d.inspections = (d.inspections && typeof d.inspections === "object") ? d.inspections : {};
+          const rec = {
+            id: "INS" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+            date: new Date().toISOString().slice(0, 10),
+            sens: label, km: kmValid ? kmEdl : null, items: {},
+            note: "Envoyé par le conducteur (portail QR)", source: "portail",
+          };
+          const prev = Array.isArray(d.inspections[qr.vehicule_id]) ? d.inspections[qr.vehicule_id] : [];
+          d.inspections[qr.vehicule_id] = [rec, ...prev];
+          await db.from("app_settings").upsert({ id: soc, data: d });
+        } catch (_e) { /* l'historique est best-effort : l'envoi des photos réussit quand même */ }
         // Notifie le gestionnaire : on enregistre AUSSI une « demande conducteur » (type 'etat_lieux',
         // statut 'nouveau') dans declarations_conducteur → même badge + alerte + inbox que les sinistres.
         // Aucune donnée dupliquée côté fiche : les photos restent dans `documents` (section État des lieux),
         // cette ligne ne sert qu'à alerter (mêmes URLs, réutilisées pour l'aperçu). Best-effort.
         try {
+          const kmTxt = kmValid ? ` · ${kmEdl.toLocaleString("fr-FR")} km` : "";
           await db.from("declarations_conducteur").insert({
             id: genId("dc"), vehicule_id: qr.vehicule_id, plaque: qr.plaque || "", societe: qr.societe || "PXP",
             type: "etat_lieux",
-            description: `${photos.length} photo(s) d'état des lieux — ${label === "Sortie" ? "restitution" : "prise en main"}`,
+            description: `${photos.length} photo(s) d'état des lieux — ${label === "Sortie" ? "restitution" : "prise en main"}${kmTxt}`,
             photos, statut: "nouveau",
           });
         } catch (_e) { /* la table d'alerte peut manquer : l'envoi des photos réussit quand même */ }
-        return json({ ok: true, sens, photos: photos.length });
+        return json({ ok: true, sens, photos: photos.length, km: kmValid ? kmEdl : null });
       }
 
       const qtok = String(body.q || "").trim();
