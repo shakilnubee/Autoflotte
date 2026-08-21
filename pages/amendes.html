@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260821a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260821a">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -473,11 +473,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820o"></script>
-<script src="../assets/js/supabase-client.js?v=20260820o"></script>
-<script src="../assets/js/data.js?v=20260820o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260821a"></script>
+<script src="../assets/js/supabase-client.js?v=20260821a"></script>
+<script src="../assets/js/data.js?v=20260821a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260820o"></script>
+<script src="../assets/js/app.js?v=20260821a"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -491,6 +491,13 @@
   // ⚠️ Échappement HTML — DÉFINI TÔT car utilisé dès l'init (rebuildMotifFilter, motifPill…).
   // S'il était déclaré plus bas (const = TDZ), l'appel à l'init plantait toute la page.
   const escAmende = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  // Sûr dans un attribut ET dans la chaîne JS d'un onclick (mêmes règles que scanPreview).
+  const safeUrl = u => encodeURI(String(u || '')).replace(/'/g, '%27');
+  // Ouvre un scan (avis / justificatif / pièce jointe) en le SIGNANT — bucket privé (RGPD). FP.openScan
+  // génère un lien signé avant d'ouvrir (comme l'aperçu image). Repli window.open si FP indispo.
+  // ⚠️ Ne JAMAIS mettre l'URL de stockage BRUTE dans un href : un n° d'avis est deviné/imprimé sur le PV
+  // → sans signature, le scan (nom, plaque, adresse) serait accessible sans authentification.
+  const openScanAttr = u => { const s = safeUrl(u); return `href="#" onclick="event.preventDefault();(window.FP&&FP.openScan)?FP.openScan('${s}'):window.open('${s}','_blank','noopener')"`; };
   // Aperçu inline d'un scan (image -> <img> ; PDF/inconnu -> <iframe>) directement dans le tiroir.
   function scanPreview(url) {
     if (!url) return '';
@@ -518,7 +525,7 @@
             ${p.date ? `<div class="text-xs text-slate-400">Ajouté le ${FP.date(p.date)}</div>` : ''}
           </div>
           <button type="button" class="btn btn-outline text-xs !px-2.5" data-piece-view="${escAmende(p.id || '')}" title="Aperçu"><i data-lucide="eye" class="w-4 h-4"></i> Voir</button>
-          <a href="${escAmende(p.url || '')}" target="_blank" rel="noopener" class="ra-btn" title="Ouvrir dans un onglet"><i data-lucide="external-link" class="w-4 h-4"></i></a>
+          <a ${openScanAttr(p.url || '')} class="ra-btn" title="Ouvrir dans un onglet"><i data-lucide="external-link" class="w-4 h-4"></i></a>
           <button type="button" class="ra-btn" data-piece-del="${escAmende(p.id || '')}" title="Supprimer ce document"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
         </div>
         <div data-piece-prev="${escAmende(p.id || '')}" style="display:none;padding:0 .6rem .65rem"></div>
@@ -959,10 +966,15 @@
   const condEmails = {};        // clé EXACTE (key ou nom complet normalisé) → e-mail
   const condEmailByFirst = {};  // prénom seul → e-mail, MAIS neutralisé si 2 personnes différentes le partagent
   const AMBIGU = '__AMBIGU__';
+  // ⚠️ Normalisation VIA les helpers canoniques (mêmes que la table conducteurs) : nom complet
+  // désaccentué (FP.normNomComplet) pour l'exact, prénom désaccentué (FP.normPrenom) pour le repli —
+  // sinon un conducteur accentué (« Jérôme », « José ») n'était jamais retrouvé (clé accentuée ≠ clé désaccentuée).
+  const _nnc = s => (FP.normNomComplet ? FP.normNomComplet(s) : (s || '').toString().toLowerCase().trim());
+  const _npr = s => (FP.normPrenom ? FP.normPrenom(s) : (s || '').toString().toLowerCase().trim().split(/\s+/)[0]);
   function lookupEmail(prenom) {
-    const p = (prenom || '').toLowerCase().trim();
+    const p = _nnc(prenom);
     if (condEmails[p]) return condEmails[p];               // 1) correspondance exacte (jamais ambiguë)
-    const fb = condEmailByFirst[p.split(' ')[0]];          // 2) repli prénom SEULEMENT s'il est unique
+    const fb = condEmailByFirst[_npr(prenom)];             // 2) repli prénom SEULEMENT s'il est unique
     // ⚠️ Ne JAMAIS deviner sur un prénom partagé par 2 conducteurs (envoi de l'avis + PII au MAUVAIS
     // destinataire). En cas d'ambiguïté on renvoie '' → le flux d'envoi bloque au lieu de se tromper.
     return (fb && fb !== AMBIGU) ? fb : '';
@@ -972,9 +984,9 @@
       (r.data || []).forEach(c => {
         if (!c.email) return;
         [c.key, c.name].filter(Boolean).forEach(n => {
-          const k = String(n).toLowerCase().trim();
+          const k = _nnc(n);
           condEmails[k] = c.email;
-          const f = k.split(' ')[0];
+          const f = _npr(n);
           if (condEmailByFirst[f] === undefined) condEmailByFirst[f] = c.email;
           else if (condEmailByFirst[f] !== c.email) condEmailByFirst[f] = AMBIGU; // homonyme de prénom, e-mail différent
         });
@@ -1516,7 +1528,7 @@
           <div class="field-label">Scan de l'avis</div>
           ${scanPreview(a.avisUrl)}
           <div class="flex gap-2 mt-2">
-            <a href="${escAmende(a.avisUrl)}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
+            <a ${openScanAttr(a.avisUrl)} class="btn btn-outline text-sm flex-1 justify-center">
               <i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir en grand
             </a>
             <button type="button" id="avis-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le scan de l'avis"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>
@@ -1528,7 +1540,7 @@
         ${a.justifUrl ? `
           ${scanPreview(a.justifUrl)}
           <div class="flex gap-2 mt-2">
-            <a href="${escAmende(a.justifUrl)}" target="_blank" rel="noopener" class="btn btn-outline text-sm flex-1 justify-center">
+            <a ${openScanAttr(a.justifUrl)} class="btn btn-outline text-sm flex-1 justify-center">
               <i data-lucide="external-link" class="w-4 h-4"></i> Ouvrir en grand
             </a>
             <button type="button" id="justif-del" class="btn btn-outline text-sm !px-2.5" title="Supprimer le justificatif"><i data-lucide="trash-2" class="w-4 h-4 text-red-600"></i></button>

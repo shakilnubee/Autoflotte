@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260821a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260821a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -594,11 +594,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820o"></script>
-<script src="../assets/js/supabase-client.js?v=20260820o"></script>
-<script src="../assets/js/data.js?v=20260820o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260821a"></script>
+<script src="../assets/js/supabase-client.js?v=20260821a"></script>
+<script src="../assets/js/data.js?v=20260821a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260820o"></script>
+<script src="../assets/js/app.js?v=20260821a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1308,15 +1308,20 @@
     // logique que le moteur de coût (lldSet, plus haut).
     const _lldImmats = new Set();
     try { getLocalease().forEach(c => { const k = FP.normImmat((c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '')) || ''); if (k) _lldImmats.add(k); }); } catch (e) {}
-    const rows = [...leasingImmats]
+    // ⚠️ rowsAll = jeu COMPLET (dédoublonné LLD + filtre loueur) qui alimente les KPI ; `rows` = ce même
+    // jeu filtré EN PLUS par la recherche `q`, uniquement pour l'AFFICHAGE. La recherche ne doit JAMAIS
+    // changer les compteurs (nb véhicules, coût mensuel/annuel) — même règle que le côté Ayvens/LLD, qui
+    // calcule déjà ses KPI sur les lignes non filtrées par la recherche. (Avant : les KPI BPCE bougeaient
+    // à la recherche alors que les KPI Ayvens non → total incohérent, ex. « 3 véhicules en leasing ».)
+    const rowsAll = [...leasingImmats]
       .map(immat => {
         const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)) || { immat, marque: '?', modele: '', chauffeur: '—' };
         return { v, agg: leasingByVeh[immat] || { count: 0, total: 0, lastDate: '', lastFile: null, amounts: [] } };
       })
       .filter(({ v }) => !_lldImmats.has(FP.normImmat(v.immat || '')))     // déjà compté côté LLD
       .filter(({ v }) => leasingLoueurFilter === 'all' || loueurNomOf(v) === leasingLoueurFilter)
-      .filter(({ v }) => !q || FP.norm(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`).includes(q))
       .sort((a,b) => b.agg.total - a.agg.total);
+    const rows = q ? rowsAll.filter(({ v }) => FP.norm(`${v.immat} ${v.marque} ${v.modele} ${v.chauffeur}`).includes(q)) : rowsAll;
 
     const finContratCell = (l) => {
       if (!l || !l.finContrat || isNaN(l.finContrat)) return '<span class="text-slate-400">—</span>';
@@ -1418,7 +1423,7 @@
 
     // KPIs des lignes « dérivées » (BPCE / factures).
     let mensTotal = 0, engagementTotal = 0, nbAvecLoyer = 0;
-    rows.forEach(({ v }) => {
+    rowsAll.forEach(({ v }) => {
       // SOURCE UNIQUE du loyer = le loyer d'offre courant (FP.leasingLoyerCourant + avenants),
       // la médiane des factures ne servant que de repli — même calcul que la colonne « loyer moyen »
       // de la ligne et que le KPI du haut. (Avant : uniquement la médiane → 2 totaux différents à
@@ -1438,7 +1443,7 @@
     localeaseSearch = leasingSearch;   // une seule recherche pilote les deux jeux de lignes
     const loc = _renderLocaleaseRows() || { nb: 0, mens: 0, eng: 0, nbAvecLoyer: 0 };
 
-    const totNb    = rows.length + loc.nb;
+    const totNb    = rowsAll.length + loc.nb;
     const totMens  = mensTotal + loc.mens;
     const totEng   = engagementTotal + loc.eng;
     const totNbLoy = nbAvecLoyer + loc.nbAvecLoyer;

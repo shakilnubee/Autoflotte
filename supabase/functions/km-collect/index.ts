@@ -484,6 +484,8 @@ Deno.serve(async (req) => {
           await db.from("declarations_conducteur").insert({
             id: genId("dc"), vehicule_id: qr.vehicule_id, plaque: qr.plaque || "", societe: qr.societe || "PXP",
             type: "etat_lieux",
+            // Date du jour (comme un sinistre via date_incident) → l'inbox/alerte affiche une date, pas un vide.
+            date_incident: new Date().toISOString().slice(0, 10),
             description: `${photos.length} photo(s) d'état des lieux — ${label === "Sortie" ? "restitution" : "prise en main"}${kmTxt}`,
             photos, statut: "nouveau",
           });

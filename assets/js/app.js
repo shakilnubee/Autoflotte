@@ -5445,7 +5445,7 @@ FP.buildAlertes = (data) => {
           message: `${sansJustif.length} amende${sansJustif.length > 1 ? 's' : ''} payée${sansJustif.length > 1 ? 's' : ''} sans justificatif`,
           detail: 'Ajoute le reçu de paiement sur la fiche de l\'amende',
           sort: 1200,
-          vehicules: sansJustif.map(a => ({ label: `${a.prenom || '?'} · ${a.motif || 'amende'}${a.montant ? ' · ' + FP.euro(a.montant) : ''} (${FP.date(a.date)})`, target: 'amendes.html?amende=' + encodeURIComponent(a.id) })),
+          vehicules: sansJustif.map(a => { const md = FP.montantDu ? FP.montantDu(a) : a.montant; return { label: `${a.prenom || '?'} · ${a.motif || 'amende'}${md ? ' · ' + FP.euro(md) : ''} (${FP.date(a.date)})`, target: 'amendes.html?amende=' + encodeURIComponent(a.id) }; }),
         });
       }
     }

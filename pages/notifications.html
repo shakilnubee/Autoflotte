@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260820o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260820o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260821a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260820o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260821a">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -142,11 +142,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260820o"></script>
-<script src="../assets/js/supabase-client.js?v=20260820o"></script>
-<script src="../assets/js/data.js?v=20260820o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260821a"></script>
+<script src="../assets/js/supabase-client.js?v=20260821a"></script>
+<script src="../assets/js/data.js?v=20260821a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260820o"></script>
+<script src="../assets/js/app.js?v=20260821a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -400,7 +400,22 @@
   // + fusionne base PXP et overrides saisis). Avant, une recherche brute base[v.immat] ratait les
   // véhicules dont la plaque/clé différait → le forfait était réclamé à tort alors que la fiche l'affichait.
   function leasingForfait(v) { try { return (FP.leasingContrat ? FP.leasingContrat(v && v.immat) : null); } catch (e) { return null; } }
-  function estLeasing(v) { try { const prof = FP.societeProfil ? FP.societeProfil() : {}; const p = String(v.proprietaire || '').trim().toLowerCase(); const etiq = String(prof.proprietaireLeasing || prof.loueurNom || '').trim().toLowerCase(); if (p && etiq && p === etiq) return true; } catch (e) {} return !!leasingForfait(v); }
+  // ⚠️ MÊME détection leasing que la page Contrats : le propriétaire doit être comparé à TOUS les
+  // loueurs configurés (multi-loueurs) via le helper canonique FP.leasingProps() — pas seulement au
+  // loueur unique du profil (sinon un véhicule d'un 2ᵉ loueur, visible dans Contrats, n'était jamais
+  // réclamé ici : ni son forfait ni son PDF de contrat). Repli sur le profil si le helper est absent.
+  function estLeasing(v) {
+    try {
+      const p = String(v.proprietaire || '').trim().toLowerCase();
+      if (p) {
+        let props = [];
+        try { if (FP.leasingProps) props = FP.leasingProps() || []; } catch (e) {}
+        if (!props.length) { const prof = FP.societeProfil ? FP.societeProfil() : {}; const etiq = String(prof.proprietaireLeasing || prof.loueurNom || '').trim().toLowerCase(); if (etiq) props = [etiq]; }
+        if (props.indexOf(p) !== -1) return true;
+      }
+    } catch (e) {}
+    return !!leasingForfait(v);
+  }
 
   const VEH_FIELDS = [
     { k: 'immat', label: 'Immatriculation' }, { k: 'marque', label: 'Marque' }, { k: 'modele', label: 'Modèle' },
@@ -513,12 +528,31 @@
   // les lignes déjà marquées ignorées et on passe le préfixe à compItem pour que la ✕ s'affiche.
   const ignHas = (key) => !!(window.FP && FP.ignore && FP.ignore.has && FP.ignore.has(key));
   const idSlug = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'x';
+  // Résout la plaque d'un contrat Localease/Ayvens comme le fait pages/contrats.html (autoImmatLoc) :
+  // beaucoup de contrats n'ont PAS de c.immat explicite → ils sont rattachés au véhicule par le
+  // conducteur (+ modèle). Sans cette résolution, pdfManquants signalait à tort « PDF manquant » alors
+  // que le PDF vit dans le contrat Ayvens rattaché par conducteur. Miroir exact de contrats.html:2011.
+  function locImmatOf(c) {
+    if (c && c.immat) return c.immat;
+    try {
+      const norm = x => (x || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const cond = norm(c && c.conducteur); if (!cond || /nouveau collaborateur|nouveaux collaborateurs/.test(cond)) return '';
+      const mdl = norm(c && c.modele).split(' ')[0]; const condFirst = cond.split(' ')[0];
+      const cands = (data.vehicules || []).filter(v => {
+        const vc = norm(v.chauffeur); if (!vc) return false; const vcFirst = vc.split(' ')[0];
+        const condOk = vc === cond || vcFirst === condFirst || vc.startsWith(cond + ' ') || cond.startsWith(vc + ' ');
+        return condOk && (!mdl || norm(v.modele).includes(mdl));
+      });
+      const v = cands.find(x => /localease/.test(norm(x.proprietaire))) || cands[0];
+      return v ? (v.immat || '') : '';
+    } catch (e) { return ''; }
+  }
   function pdfManquants(actifs) {
     const items = [];
     let s = {}; try { s = (FP.settings && FP.settings.get) ? (FP.settings.get() || {}) : {}; } catch (e) {}
     const loc = Array.isArray(s.localeaseContrats) ? s.localeaseContrats : [];
     const locByImmat = {};
-    loc.forEach(c => { const k = c && c.immat ? FP.normImmat(c.immat) : ''; if (k) locByImmat[k] = c; });
+    loc.forEach(c => { const k = FP.normImmat(locImmatOf(c) || ''); if (k) locByImmat[k] = c; });
     const leasingDocs = (s.leasingDocs && typeof s.leasingDocs === 'object') ? s.leasingDocs : {};
     const LBL_CONTRAT = { k: 'contratPdf', label: 'PDF du contrat de leasing manquant', target: 'contrats.html' };
     const LBL_PRIME = { k: 'primePdf', label: "PDF de la prime d'assurance manquant", target: 'contrats.html' };
@@ -551,6 +585,10 @@
       const pfx = 'complet:prime:' + idSlug(key) + ':';
       if (ignHas(pfx + LBL_PRIME.k)) return;
       const k = FP.normImmat(key);
+      // Ne pas réclamer le PDF de la prime d'un véhicule VENDU / hors flotte (sa prime n'est déjà plus
+      // comptée dans les totaux) : on cherche dans TOUTE la flotte et on saute s'il est hors flotte.
+      const vAll = (data.vehicules || []).find(x => FP.normImmat(x.immat) === k);
+      if (vAll && FP.horsFlotte && FP.horsFlotte(vAll)) return;
       const v = (actifs || []).find(x => FP.normImmat(x.immat) === k);
       const nom = v ? `${v.immat} · ${(v.marque || '')} ${(v.modele || '')}`.trim() : key;
       items.push(compItem(nom, [LBL_PRIME], 'contrats.html', pfx));
@@ -1219,8 +1257,16 @@
   let _verifCongeRows = []; // dernières alertes « conso pendant congé » (pour l'export relevé)
   async function loadVerifTx() {
     if (_verifTx !== null && _verifUlys !== null) return _verifTx;
-    try { const r = await FP.supabase.from('total_conso_tx').select('*'); _verifTx = (r && r.data) || []; } // RLS filtre déjà par société
-    catch (e) { _verifTx = []; }
+    try {
+      const r = await FP.supabase.from('total_conso_tx').select('*'); let rows = (r && r.data) || [];
+      // ⚠️ Isolation multi-sociétés (MÊME règle défensive que ulys_conso ci-dessous) : le CEO voit
+      // toutes les sociétés via la RLS → sur une société précise on refiltre côté client, et une ligne
+      // historique SANS `societe` appartient à PXP (sinon elle fuite dans les alertes conso/anomalies
+      // de CHAQUE société avec des noms de conducteurs d'une autre boîte).
+      const soc = FP.activeSociete ? FP.activeSociete() : null;
+      if (soc && soc !== '__all__') { const s = String(soc).toLowerCase(); rows = rows.filter(x => x.societe ? String(x.societe).toLowerCase() === s : s === 'pxp'); }
+      _verifTx = rows;
+    } catch (e) { _verifTx = []; }
     try {
       const r = await FP.supabase.from('ulys_conso').select('*'); let rows = (r && r.data) || [];
       const soc = FP.activeSociete ? FP.activeSociete() : null;
