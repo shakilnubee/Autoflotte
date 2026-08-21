@@ -508,6 +508,11 @@
   // settings.leasingDocs[IMMAT] ; primes d'assurance = settings.assurancePrimes[immat].docUrl.
   // But : signaler dans « À compléter » les véhicules leasing sans PDF de contrat et les primes
   // d'assurance saisies sans PDF joint (chaque ligne mène à contrats.html pour déposer le fichier).
+  // Chaque ligne PDF est IGNORABLE (✕ « non concerné ») : même mécanique que le reste de la
+  // checklist (FP.ignore, préfixe « complet: » → apparaît dans le volet « réafficher »). On saute
+  // les lignes déjà marquées ignorées et on passe le préfixe à compItem pour que la ✕ s'affiche.
+  const ignHas = (key) => !!(window.FP && FP.ignore && FP.ignore.has && FP.ignore.has(key));
+  const idSlug = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'x';
   function pdfManquants(actifs) {
     const items = [];
     let s = {}; try { s = (FP.settings && FP.settings.get) ? (FP.settings.get() || {}) : {}; } catch (e) {}
@@ -516,21 +521,26 @@
     loc.forEach(c => { const k = c && c.immat ? FP.normImmat(c.immat) : ''; if (k) locByImmat[k] = c; });
     const leasingDocs = (s.leasingDocs && typeof s.leasingDocs === 'object') ? s.leasingDocs : {};
     const LBL_CONTRAT = { k: 'contratPdf', label: 'PDF du contrat de leasing manquant', target: 'contrats.html' };
+    const LBL_PRIME = { k: 'primePdf', label: "PDF de la prime d'assurance manquant", target: 'contrats.html' };
     // (1) Véhicules leasing de la flotte sans PDF de contrat
     (actifs || []).forEach(v => {
       if (!estLeasing(v)) return;
+      const pfx = 'complet:veh:' + v.id + ':';
+      if (ignHas(pfx + LBL_CONTRAT.k)) return;
       const k = FP.normImmat(v.immat);
       const locC = k ? locByImmat[k] : null;
       const hasDoc = locC ? (Array.isArray(locC.docs) && locC.docs.length > 0)
         : (Array.isArray(leasingDocs[String(v.immat || '').toUpperCase()]) && leasingDocs[String(v.immat || '').toUpperCase()].length > 0);
-      if (!hasDoc) items.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), [LBL_CONTRAT], 'contrats.html', ''));
+      if (!hasDoc) items.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), [LBL_CONTRAT], 'contrats.html', pfx));
     });
     // (2) Contrats Ayvens/Localease non rattachés à un véhicule de la flotte, sans PDF
-    loc.forEach(c => {
+    loc.forEach((c, i) => {
       const k = c && c.immat ? FP.normImmat(c.immat) : '';
       if (k && (actifs || []).some(v => FP.normImmat(v.immat) === k)) return; // déjà traité en (1)
+      const pfx = 'complet:leasedoc:' + idSlug(c.immat || c.offre || c.conducteur || ('n' + i)) + ':';
+      if (ignHas(pfx + LBL_CONTRAT.k)) return;
       const hasDoc = Array.isArray(c.docs) && c.docs.length > 0;
-      if (!hasDoc) items.push(compItem(`${c.immat || c.conducteur || 'Contrat leasing'} · ${(c.marque || '')} ${(c.modele || '')}`.trim(), [LBL_CONTRAT], 'contrats.html', ''));
+      if (!hasDoc) items.push(compItem(`${c.immat || c.conducteur || 'Contrat leasing'} · ${(c.marque || '')} ${(c.modele || '')}`.trim(), [LBL_CONTRAT], 'contrats.html', pfx));
     });
     // (3) Primes d'assurance saisies (montant TTC) mais sans PDF joint
     const primes = (s.assurancePrimes && typeof s.assurancePrimes === 'object') ? s.assurancePrimes : {};
@@ -538,10 +548,12 @@
       const p = primes[key] || {};
       const hasAmount = p.ttc != null && String(p.ttc).trim() !== '';
       if (!hasAmount || p.docUrl) return;
+      const pfx = 'complet:prime:' + idSlug(key) + ':';
+      if (ignHas(pfx + LBL_PRIME.k)) return;
       const k = FP.normImmat(key);
       const v = (actifs || []).find(x => FP.normImmat(x.immat) === k);
       const nom = v ? `${v.immat} · ${(v.marque || '')} ${(v.modele || '')}`.trim() : key;
-      items.push(compItem(nom, [{ k: 'primePdf', label: "PDF de la prime d'assurance manquant", target: 'contrats.html' }], 'contrats.html', ''));
+      items.push(compItem(nom, [LBL_PRIME], 'contrats.html', pfx));
     });
     return items;
   }
