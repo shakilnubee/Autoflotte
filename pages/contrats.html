@@ -238,6 +238,21 @@
         .ls-grid .k{font-size:.63rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--fp-muted)}
         .ls-grid b{font-size:.92rem;color:var(--fp-primary);font-weight:800}
         .ls-actions{display:flex;gap:6px;border-top:1px solid var(--fp-border);padding-top:10px}
+        /* ⚠️ ALIGNEMENT UNIFORME de la table leasing : les lignes « dérivées » (BPCE) et « LLD » (Ayvens)
+           sont produites par 2 générateurs → sans ça, une colonne était à gauche sur une ligne et à droite
+           sur l'autre. On force ici la MÊME forme pour TOUTES les lignes (source unique de l'alignement) :
+           chiffres à droite, dates + contrat centrés. Le !important gagne sur les styles inline hérités. */
+        [data-section="leasing"] .fp-table th:nth-child(5),  [data-section="leasing"] .fp-table td:nth-child(5),
+        [data-section="leasing"] .fp-table th:nth-child(6),  [data-section="leasing"] .fp-table td:nth-child(6),
+        [data-section="leasing"] .fp-table th:nth-child(7),  [data-section="leasing"] .fp-table td:nth-child(7),
+        [data-section="leasing"] .fp-table th:nth-child(11), [data-section="leasing"] .fp-table td:nth-child(11),
+        [data-section="leasing"] .fp-table th:nth-child(12), [data-section="leasing"] .fp-table td:nth-child(12),
+        [data-section="leasing"] .fp-table th:nth-child(13), [data-section="leasing"] .fp-table td:nth-child(13) { text-align: right !important; }
+        [data-section="leasing"] .fp-table th:nth-child(9),  [data-section="leasing"] .fp-table td:nth-child(9),
+        [data-section="leasing"] .fp-table th:nth-child(10), [data-section="leasing"] .fp-table td:nth-child(10),
+        [data-section="leasing"] .fp-table th:nth-child(14), [data-section="leasing"] .fp-table td:nth-child(14) { text-align: center !important; }
+        [data-section="leasing"] .fp-table td:nth-child(14) { white-space: normal; }
+        [data-section="leasing"] .fp-table td:nth-child(14) .btn { margin: 2px; }
       </style>
       <div id="leasing-bpce-body">
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
@@ -292,6 +307,7 @@
            et récupération/restauration des contrats. Les libellés loc-title/loc-desc restent (masqués)
            pour ne casser aucune référence JS. -->
       <input type="file" id="loc-upload-file" accept="application/pdf,image/*" class="hidden" />
+      <input type="file" id="bpce-up-file" accept="application/pdf,image/*" class="hidden" />
       <span id="loc-title" class="hidden"></span><span id="loc-desc" class="hidden"></span>
       <div class="mt-3 pt-3 border-t border-slate-100">
         <button id="loc-recover-pdf" type="button" class="text-xs font-semibold" style="color:var(--fp-accent)"><i data-lucide="link" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Retrouver les PDF (relier les contrats déjà sur le Drive)</button>
@@ -618,6 +634,20 @@
   // Nom de loueur EN CLAIR (sans HTML) pour un véhicule — sert au filtre par loueur.
   function loueurNomOf(v) {
     return FP.loueurOf ? FP.loueurOf(v) : String((v && v.proprietaire) || '').trim();
+  }
+  // ===== Contrats PDF des lignes leasing « dérivées » (BPCE…) — par IMMAT, synchronisé par société =====
+  // Les lignes Ayvens/LLD rangent leurs PDF dans le contrat saisi (c.docs) ; les lignes dérivées n'ont
+  // pas de contrat saisi → on stocke leur(s) PDF de contrat dans app_settings.leasingDocs[immat], comme
+  // les autres réglages leasing. But : pouvoir voir/téléverser le contrat AUSSI pour les véhicules BPCE.
+  function bpceDocs(immat){ try { const m = FP.settings.get().leasingDocs || {}; const k = String(immat || '').toUpperCase(); return Array.isArray(m[k]) ? m[k] : []; } catch (e) { return []; } }
+  function setBpceDocs(immat, list){ const s = FP.settings.get(); s.leasingDocs = (s.leasingDocs && typeof s.leasingDocs === 'object') ? s.leasingDocs : {}; const k = String(immat || '').toUpperCase(); if (list && list.length) s.leasingDocs[k] = list; else delete s.leasingDocs[k]; FP.settings.save(s); }
+  function bpceDocsHtml(immat){
+    const docs = bpceDocs(immat);
+    const links = docs.map((d, di) => `<div class="flex items-center gap-1" style="margin-bottom:2px;max-width:170px">
+        <button type="button" data-bpce-doc="${escC(d.url)}" class="hover:underline" style="background:none;border:none;padding:0;cursor:pointer;color:var(--fp-accent);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left" title="${escC(d.name || 'Contrat')}"><i data-lucide="file-text" class="w-3 h-3 inline"></i> ${escC(d.name || 'Contrat')}</button>
+        <button type="button" data-bpce-doc-del="${escC(immat)}::${di}" class="text-slate-300 hover:text-red-600 flex-shrink-0" title="Supprimer ce document" style="font-size:12px;line-height:1">✕</button>
+      </div>`).join('');
+    return links + `<button type="button" class="btn btn-outline text-xs !px-2" data-bpce-up="${escC(immat)}" title="Téléverser le contrat de leasing (PDF)" style="margin-top:2px"><i data-lucide="upload" class="w-3.5 h-3.5"></i> ${docs.length ? 'Ajouter un doc' : 'Contrat'}</button>`;
   }
   // ===== Filtre par loueur (partagé BPCE + Localease) =====
   let leasingLoueurFilter = 'all';
@@ -1255,6 +1285,7 @@
         <td>${moyMens != null && moyMens > 0 ? FP.euroPrecis(moyMens) : '<span class="text-slate-400">—</span>'}</td>
         <td>${(() => { const d = FP.tvsDetail(v); return (d && d.applicable && d.total != null) ? FP.euro(d.total) : '<span class="text-slate-400">—</span>'; })()}</td>
         <td style="white-space:nowrap">
+          ${bpceDocsHtml(v.immat)}
           ${(() => { const jf = (l && l.finContrat && !isNaN(l.finContrat)) ? (FP.joursRestants ? FP.joursRestants(l.finContrat) : Math.ceil((l.finContrat - new Date()) / 86400000)) : null; const urg = jf !== null && jf <= 120; return `<button type="button" class="btn btn-outline text-xs !px-2" data-restit-lease="${v.immat}" title="Checklist de restitution (compte à rebours 120/90/60/30 j)"${urg ? ' style="border-color:var(--fp-accent);color:var(--fp-accent)"' : ''}><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i></button>`; })()}
           <button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}" title="Modifier le forfait du contrat"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
           <button type="button" class="btn btn-outline text-xs !px-2" data-del-lease="${v.immat}" title="Retirer ce véhicule du leasing"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>
@@ -1292,6 +1323,7 @@
         <div class="ls-actions">
           <button type="button" class="btn btn-outline text-xs !px-2" data-restit-lease="${v.immat}"${urg ? ' style="border-color:var(--fp-accent);color:var(--fp-accent)"' : ''}><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i> Restitution</button>
           <button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Forfait</button>
+          <button type="button" class="btn btn-outline text-xs !px-2" data-bpce-up="${FP.esc(v.immat)}" title="Téléverser le contrat de leasing (PDF)"><i data-lucide="upload" class="w-3.5 h-3.5"></i> Contrat</button>
           <button type="button" class="btn btn-outline text-xs !px-2" data-del-lease="${v.immat}" title="Retirer du leasing"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>
         </div>
       </div>`;
@@ -1477,8 +1509,37 @@
     }
   });
 
+  // ===== Contrat PDF des lignes leasing dérivées (BPCE…) : téléverser / voir / supprimer =====
+  let _bpceUpImmat = null;
+  function bpceUpload(immat){ _bpceUpImmat = immat; const inp = $('bpce-up-file'); if (!inp) return; inp.value = ''; inp.click(); }
+  if ($('bpce-up-file')) $('bpce-up-file').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0]; const immat = _bpceUpImmat; _bpceUpImmat = null;
+    if (!file || !immat) return;
+    if (!FP.uploadScan) { alert('Stockage indisponible — recharge la page (Ctrl+Maj+R).'); return; }
+    if (FP.toast) FP.toast('Envoi du contrat…');
+    try {
+      const url = await FP.uploadScan(file, 'contrats-leasing');
+      if (!url) { alert("Échec de l'envoi du document."); return; }
+      const list = bpceDocs(immat).slice(); list.push({ url, name: file.name || 'Contrat de leasing.pdf' });
+      setBpceDocs(immat, list);
+      renderLeasing();
+      if (FP.toast) FP.toast('✓ Contrat enregistré');
+    } catch (err) { console.error('[bpce doc]', err); alert("Échec de l'envoi du document."); }
+  });
+
   // Actions leasing — mêmes boutons en vue Tableau ET en vue Cartes.
   async function leaseAction(e){
+    const bUp = e.target.closest('[data-bpce-up]');
+    if (bUp) { bpceUpload(bUp.dataset.bpceUp); return; }
+    const bDoc = e.target.closest('[data-bpce-doc]');
+    if (bDoc) { const u = bDoc.getAttribute('data-bpce-doc'); const url = (FP.signedScanUrl) ? await FP.signedScanUrl(u, 3600) : u; window.open(url, '_blank', 'noopener'); return; }
+    const bDel = e.target.closest('[data-bpce-doc-del]');
+    if (bDel) {
+      const [immat, di] = bDel.dataset.bpceDocDel.split('::'); const idx = +di;
+      if (!(await FP.confirm('Supprimer ce document de contrat ?'))) return;
+      const list = bpceDocs(immat).slice(); list.splice(idx, 1); setBpceDocs(immat, list); renderLeasing();
+      if (FP.toast) FP.toast('Document supprimé'); return;
+    }
     const restit = e.target.closest('[data-restit-lease]');
     if (restit) { openRestit(restit.dataset.restitLease); return; }
     const del = e.target.closest('[data-del-lease]');
@@ -1924,7 +1985,12 @@
       const totalVerseHtml = totalVerse != null ? `<span${totalVerseEst ? ' class="cursor-help" title="Estimation basée sur la date de mise en circulation. Clique la date de « Début de contrat » pour saisir la vraie date et obtenir le montant exact."' : ''}>${totalVerseEst ? '~' : ''}${FP.euroPrecis(totalVerse)}</span>` : '<span class="text-slate-400">—</span>';
       const loyerHtml = loyerCourant != null ? FP.euroPrecis(loyerCourant) : '<span class="text-slate-400">—</span>';
       const tvsHtml = (() => { const d = (linkedV && FP.tvsDetail) ? FP.tvsDetail(linkedV) : null; const val = (d && d.applicable && d.total != null) ? d.total : tvsEst(c); return FP.euro(val); })();
-      const actionsHtml = `${docsHtml}<button type="button" class="btn btn-outline text-xs !px-2" data-loc-edit="${i}" title="Modifier le contrat (forfait km, durée, loyer, dates…)"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button> <button type="button" class="btn btn-outline" style="padding:2px 9px;font-size:11px" data-loc-up="${i}" title="Ajouter / téléverser un document"><i data-lucide="upload" class="w-3 h-3"></i> ${docs.length ? 'doc' : '+ doc'}</button> <button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>`;
+      // ⚠️ MÊMES BOUTONS QUE LES LIGNES BPCE (source unique de la forme) : dans le même ordre et le même
+      // style → Contrat (téléverser), Restitution, Modifier, Supprimer. Avant, les lignes Ayvens et BPCE
+      // avaient des boutons différents dans la dernière colonne.
+      const _upBtn = `<button type="button" class="btn btn-outline text-xs !px-2" data-loc-up="${i}" title="Téléverser le contrat de leasing (PDF)"><i data-lucide="upload" class="w-3.5 h-3.5"></i> ${docs.length ? 'Ajouter un doc' : 'Contrat'}</button>`;
+      const _restitBtn2 = _restitInFleet ? `<button type="button" class="btn btn-outline text-xs !px-2" data-loc-restit="${escC(_restitImmat)}" title="Checklist de restitution (compte à rebours 120/90/60/30 j)"><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i></button>` : '';
+      const actionsHtml = `${docsHtml}${_upBtn}${_restitBtn2}<button type="button" class="btn btn-outline text-xs !px-2" data-loc-edit="${i}" title="Modifier le contrat (forfait km, durée, loyer, dates…)"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button><button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>`;
       const tr = `<tr>
         <td class="font-mono">${immatCell}</td>
         <td>${vehHtml}</td>
