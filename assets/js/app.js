@@ -6631,7 +6631,7 @@ FP.lienConducteur = function (name, label) {
 FP.datePicker = (function () {
   const MOIS = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
   const JOURS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-  let pop = null, curInput = null, viewY = 0, viewM = 0, onDoc = null;
+  let pop = null, curInput = null, viewY = 0, viewM = 0, viewMode = 'days', onDoc = null;
 
   function ensureCSS() {
     if (document.getElementById('fp-dp-css')) return;
@@ -6671,6 +6671,22 @@ FP.datePicker = (function () {
     .fp-dp__today:hover{background:rgba(11,18,32,.12)}
     .fp-dp__clear{background:transparent;color:var(--fp-muted,#5A6577);box-shadow:inset 0 0 0 1px var(--fp-border,#E3E8F0)}
     .fp-dp__clear:hover{color:#dc2626;box-shadow:inset 0 0 0 1px #fecaca}
+    /* Champ de SAISIE manuelle (« écrire la date à la main ») */
+    .fp-dp__type{width:100%;box-sizing:border-box;margin-bottom:10px;padding:8px 11px;border-radius:12px;font-size:.9rem;font-weight:700;
+      letter-spacing:.5px;text-align:center;color:var(--fp-text,#111A2B);
+      border:1.5px solid var(--fp-border,#E3E8F0);background:rgba(255,255,255,.7);outline:none;transition:.15s;font-family:inherit}
+    .fp-dp__type:focus{border-color:var(--fp-accent,#F97316);box-shadow:0 0 0 3px rgba(249,115,22,.16)}
+    .fp-dp__type.bad{border-color:#fca5a5;box-shadow:0 0 0 3px rgba(220,38,38,.14)}
+    .fp-dp__title span,.fp-dp__title b{cursor:pointer;border-radius:6px;padding:1px 4px;transition:background .12s}
+    .fp-dp__title span:hover,.fp-dp__title b:hover{background:rgba(249,115,22,.16)}
+    /* Grilles MOIS / ANNÉES (clic sur le mois ou l'année de l'en-tête) */
+    .fp-dp__pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:2px}
+    .fp-dp__pcell{border:none;border-radius:12px;padding:12px 4px;cursor:pointer;font-size:.82rem;font-weight:700;
+      background:rgba(11,18,32,.05);color:var(--fp-text,#111A2B);transition:transform .12s,background .12s}
+    .fp-dp__pcell:hover{background:rgba(249,115,22,.16);transform:translateY(-2px)}
+    .fp-dp__pcell.sel{background:linear-gradient(155deg,#FDBA74,#F97316);color:#fff;box-shadow:0 8px 18px -6px rgba(249,115,22,.7)}
+    body.fp-dark .fp-dp__type{background:rgba(255,255,255,.06);color:#EAF0FB}
+    body.fp-dark .fp-dp__pcell{background:rgba(255,255,255,.06)}
     /* ── mode sombre : verre nuit ── */
     body.fp-dark .fp-dp{background:linear-gradient(160deg,rgba(27,39,64,.98),rgba(19,31,56,.98));
       border-color:rgba(120,140,180,.18);
@@ -6685,11 +6701,47 @@ FP.datePicker = (function () {
   const parse = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); return m ? { y: +m[1], m: +m[2] - 1, d: +m[3] } : null; };
   const clampAttr = (input, name) => { const p = parse(input.getAttribute(name)); return p ? new Date(p.y, p.m, p.d) : null; };
 
+  // Champ de saisie manuelle (jj/mm/aaaa) — rempli avec la valeur ISO courante.
+  const typeField = () => {
+    const sel = parse(curInput && curInput.value);
+    const v = sel ? `${String(sel.d).padStart(2, '0')}/${String(sel.m + 1).padStart(2, '0')}/${sel.y}` : '';
+    return `<input type="text" class="fp-dp__type" inputmode="numeric" autocomplete="off" placeholder="jj/mm/aaaa" value="${v}" aria-label="Taper la date">`;
+  };
   function render() {
     if (!pop || !curInput) return;
     const sel = parse(curInput.value);
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const min = clampAttr(curInput, 'min'), max = clampAttr(curInput, 'max');
+    const footer = `<div class="fp-dp__ft">
+        <button type="button" class="fp-dp__btn fp-dp__today" data-today>Aujourd'hui</button>
+        <button type="button" class="fp-dp__btn fp-dp__clear" data-clear>Effacer</button>
+      </div>`;
+    // ── Vue MOIS : on clique un mois pour sauter directement ──
+    if (viewMode === 'months') {
+      const cells = MOIS.map((mo, i) => `<button type="button" class="fp-dp__pcell${(sel && sel.y === viewY && sel.m === i) ? ' sel' : ''}" data-mo="${i}">${mo.slice(0, 4)}</button>`).join('');
+      pop.innerHTML = `${typeField()}
+        <div class="fp-dp__hd">
+          <button type="button" class="fp-dp__nav" data-nav="-1" title="Année précédente">‹</button>
+          <div class="fp-dp__title"><b data-yearpick>${viewY}</b></div>
+          <button type="button" class="fp-dp__nav" data-nav="1" title="Année suivante">›</button>
+        </div>
+        <div class="fp-dp__pgrid">${cells}</div>${footer}`;
+      return;
+    }
+    // ── Vue ANNÉES : grille de 12 années autour de la vue, clic = choisir l'année ──
+    if (viewMode === 'years') {
+      const start = viewY - 5; let cells = '';
+      for (let y = start; y < start + 12; y++) cells += `<button type="button" class="fp-dp__pcell${(sel && sel.y === y) ? ' sel' : ''}" data-yr="${y}">${y}</button>`;
+      pop.innerHTML = `${typeField()}
+        <div class="fp-dp__hd">
+          <button type="button" class="fp-dp__nav" data-navy="-12" title="12 ans avant">‹</button>
+          <div class="fp-dp__title"><span>${start} – ${start + 11}</span></div>
+          <button type="button" class="fp-dp__nav" data-navy="12" title="12 ans après">›</button>
+        </div>
+        <div class="fp-dp__pgrid">${cells}</div>${footer}`;
+      return;
+    }
+    // ── Vue JOURS (défaut) ──
     const first = new Date(viewY, viewM, 1);
     let startDow = (first.getDay() + 6) % 7; // Lundi = 0
     const daysInMonth = new Date(viewY, viewM + 1, 0).getDate();
@@ -6705,17 +6757,22 @@ FP.datePicker = (function () {
     }
     const total = startDow + daysInMonth; const trail = (7 - (total % 7)) % 7;
     for (let i = 1; i <= trail; i++) cells += `<button type="button" class="fp-dp__day out" tabindex="-1" data-off="1" data-d="${i}">${i}</button>`;
-    pop.innerHTML = `
+    pop.innerHTML = `${typeField()}
       <div class="fp-dp__hd">
         <button type="button" class="fp-dp__nav" data-nav="-1" title="Mois précédent">‹</button>
-        <div class="fp-dp__title"><span>${MOIS[viewM]}</span> <b>${viewY}</b></div>
+        <div class="fp-dp__title"><span data-monthpick title="Choisir le mois">${MOIS[viewM]}</span> <b data-yearpick title="Choisir l'année">${viewY}</b></div>
         <button type="button" class="fp-dp__nav" data-nav="1" title="Mois suivant">›</button>
       </div>
-      <div class="fp-dp__grid">${JOURS.map(j => `<div class="fp-dp__dow">${j}</div>`).join('')}${cells}</div>
-      <div class="fp-dp__ft">
-        <button type="button" class="fp-dp__btn fp-dp__today" data-today>Aujourd'hui</button>
-        <button type="button" class="fp-dp__btn fp-dp__clear" data-clear>Effacer</button>
-      </div>`;
+      <div class="fp-dp__grid">${JOURS.map(j => `<div class="fp-dp__dow">${j}</div>`).join('')}${cells}</div>${footer}`;
+  }
+  // Parse une saisie manuelle : jj/mm/aaaa, jj-mm-aaaa, ou aaaa-mm-jj. Renvoie {y,m,d} (m 0-based) ou null.
+  function parseTyped(str) {
+    const s = String(str || '').trim(); if (!s) return null;
+    let m = /^(\d{1,2})[\/\-. ](\d{1,2})[\/\-. ](\d{2,4})$/.exec(s);
+    if (m) { let y = +m[3]; if (y < 100) y += 2000; const mo = +m[2] - 1, d = +m[1]; const dt = new Date(y, mo, d); return (dt.getFullYear() === y && dt.getMonth() === mo && dt.getDate() === d) ? { y, m: mo, d } : null; }
+    m = /^(\d{4})[\/\-. ](\d{1,2})[\/\-. ](\d{1,2})$/.exec(s);
+    if (m) { const y = +m[1], mo = +m[2] - 1, d = +m[3]; const dt = new Date(y, mo, d); return (dt.getFullYear() === y && dt.getMonth() === mo && dt.getDate() === d) ? { y, m: mo, d } : null; }
+    return null;
   }
 
   function place() {
@@ -6744,19 +6801,41 @@ FP.datePicker = (function () {
     close();
     curInput = input; input.classList.add('fp-dp-on');
     const sel = parse(input.value) || (() => { const t = new Date(); return { y: t.getFullYear(), m: t.getMonth(), d: t.getDate() }; })();
-    viewY = sel.y; viewM = sel.m;
+    viewY = sel.y; viewM = sel.m; viewMode = 'days';
     pop = document.createElement('div'); pop.className = 'fp-dp'; document.body.appendChild(pop);
     render(); place();
     requestAnimationFrame(() => pop && pop.classList.add('open'));
     pop.addEventListener('click', (e) => {
+      // Clic sur le MOIS ou l'ANNÉE de l'en-tête → grille de sélection (plus besoin de défiler).
+      if (e.target.closest('[data-monthpick]')) { viewMode = 'months'; render(); place(); return; }
+      if (e.target.closest('[data-yearpick]')) { viewMode = 'years'; render(); place(); return; }
+      const mo = e.target.closest('[data-mo]'); if (mo) { viewM = +mo.dataset.mo; viewMode = 'days'; render(); place(); return; }
+      const yr = e.target.closest('[data-yr]'); if (yr) { viewY = +yr.dataset.yr; viewMode = 'months'; render(); place(); return; }
+      const navy = e.target.closest('[data-navy]'); if (navy) { viewY += +navy.dataset.navy; render(); place(); return; }
       const nav = e.target.closest('[data-nav]');
-      if (nav) { viewM += +nav.dataset.nav; if (viewM < 0) { viewM = 11; viewY--; } else if (viewM > 11) { viewM = 0; viewY++; } render(); place(); return; }
+      if (nav) {
+        if (viewMode === 'months') { viewY += +nav.dataset.nav; }   // en vue mois, ‹ › changent l'année
+        else { viewM += +nav.dataset.nav; if (viewM < 0) { viewM = 11; viewY--; } else if (viewM > 11) { viewM = 0; viewY++; } }
+        render(); place(); return;
+      }
       if (e.target.closest('[data-today]')) { const t = new Date(); pick(t.getFullYear(), t.getMonth(), t.getDate()); return; }
       if (e.target.closest('[data-clear]')) { pick2clear(); return; }
       const day = e.target.closest('.fp-dp__day'); if (!day || day.disabled) return;
       const off = +(day.dataset.off || 0); let y = viewY, m = viewM + off;
       if (m < 0) { m = 11; y--; } else if (m > 11) { m = 0; y++; }
       pick(y, m, +day.dataset.d);
+    });
+    // Saisie MANUELLE de la date (« écrire à la main ») : Entrée valide, sinon on synchronise le calendrier.
+    pop.addEventListener('keydown', (e) => {
+      const tf = e.target.closest && e.target.closest('.fp-dp__type'); if (!tf) return;
+      if (e.key === 'Enter') { e.preventDefault(); const p = parseTyped(tf.value); if (p) pick(p.y, p.m, p.d); else tf.classList.add('bad'); }
+      else if (e.key === 'Escape') { close(); }
+    });
+    pop.addEventListener('input', (e) => {
+      const tf = e.target.closest && e.target.closest('.fp-dp__type'); if (!tf) return;
+      tf.classList.remove('bad');
+      const p = parseTyped(tf.value);
+      if (p) { viewY = p.y; viewM = p.m; }   // le calendrier suit ce qu'on tape (sans re-render : on ne perd pas le focus du champ)
     });
     onDoc = (e) => { if (pop && !pop.contains(e.target) && e.target !== curInput) close(); };
     setTimeout(() => { document.addEventListener('mousedown', onDoc, true); }, 0);
