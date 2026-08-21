@@ -5813,6 +5813,34 @@ FP.buildAlertes = (data) => {
     }
   } catch (e) {}
 
+  // --- État des lieux d'entrée MANQUANT après un changement de conducteur ---
+  // Quand un conducteur change (≥2 périodes d'affectation) et que le NOUVEAU conducteur n'a aucun
+  // état des lieux de PRISE (Entrée) enregistré depuis le début de son affectation → on le signale
+  // (protection en cas de litige / facturation). Une seule alerte dépliable, ignorable.
+  try {
+    const insp = (FP.settings.get().inspections) || {};
+    const manque = [];
+    (data.vehicules || []).forEach(v => {
+      if (horsFlotte(v)) return;
+      const periods = FP.affectations ? FP.affectations.forVeh(v.id) : [];
+      if (!Array.isArray(periods) || periods.length < 2) return;   // aucun changement de conducteur → rien à signaler
+      const cur = FP.affectations.courante ? FP.affectations.courante(v.id) : null;
+      if (!cur || !cur.conducteur || String(cur.conducteur).trim() === '' || cur.conducteur === '—') return;
+      const list = Array.isArray(insp[v.id]) ? insp[v.id] : [];
+      const hasEntree = list.some(x => x && x.sens !== 'Sortie' && x.date && (!cur.debut || String(x.date) >= String(cur.debut)));
+      if (!hasEntree) manque.push({ v, cur });
+    });
+    if (manque.length) {
+      out.push({
+        niveau: 'warn', categorie: 'États des lieux',
+        message: `${manque.length} état${manque.length > 1 ? 's' : ''} des lieux d'entrée manquant${manque.length > 1 ? 's' : ''}`,
+        detail: 'Un conducteur a changé mais aucun état des lieux de prise en main n\'a été enregistré pour le nouveau — à faire (photos + km) pour être couvert en cas de litige.',
+        sort: 250, muteKey: 'edlmanque|' + manque.map(m => (m.v.immat || '') + ':' + (m.cur.conducteur || '')).join(','),
+        vehicules: manque.map(m => ({ label: `${m.v.immat || '—'} · ${m.v.marque || ''} ${m.v.modele || ''} — ${m.cur.conducteur}`, target: 'vehicules.html?immat=' + encodeURIComponent(m.v.immat || '') })),
+      });
+    }
+  } catch (e) {}
+
   // --- Conducteurs sans e-mail (indispensable pour le relevé km par mail et l'envoi d'amendes) ---
   // Regroupé en UNE alerte dépliable (règle 0bis), ignorable. On ne compte QUE les conducteurs
   // rattachés à un véhicule ACTIF (ceux qu'on contacte réellement), et on se garde du « flash »
