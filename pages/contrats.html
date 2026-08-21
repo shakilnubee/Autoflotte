@@ -1314,7 +1314,7 @@
     const finContratCell = (l) => {
       if (!l || !l.finContrat || isNaN(l.finContrat)) return '<span class="text-slate-400">—</span>';
       const diff = (FP.joursRestants ? FP.joursRestants(l.finContrat) : Math.ceil((l.finContrat - new Date()) / 86400000));
-      const ds = FP.date(l.finContrat.toISOString());
+      const ds = FP.dateNum(l.finContrat.toISOString());   // format numérique jj/mm/aaaa — IDENTIQUE aux lignes Ayvens et à la colonne Début
       if (diff < 0)        return `<span style="color:var(--fp-danger);font-weight:700">${ds}</span><br><span class="text-xs" style="color:var(--fp-danger)">terminé (+${-diff}j)</span>`;
       if (diff < 90)       return `<span style="color:var(--fp-danger);font-weight:600">${ds}</span><br><span class="text-xs" style="color:var(--fp-danger)">dans ${diff}j</span>`;
       if (diff < 180)      return `<span style="color:var(--fp-warn);font-weight:600">${ds}</span><br><span class="text-xs" style="color:var(--fp-warn)">~${Math.round(diff / 30)} mois</span>`;
@@ -1386,22 +1386,24 @@
       const urg = jf !== null && jf <= 120;
       return `<div class="ls-card">
         <div class="ls-top">
-          <div><span class="ls-immat">${FP.esc(v.immat)}</span> <span class="ls-veh">${FP.esc(v.marque)} ${FP.esc(v.modele)}</span><br>
-            <span class="ls-sub">${(v.chauffeur && v.chauffeur !== '—') ? FP.esc(v.chauffeur) + ' · ' : ''}${FP.esc(loueurNomOf(v) || 'Leasing')}</span></div>
+          <div><span class="ls-immat">${FP.lienVehicule(v.immat)}</span> <span class="ls-veh">${FP.esc(v.marque)} ${FP.esc(v.modele)}</span><br>
+            <span class="ls-sub">${(v.chauffeur && v.chauffeur !== '—') ? FP.lienConducteur(v.chauffeur) + ' · ' : ''}${FP.esc(loueurNomOf(v) || 'Leasing')}</span></div>
           <div>${statutKm(l, v.immat)}</div>
         </div>
         <div class="ls-grid">
           <div><span class="k">Loyer / mois</span><b>${moyMens != null && moyMens > 0 ? FP.euroPrecis(moyMens) : '—'}</b></div>
           <div><span class="k">Forfait km</span><b>${l ? FP.num(l.kmContrat) + ' km' : '—'}</b></div>
           <div><span class="k">Km actuel</span><b>${l ? FP.num(l.km) + ' km' : (v.km != null ? FP.num(v.km) + ' km' : '—')}</b></div>
+          <div><span class="k">Projection fin</span><b>${l && l.projectionFin !== null ? '~' + FP.num(l.projectionFin) + ' km' : '—'}</b></div>
+          <div><span class="k">Début</span><b>${l && l.debut ? FP.dateNum(l.debut) : '—'}</b></div>
           <div><span class="k">Fin de contrat</span><b>${finContratCell(l)}</b></div>
           <div><span class="k">Total versé</span><b>${totalTheo > 0 ? FP.euroPrecis(totalTheo) : '—'}</b></div>
           <div><span class="k">TVS / an</span><b>${(tvsD && tvsD.applicable && tvsD.total != null) ? FP.euro(tvsD.total) : '—'}</b></div>
         </div>
-        <div class="ls-actions">
-          <button type="button" class="btn btn-outline text-xs !px-2" data-restit-lease="${v.immat}"${urg ? ' style="border-color:var(--fp-accent);color:var(--fp-accent)"' : ''}><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i> Restitution</button>
-          <button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}"><i data-lucide="pencil" class="w-3.5 h-3.5"></i> Forfait</button>
-          <button type="button" class="btn btn-outline text-xs !px-2" data-bpce-up="${FP.esc(v.immat)}" title="Téléverser le contrat de leasing (PDF)"><i data-lucide="upload" class="w-3.5 h-3.5"></i> Contrat</button>
+        <div class="ls-actions" style="flex-wrap:wrap">
+          ${bpceDocsHtml(v.immat)}
+          <button type="button" class="btn btn-outline text-xs !px-2" data-restit-lease="${v.immat}" title="Restitution"${urg ? ' style="border-color:var(--fp-accent);color:var(--fp-accent)"' : ''}><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i></button>
+          <button type="button" class="btn btn-outline text-xs !px-2" data-edit-lease="${v.immat}" title="Modifier le forfait / le contrat"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
           <button type="button" class="btn btn-outline text-xs !px-2" data-del-lease="${v.immat}" title="Retirer du leasing"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>
         </div>
       </div>`;
@@ -2091,21 +2093,23 @@
       const _upBtn = `<button type="button" class="btn btn-outline text-xs !px-2" data-loc-up="${i}" title="Téléverser le contrat de leasing (PDF)"><i data-lucide="upload" class="w-3.5 h-3.5"></i> ${docs.length ? 'Ajouter un doc' : 'Contrat'}</button>`;
       const _restitBtn2 = _restitInFleet ? `<button type="button" class="btn btn-outline text-xs !px-2" data-loc-restit="${escC(_restitImmat)}" title="Checklist de restitution (compte à rebours 120/90/60/30 j)"><i data-lucide="clipboard-check" class="w-3.5 h-3.5"></i></button>` : '';
       const actionsHtml = `${docsHtml}${_upBtn}${_restitBtn2}<button type="button" class="btn btn-outline text-xs !px-2" data-loc-edit="${i}" title="Modifier le contrat (forfait km, durée, loyer, dates…)"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button><button type="button" class="btn btn-outline text-xs !px-2" data-loc-del="${i}" title="Supprimer ce contrat"><i data-lucide="trash-2" class="w-3.5 h-3.5 text-red-600"></i></button>`;
+      // ⚠️ MÊMES CLASSES DE CELLULES QUE LES LIGNES BPCE (l'alignement des colonnes est géré une seule
+      // fois par le CSS scopé [data-section="leasing"] → pas de text-align inline à ré-appliquer ici).
       const tr = `<tr>
-        <td class="font-mono">${immatCell}</td>
+        <td class="font-mono font-semibold">${immatCell}</td>
         <td>${vehHtml}</td>
-        <td class="font-medium">${condHtml}</td>
-        <td class="text-sm text-slate-600">${loueurTxt}</td>
+        <td>${condHtml}</td>
+        <td>${loueurTxt}</td>
         <td>${kmTotalHtml}</td>
-        <td style="text-align:right">${kmActCell}</td>
-        <td style="text-align:right">${projHtml}</td>
+        <td>${kmActCell}</td>
+        <td>${projHtml}</td>
         <td>${statutCell}</td>
-        <td style="text-align:center">${debutCell}</td>
-        <td style="text-align:center">${finCell}</td>
-        <td class="font-semibold" style="text-align:right">${totalVerseHtml}</td>
-        <td style="text-align:right">${loyerHtml}</td>
-        <td style="text-align:right">${tvsHtml}</td>
-        <td style="text-align:center;white-space:nowrap">${actionsHtml}</td>
+        <td>${debutCell}</td>
+        <td>${finCell}</td>
+        <td class="font-semibold">${totalVerseHtml}</td>
+        <td>${loyerHtml}</td>
+        <td>${tvsHtml}</td>
+        <td style="white-space:nowrap">${actionsHtml}</td>
       </tr>`;
       return { immatCell, vehHtml, condHtml, loueurTxt, kmTotalHtml, kmActCell, projHtml, statutCell, debutCell, finCell, totalVerseHtml, loyerHtml, tvsHtml, actionsHtml, tr };
     });
