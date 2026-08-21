@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260821a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260821b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260821a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260821b">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -307,10 +307,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260821a"></script>
-<script src="../assets/js/supabase-client.js?v=20260821a"></script>
-<script src="../assets/js/data.js?v=20260821a"></script>
-<script src="../assets/js/app.js?v=20260821a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260821b"></script>
+<script src="../assets/js/supabase-client.js?v=20260821b"></script>
+<script src="../assets/js/data.js?v=20260821b"></script>
+<script src="../assets/js/app.js?v=20260821b"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -687,7 +687,10 @@
       // ⚠️ Véhicule VENDU : on n'impute plus son loyer (comme l'assurance et la TVS ci-dessous, mises à 0
       // pour un vendu). Sinon incohérence interne au TCO (leasing compté mais pas assurance/TVS).
       if (_hasOffer && !FP.estVendu(v)) {
-        if (annee === 'all') { _leasing = FP.leasingTotalVerse(_leasC) || 0; }
+        // MALUS écologique = coût UNIQUE payé au DÉPART du contrat. En « toutes années » (coût total) on
+        // le compte en entier ; sur une année précise, uniquement l'année du DÉBUT du contrat.
+        const _malusV = (FP.leasingMalus) ? FP.leasingMalus(v) : 0;
+        if (annee === 'all') { _leasing = (FP.leasingTotalVerse(_leasC) || 0) + _malusV; }
         else {
           const _cDebut = (_leasC && _leasC.debut) ? new Date(_leasC.debut) : null;
           let _cFin = null;
@@ -698,6 +701,8 @@
           const e = (_cFin && !isNaN(_cFin)) ? _cFin : yEnd;
           if (e < yStart || s > yEnd) { _leasing = 0; }                 // contrat hors de l'année choisie
           else { const a = s > yStart ? s : yStart, b = e < yEnd ? e : yEnd; let mois = Math.round((b - a) / (365.25 / 12 * 86400000)); mois = Math.max(1, Math.min(12, mois)); _leasing = _loyerMois * mois; }
+          // MALUS uniquement l'année où le contrat DÉBUTE (coût unique payé au départ).
+          if (_malusV > 0 && _cDebut && !isNaN(_cDebut) && _cDebut.getFullYear() === Number(annee)) _leasing += _malusV;
         }
       }
       // Sinistres comptés au RESTE À CHARGE (après remboursement assureur), pas au brut → même source

@@ -1224,8 +1224,88 @@ FP.leasingMensuelFlotte = (data) => {
   });
   return mens;
 };
-// Coût annuel leasing total = BPCE (× 12) + Localease/Ayvens (déjà annuel). Source unique flotte.
-FP.leasingAnnuelFlotte = (data) => FP.leasingMensuelFlotte(data) * 12 + (FP.leasingLocaleaseAnnuel ? FP.leasingLocaleaseAnnuel() : 0);
+// ⚠️ SOURCE UNIQUE — MALUS écologique (coût UNIQUE, payé une seule fois au départ du contrat de
+// leasing). Deux sources possibles selon le type de ligne : override/base BPCE via FP.leasingContrat,
+// OU le contrat Localease/Ayvens (settings.localeaseContrats[].malus). FP.leasingMalus(v|immat) renvoie
+// le malus (€) d'UN véhicule (0 si aucun) ; les totaux flotte ci-dessous s'appuient dessus.
+FP.leasingMalus = (v) => {
+  try {
+    const immat = (typeof v === 'string') ? v : (v && v.immat);
+    if (!immat) return 0;
+    const key = String(immat).trim().toUpperCase();
+    const c = FP.leasingContrat ? FP.leasingContrat(immat) : null;
+    if (c && c.malus != null && c.malus !== '' && +c.malus > 0) return +c.malus;
+    // Repli : override brut (le contrat peut ne pas avoir km/début → leasingContrat renvoie null).
+    try { const ov = (FP.getLeasingOverrides ? FP.getLeasingOverrides() : {})[key]; if (ov && +ov.malus > 0) return +ov.malus; } catch (e) {}
+    // Contrat Localease/Ayvens rattaché par plaque.
+    const list = (FP.settings.get().localeaseContrats) || [];
+    const k = FP.normImmat(immat);
+    for (const lc of list) { if (lc && lc.immat && FP.normImmat(lc.immat) === k && +lc.malus > 0) return +lc.malus; }
+  } catch (e) {}
+  return 0;
+};
+// Durée (mois) du contrat de leasing d'un véhicule — pour amortir le malus sur la vie du contrat.
+FP._leasingDureeMois = (v) => {
+  try {
+    const immat = (typeof v === 'string') ? v : (v && v.immat);
+    const c = FP.leasingContrat ? FP.leasingContrat(immat) : null;
+    if (c && +c.dureeMois > 0) return +c.dureeMois;
+    const list = (FP.settings.get().localeaseContrats) || []; const k = FP.normImmat(immat);
+    for (const lc of list) { if (lc && lc.immat && FP.normImmat(lc.immat) === k) { const d = +(lc.dureeMois || lc.duree); if (d > 0) return d; } }
+  } catch (e) {}
+  return 36;
+};
+// MALUS TOTAL de la flotte (coût unique, sur toute la vie des contrats) — pour « engagement » et TCO.
+// Dédup par plaque, exclut les véhicules vendus/hors flotte et les contrats terminés.
+FP.leasingMalusFlotte = (data) => {
+  data = data || {}; let total = 0; const seen = new Set();
+  try {
+    const vehs = data.vehicules || [];
+    // 1) Contrats Localease/Ayvens
+    ((FP.settings.get().localeaseContrats) || []).forEach(c => {
+      if (!c || !(+c.malus > 0)) return;
+      if (FP.leasingTermine && FP.leasingTermine(c)) return;
+      const k = c.immat ? FP.normImmat(c.immat) : '';
+      if (k) { const v = vehs.find(x => FP.normImmat(x.immat) === k); if (v && FP.horsFlotte && FP.horsFlotte(v)) return; if (seen.has(k)) return; seen.add(k); }
+      total += +c.malus;
+    });
+    // 2) Véhicules BPCE (override/base) non déjà comptés
+    vehs.filter(v => !(FP.horsFlotte && FP.horsFlotte(v))).forEach(v => {
+      const k = FP.normImmat(v.immat); if (!k || seen.has(k)) return;
+      const c = FP.leasingContrat ? FP.leasingContrat(v.immat) : null;
+      const m = FP.leasingMalus(v); if (!(m > 0)) return;
+      if (c && FP.leasingTermine && FP.leasingTermine(c)) return;
+      seen.add(k); total += m;
+    });
+  } catch (e) {}
+  return total;
+};
+// MALUS ANNUEL AMORTI de la flotte = Σ (malus × 12 / durée) — le coût unique réparti sur la durée du
+// contrat, pour un « coût annuel » réaliste (sinon une année serait gonflée par le malus complet).
+FP.leasingMalusAnnuelFlotte = (data) => {
+  data = data || {}; let total = 0; const seen = new Set();
+  try {
+    const vehs = data.vehicules || [];
+    ((FP.settings.get().localeaseContrats) || []).forEach(c => {
+      if (!c || !(+c.malus > 0)) return;
+      if (FP.leasingTermine && FP.leasingTermine(c)) return;
+      const k = c.immat ? FP.normImmat(c.immat) : '';
+      if (k) { const v = vehs.find(x => FP.normImmat(x.immat) === k); if (v && FP.horsFlotte && FP.horsFlotte(v)) return; if (seen.has(k)) return; seen.add(k); }
+      const d = +(c.dureeMois || c.duree) || 36; total += (+c.malus) * 12 / d;
+    });
+    vehs.filter(v => !(FP.horsFlotte && FP.horsFlotte(v))).forEach(v => {
+      const k = FP.normImmat(v.immat); if (!k || seen.has(k)) return;
+      const c = FP.leasingContrat ? FP.leasingContrat(v.immat) : null;
+      const m = FP.leasingMalus(v); if (!(m > 0)) return;
+      if (c && FP.leasingTermine && FP.leasingTermine(c)) return;
+      seen.add(k); total += m * 12 / FP._leasingDureeMois(v);
+    });
+  } catch (e) {}
+  return total;
+};
+// Coût annuel leasing total = BPCE (× 12) + Localease/Ayvens (déjà annuel) + malus amorti (coût unique
+// réparti sur la durée). Source unique flotte (Budget, dashboard, Contrats lisent ce même total).
+FP.leasingAnnuelFlotte = (data) => FP.leasingMensuelFlotte(data) * 12 + (FP.leasingLocaleaseAnnuel ? FP.leasingLocaleaseAnnuel() : 0) + FP.leasingMalusAnnuelFlotte(data);
 
 // ⚠️ SOURCE UNIQUE — dépendances d'un véhicule (factures / amendes / emprunts en cours) avant
 // suppression, pour un AVERTISSEMENT identique partout (fiche véhicule ET Contrats).
