@@ -3706,7 +3706,9 @@
       else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
     });
     el.addEventListener('blur', () => commit(true));
-    if (type === 'select') el.addEventListener('change', () => commit(true));
+    // 'change' couvre AUSSI le choix d'une date dans le calendrier FP.datePicker (qui émet 'change') →
+    // la date sélectionnée s'enregistre TOUT DE SUITE, sans avoir à cliquer ailleurs ni valider.
+    el.addEventListener('change', () => commit(true));
   }
 
   let _rowClickTimer = null;
@@ -4182,11 +4184,22 @@
       }
       renderTable(); renderKPIs(); if (drawerVehId && $('drawer').classList.contains('open')) openDrawer(drawerVehId);
     };
-    // ⚠️ On ne valide QUE sur clic « ✓ » ou Entrée — JAMAIS sur change/blur : tu peux taper l'année
-    // OU ouvrir le calendrier sans que la zone se referme. « ✕ » ou Échap annule.
+    // Valide sur « ✓ », Entrée, choix d'une date (change) OU clic AILLEURS (blur) — « ✕ »/Échap annule.
     el.querySelector('.ap-ok').addEventListener('click', () => commit(true));
     el.querySelector('.ap-cancel').addEventListener('click', () => commit(false));
     inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); commit(true); } else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); } });
+    // Choix d'une date dans le calendrier (FP.datePicker émet 'change') → enregistre tout de suite.
+    inp.addEventListener('change', () => commit(true));
+    // Clic AILLEURS = enregistre + ferme (comme demandé). Garde-fous : ne PAS committer si le focus est
+    // encore dans l'éditeur (✓/✕) ou dans le calendrier ouvert (sinon on fermerait en plein choix de date).
+    inp.addEventListener('blur', () => setTimeout(() => {
+      if (done) return;
+      const ae = document.activeElement;
+      if (el.contains(ae)) return;                                   // ✓ / ✕ / champ toujours actif
+      if (ae && ae.closest && ae.closest('.fp-dp')) return;          // le calendrier a le focus
+      if (document.querySelector('.fp-dp')) return;                  // calendrier encore ouvert
+      commit(true);
+    }, 170));
   });
   // Formulaire « Modifier » : quand on saisit le dernier anti-pollution, la prochaine échéance se met à jour EN DIRECT.
   if ($('f-antipol-dernier')) $('f-antipol-dernier').addEventListener('change', () => {
