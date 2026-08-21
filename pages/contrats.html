@@ -325,7 +325,7 @@
       <div class="section-title">
         <span class="drag-handle" draggable="true" title="Glisser pour réordonner"><i data-lucide="grip-vertical" class="w-4 h-4"></i></span>
         <i data-lucide="shield-check" class="w-5 h-5"></i> Assurance — <span id="assur-titre">—</span>
-        <button id="assur-edit" type="button" class="text-xs font-semibold ml-2" style="color:var(--fp-accent)"><i data-lucide="pencil" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Modifier</button>
+        <button id="assur-edit" type="button" class="btn btn-outline text-xs ml-2" style="padding:3px 10px" title="Configurer l'assureur, le n° de police (comme dans Paramètres)"><i data-lucide="settings" class="w-3.5 h-3.5"></i> Configurer</button>
       </div>
       <p class="text-sm text-slate-600 mb-4">Police couvrant les véhicules de la flotte. <span class="text-slate-400">Paramétrable par société.</span></p>
       <div id="assur-config" class="hidden mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
@@ -904,7 +904,7 @@
         <td>${FP.lienConducteur(v.chauffeur)}</td>
         <td><div class="flex flex-wrap gap-1">${FP.vehGroupes(v).map(k => `<span class="groupe-pill gp-${k}"><span class="dot"></span>${FP.groupeLabel(k)}</span>`).join('')}</div></td>
         <td><span class="badge ${pr ? 'badge-ok' : (hasPerVeh ? 'badge-warn' : 'badge-ok')}">${pr ? 'Couvert' : (hasPerVeh ? 'Prime manquante' : 'Couvert')}</span></td>
-        <td style="text-align:right;cursor:pointer" data-assur-edit="${v.immat || ''}" title="Cliquer pour modifier la prime (€/an TTC)">${cout} <i data-lucide="pencil" class="w-3 h-3 inline text-slate-300" style="vertical-align:-1px"></i>${(pr && pr.docUrl) ? ` <button type="button" data-assur-doc="${escC(pr.docUrl)}" onclick="event.stopPropagation()" title="Voir le document de la prime (${escC(pr.docName || 'PDF')})" style="background:none;border:none;cursor:pointer;color:var(--fp-accent);font-size:11.5px;font-weight:600">📄 PDF</button>` : ''}</td>
+        <td style="text-align:right;cursor:pointer" data-assur-edit="${v.immat || ''}" title="Cliquer pour modifier la prime (€/an TTC)">${cout} <i data-lucide="pencil" class="w-3 h-3 inline text-slate-300" style="vertical-align:-1px"></i>${(pr && pr.docUrl) ? ` <button type="button" data-assur-doc="${escC(pr.docUrl)}" onclick="event.stopPropagation()" title="Voir le document de la prime (${escC(pr.docName || 'PDF')})" style="background:none;border:none;cursor:pointer;color:var(--fp-accent);font-size:11.5px;font-weight:600">📄 PDF</button>` : ''} <button type="button" data-assur-attach="${v.immat || ''}" onclick="event.stopPropagation()" title="${(pr && pr.docUrl) ? 'Remplacer' : 'Joindre'} le PDF de la prime de ce véhicule" style="background:none;border:none;cursor:pointer;color:var(--fp-muted);font-size:11.5px">📎</button></td>
       </tr>`;
     }).join('');
     if (window.lucide) try { lucide.createIcons(); } catch (e) {}
@@ -1156,7 +1156,7 @@
   // ----- Ajouter UNE prime d'assurance (par véhicule) : dépôt du document + lecture auto -----
   const primeNum = str => { const n = parseFloat(String(str == null ? '' : str).replace(/[\s€]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
   let _primeDoc = null; // { url, name } du document déposé
-  function openPrimeModal(){
+  function openPrimeModal(preImmat){
     _primeDoc = null;
     const sel = $('prime-veh');
     if (sel) {
@@ -1166,7 +1166,19 @@
       if (window.FP && FP.searchSelect) { try { FP.searchSelect(sel, { placeholder: 'Rechercher un véhicule…' }); } catch (e) {} }
     }
     $('prime-ttc').value = ''; $('prime-ht').value = '';
-    const st = $('prime-doc-status'); if (st) { st.textContent = ''; st.className = 'text-xs mt-1'; }
+    // Pré-remplissage quand on ouvre depuis une ligne véhicule (clic « 📎 PDF ») : véhicule + montant déjà connus.
+    if (preImmat && sel) {
+      sel.value = preImmat;
+      try { if (window.FP && FP.searchSelect) sel.dispatchEvent(new Event('change')); } catch (e) {}
+      const p = assurPrimes(); const k = normPlaque(preImmat); let cur = null;
+      for (const key in p) { if (normPlaque(key) === k) { cur = p[key]; break; } }
+      if (cur) {
+        if (Number.isFinite(cur.ttc)) $('prime-ttc').value = String(cur.ttc).replace('.', ',');
+        if (Number.isFinite(cur.ht)) $('prime-ht').value = String(cur.ht).replace('.', ',');
+        if (cur.docUrl) _primeDoc = { url: cur.docUrl, name: cur.docName || 'prime-assurance.pdf' };
+      }
+    }
+    const st = $('prime-doc-status'); if (st) { st.textContent = preImmat ? 'Dépose le PDF de la prime de ce véhicule (ou remplace-le).' : ''; st.className = 'text-xs mt-1'; }
     const m = $('prime-modal'); m.classList.remove('hidden'); m.classList.add('flex');
     if (window.lucide) lucide.createIcons();
   }
@@ -2457,6 +2469,9 @@
         .catch(() => { if (url) window.open(url, '_blank', 'noopener'); });
       return;
     }
+    // 📎 Joindre / remplacer le PDF de la prime de CE véhicule → ouvre la modale pré-remplie (dépôt du PDF).
+    const att = e.target.closest('[data-assur-attach]');
+    if (att) { e.preventDefault(); e.stopPropagation(); openPrimeModal(att.getAttribute('data-assur-attach')); return; }
     const td = e.target.closest('[data-assur-edit]'); if (!td || td.querySelector('input')) return;
     const immat = td.dataset.assurEdit; if (!immat) return;
     const k = normPlaque(immat);
