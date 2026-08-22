@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260821d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260821e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260821d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260821e">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -993,13 +993,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260821d"></script>
-<script src="../assets/js/supabase-client.js?v=20260821d"></script>
-<script src="../assets/js/data.js?v=20260821d"></script>
-<script src="../assets/js/fleet-docs.js?v=20260821d"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260821d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260821e"></script>
+<script src="../assets/js/supabase-client.js?v=20260821e"></script>
+<script src="../assets/js/data.js?v=20260821e"></script>
+<script src="../assets/js/fleet-docs.js?v=20260821e"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260821e"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260821d"></script>
+<script src="../assets/js/app.js?v=20260821e"></script>
 <script>
   lucide.createIcons();
 
@@ -3083,9 +3083,11 @@
   // === Persistance Supabase (les ajouts/suppressions sont enregistrés partout) ===
   function dbAvailable() { return !!(window.FP && FP.db && FP.supabase); }
   function nextVehId() {
-    let max = 0;
-    data.vehicules.forEach(v => { const m = /^V-(\d+)$/.exec(v.id || ''); if (m) max = Math.max(max, +m[1]); });
-    return 'V-' + String(max + 1).padStart(3, '0');
+    // ⚠️ `id` = clé primaire GLOBALE (toutes sociétés confondues). Un compteur séquentiel calculé sur
+    // `data.vehicules` (filtré par société) donnait « V-001 » pour une société neuve → COLLISION avec le
+    // V-001 d'une autre société (PXP) → insertion refusée (véhicule perdu au rechargement) voire
+    // écrasement inter-société côté CEO. On génère un id GLOBALEMENT unique (comme l'import par lot).
+    return 'V-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
   function vehToDb(v) {
     const dateOrNull = d => (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) ? d : null;
