@@ -356,7 +356,9 @@ Deno.serve(async (req) => {
             const raw = vm && qr.vehicule_id ? vm[qr.vehicule_id] : null;
             if (raw != null && raw !== "") masseKg = Number(raw);
           } catch (_) { /* pas de masse réglée */ }
-          if (masseKg == null) { const k = String(qr.plaque || "").toUpperCase().trim(); if (MASSE_CG[k] != null) masseKg = MASSE_CG[k]; }
+          // Table MASSE_CG = masses relevées sur les cartes grises de la flotte PXP → repli réservé à PXP
+          // (les autres sociétés renseignent leur masse via vehMasse, prioritaire ci-dessus).
+          if (masseKg == null && (qr.societe || "PXP") === "PXP") { const k = String(qr.plaque || "").toUpperCase().trim(); if (MASSE_CG[k] != null) masseKg = MASSE_CG[k]; }
           if (masseKg == null && veh) {
             const mod = String(veh.modele || "").toUpperCase();
             const KNOWN: Record<string, number> = { "SEAL U": 2102, "ATTO 3": 1750 };
