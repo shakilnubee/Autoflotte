@@ -305,7 +305,7 @@
           <div>
             <div class="kpi-label">Véhicules</div>
             <div class="kpi-value" id="kpi-vehicules">—</div>
-            <div class="kpi-delta up">↑ 2 ce trimestre</div>
+            <div class="kpi-delta">au total</div>
           </div>
           <div class="kpi-ic">
             <i data-lucide="car"></i>
@@ -342,7 +342,7 @@
             <div class="kpi-label">Coûts du mois</div>
             <div class="kpi-value" id="kpi-couts">—</div>
             <div id="kpi-couts-spark" class="mt-1" title="Tendance des 6 derniers mois"></div>
-            <div class="kpi-delta">Voir le détail →</div>
+            <div class="kpi-delta" id="kpi-couts-delta">Voir le détail →</div>
           </div>
           <div class="kpi-ic">
             <i data-lucide="euro"></i>
@@ -905,8 +905,14 @@
   { // sous-titre tendance (variation 1er → dernier mois)
     const first = monthlyTotals[0], last = monthlyTotals[monthlyTotals.length - 1];
     const deltaPct = first > 0 ? Math.round(((last - first) / first) * 100) : 0;
-    const deltaEl = document.querySelector('.kpi-delta.up, .kpi-delta.down');
-    if (deltaEl) { deltaEl.className = deltaPct < 0 ? 'kpi-delta down' : 'kpi-delta up'; deltaEl.textContent = `${deltaPct < 0 ? '↓' : '↑'} ${Math.abs(deltaPct)}% vs ${months[0].label}`; }
+    // ⚠️ La tendance porte sur les COÛTS → on l'affiche sur la tuile « Coûts du mois » (par id), PAS sur
+    // la 1re tuile venue (avant : querySelector('.kpi-delta.up') tombait sur la tuile « Véhicules »).
+    // Sans historique de coûts (société neuve) → on garde le lien « Voir le détail » (pas de faux « ↑ 0% »).
+    const deltaEl = document.getElementById('kpi-couts-delta');
+    if (deltaEl) {
+      if (first > 0) { deltaEl.className = deltaPct < 0 ? 'kpi-delta down' : 'kpi-delta up'; deltaEl.textContent = `${deltaPct < 0 ? '↓' : '↑'} ${Math.abs(deltaPct)}% vs ${months[0].label}`; }
+      else { deltaEl.className = 'kpi-delta'; deltaEl.textContent = 'Voir le détail →'; }
+    }
   }
   if (_chCosts) { try { _chCosts.destroy(); } catch (e) {} }
   const ctx1 = document.getElementById('costsChart').getContext('2d');
