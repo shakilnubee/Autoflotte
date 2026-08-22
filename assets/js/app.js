@@ -3012,8 +3012,16 @@ FP.societeProfil = () => {
 // sinon on verrait des données PXP sur une autre société.
 (function filterStaticCacheBySociete() {
   try {
-    const s = FP.activeSociete();
-    if (s === 'PXP' || s === '__all__') return;
+    // ⚠️ data.js = instantané PXP. On ne le peint QUE si on est CERTAIN d'être PXP / super-admin :
+    // société explicitement 'PXP'/'__all__', OU profil super-admin confirmé (is_admin=true) sans société
+    // précise. Sinon — client, OU société ENCORE INCONNUE au TOUT 1er login (navigateur vierge, profil
+    // pas encore en cache) — on filtre : un nouveau client ne doit JAMAIS voir la flotte PXP, même le
+    // temps du 1er rendu (loadAll remplira ses vraies données juste après). Tradeoff : au 1er login sur
+    // un navigateur neuf, le cache statique n'est pas peint tant que la société n'est pas confirmée.
+    let raw = null; try { raw = localStorage.getItem('fp_societe'); } catch (e) {}
+    let superAdmin = false; try { const p = JSON.parse(localStorage.getItem('fp_profile') || 'null'); superAdmin = !!(p && p.is_admin === true); } catch (e) {}
+    if (raw === 'PXP' || raw === '__all__' || (superAdmin && !raw)) return;
+    const s = raw;   // société explicite du client, ou null (inconnu → tout est filtré, aucune fuite PXP)
     const d = window.FP_DATA;
     if (d) ['vehicules', 'amendes', 'factures', 'conducteurs'].forEach(k => {
       const arr = d[k]; if (!Array.isArray(arr)) return;
@@ -4594,8 +4602,10 @@ FP.LEASING_OVERRIDES_KEY = 'auto_flotte_leasing_contrats'; // ancien stockage lo
 FP.getLeasingOverrides = () => {
   const obj = (FP.settings && FP.settings.get()) || {};
   let shared = (obj.leasingContrats && typeof obj.leasingContrats === 'object') ? obj.leasingContrats : null;
-  // Migration unique : remonte d'éventuels anciens forfaits locaux vers les réglages partagés
-  if ((!shared || !Object.keys(shared).length) && FP.settings) {
+  // Migration unique : remonte d'éventuels anciens forfaits locaux vers les réglages partagés.
+  // ⚠️ RÉSERVÉE À PXP : la clé legacy `auto_flotte_leasing_contrats` n'est PAS suffixée par société →
+  // sans cette garde, une autre société au leasingContrats vide hériterait des forfaits leasing PXP.
+  if ((!shared || !Object.keys(shared).length) && FP.settings && (!FP.activeSociete || FP.activeSociete() === 'PXP')) {
     let local = {};
     try { local = JSON.parse(localStorage.getItem(FP.LEASING_OVERRIDES_KEY) || '{}'); } catch (e) {}
     if (Object.keys(local).length) {
