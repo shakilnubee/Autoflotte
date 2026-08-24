@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260821h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260821i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260821h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260821i">
 <style>
   .chart-wrap { position: relative; height: 280px; }
   .chart-wrap-sm { position: relative; height: 220px; }
@@ -186,6 +186,13 @@
       </div>
     </div>
 
+    <!-- Km parcourus par conducteur -->
+    <div class="card p-5 mb-6">
+      <h3 class="font-bold text-slate-900 mb-1 flex items-center gap-2"><i data-lucide="route" class="w-4 h-4" style="color:#F97316"></i> Km parcourus par conducteur</h3>
+      <p class="text-xs text-slate-400 mb-4">Total des km de chaque affectation (km à la fin − km au début saisis, sinon estimation d'après les états des lieux). Qui roule le plus.</p>
+      <div id="km-cond-list"></div>
+    </div>
+
     <!-- Stats sinistres / accidents -->
     <div class="card p-5 mb-6">
       <h3 class="font-bold text-slate-900 mb-4 flex items-center gap-2"><i data-lucide="alert-octagon" class="w-4 h-4" style="color:#F97316"></i> Sinistres / accidents <span class="text-xs font-normal text-slate-400">(<span id="sin-periode">toutes années</span>)</span></h3>
@@ -307,10 +314,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260821h"></script>
-<script src="../assets/js/supabase-client.js?v=20260821h"></script>
-<script src="../assets/js/data.js?v=20260821h"></script>
-<script src="../assets/js/app.js?v=20260821h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260821i"></script>
+<script src="../assets/js/supabase-client.js?v=20260821i"></script>
+<script src="../assets/js/data.js?v=20260821i"></script>
+<script src="../assets/js/app.js?v=20260821i"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -747,6 +754,34 @@
     }).sort((a, b) => b.total - a.total);
     renderTcoTable();
     renderPodiumPerKm(annee);
+    renderKmConducteur();
+  }
+
+  // === Classement km parcourus par conducteur (source unique FP.kmParConducteur) ===
+  // Basé sur les affectations (km début/fin) → métrique « à vie », indépendante du filtre d'année.
+  function renderKmConducteur() {
+    const box = $('km-cond-list'); if (!box) return;
+    const rows = (FP.kmParConducteur ? FP.kmParConducteur(data) : []) || [];
+    if (!rows.length) {
+      box.innerHTML = '<p class="text-sm text-slate-400 py-2">Aucun km d\'affectation pour l\'instant. Renseigne le <b>km au début / à la fin</b> des affectations (fiche véhicule → « Conducteurs — historique ») — c\'est aussi rempli automatiquement à chaque changement de conducteur.</p>';
+      return;
+    }
+    const maxKm = rows[0].km || 1;
+    const medals = ['🥇', '🥈', '🥉'];
+    box.innerHTML = rows.slice(0, 15).map((r, i) => {
+      const pct = Math.max(4, Math.round((r.km / maxKm) * 100));
+      const sub = `${r.nbVehicules} véhicule${r.nbVehicules > 1 ? 's' : ''} · ${r.periodes} période${r.periodes > 1 ? 's' : ''}`;
+      const href = 'conducteurs.html?cond=' + encodeURIComponent(r.nom);
+      return `<a href="${href}" class="flex items-center gap-3 py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg px-2 -mx-2 transition" style="text-decoration:none">
+        <span style="font-size:1.15rem;width:1.8rem;text-align:center;flex-shrink:0">${medals[i] || (i + 1)}</span>
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold text-slate-900 truncate">${FP.esc(r.nom)}</div>
+          <div class="mt-1 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#F97316,#FB923C);border-radius:9999px"></div></div>
+          <div class="text-xs text-slate-400 truncate mt-0.5">${sub}</div>
+        </div>
+        <div class="text-right flex-shrink-0"><div class="font-extrabold text-slate-900">${FP.num(r.km)}<span class="text-xs font-normal text-slate-400"> km</span></div></div>
+      </a>`;
+    }).join('');
   }
 
   // === Podium coût au km (les plus chères / les moins chères) ===

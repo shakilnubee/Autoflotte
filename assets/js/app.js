@@ -4911,6 +4911,29 @@ FP.affectations = {
   // Km parcourus SAISIS pour une période (kmFin − kmDebut) — source MANUELLE, prioritaire sur l'estimation
   // par états des lieux. Renvoie null si l'un des deux km manque ou si l'écart est négatif (aberrant).
   kmParcouru(a) { if (!a) return null; const d = this._km(a.kmDebut), f = this._km(a.kmFin); if (d == null || f == null) return null; const diff = f - d; return diff >= 0 ? diff : null; },
+  // ⚠️ SOURCE UNIQUE — km parcourus d'une période (utilisée par la fiche véhicule ET le classement
+  // « km par conducteur » des stats) : km SAISIS (kmParcouru) en priorité, sinon estimation par états
+  // des lieux (1re prise → dernière restitution de la période ; période en cours → km actuel du véhicule).
+  kmPeriode(veh, a) {
+    if (!a) return null;
+    const manuel = this.kmParcouru(a);
+    if (manuel != null) return manuel;
+    try {
+      if (!veh || veh.id == null) return null;
+      const insp = (((FP.settings.get().inspections) || {})[veh.id] || [])
+        .filter(x => x && x.km != null && String(x.km).trim() !== '' && Number.isFinite(+x.km) && x.date);
+      if (!insp.length) return null;
+      const inP = (d) => (!a.debut || d >= a.debut) && (!a.fin || d <= a.fin);
+      const entries = insp.filter(x => x.sens !== 'Sortie' && inP(x.date)).sort((p, q) => String(p.date).localeCompare(q.date));
+      const exits = insp.filter(x => x.sens === 'Sortie' && inP(x.date)).sort((p, q) => String(p.date).localeCompare(q.date));
+      const entryKm = entries.length ? +entries[0].km : null;
+      let exitKm = exits.length ? +exits[exits.length - 1].km : null;
+      if (!a.fin && exitKm == null && Number.isFinite(+veh.km)) exitKm = +veh.km;
+      if (entryKm == null || exitKm == null) return null;
+      const diff = exitKm - entryKm;
+      return diff >= 0 ? diff : null;
+    } catch (e) { return null; }
+  },
   // record : ferme l'entrée en cours si le nom change, en ouvre une nouvelle si un conducteur est désigné.
   // `km` (optionnel) = km AU COMPTEUR au moment du changement → stampé en km de FIN de l'ancienne période
   // ET en km de DÉBUT de la nouvelle (consigne : « quand tu mets le début/fin, tu mets aussi le km »).
@@ -4984,6 +5007,33 @@ FP.affectations = {
     }));
     if (touched) FP.settings.save(s);
   },
+};
+
+// ⚠️ SOURCE UNIQUE — KM PARCOURUS PAR CONDUCTEUR (classement Statistiques).
+// Somme, par conducteur, des km de chaque période d'affectation (FP.affectations.kmPeriode :
+// km saisis en priorité, sinon estimation états des lieux). Groupé par conducteur via
+// FP.condGroupKey (fusionne les variantes d'un même nom) → un seul total par personne.
+// Isolation société : FP.affectations.all() = app_settings de la société active uniquement.
+FP.kmParConducteur = (data) => {
+  data = data || (typeof window !== 'undefined' ? window.FP_DATA : null) || {};
+  const vehById = {}; (data.vehicules || []).forEach(v => { if (v && v.id != null) vehById[v.id] = v; });
+  const all = (FP.affectations && FP.affectations.all) ? FP.affectations.all() : {};
+  const map = {};
+  Object.keys(all).forEach(vehId => {
+    const veh = vehById[vehId];
+    (Array.isArray(all[vehId]) ? all[vehId] : []).forEach(a => {
+      const nom = (a && a.conducteur != null ? String(a.conducteur) : '').trim();
+      if (!nom || nom === '—') return;
+      const km = FP.affectations.kmPeriode(veh, a);
+      if (km == null || km <= 0) return;
+      const key = FP.condGroupKey ? FP.condGroupKey(nom) : (FP.normNomComplet ? FP.normNomComplet(nom) : nom.toLowerCase());
+      if (!map[key]) map[key] = { nom, km: 0, periodes: 0, vehicules: new Set() };
+      map[key].km += km; map[key].periodes++; if (veh && veh.immat) map[key].vehicules.add(veh.immat);
+    });
+  });
+  return Object.values(map)
+    .map(x => ({ nom: x.nom, km: x.km, periodes: x.periodes, nbVehicules: x.vehicules.size }))
+    .sort((a, b) => b.km - a.km);
 };
 
 // ===== LOYERS DE LEASING basés sur l'OFFRE (fixe) + AVENANTS (prorata) =====
