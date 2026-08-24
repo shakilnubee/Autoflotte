@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260824a">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260824b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260824a"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260824b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260824a">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260824b">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -542,10 +542,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260824a"></script>
-<script src="assets/js/supabase-client.js?v=20260824a"></script>
-<script src="assets/js/data.js?v=20260824a"></script>
-<script src="assets/js/app.js?v=20260824a"></script>
+<script src="assets/js/vendor/supabase.js?v=20260824b"></script>
+<script src="assets/js/supabase-client.js?v=20260824b"></script>
+<script src="assets/js/data.js?v=20260824b"></script>
+<script src="assets/js/app.js?v=20260824b"></script>
 <!-- Upsell gestion déléguée : visible uniquement pour les ADMINS clients (ni CEO, ni gestionnaire, ni salarié), masquable -->
 <script>
 (function(){
@@ -1996,13 +1996,25 @@
       var t=today();
       if(localStorage.getItem('fp_ia_health_dismiss')===t) return;               // « masqué aujourd'hui »
       if(localStorage.getItem('fp_ia_health_day')===t){                          // déjà testé aujourd'hui
-        if(localStorage.getItem('fp_ia_health_ok')==='0') show(localStorage.getItem('fp_ia_health_msg')||'');
-        return;
+        if(localStorage.getItem('fp_ia_health_ok')==='0'){
+          var cached = localStorage.getItem('fp_ia_health_msg')||'';
+          // Un échec RÉSEAU mémorisé par erreur (ancienne logique) ne doit plus rester affiché toute la
+          // journée : on purge le cache et on re-teste maintenant (au lieu de re-montrer le faux bandeau).
+          if(window.FP && FP._isNetFail && FP._isNetFail(cached)){
+            localStorage.removeItem('fp_ia_health_day'); localStorage.removeItem('fp_ia_health_ok'); localStorage.removeItem('fp_ia_health_msg');
+          } else { show(cached); return; }
+        } else { return; }
       }
       FP.aiHealth().then(function(r){
+        if(r && r.ok){ localStorage.setItem('fp_ia_health_day', t); localStorage.setItem('fp_ia_health_ok','1'); return; }
+        // Hoquet RÉSEAU passager (mobile, réveil de la fonction…) : on n'alarme PAS et on ne mémorise
+        // PAS l'échec pour la journée → le scanner retente de lui-même à l'usage, et on re-testera à la
+        // prochaine visite (au lieu d'afficher un bandeau « IA indisponible » toute la journée à tort).
+        if(r && r.transient) return;
         localStorage.setItem('fp_ia_health_day', t);
-        if(r && r.ok){ localStorage.setItem('fp_ia_health_ok','1'); return; }
         var lab = FP.aiHealthLabel ? FP.aiHealthLabel(r) : null;
+        // Même après retries, si c'est un échec réseau on reste discret (pas de bandeau rouge alarmant).
+        if(lab && lab.level==='warn') return;
         var msg = (lab && (lab.msg + (lab.hint ? ' — ' + lab.hint : ''))) || (r && r.reason) || 'Service IA indisponible.';
         localStorage.setItem('fp_ia_health_ok','0');
         localStorage.setItem('fp_ia_health_msg', msg);

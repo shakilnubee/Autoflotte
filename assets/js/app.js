@@ -7981,22 +7981,39 @@ FP._aiErrText = async function (error) {
   try { if (error && error.context && typeof error.context.text === 'function') { const t = await error.context.text(); if (t) return String(t).slice(0, 200); } } catch (_) {}
   return (error && error.message) || 'Erreur du service IA.';
 };
-FP.aiHealth = async function () {
-  if (!(FP.supabase && FP.supabase.functions)) return { ok: false, reason: 'Connexion au serveur indisponible (non connecté ?).' };
+// Un échec RÉSEAU/transitoire (le navigateur n'a pas pu joindre la fonction : mobile, réveil de la
+// fonction, coupure passagère) ≠ une VRAIE panne serveur (modèle invalide, clé absente, quota). On les
+// distingue pour ne PAS afficher de bandeau alarmant « IA indisponible » sur un simple hoquet réseau.
+FP._isNetFail = function (s) {
+  s = String(s || '').toLowerCase();
+  return /failed to send a request|failed to fetch|load failed|network\s*error|networkerror|fetch\s*error|timeout|timed out|aborted|r[ée]seau|connexion|serveur indisponible|non connect[ée]/.test(s);
+};
+FP.aiHealth = async function (opts) {
+  opts = opts || {};
+  if (!(FP.supabase && FP.supabase.functions)) return { ok: false, reason: 'Connexion au serveur indisponible (non connecté ?).', transient: true };
   const payload = { fileBase64: FP._AI_PIXEL, mediaType: 'image/png', docType: 'ping',
     prompt: 'Test de disponibilité. Ignore l\'image (volontairement vide). Réponds STRICTEMENT en JSON : { "reponse": "ok" }.', maxTokens: 40 };
   const names = [...new Set([FP._scanFn, 'Scan-doc', 'scan-doc'].filter(Boolean))];
+  // On retente si l'échec est un simple hoquet réseau (le 1er appel « réveille » parfois la fonction
+  // qui dort → le 2ᵉ passe). Un échec « serveur » (modèle/clé/quota) n'est PAS retenté (inutile).
+  const tries = Math.max(0, opts.retries != null ? opts.retries : 2);
   let reason = 'Fonction IA « scan-doc » introuvable côté serveur.';
-  for (const name of names) {
-    try {
-      const { data, error } = await FP.supabase.functions.invoke(name, { body: payload });
-      if (error) { reason = await FP._aiErrText(error); continue; }
-      if (data && data.ok) { FP._scanFn = name; return { ok: true, model: data.model || null }; }
-      if (data && data.error) { reason = data.error; continue; }
-      reason = 'Réponse inattendue du service IA.';
-    } catch (e) { reason = (e && e.message) || String(e); }
+  let lastNet = false;
+  for (let attempt = 0; attempt <= tries; attempt++) {
+    lastNet = false;
+    for (const name of names) {
+      try {
+        const { data, error } = await FP.supabase.functions.invoke(name, { body: payload });
+        if (error) { reason = await FP._aiErrText(error); if (FP._isNetFail(reason)) lastNet = true; continue; }
+        if (data && data.ok) { FP._scanFn = name; return { ok: true, model: data.model || null }; }
+        if (data && data.error) { reason = data.error; continue; } // vraie erreur serveur → pas transitoire
+        reason = 'Réponse inattendue du service IA.';
+      } catch (e) { reason = (e && e.message) || String(e); if (FP._isNetFail(reason)) lastNet = true; }
+    }
+    if (lastNet && attempt < tries) { await new Promise((res) => setTimeout(res, 900 * (attempt + 1))); continue; }
+    break; // succès impossible, ou échec non-transitoire : inutile de réessayer
   }
-  return { ok: false, reason };
+  return { ok: false, reason, transient: lastNet };
 };
 // Traduit un résultat de FP.aiHealth() en { level, msg, hint } compréhensible (admin).
 FP.aiHealthLabel = function (r) {
@@ -8009,6 +8026,8 @@ FP.aiHealthLabel = function (r) {
     return { level: 'err', msg: 'Clé API Anthropic manquante ou invalide.', hint: 'Vérifie le secret ANTHROPIC_API_KEY dans Supabase → Edge Functions → Secrets.', reason: r.reason };
   if (/quota|rate.?limit|overloaded|credit|billing|429|insufficient|exceeded/.test(s))
     return { level: 'err', msg: 'Quota / crédit Anthropic épuisé (ou surcharge).', hint: 'Vérifie le solde / les limites de ton compte Anthropic.', reason: r.reason };
+  if (r.transient || (FP._isNetFail && FP._isNetFail(s)))
+    return { level: 'warn', msg: 'Connexion au service IA momentanément interrompue (réseau). Réessaie dans un instant — le scanner refonctionne dès que la connexion revient.', reason: r.reason };
   if (/connexion|serveur indisponible|non connecté/.test(s))
     return { level: 'warn', msg: r.reason };
   return { level: 'err', msg: 'Service IA indisponible.', hint: r.reason, reason: r.reason };
