@@ -2024,17 +2024,51 @@
     items.push(vehs.length
       ? `⚠️ <b>${vehs.length} véhicule(s)</b> assigné(s) (${vehs.map(v => escapeHtml(v.immat)).join(', ')}) → seront <b>libérés</b>. Pense à les réattribuer à un remplaçant.`
       : '✅ Aucun véhicule assigné.');
+    // ⚠️ VÉRIFICATION AMENDES IMPAYÉES — source unique FP.estAPayer (statut « à payer » tolérant) +
+    // FP.montantDu (montant réellement dû, majoré compris). On liste le détail + total dû, cliquable.
     const dues = (d.amendes || []).filter(a => (FP.estAPayer ? FP.estAPayer(a) : a.statut === 'à payer'));
-    items.push(dues.length
-      ? `⚠️ <b>${dues.length} amende(s) à payer</b> encore en cours → à solder / désigner avant le départ.`
-      : '✅ Aucune amende en cours.');
+    const totalDu = dues.reduce((s, a) => s + (FP.montantDu ? (FP.montantDu(a) || 0) : (+a.montant || 0)), 0);
+    if (dues.length) {
+      const lignes = dues.slice(0, 12).map(a => {
+        const lbl = a.numeroAvis ? ('n° ' + a.numeroAvis) : (a.motif || 'Amende');
+        const dt = a.date ? FP.date(a.date) : '';
+        const m = FP.euro(FP.montantDu ? (FP.montantDu(a) || 0) : (+a.montant || 0));
+        return `<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(lbl)}${dt ? (' · ' + escapeHtml(dt)) : ''}</span><b style="white-space:nowrap">${m}</b></div>`;
+      }).join('');
+      items.push(`<div style="border:1px solid #FCA5A5;background:#FEF2F2;border-radius:10px;padding:10px 12px;margin:2px 0">
+        <div style="font-weight:800;color:#b91c1c">⚠️ ${dues.length} amende(s) impayée(s) — ${FP.euro(totalDu)} encore dû</div>
+        <div style="margin-top:6px;font-size:12px;color:#7f1d1d">${lignes}${dues.length > 12 ? `<div style="opacity:.7">+ ${dues.length - 12} autre(s)…</div>` : ''}</div>
+        <a href="amendes.html?conducteur=${encodeURIComponent(d.name || '')}" class="btn btn-outline text-xs" style="margin-top:8px;color:#b91c1c;border-color:#FCA5A5"><i data-lucide="external-link" class="w-3.5 h-3.5"></i> Voir / solder ses amendes</a>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:700;color:#b91c1c;cursor:pointer"><input type="checkbox" id="sortie-ack-amendes"> Je confirme le départ <u>malgré</u> ces amendes impayées</label>
+      </div>`);
+    } else {
+      items.push('✅ Aucune amende en cours.');
+    }
     items.push('🔑 Pense aussi à récupérer / clôturer : <b>carte carburant</b>, <b>badge télépéage</b>, <b>emprunt de véhicule en cours</b> (le cas échéant).');
     if ($('sortie-checklist')) $('sortie-checklist').innerHTML = items.map(t => `<div>${t}</div>`).join('');
+    // Garde-fou (sans jamais bloquer définitivement — le site doit tout pouvoir faire) : s'il y a des
+    // amendes impayées, le bouton « Confirmer » reste désactivé TANT QUE la case n'est pas cochée.
+    const confirmBtn = $('sortie-confirm');
+    const ackEl = document.getElementById('sortie-ack-amendes');
+    if (confirmBtn) {
+      confirmBtn.disabled = !!dues.length;
+      confirmBtn.style.opacity = confirmBtn.disabled ? '.5' : '1';
+      confirmBtn.style.cursor = confirmBtn.disabled ? 'not-allowed' : 'pointer';
+      if (ackEl) ackEl.addEventListener('change', () => {
+        confirmBtn.disabled = !ackEl.checked;
+        confirmBtn.style.opacity = confirmBtn.disabled ? '.5' : '1';
+        confirmBtn.style.cursor = confirmBtn.disabled ? 'not-allowed' : 'pointer';
+      });
+    }
     $('sortie-backdrop').classList.add('open');
     if (window.lucide) lucide.createIcons();
   }
   function confirmSortie() {
     const key = _sortieKey; if (!key) return;
+    // Double garde-fou : si des amendes impayées existent, la case doit être cochée (le bouton est
+    // normalement désactivé, mais on re-vérifie ici au cas où). On n'INTERDIT jamais — on demande de confirmer.
+    const _ack = document.getElementById('sortie-ack-amendes');
+    if (_ack && !_ack.checked) { if (FP.toast) FP.toast('Coche la case pour confirmer le départ malgré les amendes impayées.'); return; }
     const d = drivers.find(x => x.key === key);
     const date = ($('sortie-date') && $('sortie-date').value) || new Date().toISOString().slice(0, 10);
     // 1) Archive + PURGE RGPD des données perso (on garde le nom pour l'historique).
