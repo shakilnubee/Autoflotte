@@ -8302,6 +8302,153 @@ FP.pdfLogoBars = function (doc, rightX, midY) {
   try { doc.setLineCap('butt'); } catch (e) {}
 };
 
+// ===== ÉTAT DES LIEUX — remise d'un véhicule à un conducteur (modèle client) =====
+// Génère un PDF « État des lieux véhicule de fonction » PRÉ-REMPLI (employé, modèle, immat, km, date),
+// avec le LOGO DE LA SOCIÉTÉ (pas PXP en dur), un formulaire pour l'état (carrosserie, rayures…), puis
+// enregistre le PDF dans les Documents du véhicule et l'envoie par e-mail (au conducteur + copie société).
+FP.edl = {
+  EXT: ['Carrosserie', 'Pare-chocs', 'Vitres / pare-brise', 'Rétroviseurs', 'Jantes / pneus', 'Portières', 'Toit / capot / coffre'],
+  INT: ['Sièges', 'Tableau de bord / commandes', 'Tapis / moquettes', 'Éléments électroniques (GPS, écran, chargeurs…)', 'Odeurs / propreté générale'],
+  ACC: ['Photocopie carte grise', 'Assurance', 'Chargeur / câble (si électrique)', 'Roue de secours / kit crevaison'],
+  open(veh, opts) {
+    opts = opts || {};
+    if (!veh) return;
+    const esc = FP.esc || (s => String(s == null ? '' : s));
+    const prof = (FP.settings.get().profil) || {};
+    const socNom = prof.nom || (FP.activeSociete && FP.activeSociete()) || '';
+    const cond = String(opts.conducteur || veh.chauffeur || '').trim();
+    let condEmail = ''; try { const c = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(cond) : null; condEmail = (c && c.email) || ''; } catch (e) {}
+    const km = FP.kmActuel ? FP.kmActuel(veh) : (veh.km || 0);
+    const today = new Date().toISOString().slice(0, 10);
+    const modele = ((veh.marque || '') + ' ' + (veh.modele || '')).trim();
+    const inp = (id, val, ph) => `<input id="${id}" value="${esc(val)}" placeholder="${esc(ph || '')}" style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:13px">`;
+    const infoRow = (lbl, field) => `<label style="display:flex;gap:10px;align-items:center;margin-bottom:7px"><span style="flex:0 0 165px;font-size:13px;color:#64748b">${lbl}</span>${field}</label>`;
+    const rowInput = (grp, label) => `<label style="display:flex;gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid #f1f5f9"><span style="flex:0 0 205px;font-size:12.5px;color:#334155">${esc(label)}</span><input data-edl="${grp}" data-lbl="${esc(label)}" placeholder="RAS — ou précisez (rayure, impact…)" style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:5px 9px;font-size:12.5px"></label>`;
+    const accRow = (label) => `<label style="display:inline-flex;gap:7px;align-items:center;font-size:12.5px;color:#334155;margin:3px 14px 3px 0"><input type="checkbox" data-acc="${esc(label)}" checked> ${esc(label)}</label>`;
+    const sec = t => `<div style="font-weight:800;color:#0f1e3d;margin:16px 0 6px;padding-bottom:3px;border-bottom:2px solid #f1f5f9">${esc(t)}</div>`;
+    const ta = (id, ph) => `<textarea id="${id}" rows="2" placeholder="${esc(ph || 'Commentaires…')}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:12.5px;margin-top:4px"></textarea>`;
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,61,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:14px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:780px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">
+      <div style="padding:14px 18px;border-bottom:1px solid #eef2f7;display:flex;align-items:center;gap:10px">
+        <div style="font-size:16px;font-weight:800;color:#0f1e3d">📋 État des lieux — remise du véhicule</div>
+        <button type="button" data-edl-x style="margin-left:auto;border:none;background:none;font-size:22px;line-height:1;cursor:pointer;color:#64748b">×</button>
+      </div>
+      <div style="padding:16px 18px;overflow:auto;flex:1">
+        ${infoRow('Nom / prénom employé', inp('edl-employe', cond, 'Employé'))}
+        ${infoRow('Modèle du véhicule', inp('edl-modele', modele))}
+        ${infoRow('Immatriculation', inp('edl-immat', veh.immat || ''))}
+        ${infoRow('Kilométrage', inp('edl-km', km))}
+        ${infoRow('Date de remise', `<input id="edl-date" type="date" value="${esc(today)}" style="flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:6px 9px;font-size:13px">`)}
+        ${sec('État extérieur — cochez / précisez')}
+        ${this.EXT.map(l => rowInput('ext', l)).join('')}
+        ${ta('edl-com-ext', 'Commentaires (extérieur)…')}
+        ${sec('État intérieur — cochez / précisez')}
+        ${this.INT.map(l => rowInput('int', l)).join('')}
+        ${ta('edl-com-int', 'Commentaires (intérieur)…')}
+        ${sec('Accessoires fournis avec le véhicule')}
+        <div style="margin:2px 0">${this.ACC.map(accRow).join('')}</div>
+        <label style="display:flex;gap:10px;align-items:center;margin-top:6px"><span style="flex:0 0 60px;font-size:12.5px;color:#64748b">Autres</span>${inp('edl-autres', '', 'Autres accessoires…')}</label>
+        ${ta('edl-com-acc', 'Commentaires (accessoires)…')}
+        ${sec('Envoi')}
+        ${infoRow('E-mail de l\'employé', inp('edl-to', condEmail, 'employe@exemple.fr'))}
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:2px">Le PDF sera enregistré dans les Documents du véhicule et envoyé à l'employé${prof.mailCopie ? ' (copie ' + esc(prof.mailCopie) + ')' : ''}. Le logo de ta société est repris automatiquement.</div>
+      </div>
+      <div style="padding:12px 18px;border-top:1px solid #eef2f7;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+        <button type="button" data-edl-x class="btn btn-outline">Annuler</button>
+        <button type="button" data-edl-dl class="btn btn-outline"><i data-lucide="download" class="w-4 h-4"></i> Télécharger le PDF</button>
+        <button type="button" data-edl-send class="btn btn-dark"><i data-lucide="send" class="w-4 h-4"></i> Enregistrer + envoyer</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    if (window.lucide) lucide.createIcons();
+    const close = () => ov.remove();
+    ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-edl-x]')) close(); });
+    const collect = () => {
+      const val = id => { const el = ov.querySelector('#' + id); return el ? String(el.value || '').trim() : ''; };
+      const grp = g => Array.from(ov.querySelectorAll('[data-edl="' + g + '"]')).map(i => ({ label: i.getAttribute('data-lbl'), val: (i.value || '').trim() || 'RAS' }));
+      const acc = Array.from(ov.querySelectorAll('[data-acc]')).map(c => ({ label: c.getAttribute('data-acc'), on: c.checked }));
+      return {
+        socNom, logo: prof.logoDataUrl || '', employe: val('edl-employe'), modele: val('edl-modele'), immat: val('edl-immat'),
+        km: val('edl-km'), date: val('edl-date'), ext: grp('ext'), comExt: val('edl-com-ext'), int: grp('int'), comInt: val('edl-com-int'),
+        acc, autres: val('edl-autres'), comAcc: val('edl-com-acc'), to: val('edl-to'),
+      };
+    };
+    const run = async (mode) => {
+      const data = collect();
+      const btn = ov.querySelector(mode === 'send' ? '[data-edl-send]' : '[data-edl-dl]'); const old = btn.innerHTML;
+      btn.disabled = true; btn.textContent = '…';
+      try {
+        if (!(window.jspdf && window.jspdf.jsPDF)) { if (FP.ensureJsPDF) { await FP.ensureJsPDF(); } }
+        const doc = this._pdf(data);
+        const fname = 'Etat-des-lieux-' + (data.immat || 'vehicule') + '-' + data.date + '.pdf';
+        if (mode === 'dl') { doc.save(fname); btn.disabled = false; btn.innerHTML = old; return; }
+        // Enregistre dans les Documents du véhicule + envoie par e-mail.
+        const blob = doc.output('blob');
+        let url = null;
+        try { if (FP.uploadScan) url = await FP.uploadScan(new File([blob], fname, { type: 'application/pdf' }), 'documents'); } catch (e) {}
+        if (url && FP.persist) { try { await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: 'État des lieux remise ' + FP.date(data.date), url, driveId: null }); } catch (e) {} }
+        let mailed = false;
+        if (data.to && FP.sendEmail) {
+          const b64 = doc.output('datauristring').split(',')[1];
+          const html = `<p>Bonjour,</p><p>Veuillez trouver ci-joint l'<b>état des lieux</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}) qui vous est remis le ${esc(FP.date(data.date))}.</p><p>Merci de vérifier, dater et signer.</p><p>— ${esc(data.socNom || 'Gestion de flotte')}</p>`;
+          try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux — ' + data.immat + ' — ' + data.employe, html, text: 'État des lieux du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
+        }
+        close();
+        if (FP.toast) FP.toast(mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré'));
+      } catch (e) { btn.disabled = false; btn.innerHTML = old; if (FP.toast) FP.toast('Échec — réessaie'); console.warn('[edl]', e); }
+    };
+    ov.querySelector('[data-edl-dl]').addEventListener('click', () => run('dl'));
+    ov.querySelector('[data-edl-send]').addEventListener('click', () => run('send'));
+  },
+  // Génère le PDF (jsPDF) au format du modèle client, avec le logo de la société.
+  _pdf(data) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+    const M = 16; let y = 14;
+    const ensure = need => { if (y + need > H - 14) { doc.addPage(); y = 16; } };
+    // En-tête : logo société (ou nom) + titre.
+    if (data.logo && /^data:image\//i.test(data.logo)) {
+      try { const fmt = /png/i.test(data.logo) ? 'PNG' : 'JPEG'; doc.addImage(data.logo, fmt, M, y, 30, 14, undefined, 'FAST'); } catch (e) {}
+    } else if (data.socNom) { doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(15, 30, 61); doc.text(data.socNom, M, y + 8); }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(15, 30, 61);
+    doc.text('ÉTAT DES LIEUX – VÉHICULE', W - M, y + 6, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(120, 130, 145);
+    doc.text('À remplir lors de la remise du véhicule à l\'employé', W - M, y + 11, { align: 'right' });
+    y += 20; doc.setDrawColor(230, 235, 242); doc.line(M, y, W - M, y); y += 7;
+    // Bloc infos.
+    const info = [['Nom et prénom de l\'employé', data.employe], ['Modèle du véhicule', data.modele], ['Immatriculation', data.immat], ['Kilométrage', data.km ? (data.km + ' km') : ''], ['Date de remise', data.date ? FP.date(data.date) : '']];
+    doc.setFontSize(10.5);
+    info.forEach(([l, v]) => { ensure(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(70, 80, 95); doc.text(l + ' :', M, y); doc.setFont('helvetica', 'normal'); doc.setTextColor(20, 28, 40); doc.text(String(v || ''), M + 62, y); y += 6.4; });
+    const section = (title, rows, com) => {
+      y += 3; ensure(12); doc.setFillColor(15, 30, 61); doc.rect(M, y - 4, W - 2 * M, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text(title, M + 2, y + 0.8); y += 8;
+      doc.setFontSize(9.5);
+      rows.forEach(r => { ensure(6.5); doc.setTextColor(60, 70, 85); doc.setFont('helvetica', 'bold'); doc.text(r.label + ' :', M + 1, y); doc.setFont('helvetica', 'normal'); doc.setTextColor(20, 28, 40); doc.text(doc.splitTextToSize(String(r.val || 'RAS'), W - 2 * M - 62), M + 63, y); y += 6; });
+      if (com) { ensure(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const lines = doc.splitTextToSize('Commentaires : ' + com, W - 2 * M - 2); doc.text(lines, M + 1, y + 1); y += 5 + lines.length * 4.6; doc.setFont('helvetica', 'normal'); }
+    };
+    section('ÉTAT EXTÉRIEUR', data.ext, data.comExt);
+    section('ÉTAT INTÉRIEUR', data.int, data.comInt);
+    // Accessoires.
+    y += 3; ensure(12); doc.setFillColor(15, 30, 61); doc.rect(M, y - 4, W - 2 * M, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text('ACCESSOIRES FOURNIS', M + 2, y + 0.8); y += 8;
+    doc.setFontSize(10); doc.setTextColor(20, 28, 40);
+    (data.acc || []).forEach(a => { ensure(6); doc.setFont('helvetica', 'normal'); doc.text((a.on ? '[X] ' : '[  ] ') + a.label, M + 1, y); y += 5.6; });
+    if (data.autres) { ensure(6); doc.text('Autres : ' + data.autres, M + 1, y); y += 5.6; }
+    if (data.comAcc) { ensure(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const l = doc.splitTextToSize('Commentaires : ' + data.comAcc, W - 2 * M - 2); doc.text(l, M + 1, y + 1); y += 5 + l.length * 4.6; }
+    // Signatures.
+    y += 6; ensure(34); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(15, 30, 61); doc.text('SIGNATURES', M, y); y += 6;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(60, 70, 85);
+    doc.text('Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 10;
+    const colW = (W - 2 * M) / 2;
+    doc.text('Signature de l\'employé :', M, y); doc.text('Signature ' + (data.socNom || 'gestionnaire') + ' :', M + colW, y);
+    y += 16; doc.setDrawColor(150, 160, 175); doc.line(M, y, M + colW - 12, y); doc.line(M + colW, y, W - M, y); y += 5;
+    doc.text('Date :', M, y); doc.text('Date :', M + colW, y);
+    // Pied de page Parc Pilot.
+    doc.setFontSize(7.5); doc.setTextColor(150, 160, 175); doc.text('Édité via Parc Pilot — gestion de flotte', M, H - 8);
+    return doc;
+  },
+};
+
 // ================= FACTURES ULYS (péages VINCI) — lecture précise PARTAGÉE =================
 // SOURCE DE VÉRITÉ UNIQUE pour lire un relevé Ulys (règle « une seule source ») : le PDF a une
 // couche texte, mais une lecture standard MÉLANGE les colonnes → montants/prénoms faux. On

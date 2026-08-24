@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821p">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260821o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260821p"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260821o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260821p">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -993,13 +993,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260821o"></script>
-<script src="../assets/js/supabase-client.js?v=20260821o"></script>
-<script src="../assets/js/data.js?v=20260821o"></script>
-<script src="../assets/js/fleet-docs.js?v=20260821o"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260821o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260821p"></script>
+<script src="../assets/js/supabase-client.js?v=20260821p"></script>
+<script src="../assets/js/data.js?v=20260821p"></script>
+<script src="../assets/js/fleet-docs.js?v=20260821p"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260821p"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260821o"></script>
+<script src="../assets/js/app.js?v=20260821p"></script>
 <script>
   lucide.createIcons();
 
@@ -1503,6 +1503,7 @@
         <div class="pt-2" id="veh-affect-body" data-veh-id="${v.id}">${affectRowsHTML(v.id, null)}</div>
         <div id="veh-affect-add" class="pt-2"></div>
         <button type="button" class="text-xs font-semibold mt-1" style="color:var(--fp-accent)" data-affect-addbtn><i data-lucide="plus" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Ajouter une période à la main</button>
+        <button type="button" class="text-xs font-semibold mt-1 ml-4" style="color:var(--fp-primary)" data-edl-btn="${v.id}" title="Générer l'état des lieux de remise (pré-rempli, logo société, envoi e-mail)"><i data-lucide="clipboard-list" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> État des lieux (remise)</button>
       </details>`;
   }
 
@@ -1518,6 +1519,13 @@
   if (!window._affectWired) {
     window._affectWired = true;
     document.addEventListener('click', async (e) => {
+      // État des lieux (remise) — bouton de la section « Conducteurs — historique ».
+      const edlB = e.target.closest('[data-edl-btn]');
+      if (edlB) {
+        const v = (data.vehicules || []).find(x => x.id === edlB.dataset.edlBtn);
+        if (v && FP.edl) { const cur = (FP.affectations && FP.affectations.courante) ? FP.affectations.courante(v.id) : null; FP.edl.open(v, { conducteur: (cur && cur.conducteur) || v.chauffeur || '' }); }
+        return;
+      }
       const body = document.getElementById('veh-affect-body');
       const vehId = body ? body.dataset.vehId : null;
       const edit = e.target.closest('[data-affect-edit]');
@@ -3353,6 +3361,13 @@
       if (updated && FP.estVendu(updated) && updated.immat && FP.archiveVehicleDocs) FP.archiveVehicleDocs(updated.immat);
       // Nouveau passage à « vendu » → process de CESSION (checklist de sortie).
       if (updated && FP.estVendu(updated) && !FP.estVendu({ statut: _oldStatut })) showCessionProcess(updated);
+      // Nouveau conducteur affecté (changement) → proposer l'ÉTAT DES LIEUX de remise (pré-rempli, logo société).
+      try {
+        const _nc = (payload.chauffeur || '').trim();
+        if (updated && FP.edl && _nc && _nc !== '—' && _nc.toLowerCase() !== (_oldChauffeur || '').trim().toLowerCase()) {
+          setTimeout(async () => { if (await FP.confirm(`Générer l'état des lieux de remise du véhicule à « ${_nc} » ?`)) FP.edl.open(updated, { conducteur: _nc }); }, 200);
+        }
+      } catch (e) {}
     } else {
       const newV = { id: nextVehId(), ...payload };
       // Anti-doublon : immatriculation déjà présente → on propose FUSION / ajout / annulation.
@@ -3372,6 +3387,8 @@
       }
       data.vehicules.push(newV);
       try { if (FP.affectations && (newV.chauffeur || '').trim() && newV.chauffeur !== '—') FP.affectations.record(newV.id, newV.chauffeur, null, null, newV.km); } catch (e) {}
+      // Véhicule créé avec un conducteur → proposer l'état des lieux de remise.
+      try { const _nc = (newV.chauffeur || '').trim(); if (FP.edl && _nc && _nc !== '—') setTimeout(async () => { if (await FP.confirm(`Générer l'état des lieux de remise du véhicule à « ${_nc} » ?`)) FP.edl.open(newV, { conducteur: _nc }); }, 200); } catch (e) {}
       saveMasse(newV.id);
       closeModal();
       renderKPIs();
