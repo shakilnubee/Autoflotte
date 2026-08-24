@@ -5025,6 +5025,42 @@ FP.affectations = {
     s.affectations[vehId] = list;
     FP.settings.save(s);
   },
+  // ⚠️ INITIALISATION UNIQUE (non destructive) du km de départ des conducteurs ACTUELS des véhicules
+  // NON-LEASING : on GÈLE le km de début de l'affectation en cours au DERNIER RELEVÉ km connu (= km actuel),
+  // et la date de début à celle du dernier relevé si on la connaît. But (consigne) : « commencer à partir
+  // du dernier relevé km ». Ne s'exécute qu'UNE fois par société (drapeau affectKmInitV1) et ne touche
+  // JAMAIS un km déjà saisi → une modif ultérieure du véhicule ne « remet pas à aujourd'hui » le compteur.
+  // Les LEASINGS sont exclus (ils démarrent à 0 automatiquement, cf. kmPeriode).
+  initDebutsNonLeasing(data) {
+    data = data || (typeof window !== 'undefined' ? window.FP_DATA : null) || {};
+    const s = FP.settings.get();
+    if (s.affectKmInitV1) return 0;                 // déjà initialisé pour cette société
+    s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
+    let changed = 0;
+    (data.vehicules || []).forEach(v => {
+      if (!v || v.id == null) return;
+      if (FP.horsFlotte && FP.horsFlotte(v)) return;
+      if (FP.estLeasing && FP.estLeasing(v)) return;                // leasings : 0 km auto, on ne gèle rien
+      const ch = (v.chauffeur != null ? String(v.chauffeur) : '').trim();
+      if (!ch || ch === '—') return;
+      const kmA = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
+      if (!(kmA > 0)) return;                                       // pas de km connu → rien à geler
+      // Date du dernier relevé si le cache relevés est chargé (sinon on laissera la date telle quelle).
+      let dernDate = null;
+      try { const r = (FP.releveKm && FP.releveKm.recusDe) ? FP.releveKm.recusDe(v)[0] : null; if (r && r.used_at) dernDate = String(r.used_at).slice(0, 10); } catch (e) {}
+      let list = Array.isArray(s.affectations[v.id]) ? s.affectations[v.id] : [];
+      let cur = [...list].reverse().find(x => !x.fin) || null;
+      if (!cur) { cur = { conducteur: ch, debut: dernDate || v.dateMiseEnCirculation || null, fin: null }; list.push(cur); s.affectations[v.id] = list; }
+      if (cur.kmDebut == null) {                                    // ne JAMAIS écraser un km déjà présent
+        cur.kmDebut = this._km(kmA);
+        if (!cur.debut && dernDate) cur.debut = dernDate;          // date de début = dernier relevé (si connu, jamais « aujourd'hui »)
+        changed++;
+      }
+    });
+    s.affectKmInitV1 = true;                                        // marqueur : ne plus jamais re-geler
+    FP.settings.save(s);
+    return changed;
+  },
   // Renomme un conducteur dans tout l'historique (suit un renommage de fiche).
   rename(oldName, newName) {
     const from = this._norm(oldName).toLowerCase(); const to = this._norm(newName);
