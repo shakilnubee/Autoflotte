@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260821h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260821i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260821h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260821i">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -993,13 +993,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260821h"></script>
-<script src="../assets/js/supabase-client.js?v=20260821h"></script>
-<script src="../assets/js/data.js?v=20260821h"></script>
-<script src="../assets/js/fleet-docs.js?v=20260821h"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260821h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260821i"></script>
+<script src="../assets/js/supabase-client.js?v=20260821i"></script>
+<script src="../assets/js/data.js?v=20260821i"></script>
+<script src="../assets/js/fleet-docs.js?v=20260821i"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260821i"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260821h"></script>
+<script src="../assets/js/app.js?v=20260821i"></script>
 <script>
   lucide.createIcons();
 
@@ -1431,24 +1431,11 @@
   // Km parcourus PENDANT une affectation = km de la restitution (Sortie) − km de la prise (Entrée),
   // lus dans les états des lieux datés (getInspections) qui tombent dans la période [début, fin].
   // Période en cours (pas de fin) : on prend le km ACTUEL du véhicule comme borne haute.
+  // Km parcourus d'une période — délégué au helper canonique FP.affectations.kmPeriode
+  // (km saisis en priorité, sinon estimation par états des lieux). Une seule source partout.
   function kmParcouruAffect(v, a) {
-    try {
-      // Priorité au km SAISI à la main (kmDébut/kmFin de la période) — source de vérité de l'utilisateur.
-      const manuel = (FP.affectations && FP.affectations.kmParcouru) ? FP.affectations.kmParcouru(a) : null;
-      if (manuel != null) return manuel;
-      // Sinon : estimation d'après les états des lieux (première prise → dernière restitution).
-      const insp = (getInspections(v.id) || []).filter(x => x && x.km != null && String(x.km).trim() !== '' && Number.isFinite(+x.km) && x.date);
-      if (!insp.length) return null;
-      const inP = (d) => (!a.debut || d >= a.debut) && (!a.fin || d <= a.fin);
-      const entries = insp.filter(x => x.sens !== 'Sortie' && inP(x.date)).sort((p, q) => String(p.date).localeCompare(q.date));
-      const exits = insp.filter(x => x.sens === 'Sortie' && inP(x.date)).sort((p, q) => String(p.date).localeCompare(q.date));
-      const entryKm = entries.length ? +entries[0].km : null;                 // première PRISE de la période
-      let exitKm = exits.length ? +exits[exits.length - 1].km : null;         // dernière RESTITUTION
-      if (!a.fin && exitKm == null && Number.isFinite(+v.km)) exitKm = +v.km;  // en cours → km actuel
-      if (entryKm == null || exitKm == null) return null;
-      const diff = exitKm - entryKm;
-      return diff >= 0 ? diff : null;
-    } catch (e) { return null; }
+    try { return (FP.affectations && FP.affectations.kmPeriode) ? FP.affectations.kmPeriode(v, a) : null; }
+    catch (e) { return null; }
   }
   function affectRowsHTML(vehId, editIdx) {
     // On garde l'INDEX d'origine (position dans le tableau stocké) pour l'édition,
