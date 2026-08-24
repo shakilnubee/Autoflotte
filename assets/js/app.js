@@ -8289,6 +8289,19 @@ FP.ocr = {
   },
 };
 
+// ⚠️ SOURCE UNIQUE — logo Parc Pilot (les 3 barres orange, même marque que dans l'app) dans un PDF jsPDF.
+// À appeler dans CHAQUE en-tête de PDF, juste à gauche du nom « Parc Pilot ». rightX = extrémité droite
+// des barres (l'endroit où commence le texte « Parc »), midY = milieu vertical du nom.
+FP.pdfLogoBars = function (doc, rightX, midY) {
+  if (!doc) return;
+  try { doc.setLineCap('round'); } catch (e) {}
+  doc.setLineWidth(0.9);
+  doc.setDrawColor(251, 146, 60); doc.line(rightX - 6.5, midY - 2.2, rightX - 1.4, midY - 2.2);
+  doc.setDrawColor(249, 115, 22); doc.line(rightX - 7.5, midY, rightX - 0.4, midY);
+  doc.setDrawColor(251, 146, 60); doc.line(rightX - 5.6, midY + 2.2, rightX - 2.3, midY + 2.2);
+  try { doc.setLineCap('butt'); } catch (e) {}
+};
+
 // ================= FACTURES ULYS (péages VINCI) — lecture précise PARTAGÉE =================
 // SOURCE DE VÉRITÉ UNIQUE pour lire un relevé Ulys (règle « une seule source ») : le PDF a une
 // couche texte, mais une lecture standard MÉLANGE les colonnes → montants/prénoms faux. On
@@ -10213,6 +10226,8 @@ FP.exportRows = function (baseName, colDefs, rows, kind, opts) {
       doc.text('Édité le ' + today + '   ·   ' + rows.length + ' ligne' + (rows.length > 1 ? 's' : ''), 16, 26);
       doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(14);
       const pw = doc.getTextWidth('Pilot'), rw = doc.getTextWidth('Parc');
+      // Logo Parc Pilot (3 barres orange, même marque que dans l'app) à gauche du nom — source unique FP.pdfLogoBars.
+      FP.pdfLogoBars(doc, pageW - 16 - pw - rw - 3, 17.6);
       doc.setTextColor(255, 255, 255); doc.text('Parc', pageW - 16 - pw - rw, 19);
       doc.setTextColor(249, 115, 22); doc.text('Pilot', pageW - 16 - pw, 19);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(148, 163, 184);
