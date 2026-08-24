@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260821g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260821h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260821g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260821h">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -993,13 +993,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260821g"></script>
-<script src="../assets/js/supabase-client.js?v=20260821g"></script>
-<script src="../assets/js/data.js?v=20260821g"></script>
-<script src="../assets/js/fleet-docs.js?v=20260821g"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260821g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260821h"></script>
+<script src="../assets/js/supabase-client.js?v=20260821h"></script>
+<script src="../assets/js/data.js?v=20260821h"></script>
+<script src="../assets/js/fleet-docs.js?v=20260821h"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260821h"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260821g"></script>
+<script src="../assets/js/app.js?v=20260821h"></script>
 <script>
   lucide.createIcons();
 
@@ -1433,6 +1433,10 @@
   // Période en cours (pas de fin) : on prend le km ACTUEL du véhicule comme borne haute.
   function kmParcouruAffect(v, a) {
     try {
+      // Priorité au km SAISI à la main (kmDébut/kmFin de la période) — source de vérité de l'utilisateur.
+      const manuel = (FP.affectations && FP.affectations.kmParcouru) ? FP.affectations.kmParcouru(a) : null;
+      if (manuel != null) return manuel;
+      // Sinon : estimation d'après les états des lieux (première prise → dernière restitution).
       const insp = (getInspections(v.id) || []).filter(x => x && x.km != null && String(x.km).trim() !== '' && Number.isFinite(+x.km) && x.date);
       if (!insp.length) return null;
       const inP = (d) => (!a.debut || d >= a.debut) && (!a.fin || d <= a.fin);
@@ -1462,7 +1466,9 @@
           <div class="flex items-center gap-2 mb-2"><i data-lucide="user" class="w-4 h-4 text-slate-400"></i><span class="font-semibold text-slate-800">${escapeHtml(a.conducteur || '—')}</span></div>
           <div class="flex flex-wrap items-end gap-2">
             <label class="text-xs text-slate-500">Début<br><input type="date" data-affect-debut value="${a.debut || ''}" class="border border-slate-200 rounded-lg px-2 py-1 text-sm"></label>
+            <label class="text-xs text-slate-500">Km au début<br><input type="number" min="0" inputmode="numeric" data-affect-kmdebut value="${a.kmDebut != null ? a.kmDebut : ''}" placeholder="km compteur" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" style="width:110px"></label>
             <label class="text-xs text-slate-500">Fin (vide = en cours)<br><input type="date" data-affect-fin value="${a.fin || ''}" class="border border-slate-200 rounded-lg px-2 py-1 text-sm"></label>
+            <label class="text-xs text-slate-500">Km à la fin<br><input type="number" min="0" inputmode="numeric" data-affect-kmfin value="${a.kmFin != null ? a.kmFin : ''}" placeholder="km compteur" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" style="width:110px"></label>
             <button type="button" class="btn btn-dark text-xs" data-affect-save="${i}"><i data-lucide="check" class="w-3.5 h-3.5"></i> Enregistrer</button>
             <button type="button" class="btn btn-outline text-xs" data-affect-cancel><i data-lucide="x" class="w-3.5 h-3.5"></i> Annuler</button>
             <button type="button" class="text-xs font-semibold text-red-600 ml-auto" data-affect-del="${i}"><i data-lucide="trash-2" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Supprimer</button>
@@ -1472,16 +1478,23 @@
       const enCours = !a.fin;
       const debut = a.debut ? FP.dateNum(a.debut) : '<span class="text-slate-400">depuis l’origine</span>';
       const periode = enCours ? `depuis ${a.debut ? FP.dateNum(a.debut) : '—'}` : `${debut} → ${FP.dateNum(a.fin)}`;
-      // Km parcourus pendant cette période (états des lieux prise → restitution).
+      // Km parcourus pendant cette période — km SAISIS (kmFin−kmDébut) en priorité, sinon estimation
+      // par états des lieux (prise → restitution). Une seule source via kmParcouruAffect.
       const kmP = _vAff ? kmParcouruAffect(_vAff, a) : null;
-      const kmBadge = (kmP != null && kmP > 0) ? `<span class="text-xs" style="font-weight:700;color:var(--fp-primary)" title="Kilomètres parcourus pendant l'affectation (restitution − prise, d'après les états des lieux)">${FP.num(kmP)} km parcourus</span>` : '';
+      const kmManuel = (FP.affectations && FP.affectations.kmParcouru) ? FP.affectations.kmParcouru(a) : null;
+      const kmBadge = (kmP != null && kmP > 0) ? `<span class="text-xs" style="font-weight:700;color:var(--fp-primary)" title="${kmManuel != null ? 'Kilomètres parcourus (km à la fin − km au début saisis)' : "Kilomètres parcourus estimés d'après les états des lieux (restitution − prise)"}">${FP.num(kmP)} km parcourus</span>` : '';
+      // Km au compteur début → fin de l'affectation (s'ils sont saisis).
+      const kmRange = (a.kmDebut != null || a.kmFin != null)
+        ? `<span class="text-xs text-slate-400" title="Km au compteur au début et à la fin de l'affectation">${a.kmDebut != null ? FP.num(a.kmDebut) : '—'} → ${a.kmFin != null ? FP.num(a.kmFin) : '…'} km</span>`
+        : '';
       return `<div class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-100" data-affect-row="${i}">
         <div class="flex items-center gap-2 min-w-0">
           <span style="width:9px;height:9px;border-radius:50%;flex:none;background:${enCours ? '#16a34a' : '#94a3b8'}"></span>
           <span class="font-semibold text-slate-800 truncate">${escapeHtml(a.conducteur || '—')}</span>
           ${enCours ? '<span style="font-size:.66rem;font-weight:700;color:#fff;background:#16a34a;border-radius:9999px;padding:1px 8px">actuel</span>' : ''}
         </div>
-        <div class="flex items-center gap-2 whitespace-nowrap">
+        <div class="flex items-center gap-2 whitespace-nowrap flex-wrap justify-end">
+          ${kmRange}
           ${kmBadge}
           <span class="text-xs text-slate-500">${periode}</span>
           <button type="button" class="text-slate-400 hover:text-slate-700" data-affect-edit="${i}" title="Corriger les dates"><i data-lucide="pencil" class="w-3.5 h-3.5"></i></button>
@@ -1529,8 +1542,11 @@
         const row = save.closest('[data-affect-row]');
         const debut = row.querySelector('[data-affect-debut]').value || null;
         const fin = row.querySelector('[data-affect-fin]').value || null;
+        const kmDebut = row.querySelector('[data-affect-kmdebut]').value.trim() || null;
+        const kmFin = row.querySelector('[data-affect-kmfin]').value.trim() || null;
         if (debut && fin && fin < debut) { FP.alert('La date de fin ne peut pas être avant la date de début.'); return; }
-        FP.affectations.setEntry(vehId, +save.dataset.affectSave, { debut, fin });
+        if (kmDebut != null && kmFin != null && +kmFin < +kmDebut) { FP.alert('Le km à la fin ne peut pas être inférieur au km au début.'); return; }
+        FP.affectations.setEntry(vehId, +save.dataset.affectSave, { debut, fin, kmDebut, kmFin });
         refreshAffect(vehId, null);
         if (FP.toast) FP.toast('✓ Période mise à jour');
         return;
@@ -1553,7 +1569,9 @@
           <div class="flex flex-wrap items-end gap-2">
             <label class="text-xs text-slate-500">Conducteur<br><input type="text" data-affect-newnom placeholder="Nom du conducteur" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" style="min-width:160px"></label>
             <label class="text-xs text-slate-500">Début<br><input type="date" data-affect-newdebut class="border border-slate-200 rounded-lg px-2 py-1 text-sm"></label>
+            <label class="text-xs text-slate-500">Km au début<br><input type="number" min="0" inputmode="numeric" data-affect-newkmdebut placeholder="km compteur" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" style="width:110px"></label>
             <label class="text-xs text-slate-500">Fin (vide = en cours)<br><input type="date" data-affect-newfin class="border border-slate-200 rounded-lg px-2 py-1 text-sm"></label>
+            <label class="text-xs text-slate-500">Km à la fin<br><input type="number" min="0" inputmode="numeric" data-affect-newkmfin placeholder="km compteur" class="border border-slate-200 rounded-lg px-2 py-1 text-sm" style="width:110px"></label>
             <button type="button" class="btn btn-dark text-xs" data-affect-addsave><i data-lucide="check" class="w-3.5 h-3.5"></i> Ajouter</button>
           </div>
         </div>`;
@@ -1566,9 +1584,12 @@
         const nom = box.querySelector('[data-affect-newnom]').value.trim();
         const debut = box.querySelector('[data-affect-newdebut]').value || null;
         const fin = box.querySelector('[data-affect-newfin]').value || null;
+        const kmDebut = box.querySelector('[data-affect-newkmdebut]').value.trim() || null;
+        const kmFin = box.querySelector('[data-affect-newkmfin]').value.trim() || null;
         if (!nom) { FP.alert('Indique le nom du conducteur.'); return; }
         if (debut && fin && fin < debut) { FP.alert('La date de fin ne peut pas être avant la date de début.'); return; }
-        FP.affectations.addEntry(vehId, nom, debut, fin);
+        if (kmDebut != null && kmFin != null && +kmFin < +kmDebut) { FP.alert('Le km à la fin ne peut pas être inférieur au km au début.'); return; }
+        FP.affectations.addEntry(vehId, nom, debut, fin, kmDebut, kmFin);
         box.innerHTML = ''; box.dataset.open = '0';
         refreshAffect(vehId, null);
         if (FP.toast) FP.toast('✓ Période ajoutée');
@@ -3334,7 +3355,7 @@
       const _oldChauffeur = idx >= 0 ? (data.vehicules[idx].chauffeur || '') : '';
       if (idx >= 0) { data.vehicules[idx] = { ...data.vehicules[idx], ...payload }; updated = data.vehicules[idx]; }
       // Historique d'affectation daté : on note le changement de conducteur (ferme l'ancien, ouvre le nouveau)
-      try { if (FP.affectations && (_oldChauffeur || '').trim() !== (payload.chauffeur || '').trim()) FP.affectations.record(id, payload.chauffeur, null, _oldChauffeur); } catch (e) {}
+      try { if (FP.affectations && (_oldChauffeur || '').trim() !== (payload.chauffeur || '').trim()) FP.affectations.record(id, payload.chauffeur, null, _oldChauffeur, (updated && updated.km != null ? updated.km : payload.km)); } catch (e) {}
       saveMasse(id);
       closeModal();
       renderKPIs();
@@ -3363,7 +3384,7 @@
         // action === 'add' → on continue et on ajoute un nouveau véhicule.
       }
       data.vehicules.push(newV);
-      try { if (FP.affectations && (newV.chauffeur || '').trim() && newV.chauffeur !== '—') FP.affectations.record(newV.id, newV.chauffeur); } catch (e) {}
+      try { if (FP.affectations && (newV.chauffeur || '').trim() && newV.chauffeur !== '—') FP.affectations.record(newV.id, newV.chauffeur, null, null, newV.km); } catch (e) {}
       saveMasse(newV.id);
       closeModal();
       renderKPIs();

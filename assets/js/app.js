@@ -4906,11 +4906,20 @@ FP.affectations = {
   },
   // Enregistre un changement de conducteur : ferme l'entrée en cours si le nom change,
   // en ouvre une nouvelle si un conducteur est désigné. Idempotent (rien si inchangé).
-  record(vehId, nouveauConducteur, dateISO, ancienConducteur) {
+  // Normalise un km saisi → entier positif ou null (vide/invalide). Utilisé pour kmDebut/kmFin.
+  _km(v) { if (v == null || v === '') return null; const n = Math.round(Number(String(v).replace(/[^\d.-]/g, ''))); return Number.isFinite(n) && n >= 0 ? n : null; },
+  // Km parcourus SAISIS pour une période (kmFin − kmDebut) — source MANUELLE, prioritaire sur l'estimation
+  // par états des lieux. Renvoie null si l'un des deux km manque ou si l'écart est négatif (aberrant).
+  kmParcouru(a) { if (!a) return null; const d = this._km(a.kmDebut), f = this._km(a.kmFin); if (d == null || f == null) return null; const diff = f - d; return diff >= 0 ? diff : null; },
+  // record : ferme l'entrée en cours si le nom change, en ouvre une nouvelle si un conducteur est désigné.
+  // `km` (optionnel) = km AU COMPTEUR au moment du changement → stampé en km de FIN de l'ancienne période
+  // ET en km de DÉBUT de la nouvelle (consigne : « quand tu mets le début/fin, tu mets aussi le km »).
+  record(vehId, nouveauConducteur, dateISO, ancienConducteur, km) {
     if (!vehId) return;
     const nom = this._norm(nouveauConducteur);
     const vide = !nom || nom === '—';
     const jour = dateISO || new Date().toISOString().slice(0, 10);
+    const kmN = this._km(km);
     const s = FP.settings.get();
     s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
     const list = Array.isArray(s.affectations[vehId]) ? s.affectations[vehId] : [];
@@ -4921,24 +4930,26 @@ FP.affectations = {
     // changement. Début inconnu (null → affiché « depuis l'origine »).
     const ancien = this._norm(ancienConducteur);
     if (!encours && ancien && ancien !== '—' && ancien.toLowerCase() !== (vide ? '' : nom.toLowerCase())) {
-      list.push({ conducteur: ancien, debut: null, fin: jour });
+      list.push({ conducteur: ancien, debut: null, fin: jour, kmFin: kmN });
       changed = true;
     }
     const actuel = encours ? this._norm(encours.conducteur) : '';
     if (actuel !== (vide ? '' : nom)) {   // vrai changement
-      if (encours) { encours.fin = jour; changed = true; } // on clôt l'affectation précédente
-      if (!vide) { list.push({ conducteur: nom, debut: jour, fin: null }); changed = true; }
+      if (encours) { encours.fin = jour; if (kmN != null && encours.kmFin == null) encours.kmFin = kmN; changed = true; } // on clôt l'affectation précédente
+      if (!vide) { list.push({ conducteur: nom, debut: jour, fin: null, kmDebut: kmN }); changed = true; }
     }
     if (changed) { s.affectations[vehId] = list; FP.settings.save(s); }
   },
   // --- Édition manuelle (crayon dans la fiche véhicule) ---
-  // Modifie les dates début/fin d'une entrée (index = position dans le tableau stocké).
+  // Modifie les dates début/fin (et km début/fin) d'une entrée (index = position dans le tableau stocké).
   setEntry(vehId, index, patch) {
     const s = FP.settings.get();
     const list = (s.affectations && Array.isArray(s.affectations[vehId])) ? s.affectations[vehId] : null;
     if (!list || !list[index]) return;
     if ('debut' in patch) list[index].debut = patch.debut || null;
     if ('fin' in patch) list[index].fin = patch.fin || null;
+    if ('kmDebut' in patch) list[index].kmDebut = this._km(patch.kmDebut);
+    if ('kmFin' in patch) list[index].kmFin = this._km(patch.kmFin);
     if ('conducteur' in patch && this._norm(patch.conducteur)) list[index].conducteur = this._norm(patch.conducteur);
     FP.settings.save(s);
   },
@@ -4951,14 +4962,14 @@ FP.affectations = {
     if (!list.length) delete s.affectations[vehId];
     FP.settings.save(s);
   },
-  // Ajoute une période à la main (backfill : conducteur connu à une date connue).
-  addEntry(vehId, conducteur, debut, fin) {
+  // Ajoute une période à la main (backfill : conducteur connu à une date connue + km début/fin optionnels).
+  addEntry(vehId, conducteur, debut, fin, kmDebut, kmFin) {
     const nom = this._norm(conducteur);
     if (!vehId || !nom) return;
     const s = FP.settings.get();
     s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
     const list = Array.isArray(s.affectations[vehId]) ? s.affectations[vehId] : [];
-    list.push({ conducteur: nom, debut: debut || null, fin: fin || null });
+    list.push({ conducteur: nom, debut: debut || null, fin: fin || null, kmDebut: this._km(kmDebut), kmFin: this._km(kmFin) });
     s.affectations[vehId] = list;
     FP.settings.save(s);
   },
