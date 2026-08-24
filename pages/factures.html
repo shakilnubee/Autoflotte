@@ -325,6 +325,7 @@
           <select id="doc-filter-type" class="text-sm border border-slate-200 rounded-lg px-3 py-2"><option value="all">Tous types</option></select>
           <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#475569;cursor:pointer"><input type="checkbox" id="doc-hide-arch"> Masquer les archivés</label>
           <button id="doc-view-toggle" type="button" class="btn btn-outline text-sm" style="margin-left:auto"><i data-lucide="list" class="w-4 h-4"></i> <span id="doc-view-label">Vue liste</span></button>
+          <button id="doc-clean-drive" type="button" class="btn btn-outline text-sm" style="color:#b45309;border-color:#fcd34d" title="Supprimer toutes les entrées Documents qui pointent vers un lien Google Drive (pour tout passer en PDF). Aperçu avant suppression."><i data-lucide="link-2-off" class="w-4 h-4"></i> Nettoyer les liens Drive</button>
           <button id="doc-import-btn" type="button" class="btn btn-dark text-sm"><i data-lucide="upload" class="w-4 h-4"></i> Importer un document</button>
         </div>
       </div>
@@ -2039,7 +2040,7 @@
       const prev = u ? (isImgU(u) ? `<img src="${escapeHtml(u)}" loading="lazy" style="width:100%;height:100%;object-fit:cover">` : `<i data-lucide="file-text" style="width:30px;height:30px;color:#64748b"></i>`) : `<i data-lucide="file" style="width:30px;height:30px;color:#cbd5e1"></i>`;
       return `<div style="position:relative;border:1px solid var(--fp-border);border-radius:12px;overflow:hidden;background:#fff">
         <a href="${escapeHtml(u) || '#'}" ${u ? 'target="_blank" rel="noopener"' : ''} style="display:flex;align-items:center;justify-content:center;height:100px;background:#f1f5f9">${prev}</a>
-        <button type="button" data-doc-del="${escapeHtml(d.id)}" title="Supprimer" style="position:absolute;top:4px;right:4px;background:rgba(15,30,61,.72);color:#fff;border:none;border-radius:6px;width:22px;height:22px;cursor:pointer">✕</button>
+        <button type="button" data-doc-del="${escapeHtml(d.id)}" title="Supprimer ce document" style="position:absolute;top:5px;right:5px;background:#dc2626;color:#fff;border:none;border-radius:8px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px -1px rgba(0,0,0,.35)"><i data-lucide="trash-2" style="width:14px;height:14px"></i></button>
         <div style="padding:8px">
           <div style="font-size:11px;font-weight:700;color:var(--fp-accent);text-transform:uppercase">${escapeHtml(DL[d.type] || d.type || 'Document')}</div>
           <input class="doc-rename" data-id="${escapeHtml(d.id)}" value="${escapeHtml(d.label || '')}" placeholder="Renommer…" title="Cliquer pour renommer" style="width:100%;font-size:12px;color:#334155;border:1px solid transparent;border-radius:6px;padding:2px 5px;background:transparent">
@@ -2131,6 +2132,56 @@
       const lbl = $('doc-view-label'); if (lbl) lbl.textContent = (docView === 'drive') ? 'Vue liste' : 'Vue dossiers';
       renderDocuments();
     });
+
+    // ----- Nettoyer les liens Drive : APERÇU (liste) puis suppression sur confirmation -----
+    // Un document « en lien Drive » = son fichier pointe vers Google Drive (driveId, ou url drive.google.com) ;
+    // les PDF déjà uploadés sur le site (coffre Supabase) NE sont PAS concernés. On ne touche PAS aux factures.
+    const isDriveDoc = d => !!(d && (d.driveId || /drive\.google\.com/i.test(String(d.url || ''))));
+    function openCleanDrive() {
+      const DL = docLabels();
+      const list = (docs || []).filter(isDriveDoc);
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,61,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+      const rowsHtml = list.map(d => {
+        const immat = vehImmat(d.vehiculeId) || 'Sans plaque';
+        const type = DL[d.type] || d.type || 'Document';
+        const when = ts(d) ? FP.date(ts(d).slice(0, 10)) : '—';
+        const u = d.url || (d.driveId ? ('https://drive.google.com/file/d/' + d.driveId + '/view') : '');
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid #eef2f7;font-size:13px">
+          <span style="font-family:monospace;font-weight:800;color:#0f1e3d;min-width:78px">${escapeHtml(immat)}</span>
+          <span style="font-weight:700;color:var(--fp-accent);text-transform:uppercase;font-size:11px;min-width:110px">${escapeHtml(type)}</span>
+          <span style="flex:1;min-width:0;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(d.label || '(sans nom)')}</span>
+          <span style="color:#94a3b8;white-space:nowrap">${escapeHtml(when)}</span>
+          ${u ? `<a href="${escapeHtml(u)}" target="_blank" rel="noopener" title="Voir avant suppression" style="color:#0e7490">↗</a>` : ''}
+        </div>`;
+      }).join('');
+      ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:720px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">
+        <div style="padding:16px 18px;border-bottom:1px solid #eef2f7">
+          <div style="font-size:17px;font-weight:800;color:#0f1e3d;display:flex;align-items:center;gap:8px"><i data-lucide="link-2-off" style="width:20px;height:20px;color:#b45309"></i> Nettoyer les liens Drive</div>
+          <div style="font-size:13px;color:#64748b;margin-top:4px">${list.length ? `<b>${list.length}</b> document(s) pointent vers un lien Google Drive et seront <b style="color:#b91c1c">supprimés entièrement</b> (entrée + lien). Les <b>factures</b> ne sont pas touchées. ⚠️ Ces documents disparaîtront aussi de la <b>fiche du véhicule</b>. Tu pourras ré-uploader tes PDF ensuite.` : 'Aucun document en lien Drive. 🎉 Rien à nettoyer.'}</div>
+        </div>
+        ${list.length ? `<div style="overflow:auto;flex:1">${rowsHtml}</div>` : ''}
+        <div style="padding:14px 18px;border-top:1px solid #eef2f7;display:flex;gap:10px;justify-content:flex-end">
+          <button type="button" data-cd-cancel class="btn btn-outline">${list.length ? 'Annuler' : 'Fermer'}</button>
+          ${list.length ? `<button type="button" data-cd-go class="btn" style="background:#b91c1c;color:#fff"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer les ${list.length} liens Drive</button>` : ''}
+        </div>
+      </div>`;
+      document.body.appendChild(ov);
+      if (window.lucide) lucide.createIcons();
+      const close = () => ov.remove();
+      ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-cd-cancel]')) close(); });
+      const go = ov.querySelector('[data-cd-go]');
+      if (go) go.addEventListener('click', async () => {
+        go.disabled = true; go.textContent = 'Suppression…';
+        const ids = list.map(d => d.id);
+        for (const id of ids) { try { if (FP.persist) await FP.persist.delete('documents', id); } catch (e) {} }
+        docs = docs.filter(d => !isDriveDoc(d));
+        close();
+        renderDocuments();
+        if (FP.toast) FP.toast(`✓ ${ids.length} lien(s) Drive supprimé(s)`);
+      });
+    }
+    { const b = $('doc-clean-drive'); if (b) b.addEventListener('click', openCleanDrive); }
     $('doc-drive').addEventListener('click', async e => {
       const f = e.target.closest('[data-folder]'); if (f) { driveFolder = f.dataset.folder; driveYear = null; renderDrive(); return; }
       const y = e.target.closest('[data-year]'); if (y) { driveYear = y.dataset.year; renderDrive(); return; }
