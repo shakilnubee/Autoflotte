@@ -1834,6 +1834,11 @@
     };
     // Libellés = types de base + types personnalisés créés par l'utilisateur (réglages partagés)
     const docLabels = () => Object.assign({}, BASE_LABELS, (FP.settings.get().docTypes) || {});
+    // ⚠️ L'IA (FP.detectDoc) renvoie des types génériques ('facture', 'carte-grise'…) qui NE
+    // correspondent PAS toujours aux clés des catégories Documents (ex. 'facture' ≠ 'facture-achat').
+    // Ce mapping traduit le type détecté vers la bonne catégorie Documents ; sinon on retombe sur 'autre'.
+    const DET_TO_DOCCAT = { 'facture': 'facture-achat', 'controle-technique': 'controle-technique', 'pv': 'pv', 'carte-grise': 'carte-grise', 'assurance': 'assurance', 'permis': 'autre', 'carte-identite': 'autre', 'sinistre': 'autre' };
+    const detDocCat = (t) => { const DL = docLabels(); const k = DET_TO_DOCCAT[t] || t; return (k && DL[k]) ? k : 'autre'; };
     let docs = null, loaded = false;
     const vehImmat = id => { const v = (window.FP_DATA.vehicules||[]).find(x => x.id === id); return v ? v.immat : (id || '?'); };
     const ts = d => d.createdAt || d.created_at || '';
@@ -2192,47 +2197,62 @@
       if (!files.length) { if (FP.toast) FP.toast('Aucune image ou PDF sélectionné.'); return; }
       if (!(window.FP && FP.uploadScan && FP.persist)) { alert('Connexion requise pour enregistrer en ligne.'); return; }
       const DL = docLabels();
-      const vehs = (window.FP_DATA && window.FP_DATA.vehicules) || [];
+      const vehs = ((window.FP_DATA && window.FP_DATA.vehicules) || []).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
       const ov = document.createElement('div');
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,61,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-      ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:640px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">
-        <div style="padding:16px 18px;border-bottom:1px solid #eef2f7;font-size:16px;font-weight:800;color:#0f1e3d;display:flex;align-items:center;gap:8px"><i data-lucide="files" style="width:20px;height:20px;color:var(--fp-accent)"></i> Import en masse — tri automatique</div>
+      ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:720px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">
+        <div style="padding:16px 18px;border-bottom:1px solid #eef2f7;font-size:16px;font-weight:800;color:#0f1e3d;display:flex;align-items:center;gap:8px"><i data-lucide="files" style="width:20px;height:20px;color:var(--fp-accent)"></i> Import en masse — l'IA propose, tu confirmes</div>
         <div id="doclot-body" style="padding:16px 18px;overflow:auto;flex:1;font-size:13px;color:#334155"></div>
-        <div style="padding:12px 18px;border-top:1px solid #eef2f7;display:flex;justify-content:flex-end"><button type="button" id="doclot-close" class="btn btn-outline" disabled style="opacity:.5">Fermer</button></div>
+        <div id="doclot-foot" style="padding:12px 18px;border-top:1px solid #eef2f7;display:flex;gap:10px;justify-content:flex-end"></div>
       </div>`;
       document.body.appendChild(ov);
       if (window.lucide) lucide.createIcons();
-      const body = ov.querySelector('#doclot-body');
-      const closeBtn = ov.querySelector('#doclot-close');
-      if (!docs) docs = [];
-      let ok = 0, sansPlaque = 0, fail = 0; const lignes = [];
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i];
-        body.innerHTML = `<div style="display:inline-flex;align-items:center;gap:8px"><span class="fa-spin"></span> Lecture ${i + 1}/${files.length} : ${escapeHtml(f.name)}…</div>
-          <div style="margin-top:8px;color:#64748b">✓ ${ok} rangé(s) · ${sansPlaque} sans plaque · ${fail} échec(s)</div>`;
-        let det = { vehicule: null, type: 'autre' };
-        try { if (FP.ocr && FP.detectDoc) { const text = await FP.ocr.fileToText(f); det = FP.detectDoc(text, vehs) || det; } } catch (e) {}
-        let url = null;
-        try { url = await FP.uploadScan(f, 'documents'); } catch (e) {}
-        if (!url) { fail++; lignes.push({ name: f.name, txt: 'échec upload', col: '#b91c1c' }); continue; }
-        const vehId = det.vehicule ? det.vehicule.id : null;
-        const type = (det.type && DL[det.type]) ? det.type : 'autre';
-        const doc = { id: 'D' + Date.now().toString(36) + i, vehiculeId: vehId, type, label: f.name, url, driveId: null };
-        try {
-          await FP.persist.insert('documents', doc);
-          doc.createdAt = new Date().toISOString(); docs.push(doc);
-          if (vehId) { ok++; lignes.push({ name: f.name, txt: (det.vehicule.immat || '?') + ' · ' + (DL[type] || type), col: '#047857' }); }
-          else { sansPlaque++; lignes.push({ name: f.name, txt: 'Sans plaque — à ranger', col: '#b45309' }); }
-        } catch (e) { fail++; lignes.push({ name: f.name, txt: 'échec enregistrement', col: '#b91c1c' }); }
-      }
-      body.innerHTML = `<div style="font-weight:800;color:#047857;margin-bottom:6px">✓ ${ok} document(s) rangé(s) automatiquement${sansPlaque ? ` · <span style="color:#b45309">${sansPlaque} sans plaque (dossier « Sans plaque »)</span>` : ''}${fail ? ` · <span style="color:#b91c1c">${fail} échec(s)</span>` : ''}</div>
-        <div style="max-height:46vh;overflow:auto;border-top:1px solid #eef2f7;padding-top:8px">${lignes.map(l => `<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(l.name)}</span><b style="white-space:nowrap;color:${l.col}">${escapeHtml(l.txt)}</b></div>`).join('')}</div>`;
-      closeBtn.disabled = false; closeBtn.style.opacity = '1';
-      renderDocuments();
-      if (FP.toast) FP.toast(`✓ ${ok + sansPlaque} document(s) importé(s)`);
+      const body = ov.querySelector('#doclot-body'), foot = ov.querySelector('#doclot-foot');
       const close = () => ov.remove();
-      closeBtn.addEventListener('click', close);
       ov.addEventListener('click', e => { if (e.target === ov) close(); });
+      // --- PHASE 1 : l'IA lit chaque fichier et PROPOSE un véhicule + une catégorie ---
+      const rows = [];
+      for (let i = 0; i < files.length; i++) {
+        body.innerHTML = `<div style="display:inline-flex;align-items:center;gap:8px"><span class="fa-spin"></span> Analyse ${i + 1}/${files.length} : ${escapeHtml(files[i].name)}…</div>`;
+        let det = { vehicule: null, type: 'autre' };
+        try { if (FP.ocr && FP.detectDoc) { const text = await FP.ocr.fileToText(files[i]); det = FP.detectDoc(text, vehs) || det; } } catch (e) {}
+        rows.push({ file: files[i], vehId: det.vehicule ? det.vehicule.id : '', type: detDocCat(det.type) });
+      }
+      // --- PHASE 2 : revue éditable (véhicule + catégorie pré-remplis par l'IA) avant enregistrement ---
+      const selStyle = 'border:1px solid var(--fp-border);border-radius:6px;padding:3px 6px;font-size:12px;max-width:140px';
+      const vehOpts = sel => `<option value="">— Sans plaque —</option>` + vehs.map(v => `<option value="${escapeHtml(v.id)}" ${sel === v.id ? 'selected' : ''}>${escapeHtml(v.immat || '?')}</option>`).join('');
+      const typeOpts = sel => Object.keys(DL).map(t => `<option value="${t}" ${sel === t ? 'selected' : ''}>${escapeHtml(DL[t])}</option>`).join('');
+      body.innerHTML = `<div style="margin-bottom:10px;color:#475569">L'IA a reconnu chaque document. <b>Vérifie / corrige</b> le véhicule et la catégorie, puis enregistre.</div>`
+        + rows.map((r, i) => `<div data-drow="${i}" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eef2f7">
+            <i data-lucide="file-text" style="width:16px;height:16px;color:#94a3b8;flex:none"></i>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${escapeHtml(r.file.name)}</span>
+            <select class="dl-veh" style="${selStyle}">${vehOpts(r.vehId)}</select>
+            <select class="dl-type" style="${selStyle}">${typeOpts(r.type)}</select>
+          </div>`).join('');
+      foot.innerHTML = `<button type="button" id="doclot-cancel" class="btn btn-outline">Annuler</button><button type="button" id="doclot-save" class="btn btn-dark"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer ${rows.length} document(s)</button>`;
+      if (window.lucide) lucide.createIcons();
+      ov.querySelector('#doclot-cancel').addEventListener('click', close);
+      ov.querySelector('#doclot-save').addEventListener('click', async () => {
+        const saveBtn = ov.querySelector('#doclot-save'); saveBtn.disabled = true;
+        const rowEls = body.querySelectorAll('[data-drow]');
+        if (!docs) docs = [];
+        let ok = 0, fail = 0;
+        for (let i = 0; i < rows.length; i++) {
+          const el = rowEls[i];
+          const vehId = (el.querySelector('.dl-veh').value) || null;
+          const type = el.querySelector('.dl-type').value || 'autre';
+          saveBtn.innerHTML = `⏳ Enregistrement ${i + 1}/${rows.length}…`;
+          let url = null;
+          try { url = await FP.uploadScan(rows[i].file, 'documents'); } catch (e) {}
+          if (!url) { fail++; continue; }
+          const doc = { id: 'D' + Date.now().toString(36) + i, vehiculeId: vehId, type, label: rows[i].file.name, url, driveId: null };
+          try { await FP.persist.insert('documents', doc); doc.createdAt = new Date().toISOString(); docs.push(doc); ok++; }
+          catch (e) { fail++; }
+        }
+        close();
+        renderDocuments();
+        if (FP.toast) FP.toast(`✓ ${ok} document(s) enregistré(s)${fail ? ` · ${fail} échec(s)` : ''}`);
+      });
     }
     { const b = $('doc-import-lot'), inp = $('doc-lot-file');
       if (b && inp) { b.addEventListener('click', () => inp.click()); inp.addEventListener('change', e => { const fl = e.target.files; if (fl && fl.length) handleDocLot(fl); e.target.value = ''; }); } }
@@ -2325,7 +2345,7 @@
         const found = [];
         if (det.vehicule && !$('di-veh').value) { $('di-veh').value = det.vehicule.id; $('di-veh').dispatchEvent(new Event('change')); found.push('véhicule <b>'+det.vehicule.immat+'</b>'); }
         else if (det.vehicule) found.push('véhicule <b>'+det.vehicule.immat+'</b>');
-        if (det.type && det.type !== 'autre') { $('di-type').value = det.type; found.push('type <b>'+(docLabels()[det.type]||det.type)+'</b>'); }
+        const _cat = detDocCat(det.type); if (_cat && _cat !== 'autre') { $('di-type').value = _cat; found.push('type <b>'+(docLabels()[_cat]||_cat)+'</b>'); }
         if (found.length) { dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#ECFDF5;color:#047857'); dd.innerHTML = '✓ Détecté : ' + found.join(' · ') + ' · <a href="#" class="di-clear" style="color:#047857;font-weight:700;text-decoration:underline">✕ retirer le fichier</a>'; }
         else { dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#FEF2F2;color:#B91C1C'); dd.innerHTML = "Véhicule non reconnu sur le document — choisis-le dans la liste. · <a href=\"#\" class=\"di-clear\" style=\"color:#B91C1C;font-weight:700;text-decoration:underline\">✕ retirer le fichier</a>"; }
       } catch (e) { console.error('[di detect]', e); dd.className='hidden'; }
