@@ -5025,16 +5025,16 @@ FP.affectations = {
     s.affectations[vehId] = list;
     FP.settings.save(s);
   },
-  // ⚠️ INITIALISATION UNIQUE (non destructive) du km de départ des conducteurs ACTUELS des véhicules
+  // ⚠️ INITIALISATION (non destructive, IDEMPOTENTE) du km de départ des conducteurs ACTUELS des véhicules
   // NON-LEASING : on GÈLE le km de début de l'affectation en cours au DERNIER RELEVÉ km connu (= km actuel),
   // et la date de début à celle du dernier relevé si on la connaît. But (consigne) : « commencer à partir
-  // du dernier relevé km ». Ne s'exécute qu'UNE fois par société (drapeau affectKmInitV1) et ne touche
-  // JAMAIS un km déjà saisi → une modif ultérieure du véhicule ne « remet pas à aujourd'hui » le compteur.
-  // Les LEASINGS sont exclus (ils démarrent à 0 automatiquement, cf. kmPeriode).
+  // du dernier relevé km ». Ne touche JAMAIS un km déjà présent (guard `kmDebut == null`) → une modif
+  // ultérieure du véhicule ne « remet pas à aujourd'hui » le compteur, et un conducteur/véhicule AJOUTÉ
+  // plus tard est rattrapé au prochain passage (pas de drapeau global qui bloquait les nouveaux).
+  // Les LEASINGS sont exclus (ils démarrent à 0 automatiquement, cf. kmPeriode). N'écrit que si ça change.
   initDebutsNonLeasing(data) {
     data = data || (typeof window !== 'undefined' ? window.FP_DATA : null) || {};
     const s = FP.settings.get();
-    if (s.affectKmInitV1) return 0;                 // déjà initialisé pour cette société
     s.affectations = (s.affectations && typeof s.affectations === 'object') ? s.affectations : {};
     let changed = 0;
     (data.vehicules || []).forEach(v => {
@@ -5057,8 +5057,7 @@ FP.affectations = {
         changed++;
       }
     });
-    s.affectKmInitV1 = true;                                        // marqueur : ne plus jamais re-geler
-    FP.settings.save(s);
+    if (changed) FP.settings.save(s);                              // n'écrit QUE si quelque chose a été gelé
     return changed;
   },
   // Renomme un conducteur dans tout l'historique (suit un renommage de fiche).
@@ -5086,7 +5085,7 @@ FP.kmParConducteur = (data) => {
     const nom = (a && a.conducteur != null ? String(a.conducteur) : '').trim();
     if (!nom || nom === '—') return;
     const km = FP.affectations.kmPeriode(veh, a);
-    if (km == null || km <= 0) return;
+    if (km == null || km < 0) return;   // on INCLUT 0 km (conducteur actuel dont le compteur vient de démarrer)
     const key = FP.condGroupKey ? FP.condGroupKey(nom) : (FP.normNomComplet ? FP.normNomComplet(nom) : nom.toLowerCase());
     if (!map[key]) map[key] = { nom, km: 0, periodes: 0, vehicules: new Set() };
     map[key].km += km; map[key].periodes++; if (veh && veh.immat) map[key].vehicules.add(veh.immat);
