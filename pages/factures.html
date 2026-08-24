@@ -1839,6 +1839,24 @@
     // Ce mapping traduit le type détecté vers la bonne catégorie Documents ; sinon on retombe sur 'autre'.
     const DET_TO_DOCCAT = { 'facture': 'facture-achat', 'controle-technique': 'controle-technique', 'pv': 'pv', 'carte-grise': 'carte-grise', 'assurance': 'assurance', 'permis': 'autre', 'carte-identite': 'autre', 'sinistre': 'autre' };
     const detDocCat = (t) => { const DL = docLabels(); const k = DET_TO_DOCCAT[t] || t; return (k && DL[k]) ? k : 'autre'; };
+    // ⚠️ SOURCE UNIQUE de reconnaissance d'un document (unitaire ET en masse) : IA VISION d'abord
+    // (FP.scanIA — la même que le scan de factures, fiable sur photos/scans), repli OCR (Tesseract) si
+    // l'IA est momentanément indisponible. Retrouve le véhicule par PLAQUE ou par VIN, et la catégorie.
+    async function detectDocFor(file) {
+      const vehs = (window.FP_DATA && window.FP_DATA.vehicules) || [];
+      const normPl = s => FP.normImmat ? FP.normImmat(s) : String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const normVin = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      let ia = null;
+      try { if (FP.scanIA) ia = await FP.scanIA(file, 'facture'); } catch (e) {}
+      if (ia) {
+        const pl = normPl(ia.vehiculeImmat || '');
+        let veh = pl ? vehs.find(v => normPl(v.immat) === pl) : null;
+        if (!veh && ia.vin) { const nv = normVin(ia.vin); if (nv.length >= 11) veh = vehs.find(v => v.vin && normVin(v.vin) === nv); }
+        return { vehicule: veh || null, type: detDocCat(ia.docType), source: 'ia' };
+      }
+      try { if (FP.ocr && FP.detectDoc) { const text = await FP.ocr.fileToText(file); const det = FP.detectDoc(text, vehs) || {}; return { vehicule: det.vehicule || null, type: detDocCat(det.type), source: 'ocr' }; } } catch (e) {}
+      return { vehicule: null, type: 'autre', source: 'none' };
+    }
     let docs = null, loaded = false;
     const vehImmat = id => { const v = (window.FP_DATA.vehicules||[]).find(x => x.id === id); return v ? v.immat : (id || '?'); };
     const ts = d => d.createdAt || d.created_at || '';
@@ -2210,27 +2228,13 @@
       const body = ov.querySelector('#doclot-body'), foot = ov.querySelector('#doclot-foot');
       const close = () => ov.remove();
       ov.addEventListener('click', e => { if (e.target === ov) close(); });
-      // --- PHASE 1 : l'IA VISION lit chaque fichier (bien meilleure que l'OCR sur les photos/scans)
-      // et PROPOSE un véhicule (par plaque OU par VIN) + une catégorie. Repli sur l'OCR si l'IA indispo.
-      const normPl = s => FP.normImmat ? FP.normImmat(s) : String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const normVin = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      // --- PHASE 1 : l'IA VISION lit chaque fichier (source unique detectDocFor : vision d'abord, repli
+      // OCR) et PROPOSE un véhicule (par plaque OU par VIN) + une catégorie. ---
       const rows = [];
       for (let i = 0; i < files.length; i++) {
         body.innerHTML = `<div style="display:inline-flex;align-items:center;gap:8px"><span class="fa-spin"></span> Analyse ${i + 1}/${files.length} (IA vision) : ${escapeHtml(files[i].name)}…</div>`;
-        let vehId = '', type = 'autre';
-        let ia = null;
-        try { if (FP.scanIA) ia = await FP.scanIA(files[i], 'facture'); } catch (e) {}
-        if (ia) {
-          const pl = normPl(ia.vehiculeImmat || '');
-          let hit = pl ? vehs.find(v => normPl(v.immat) === pl) : null;
-          if (!hit && ia.vin) { const nv = normVin(ia.vin); if (nv.length >= 11) hit = vehs.find(v => v.vin && normVin(v.vin) === nv); }
-          if (hit) vehId = hit.id;
-          type = detDocCat(ia.docType);
-        } else {
-          // Repli OCR (Tesseract) + detectDoc si l'IA vision est momentanément indisponible.
-          try { if (FP.ocr && FP.detectDoc) { const text = await FP.ocr.fileToText(files[i]); const det = FP.detectDoc(text, vehs) || {}; if (det.vehicule) vehId = det.vehicule.id; type = detDocCat(det.type); } } catch (e) {}
-        }
-        rows.push({ file: files[i], vehId, type });
+        const det = await detectDocFor(files[i]);
+        rows.push({ file: files[i], vehId: det.vehicule ? det.vehicule.id : '', type: det.type });
       }
       // --- PHASE 2 : revue éditable (véhicule + catégorie pré-remplis par l'IA) avant enregistrement ---
       const selStyle = 'border:1px solid var(--fp-border);border-radius:6px;padding:3px 6px;font-size:12px;max-width:140px';
@@ -2352,14 +2356,13 @@
       const dd = $('di-detect');
       if (!f || !(window.FP && FP.ocr)) return;
       dd.className = ''; dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#F1F5F9;color:#475569');
-      dd.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="fa-spin"></span> Lecture du document…</span>';
+      dd.innerHTML = '<span style="display:inline-flex;align-items:center;gap:6px"><span class="fa-spin"></span> Lecture du document (IA vision)…</span>';
       try {
-        const text = await FP.ocr.fileToText(f);
-        const det = FP.detectDoc(text, (window.FP_DATA && window.FP_DATA.vehicules) || []);
+        const det = await detectDocFor(f);
         const found = [];
         if (det.vehicule && !$('di-veh').value) { $('di-veh').value = det.vehicule.id; $('di-veh').dispatchEvent(new Event('change')); found.push('véhicule <b>'+det.vehicule.immat+'</b>'); }
         else if (det.vehicule) found.push('véhicule <b>'+det.vehicule.immat+'</b>');
-        const _cat = detDocCat(det.type); if (_cat && _cat !== 'autre') { $('di-type').value = _cat; found.push('type <b>'+(docLabels()[_cat]||_cat)+'</b>'); }
+        const _cat = det.type; if (_cat && _cat !== 'autre') { $('di-type').value = _cat; found.push('type <b>'+(docLabels()[_cat]||_cat)+'</b>'); }
         if (found.length) { dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#ECFDF5;color:#047857'); dd.innerHTML = '✓ Détecté : ' + found.join(' · ') + ' · <a href="#" class="di-clear" style="color:#047857;font-weight:700;text-decoration:underline">✕ retirer le fichier</a>'; }
         else { dd.setAttribute('style','font-size:12px;border-radius:8px;padding:8px 10px;background:#FEF2F2;color:#B91C1C'); dd.innerHTML = "Véhicule non reconnu sur le document — choisis-le dans la liste. · <a href=\"#\" class=\"di-clear\" style=\"color:#B91C1C;font-weight:700;text-decoration:underline\">✕ retirer le fichier</a>"; }
       } catch (e) { console.error('[di detect]', e); dd.className='hidden'; }
