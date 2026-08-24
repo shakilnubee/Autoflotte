@@ -495,6 +495,27 @@ Deno.serve(async (req) => {
         return json({ ok: true, sens, photos: photos.length, km: kmValid ? kmEdl : null });
       }
 
+      // === Question / demande du conducteur (portail QR) ===
+      // Le conducteur pose une question libre → on l'enregistre comme « demande conducteur »
+      // (type 'question', statut 'nouveau') → même badge + alerte + inbox que les sinistres.
+      if (action === "question") {
+        const qtok0 = String(body.q || "").trim();
+        if (!qtok0) return json({ error: "QR incomplet." }, 400);
+        const { qr, err } = await loadQr(db, qtok0);
+        if (err) return json({ error: err }, 404);
+        const question = String(body.description || "").trim();
+        if (!question) return json({ error: "Écris ta question." }, 400);
+        const photos = await uploadPhotos(db, body.photos, "questions/" + (qr.plaque || "veh"));
+        const ins = await db.from("declarations_conducteur").insert({
+          id: genId("dc"), vehicule_id: qr.vehicule_id, plaque: qr.plaque || "", societe: qr.societe || "PXP",
+          type: "question",
+          date_incident: new Date().toISOString().slice(0, 10),
+          description: question.slice(0, 4000), photos, statut: "nouveau",
+        });
+        if (ins.error) return json({ error: "Échec de l'envoi. Réessaie." }, 500);
+        return json({ ok: true, type: "question", photos: photos.length });
+      }
+
       const qtok = String(body.q || "").trim();
       const token = String(body.t || "").trim();
       const km = Math.round(Number(body.km));
@@ -536,6 +557,18 @@ Deno.serve(async (req) => {
           token: "qr-" + crypto.randomUUID(), vehicule_id: vehiculeId, plaque, societe,
           chauffeur, km_avant: kmRef, km_recu: km, used_at: now, source: "qr",
         });
+        // Notifie le gestionnaire : un relevé km SPONTANÉ (portail QR) crée une « demande conducteur »
+        // (type 'km', statut 'nouveau') → même badge + alerte + inbox que les sinistres. Best-effort :
+        // si la table manque, le relevé km reste enregistré dans km_requests.
+        try {
+          await db.from("declarations_conducteur").insert({
+            id: genId("dc"), vehicule_id: vehiculeId, plaque: plaque || "", societe: societe || "PXP",
+            type: "km",
+            date_incident: now.slice(0, 10),
+            description: `Relevé kilométrique : ${km.toLocaleString("fr-FR")} km`,
+            photos: [], statut: "nouveau",
+          });
+        } catch (_e) { /* l'alerte est best-effort */ }
       } else {
         // Lien e-mail : marque la demande comme répondue (idempotent).
         await db.from("km_requests").update({ km_recu: km, used_at: now }).eq("token", token);

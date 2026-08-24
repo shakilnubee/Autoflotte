@@ -4154,7 +4154,7 @@ try { window.addEventListener('fp:data-ready', () => { if (FP.refreshProspectsBa
 
 // Badge rouge « demandes conducteur » (déclarations envoyées depuis le QR véhicule, statut 'nouveau')
 // sur le lien Sinistres du menu. Isolation société = RLS (le compte ne compte que sa société).
-FP.declCondCount = 0; FP.declCondSinCount = 0; FP.declCondEdlCount = 0;
+FP.declCondCount = 0; FP.declCondSinCount = 0; FP.declCondEdlCount = 0; FP.declCondKmCount = 0; FP.declCondQuestionCount = 0;
 FP.refreshDeclCondBadge = async () => {
   try {
     if (!FP.supabase) return;
@@ -4170,7 +4170,10 @@ FP.refreshDeclCondBadge = async () => {
     const _rows = r.data || [];
     const count = _rows.length;
     FP.declCondEdlCount = _rows.filter(x => String(x.type || '') === 'etat_lieux').length;
-    FP.declCondSinCount = count - FP.declCondEdlCount;
+    FP.declCondKmCount = _rows.filter(x => String(x.type || '') === 'km').length;
+    FP.declCondQuestionCount = _rows.filter(x => String(x.type || '') === 'question').length;
+    // Sinistres/problèmes = tout le reste (types 'sinistre'/'probleme' ou vide).
+    FP.declCondSinCount = count - FP.declCondEdlCount - FP.declCondKmCount - FP.declCondQuestionCount;
     const changed = (count !== FP.declCondCount); FP.declCondCount = count;
     // Le compteur arrive en ASYNC après fp:data-ready → on prévient les vues d'alertes de se re-rendre
     // (dashboard « À traiter », page Suivi & alertes) pour que l'alerte « demande conducteur » apparaisse.
@@ -5899,6 +5902,32 @@ FP.buildAlertes = (data) => {
         detail: 'Un conducteur a envoyé des photos d\'état des lieux depuis le QR véhicule — à consulter dans Sinistres (Demandes conducteur).',
         sort: -90, target: 'sinistres.html',
         muteKey: 'decledl|' + nEdl,
+      });
+    }
+  } catch (e) {}
+  // Questions posées par un conducteur depuis le QR véhicule (à répondre).
+  try {
+    const nQ = FP.declCondQuestionCount || 0;
+    if (nQ > 0) {
+      out.push({
+        niveau: 'warning', categorie: 'Conducteurs',
+        message: nQ > 1 ? `${nQ} questions de conducteur` : `1 question de conducteur`,
+        detail: 'Un conducteur a posé une question depuis le QR véhicule — à consulter dans Sinistres (Demandes conducteur).',
+        sort: -95, target: 'sinistres.html',
+        muteKey: 'declque|' + nQ,
+      });
+    }
+  } catch (e) {}
+  // Relevés kilométriques envoyés spontanément par un conducteur depuis le QR véhicule.
+  try {
+    const nKm = FP.declCondKmCount || 0;
+    if (nKm > 0) {
+      out.push({
+        niveau: 'info', categorie: 'Relevé KM',
+        message: nKm > 1 ? `${nKm} relevés kilométriques reçus` : `1 relevé kilométrique reçu`,
+        detail: 'Un conducteur a relevé son kilométrage depuis le QR véhicule — à consulter dans Sinistres (Demandes conducteur).',
+        sort: -80, target: 'sinistres.html',
+        muteKey: 'declkm|' + nKm,
       });
     }
   } catch (e) {}
