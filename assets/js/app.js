@@ -3162,6 +3162,137 @@ FP.ensureJsPDF = function () {
   } catch (e) {}
 })();
 
+// === NOTIFICATIONS PUSH (Web Push / VAPID) ==================================
+// Permet à un gestionnaire/admin de recevoir une notification sur son téléphone ou
+// son ordinateur — MÊME appli fermée — quand un conducteur soumet quelque chose via
+// son QR (relevé km, sinistre/problème, question, état des lieux). L'abonnement du
+// navigateur est enregistré dans Supabase (table push_subscriptions, isolé par société),
+// et l'Edge Function km-collect envoie le push via la clé VAPID (secret serveur).
+// ⚠️ Ici on ne met QUE la clé PUBLIQUE VAPID (non secrète, comme la clé Supabase publique).
+FP.push = {
+  // Clé PUBLIQUE VAPID (identifie l'expéditeur des push ; sûre à exposer côté client).
+  VAPID_PUBLIC: 'BC72FQ-8eo9eDqHYrUFA8iA0NOiRgLH2lENOKONLuVyz8Fv5e7xI_l9TN8yz4JpebybwS5Md3ENV1Qee6K9jweg',
+  supported() {
+    return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
+  },
+  _u8(base64) {
+    const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+    const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(b64); const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  },
+  permission() { try { return Notification.permission; } catch (e) { return 'denied'; } },
+  async _reg() {
+    if (!('serviceWorker' in navigator)) return null;
+    try {
+      const base = location.pathname.indexOf('/pages/') !== -1 ? '../' : './';
+      await navigator.serviceWorker.register(base + 'sw.js').catch(() => {});
+      return await navigator.serviceWorker.ready;
+    } catch (e) { return null; }
+  },
+  async isSubscribed() {
+    if (!this.supported()) return false;
+    try { const reg = await navigator.serviceWorker.ready; return !!(await reg.pushManager.getSubscription()); }
+    catch (e) { return false; }
+  },
+  // état : 'unsupported' | 'denied' | 'subscribed' | 'off'
+  async state() {
+    if (!this.supported()) return 'unsupported';
+    if (this.permission() === 'denied') return 'denied';
+    return (await this.isSubscribed()) ? 'subscribed' : 'off';
+  },
+  _societe() {
+    let s = 'PXP';
+    try { s = (FP.activeSociete ? FP.activeSociete() : 'PXP') || 'PXP'; } catch (e) {}
+    // '__all__' (vue CEO toutes sociétés) n'est pas une vraie société → on rattache à PXP par défaut.
+    return (s === '__all__') ? 'PXP' : s;
+  },
+  // Active les notifications sur CET appareil : demande la permission, s'abonne au push,
+  // et enregistre l'abonnement dans Supabase (upsert par endpoint = 1 ligne par appareil).
+  async subscribe() {
+    if (!this.supported()) throw new Error("Cet appareil/navigateur ne gère pas les notifications push.");
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') throw new Error("Notifications refusées. Autorise-les dans les réglages du navigateur.");
+    const reg = await this._reg();
+    if (!reg) throw new Error("Service worker indisponible.");
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: this._u8(this.VAPID_PUBLIC) });
+    const j = sub.toJSON();
+    let email = '', userId = null;
+    try { const u = await FP.auth.getUser(); email = (u && u.email) || ''; userId = (u && u.id) || null; } catch (e) {}
+    const row = {
+      societe: this._societe(), user_id: userId, email,
+      endpoint: j.endpoint, p256dh: j.keys && j.keys.p256dh, auth: j.keys && j.keys.auth,
+      user_agent: (navigator.userAgent || '').slice(0, 300),
+    };
+    try {
+      const c = FP.supabase;
+      if (c) { const r = await c.from('push_subscriptions').upsert(row, { onConflict: 'endpoint' }); if (r.error) throw r.error; }
+      else await FP.db.insert('push_subscriptions', row);
+    } catch (e) { throw new Error("Enregistrement impossible : " + (e.message || e)); }
+    return true;
+  },
+  // Désactive sur CET appareil : désabonne le navigateur + supprime la ligne Supabase.
+  async unsubscribe() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        const ep = sub.endpoint;
+        await sub.unsubscribe().catch(() => {});
+        try { const c = FP.supabase; if (c) await c.from('push_subscriptions').delete().eq('endpoint', ep); } catch (e) {}
+      }
+    } catch (e) {}
+    return true;
+  },
+  // Injecte un bouton-bascule prêt à l'emploi dans un conteneur (utilisé dans Paramètres).
+  // Réservé aux rôles qui gèrent la flotte (admin/gestionnaire) — un chauffeur n'en a pas besoin.
+  async renderToggle(container) {
+    if (!container) return;
+    const st = await this.state();
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;align-items:center;gap:12px;flex-wrap:wrap';
+    const btn = document.createElement('button');
+    btn.className = 'fp-btn';
+    const info = document.createElement('span');
+    info.style.cssText = 'font-size:13px;color:var(--fp-muted,#64748B)';
+    const paint = (state) => {
+      if (state === 'unsupported') {
+        btn.textContent = '🔔 Non disponible'; btn.disabled = true;
+        btn.style.cssText = 'opacity:.6;cursor:not-allowed;padding:10px 16px;border-radius:10px;border:1px solid #CBD5E1;background:#F1F5F9;font-weight:600';
+        info.textContent = "Ouvre le site dans Safari/Chrome (ou installe l'appli) pour activer les notifications.";
+      } else if (state === 'denied') {
+        btn.textContent = '🔕 Bloquées'; btn.disabled = true;
+        btn.style.cssText = 'opacity:.7;cursor:not-allowed;padding:10px 16px;border-radius:10px;border:1px solid #FCA5A5;background:#FEF2F2;color:#B91C1C;font-weight:600';
+        info.textContent = "Notifications bloquées par le navigateur. Ré-autorise-les dans ses réglages, puis recharge.";
+      } else if (state === 'subscribed') {
+        btn.textContent = '🔔 Activées — désactiver'; btn.disabled = false;
+        btn.style.cssText = 'cursor:pointer;padding:10px 16px;border-radius:10px;border:1px solid #86EFAC;background:#DCFCE7;color:#166534;font-weight:700';
+        info.textContent = "Cet appareil reçoit les alertes conducteur (relevé km, sinistre, question, état des lieux).";
+      } else {
+        btn.textContent = '🔔 Activer sur cet appareil'; btn.disabled = false;
+        btn.style.cssText = 'cursor:pointer;padding:10px 16px;border-radius:10px;border:1px solid #3B82F6;background:#EFF6FF;color:#1D4ED8;font-weight:700';
+        info.textContent = "Reçois une notification (même appli fermée) quand un conducteur t'envoie quelque chose.";
+      }
+    };
+    paint(st);
+    btn.addEventListener('click', async () => {
+      const cur = await this.state();
+      btn.disabled = true; const old = btn.textContent; btn.textContent = '…';
+      try {
+        if (cur === 'subscribed') { await this.unsubscribe(); if (FP.toast) FP.toast('🔕 Notifications désactivées sur cet appareil'); }
+        else { await this.subscribe(); if (FP.toast) FP.toast('🔔 Notifications activées sur cet appareil'); }
+      } catch (e) {
+        if (FP.toast) FP.toast('⚠️ ' + (e.message || e), { danger: true }); else alert(e.message || e);
+      }
+      paint(await this.state());
+    });
+    wrap.appendChild(btn); wrap.appendChild(info);
+    container.innerHTML = ''; container.appendChild(wrap);
+  },
+};
+
 // === Navigation MOBILE : barre + menu latéral repliable (hamburger) ===
 // Injecté sur toutes les pages qui ont une sidebar. N'apparaît qu'en < 769px (CSS).
 (function mobileNav() {

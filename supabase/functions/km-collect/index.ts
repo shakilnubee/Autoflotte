@@ -16,6 +16,7 @@
 //    SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont injectés automatiquement.
 // ============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import webpush from "npm:web-push@3.6.7";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -312,6 +313,58 @@ function genId(prefix: string) {
   return prefix + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
 }
 
+// ─── NOTIFICATIONS PUSH (Web Push / VAPID) ───────────────────────────────────
+// Envoie une notification push à TOUS les appareils abonnés de la société (les
+// gestionnaires qui ont activé les notifs), quand un chauffeur soumet quelque chose
+// via son QR (relevé km, déclaration, question, état des lieux) — même appli fermée.
+//
+// ⚠️ La clé PRIVÉE VAPID vit UNIQUEMENT dans les secrets de l'Edge Function
+//    (VAPID_PRIVATE_KEY), jamais dans le repo. Best-effort : si les clés ne sont pas
+//    configurées ou l'envoi échoue, la soumission du chauffeur réussit quand même.
+let _vapidReady: boolean | null = null;
+function vapidReady(): boolean {
+  if (_vapidReady !== null) return _vapidReady;
+  const pub = Deno.env.get("VAPID_PUBLIC_KEY") || "";
+  const priv = Deno.env.get("VAPID_PRIVATE_KEY") || "";
+  const subj = Deno.env.get("VAPID_SUBJECT") || "mailto:contact@parc-pilot.fr";
+  if (!pub || !priv) { _vapidReady = false; return false; }
+  try { webpush.setVapidDetails(subj, pub, priv); _vapidReady = true; }
+  catch { _vapidReady = false; }
+  return _vapidReady;
+}
+
+async function sendPush(
+  db: ReturnType<typeof createClient>,
+  societe: string,
+  payload: { title: string; body: string; url?: string; tag?: string },
+) {
+  try {
+    if (!vapidReady()) return;
+    const soc = societe || "PXP";
+    const { data } = await db.from("push_subscriptions").select("id,endpoint,p256dh,auth").eq("societe", soc);
+    if (!Array.isArray(data) || !data.length) return;
+    const body = JSON.stringify({
+      title: payload.title || "Parc Pilot",
+      body: payload.body || "",
+      url: payload.url || "./notifications.html",
+      tag: payload.tag || undefined,
+      icon: "./assets/icons/icon-192.png",
+    });
+    await Promise.all((data as Array<Record<string, string>>).map(async (s) => {
+      const sub = { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } };
+      try {
+        await webpush.sendNotification(sub, body);
+      } catch (e) {
+        // 404/410 = abonnement expiré (appareil désinstallé / permission retirée) → on le supprime.
+        const code = e && (e as { statusCode?: number }).statusCode;
+        if (code === 404 || code === 410) {
+          try { await db.from("push_subscriptions").delete().eq("id", s.id); } catch { /* ignore */ }
+        }
+      }
+    }));
+  } catch { /* push best-effort : ne bloque jamais la soumission du chauffeur */ }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -428,6 +481,11 @@ Deno.serve(async (req) => {
         };
         const ins = await db.from("declarations_conducteur").insert(rec);
         if (ins.error) return json({ error: "Échec de l'enregistrement. Réessaie." }, 500);
+        await sendPush(db, qr.societe || "PXP", {
+          title: type === "probleme" ? "⚠️ Problème signalé" : "🚨 Sinistre déclaré",
+          body: `${qr.plaque || "Véhicule"} — un conducteur vient de faire une déclaration.`,
+          url: "./notifications.html", tag: "decl-" + (qr.vehicule_id || ""),
+        });
         return json({ ok: true, type, photos: photos.length });
       }
 
@@ -492,6 +550,11 @@ Deno.serve(async (req) => {
             photos, statut: "nouveau",
           });
         } catch (_e) { /* la table d'alerte peut manquer : l'envoi des photos réussit quand même */ }
+        await sendPush(db, qr.societe || "PXP", {
+          title: "📸 État des lieux reçu",
+          body: `${qr.plaque || "Véhicule"} — ${photos.length} photo(s) · ${label === "Sortie" ? "restitution" : "prise en main"}${kmValid ? ` · ${kmEdl.toLocaleString("fr-FR")} km` : ""}.`,
+          url: "./notifications.html", tag: "edl-" + (qr.vehicule_id || ""),
+        });
         return json({ ok: true, sens, photos: photos.length, km: kmValid ? kmEdl : null });
       }
 
@@ -513,6 +576,11 @@ Deno.serve(async (req) => {
           description: question.slice(0, 4000), photos, statut: "nouveau",
         });
         if (ins.error) return json({ error: "Échec de l'envoi. Réessaie." }, 500);
+        await sendPush(db, qr.societe || "PXP", {
+          title: "❓ Question d'un conducteur",
+          body: `${qr.plaque || "Véhicule"} — ${question.slice(0, 90)}`,
+          url: "./notifications.html", tag: "question-" + (qr.vehicule_id || ""),
+        });
         return json({ ok: true, type: "question", photos: photos.length });
       }
 
@@ -569,6 +637,11 @@ Deno.serve(async (req) => {
             photos: [], statut: "nouveau",
           });
         } catch (_e) { /* l'alerte est best-effort */ }
+        await sendPush(db, societe || "PXP", {
+          title: "🛣️ Nouveau relevé km",
+          body: `${plaque || "Véhicule"} — ${km.toLocaleString("fr-FR")} km relevés par le conducteur.`,
+          url: "./notifications.html", tag: "km-" + (vehiculeId || ""),
+        });
       } else {
         // Lien e-mail : marque la demande comme répondue (idempotent).
         await db.from("km_requests").update({ km_recu: km, used_at: now }).eq("token", token);
