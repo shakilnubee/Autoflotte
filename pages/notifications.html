@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260821g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260821f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260821g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260821f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260821g">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -142,11 +142,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260821f"></script>
-<script src="../assets/js/supabase-client.js?v=20260821f"></script>
-<script src="../assets/js/data.js?v=20260821f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260821g"></script>
+<script src="../assets/js/supabase-client.js?v=20260821g"></script>
+<script src="../assets/js/data.js?v=20260821g"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260821f"></script>
+<script src="../assets/js/app.js?v=20260821g"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -166,7 +166,9 @@
         <div class="font-semibold text-slate-900">${esc(a.message)}</div>
         ${a.detail ? `<div class="text-sm text-slate-500 mt-0.5">${esc(a.detail)}</div>` : ''}
         ${a.vehicules && a.vehicules.length ? (() => {
-          const _ln = x => `<a href="${esc(x.target)}" class="block text-xs text-slate-600 hover:text-slate-900 hover:underline py-0.5">• ${esc(x.label)}</a>`;
+          const _ln = x => x.immoId
+            ? `<div class="flex items-center justify-between gap-2 py-0.5"><a href="${esc(x.target)}" class="text-xs text-slate-600 hover:text-slate-900 hover:underline min-w-0 truncate">• ${esc(x.label)}</a><button type="button" data-immo-lever="${esc(x.immoId)}" class="shrink-0 text-xs font-semibold" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:9999px;background:#fff;color:#0f766e;border:1px solid #99f6e4;cursor:pointer"><i data-lucide="check" class="w-3 h-3"></i> Lever l'immobilisation</button></div>`
+            : `<a href="${esc(x.target)}" class="block text-xs text-slate-600 hover:text-slate-900 hover:underline py-0.5">• ${esc(x.label)}</a>`;
           const _first = a.vehicules.slice(0, 3), _rest = a.vehicules.slice(3);
           return `<div class="mt-2">
             ${_first.map(_ln).join('')}
@@ -262,6 +264,18 @@
     const msg = card ? (card.querySelector('.font-semibold') || {}).textContent || '' : '';
     const label = [cat, msg].filter(Boolean).join(' — ');
     FP.alertes.masquer(b.dataset.mute, label);
+    render();
+  });
+  // Lever l'immobilisation directement depuis l'alerte (bouton par véhicule listé).
+  document.getElementById('notif-cols').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-immo-lever]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const id = b.dataset.immoLever;
+    b.disabled = true;
+    try {
+      await (FP.immobilise && FP.immobilise.set(id, false));
+      if (FP.toast) FP.toast('✓ Immobilisation levée');
+    } catch (err) { if (FP.toast) FP.toast('Échec — réessaie'); b.disabled = false; return; }
     render();
   });
   // Réafficher
