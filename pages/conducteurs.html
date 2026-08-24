@@ -1660,6 +1660,14 @@
   async function deleteDriver(key) {
     const d = drivers.find(x => x.key === key);
     if (!d) return;
+    // ⚠️ GARDE-FOU AMENDES IMPAYÉES (même contrôle qu'à la « Sortie des effectifs ») — sources uniques
+    // FP.estAPayer + FP.montantDu. On n'interdit jamais (le site doit tout pouvoir faire) mais on demande
+    // une confirmation DÉDIÉE, en montrant le total encore dû, pour ne pas supprimer par mégarde.
+    const dues = (d.amendes || []).filter(a => (FP.estAPayer ? FP.estAPayer(a) : a.statut === 'à payer'));
+    if (dues.length) {
+      const totalDu = dues.reduce((s, a) => s + (FP.montantDu ? (FP.montantDu(a) || 0) : (+a.montant || 0)), 0);
+      if (!(await FP.confirm(`⚠️ « ${d.name} » a ${dues.length} amende(s) IMPAYÉE(S) — ${FP.euro(totalDu)} encore dû.\n\nElles resteront enregistrées sous son nom mais ne seront plus rattachées à une fiche active. Il vaut mieux les solder d'abord (onglet Amendes).\n\nSupprimer quand même ce conducteur ?`))) return;
+    }
     const linked = d.vehicules.length + d.amendes.length;
     if (linked === 0) {
       if (!(await FP.confirm(`Supprimer le conducteur « ${d.name} » ?`))) return;
