@@ -4810,6 +4810,19 @@ FP.leasingContrat = (immat) => {
   return merged;
 };
 
+// ⚠️ HELPER CANONIQUE — un véhicule est-il en LEASING/LLD ? Loueur (proprietaire) reconnu parmi les
+// loueurs configurés (FP.leasingProps, multi-loueurs) OU contrat de leasing renseigné pour sa plaque.
+// À utiliser PARTOUT (une seule définition) plutôt que de re-tester le propriétaire à la main.
+FP.estLeasing = (v) => {
+  if (!v) return false;
+  try {
+    const p = String(v.proprietaire || '').trim().toLowerCase();
+    if (p) { let props = []; try { props = FP.leasingProps() || []; } catch (e) {} if (props.indexOf(p) !== -1) return true; }
+  } catch (e) {}
+  try { if (FP.leasingContrat && FP.leasingContrat(v.immat)) return true; } catch (e) {}
+  return false;
+};
+
 // ⚠️ HELPER CANONIQUE — échéance (date de fin) d'un contrat de leasing/LLD.
 // `fin` explicite si présente, sinon `debut` + durée (`dureeMois` ou `duree`, en mois).
 // Renvoie un Date, ou null si on ne peut PAS la calculer (ni fin ni début+durée). Une échéance
@@ -4911,28 +4924,44 @@ FP.affectations = {
   // Km parcourus SAISIS pour une période (kmFin − kmDebut) — source MANUELLE, prioritaire sur l'estimation
   // par états des lieux. Renvoie null si l'un des deux km manque ou si l'écart est négatif (aberrant).
   kmParcouru(a) { if (!a) return null; const d = this._km(a.kmDebut), f = this._km(a.kmFin); if (d == null || f == null) return null; const diff = f - d; return diff >= 0 ? diff : null; },
+  // Cette période est-elle la 1re (le PREMIER conducteur) du véhicule ? = celle dont la date de début
+  // est la plus ancienne (début vide = origine → considéré le plus ancien).
+  _estPremierePeriode(veh, a) {
+    if (!veh || veh.id == null || !a) return false;
+    const list = this.forVeh(veh.id); if (!list.length) return true;
+    const rank = x => (x && x.debut) ? String(x.debut) : '';   // '' = origine = le plus ancien
+    let first = list[0]; list.forEach(x => { if (rank(x) < rank(first)) first = x; });
+    return first === a || (!!first && first.conducteur === a.conducteur && (first.debut || null) === (a.debut || null) && (first.fin || null) === (a.fin || null));
+  },
   // ⚠️ SOURCE UNIQUE — km parcourus d'une période (utilisée par la fiche véhicule ET le classement
-  // « km par conducteur » des stats) : km SAISIS (kmParcouru) en priorité, sinon estimation par états
-  // des lieux (1re prise → dernière restitution de la période ; période en cours → km actuel du véhicule).
+  // « km par conducteur » des stats). Ordre de priorité pour chaque borne :
+  //  • km de DÉBUT : km saisi > 1re PRISE (état des lieux) > 0 si c'est le 1er conducteur d'un LEASING
+  //    (véhicules neufs, conducteur = le premier → départ compteur à 0, consigne utilisateur).
+  //  • km de FIN : km saisi > dernière RESTITUTION (état des lieux) > (période en cours) km ACTUEL du véhicule.
+  // Renvoie null si l'une des bornes reste inconnue (on n'invente jamais).
   kmPeriode(veh, a) {
     if (!a) return null;
-    const manuel = this.kmParcouru(a);
-    if (manuel != null) return manuel;
+    const dMan = this._km(a.kmDebut), fMan = this._km(a.kmFin);
+    let entryKm = null, exitKm = null;
     try {
-      if (!veh || veh.id == null) return null;
-      const insp = (((FP.settings.get().inspections) || {})[veh.id] || [])
-        .filter(x => x && x.km != null && String(x.km).trim() !== '' && Number.isFinite(+x.km) && x.date);
-      if (!insp.length) return null;
-      const inP = (d) => (!a.debut || d >= a.debut) && (!a.fin || d <= a.fin);
-      const entries = insp.filter(x => x.sens !== 'Sortie' && inP(x.date)).sort((p, q) => String(p.date).localeCompare(q.date));
-      const exits = insp.filter(x => x.sens === 'Sortie' && inP(x.date)).sort((p, q) => String(p.date).localeCompare(q.date));
-      const entryKm = entries.length ? +entries[0].km : null;
-      let exitKm = exits.length ? +exits[exits.length - 1].km : null;
-      if (!a.fin && exitKm == null && Number.isFinite(+veh.km)) exitKm = +veh.km;
-      if (entryKm == null || exitKm == null) return null;
-      const diff = exitKm - entryKm;
-      return diff >= 0 ? diff : null;
-    } catch (e) { return null; }
+      if (veh && veh.id != null) {
+        const insp = (((FP.settings.get().inspections) || {})[veh.id] || [])
+          .filter(x => x && x.km != null && String(x.km).trim() !== '' && Number.isFinite(+x.km) && x.date);
+        const inP = (d) => (!a.debut || d >= a.debut) && (!a.fin || d <= a.fin);
+        const entries = insp.filter(x => x.sens !== 'Sortie' && inP(x.date)).sort((p, q) => String(p.date).localeCompare(q.date));
+        const exits = insp.filter(x => x.sens === 'Sortie' && inP(x.date)).sort((p, q) => String(p.date).localeCompare(q.date));
+        entryKm = entries.length ? +entries[0].km : null;
+        exitKm = exits.length ? +exits[exits.length - 1].km : null;
+      }
+    } catch (e) {}
+    // Borne de DÉBUT
+    let kmDeb = dMan != null ? dMan : (entryKm != null ? entryKm : null);
+    if (kmDeb == null && veh && FP.estLeasing && FP.estLeasing(veh) && this._estPremierePeriode(veh, a)) kmDeb = 0;
+    // Borne de FIN
+    let kmFin = fMan != null ? fMan : (exitKm != null ? exitKm : null);
+    if (kmFin == null && !a.fin && veh && Number.isFinite(+veh.km)) kmFin = +veh.km;
+    if (kmDeb == null || kmFin == null) return null;
+    return kmFin >= kmDeb ? kmFin - kmDeb : null;
   },
   // record : ferme l'entrée en cours si le nom change, en ouvre une nouvelle si un conducteur est désigné.
   // `km` (optionnel) = km AU COMPTEUR au moment du changement → stampé en km de FIN de l'ancienne période
@@ -5016,20 +5045,26 @@ FP.affectations = {
 // Isolation société : FP.affectations.all() = app_settings de la société active uniquement.
 FP.kmParConducteur = (data) => {
   data = data || (typeof window !== 'undefined' ? window.FP_DATA : null) || {};
-  const vehById = {}; (data.vehicules || []).forEach(v => { if (v && v.id != null) vehById[v.id] = v; });
-  const all = (FP.affectations && FP.affectations.all) ? FP.affectations.all() : {};
   const map = {};
-  Object.keys(all).forEach(vehId => {
-    const veh = vehById[vehId];
-    (Array.isArray(all[vehId]) ? all[vehId] : []).forEach(a => {
-      const nom = (a && a.conducteur != null ? String(a.conducteur) : '').trim();
-      if (!nom || nom === '—') return;
-      const km = FP.affectations.kmPeriode(veh, a);
-      if (km == null || km <= 0) return;
-      const key = FP.condGroupKey ? FP.condGroupKey(nom) : (FP.normNomComplet ? FP.normNomComplet(nom) : nom.toLowerCase());
-      if (!map[key]) map[key] = { nom, km: 0, periodes: 0, vehicules: new Set() };
-      map[key].km += km; map[key].periodes++; if (veh && veh.immat) map[key].vehicules.add(veh.immat);
-    });
+  const add = (veh, a) => {
+    const nom = (a && a.conducteur != null ? String(a.conducteur) : '').trim();
+    if (!nom || nom === '—') return;
+    const km = FP.affectations.kmPeriode(veh, a);
+    if (km == null || km <= 0) return;
+    const key = FP.condGroupKey ? FP.condGroupKey(nom) : (FP.normNomComplet ? FP.normNomComplet(nom) : nom.toLowerCase());
+    if (!map[key]) map[key] = { nom, km: 0, periodes: 0, vehicules: new Set() };
+    map[key].km += km; map[key].periodes++; if (veh && veh.immat) map[key].vehicules.add(veh.immat);
+  };
+  // On itère les VÉHICULES (pas seulement les affectations stockées) : un véhicule qui a un chauffeur
+  // mais dont l'affectation n'a pas encore été « ouverte » (ensureCourante) est quand même pris en compte
+  // via une période courante SYNTHÉTIQUE (début = 1re mise en circulation) → les leasings comptent tout seuls.
+  (data.vehicules || []).forEach(veh => {
+    if (!veh || veh.id == null) return;
+    if (FP.horsFlotte && FP.horsFlotte(veh)) return;   // pas de classement sur les vendus / hors flotte
+    const periods = (FP.affectations && FP.affectations.forVeh) ? FP.affectations.forVeh(veh.id) : [];
+    if (periods.length) { periods.forEach(a => add(veh, a)); return; }
+    const ch = (veh.chauffeur != null ? String(veh.chauffeur) : '').trim();
+    if (ch && ch !== '—') add(veh, { conducteur: ch, debut: veh.dateMiseEnCirculation || null, fin: null });
   });
   return Object.values(map)
     .map(x => ({ nom: x.nom, km: x.km, periodes: x.periodes, nbVehicules: x.vehicules.size }))
