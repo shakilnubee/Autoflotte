@@ -366,6 +366,25 @@ FP.estVendu = (v) => { const s = ((v && v.statut) || '').toString().toLowerCase(
 // horsFlotte = plus à suivre au quotidien (vendu, à vendre, hors service, cédé, archivé, restitué).
 // Utilisé pour les ALERTES / échéances / CT (on n'alerte pas sur une voiture en cours de vente).
 FP.horsFlotte = (v) => ['vendu', 'vendue', 'à vendre', 'a vendre', 'a-vendre', 'cédé', 'cede', 'cédée', 'hors service', 'hors-service', 'hs', 'archive', 'archivé', 'archivée', 'restitué', 'restitue'].includes(((v && v.statut) || '').toString().toLowerCase().trim());
+// ⚠️ HELPER CANONIQUE — IMMOBILISATION d'un véhicule (garage / hors service temporaire).
+// UNE seule source de vérité : app_settings.vehImmobilise[vehId] = { since:'YYYY-MM-DD' } (par société,
+// synchronisé sur tous les appareils via FP.settings). À utiliser PARTOUT (dashboard, alertes, fiche…)
+// pour marquer / lever une immobilisation — ne jamais réécrire vehImmobilise à la main ailleurs.
+FP.immobilise = {
+  map() { try { const s = FP.settings.get(); return (s.vehImmobilise && typeof s.vehImmobilise === 'object') ? s.vehImmobilise : {}; } catch (e) { return {}; } },
+  is(id) { return !!this.map()[id]; },
+  since(id) { const im = this.map()[id]; return im && im.since ? im.since : null; },
+  jours(id) { const d = this.since(id); if (!d) return 0; const t0 = new Date(); t0.setHours(0, 0, 0, 0); return Math.max(0, Math.floor((t0 - new Date(d)) / 86400000)); },
+  // on=true → marque immobilisé (depuis aujourd'hui) ; on=false → lève l'immobilisation. Persisté (Supabase).
+  set(id, on) {
+    try {
+      const s = FP.settings.get(); s.vehImmobilise = (s.vehImmobilise && typeof s.vehImmobilise === 'object') ? s.vehImmobilise : {};
+      if (on) { if (!s.vehImmobilise[id]) s.vehImmobilise[id] = { since: new Date().toISOString().slice(0, 10) }; }
+      else { delete s.vehImmobilise[id]; }
+      return FP.settings.save(s);
+    } catch (e) { return Promise.resolve(); }
+  },
+};
 // ⚠️ HELPER CANONIQUE — montant RÉELLEMENT DÛ d'une amende : le majoré si elle est majorée,
 // sinon le montant initial. À UTILISER PARTOUT (sommes, podiums, KPI, alertes, exports) pour
 // que tous les écrans affichent le même montant (règle « une seule source de vérité », CLAUDE.md).
@@ -5693,7 +5712,7 @@ FP.buildAlertes = (data) => {
 
   // --- Véhicules IMMOBILISÉS depuis trop longtemps (marqués via le dashboard) ---
   try {
-    const immo = (FP.settings.get().vehImmobilise) || {};
+    const immo = FP.immobilise.map();
     const seuilJ = FP.notifCfg().immobiliseJours;
     const t0 = new Date(); t0.setHours(0, 0, 0, 0);
     const items = [];
@@ -5701,7 +5720,8 @@ FP.buildAlertes = (data) => {
       if (FP.horsFlotte(v)) return;
       const im = immo[v.id]; if (!im || !im.since) return;
       const j = Math.floor((t0 - new Date(im.since)) / 86400000);
-      if (j >= seuilJ) items.push({ label: `${v.immat} · ${v.marque} ${v.modele} — immobilisé depuis ${j} j`, target: 'vehicules.html' });
+      // immoId → la page Alertes affiche un bouton « Lever l'immobilisation » directement sur la ligne.
+      if (j >= seuilJ) items.push({ label: `${v.immat} · ${v.marque} ${v.modele} — immobilisé depuis ${j} j`, target: `vehicules.html?immat=${encodeURIComponent(v.immat || '')}`, immoId: v.id });
     });
     if (items.length) out.push({ niveau: 'warn', categorie: 'Immobilisation', message: `${items.length} véhicule(s) immobilisé(s) depuis + de ${seuilJ} j`, detail: 'Au garage / hors service trop longtemps — à débloquer', sort: 400, vehicules: items });
   } catch (e) {}
