@@ -768,7 +768,7 @@
     }
     const maxKm = rows[0].km || 1;
     const medals = ['🥇', '🥈', '🥉'];
-    box.innerHTML = rows.slice(0, 15).map((r, i) => {
+    const rowHtml = (r, i) => {
       const pct = Math.max(4, Math.round((r.km / maxKm) * 100));
       const sub = `${r.nbVehicules} véhicule${r.nbVehicules > 1 ? 's' : ''} · ${r.periodes} période${r.periodes > 1 ? 's' : ''}`;
       const href = 'conducteurs.html?cond=' + encodeURIComponent(r.nom);
@@ -781,8 +781,23 @@
         </div>
         <div class="text-right flex-shrink-0"><div class="font-extrabold text-slate-900">${FP.num(r.km)}<span class="text-xs font-normal text-slate-400"> km</span></div></div>
       </a>`;
-    }).join('');
+    };
+    // 10 lignes visibles + reste repliable (vrai toggle « Voir tout / Voir moins » → pas besoin de scroller la page).
+    const LIM = 10;
+    const first = rows.slice(0, LIM), rest = rows.slice(LIM);
+    box.innerHTML = first.map(rowHtml).join('')
+      + (rest.length ? `<div class="kmc-rest" hidden>${rest.map((r, i) => rowHtml(r, i + LIM)).join('')}</div>
+          <button type="button" class="kmc-seemore text-xs font-semibold mt-2" data-total="${rows.length}" style="color:var(--fp-accent)">Voir tout (${rows.length})</button>` : '');
   }
+  // Toggle « Voir tout / Voir moins » du classement km par conducteur (attaché une seule fois).
+  { const box = document.getElementById('km-cond-list');
+    if (box) box.addEventListener('click', (e) => {
+      const b = e.target.closest('.kmc-seemore'); if (!b) return;
+      e.preventDefault();
+      const rest = box.querySelector('.kmc-rest'); if (!rest) return;
+      rest.hidden = !rest.hidden;
+      b.textContent = rest.hidden ? `Voir tout (${b.dataset.total})` : 'Voir moins';
+    }); }
 
   // === Podium coût au km (les plus chères / les moins chères) ===
   function renderPodiumPerKm(annee) {
