@@ -8648,6 +8648,16 @@ FP.detectDoc = function (rawText, vehicules) {
     const flat = norm(text);
     for (const v of list) { const nv = norm(v.immat); if (nv && nv.length >= 6 && flat.includes(nv)) { out.vehicule = v; out.immat = v.immat; break; } }
   }
+  // Repli 2 — match par VIN (n° de série, 17 car.) : une facture d'achat ou une carte grise porte
+  // souvent le VIN plutôt que la plaque (véhicule pas encore immatriculé). On retrouve alors le véhicule
+  // par son VIN enregistré, même si la plaque est absente ou mal lue par l'OCR.
+  if (!out.vehicule && list.length) {
+    const flat = norm(text);
+    for (const v of list) {
+      const nv = norm(v.vin || v.vinNumber || v.numeroSerie || '');
+      if (nv && nv.length >= 11 && flat.includes(nv)) { out.vehicule = v; if (!out.immat) out.immat = v.immat || null; out.vin = v.vin || nv; break; }
+    }
+  }
 
   // --- Type de document ---
   // Une VRAIE facture (mot « Facture » + un récapitulatif Total TTC/TVA/HT) est prioritaire :
