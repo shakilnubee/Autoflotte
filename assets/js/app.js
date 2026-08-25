@@ -5022,6 +5022,13 @@ FP.leasingContrat = (immat) => {
   const ov = FP.getLeasingOverrides()[key] || null;
   if (!base && !ov) return null;
   const merged = { dureeMois: 36, kmSupp: null, kmTolerance: null, ...(base || {}), ...(ov || {}) };
+  // ⚠️ REPLI DÉBUT = date de mise en circulation du véhicule (comportement prévu à l'origine) quand
+  // aucune date de début n'est saisie sur le contrat — la date de début n'est presque jamais sur
+  // l'offre PDF. Sans ce repli, un contrat pourtant renseigné (forfait km, loyer…) restait INVISIBLE.
+  // L'utilisateur peut toujours saisir une vraie date de début différente (elle prime).
+  if (!merged.debut) {
+    try { const v = ((window.FP_DATA && FP_DATA.vehicules) || []).find(x => (x.immat || '').trim().toUpperCase() === key); if (v && v.dateMiseEnCirculation) merged.debut = v.dateMiseEnCirculation; } catch (e) {}
+  }
   if (!merged.kmContrat || !merged.debut) return null;
   return merged;
 };
