@@ -669,6 +669,18 @@
     try { const CK = window.FP_CACHE_KEY; const c = CK && JSON.parse(localStorage.getItem(CK) || 'null'); if (c && Array.isArray(c.vehicules)) { const cv = c.vehicules.find(x => x.id === v.id); if (cv) { cv.chauffeur = v.chauffeur; localStorage.setItem(CK, JSON.stringify(c)); } } } catch (e) {}
     return true;
   }
+  // Change le LOUEUR d'un véhicule = écrit son champ « propriétaire » (= étiquette du loueur, ce qui
+  // détermine le rattachement leasing). Persiste sur le véhicule (base + cache), même schéma que le
+  // chauffeur. `prop` = l'étiquette propriétaire du loueur cible (ex. « TEMSYS »).
+  function setVehLoueur(immat, prop){
+    const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(immat)); if (!v) return false;
+    const val = String(prop || '').trim();
+    if (String(v.proprietaire || '').trim() === val) return false; // pas de changement réel
+    v.proprietaire = val;
+    try { if (FP.persist && FP.persist.upsert) FP.persist.upsert('vehicules', { id: v.id, proprietaire: v.proprietaire }); else if (FP.db && FP.db.upsert) FP.db.upsert('vehicules', { id: v.id, proprietaire: v.proprietaire }); } catch (e) { console.warn('[set loueur]', e); }
+    try { const CK = window.FP_CACHE_KEY; const c = CK && JSON.parse(localStorage.getItem(CK) || 'null'); if (c && Array.isArray(c.vehicules)) { const cv = c.vehicules.find(x => x.id === v.id); if (cv) { cv.proprietaire = v.proprietaire; localStorage.setItem(CK, JSON.stringify(c)); } } } catch (e) {}
+    return true;
+  }
   function bpceDocsHtml(immat){
     const docs = bpceDocs(immat);
     const links = docs.map((d, di) => `<div class="flex items-center gap-1" style="margin-bottom:2px;max-width:170px">
@@ -1367,7 +1379,7 @@
         <td class="font-mono font-semibold">${FP.lienVehicule(v.immat)}</td>
         <td>${FP.esc(v.marque)} ${FP.esc(v.modele)}${(cRaw && cRaw.malus) ? ` <span class="text-amber-600 text-xs">· malus ${FP.euro(cRaw.malus)}</span>` : ''}</td>
         <td>${(v.chauffeur && v.chauffeur !== '—') ? (FP.lienConducteur(v.chauffeur) + ` <button type="button" data-veh-cond="${FP.esc(v.immat)}" title="Changer le conducteur" style="background:none;border:none;cursor:pointer;color:var(--fp-muted);font-size:12px;vertical-align:1px">✏️</button>`) : `<button type="button" data-veh-cond="${FP.esc(v.immat)}" class="text-slate-400" style="background:none;border:none;cursor:pointer;text-decoration:underline dotted;font-size:.82rem">+ affecter</button>`}</td>
-        <td>${loueurDeVeh(v)}</td>
+        <td><span class="cursor-pointer" data-chg-loueur="${escC(v.immat)}" title="Changer de loueur" style="border-bottom:1px dotted #94a3b8">${loueurDeVeh(v)}</span></td>
         <td>${l ? FP.num(l.kmContrat) + ' km' : '<span class="text-slate-400">—</span>'}</td>
         <td>${(() => { const km = l ? FP.num(l.km) + ' km' : (v.km != null ? FP.num(v.km) + ' km' : null); return km ? `<span class="cursor-pointer underline decoration-dotted" data-edit-lease="${v.immat}" title="Modifier le contrat (km, forfait, dates…)">${km}</span>` : '<span class="text-slate-400">—</span>'; })()}</td>
         <td style="${projColor}">${l && l.projectionFin !== null ? '~' + FP.num(l.projectionFin) + ' km' : '<span class="text-slate-400">—</span>'}</td>
@@ -1734,6 +1746,36 @@
 
   // Actions leasing — mêmes boutons en vue Tableau ET en vue Cartes.
   async function leaseAction(e){
+    // Changer le LOUEUR d'un véhicule (ex. Mégane rattachée par erreur à BPCE → TEMSYS). Petit menu des
+    // loueurs configurés → écrit le champ « propriétaire » du véhicule (source du rattachement leasing).
+    const chgL = e.target.closest('[data-chg-loueur]');
+    if (chgL) {
+      const immat = chgL.dataset.chgLoueur;
+      const loueurs = (getLoueurs() || []).filter(l => l && (l.prop || l.nom));
+      if (!loueurs.length) { alert('Aucun loueur configuré. Ajoute d\'abord tes loueurs (bouton « Ajouter un loueur »).'); return; }
+      const v = (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(immat));
+      const curProp = String((v && v.proprietaire) || '').trim().toLowerCase();
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,61,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+      const items = loueurs.map(l => { const prop = String(l.prop || l.nom || '').trim(); const sel = prop.toLowerCase() === curProp; return `<button type="button" data-lo-pick="${escC(prop)}" style="display:block;width:100%;text-align:left;padding:10px 12px;border:none;border-bottom:1px solid #f1f5f9;background:${sel ? '#EFF6FF' : '#fff'};cursor:pointer;font-size:14px;color:#0f172a">${sel ? '✓ ' : ''}${escC(l.nom || prop)}</button>`; }).join('');
+      ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+          <div style="padding:14px 16px 6px;font-size:15px;font-weight:800;color:#0f1e3d">Loueur de ${escC(immat)}</div>
+          <div style="max-height:50vh;overflow:auto">${items}</div>
+          <div style="padding:10px 16px;background:#f8fafc;text-align:right"><button type="button" data-lo-cancel class="btn btn-outline text-sm">Annuler</button></div>
+        </div>`;
+      document.body.appendChild(ov);
+      const close = () => ov.remove();
+      ov.addEventListener('click', ev => {
+        if (ev.target === ov || ev.target.closest('[data-lo-cancel]')) { close(); return; }
+        const pick = ev.target.closest('[data-lo-pick]');
+        if (pick) {
+          const prop = pick.getAttribute('data-lo-pick');
+          close();
+          if (setVehLoueur(immat, prop)) { rebuildLeasingData(); renderKPIs(); renderLeasing(); if (typeof renderLocalease === 'function') renderLocalease(); if (FP.toast) FP.toast('Loueur mis à jour ✓'); }
+        }
+      });
+      return;
+    }
     // Affecter / changer le conducteur d'une ligne BPCE (= chauffeur du véhicule) — parité avec Ayvens.
     const vCond = e.target.closest('[data-veh-cond]');
     if (vCond) {
