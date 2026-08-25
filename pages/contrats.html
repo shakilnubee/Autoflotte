@@ -209,6 +209,7 @@
         <div id="loueurs-rows" class="space-y-2"></div>
         <div class="flex items-center gap-3 mt-3 flex-wrap">
           <button id="loueur-add" type="button" class="btn btn-outline text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un loueur</button>
+          <button id="loueur-rebuild" type="button" class="btn text-sm" style="border-color:#93C5FD;color:#1D4ED8;background:#EFF6FF" title="Recrée la liste des loueurs à partir du champ « propriétaire » de tes véhicules (utile si la config a été perdue)"><i data-lucide="wand-2" class="w-4 h-4"></i> Reconstruire depuis mes véhicules</button>
           <button id="leasing-config-save" type="button" class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
           <span id="leasing-config-status" class="text-xs"></span>
         </div>
@@ -2706,6 +2707,29 @@
     const box = $('loueurs-rows'); if (!box) return;
     box.insertAdjacentHTML('beforeend', loueurRowHTML('', ''));
     lucide.createIcons();
+  });
+  // 🪄 RECONSTRUCTION : recrée la liste des loueurs à partir du champ « propriétaire » de chaque
+  // véhicule (donnée INTACTE, propre au véhicule) → récupère le registre des loueurs si la config a
+  // été perdue. On fusionne avec les loueurs déjà présents (pas de doublon d'étiquette propriétaire).
+  if ($('loueur-rebuild')) $('loueur-rebuild').addEventListener('click', async () => {
+    const props = new Map(); // clé = propriétaire en minuscule → libellé d'origine
+    const vehs = (Array.isArray(vehicules) && vehicules.length) ? vehicules : ((window.FP && FP.data && FP.data.vehicules) || []);
+    vehs.forEach(v => {
+      const p = String((v && v.proprietaire) || '').trim();
+      if (p && !props.has(p.toLowerCase())) props.set(p.toLowerCase(), p);
+    });
+    if (!props.size) { alert("Aucun « propriétaire » n'est renseigné sur tes véhicules → rien à reconstruire. Ajoute les loueurs à la main."); return; }
+    // Loueurs déjà configurés (on garde leur nom d'affichage s'il existe).
+    let cur = []; try { const s = FP.settings.get(); if (Array.isArray(s.loueurs)) cur = s.loueurs; } catch (e) {}
+    const byProp = new Map();
+    cur.forEach(l => { const k = String((l && l.prop) || '').trim().toLowerCase(); if (k) byProp.set(k, { nom: String(l.nom || '').trim() || l.prop, prop: l.prop }); });
+    props.forEach((label, k) => { if (!byProp.has(k)) byProp.set(k, { nom: label, prop: label }); });
+    const list = Array.from(byProp.values());
+    if (!await FP.confirm('🪄 Reconstruire les loueurs depuis tes véhicules ?\n\n' + list.map(l => '• ' + l.nom).join('\n') + '\n\n(On garde ceux déjà configurés, on ajoute les manquants. Rien n\'est supprimé.)')) return;
+    const s = FP.settings.get(); s.loueurs = list; FP.settings.save(s);
+    const st = $('leasing-config-status'); if (st) { st.textContent = '✓ ' + list.length + ' loueur(s) reconstruits.'; st.style.color = '#059669'; }
+    renderLoueursRows();
+    try { rebuildLeasingData(); renderKPIs(); renderLeasing(); if (typeof renderLocalease === 'function') renderLocalease(); } catch (e) {}
   });
   // Bouton rapide (barre du haut) : ouvre la config loueurs + ajoute directement une ligne vierge.
   if ($('loueur-add-quick')) $('loueur-add-quick').addEventListener('click', () => {
