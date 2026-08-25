@@ -2699,6 +2699,47 @@
     }
     return filled;
   }
+  // Lit un PDF de contrat déjà dans le stockage → { loyerTTC, dureeMois, kmTotal, malus, co2, kmSupp,
+  // kmTolerance, offre }. D'ABORD par extraction TEXTE locale (pdf.js + parseOfferText) — fiable et sans
+  // serveur pour les vrais PDF ; PUIS l'IA (FP.scanIA) comble les trous et gère les PDF scannés (image).
+  async function readContractPdf(fileUrl, name) {
+    const url = (FP.signedScanUrl) ? await FP.signedScanUrl(fileUrl, 3600) : fileUrl;
+    const resp = await fetch(url); if (!resp.ok) throw new Error('téléchargement du PDF : HTTP ' + resp.status);
+    const blob = await resp.blob();
+    if (blob.type && /json|html|text/i.test(blob.type)) throw new Error('le stockage a renvoyé « ' + blob.type + ' » au lieu d\'un PDF (fichier introuvable ?).');
+    const buf = await blob.arrayBuffer();
+    const out = {};
+    // 1) Extraction texte locale (pdf.js) — reconstruit les lignes par position (méthode Ulys).
+    try {
+      await liLoadScript(LI_PDFJS); window.pdfjsLib.GlobalWorkerOptions.workerSrc = LI_WORKER;
+      const pdf = await window.pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+      let text = ''; const n = Math.min(pdf.numPages, 8);
+      for (let p = 1; p <= n; p++) {
+        const pg = await pdf.getPage(p); const c = await pg.getTextContent();
+        const items = c.items.filter(it => it.str && it.str.trim() !== '').map(it => ({ s: it.str, x: it.transform[4], y: it.transform[5] }));
+        items.sort((a, b) => (Math.abs(b.y - a.y) > 3 ? b.y - a.y : a.x - b.x));
+        const lines = []; let cur = null;
+        items.forEach(it => { if (cur && Math.abs(it.y - cur.y) <= 3) cur.parts.push(it); else { cur = { y: it.y, parts: [it] }; lines.push(cur); } });
+        text += lines.map(l => l.parts.sort((a, b) => a.x - b.x).map(pp => pp.s).join(' ')).join('\n') + '\n';
+      }
+      if (text.trim() && typeof parseOfferText === 'function') {
+        const off = parseOfferText(text) || {};
+        if (off.loyer != null) out.loyerTTC = off.loyer;
+        if (off.dureeMois != null) out.dureeMois = off.dureeMois;
+        if (off.kmContrat != null) out.kmTotal = off.kmContrat;
+        if (off.malus != null) out.malus = off.malus;
+      }
+    } catch (e) { console.warn('[readContractPdf texte]', e); }
+    // 2) IA (repli / complément) — comble co2, kmSupp, tolérance, offre et gère les scans image.
+    try {
+      if (window.FP && FP.scanIA) {
+        const file = new File([buf.slice(0)], name || 'contrat.pdf', { type: 'application/pdf' });
+        const f = await FP.scanIA(file, 'leasing', LOCALEASE_PROMPT);
+        if (f) ['loyerTTC', 'dureeMois', 'kmTotal', 'co2', 'malus', 'kmSupp', 'kmTolerance', 'offre'].forEach(k => { if ((out[k] == null || out[k] === '') && f[k] != null && f[k] !== '') out[k] = f[k]; });
+      }
+    } catch (e) { console.warn('[readContractPdf IA]', e); }
+    return out;
+  }
   function renderRecoverPanel(files) {
     const panel = $('loc-recover-panel'); if (!panel) return;
     const linked = linkedDocMap();
@@ -2759,22 +2800,15 @@
       const f = files[+r.dataset.recRead]; if (!f) return;
       const lk = linkedDocMap()[f.url];
       if (!lk) { alert('Relie d\'abord ce PDF à un véhicule / contrat.'); return; }
-      if (!(window.FP && FP.scanIA)) { alert('Lecture IA indisponible (connexion requise).'); return; }
       const old = r.textContent; r.disabled = true; r.textContent = '⏳ Lecture…';
       try {
-        // Le fichier est dans un bucket privé → on passe par une URL SIGNÉE (sinon fetch = 400/403 et
-        // l'IA reçoit une page d'erreur, pas le PDF). Puis on reconstruit un File pour FP.scanIA.
-        const url = (FP.signedScanUrl) ? await FP.signedScanUrl(f.url, 3600) : f.url;
-        const resp = await fetch(url); if (!resp.ok) throw new Error('téléchargement du PDF : HTTP ' + resp.status);
-        const blob = await resp.blob();
-        if (blob.type && /json|html|text/i.test(blob.type)) throw new Error('le stockage a renvoyé « ' + blob.type +' » au lieu d\'un PDF (fichier introuvable ?).');
-        const file = new File([blob], f.name || 'contrat.pdf', { type: (blob.type && /pdf/i.test(blob.type)) ? blob.type : 'application/pdf' });
-        const fields = await FP.scanIA(file, 'leasing', LOCALEASE_PROMPT);
+        // Lecture DIRECTE dans le navigateur (pdf.js) — fiable et sans serveur pour les montants clés ;
+        // l'IA ne sert que de complément (co2, tolérance, ou PDF scanné image). Cf. readContractPdf.
+        const fields = await readContractPdf(f.url, f.name);
         const hasAny = fields && Object.keys(fields).some(k => fields[k] != null && fields[k] !== '');
         if (!hasAny) {
-          // scanIA a échoué OU n'a rien extrait → on montre la VRAIE raison (FP._scanLastErr).
           const why = (window.FP && FP._scanLastErr || '').toString().trim();
-          alert('Le PDF n\'a pas pu être lu automatiquement' + (why ? ' :\n\n' + why : ' (peut-être un scan image, ou un format d\'offre inhabituel).') + '\n\nTu peux saisir les infos à la main via le crayon ✏️ de la ligne.');
+          alert('Le PDF n\'a pas pu être lu automatiquement' + (why ? ' :\n\n' + why : '.\n\nC\'est peut-être un PDF « scanné » (image), ou un format d\'offre que le lecteur ne reconnaît pas.') + '\n\nTu peux saisir les infos à la main via le crayon ✏️ de la ligne.');
           r.disabled = false; r.textContent = old; return;
         }
         const filled = applyScannedToTarget(lk, fields);
