@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Signer l'état des lieux — Parc Pilot</title>
+<link rel="icon" href="assets/icons/icon-192.png" />
+<style>
+  :root { --nav:#0F1E3D; --acc:#F97316; --bg:#F1F5F9; --card:#fff; --txt:#0f172a; --muted:#64748b; --border:#e2e8f0; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--txt); }
+  .wrap { max-width:560px; margin:0 auto; padding:16px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px; box-shadow:0 10px 30px -20px rgba(15,30,61,.4); margin-bottom:14px; }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+  .brand .bars { display:flex; gap:3px; align-items:flex-end; height:20px; }
+  .brand .bars i { width:5px; background:var(--acc); border-radius:2px; display:block; }
+  h1 { font-size:1.15rem; margin:.2rem 0 0; color:var(--nav); }
+  .sub { color:var(--muted); font-size:.9rem; margin-top:2px; }
+  .row { display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px solid #f1f5f9; font-size:.92rem; }
+  .row .k { color:var(--muted); }
+  .row .v { font-weight:700; text-align:right; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; border:none; border-radius:12px; padding:13px 18px; font-size:1rem; font-weight:800; cursor:pointer; width:100%; }
+  .btn-nav { background:var(--nav); color:#fff; }
+  .btn-out { background:#fff; color:var(--nav); border:1px solid var(--border); }
+  .btn:disabled { opacity:.55; cursor:not-allowed; }
+  label.f { display:block; font-size:.82rem; color:var(--muted); font-weight:600; margin:10px 0 4px; }
+  input.f { width:100%; border:1px solid var(--border); border-radius:10px; padding:11px 12px; font-size:1rem; }
+  .padwrap { border:2px dashed #cbd5e1; border-radius:14px; background:#fff; position:relative; touch-action:none; }
+  canvas { display:block; width:100%; height:190px; border-radius:12px; }
+  .padhint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#cbd5e1; font-size:.95rem; pointer-events:none; }
+  .clear { position:absolute; top:8px; right:8px; background:#f1f5f9; border:none; border-radius:8px; padding:5px 10px; font-size:.8rem; color:#475569; cursor:pointer; }
+  .foot { text-align:center; color:#94a3b8; font-size:.78rem; margin:8px 0 24px; }
+  .msg { padding:12px 14px; border-radius:12px; font-size:.92rem; margin-top:10px; display:none; }
+  .msg.err { background:#fef2f2; border:1px solid #fca5a5; color:#991b1b; }
+  .msg.ok { background:#f0fdf4; border:1px solid #86efac; color:#166534; }
+  .center { text-align:center; }
+  .big { font-size:2.4rem; }
+  a.doclink { color:var(--acc); font-weight:700; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="brand"><span class="bars"><i style="height:9px"></i><i style="height:15px"></i><i style="height:20px"></i></span><strong id="soc-nom" style="color:var(--nav)">Parc Pilot</strong></div>
+    <h1 id="title">Signature de l'état des lieux</h1>
+    <div class="sub" id="subtitle">Chargement…</div>
+  </div>
+
+  <div id="main" style="display:none">
+    <div class="card">
+      <div class="row"><span class="k">Véhicule</span><span class="v" id="i-veh">—</span></div>
+      <div class="row"><span class="k">Immatriculation</span><span class="v" id="i-immat">—</span></div>
+      <div class="row"><span class="k">Employé</span><span class="v" id="i-emp">—</span></div>
+      <div class="row" style="border-bottom:none"><span class="k">Date</span><span class="v" id="i-date">—</span></div>
+      <div style="margin-top:12px"><a class="doclink" id="i-pdf" href="#" target="_blank" rel="noopener">📄 Voir le document (PDF)</a></div>
+    </div>
+
+    <div class="card">
+      <label class="f">Votre nom</label>
+      <input class="f" id="f-nom" placeholder="Nom et prénom" />
+      <label class="f">Votre signature</label>
+      <div class="padwrap">
+        <canvas id="pad"></canvas>
+        <div class="padhint" id="padhint">Signez ici avec le doigt ou la souris</div>
+        <button class="clear" id="clear">Effacer</button>
+      </div>
+      <div class="msg err" id="err"></div>
+      <button class="btn btn-nav" id="send" style="margin-top:14px">✍️ Je signe le document</button>
+      <p class="sub" style="margin-top:8px">En signant, vous reconnaissez l'état du véhicule décrit dans le document. Signature électronique horodatée.</p>
+    </div>
+  </div>
+
+  <div id="done" class="card center" style="display:none">
+    <div class="big">✅</div>
+    <h1 style="margin-top:6px">Merci, c'est signé !</h1>
+    <p class="sub" id="done-sub">Votre signature a bien été enregistrée.</p>
+    <a class="btn btn-out" id="done-pdf" href="#" target="_blank" rel="noopener" style="margin-top:10px;display:none">📄 Voir le document signé</a>
+  </div>
+
+  <div class="foot">Parc Pilot — gestion de flotte</div>
+</div>
+
+<script>
+(function () {
+  var FN = 'https://tzjuptlzoywjeigmyfuj.supabase.co/functions/v1/edl-sign';
+  var APIKEY = 'sb_publishable_KC3TZ1zda-ja-0wkyjHUlg_aKohD6tq';
+  var $ = function (id) { return document.getElementById(id); };
+  var params = new URLSearchParams(location.search);
+  var token = params.get('t') || '';
+  var who = (params.get('who') || 'employe') === 'societe' ? 'societe' : 'employe';
+  function headers() { return { 'Content-Type': 'application/json', 'apikey': APIKEY, 'Authorization': 'Bearer ' + APIKEY }; }
+  function showErr(m) { var e = $('err'); e.textContent = m || 'Une erreur est survenue.'; e.style.display = ''; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]; }); }
+
+  if (!token) { $('subtitle').textContent = 'Lien de signature incomplet.'; return; }
+
+  // ---- Signature pad (canvas) ----
+  var canvas = $('pad'), ctx, drawing = false, hasInk = false, last = null;
+  function fitCanvas() {
+    var r = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+    ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f172a';
+  }
+  function pos(e) {
+    var r = canvas.getBoundingClientRect(), t = (e.touches && e.touches[0]) || e;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  }
+  function start(e) { e.preventDefault(); drawing = true; last = pos(e); }
+  function move(e) {
+    if (!drawing) return; e.preventDefault();
+    var p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p;
+    if (!hasInk) { hasInk = true; $('padhint').style.display = 'none'; }
+  }
+  function end() { drawing = false; }
+  ['mousedown', 'touchstart'].forEach(function (ev) { canvas.addEventListener(ev, start, { passive: false }); });
+  ['mousemove', 'touchmove'].forEach(function (ev) { canvas.addEventListener(ev, move, { passive: false }); });
+  ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(function (ev) { canvas.addEventListener(ev, end); });
+  $('clear').addEventListener('click', function () { ctx.clearRect(0, 0, canvas.width, canvas.height); hasInk = false; $('padhint').style.display = ''; });
+
+  // ---- Charge les infos du document ----
+  fetch(FN + '?t=' + encodeURIComponent(token) + '&who=' + who, { headers: headers(), cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if (!d || d.error) { $('subtitle').textContent = (d && d.error) || 'Lien invalide.'; return; }
+      if (d.societe) $('soc-nom').textContent = d.societe;
+      var isRestit = d.sens === 'restitution';
+      $('title').textContent = 'Signer l\'état des lieux' + (isRestit ? ' (restitution)' : ' (remise)');
+      $('subtitle').textContent = who === 'societe' ? 'Signature pour la société' : 'Bonjour ' + (d.nom || '') + ', merci de signer le document ci-dessous.';
+      $('i-veh').textContent = d.modele || '—';
+      $('i-immat').textContent = d.plaque || '—';
+      $('i-emp').textContent = d.employe || '—';
+      $('i-date').textContent = d.date || '—';
+      if (d.pdfUrl) $('i-pdf').href = d.pdfUrl;
+      if (d.nom) $('f-nom').value = d.nom;
+      $('main').style.display = '';
+      fitCanvas();
+      if (d.alreadySigned) {
+        $('main').style.display = 'none';
+        $('done').style.display = '';
+        $('done-sub').textContent = 'Vous avez déjà signé ce document.';
+        if (d.pdfUrl && d.statut === 'signe') { $('done-pdf').href = d.pdfUrl; $('done-pdf').style.display = ''; }
+      }
+    })
+    .catch(function () { $('subtitle').textContent = 'Impossible de charger le document. Vérifie ta connexion.'; });
+
+  window.addEventListener('resize', function () { if ($('main').style.display !== 'none') { var img = canvas.toDataURL(); fitCanvas(); } });
+
+  // ---- Envoi de la signature ----
+  $('send').addEventListener('click', function () {
+    $('err').style.display = 'none';
+    if (!hasInk) { showErr('Dessine ta signature dans le cadre avant de valider.'); return; }
+    var nom = ($('f-nom').value || '').trim();
+    if (!nom) { showErr('Indique ton nom.'); return; }
+    var b = $('send'); b.disabled = true; var old = b.textContent; b.textContent = '… envoi';
+    var dataUrl = canvas.toDataURL('image/png');
+    fetch(FN, { method: 'POST', headers: headers(), body: JSON.stringify({ action: 'sign', t: token, who: who, nom: nom, signature: dataUrl }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || d.error) { showErr((d && d.error) || 'Échec de l\'envoi.'); b.disabled = false; b.textContent = old; return; }
+        $('main').style.display = 'none'; $('done').style.display = '';
+        $('done-sub').textContent = d.allSigned ? 'Document entièrement signé. Merci !' : 'Votre signature est enregistrée. Merci !';
+      })
+      .catch(function () { showErr('Erreur réseau. Réessaie.'); b.disabled = false; b.textContent = old; });
+  });
+})();
+</script>
+</body>
+</html>

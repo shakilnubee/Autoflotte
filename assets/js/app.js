@@ -8482,6 +8482,7 @@ FP.pdfLogoBars = function (doc, rightX, midY) {
 // avec le LOGO DE LA SOCIÉTÉ (pas PXP en dur), un formulaire pour l'état (carrosserie, rayures…), puis
 // enregistre le PDF dans les Documents du véhicule et l'envoie par e-mail (au conducteur + copie société).
 FP.edl = {
+  SIGN_BASE: 'https://parc-pilot.fr/signer.html',   // page publique de signature intégrée
   EXT: ['Carrosserie', 'Pare-chocs', 'Vitres / pare-brise', 'Rétroviseurs', 'Jantes / pneus', 'Portières', 'Toit / capot / coffre'],
   INT: ['Sièges', 'Tableau de bord / commandes', 'Tapis / moquettes', 'Éléments électroniques (GPS, écran, chargeurs…)', 'Odeurs / propreté générale'],
   ACC: ['Photocopie carte grise', 'Assurance', 'Chargeur / câble (si électrique)', 'Roue de secours / kit crevaison'],
@@ -8540,10 +8541,13 @@ FP.edl = {
         <div data-edl-thumbs style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
         ${sec('Envoi')}
         ${infoRow('E-mail de l\'employé', inp('edl-to', condEmail, 'employe@exemple.fr'))}
-        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;cursor:pointer">
-          <input type="checkbox" data-edl-sign style="margin-top:2px">
-          <span style="font-size:12.5px;color:#334155">✍️ <b>Faire signer électroniquement (Yousign)</b> — l'employé <b>et</b> le signataire de la société reçoivent chacun un lien Yousign, signent en ligne, et le document signé revient dans la fiche. <span style="color:#94a3b8">(À défaut, le PDF part en pièce jointe pour signature manuelle.)</span></span>
-        </label>
+        <label style="display:block;font-size:12.5px;color:#334155;font-weight:700;margin-top:8px">✍️ Signature électronique</label>
+        <select data-edl-signmode style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:7px 9px;font-size:12.5px;margin-top:3px">
+          <option value="integree">Signature intégrée Parc Pilot — l'employé signe en ligne (recommandé)</option>
+          <option value="none">Aucune — PDF en pièce jointe (signature manuelle)</option>
+          <option value="yousign">Yousign (si ton compte est activé)</option>
+        </select>
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:3px">La <b>signature intégrée</b> envoie à l'employé (et au signataire société) un <b>lien</b> pour signer au doigt/souris. Le PDF signé revient dans la fiche. Aucun prestataire, aucune limite.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
           ${infoRow('Signataire société (nom)', inp('edl-soc-nom', prof.edlSignataireNom || socNom, 'Nom du signataire société'))}
           ${infoRow('E-mail signataire société', inp('edl-soc-email', prof.edlSignataireEmail || '', 'signataire@societe.fr'))}
@@ -8627,7 +8631,7 @@ FP.edl = {
         employe: val('edl-employe'), modele: val('edl-modele'), immat: val('edl-immat'),
         km: val('edl-km'), date: val('edl-date'), ext: grp('ext'), comExt: val('edl-com-ext'), int: grp('int'), comInt: val('edl-com-int'),
         acc, autres: val('edl-autres'), comAcc: val('edl-com-acc'), to: val('edl-to'), photos: edlPhotos.slice(),
-        sign: !!(ov.querySelector('[data-edl-sign]') && ov.querySelector('[data-edl-sign]').checked),
+        signMode: (ov.querySelector('[data-edl-signmode]') && ov.querySelector('[data-edl-signmode]').value) || 'integree',
         socSignNom: val('edl-soc-nom'), socSignEmail: val('edl-soc-email'),
       };
     };
@@ -8665,12 +8669,44 @@ FP.edl = {
           }
         }
         const b64 = doc.output('datauristring').split(',')[1];
-        let mailed = false, signed = false;
-        // A) Signature électronique Yousign (si demandée) : l'employé ET le signataire société
-        //    reçoivent chacun un lien de signature, positionné sur LEUR case.
-        if (data.sign && data.to && FP.supabase && FP.supabase.functions) {
+        const mode = data.signMode || 'integree';
+        let mailed = false, signed = false, sentForSign = false;
+        const sig = doc.__edlSig || {};
+        // Liste des signataires (employé + éventuellement le signataire société).
+        const signersList = [{ role: 'employe', nom: data.employe, email: data.to }];
+        if (data.socSignEmail && /@/.test(data.socSignEmail)) signersList.push({ role: 'societe', nom: (data.socSignNom || data.socNom || 'Société'), email: data.socSignEmail.trim() });
+
+        // A) SIGNATURE INTÉGRÉE (Parc Pilot, sans prestataire) : chaque signataire reçoit un LIEN
+        //    vers signer.html, signe au doigt/souris, et le PDF signé revient dans la fiche.
+        if (mode === 'integree' && data.to && FP.db && FP.db.insert) {
+          try {
+            const token = 'sig-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+            let soc = 'PXP'; try { soc = (FP.activeSociete ? FP.activeSociete() : 'PXP') || 'PXP'; } catch (e) {} if (soc === '__all__') soc = 'PXP';
+            const rec = {
+              token, vehiculeId: veh.id, plaque: data.immat, societe: soc, employe: data.employe, modele: data.modele,
+              date: data.date, sens: data.sens, pdfUrl: url || '', fieldEmploye: sig.employe || null, fieldSociete: sig.societe || null,
+              signataires: signersList.map(s => ({ role: s.role, nom: s.nom, email: s.email, signed: false })), statut: 'en_attente',
+            };
+            const ins = await FP.db.insert('edl_signatures', rec);
+            if (ins && ins.error) throw new Error(ins.error.message || 'insert');
+            const base = FP.edl.SIGN_BASE || 'https://parc-pilot.fr/signer.html';
+            for (const s of signersList) {
+              const link = base + '?t=' + encodeURIComponent(token) + '&who=' + s.role;
+              const qui = s.role === 'societe' ? 'pour la société' : '';
+              const html = `<p>Bonjour,</p><p>Merci de <b>signer électroniquement</b> ${qui ? qui + ' ' : ''}l'état des lieux du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)})${isRestit ? ', rendu' : ', remis'} le ${esc(FP.date(data.date))}.</p><p><a href="${link}" style="display:inline-block;background:#0F1E3D;color:#fff;padding:11px 20px;border-radius:8px;text-decoration:none;font-weight:700">✍️ Signer le document</a></p><p style="font-size:12px;color:#64748b">Ou copiez ce lien : ${link}</p><p>— ${esc(data.socNom || 'Gestion de flotte')}</p>`;
+              try { await FP.sendEmail({ to: s.email, cc: '', subject: 'À signer — état des lieux ' + data.immat + (s.role === 'societe' ? ' (société)' : ''), html, text: 'Signer l\'état des lieux : ' + link, replyTo: prof.mailExpediteur || '' }); } catch (e) {}
+            }
+            sentForSign = true;
+          } catch (e) {
+            console.warn('[edl integree]', e);
+            btn.disabled = false; btn.innerHTML = old;
+            showErr('⚠️ Envoi pour signature impossible :\n' + (e.message || e) + '\n\n(Le PDF est enregistré dans les Documents. Réessaie, ou choisis « Aucune — pièce jointe ». Si l\'erreur parle de « edl_signatures », la table n\'est pas encore créée côté serveur.)');
+            return;
+          }
+        }
+        // B) SIGNATURE YOUSIGN (si le compte est activé) : lien Yousign par signataire.
+        else if (mode === 'yousign' && data.to && FP.supabase && FP.supabase.functions) {
           const nameParts = (full) => { const p = String(full || '').trim().split(/\s+/); return { firstName: p[0] || 'Signataire', lastName: p.slice(1).join(' ') || '-' }; };
-          const sig = doc.__edlSig || {};
           const signers = [{ ...nameParts(data.employe), email: data.to, field: sig.employe || null }];
           if (data.socSignEmail && /@/.test(data.socSignEmail)) signers.push({ ...nameParts(data.socSignNom || data.socNom), email: data.socSignEmail.trim(), field: sig.societe || null });
           try {
@@ -8682,16 +8718,13 @@ FP.edl = {
             if (yd && yd.ok) signed = true;
           } catch (e) {
             console.warn('[edl yousign]', e);
-            // Erreur PERSISTANTE (le message Yousign part trop vite en toast) : on l'affiche dans la
-            // fenêtre, on NE ferme PAS, et on ne bascule PAS en repli automatique → l'utilisateur lit
-            // l'erreur, la corrige (ou copie), et relance. Le PDF est déjà enregistré dans la fiche.
             btn.disabled = false; btn.innerHTML = old;
-            showErr('⚠️ Signature Yousign impossible :\n' + (e.message || e) + '\n\n(Le PDF a été enregistré dans les Documents du véhicule. Corrige puis réessaie, ou décoche « Faire signer » pour envoyer en pièce jointe.)');
+            showErr('⚠️ Signature Yousign impossible :\n' + (e.message || e) + '\n\n(Le PDF a été enregistré dans les Documents. Corrige puis réessaie, ou choisis « Signature intégrée » / « Aucune ».)');
             return;
           }
         }
-        // B) À défaut (pas de signature demandée, ou Yousign a échoué) : e-mail avec le PDF en pièce jointe.
-        if (!signed && data.to && FP.sendEmail) {
+        // C) À défaut (« Aucune », ou pas d'e-mail) : e-mail avec le PDF en pièce jointe.
+        if (!signed && !sentForSign && data.to && FP.sendEmail) {
           const phrase = isRestit
             ? `Veuillez trouver ci-joint l'<b>état des lieux de restitution</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}), rendu le ${esc(FP.date(data.date))}.`
             : `Veuillez trouver ci-joint l'<b>état des lieux</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}) qui vous est remis le ${esc(FP.date(data.date))}.`;
@@ -8699,7 +8732,7 @@ FP.edl = {
           try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux (' + motLbl + ') — ' + data.immat + ' — ' + data.employe, html, text: 'État des lieux (' + motLbl + ') du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
         }
         close();
-        if (FP.toast) FP.toast(signed ? '✓ Envoyé pour signature (Yousign)' : (mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré')));
+        if (FP.toast) FP.toast(sentForSign ? '✓ Envoyé pour signature (lien e-mail)' : signed ? '✓ Envoyé pour signature (Yousign)' : (mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré')));
       } catch (e) { btn.disabled = false; btn.innerHTML = old; if (FP.toast) FP.toast('Échec — réessaie'); console.warn('[edl]', e); }
     };
     ov.querySelector('[data-edl-dl]').addEventListener('click', () => run('dl'));
