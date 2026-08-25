@@ -2836,7 +2836,18 @@
       nom: (r.querySelector('[data-l-nom]') ? r.querySelector('[data-l-nom]').value : '').trim(),
       prop: (r.querySelector('[data-l-prop]') ? r.querySelector('[data-l-prop]').value : '').trim(),
     })).filter(l => l.nom || l.prop);
-    const s = FP.settings.get(); s.loueurs = list; FP.settings.save(s);
+    const s = FP.settings.get(); s.loueurs = list;
+    // ⚠️ La liste enregistrée fait AUTORITÉ : si l'ancien loueur « de repli » du profil
+    // (proprietaireLeasing / loueurNom) n'y figure plus, on le retire du profil — sinon getLoueurs
+    // le ré-injecte et un loueur qu'on vient de supprimer « revient » (cause des doublons impossibles
+    // à effacer).
+    try {
+      s.profil = (s.profil && typeof s.profil === 'object') ? s.profil : {};
+      const inList = (v) => { const t = String(v || '').trim().toLowerCase(); return !!(t && list.some(l => String(l.prop || '').trim().toLowerCase() === t || String(l.nom || '').trim().toLowerCase() === t)); };
+      if (s.profil.proprietaireLeasing && !inList(s.profil.proprietaireLeasing)) s.profil.proprietaireLeasing = '';
+      if (s.profil.loueurNom && !inList(s.profil.loueurNom)) s.profil.loueurNom = '';
+    } catch (e) {}
+    FP.settings.save(s);
     const st = $('leasing-config-status'); if (st) { st.textContent = '✓ Loueurs enregistrés.'; st.style.color = '#059669'; }
     rebuildLeasingData(); renderKPIs(); renderLeasing(); if (typeof renderLocalease === 'function') renderLocalease();
   });
