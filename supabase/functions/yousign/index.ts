@@ -53,14 +53,17 @@ Deno.serve(async (req) => {
 
   const pdfB64 = String(body.pdfBase64 || "");
   const filename = String(body.filename || "document.pdf");
-  const signer = (body.signer && typeof body.signer === "object") ? body.signer as Record<string, string> : {};
-  const first = String(signer.firstName || "").trim();
-  const last = String(signer.lastName || "").trim() || first || "-";
-  const email = String(signer.email || "").trim();
   const requestName = String(body.requestName || "État des lieux à signer").slice(0, 180);
-  const field = (body.field && typeof body.field === "object") ? body.field as Record<string, number> : {};
+  // On accepte une LISTE de signataires (employé + société), ou un seul (rétro-compat `signer`).
+  type Signer = { firstName?: string; lastName?: string; email?: string; field?: Record<string, number> };
+  let rawSigners: Signer[] = [];
+  if (Array.isArray(body.signers)) rawSigners = body.signers as Signer[];
+  else if (body.signer && typeof body.signer === "object") rawSigners = [{ ...(body.signer as Signer), field: (body.field as Record<string, number>) }];
+  const signers = rawSigners
+    .map((s) => ({ first: String(s.firstName || "").trim(), last: String(s.lastName || "").trim(), email: String(s.email || "").trim(), field: (s.field && typeof s.field === "object") ? s.field : {} }))
+    .filter((s) => s.email && s.first);
   if (!pdfB64) return json({ error: "PDF manquant." }, 400);
-  if (!email || !first) return json({ error: "Signataire incomplet (nom / e-mail)." }, 400);
+  if (!signers.length) return json({ error: "Aucun signataire valide (nom / e-mail)." }, 400);
 
   try {
     // 1) Créer la signature request (envoi par e-mail).
@@ -72,7 +75,7 @@ Deno.serve(async (req) => {
     const srTxt = await srRes.text();
     let sr: Record<string, unknown> = {};
     try { sr = JSON.parse(srTxt); } catch { /* garde le texte pour l'erreur */ }
-    if (!srRes.ok || !sr.id) return json({ error: "Yousign (création) : " + (String((sr as { detail?: string }).detail || "") || srTxt).slice(0, 300) }, 502);
+    if (!srRes.ok || !sr.id) return json({ error: "Yousign (création) : " + (String((sr as { detail?: string }).detail || "") || srTxt).slice(0, 500) }, 502);
     const srId = String(sr.id);
 
     // 2) Attacher le PDF (document signable) — multipart/form-data.
@@ -84,33 +87,36 @@ Deno.serve(async (req) => {
     const docTxt = await docRes.text();
     let docObj: Record<string, unknown> = {};
     try { docObj = JSON.parse(docTxt); } catch { /* idem */ }
-    if (!docRes.ok || !docObj.id) return json({ error: "Yousign (document) : " + docTxt.slice(0, 300) }, 502);
+    if (!docRes.ok || !docObj.id) return json({ error: "Yousign (document) : " + docTxt.slice(0, 500) }, 502);
     const docId = String(docObj.id);
 
-    // 3) Ajouter le signataire + le champ signature (position en points, origine haut-gauche).
-    const signerBody = {
-      info: { first_name: first, last_name: last, email, locale: "fr" },
-      signature_level: "electronic_signature",
-      signature_authentication_mode: "no_otp",
-      fields: [{
-        document_id: docId, type: "signature",
-        page: Math.max(1, Math.round(Number(field.page) || 1)),
-        x: Math.max(0, Math.round(Number(field.x) || 40)),
-        y: Math.max(0, Math.round(Number(field.y) || 700)),
-        width: Math.max(60, Math.round(Number(field.width) || 170)),
-        height: Math.max(30, Math.round(Number(field.height) || 40)),
-      }],
-    };
-    const sgRes = await fetch(API + "/signature_requests/" + srId + "/signers", {
-      method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: JSON.stringify(signerBody),
-    });
-    const sgTxt = await sgRes.text();
-    if (!sgRes.ok) return json({ error: "Yousign (signataire) : " + sgTxt.slice(0, 300) }, 502);
+    // 3) Ajouter CHAQUE signataire + son champ signature (position en points, origine haut-gauche).
+    for (const s of signers) {
+      const f = s.field || {};
+      const signerBody = {
+        info: { first_name: s.first, last_name: (s.last || s.first || "-"), email: s.email, locale: "fr" },
+        signature_level: "electronic_signature",
+        signature_authentication_mode: "no_otp",
+        fields: [{
+          document_id: docId, type: "signature",
+          page: Math.max(1, Math.round(Number(f.page) || 1)),
+          x: Math.max(0, Math.round(Number(f.x) || 40)),
+          y: Math.max(0, Math.round(Number(f.y) || 700)),
+          width: Math.max(60, Math.round(Number(f.width) || 170)),
+          height: Math.max(30, Math.round(Number(f.height) || 40)),
+        }],
+      };
+      const sgRes = await fetch(API + "/signature_requests/" + srId + "/signers", {
+        method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: JSON.stringify(signerBody),
+      });
+      const sgTxt = await sgRes.text();
+      if (!sgRes.ok) return json({ error: "Yousign (signataire " + s.email + ") : " + sgTxt.slice(0, 400) }, 502);
+    }
 
     // 4) Activer → Yousign envoie l'e-mail de signature au signataire.
     const actRes = await fetch(API + "/signature_requests/" + srId + "/activate", { method: "POST", headers: H });
     const actTxt = await actRes.text();
-    if (!actRes.ok) return json({ error: "Yousign (activation) : " + actTxt.slice(0, 300) }, 502);
+    if (!actRes.ok) return json({ error: "Yousign (activation) : " + actTxt.slice(0, 500) }, 502);
 
     return json({ ok: true, signatureRequestId: srId, env: (Deno.env.get("YOUSIGN_ENV") || "sandbox") });
   } catch (e) {
