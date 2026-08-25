@@ -8747,7 +8747,11 @@ FP.edl = {
         }
         close();
         if (FP.toast) FP.toast(sentForSign ? '✓ Envoyé pour signature (lien e-mail)' : signed ? '✓ Envoyé pour signature (Yousign)' : (mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré')));
-      } catch (e) { btn.disabled = false; btn.innerHTML = old; if (FP.toast) FP.toast('Échec — réessaie'); console.warn('[edl]', e); }
+      } catch (e) {
+        btn.disabled = false; btn.innerHTML = old; console.warn('[edl]', e);
+        // Erreur PERSISTANTE et lisible (au lieu d'un « Échec » fugace) → on sait la vraie cause.
+        showErr('⚠️ Échec :\n' + ((e && e.message) || e) + '\n\n(Astuce : si le message parle de « edl_signatures », la table n\'est pas encore créée côté serveur — lance le SQL fourni. Sinon, copie ce message.)');
+      }
     };
     ov.querySelector('[data-edl-dl]').addEventListener('click', () => run('dl'));
     ov.querySelector('[data-edl-send]').addEventListener('click', () => run('send'));
