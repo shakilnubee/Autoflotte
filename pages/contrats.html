@@ -677,7 +677,10 @@
     const val = String(prop || '').trim();
     if (String(v.proprietaire || '').trim() === val) return false; // pas de changement réel
     v.proprietaire = val;
-    try { if (FP.persist && FP.persist.upsert) FP.persist.upsert('vehicules', { id: v.id, proprietaire: v.proprietaire }); else if (FP.db && FP.db.upsert) FP.db.upsert('vehicules', { id: v.id, proprietaire: v.proprietaire }); } catch (e) { console.warn('[set loueur]', e); }
+    // ⚠️ UPDATE (pas upsert) : on ne modifie qu'UN champ d'un véhicule EXISTANT. Un upsert partiel
+    // tenterait un INSERT { id, proprietaire } qui échoue (colonnes NOT NULL immat/société, RLS) →
+    // « échec ». L'UPDATE ne touche que la colonne visée sur la ligne déjà présente.
+    try { if (FP.persist && FP.persist.update) FP.persist.update('vehicules', v.id, { proprietaire: v.proprietaire }); else if (FP.db && FP.db.update) FP.db.update('vehicules', v.id, { proprietaire: v.proprietaire }); } catch (e) { console.warn('[set loueur]', e); }
     try { const CK = window.FP_CACHE_KEY; const c = CK && JSON.parse(localStorage.getItem(CK) || 'null'); if (c && Array.isArray(c.vehicules)) { const cv = c.vehicules.find(x => x.id === v.id); if (cv) { cv.proprietaire = v.proprietaire; localStorage.setItem(CK, JSON.stringify(c)); } } } catch (e) {}
     return true;
   }
