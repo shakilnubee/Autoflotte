@@ -1109,6 +1109,12 @@
     if (docsCache) return docsCache.filter(d => d.vehiculeId === id);
     return lsGetAllDocs()[id] || [];
   }
+  // Les documents de type « état des lieux » regroupent DEUX natures : le PDF de l'état des lieux
+  // (un vrai DOCUMENT → doit figurer dans la liste « Documents ») et les PHOTOS jointes (galerie de
+  // la section « État des lieux »). On les distingue par l'extension d'URL : image = photo (galerie),
+  // sinon = document (PDF/fichier → liste Documents). SOURCE UNIQUE réutilisée aux deux endroits.
+  const EDL_IMG_RE = /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i;
+  function edlIsPhoto(d){ return !!(d && d.type === 'etat-des-lieux' && EDL_IMG_RE.test(d.url || '')); }
   // ⚠️ UN SEUL document par catégorie ADMINISTRATIVE : ajouter une nouvelle carte grise (etc.) REMPLACE
   // l'ancienne au lieu d'empiler des doublons. Les catégories qui peuvent légitimement être multiples
   // (état des lieux, PV, autre) ne sont PAS concernées.
@@ -1243,8 +1249,9 @@
 
   function docsSectionHTML(v){
     const builtin = builtinDocs(v);
-    // Les photos « état des lieux » ont leur propre galerie (edlSectionHTML) → on les exclut de la liste.
-    const docs = getVehDocs(v.id).filter(d => d.type !== 'etat-des-lieux');
+    // Les PHOTOS d'état des lieux ont leur propre galerie (edlSectionHTML) → exclues d'ici. En revanche
+    // le PDF de l'état des lieux (signé ou non) EST un document → il apparaît bien dans « Documents ».
+    const docs = getVehDocs(v.id).filter(d => !edlIsPhoto(d));
     // « Assurance (carte verte) » et « Carte mémo » faisaient doublon → on ne propose que « Carte mémo »
     // dans le menu (le type 'assurance' reste reconnu pour AFFICHER les anciens documents déjà ajoutés).
     const typeOptions = DOC_TYPES.filter(t => t.key !== 'assurance').map(t => `<option value="${t.key}">${t.label}</option>`).join('');
@@ -1315,7 +1322,8 @@
     }).join('') + `<div style="align-self:center;font-size:12px;color:#64748b;font-weight:700">${edlPending.length} photo${edlPending.length > 1 ? 's' : ''} prête${edlPending.length > 1 ? 's' : ''}</div>`;
   }
   function edlSectionHTML(v){
-    const photos = getVehDocs(v.id).filter(d => d.type === 'etat-des-lieux');
+    // Galerie = uniquement les PHOTOS (images). Le PDF de l'état des lieux est listé dans « Documents ».
+    const photos = getVehDocs(v.id).filter(edlIsPhoto);
     const list = getInspections(v.id);
     const isImgUrl = u => /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i.test(u || '');
     const photoTile = (p) => {
