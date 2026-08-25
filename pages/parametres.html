@@ -266,6 +266,7 @@
           <select class="field-input" id="soc-switch" style="width:auto;min-width:180px"></select>
           <button class="btn btn-dark text-sm" id="btn-new-societe"><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle société</button>
           <button class="btn text-sm text-red-600 hover:bg-red-50 hidden" id="btn-del-societe" title="Réservé au CEO — retire une société cliente de la liste"><i data-lucide="trash-2" class="w-4 h-4"></i> Supprimer une société</button>
+          <button class="btn text-sm hidden" id="btn-recover-settings" title="Réservé au CEO — restaure d'anciens réglages retrouvés sur le serveur (ne remplace rien de déjà rempli)" style="border-color:#93C5FD;color:#1D4ED8;background:#EFF6FF"><i data-lucide="life-buoy" class="w-4 h-4"></i> Récupérer d'anciens réglages</button>
         </div>
         <p class="text-xs text-slate-500 mt-2">Changer de société recharge la page avec ses données. À la création d'une nouvelle société, remplis ses infos ci-dessous.</p>
       </div>
@@ -1079,6 +1080,7 @@
     sel.innerHTML = list.map(s => `<option value="${s.replace(/"/g,'&quot;')}"${s === cur ? ' selected' : ''}>${FP.esc ? FP.esc(s) : s}</option>`).join('');
     // Bouton « Supprimer une société » : visible UNIQUEMENT pour le CEO.
     const db = $('btn-del-societe'); if (db) db.classList.toggle('hidden', !(FP.isCEO && FP.isCEO()));
+    const rb = $('btn-recover-settings'); if (rb) rb.classList.toggle('hidden', !(FP.isCEO && FP.isCEO()));
   }
   // Suppression COMPLÈTE d'une société (CEO) — société + ses comptes. Ne touche PAS aux données
   // déjà en base (véhicules/amendes… restent isolés). Liste depuis TOUTES les sources (registre local,
@@ -1120,6 +1122,54 @@
     for (const u of accs) { try { await FP.supabase.functions.invoke('manage-users', { body: { action: 'delete', id: u.id } }); } catch (e) {} }
     // Persiste la liste CÔTÉ SERVEUR avant de recharger (sinon la reload coupe la sauvegarde → retour).
     try { if (FP.supabase && FP.settings && FP.settings._dbId) { await FP.supabase.from('app_settings').upsert({ id: FP.settings._dbId(), data: FP.settings.get() }); } } catch (e) {}
+    location.reload();
+  }
+  // 🛟 RÉCUPÉRATION de réglages : lit les anciens enregistrements serveur (surtout la ligne héritée
+  // « global » de PXP, souvent épargnée par un écrasement de la ligne société) et RESTAURE uniquement
+  // les valeurs actuellement VIDES — ne remplace JAMAIS ce qui est déjà rempli. Sûr et réversible.
+  function _isEmptyVal(v) { return v == null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length); }
+  function _deepFillGaps(cur, src, prefix, changes) {
+    cur = (cur && typeof cur === 'object' && !Array.isArray(cur)) ? cur : {};
+    Object.keys(src || {}).forEach(k => {
+      const sv = src[k], cv = cur[k];
+      if (sv == null) return;
+      if (typeof sv === 'object' && !Array.isArray(sv)) {
+        cur[k] = _deepFillGaps((cv && typeof cv === 'object' && !Array.isArray(cv)) ? cv : {}, sv, prefix + k + '.', changes);
+      } else if (_isEmptyVal(cv) && !_isEmptyVal(sv)) {
+        cur[k] = sv; changes.push(prefix + k);
+      }
+    });
+    return cur;
+  }
+  async function recoverSettings() {
+    if (!(FP.isCEO && FP.isCEO())) { alert('Action réservée au CEO.'); return; }
+    let rows = [];
+    try {
+      const active = (FP.activeSociete && FP.activeSociete()) || 'PXP';
+      const ids = Array.from(new Set(['global', 'PXP', active].filter(x => x && x !== '__all__')));
+      const r = await FP.supabase.from('app_settings').select('id, data').in('id', ids);
+      rows = (r && r.data) || [];
+    } catch (e) {}
+    if (!rows.length) { alert("Aucun ancien enregistrement de réglages trouvé sur le serveur."); return; }
+    // Source = fusion des anciens enregistrements (la ligne « global » d'abord : c'est la plus ancienne
+    // pour PXP). Première valeur non-vide gardée.
+    const order = { global: 0, PXP: 1 };
+    rows.sort((a, b) => (order[a.id] != null ? order[a.id] : 9) - (order[b.id] != null ? order[b.id] : 9));
+    const source = {};
+    rows.forEach(row => { const d = (row && row.data && typeof row.data === 'object') ? row.data : {}; _deepFillGaps(source, d, '', []); });
+    const cur = FP.settings.get();
+    const changes = [];
+    const restored = _deepFillGaps(JSON.parse(JSON.stringify(cur)), source, '', changes);
+    // On ne restaure PAS la liste des sociétés / tombstones via ce mécanisme (géré ailleurs) pour éviter
+    // de ressusciter une société supprimée.
+    ['societes', 'societesDeleted'].forEach(k => { if (restored[k] !== undefined) restored[k] = cur[k]; });
+    const realChanges = changes.filter(c => c !== 'societes' && !c.startsWith('societes'));
+    if (!realChanges.length) { alert("Rien à restaurer : les anciens enregistrements ne contiennent pas d'infos qui vous manquent aujourd'hui."); return; }
+    const apercu = realChanges.slice(0, 12).map(c => '• ' + c).join('\n') + (realChanges.length > 12 ? '\n… et ' + (realChanges.length - 12) + ' autre(s)' : '');
+    if (!await FP.confirm('🛟 ' + realChanges.length + " réglage(s) retrouvé(s) à restaurer :\n\n" + apercu + "\n\n⚠️ On ne remplace RIEN de ce qui est déjà rempli — on ne fait que combler les trous.\n\nRestaurer ?")) return;
+    FP.settings.save(restored);
+    try { if (FP.supabase && FP.settings && FP.settings._dbId) { await FP.supabase.from('app_settings').upsert({ id: FP.settings._dbId(), data: FP.settings.get() }); } } catch (e) {}
+    alert('✓ ' + realChanges.length + ' réglage(s) restauré(s). La page va se recharger.');
     location.reload();
   }
   // Formulaire du profil (champs générés depuis FP.PROFIL_CHAMPS)
@@ -1433,6 +1483,7 @@
   { const sw = $('soc-switch'); if (sw) sw.addEventListener('change', e => switchSociete(e.target.value)); }
   { const nb = $('btn-new-societe'); if (nb) nb.addEventListener('click', newSociete); }
   { const db = $('btn-del-societe'); if (db) db.addEventListener('click', deleteSociete); }
+  { const rb = $('btn-recover-settings'); if (rb) rb.addEventListener('click', recoverSettings); }
   // Réservé au CEO (super-admin) : sauvegarde complète + bascule/création de société (multi-flotte).
   // Un Admin gère les INFOS de SA société (plus bas), mais ne change pas de société ni n'en crée.
   if (FP.isSuperAdmin && !FP.isSuperAdmin()) {
