@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260825h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260825h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260826a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260825h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260826a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -595,11 +595,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260825h"></script>
-<script src="../assets/js/supabase-client.js?v=20260825h"></script>
-<script src="../assets/js/data.js?v=20260825h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260826a"></script>
+<script src="../assets/js/supabase-client.js?v=20260826a"></script>
+<script src="../assets/js/data.js?v=20260826a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260825h"></script>
+<script src="../assets/js/app.js?v=20260826a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1444,6 +1444,7 @@
       // de la ligne et que le KPI du haut. (Avant : uniquement la médiane → 2 totaux différents à
       // l'écran, et 0 pour un véhicule avec loyer d'offre mais sans encore de facture.)
       const cRaw = (FP.leasingContrat) ? FP.leasingContrat(v.immat) : null;
+      if (cRaw && FP.leasingTermine && FP.leasingTermine(cRaw)) return; // contrat fini → plus de loyer projeté (parité avec le KPI du haut)
       const offerLoyer = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(cRaw) : null;
       const mens = (offerLoyer != null) ? offerLoyer : mensualiteFixe(v.immat);
       if (mens > 0) {
@@ -2209,9 +2210,21 @@
     const tbody = $('tbody-leasing'); if (!tbody) return { nb: 0, mens: 0, eng: 0, nbAvecLoyer: 0 };
     // On garde l'INDEX d'origine (les actions data-loc-* pointent dessus) tout en filtrant par loueur.
     const matched = list.map((c, i) => ({ c, i })).filter(x => matchLoueur(x.c));
-    const mensTotal = matched.reduce((s,x)=>s+(Number(x.c.loyerTTC)||0),0);
-    const engTotal  = matched.reduce((s,x)=>s+((Number(x.c.loyerTTC)||0)*(Number(x.c.dureeMois)||0)),0);
-    const nbAvecLoyer = matched.reduce((n,x)=>n+((Number(x.c.loyerTTC)||0)>0?1:0),0);
+    // ⚠️ SOURCE UNIQUE des KPIs section = MÊME calcul que le loyer affiché sur la ligne (loyerCourant)
+    // ET que la carte du haut (locMens) : loyer d'offre + avenant courant + override facture (par immat),
+    // et un contrat TERMINÉ ne compte plus de loyer mensuel. Avant, le total additionnait le loyerTTC
+    // brut → il divergeait de la ligne et de la carte du haut.
+    const curLoyerLoc = (c) => {
+      const ik = (c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '') || '').toUpperCase();
+      const ov = (ik && FP.getLeasingOverrides) ? (FP.getLeasingOverrides()[ik] || {}).loyer : null;
+      const bs = (ov != null && ov !== '') ? Number(ov) : c.loyerTTC;
+      const off = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant({ loyer: bs, avenants: c.avenants }) : null;
+      return off != null ? off : (+bs || 0);
+    };
+    const termineLoc = (c) => !!(FP.leasingTermine && FP.leasingTermine(c));
+    const mensTotal = matched.reduce((s,x)=> s + (termineLoc(x.c) ? 0 : curLoyerLoc(x.c)), 0);
+    const engTotal  = matched.reduce((s,x)=> s + (curLoyerLoc(x.c) * (Number(x.c.dureeMois)||0)), 0);
+    const nbAvecLoyer = matched.reduce((n,x)=> n + (curLoyerLoc(x.c) > 0 ? 1 : 0), 0);
     // Recherche (comme BPCE) : ne filtre QUE les lignes affichées, pas les KPIs (totaux du loueur).
     const q = FP.norm(localeaseSearch).trim();
     const shown = q ? matched.filter(({ c }) => FP.norm(`${c.immat || ''} ${c.marque || ''} ${c.modele || ''} ${c.conducteur || ''}`).includes(q)) : matched;
