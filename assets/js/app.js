@@ -2982,11 +2982,11 @@ FP.PROFIL_CHAMPS = [
   { key: 'edlSignataireNom',   label: 'États des lieux — signataire société (nom)',   type: 'text',  ph: 'ex. Mallaury Herembert — la personne qui signe côté société' },
   { key: 'edlSignataireEmail', label: 'États des lieux — e-mail du signataire société', type: 'email', ph: 'ex. mallaury@masociete.fr — reçoit le lien de signature Yousign' },
   { key: 'mailDomaineEnvoi',   label: "Domaine d'envoi vérifié (Resend)", type: 'text',  ph: 'ex. resend.masociete.fr — le domaine validé dans Resend (le mail part de <ton adresse>@ce-domaine, réponse vers l’e-mail ci-dessus)' },
-  // Prestataires carte carburant / badge péage PROPRES à la société (comme le loueur). Vide = valeur
-  // par défaut (PXP → TotalEnergies / Ulys ; autre société → libellé générique). Sert aux libellés
-  // partout (fiches, Total Fleet, Ulys) et au rattachement de la conso.
-  { key: 'prestataireCarte',   label: 'Prestataire carte carburant',      type: 'text',  ph: 'ex. TotalEnergies, Shell, BP… (vide = TotalEnergies pour PXP)' },
-  { key: 'prestataireBadge',   label: 'Prestataire badge de péage',       type: 'text',  ph: 'ex. Ulys, Fulli, Bip&Go… (vide = Ulys pour PXP)' },
+  // ⚠️ Les PRESTATAIRES carte carburant / badge péage NE sont PLUS ici : ils se gèrent dans
+  // Contrôle → « Cartes & badges » (bouton ➕ Prestataire), au même endroit que le reste des
+  // prestataires. Les valeurs déjà enregistrées (settings.prestataireCarte / .prestataireBadge)
+  // restent lues par FP.prestataireCarte() / FP.prestataireBadge() ; vide = défaut (PXP →
+  // TotalEnergies / Ulys ; autre société → libellé générique).
   // ⚠️ Les LOUEURS (BPCE, Ayvens…) se gèrent dans l'onglet CONTRATS (liste multi-loueurs
   // settings.loueurs), PAS ici. On n'expose donc PAS loueurNom/proprietaireLeasing dans le
   // formulaire Paramètres (les valeurs restent en base pour la rétro-compat / le repli PXP).
@@ -4354,17 +4354,32 @@ FP.refreshDeclCondBadge = async () => {
     // Le compteur arrive en ASYNC après fp:data-ready → on prévient les vues d'alertes de se re-rendre
     // (dashboard « À traiter », page Suivi & alertes) pour que l'alerte « demande conducteur » apparaisse.
     if (changed) { try { window.dispatchEvent(new CustomEvent('fp:decl-count', { detail: { count } })); } catch (e) {} }
-    document.querySelectorAll('a[data-nav="sinistres.html"], .fp-sidebar a[href*="sinistres.html"], aside a[href*="sinistres.html"]').forEach(a => {
+    // États des lieux EN ATTENTE DE SIGNATURE (au moins un signataire manquant) → comptent dans le
+    // badge « Suivi & alertes » (le gestionnaire voit qu'il reste des signatures à faire, où qu'il soit).
+    let edlPend = 0;
+    try { if (FP.edlSign && FP.edlSign.load) { const p = await FP.edlSign.load(); edlPend = Array.isArray(p) ? p.length : 0; } } catch (e) {}
+    // BADGE « Sinistres » = uniquement les déclarations de type sinistre/problème (pas km/état des lieux).
+    FP.setNavBadge('sinistres.html', FP.declCondSinCount, FP.declCondSinCount + ' déclaration(s) sinistre/problème en attente');
+    // BADGE « Suivi & alertes » = demandes conducteur (km, état des lieux, question) + signatures en attente.
+    const notifCount = FP.declCondKmCount + FP.declCondEdlCount + FP.declCondQuestionCount + edlPend;
+    FP.setNavBadge('notifications.html', notifCount, notifCount + ' élément(s) à traiter (demande conducteur, signature…)');
+  } catch (e) {}
+};
+// Pose/retire une pastille rouge sur un lien de la sidebar (par data-nav ou href), sur toutes ses occurrences.
+FP.setNavBadge = function (navFile, count, title) {
+  try {
+    const sel = 'a[data-nav="' + navFile + '"], .fp-sidebar a[href*="' + navFile + '"], aside a[href*="' + navFile + '"]';
+    document.querySelectorAll(sel).forEach(a => {
       let b = a.querySelector('.fp-decl-badge');
-      if (!count) { if (b) b.remove(); return; }
+      if (!count || count < 1) { if (b) b.remove(); return; }
       if (!b) {
         b = document.createElement('span');
         b.className = 'fp-decl-badge';
         b.style.cssText = 'background:#EF4444;color:#fff;font-size:.66rem;font-weight:800;min-width:1.1rem;text-align:center;padding:.05rem .35rem;border-radius:999px;margin-left:auto';
         a.appendChild(b);
       }
-      b.title = count + ' demande(s) conducteur en attente';
-      b.textContent = count;
+      b.title = title || (count + ' à traiter');
+      b.textContent = count > 99 ? '99+' : count;
     });
   } catch (e) {}
 };
@@ -8710,8 +8725,12 @@ FP.edl = {
         // lien AUTOMATIQUEMENT une fois le gestionnaire signé (envoi côté serveur, cf. edge edl-sign).
         // S'il n'y a pas de signataire société → le salarié est seul (ordre 1) et reçoit tout de suite.
         const signersList = [];
-        if (data.socSignEmail && /@/.test(data.socSignEmail)) signersList.push({ role: 'societe', ordre: 1, nom: (data.socSignNom || data.socNom || 'Société'), email: data.socSignEmail.trim() });
-        signersList.push({ role: 'employe', ordre: signersList.length ? 2 : 1, nom: data.employe, email: data.to });
+        // Nom du signataire société : JAMAIS l'e-mail (déroutant sur la page de signature). On prend le
+        // nom saisi (s'il n'a pas l'air d'un e-mail), sinon le nom de la société, sinon « Gestionnaire de flotte ».
+        const cleanName = (v) => { const s = String(v || '').trim(); return (s && !/@/.test(s)) ? s : ''; };
+        const socSignerNom = cleanName(data.socSignNom) || cleanName(data.socNom) || 'Gestionnaire de flotte';
+        if (data.socSignEmail && /@/.test(data.socSignEmail)) signersList.push({ role: 'societe', ordre: 1, nom: socSignerNom, email: data.socSignEmail.trim() });
+        signersList.push({ role: 'employe', ordre: signersList.length ? 2 : 1, nom: cleanName(data.employe) || 'Salarié', email: data.to });
 
         // A) SIGNATURE INTÉGRÉE (Parc Pilot, sans prestataire) : chaque signataire reçoit un LIEN
         //    vers signer.html, signe au doigt/souris, et le PDF signé revient dans la fiche.
@@ -8869,22 +8888,29 @@ FP.edl = {
       if (col === 1) { y = rowY + rowH + gap; }
     }
     // Signatures.
-    y += 6; ensure(34); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(15, 30, 61); doc.text('SIGNATURES', M, y); y += 6;
+    y += 6; ensure(44); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(15, 30, 61); doc.text('SIGNATURES', M, y); y += 6;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(60, 70, 85);
     doc.text(isRestit ? 'Le véhicule est restitué dans l\'état décrit ci-dessus.' : 'Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 10;
     const colW = (W - 2 * M) / 2;
+    const labelY = y;
     doc.text('Signature de l\'employé :', M, y); doc.text('Signature ' + (data.socNom || 'société') + ' :', M + colW, y);
-    // Champs signature (employé à gauche, société à droite) pour Yousign — position en POINTS,
-    // origine haut-gauche (1 mm = 2.83465 pt). L'app envoie chaque signataire sur SON champ.
+    const lineY = labelY + 16, dateY = lineY + 5, emailY = dateY + 5;
+    const dateLblW = doc.getTextWidth('Date : ') + 1;   // largeur du libellé « Date : » (mm) → valeur juste après
+    // Champs signature (employé à gauche, société à droite) — position en POINTS, origine HAUT-gauche
+    // (1 mm = 2.83465 pt). L'app envoie chaque signataire sur SON champ ; l'edge y appose l'image de la
+    // signature + la DATE (alignée sur « Date : ») + l'E-MAIL du signataire (sous la date). SOURCE UNIQUE
+    // des coordonnées : ici (l'edge ne fait que dessiner à ces positions) — cf. buildSignedPdf.
     try {
-      const PT = 2.83465, p = doc.internal.getCurrentPageInfo().pageNumber, sy = Math.round((y + 2) * PT), sh = Math.round(13 * PT);
+      const PT = 2.83465, p = doc.internal.getCurrentPageInfo().pageNumber, sy = Math.round((labelY + 2) * PT), sh = Math.round(13 * PT);
       doc.__edlSig = {
-        employe: { page: p, x: Math.round(M * PT), y: sy, width: Math.round((colW - 14) * PT), height: sh },
-        societe: { page: p, x: Math.round((M + colW) * PT), y: sy, width: Math.round((colW - 6) * PT), height: sh },
+        employe: { page: p, x: Math.round(M * PT), y: sy, width: Math.round((colW - 14) * PT), height: sh,
+                   dateX: Math.round((M + dateLblW) * PT), dateY: Math.round(dateY * PT), emailX: Math.round(M * PT), emailY: Math.round(emailY * PT) },
+        societe: { page: p, x: Math.round((M + colW) * PT), y: sy, width: Math.round((colW - 6) * PT), height: sh,
+                   dateX: Math.round((M + colW + dateLblW) * PT), dateY: Math.round(dateY * PT), emailX: Math.round((M + colW) * PT), emailY: Math.round(emailY * PT) },
       };
     } catch (e) {}
-    y += 16; doc.setDrawColor(150, 160, 175); doc.line(M, y, M + colW - 12, y); doc.line(M + colW, y, W - M, y); y += 5;
-    doc.text('Date :', M, y); doc.text('Date :', M + colW, y);
+    y = lineY; doc.setDrawColor(150, 160, 175); doc.line(M, y, M + colW - 12, y); doc.line(M + colW, y, W - M, y); y = dateY;
+    doc.text('Date :', M, y); doc.text('Date :', M + colW, y); y = emailY + 2;
     // Pied de page Parc Pilot.
     doc.setFontSize(7.5); doc.setTextColor(150, 160, 175); doc.text('Édité via Parc Pilot — gestion de flotte', M, H - 8);
     return doc;
