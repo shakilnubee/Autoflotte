@@ -302,17 +302,16 @@
       </div>
       <p id="leasing-bpce-masque" class="text-sm text-slate-400 hidden">Section masquée par le filtre. Choisis <b>« Tous les loueurs »</b> ci-dessus pour la réafficher.</p>
 
-      <!-- ⚠️ FUSION (une seule table leasing) : les contrats LLD saisis à la main (tous loueurs,
-           Ayvens compris) sont désormais rendus dans LA MÊME table ci-dessus (tbody-leasing / ls-cards).
-           On garde ici les seuls outils propres aux contrats Ayvens : téléversement d'un PDF de contrat
-           et récupération/restauration des contrats. Les libellés loc-title/loc-desc restent (masqués)
-           pour ne casser aucune référence JS. -->
+      <!-- ⚠️ FUSION (une seule table leasing) : les contrats LLD saisis à la main (TOUS loueurs)
+           sont rendus dans LA MÊME table ci-dessus (tbody-leasing / ls-cards). On garde ici les
+           seuls outils propres aux contrats LLD : téléversement d'un PDF et récupération des PDF
+           orphelins. Les libellés loc-title/loc-desc restent (masqués) pour ne casser aucune
+           référence JS. Aucun libellé n'est spécifique à une société ou à un loueur. -->
       <input type="file" id="loc-upload-file" accept="application/pdf,image/*" class="hidden" />
       <input type="file" id="bpce-up-file" accept="application/pdf,image/*" class="hidden" />
       <span id="loc-title" class="hidden"></span><span id="loc-desc" class="hidden"></span>
       <div class="mt-3 pt-3 border-t border-slate-100">
         <button id="loc-recover-pdf" type="button" class="text-xs font-semibold" style="color:var(--fp-accent)"><i data-lucide="link" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Retrouver les PDF (relier les contrats déjà sur le Drive)</button>
-        <button id="loc-restore-default" type="button" class="text-xs font-semibold ml-4" style="color:var(--fp-accent)"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i> Restaurer les contrats Ayvens manquants</button>
         <div id="loc-recover-panel" class="hidden mt-3 p-4 rounded-lg" style="background:#FFFBEB;border:1px solid #FDE68A"></div>
       </div>
     </div>
@@ -695,12 +694,14 @@
   // ===== Filtre par loueur (partagé BPCE + Localease) =====
   let leasingLoueurFilter = 'all';
   const LOCALEASE_VAL = '__localease__';
-  function localeaseLabel(){ return (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? 'Localease (Ayvens)' : 'Leasing (LLD)'; }
+  // Libellé GÉNÉRIQUE (aucun nom de loueur codé en dur) — identique pour TOUTES les sociétés.
+  // Le vrai nom du loueur vient des données (registre loueurs / champ c.loueur du contrat).
+  function localeaseLabel(){ return 'Leasing (LLD)'; }
   function populateLeasingLoueurFilter(){
     const sel = $('leasing-loueur-filter'); if (!sel) return;
     const cur = leasingLoueurFilter;
     const noms = [...new Set(getLoueurs().map(l => (l.nom || '').trim()).filter(Boolean))];
-    let hasLoc = false; try { hasLoc = getLocalease().length > 0 || (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP'); } catch (e) {}
+    let hasLoc = false; try { hasLoc = getLocalease().length > 0; } catch (e) {}
     let html = '<option value="all">Tous les loueurs</option>' + noms.map(n => `<option value="${escC(n)}">${escC(n)}</option>`).join('');
     if (hasLoc) html += `<option value="${LOCALEASE_VAL}">${escC(localeaseLabel())}</option>`;
     sel.innerHTML = html;
@@ -2123,10 +2124,10 @@
     if (!CONTRAT_TABS[_ct]) { try { _ct = (FP.lastTab && FP.lastTab.get('contrats', 'leasing')) || 'leasing'; } catch (e) { _ct = 'leasing'; } }
     switchContratTab(CONTRAT_TABS[_ct] ? _ct : 'leasing'); }
 
-  // ===== Leasing Localease (Ayvens) — contrats LLD séparés de BPCE =====
-  // Prompt de lecture automatique d'une offre/contrat LLD Ayvens (Localease)
+  // ===== Contrats LLD (Location Longue Durée) saisis à la main — tous loueurs =====
+  // Prompt de lecture automatique d'une offre/contrat LLD (générique, tous loueurs)
   const LOCALEASE_PROMPT = [
-    "Lis ce contrat / offre de Location Longue Duree (LLD) Ayvens (ex Localease) de vehicule.",
+    "Lis ce contrat / offre de Location Longue Duree (LLD) de vehicule.",
     "Renvoie UNIQUEMENT un objet JSON valide, sans texte autour, avec ces cles (mets null si absent) :",
     "loyerTTC : le LOYER MENSUEL total TTC (par mois), nombre a point decimal (ex 414.71). C'est le loyer global incluant services, PAS le seul loyer financier. Cherche les libelles 'Loyer mensuel', 'Total mensuel TTC', 'Redevance mensuelle', 'Mensualite TTC', 'Loyer TTC/mois'. Prends le montant PAR MOIS (jamais le total du contrat).",
     "dureeMois : la duree du contrat en mois (ex 25).",
@@ -2138,29 +2139,17 @@
     "kmSupp : le cout du kilometre supplementaire en euros/km s'il est indique (ex 0.16 ; 'Cout pour 1 kilometre supplementaire (TTC)'), sinon null.",
     "kmTolerance : la tolerance kilometrique offerte en km si indiquee (ex 2000 ; 'Tolerance Kilometrique : 2000 km'), sinon null."
   ];
-  // ⚠️ RGPD (repo PUBLIC) : ce modèle de secours ne contient AUCUNE donnée personnelle (ni prénom,
-  // ni plaque réels). Les vrais contrats PXP vivent dans Supabase (localeaseContrats, déjà semé) ; ce
-  // tableau ne sert QUE de repli si la liste serveur est vide. Le conducteur/la plaque se (re)saisissent
-  // dans l'app. Données techniques (modèle, km, loyer, CO₂) conservées car non identifiantes.
-  const LOCALEASE_DEFAUT = [
-    { conducteur:'Collaborateur 1', marque:'Hyundai', modele:'Kona Hybrid 138',   dureeMois:25, kmTotal:40000, loyerTTC:263.62, offre:'26AV048044', co2:104, kmSupp:0.13, kmTolerance:2000 },
-    { conducteur:'Collaborateur 2', marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:40000, loyerTTC:386.77, offre:'26AV048023', co2:126, malus:1130, kmSupp:0.16, kmTolerance:2000 },
-    { conducteur:'Collaborateur 3', marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:60000, loyerTTC:463.75, offre:'26AV048026', co2:126, malus:1130, kmSupp:0.16, kmTolerance:2000 },
-    { conducteur:'Collaborateur 4', marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:50000, loyerTTC:414.71, offre:'26MI086362', co2:126, malus:1130, kmSupp:0.16, kmTolerance:2000 },
-    { conducteur:'Collaborateur 5', marque:'Hyundai', modele:'Tucson Hybrid 239', dureeMois:25, kmTotal:50000, loyerTTC:414.71, offre:'26MI086362', co2:126, malus:1130, kmSupp:0.16, kmTolerance:2000 },
-    // Offre 26AV048042 = 2 véhicules identiques (Kona), pas encore nominatifs → 2 lignes
-    { conducteur:'Collaborateur 6', marque:'Hyundai', modele:'Kona Hybrid 138', dureeMois:25, kmTotal:70000, loyerTTC:354.97, offre:'26AV048042', co2:104, kmSupp:0.13, kmTolerance:2000 },
-    { conducteur:'Collaborateur 7', marque:'Hyundai', modele:'Kona Hybrid 138', dureeMois:25, kmTotal:70000, loyerTTC:354.97, offre:'26AV048042', co2:104, kmSupp:0.13, kmTolerance:2000 },
-  ];
+  // ⚠️ CONFIG IDENTIQUE POUR TOUTES LES SOCIÉTÉS : aucun contrat n'est codé en dur. Chaque société
+  // (PXP incluse) démarre avec une liste VIDE ; les vrais contrats vivent dans Supabase
+  // (localeaseContrats, isolé par société) et se saisissent dans l'app. Un nouvel import ne récupère
+  // donc jamais de données d'une autre société.
   function getLocalease(){
     const s = FP.settings.get();
     let changed = false;
-    // ⚠️ Les défauts ne sont semés QU'UNE SEULE FOIS (première ouverture, PXP uniquement). Ensuite la
-    // liste enregistrée FAIT AUTORITÉ → renommer un conducteur ne réinjecte plus la ligne d'origine
-    // (c'était la cause des doublons). Une autre société démarre sans contrat.
+    // La liste enregistrée FAIT AUTORITÉ (pas de réinjection → pas de doublons). Base vide pour tous.
     let list = Array.isArray(s.localeaseContrats) ? s.localeaseContrats : null;
     if (list === null) {
-      list = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP') ? LOCALEASE_DEFAUT.map(d => ({ ...d })) : [];
+      list = [];
       changed = true;
     }
     // Migration : un seul PDF (pdfUrl) -> liste de documents (docs[]) pour pouvoir en attacher plusieurs
@@ -2202,13 +2191,13 @@
   // LLD saisis à la main (tous loueurs) dans le MÊME tbody que les lignes dérivées, et RENVOIE ses
   // compteurs { nb, mens, eng, nbAvecLoyer } pour que l'orchestrateur additionne les KPIs.
   function _renderLocaleaseRows(){
-    const estPXP = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP');
-    // Un contrat saisi appartient à un loueur (c.loueur) ; vide = Localease/Ayvens (défaut historique).
+    // Un contrat saisi appartient à un loueur (c.loueur) ; vide = « Leasing (LLD) » générique.
     const matchLoueur = (c) => leasingLoueurFilter === 'all' || (leasingLoueurFilter === LOCALEASE_VAL ? !((c.loueur || '').toString().trim()) : (c.loueur || '').toString().trim() === leasingLoueurFilter);
-    const tit = $('loc-title'); if (tit) tit.textContent = (leasingLoueurFilter !== 'all' && leasingLoueurFilter !== LOCALEASE_VAL) ? ('Contrats saisis — ' + leasingLoueurFilter) : (estPXP ? 'Leasing — Localease (Ayvens)' : 'Leasing (LLD)');
+    const tit = $('loc-title'); if (tit) tit.textContent = (leasingLoueurFilter !== 'all' && leasingLoueurFilter !== LOCALEASE_VAL) ? ('Contrats saisis — ' + leasingLoueurFilter) : 'Leasing (LLD)';
     const desc = $('loc-desc'); if (desc) desc.textContent = 'Contrats de leasing — loyers mensuels, échéances et documents.';
-    const rec = $('loc-recover-pdf'); if (rec) rec.style.display = estPXP ? '' : 'none';
-    { const rd = $('loc-restore-default'); if (rd) rd.style.display = estPXP ? '' : 'none'; }
+    // « Retrouver les PDF » : masqué hors PXP — il liste un dossier de stockage PARTAGÉ (isolation
+    // des données entre sociétés). Ce n'est pas un libellé de config, c'est une garde de sécurité.
+    { const rec = $('loc-recover-pdf'); if (rec) rec.style.display = ((((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP')) ? '' : 'none'; }
     const list = getLocalease();
     const tbody = $('tbody-leasing'); if (!tbody) return { nb: 0, mens: 0, eng: 0, nbAvecLoyer: 0 };
     // On garde l'INDEX d'origine (les actions data-loc-* pointent dessus) tout en filtrant par loueur.
@@ -2500,7 +2489,7 @@
     }
     const rec = {
       conducteur: ($('locadd-cond').value || '').trim(), immat: immat || '', marque, modele,
-      loueur: (loueurSel === LOCALEASE_VAL) ? '' : loueurSel, // '' = Localease/Ayvens (défaut historique)
+      loueur: (loueurSel === LOCALEASE_VAL) ? '' : loueurSel, // '' = « Leasing (LLD) » générique (sans loueur nommé)
       loyerTTC: loyer, dureeMois: dureeV, kmTotal: parseInt($('locadd-km').value, 10) || null,
       debut: debutV, offre: ($('locadd-offre').value || '').trim(), docs: _locAddDoc ? [{ url: _locAddDoc.url, name: _locAddDoc.name }] : [],
     };
@@ -2551,7 +2540,9 @@
       // id V-NNN suivant
       let maxN=0; (data.vehicules||[]).forEach(v=>{ const m=String(v.id||'').match(/(\d+)/); if(m){ const n=+m[1]; if(n>maxN)maxN=n; } });
       const id='V-'+String(maxN+1).padStart(3,'0');
-      const loueur=(FP.societeProfil&&FP.societeProfil().loueurNom)||'Ayvens';
+      // Loueur du véhicule créé = celui du CONTRAT (donnée), sinon le loueur du profil société.
+      // Aucun nom de loueur codé en dur : générique pour toutes les sociétés.
+      const loueur=((c.loueur||'').toString().trim())||(FP.societeProfil&&FP.societeProfil().loueurNom)||'';
       const veh={ id, immat, marque:c.marque||'', modele:c.modele||'', categorie:'', carburant:'', km:(c.kmActuel!=null?c.kmActuel:0), statut:'actif', proprietaire:loueur, groupes:['non-classe'] };
       if(c.co2!=null) veh.co2=c.co2;
       data.vehicules.push(veh);
@@ -2648,19 +2639,6 @@
   function contratOptionsHtml() {
     return getLocalease().map((c, i) => `<option value="${i}">${escC((c.conducteur || '?') + ' — ' + (c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '') || '?') + ' — ' + (c.marque || '') + ' ' + (c.modele || ''))}</option>`).join('');
   }
-  // Restaurer les contrats Ayvens du modèle d'origine qui ne sont plus dans la liste enregistrée.
-  if ($('loc-restore-default')) $('loc-restore-default').addEventListener('click', async () => {
-    if (((FP.activeSociete && FP.activeSociete()) || 'PXP') !== 'PXP') { alert('Restauration réservée à la flotte PXP.'); return; }
-    const norm = s => (s || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-    const cur = getLocalease();
-    const has = (d) => cur.some(c => norm(c.conducteur) === norm(d.conducteur) && ((d.offre && norm(c.offre) === norm(d.offre)) || norm(c.modele) === norm(d.modele)));
-    const missing = LOCALEASE_DEFAUT.filter(d => !has(d));
-    if (!missing.length) { if (FP.toast) FP.toast('Aucun contrat Ayvens manquant ✓'); else alert('Rien à restaurer — tous les contrats Ayvens du modèle sont présents.'); return; }
-    if (!await FP.confirm(`Restaurer ${missing.length} contrat(s) Ayvens manquant(s) ?\n\n${missing.map(d => '• ' + d.conducteur + ' — ' + d.modele + (d.offre ? ' (' + d.offre + ')' : '')).join('\n')}`)) return;
-    const s = FP.settings.get(); const l = getLocalease(); missing.forEach(d => l.push({ ...d, docs: [] })); s.localeaseContrats = l; FP.settings.save(s);
-    renderLocalease(); renderKPIs();
-    if (FP.toast) FP.toast(`✓ ${missing.length} contrat(s) Ayvens restauré(s)`); else alert(missing.length + ' contrat(s) restauré(s).');
-  });
   if ($('loc-recover-pdf')) $('loc-recover-pdf').addEventListener('click', async () => {
     const panel = $('loc-recover-panel'); if (!panel) return;
     if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }
