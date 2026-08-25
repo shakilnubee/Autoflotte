@@ -8488,6 +8488,7 @@ FP.edl = {
     const prof = (FP.settings.get().profil) || {};
     const socNom = prof.nom || (FP.activeSociete && FP.activeSociete()) || '';
     const cond = String(opts.conducteur || veh.chauffeur || '').trim();
+    const sens = String(opts.sens || 'remise') === 'restitution' ? 'restitution' : 'remise';
     let condEmail = ''; try { const c = (FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(cond) : null; condEmail = (c && c.email) || ''; } catch (e) {}
     const km = FP.kmActuel ? FP.kmActuel(veh) : (veh.km || 0);
     const today = new Date().toISOString().slice(0, 10);
@@ -8502,10 +8503,15 @@ FP.edl = {
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,61,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:14px';
     ov.innerHTML = `<div style="background:#fff;border-radius:16px;max-width:780px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">
       <div style="padding:14px 18px;border-bottom:1px solid #eef2f7;display:flex;align-items:center;gap:10px">
-        <div style="font-size:16px;font-weight:800;color:#0f1e3d">📋 État des lieux — remise du véhicule</div>
+        <div style="font-size:16px;font-weight:800;color:#0f1e3d">📋 État des lieux du véhicule</div>
         <button type="button" data-edl-x style="margin-left:auto;border:none;background:none;font-size:22px;line-height:1;cursor:pointer;color:#64748b">×</button>
       </div>
       <div style="padding:16px 18px;overflow:auto;flex:1">
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding:8px 10px;background:#f8fafc;border-radius:10px;font-size:13px">
+          <span style="color:#64748b;font-weight:700">Type :</span>
+          <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="radio" name="edl-sens" value="remise" ${sens !== 'restitution' ? 'checked' : ''}> 📥 Remise (entrée)</label>
+          <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="radio" name="edl-sens" value="restitution" ${sens === 'restitution' ? 'checked' : ''}> 📤 Restitution (sortie)</label>
+        </div>
         ${infoRow('Nom / prénom employé', inp('edl-employe', cond, 'Employé'))}
         ${infoRow('Modèle du véhicule', inp('edl-modele', modele))}
         ${infoRow('Immatriculation', inp('edl-immat', veh.immat || ''))}
@@ -8521,6 +8527,12 @@ FP.edl = {
         <div style="margin:2px 0">${this.ACC.map(accRow).join('')}</div>
         <label style="display:flex;gap:10px;align-items:center;margin-top:6px"><span style="flex:0 0 60px;font-size:12.5px;color:#64748b">Autres</span>${inp('edl-autres', '', 'Autres accessoires…')}</label>
         ${ta('edl-com-acc', 'Commentaires (accessoires)…')}
+        ${sec('Photos de l\'état du véhicule')}
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <label style="cursor:pointer;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:12.5px;color:#0f1e3d;background:#fff;display:inline-flex;gap:6px;align-items:center">📷 Ajouter des photos<input type="file" data-edl-photos accept="image/*" multiple capture="environment" style="display:none"></label>
+          <span data-edl-photocount style="font-size:12px;color:#94a3b8">Recommandé à la restitution (carrosserie, intérieur, dommages…). Elles sont jointes au PDF et rangées dans la fiche.</span>
+        </div>
+        <div data-edl-thumbs style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
         ${sec('Envoi')}
         ${infoRow('E-mail de l\'employé', inp('edl-to', condEmail, 'employe@exemple.fr'))}
         <div style="font-size:11.5px;color:#94a3b8;margin-top:2px">Le PDF sera enregistré dans les Documents du véhicule et envoyé à l'employé${prof.mailCopie ? ' (copie ' + esc(prof.mailCopie) + ')' : ''}. Le logo de ta société est repris automatiquement.</div>
@@ -8535,14 +8547,41 @@ FP.edl = {
     if (window.lucide) lucide.createIcons();
     const close = () => ov.remove();
     ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-edl-x]')) close(); });
+    // --- Photos (jointes au PDF + enregistrées dans la fiche « État des lieux ») ---
+    const edlPhotos = [];
+    const photoIn = ov.querySelector('[data-edl-photos]');
+    const thumbsBox = ov.querySelector('[data-edl-thumbs]');
+    const pcount = ov.querySelector('[data-edl-photocount]');
+    const renderThumbs = () => {
+      if (!thumbsBox) return;
+      thumbsBox.innerHTML = edlPhotos.map((p, i) => `<div style="position:relative"><img src="${p}" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid #e2e8f0"><button type="button" data-edl-prm="${i}" title="Retirer" style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:9999px;width:20px;height:20px;line-height:1;font-size:12px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.3)">✕</button></div>`).join('');
+      if (pcount) pcount.textContent = edlPhotos.length ? (edlPhotos.length + ' photo(s) jointe(s)') : 'Recommandé à la restitution (carrosserie, intérieur, dommages…). Elles sont jointes au PDF et rangées dans la fiche.';
+    };
+    // Charge une image, la redimensionne (max 1400 px) et renvoie un data URL JPEG léger (PDF raisonnable).
+    const loadPhoto = (file) => new Promise(res => {
+      const r = new FileReader();
+      r.onload = () => { const img = new Image(); img.onload = () => {
+        const max = 1400; let w = img.width, h = img.height; if (w > max || h > max) { const k = max / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
+        try { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h); res(cv.toDataURL('image/jpeg', 0.82)); } catch (e) { res(r.result); }
+      }; img.onerror = () => res(null); img.src = r.result; };
+      r.onerror = () => res(null); r.readAsDataURL(file);
+    });
+    if (photoIn) photoIn.addEventListener('change', async e => {
+      const files = Array.from(e.target.files || []); e.target.value = '';
+      for (const f of files) { if (!/^image\//.test(f.type)) continue; const d = await loadPhoto(f); if (d) edlPhotos.push(d); }
+      renderThumbs();
+    });
+    if (thumbsBox) thumbsBox.addEventListener('click', e => { const b = e.target.closest('[data-edl-prm]'); if (b) { edlPhotos.splice(+b.getAttribute('data-edl-prm'), 1); renderThumbs(); } });
     const collect = () => {
       const val = id => { const el = ov.querySelector('#' + id); return el ? String(el.value || '').trim() : ''; };
       const grp = g => Array.from(ov.querySelectorAll('[data-edl="' + g + '"]')).map(i => ({ label: i.getAttribute('data-lbl'), val: (i.value || '').trim() || 'RAS' }));
       const acc = Array.from(ov.querySelectorAll('[data-acc]')).map(c => ({ label: c.getAttribute('data-acc'), on: c.checked }));
+      const sr = ov.querySelector('input[name="edl-sens"]:checked');
       return {
-        socNom, logo: prof.logoDataUrl || '', employe: val('edl-employe'), modele: val('edl-modele'), immat: val('edl-immat'),
+        socNom, logo: prof.logoDataUrl || '', sens: (sr && sr.value === 'restitution') ? 'restitution' : 'remise',
+        employe: val('edl-employe'), modele: val('edl-modele'), immat: val('edl-immat'),
         km: val('edl-km'), date: val('edl-date'), ext: grp('ext'), comExt: val('edl-com-ext'), int: grp('int'), comInt: val('edl-com-int'),
-        acc, autres: val('edl-autres'), comAcc: val('edl-com-acc'), to: val('edl-to'),
+        acc, autres: val('edl-autres'), comAcc: val('edl-com-acc'), to: val('edl-to'), photos: edlPhotos.slice(),
       };
     };
     const run = async (mode) => {
@@ -8551,19 +8590,38 @@ FP.edl = {
       btn.disabled = true; btn.textContent = '…';
       try {
         if (!(window.jspdf && window.jspdf.jsPDF)) { if (FP.ensureJsPDF) { await FP.ensureJsPDF(); } }
+        const isRestit = data.sens === 'restitution';
+        const motLbl = isRestit ? 'restitution' : 'remise';
         const doc = this._pdf(data);
-        const fname = 'Etat-des-lieux-' + (data.immat || 'vehicule') + '-' + data.date + '.pdf';
+        const fname = 'Etat-des-lieux-' + motLbl + '-' + (data.immat || 'vehicule') + '-' + data.date + '.pdf';
         if (mode === 'dl') { doc.save(fname); btn.disabled = false; btn.innerHTML = old; return; }
-        // Enregistre dans les Documents du véhicule + envoie par e-mail.
+        // Enregistre le PDF dans les Documents du véhicule + envoie par e-mail.
         const blob = doc.output('blob');
         let url = null;
         try { if (FP.uploadScan) url = await FP.uploadScan(new File([blob], fname, { type: 'application/pdf' }), 'documents'); } catch (e) {}
-        if (url && FP.persist) { try { await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: 'État des lieux remise ' + FP.date(data.date), url, driveId: null }); } catch (e) {} }
+        if (url && FP.persist) { try { await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: 'État des lieux ' + motLbl + ' ' + FP.date(data.date), url, driveId: null }); } catch (e) {} }
+        // Range AUSSI chaque photo dans la fiche « État des lieux » (label Entrée/Sortie = MÊME convention
+        // que les photos envoyées par le conducteur via le QR → un seul endroit, pas de doublon de logique).
+        if (Array.isArray(data.photos) && data.photos.length && FP.uploadScan && FP.persist) {
+          const sensLabel = isRestit ? 'Sortie' : 'Entrée';
+          for (const p of data.photos) {
+            try {
+              const m = /^data:(image\/[a-z]+);base64,/i.exec(p); const mime = (m && m[1]) || 'image/jpeg';
+              const bin = atob(p.split(',')[1]); const arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+              const ext = /png/i.test(mime) ? 'png' : 'jpg';
+              const purl = await FP.uploadScan(new File([arr], 'edl-' + motLbl + '-' + Date.now().toString(36) + '.' + ext, { type: mime }), 'documents');
+              if (purl) await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: sensLabel, url: purl, driveId: null });
+            } catch (e) {}
+          }
+        }
         let mailed = false;
         if (data.to && FP.sendEmail) {
           const b64 = doc.output('datauristring').split(',')[1];
-          const html = `<p>Bonjour,</p><p>Veuillez trouver ci-joint l'<b>état des lieux</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}) qui vous est remis le ${esc(FP.date(data.date))}.</p><p>Merci de vérifier, dater et signer.</p><p>— ${esc(data.socNom || 'Gestion de flotte')}</p>`;
-          try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux — ' + data.immat + ' — ' + data.employe, html, text: 'État des lieux du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
+          const phrase = isRestit
+            ? `Veuillez trouver ci-joint l'<b>état des lieux de restitution</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}), rendu le ${esc(FP.date(data.date))}.`
+            : `Veuillez trouver ci-joint l'<b>état des lieux</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}) qui vous est remis le ${esc(FP.date(data.date))}.`;
+          const html = `<p>Bonjour,</p><p>${phrase}</p><p>Merci de vérifier, dater et signer.</p><p>— ${esc(data.socNom || 'Gestion de flotte')}</p>`;
+          try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux (' + motLbl + ') — ' + data.immat + ' — ' + data.employe, html, text: 'État des lieux (' + motLbl + ') du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
         }
         close();
         if (FP.toast) FP.toast(mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré'));
@@ -8585,17 +8643,30 @@ FP.edl = {
     } else if (data.socNom) { doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(15, 30, 61); doc.text(data.socNom, M, y + 8); }
     doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(15, 30, 61);
     doc.text('ÉTAT DES LIEUX – VÉHICULE', W - M, y + 6, { align: 'right' });
+    const isRestit = data.sens === 'restitution';
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(120, 130, 145);
-    doc.text('À remplir lors de la remise du véhicule à l\'employé', W - M, y + 11, { align: 'right' });
+    doc.text(isRestit ? 'À remplir lors de la restitution du véhicule' : 'À remplir lors de la remise du véhicule à l\'employé', W - M, y + 11, { align: 'right' });
     y += 20; doc.setDrawColor(230, 235, 242); doc.line(M, y, W - M, y); y += 7;
     // Bloc infos.
-    const info = [['Nom et prénom de l\'employé', data.employe], ['Modèle du véhicule', data.modele], ['Immatriculation', data.immat], ['Kilométrage', data.km ? (data.km + ' km') : ''], ['Date de remise', data.date ? FP.date(data.date) : '']];
+    const info = [['Nom et prénom de l\'employé', data.employe], ['Modèle du véhicule', data.modele], ['Immatriculation', data.immat], ['Kilométrage', data.km ? (data.km + ' km') : ''], [isRestit ? 'Date de restitution' : 'Date de remise', data.date ? FP.date(data.date) : '']];
     doc.setFontSize(10.5);
     info.forEach(([l, v]) => { ensure(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(70, 80, 95); doc.text(l + ' :', M, y); doc.setFont('helvetica', 'normal'); doc.setTextColor(20, 28, 40); doc.text(String(v || ''), M + 62, y); y += 6.4; });
     const section = (title, rows, com) => {
       y += 3; ensure(12); doc.setFillColor(15, 30, 61); doc.rect(M, y - 4, W - 2 * M, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text(title, M + 2, y + 0.8); y += 8;
       doc.setFontSize(9.5);
-      rows.forEach(r => { ensure(6.5); doc.setTextColor(60, 70, 85); doc.setFont('helvetica', 'bold'); doc.text(r.label + ' :', M + 1, y); doc.setFont('helvetica', 'normal'); doc.setTextColor(20, 28, 40); doc.text(doc.splitTextToSize(String(r.val || 'RAS'), W - 2 * M - 62), M + 63, y); y += 6; });
+      // ⚠️ Le LIBELLÉ ET la VALEUR sont chacun renvoyés à la ligne dans LEUR colonne (sinon un libellé
+      // long — « Éléments électroniques… » — déborde sur la valeur, et une valeur longue chevauche la
+      // ligne suivante). On avance de la hauteur de la colonne la PLUS haute.
+      const LBL_W = 59, VAL_X = M + 63, VAL_W = W - M - VAL_X;
+      rows.forEach(r => {
+        const labelLines = doc.splitTextToSize(r.label + ' :', LBL_W);
+        const valLines = doc.splitTextToSize(String(r.val || 'RAS'), VAL_W);
+        const nL = Math.max(labelLines.length, valLines.length);
+        ensure(nL * 4.4 + 1.6);
+        doc.setTextColor(60, 70, 85); doc.setFont('helvetica', 'bold'); doc.text(labelLines, M + 1, y);
+        doc.setTextColor(20, 28, 40); doc.setFont('helvetica', 'normal'); doc.text(valLines, VAL_X, y);
+        y += nL * 4.4 + 1.6;
+      });
       if (com) { ensure(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const lines = doc.splitTextToSize('Commentaires : ' + com, W - 2 * M - 2); doc.text(lines, M + 1, y + 1); y += 5 + lines.length * 4.6; doc.setFont('helvetica', 'normal'); }
     };
     section('ÉTAT EXTÉRIEUR', data.ext, data.comExt);
@@ -8606,10 +8677,25 @@ FP.edl = {
     (data.acc || []).forEach(a => { ensure(6); doc.setFont('helvetica', 'normal'); doc.text((a.on ? '[X] ' : '[  ] ') + a.label, M + 1, y); y += 5.6; });
     if (data.autres) { ensure(6); doc.text('Autres : ' + data.autres, M + 1, y); y += 5.6; }
     if (data.comAcc) { ensure(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const l = doc.splitTextToSize('Commentaires : ' + data.comAcc, W - 2 * M - 2); doc.text(l, M + 1, y + 1); y += 5 + l.length * 4.6; }
+    // Photos jointes (2 par ligne, aspect préservé) — carrosserie, intérieur, dommages…
+    if (Array.isArray(data.photos) && data.photos.length) {
+      y += 5; ensure(12); doc.setFillColor(15, 30, 61); doc.rect(M, y - 4, W - 2 * M, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text('PHOTOS', M + 2, y + 0.8); y += 9;
+      const gap = 6, colW = (W - 2 * M - gap) / 2; let col = 0, rowH = 0, rowY = y;
+      data.photos.forEach(p => {
+        let aw = colW, ah = colW * 0.72;
+        try { const pr = doc.getImageProperties(p); if (pr && pr.width && pr.height) { ah = colW * (pr.height / pr.width); if (ah > 78) { ah = 78; aw = 78 * (pr.width / pr.height); } } } catch (e) {}
+        if (col === 0) { ensure(82); rowY = y; }
+        const x = M + col * (colW + gap) + (colW - aw) / 2;
+        try { doc.addImage(p, /png/i.test(p) ? 'PNG' : 'JPEG', x, rowY, aw, ah, undefined, 'FAST'); } catch (e) {}
+        rowH = Math.max(rowH, ah);
+        if (col === 1) { y = rowY + rowH + gap; col = 0; rowH = 0; } else { col = 1; }
+      });
+      if (col === 1) { y = rowY + rowH + gap; }
+    }
     // Signatures.
     y += 6; ensure(34); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(15, 30, 61); doc.text('SIGNATURES', M, y); y += 6;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(60, 70, 85);
-    doc.text('Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 10;
+    doc.text(isRestit ? 'Le véhicule est restitué dans l\'état décrit ci-dessus.' : 'Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 10;
     const colW = (W - 2 * M) / 2;
     doc.text('Signature de l\'employé :', M, y); doc.text('Signature ' + (data.socNom || 'gestionnaire') + ' :', M + colW, y);
     y += 16; doc.setDrawColor(150, 160, 175); doc.line(M, y, M + colW - 12, y); doc.line(M + colW, y, W - M, y); y += 5;
