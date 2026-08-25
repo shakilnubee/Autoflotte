@@ -2977,6 +2977,10 @@ FP.MAIL_DEFAUT = {
 FP.PROFIL_CHAMPS = [
   { key: 'mailExpediteur',     label: "E-mail d'envoi des amendes",       type: 'email', ph: 'ex. contact@masociete.fr' },
   { key: 'mailCopie',          label: 'E-mails en copie (séparés par ,)', type: 'text',  ph: 'ex. compta@masociete.fr, direction@masociete.fr' },
+  // Signataire côté SOCIÉTÉ pour les états des lieux (reçoit le lien Yousign pour signer « pour la
+  // société »). Propre à chaque société (le titulaire change d'une société à l'autre).
+  { key: 'edlSignataireNom',   label: 'États des lieux — signataire société (nom)',   type: 'text',  ph: 'ex. Mallaury Herembert — la personne qui signe côté société' },
+  { key: 'edlSignataireEmail', label: 'États des lieux — e-mail du signataire société', type: 'email', ph: 'ex. mallaury@masociete.fr — reçoit le lien de signature Yousign' },
   { key: 'mailDomaineEnvoi',   label: "Domaine d'envoi vérifié (Resend)", type: 'text',  ph: 'ex. resend.masociete.fr — le domaine validé dans Resend (le mail part de <ton adresse>@ce-domaine, réponse vers l’e-mail ci-dessus)' },
   // Prestataires carte carburant / badge péage PROPRES à la société (comme le loueur). Vide = valeur
   // par défaut (PXP → TotalEnergies / Ulys ; autre société → libellé générique). Sert aux libellés
@@ -8538,9 +8542,15 @@ FP.edl = {
         ${infoRow('E-mail de l\'employé', inp('edl-to', condEmail, 'employe@exemple.fr'))}
         <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;cursor:pointer">
           <input type="checkbox" data-edl-sign style="margin-top:2px">
-          <span style="font-size:12.5px;color:#334155">✍️ <b>Faire signer électroniquement (Yousign)</b> — l'employé reçoit un lien Yousign, signe en ligne, et le document signé revient dans la fiche. <span style="color:#94a3b8">(À défaut, le PDF part en pièce jointe pour signature manuelle.)</span></span>
+          <span style="font-size:12.5px;color:#334155">✍️ <b>Faire signer électroniquement (Yousign)</b> — l'employé <b>et</b> le signataire de la société reçoivent chacun un lien Yousign, signent en ligne, et le document signé revient dans la fiche. <span style="color:#94a3b8">(À défaut, le PDF part en pièce jointe pour signature manuelle.)</span></span>
         </label>
-        <div style="font-size:11.5px;color:#94a3b8;margin-top:4px">Le PDF sera enregistré dans les Documents du véhicule et envoyé à l'employé${prof.mailCopie ? ' (copie ' + esc(prof.mailCopie) + ')' : ''}. Le logo de ta société est repris automatiquement.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          ${infoRow('Signataire société (nom)', inp('edl-soc-nom', prof.edlSignataireNom || socNom, 'Nom du signataire société'))}
+          ${infoRow('E-mail signataire société', inp('edl-soc-email', prof.edlSignataireEmail || '', 'signataire@societe.fr'))}
+        </div>
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:2px">Le signataire société est pré-rempli depuis <b>Paramètres → Société</b> (modifiable par société). Il reçoit le lien pour signer « pour la société ».</div>
+        <div data-edl-err style="display:none;margin-top:10px;padding:10px 12px;border:1px solid #fca5a5;background:#fef2f2;border-radius:10px;font-size:12px;color:#991b1b;white-space:pre-wrap;word-break:break-word"></div>
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:6px">Le PDF sera enregistré dans les Documents du véhicule et envoyé à l'employé${prof.mailCopie ? ' (copie ' + esc(prof.mailCopie) + ')' : ''}. Le logo de ta société est repris automatiquement.</div>
       </div>
       <div style="padding:12px 18px;border-top:1px solid #eef2f7;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
         <button type="button" data-edl-x class="btn btn-outline">Annuler</button>
@@ -8618,9 +8628,13 @@ FP.edl = {
         km: val('edl-km'), date: val('edl-date'), ext: grp('ext'), comExt: val('edl-com-ext'), int: grp('int'), comInt: val('edl-com-int'),
         acc, autres: val('edl-autres'), comAcc: val('edl-com-acc'), to: val('edl-to'), photos: edlPhotos.slice(),
         sign: !!(ov.querySelector('[data-edl-sign]') && ov.querySelector('[data-edl-sign]').checked),
+        socSignNom: val('edl-soc-nom'), socSignEmail: val('edl-soc-email'),
       };
     };
+    const showErr = (msg) => { const b = ov.querySelector('[data-edl-err]'); if (b) { b.style.display = ''; b.textContent = msg || ''; try { b.scrollIntoView({ block: 'nearest' }); } catch (e) {} } };
+    const hideErr = () => { const b = ov.querySelector('[data-edl-err]'); if (b) b.style.display = 'none'; };
     const run = async (mode) => {
+      hideErr();
       const data = collect();
       const btn = ov.querySelector(mode === 'send' ? '[data-edl-send]' : '[data-edl-dl]'); const old = btn.innerHTML;
       btn.disabled = true; btn.textContent = '…';
@@ -8652,18 +8666,29 @@ FP.edl = {
         }
         const b64 = doc.output('datauristring').split(',')[1];
         let mailed = false, signed = false;
-        // A) Signature électronique Yousign (si demandée) : l'employé reçoit un lien de signature.
+        // A) Signature électronique Yousign (si demandée) : l'employé ET le signataire société
+        //    reçoivent chacun un lien de signature, positionné sur LEUR case.
         if (data.sign && data.to && FP.supabase && FP.supabase.functions) {
+          const nameParts = (full) => { const p = String(full || '').trim().split(/\s+/); return { firstName: p[0] || 'Signataire', lastName: p.slice(1).join(' ') || '-' }; };
+          const sig = doc.__edlSig || {};
+          const signers = [{ ...nameParts(data.employe), email: data.to, field: sig.employe || null }];
+          if (data.socSignEmail && /@/.test(data.socSignEmail)) signers.push({ ...nameParts(data.socSignNom || data.socNom), email: data.socSignEmail.trim(), field: sig.societe || null });
           try {
-            const parts = String(data.employe || '').trim().split(/\s+/);
-            const firstName = parts[0] || 'Employé'; const lastName = parts.slice(1).join(' ') || '-';
             const { data: yd, error: ye } = await FP.supabase.functions.invoke('yousign', {
-              body: { pdfBase64: b64, filename: fname, requestName: 'État des lieux (' + motLbl + ') — ' + data.immat + ' — ' + data.employe, signer: { firstName, lastName, email: data.to }, field: doc.__edlSig || null },
+              body: { pdfBase64: b64, filename: fname, requestName: 'État des lieux (' + motLbl + ') — ' + data.immat + ' — ' + data.employe, signers },
             });
             if (ye) { let m = ye.message || 'Yousign'; try { const c = ye.context && (await ye.context.json()); if (c && c.error) m = c.error; } catch (e) {} throw new Error(m); }
             if (yd && yd.error) throw new Error(yd.error);
             if (yd && yd.ok) signed = true;
-          } catch (e) { console.warn('[edl yousign]', e); if (FP.toast) FP.toast('⚠️ Signature Yousign impossible (' + (e.message || e) + ') — envoi du PDF en pièce jointe à la place.', { danger: true }); }
+          } catch (e) {
+            console.warn('[edl yousign]', e);
+            // Erreur PERSISTANTE (le message Yousign part trop vite en toast) : on l'affiche dans la
+            // fenêtre, on NE ferme PAS, et on ne bascule PAS en repli automatique → l'utilisateur lit
+            // l'erreur, la corrige (ou copie), et relance. Le PDF est déjà enregistré dans la fiche.
+            btn.disabled = false; btn.innerHTML = old;
+            showErr('⚠️ Signature Yousign impossible :\n' + (e.message || e) + '\n\n(Le PDF a été enregistré dans les Documents du véhicule. Corrige puis réessaie, ou décoche « Faire signer » pour envoyer en pièce jointe.)');
+            return;
+          }
         }
         // B) À défaut (pas de signature demandée, ou Yousign a échoué) : e-mail avec le PDF en pièce jointe.
         if (!signed && data.to && FP.sendEmail) {
@@ -8747,9 +8772,16 @@ FP.edl = {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(60, 70, 85);
     doc.text(isRestit ? 'Le véhicule est restitué dans l\'état décrit ci-dessus.' : 'Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 10;
     const colW = (W - 2 * M) / 2;
-    doc.text('Signature de l\'employé :', M, y); doc.text('Signature ' + (data.socNom || 'gestionnaire') + ' :', M + colW, y);
-    // Champ signature (employé) pour Yousign — position en POINTS, origine haut-gauche (1 mm = 2.83465 pt).
-    try { const PT = 2.83465; doc.__edlSig = { page: doc.internal.getCurrentPageInfo().pageNumber, x: Math.round(M * PT), y: Math.round((y + 2) * PT), width: Math.round((colW - 14) * PT), height: Math.round(13 * PT) }; } catch (e) {}
+    doc.text('Signature de l\'employé :', M, y); doc.text('Signature ' + (data.socNom || 'société') + ' :', M + colW, y);
+    // Champs signature (employé à gauche, société à droite) pour Yousign — position en POINTS,
+    // origine haut-gauche (1 mm = 2.83465 pt). L'app envoie chaque signataire sur SON champ.
+    try {
+      const PT = 2.83465, p = doc.internal.getCurrentPageInfo().pageNumber, sy = Math.round((y + 2) * PT), sh = Math.round(13 * PT);
+      doc.__edlSig = {
+        employe: { page: p, x: Math.round(M * PT), y: sy, width: Math.round((colW - 14) * PT), height: sh },
+        societe: { page: p, x: Math.round((M + colW) * PT), y: sy, width: Math.round((colW - 6) * PT), height: sh },
+      };
+    } catch (e) {}
     y += 16; doc.setDrawColor(150, 160, 175); doc.line(M, y, M + colW - 12, y); doc.line(M + colW, y, W - M, y); y += 5;
     doc.text('Date :', M, y); doc.text('Date :', M + colW, y);
     // Pied de page Parc Pilot.
