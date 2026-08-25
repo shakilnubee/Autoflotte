@@ -444,6 +444,9 @@
     { k: 'masse', label: 'Masse (carte grise)', val: v => vehMasseEff(v) },
     { k: 'couleur', label: 'Couleur' },
     { k: 'boite', label: 'Boîte de vitesses' },
+    // Valeur d'achat : sert à l'AVANTAGE EN NATURE (véhicule acheté), au TCO, à la valeur du parc et
+    // à l'estimation de revente. Inutile en leasing (l'AEN y utilise le loyer, le véhicule n'est pas acheté).
+    { k: 'valeurAchat', label: "Valeur d'achat (avantage en nature, TCO, revente)", skip: v => estLeasing(v), empty: v => !(Number(v.valeurAchat) > 0) },
     // Carte grise + carte mémo : doivent être HÉBERGÉES SUR LA PLATEFORME (pas Google Drive) pour
     // apparaître dans le QR conducteur → « Mes documents ». On les remplit par UPLOAD (PDF/photo).
     { k: 'carteGrise', label: 'Carte grise à importer sur la plateforme (pour le QR véhicule)', empty: v => !hasCgPlatform(v) },
@@ -478,6 +481,9 @@
     // majoration (base `montant` vide, seul `montantMajore` renseigné) était signalée « manquante » à tort.
     { k: 'montant', label: 'Montant', empty: a => !(FP.montantDu ? FP.montantDu(a) : a.montant) },
     { k: 'numeroAvis', label: "N° d'avis" }, { k: 'motif', label: 'Motif' }, { k: 'date', label: 'Date' },
+    // Date limite du tarif minoré : alimente l'alerte « payer avant » (ne pas rater le tarif réduit).
+    // Demandée seulement pour une amende ENCORE à payer et qui a bien un tarif minoré.
+    { k: 'dateLimiteMinore', label: 'Date limite du tarif minoré (alerte « payer avant »)', skip: a => (FP.estAPayer && !FP.estAPayer(a)) || isEmptyV(a.montantMinore) },
   ];
   // Renvoie les champs manquants sous forme [{k,label}]. Si ignPrefix est fourni, on saute
   // les champs marqués « ignorés » (ex. véhicule étranger, moto sans CO₂/masse…) — persistant.
@@ -708,7 +714,7 @@
       if (k === 'boite') return { kind: 'select', options: ['Manuelle', 'Automatique'] };
       if (k === 'carburant') return { kind: 'select', options: (window.FP && FP.CARBURANTS) || [] };
       if (['dateMiseEnCirculation', 'prochainCT', 'antiPollution'].indexOf(k) !== -1) return { kind: 'date' };
-      if (['km', 'puissanceFiscale', 'co2'].indexOf(k) !== -1) return { kind: 'number' };
+      if (['km', 'puissanceFiscale', 'co2', 'valeurAchat'].indexOf(k) !== -1) return { kind: 'number' };
       if (k === 'masse') return { kind: 'masse' };
       if (k === 'cleDetenteur' || k === 'cgDetenteur') return { kind: 'detenteur' };
       if (k === 'carteGrise') return { kind: 'file', docType: 'carte-grise' }; // upload PDF/photo (pas de saisie)
@@ -718,7 +724,7 @@
       return { kind: 'text' };
     }
     if (type === 'cond') { return (['dateNaissance', 'permisExpiration'].indexOf(k) !== -1) ? { kind: 'date' } : { kind: 'text' }; }
-    if (type === 'am') { if (k === 'montant') return { kind: 'number' }; if (k === 'date') return { kind: 'date' }; return { kind: 'text' }; }
+    if (type === 'am') { if (k === 'montant') return { kind: 'number' }; if (k === 'date' || k === 'dateLimiteMinore') return { kind: 'date' }; return { kind: 'text' }; }
     return { kind: 'fiche' };
   }
   function buildRaf() {
