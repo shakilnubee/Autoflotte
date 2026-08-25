@@ -3518,18 +3518,22 @@ FP.settings = {
     } catch { return JSON.parse(JSON.stringify(this.defaults)); }
   },
   save(obj) {
+    // On CAPTURE l'état local AVANT d'écraser le cache : il sert de base de « delta » quand le snapshot
+    // serveur n'est pas encore posé (→ on n'écrit alors QUE les clés que CE poste vient de changer,
+    // sans réécraser les modifs récentes d'un autre poste). Cf. _pushSettings.
+    let prevLocal = null; try { prevLocal = JSON.parse(this._readLocal() || 'null'); } catch (e) {}
     localStorage.setItem(this._key(), JSON.stringify(obj));
     this.applyTheme();
     // Partage les réglages PAR SOCIÉTÉ sur tous les postes via Supabase (ligne app_settings = la
     // société). Écriture par FUSION « delta » anti-écrasement (voir _pushSettings) — sinon deux
     // postes admin qui enregistrent en même temps s'écrasaient (le dernier gagnait, l'autre perdait
     // ses ajouts). Passe par la file de sécurité : renvoyé auto si la base est momentanément injoignable.
-    this._pushSettings(obj);
+    this._pushSettings(obj, prevLocal);
   },
   // Réf. = ce que le serveur contenait au dernier chargement/écriture (posé par supabase-client au load).
   // Sert à ne réécrire QUE les clés que CE poste a modifiées (le « delta »).
   _serverSnap: null,
-  _pushSettings(obj) {
+  _pushSettings(obj, prevLocal) {
     const self = this;
     let id; try { id = this._dbId(); } catch (e) { id = 'global'; }
     const plainUpsert = (data) => {
@@ -3538,23 +3542,26 @@ FP.settings = {
         else if (FP.db && FP.supabase) FP.db.upsert('app_settings', { id, data });
       } catch (e) {}
     };
-    const base = (this._serverSnap && typeof this._serverSnap === 'object') ? this._serverSnap : null;
+    // Base de comparaison pour le « delta ». Idéalement le snapshot serveur (posé au load). À DÉFAUT
+    // (synchro initiale pas encore faite), l'état LOCAL D'AVANT ce save : il permet de n'écrire QUE les
+    // clés que CE poste vient réellement de changer → on ne réécrase plus les modifs récentes d'un AUTRE
+    // poste (avant, une fusion « le local gagne » sans base pouvait les annuler). Null seulement au tout
+    // 1er enregistrement sur un cache vierge.
+    const base = (this._serverSnap && typeof this._serverSnap === 'object') ? this._serverSnap
+               : ((prevLocal && typeof prevLocal === 'object') ? prevLocal : null);
     // Sans Supabase : on ne peut rien lire/écrire côté serveur → file/local (comportement d'avant).
     if (!(FP.supabase && FP.supabase.from)) { plainUpsert(obj); return; }
-    // ⚠️ ANTI-ÉCRASEMENT (cause racine d'un bug vécu) : PAS de snapshot serveur sur CET appareil = la
-    // synchro initiale n'a pas encore chargé les réglages partagés. Écrire le cache local TEL QUEL
-    // écraserait la config de la société avec une version potentiellement INCOMPLÈTE. On lit donc
-    // d'abord le serveur et on FUSIONNE EN PROFONDEUR : on part du serveur (→ préserve les clés que ce
-    // cache local ne connaît pas, ex. SIRET) et on applique par-dessus les valeurs locales (→ les
-    // changements de CE poste sont bien enregistrés). Ainsi l'écriture N'EST JAMAIS bloquée (on peut
-    // toujours corriger) ET la config serveur n'est jamais effacée par un cache incomplet.
+    // ⚠️ AUCUN repère (ni snapshot serveur ni état local précédent) = tout 1er enregistrement sur ce
+    // cache. Écrire le cache local TEL QUEL écraserait une config serveur existante. On lit donc le
+    // serveur et on COMBLE seulement les TROUS (le serveur gagne sur les feuilles existantes → SIRET &
+    // Cie préservés), sans jamais réécraser. Repli file d'écriture si la lecture échoue (pas de perte).
     if (!base) {
-      const deepMerge = (dst, over) => {
-        const out = (dst && typeof dst === 'object' && !Array.isArray(dst)) ? Object.assign({}, dst) : {};
-        Object.keys(over || {}).forEach(k => {
-          const ov = over[k];
-          if (ov && typeof ov === 'object' && !Array.isArray(ov)) out[k] = deepMerge(out[k], ov);
-          else out[k] = ov;   // valeurs simples + tableaux : le local gagne (les tombstones gèrent les sociétés)
+      const gapFill = (remote, local) => {
+        const out = (remote && typeof remote === 'object' && !Array.isArray(remote)) ? Object.assign({}, remote) : {};
+        Object.keys(local || {}).forEach(k => {
+          const lv = local[k], rv = out[k];
+          if (lv && typeof lv === 'object' && !Array.isArray(lv)) out[k] = gapFill(rv, lv);
+          else if (rv === undefined || rv === null || rv === '') out[k] = lv;   // serveur absent/vide → on comble
         });
         return out;
       };
@@ -3562,11 +3569,11 @@ FP.settings = {
         try {
           const r = await FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
           const remote = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : null;
-          const merged = remote ? deepMerge(remote, obj) : obj;
+          const merged = remote ? gapFill(remote, obj) : obj;
           self._serverSnap = JSON.parse(JSON.stringify(merged));
           try { localStorage.setItem(self._key(), JSON.stringify(merged)); } catch (_) {}
           plainUpsert(merged);
-        } catch (e) { /* hors-ligne : on ne touche pas au serveur */ }
+        } catch (e) { plainUpsert(obj); }   // échec de lecture → au moins mettre en file (ne pas perdre l'écriture)
       })();
       return;
     }
