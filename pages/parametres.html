@@ -1146,7 +1146,10 @@
     let rows = [];
     try {
       const active = (FP.activeSociete && FP.activeSociete()) || 'PXP';
-      const ids = Array.from(new Set(['global', 'PXP', active].filter(x => x && x !== '__all__')));
+      // ⚠️ ISOLATION MULTI-SOCIÉTÉS : on ne restaure QUE depuis les anciens enregistrements de LA MÊME
+      // société. « global » est l'ancienne ligne héritée de PXP → à ne lire QUE si la société active est
+      // PXP (sinon on injecterait la config PXP — e-mails, loueurs… — dans une société cliente).
+      const ids = (active === 'PXP') ? ['global', 'PXP'] : [active];
       const r = await FP.supabase.from('app_settings').select('id, data').in('id', ids);
       rows = (r && r.data) || [];
     } catch (e) {}
