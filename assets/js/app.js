@@ -4354,15 +4354,16 @@ FP.refreshDeclCondBadge = async () => {
     // Le compteur arrive en ASYNC après fp:data-ready → on prévient les vues d'alertes de se re-rendre
     // (dashboard « À traiter », page Suivi & alertes) pour que l'alerte « demande conducteur » apparaisse.
     if (changed) { try { window.dispatchEvent(new CustomEvent('fp:decl-count', { detail: { count } })); } catch (e) {} }
-    // États des lieux EN ATTENTE DE SIGNATURE (au moins un signataire manquant) → comptent dans le
-    // badge « Suivi & alertes » (le gestionnaire voit qu'il reste des signatures à faire, où qu'il soit).
-    let edlPend = 0;
-    try { if (FP.edlSign && FP.edlSign.load) { const p = await FP.edlSign.load(); edlPend = Array.isArray(p) ? p.length : 0; } } catch (e) {}
+    // NOUVELLE activité de signature d'état des lieux (une signature reçue depuis la dernière visite de
+    // « Suivi & alertes ») → compte dans le badge « Suivi & alertes ». Le gestionnaire voit ainsi, où qu'il
+    // soit, qu'un document vient d'être signé (la pastille s'éteint quand il ouvre « Suivi & alertes »).
+    let edlUnseen = 0;
+    try { if (FP.edlSign && FP.edlSign.load) { await FP.edlSign.load(); edlUnseen = FP.edlSign._unseen || 0; } } catch (e) {}
     // BADGE « Sinistres » = uniquement les déclarations de type sinistre/problème (pas km/état des lieux).
     FP.setNavBadge('sinistres.html', FP.declCondSinCount, FP.declCondSinCount + ' déclaration(s) sinistre/problème en attente');
-    // BADGE « Suivi & alertes » = demandes conducteur (km, état des lieux, question) + signatures en attente.
-    const notifCount = FP.declCondKmCount + FP.declCondEdlCount + FP.declCondQuestionCount + edlPend;
-    FP.setNavBadge('notifications.html', notifCount, notifCount + ' élément(s) à traiter (demande conducteur, signature…)');
+    // BADGE « Suivi & alertes » = demandes conducteur (km, état des lieux, question) + signatures reçues.
+    const notifCount = FP.declCondKmCount + FP.declCondEdlCount + FP.declCondQuestionCount + edlUnseen;
+    FP.setNavBadge('notifications.html', notifCount, notifCount + ' nouveauté(s) : demande conducteur ou signature reçue');
   } catch (e) {}
 };
 // Pose/retire une pastille rouge sur un lien de la sidebar (par data-nav ou href), sur toutes ses occurrences.
@@ -8921,12 +8922,16 @@ FP.edl = {
 // Charge la table edl_signatures (filtrée par société) et expose les demandes NON entièrement
 // signées + la liste des signataires manquants. Lu par buildAlertes (alerte « en attente de signature »).
 FP.edlSign = {
-  _pending: null,
+  _pending: null,   // demandes non entièrement signées (pour l'alerte « en attente de signature »)
+  _unseen: 0,       // NOUVELLE activité de signature non encore vue par le gestionnaire (→ pastille menu)
+  _rows: null,      // dernières lignes chargées (pour markSeen)
+  _nbSignedOf(x) { const sgs = Array.isArray(x.signataires) ? x.signataires : []; return sgs.filter(s => s && s.signed).length; },
   async load() {
     try {
-      if (!(FP.db && FP.db.select)) { this._pending = []; return this._pending; }
+      if (!(FP.db && FP.db.select)) { this._pending = []; this._unseen = 0; return this._pending; }
       const r = await FP.db.select('edl_signatures');   // RLS + filtre société
       const rows = (r && r.data) ? r.data : [];
+      this._rows = rows;
       this._pending = rows
         .filter(x => x && (x.statut || 'en_attente') !== 'signe')
         .map(x => {
@@ -8936,8 +8941,34 @@ FP.edlSign = {
           return { plaque: x.plaque || '', modele: x.modele || '', vehiculeId: x.vehiculeId || '', date: x.date || '', sens: x.sens || 'remise', manque, nbTotal: requis.length };
         })
         .filter(x => x.manque.length);   // il reste au moins un signataire à signer
+      // NOUVELLE activité de signature = une signature de plus qu'à la dernière visite de « Suivi & alertes ».
+      // Suivi via settings.edlSeen { token: nbSignatures vues }. 1re fois → on initialise à l'existant
+      // (pas de gros chiffre au départ) ; ensuite chaque signature reçue fait +1 la pastille.
+      try {
+        const s = FP.settings.get();
+        let seen = (s.edlSeen && typeof s.edlSeen === 'object') ? s.edlSeen : null;
+        if (!seen) { // init : tout l'existant est considéré « déjà vu »
+          seen = {}; rows.forEach(x => { if (x && x.token) seen[x.token] = this._nbSignedOf(x); });
+          s.edlSeen = seen; try { FP.settings.save(s); } catch (e) {}
+          this._unseen = 0;
+        } else {
+          let u = 0; rows.forEach(x => { if (x && x.token && this._nbSignedOf(x) > (seen[x.token] || 0)) u++; });
+          this._unseen = u;
+        }
+      } catch (e) { this._unseen = 0; }
       return this._pending;
-    } catch (e) { this._pending = []; return this._pending; }
+    } catch (e) { this._pending = []; this._unseen = 0; return this._pending; }
+  },
+  // Marque toute l'activité de signature comme VUE (appelé quand on ouvre « Suivi & alertes ») → éteint la pastille.
+  markSeen() {
+    try {
+      const rows = this._rows || []; if (!rows.length) { this._unseen = 0; return; }
+      const s = FP.settings.get(); const seen = Object.assign({}, s.edlSeen || {});
+      rows.forEach(x => { if (x && x.token) seen[x.token] = this._nbSignedOf(x); });
+      s.edlSeen = seen; try { FP.settings.save(s); } catch (e) {}
+      this._unseen = 0;
+      if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
+    } catch (e) {}
   },
 };
 
