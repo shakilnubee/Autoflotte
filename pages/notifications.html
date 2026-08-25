@@ -609,6 +609,41 @@
     });
     return items;
   }
+  // === Contrats de leasing INCOMPLETS (champs manquants) ===================================
+  // Un véhicule en leasing dont le contrat n'a pas ses infos clés (date de début, forfait km, durée,
+  // loyer) → la ligne reste vide dans le tableau (FP.leasingContrat exige début + forfait km). La DATE
+  // DE DÉBUT n'est presque jamais dans l'offre PDF, d'où ce rappel. Sources : override BPCE + contrat LLD.
+  function leasingChampsManquants(actifs) {
+    const items = [];
+    let s = {}; try { s = (FP.settings && FP.settings.get) ? (FP.settings.get() || {}) : {}; } catch (e) {}
+    const overrides = (s.leasingContrats && typeof s.leasingContrats === 'object') ? s.leasingContrats : {};
+    const loc = Array.isArray(s.localeaseContrats) ? s.localeaseContrats : [];
+    const locByImmat = {}; loc.forEach(c => { const k = FP.normImmat(locImmatOf(c) || ''); if (k) locByImmat[k] = c; });
+    const CH = [
+      { k: 'leaseDebut', label: 'Date de début du contrat manquante' },
+      { k: 'leaseKm', label: 'Forfait km du contrat manquant' },
+      { k: 'leaseDuree', label: 'Durée du contrat manquante' },
+      { k: 'leaseLoyer', label: 'Loyer mensuel du contrat manquant' },
+    ];
+    (actifs || []).forEach(v => {
+      if (!estLeasing(v)) return;
+      const K = String(v.immat || '').toUpperCase();
+      const ov = overrides[K] || {};
+      const lld = locByImmat[FP.normImmat(v.immat)] || null;
+      const debut = ov.debut || (lld && lld.debut) || '';
+      const km = ov.kmContrat || (lld && lld.kmTotal) || null;
+      const duree = ov.dureeMois || (lld && lld.dureeMois) || null;
+      const loyer = (ov.loyer > 0 ? ov.loyer : null) || (lld && lld.loyerTTC > 0 ? lld.loyerTTC : null);
+      const pfx = 'complet:lease:' + v.id + ':';
+      const miss = [];
+      if (!debut && !ignHas(pfx + 'leaseDebut')) miss.push(CH[0]);
+      if (!km && !ignHas(pfx + 'leaseKm')) miss.push(CH[1]);
+      if (!duree && !ignHas(pfx + 'leaseDuree')) miss.push(CH[2]);
+      if (!loyer && !ignHas(pfx + 'leaseLoyer')) miss.push(CH[3]);
+      if (miss.length) items.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), miss, 'contrats.html?tab=leasing', pfx));
+    });
+    return items;
+  }
   function renderComplet() {
     const box = document.getElementById('suivi-complet'); if (!box) return;
     const actifs = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
@@ -634,8 +669,9 @@
     const cfgHTML = cfg.length ? `<div class="mb-6"><h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2"><i data-lucide="settings" class="w-5 h-5"></i> Configuration société <span class="badge badge-danger">${cfg.length}</span></h2><div class="space-y-2" style="max-width:840px">`
       + cfg.map(c => `<a href="${esc(c.target)}" class="notif" style="text-decoration:none"><div class="flex-1 min-w-0"><div class="font-semibold text-slate-900">${esc(c.label)}</div></div><span class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap">Compléter →</span></a>`).join('') + `</div></div>` : '';
     const pdfItems = pdfManquants(actifs);
+    const leaseItems = leasingChampsManquants(actifs);
     const dupG = dupDocGroups();
-    const total = vehItems.length + condItems.length + amItems.length + cfg.length + dupG.length + pdfItems.length;
+    const total = vehItems.length + condItems.length + amItems.length + cfg.length + dupG.length + pdfItems.length + leaseItems.length;
     const rafN = buildRaf().length;
     const intro = total ? `<div class="mb-5 flex items-center gap-3 flex-wrap">
         <p class="text-sm text-slate-500" style="margin:0">${total} élément(s) à compléter. Clique une ligne pour la remplir, ou enchaîne-les toutes :</p>
@@ -659,6 +695,7 @@
       + sectionCompHTML('Véhicules à compléter', 'car', vehItems)
       + sectionCompHTML('Conducteurs à compléter', 'users', condItems)
       + sectionCompHTML('Amendes à compléter', 'ticket', amItems)
+      + sectionCompHTML('Contrats de leasing à compléter', 'file-check', leaseItems)
       + sectionCompHTML('Documents / PDF à compléter', 'file-text', pdfItems)
       + restoreHTML;
     lucide.createIcons();

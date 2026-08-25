@@ -2699,6 +2699,26 @@
     }
     return filled;
   }
+  // Champs ENCORE manquants pour qu'un contrat s'affiche dans le tableau (FP.leasingContrat exige
+  // début + forfait km). La DATE DE DÉBUT n'est presque jamais dans l'offre PDF → à saisir à la main.
+  function missingContractFields(lk) {
+    const miss = [];
+    if (!lk) return miss;
+    if (lk.type === 'lld') {
+      const c = getLocalease()[lk.ci] || {};
+      if (!c.debut) miss.push('date de début');
+      if (!c.kmTotal) miss.push('forfait km');
+      if (!c.dureeMois) miss.push('durée');
+      if (!(c.loyerTTC > 0)) miss.push('loyer');
+    } else if (lk.type === 'bpce') {
+      const ov = (FP.getLeasingOverrides ? (FP.getLeasingOverrides()[(lk.immat || '').toUpperCase()] || {}) : {});
+      if (!ov.debut) miss.push('date de début');
+      if (!ov.kmContrat) miss.push('forfait km');
+      if (!ov.dureeMois) miss.push('durée');
+      if (!(ov.loyer > 0)) miss.push('loyer');
+    }
+    return miss;
+  }
   // Lit un PDF de contrat déjà dans le stockage → { loyerTTC, dureeMois, kmTotal, malus, co2, kmSupp,
   // kmTolerance, offre }. D'ABORD par extraction TEXTE locale (pdf.js + parseOfferText) — fiable et sans
   // serveur pour les vrais PDF ; PUIS l'IA (FP.scanIA) comble les trous et gère les PDF scannés (image).
@@ -2813,17 +2833,22 @@
         }
         const filled = applyScannedToTarget(lk, fields);
         renderLeasing(); renderRecoverPanel(files);
-        if (filled.length) { if (FP.toast) FP.toast('✓ Rempli : ' + filled.join(' · ')); }
-        else {
-          // La lecture a marché mais tous ces champs sont DÉJÀ renseignés → on dit ce qui a été lu.
-          const rd = [];
-          if (fields.loyerTTC != null) rd.push('loyer ' + FP.euroPrecis(Number(fields.loyerTTC)));
-          if (fields.dureeMois != null) rd.push(Math.round(Number(fields.dureeMois)) + ' mois');
-          if (fields.kmTotal != null) rd.push(FP.num(Number(fields.kmTotal)) + ' km');
-          if (fields.co2 != null) rd.push('CO₂ ' + Math.round(Number(fields.co2)));
-          if (fields.malus != null && Number(fields.malus) > 0) rd.push('malus ' + FP.euro(Number(fields.malus)));
-          alert('Lu depuis le PDF : ' + (rd.join(' · ') || '—') + '.\n\nCes champs sont déjà renseignés dans le tableau — rien à remplacer. Pour corriger une valeur, utilise le crayon ✏️ de la ligne.');
-        }
+        // Ce qui a été lu (pour que l'utilisateur voie que la lecture marche).
+        const rd = [];
+        if (fields.loyerTTC != null) rd.push('loyer ' + FP.euroPrecis(Number(fields.loyerTTC)));
+        if (fields.dureeMois != null) rd.push(Math.round(Number(fields.dureeMois)) + ' mois');
+        if (fields.kmTotal != null) rd.push(FP.num(Number(fields.kmTotal)) + ' km');
+        if (fields.co2 != null) rd.push('CO₂ ' + Math.round(Number(fields.co2)));
+        if (fields.malus != null && Number(fields.malus) > 0) rd.push('malus ' + FP.euro(Number(fields.malus)));
+        // ⚠️ Ce qui manque ENCORE pour que le contrat s'AFFICHE dans le tableau (souvent la DATE DE
+        // DÉBUT, absente des offres). Sans début + forfait km, FP.leasingContrat renvoie null → cellules vides.
+        const miss = missingContractFields(lk);
+        let msg = 'Lu depuis le PDF : ' + (rd.join(' · ') || '—') + '.';
+        if (filled.length) msg += '\n\n✓ Enregistré : ' + filled.join(' · ') + '.';
+        else msg += '\n\n(Ces valeurs étaient déjà enregistrées.)';
+        if (miss.length) msg += '\n\n⚠️ Pour que le contrat s\'affiche dans le tableau, il manque encore : ' + miss.join(', ') + '.\nCes infos ne sont pas dans l\'offre PDF — clique le crayon ✏️ de la ligne (ou la date « début ») pour les saisir. La DATE DE DÉBUT est la plus importante.';
+        else msg += '\n\n✓ Le contrat est complet.';
+        alert(msg);
       } catch (err) { console.warn('[lire pdf relié]', err); alert('Impossible de lire ce PDF : ' + (err && err.message ? err.message : err)); r.disabled = false; r.textContent = old; }
       return;
     }
