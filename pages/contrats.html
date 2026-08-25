@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260824c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260824d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260824c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260824d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260824c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260824d">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -594,11 +594,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260824c"></script>
-<script src="../assets/js/supabase-client.js?v=20260824c"></script>
-<script src="../assets/js/data.js?v=20260824c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260824d"></script>
+<script src="../assets/js/supabase-client.js?v=20260824d"></script>
+<script src="../assets/js/data.js?v=20260824d"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260824c"></script>
+<script src="../assets/js/app.js?v=20260824d"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1536,43 +1536,62 @@
     return units;
   }
   // Lignes d'export CSV/Excel = assurance (1 ligne/véhicule) + TOUTES les unités leasing (source unique).
+  // Onglet actif (Leasing / Assurance) — l'export ne sort QUE les données de l'onglet affiché
+  // (leasing → aucune ligne assurance, et inversement). Consigne explicite de l'utilisateur.
+  function activeCtab() { try { const h = $('contrat-sections'); const t = h && h.getAttribute('data-ctab'); return (t === 'assurance') ? 'assurance' : 'leasing'; } catch (e) { return 'leasing'; } }
+  // Lignes LEASING (toutes les unités : BPCE + Ayvens/LLD, source unique leasingUnitsAll).
   function leasingExportRows() {
-    const out = [];
-    vehicules.forEach(v => out.push({
-      section: 'Assurance', loueur: (FP.assuranceLabel && FP.assuranceLabel()) || 'Assurance flotte',
-      immat: v.immat, vehicule: `${v.marque || ''} ${v.modele || ''}`.trim(), chauffeur: (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '',
-      debut: '', kmContrat: '', kmActuel: (FP.kmActuel ? FP.kmActuel(v) : (v.km != null ? v.km : '')),
-      duree: '', loyer: '', total: '', fin: '', statutKm: '', depassement: '',
-    }));
-    leasingUnitsAll().forEach(u => out.push({
-      section: 'Leasing', loueur: u.loueur, immat: u.immat, vehicule: `${u.marque || ''} ${u.modele || ''}`.trim(), chauffeur: u.chauffeur,
+    return leasingUnitsAll().map(u => ({
+      loueur: u.loueur, immat: u.immat, vehicule: `${u.marque || ''} ${u.modele || ''}`.trim(), chauffeur: u.chauffeur,
       debut: _fmtDateExp(u.debut), kmContrat: (u.kmContrat != null ? u.kmContrat : ''), kmActuel: (u.km != null ? u.km : ''),
       duree: (u.dureeMois != null ? u.dureeMois : ''), loyer: (u.loyer != null ? u.loyer : ''), total: (u.total != null ? u.total : ''),
       fin: u.finContrat ? _fmtDateExp(u.finContrat.toISOString().slice(0, 10)) : '',
       statutKm: _statutKmTxt(u.niveau), depassement: ((u.niveau === 'danger' || u.niveau === 'warn') && u.depassementProjete > 0 ? u.depassementProjete : ''),
     }));
-    return out;
   }
+  // Lignes ASSURANCE (une par véhicule) : assureur rattaché + prime HT/TTC annuelle.
+  function assuranceExportRows() {
+    return vehicules.map(v => {
+      const pr = (typeof vehPrime === 'function') ? vehPrime(v) : null;
+      return {
+        assureur: (typeof assureurLabel === 'function' ? assureurLabel(v) : ((FP.assuranceLabel && FP.assuranceLabel()) || 'Assurance')),
+        immat: v.immat, vehicule: `${v.marque || ''} ${v.modele || ''}`.trim(), chauffeur: (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '',
+        miseCirc: v.dateMiseEnCirculation ? _fmtDateExp(v.dateMiseEnCirculation) : '', statut: v.statut || '',
+        primeHT: (pr && pr.ht != null) ? pr.ht : '', primeTTC: (pr && pr.ttc != null) ? pr.ttc : '',
+      };
+    });
+  }
+  const LEASING_COLS = [
+    { key: 'loueur',     label: 'Loueur' },
+    { key: 'immat',      label: 'Immat' },
+    { key: 'vehicule',   label: 'Véhicule' },
+    { key: 'chauffeur',  label: 'Chauffeur' },
+    { key: 'debut',      label: 'Début contrat' },
+    { key: 'kmContrat',  label: 'Km contractuel', format: FP.csv.numFormat },
+    { key: 'kmActuel',   label: "Km aujourd'hui", format: FP.csv.numFormat },
+    { key: 'duree',      label: 'Durée (mois)' },
+    { key: 'loyer',      label: 'Loyer/mois (€)', format: FP.csv.numFormat },
+    { key: 'total',      label: 'Total versé (€)', format: FP.csv.numFormat },
+    { key: 'fin',        label: 'Fin contrat' },
+    { key: 'statutKm',   label: 'Statut km' },
+    { key: 'depassement', label: 'Dépassement projeté (km)', format: FP.csv.numFormat },
+  ];
+  const ASSUR_COLS = [
+    { key: 'assureur',  label: 'Assureur' },
+    { key: 'immat',     label: 'Immat' },
+    { key: 'vehicule',  label: 'Véhicule' },
+    { key: 'chauffeur', label: 'Conducteur' },
+    { key: 'miseCirc',  label: '1re immat.' },
+    { key: 'statut',    label: 'Statut' },
+    { key: 'primeHT',   label: 'Prime HT/an (€)', format: FP.csv.numFormat },
+    { key: 'primeTTC',  label: 'Prime TTC/an (€)', format: FP.csv.numFormat },
+  ];
   FP.injectDataIO({
     exportOnly: true,
-    filename: `parc-pilot-contrats-${new Date().toISOString().slice(0,10)}.csv`,
-    columns: [
-      { key: 'section',    label: 'Section' },
-      { key: 'loueur',     label: 'Loueur / Assureur' },
-      { key: 'immat',      label: 'Immat' },
-      { key: 'vehicule',   label: 'Véhicule' },
-      { key: 'chauffeur',  label: 'Chauffeur' },
-      { key: 'debut',      label: 'Début contrat' },
-      { key: 'kmContrat',  label: 'Km contractuel', format: FP.csv.numFormat },
-      { key: 'kmActuel',   label: "Km aujourd'hui", format: FP.csv.numFormat },
-      { key: 'duree',      label: 'Durée (mois)' },
-      { key: 'loyer',      label: 'Loyer/mois (€)', format: FP.csv.numFormat },
-      { key: 'total',      label: 'Total versé (€)', format: FP.csv.numFormat },
-      { key: 'fin',        label: 'Fin contrat' },
-      { key: 'statutKm',   label: 'Statut km' },
-      { key: 'depassement', label: 'Dépassement projeté (km)', format: FP.csv.numFormat },
-    ],
-    getRows: leasingExportRows,
+    // Nom de fichier + colonnes + lignes = ceux de l'onglet AFFICHÉ (évalués au clic sur Exporter).
+    filename: () => `parc-pilot-${activeCtab()}-${new Date().toISOString().slice(0, 10)}.csv`,
+    columns: () => activeCtab() === 'assurance' ? ASSUR_COLS : LEASING_COLS,
+    getRows: () => activeCtab() === 'assurance' ? assuranceExportRows() : leasingExportRows(),
   });
 
   // ---------- Édition du forfait leasing ----------
