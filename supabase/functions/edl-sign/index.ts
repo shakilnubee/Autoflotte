@@ -81,7 +81,41 @@ async function sendPush(db: ReturnType<typeof createClient>, societe: string, pa
   } catch { /* best-effort */ }
 }
 
-type Signer = { role: string; nom?: string; email?: string; signed?: boolean; signedAt?: string; ip?: string; sigUrl?: string };
+// ─── Envoi d'e-mail (Resend) pour RELAYER le lien au signataire SUIVANT (signature séquentielle).
+//    L'app (client) rend et envoie le 1er e-mail ; quand ce signataire signe, c'est CETTE fonction
+//    qui envoie l'e-mail PRÉ-RENDU (stocké dans le signataire) au suivant. Le `from` est calculé
+//    côté serveur depuis la config de la société (mailExpediteur + domaine) — comme send-email —
+//    avec repli sur le secret EMAIL_FROM. Ce n'est PAS un relais ouvert : l'e-mail et le
+//    destinataire sont ceux déjà enregistrés dans edl_signatures (aucune donnée venue de la requête).
+async function societeFrom(db: ReturnType<typeof createClient>, societe: string): Promise<{ from: string; replyTo: string }> {
+  const envFrom = Deno.env.get("EMAIL_FROM") || "Parc Pilot <onboarding@resend.dev>";
+  try {
+    const { data } = await db.from("app_settings").select("data").eq("id", String(societe || "PXP")).maybeSingle();
+    const d = (data && (data as { data?: Record<string, unknown> }).data) || {};
+    const p = (d.profil && typeof d.profil === "object") ? d.profil as Record<string, unknown> : {};
+    const exp = String(p.mailExpediteur || "").trim();
+    if (exp) {
+      const dom = String(p.mailDomaineEnvoi || "").trim().replace(/^@/, "");
+      const fromAddr = dom ? (exp.split("@")[0] + "@" + dom) : exp;
+      let nom = String((d.societe && (d.societe as Record<string, unknown>).nom) || "").replace(/[<>"]/g, "").trim();
+      if (/^parc\s*pilot$/i.test(nom)) nom = "";
+      return { from: nom ? `${nom} <${fromAddr}>` : fromAddr, replyTo: exp };
+    }
+  } catch { /* repli EMAIL_FROM */ }
+  return { from: envFrom, replyTo: "" };
+}
+async function sendSignEmail(db: ReturnType<typeof createClient>, societe: string, to: string, subject: string, html: string, text: string): Promise<boolean> {
+  const key = Deno.env.get("RESEND_API_KEY"); if (!key || !to) return false;
+  const { from, replyTo } = await societeFrom(db, societe);
+  const payload: Record<string, unknown> = { from, to: [to], subject: subject || "État des lieux à signer" };
+  if (html) payload.html = html; if (text) payload.text = text; if (replyTo) payload.reply_to = replyTo;
+  try {
+    const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    return r.ok;
+  } catch { return false; }
+}
+
+type Signer = { role: string; nom?: string; email?: string; signed?: boolean; signedAt?: string; ip?: string; sigUrl?: string; ordre?: number; notified?: boolean; mailSubject?: string; mailHtml?: string; mailText?: string };
 
 // Reconstruit le PDF signé : appose chaque signature (image PNG) sur SON champ (points, origine
 // haut-gauche → pdf-lib origine bas-gauche), avec le nom + la date sous la signature.
@@ -158,6 +192,15 @@ Deno.serve(async (req) => {
       if (!me) return json({ error: "Signataire introuvable." }, 404);
       if (me.signed === true) return json({ ok: true, deja: true, statut: row.statut || "en_attente" });
 
+      // ORDRE DE SIGNATURE (séquentiel) : un signataire ne peut signer QUE si tous ceux d'ordre
+      // INFÉRIEUR ont déjà signé (le gestionnaire de flotte d'abord, puis le salarié). Rétro-compatible :
+      // si aucun ordre n'est défini (anciens envois « tous en même temps »), aucune contrainte.
+      const myOrdre = Number(me.ordre) || 0;
+      if (myOrdre > 0) {
+        const attente = signers.find((s) => s.email && (Number(s.ordre) || 0) < myOrdre && s.signed !== true);
+        if (attente) return json({ error: "En attente de la signature du gestionnaire de flotte. Tu recevras un e-mail dès que ce sera à ton tour de signer." }, 409);
+      }
+
       // Enregistre l'image de la signature (bucket public "scans").
       let sigUrl = "";
       try {
@@ -204,14 +247,33 @@ Deno.serve(async (req) => {
         }
       }
 
+      // SIGNATURE SÉQUENTIELLE : dès que ce signataire a signé, on notifie AUTOMATIQUEMENT le
+      // signataire SUIVANT (ordre supérieur) en lui envoyant son e-mail PRÉ-RENDU (stocké à la
+      // création). notified=true est persisté (via l'update ci-dessous) pour ne jamais ré-envoyer.
+      // Rétro-compat : si le suivant n'a pas d'e-mail pré-rendu (anciens envois « tous à la fois »),
+      // on ne fait rien (il a déjà reçu son lien).
+      let relayedTo = "";
+      if (!allSigned) {
+        const next = signers
+          .filter((s) => s.email && s.signed !== true)
+          .sort((a, b) => (Number(a.ordre) || 0) - (Number(b.ordre) || 0))[0];
+        if (next && next.notified !== true && next.mailHtml) {
+          const okMail = await sendSignEmail(db, String(row.societe || "PXP"), String(next.email), String(next.mailSubject || ""), String(next.mailHtml || ""), String(next.mailText || ""));
+          if (okMail) { next.notified = true; relayedTo = next.role === "employe" ? "salarié" : (next.nom || "signataire suivant"); }
+        }
+      }
+
       await db.from("edl_signatures").update({ signataires: signers, statut, signed_pdf_url: signedPdfUrl }).eq("token", token);
 
-      // Notifie le(s) gestionnaire(s) de la société : signature reçue, et surtout quand c'est COMPLET.
+      // Notifie le(s) gestionnaire(s) de la société : signature reçue, transmission au suivant, ou COMPLET.
       const nbSigned = required.filter((s) => s.signed).length;
       const reste = required.length - nbSigned;
-      await sendPush(db, String(row.societe || "PXP"), allSigned
+      const pushPayload = allSigned
         ? { title: "✅ État des lieux signé", body: (row.plaque || "Véhicule") + " — document entièrement signé par tous les signataires.", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + token }
-        : { title: "✍️ Signature reçue", body: (row.plaque || "Véhicule") + " — " + (me.nom || "un signataire") + " a signé. Il reste " + reste + " signature(s).", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + token });
+        : relayedTo
+          ? { title: "✍️ Signé — transmis au " + relayedTo, body: (row.plaque || "Véhicule") + " — " + (me.nom || "le gestionnaire") + " a signé. Le lien vient d'être envoyé au " + relayedTo + " pour sa signature.", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + token }
+          : { title: "✍️ Signature reçue", body: (row.plaque || "Véhicule") + " — " + (me.nom || "un signataire") + " a signé. Il reste " + reste + " signature(s).", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + token };
+      await sendPush(db, String(row.societe || "PXP"), pushPayload);
 
       return json({ ok: true, statut, allSigned });
     }

@@ -8705,9 +8705,13 @@ FP.edl = {
         const smode = data.signMode || 'integree';   // ⚠️ PAS « mode » (déjà le paramètre de run()) → collision TDZ
         let mailed = false, signed = false, sentForSign = false;
         const sig = doc.__edlSig || {};
-        // Liste des signataires (employé + éventuellement le signataire société).
-        const signersList = [{ role: 'employe', nom: data.employe, email: data.to }];
-        if (data.socSignEmail && /@/.test(data.socSignEmail)) signersList.push({ role: 'societe', nom: (data.socSignNom || data.socNom || 'Société'), email: data.socSignEmail.trim() });
+        // Liste des signataires, DANS L'ORDRE DE SIGNATURE : le GESTIONNAIRE (signataire société)
+        // signe D'ABORD (ordre 1) pour vérifier que tout est OK, puis le salarié (ordre 2) reçoit le
+        // lien AUTOMATIQUEMENT une fois le gestionnaire signé (envoi côté serveur, cf. edge edl-sign).
+        // S'il n'y a pas de signataire société → le salarié est seul (ordre 1) et reçoit tout de suite.
+        const signersList = [];
+        if (data.socSignEmail && /@/.test(data.socSignEmail)) signersList.push({ role: 'societe', ordre: 1, nom: (data.socSignNom || data.socNom || 'Société'), email: data.socSignEmail.trim() });
+        signersList.push({ role: 'employe', ordre: signersList.length ? 2 : 1, nom: data.employe, email: data.to });
 
         // A) SIGNATURE INTÉGRÉE (Parc Pilot, sans prestataire) : chaque signataire reçoit un LIEN
         //    vers signer.html, signe au doigt/souris, et le PDF signé revient dans la fiche.
@@ -8715,18 +8719,13 @@ FP.edl = {
           try {
             const token = 'sig-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
             let soc = 'PXP'; try { soc = (FP.activeSociete ? FP.activeSociete() : 'PXP') || 'PXP'; } catch (e) {} if (soc === '__all__') soc = 'PXP';
-            const rec = {
-              token, vehiculeId: veh.id, plaque: data.immat, societe: soc, employe: data.employe, modele: data.modele,
-              date: data.date, sens: data.sens, pdfUrl: url || '', fieldEmploye: sig.employe || null, fieldSociete: sig.societe || null,
-              signataires: signersList.map(s => ({ role: s.role, nom: s.nom, email: s.email, signed: false })), statut: 'en_attente',
-            };
-            const ins = await FP.db.insert('edl_signatures', rec);
-            if (ins && ins.error) throw new Error(ins.error.message || 'insert');
             const base = FP.edl.SIGN_BASE || 'https://parc-pilot.fr/signer.html';
             const logoSrc = prof.logoUrl || '';   // logo HÉBERGÉ (les data: URI sont souvent bloqués en e-mail)
             let tpl = (prof.mailModeleSignature || '').trim();
             if (!tpl) tpl = 'Bonjour {prenom},\n\nMerci de signer électroniquement l\'état des lieux du véhicule {immat} ({modele}). Cela ne prend que quelques secondes.';
-            for (const s of signersList) {
+            // SOURCE UNIQUE du rendu de l'e-mail de signature (le MÊME modèle est stocké pour CHAQUE
+            // signataire → l'app envoie le 1er, le serveur relaie le suivant sans dupliquer le template).
+            const renderMail = (s) => {
               const link = base + '?t=' + encodeURIComponent(token) + '&who=' + s.role;
               const prenomS = String(s.nom || '').trim().split(/\s+/)[0] || '';
               const intro = esc(tpl).replace(/\{prenom\}/g, esc(prenomS) + (s.role === 'societe' ? ' (société)' : '')).replace(/\{immat\}/g, esc(data.immat)).replace(/\{modele\}/g, esc(data.modele)).replace(/\{date\}/g, esc(FP.date(data.date))).replace(/\n/g, '<br>');
@@ -8741,7 +8740,24 @@ FP.edl = {
   </div>
   <div style="text-align:center;font-size:11px;color:#cbd5e1;margin-top:10px">— ${esc(data.socNom || 'Gestion de flotte')} · via Parc Pilot</div>
 </div>`;
-              try { await FP.sendEmail({ to: s.email, cc: '', subject: 'À signer — état des lieux ' + data.immat + (s.role === 'societe' ? ' (société)' : ''), html, text: 'Signer l\'état des lieux : ' + link, replyTo: prof.mailExpediteur || '' }); } catch (e) {}
+              return { link, subject: 'À signer — état des lieux ' + data.immat + (s.role === 'societe' ? ' (société)' : ''), html, text: 'Signer l\'état des lieux : ' + link };
+            };
+            const minOrdre = Math.min.apply(null, signersList.map(s => s.ordre));
+            const rec = {
+              token, vehiculeId: veh.id, plaque: data.immat, societe: soc, employe: data.employe, modele: data.modele,
+              date: data.date, sens: data.sens, pdfUrl: url || '', fieldEmploye: sig.employe || null, fieldSociete: sig.societe || null,
+              // Chaque signataire embarque son ordre + son e-mail PRÉ-RENDU (mailHtml/mailSubject/mailText)
+              // + notified (a-t-il déjà reçu son lien ?). Seul le 1er de l'ordre est notifié tout de suite.
+              signataires: signersList.map(s => { const mk = renderMail(s); return { role: s.role, nom: s.nom, email: s.email, ordre: s.ordre, signed: false, notified: s.ordre === minOrdre, mailSubject: mk.subject, mailHtml: mk.html, mailText: mk.text }; }),
+              statut: 'en_attente',
+            };
+            const ins = await FP.db.insert('edl_signatures', rec);
+            if (ins && ins.error) throw new Error(ins.error.message || 'insert');
+            // Envoi UNIQUEMENT au 1er signataire de l'ordre (le gestionnaire quand il y a un signataire société).
+            for (const s of signersList) {
+              if (s.ordre !== minOrdre) continue;   // les suivants seront relayés par le serveur à leur tour
+              const mk = renderMail(s);
+              try { await FP.sendEmail({ to: s.email, cc: '', subject: mk.subject, html: mk.html, text: mk.text, replyTo: prof.mailExpediteur || '' }); } catch (e) {}
             }
             sentForSign = true;
           } catch (e) {
@@ -8779,7 +8795,8 @@ FP.edl = {
           try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux (' + motLbl + ') — ' + data.immat + ' — ' + data.employe, html, text: 'État des lieux (' + motLbl + ') du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
         }
         close();
-        if (FP.toast) FP.toast(sentForSign ? '✓ Envoyé pour signature (lien e-mail)' : signed ? '✓ Envoyé pour signature (Yousign)' : (mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré')));
+        const seq = sentForSign && signersList.length > 1;   // gestionnaire d'abord, puis salarié
+        if (FP.toast) FP.toast(seq ? '✓ Lien de signature envoyé — à toi de signer d\'abord, le salarié sera notifié ensuite' : sentForSign ? '✓ Envoyé pour signature (lien e-mail)' : signed ? '✓ Envoyé pour signature (Yousign)' : (mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré')));
       } catch (e) {
         btn.disabled = false; btn.innerHTML = old; console.warn('[edl]', e);
         // Erreur PERSISTANTE et lisible (au lieu d'un « Échec » fugace) → on sait la vraie cause.
