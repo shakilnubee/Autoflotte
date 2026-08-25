@@ -2636,8 +2636,55 @@
       }));
     } catch (e) { console.warn('[listContratPdfs]', e); return []; }
   }
-  function contratOptionsHtml() {
-    return getLocalease().map((c, i) => `<option value="${i}">${escC((c.conducteur || '?') + ' — ' + (c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '') || '?') + ' — ' + (c.marque || '') + ' ' + (c.modele || ''))}</option>`).join('');
+  // Cibles possibles pour relier un PDF : contrats LLD saisis + véhicules en leasing dérivés (BPCE…).
+  // ⚠️ Avant, le menu ne listait QUE les contrats LLD saisis à la main → vide si la flotte est en
+  // leasing « dérivé » (factures / champ propriétaire). On propose désormais TOUS les véhicules en leasing.
+  function recoverTargets() {
+    const targets = [];
+    const seen = new Set();
+    getLocalease().forEach((c, i) => {
+      const immat = c.immat || (typeof autoImmatLoc === 'function' ? autoImmatLoc(c) : '') || '';
+      if (immat) seen.add(FP.normImmat(immat));
+      targets.push({ key: 'lld:' + i, label: ((c.conducteur || '?') + ' — ' + (immat || '?') + ' — ' + ((c.marque || '') + ' ' + (c.modele || '')).trim()).trim() });
+    });
+    try {
+      [...(leasingImmats || [])].forEach(immat => {
+        const nk = FP.normImmat(immat || ''); if (!nk || seen.has(nk)) return; seen.add(nk);
+        const v = (vehicules || []).find(x => FP.normImmat(x.immat) === nk) || { immat: immat, marque: '', modele: '', chauffeur: '' };
+        targets.push({ key: 'bpce:' + (v.immat || immat), label: (((v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '—') + ' — ' + (v.immat || immat) + ' — ' + ((v.marque || '') + ' ' + (v.modele || '')).trim()).trim() });
+      });
+    } catch (e) { console.warn('[recoverTargets]', e); }
+    return targets;
+  }
+  function targetOptionsHtml() {
+    return `<option value="">— Choisir le véhicule / contrat —</option>` + recoverTargets().map(x => `<option value="${escC(x.key)}">${escC(x.label)}</option>`).join('');
+  }
+  // Carte des PDF déjà reliés (contrat LLD c.docs OU véhicule BPCE app_settings.leasingDocs) → « Détacher ».
+  function linkedDocMap() {
+    const map = {};
+    getLocalease().forEach((c, ci) => { (Array.isArray(c.docs) ? c.docs : []).forEach(d => { if (d && d.url) map[d.url] = { type: 'lld', ci: ci, label: ((c.conducteur || '?') + ' ' + (c.immat || '')).trim() }; }); });
+    try { const ld = FP.settings.get().leasingDocs || {}; Object.keys(ld).forEach(immat => { (Array.isArray(ld[immat]) ? ld[immat] : []).forEach(d => { if (d && d.url) map[d.url] = { type: 'bpce', immat: immat, label: immat }; }); }); } catch (e) {}
+    return map;
+  }
+  function renderRecoverPanel(files) {
+    const panel = $('loc-recover-panel'); if (!panel) return;
+    const linked = linkedDocMap();
+    const targets = recoverTargets();
+    const opts = targetOptionsHtml();
+    let head = `<div class="text-sm font-semibold mb-2" style="color:#92400E">📎 ${files.length} PDF trouvé(s) dans le stockage. Ouvre chacun pour l'identifier, choisis le véhicule/contrat, puis « Lier ». Un PDF déjà relié peut être « Détaché ».</div>`;
+    if (!targets.length) head += `<div class="text-xs mb-2" style="color:#b45309">Aucun véhicule en leasing détecté pour l'instant : ajoute d'abord un contrat (bouton « Ajouter un contrat ») ou renseigne le loueur d'un véhicule, puis reviens ici.</div>`;
+    panel.innerHTML = head + files.map((f, i) => {
+      const lk = linked[f.url];
+      const right = lk
+        ? `<span class="text-xs" style="flex:1;color:#047857;font-weight:600">✓ relié à ${escC(lk.label)}</span><button type="button" class="btn btn-outline text-xs" data-rec-unlink="${i}" style="flex-shrink:0;color:#dc2626;border-color:#fecaca">Détacher</button>`
+        : `<select class="field-input text-sm" data-rec-sel style="flex:1;min-width:200px">${opts}</select><button type="button" class="btn btn-dark text-xs" data-rec-link="${i}" style="flex-shrink:0">Lier</button>`;
+      return `<div class="flex items-center gap-2 py-1.5" style="border-bottom:1px solid #FDE68A" data-rec="${i}">
+          <a href="${escC(f.url)}" target="_blank" rel="noopener" class="btn btn-outline text-xs" style="flex-shrink:0"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Ouvrir PDF ${i + 1}</a>
+          ${right}
+        </div>`;
+    }).join('');
+    panel.dataset.files = JSON.stringify(files);
+    if (window.lucide) lucide.createIcons();
   }
   if ($('loc-recover-pdf')) $('loc-recover-pdf').addEventListener('click', async () => {
     const panel = $('loc-recover-panel'); if (!panel) return;
@@ -2646,29 +2693,48 @@
     panel.innerHTML = (FP.skeletonHTML ? FP.skeletonHTML({ type: 'rows', count: 3 }) : '<div class="text-sm text-slate-500">Chargement des PDF du stockage…</div>');
     const files = await listContratPdfs();
     if (!files.length) { panel.innerHTML = '<div class="text-sm text-slate-500">Aucun PDF de contrat trouvé dans le stockage.</div>'; return; }
-    const opts = contratOptionsHtml();
-    panel.innerHTML = `<div class="text-sm font-semibold mb-2" style="color:#92400E">📎 ${files.length} PDF trouvé(s) dans le stockage. Ouvre chacun pour l'identifier, choisis le contrat correspondant, puis clique « Lier ».</div>`
-      + files.map((f, i) => `<div class="flex items-center gap-2 py-1.5" style="border-bottom:1px solid #FDE68A" data-rec="${i}">
-          <a href="${escC(f.url)}" target="_blank" rel="noopener" class="btn btn-outline text-xs" style="flex-shrink:0"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Ouvrir PDF ${i + 1}</a>
-          <select class="field-input text-sm" data-rec-sel style="flex:1;min-width:200px">${opts}</select>
-          <button type="button" class="btn btn-dark text-xs" data-rec-link="${i}" style="flex-shrink:0">Lier</button>
-        </div>`).join('');
-    panel.dataset.files = JSON.stringify(files);
-    if (window.lucide) lucide.createIcons();
+    renderRecoverPanel(files);
   });
-  if ($('loc-recover-panel')) $('loc-recover-panel').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-rec-link]'); if (!b) return;
-    let files = []; try { files = JSON.parse($('loc-recover-panel').dataset.files || '[]'); } catch (_) {}
-    const f = files[+b.dataset.recLink]; if (!f) return;
-    const row = b.closest('[data-rec]'); const sel = row.querySelector('[data-rec-sel]'); if (!sel) return;
-    const list = getLocalease(); const ci = +sel.value; if (!list[ci]) return;
-    if (!Array.isArray(list[ci].docs)) list[ci].docs = list[ci].pdfUrl ? [{ url: list[ci].pdfUrl, name: 'Contrat' }] : [];
-    if (list[ci].docs.some(d => d.url === f.url)) { alert('Ce PDF est déjà lié à ce contrat.'); return; }
-    list[ci].docs.push({ url: f.url, name: 'Contrat' });
-    list[ci].pdfUrl = list[ci].docs[0].url;
-    const s = FP.settings.get(); s.localeaseContrats = list; FP.settings.save(s); renderLocalease();
-    b.textContent = '✓ Lié'; b.disabled = true; b.classList.remove('btn-dark'); b.classList.add('btn-outline');
-    if (FP.toast) FP.toast('PDF relié au contrat ✓');
+  if ($('loc-recover-panel')) $('loc-recover-panel').addEventListener('click', async (e) => {
+    const panel = $('loc-recover-panel'); if (!panel) return;
+    let files = []; try { files = JSON.parse(panel.dataset.files || '[]'); } catch (_) {}
+    // === Lier un PDF à un contrat LLD ou à un véhicule en leasing (BPCE) ===
+    const b = e.target.closest('[data-rec-link]');
+    if (b) {
+      const f = files[+b.dataset.recLink]; if (!f) return;
+      const row = b.closest('[data-rec]'); const sel = row && row.querySelector('[data-rec-sel]'); const key = sel ? sel.value : '';
+      if (!key) { alert('Choisis d\'abord le véhicule / contrat dans la liste.'); return; }
+      if (key.slice(0, 4) === 'lld:') {
+        const ci = +key.slice(4); const list = getLocalease(); if (!list[ci]) return;
+        if (!Array.isArray(list[ci].docs)) list[ci].docs = list[ci].pdfUrl ? [{ url: list[ci].pdfUrl, name: 'Contrat' }] : [];
+        if (list[ci].docs.some(d => d.url === f.url)) { alert('Ce PDF est déjà lié à ce contrat.'); return; }
+        list[ci].docs.push({ url: f.url, name: 'Contrat' }); list[ci].pdfUrl = list[ci].docs[0].url;
+        const s = FP.settings.get(); s.localeaseContrats = list; FP.settings.save(s);
+      } else if (key.slice(0, 5) === 'bpce:') {
+        const immat = key.slice(5); const list = bpceDocs(immat).slice();
+        if (list.some(d => d.url === f.url)) { alert('Ce PDF est déjà lié à ce véhicule.'); return; }
+        list.push({ url: f.url, name: 'Contrat de leasing.pdf' }); setBpceDocs(immat, list);
+      } else return;
+      renderLeasing(); renderRecoverPanel(files);
+      if (FP.toast) FP.toast('PDF relié ✓');
+      return;
+    }
+    // === Détacher un PDF mal relié ===
+    const u = e.target.closest('[data-rec-unlink]');
+    if (u) {
+      const f = files[+u.dataset.recUnlink]; if (!f) return;
+      if (!(await FP.confirm('Détacher ce PDF de son contrat / véhicule ?'))) return;
+      const lk = linkedDocMap()[f.url];
+      if (lk && lk.type === 'lld') {
+        const list = getLocalease(); const c = list[lk.ci];
+        if (c && Array.isArray(c.docs)) { c.docs = c.docs.filter(d => d.url !== f.url); c.pdfUrl = c.docs[0] ? c.docs[0].url : null; const s = FP.settings.get(); s.localeaseContrats = list; FP.settings.save(s); }
+      } else if (lk && lk.type === 'bpce') {
+        setBpceDocs(lk.immat, bpceDocs(lk.immat).filter(d => d.url !== f.url));
+      }
+      renderLeasing(); renderRecoverPanel(files);
+      if (FP.toast) FP.toast('PDF détaché');
+      return;
+    }
   });
 
   // Saisie de la prime annuelle d'assurance (sauvegardée + synchronisée par société)
