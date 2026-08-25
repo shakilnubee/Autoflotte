@@ -2762,15 +2762,34 @@
       if (!(window.FP && FP.scanIA)) { alert('Lecture IA indisponible (connexion requise).'); return; }
       const old = r.textContent; r.disabled = true; r.textContent = '⏳ Lecture…';
       try {
+        // Le fichier est dans un bucket privé → on passe par une URL SIGNÉE (sinon fetch = 400/403 et
+        // l'IA reçoit une page d'erreur, pas le PDF). Puis on reconstruit un File pour FP.scanIA.
         const url = (FP.signedScanUrl) ? await FP.signedScanUrl(f.url, 3600) : f.url;
-        const resp = await fetch(url); if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const resp = await fetch(url); if (!resp.ok) throw new Error('téléchargement du PDF : HTTP ' + resp.status);
         const blob = await resp.blob();
-        const file = new File([blob], f.name || 'contrat.pdf', { type: blob.type || 'application/pdf' });
+        if (blob.type && /json|html|text/i.test(blob.type)) throw new Error('le stockage a renvoyé « ' + blob.type +' » au lieu d\'un PDF (fichier introuvable ?).');
+        const file = new File([blob], f.name || 'contrat.pdf', { type: (blob.type && /pdf/i.test(blob.type)) ? blob.type : 'application/pdf' });
         const fields = await FP.scanIA(file, 'leasing', LOCALEASE_PROMPT);
+        const hasAny = fields && Object.keys(fields).some(k => fields[k] != null && fields[k] !== '');
+        if (!hasAny) {
+          // scanIA a échoué OU n'a rien extrait → on montre la VRAIE raison (FP._scanLastErr).
+          const why = (window.FP && FP._scanLastErr || '').toString().trim();
+          alert('Le PDF n\'a pas pu être lu automatiquement' + (why ? ' :\n\n' + why : ' (peut-être un scan image, ou un format d\'offre inhabituel).') + '\n\nTu peux saisir les infos à la main via le crayon ✏️ de la ligne.');
+          r.disabled = false; r.textContent = old; return;
+        }
         const filled = applyScannedToTarget(lk, fields);
         renderLeasing(); renderRecoverPanel(files);
         if (filled.length) { if (FP.toast) FP.toast('✓ Rempli : ' + filled.join(' · ')); }
-        else alert('Rien de nouveau à remplir (champs déjà renseignés, ou format d\'offre non reconnu). Tu peux compléter à la main via le crayon ✏️ de la ligne.');
+        else {
+          // La lecture a marché mais tous ces champs sont DÉJÀ renseignés → on dit ce qui a été lu.
+          const rd = [];
+          if (fields.loyerTTC != null) rd.push('loyer ' + FP.euroPrecis(Number(fields.loyerTTC)));
+          if (fields.dureeMois != null) rd.push(Math.round(Number(fields.dureeMois)) + ' mois');
+          if (fields.kmTotal != null) rd.push(FP.num(Number(fields.kmTotal)) + ' km');
+          if (fields.co2 != null) rd.push('CO₂ ' + Math.round(Number(fields.co2)));
+          if (fields.malus != null && Number(fields.malus) > 0) rd.push('malus ' + FP.euro(Number(fields.malus)));
+          alert('Lu depuis le PDF : ' + (rd.join(' · ') || '—') + '.\n\nCes champs sont déjà renseignés dans le tableau — rien à remplacer. Pour corriger une valeur, utilise le crayon ✏️ de la ligne.');
+        }
       } catch (err) { console.warn('[lire pdf relié]', err); alert('Impossible de lire ce PDF : ' + (err && err.message ? err.message : err)); r.disabled = false; r.textContent = old; }
       return;
     }
