@@ -157,9 +157,21 @@ fleet-app/
     `supabase/COMPTES-CEO-ADMIN-GESTIONNAIRE.md` ; SQL : `supabase/roles-ceo-admin-gestionnaire.sql`.
   - ⚠️ **RÈGLE** : tout nouveau bouton/écran qui touche à la **config société** doit être gardé par
     `FP.canManageSociete()`, et toute gestion de **comptes** par `FP.canManageUsers()` (+ portée serveur).
-  - ✅ **Durcissement appliqué (2026-07-30)** : l'ÉCRITURE de `app_settings` est réservée CEO/Admin côté
-    base (policies `app_settings_read`/`app_settings_write`, `fp_role() <> 'gestionnaire'` — cf.
-    `supabase/durcissement-config-gestionnaire.sql`). Un gestionnaire lit mais ne modifie plus la config.
+  - ⚠️ **`app_settings` — écriture RÉOUVERTE au gestionnaire (2026-08-25, correctif)** : le durcissement
+    du 2026-07-30 (`supabase/durcissement-config-gestionnaire.sql`, écriture réservée CEO/Admin via
+    `fp_role() <> 'gestionnaire'`) a été **ANNULÉ** car il cassait les opérations normales d'un
+    gestionnaire : `app_settings` ne stocke pas QUE la config société, mais aussi des **données de
+    travail** (affectations conducteur↔véhicule + km début/fin, immobilisations `vehImmobilise`,
+    checklist de restitution, montants payés d'amendes `amendeMontantPaye`, `kmMajDates`, inspections…).
+    Bloquer toute écriture bloquait ces opérations → erreur « new row violates row-level security policy
+    for table app_settings » en prod. **État actuel** : policy permissive `tenant_app_settings` par
+    société (gestionnaire inclus) — cf. `supabase/gestionnaire-app-settings-fix.sql`. La **config
+    société reste réservée à l'admin AU NIVEAU DE L'INTERFACE** (`FP.canManageSociete()` masque les
+    écrans + les boutons « Enregistrer » de config pour un gestionnaire — cf. `gateParamForGestionnaire`
+    dans `pages/parametres.html`), même modèle de droits que le reste de la plateforme. ⚠️ **Ne PAS
+    ré-appliquer le durcissement `app_settings` tel quel** : pour reprotéger la config côté base sans
+    casser les opérations, il faudrait d'abord SÉPARER config et données de travail dans des lignes
+    `app_settings` distinctes (refactor de `FP.settings`) — à faire seulement sur demande explicite.
   - ⚠️ **ESPACE SALARIÉ (chauffeur) — SÉCURITÉ SERVEUR À CONSTRUIRE AVANT ACTIVATION** (audit sécu, finding
     ÉLEVÉ) : aujourd'hui le rôle `chauffeur` et sa/ses plaque(s) vivent dans `user_metadata` (**falsifiable**)
     et les policies RLS isolent seulement par **société** → un compte chauffeur aurait accès (lecture ET
