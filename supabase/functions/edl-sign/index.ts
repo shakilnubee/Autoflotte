@@ -14,6 +14,7 @@
 // ============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { PDFDocument } from "npm:pdf-lib@1.17.1";
+import webpush from "npm:web-push@3.6.7";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -56,6 +57,29 @@ function b64ToBytes(b64: string): Uint8Array {
   return a;
 }
 function genId(p: string) { return p + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8); }
+
+// ─── Notification PUSH au(x) gestionnaire(s) de la société (best-effort) ───
+let _vapid: boolean | null = null;
+function vapidReady(): boolean {
+  if (_vapid !== null) return _vapid;
+  const pub = Deno.env.get("VAPID_PUBLIC_KEY") || "", priv = Deno.env.get("VAPID_PRIVATE_KEY") || "";
+  const subj = Deno.env.get("VAPID_SUBJECT") || "mailto:contact@parc-pilot.fr";
+  if (!pub || !priv) { _vapid = false; return false; }
+  try { webpush.setVapidDetails(subj, pub, priv); _vapid = true; } catch { _vapid = false; }
+  return _vapid;
+}
+async function sendPush(db: ReturnType<typeof createClient>, societe: string, payload: { title: string; body: string; url?: string; tag?: string }) {
+  try {
+    if (!vapidReady()) return;
+    const { data } = await db.from("push_subscriptions").select("id,endpoint,p256dh,auth").eq("societe", societe || "PXP");
+    if (!Array.isArray(data) || !data.length) return;
+    const body = JSON.stringify({ title: payload.title || "Parc Pilot", body: payload.body || "", url: payload.url || "./pages/vehicules.html", tag: payload.tag, icon: "./assets/icons/icon-192.png" });
+    await Promise.all((data as Array<Record<string, string>>).map(async (s) => {
+      try { await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body); }
+      catch (e) { const c = e && (e as { statusCode?: number }).statusCode; if (c === 404 || c === 410) { try { await db.from("push_subscriptions").delete().eq("id", s.id); } catch { /* ignore */ } } }
+    }));
+  } catch { /* best-effort */ }
+}
 
 type Signer = { role: string; nom?: string; email?: string; signed?: boolean; signedAt?: string; ip?: string; sigUrl?: string };
 
@@ -181,6 +205,14 @@ Deno.serve(async (req) => {
       }
 
       await db.from("edl_signatures").update({ signataires: signers, statut, signed_pdf_url: signedPdfUrl }).eq("token", token);
+
+      // Notifie le(s) gestionnaire(s) de la société : signature reçue, et surtout quand c'est COMPLET.
+      const nbSigned = required.filter((s) => s.signed).length;
+      const reste = required.length - nbSigned;
+      await sendPush(db, String(row.societe || "PXP"), allSigned
+        ? { title: "✅ État des lieux signé", body: (row.plaque || "Véhicule") + " — document entièrement signé par tous les signataires.", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + token }
+        : { title: "✍️ Signature reçue", body: (row.plaque || "Véhicule") + " — " + (me.nom || "un signataire") + " a signé. Il reste " + reste + " signature(s).", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + token });
+
       return json({ ok: true, statut, allSigned });
     }
 
