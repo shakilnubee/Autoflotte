@@ -2715,7 +2715,7 @@
   // 🪄 RECONSTRUCTION : recrée la liste des loueurs à partir du champ « propriétaire » de chaque
   // véhicule (donnée INTACTE, propre au véhicule) → récupère le registre des loueurs si la config a
   // été perdue. On fusionne avec les loueurs déjà présents (pas de doublon d'étiquette propriétaire).
-  if ($('loueur-rebuild')) $('loueur-rebuild').addEventListener('click', async () => {
+  if ($('loueur-rebuild')) $('loueur-rebuild').addEventListener('click', () => {
     const props = new Map(); // clé = propriétaire en minuscule → libellé d'origine
     const vehs = (Array.isArray(vehicules) && vehicules.length) ? vehicules : ((window.FP && FP.data && FP.data.vehicules) || []);
     vehs.forEach(v => {
@@ -2723,17 +2723,44 @@
       if (p && !props.has(p.toLowerCase())) props.set(p.toLowerCase(), p);
     });
     if (!props.size) { alert("Aucun « propriétaire » n'est renseigné sur tes véhicules → rien à reconstruire. Ajoute les loueurs à la main."); return; }
-    // Loueurs déjà configurés (on garde leur nom d'affichage s'il existe).
-    let cur = []; try { const s = FP.settings.get(); if (Array.isArray(s.loueurs)) cur = s.loueurs; } catch (e) {}
-    const byProp = new Map();
-    cur.forEach(l => { const k = String((l && l.prop) || '').trim().toLowerCase(); if (k) byProp.set(k, { nom: String(l.nom || '').trim() || l.prop, prop: l.prop }); });
-    props.forEach((label, k) => { if (!byProp.has(k)) byProp.set(k, { nom: label, prop: label }); });
-    const list = Array.from(byProp.values());
-    if (!await FP.confirm('🪄 Reconstruire les loueurs depuis tes véhicules ?\n\n' + list.map(l => '• ' + l.nom).join('\n') + '\n\n(On garde ceux déjà configurés, on ajoute les manquants. Rien n\'est supprimé.)')) return;
-    const s = FP.settings.get(); s.loueurs = list; FP.settings.save(s);
-    const st = $('leasing-config-status'); if (st) { st.textContent = '✓ ' + list.length + ' loueur(s) reconstruits.'; st.style.color = '#059669'; }
-    renderLoueursRows();
-    try { rebuildLeasingData(); renderKPIs(); renderLeasing(); if (typeof renderLocalease === 'function') renderLocalease(); } catch (e) {}
+    // ⚠️ Le champ « propriétaire » contient AUSSI les propriétaires (ex. TJMAX, PXP), pas seulement les
+    // loueurs. On ne peut donc PAS tout ajouter : on laisse l'utilisateur COCHER ses vrais loueurs.
+    // Pré-cochage heuristique = noms qui « ressemblent » à un loueur (lease, LLD, Ayvens, Arval…).
+    const RE_LOUEUR = /lease|leasing|lld|ayvens|arval|\bald\b|alphabet|leaseplan|temsys|diac|\blocation\b|bpce|athlon|leasys|financement/i;
+    const cands = Array.from(props.values());
+    const rows = cands.map((label, i) => `<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #f1f5f9;cursor:pointer">
+        <input type="checkbox" data-lr-cb value="${escC(label)}" ${RE_LOUEUR.test(label) ? 'checked' : ''} style="width:16px;height:16px">
+        <span style="font-size:13.5px;color:#0f172a">${escC(label)}</span>
+      </label>`).join('');
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,61,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+        <div style="padding:16px 18px 8px"><div style="font-size:15px;font-weight:800;color:#0f1e3d">🪄 Choisis tes loueurs</div>
+          <div style="font-size:12.5px;color:#64748b;margin-top:3px">Coche uniquement les vrais loueurs de leasing (pas les propriétaires comme TJMAX). Les cases sont pré-cochées au mieux — ajuste si besoin.</div></div>
+        <div style="max-height:46vh;overflow:auto;padding:4px 18px">${rows}</div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;background:#f8fafc">
+          <button type="button" data-lr-cancel class="btn btn-outline text-sm">Annuler</button>
+          <button type="button" data-lr-ok class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Ajouter les loueurs cochés</button>
+        </div></div>`;
+    document.body.appendChild(ov);
+    if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+    const close = () => ov.remove();
+    ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-lr-cancel]')) close(); });
+    ov.querySelector('[data-lr-ok]').addEventListener('click', () => {
+      const chosen = Array.from(ov.querySelectorAll('[data-lr-cb]:checked')).map(c => c.value);
+      if (!chosen.length) { alert('Coche au moins un loueur (ou clique Annuler).'); return; }
+      // Fusionne avec les loueurs déjà configurés (garde le nom d'affichage existant, pas de doublon).
+      let cur = []; try { const s = FP.settings.get(); if (Array.isArray(s.loueurs)) cur = s.loueurs; } catch (e) {}
+      const byProp = new Map();
+      cur.forEach(l => { const k = String((l && l.prop) || '').trim().toLowerCase(); if (k) byProp.set(k, { nom: String(l.nom || '').trim() || l.prop, prop: l.prop }); });
+      chosen.forEach(label => { const k = label.trim().toLowerCase(); if (!byProp.has(k)) byProp.set(k, { nom: label, prop: label }); });
+      const list = Array.from(byProp.values());
+      const s = FP.settings.get(); s.loueurs = list; FP.settings.save(s);
+      const st = $('leasing-config-status'); if (st) { st.textContent = '✓ ' + list.length + ' loueur(s) enregistrés.'; st.style.color = '#059669'; }
+      close();
+      renderLoueursRows();
+      try { rebuildLeasingData(); renderKPIs(); renderLeasing(); if (typeof renderLocalease === 'function') renderLocalease(); } catch (e) {}
+    });
   });
   // Bouton rapide (barre du haut) : ouvre la config loueurs + ajoute directement une ligne vierge.
   if ($('loueur-add-quick')) $('loueur-add-quick').addEventListener('click', () => {
