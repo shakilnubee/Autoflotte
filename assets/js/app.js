@@ -8683,7 +8683,7 @@ FP.edl = {
           }
         }
         const b64 = doc.output('datauristring').split(',')[1];
-        const mode = data.signMode || 'integree';
+        const smode = data.signMode || 'integree';   // ⚠️ PAS « mode » (déjà le paramètre de run()) → collision TDZ
         let mailed = false, signed = false, sentForSign = false;
         const sig = doc.__edlSig || {};
         // Liste des signataires (employé + éventuellement le signataire société).
@@ -8692,7 +8692,7 @@ FP.edl = {
 
         // A) SIGNATURE INTÉGRÉE (Parc Pilot, sans prestataire) : chaque signataire reçoit un LIEN
         //    vers signer.html, signe au doigt/souris, et le PDF signé revient dans la fiche.
-        if (mode === 'integree' && data.to && FP.db && FP.db.insert) {
+        if (smode === 'integree' && data.to && FP.db && FP.db.insert) {
           try {
             const token = 'sig-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
             let soc = 'PXP'; try { soc = (FP.activeSociete ? FP.activeSociete() : 'PXP') || 'PXP'; } catch (e) {} if (soc === '__all__') soc = 'PXP';
@@ -8719,7 +8719,7 @@ FP.edl = {
           }
         }
         // B) SIGNATURE YOUSIGN (si le compte est activé) : lien Yousign par signataire.
-        else if (mode === 'yousign' && data.to && FP.supabase && FP.supabase.functions) {
+        else if (smode === 'yousign' && data.to && FP.supabase && FP.supabase.functions) {
           const nameParts = (full) => { const p = String(full || '').trim().split(/\s+/); return { firstName: p[0] || 'Signataire', lastName: p.slice(1).join(' ') || '-' }; };
           const signers = [{ ...nameParts(data.employe), email: data.to, field: sig.employe || null }];
           if (data.socSignEmail && /@/.test(data.socSignEmail)) signers.push({ ...nameParts(data.socSignNom || data.socNom), email: data.socSignEmail.trim(), field: sig.societe || null });
