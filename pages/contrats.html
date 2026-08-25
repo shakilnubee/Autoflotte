@@ -1463,31 +1463,106 @@
     if (window.lucide) lucide.createIcons();
   }
 
+  // ⚠️ EXPORT CONTRATS (CSV/Excel) — doit refléter EXACTEMENT ce qui est à l'écran : assurance +
+  // leasing BPCE (dérivé) + leasing Localease/LLD (Ayvens). Avant, l'export ne parcourait QUE
+  // `leasingImmats` (BPCE) → les contrats Ayvens/LLD manquaient. On ajoute les colonnes demandées :
+  // début de contrat, km contractuel, km d'aujourd'hui, et un statut « Dépassement » pour les
+  // véhicules à risque. Les montants viennent des MÊMES helpers que l'affichage (source unique).
+  function _fmtDateExp(d) { if (!d) return ''; try { return FP.dateNum(typeof d === 'string' ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10)); } catch (e) { return ''; } }
+  function _statutKmTxt(niveau) { return niveau === 'danger' ? 'Dépassement' : niveau === 'warn' ? 'À surveiller' : niveau === 'ok' ? 'OK' : ''; }
+  function leasingExportRows() {
+    const out = [];
+    // 1) ASSURANCE — une ligne par véhicule (les colonnes leasing restent vides).
+    vehicules.forEach(v => out.push({
+      section: 'Assurance', loueur: (FP.assuranceLabel && FP.assuranceLabel()) || 'Assurance flotte',
+      immat: v.immat, vehicule: `${v.marque || ''} ${v.modele || ''}`.trim(), chauffeur: (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '',
+      debut: '', kmContrat: '', kmActuel: (FP.kmActuel ? FP.kmActuel(v) : (v.km != null ? v.km : '')),
+      duree: '', loyer: '', total: '', fin: '', statutKm: '', depassement: '',
+    }));
+    // Plaques LLD (Ayvens) — pour ne PAS les compter deux fois côté BPCE (même règle que l'affichage).
+    const lldSet = new Set();
+    try { getLocalease().forEach(c => { const k = FP.normImmat((c.immat || autoImmatLoc(c) || '')); if (k) lldSet.add(k); }); } catch (e) {}
+    // 2) LEASING BPCE (dérivé) — mêmes montants/statuts que le tableau (FP.leasingInfo / leasingContrat).
+    [...leasingImmats].forEach(immat => {
+      if (lldSet.has(FP.normImmat(immat || ''))) return; // déjà compté en 3) côté LLD
+      const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)) || { immat, marque: '?', modele: '', chauffeur: '' };
+      const l = FP.leasingInfo ? FP.leasingInfo(v) : null;
+      const cRaw = FP.leasingContrat ? FP.leasingContrat(immat) : null;
+      const offerLoyer = (FP.leasingLoyerCourant && cRaw) ? FP.leasingLoyerCourant(cRaw) : null;
+      const mens = (offerLoyer != null) ? offerLoyer : mensualiteFixe(immat);
+      const moisT = moisTheoriques(l);
+      const agg = leasingByVeh[immat] || { count: 0, total: 0 };
+      const totalOffre = (offerLoyer != null && FP.leasingTotalVerse && cRaw) ? FP.leasingTotalVerse(cRaw) : null;
+      const total = (totalOffre != null) ? totalOffre : ((mens != null && moisT != null) ? mens * moisT : agg.total);
+      const debut = (cRaw && cRaw.debut) || v.dateMiseEnCirculation || '';
+      out.push({
+        section: 'Leasing', loueur: (FP.loueurOf ? FP.loueurOf(v) : '') || 'Leasing',
+        immat: v.immat, vehicule: `${v.marque || ''} ${v.modele || ''}`.trim(), chauffeur: (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '',
+        debut: _fmtDateExp(debut),
+        kmContrat: (l && l.kmContrat) || (cRaw && cRaw.kmContrat) || '',
+        kmActuel: (l && l.km != null) ? l.km : (FP.kmActuel ? FP.kmActuel(v) : (v.km != null ? v.km : '')),
+        duree: (cRaw && cRaw.dureeMois) || moisT || '',
+        loyer: (mens != null) ? mens : '',
+        total: (total !== '' && total != null) ? total : '',
+        fin: (l && l.finContrat) ? _fmtDateExp(l.finContrat.toISOString ? l.finContrat.toISOString().slice(0, 10) : l.finContrat) : '',
+        statutKm: _statutKmTxt(l && l.niveau),
+        depassement: (l && (l.niveau === 'danger' || l.niveau === 'warn') && l.depassementProjete > 0) ? l.depassementProjete : '',
+      });
+    });
+    // 3) LEASING LOCALEASE / LLD (Ayvens) — ⚠️ calculs PARALLÈLES à _renderLocaleaseRows (lecture seule,
+    //    aucune mutation) : projection km linéaire + statut, identiques à l'affichage. À garder en phase.
+    try {
+      getLocalease().forEach(c => {
+        const dur = Number(c.dureeMois) || 0;
+        const autoImmat = c.immat || autoImmatLoc(c);
+        const linkedV = autoImmat ? (data.vehicules || []).find(v => normPlaque(v.immat) === normPlaque(autoImmat)) : null;
+        const kmAct = (c.kmActuel != null && c.kmActuel !== '') ? Number(c.kmActuel) : ((linkedV && linkedV.km != null && linkedV.km !== '') ? Number(linkedV.km) : null);
+        const effDebut = c.debut || (linkedV && linkedV.dateMiseEnCirculation) || '';
+        const durEff = (c.fin && effDebut) ? (monthsBetween(effDebut, c.fin) || dur) : dur;
+        const effFinDate = c.fin ? new Date(c.fin) : (effDebut && dur ? addMonths(effDebut, dur) : null);
+        let moisEcoules = null;
+        if (effDebut) { const d = new Date(effDebut); if (!isNaN(d)) { const now = new Date(); let m = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth()); if (now.getDate() < d.getDate()) m--; moisEcoules = Math.max(0, durEff ? Math.min(m, durEff) : m); } }
+        const rate = (kmAct != null && moisEcoules && moisEcoules > 0) ? kmAct / moisEcoules : null;
+        const proj = (rate != null && durEff) ? Math.round(rate * durEff) : null;
+        const ratio = (proj != null && c.kmTotal) ? proj / c.kmTotal : null;
+        const over = (proj != null && c.kmTotal) ? proj - c.kmTotal : null;
+        const niveau = ratio == null ? null : (ratio > 1 ? 'danger' : (ratio > 0.9 ? 'warn' : 'ok'));
+        const ovL = (autoImmat && FP.getLeasingOverrides) ? (FP.getLeasingOverrides()[(autoImmat || '').toUpperCase()] || {}).loyer : null;
+        const baseLoyer = (ovL != null && ovL !== '') ? Number(ovL) : c.loyerTTC;
+        const loyer = (FP.leasingLoyerCourant) ? FP.leasingLoyerCourant({ debut: effDebut, dureeMois: c.dureeMois, loyer: baseLoyer, avenants: c.avenants }) : (c.loyerTTC || null);
+        const total = effDebut && FP.leasingTotalVerse ? FP.leasingTotalVerse({ debut: effDebut, dureeMois: durEff || c.dureeMois, loyer: baseLoyer, avenants: c.avenants }) : null;
+        out.push({
+          section: 'Leasing', loueur: (c.loueur || '').toString().trim() || localeaseLabel(),
+          immat: autoImmat || '', vehicule: `${c.marque || ''} ${c.modele || ''}`.trim(), chauffeur: c.conducteur || '',
+          debut: _fmtDateExp(effDebut), kmContrat: c.kmTotal || '', kmActuel: (kmAct != null ? kmAct : ''),
+          duree: (durEff || c.dureeMois || ''), loyer: (loyer != null ? loyer : ''), total: (total != null ? total : ''),
+          fin: (effFinDate && !isNaN(effFinDate)) ? _fmtDateExp(effFinDate.toISOString().slice(0, 10)) : '',
+          statutKm: _statutKmTxt(niveau), depassement: ((niveau === 'danger' || niveau === 'warn') && over > 0 ? over : ''),
+        });
+      });
+    } catch (e) { console.warn('[export leasing localease]', e); }
+    return out;
+  }
   FP.injectDataIO({
     exportOnly: true,
     filename: `parc-pilot-contrats-${new Date().toISOString().slice(0,10)}.csv`,
     columns: [
-      { key: 'section',   label: 'Section' },
-      { key: 'immat',     label: 'Immat' },
-      { key: 'vehicule',  label: 'Véhicule' },
-      { key: 'chauffeur', label: 'Chauffeur' },
-      { key: 'contrat',   label: 'Contrat' },
-      { key: 'detail',    label: 'Détail' },
-      { key: 'cout',      label: 'Coût (€)', format: FP.csv.numFormat },
+      { key: 'section',    label: 'Section' },
+      { key: 'loueur',     label: 'Loueur / Assureur' },
+      { key: 'immat',      label: 'Immat' },
+      { key: 'vehicule',   label: 'Véhicule' },
+      { key: 'chauffeur',  label: 'Chauffeur' },
+      { key: 'debut',      label: 'Début contrat' },
+      { key: 'kmContrat',  label: 'Km contractuel', format: FP.csv.numFormat },
+      { key: 'kmActuel',   label: "Km aujourd'hui", format: FP.csv.numFormat },
+      { key: 'duree',      label: 'Durée (mois)' },
+      { key: 'loyer',      label: 'Loyer/mois (€)', format: FP.csv.numFormat },
+      { key: 'total',      label: 'Total versé (€)', format: FP.csv.numFormat },
+      { key: 'fin',        label: 'Fin contrat' },
+      { key: 'statutKm',   label: 'Statut km' },
+      { key: 'depassement', label: 'Dépassement projeté (km)', format: FP.csv.numFormat },
     ],
-    getRows: () => {
-      const out = [];
-      vehicules.forEach(v => out.push({ section: 'Assurance', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: (FP.assuranceLabel && FP.assuranceLabel()) || 'Assurance flotte', detail: 'Police flotte', cout: '' }));
-      leasingImmats.forEach(immat => {
-        const v = vehicules.find(x => FP.normImmat(x.immat) === FP.normImmat(immat)) || { immat, marque: '?', modele: '', chauffeur: '—' };
-        const agg = leasingByVeh[immat] || { count: 0, total: 0, amounts: [] };
-        const l = FP.leasingInfo(v); const mens = mensualiteFixe(immat); const moisT = moisTheoriques(l);
-        const nbMens = (moisT != null) ? moisT : agg.count;
-        const totalTheo = (mens != null && moisT != null) ? mens * moisT : agg.total;
-        out.push({ section: 'Leasing', immat: v.immat, vehicule: `${v.marque} ${v.modele}`, chauffeur: v.chauffeur, contrat: (FP.loueurOf ? (FP.loueurOf(v) || 'Leasing') : (FP.societeProfil ? (FP.societeProfil().loueurNom || 'Leasing') : 'Leasing')), detail: `${nbMens} mensualités (théorique)`, cout: totalTheo });
-      });
-      return out;
-    },
+    getRows: leasingExportRows,
   });
 
   // ---------- Édition du forfait leasing ----------
