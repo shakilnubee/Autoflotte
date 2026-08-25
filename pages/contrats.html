@@ -2040,10 +2040,14 @@
   });
   applySectionOrder();
 
-  renderKPIs();
-  renderAssurance();
-  renderLeasing();
-  renderCartes();
+  // ⚠️ ROBUSTESSE : si un rendu plante (ex. config partiellement perdue), on NE DOIT PAS interrompre
+  // l'init — sinon les boutons plus bas (Ajouter/Reconstruire un loueur…) ne seraient jamais activés.
+  // Chaque rendu est isolé : une erreur est journalisée mais ne casse pas la page ni ses boutons.
+  const _safe = (fn, name) => { try { fn(); } catch (e) { console.error('[contrats init]', name, e); } };
+  _safe(renderKPIs, 'renderKPIs');
+  _safe(renderAssurance, 'renderAssurance');
+  _safe(renderLeasing, 'renderLeasing');
+  _safe(renderCartes, 'renderCartes');
 
   // ===== Onglets Leasing / Assurance : chaque onglet n'affiche QUE ses sections (séparation nette). =====
   // Leasing = sections leasing (BPCE) + localease (Ayvens/LLD). Assurance = section assurance.
@@ -2567,8 +2571,8 @@
       }
     } catch(err){ console.error('[localease upload]', err); alert('Échec du téléversement du contrat. Réessaie.'); }
   });
-  renderLocalease();
-  renderKPIs(); // re-calcul des KPIs leasing MAINTENANT que Localease est défini (inclut ses loyers)
+  _safe(renderLocalease, 'renderLocalease');
+  _safe(renderKPIs, 'renderKPIs2'); // re-calcul des KPIs leasing MAINTENANT que Localease est défini (inclut ses loyers)
 
   // === Récupération des PDF de contrats orphelins (fichiers encore dans le stockage mais dont
   //     le lien avec le contrat a été perdu). On liste le dossier scans/contrats-leasing et on
