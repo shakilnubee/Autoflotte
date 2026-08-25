@@ -3539,9 +3539,25 @@ FP.settings = {
       } catch (e) {}
     };
     const base = (this._serverSnap && typeof this._serverSnap === 'object') ? this._serverSnap : null;
-    // Sans point de référence (pas encore chargé depuis le serveur) OU sans Supabase : comportement
-    // d'avant (on écrit le blob local tel quel). Aucun risque de régression.
-    if (!base || !(FP.supabase && FP.supabase.from)) { this._serverSnap = null; plainUpsert(obj); return; }
+    // Sans Supabase : on ne peut rien lire/écrire côté serveur → file/local (comportement d'avant).
+    if (!(FP.supabase && FP.supabase.from)) { plainUpsert(obj); return; }
+    // ⚠️ ANTI-ÉCRASEMENT (cause racine d'un bug vécu) : PAS de snapshot serveur sur CET appareil = la
+    // synchro initiale n'a pas encore chargé les réglages partagés. Écrire maintenant le cache local
+    // écraserait la config de la société avec une version potentiellement INCOMPLÈTE (ex. un appareil
+    // fraîchement ouvert). On NE touche donc JAMAIS à une ligne existante tant qu'on n'a pas son
+    // snapshot : on lit d'abord le serveur (→ pose le snapshot) ; on ne CRÉE que s'il n'existe AUCUNE
+    // ligne. Le prochain enregistrement (après interaction) fera une vraie fusion « delta » sûre.
+    if (!base) {
+      (async () => {
+        try {
+          const r = await FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
+          const remote = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : null;
+          if (remote) { self._serverSnap = JSON.parse(JSON.stringify(remote)); }   // ligne existante → on NE l'écrase PAS
+          else { self._serverSnap = JSON.parse(JSON.stringify(obj)); plainUpsert(obj); }   // aucune ligne → création sûre
+        } catch (e) { /* hors-ligne : on ne touche pas au serveur */ }
+      })();
+      return;
+    }
     // Fusion « delta » : on repart de la version FRAÎCHE du serveur et on n'y applique QUE les clés que
     // CE poste a changées depuis son dernier sync (obj vs base). Les modifs d'un AUTRE poste sont
     // préservées ; une suppression reste une suppression (pas de « resurrection »).
