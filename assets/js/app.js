@@ -10679,12 +10679,16 @@ FP.pdfPreview = function (doc, filename, subtitle) {
 // géré à part par FP.makeExportMenu.
 FP.injectDataIO = function (cfg) {
   cfg = cfg || {};
-  const cols = (cfg.columns || []).filter(c => c && c.key && !c.readonly);
+  // `cfg.columns` peut être un TABLEAU (fixe) ou une FONCTION évaluée au moment de l'export
+  // (ex. onglets Leasing / Assurance : chaque onglet exporte ses PROPRES colonnes). L'import ne
+  // s'appuie que sur des colonnes fixes → colonnes-fonction ⇒ import désactivé (export seul).
+  const colsIsFn = typeof cfg.columns === 'function';
+  const cols = (colsIsFn ? [] : (cfg.columns || [])).filter(c => c && c.key && !c.readonly);
   // Deux capacités indépendantes : IMPORT (si onImport) et EXPORT Excel (si getRows).
   // ⚠️ RÈGLE PROJET « tout en Excel » : dès qu'une page fournit getRows, injectDataIO
   // pose AUTOMATIQUEMENT un bouton « Exporter (Excel) » (.xlsx), partout, pareil.
   const canImport = typeof cfg.onImport === 'function' && cols.length > 0 && cfg.exportOnly !== true;
-  const canExport = typeof cfg.getRows === 'function' && cfg.export !== false && (cfg.columns || []).length > 0;
+  const canExport = typeof cfg.getRows === 'function' && cfg.export !== false && (colsIsFn || (cfg.columns || []).length > 0);
   if (!canImport && !canExport) return;
   const mount = document.querySelector('[data-data-io]');
   if (!mount || mount.dataset.ioReady === '1') return;
@@ -10745,7 +10749,9 @@ FP.injectDataIO = function (cfg) {
   //     numériques, encodage propre, plus de « signes bizarres » du CSV). ---
   if (canExport) {
     const numFmt = (FP.csv && FP.csv.numFormat) || null;
-    const expColDefs = (cfg.columns || []).map(c => {
+    // Construit les définitions de colonnes d'export à partir d'un tableau de colonnes (résolu au clic
+    // quand `cfg.columns` est une fonction, pour un export adapté à l'onglet/au contexte courant).
+    const buildColDefs = (columnsArr) => (columnsArr || []).map(c => {
       const isNum = c.number === true || (numFmt && c.format === numFmt);
       return {
         label: c.label, number: isNum, noTotal: c.noTotal === true,
@@ -10763,10 +10769,13 @@ FP.injectDataIO = function (cfg) {
     expBtn.className = 'btn btn-outline text-sm';
     expBtn.innerHTML = '<i data-lucide="sheet" class="w-4 h-4"></i> Exporter (Excel)';
     expBtn.addEventListener('click', () => {
+      const columnsArr = colsIsFn ? (cfg.columns() || []) : (cfg.columns || []);
+      const expColDefs = buildColDefs(columnsArr);
       let rows = [];
       try { rows = (cfg.getRows() || []).slice(); } catch (e) { rows = []; }
       if (!rows.length) { if (FP.toast) FP.toast('Aucune ligne à exporter (vérifie les filtres).'); return; }
-      const baseName = String(cfg.baseName || cfg.filename || 'export').replace(/\.(csv|xlsx|xls)$/i, '');
+      const fnRaw = (typeof cfg.baseName === 'function') ? cfg.baseName() : (cfg.baseName || (typeof cfg.filename === 'function' ? cfg.filename() : cfg.filename) || 'export');
+      const baseName = String(fnRaw).replace(/\.(csv|xlsx|xls)$/i, '');
       if (FP.exportRows) FP.exportRows(baseName, expColDefs, rows, 'xlsx', { sheetName: cfg.sheetName || 'Export', total: !!cfg.total });
       else if (FP.toast) FP.toast('Export Excel indisponible.');
     });
