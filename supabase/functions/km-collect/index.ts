@@ -333,6 +333,38 @@ function vapidReady(): boolean {
   return _vapidReady;
 }
 
+// Journalise un SCAN du QR véhicule (ouverture du portail / page km) + notifie le gestionnaire.
+// Anti-spam : n'enregistre RIEN (et ne notifie pas) si le même véhicule a été scanné dans les
+// 20 dernières minutes (une même personne qui navigue = un seul scan). Best-effort : n'empêche
+// jamais l'ouverture du portail si la table qr_scans n'existe pas encore.
+async function logScan(
+  db: ReturnType<typeof createClient>,
+  qr: Record<string, unknown>,
+  mode: string,
+  userAgent: string,
+) {
+  try {
+    const vehId = qr.vehicule_id ? String(qr.vehicule_id) : null;
+    if (!vehId) return;
+    const since = new Date(Date.now() - 20 * 60 * 1000).toISOString(); // fenêtre anti-spam : 20 min
+    const { data: recent } = await db.from("qr_scans")
+      .select("id").eq("vehicule_id", vehId).gte("scanned_at", since).limit(1);
+    if (Array.isArray(recent) && recent.length) return; // déjà scanné très récemment → on ignore
+    const soc = qr.societe ? String(qr.societe) : "PXP";
+    const ins = await db.from("qr_scans").insert({
+      vehicule_id: vehId, plaque: qr.plaque ? String(qr.plaque) : "", societe: soc,
+      mode: mode || "portail", user_agent: (userAgent || "").slice(0, 300),
+    });
+    if (ins.error) return; // table absente / RLS : on n'insiste pas (portail ouvert quand même)
+    await sendPush(db, soc, {
+      title: "👀 QR véhicule scanné",
+      body: `${qr.plaque || "Véhicule"} — quelqu'un vient d'ouvrir le portail du véhicule.`,
+      url: "./pages/vehicules.html" + (qr.plaque ? ("?immat=" + encodeURIComponent(String(qr.plaque))) : ""),
+      tag: "scan-" + vehId,
+    });
+  } catch { /* best-effort : le scan/portail marche même sans journal */ }
+}
+
 async function sendPush(
   db: ReturnType<typeof createClient>,
   societe: string,
@@ -384,6 +416,10 @@ Deno.serve(async (req) => {
         const kmConnu = await vehKm(db, qr.vehicule_id);
         const kmDate = await dernierReleveDate(db, qr.vehicule_id);
         const base = { ok: true, mode: "qr", plaque: qr.plaque || "", chauffeur: "", societe: qr.societe || "", kmConnu, kmDate, deja: false, kmRecu: null };
+        // Journalise le SCAN du QR (quand + quel véhicule) + notifie le gestionnaire. Anti-spam 20 min.
+        // Mode selon la page qui appelle : portail complet (v.html, full=1) vs page relevé km.
+        const scanMode = url.searchParams.get("full") === "1" ? "portail" : "km";
+        await logScan(db, qr, scanMode, req.headers.get("user-agent") || "");
         // `full=1` (portail v.html) : on joint infos véhicule + documents + EDL + config société.
         if (url.searchParams.get("full") === "1") {
           const veh = await vehInfo(db, qr.vehicule_id);

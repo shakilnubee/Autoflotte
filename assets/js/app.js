@@ -3293,6 +3293,27 @@ FP.push = {
   },
 };
 
+// === Journal des SCANS du QR véhicule (lecture) =============================
+// Source unique pour lire « quand le QR d'un véhicule a été scanné » (table qr_scans,
+// alimentée par l'Edge Function km-collect à chaque ouverture du portail). Isolé par
+// société via la RLS. Un QR n'a pas de login → on connaît le véhicule + l'heure, pas la personne.
+FP.qrScans = {
+  async recent(vehId, limit) {
+    if (!vehId || !(FP.supabase && FP.supabase.from)) return [];
+    try {
+      const { data, error } = await FP.supabase.from('qr_scans')
+        .select('scanned_at,mode,plaque')
+        .eq('vehicule_id', vehId)
+        .order('scanned_at', { ascending: false })
+        .limit(limit || 12);
+      if (error) return [];
+      return (data || []).map((r) => ({ at: r.scanned_at, mode: r.mode || 'portail', plaque: r.plaque || '' }));
+    } catch (e) { return []; }
+  },
+  // Date/heure du dernier scan d'un véhicule (ISO), ou null.
+  async last(vehId) { const l = await this.recent(vehId, 1); return l.length ? l[0].at : null; },
+};
+
 // === Navigation MOBILE : barre + menu latéral repliable (hamburger) ===
 // Injecté sur toutes les pages qui ont une sidebar. N'apparaît qu'en < 769px (CSS).
 (function mobileNav() {

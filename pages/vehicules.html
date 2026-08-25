@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260824b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260824c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260824b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260824c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260824b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260824c">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -718,6 +718,8 @@
       <div id="qr-holder" style="background:#fff;padding:8px;border:1px solid var(--fp-border);border-radius:12px"></div>
       <div id="qr-label" class="text-center font-mono font-bold text-slate-800"></div>
     </div>
+    <!-- Journal des scans de CE QR (quand quelqu'un l'a ouvert) -->
+    <div id="qr-scans" class="mt-3 text-sm" style="display:none"></div>
     <div class="flex gap-2 pt-4">
       <button type="button" class="btn btn-outline flex-1 justify-center" id="qr-print"><i data-lucide="printer" class="w-4 h-4"></i> Imprimer</button>
       <button type="button" class="btn btn-dark flex-1 justify-center" id="qr-download"><i data-lucide="download" class="w-4 h-4"></i> PNG</button>
@@ -993,13 +995,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260824b"></script>
-<script src="../assets/js/supabase-client.js?v=20260824b"></script>
-<script src="../assets/js/data.js?v=20260824b"></script>
-<script src="../assets/js/fleet-docs.js?v=20260824b"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260824b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260824c"></script>
+<script src="../assets/js/supabase-client.js?v=20260824c"></script>
+<script src="../assets/js/data.js?v=20260824c"></script>
+<script src="../assets/js/fleet-docs.js?v=20260824c"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260824c"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260824b"></script>
+<script src="../assets/js/app.js?v=20260824c"></script>
 <script>
   lucide.createIcons();
 
@@ -4818,6 +4820,43 @@
     const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
     $('qr-label').textContent = label;
     $('qr-backdrop').classList.add('open');
+    renderQrScans(v);
+  }
+  // Affiche « quand ce QR a été scanné » (dernier scan + historique dépliable). Un QR n'a pas de
+  // login → on connaît le véhicule + l'heure, pas la personne. Lecture via FP.qrScans (source unique).
+  async function renderQrScans(v) {
+    const box = $('qr-scans'); if (!box) return;
+    box.style.display = 'none'; box.innerHTML = '';
+    if (!(window.FP && FP.qrScans)) return;
+    let scans = [];
+    try { scans = await FP.qrScans.recent(v.id, 12); } catch (e) { scans = []; }
+    // La modale a pu être refermée / changée de véhicule entre-temps : on ne peint que si toujours pertinent
+    if (!qrCurrent || qrCurrent.immat !== (v.immat || '')) return;
+    const when = (iso) => { try { return FP.dateHeure ? FP.dateHeure(iso) : new Date(iso).toLocaleString('fr-FR'); } catch (e) { return String(iso || ''); } };
+    box.style.display = '';
+    if (!scans.length) {
+      box.innerHTML = '<div style="text-align:center;color:var(--fp-muted);font-size:.82rem">👀 Aucun scan enregistré pour l\'instant.<br>Dès qu\'un conducteur ouvre ce QR, la date apparaîtra ici.</div>';
+      return;
+    }
+    const first = scans[0];
+    const restCount = scans.length - 1;
+    let html = '<div style="background:var(--fp-bg,#F1F5F9);border:1px solid var(--fp-border);border-radius:10px;padding:9px 11px">'
+      + '<div style="font-weight:700;color:var(--fp-primary);display:flex;align-items:center;gap:6px"><span>👀</span> Dernier scan</div>'
+      + '<div style="margin-top:2px">' + FP.esc(when(first.at)) + '</div>';
+    if (restCount > 0) {
+      html += '<button type="button" id="qr-scans-more" style="margin-top:6px;font-size:.78rem;color:var(--fp-accent);background:none;border:none;cursor:pointer;padding:0;font-weight:600">Voir les ' + restCount + ' précédents</button>'
+        + '<div id="qr-scans-rest" style="display:none;margin-top:6px;border-top:1px dashed var(--fp-border);padding-top:6px;font-size:.82rem;color:var(--fp-muted)">'
+        + scans.slice(1).map((s) => '<div style="padding:2px 0">' + FP.esc(when(s.at)) + '</div>').join('') + '</div>';
+    }
+    html += '</div>';
+    box.innerHTML = html;
+    const moreBtn = $('qr-scans-more');
+    if (moreBtn) moreBtn.addEventListener('click', () => {
+      const rest = $('qr-scans-rest'); if (!rest) return;
+      const open = rest.style.display !== 'none';
+      rest.style.display = open ? 'none' : '';
+      moreBtn.textContent = open ? ('Voir les ' + restCount + ' précédents') : 'Voir moins';
+    });
   }
   // Le PNG téléchargé reprend EXACTEMENT le même modèle que l'impression :
   // logo société + « Société — PLAQUE » + QR + plaque + modèle + astuce, sur une carte.
