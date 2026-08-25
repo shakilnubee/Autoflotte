@@ -2666,6 +2666,39 @@
     try { const ld = FP.settings.get().leasingDocs || {}; Object.keys(ld).forEach(immat => { (Array.isArray(ld[immat]) ? ld[immat] : []).forEach(d => { if (d && d.url) map[d.url] = { type: 'bpce', immat: immat, label: immat }; }); }); } catch (e) {}
     return map;
   }
+  // Applique les champs lus par l'IA à la cible — UNIQUEMENT les champs encore vides (on ne clobber
+  // jamais une valeur déjà saisie). LLD → l'objet contrat ; BPCE → override leasing (FP.saveLeasingOverride).
+  function applyScannedToTarget(lk, f) {
+    if (!lk || !f) return [];
+    const filled = [];
+    const num = v => (v != null && v !== '' && !isNaN(Number(v))) ? Number(v) : null;
+    if (lk.type === 'lld') {
+      const list = getLocalease(); const c = list[lk.ci]; if (!c) return [];
+      const setIf = (key, val, lbl) => { if (val != null && (c[key] == null || c[key] === '')) { c[key] = val; filled.push(lbl); } };
+      setIf('loyerTTC', num(f.loyerTTC), 'loyer');
+      setIf('dureeMois', num(f.dureeMois), 'durée');
+      setIf('kmTotal', num(f.kmTotal), 'forfait km');
+      setIf('co2', num(f.co2), 'CO₂');
+      setIf('malus', num(f.malus), 'malus');
+      setIf('kmSupp', num(f.kmSupp), 'km sup.');
+      setIf('kmTolerance', num(f.kmTolerance), 'tolérance km');
+      if (f.offre && !(String(c.offre || '')).trim()) { c.offre = String(f.offre); filled.push('offre'); }
+      if (filled.length) { const s = FP.settings.get(); s.localeaseContrats = list; FP.settings.save(s); }
+    } else if (lk.type === 'bpce') {
+      const immat = lk.immat;
+      const cur = (FP.getLeasingOverrides ? (FP.getLeasingOverrides()[(immat || '').toUpperCase()] || {}) : {});
+      const payload = {};
+      const addIf = (key, val, lbl) => { if (val != null && (cur[key] == null || cur[key] === '')) { payload[key] = val; filled.push(lbl); } };
+      addIf('loyer', num(f.loyerTTC), 'loyer');
+      addIf('dureeMois', num(f.dureeMois), 'durée');
+      addIf('kmContrat', num(f.kmTotal), 'forfait km');
+      addIf('malus', num(f.malus), 'malus');
+      addIf('kmSupp', num(f.kmSupp), 'km sup.');
+      addIf('kmTolerance', num(f.kmTolerance), 'tolérance km');
+      if (Object.keys(payload).length && FP.saveLeasingOverride) FP.saveLeasingOverride(immat, payload);
+    }
+    return filled;
+  }
   function renderRecoverPanel(files) {
     const panel = $('loc-recover-panel'); if (!panel) return;
     const linked = linkedDocMap();
@@ -2675,8 +2708,9 @@
     if (!targets.length) head += `<div class="text-xs mb-2" style="color:#b45309">Aucun véhicule en leasing détecté pour l'instant : ajoute d'abord un contrat (bouton « Ajouter un contrat ») ou renseigne le loueur d'un véhicule, puis reviens ici.</div>`;
     panel.innerHTML = head + files.map((f, i) => {
       const lk = linked[f.url];
+      const readBtn = (window.FP && FP.scanIA) ? `<button type="button" class="btn btn-outline text-xs" data-rec-read="${i}" style="flex-shrink:0" title="Lire ce PDF et remplir les champs manquants (loyer, durée, forfait km…)">📄 Lire &amp; remplir</button>` : '';
       const right = lk
-        ? `<span class="text-xs" style="flex:1;color:#047857;font-weight:600">✓ relié à ${escC(lk.label)}</span><button type="button" class="btn btn-outline text-xs" data-rec-unlink="${i}" style="flex-shrink:0;color:#dc2626;border-color:#fecaca">Détacher</button>`
+        ? `<span class="text-xs" style="flex:1;color:#047857;font-weight:600">✓ relié à ${escC(lk.label)}</span>${readBtn}<button type="button" class="btn btn-outline text-xs" data-rec-unlink="${i}" style="flex-shrink:0;color:#dc2626;border-color:#fecaca">Détacher</button>`
         : `<select class="field-input text-sm" data-rec-sel style="flex:1;min-width:200px">${opts}</select><button type="button" class="btn btn-dark text-xs" data-rec-link="${i}" style="flex-shrink:0">Lier</button>`;
       return `<div class="flex items-center gap-2 py-1.5" style="border-bottom:1px solid #FDE68A" data-rec="${i}">
           <a href="${escC(f.url)}" target="_blank" rel="noopener" class="btn btn-outline text-xs" style="flex-shrink:0"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Ouvrir PDF ${i + 1}</a>
@@ -2717,6 +2751,27 @@
       } else return;
       renderLeasing(); renderRecoverPanel(files);
       if (FP.toast) FP.toast('PDF relié ✓');
+      return;
+    }
+    // === Lire un PDF déjà relié et remplir les champs manquants (IA) ===
+    const r = e.target.closest('[data-rec-read]');
+    if (r) {
+      const f = files[+r.dataset.recRead]; if (!f) return;
+      const lk = linkedDocMap()[f.url];
+      if (!lk) { alert('Relie d\'abord ce PDF à un véhicule / contrat.'); return; }
+      if (!(window.FP && FP.scanIA)) { alert('Lecture IA indisponible (connexion requise).'); return; }
+      const old = r.textContent; r.disabled = true; r.textContent = '⏳ Lecture…';
+      try {
+        const url = (FP.signedScanUrl) ? await FP.signedScanUrl(f.url, 3600) : f.url;
+        const resp = await fetch(url); if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const blob = await resp.blob();
+        const file = new File([blob], f.name || 'contrat.pdf', { type: blob.type || 'application/pdf' });
+        const fields = await FP.scanIA(file, 'leasing', LOCALEASE_PROMPT);
+        const filled = applyScannedToTarget(lk, fields);
+        renderLeasing(); renderRecoverPanel(files);
+        if (filled.length) { if (FP.toast) FP.toast('✓ Rempli : ' + filled.join(' · ')); }
+        else alert('Rien de nouveau à remplir (champs déjà renseignés, ou format d\'offre non reconnu). Tu peux compléter à la main via le crayon ✏️ de la ligne.');
+      } catch (err) { console.warn('[lire pdf relié]', err); alert('Impossible de lire ce PDF : ' + (err && err.message ? err.message : err)); r.disabled = false; r.textContent = old; }
       return;
     }
     // === Détacher un PDF mal relié ===
