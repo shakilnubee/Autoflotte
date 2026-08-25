@@ -3542,18 +3542,30 @@ FP.settings = {
     // Sans Supabase : on ne peut rien lire/écrire côté serveur → file/local (comportement d'avant).
     if (!(FP.supabase && FP.supabase.from)) { plainUpsert(obj); return; }
     // ⚠️ ANTI-ÉCRASEMENT (cause racine d'un bug vécu) : PAS de snapshot serveur sur CET appareil = la
-    // synchro initiale n'a pas encore chargé les réglages partagés. Écrire maintenant le cache local
-    // écraserait la config de la société avec une version potentiellement INCOMPLÈTE (ex. un appareil
-    // fraîchement ouvert). On NE touche donc JAMAIS à une ligne existante tant qu'on n'a pas son
-    // snapshot : on lit d'abord le serveur (→ pose le snapshot) ; on ne CRÉE que s'il n'existe AUCUNE
-    // ligne. Le prochain enregistrement (après interaction) fera une vraie fusion « delta » sûre.
+    // synchro initiale n'a pas encore chargé les réglages partagés. Écrire le cache local TEL QUEL
+    // écraserait la config de la société avec une version potentiellement INCOMPLÈTE. On lit donc
+    // d'abord le serveur et on FUSIONNE EN PROFONDEUR : on part du serveur (→ préserve les clés que ce
+    // cache local ne connaît pas, ex. SIRET) et on applique par-dessus les valeurs locales (→ les
+    // changements de CE poste sont bien enregistrés). Ainsi l'écriture N'EST JAMAIS bloquée (on peut
+    // toujours corriger) ET la config serveur n'est jamais effacée par un cache incomplet.
     if (!base) {
+      const deepMerge = (dst, over) => {
+        const out = (dst && typeof dst === 'object' && !Array.isArray(dst)) ? Object.assign({}, dst) : {};
+        Object.keys(over || {}).forEach(k => {
+          const ov = over[k];
+          if (ov && typeof ov === 'object' && !Array.isArray(ov)) out[k] = deepMerge(out[k], ov);
+          else out[k] = ov;   // valeurs simples + tableaux : le local gagne (les tombstones gèrent les sociétés)
+        });
+        return out;
+      };
       (async () => {
         try {
           const r = await FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
           const remote = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : null;
-          if (remote) { self._serverSnap = JSON.parse(JSON.stringify(remote)); }   // ligne existante → on NE l'écrase PAS
-          else { self._serverSnap = JSON.parse(JSON.stringify(obj)); plainUpsert(obj); }   // aucune ligne → création sûre
+          const merged = remote ? deepMerge(remote, obj) : obj;
+          self._serverSnap = JSON.parse(JSON.stringify(merged));
+          try { localStorage.setItem(self._key(), JSON.stringify(merged)); } catch (_) {}
+          plainUpsert(merged);
         } catch (e) { /* hors-ligne : on ne touche pas au serveur */ }
       })();
       return;
