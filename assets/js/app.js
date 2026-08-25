@@ -8934,6 +8934,12 @@ FP.edlSign = {
   _unseen: 0,       // NOUVELLE activité de signature non encore vue par le gestionnaire (→ pastille menu)
   _rows: null,      // dernières lignes chargées (pour markSeen)
   _nbSignedOf(x) { const sgs = Array.isArray(x.signataires) ? x.signataires : []; return sgs.filter(s => s && s.signed).length; },
+  // ⚠️ Le marqueur « signatures vues » est un état PAR APPAREIL (comme l'onglet ouvert) → localStorage
+  // UNIQUEMENT, JAMAIS FP.settings (qui se synchronise). Écrire dans FP.settings au chargement pouvait
+  // écraser les réglages partagés d'un poste au cache incomplet — régression corrigée (ne pas refaire).
+  _seenKey() { let soc = 'PXP'; try { soc = (FP.activeSociete && FP.activeSociete()) || 'PXP'; } catch (e) {} return 'fp_edlseen_' + soc; },
+  _readSeen() { try { const v = JSON.parse(localStorage.getItem(this._seenKey()) || 'null'); return (v && typeof v === 'object') ? v : null; } catch (e) { return null; } },
+  _writeSeen(m) { try { localStorage.setItem(this._seenKey(), JSON.stringify(m || {})); } catch (e) {} },
   async load() {
     try {
       if (!(FP.db && FP.db.select)) { this._pending = []; this._unseen = 0; return this._pending; }
@@ -8950,20 +8956,16 @@ FP.edlSign = {
         })
         .filter(x => x.manque.length);   // il reste au moins un signataire à signer
       // NOUVELLE activité de signature = une signature de plus qu'à la dernière visite de « Suivi & alertes ».
-      // Suivi via settings.edlSeen { token: nbSignatures vues }. 1re fois → on initialise à l'existant
-      // (pas de gros chiffre au départ) ; ensuite chaque signature reçue fait +1 la pastille.
-      try {
-        const s = FP.settings.get();
-        let seen = (s.edlSeen && typeof s.edlSeen === 'object') ? s.edlSeen : null;
-        if (!seen) { // init : tout l'existant est considéré « déjà vu »
-          seen = {}; rows.forEach(x => { if (x && x.token) seen[x.token] = this._nbSignedOf(x); });
-          s.edlSeen = seen; try { FP.settings.save(s); } catch (e) {}
-          this._unseen = 0;
-        } else {
-          let u = 0; rows.forEach(x => { if (x && x.token && this._nbSignedOf(x) > (seen[x.token] || 0)) u++; });
-          this._unseen = u;
-        }
-      } catch (e) { this._unseen = 0; }
+      // Marqueur localStorage { token: nbSignatures vues } (par appareil). 1re fois → on initialise à
+      // l'existant (pas de gros chiffre au départ) ; ensuite chaque signature reçue fait +1 la pastille.
+      let seen = this._readSeen();
+      if (!seen) {
+        seen = {}; rows.forEach(x => { if (x && x.token) seen[x.token] = this._nbSignedOf(x); });
+        this._writeSeen(seen); this._unseen = 0;
+      } else {
+        let u = 0; rows.forEach(x => { if (x && x.token && this._nbSignedOf(x) > (seen[x.token] || 0)) u++; });
+        this._unseen = u;
+      }
       return this._pending;
     } catch (e) { this._pending = []; this._unseen = 0; return this._pending; }
   },
@@ -8971,10 +8973,9 @@ FP.edlSign = {
   markSeen() {
     try {
       const rows = this._rows || []; if (!rows.length) { this._unseen = 0; return; }
-      const s = FP.settings.get(); const seen = Object.assign({}, s.edlSeen || {});
+      const seen = this._readSeen() || {};
       rows.forEach(x => { if (x && x.token) seen[x.token] = this._nbSignedOf(x); });
-      s.edlSeen = seen; try { FP.settings.save(s); } catch (e) {}
-      this._unseen = 0;
+      this._writeSeen(seen); this._unseen = 0;
       if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
     } catch (e) {}
   },
