@@ -43,7 +43,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Méthode non autorisée." }, 405);
 
-  const KEY = Deno.env.get("YOUSIGN_API_KEY");
+  // .trim() : évite l'échec « Invalid authentication credentials » si la clé a été collée dans le
+  // secret Supabase avec un espace ou un retour à la ligne en trop.
+  const KEY = (Deno.env.get("YOUSIGN_API_KEY") || "").trim();
+  const ENV = (Deno.env.get("YOUSIGN_ENV") || "sandbox").toLowerCase();
   if (!KEY) return json({ error: "Signature indisponible : clé Yousign non configurée côté serveur (YOUSIGN_API_KEY)." }, 500);
   const H = { "Authorization": "Bearer " + KEY };
   const API = baseUrl();
@@ -75,7 +78,7 @@ Deno.serve(async (req) => {
     const srTxt = await srRes.text();
     let sr: Record<string, unknown> = {};
     try { sr = JSON.parse(srTxt); } catch { /* garde le texte pour l'erreur */ }
-    if (!srRes.ok || !sr.id) return json({ error: "Yousign (création) : " + (String((sr as { detail?: string }).detail || "") || srTxt).slice(0, 500) }, 502);
+    if (!srRes.ok || !sr.id) return json({ error: "Yousign (création · env=" + ENV + ") : " + (String((sr as { detail?: string }).detail || "") || srTxt).slice(0, 500) }, 502);
     const srId = String(sr.id);
 
     // 2) Attacher le PDF (document signable) — multipart/form-data.
