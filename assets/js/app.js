@@ -8564,6 +8564,20 @@ FP.edl = {
     </div>`;
     document.body.appendChild(ov);
     if (window.lucide) lucide.createIcons();
+    // Signataire société : par défaut = le GESTIONNAIRE CONNECTÉ (celui qui fait l'état des lieux),
+    // si aucun signataire société n'a été réglé dans Paramètres → Société. → les 2 e-mails (conducteur
+    // + gestionnaire) sont remplis automatiquement, sans rien saisir.
+    if (!prof.edlSignataireEmail) {
+      try {
+        if (FP.auth && FP.auth.getUser) FP.auth.getUser().then((u) => {
+          const em = u && u.email; const fE = ov.querySelector('#edl-soc-email'), fN = ov.querySelector('#edl-soc-nom');
+          if (em && fE && !fE.value) fE.value = em;
+          // Nom : nom du compte (user_metadata) sinon on garde le nom de la société déjà pré-rempli.
+          const nm = u && u.user_metadata && (u.user_metadata.full_name || u.user_metadata.name);
+          if (nm && fN && (!fN.value || fN.value === socNom)) fN.value = nm;
+        }).catch(() => {});
+      } catch (e) {}
+    }
     const close = () => ov.remove();
     ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-edl-x]')) close(); });
     // --- Photos (jointes au PDF + enregistrées dans la fiche « État des lieux ») ---
