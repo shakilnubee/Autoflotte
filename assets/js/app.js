@@ -2997,6 +2997,7 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModelePaiement_en',   label: "E-mail EN — payment request",      type: 'textarea', ph: 'Use {prenom} for the first name.', default: FP.MAIL_DEFAUT.paiement_en, lang: 'en' },
   { key: 'mailModeleDesignation_en',label: "E-mail EN — driver designation",   type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.designation_en, lang: 'en' },
   { key: 'mailModeleRelance_en',    label: "E-mail EN — reminder",             type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.relance_en, lang: 'en' },
+  { key: 'mailModeleSignature',  label: "Modèle e-mail — demande de signature (état des lieux)", type: 'textarea', ph: 'Message envoyé au conducteur pour signer. Balises : {prenom}, {immat}, {modele}, {date}. Le bouton « Signer le document » et les infos du véhicule sont ajoutés automatiquement (mise en page soignée).', default: 'Bonjour {prenom},\n\nMerci de signer électroniquement l\'état des lieux du véhicule {immat} ({modele}). Cela ne prend que quelques secondes.' },
   { key: 'mailSignature',        label: "Signature (bas des e-mails d'amende)",    type: 'textarea', ph: 'Colle ta signature — texte simple OU le CODE HTML de ta signature Gmail (avec logo/images). Le HTML est envoyé tel quel (le logo s\'affiche). Astuce : Gmail → Paramètres → Signature ; ou clic droit « Inspecter » sur ta signature → copier l\'élément.' },
 ];
 // Contrat d'assurance de la société ACTIVE (assureur + n° de police), paramétrable dans Contrats.
@@ -5810,6 +5811,11 @@ FP.buildAlertes = (data) => {
         const repondu = (FP.kmCollecte && FP.kmCollecte.recus ? FP.kmCollecte.recus() : [])
           .some(x => x.vehicule_id === v.id && x.used_at && new Date(x.used_at).getTime() >= sent.getTime());
         if (repondu) return;
+        // ⚠️ Km mis à jour MANUELLEMENT (fiche, MAJ en lot, photo…) APRÈS l'envoi → le km est à jour
+        // même si CE lien n'a pas été utilisé → pas de relance. (settings.kmMajDates = date de dernière
+        // mise à jour du km par véhicule.) Corrige le cas « j'ai déjà renseigné le km mais la relance reste ».
+        const kmUpd = kmDates[v.immat] ? new Date(kmDates[v.immat]) : null;
+        if (kmUpd && !isNaN(kmUpd) && kmUpd.getTime() >= sent.getTime()) return;
         const j = Math.floor((today - sent) / 86400000);
         if (j < relanceJours) return;
         const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
@@ -5818,6 +5824,19 @@ FP.buildAlertes = (data) => {
       if (relances.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relances.length} relance${relances.length > 1 ? 's' : ''} relevé km`, detail: 'Demande envoyée par mail, sans réponse du chauffeur — rouvre la fiche pour renvoyer.', sort: 470, muteKey: 'relevekm-relance', vehicules: relances });
     } catch (e) {}
   }
+
+  // --- États des lieux EN ATTENTE DE SIGNATURE (un ou plusieurs signataires manquants) ---
+  // Source = FP.edlSign._pending (chargé par FP.edlSign.load() sur la page). Chaque ligne dit QUI manque.
+  try {
+    const pend = (FP.edlSign && FP.edlSign._pending) || null;
+    if (Array.isArray(pend) && pend.length) {
+      const items = pend.map(p => ({
+        label: `${p.plaque}${p.modele ? ' · ' + p.modele : ''}${p.sens === 'restitution' ? ' (restitution)' : ''} — en attente : ${p.manque.join(', ')}`,
+        target: 'vehicules.html?immat=' + encodeURIComponent(p.plaque || ''),
+      }));
+      out.push({ niveau: 'warn', categorie: 'États des lieux', message: `${pend.length} état${pend.length > 1 ? 's' : ''} des lieux à signer`, detail: 'Signature électronique en attente — il manque au moins une signature.', sort: 465, muteKey: 'edl-sign-pending', vehicules: items });
+    }
+  } catch (e) {}
 
   // --- Amendes à payer ---
   const amAPayer = (data.amendes || []).filter(a => FP.estAPayer(a));
@@ -8704,10 +8723,24 @@ FP.edl = {
             const ins = await FP.db.insert('edl_signatures', rec);
             if (ins && ins.error) throw new Error(ins.error.message || 'insert');
             const base = FP.edl.SIGN_BASE || 'https://parc-pilot.fr/signer.html';
+            const logoSrc = prof.logoUrl || '';   // logo HÉBERGÉ (les data: URI sont souvent bloqués en e-mail)
+            let tpl = (prof.mailModeleSignature || '').trim();
+            if (!tpl) tpl = 'Bonjour {prenom},\n\nMerci de signer électroniquement l\'état des lieux du véhicule {immat} ({modele}). Cela ne prend que quelques secondes.';
             for (const s of signersList) {
               const link = base + '?t=' + encodeURIComponent(token) + '&who=' + s.role;
-              const qui = s.role === 'societe' ? 'pour la société' : '';
-              const html = `<p>Bonjour,</p><p>Merci de <b>signer électroniquement</b> ${qui ? qui + ' ' : ''}l'état des lieux du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)})${isRestit ? ', rendu' : ', remis'} le ${esc(FP.date(data.date))}.</p><p><a href="${link}" style="display:inline-block;background:#0F1E3D;color:#fff;padding:11px 20px;border-radius:8px;text-decoration:none;font-weight:700">✍️ Signer le document</a></p><p style="font-size:12px;color:#64748b">Ou copiez ce lien : ${link}</p><p>— ${esc(data.socNom || 'Gestion de flotte')}</p>`;
+              const prenomS = String(s.nom || '').trim().split(/\s+/)[0] || '';
+              const intro = esc(tpl).replace(/\{prenom\}/g, esc(prenomS) + (s.role === 'societe' ? ' (société)' : '')).replace(/\{immat\}/g, esc(data.immat)).replace(/\{modele\}/g, esc(data.modele)).replace(/\{date\}/g, esc(FP.date(data.date))).replace(/\n/g, '<br>');
+              const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">
+  ${logoSrc ? `<div style="text-align:center;padding:6px 0"><img src="${esc(logoSrc)}" alt="" style="max-height:46px"></div>` : ''}
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px 24px">
+    <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#F97316">État des lieux à signer</div>
+    <div style="font-size:15px;line-height:1.55;margin:10px 0 2px">${intro}</div>
+    <div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155">🚗 <b>${esc(data.modele)}</b> · ${esc(data.immat)}${isRestit ? ' · restitution' : ''} · ${esc(FP.date(data.date))}</div>
+    <div style="text-align:center;margin:18px 0 6px"><a href="${link}" style="display:inline-block;background:#0F1E3D;color:#fff;padding:13px 32px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">✍️ Signer le document</a></div>
+    <div style="text-align:center;font-size:11.5px;color:#94a3b8;margin-top:8px">Signature électronique sécurisée · quelques secondes suffisent</div>
+  </div>
+  <div style="text-align:center;font-size:11px;color:#cbd5e1;margin-top:10px">— ${esc(data.socNom || 'Gestion de flotte')} · via Parc Pilot</div>
+</div>`;
               try { await FP.sendEmail({ to: s.email, cc: '', subject: 'À signer — état des lieux ' + data.immat + (s.role === 'societe' ? ' (société)' : ''), html, text: 'Signer l\'état des lieux : ' + link, replyTo: prof.mailExpediteur || '' }); } catch (e) {}
             }
             sentForSign = true;
@@ -8838,6 +8871,30 @@ FP.edl = {
     // Pied de page Parc Pilot.
     doc.setFontSize(7.5); doc.setTextColor(150, 160, 175); doc.text('Édité via Parc Pilot — gestion de flotte', M, H - 8);
     return doc;
+  },
+};
+
+// ===== Suivi des SIGNATURES d'état des lieux (qui manque encore ?) =====
+// Charge la table edl_signatures (filtrée par société) et expose les demandes NON entièrement
+// signées + la liste des signataires manquants. Lu par buildAlertes (alerte « en attente de signature »).
+FP.edlSign = {
+  _pending: null,
+  async load() {
+    try {
+      if (!(FP.db && FP.db.select)) { this._pending = []; return this._pending; }
+      const r = await FP.db.select('edl_signatures');   // RLS + filtre société
+      const rows = (r && r.data) ? r.data : [];
+      this._pending = rows
+        .filter(x => x && (x.statut || 'en_attente') !== 'signe')
+        .map(x => {
+          const sgs = Array.isArray(x.signataires) ? x.signataires : [];
+          const requis = sgs.filter(s => s && s.email);
+          const manque = requis.filter(s => !s.signed).map(s => s.nom || s.email);
+          return { plaque: x.plaque || '', modele: x.modele || '', vehiculeId: x.vehiculeId || '', date: x.date || '', sens: x.sens || 'remise', manque, nbTotal: requis.length };
+        })
+        .filter(x => x.manque.length);   // il reste au moins un signataire à signer
+      return this._pending;
+    } catch (e) { this._pending = []; return this._pending; }
   },
 };
 
