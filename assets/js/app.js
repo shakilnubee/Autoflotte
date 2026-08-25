@@ -3266,7 +3266,15 @@ FP.push = {
       if (state === 'unsupported') {
         btn.textContent = '🔔 Non disponible'; btn.disabled = true;
         btn.style.cssText = 'opacity:.6;cursor:not-allowed;padding:10px 16px;border-radius:10px;border:1px solid #CBD5E1;background:#F1F5F9;font-weight:600';
-        info.textContent = "Ouvre le site dans Safari/Chrome (ou installe l'appli) pour activer les notifications.";
+        // iOS/iPadOS : les notifications web ne marchent QUE si l'appli est ajoutée à l'écran d'accueil
+        // (exigence d'Apple). On donne alors les étapes exactes plutôt qu'un message générique.
+        const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const standalone = (window.navigator.standalone === true) || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+        if (isIOS && !standalone) {
+          info.innerHTML = "<b>Sur iPhone/iPad</b>, il faut d'abord ajouter Parc Pilot à l'écran d'accueil :<br>1. Appuie sur <b>Partager</b> (le carré avec la flèche ↑, en bas de Safari).<br>2. Choisis <b>« Sur l'écran d'accueil »</b>.<br>3. Ouvre Parc Pilot <b>depuis la nouvelle icône</b> (plus depuis Safari).<br>4. Reviens ici : le bouton <b>« Activer »</b> sera alors disponible.";
+        } else {
+          info.textContent = "Ouvre le site dans Safari/Chrome (ou installe l'appli) pour activer les notifications.";
+        }
       } else if (state === 'denied') {
         btn.textContent = '🔕 Bloquées'; btn.disabled = true;
         btn.style.cssText = 'opacity:.7;cursor:not-allowed;padding:10px 16px;border-radius:10px;border:1px solid #FCA5A5;background:#FEF2F2;color:#B91C1C;font-weight:600';
