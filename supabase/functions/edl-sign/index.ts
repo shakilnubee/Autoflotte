@@ -13,7 +13,7 @@
 //  Déploiement : automatique (GitHub Action au push sur main).
 // ============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { PDFDocument } from "npm:pdf-lib@1.17.1";
+import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 import webpush from "npm:web-push@3.6.7";
 
 const CORS = {
@@ -124,23 +124,34 @@ async function buildSignedPdf(db: ReturnType<typeof createClient>, row: Record<s
     const base = await fetchBytes(db, String(row.pdf_url || "")); if (!base) return null;
     const pdf = await PDFDocument.load(base);
     const pages = pdf.getPages();
+    let font; try { font = await pdf.embedFont(StandardFonts.Helvetica); } catch { font = undefined; }
+    const ink = rgb(0.14, 0.18, 0.29);
+    const frDate = (iso?: string) => { const d = String(iso || "").slice(0, 10); const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d); return m ? `${m[3]}/${m[2]}/${m[1]}` : d; };
     for (const s of signers) {
       if (!s.sigUrl || s.signed !== true) continue;
       const field = (s.role === "societe" ? row.field_societe : row.field_employe) as Record<string, number> | null;
       if (!field || !field.page) continue;
       const page = pages[Math.max(0, Math.round(Number(field.page)) - 1)]; if (!page) continue;
-      const sigBytes = await fetchBytes(db, s.sigUrl); if (!sigBytes) continue;
-      let img; try { img = await pdf.embedPng(sigBytes); } catch { continue; }
-      const boxW = Number(field.width) || 170, boxH = Number(field.height) || 40;
-      const iw = img.width, ih = img.height, sc = Math.min(boxW / iw, boxH / ih);
-      const w = iw * sc, h = ih * sc, ph = page.getHeight();
-      const x = Number(field.x) || 40, yTop = Number(field.y) || 700;
-      const yBottom = ph - yTop - h; // place le HAUT de l'image à yTop (origine bas-gauche pdf-lib)
-      page.drawImage(img, { x, y: yBottom, width: w, height: h });
-      try {
-        const label = (s.nom || "") + (s.signedAt ? "  ·  " + String(s.signedAt).slice(0, 10) : "");
-        page.drawText(label, { x, y: Math.max(6, yBottom - 9), size: 7 });
-      } catch { /* texte best-effort */ }
+      const ph = page.getHeight();
+      const sigBytes = await fetchBytes(db, s.sigUrl);
+      if (sigBytes) {
+        let img; try { img = await pdf.embedPng(sigBytes); } catch { img = null; }
+        if (img) {
+          const boxW = Number(field.width) || 170, boxH = Number(field.height) || 40;
+          const iw = img.width, ih = img.height, sc = Math.min(boxW / iw, boxH / ih);
+          const w = iw * sc, h = ih * sc;
+          const x = Number(field.x) || 40, yTop = Number(field.y) || 700;
+          page.drawImage(img, { x, y: ph - yTop - h, width: w, height: h }); // HAUT de l'image à yTop
+        }
+      }
+      // DATE (alignée sur « Date : ») + E-MAIL du signataire (juste en dessous), à une taille lisible.
+      // Coordonnées calculées à la génération du PDF (app.js) → l'edge ne fait que dessiner.
+      if (font) {
+        try {
+          if (field.dateY) page.drawText(frDate(s.signedAt), { x: Number(field.dateX) || 40, y: ph - Number(field.dateY), size: 9.5, font, color: ink });
+          if (field.emailY && s.email) page.drawText("Signé par " + String(s.email), { x: Number(field.emailX) || 40, y: ph - Number(field.emailY), size: 8, font, color: rgb(0.42, 0.47, 0.55) });
+        } catch { /* texte best-effort */ }
+      }
     }
     return await pdf.save();
   } catch { return null; }
@@ -275,7 +286,37 @@ Deno.serve(async (req) => {
           : { title: "✍️ Signature reçue", body: (row.plaque || "Véhicule") + " — " + (me.nom || "un signataire") + " a signé. Il reste " + reste + " signature(s).", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + token };
       await sendPush(db, String(row.societe || "PXP"), pushPayload);
 
-      return json({ ok: true, statut, allSigned });
+      // COMPLET → envoie à TOUS les signataires l'état des lieux SIGNÉ (PDF en pièce jointe), beau message.
+      if (allSigned && signedPdfUrl) {
+        const plaque = String(row.plaque || "Véhicule"), modele = String(row.modele || "");
+        const dateStr = String(row.date || "").slice(0, 10).split("-").reverse().join("/");
+        const sensTxt = row.sens === "restitution" ? "restitution" : "remise";
+        const { from, replyTo } = await societeFrom(db, String(row.societe || "PXP"));
+        const key = Deno.env.get("RESEND_API_KEY");
+        const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px 24px">
+    <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#16a34a">✅ État des lieux signé</div>
+    <div style="font-size:15px;line-height:1.55;margin:12px 0 2px">Bonjour,</div>
+    <div style="font-size:15px;line-height:1.55;margin:6px 0">L'état des lieux (${sensTxt}) du véhicule a été <b>signé par toutes les parties</b>. Vous en trouverez la <b>version signée en pièce jointe</b> — à conserver.</div>
+    <div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155">🚗 <b>${modele}</b> · ${plaque}${dateStr ? " · " + dateStr : ""}</div>
+    <div style="text-align:center;margin:16px 0 4px"><a href="${signedPdfUrl}" style="display:inline-block;background:#0F1E3D;color:#fff;padding:12px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px">⬇️ Télécharger l'état des lieux signé</a></div>
+  </div>
+  <div style="text-align:center;font-size:11px;color:#cbd5e1;margin-top:10px">Document signé électroniquement · via Parc Pilot</div>
+</div>`;
+        if (key) {
+          const dest = Array.from(new Set(required.map((s) => String(s.email || "")).filter(Boolean)));
+          for (const to of dest) {
+            const payload: Record<string, unknown> = { from, to: [to], subject: "État des lieux signé — " + plaque, html, text: "L'état des lieux signé du véhicule " + plaque + " est disponible : " + signedPdfUrl, attachments: [{ filename: "Etat-des-lieux-signe-" + plaque + ".pdf", path: signedPdfUrl }] };
+            if (replyTo) payload.reply_to = replyTo;
+            try { await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); } catch { /* best-effort */ }
+          }
+        }
+      }
+
+      // signedUrlOut : lien de téléchargement direct dès que TOUT est signé (bouton sur signer.html).
+      let signedUrlOut = "";
+      if (allSigned && signedPdfUrl) { try { signedUrlOut = await signedUrl(db, String(signedPdfUrl)); } catch { signedUrlOut = String(signedPdfUrl); } }
+      return json({ ok: true, statut, allSigned, signedPdfUrl: signedUrlOut });
     }
 
     return json({ error: "Méthode non autorisée." }, 405);
