@@ -8530,12 +8530,17 @@ FP.edl = {
         ${sec('Photos de l\'état du véhicule')}
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
           <label style="cursor:pointer;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px;font-size:12.5px;color:#0f1e3d;background:#fff;display:inline-flex;gap:6px;align-items:center">📷 Ajouter des photos<input type="file" data-edl-photos accept="image/*" multiple capture="environment" style="display:none"></label>
+          <span data-edl-existing></span>
           <span data-edl-photocount style="font-size:12px;color:#94a3b8">Recommandé à la restitution (carrosserie, intérieur, dommages…). Elles sont jointes au PDF et rangées dans la fiche.</span>
         </div>
         <div data-edl-thumbs style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
         ${sec('Envoi')}
         ${infoRow('E-mail de l\'employé', inp('edl-to', condEmail, 'employe@exemple.fr'))}
-        <div style="font-size:11.5px;color:#94a3b8;margin-top:2px">Le PDF sera enregistré dans les Documents du véhicule et envoyé à l'employé${prof.mailCopie ? ' (copie ' + esc(prof.mailCopie) + ')' : ''}. Le logo de ta société est repris automatiquement.</div>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;cursor:pointer">
+          <input type="checkbox" data-edl-sign style="margin-top:2px">
+          <span style="font-size:12.5px;color:#334155">✍️ <b>Faire signer électroniquement (Yousign)</b> — l'employé reçoit un lien Yousign, signe en ligne, et le document signé revient dans la fiche. <span style="color:#94a3b8">(À défaut, le PDF part en pièce jointe pour signature manuelle.)</span></span>
+        </label>
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:4px">Le PDF sera enregistré dans les Documents du véhicule et envoyé à l'employé${prof.mailCopie ? ' (copie ' + esc(prof.mailCopie) + ')' : ''}. Le logo de ta société est repris automatiquement.</div>
       </div>
       <div style="padding:12px 18px;border-top:1px solid #eef2f7;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
         <button type="button" data-edl-x class="btn btn-outline">Annuler</button>
@@ -8572,6 +8577,36 @@ FP.edl = {
       renderThumbs();
     });
     if (thumbsBox) thumbsBox.addEventListener('click', e => { const b = e.target.closest('[data-edl-prm]'); if (b) { edlPhotos.splice(+b.getAttribute('data-edl-prm'), 1); renderThumbs(); } });
+    // Récupère une image (URL Storage) → data URL (via URL signée + redimensionnement). Sert à
+    // « reprendre » les photos DÉJÀ enregistrées dans la fiche (1er état des lieux, sans re-photographier).
+    const urlToDataUrl = async (url) => {
+      try {
+        let u = url; if (FP.signedScanUrl) { try { u = (await FP.signedScanUrl(url)) || url; } catch (e) {} }
+        const r = await fetch(u); if (!r.ok) return null; const b = await r.blob();
+        return await loadPhoto(new File([b], 'photo', { type: b.type || 'image/jpeg' }));
+      } catch (e) { return null; }
+    };
+    // Cherche les photos d'état des lieux DÉJÀ enregistrées pour ce véhicule (hors PDF) et propose,
+    // via un bouton OPT-IN, de les reprendre. Volontairement PAS automatique : pour un 2ᵉ conducteur,
+    // on prend de NOUVELLES photos (on ne réutilise pas celles de l'ancien conducteur par erreur).
+    (async () => {
+      try {
+        if (!(FP.db && FP.db.select)) return;
+        const res = await FP.db.select('documents');
+        const urls = (res && res.data ? res.data : []).filter(d => d && d.vehiculeId === veh.id && d.type === 'etat-des-lieux' && d.url && !/\.pdf(\?|$)/i.test(d.url)).map(d => d.url);
+        const wrap = ov.querySelector('[data-edl-existing]'); if (!wrap || !urls.length) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.style.cssText = 'cursor:pointer;border:1px solid #bfdbfe;border-radius:8px;padding:6px 12px;font-size:12.5px;color:#1d4ed8;background:#eff6ff;display:inline-flex;gap:6px;align-items:center';
+        btn.textContent = '📎 Reprendre les ' + urls.length + ' photo(s) déjà enregistrée(s)';
+        btn.addEventListener('click', async () => {
+          btn.disabled = true; const t = btn.textContent; btn.textContent = '… chargement';
+          for (const u of urls) { const d = await urlToDataUrl(u); if (d) edlPhotos.push(d); }
+          renderThumbs(); btn.remove();
+        });
+        wrap.appendChild(btn);
+      } catch (e) {}
+    })();
     const collect = () => {
       const val = id => { const el = ov.querySelector('#' + id); return el ? String(el.value || '').trim() : ''; };
       const grp = g => Array.from(ov.querySelectorAll('[data-edl="' + g + '"]')).map(i => ({ label: i.getAttribute('data-lbl'), val: (i.value || '').trim() || 'RAS' }));
@@ -8582,6 +8617,7 @@ FP.edl = {
         employe: val('edl-employe'), modele: val('edl-modele'), immat: val('edl-immat'),
         km: val('edl-km'), date: val('edl-date'), ext: grp('ext'), comExt: val('edl-com-ext'), int: grp('int'), comInt: val('edl-com-int'),
         acc, autres: val('edl-autres'), comAcc: val('edl-com-acc'), to: val('edl-to'), photos: edlPhotos.slice(),
+        sign: !!(ov.querySelector('[data-edl-sign]') && ov.querySelector('[data-edl-sign]').checked),
       };
     };
     const run = async (mode) => {
@@ -8614,9 +8650,23 @@ FP.edl = {
             } catch (e) {}
           }
         }
-        let mailed = false;
-        if (data.to && FP.sendEmail) {
-          const b64 = doc.output('datauristring').split(',')[1];
+        const b64 = doc.output('datauristring').split(',')[1];
+        let mailed = false, signed = false;
+        // A) Signature électronique Yousign (si demandée) : l'employé reçoit un lien de signature.
+        if (data.sign && data.to && FP.supabase && FP.supabase.functions) {
+          try {
+            const parts = String(data.employe || '').trim().split(/\s+/);
+            const firstName = parts[0] || 'Employé'; const lastName = parts.slice(1).join(' ') || '-';
+            const { data: yd, error: ye } = await FP.supabase.functions.invoke('yousign', {
+              body: { pdfBase64: b64, filename: fname, requestName: 'État des lieux (' + motLbl + ') — ' + data.immat + ' — ' + data.employe, signer: { firstName, lastName, email: data.to }, field: doc.__edlSig || null },
+            });
+            if (ye) { let m = ye.message || 'Yousign'; try { const c = ye.context && (await ye.context.json()); if (c && c.error) m = c.error; } catch (e) {} throw new Error(m); }
+            if (yd && yd.error) throw new Error(yd.error);
+            if (yd && yd.ok) signed = true;
+          } catch (e) { console.warn('[edl yousign]', e); if (FP.toast) FP.toast('⚠️ Signature Yousign impossible (' + (e.message || e) + ') — envoi du PDF en pièce jointe à la place.', { danger: true }); }
+        }
+        // B) À défaut (pas de signature demandée, ou Yousign a échoué) : e-mail avec le PDF en pièce jointe.
+        if (!signed && data.to && FP.sendEmail) {
           const phrase = isRestit
             ? `Veuillez trouver ci-joint l'<b>état des lieux de restitution</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}), rendu le ${esc(FP.date(data.date))}.`
             : `Veuillez trouver ci-joint l'<b>état des lieux</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}) qui vous est remis le ${esc(FP.date(data.date))}.`;
@@ -8624,7 +8674,7 @@ FP.edl = {
           try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux (' + motLbl + ') — ' + data.immat + ' — ' + data.employe, html, text: 'État des lieux (' + motLbl + ') du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
         }
         close();
-        if (FP.toast) FP.toast(mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré'));
+        if (FP.toast) FP.toast(signed ? '✓ Envoyé pour signature (Yousign)' : (mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré')));
       } catch (e) { btn.disabled = false; btn.innerHTML = old; if (FP.toast) FP.toast('Échec — réessaie'); console.warn('[edl]', e); }
     };
     ov.querySelector('[data-edl-dl]').addEventListener('click', () => run('dl'));
@@ -8698,6 +8748,8 @@ FP.edl = {
     doc.text(isRestit ? 'Le véhicule est restitué dans l\'état décrit ci-dessus.' : 'Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 10;
     const colW = (W - 2 * M) / 2;
     doc.text('Signature de l\'employé :', M, y); doc.text('Signature ' + (data.socNom || 'gestionnaire') + ' :', M + colW, y);
+    // Champ signature (employé) pour Yousign — position en POINTS, origine haut-gauche (1 mm = 2.83465 pt).
+    try { const PT = 2.83465; doc.__edlSig = { page: doc.internal.getCurrentPageInfo().pageNumber, x: Math.round(M * PT), y: Math.round((y + 2) * PT), width: Math.round((colW - 14) * PT), height: Math.round(13 * PT) }; } catch (e) {}
     y += 16; doc.setDrawColor(150, 160, 175); doc.line(M, y, M + colW - 12, y); doc.line(M + colW, y, W - M, y); y += 5;
     doc.text('Date :', M, y); doc.text('Date :', M + colW, y);
     // Pied de page Parc Pilot.
