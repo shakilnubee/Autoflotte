@@ -5905,6 +5905,20 @@ FP.buildAlertes = (data) => {
     }
   } catch (e) {}
 
+  // --- États des lieux ENTIÈREMENT SIGNÉS récemment (confirmation positive) ---
+  // Source = FP.edlSign._recentSigned (signés dans les 7 derniers jours). Chaque ligne ouvre la VERSION
+  // SIGNÉE (PDF) ; ainsi le gestionnaire est notifié DANS les alertes que la signature est terminée.
+  try {
+    const rsg = (FP.edlSign && FP.edlSign._recentSigned) || null;
+    if (Array.isArray(rsg) && rsg.length) {
+      const items = rsg.map(p => ({
+        label: `${p.plaque}${p.modele ? ' · ' + p.modele : ''}${p.sens === 'restitution' ? ' (restitution)' : ''} — signé ✓`,
+        target: p.signedUrl || ('vehicules.html?immat=' + encodeURIComponent(p.plaque || '')),
+      }));
+      out.push({ niveau: 'info', categorie: 'États des lieux', message: `${rsg.length} état${rsg.length > 1 ? 's' : ''} des lieux signé${rsg.length > 1 ? 's' : ''}`, detail: 'Signature terminée par toutes les parties — la version signée est rangée dans la fiche du véhicule (Documents).', sort: 466, muteKey: 'edl-signed-recent', vehicules: items });
+    }
+  } catch (e) {}
+
   // --- Amendes à payer ---
   const amAPayer = (data.amendes || []).filter(a => FP.estAPayer(a));
   if (amAPayer.length > 0) {
@@ -8802,7 +8816,12 @@ FP.edl = {
         const blob = doc.output('blob');
         let url = null;
         try { if (FP.uploadScan) url = await FP.uploadScan(new File([blob], fname, { type: 'application/pdf' }), 'documents'); } catch (e) {}
-        if (url && FP.persist) { try { await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: 'État des lieux ' + motLbl + ' ' + FP.date(data.date), url, driveId: null }); } catch (e) {} }
+        const smode = data.signMode || 'integree';   // mode de signature — défini AVANT l'ajout aux Documents
+        const willSign = (smode === 'integree' || smode === 'yousign');
+        // ⚠️ Si le document part EN SIGNATURE, on n'ajoute PAS le PDF NON signé aux Documents du véhicule :
+        // SEUL le PDF ENTIÈREMENT SIGNÉ y sera rangé (par l'edge edl-sign, une fois toutes les signatures faites).
+        // Le PDF non signé reste uniquement dans le stockage (url = base sur laquelle l'edge appose les signatures).
+        if (url && FP.persist && !willSign) { try { await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: 'État des lieux ' + motLbl + ' ' + FP.date(data.date), url, driveId: null }); } catch (e) {} }
         // Range AUSSI chaque photo dans la fiche « État des lieux » (label Entrée/Sortie = MÊME convention
         // que les photos envoyées par le conducteur via le QR → un seul endroit, pas de doublon de logique).
         if (Array.isArray(data.photos) && data.photos.length && FP.uploadScan && FP.persist) {
@@ -8818,7 +8837,7 @@ FP.edl = {
           }
         }
         const b64 = doc.output('datauristring').split(',')[1];
-        const smode = data.signMode || 'integree';   // ⚠️ PAS « mode » (déjà le paramètre de run()) → collision TDZ
+        // (smode / willSign déjà calculés plus haut — avant l'ajout conditionnel aux Documents)
         let mailed = false, signed = false, sentForSign = false;
         const sig = doc.__edlSig || {};
         // Liste des signataires, DANS L'ORDRE DE SIGNATURE : le GESTIONNAIRE (signataire société)
@@ -9100,6 +9119,19 @@ FP.edlSign = {
           return { token: x.token || '', id: x.id, plaque: x.plaque || '', modele: x.modele || '', vehiculeId: x.vehiculeId || '', date: x.date || '', sens: x.sens || 'remise', manque, nbTotal: requis.length };
         })
         .filter(x => x.manque.length);   // il reste au moins un signataire à signer
+      // États des lieux ENTIÈREMENT SIGNÉS récemment (7 j) → alerte POSITIVE « signé ✓ » dans la page Alertes
+      // (le gestionnaire voit clairement qu'une signature est terminée ; auto-expire au bout d'une semaine).
+      const _now = Date.now(), _WEEK = 7 * 864e5;
+      this._recentSigned = rows
+        .filter(x => x && x.statut === 'signe')
+        .map(x => {
+          const sgs = Array.isArray(x.signataires) ? x.signataires : [];
+          const times = sgs.map(s => (s && s.signedAt) ? Date.parse(s.signedAt) : 0).filter(Boolean);
+          const when = times.length ? Math.max.apply(null, times) : 0;
+          return { plaque: x.plaque || '', modele: x.modele || '', vehiculeId: x.vehiculeId || '', signedUrl: x.signedPdfUrl || '', sens: x.sens || 'remise', when };
+        })
+        .filter(x => x.when && (_now - x.when) < _WEEK)
+        .sort((a, b) => b.when - a.when);
       // NOUVELLE activité de signature = une signature de plus qu'à la dernière visite de « Suivi & alertes ».
       // Marqueur localStorage { token: nbSignatures vues } (par appareil). 1re fois → on initialise à
       // l'existant (pas de gros chiffre au départ) ; ensuite chaque signature reçue fait +1 la pastille.
