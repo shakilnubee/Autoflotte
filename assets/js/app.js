@@ -7508,6 +7508,55 @@ FP.trash = {
       return true;
     } catch (err) { console.warn('[trash restore]', err); return false; }
   },
+  // ===== Suppression DÉFINITIVE (retire de la corbeille ET efface les fichiers du serveur) =====
+  MAX_AGE_DAYS: 30,   // au-delà, purge automatique (le fichier quitte vraiment le stockage)
+  // Récupère TOUTES les URL de fichiers stockées dans un enregistrement (facture PDF, documents,
+  // docs de contrat leasing, photos de sinistre…) — parcours récursif, robuste quel que soit le champ.
+  _fileUrls(entry) {
+    const urls = new Set();
+    const isStore = (u) => typeof u === 'string' && /\/storage\/v1\/object\//.test(u);
+    const scan = (v) => {
+      if (!v) return;
+      if (typeof v === 'string') { if (isStore(v)) urls.add(v); return; }
+      if (Array.isArray(v)) { v.forEach(scan); return; }
+      if (typeof v === 'object') { try { Object.values(v).forEach(scan); } catch (e) {} }
+    };
+    try { scan(entry && entry.rec); } catch (e) {}
+    return [...urls];
+  },
+  // Efface du stockage tous les fichiers d'un élément de corbeille (best effort).
+  async purgeFiles(entry) {
+    const urls = this._fileUrls(entry);
+    for (const u of urls) {
+      try { const ref = FP._storageRef ? FP._storageRef(u) : null; if (ref && FP.supabase && FP.supabase.storage) await FP.supabase.storage.from(ref.bucket).remove([ref.path]); }
+      catch (e) { console.warn('[trash purgeFiles]', e); }
+    }
+    return urls.length;
+  },
+  // Suppression DÉFINITIVE d'un élément : efface ses fichiers serveur puis le retire de la corbeille.
+  async purge(id) {
+    const e = this._all().find(x => x.id === id);
+    if (e) await this.purgeFiles(e);
+    this.remove(id);
+    return true;
+  },
+  // Vider TOUTE la corbeille EN supprimant aussi les fichiers serveur.
+  async clearWithFiles() {
+    const all = this._all();
+    for (const e of all) { try { await this.purgeFiles(e); } catch (x) {} }
+    this.clear();
+    return all.length;
+  },
+  // Purge AUTOMATIQUE des éléments de plus de MAX_AGE_DAYS jours (fichiers serveur compris).
+  // La corbeille est un filet de 30 j : passé ce délai, la suppression devient définitive.
+  async purgeExpired() {
+    try {
+      const cutoff = Date.now() - this.MAX_AGE_DAYS * 864e5;
+      const old = this._all().filter(e => (e.ts || 0) && (e.ts || 0) < cutoff);
+      for (const e of old) { try { await this.purgeFiles(e); } catch (x) {} this.remove(e.id); }
+      return old.length;
+    } catch (e) { return 0; }
+  },
 };
 
 FP.persist = {
