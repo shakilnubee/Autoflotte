@@ -1876,9 +1876,14 @@
     m = /malus[^\d]{0,40}?percevoir\s*de\s*([\d][\d\s.]*(?:,\d+)?)\s*€/i.exec(t)
       || /malus\s*(?:[ée]cologique)?[^\d]{0,20}?([\d][\d\s.]*(?:,\d+)?)\s*€/i.exec(t);
     if (m) { const v = parseFR(m[1]); if (v != null && v >= 0 && v < 100000) out.malus = v; }
-    // Loyer TTC : nombre juste avant « Montant TTC » (proche de « Loyer »).
-    m = /([\d][\d\s.]*,\d{2})\s*€?\s*montant\s*ttc/i.exec(t);
-    if (m) { const v = parseFR(m[1]); if (v != null && v > 0 && v < 20000) out.loyer = v; }
+    // Loyer TTC mensuel : plusieurs formulations selon le loueur. Le « ,dd » (2 décimales) évite de
+    // confondre avec un kilométrage (sans décimales). Premier motif qui matche gagne.
+    const loyerPats = [
+      /([\d][\d\s.]*,\d{2})\s*€?\s*montant\s*ttc/i,                                                   // « … 414,71 Montant TTC »
+      /(?:loyer\s*mensuel|total\s*mensuel|redevance\s*mensuelle|mensualit[ée]|loyer\s*ttc(?:\s*\/?\s*mois)?|loyer)[^\d]{0,25}?([\d][\d\s.]*,\d{2})\s*€/i, // « Loyer mensuel … 414,71 € »
+      /([\d][\d\s.]*,\d{2})\s*€\s*(?:ttc\s*)?(?:\/\s*mois|par\s*mois)/i,                               // « 414,71 € TTC / mois »
+    ];
+    for (const p of loyerPats) { const mm = p.exec(t); if (mm) { const v = parseFR(mm[1]); if (v != null && v > 0 && v < 20000) { out.loyer = v; break; } } }
     // Forfait km (5 000–500 000).
     m = /([\d][\d\s.]{3,})\s*km\b/i.exec(t);
     if (m) { const v = parseFR(m[1]); if (v != null && v >= 5000 && v <= 500000) out.kmContrat = v; }
@@ -2778,8 +2783,9 @@
         ? `<span class="text-xs" style="flex:1;color:#047857;font-weight:600">✓ relié à ${escC(lk.label)}</span>${readBtn}<button type="button" class="btn btn-outline text-xs" data-rec-unlink="${i}" style="flex-shrink:0;color:#dc2626;border-color:#fecaca">Détacher</button>`
         : `<select class="field-input text-sm" data-rec-sel style="flex:1;min-width:200px">${opts}</select><button type="button" class="btn btn-dark text-xs" data-rec-link="${i}" style="flex-shrink:0">Lier</button>`;
       return `<div class="flex items-center gap-2 py-1.5" style="border-bottom:1px solid #FDE68A" data-rec="${i}">
-          <a href="${escC(f.url)}" target="_blank" rel="noopener" class="btn btn-outline text-xs" style="flex-shrink:0"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Ouvrir PDF ${i + 1}</a>
+          <button type="button" data-rec-open="${i}" class="btn btn-outline text-xs" style="flex-shrink:0"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Ouvrir PDF ${i + 1}</button>
           ${right}
+          <button type="button" data-rec-delfile="${i}" title="Supprimer définitivement ce PDF du stockage" class="btn btn-outline text-xs" style="flex-shrink:0;color:#dc2626;border-color:#fecaca"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
         </div>`;
     }).join('');
     panel.dataset.files = JSON.stringify(files);
@@ -2797,6 +2803,35 @@
   if ($('loc-recover-panel')) $('loc-recover-panel').addEventListener('click', async (e) => {
     const panel = $('loc-recover-panel'); if (!panel) return;
     let files = []; try { files = JSON.parse(panel.dataset.files || '[]'); } catch (_) {}
+    // === Ouvrir le PDF : URL SIGNÉE (bucket privé → l'URL publique renvoie « Bucket not found ») ===
+    const op = e.target.closest('[data-rec-open]');
+    if (op) {
+      const f = files[+op.dataset.recOpen]; if (!f) return;
+      try { const url = (FP.signedScanUrl) ? await FP.signedScanUrl(f.url, 3600) : f.url; window.open(url, '_blank', 'noopener'); }
+      catch (err) { console.warn('[rec open]', err); window.open(f.url, '_blank', 'noopener'); }
+      return;
+    }
+    // === Supprimer DÉFINITIVEMENT le PDF du stockage (vider les fichiers inutiles) ===
+    const df = e.target.closest('[data-rec-delfile]');
+    if (df) {
+      const idx = +df.dataset.recDelFile; const f = files[idx]; if (!f) return;
+      const lk = linkedDocMap()[f.url];
+      const warn = lk ? `\n\n⚠️ Ce PDF est relié à ${lk.label} — le lien sera aussi retiré.` : '';
+      if (!(await FP.confirm('Supprimer DÉFINITIVEMENT ce PDF du stockage ?' + warn + '\n\nCette action est irréversible.'))) return;
+      try {
+        // 1) détacher d'abord si relié
+        if (lk && lk.type === 'lld') { const list = getLocalease(); const c = list[lk.ci]; if (c && Array.isArray(c.docs)) { c.docs = c.docs.filter(d => d.url !== f.url); c.pdfUrl = c.docs[0] ? c.docs[0].url : null; const s = FP.settings.get(); s.localeaseContrats = list; FP.settings.save(s); } }
+        else if (lk && lk.type === 'bpce') { setBpceDocs(lk.immat, bpceDocs(lk.immat).filter(d => d.url !== f.url)); }
+        // 2) supprimer le fichier du stockage
+        const ref = FP._storageRef ? FP._storageRef(f.url) : null;
+        if (ref && FP.supabase && FP.supabase.storage) { const { error } = await FP.supabase.storage.from(ref.bucket).remove([ref.path]); if (error) throw error; }
+        // 3) retirer de la liste et re-render
+        files.splice(idx, 1); panel.dataset.files = JSON.stringify(files);
+        renderLeasing(); renderRecoverPanel(files);
+        if (FP.toast) FP.toast('PDF supprimé du stockage');
+      } catch (err) { console.warn('[rec delfile]', err); alert('Impossible de supprimer ce fichier : ' + (err && err.message ? err.message : err)); }
+      return;
+    }
     // === Lier un PDF à un contrat LLD ou à un véhicule en leasing (BPCE) ===
     const b = e.target.closest('[data-rec-link]');
     if (b) {
