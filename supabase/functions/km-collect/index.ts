@@ -189,22 +189,15 @@ async function vehAmendes(db: ReturnType<typeof createClient>, societe: string, 
   return out;
 }
 
-// Podium des amendes (portail « Mes amendes ») : classement des conducteurs de la société par NOMBRE
-// d'amendes, du MEILLEUR (le moins) au moins bon. ⚠️ CONFIDENTIALITÉ : on n'expose QUE le PRÉNOM
-// (jamais le nom complet, ni le montant, ni les points) — juste l'ordre du classement.
+// Podium des amendes (portail « Mes amendes ») : TOP 5 des conducteurs par NOMBRE d'amendes,
+// du PLUS au MOINS (le n°1 = celui qui a le plus d'amendes). ⚠️ CONFIDENTIALITÉ : on n'expose QUE le
+// PRÉNOM (jamais le nom complet, ni le montant, ni les points) — juste l'ordre du classement.
 async function amendesPodium(db: ReturnType<typeof createClient>, societe: string) {
   try {
     const soc = societe || "PXP";
     const _norm = (s: string) => String(s || "").trim();
     const counts: Record<string, number> = {};
-    // 1) Tous les conducteurs connus de la société → présents dans le classement même à 0 amende.
-    const { data: conds } = await db.from("conducteurs").select("prenom,nom,name,masque").eq("societe", soc);
-    for (const c of ((conds || []) as Record<string, unknown>[])) {
-      if (c.masque === true) continue;
-      let p = _norm(String(c.prenom || "")); if (!p) p = _norm(String(c.name || "")).split(/\s+/)[0];
-      if (p) counts[p] = counts[p] || 0;
-    }
-    // 2) Comptage des amendes par prénom (1er mot).
+    // Comptage des amendes par prénom (1er mot). On ne liste QUE les conducteurs ayant au moins 1 amende.
     const { data: ams } = await db.from("amendes").select("prenom").eq("societe", soc);
     for (const a of ((ams || []) as Record<string, unknown>[])) {
       const p = _norm(String(a.prenom || "")).split(/\s+/)[0];
@@ -212,10 +205,11 @@ async function amendesPodium(db: ReturnType<typeof createClient>, societe: strin
       counts[p] = (counts[p] || 0) + 1;
     }
     const arr = Object.keys(counts).map((prenom) => ({ prenom, n: counts[prenom] }));
-    arr.sort((x, y) => x.n - y.n || x.prenom.localeCompare(y.prenom, "fr")); // le moins d'amendes en tête
-    // On renvoie prénom + rang (le rang est « dense » : même nombre d'amendes = même rang). Pas de compte exposé.
+    arr.sort((x, y) => y.n - x.n || x.prenom.localeCompare(y.prenom, "fr")); // le PLUS d'amendes en tête
+    const top = arr.slice(0, 5); // TOP 5 (comme le tableau de bord)
+    // Prénom + rang dense (même nombre d'amendes = même rang). Le compte n'est PAS exposé.
     let rank = 0, prevN = -1;
-    return arr.map((x, i) => { if (x.n !== prevN) { rank = i + 1; prevN = x.n; } return { prenom: x.prenom, rang: rank }; });
+    return top.map((x, i) => { if (x.n !== prevN) { rank = i + 1; prevN = x.n; } return { prenom: x.prenom, rang: rank }; });
   } catch { return []; }
 }
 
