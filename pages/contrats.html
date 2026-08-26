@@ -2640,6 +2640,7 @@
       const hidden = recoverHiddenSet();
       return data.filter(f => f && f.name && /\.pdf$/i.test(f.name) && !hidden.has('contrats-leasing/' + f.name)).map(f => ({
         name: f.name,
+        path: 'contrats-leasing/' + f.name,   // ⚠️ chemin RÉEL du stockage (pour remove) — plus fiable que déduire de l'URL
         url: FP.supabase.storage.from(FP.SCAN_BUCKET || 'scans').getPublicUrl('contrats-leasing/' + f.name).data.publicUrl,
       }));
     } catch (e) { console.warn('[listContratPdfs]', e); return []; }
@@ -2825,21 +2826,23 @@
         // 1) détacher d'abord si relié
         if (lk && lk.type === 'lld') { const list = getLocalease(); const c = list[lk.ci]; if (c && Array.isArray(c.docs)) { c.docs = c.docs.filter(d => d.url !== f.url); c.pdfUrl = c.docs[0] ? c.docs[0].url : null; const s = FP.settings.get(); s.localeaseContrats = list; FP.settings.save(s); } }
         else if (lk && lk.type === 'bpce') { setBpceDocs(lk.immat, bpceDocs(lk.immat).filter(d => d.url !== f.url)); }
-        // 2) tenter la vraie suppression du fichier du stockage (peut échouer si pas de droit RLS delete)
-        const ref = FP._storageRef ? FP._storageRef(f.url) : null;
+        // 2) tenter la vraie suppression du fichier du stockage. On utilise le CHEMIN RÉEL du stockage
+        //    (f.path) plutôt que de le déduire de l'URL (fragile si espaces/caractères spéciaux).
+        const bucket = (FP.SCAN_BUCKET || 'scans');
+        const path = f.path || ((FP._storageRef ? FP._storageRef(f.url) : null) || {}).path || '';
         let deleted = false, why = '';
-        if (ref && FP.supabase && FP.supabase.storage) {
+        if (path && FP.supabase && FP.supabase.storage) {
           try {
-            const { data: removed, error } = await FP.supabase.storage.from(ref.bucket).remove([ref.path]);
+            const { data: removed, error } = await FP.supabase.storage.from(bucket).remove([path]);
             if (error) why = error.message || String(error);
             else if (removed && removed.length) deleted = true;
-            else why = 'droits de suppression du stockage non accordés';
+            else why = 'le stockage n\'a rien supprimé (chemin « ' + path + ' » introuvable, ou droit refusé)';
           } catch (e2) { why = (e2 && e2.message) || String(e2); }
-        }
+        } else { why = 'chemin du fichier introuvable'; }
         // 3) si la suppression physique a échoué → masquer le PDF de la liste (persistant, par société)
-        if (!deleted && ref) {
+        if (!deleted && path) {
           const s = FP.settings.get(); const h = Array.isArray(s.recoverHidden) ? s.recoverHidden : [];
-          if (h.indexOf(ref.path) === -1) h.push(ref.path);
+          if (h.indexOf(path) === -1) h.push(path);
           s.recoverHidden = h; FP.settings.save(s);
         }
         // 4) retirer de la liste affichée et re-render
