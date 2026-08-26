@@ -1876,14 +1876,18 @@
     m = /malus[^\d]{0,40}?percevoir\s*de\s*([\d][\d\s.]*(?:,\d+)?)\s*€/i.exec(t)
       || /malus\s*(?:[ée]cologique)?[^\d]{0,20}?([\d][\d\s.]*(?:,\d+)?)\s*€/i.exec(t);
     if (m) { const v = parseFR(m[1]); if (v != null && v >= 0 && v < 100000) out.malus = v; }
-    // Loyer TTC mensuel : plusieurs formulations selon le loueur. Le « ,dd » (2 décimales) évite de
-    // confondre avec un kilométrage (sans décimales). Premier motif qui matche gagne.
+    // Loyer TTC MENSUEL : on n'accepte QUE des montants clairement étiquetés « mensuel » (ou « /mois »).
+    // ⚠️ On NE prend PAS le mot « loyer » seul ni un « Montant TTC » isolé : ils apparaissent aussi sur
+    // les lignes de TOTAL du contrat → risque de ramasser un gros nombre faux (ex. 2688 au lieu du loyer).
+    // Le « ,dd » (2 décimales) écarte le kilométrage. Premier motif qui matche gagne.
     const loyerPats = [
-      /([\d][\d\s.]*,\d{2})\s*€?\s*montant\s*ttc/i,                                                   // « … 414,71 Montant TTC »
-      /(?:loyer\s*mensuel|total\s*mensuel|redevance\s*mensuelle|mensualit[ée]|loyer\s*ttc(?:\s*\/?\s*mois)?|loyer)[^\d]{0,25}?([\d][\d\s.]*,\d{2})\s*€/i, // « Loyer mensuel … 414,71 € »
-      /([\d][\d\s.]*,\d{2})\s*€\s*(?:ttc\s*)?(?:\/\s*mois|par\s*mois)/i,                               // « 414,71 € TTC / mois »
+      /(?:loyer\s*mensuel|total\s*mensuel(?:\s*ttc)?|redevance\s*mensuelle|mensualit[ée]\s*(?:ttc)?|loyer\s*ttc\s*\/?\s*mois)\s*[:=]?\s*([\d][\d\s.]*,\d{2})\s*€?/i, // « Loyer mensuel : 414,71 € »
+      /(?:loyer|mensuel|redevance|mensualit[ée])[^€\n]{0,40}?([\d][\d\s.]*,\d{2})\s*€?\s*montant\s*ttc/i,  // « Loyer … 414,71 Montant TTC » (mot mensuel à proximité)
+      /([\d][\d\s.]*,\d{2})\s*€?\s*(?:ttc\s*)?(?:\/\s*mois|par\s*mois)/i,                                  // « 414,71 € TTC / mois »
     ];
-    for (const p of loyerPats) { const mm = p.exec(t); if (mm) { const v = parseFR(mm[1]); if (v != null && v > 0 && v < 20000) { out.loyer = v; break; } } }
+    // Garde-fou : un loyer mensuel de véhicule dépasse rarement ~2 500 € ; au-delà, on préfère ne rien
+    // mettre (l'utilisateur saisit à la main) plutôt qu'un montant manifestement faux.
+    for (const p of loyerPats) { const mm = p.exec(t); if (mm) { const v = parseFR(mm[1]); if (v != null && v > 0 && v < 2500) { out.loyer = v; break; } } }
     // Forfait km (5 000–500 000).
     m = /([\d][\d\s.]{3,})\s*km\b/i.exec(t);
     if (m) { const v = parseFR(m[1]); if (v != null && v >= 5000 && v <= 500000) out.kmContrat = v; }
@@ -2768,7 +2772,12 @@
       if (window.FP && FP.scanIA) {
         const file = new File([buf.slice(0)], name || 'contrat.pdf', { type: 'application/pdf' });
         const f = await FP.scanIA(file, 'leasing', LOCALEASE_PROMPT);
-        if (f) ['loyerTTC', 'dureeMois', 'kmTotal', 'co2', 'malus', 'kmSupp', 'kmTolerance', 'offre'].forEach(k => { if ((out[k] == null || out[k] === '') && f[k] != null && f[k] !== '') out[k] = f[k]; });
+        if (f) {
+          // Garde-fou loyer : l'IA confond parfois le loyer mensuel avec un total → on ignore un loyer
+          // aberrant (> 2 500 €/mois pour un véhicule). Le reste (durée, km, co2…) est repris tel quel.
+          if (f.loyerTTC != null && Number(f.loyerTTC) >= 2500) f.loyerTTC = null;
+          ['loyerTTC', 'dureeMois', 'kmTotal', 'co2', 'malus', 'kmSupp', 'kmTolerance', 'offre'].forEach(k => { if ((out[k] == null || out[k] === '') && f[k] != null && f[k] !== '') out[k] = f[k]; });
+        }
       }
     } catch (e) { console.warn('[readContractPdf IA]', e); }
     return out;
