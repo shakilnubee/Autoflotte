@@ -2631,11 +2631,14 @@
   // === Récupération des PDF de contrats orphelins (fichiers encore dans le stockage mais dont
   //     le lien avec le contrat a été perdu). On liste le dossier scans/contrats-leasing et on
   //     laisse l'utilisateur ré-associer chaque PDF au bon contrat. ===
+  // PDF « masqués » de la liste (nettoyage sans droit de suppression stockage) — persistant par société.
+  function recoverHiddenSet() { try { const h = FP.settings.get().recoverHidden; return new Set(Array.isArray(h) ? h : []); } catch (e) { return new Set(); } }
   async function listContratPdfs() {
     try {
       const { data, error } = await FP.supabase.storage.from(FP.SCAN_BUCKET || 'scans').list('contrats-leasing', { limit: 300, sortBy: { column: 'name', order: 'asc' } });
       if (error || !Array.isArray(data)) return [];
-      return data.filter(f => f && f.name && /\.pdf$/i.test(f.name)).map(f => ({
+      const hidden = recoverHiddenSet();
+      return data.filter(f => f && f.name && /\.pdf$/i.test(f.name) && !hidden.has('contrats-leasing/' + f.name)).map(f => ({
         name: f.name,
         url: FP.supabase.storage.from(FP.SCAN_BUCKET || 'scans').getPublicUrl('contrats-leasing/' + f.name).data.publicUrl,
       }));
@@ -2817,19 +2820,33 @@
       const idx = +df.dataset.recDelFile; const f = files[idx]; if (!f) return;
       const lk = linkedDocMap()[f.url];
       const warn = lk ? `\n\n⚠️ Ce PDF est relié à ${lk.label} — le lien sera aussi retiré.` : '';
-      if (!(await FP.confirm('Supprimer DÉFINITIVEMENT ce PDF du stockage ?' + warn + '\n\nCette action est irréversible.'))) return;
+      if (!(await FP.confirm('Retirer ce PDF de la liste ?' + warn + '\n\nJe tente de le supprimer définitivement du stockage ; si les droits ne le permettent pas, il sera simplement masqué de cette liste (mais conservé dans le stockage).'))) return;
       try {
         // 1) détacher d'abord si relié
         if (lk && lk.type === 'lld') { const list = getLocalease(); const c = list[lk.ci]; if (c && Array.isArray(c.docs)) { c.docs = c.docs.filter(d => d.url !== f.url); c.pdfUrl = c.docs[0] ? c.docs[0].url : null; const s = FP.settings.get(); s.localeaseContrats = list; FP.settings.save(s); } }
         else if (lk && lk.type === 'bpce') { setBpceDocs(lk.immat, bpceDocs(lk.immat).filter(d => d.url !== f.url)); }
-        // 2) supprimer le fichier du stockage
+        // 2) tenter la vraie suppression du fichier du stockage (peut échouer si pas de droit RLS delete)
         const ref = FP._storageRef ? FP._storageRef(f.url) : null;
-        if (ref && FP.supabase && FP.supabase.storage) { const { error } = await FP.supabase.storage.from(ref.bucket).remove([ref.path]); if (error) throw error; }
-        // 3) retirer de la liste et re-render
+        let deleted = false, why = '';
+        if (ref && FP.supabase && FP.supabase.storage) {
+          try {
+            const { data: removed, error } = await FP.supabase.storage.from(ref.bucket).remove([ref.path]);
+            if (error) why = error.message || String(error);
+            else if (removed && removed.length) deleted = true;
+            else why = 'droits de suppression du stockage non accordés';
+          } catch (e2) { why = (e2 && e2.message) || String(e2); }
+        }
+        // 3) si la suppression physique a échoué → masquer le PDF de la liste (persistant, par société)
+        if (!deleted && ref) {
+          const s = FP.settings.get(); const h = Array.isArray(s.recoverHidden) ? s.recoverHidden : [];
+          if (h.indexOf(ref.path) === -1) h.push(ref.path);
+          s.recoverHidden = h; FP.settings.save(s);
+        }
+        // 4) retirer de la liste affichée et re-render
         files.splice(idx, 1); panel.dataset.files = JSON.stringify(files);
         renderLeasing(); renderRecoverPanel(files);
-        if (FP.toast) FP.toast('PDF supprimé du stockage');
-      } catch (err) { console.warn('[rec delfile]', err); alert('Impossible de supprimer ce fichier : ' + (err && err.message ? err.message : err)); }
+        if (FP.toast) FP.toast(deleted ? 'PDF supprimé du stockage ✓' : 'PDF retiré de la liste (fichier conservé dans le stockage)');
+      } catch (err) { console.warn('[rec delfile]', err); alert('Impossible de retirer ce fichier : ' + (err && err.message ? err.message : err)); }
       return;
     }
     // === Lier un PDF à un contrat LLD ou à un véhicule en leasing (BPCE) ===
