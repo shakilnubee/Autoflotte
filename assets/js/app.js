@@ -5899,6 +5899,7 @@ FP.buildAlertes = (data) => {
       const items = pend.map(p => ({
         label: `${p.plaque}${p.modele ? ' · ' + p.modele : ''}${p.sens === 'restitution' ? ' (restitution)' : ''} — en attente : ${p.manque.join(', ')}`,
         target: 'vehicules.html?immat=' + encodeURIComponent(p.plaque || ''),
+        edlToken: p.token || '',   // → bouton « Annuler » dans l'alerte (états des lieux supprimés)
       }));
       out.push({ niveau: 'warn', categorie: 'États des lieux', message: `${pend.length} état${pend.length > 1 ? 's' : ''} des lieux à signer`, detail: 'Signature électronique en attente — il manque au moins une signature.', sort: 465, muteKey: 'edl-sign-pending', vehicules: items });
     }
@@ -9087,12 +9088,12 @@ FP.edlSign = {
       const rows = (r && r.data) ? r.data : [];
       this._rows = rows;
       this._pending = rows
-        .filter(x => x && (x.statut || 'en_attente') !== 'signe')
+        .filter(x => x && !['signe', 'annule'].includes(x.statut || 'en_attente'))   // ni signé, ni annulé
         .map(x => {
           const sgs = Array.isArray(x.signataires) ? x.signataires : [];
           const requis = sgs.filter(s => s && s.email);
           const manque = requis.filter(s => !s.signed).map(s => s.nom || s.email);
-          return { plaque: x.plaque || '', modele: x.modele || '', vehiculeId: x.vehiculeId || '', date: x.date || '', sens: x.sens || 'remise', manque, nbTotal: requis.length };
+          return { token: x.token || '', id: x.id, plaque: x.plaque || '', modele: x.modele || '', vehiculeId: x.vehiculeId || '', date: x.date || '', sens: x.sens || 'remise', manque, nbTotal: requis.length };
         })
         .filter(x => x.manque.length);   // il reste au moins un signataire à signer
       // NOUVELLE activité de signature = une signature de plus qu'à la dernière visite de « Suivi & alertes ».
@@ -9118,6 +9119,21 @@ FP.edlSign = {
       this._writeSeen(seen); this._unseen = 0;
       if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
     } catch (e) {}
+  },
+  // Annule une demande de signature (état des lieux supprimé / envoyé par erreur) → disparaît de l'alerte
+  // « à signer » et ne réapparaît plus. NON destructif : la ligne passe en statut 'annule' (archivée, pas
+  // de DELETE) → cohérent avec la règle « favoriser l'archivage vs suppression ». Rechargé après.
+  async cancel(token) {
+    try {
+      if (!token || !(FP.db && FP.db.update)) return { error: 'indisponible' };
+      let rows = this._rows;
+      if (!rows) { await this.load(); rows = this._rows || []; }
+      const row = rows.find(x => x && x.token === token);
+      if (!row || !row.id) return { error: 'introuvable' };
+      const res = await FP.db.update('edl_signatures', row.id, { statut: 'annule' });
+      if (!res || !res.error) await this.load();
+      return res || { error: null };
+    } catch (e) { return { error: (e && e.message) || String(e) }; }
   },
 };
 
