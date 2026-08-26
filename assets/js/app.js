@@ -3325,6 +3325,34 @@ FP.qrScans = {
   },
   // Date/heure du dernier scan d'un véhicule (ISO), ou null.
   async last(vehId) { const l = await this.recent(vehId, 1); return l.length ? l[0].at : null; },
+  // ---- Alerte « QR scanné » (page Suivi & alertes) ----
+  _recent: null,   // scans de la flotte sur les dernières 24 h (pour l'alerte, persistante)
+  _unseen: 0,      // scans NON VUS depuis la dernière ouverture de « Suivi & alertes » (→ pastille menu)
+  _seenKey() { let soc = 'PXP'; try { soc = (FP.activeSociete && FP.activeSociete()) || 'PXP'; } catch (e) {} return 'fp_qrscan_seen_' + soc; },
+  _readSeen() { try { return localStorage.getItem(this._seenKey()) || ''; } catch (e) { return ''; } },
+  _writeSeen(iso) { try { localStorage.setItem(this._seenKey(), iso || ''); } catch (e) {} },
+  // Charge les scans récents (24 h) de TOUTE la flotte (filtrés par société via la RLS) + calcule le
+  // nombre de scans NON VUS (postérieurs au marqueur « vu »). Marqueur PAR APPAREIL (localStorage), comme
+  // l'activité de signature EDL. 1re fois → on initialise le marqueur à maintenant (pas d'historique massif).
+  async load(hours) {
+    try {
+      if (!(FP.supabase && FP.supabase.from)) { this._recent = []; this._unseen = 0; return this._recent; }
+      const since = new Date(Date.now() - (hours || 24) * 3600 * 1000).toISOString();
+      const { data, error } = await FP.supabase.from('qr_scans')
+        .select('vehicule_id,plaque,scanned_at,mode')
+        .gte('scanned_at', since)
+        .order('scanned_at', { ascending: false })
+        .limit(100);
+      if (error) { this._recent = []; this._unseen = 0; return this._recent; }
+      this._recent = (data || []).map(r => ({ vehiculeId: r.vehicule_id, plaque: r.plaque || '', at: r.scanned_at, mode: r.mode || 'portail' }));
+      const seen = this._readSeen();
+      if (!seen) { this._writeSeen(new Date().toISOString()); this._unseen = 0; }   // init sans spammer l'historique
+      else this._unseen = this._recent.filter(s => s.at && s.at > seen).length;
+      return this._recent;
+    } catch (e) { this._recent = []; this._unseen = 0; return this._recent; }
+  },
+  // Marque les scans comme VUS (appelé à l'ouverture de « Suivi & alertes ») → éteint la pastille.
+  markSeen() { try { this._writeSeen(new Date().toISOString()); this._unseen = 0; if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge(); } catch (e) {} },
 };
 
 // === Navigation MOBILE : barre + menu latéral repliable (hamburger) ===
@@ -4402,11 +4430,14 @@ FP.refreshDeclCondBadge = async () => {
     // soit, qu'un document vient d'être signé (la pastille s'éteint quand il ouvre « Suivi & alertes »).
     let edlUnseen = 0;
     try { if (FP.edlSign && FP.edlSign.load) { await FP.edlSign.load(); edlUnseen = FP.edlSign._unseen || 0; } } catch (e) {}
+    // NOUVEAUX scans de QR véhicule depuis la dernière visite de « Suivi & alertes » → pastille aussi.
+    let scanUnseen = 0;
+    try { if (FP.qrScans && FP.qrScans.load) { await FP.qrScans.load(); scanUnseen = FP.qrScans._unseen || 0; } } catch (e) {}
     // BADGE « Sinistres » = uniquement les déclarations de type sinistre/problème (pas km/état des lieux).
     FP.setNavBadge('sinistres.html', FP.declCondSinCount, FP.declCondSinCount + ' déclaration(s) sinistre/problème en attente');
-    // BADGE « Suivi & alertes » = demandes conducteur (km, état des lieux, question) + signatures reçues.
-    const notifCount = FP.declCondKmCount + FP.declCondEdlCount + FP.declCondQuestionCount + edlUnseen;
-    FP.setNavBadge('notifications.html', notifCount, notifCount + ' nouveauté(s) : demande conducteur ou signature reçue');
+    // BADGE « Suivi & alertes » = demandes conducteur (km, état des lieux, question) + signatures reçues + scans QR.
+    const notifCount = FP.declCondKmCount + FP.declCondEdlCount + FP.declCondQuestionCount + edlUnseen + scanUnseen;
+    FP.setNavBadge('notifications.html', notifCount, notifCount + ' nouveauté(s) : demande conducteur, signature ou scan QR');
   } catch (e) {}
 };
 // Pose/retire une pastille rouge sur un lien de la sidebar (par data-nav ou href), sur toutes ses occurrences.
@@ -5916,6 +5947,21 @@ FP.buildAlertes = (data) => {
         target: p.signedUrl || ('vehicules.html?immat=' + encodeURIComponent(p.plaque || '')),
       }));
       out.push({ niveau: 'info', categorie: 'États des lieux', message: `${rsg.length} état${rsg.length > 1 ? 's' : ''} des lieux signé${rsg.length > 1 ? 's' : ''}`, detail: 'Signature terminée par toutes les parties — la version signée est rangée dans la fiche du véhicule (Documents).', sort: 466, muteKey: 'edl-signed-recent', vehicules: items });
+    }
+  } catch (e) {}
+
+  // --- Scans du QR véhicule (dernières 24 h) → « quelqu'un a ouvert le portail d'un véhicule » ---
+  // Source = FP.qrScans._recent (chargé sur la page). On regroupe par véhicule (dernier scan de chacun).
+  try {
+    const scans = (FP.qrScans && FP.qrScans._recent) || null;
+    if (Array.isArray(scans) && scans.length) {
+      const rel = (iso) => { const ms = Date.now() - Date.parse(iso); if (!(ms >= 0)) return ''; const mn = Math.round(ms / 60000); if (mn < 60) return 'il y a ' + Math.max(1, mn) + ' min'; const h = Math.round(mn / 60); if (h < 24) return 'il y a ' + h + ' h'; return 'il y a ' + Math.round(h / 24) + ' j'; };
+      const byVeh = new Map(); scans.forEach(s => { if (s && s.vehiculeId && !byVeh.has(s.vehiculeId)) byVeh.set(s.vehiculeId, s); });
+      const list = Array.from(byVeh.values());
+      const items = list.map(s => ({ label: `${s.plaque || 'Véhicule'} — QR ouvert ${rel(s.at)}`, target: 'vehicules.html?immat=' + encodeURIComponent(s.plaque || '') }));
+      const nNew = (FP.qrScans._unseen || 0);
+      const msg = (nNew > 0 ? `${nNew} nouveau${nNew > 1 ? 'x' : ''} scan${nNew > 1 ? 's' : ''} de QR` : `${list.length} véhicule${list.length > 1 ? 's' : ''} scanné${list.length > 1 ? 's' : ''}`) + ' (24 h)';
+      out.push({ niveau: 'info', categorie: 'Activité QR', message: msg, detail: 'Quelqu\'un a ouvert le portail QR d\'un véhicule (le détail daté est dans la fiche du véhicule).', sort: 470, vehicules: items });
     }
   } catch (e) {}
 
