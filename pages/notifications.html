@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260826f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260826g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260826f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260826g">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -142,11 +142,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260826f"></script>
-<script src="../assets/js/supabase-client.js?v=20260826f"></script>
-<script src="../assets/js/data.js?v=20260826f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260826g"></script>
+<script src="../assets/js/supabase-client.js?v=20260826g"></script>
+<script src="../assets/js/data.js?v=20260826g"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260826f"></script>
+<script src="../assets/js/app.js?v=20260826g"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -168,6 +168,8 @@
         ${a.vehicules && a.vehicules.length ? (() => {
           const _ln = x => x.immoId
             ? `<div class="flex items-center justify-between gap-2 py-0.5"><a href="${esc(x.target)}" class="text-xs text-slate-600 hover:text-slate-900 hover:underline min-w-0 truncate">• ${esc(x.label)}</a><button type="button" data-immo-lever="${esc(x.immoId)}" class="shrink-0 text-xs font-semibold" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:9999px;background:#fff;color:#0f766e;border:1px solid #99f6e4;cursor:pointer"><i data-lucide="check" class="w-3 h-3"></i> Lever l'immobilisation</button></div>`
+            : x.edlToken
+            ? `<div class="flex items-center justify-between gap-2 py-0.5"><a href="${esc(x.target)}" class="text-xs text-slate-600 hover:text-slate-900 hover:underline min-w-0 truncate">• ${esc(x.label)}</a><button type="button" data-edl-cancel="${esc(x.edlToken)}" title="Annuler cette demande de signature (état des lieux supprimé)" class="shrink-0 text-xs font-semibold" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:9999px;background:#fff;color:#b91c1c;border:1px solid #fecaca;cursor:pointer"><i data-lucide="x" class="w-3 h-3"></i> Annuler</button></div>`
             : `<a href="${esc(x.target)}" class="block text-xs text-slate-600 hover:text-slate-900 hover:underline py-0.5">• ${esc(x.label)}</a>`;
           const _first = a.vehicules.slice(0, 3), _rest = a.vehicules.slice(3);
           return `<div class="mt-2">
@@ -221,30 +223,63 @@
     { titre: 'Autres',             icon: 'bell',         color: 'text-slate-600',  match: a => !CLAIMED.has(a.categorie) },
   ];
 
+  // État plié/déplié des colonnes — cache d'affichage rapide PAR APPAREIL (localStorage), comme l'onglet ouvert.
+  const COL_STATE_KEY = 'fp_notif_cols_v1';
+  function readColState() { try { return JSON.parse(localStorage.getItem(COL_STATE_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function writeColState(m) { try { localStorage.setItem(COL_STATE_KEY, JSON.stringify(m || {})); } catch (e) {} }
+  // Réglé par l'utilisateur → on respecte son choix ; sinon replié par défaut si la colonne est VIDE.
+  function colCollapsed(title, hasAlerts) { const s = readColState(); return (title in s) ? !!s[title] : !hasAlerts; }
+
   function render() {
     const alerts = FP.buildAlertes(data);
     const cont = document.getElementById('notif-cols');
-    // « Relevé km » : remonté tout en haut (avant Amendes) quand il a des alertes ;
-    // sinon laissé à sa place naturelle, avec les autres colonnes vides.
-    let cols = COLS.slice();
+    // Colonnes NON VIDES d'abord (dans l'ordre COLS), puis les vides → « Autres » (états des lieux, etc.)
+    // remonte tout seul en haut dès qu'il a du contenu, plus besoin de scroller en bas.
+    const withN = COLS.map(c => ({ c, n: alerts.filter(c.match).length }));
+    let cols = withN.filter(x => x.n > 0).map(x => x.c).concat(withN.filter(x => x.n === 0).map(x => x.c));
+    // « Relevé km » reste prioritaire tout en haut quand il a des alertes.
     const rkIdx = cols.findIndex(c => c.titre === 'Relevé km');
-    if (rkIdx > -1 && alerts.some(cols[rkIdx].match)) {
-      cols.unshift(cols.splice(rkIdx, 1)[0]);
-    }
+    if (rkIdx > 0 && alerts.some(cols[rkIdx].match)) cols.unshift(cols.splice(rkIdx, 1)[0]);
     cont.innerHTML = cols.map((col, i) => {
       const list = alerts.filter(col.match);
       const body = list.map(notifHTML).join('') || '<p class="text-sm text-slate-400">Rien à signaler ✓</p>';
+      const collapsed = colCollapsed(col.titre, list.length > 0);
       return `<div>
-        <h2 class="font-bold text-slate-900 mb-3 flex items-center gap-2">
-          <i data-lucide="${col.icon}" class="w-5 h-5 ${col.color}"></i> ${col.titre}
+        <button type="button" class="notif-colhead" data-coltoggle="${esc(col.titre)}" aria-expanded="${collapsed ? 'false' : 'true'}" style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:0 0 12px;cursor:pointer;text-align:left">
+          <i data-lucide="${col.icon}" class="w-5 h-5 ${col.color}"></i>
+          <span class="flex-1 font-bold text-slate-900">${col.titre}</span>
           <span class="badge ${list.length ? 'badge-danger' : ''}" ${list.length ? '' : 'style="background:#E2E8F0;color:#475569"'}>${list.length}</span>
-        </h2>
-        <div class="space-y-2" id="col-${i}">${body}</div>
+          <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 notif-chev" style="transition:transform .2s;${collapsed ? '' : 'transform:rotate(180deg)'}"></i>
+        </button>
+        <div class="space-y-2 notif-colbody" id="col-${i}"${collapsed ? ' hidden' : ''}>${body}</div>
       </div>`;
     }).join('');
     renderMasquees();
     lucide.createIcons();
   }
+  // Plier / déplier une colonne (vrai toggle, mémorisé par appareil).
+  document.getElementById('notif-cols').addEventListener('click', (e) => {
+    const h = e.target.closest('[data-coltoggle]'); if (!h) return;
+    const wrap = h.parentElement, body = wrap.querySelector('.notif-colbody'), chev = h.querySelector('.notif-chev');
+    if (!body) return;
+    const nowCollapsed = !body.hidden;
+    body.hidden = nowCollapsed;
+    h.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
+    if (chev) chev.style.transform = nowCollapsed ? '' : 'rotate(180deg)';
+    const s = readColState(); s[h.dataset.coltoggle] = nowCollapsed; writeColState(s);
+  });
+  // Annuler une demande de signature (état des lieux supprimé) → ne réapparaît plus dans l'alerte.
+  document.getElementById('notif-cols').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-edl-cancel]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const ok = FP.confirm ? await FP.confirm('Annuler cette demande de signature ? Elle ne réapparaîtra plus dans les alertes.') : confirm('Annuler cette demande de signature ?');
+    if (!ok) return;
+    b.disabled = true;
+    const res = await FP.edlSign.cancel(b.dataset.edlCancel);
+    if (res && res.error) { alert('Impossible d\'annuler : ' + res.error); b.disabled = false; return; }
+    if (FP.toast) FP.toast('✓ Demande de signature annulée');
+    render();
+  });
 
   // « Voir tout » / « Voir moins » : déroule ou replie le reste de la liste sur place (pas de navigation).
   document.getElementById('notif-cols').addEventListener('click', (e) => {
