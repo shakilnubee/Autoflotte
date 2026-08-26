@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260826b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260826c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260826b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260826c">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -487,7 +487,7 @@
 
       <div class="mt-5 pt-4 border-t border-slate-100">
         <div class="field-label flex items-center gap-2"><i data-lucide="trash-2" class="w-4 h-4" style="color:var(--fp-accent)"></i> Corbeille — restaurer un élément supprimé</div>
-        <p class="text-sm text-slate-600 mb-3">Les <b>véhicules</b>, <b>amendes</b>, <b>conducteurs</b> et <b>contrats de leasing</b> supprimés sont conservés ici (synchronisés sur tous tes appareils). Clique sur <b>Restaurer</b> pour les remettre. <span class="text-slate-400">Après une restauration, recharge la page (Ctrl+Maj+R) pour la voir apparaître partout.</span></p>
+        <p class="text-sm text-slate-600 mb-3">Les <b>véhicules</b>, <b>amendes</b>, <b>conducteurs</b>, <b>factures</b>, <b>documents</b> et <b>contrats de leasing</b> supprimés sont conservés ici <b>30 jours</b> (synchronisés sur tous tes appareils). Clique sur <b>Restaurer</b> pour les remettre. <b>Passé 30 jours — ou si tu cliques ✕ / « Vider la corbeille »</b> — la suppression devient <b>définitive</b> et les <b>fichiers (PDF, documents…) sont effacés du serveur</b> (libère l'espace). <span class="text-slate-400">Après une restauration, recharge la page (Ctrl+Maj+R) pour la voir apparaître partout.</span></p>
         <div id="corbeille-list" class="space-y-2"></div>
         <div class="flex gap-2 mt-3">
           <button class="btn btn-outline text-sm" id="corb-refresh"><i data-lucide="refresh-cw" class="w-4 h-4"></i> Rafraîchir</button>
@@ -761,10 +761,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260826b"></script>
-<script src="../assets/js/supabase-client.js?v=20260826b"></script>
-<script src="../assets/js/data.js?v=20260826b"></script>
-<script src="../assets/js/app.js?v=20260826b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260826c"></script>
+<script src="../assets/js/supabase-client.js?v=20260826c"></script>
+<script src="../assets/js/data.js?v=20260826c"></script>
+<script src="../assets/js/app.js?v=20260826c"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -2368,33 +2368,46 @@
 <script>
 (function(){
   function esc(s){ return (window.FP && FP.esc) ? FP.esc(s) : String(s==null?'':s); }
+  var corbeilleExpanded = false;
+  var CORB_LIMIT = 5;
+  function corbRowHTML(e){
+    var d = new Date(e.ts); var ds = isNaN(d) ? '' : d.toLocaleDateString('fr-FR');
+    return '<div class="flex items-center justify-between gap-2 p-2 rounded-lg" style="border:1px solid var(--fp-border);background:#fff">'
+      + '<div class="min-w-0"><span class="text-xs font-bold" style="color:#0e7490">' + esc(FP.trash.typeLabel(e.type)) + '</span> '
+      + '<span class="text-sm text-slate-700">' + esc(e.label || '(sans nom)') + '</span>'
+      + '<span class="text-xs text-slate-400 block">Supprimé le ' + ds + '</span></div>'
+      + '<div class="flex gap-1 flex-shrink-0">'
+      + '<button class="btn btn-dark text-xs" style="padding:.3rem .6rem" data-corb-restore="' + e.id + '"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Restaurer</button>'
+      + '<button class="btn btn-outline text-xs" style="padding:.3rem .5rem" data-corb-del="' + e.id + '" title="Supprimer définitivement (efface aussi les fichiers du serveur)"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>'
+      + '</div></div>';
+  }
   function renderCorbeille(){
     var host = document.getElementById('corbeille-list'); if (!host) return;
     if (!(window.FP && FP.trash)) { host.innerHTML = '<p class="text-sm text-slate-400">Corbeille indisponible (recharge la page).</p>'; return; }
     var list = FP.trash.list();
     if (!list.length) { host.innerHTML = '<p class="text-sm text-slate-400">Corbeille vide — rien à restaurer.</p>'; return; }
-    host.innerHTML = list.map(function(e){
-      var d = new Date(e.ts); var ds = isNaN(d) ? '' : d.toLocaleDateString('fr-FR');
-      return '<div class="flex items-center justify-between gap-2 p-2 rounded-lg" style="border:1px solid var(--fp-border);background:#fff">'
-        + '<div class="min-w-0"><span class="text-xs font-bold" style="color:#0e7490">' + esc(FP.trash.typeLabel(e.type)) + '</span> '
-        + '<span class="text-sm text-slate-700">' + esc(e.label || '(sans nom)') + '</span>'
-        + '<span class="text-xs text-slate-400 block">Supprimé le ' + ds + '</span></div>'
-        + '<div class="flex gap-1 flex-shrink-0">'
-        + '<button class="btn btn-dark text-xs" style="padding:.3rem .6rem" data-corb-restore="' + e.id + '"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Restaurer</button>'
-        + '<button class="btn btn-outline text-xs" style="padding:.3rem .5rem" data-corb-del="' + e.id + '" title="Retirer de la corbeille (définitif)"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>'
-        + '</div></div>';
-    }).join('');
+    var visibles = corbeilleExpanded ? list : list.slice(0, CORB_LIMIT);
+    var html = visibles.map(corbRowHTML).join('');
+    if (list.length > CORB_LIMIT) {
+      html += corbeilleExpanded
+        ? '<button type="button" id="corb-toggle" class="text-sm font-semibold mt-1" style="color:var(--fp-accent);background:none;border:none;cursor:pointer">▲ Voir moins</button>'
+        : '<button type="button" id="corb-toggle" class="text-sm font-semibold mt-1" style="color:var(--fp-accent);background:none;border:none;cursor:pointer">▼ Voir tout (' + (list.length - CORB_LIMIT) + ' de plus)</button>';
+    }
+    host.innerHTML = html;
+    var tg = document.getElementById('corb-toggle'); if (tg) tg.addEventListener('click', function(){ corbeilleExpanded = !corbeilleExpanded; renderCorbeille(); });
     if (window.lucide) lucide.createIcons();
   }
   document.addEventListener('click', async function(e){
     var r = e.target.closest && e.target.closest('[data-corb-restore]');
     if (r) { var ok = await FP.trash.restore(r.getAttribute('data-corb-restore')); renderCorbeille(); if (FP.toast) FP.toast(ok ? '✓ Restauré — recharge la page (Ctrl+Maj+R) pour le voir partout' : 'Échec de la restauration'); return; }
     var d = e.target.closest && e.target.closest('[data-corb-del]');
-    if (d) { if (window.FP && FP.confirm ? await FP.confirm('Retirer définitivement cet élément de la corbeille ? Il ne sera plus restaurable.') : confirm('Retirer ?')) { FP.trash.remove(d.getAttribute('data-corb-del')); renderCorbeille(); } return; }
+    if (d) { if (window.FP && FP.confirm ? await FP.confirm('Supprimer DÉFINITIVEMENT cet élément ?\n\nIl ne sera plus restaurable, et ses fichiers (PDF, documents…) seront effacés du serveur.') : confirm('Supprimer définitivement ?')) { if (FP.trash.purge) { await FP.trash.purge(d.getAttribute('data-corb-del')); } else { FP.trash.remove(d.getAttribute('data-corb-del')); } renderCorbeille(); if (FP.toast) FP.toast('Élément supprimé définitivement'); } return; }
   });
   var cr = document.getElementById('corb-refresh'); if (cr) cr.addEventListener('click', renderCorbeille);
-  var cc = document.getElementById('corb-clear'); if (cc) cc.addEventListener('click', async function(){ if (window.FP && FP.confirm ? await FP.confirm('Vider TOUTE la corbeille ? Les éléments ne seront plus restaurables.') : confirm('Vider ?')) { FP.trash.clear(); renderCorbeille(); } });
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderCorbeille); else renderCorbeille();
+  var cc = document.getElementById('corb-clear'); if (cc) cc.addEventListener('click', async function(){ if (window.FP && FP.confirm ? await FP.confirm('Vider TOUTE la corbeille ?\n\nLes éléments ne seront plus restaurables, et tous leurs fichiers (PDF, documents…) seront effacés du serveur.') : confirm('Vider ?')) { if (FP.trash.clearWithFiles) { await FP.trash.clearWithFiles(); } else { FP.trash.clear(); } renderCorbeille(); if (FP.toast) FP.toast('Corbeille vidée'); } });
+  // Auto-purge des éléments de plus de 30 jours (fichiers serveur compris), puis rendu.
+  function initCorbeille(){ try { if (window.FP && FP.trash && FP.trash.purgeExpired) FP.trash.purgeExpired().then(function(n){ renderCorbeille(); }); else renderCorbeille(); } catch (e) { renderCorbeille(); } }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCorbeille); else initCorbeille();
   window.addEventListener('fp:data-ready', renderCorbeille);
 })();
 </script>
