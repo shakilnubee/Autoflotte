@@ -8840,7 +8840,11 @@ FP.edl = {
             const token = 'sig-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
             let soc = 'PXP'; try { soc = (FP.activeSociete ? FP.activeSociete() : 'PXP') || 'PXP'; } catch (e) {} if (soc === '__all__') soc = 'PXP';
             const base = FP.edl.SIGN_BASE || 'https://parc-pilot.fr/signer.html';
-            const logoSrc = prof.logoUrl || '';   // logo HÉBERGÉ (les data: URI sont souvent bloqués en e-mail)
+            // Logo de la société dans l'e-mail : on l'HÉBERGE (upload + cache par société) car les clients
+            // mail (Gmail…) ne rendent pas les data: URI. Chaque société a ainsi SON propre logo, jamais codé
+            // en dur. Repli sur le cache prof.logoUrl si l'hébergement échoue.
+            let logoSrc = '';
+            try { logoSrc = (FP.hostSocieteLogo ? await FP.hostSocieteLogo() : '') || prof.logoUrl || ''; } catch (e) { logoSrc = prof.logoUrl || ''; }
             let tpl = (prof.mailModeleSignature || '').trim();
             if (!tpl) tpl = 'Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signez l\'état des lieux de votre {modele} ({immat}) en quelques secondes, directement depuis ce mail.';
             // SOURCE UNIQUE du rendu de l'e-mail de signature (le MÊME modèle est stocké pour CHAQUE
