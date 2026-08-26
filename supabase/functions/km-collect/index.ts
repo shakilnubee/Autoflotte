@@ -88,7 +88,7 @@ async function dernierReleveDate(db: ReturnType<typeof createClient>, vehiculeId
 async function vehInfo(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
   if (!vehiculeId) return null;
   const { data: v } = await db.from("vehicules")
-    .select("marque,modele,carburant,co2,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur")
+    .select("marque,modele,carburant,co2,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur,statut,couleur,boite")
     .eq("id", vehiculeId).maybeSingle();
   return v || null;
 }
@@ -177,6 +177,36 @@ async function vehAmendes(db: ReturnType<typeof createClient>, societe: string, 
     return String(y.date).localeCompare(String(x.date));
   });
   return out;
+}
+
+// Podium des amendes (portail « Mes amendes ») : classement des conducteurs de la société par NOMBRE
+// d'amendes, du MEILLEUR (le moins) au moins bon. ⚠️ CONFIDENTIALITÉ : on n'expose QUE le PRÉNOM
+// (jamais le nom complet, ni le montant, ni les points) — juste l'ordre du classement.
+async function amendesPodium(db: ReturnType<typeof createClient>, societe: string) {
+  try {
+    const soc = societe || "PXP";
+    const _norm = (s: string) => String(s || "").trim();
+    const counts: Record<string, number> = {};
+    // 1) Tous les conducteurs connus de la société → présents dans le classement même à 0 amende.
+    const { data: conds } = await db.from("conducteurs").select("prenom,nom,name,masque").eq("societe", soc);
+    for (const c of ((conds || []) as Record<string, unknown>[])) {
+      if (c.masque === true) continue;
+      let p = _norm(String(c.prenom || "")); if (!p) p = _norm(String(c.name || "")).split(/\s+/)[0];
+      if (p) counts[p] = counts[p] || 0;
+    }
+    // 2) Comptage des amendes par prénom (1er mot).
+    const { data: ams } = await db.from("amendes").select("prenom").eq("societe", soc);
+    for (const a of ((ams || []) as Record<string, unknown>[])) {
+      const p = _norm(String(a.prenom || "")).split(/\s+/)[0];
+      if (!p) continue;
+      counts[p] = (counts[p] || 0) + 1;
+    }
+    const arr = Object.keys(counts).map((prenom) => ({ prenom, n: counts[prenom] }));
+    arr.sort((x, y) => x.n - y.n || x.prenom.localeCompare(y.prenom, "fr")); // le moins d'amendes en tête
+    // On renvoie prénom + rang (le rang est « dense » : même nombre d'amendes = même rang). Pas de compte exposé.
+    let rank = 0, prevN = -1;
+    return arr.map((x, i) => { if (x.n !== prevN) { rank = i + 1; prevN = x.n; } return { prenom: x.prenom, rang: rank }; });
+  } catch { return []; }
 }
 
 // Conducteur ACTUEL du véhicule : le champ `chauffeur` du véhicule, sinon l'affectation EN COURS
@@ -459,6 +489,8 @@ Deno.serve(async (req) => {
             masse: masseKg,
             km: veh.km != null ? Number(veh.km) : null,
             prochainCT: veh.prochain_ct || "", dateMiseEnCirculation: veh.date_mise_en_circulation || "",
+            // Vente (onglet « À vendre » du portail) : statut + specs de base (jamais le prix ni les coûts).
+            statut: veh.statut || "", couleur: veh.couleur || "", boite: veh.boite || "",
           } : null;
           // Langue du conducteur (carte condLangues côté société) → le portail s'affiche en FR ou EN.
           const langMap = (portal as Record<string, unknown>).condLangues as Record<string, unknown> || {};
@@ -469,8 +501,10 @@ Deno.serve(async (req) => {
           const conducteur2 = conducteur ? { ...conducteur, langue } : { langue };
           // Amendes du conducteur (montant + n° d'avis) pour l'onglet « Mes amendes » du portail (sans PDF).
           const amendes = await vehAmendes(db, qr.societe || "PXP", conducteur as Record<string, unknown> | null);
+          // Podium des amendes (prénom + rang seulement) — classement de la flotte, affiché en tête de l'onglet.
+          const podium = await amendesPodium(db, qr.societe || "PXP");
           // ⚠️ La page v.html lit `portail` (français) → on émet cette clé (pas `portal`).
-          return json({ ...base, veh: info, docs, edl, portail: portal, conducteur: conducteur2, amendes, langue });
+          return json({ ...base, veh: info, docs, edl, portail: portal, conducteur: conducteur2, amendes, podium, langue });
         }
         return json(base);
       }
