@@ -3611,12 +3611,43 @@ FP.settings = {
     // Fusion « delta » : on repart de la version FRAÎCHE du serveur et on n'y applique QUE les clés que
     // CE poste a changées depuis son dernier sync (obj vs base). Les modifs d'un AUTRE poste sont
     // préservées ; une suppression reste une suppression (pas de « resurrection »).
+    // Clés « collection de travail » toggées SOUVENT et depuis PLUSIEURS appareils (tâches faites,
+    // rappels cochés par période, immobilisations, montants payés d'amendes, dates de MAJ km, étapes
+    // sinistres…). Pour CELLES-CI on ne remplace PAS toute la collection (sinon un poste au cache un peu
+    // ancien écrase les coches faites ailleurs → « la tâche terminée disparaît », « le rappel se décoche »).
+    // On fusionne ENTRÉE PAR ENTRÉE sur la version FRAÎCHE du serveur : on applique seulement ce que CE
+    // poste a ajouté/modifié/supprimé (obj vs base), le reste du serveur est préservé.
+    const COLLECTION_KEYS = new Set(['taches', 'rappelsFaits', 'rappelsPerso', 'vehImmobilise', 'amendeMontantPaye', 'amendeMontants', 'kmMajDates', 'sinistreStage', 'sinistreStatut', 'sinistreGroupes', 'docStatus', 'permisMasque', 'condDocs', 'leasingContrats', 'kmSuiviExclus']);
+    const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
+    // Fusion par FEUILLE d'un objet-map (ajouts/modifs d'obj appliqués sur remote frais ; suppressions de CE poste honorées).
+    const mergeMap = (remoteV, objV, baseV) => {
+      const out = isPlain(remoteV) ? { ...remoteV } : {};
+      const ks = new Set([...(isPlain(objV) ? Object.keys(objV) : []), ...(isPlain(baseV) ? Object.keys(baseV) : [])]);
+      ks.forEach(k => {
+        const ov = isPlain(objV) ? objV[k] : undefined, bv = isPlain(baseV) ? baseV[k] : undefined, rv = out[k];
+        if (isPlain(ov) || isPlain(bv) || isPlain(rv)) { out[k] = mergeMap(rv, ov, bv); }         // sous-objet → récursion
+        else if (JSON.stringify(ov) !== JSON.stringify(bv)) { if (ov === undefined) delete out[k]; else out[k] = ov; }
+      });
+      return out;
+    };
+    // Fusion d'un tableau d'objets {id,…} par id (union sur remote frais ; modifs/suppressions de CE poste appliquées).
+    const mergeById = (remoteV, objV, baseV) => {
+      const rA = Array.isArray(remoteV) ? remoteV : [], oA = Array.isArray(objV) ? objV : [], bA = Array.isArray(baseV) ? baseV : [];
+      const byId = new Map(); rA.forEach(t => { if (t && t.id != null) byId.set(t.id, t); });
+      const objIds = new Set(oA.map(t => t && t.id).filter(v => v != null));
+      oA.forEach(t => { if (t && t.id != null) byId.set(t.id, t); });                              // ajouts/modifs de ce poste
+      bA.forEach(t => { if (t && t.id != null && !objIds.has(t.id)) byId.delete(t.id); });          // suppressions de ce poste
+      return Array.from(byId.values());
+    };
+    const mergeCollection = (k, remoteV, objV, baseV) => Array.isArray(objV) || Array.isArray(remoteV) ? mergeById(remoteV, objV, baseV) : mergeMap(remoteV, objV, baseV);
     const applyDelta = (remote) => {
       const merged = { ...remote };
       const keys = new Set([...Object.keys(obj), ...Object.keys(base)]);
       keys.forEach(k => {
         const changedHere = JSON.stringify(obj[k]) !== JSON.stringify(base[k]);
-        if (changedHere) { if (Object.prototype.hasOwnProperty.call(obj, k)) merged[k] = obj[k]; else delete merged[k]; }
+        if (!changedHere) return;
+        if (COLLECTION_KEYS.has(k)) { merged[k] = mergeCollection(k, remote[k], obj[k], base[k]); return; }  // fusion fine (multi-appareils)
+        if (Object.prototype.hasOwnProperty.call(obj, k)) merged[k] = obj[k]; else delete merged[k];
       });
       // ⚠️ FILET DE SÉCURITÉ « logo » : le logo société est un gros dataURL qui peut MANQUER dans le
       // cache local. Une sauvegarde ne doit JAMAIS l'effacer du serveur par accident. On ne retire le
