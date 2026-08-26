@@ -3382,6 +3382,9 @@ FP.qrScans = {
         if (!a) return;
         const href = a.getAttribute('href') || '';
         if (href === '#' || href.charAt(0) === '#' || a.classList.contains('fp-jis-toggle')) return;
+        // Parent d'un menu déroulant (sous-onglets .fp-subnav juste après) → il déplie/replie, ne pas fermer.
+        const nb = a.nextElementSibling;
+        if (nb && nb.classList && nb.classList.contains('fp-subnav')) return;
         close();
       });
       addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
@@ -11831,8 +11834,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const close = () => document.body.classList.remove('fp-nav-open');
       btn.addEventListener('click', () => document.body.classList.toggle('fp-nav-open'));
       ov.addEventListener('click', close);
-      // Refermer après un clic sur un lien de navigation
-      sb.addEventListener('click', (e) => { if (e.target.closest('a[data-nav], a[href]')) close(); });
+      // Refermer après un clic sur un lien de navigation — SAUF si c'est le PARENT d'un menu déroulant
+      // (il déplie/replie sa liste, il ne navigue pas) : sinon, sur mobile, cliquer « Suivi & alertes »
+      // dépliait le sous-menu ET refermait le tiroir en même temps → il fallait rouvrir pour le voir.
+      sb.addEventListener('click', (e) => {
+        const a = e.target.closest('a[data-nav], a[href]'); if (!a) return;
+        const nb = a.nextElementSibling;
+        if (nb && nb.classList && nb.classList.contains('fp-subnav')) return; // parent déroulant → garder le tiroir ouvert
+        close();
+      });
       window.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
       if (window.lucide) lucide.createIcons();
     } catch (e) {}

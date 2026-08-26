@@ -590,7 +590,13 @@
 
   function vehTitle() { var v = DATA.veh || {}; return ((v.marque || '') + ' ' + (v.modele || '')).trim() || (DATA.plaque || t('head_title')); }
 
-  function goMenu() { show('v-menu', vehTitle(), t('head_ask')); }
+  function goMenu(fromPop) {
+    show('v-menu', vehTitle(), t('head_ask'));
+    // Le MENU = base de l'historique. Ainsi le bouton RETOUR du navigateur depuis une sous-page revient
+    // au menu SANS recharger (au lieu de « resetter » la page ou de quitter le portail). On ne repose la
+    // base que quand ce n'est PAS déjà un retour navigateur (sinon on écraserait l'entrée courante).
+    if (!fromPop) { try { history.replaceState({ ppv: 'menu' }, ''); } catch (e) {} }
+  }
 
   // ---- Mon véhicule ----
   // « À vendre » = statut du véhicule (mêmes règles que la page a-vendre.html : « à vendre » / « a-vendre »).
@@ -824,7 +830,12 @@
     }
     var go = e.target.closest && e.target.closest('[data-go]');
     if (go) { route(go.getAttribute('data-go')); return; }
-    if (e.target.closest && e.target.closest('[data-back]')) { if (history.state && history.state.ppv) history.back(); else goMenu(); return; }
+    if (e.target.closest && e.target.closest('[data-back]')) {
+      // Bouton « Retour » de l'app = même comportement que le retour navigateur : on dépile l'historique
+      // (→ popstate ramène au menu sans recharger). Repli direct sur le menu si pas d'entrée à dépiler.
+      if (history.state && history.state.ppv && history.state.ppv !== 'menu') history.back(); else goMenu();
+      return;
+    }
     var rm = e.target.closest && e.target.closest('[data-rm]');
     if (rm) {
       var host = rm.closest('#sin-thumbs') ? 'sin' : 'edl';
@@ -851,9 +862,18 @@
     // (et pas seulement celui de l'app) ramène au menu du portail au lieu de quitter la page.
     if (v !== 'km' && !_fromPop) { try { history.pushState({ ppv: v }, ''); } catch (e) {} }
   }
-  // Retour navigateur (ou geste « précédent ») depuis une sous-page → on revient au menu du portail.
+  // Retour/avance navigateur (ou geste « précédent ») → on restaure EXACTEMENT la vue enregistrée dans
+  // l'historique (et non un reset systématique). Sous-page → menu ; menu (base) → on laisse le navigateur
+  // quitter le portail. _fromPop empêche de re-empiler une entrée pendant la restauration.
   var _fromPop = false;
-  window.addEventListener('popstate', function () { _fromPop = true; try { if (curView !== 'v-menu') goMenu(); } finally { _fromPop = false; } });
+  window.addEventListener('popstate', function (ev) {
+    _fromPop = true;
+    try {
+      var st = (ev && ev.state) || history.state || {};
+      if (!st || !st.ppv || st.ppv === 'menu') goMenu(true);
+      else route(st.ppv);
+    } finally { _fromPop = false; }
+  });
 
   function resetQueForm() {
     $('que-form-wrap').classList.remove('hide'); $('que-done').classList.add('hide');
