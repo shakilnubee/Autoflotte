@@ -2458,6 +2458,26 @@
       else show('Document non enregistré (tu peux saisir les infos à la main).', 'color:#B45309');
     } catch (e) { console.warn('[locadd file]', e); show('Échec : ' + (e.message || e), 'color:#B91C1C'); }
   }
+  // ⚠️ AUTO-CRÉATION DU VÉHICULE depuis un contrat leasing — ANTI-DOUBLON (clé = immatriculation).
+  // Ajouter un contrat crée le véhicule dans l'onglet Véhicules s'il n'existe pas encore (plus de double
+  // saisie). Si la plaque existe déjà → on ne crée rien (on se rattache au véhicule existant). Sans
+  // plaque → impossible de créer (on saute). Renvoie true si un véhicule a été créé.
+  function autoCreateVehFromContrat(rec){
+    try {
+      const immat = ((rec && rec.immat) || '').trim();
+      if (!immat) return false;
+      if ((data.vehicules || []).some(x => normPlaque(x.immat) === normPlaque(immat))) return false; // déjà dans la flotte
+      let maxN = 0; (data.vehicules || []).forEach(x => { const m = String(x.id || '').match(/(\d+)/); if (m) { const n = +m[1]; if (n > maxN) maxN = n; } });
+      const id = 'V-' + String(maxN + 1).padStart(3, '0');
+      const loueur = ((rec.loueur || '').toString().trim()) || (FP.societeProfil && FP.societeProfil().loueurNom) || '';
+      const veh = { id, immat, marque: rec.marque || '', modele: rec.modele || '', categorie: '', carburant: '', km: (rec.kmActuel != null ? rec.kmActuel : 0), statut: 'actif', proprietaire: loueur, chauffeur: rec.conducteur || '', groupes: ['non-classe'] };
+      if (rec.co2 != null) veh.co2 = rec.co2;
+      data.vehicules.push(veh);
+      try { if (FP.persist && FP.persist.insert) FP.persist.insert('vehicules', veh); else if (FP.db && FP.db.insert) FP.db.insert('vehicules', veh); } catch (e) { console.warn('[autoCreateVeh persist]', e); }
+      try { rebuildLeasingData(); } catch (e) {}
+      return true;
+    } catch (e) { console.warn('[autoCreateVehFromContrat]', e); return false; }
+  }
   function saveLocAdd(){
     const loyer = locNum($('locadd-loyer').value);
     if (!(loyer > 0)) { alert('Saisis le loyer TTC (€/mois).'); return; }
@@ -2491,9 +2511,10 @@
         { const tl = parseInt($('locadd-tol').value, 10); if (Number.isFinite(tl) && tl > 0) c.kmTolerance = tl; else delete c.kmTolerance; }
         if (_locAddDoc) { if (!Array.isArray(c.docs)) c.docs = []; c.docs.push({ url: _locAddDoc.url, name: _locAddDoc.name }); c.pdfUrl = c.docs[0].url; }
         s.localeaseContrats = list; FP.settings.save(s);
+        var createdE = autoCreateVehFromContrat(c);   // crée le véhicule si la plaque vient d'être ajoutée
       }
       closeLocAddModal(); renderLocalease(); renderKPIs();
-      if (FP.toast) FP.toast('✓ Contrat modifié — coûts mis à jour');
+      if (FP.toast) FP.toast(createdE ? '✓ Contrat modifié · véhicule ajouté à la flotte' : '✓ Contrat modifié — coûts mis à jour');
       return;
     }
     const rec = {
@@ -2507,8 +2528,9 @@
     { const tl = parseInt($('locadd-tol').value, 10); if (Number.isFinite(tl) && tl > 0) rec.kmTolerance = tl; }
     if (_locAddScan) { const c = locNum(_locAddScan.co2); if (c != null) rec.co2 = Math.round(c); const ml = locNum(_locAddScan.malus); if (ml != null && ml > 0) rec.malus = ml; }
     const s = FP.settings.get(); const list = getLocalease(); list.push(rec); s.localeaseContrats = list; FP.settings.save(s);
+    const created = autoCreateVehFromContrat(rec);   // ANTI-DOUBLON : crée le véhicule s'il n'existe pas
     closeLocAddModal(); renderLocalease(); renderKPIs();
-    if (FP.toast) FP.toast('✓ Contrat de leasing ajouté — coûts mis à jour');
+    if (FP.toast) FP.toast(created ? '✓ Contrat ajouté · véhicule créé dans la flotte' : '✓ Contrat de leasing ajouté — coûts mis à jour');
   }
   if ($('loc-add')) $('loc-add').addEventListener('click', openLocAddModal);
   // « Ajouter un contrat » depuis la section principale = même modale (avec choix du loueur : BPCE,
