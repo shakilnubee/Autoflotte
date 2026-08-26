@@ -2997,7 +2997,7 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModelePaiement_en',   label: "E-mail EN — payment request",      type: 'textarea', ph: 'Use {prenom} for the first name.', default: FP.MAIL_DEFAUT.paiement_en, lang: 'en' },
   { key: 'mailModeleDesignation_en',label: "E-mail EN — driver designation",   type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.designation_en, lang: 'en' },
   { key: 'mailModeleRelance_en',    label: "E-mail EN — reminder",             type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.relance_en, lang: 'en' },
-  { key: 'mailModeleSignature',  label: "Modèle e-mail — demande de signature (état des lieux)", type: 'textarea', ph: 'Message envoyé au conducteur pour signer. Balises : {prenom}, {immat}, {modele}, {date}. Le bouton « Signer le document » et les infos du véhicule sont ajoutés automatiquement (mise en page soignée).', default: 'Bonjour {prenom},\n\nMerci de signer électroniquement l\'état des lieux du véhicule {immat} ({modele}). Cela ne prend que quelques secondes.' },
+  { key: 'mailModeleSignature',  label: "Modèle e-mail — demande de signature (état des lieux)", type: 'textarea', ph: 'Message envoyé au conducteur pour signer. Balises : {prenom}, {immat}, {modele}, {date}. Le bouton « Signer le document » et les infos du véhicule sont ajoutés automatiquement (mise en page soignée).', default: 'Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signez l\'état des lieux de votre {modele} ({immat}) en quelques secondes, directement depuis ce mail.' },
   { key: 'mailSignature',        label: "Signature (bas des e-mails d'amende)",    type: 'textarea', ph: 'Colle ta signature — texte simple OU le CODE HTML de ta signature Gmail (avec logo/images). Le HTML est envoyé tel quel (le logo s\'affiche). Astuce : Gmail → Paramètres → Signature ; ou clic droit « Inspecter » sur ta signature → copier l\'élément.' },
 ];
 // Contrat d'assurance de la société ACTIVE (assureur + n° de police), paramétrable dans Contrats.
@@ -8841,25 +8841,35 @@ FP.edl = {
             const base = FP.edl.SIGN_BASE || 'https://parc-pilot.fr/signer.html';
             const logoSrc = prof.logoUrl || '';   // logo HÉBERGÉ (les data: URI sont souvent bloqués en e-mail)
             let tpl = (prof.mailModeleSignature || '').trim();
-            if (!tpl) tpl = 'Bonjour {prenom},\n\nMerci de signer électroniquement l\'état des lieux du véhicule {immat} ({modele}). Cela ne prend que quelques secondes.';
+            if (!tpl) tpl = 'Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signez l\'état des lieux de votre {modele} ({immat}) en quelques secondes, directement depuis ce mail.';
             // SOURCE UNIQUE du rendu de l'e-mail de signature (le MÊME modèle est stocké pour CHAQUE
             // signataire → l'app envoie le 1er, le serveur relaie le suivant sans dupliquer le template).
             const renderMail = (s) => {
               const link = base + '?t=' + encodeURIComponent(token) + '&who=' + s.role;
               const prenomS = String(s.nom || '').trim().split(/\s+/)[0] || '';
-              const intro = esc(tpl).replace(/\{prenom\}/g, esc(prenomS) + (s.role === 'societe' ? ' (société)' : '')).replace(/\{immat\}/g, esc(data.immat)).replace(/\{modele\}/g, esc(data.modele)).replace(/\{date\}/g, esc(FP.date(data.date))).replace(/\n/g, '<br>');
+              // La plaque ne doit JAMAIS se couper en deux lignes → span nowrap partout où elle apparaît.
+              const plaqueHtml = '<span style="white-space:nowrap">' + esc(data.immat) + '</span>';
+              // Deux messages distincts : le CONDUCTEUR reçoit le modèle configurable (ton libre) ;
+              // le SIGNATAIRE SOCIÉTÉ (gestionnaire, signe en 1er « pour la société ») reçoit un message
+              // dédié — on le salue par son PRÉNOM (jamais « {société} (société) ») et on précise son rôle.
+              let intro;
+              if (s.role === 'societe') {
+                intro = 'Bonjour ' + esc(prenomS) + ',<br><br>Merci de vérifier et de signer l\'état des lieux du ' + esc(data.modele) + ' (' + plaqueHtml + ') <b>pour la société</b>. Une fois validé, le conducteur recevra automatiquement le lien pour signer à son tour.';
+              } else {
+                intro = esc(tpl).replace(/\{prenom\}/g, esc(prenomS)).replace(/\{immat\}/g, plaqueHtml).replace(/\{modele\}/g, esc(data.modele)).replace(/\{date\}/g, esc(FP.date(data.date))).replace(/\n/g, '<br>');
+              }
               const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">
   ${logoSrc ? `<div style="text-align:center;padding:6px 0"><img src="${esc(logoSrc)}" alt="" style="max-height:46px"></div>` : ''}
   <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px 24px">
     <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#F97316">État des lieux à signer</div>
     <div style="font-size:15px;line-height:1.55;margin:10px 0 2px">${intro}</div>
-    <div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155">🚗 <b>${esc(data.modele)}</b> · ${esc(data.immat)}${isRestit ? ' · restitution' : ''} · ${esc(FP.date(data.date))}</div>
+    <div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155">🚗 <b>${esc(data.modele)}</b> · ${plaqueHtml}${isRestit ? ' · restitution' : ''} · ${esc(FP.date(data.date))}</div>
     <div style="text-align:center;margin:18px 0 6px"><a href="${link}" style="display:inline-block;background:#0F1E3D;color:#fff;padding:13px 32px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">✍️ Signer le document</a></div>
     <div style="text-align:center;font-size:11.5px;color:#94a3b8;margin-top:8px">Signature électronique sécurisée · quelques secondes suffisent</div>
   </div>
   <div style="text-align:center;font-size:11px;color:#cbd5e1;margin-top:10px">— ${esc(data.socNom || 'Gestion de flotte')} · via Parc Pilot</div>
 </div>`;
-              return { link, subject: 'À signer — état des lieux ' + data.immat + (s.role === 'societe' ? ' (société)' : ''), html, text: 'Signer l\'état des lieux : ' + link };
+              return { link, subject: (s.role === 'societe' ? 'À signer pour la société — état des lieux ' : 'À signer — état des lieux ') + data.immat, html, text: 'Signer l\'état des lieux : ' + link };
             };
             const minOrdre = Math.min.apply(null, signersList.map(s => s.ordre));
             const rec = {
