@@ -8941,69 +8941,105 @@ FP.edl = {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
     const M = 16; let y = 14;
-    const ensure = need => { if (y + need > H - 14) { doc.addPage(); y = 16; } };
-    // En-tête : logo société (ou nom) + titre.
+    // Palette « à la sauce Parc Pilot »
+    const NAVY = [15, 30, 61], ACC = [249, 115, 22], INK = [20, 28, 40], MUT = [100, 112, 128], SOFT = [248, 250, 252], LINE = [226, 232, 240];
+    const isRestit = data.sens === 'restitution';
+    const ensure = need => { if (y + need > H - 16) { doc.addPage(); y = 16; } };
+    // ---- En-tête : logo société (ou nom) à gauche + titre à droite + filet accentué ----
     if (data.logo && /^data:image\//i.test(data.logo)) {
       try { const fmt = /png/i.test(data.logo) ? 'PNG' : 'JPEG'; doc.addImage(data.logo, fmt, M, y, 30, 14, undefined, 'FAST'); } catch (e) {}
-    } else if (data.socNom) { doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(15, 30, 61); doc.text(data.socNom, M, y + 8); }
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(15, 30, 61);
-    doc.text('ÉTAT DES LIEUX – VÉHICULE', W - M, y + 6, { align: 'right' });
-    const isRestit = data.sens === 'restitution';
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(120, 130, 145);
-    doc.text(isRestit ? 'À remplir lors de la restitution du véhicule' : 'À remplir lors de la remise du véhicule à l\'employé', W - M, y + 11, { align: 'right' });
-    y += 20; doc.setDrawColor(230, 235, 242); doc.line(M, y, W - M, y); y += 7;
-    // Bloc infos.
-    const info = [['Nom et prénom de l\'employé', data.employe], ['Modèle du véhicule', data.modele], ['Immatriculation', data.immat], ['Kilométrage', data.km ? (data.km + ' km') : ''], [isRestit ? 'Date de restitution' : 'Date de remise', data.date ? FP.date(data.date) : '']];
-    doc.setFontSize(10.5);
-    info.forEach(([l, v]) => { ensure(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(70, 80, 95); doc.text(l + ' :', M, y); doc.setFont('helvetica', 'normal'); doc.setTextColor(20, 28, 40); doc.text(String(v || ''), M + 62, y); y += 6.4; });
+    } else if (data.socNom) { doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor.apply(doc, NAVY); doc.text(data.socNom, M, y + 8); }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.setTextColor.apply(doc, NAVY);
+    doc.text('ÉTAT DES LIEUX', W - M, y + 5, { align: 'right' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor.apply(doc, ACC);
+    doc.text(isRestit ? 'Restitution du véhicule' : 'Remise du véhicule', W - M, y + 11.5, { align: 'right' });
+    y += 19;
+    doc.setDrawColor.apply(doc, NAVY); doc.setLineWidth(0.5); doc.line(M, y, W - M, y);
+    doc.setDrawColor.apply(doc, ACC); doc.setLineWidth(1.6); doc.line(M, y, M + 34, y);
+    doc.setLineWidth(0.2);
+    y += 8;
+    // ---- Carte infos (fond doux arrondi) ----
+    const info = [['Nom et prénom', data.employe], ['Modèle', data.modele], ['Immatriculation', data.immat], ['Kilométrage', data.km ? (data.km + ' km') : '—'], [isRestit ? 'Date de restitution' : 'Date de remise', data.date ? FP.date(data.date) : '—']];
+    const cardH = 7 + info.length * 6.6;
+    ensure(cardH + 4);
+    doc.setFillColor.apply(doc, SOFT); doc.setDrawColor.apply(doc, LINE); doc.setLineWidth(0.3);
+    doc.roundedRect(M, y, W - 2 * M, cardH, 2.5, 2.5, 'FD');
+    let iy = y + 7; doc.setFontSize(10);
+    info.forEach(([l, v]) => {
+      doc.setFont('helvetica', 'bold'); doc.setTextColor.apply(doc, MUT); doc.text(l, M + 4, iy);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor.apply(doc, INK); doc.text(String(v || '—'), M + 60, iy);
+      iy += 6.6;
+    });
+    y += cardH + 8;
+    // ---- Barre de section (navy arrondie + liseré orange) — SOURCE UNIQUE ----
+    const sectionBar = (title) => {
+      y += 1; ensure(15);
+      doc.setFillColor.apply(doc, NAVY); doc.roundedRect(M, y - 4, W - 2 * M, 8, 2, 2, 'F');
+      doc.setFillColor.apply(doc, ACC); doc.roundedRect(M, y - 4, 2.6, 8, 1, 1, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text(title, M + 6, y + 1.3);
+      y += 9.5;
+    };
     const section = (title, rows, com) => {
-      y += 3; ensure(12); doc.setFillColor(15, 30, 61); doc.rect(M, y - 4, W - 2 * M, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text(title, M + 2, y + 0.8); y += 8;
+      sectionBar(title);
       doc.setFontSize(9.5);
-      // ⚠️ Le LIBELLÉ ET la VALEUR sont chacun renvoyés à la ligne dans LEUR colonne (sinon un libellé
-      // long — « Éléments électroniques… » — déborde sur la valeur, et une valeur longue chevauche la
-      // ligne suivante). On avance de la hauteur de la colonne la PLUS haute.
-      const LBL_W = 59, VAL_X = M + 63, VAL_W = W - M - VAL_X;
-      rows.forEach(r => {
-        const labelLines = doc.splitTextToSize(r.label + ' :', LBL_W);
+      // ⚠️ Libellé ET valeur renvoyés à la ligne chacun dans SA colonne (libellé long / valeur longue).
+      const LBL_W = 56, VAL_X = M + 62, VAL_W = W - M - VAL_X;
+      rows.forEach((r, idx) => {
+        const labelLines = doc.splitTextToSize(r.label, LBL_W);
         const valLines = doc.splitTextToSize(String(r.val || 'RAS'), VAL_W);
         const nL = Math.max(labelLines.length, valLines.length);
-        ensure(nL * 4.4 + 1.6);
-        doc.setTextColor(60, 70, 85); doc.setFont('helvetica', 'bold'); doc.text(labelLines, M + 1, y);
-        doc.setTextColor(20, 28, 40); doc.setFont('helvetica', 'normal'); doc.text(valLines, VAL_X, y);
-        y += nL * 4.4 + 1.6;
+        const rowH = nL * 4.4 + 2.6;
+        ensure(rowH);
+        if (idx % 2 === 1) { doc.setFillColor.apply(doc, SOFT); doc.rect(M, y - 3.4, W - 2 * M, rowH, 'F'); }   // zébrage doux
+        doc.setTextColor(60, 70, 85); doc.setFont('helvetica', 'bold'); doc.text(labelLines, M + 3, y);
+        doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text(valLines, VAL_X, y);
+        y += rowH;
       });
-      if (com) { ensure(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const lines = doc.splitTextToSize('Commentaires : ' + com, W - 2 * M - 2); doc.text(lines, M + 1, y + 1); y += 5 + lines.length * 4.6; doc.setFont('helvetica', 'normal'); }
+      if (com) { ensure(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const lines = doc.splitTextToSize('Commentaires : ' + com, W - 2 * M - 6); doc.text(lines, M + 3, y + 1); y += 4 + lines.length * 4.6; doc.setFont('helvetica', 'normal'); }
+      y += 2;
     };
     section('ÉTAT EXTÉRIEUR', data.ext, data.comExt);
     section('ÉTAT INTÉRIEUR', data.int, data.comInt);
-    // Accessoires.
-    y += 3; ensure(12); doc.setFillColor(15, 30, 61); doc.rect(M, y - 4, W - 2 * M, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text('ACCESSOIRES FOURNIS', M + 2, y + 0.8); y += 8;
-    doc.setFontSize(10); doc.setTextColor(20, 28, 40);
-    (data.acc || []).forEach(a => { ensure(6); doc.setFont('helvetica', 'normal'); doc.text((a.on ? '[X] ' : '[  ] ') + a.label, M + 1, y); y += 5.6; });
-    if (data.autres) { ensure(6); doc.text('Autres : ' + data.autres, M + 1, y); y += 5.6; }
-    if (data.comAcc) { ensure(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const l = doc.splitTextToSize('Commentaires : ' + data.comAcc, W - 2 * M - 2); doc.text(l, M + 1, y + 1); y += 5 + l.length * 4.6; }
-    // Photos jointes (2 par ligne, aspect préservé) — carrosserie, intérieur, dommages…
+    // ---- Accessoires (cases à cocher dessinées) ----
+    sectionBar('ACCESSOIRES FOURNIS');
+    doc.setFontSize(10);
+    (data.acc || []).forEach(a => {
+      ensure(6.6);
+      const bx = M + 3, by = y - 3.2, bs = 3.8;
+      if (a.on) {
+        doc.setFillColor.apply(doc, NAVY); doc.setDrawColor.apply(doc, NAVY); doc.roundedRect(bx, by, bs, bs, 0.7, 0.7, 'FD');
+        doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text('X', bx + bs / 2, by + bs - 0.9, { align: 'center' }); doc.setFontSize(10);
+      } else { doc.setDrawColor.apply(doc, MUT); doc.setLineWidth(0.3); doc.roundedRect(bx, by, bs, bs, 0.7, 0.7, 'D'); }
+      doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text(a.label, bx + bs + 3, y);
+      y += 6.6;
+    });
+    if (data.autres) { ensure(6); doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text('Autres : ' + data.autres, M + 3, y); y += 6; }
+    if (data.comAcc) { ensure(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const l = doc.splitTextToSize('Commentaires : ' + data.comAcc, W - 2 * M - 6); doc.text(l, M + 3, y + 1); y += 4 + l.length * 4.6; doc.setFont('helvetica', 'normal'); }
+    y += 3;
+    // ---- Photos jointes (2 par ligne, aspect préservé) ----
     if (Array.isArray(data.photos) && data.photos.length) {
-      y += 5; ensure(12); doc.setFillColor(15, 30, 61); doc.rect(M, y - 4, W - 2 * M, 7, 'F'); doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.text('PHOTOS', M + 2, y + 0.8); y += 9;
-      const gap = 6, colW = (W - 2 * M - gap) / 2; let col = 0, rowH = 0, rowY = y;
+      sectionBar('PHOTOS');
+      const gap = 6, colW2 = (W - 2 * M - gap) / 2; let col = 0, rowH = 0, rowY = y;
       data.photos.forEach(p => {
-        let aw = colW, ah = colW * 0.72;
-        try { const pr = doc.getImageProperties(p); if (pr && pr.width && pr.height) { ah = colW * (pr.height / pr.width); if (ah > 78) { ah = 78; aw = 78 * (pr.width / pr.height); } } } catch (e) {}
+        let aw = colW2, ah = colW2 * 0.72;
+        try { const pr = doc.getImageProperties(p); if (pr && pr.width && pr.height) { ah = colW2 * (pr.height / pr.width); if (ah > 78) { ah = 78; aw = 78 * (pr.width / pr.height); } } } catch (e) {}
         if (col === 0) { ensure(82); rowY = y; }
-        const x = M + col * (colW + gap) + (colW - aw) / 2;
+        const x = M + col * (colW2 + gap) + (colW2 - aw) / 2;
         try { doc.addImage(p, /png/i.test(p) ? 'PNG' : 'JPEG', x, rowY, aw, ah, undefined, 'FAST'); } catch (e) {}
         rowH = Math.max(rowH, ah);
         if (col === 1) { y = rowY + rowH + gap; col = 0; rowH = 0; } else { col = 1; }
       });
       if (col === 1) { y = rowY + rowH + gap; }
     }
-    // Signatures.
-    y += 6; ensure(44); doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(15, 30, 61); doc.text('SIGNATURES', M, y); y += 6;
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(60, 70, 85);
-    doc.text(isRestit ? 'Le véhicule est restitué dans l\'état décrit ci-dessus.' : 'Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 10;
+    // ---- Signatures ----
+    y += 4; ensure(46);
+    sectionBar('SIGNATURES');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(70, 80, 95);
+    doc.text(isRestit ? 'Le véhicule est restitué dans l\'état décrit ci-dessus.' : 'Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 9;
     const colW = (W - 2 * M) / 2;
     const labelY = y;
-    doc.text('Signature de l\'employé :', M, y); doc.text('Signature ' + (data.socNom || 'société') + ' :', M + colW, y);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor.apply(doc, NAVY);
+    doc.text('Signature de l\'employé', M, y); doc.text('Signature ' + (data.socNom || 'société'), M + colW, y);
     const lineY = labelY + 16, dateY = lineY + 5, emailY = dateY + 5;
     const dateLblW = doc.getTextWidth('Date : ') + 1;   // largeur du libellé « Date : » (mm) → valeur juste après
     // Champs signature (employé à gauche, société à droite) — position en POINTS, origine HAUT-gauche
@@ -9019,10 +9055,13 @@ FP.edl = {
                    dateX: Math.round((M + colW + dateLblW) * PT), dateY: Math.round(dateY * PT), emailX: Math.round((M + colW) * PT), emailY: Math.round(emailY * PT) },
       };
     } catch (e) {}
-    y = lineY; doc.setDrawColor(150, 160, 175); doc.line(M, y, M + colW - 12, y); doc.line(M + colW, y, W - M, y); y = dateY;
-    doc.text('Date :', M, y); doc.text('Date :', M + colW, y); y = emailY + 2;
-    // Pied de page Parc Pilot.
-    doc.setFontSize(7.5); doc.setTextColor(150, 160, 175); doc.text('Édité via Parc Pilot — gestion de flotte', M, H - 8);
+    y = lineY; doc.setFont('helvetica', 'normal'); doc.setDrawColor(150, 160, 175); doc.setLineWidth(0.3); doc.line(M, y, M + colW - 12, y); doc.line(M + colW, y, W - M, y); y = dateY;
+    doc.setTextColor.apply(doc, MUT); doc.text('Date :', M, y); doc.text('Date :', M + colW, y); y = emailY + 2;
+    // ---- Pied de page Parc Pilot (filet + pastille orange) ----
+    doc.setDrawColor.apply(doc, LINE); doc.setLineWidth(0.2); doc.line(M, H - 12, W - M, H - 12);
+    doc.setFillColor.apply(doc, ACC); doc.circle(M + 1.2, H - 8.7, 1, 'F');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor.apply(doc, MUT);
+    doc.text('Parc Pilot — gestion de flotte', M + 4, H - 8);
     return doc;
   },
 };
