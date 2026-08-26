@@ -56,6 +56,16 @@ async function loadQr(db: ReturnType<typeof createClient>, token: string) {
   const { data, error } = await db.from("km_qr").select("*").eq("token", token).maybeSingle();
   if (error) throw error;
   if (!data) return { err: "QR invalide. Demande à ton gestionnaire de flotte d'imprimer le bon QR." };
+  // ⚠️ Véhicule SORTI de la flotte (vendu, cédé, hors service, restitué…) → QR DÉSACTIVÉ (aucun accès :
+  // ni infos, ni relevé km, ni déclaration). « à vendre » reste ACTIF (l'onglet Vente sert à la revente).
+  try {
+    if (data.vehicule_id) {
+      const { data: v } = await db.from("vehicules").select("statut").eq("id", data.vehicule_id).maybeSingle();
+      const s = String((v && v.statut) || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+      const SORTI = ["vendu", "vendue", "cede", "cedee", "hors service", "hors-service", "hs", "archive", "archivee", "restitue", "restituee", "detruit", "detruite", "epave"];
+      if (SORTI.indexOf(s) !== -1) return { err: "Ce véhicule n'est plus dans la flotte : ce QR a été désactivé." };
+    }
+  } catch { /* en cas de doute, on n'empêche pas l'accès */ }
   return { qr: data };
 }
 
