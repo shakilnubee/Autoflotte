@@ -8953,31 +8953,31 @@ FP.edl = {
     doc.text('ÉTAT DES LIEUX', W - M, y + 5, { align: 'right' });
     doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor.apply(doc, ACC);
     doc.text(isRestit ? 'Restitution du véhicule' : 'Remise du véhicule', W - M, y + 11.5, { align: 'right' });
-    y += 19;
+    y += 17;
     doc.setDrawColor.apply(doc, NAVY); doc.setLineWidth(0.5); doc.line(M, y, W - M, y);
     doc.setDrawColor.apply(doc, ACC); doc.setLineWidth(1.6); doc.line(M, y, M + 34, y);
     doc.setLineWidth(0.2);
-    y += 8;
+    y += 6;
     // ---- Carte infos (fond doux arrondi) ----
     const info = [['Nom et prénom', data.employe], ['Modèle', data.modele], ['Immatriculation', data.immat], ['Kilométrage', data.km ? (data.km + ' km') : '—'], [isRestit ? 'Date de restitution' : 'Date de remise', data.date ? FP.date(data.date) : '—']];
-    const cardH = 7 + info.length * 6.6;
+    const cardH = 4.5 + info.length * 5.9;
     ensure(cardH + 4);
     doc.setFillColor.apply(doc, SOFT); doc.setDrawColor.apply(doc, LINE); doc.setLineWidth(0.3);
     doc.roundedRect(M, y, W - 2 * M, cardH, 2.5, 2.5, 'FD');
-    let iy = y + 7; doc.setFontSize(10);
+    let iy = y + 6; doc.setFontSize(10);
     info.forEach(([l, v]) => {
       doc.setFont('helvetica', 'bold'); doc.setTextColor.apply(doc, MUT); doc.text(l, M + 4, iy);
       doc.setFont('helvetica', 'normal'); doc.setTextColor.apply(doc, INK); doc.text(String(v || '—'), M + 60, iy);
-      iy += 6.6;
+      iy += 5.9;
     });
-    y += cardH + 8;
+    y += cardH + 5;
     // ---- Barre de section (navy arrondie + liseré orange) — SOURCE UNIQUE ----
     const sectionBar = (title) => {
-      y += 1; ensure(15);
-      doc.setFillColor.apply(doc, NAVY); doc.roundedRect(M, y - 4, W - 2 * M, 8, 2, 2, 'F');
-      doc.setFillColor.apply(doc, ACC); doc.roundedRect(M, y - 4, 2.6, 8, 1, 1, 'F');
-      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text(title, M + 6, y + 1.3);
-      y += 9.5;
+      ensure(14);
+      doc.setFillColor.apply(doc, NAVY); doc.roundedRect(M, y - 4, W - 2 * M, 7.5, 2, 2, 'F');
+      doc.setFillColor.apply(doc, ACC); doc.roundedRect(M, y - 4, 2.6, 7.5, 1, 1, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text(title, M + 6, y + 1.1);
+      y += 8.5;
     };
     const section = (title, rows, com) => {
       sectionBar(title);
@@ -8988,15 +8988,15 @@ FP.edl = {
         const labelLines = doc.splitTextToSize(r.label, LBL_W);
         const valLines = doc.splitTextToSize(String(r.val || 'RAS'), VAL_W);
         const nL = Math.max(labelLines.length, valLines.length);
-        const rowH = nL * 4.4 + 2.6;
+        const rowH = nL * 4.2 + 1.5;
         ensure(rowH);
-        if (idx % 2 === 1) { doc.setFillColor.apply(doc, SOFT); doc.rect(M, y - 3.4, W - 2 * M, rowH, 'F'); }   // zébrage doux
+        if (idx % 2 === 1) { doc.setFillColor.apply(doc, SOFT); doc.rect(M, y - 3.2, W - 2 * M, rowH, 'F'); }   // zébrage doux
         doc.setTextColor(60, 70, 85); doc.setFont('helvetica', 'bold'); doc.text(labelLines, M + 3, y);
         doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text(valLines, VAL_X, y);
         y += rowH;
       });
-      if (com) { ensure(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const lines = doc.splitTextToSize('Commentaires : ' + com, W - 2 * M - 6); doc.text(lines, M + 3, y + 1); y += 4 + lines.length * 4.6; doc.setFont('helvetica', 'normal'); }
-      y += 2;
+      if (com) { ensure(10); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const lines = doc.splitTextToSize('Commentaires : ' + com, W - 2 * M - 6); doc.text(lines, M + 3, y + 1); y += 3.5 + lines.length * 4.4; doc.setFont('helvetica', 'normal'); }
+      y += 1.5;
     };
     section('ÉTAT EXTÉRIEUR', data.ext, data.comExt);
     section('ÉTAT INTÉRIEUR', data.int, data.comInt);
@@ -9004,18 +9004,18 @@ FP.edl = {
     sectionBar('ACCESSOIRES FOURNIS');
     doc.setFontSize(10);
     (data.acc || []).forEach(a => {
-      ensure(6.6);
-      const bx = M + 3, by = y - 3.2, bs = 3.8;
+      ensure(5.9);
+      const bx = M + 3, by = y - 3.1, bs = 3.8;
       if (a.on) {
         doc.setFillColor.apply(doc, NAVY); doc.setDrawColor.apply(doc, NAVY); doc.roundedRect(bx, by, bs, bs, 0.7, 0.7, 'FD');
         doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.text('X', bx + bs / 2, by + bs - 0.9, { align: 'center' }); doc.setFontSize(10);
       } else { doc.setDrawColor.apply(doc, MUT); doc.setLineWidth(0.3); doc.roundedRect(bx, by, bs, bs, 0.7, 0.7, 'D'); }
       doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text(a.label, bx + bs + 3, y);
-      y += 6.6;
+      y += 5.9;
     });
-    if (data.autres) { ensure(6); doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text('Autres : ' + data.autres, M + 3, y); y += 6; }
-    if (data.comAcc) { ensure(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const l = doc.splitTextToSize('Commentaires : ' + data.comAcc, W - 2 * M - 6); doc.text(l, M + 3, y + 1); y += 4 + l.length * 4.6; doc.setFont('helvetica', 'normal'); }
-    y += 3;
+    if (data.autres) { ensure(6); doc.setTextColor.apply(doc, INK); doc.setFont('helvetica', 'normal'); doc.text('Autres : ' + data.autres, M + 3, y); y += 5.9; }
+    if (data.comAcc) { ensure(8); doc.setFont('helvetica', 'italic'); doc.setTextColor(90, 100, 115); const l = doc.splitTextToSize('Commentaires : ' + data.comAcc, W - 2 * M - 6); doc.text(l, M + 3, y + 1); y += 3.5 + l.length * 4.4; doc.setFont('helvetica', 'normal'); }
+    y += 2;
     // ---- Photos jointes (2 par ligne, aspect préservé) ----
     if (Array.isArray(data.photos) && data.photos.length) {
       sectionBar('PHOTOS');
@@ -9032,10 +9032,10 @@ FP.edl = {
       if (col === 1) { y = rowY + rowH + gap; }
     }
     // ---- Signatures ----
-    y += 4; ensure(46);
+    y += 3; ensure(44);
     sectionBar('SIGNATURES');
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(70, 80, 95);
-    doc.text(isRestit ? 'Le véhicule est restitué dans l\'état décrit ci-dessus.' : 'Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 9;
+    doc.text(isRestit ? 'Le véhicule est restitué dans l\'état décrit ci-dessus.' : 'Je reconnais avoir reçu le véhicule dans l\'état décrit ci-dessus.', M, y); y += 8;
     const colW = (W - 2 * M) / 2;
     const labelY = y;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor.apply(doc, NAVY);

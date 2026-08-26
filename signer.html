@@ -193,11 +193,12 @@
   ['mousemove', 'touchmove'].forEach(function (ev) { canvas.addEventListener(ev, move, { passive: false }); });
   ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(function (ev) { canvas.addEventListener(ev, end); });
   function clearPad() {
-    // Effacement TOTAL, quel que soit le zoom/DPR : on remet la matrice à l'identité, on efface tout
-    // le backing-store (device pixels), puis on restaure l'échelle. (clearRect dans l'espace mis à
-    // l'échelle laissait parfois une trace → bug « Effacer n'efface pas tout ».)
-    if (!ctx) return;
-    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore();
+    // Effacement TOTAL et fiable partout (Safari iPhone compris) : réaffecter canvas.width vide
+    // ENTIÈREMENT le backing-store et remet la matrice à zéro → fitCanvas() le fait puis ré-applique
+    // l'échelle DPR + le style de trait. (Un simple clearRect dans l'espace mis à l'échelle laissait
+    // parfois une trace de la signature → c'était le bug « Effacer n'efface pas tout ».)
+    drawing = false; last = null;
+    fitCanvas();
     hasInk = false; $('padhint').style.display = '';
   }
   $('clear').addEventListener('click', clearPad);
