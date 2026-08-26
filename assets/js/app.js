@@ -9143,6 +9143,8 @@ FP.edlSign = {
         let u = 0; rows.forEach(x => { if (x && x.token && this._nbSignedOf(x) > (seen[x.token] || 0)) u++; });
         this._unseen = u;
       }
+      // Auto-nettoyage des brouillons non signés désormais superflus (1 fois / session, fire-and-forget).
+      try { this.cleanupSupersededDocs(); } catch (e) {}
       return this._pending;
     } catch (e) { this._pending = []; this._unseen = 0; return this._pending; }
   },
@@ -9170,6 +9172,33 @@ FP.edlSign = {
       if (!res || !res.error) await this.load();
       return res || { error: null };
     } catch (e) { return { error: (e && e.message) || String(e) }; }
+  },
+  // Nettoyage AUTOMATIQUE (1 fois / session) : quand un état des lieux est ENTIÈREMENT SIGNÉ, on retire
+  // des Documents du véhicule le brouillon NON signé (celui dont l'URL = pdfUrl de la demande) → il ne
+  // reste que la VERSION SIGNÉE. Auto-répare aussi les doublons créés avant le correctif (app.js caché).
+  async cleanupSupersededDocs() {
+    try {
+      if (!(FP.db && FP.db.select && FP.db.delete)) return 0;
+      try { if (sessionStorage.getItem('fp_edl_docs_cleaned')) return 0; } catch (e) {}
+      let rows = this._rows; if (!rows) { await this.load(); rows = this._rows || []; }
+      // URL des PDF NON signés qui ont maintenant une version SIGNÉE → superflus dans Documents.
+      const superseded = new Set(rows.filter(x => x && x.statut === 'signe' && x.pdfUrl && x.signedPdfUrl && x.pdfUrl !== x.signedPdfUrl).map(x => x.pdfUrl));
+      try { sessionStorage.setItem('fp_edl_docs_cleaned', '1'); } catch (e) {}   // au plus 1 balayage / session
+      if (!superseded.size) return 0;
+      const dr = await FP.db.select('documents');
+      const docs = (dr && dr.data) ? dr.data : [];
+      const toDelete = docs.filter(d => d && d.type === 'etat-des-lieux' && d.url && superseded.has(d.url));
+      let n = 0;
+      for (const d of toDelete) {
+        const del = await FP.db.delete('documents', d.id);
+        if (!del || !del.error) {
+          n++;
+          try { if (FP.supabase && FP.scanPath) { const p = FP.scanPath(d.url); if (p) await FP.supabase.storage.from(FP.SCAN_BUCKET).remove([p]); } } catch (e) {}   // libère aussi le fichier
+        }
+      }
+      if (n) { try { window.dispatchEvent(new CustomEvent('fp:data-ready')); } catch (e) {} }
+      return n;
+    } catch (e) { return 0; }
   },
 };
 
