@@ -3021,6 +3021,27 @@ FP.assuranceContrat = () => {
 };
 // Libellé « ASSUREUR (police) » réutilisable (titre section, fiche véhicule…). Vide si non configuré.
 FP.assuranceLabel = () => { const c = FP.assuranceContrat(); return c.assureur ? (c.assureur + (c.police ? ' (' + c.police + ')' : '')) : ''; };
+// Liste canonique des assureurs (settings.assureurs ; repli sur l'ancien contrat unique assuranceContrat).
+FP.assureursListe = () => {
+  let s = {}; try { s = FP.settings.get() || {}; } catch (e) {}
+  let list = Array.isArray(s.assureurs) ? s.assureurs.filter(a => a && (a.nom || a.police)) : null;
+  if (!list || !list.length) { const c = s.assuranceContrat || {}; list = (c.assureur || c.police) ? [{ id: 'a1', nom: c.assureur || '', police: c.police || '' }] : []; }
+  return list.map((a, i) => ({ id: a.id || ('a' + (i + 1)), nom: String(a.nom || '').trim(), police: String(a.police || '').trim() }));
+};
+// ⚠️ SOURCE UNIQUE — assureur D'UN véhicule. Rattachement par plaque (settings.assureurVeh[plaque]=id),
+// sinon le 1er assureur (= assureur global). La fiche véhicule, l'export PDF et la checklist « À compléter »
+// DOIVENT lire ceci (avant, ils retombaient sur l'assureur global → divergence avec la page Contrats qui
+// gère le rattachement par véhicule).
+FP.assureurOf = (v) => {
+  try {
+    const list = FP.assureursListe(); if (!list.length) return null;
+    const map = (FP.settings.get().assureurVeh) || {};
+    const k = FP.normImmat ? FP.normImmat(v && v.immat || '') : (v && v.immat || '');
+    let id = null; for (const key in map) { if ((FP.normImmat ? FP.normImmat(key) : key) === k) { id = map[key]; break; } }
+    return (id && list.find(x => x.id === id)) || list[0] || null;
+  } catch (e) { return null; }
+};
+FP.assureurLabelVeh = (v) => { const a = FP.assureurOf(v); return a ? (a.nom || a.police || '') : (FP.assuranceLabel ? FP.assuranceLabel() : ''); };
 
 // Profil de la société ACTIVE : valeurs saisies (settings.profil) par-dessus des valeurs par défaut.
 // ⚠️ PXP conserve ses valeurs historiques (rien ne change) ; une NOUVELLE société démarre vide → l'app propose de les remplir.
