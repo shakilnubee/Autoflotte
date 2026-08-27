@@ -718,6 +718,21 @@
   // « Points à vérifier » a pour défaut « classe »). On ne supprime la clé QUE si le choix retombe
   // sur ce défaut — sinon un « À vérifier » explicite serait écrasé au prochain rebuild (régression).
   function setStatut(fid, st, def){ const s = FP.settings.get(); const m = s.controleStatuts || {}; if (st && st !== (def || 'a-verifier')) m[fid] = st; else delete m[fid]; s.controleStatuts = m; FP.settings.save(s); }
+  // ⚠️ SYNCHRO « Points à vérifier » (Total Fleet/Ulys) ⇄ statut de la trouvaille : marquer une anomalie
+  // carte « Justifié / Fraude / Classé » ici l'ARCHIVE dans « Points à vérifier » (tfAnomOk, source unique) ;
+  // la remettre à « À vérifier » la RÉACTIVE là-bas. (Le sens inverse — archiver dans Points à vérifier →
+  // défaut « classé » ici — existait déjà via FP.tfAnomArchivee.)
+  function syncAnomArchive(f, st){
+    try {
+      if (!f || f.genre !== 'carte' || !f._anom || !f._anom.key) return;
+      const s = FP.settings.get(); const m = (s.tfAnomOk && typeof s.tfAnomOk === 'object') ? s.tfAnomOk : {};
+      const key = f._anom.key;
+      const resolu = (st && st !== 'a-verifier'); // justifié / fraude / classé = traité → archivé
+      if (resolu) m[key] = { key, t: f._anom.t || '', txt: f._anom.txt || '', mois: f._anom.mois || '', facnum: f._anom.facnum || '', okAt: Date.now() };
+      else delete m[key];
+      s.tfAnomOk = m; FP.settings.save(s);
+    } catch (e) {}
+  }
 
   const ST_LABEL = { 'a-verifier':'À vérifier', 'justifie':'Justifié', 'fraude':'Fraude', 'classe':'Classé' };
 
@@ -791,7 +806,10 @@
       else { type = prod || catLbl(a.categorie); detail = a.motif || a.txt || 'anomalie carte'; }
       out.push({ fid, genre:'carte', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre', type,
         date:a.date||'', mois:a.mois || (a.date ? String(a.date).slice(0,7) : ''),
-        montant:a.montant, facnum:a.facnum||'', detail, statut: st, _def: def });
+        montant:a.montant, facnum:a.facnum||'', detail, statut: st, _def: def,
+        // Clé + charge pour SYNCHRONISER avec « Points à vérifier » (Total Fleet) : marquer cette
+        // anomalie « justifié / fraude / classé » ici l'archive là-bas, et inversement (source unique tfAnomOk).
+        _anom: { key: a.key || '', t: a.t || '', txt: a.txt || '', mois: a.mois || '', facnum: a.facnum || '' } });
     });
     // 4) Conso APRÈS le départ du conducteur (carte/badge encore active pour un salarié parti).
     (FP.consoApresDepart ? FP.consoApresDepart(_tx) : []).forEach(a => {
@@ -1111,7 +1129,7 @@
   });
   $('ctrl-body').addEventListener('change', (e) => {
     const sel = e.target.closest('[data-statut]');
-    if (sel) { const fid = sel.getAttribute('data-statut'); const f = _findings.find(x=>x.fid===fid); setStatut(fid, sel.value, f && f._def); if (f) f.statut = sel.value; if (FP.toast) FP.toast('Statut : ' + (ST_LABEL[sel.value]||sel.value)); render(); _writeFindingsCache(); }
+    if (sel) { const fid = sel.getAttribute('data-statut'); const f = _findings.find(x=>x.fid===fid); setStatut(fid, sel.value, f && f._def); if (f) f.statut = sel.value; syncAnomArchive(f, sel.value); if (FP.toast) FP.toast('Statut : ' + (ST_LABEL[sel.value]||sel.value)); render(); _writeFindingsCache(); }
   });
 
   async function openFacture(facnum){
