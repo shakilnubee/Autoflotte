@@ -6057,6 +6057,35 @@ FP.buildAlertes = (data) => {
     });
   }
 
+  // --- Amendes ÉCHUES non payées → risque de majoration (on GARDE le petit montant, mais on PRÉVIENT) ---
+  // Choix produit : on ne bascule pas automatiquement au majoré (l'ANTAI ne l'émet pas toujours), mais dès
+  // que la date limite du tarif forfaitaire est dépassée et que l'amende est toujours à payer, on affiche
+  // une alerte regroupée « échéance dépassée » (le montant reste le tarif de départ tant que l'avis de
+  // majoration officiel n'est pas importé). Complète la reco « payer AVANT la majoration » (qui, elle,
+  // disparaît une fois la date passée).
+  try {
+    const _t0 = new Date(); _t0.setHours(0, 0, 0, 0);
+    const echues = (data.amendes || []).filter(a => {
+      if (!FP.estAPayer(a) || a.majoree) return false;              // déjà majorée = déjà au bon montant
+      const base = a.date ? new Date(a.date) : null;
+      const isFps = FP.estFps ? FP.estFps(a) : false;
+      let lim = a.dateLimiteForfaitaire ? new Date(a.dateLimiteForfaitaire)
+        : (base && !isNaN(base) ? (() => { const l = new Date(base); l.setDate(l.getDate() + (isFps ? 90 : 45)); return l; })() : null);
+      if (!lim || isNaN(lim)) return false;
+      lim.setHours(0, 0, 0, 0);
+      return lim < _t0;
+    });
+    if (echues.length) {
+      echues.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+      out.push({
+        niveau: 'warn', categorie: 'Amendes', sort: 999, muteKey: 'amende-echue',
+        message: `${echues.length} amende${echues.length > 1 ? 's' : ''} : échéance dépassée (risque de majoration)`,
+        detail: 'Le tarif de départ n\'est peut-être plus valable : règle-les vite et vérifie si un avis de majoration est arrivé. Le montant affiché reste le tarif de départ tant que l\'avis majoré n\'est pas importé (Parc Pilot n\'invente pas le majoré).',
+        vehicules: echues.map(a => ({ label: `${FP.esc(a.prenom || '—')}${a.numeroAvis ? ' · avis ' + FP.esc(a.numeroAvis) : ''} — ${FP.euro(FP.montantDu(a))} (échéance ${a.dateLimiteForfaitaire ? FP.date(a.dateLimiteForfaitaire) : 'estimée'} dépassée)`, target: 'amendes.html?filtre=apayer' })),
+      });
+    }
+  } catch (e) {}
+
   // --- Amendes marquées payées SANS justificatif (uniquement celles suivies = à partir de maintenant) ---
   try {
     const watchJ = (FP.settings.get().amendesJustifWatch) || [];
