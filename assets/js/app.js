@@ -9019,6 +9019,10 @@ FP.edl = {
         const socSignerNom = cleanName(data.socSignNom) || cleanName(data.socNom) || 'Gestionnaire de flotte';
         if (data.socSignEmail && /@/.test(data.socSignEmail)) signersList.push({ role: 'societe', ordre: 1, nom: socSignerNom, email: data.socSignEmail.trim() });
         signersList.push({ role: 'employe', ordre: signersList.length ? 2 : 1, nom: cleanName(data.employe) || 'Salarié', email: data.to });
+        // ⚠️ SÉCURITÉ SIGNATURE : chaque signataire a son PROPRE jeton secret (sigToken). Le lien de
+        // signature l'identifie par CE jeton → impossible de signer « à la place » de l'autre partie en
+        // changeant l'URL (avant : un seul jeton par document + rôle dans l'URL = falsifiable).
+        signersList.forEach((s, i) => { s.sigToken = 'sg-' + Date.now().toString(36) + i.toString(36) + Math.random().toString(36).slice(2, 10); });
 
         // A) SIGNATURE INTÉGRÉE (Parc Pilot, sans prestataire) : chaque signataire reçoit un LIEN
         //    vers signer.html, signe au doigt/souris, et le PDF signé revient dans la fiche.
@@ -9037,7 +9041,9 @@ FP.edl = {
             // SOURCE UNIQUE du rendu de l'e-mail de signature (le MÊME modèle est stocké pour CHAQUE
             // signataire → l'app envoie le 1er, le serveur relaie le suivant sans dupliquer le template).
             const renderMail = (s) => {
-              const link = base + '?t=' + encodeURIComponent(token) + '&who=' + s.role;
+              // Le lien porte le jeton PROPRE au signataire (sigToken) → le serveur sait qui signe sans se
+              // fier au paramètre `who` (falsifiable). `who` reste dans l'URL pour l'affichage/compat.
+              const link = base + '?t=' + encodeURIComponent(s.sigToken || token) + '&who=' + s.role;
               const prenomS = String(s.nom || '').trim().split(/\s+/)[0] || '';
               // La plaque ne doit JAMAIS se couper en deux lignes → span nowrap partout où elle apparaît.
               const plaqueHtml = '<span style="white-space:nowrap">' + esc(data.immat) + '</span>';
@@ -9069,7 +9075,7 @@ FP.edl = {
               date: data.date, sens: data.sens, pdfUrl: url || '', fieldEmploye: sig.employe || null, fieldSociete: sig.societe || null,
               // Chaque signataire embarque son ordre + son e-mail PRÉ-RENDU (mailHtml/mailSubject/mailText)
               // + notified (a-t-il déjà reçu son lien ?). Seul le 1er de l'ordre est notifié tout de suite.
-              signataires: signersList.map(s => { const mk = renderMail(s); return { role: s.role, nom: s.nom, email: s.email, ordre: s.ordre, signed: false, notified: s.ordre === minOrdre, mailSubject: mk.subject, mailHtml: mk.html, mailText: mk.text }; }),
+              signataires: signersList.map(s => { const mk = renderMail(s); return { role: s.role, nom: s.nom, email: s.email, ordre: s.ordre, sigToken: s.sigToken, signed: false, notified: s.ordre === minOrdre, mailSubject: mk.subject, mailHtml: mk.html, mailText: mk.text }; }),
               statut: 'en_attente',
             };
             const ins = await FP.db.insert('edl_signatures', rec);
