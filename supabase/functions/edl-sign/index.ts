@@ -115,7 +115,34 @@ async function sendSignEmail(db: ReturnType<typeof createClient>, societe: strin
   } catch { return false; }
 }
 
-type Signer = { role: string; nom?: string; email?: string; signed?: boolean; signedAt?: string; ip?: string; sigUrl?: string; ordre?: number; notified?: boolean; mailSubject?: string; mailHtml?: string; mailText?: string };
+type Signer = { role: string; nom?: string; email?: string; signed?: boolean; signedAt?: string; ip?: string; sigUrl?: string; ordre?: number; notified?: boolean; sigToken?: string; mailSubject?: string; mailHtml?: string; mailText?: string };
+
+// Résout le signataire à partir du jeton reçu dans l'URL, de façon SÛRE :
+//  1) jeton PROPRE au signataire (sigToken, liens récents) → identifie le signataire ET son rôle sans se
+//     fier au paramètre `who` (falsifiable) → on ne peut plus signer « à la place » de l'autre partie ;
+//  2) repli : jeton du DOCUMENT (anciens liens) → on retombe sur le paramètre `who`.
+// Renvoie { row, me, who } ou null. `who` = rôle RÉEL retenu (à utiliser partout au lieu du param d'URL).
+async function resolveSigner(db: ReturnType<typeof createClient>, t: string, whoParam: string) {
+  if (!t) return null;
+  // Cas 1 : sigToken (préfixe « sg- »). On cherche la ligne dont un signataire porte ce jeton.
+  if (t.indexOf("sg-") === 0) {
+    const { data: rows } = await db.from("edl_signatures").select("*").order("id", { ascending: false }).limit(2000);
+    for (const r of ((rows || []) as Array<Record<string, unknown>>)) {
+      const signers = (Array.isArray(r.signataires) ? r.signataires : []) as Signer[];
+      const me = signers.find((s) => s.sigToken && s.sigToken === t);
+      if (me) return { row: r, me, who: me.role };
+    }
+    return null;
+  }
+  // Cas 2 : jeton du document (compat) → who vient de l'URL.
+  const { data: byDoc } = await db.from("edl_signatures").select("*").eq("token", t).maybeSingle();
+  if (byDoc) {
+    const signers = (Array.isArray(byDoc.signataires) ? byDoc.signataires : []) as Signer[];
+    const me = signers.find((s) => s.role === whoParam) || null;
+    return { row: byDoc, me, who: whoParam };
+  }
+  return null;
+}
 
 // Reconstruit le PDF signé : appose chaque signature (image PNG) sur SON champ (points, origine
 // haut-gauche → pdf-lib origine bas-gauche), avec le nom + la date sous la signature.
@@ -167,12 +194,11 @@ Deno.serve(async (req) => {
     if (req.method === "GET") {
       const url = new URL(req.url);
       const token = url.searchParams.get("t") || "";
-      const who = (url.searchParams.get("who") || "employe") === "societe" ? "societe" : "employe";
+      const whoParam = (url.searchParams.get("who") || "employe") === "societe" ? "societe" : "employe";
       if (!token) return json({ error: "Lien incomplet." }, 400);
-      const { data: row } = await db.from("edl_signatures").select("*").eq("token", token).maybeSingle();
-      if (!row) return json({ error: "Lien de signature invalide ou expiré." }, 404);
-      const signers = (Array.isArray(row.signataires) ? row.signataires : []) as Signer[];
-      const me = signers.find((s) => s.role === who);
+      const found = await resolveSigner(db, token, whoParam);
+      if (!found || !found.row) return json({ error: "Lien de signature invalide ou expiré." }, 404);
+      const row = found.row; const who = found.who; const me = found.me;
       if (!me) return json({ error: "Aucun signataire correspondant à ce lien." }, 404);
       const pdfView = await signedUrl(db, String(row.statut === "signe" && row.signed_pdf_url ? row.signed_pdf_url : row.pdf_url));
       return json({
@@ -189,18 +215,19 @@ Deno.serve(async (req) => {
       try { body = await req.json(); } catch { return json({ error: "Requête invalide." }, 400); }
       if (String(body.action || "") !== "sign") return json({ error: "Action inconnue." }, 400);
       const token = String(body.t || "").trim();
-      const who = String(body.who || "employe") === "societe" ? "societe" : "employe";
+      const whoParam = String(body.who || "employe") === "societe" ? "societe" : "employe";
       const sigData = String(body.signature || "");
       const nom = String(body.nom || "").trim();
       if (!token) return json({ error: "Lien incomplet." }, 400);
       const m = /^data:image\/png;base64,(.+)$/.exec(sigData);
       if (!m) return json({ error: "Signature manquante — dessine ta signature puis valide." }, 400);
 
-      const { data: row } = await db.from("edl_signatures").select("*").eq("token", token).maybeSingle();
-      if (!row) return json({ error: "Lien invalide ou expiré." }, 404);
-      const signers = (Array.isArray(row.signataires) ? row.signataires : []) as Signer[];
-      const me = signers.find((s) => s.role === who);
+      const found = await resolveSigner(db, token, whoParam);
+      if (!found || !found.row) return json({ error: "Lien invalide ou expiré." }, 404);
+      const row = found.row; const who = found.who; const me = found.me;
+      const docToken = String(row.token || token); // jeton du DOCUMENT (pour l'update + les chemins de stockage)
       if (!me) return json({ error: "Signataire introuvable." }, 404);
+      const signers = (Array.isArray(row.signataires) ? row.signataires : []) as Signer[];
       if (me.signed === true) return json({ ok: true, deja: true, statut: row.statut || "en_attente" });
 
       // ORDRE DE SIGNATURE (séquentiel) : un signataire ne peut signer QUE si tous ceux d'ordre
@@ -217,7 +244,7 @@ Deno.serve(async (req) => {
       try {
         const bytes = b64ToBytes(m[1]);
         if (bytes.length > 4_000_000) return json({ error: "Signature trop volumineuse." }, 400);
-        const path = "edl-signatures/" + token + "/" + who + "-" + Date.now().toString(36) + ".png";
+        const path = "edl-signatures/" + docToken + "/" + who + "-" + Date.now().toString(36) + ".png";
         const up = await db.storage.from(BUCKET).upload(path, bytes, { contentType: "image/png", upsert: true });
         if (!up.error) { const pub = db.storage.from(BUCKET).getPublicUrl(path); sigUrl = (pub && pub.data && pub.data.publicUrl) || ""; }
       } catch { /* best-effort */ }
@@ -239,7 +266,7 @@ Deno.serve(async (req) => {
         const signedBytes = await buildSignedPdf(db, row, signers);
         if (signedBytes) {
           try {
-            const path = "documents/etat-des-lieux-signe-" + token + ".pdf";
+            const path = "documents/etat-des-lieux-signe-" + docToken + ".pdf";
             const up = await db.storage.from(BUCKET).upload(path, signedBytes, { contentType: "application/pdf", upsert: true });
             if (!up.error) {
               const { data: su } = await db.storage.from(BUCKET).createSignedUrl(path, 315360000); // ~10 ans
@@ -274,16 +301,16 @@ Deno.serve(async (req) => {
         }
       }
 
-      await db.from("edl_signatures").update({ signataires: signers, statut, signed_pdf_url: signedPdfUrl }).eq("token", token);
+      await db.from("edl_signatures").update({ signataires: signers, statut, signed_pdf_url: signedPdfUrl }).eq("token", docToken);
 
       // Notifie le(s) gestionnaire(s) de la société : signature reçue, transmission au suivant, ou COMPLET.
       const nbSigned = required.filter((s) => s.signed).length;
       const reste = required.length - nbSigned;
       const pushPayload = allSigned
-        ? { title: "✅ État des lieux signé", body: (row.plaque || "Véhicule") + " — document entièrement signé par tous les signataires.", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + token }
+        ? { title: "✅ État des lieux signé", body: (row.plaque || "Véhicule") + " — document entièrement signé par tous les signataires.", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + docToken }
         : relayedTo
-          ? { title: "✍️ Signé — transmis au " + relayedTo, body: (row.plaque || "Véhicule") + " — " + (me.nom || "le gestionnaire") + " a signé. Le lien vient d'être envoyé au " + relayedTo + " pour sa signature.", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + token }
-          : { title: "✍️ Signature reçue", body: (row.plaque || "Véhicule") + " — " + (me.nom || "un signataire") + " a signé. Il reste " + reste + " signature(s).", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + token };
+          ? { title: "✍️ Signé — transmis au " + relayedTo, body: (row.plaque || "Véhicule") + " — " + (me.nom || "le gestionnaire") + " a signé. Le lien vient d'être envoyé au " + relayedTo + " pour sa signature.", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + docToken }
+          : { title: "✍️ Signature reçue", body: (row.plaque || "Véhicule") + " — " + (me.nom || "un signataire") + " a signé. Il reste " + reste + " signature(s).", url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")), tag: "edlsign-" + docToken };
       await sendPush(db, String(row.societe || "PXP"), pushPayload);
 
       // COMPLET → envoie à TOUS les signataires l'état des lieux SIGNÉ (PDF en pièce jointe), beau message.

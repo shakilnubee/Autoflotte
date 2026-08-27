@@ -164,16 +164,34 @@ const MASSE_CG: Record<string, number> = {
 // est le montant DÛ (majoré si l'amende est marquée majorée, sinon le montant courant).
 async function vehAmendes(db: ReturnType<typeof createClient>, societe: string, conducteur: Record<string, unknown> | null) {
   if (!conducteur) return [];
-  const { data } = await db.from("amendes").select("*").eq("societe", societe || "PXP");
+  const soc = societe || "PXP";
+  const { data } = await db.from("amendes").select("*").eq("societe", soc);
   if (!Array.isArray(data)) return [];
-  const keys = new Set<string>();
-  const add = (s: unknown) => { const n = _norm(String(s || "")); if (n) keys.add(n); };
-  add(conducteur.prenom); add(conducteur.name); add(String(conducteur.prenom || "") + String(conducteur.nom || ""));
-  if (!keys.size) return [];
+  // ⚠️ CONFIDENTIALITÉ (PII) — on ne rattache une amende à CE conducteur que si le lien est CERTAIN :
+  //   • correspondance COMPLÈTE prénom + nom (ou name) → sûr, même si un homonyme de prénom existe ;
+  //   • correspondance sur le PRÉNOM SEUL → uniquement si ce prénom est UNIQUE dans la société (sinon on
+  //     ne peut pas trancher entre deux personnes du même prénom → on n'affiche RIEN plutôt que de fuiter).
+  const firstOf = (s: string) => _norm(String(s || "").split(/\s+/)[0]);
+  const fullKey = _norm(String(conducteur.prenom || "") + String(conducteur.nom || ""));
+  const nameKey = _norm(String(conducteur.name || ""));
+  const firstKey = firstOf(String(conducteur.prenom || conducteur.name || ""));
+  const hasNom = !!_norm(String(conducteur.nom || "")) || (!!nameKey && nameKey !== firstKey);
+  // Prénoms partagés par ≥ 2 conducteurs de la société → un prénom seul ne suffit pas à identifier.
+  const { data: conds } = await db.from("conducteurs").select("prenom,nom,name").eq("societe", soc);
+  const firstCount: Record<string, number> = {};
+  for (const c of ((conds || []) as Record<string, unknown>[])) {
+    const f = firstOf(String(c.prenom || c.name || ""));
+    if (f) firstCount[f] = (firstCount[f] || 0) + 1;
+  }
+  const firstShared = (firstCount[firstKey] || 0) > 1;
   const out: Array<Record<string, unknown>> = [];
   for (const a of data as Array<Record<string, unknown>>) {
     const ap = _norm(String(a.prenom || ""));
-    if (!ap || !keys.has(ap)) continue;
+    if (!ap) continue;
+    let mine = false;
+    if (hasNom && ((fullKey && ap === fullKey) || (nameKey && ap === nameKey))) mine = true; // prénom + nom = certain
+    else if (firstKey && ap === firstKey) mine = !firstShared;                               // prénom seul → seulement si unique
+    if (!mine) continue;
     const majoree = a.majoree === true || a.majoree === "true";
     const montant = (majoree && a.montant_majore != null && a.montant_majore !== "") ? Number(a.montant_majore) : (Number(a.montant) || 0);
     out.push({ numeroAvis: String(a.numero_avis || ""), montant: isFinite(montant) ? montant : 0, date: String(a.date || ""), motif: String(a.motif || ""), statut: String(a.statut || "") });
