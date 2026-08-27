@@ -4485,11 +4485,16 @@ FP.refreshDeclCondBadge = async () => {
     let _soc = '__all__'; try { _soc = (FP.activeSociete && FP.activeSociete()) || '__all__'; } catch (e) {}
     // On lit id+type (uniquement les 'nouveau', peu nombreux) pour distinguer sinistres/problèmes des
     // envois d'état des lieux → deux alertes distinctes, un seul badge (total).
-    let _q = FP.supabase.from('declarations_conducteur').select('id,type').eq('statut', 'nouveau');
-    if (_soc && _soc !== '__all__') _q = _q.eq('societe', _soc);
-    const r = await _q;
-    if (r.error) return; // table pas encore créée → pas de badge
-    const _rows = r.data || [];
+    // ⚠️ La lecture des demandes conducteur ne doit JAMAIS bloquer le reste du badge : si cette requête
+    // échoue (table absente, erreur réseau…), on continue quand même vers les signatures EDL + scans QR
+    // (sinon la pastille « état des lieux signé » ne s'affichait jamais quand cette 1re requête ratait).
+    let _rows = [];
+    try {
+      let _q = FP.supabase.from('declarations_conducteur').select('id,type').eq('statut', 'nouveau');
+      if (_soc && _soc !== '__all__') _q = _q.eq('societe', _soc);
+      const r = await _q;
+      if (!r.error) _rows = r.data || [];
+    } catch (e) { /* on continue : signatures EDL + scans QR restent comptés */ }
     const count = _rows.length;
     FP.declCondEdlCount = _rows.filter(x => String(x.type || '') === 'etat_lieux').length;
     FP.declCondKmCount = _rows.filter(x => String(x.type || '') === 'km').length;
