@@ -8899,6 +8899,7 @@ FP.edl = {
     ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-edl-x]')) close(); });
     // --- Photos (jointes au PDF + enregistrées dans la fiche « État des lieux ») ---
     const edlPhotos = [];
+    const edlPhotoSrc = []; // parallèle à edlPhotos : URL d'origine si la photo a été « reprise » (déjà un doc), sinon null
     const photoIn = ov.querySelector('[data-edl-photos]');
     const thumbsBox = ov.querySelector('[data-edl-thumbs]');
     const pcount = ov.querySelector('[data-edl-photocount]');
@@ -8918,10 +8919,10 @@ FP.edl = {
     });
     if (photoIn) photoIn.addEventListener('change', async e => {
       const files = Array.from(e.target.files || []); e.target.value = '';
-      for (const f of files) { if (!/^image\//.test(f.type)) continue; const d = await loadPhoto(f); if (d) edlPhotos.push(d); }
+      for (const f of files) { if (!/^image\//.test(f.type)) continue; const d = await loadPhoto(f); if (d) { edlPhotos.push(d); edlPhotoSrc.push(null); } }
       renderThumbs();
     });
-    if (thumbsBox) thumbsBox.addEventListener('click', e => { const b = e.target.closest('[data-edl-prm]'); if (b) { edlPhotos.splice(+b.getAttribute('data-edl-prm'), 1); renderThumbs(); } });
+    if (thumbsBox) thumbsBox.addEventListener('click', e => { const b = e.target.closest('[data-edl-prm]'); if (b) { const _i = +b.getAttribute('data-edl-prm'); edlPhotos.splice(_i, 1); edlPhotoSrc.splice(_i, 1); renderThumbs(); } });
     // Récupère une image (URL Storage) → data URL (via URL signée + redimensionnement). Sert à
     // « reprendre » les photos DÉJÀ enregistrées dans la fiche (1er état des lieux, sans re-photographier).
     const urlToDataUrl = async (url) => {
@@ -8946,7 +8947,7 @@ FP.edl = {
         btn.textContent = '📎 Reprendre les ' + urls.length + ' photo(s) déjà enregistrée(s)';
         btn.addEventListener('click', async () => {
           btn.disabled = true; const t = btn.textContent; btn.textContent = '… chargement';
-          for (const u of urls) { const d = await urlToDataUrl(u); if (d) edlPhotos.push(d); }
+          for (const u of urls) { const d = await urlToDataUrl(u); if (d) { edlPhotos.push(d); edlPhotoSrc.push(u); } }
           renderThumbs(); btn.remove();
         });
         wrap.appendChild(btn);
@@ -8961,7 +8962,7 @@ FP.edl = {
         socNom, logo: prof.logoDataUrl || '', sens: (sr && sr.value === 'restitution') ? 'restitution' : 'remise',
         employe: val('edl-employe'), modele: val('edl-modele'), immat: val('edl-immat'),
         km: val('edl-km'), date: val('edl-date'), ext: grp('ext'), comExt: val('edl-com-ext'), int: grp('int'), comInt: val('edl-com-int'),
-        acc, autres: val('edl-autres'), comAcc: val('edl-com-acc'), to: val('edl-to'), photos: edlPhotos.slice(),
+        acc, autres: val('edl-autres'), comAcc: val('edl-com-acc'), to: val('edl-to'), photos: edlPhotos.slice(), photosSrc: edlPhotoSrc.slice(),
         signMode: (ov.querySelector('[data-edl-signmode]') && ov.querySelector('[data-edl-signmode]').value) || 'integree',
         socSignNom: val('edl-soc-nom'), socSignEmail: val('edl-soc-email'),
       };
@@ -8994,12 +8995,39 @@ FP.edl = {
         // que les photos envoyées par le conducteur via le QR → un seul endroit, pas de doublon de logique).
         if (Array.isArray(data.photos) && data.photos.length && FP.uploadScan && FP.persist) {
           const sensLabel = isRestit ? 'Sortie' : 'Entrée';
-          for (const p of data.photos) {
+          // ⚠️ ANTI-DOUBLON PHOTOS (régression signalée) : au ré-essai (bug puis on recommence) ou à la
+          // « reprise » des photos déjà enregistrées, on ne veut PAS ré-empiler la même image. On calcule
+          // une EMPREINTE du contenu, on l'encode dans le nom de fichier (upsert = même objet de stockage)
+          // et on SAUTE la photo si une photo identique existe déjà pour ce véhicule + ce sens (Entrée/Sortie).
+          const photoHash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); };
+          const seen = new Set();
+          try {
+            if (FP.db && FP.db.select) {
+              const dr = await FP.db.select('documents');
+              (dr && dr.data ? dr.data : []).forEach(d => {
+                if (d && d.vehiculeId === veh.id && d.type === 'etat-des-lieux' && d.url) {
+                  const mm = /-h([a-z0-9]+)\.(?:jpg|png)(?:\?|$)/i.exec(d.url);
+                  if (mm) seen.add((d.label || '') + '|' + mm[1]);
+                }
+              });
+            }
+          } catch (e) {}
+          for (let pi = 0; pi < data.photos.length; pi++) {
+            const p = data.photos[pi];
             try {
+              // Photo « reprise » depuis la fiche (elle EXISTE déjà comme document) → on ne la ré-enregistre pas.
+              if (data.photosSrc && data.photosSrc[pi]) continue;
+              const payload = p.split(',')[1] || '';
+              const h = photoHash(payload);
+              const key = sensLabel + '|' + h;
+              if (seen.has(key)) continue;   // photo identique déjà enregistrée pour ce véhicule + sens → on ne double pas
+              seen.add(key);
               const m = /^data:(image\/[a-z]+);base64,/i.exec(p); const mime = (m && m[1]) || 'image/jpeg';
-              const bin = atob(p.split(',')[1]); const arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+              const bin = atob(payload); const arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
               const ext = /png/i.test(mime) ? 'png' : 'jpg';
-              const purl = await FP.uploadScan(new File([arr], 'edl-' + motLbl + '-' + Date.now().toString(36) + '.' + ext, { type: mime }), 'documents');
+              // Nom DÉTERMINISTE (empreinte) → upsert : au ré-essai, la même image écrase le même fichier
+              // au lieu d'en créer un nouveau, et l'insert ci-dessous est sauté (plus d'accumulation).
+              const purl = await FP.uploadScan(new File([arr], 'edl.' + ext, { type: mime }), 'documents', { name: 'edl-' + motLbl + '-' + sensLabel.toLowerCase() + '-h' + h });
               if (purl) await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: sensLabel, url: purl, driveId: null });
             } catch (e) {}
           }
