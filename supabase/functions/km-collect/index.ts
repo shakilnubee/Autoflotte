@@ -312,7 +312,11 @@ async function vehEdl(db: ReturnType<typeof createClient>, vehiculeId: string | 
 }
 
 // Config PORTAIL par société : lue dans app_settings (id = société). Assureur/police + assistance + notice.
-async function portalConfig(db: ReturnType<typeof createClient>, societe: string) {
+// ⚠️ MULTI-ASSUREURS : si la société a plusieurs assureurs (s.assureurs) et que le véhicule (plaque) est
+// rattaché à l'un d'eux (s.assureurVeh), on renvoie l'assureur / n° d'assistance / notice DE CET ASSUREUR
+// (même logique que FP.assureurOf / FP.assistanceOf / FP.noticeOf côté client), avec repli sur la config
+// globale (assuranceContrat + portail) — pour que le conducteur voie l'assistance de SON véhicule.
+async function portalConfig(db: ReturnType<typeof createClient>, societe: string, plaque = "") {
   const soc = societe || "PXP";
   const { data } = await db.from("app_settings").select("data").eq("id", soc).maybeSingle();
   const s = (data && data.data && typeof data.data === "object") ? data.data as Record<string, unknown> : {};
@@ -320,13 +324,28 @@ async function portalConfig(db: ReturnType<typeof createClient>, societe: string
   const ass = (s.assuranceContrat && typeof s.assuranceContrat === "object") ? s.assuranceContrat as Record<string, unknown> : {};
   const prof = (s.profil && typeof s.profil === "object") ? s.profil as Record<string, unknown> : {};
   const socObj = (s.societe && typeof s.societe === "object") ? s.societe as Record<string, unknown> : {};
-  // PXP : valeurs historiques par défaut (comme FP.assuranceContrat côté client).
-  const assureur = String(ass.assureur || (soc === "PXP" ? "SWISSLIFE" : "")).trim();
-  const police = String(ass.police || (soc === "PXP" ? "011165247/0599" : "")).trim();
+  // Défauts globaux (rétro-compat) — PXP : valeurs historiques (comme FP.assuranceContrat côté client).
+  const defAssureur = String(ass.assureur || (soc === "PXP" ? "SWISSLIFE" : "")).trim();
+  const defPolice = String(ass.police || (soc === "PXP" ? "011165247/0599" : "")).trim();
+  const gAssist = String(p.assistanceNumero || "").trim();
+  const gNotice = String(p.assistanceNotice || "").trim();
+  // Assureur DU véhicule (rattachement par plaque) → prime sur le défaut global.
+  const assureursArr = Array.isArray(s.assureurs)
+    ? (s.assureurs as Array<Record<string, unknown>>).filter((a) => a && (a.nom || a.police)) : [];
+  const assVehMap = (s.assureurVeh && typeof s.assureurVeh === "object") ? s.assureurVeh as Record<string, unknown> : {};
+  let picked: Record<string, unknown> | null = null;
+  if (assureursArr.length) {
+    const k = _norm(plaque);
+    let id: string | null = null;
+    for (const key in assVehMap) { if (_norm(key) === k) { id = String(assVehMap[key]); break; } }
+    picked = (id ? assureursArr.find((a, i) => String(a.id || ("a" + (i + 1))) === id) || null : null) || assureursArr[0] || null;
+  }
+  const assureur = (picked && String(picked.nom || "").trim()) || defAssureur;
+  const police = (picked && String(picked.police || "").trim()) || defPolice;
   return {
     assureur, police,
-    assistanceNumero: String(p.assistanceNumero || "").trim(),
-    assistanceNotice: String(p.assistanceNotice || "").trim(),
+    assistanceNumero: (picked && String(picked.assistance || "").trim()) || gAssist,
+    assistanceNotice: (picked && String(picked.notice || "").trim()) || gNotice,
     constatUrl: String(p.constatUrl || "").trim(),
     reglesTexte: String(p.reglesTexte || "").trim(),
     reglesLien: String(p.reglesLien || "").trim(),
@@ -480,7 +499,7 @@ Deno.serve(async (req) => {
           const [docs0, edl0, portal, conducteur] = await Promise.all([
             vehDocs(db, qr.vehicule_id, veh),
             vehEdl(db, qr.vehicule_id),
-            portalConfig(db, qr.societe || "PXP"),
+            portalConfig(db, qr.societe || "PXP", qr.plaque || ""),
             vehConducteur(db, chauffeurNom, qr.societe || "PXP"),
           ]);
           // Bucket privé → on SIGNE les URLs pour qu'elles s'ouvrent depuis la page publique.
