@@ -3205,7 +3205,7 @@ FP.ensureJsPDF = function () {
 // ⚠️ Ici on ne met QUE la clé PUBLIQUE VAPID (non secrète, comme la clé Supabase publique).
 FP.push = {
   // Clé PUBLIQUE VAPID (identifie l'expéditeur des push ; sûre à exposer côté client).
-  VAPID_PUBLIC: 'BC72FQ-8eo9eDqHYrUFA8iA0NOiRgLH2lENOKONLuVyz8Fv5e7xI_l9TN8yz4JpebybwS5Md3ENV1Qee6K9jweg',
+  VAPID_PUBLIC: 'BDQFsYuaQYlZueH1mNFGR7vpcfYTWpKUPtceuKIvNUag6dFwbsdKRayYnudE8CoUDN84e6oDqBJnvDiwwdKQI28',
   supported() {
     return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window);
   },
