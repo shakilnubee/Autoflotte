@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826v">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260826v"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260827a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260826v">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260827a">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -331,12 +331,13 @@
       <div id="assur-config" class="hidden mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
         <div class="font-semibold text-slate-800 text-sm mb-2">Assureurs de la société</div>
         <div id="assureurs-rows" class="space-y-2"></div>
+        <input type="file" id="assureur-notice-file" accept="application/pdf,image/*" class="hidden" />
         <div class="flex items-center gap-3 mt-3 flex-wrap">
           <button id="assureur-add" type="button" class="btn btn-outline text-sm"><i data-lucide="plus" class="w-4 h-4"></i> Ajouter un assureur</button>
           <button id="assur-config-save" type="button" class="btn btn-dark text-sm"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
           <button id="assur-apply" type="button" class="btn btn-outline text-sm" title="Écrire le 1er assureur dans la fiche de tous les véhicules actifs de la société"><i data-lucide="link" class="w-4 h-4"></i> Appliquer à la flotte</button>
         </div>
-        <p id="assur-config-status" class="text-xs mt-2 text-slate-400">Rattache chaque véhicule à son assureur via la colonne <b>Assureur</b> du tableau. « Appliquer à la flotte » écrit le 1er assureur dans la fiche des véhicules.</p>
+        <p id="assur-config-status" class="text-xs mt-2 text-slate-400">Chaque assureur a son <b>n° de police</b>, son <b>n° d'assistance 24/7</b> et sa <b>notice PDF</b>. Rattache ensuite chaque véhicule à son assureur via la colonne <b>Assureur</b> du tableau ci-dessous → le conducteur voit, dans son portail QR, l'assistance et la notice de SON assureur. « Appliquer à la flotte » écrit le 1er assureur dans la fiche de tous les véhicules.</p>
       </div>
       <div class="flex flex-wrap items-end gap-6 mb-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
         <div>
@@ -594,11 +595,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260826v"></script>
-<script src="../assets/js/supabase-client.js?v=20260826v"></script>
-<script src="../assets/js/data.js?v=20260826v"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260827a"></script>
+<script src="../assets/js/supabase-client.js?v=20260827a"></script>
+<script src="../assets/js/data.js?v=20260827a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260826v"></script>
+<script src="../assets/js/app.js?v=20260827a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -954,10 +955,11 @@
   // settings.assureurVeh[plaque] = id. Le 1er assureur reste stocké aussi dans settings.assuranceContrat
   // (rétro-compat : FP.assuranceLabel + export). Les TOTAUX ne changent pas (prime = somme par véhicule).
   function getAssureurs(){
+    if (FP.assureursListe) return FP.assureursListe();   // ⚠️ source unique (inclut assistance + notice + défaut PXP)
     const s = (FP.settings && FP.settings.get) ? FP.settings.get() : {};
     let list = Array.isArray(s.assureurs) ? s.assureurs.filter(a => a && (a.nom || a.police)) : null;
     if (!list || !list.length) { const c = s.assuranceContrat || {}; list = (c.assureur || c.police) ? [{ id: 'a1', nom: c.assureur || '', police: c.police || '' }] : []; }
-    return list.map((a, i) => ({ id: a.id || ('a' + (i + 1)), nom: String(a.nom || '').trim(), police: String(a.police || '').trim() }));
+    return list.map((a, i) => ({ id: a.id || ('a' + (i + 1)), nom: String(a.nom || '').trim(), police: String(a.police || '').trim(), assistance: String(a.assistance || '').trim(), notice: String(a.notice || '').trim() }));
   }
   function assureurVehMap(){ const s = (FP.settings && FP.settings.get) ? FP.settings.get() : {}; return (s.assureurVeh && typeof s.assureurVeh === 'object') ? s.assureurVeh : {}; }
   function assureurIdOf(v){ const m = assureurVehMap(); const k = normPlaque(v.immat); for (const key in m) { if (normPlaque(key) === k) return m[key]; } return null; }
@@ -966,12 +968,21 @@
   function assureurOf(v){ if (FP.assureurOf) return FP.assureurOf(v); const list = getAssureurs(); const id = assureurIdOf(v); let a = id ? list.find(x => x.id === id) : null; if (!a) a = list[0] || null; return a; }
   function assureurLabel(v){ if (FP.assureurLabelVeh) { const s = FP.assureurLabelVeh(v); return s || '—'; } const a = assureurOf(v); return a ? (a.nom || a.police || '—') : '—'; }
   function setAssureurVeh(immat, id){ const s = FP.settings.get(); s.assureurVeh = (s.assureurVeh && typeof s.assureurVeh === 'object') ? s.assureurVeh : {}; const k = normPlaque(immat); for (const key in s.assureurVeh) { if (normPlaque(key) === k) delete s.assureurVeh[key]; } if (id) s.assureurVeh[immat] = id; FP.settings.save(s); }
-  function assureurRowHTML(nom, police, id){ return `<div class="flex items-center gap-2 flex-wrap" data-assureur-row${id ? ` data-aid="${escC(id)}"` : ''}>
-      <input data-a-nom placeholder="Assureur (ex. AXA)" class="field-input" style="width:190px" value="${escC(nom || '')}">
-      <input data-a-police placeholder="N° de police" class="field-input" style="width:190px" value="${escC(police || '')}">
+  // Puce « notice PDF » d'une ligne assureur : lien si présente, sinon bouton d'ajout. Source = attribut data-notice de la ligne.
+  function assurNoticeChipHTML(notice){ return notice
+    ? `<a href="${escC(notice)}" target="_blank" rel="noopener" class="text-xs font-semibold" style="color:var(--fp-accent)" title="Voir la notice d'assistance">📄 Notice</a> <button type="button" class="text-red-500 text-xs font-bold ml-1" data-a-notice-del title="Retirer la notice">✕</button>`
+    : `<button type="button" class="btn btn-outline text-xs !px-2 !py-1" data-a-notice-add title="Joindre la notice d'assistance (PDF) de cet assureur"><i data-lucide="upload" class="w-3.5 h-3.5"></i> Notice PDF</button>`; }
+  function updateAssurNoticeCell(row){ const cell = row.querySelector('[data-a-notice-cell]'); if (cell){ cell.innerHTML = assurNoticeChipHTML(row.getAttribute('data-notice') || ''); if (window.lucide) try { lucide.createIcons(); } catch (e) {} } }
+  function assureurRowHTML(a){ a = a || {};
+    const nom = a.nom || '', police = a.police || '', id = a.id || '', assist = a.assistance || '', notice = a.notice || '';
+    return `<div class="flex items-center gap-2 flex-wrap" data-assureur-row${id ? ` data-aid="${escC(id)}"` : ''} data-notice="${escC(notice)}">
+      <input data-a-nom placeholder="Assureur (ex. AXA)" class="field-input" style="width:150px" value="${escC(nom)}">
+      <input data-a-police placeholder="N° de police" class="field-input" style="width:150px" value="${escC(police)}">
+      <input data-a-assist placeholder="N° assistance 24/7" class="field-input" style="width:160px" value="${escC(assist)}">
+      <span class="flex items-center gap-1" data-a-notice-cell>${assurNoticeChipHTML(notice)}</span>
       <button type="button" class="text-red-500 hover:text-red-700" data-a-del title="Retirer cet assureur"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
     </div>`; }
-  function renderAssureursRows(){ const box = $('assureurs-rows'); if (!box) return; const list = getAssureurs(); box.innerHTML = (list.length ? list : [{ nom: '', police: '', id: '' }]).map(a => assureurRowHTML(a.nom, a.police, a.id)).join(''); if (window.lucide) try { lucide.createIcons(); } catch (e) {} }
+  function renderAssureursRows(){ const box = $('assureurs-rows'); if (!box) return; const list = getAssureurs(); box.innerHTML = (list.length ? list : [{}]).map(a => assureurRowHTML(a)).join(''); if (window.lucide) try { lucide.createIcons(); } catch (e) {} }
   let assurFilter = 'all';
   function populateAssurFilter(list){
     const sel = $('assur-filter'); const wrap = $('assur-filter-wrap'); if (!sel) return;
@@ -3033,20 +3044,39 @@
   });
   if ($('assureur-add')) $('assureur-add').addEventListener('click', () => {
     const box = $('assureurs-rows'); if (!box) return;
-    box.insertAdjacentHTML('beforeend', assureurRowHTML('', '', ''));
+    box.insertAdjacentHTML('beforeend', assureurRowHTML({}));
     if (window.lucide) try { lucide.createIcons(); } catch (e) {}
   });
+  // Ligne assureur en cours d'upload de notice (le picker fichier est partagé par toutes les lignes).
+  let _assurNoticeRow = null;
   if ($('assureurs-rows')) $('assureurs-rows').addEventListener('click', (e) => {
-    const del = e.target.closest('[data-a-del]'); if (!del) return;
-    const row = del.closest('[data-assureur-row]'); if (row) row.remove();
+    const del = e.target.closest('[data-a-del]');
+    if (del) { const row = del.closest('[data-assureur-row]'); if (row) row.remove(); return; }
+    const nadd = e.target.closest('[data-a-notice-add]');
+    if (nadd) { _assurNoticeRow = nadd.closest('[data-assureur-row]'); const f = $('assureur-notice-file'); if (f) f.click(); return; }
+    const ndel = e.target.closest('[data-a-notice-del]');
+    if (ndel) { const row = ndel.closest('[data-assureur-row]'); if (row) { row.setAttribute('data-notice', ''); updateAssurNoticeCell(row); } return; }
+  });
+  if ($('assureur-notice-file')) $('assureur-notice-file').addEventListener('change', async (e) => {
+    const f = e.target.files && e.target.files[0]; e.target.value = ''; const row = _assurNoticeRow; _assurNoticeRow = null;
+    if (!f || !row) return;
+    if (!(window.FP && FP.uploadScan)) { alert('Connexion requise pour envoyer la notice.'); return; }
+    const cell = row.querySelector('[data-a-notice-cell]'); if (cell) cell.innerHTML = '<span class="text-xs text-slate-400">Envoi…</span>';
+    try { const url = await FP.uploadScan(f, 'notices'); if (!url) throw new Error('upload'); row.setAttribute('data-notice', url); updateAssurNoticeCell(row); }
+    catch (er) { console.warn(er); updateAssurNoticeCell(row); alert("Échec de l'envoi de la notice. Réessaie."); }
   });
   if ($('assur-config-save')) $('assur-config-save').addEventListener('click', () => {
     const rows = Array.from(document.querySelectorAll('#assureurs-rows [data-assureur-row]'));
-    const list = rows.map((r, i) => ({
-      id: r.getAttribute('data-aid') || ('a' + (i + 1)),
-      nom: (r.querySelector('[data-a-nom]') ? r.querySelector('[data-a-nom]').value : '').trim(),
-      police: (r.querySelector('[data-a-police]') ? r.querySelector('[data-a-police]').value : '').trim(),
-    })).filter(a => a.nom || a.police);
+    const list = rows.map((r, i) => {
+      const g = sel => { const el = r.querySelector(sel); return el ? el.value.trim() : ''; };
+      return {
+        id: r.getAttribute('data-aid') || ('a' + (i + 1)),
+        nom: g('[data-a-nom]'),
+        police: g('[data-a-police]'),
+        assistance: g('[data-a-assist]'),               // n° d'assistance 24/7 propre à cet assureur
+        notice: (r.getAttribute('data-notice') || '').trim(),  // notice PDF propre à cet assureur
+      };
+    }).filter(a => a.nom || a.police || a.assistance || a.notice);
     const s = FP.settings.get();
     s.assureurs = list;
     // Rétro-compat : le 1er assureur reste dans assuranceContrat (FP.assuranceLabel, export, titre).

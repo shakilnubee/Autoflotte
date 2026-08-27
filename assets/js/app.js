@@ -3025,8 +3025,19 @@ FP.assuranceLabel = () => { const c = FP.assuranceContrat(); return c.assureur ?
 FP.assureursListe = () => {
   let s = {}; try { s = FP.settings.get() || {}; } catch (e) {}
   let list = Array.isArray(s.assureurs) ? s.assureurs.filter(a => a && (a.nom || a.police)) : null;
-  if (!list || !list.length) { const c = s.assuranceContrat || {}; list = (c.assureur || c.police) ? [{ id: 'a1', nom: c.assureur || '', police: c.police || '' }] : []; }
-  return list.map((a, i) => ({ id: a.id || ('a' + (i + 1)), nom: String(a.nom || '').trim(), police: String(a.police || '').trim() }));
+  if (!list || !list.length) {
+    // Repli sur le contrat unique historique AVEC le défaut PXP (SWISSLIFE) → il y a TOUJOURS au moins un
+    // assureur sélectionnable quand la société en a un (fini le « à configurer » alors que le titre affiche SWISSLIFE).
+    const c = (FP.assuranceContrat ? FP.assuranceContrat() : (s.assuranceContrat || {}));
+    list = (c.assureur || c.police) ? [{ id: 'a1', nom: c.assureur || '', police: c.police || '' }] : [];
+  }
+  return list.map((a, i) => ({
+    id: a.id || ('a' + (i + 1)),
+    nom: String(a.nom || '').trim(),
+    police: String(a.police || '').trim(),
+    assistance: String(a.assistance || '').trim(),  // n° d'assistance 24/7 propre à cet assureur
+    notice: String(a.notice || '').trim(),          // notice PDF (URL) propre à cet assureur
+  }));
 };
 // ⚠️ SOURCE UNIQUE — assureur D'UN véhicule. Rattachement par plaque (settings.assureurVeh[plaque]=id),
 // sinon le 1er assureur (= assureur global). La fiche véhicule, l'export PDF et la checklist « À compléter »
@@ -3042,6 +3053,17 @@ FP.assureurOf = (v) => {
   } catch (e) { return null; }
 };
 FP.assureurLabelVeh = (v) => { const a = FP.assureurOf(v); return a ? (a.nom || a.police || '') : (FP.assuranceLabel ? FP.assuranceLabel() : ''); };
+// ⚠️ SOURCE UNIQUE — n° d'assistance 24/7 + notice PDF D'UN véhicule = ceux de SON assureur (rattachement
+// par plaque), avec REPLI sur la config portail globale de la société (settings.portail) pour rétro-compat.
+// Lues par le portail conducteur (edge km-collect, même logique) et la fiche véhicule → une seule vérité.
+FP.assistanceOf = (v) => {
+  try { const a = FP.assureurOf(v); if (a && a.assistance) return a.assistance; } catch (e) {}
+  try { return String(((FP.settings.get().portail) || {}).assistanceNumero || '').trim(); } catch (e) { return ''; }
+};
+FP.noticeOf = (v) => {
+  try { const a = FP.assureurOf(v); if (a && a.notice) return a.notice; } catch (e) {}
+  try { return String(((FP.settings.get().portail) || {}).assistanceNotice || '').trim(); } catch (e) { return ''; }
+};
 
 // Profil de la société ACTIVE : valeurs saisies (settings.profil) par-dessus des valeurs par défaut.
 // ⚠️ PXP conserve ses valeurs historiques (rien ne change) ; une NOUVELLE société démarre vide → l'app propose de les remplir.
