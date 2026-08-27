@@ -654,6 +654,36 @@
   // les autres réglages leasing. But : pouvoir voir/téléverser le contrat AUSSI pour les véhicules BPCE.
   function bpceDocs(immat){ try { const m = FP.settings.get().leasingDocs || {}; const k = String(immat || '').toUpperCase(); return Array.isArray(m[k]) ? m[k] : []; } catch (e) { return []; } }
   function setBpceDocs(immat, list){ const s = FP.settings.get(); s.leasingDocs = (s.leasingDocs && typeof s.leasingDocs === 'object') ? s.leasingDocs : {}; const k = String(immat || '').toUpperCase(); if (list && list.length) s.leasingDocs[k] = list; else delete s.leasingDocs[k]; FP.settings.save(s); }
+  // ⚠️ SENS INVERSE (source unique) : les contrats de leasing téléversés depuis la FICHE VÉHICULE sont
+  // stockés dans la table `documents` (type 'contrat'). On les charge ici pour les afficher AUSSI dans la
+  // table Contrats → un contrat déposé d'un côté apparaît des deux côtés. Cache rempli au chargement.
+  let _ficheContratDocs = {}; // immat (MAJ) → [{ url, name, docId }]
+  function ficheContratDocs(immat){ const k = String(immat || '').toUpperCase(); return Array.isArray(_ficheContratDocs[k]) ? _ficheContratDocs[k] : []; }
+  async function loadFicheContratDocs(){
+    try {
+      if (!(FP.db && FP.db.select)) return;
+      const res = await FP.db.select('documents');
+      const rows = (res && res.data) ? res.data : [];
+      const map = {};
+      rows.forEach(d => {
+        if (!d || d.type !== 'contrat' || !d.url) return;
+        const v = (data.vehicules || []).find(x => x.id === d.vehiculeId);
+        const k = v ? String(v.immat || '').toUpperCase() : '';
+        if (!k) return;
+        (map[k] = map[k] || []).push({ url: d.url, name: d.label || 'Contrat de leasing', docId: d.id });
+      });
+      _ficheContratDocs = map;
+      if (typeof renderLeasing === 'function') renderLeasing();
+    } catch (e) { /* best-effort */ }
+  }
+  // Liste FUSIONNÉE des contrats d'un véhicule (Contrats + fiche), dédupliquée par URL. On garde l'index
+  // d'origine des docs « leasing » (settings.leasingDocs) pour que leur suppression reste correcte.
+  function allContratDocs(immat){
+    const out = [], seen = new Set();
+    bpceDocs(immat).forEach((d, i) => { if (d && d.url && !seen.has(d.url)) { seen.add(d.url); out.push({ url: d.url, name: d.name || 'Contrat', src: 'leasing', idx: i }); } });
+    ficheContratDocs(immat).forEach(d => { if (d && d.url && !seen.has(d.url)) { seen.add(d.url); out.push({ url: d.url, name: d.name || 'Contrat', src: 'doc', docId: d.docId }); } });
+    return out;
+  }
   // Affecter / changer le conducteur d'un véhicule EN LEASING dérivé (BPCE) directement depuis la table :
   // le « conducteur » d'une ligne BPCE = le CHAUFFEUR du véhicule (≠ Ayvens où c'est un champ du contrat).
   // On écrit donc dans la fiche véhicule + on trace l'historique d'affectation (mêmes helpers que la fiche,
@@ -684,11 +714,14 @@
     return true;
   }
   function bpceDocsHtml(immat){
-    const docs = bpceDocs(immat);
-    const links = docs.map((d, di) => `<div class="flex items-center gap-1" style="margin-bottom:2px;max-width:170px">
+    const docs = allContratDocs(immat); // Contrats + fiche véhicule fusionnés (source unique)
+    const links = docs.map(d => {
+      const delAttr = d.src === 'doc' ? `data-fiche-doc-del="${escC(d.docId)}"` : `data-bpce-doc-del="${escC(immat)}::${d.idx}"`;
+      return `<div class="flex items-center gap-1" style="margin-bottom:2px;max-width:170px">
         <button type="button" data-bpce-doc="${escC(d.url)}" class="hover:underline" style="background:none;border:none;padding:0;cursor:pointer;color:var(--fp-accent);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left" title="${escC(d.name || 'Contrat')}"><i data-lucide="file-text" class="w-3 h-3 inline"></i> ${escC(d.name || 'Contrat')}</button>
-        <button type="button" data-bpce-doc-del="${escC(immat)}::${di}" class="text-slate-300 hover:text-red-600 flex-shrink-0" title="Supprimer ce document" style="font-size:12px;line-height:1">✕</button>
-      </div>`).join('');
+        <button type="button" ${delAttr} class="text-slate-300 hover:text-red-600 flex-shrink-0" title="Supprimer ce document" style="font-size:12px;line-height:1">✕</button>
+      </div>`;
+    }).join('');
     return links + `<button type="button" class="btn btn-outline text-xs !px-2" data-bpce-up="${escC(immat)}" title="Téléverser le contrat de leasing (PDF)" style="margin-top:2px"><i data-lucide="upload" class="w-3.5 h-3.5"></i> ${docs.length ? 'Ajouter un doc' : 'Contrat'}</button>`;
   }
   // ===== Filtre par loueur (partagé BPCE + Localease) =====
@@ -732,6 +765,7 @@
     //  véhicule. On n'exclut plus rien de la vue → les véhicules jadis masqués réapparaissent.)
   }
   rebuildLeasingData();
+  loadFicheContratDocs(); // charge les contrats déposés depuis la fiche véhicule (sens inverse) puis re-render
 
   // Suppression DÉFINITIVE d'un véhicule de toute la flotte (comme le bouton Supprimer de la
   // fiche véhicule) : base + mémoire. Renvoie true si supprimé. ⚠️ irréversible.
@@ -1812,6 +1846,16 @@
       const [immat, di] = bDel.dataset.bpceDocDel.split('::'); const idx = +di;
       if (!(await FP.confirm('Supprimer ce document de contrat ?'))) return;
       const list = bpceDocs(immat).slice(); list.splice(idx, 1); setBpceDocs(immat, list); renderLeasing();
+      if (FP.toast) FP.toast('Document supprimé'); return;
+    }
+    // Suppression d'un contrat venu de la FICHE VÉHICULE (table documents) → retiré des deux côtés.
+    const fDel = e.target.closest('[data-fiche-doc-del]');
+    if (fDel) {
+      const id = fDel.getAttribute('data-fiche-doc-del');
+      if (!(await FP.confirm('Supprimer ce contrat de leasing ?\n(Il sera aussi retiré de la fiche véhicule.)'))) return;
+      try { if (FP.persist && FP.persist.delete) await FP.persist.delete('documents', id); else if (FP.db && FP.db.delete) await FP.db.delete('documents', id); } catch (err) { console.warn('[del contrat fiche]', err); }
+      for (const k in _ficheContratDocs) { _ficheContratDocs[k] = (_ficheContratDocs[k] || []).filter(d => d.docId !== id); }
+      renderLeasing();
       if (FP.toast) FP.toast('Document supprimé'); return;
     }
     const restit = e.target.closest('[data-restit-lease]');
@@ -3226,6 +3270,7 @@
   document.addEventListener('fp:data-ready', () => {
     rebuildLeasingData();
     renderKPIs(); renderAssurance(); renderLeasing(); renderLocalease(); renderCartes();
+    loadFicheContratDocs(); // recharge les contrats déposés depuis la fiche véhicule (sens inverse)
   });
 </script>
 
