@@ -9198,25 +9198,30 @@ FP.edl = {
     const NAVY = [15, 30, 61], ACC = [249, 115, 22], INK = [20, 28, 40], MUT = [100, 112, 128], SOFT = [248, 250, 252], LINE = [226, 232, 240];
     const isRestit = data.sens === 'restitution';
     const ensure = need => { if (y + need > H - 16) { doc.addPage(); y = 16; } };
-    // ---- En-tête : logo société (ou nom) à gauche + titre à droite + filet accentué ----
+    // ---- En-tête : logo société (ou nom) à gauche + titre + pastille sous-titre à droite ----
     if (data.logo && /^data:image\//i.test(data.logo)) {
       try { const fmt = /png/i.test(data.logo) ? 'PNG' : 'JPEG'; doc.addImage(data.logo, fmt, M, y, 30, 14, undefined, 'FAST'); } catch (e) {}
-    } else if (data.socNom) { doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor.apply(doc, NAVY); doc.text(data.socNom, M, y + 8); }
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(17); doc.setTextColor.apply(doc, NAVY);
-    doc.text('ÉTAT DES LIEUX', W - M, y + 5, { align: 'right' });
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor.apply(doc, ACC);
-    doc.text(isRestit ? 'Restitution du véhicule' : 'Remise du véhicule', W - M, y + 11.5, { align: 'right' });
-    y += 17;
-    doc.setDrawColor.apply(doc, NAVY); doc.setLineWidth(0.5); doc.line(M, y, W - M, y);
-    doc.setDrawColor.apply(doc, ACC); doc.setLineWidth(1.6); doc.line(M, y, M + 34, y);
+    } else if (data.socNom) { doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor.apply(doc, NAVY); doc.text(data.socNom, M, y + 9); }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor.apply(doc, NAVY);
+    doc.text('ÉTAT DES LIEUX', W - M, y + 6, { align: 'right' });
+    // Sous-titre dans une PASTILLE arrondie (fond bleu très clair, texte navy) — plus soigné qu'un texte/trait orange.
+    { const sub = isRestit ? 'Restitution du véhicule' : 'Remise du véhicule';
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+      const pw = doc.getTextWidth(sub) + 8, ph = 6, px = W - M - pw, py = y + 9.5;
+      doc.setFillColor(236, 241, 248); doc.roundedRect(px, py, pw, ph, 3, 3, 'F');
+      doc.setTextColor.apply(doc, NAVY); doc.text(sub, px + 4, py + 4); }
+    y += 19;
+    // Filet UNIQUE, fin et net (navy) — on retire le trait orange qui jurait juste en dessous du logo.
+    doc.setDrawColor.apply(doc, NAVY); doc.setLineWidth(0.4); doc.line(M, y, W - M, y);
     doc.setLineWidth(0.2);
-    y += 6;
+    y += 6.5;
     // ---- Carte infos (fond doux arrondi) ----
     const info = [['Nom et prénom', data.employe], ['Modèle', data.modele], ['Immatriculation', data.immat], ['Kilométrage', data.km ? (data.km + ' km') : '—'], [isRestit ? 'Date de restitution' : 'Date de remise', data.date ? FP.date(data.date) : '—']];
     const cardH = 4.5 + info.length * 5.9;
     ensure(cardH + 4);
     doc.setFillColor.apply(doc, SOFT); doc.setDrawColor.apply(doc, LINE); doc.setLineWidth(0.3);
     doc.roundedRect(M, y, W - 2 * M, cardH, 2.5, 2.5, 'FD');
+    doc.setFillColor.apply(doc, NAVY); doc.roundedRect(M, y, 1.8, cardH, 0.9, 0.9, 'F');   // liseré navy premium à gauche
     let iy = y + 6; doc.setFontSize(10);
     info.forEach(([l, v]) => {
       doc.setFont('helvetica', 'bold'); doc.setTextColor.apply(doc, MUT); doc.text(l, M + 4, iy);
