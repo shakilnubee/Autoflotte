@@ -126,7 +126,7 @@ async function resolveSigner(db: ReturnType<typeof createClient>, t: string, who
   if (!t) return null;
   // Cas 1 : sigToken (préfixe « sg- »). On cherche la ligne dont un signataire porte ce jeton.
   if (t.indexOf("sg-") === 0) {
-    const { data: rows } = await db.from("edl_signatures").select("*").order("id", { ascending: false }).limit(2000);
+    const { data: rows } = await db.from("edl_signatures").select("*").order("created_at", { ascending: false }).limit(2000);
     for (const r of ((rows || []) as Array<Record<string, unknown>>)) {
       const signers = (Array.isArray(r.signataires) ? r.signataires : []) as Signer[];
       const me = signers.find((s) => s.sigToken && s.sigToken === t);
