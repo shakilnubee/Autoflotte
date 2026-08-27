@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826p">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260826o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260826p"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260826o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260826p">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -340,10 +340,10 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260826o"></script>
-<script src="../assets/js/supabase-client.js?v=20260826o"></script>
-<script src="../assets/js/data.js?v=20260826o"></script>
-<script src="../assets/js/app.js?v=20260826o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260826p"></script>
+<script src="../assets/js/supabase-client.js?v=20260826p"></script>
+<script src="../assets/js/data.js?v=20260826p"></script>
+<script src="../assets/js/app.js?v=20260826p"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -405,7 +405,9 @@
 
   function renderKPIs() {
     const rows = filtered();
-    const total = rows.reduce((s,i) => s + (i.montantTTC || 0), 0);
+    // Coût = factures DÉDOUBLONNÉES (n° + TTC) — même règle que le dashboard/les fiches, sinon un doublon
+    // gonflait le total d'entretien. Le compteur, lui, garde le nombre de lignes réelles.
+    const total = (FP.dedupeFactures ? FP.dedupeFactures(rows) : rows).reduce((s,i) => s + (i.montantTTC || 0), 0);
     $('kpi-total').textContent = rows.length;
     { const sub = $('kpi-total-sub'); if (sub) sub.textContent = (state.annee && state.annee !== 'all') ? ('année ' + state.annee) : 'toutes années'; }
     $('kpi-cout').textContent = FP.euro(total);
@@ -532,7 +534,7 @@
   let monthChart, vehChart;
   function renderCharts() {
     if (typeof Chart === 'undefined') return; // Chart.js en différé : dessiné dès qu'il est prêt
-    const rows = filtered();
+    const rows = FP.dedupeFactures ? FP.dedupeFactures(filtered()) : filtered(); // coûts dédoublonnés (n° + TTC)
 
     // Monthly maintenance
     const monthly = {};
@@ -650,7 +652,8 @@
     const sel = $('podium-year');
     const annee = (sel && sel.value) || new Date().getFullYear().toString();
     const perVeh = {};
-    interventions.filter(i => annee === 'all' || (i.date || '').startsWith(annee)).forEach(i => {
+    const _podRows = FP.dedupeFactures ? FP.dedupeFactures(interventions) : interventions; // podium sur coûts dédoublonnés
+    _podRows.filter(i => annee === 'all' || (i.date || '').startsWith(annee)).forEach(i => {
       const k = i.vehiculeImmat || '?';
       perVeh[k] = (perVeh[k] || 0) + (i.montantTTC || 0);
     });

@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826p">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260826o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260826p"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260826o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260826p">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -995,13 +995,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260826o"></script>
-<script src="../assets/js/supabase-client.js?v=20260826o"></script>
-<script src="../assets/js/data.js?v=20260826o"></script>
-<script src="../assets/js/fleet-docs.js?v=20260826o"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260826o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260826p"></script>
+<script src="../assets/js/supabase-client.js?v=20260826p"></script>
+<script src="../assets/js/data.js?v=20260826p"></script>
+<script src="../assets/js/fleet-docs.js?v=20260826p"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260826p"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260826o"></script>
+<script src="../assets/js/app.js?v=20260826p"></script>
 <script>
   lucide.createIcons();
 
@@ -2283,6 +2283,9 @@
   //  Au-dessus de 2 t → « véhicule lourd » = tarif visiteur (payant). Ex. BYD Seal U DM-i (2102 kg).
   function parkingParis(v) {
     const carb = (v.carburant || '').toLowerCase();
+    // ⚠️ RÈGLE OFFICIELLE : ne JAMAIS conclure « Payant » sur une info manquante. Carburant non renseigné
+    // = on ne peut pas trancher → « À vérifier » (jamais « Payant » présumé).
+    if (!carb.trim()) return { ok: null, txt: 'À vérifier', detail: 'Motorisation non renseignée — indiquez le carburant (et la masse champ G) dans la fiche pour trancher le stationnement à Paris.' };
     const mod = (v.modele || '').toLowerCase();
     const co2 = Number(v.co2);
     const mec = (v.dateMiseEnCirculation || '').slice(0, 10);
@@ -2301,7 +2304,12 @@
       // CO₂) sont VBE. Un hybride NON rechargeable (auto-rechargeable) n'est JAMAIS éligible, même à
       // faible CO₂ → il ne faut donc PAS lui accorder la gratuité.
       if (isPHEV && (co2Ok || !Number.isFinite(co2) || co2 === 0)) { motorOk = true; motorTxt = `hybride rechargeable${Number.isFinite(co2) && co2 > 0 ? ' (' + co2 + ' g/km)' : ''}`; }
-      else { motorOk = false; motorTxt = isPHEV ? `hybride rechargeable mais CO₂ ${Number.isFinite(co2) ? co2 + ' g' : ''} > ${seuil} g/km` : 'hybride NON rechargeable — non éligible (seuls électrique/hydrogène et hybride rechargeable ouvrent droit à la gratuité)'; }
+      else if (isPHEV) { return { ok: false, txt: 'Payant à Paris', detail: `hybride rechargeable mais CO₂ ${Number.isFinite(co2) ? co2 + ' g' : ''} > ${seuil} g/km → pas de gratuité à Paris.` }; }
+      else {
+        // « hybride » sans mention rechargeable : on ne peut PAS trancher (auto-rechargeable = payant,
+        // plug-in sous seuil CO₂ = éligible) → « À vérifier » plutôt qu'une hypothèse « Payant ».
+        return { ok: null, txt: 'À vérifier', detail: 'Hybride : précisez s\'il est RECHARGEABLE (plug-in) et son CO₂. Un hybride auto-rechargeable est payant à Paris ; un rechargeable sous seuil CO₂ est éligible. Complétez le carburant/CO₂ dans la fiche pour trancher.' };
+      }
     }
     if (!motorOk) return { ok: false, txt: 'Payant à Paris', detail: `Motorisation ${motorTxt || 'thermique'} — pas de gratuité de stationnement à Paris.` };
 

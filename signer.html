@@ -229,12 +229,33 @@
     })
     .catch(function () { $('subtitle').textContent = 'Impossible de charger le document. Vérifie ta connexion.'; });
 
-  window.addEventListener('resize', function () { if ($('main').style.display !== 'none') { var img = canvas.toDataURL(); fitCanvas(); } });
+  // Rotation / redimensionnement de l'écran : fitCanvas() vide le backing-store → on RESTAURE la
+  // signature déjà tracée (sinon elle disparaissait à la rotation du téléphone, et on pouvait valider
+  // une signature VIDE alors que hasInk restait vrai).
+  var _resizeT = null;
+  window.addEventListener('resize', function () {
+    if ($('main').style.display === 'none') return;
+    var img = null;
+    if (hasInk) { try { img = new Image(); img.src = canvas.toDataURL('image/png'); } catch (e) { img = null; } }
+    clearTimeout(_resizeT);
+    _resizeT = setTimeout(function () {
+      var r0 = canvas.getBoundingClientRect();
+      fitCanvas();
+      if (img && img.width) { try { ctx.drawImage(img, 0, 0, r0.width, r0.height); } catch (e) {} }
+    }, 120);
+  });
+  // Le canvas est-il RÉELLEMENT vide ? (filet de sécurité : ne jamais envoyer un PNG blanc.)
+  function padIsBlank() {
+    try {
+      var c = document.createElement('canvas'); c.width = canvas.width; c.height = canvas.height;
+      return canvas.toDataURL() === c.toDataURL();
+    } catch (e) { return false; }
+  }
 
   // ---- Envoi de la signature ----
   $('send').addEventListener('click', function () {
     $('err').style.display = 'none';
-    if (!hasInk) { showErr('Dessine ta signature dans le cadre avant de valider.'); return; }
+    if (!hasInk || padIsBlank()) { showErr('Dessine ta signature dans le cadre avant de valider.'); return; }
     var nom = ($('f-nom').value || '').trim();
     if (!nom) { showErr('Indique ton nom.'); return; }
     var b = $('send'); b.disabled = true; var old = b.textContent; b.textContent = '… envoi';
