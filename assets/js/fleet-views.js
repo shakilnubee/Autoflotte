@@ -967,8 +967,11 @@
     // Anomalies « vérifiées » (archivées) : mémorisées dans les réglages (clé → enregistrement complet,
     // pour garder l'HISTORIQUE même si la donnée change). Coche verte = archive ; flèche rouge = désarchive.
     function tfAnomOk(){ try { return FP.settings.get().tfAnomOk || {}; } catch (e) { return {}; } }
-    function tfAnomSaveOk(map){ try { const s = FP.settings.get(); s.tfAnomOk = map; FP.settings.save(s); } catch (e) { if (FP.toast) FP.toast('Enregistrement impossible'); } }
+    function tfAnomSaveOk(map){ try { const s = FP.settings.get(); s.tfAnomOk = map; FP.settings.save(s); } catch (e) { if (FP.toast) FP.toast('Enregistrement impossible'); } try { window.dispatchEvent(new CustomEvent('pp:anom-sync')); } catch (e) {} }
     let _tfAnomMode = 'active';
+    // Statut changé côté Contrôle (justifié/fraude/classé) → tfAnomOk modifié ailleurs : on rafraîchit
+    // « Points à vérifier » EN DIRECT (même source unique tfAnomOk, cohérence des deux vues).
+    try { window.addEventListener('pp:anom-sync', function () { try { renderAnomList(); } catch (e) {} }); } catch (e) {}
     function renderAnomList(){
       const box = $('tf-an-anom'); if (!box) return;
       const okMap = tfAnomOk();

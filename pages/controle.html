@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826u">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826v">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260826u"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260826v"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260826u">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260826v">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -289,11 +289,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260826u"></script>
-<script src="../assets/js/supabase-client.js?v=20260826u"></script>
-<script src="../assets/js/data.js?v=20260826u"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260826v"></script>
+<script src="../assets/js/supabase-client.js?v=20260826v"></script>
+<script src="../assets/js/data.js?v=20260826v"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260826u"></script>
+<script src="../assets/js/app.js?v=20260826v"></script>
 <!-- ⚡ fleet-views.js (~160 Ko : Total Fleet + Ulys) N'EST PLUS chargé ici en SYNCHRONE : l'onglet
      par défaut est « Contrôle » et n'en a pas besoin. Il est injecté à la demande (1re ouverture de
      Total/Ulys) via ensureFleetViews(), et préchargé en douceur sur temps mort → l'arrivée sur
@@ -324,7 +324,7 @@
     _flPromise = new Promise(res => {
       try {
         const s = document.createElement('script');
-        s.src = '../assets/js/fleet-views.js?v=20260826u';
+        s.src = '../assets/js/fleet-views.js?v=20260826v';
         s.onload = () => res(!!(window.FP && FP.mountTotal));
         s.onerror = () => res(false);
         document.head.appendChild(s);
@@ -731,8 +731,12 @@
       if (resolu) m[key] = { key, t: f._anom.t || '', txt: f._anom.txt || '', mois: f._anom.mois || '', facnum: f._anom.facnum || '', okAt: Date.now() };
       else delete m[key];
       s.tfAnomOk = m; FP.settings.save(s);
+      try { window.dispatchEvent(new CustomEvent('pp:anom-sync')); } catch (e) {} // prévient Total Fleet de rafraîchir « Points à vérifier »
     } catch (e) {}
   }
+  // Archivage/désarchivage fait dans « Points à vérifier » (Total Fleet/Ulys) → on recalcule la liste
+  // Contrôle EN DIRECT (sinon il fallait recharger la page). Dans les deux sens, source unique tfAnomOk.
+  try { window.addEventListener('pp:anom-sync', () => { try { rebuild(true); } catch (e) {} }); } catch (e) {}
 
   const ST_LABEL = { 'a-verifier':'À vérifier', 'justifie':'Justifié', 'fraude':'Fraude', 'classe':'Classé' };
 
@@ -1228,6 +1232,10 @@
   function _buildSig(){
     let cong = 0; try { cong = Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length; } catch (e) {}
     let smLen = 0; try { smLen = JSON.stringify(statutMap()).length; } catch (e) {}
+    // + archives « Points à vérifier » (tfAnomOk) : sinon archiver/désarchiver dans Total Fleet ne
+    // changeait pas la signature → la liste Contrôle restait figée (pas de recalcul). Régression signalée.
+    let okLen = 0; try { okLen = JSON.stringify(tfOk()).length; } catch (e) {}
+    smLen += okLen;
     const cnd = (FP.conducteursTous ? FP.conducteursTous() : ((FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [])).length;
     // + somme des montants (détecte une conso MODIFIÉE, pas seulement ajoutée/supprimée). O(tx), <1 ms.
     let sum = 0; for (let i = 0; i < _tx.length; i++) { const v = _tx[i]; sum += Number((v && (v.montant_ttc != null ? v.montant_ttc : v.montantTtc)) || 0); }
