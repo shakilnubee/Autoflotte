@@ -1236,10 +1236,13 @@
   function docRowHTML(doc){
     const t = DOC_TYPES.find(x => x.key === doc.type) || DOC_TYPES[DOC_TYPES.length - 1];
     const url = escapeHtml(sanitizeUrl(doc.url));
+    // Le PDF d'état des lieux est nommé simplement « État des lieux » (demande utilisateur) — le libellé
+    // verbeux (« … remise — signé 2025-… ») n'apporte rien ici, la date d'ajout est déjà affichée en dessous.
+    const title = (doc.type === 'etat-des-lieux') ? 'État des lieux' : (doc.label || t.label);
     return `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm" data-doc-id="${escapeHtml(doc.id)}">
       <i data-lucide="${t.icon}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
       <div class="flex-1 min-w-0">
-        <div class="font-medium truncate">${escapeHtml(doc.label || t.label)}</div>
+        <div class="font-medium truncate">${escapeHtml(title)}</div>
         <div class="text-xs text-slate-500">${t.label}${(doc.date || doc.createdAt) ? ' · ajouté le ' + FP.dateNum((doc.date || doc.createdAt).slice(0, 10)) : ''}</div>
       </div>
       <button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-open="${url}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>
@@ -1257,8 +1260,27 @@
     const typeOptions = DOC_TYPES.filter(t => t.key !== 'assurance').map(t => `<option value="${t.key}">${t.label}</option>`).join('');
     const builtinRows = builtin.map(d => builtinDocRowHTML(d, v.id)).join('');
     const linkRows = docs.length ? docs.map(docRowHTML).join('') : '';
-    const rows = (builtinRows + linkRows) || '<p class="text-sm text-slate-500">Aucun document pour le moment.</p>';
-    const count = builtin.length + docs.length;
+    // Contrats de leasing téléversés depuis l'onglet Contrats (settings.leasingDocs[immat]) : on les
+    // AFFICHE ICI aussi, sous « Contrat leasing/location » (source unique : gérés dans Contrats). Dédup par URL.
+    let leaseDocs = [];
+    try {
+      const m = (FP.settings.get().leasingDocs) || {};
+      const k = String(v.immat || '').toUpperCase();
+      const seenUrls = new Set(docs.map(d => d.url).filter(Boolean));
+      (Array.isArray(m[k]) ? m[k] : []).forEach((d, i) => { if (d && d.url && !seenUrls.has(d.url)) leaseDocs.push({ url: d.url, label: d.name || 'Contrat de leasing', _k: k + '::' + i }); });
+    } catch (e) {}
+    const tContrat = DOC_TYPES.find(x => x.key === 'contrat') || { label: 'Contrat leasing/location', icon: 'file-text' };
+    const leaseRows = leaseDocs.map(d => `<div class="flex items-center gap-2 py-2 border-b border-slate-100 text-sm">
+      <i data-lucide="${tContrat.icon}" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+      <div class="flex-1 min-w-0">
+        <div class="font-medium truncate">${escapeHtml(d.label)}</div>
+        <div class="text-xs text-slate-500">${tContrat.label} · géré dans Contrats</div>
+      </div>
+      <button type="button" class="btn btn-outline !py-1 !px-2.5 text-xs" data-doc-open="${escapeHtml(sanitizeUrl(d.url))}"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>
+      <button type="button" class="p-1.5 hover:bg-red-50 rounded text-slate-300 hover:text-red-600" data-lease-doc-del="${escapeHtml(d._k)}" title="Retirer ce contrat (aussi de l'onglet Contrats)"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+    </div>`).join('');
+    const rows = (builtinRows + linkRows + leaseRows) || '<p class="text-sm text-slate-500">Aucun document pour le moment.</p>';
+    const count = builtin.length + docs.length + leaseDocs.length;
     // Documents intégrés MASQUÉS : consultables + réaffichables un par un (les autres restent masqués).
     const hiddenB = builtinDocsHidden(v);
     const hiddenHTML = hiddenB.length ? `<details class="mt-3">
@@ -4447,6 +4469,19 @@
     const del = e.target.closest('[data-doc-del]');
     if (del) {
       delVehDoc(state.editingId, del.dataset.docDel);
+      return;
+    }
+    // Retrait d'un contrat de leasing (téléversé dans l'onglet Contrats, settings.leasingDocs) depuis la fiche.
+    const lDel = e.target.closest('[data-lease-doc-del]');
+    if (lDel) {
+      if (await FP.confirm('Retirer ce contrat de leasing ?\n(Il sera aussi retiré de l\'onglet Contrats.)')) {
+        try {
+          const parts = String(lDel.dataset.leaseDocDel || '').split('::'); const k = parts[0]; const idx = parseInt(parts[1], 10);
+          const s = FP.settings.get(); s.leasingDocs = (s.leasingDocs && typeof s.leasingDocs === 'object') ? s.leasingDocs : {};
+          if (Array.isArray(s.leasingDocs[k]) && idx >= 0) { s.leasingDocs[k].splice(idx, 1); if (!s.leasingDocs[k].length) delete s.leasingDocs[k]; FP.settings.save(s); }
+        } catch (err) {}
+        openDrawer(state.editingId);
+      }
       return;
     }
     const bDel = e.target.closest('[data-builtin-del]');
