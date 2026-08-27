@@ -637,7 +637,7 @@
       const mount = document.getElementById('conso-rapproch');
       if (!mount || !(window.FP && FP.rapprochementPanel && FP.supabase)) return;
       const soc = FP.activeSociete ? FP.activeSociete() : null;
-      const inSoc = x => !soc || soc === '__all__' || !x.societe || x.societe === soc;
+      const inSoc = x => !soc || soc === '__all__' || (x.societe ? String(x.societe) === soc : soc === 'PXP');   // NULL société → PXP (règle canonique)
       const items = [];
       try { const r = await FP.supabase.from('total_conso_tx').select('conducteur,carte,societe');
         (r.data || []).filter(inSoc).forEach(x => { const c = String(x.carte || ''); items.push({ name: x.conducteur, num: c, numKey: /^ULYS/i.test(c) ? 'condBadgeUlys' : 'condCarteTotal' }); }); } catch (e) {}
@@ -655,7 +655,7 @@
         conso = r.data || [];
         // Aligne la vue CEO scopée : ne montrer que la société active (RLS isole déjà les clients).
         const _soc = FP.activeSociete ? FP.activeSociete() : null;
-        if (_soc && _soc !== '__all__') conso = conso.filter(x => !x.societe || x.societe === _soc);
+        if (_soc && _soc !== '__all__') conso = conso.filter(x => x.societe ? String(x.societe) === _soc : _soc === 'PXP');   // NULL société → PXP
       } catch (e) {
         console.warn('[total_conso] indisponible :', e && (e.message || e));
         conso = null; // table absente → on affiche un message d'aide
@@ -666,7 +666,7 @@
         if (rt.error) throw rt.error;
         consoTx = rt.data || [];
         const _soc = FP.activeSociete ? FP.activeSociete() : null;
-        if (_soc && _soc !== '__all__') consoTx = consoTx.filter(x => !x.societe || x.societe === _soc);
+        if (_soc && _soc !== '__all__') consoTx = consoTx.filter(x => x.societe ? String(x.societe) === _soc : _soc === 'PXP');   // NULL société → PXP
         // Les conso Ulys (péage) datées vivent aussi dans total_conso_tx (pour le suivi des congés) mais
         // ne font PAS partie du relevé carte carburant Total → on les exclut des vues « Total Fleet ».
         consoTx = consoTx.filter(x => !String(x.carte || '').toUpperCase().startsWith('ULYS'));

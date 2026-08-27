@@ -1174,14 +1174,18 @@ FP.aenAnnuelFlotte = (vehicules) => (vehicules || []).reduce((s, v) => {
 // (settings.localeaseContrats, synchronisé par société). Même calcul que la page Contrats (loyer courant
 // = offre + avenant, sinon loyer de base ; override loyer par plaque prioritaire) ×12. Sert à ce que le
 // leasing du Budget/écran corresponde à celui des Contrats (avant, le Budget ratait les LLD).
-FP.leasingLocaleaseAnnuel = function () {
+FP.leasingLocaleaseAnnuel = function (data) {
   try {
     const list = FP.settings.get().localeaseContrats;
     if (!Array.isArray(list)) return 0;
     const ov = FP.getLeasingOverrides ? FP.getLeasingOverrides() : {};
+    // Index plaque → véhicule pour exclure les véhicules SORTIS (vendu/restitué/hors service) — cohérent TCO.
+    const vehByImmat = {}; try { (((data || {}).vehicules) || (window.FP_DATA && window.FP_DATA.vehicules) || []).forEach(v => { const k = FP.normImmat(v && v.immat || ''); if (k) vehByImmat[k] = v; }); } catch (e) {}
     const mens = list.reduce((s, c) => {
       // Contrat LLD terminé (échéance connue et dépassée) → on ne projette plus son loyer annuel.
       if (FP.leasingTermine && FP.leasingTermine(c)) return s;
+      const _v = vehByImmat[FP.normImmat(c && c.immat || '')];
+      if (_v && FP.horsFlotte(_v)) return s; // véhicule sorti de la flotte → plus de loyer projeté
       const ik = String(c.immat || '').toUpperCase();
       const o = (ik && ov[ik]) ? ov[ik].loyer : null;
       const base = (o != null && o !== '') ? Number(o) : c.loyerTTC;
@@ -1232,9 +1236,13 @@ FP.leasingMensuelFlotte = (data) => {
   // factures 'leasing', serait compté deux fois dans le total Budget/Contrats).
   const lldSet = new Set();
   try { (FP.settings.get().localeaseContrats || []).forEach(c => { const k = FP.normImmat(c && c.immat || ''); if (k) lldSet.add(k); }); } catch (e) {}
+  // Index plaque → véhicule (pour exclure les véhicules SORTIS de la flotte : vendu/restitué/hors service).
+  const vehByImmat = {}; (data.vehicules || []).forEach(v => { const k = FP.normImmat(v && v.immat || ''); if (k) vehByImmat[k] = v; });
   let mens = 0;
   immats.forEach(immat => {
     if (lldSet.has(FP.normImmat(immat || ''))) return; // déjà compté par leasingLocaleaseAnnuel
+    const _v = vehByImmat[FP.normImmat(immat || '')];
+    if (_v && FP.horsFlotte(_v)) return; // véhicule vendu/restitué/sorti → on ne projette plus son loyer (cohérent TCO)
     const c = FP.leasingContrat ? FP.leasingContrat(immat) : null;
     if (c && FP.leasingTermine && FP.leasingTermine(c)) return; // contrat fini → plus de loyer projeté
     const off = (c && FP.leasingLoyerCourant) ? FP.leasingLoyerCourant(c) : null;
@@ -1324,7 +1332,7 @@ FP.leasingMalusAnnuelFlotte = (data) => {
 };
 // Coût annuel leasing total = BPCE (× 12) + Localease/Ayvens (déjà annuel) + malus amorti (coût unique
 // réparti sur la durée). Source unique flotte (Budget, dashboard, Contrats lisent ce même total).
-FP.leasingAnnuelFlotte = (data) => FP.leasingMensuelFlotte(data) * 12 + (FP.leasingLocaleaseAnnuel ? FP.leasingLocaleaseAnnuel() : 0) + FP.leasingMalusAnnuelFlotte(data);
+FP.leasingAnnuelFlotte = (data) => FP.leasingMensuelFlotte(data) * 12 + (FP.leasingLocaleaseAnnuel ? FP.leasingLocaleaseAnnuel(data) : 0) + FP.leasingMalusAnnuelFlotte(data);
 
 // ⚠️ SOURCE UNIQUE — dépendances d'un véhicule (factures / amendes / emprunts en cours) avant
 // suppression, pour un AVERTISSEMENT identique partout (fiche véhicule ET Contrats).
@@ -2979,8 +2987,8 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailCopie',          label: 'E-mails en copie (séparés par ,)', type: 'text',  ph: 'ex. compta@masociete.fr, direction@masociete.fr' },
   // Signataire côté SOCIÉTÉ pour les états des lieux (reçoit le lien Yousign pour signer « pour la
   // société »). Propre à chaque société (le titulaire change d'une société à l'autre).
-  { key: 'edlSignataireNom',   label: 'États des lieux — signataire société (nom)',   type: 'text',  ph: 'ex. Mallaury Herembert — la personne qui signe côté société' },
-  { key: 'edlSignataireEmail', label: 'États des lieux — e-mail du signataire société', type: 'email', ph: 'ex. mallaury@masociete.fr — reçoit le lien de signature Yousign' },
+  { key: 'edlSignataireNom',   label: 'États des lieux — signataire société (nom)',   type: 'text',  ph: 'ex. Prénom Nom — la personne qui signe côté société' },
+  { key: 'edlSignataireEmail', label: 'États des lieux — e-mail du signataire société', type: 'email', ph: 'ex. signataire@masociete.fr — reçoit le lien de signature' },
   { key: 'mailDomaineEnvoi',   label: "Domaine d'envoi vérifié (Resend)", type: 'text',  ph: 'ex. resend.masociete.fr — le domaine validé dans Resend (le mail part de <ton adresse>@ce-domaine, réponse vers l’e-mail ci-dessus)' },
   // ⚠️ Les PRESTATAIRES carte carburant / badge péage NE sont PLUS ici : ils se gèrent dans
   // Contrôle → « Cartes & badges » (bouton ➕ Prestataire), au même endroit que le reste des
@@ -3617,7 +3625,7 @@ FP.settings = {
     // ancien écrase les coches faites ailleurs → « la tâche terminée disparaît », « le rappel se décoche »).
     // On fusionne ENTRÉE PAR ENTRÉE sur la version FRAÎCHE du serveur : on applique seulement ce que CE
     // poste a ajouté/modifié/supprimé (obj vs base), le reste du serveur est préservé.
-    const COLLECTION_KEYS = new Set(['taches', 'rappelsFaits', 'rappelsPerso', 'vehImmobilise', 'amendeMontantPaye', 'amendeMontants', 'kmMajDates', 'sinistreStage', 'sinistreStatut', 'sinistreGroupes', 'docStatus', 'permisMasque', 'condDocs', 'leasingContrats', 'kmSuiviExclus']);
+    const COLLECTION_KEYS = new Set(['taches', 'rappelsFaits', 'rappelsPerso', 'vehImmobilise', 'amendeMontantPaye', 'amendeMontants', 'kmMajDates', 'sinistreStage', 'sinistreStatut', 'sinistreGroupes', 'docStatus', 'permisMasque', 'condDocs', 'leasingContrats', 'kmSuiviExclus', 'inspections', 'reservations', 'docTypes', 'loueurs', 'alertesMasquees', 'alertesMasqueesInfo']);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
     // Fusion par FEUILLE d'un objet-map (ajouts/modifs d'obj appliqués sur remote frais ; suppressions de CE poste honorées).
     const mergeMap = (remoteV, objV, baseV) => {
@@ -3630,16 +3638,28 @@ FP.settings = {
       });
       return out;
     };
-    // Fusion d'un tableau d'objets {id,…} par id (union sur remote frais ; modifs/suppressions de CE poste appliquées).
-    const mergeById = (remoteV, objV, baseV) => {
+    // Fusion d'un TABLEAU (union sur remote frais ; modifs/suppressions de CE poste appliquées).
+    // • tableau d'objets AVEC id → fusion par id ; • sinon (strings, ou objets sans id) → union par
+    //   valeur (JSON) en honorant les suppressions de ce poste. ⚠️ Ne JAMAIS filtrer sur `.id` un tableau
+    //   sans id (ex. `loueurs` [{nom,prop}], `alertesMasquees` [string]) → on perdrait tout son contenu.
+    const mergeArr = (remoteV, objV, baseV) => {
       const rA = Array.isArray(remoteV) ? remoteV : [], oA = Array.isArray(objV) ? objV : [], bA = Array.isArray(baseV) ? baseV : [];
-      const byId = new Map(); rA.forEach(t => { if (t && t.id != null) byId.set(t.id, t); });
-      const objIds = new Set(oA.map(t => t && t.id).filter(v => v != null));
-      oA.forEach(t => { if (t && t.id != null) byId.set(t.id, t); });                              // ajouts/modifs de ce poste
-      bA.forEach(t => { if (t && t.id != null && !objIds.has(t.id)) byId.delete(t.id); });          // suppressions de ce poste
-      return Array.from(byId.values());
+      const hasIds = a => a.length > 0 && a.every(t => t && typeof t === 'object' && t.id != null);
+      if (hasIds(oA) || hasIds(rA)) {
+        const byId = new Map(); rA.forEach(t => { if (t && t.id != null) byId.set(t.id, t); });
+        const objIds = new Set(oA.map(t => t && t.id).filter(v => v != null));
+        oA.forEach(t => { if (t && t.id != null) byId.set(t.id, t); });                            // ajouts/modifs de ce poste
+        bA.forEach(t => { if (t && t.id != null && !objIds.has(t.id)) byId.delete(t.id); });        // suppressions de ce poste
+        return Array.from(byId.values());
+      }
+      // Sans id : union par valeur (dédup), suppressions de ce poste (présent dans base, absent d'obj) honorées.
+      const key = v => JSON.stringify(v);
+      const objKeys = new Set(oA.map(key)), baseKeys = new Set(bA.map(key)), seen = new Set(), out = [];
+      rA.forEach(v => { const k = key(v); if (baseKeys.has(k) && !objKeys.has(k)) return; if (!seen.has(k)) { seen.add(k); out.push(v); } });
+      oA.forEach(v => { const k = key(v); if (!seen.has(k)) { seen.add(k); out.push(v); } });
+      return out;
     };
-    const mergeCollection = (k, remoteV, objV, baseV) => Array.isArray(objV) || Array.isArray(remoteV) ? mergeById(remoteV, objV, baseV) : mergeMap(remoteV, objV, baseV);
+    const mergeCollection = (k, remoteV, objV, baseV) => (Array.isArray(objV) || Array.isArray(remoteV)) ? mergeArr(remoteV, objV, baseV) : mergeMap(remoteV, objV, baseV);
     const applyDelta = (remote) => {
       const merged = { ...remote };
       const keys = new Set([...Object.keys(obj), ...Object.keys(base)]);
@@ -7655,10 +7675,22 @@ FP.trash = {
 };
 
 FP.persist = {
-  _QKEY: 'fp_pending_writes',
+  // ⚠️ File d'écriture SUFFIXÉE PAR SOCIÉTÉ : une écriture créée hors-ligne en société A ne doit pas être
+  // « flushée » (et estampillée) sous la société B après une bascule. On ne flush que la file de la société
+  // active → l'insert part bien avec la BONNE société. Migration unique de l'ancienne file globale.
+  _QKEY: 'fp_pending_writes',   // legacy (migré vers la clé suffixée)
+  _qkey() { try { let s = (FP.activeSociete && FP.activeSociete()) || 'PXP'; if (s === '__all__') s = 'PXP'; return 'fp_pending_writes_' + String(s).toLowerCase(); } catch (e) { return 'fp_pending_writes_pxp'; } },
   available() { return !!(FP.db && FP.supabase); },
-  _loadQ() { try { return JSON.parse(localStorage.getItem(this._QKEY)) || []; } catch (e) { return []; } },
-  _saveQ(q) { try { localStorage.setItem(this._QKEY, JSON.stringify(q)); } catch (e) {} if (FP._syncBadge) FP._syncBadge(); },
+  _loadQ() {
+    try {
+      let q = JSON.parse(localStorage.getItem(this._qkey())) || [];
+      if (!Array.isArray(q)) q = [];
+      // Migration unique : l'ancienne file globale non suffixée → société courante (best-effort, pas de perte).
+      try { const legacy = JSON.parse(localStorage.getItem(this._QKEY) || 'null'); if (Array.isArray(legacy) && legacy.length) { q = q.concat(legacy); localStorage.removeItem(this._QKEY); localStorage.setItem(this._qkey(), JSON.stringify(q)); } } catch (e) {}
+      return q;
+    } catch (e) { return []; }
+  },
+  _saveQ(q) { try { localStorage.setItem(this._qkey(), JSON.stringify(q)); } catch (e) {} if (FP._syncBadge) FP._syncBadge(); },
   pendingCount() { return this._loadQ().length; },
   // Nombre de modifs en échec DÉFINITIF (erreur base, pas un simple souci réseau)
   failedCount() { return this._loadQ().filter(it => it.failed).length; },

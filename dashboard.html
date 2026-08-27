@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260826m">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260826n">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260826m"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260826n"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260826m">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260826n">
 <script>
 (function(){
   // Si "Se souvenir de moi" décoché ET nouvelle session browser : on nettoie le token
@@ -437,7 +437,7 @@
           </div>
           <div class="card p-6">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="font-bold text-slate-900" data-edit-key="dashboard.w_podium">🏆 Podium conducteurs — amendes 2026</h3>
+              <h3 class="font-bold text-slate-900" data-edit-key="dashboard.w_podium">🏆 Podium conducteurs — amendes de l'année</h3>
               <button id="dash-podium-toggle" class="btn btn-outline text-xs">Voir tout</button>
             </div>
             <div id="dash-podium" class="space-y-1" style="max-height:260px;overflow-y:auto"></div>
@@ -542,10 +542,10 @@
   </main>
 </div>
 
-<script src="assets/js/vendor/supabase.js?v=20260826m"></script>
-<script src="assets/js/supabase-client.js?v=20260826m"></script>
-<script src="assets/js/data.js?v=20260826m"></script>
-<script src="assets/js/app.js?v=20260826m"></script>
+<script src="assets/js/vendor/supabase.js?v=20260826n"></script>
+<script src="assets/js/supabase-client.js?v=20260826n"></script>
+<script src="assets/js/data.js?v=20260826n"></script>
+<script src="assets/js/app.js?v=20260826n"></script>
 <!-- Upsell gestion déléguée : visible uniquement pour les ADMINS clients (ni CEO, ni gestionnaire, ni salarié), masquable -->
 <script>
 (function(){
@@ -659,7 +659,7 @@
   }
 
   // Indicateurs détaillés (section repliable) — sur la flotte active (hors vendus)
-  const kmTotal = flotteActive.reduce((s, v) => s + (v.km || 0), 0);
+  const kmTotal = flotteActive.reduce((s, v) => s + (FP.kmActuel ? FP.kmActuel(v) : (v.km || 0)), 0);   // km RÉEL (max km / dernier relevé) — même source que les fiches
   document.getElementById('kpi-km').textContent = FP.num(kmTotal) + ' km';
   document.getElementById('kpi-km-moyen').textContent = FP.num(flotteActive.length ? Math.round(kmTotal / flotteActive.length) : 0) + ' km';
   document.getElementById('kpi-valeur').textContent = FP.euro(flotteActive.reduce((s, v) => s + (v.valeurAchat || 0), 0));
@@ -983,7 +983,8 @@
   const _podEuro = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
   function renderPodiumDash() {
     const byDriver = {};
-    (data.amendes || []).filter(a => FP.anneeAmende(a) === '2026').forEach(a => {
+    const _anneePod = String(new Date().getFullYear());   // année courante (plus de « 2026 » figé → faux dès 2027)
+    (data.amendes || []).filter(a => FP.anneeAmende(a) === _anneePod).forEach(a => {
       const k = _podKey(a.prenom); if (!k || NP_POD.has(k)) return;
       // nom = nom COMPLET unifié (prénom + nom de famille si renseigné) pour l'affichage ;
       // link = clé brute stockée sur l'amende (filtre de la page amendes inchangé).
@@ -998,7 +999,7 @@
           <span class="text-lg w-7 text-center flex-shrink-0">${medals[i] || `<span class="text-sm font-bold text-slate-400">${i + 1}</span>`}</span>
           <span class="flex-1 font-semibold text-slate-800 truncate">${FP.esc(d.nom)}</span>
           <span class="text-sm text-slate-500 flex-shrink-0">${d.n} · ${_podEuro(d.montant)}${d.points ? ' · −' + d.points + 'pts' : ''}</span>
-        </a>`).join('') || '<p class="text-sm text-slate-400">Aucune amende 2026.</p>';
+        </a>`).join('') || '<p class="text-sm text-slate-400">Aucune amende cette année.</p>';
     if (_podBtn) { if (all.length <= 5) _podBtn.style.display = 'none'; else { _podBtn.style.display = ''; _podBtn.textContent = _podExpanded ? 'Voir moins' : `Voir tout (${all.length})`; } }
   }
   if (_podBtn) _podBtn.addEventListener('click', () => { _podExpanded = !_podExpanded; renderPodiumDash(); });
@@ -1123,7 +1124,7 @@
     document.getElementById('kpi-vehicules').textContent = fa.length;
     const ap = (data.amendes || []).filter(a => FP.estAPayer(a)).length;
     document.getElementById('kpi-amendes').textContent = ap;
-    const km = fa.reduce((s, v) => s + (v.km || 0), 0);
+    const km = fa.reduce((s, v) => s + (FP.kmActuel ? FP.kmActuel(v) : (v.km || 0)), 0);   // km RÉEL — même source que les fiches
     document.getElementById('kpi-km').textContent = FP.num(km) + ' km';
     document.getElementById('kpi-km-moyen').textContent = FP.num(fa.length ? Math.round(km / fa.length) : 0) + ' km';
     document.getElementById('kpi-valeur').textContent = FP.euro(fa.reduce((s, v) => s + (v.valeurAchat || 0), 0));
