@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826o">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260826p">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260826o"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260826p"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260826o">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260826p">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -571,12 +571,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260826o"></script>
-<script src="../assets/js/supabase-client.js?v=20260826o"></script>
-<script src="../assets/js/data.js?v=20260826o"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260826p"></script>
+<script src="../assets/js/supabase-client.js?v=20260826p"></script>
+<script src="../assets/js/data.js?v=20260826p"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/fleet-docs.js?v=20260826o"></script>
-<script src="../assets/js/app.js?v=20260826o"></script>
+<script src="../assets/js/fleet-docs.js?v=20260826p"></script>
+<script src="../assets/js/app.js?v=20260826p"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1333,12 +1333,34 @@
     const items = [...state.selected].map(k => drivers.find(d => d.key === k)).filter(Boolean);
     if (items.length === 0) return;
     const linked = items.filter(d => d.vehicules.length + d.amendes.length > 0);
+    // Garde-fou AMENDES IMPAYÉES (même règle que la Sortie et la suppression unitaire) : on ne bloque
+    // pas, mais on prévient avec le total encore dû pour ne pas « virer » quelqu'un par mégarde.
+    let dueTotal = 0;
+    items.forEach(d => (d.amendes || []).forEach(a => { if (FP.estAPayer && FP.estAPayer(a)) dueTotal += (FP.montantDu ? FP.montantDu(a) : 0); }));
     let msg = `Supprimer ${items.length} conducteur${items.length > 1 ? 's' : ''} ?`;
-    if (linked.length) msg += `\n\n${linked.length} d'entre eux ${linked.length > 1 ? 'sont liés' : 'est lié'} à des véhicules/amendes : ils seront retirés de la liste (les véhicules et amendes ne sont PAS supprimés).`;
+    if (linked.length) msg += `\n\n${linked.length} d'entre eux ${linked.length > 1 ? 'sont liés' : 'est lié'} à des véhicules/amendes : ils seront archivés (véhicules et amendes NON supprimés) et leurs données personnelles (permis, adresse, tél, e-mail) seront effacées (RGPD), l'historique conservé.`;
+    if (dueTotal > 0) msg += `\n\n⚠️ Attention : ${FP.euro ? FP.euro(dueTotal) : dueTotal + ' €'} d'amendes encore À PAYER sur ces conducteurs. Solde-les avant si besoin.`;
     if (!(await FP.confirm(msg))) return;
+    const _date = new Date().toISOString().slice(0, 10);
     items.forEach(d => {
-      if (d.vehicules.length + d.amendes.length > 0) upsertCond(d.key, { masque: true, manuel: false, name: condRow(d.key) ? condRow(d.key).name : d.name });
-      else deleteCondRow(d.key);
+      if (d.vehicules.length + d.amendes.length > 0) {
+        // Archive + PURGE RGPD (même traitement que « Sortie des effectifs »).
+        upsertCond(d.key, {
+          masque: true, manuel: false, name: condRow(d.key) ? condRow(d.key).name : d.name,
+          adresse: null, dateNaissance: null, tel: null, email: null,
+          permisType: null, permisNumero: null, permisObtention: null, permisExpiration: null, permisUrl: null, permisFileId: null,
+        });
+        try { const s = FP.settings.get(); s.condSortie = (s.condSortie && typeof s.condSortie === 'object') ? s.condSortie : {}; if (!s.condSortie[d.key]) s.condSortie[d.key] = _date; FP.settings.save(s); } catch (e) {}
+        try {
+          const store = JSON.parse(localStorage.getItem(COND_KEY) || '{}');
+          if (Array.isArray(store.manuels)) store.manuels = store.manuels.filter(m => normPrenom(m.name) !== d.key);
+          store.masques = Array.isArray(store.masques) ? store.masques : []; if (!store.masques.includes(d.key)) store.masques.push(d.key);
+          localStorage.setItem(COND_KEY, JSON.stringify(store));
+          const permis = JSON.parse(localStorage.getItem(PERMIS_KEY) || '{}'); if (permis[d.key]) { delete permis[d.key]; localStorage.setItem(PERMIS_KEY, JSON.stringify(permis)); }
+        } catch (e) {}
+      } else {
+        deleteCondRow(d.key);
+      }
       unassignVehiclesOf(d.key, d); // ← retire aussi le conducteur de son/ses véhicule(s)
       condDocsRemove(d.key);     // ← purge ses documents perso
     });
@@ -1346,6 +1368,7 @@
     drivers = buildDrivers();
     renderKPIs();
     renderGrid();
+    if (FP.toast) FP.toast('Conducteur(s) retiré(s) · données perso effacées, historique conservé');
   }
 
   let currentDriverKey = null;
@@ -1494,10 +1517,12 @@
           <div class="min-w-0"><div class="font-medium">${FP.date(c.date)}</div><div class="text-xs text-slate-500">${escapeHtml(c.immat)}${c.n > 1 ? ' · ' + c.n + ' factures' : ''}</div></div>
           <div class="text-right flex-shrink-0"><div class="font-semibold">${c.montant ? FP.euroPrecis(c.montant) : '—'}</div></div>
         </div>`));
-    // Kilométrage parcouru avec son/ses véhicule(s)
-    const totalKm = d.vehicules.reduce((s, v) => s + (v.km || 0), 0);
+    // Kilométrage AU COMPTEUR de son/ses véhicule(s) — c'est la somme des odomètres (km total de chaque
+    // voiture, tous conducteurs confondus), PAS les km personnellement parcourus par ce conducteur. Ces
+    // derniers figurent, DATÉS, dans « Historique d'affectation » ci-dessous (km fin − km début par période).
+    const totalKm = d.vehicules.reduce((s, v) => s + (FP.kmActuel ? FP.kmActuel(v) : (v.km || 0)), 0);
     const kmInner = d.vehicules.length === 0 ? '<p class="text-sm text-slate-500">Aucun véhicule.</p>' :
-      `<div class="fiche-line"><span class="text-slate-600">Total parcouru</span><span class="font-bold" style="font-size:1.05rem">${FP.num(totalKm)} km</span></div>`
+      `<div class="fiche-line"><span class="text-slate-600" title="Somme des compteurs de ses véhicules (tous conducteurs confondus). Les km réellement parcourus par ce conducteur sont dans l'historique d'affectation.">Total au compteur</span><span class="font-bold" style="font-size:1.05rem">${FP.num(totalKm)} km</span></div>`
       + (d.vehicules.length > 1 ? clampList(d.vehicules.map(v => `<div class="fiche-line"><span class="flex items-center gap-2"><a href="vehicules.html?immat=${encodeURIComponent(v.immat || '')}" title="Voir la fiche véhicule" style="text-decoration:none" onclick="event.stopPropagation()"><span class="plate-badge" style="cursor:pointer">${escapeHtml(v.immat)}</span></a><span class="text-xs text-slate-500">${escapeHtml(v.marque)} ${escapeHtml(v.modele)}</span></span><span class="text-sm font-medium">${FP.num(v.km || 0)} km</span></div>`)) : '');
 
     // Historique d'affectation daté : tous les véhicules conduits par ce conducteur, avec périodes.
@@ -1801,18 +1826,24 @@
         if (homonymeDiff) { const kf = full.replace(/\s+/g, '-'); if (kf) key = kf; }
       }
     } catch (e) {}
-    // 1) Crée (ou réaffiche) le conducteur avec ses infos d'arrivée, masque levé.
-    upsertCond(key, {
-      name,
-      poste: $('f-poste') ? $('f-poste').value.trim() : '',
-      tel: $('f-tel').value.trim(),
-      email: $('f-email').value.trim(),
-      permisNumero: $('f-permis-num') ? $('f-permis-num').value.trim() : '',
-      permisExpiration: ($('f-permis-exp') && $('f-permis-exp').value) || '',
-      note: $('f-note').value.trim(),
-      manuel: true,
-      masque: false,
-    });
+    // ⚠️ ANTI-DOUBLON (CLAUDE.md) : si ce conducteur EXISTE DÉJÀ (même clé) et porte des infos, on
+    // prévient AVANT d'écraser — et on n'écrase JAMAIS un champ déjà rempli avec une case laissée vide.
+    const _existing = condRow(key);
+    if (_existing && !_existing.masque && (_existing.tel || _existing.email || _existing.permisNumero || _existing.poste)) {
+      const ok = window.confirm(`Un conducteur « ${_existing.name || name} » existe déjà avec des informations enregistrées.\n\nContinuer va COMPLÉTER sa fiche (les champs déjà remplis ne seront pas effacés). Voulez-vous continuer ?`);
+      if (!ok) return;
+    }
+    // 1) Crée (ou complète) le conducteur. On n'inclut QUE les champs réellement saisis → une case vide
+    // ne vient jamais effacer une info existante (tel/email/permis déjà connus).
+    const _ch = { name, manuel: true, masque: false };
+    const _put = (k, val) => { const v = (val == null ? '' : String(val)).trim(); if (v) _ch[k] = v; };
+    _put('poste', $('f-poste') ? $('f-poste').value : '');
+    _put('tel', $('f-tel').value);
+    _put('email', $('f-email').value);
+    _put('permisNumero', $('f-permis-num') ? $('f-permis-num').value : '');
+    if ($('f-permis-exp') && $('f-permis-exp').value) _ch.permisExpiration = $('f-permis-exp').value;
+    _put('note', $('f-note').value);
+    upsertCond(key, _ch);
     // 2) Date d'arrivée (réglages société, pas de colonne DB).
     const arrivee = ($('f-arrivee') && $('f-arrivee').value) || '';
     if (arrivee) { try { const s = FP.settings.get(); s.condArrivee = (s.condArrivee && typeof s.condArrivee === 'object') ? s.condArrivee : {}; s.condArrivee[key] = arrivee; FP.settings.save(s); } catch (e) {} }

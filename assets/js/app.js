@@ -5184,7 +5184,7 @@ FP.leasingInfo = (v) => {
   const debut = new Date(c.debut);
   const finContrat = new Date(debut); finContrat.setMonth(finContrat.getMonth() + c.dureeMois);
   const moisEcoules = Math.max(0, (today - debut) / (1000 * 60 * 60 * 24 * 30.44));
-  const km = Number(v.km) || 0;
+  const km = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0); // km réel (max saisi / dernier relevé) — source unique
   const kmParMoisAutorise = c.kmContrat / c.dureeMois;
   const kmAutoriseAJour = Math.min(c.kmContrat, Math.round(kmParMoisAutorise * moisEcoules));
   const kmParMoisReel = moisEcoules >= 0.3 ? km / moisEcoules : null;
@@ -5488,7 +5488,7 @@ FP.leasingCoutContrat = (immat) => {
   // 1) Forfait avec loyer (offre ou override) → fait foi.
   try {
     const c1 = FP.leasingContrat ? FP.leasingContrat(immat) : null;
-    if (c1) { const loyer = FP.leasingLoyerCourant ? FP.leasingLoyerCourant(c1) : (c1.loyer != null ? Number(c1.loyer) : null); if (loyer != null) return { loyerMois: loyer, contrat: c1, source: 'forfait' }; }
+    if (c1) { const loyer = FP.leasingLoyerCourant ? FP.leasingLoyerCourant(c1) : (c1.loyer != null ? Number(c1.loyer) : null); if (loyer != null) { if (FP.leasingTermine && FP.leasingTermine(c1)) return null; /* contrat fini → plus de loyer (cohérent Contrats/Budget) */ return { loyerMois: loyer, contrat: c1, source: 'forfait' }; } }
   } catch (e) {}
   // 2) Contrat LLD (Localease/Ayvens…) saisi dans l'app, retrouvé par la plaque.
   try {
@@ -5498,7 +5498,7 @@ FP.leasingCoutContrat = (immat) => {
       if (it) {
         const contrat = { debut: it.debut || null, dureeMois: Number(it.dureeMois) || 0, loyer: (it.loyerTTC != null && it.loyerTTC !== '') ? Number(it.loyerTTC) : null, avenants: Array.isArray(it.avenants) ? it.avenants : [] };
         const loyer = FP.leasingLoyerCourant ? FP.leasingLoyerCourant(contrat) : contrat.loyer;
-        if (loyer != null) return { loyerMois: loyer, contrat, source: 'lld' };
+        if (loyer != null) { if (FP.leasingTermine && FP.leasingTermine(contrat)) return null; /* contrat fini → plus de loyer */ return { loyerMois: loyer, contrat, source: 'lld' }; }
       }
     }
   } catch (e) {}
@@ -5564,7 +5564,10 @@ FP.santeConducteur = (d, data) => {
   let score = 100; const raisons = [];
   const amendes = Array.isArray(d.amendes) ? d.amendes : [];
   if (amendes.length) { score -= Math.min(30, amendes.length * 6); raisons.push(`${amendes.length} amende${amendes.length > 1 ? 's' : ''}`); }
-  const points = amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
+  // Points retirés : respecte l'override MANUEL de points restants (Paramètres/fiche) s'il existe — même
+  // source que la jauge /12 de la fiche conducteur, sinon les deux indicateurs se contredisent.
+  let points = amendes.reduce((s, a) => s + (Number(a.points) || 0), 0);
+  try { const pm = (FP.settings.get().pointsManuel) || {}; const ov = d.key != null ? pm[d.key] : null; if (ov != null && ov !== '') { const rest = Math.max(0, Math.min(12, Math.round(Number(ov)))); if (!isNaN(rest)) points = 12 - rest; } } catch (e) {}
   if (points > 0) { score -= Math.min(30, points * 3); raisons.push(`${points} point${points > 1 ? 's' : ''} retiré${points > 1 ? 's' : ''}`); }
   const dus = amendes.filter(a => FP.estAPayer && FP.estAPayer(a)).reduce((s, a) => s + (FP.montantDu ? FP.montantDu(a) : (Number(a.montantTTC) || 0)), 0);
   if (dus > 0) { score -= Math.min(15, 5 + Math.floor(dus / 100)); raisons.push(`${FP.euro ? FP.euro(dus) : dus + ' €'} à payer`); }
@@ -5671,7 +5674,7 @@ FP.decoteVehicule = (v) => {
   let res = ageY <= 1 ? (1 - 0.20 * ageY) : (0.80 * Math.pow(0.88, ageY - 1));
   res = Math.max(0.10, Math.min(1, res));
   // Ajustement kilométrage vs attendu (~20 000 km/an) : 100 000 km d'écart ≈ ±10%.
-  const km = Number(v.km) || 0;
+  const km = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0); // km réel (source unique) — cohérent avec le coût/km
   const attendu = ageY * 20000;
   let kmAdj = 1;
   if (attendu > 0) { kmAdj = 1 - ((km - attendu) / 100000) * 0.10; kmAdj = Math.max(0.80, Math.min(1.10, kmAdj)); }
@@ -6036,7 +6039,7 @@ FP.buildAlertes = (data) => {
       const items = list.map(s => ({ label: `${s.plaque || 'Véhicule'} — QR ouvert ${rel(s.at)}`, target: 'vehicules.html?immat=' + encodeURIComponent(s.plaque || '') }));
       const nNew = (FP.qrScans._unseen || 0);
       const msg = (nNew > 0 ? `${nNew} nouveau${nNew > 1 ? 'x' : ''} scan${nNew > 1 ? 's' : ''} de QR` : `${list.length} véhicule${list.length > 1 ? 's' : ''} scanné${list.length > 1 ? 's' : ''}`) + ' (24 h)';
-      out.push({ niveau: 'info', categorie: 'Activité QR', message: msg, detail: 'Quelqu\'un a ouvert le portail QR d\'un véhicule (le détail daté est dans la fiche du véhicule).', sort: 470, vehicules: items });
+      out.push({ niveau: 'info', categorie: 'Activité QR', message: msg, detail: 'Quelqu\'un a ouvert le portail QR d\'un véhicule (le détail daté est dans la fiche du véhicule).', sort: 470, muteKey: 'qr-activity', vehicules: items });
     }
   } catch (e) {}
 
@@ -6325,6 +6328,7 @@ FP.buildAlertes = (data) => {
   try {
     const sinGroupes = (FP.settings.get().sinistreGroupes) || {};
     const sinDoss = (FP.settings.get().sinistreAssurance) || {};
+    const sinStatut = (FP.settings.get().sinistreStatut) || {}; // statut de suivi par clé de groupe ou id de facture
     const gkOf = id => sinGroupes[id] || id;
     const incidents = {};
     (data.factures || []).forEach(f => {
@@ -6344,7 +6348,9 @@ FP.buildAlertes = (data) => {
       // Résolu si : réponse/clôture dans le dossier, OU statut de suivi = remboursé/PEC/refusé
       // (sur n'importe quelle ligne de l'incident), OU un montant remboursé a été saisi.
       const statResolu = RESOLU.has((sinStatut[g.key] || '').toLowerCase()) || (g.ids || []).some(id => RESOLU.has((sinStatut[id] || '').toLowerCase()));
-      if (d.resp || d.dateReponse || d.dateCloture || statResolu || (Number(d.rembourse) || 0) > 0) return false;
+      // Le courrier de l'assureur STOCKÉ (courrierUrl) ou un n° de dossier saisi = l'assureur A répondu →
+      // on éteint l'alerte même si l'IA n'a pas su lire une date dans le courrier.
+      if (d.resp || d.dateReponse || d.dateCloture || d.courrierUrl || d.numeroDossier || statResolu || (Number(d.rembourse) || 0) > 0) return false;
       const decl = d.dateDeclaration || g.date;
       const dt = decl ? new Date(decl) : null; if (!dt || isNaN(dt)) return false;
       return Math.floor((today0 - dt) / 86400000) >= SIN_RELANCE_J;
@@ -6368,7 +6374,7 @@ FP.buildAlertes = (data) => {
         const t = (f.type || '').toLowerCase();
         let amt = 0;
         if (COUT.includes(t)) amt = Number(f.montantTTC) || 0;
-        else if (t === 'sinistre' && sinStatut[f.id] !== 'rembourse' && sinStatut[f.id] !== 'pec') amt = Number(f.montantTTC) || 0;
+        else if (t === 'sinistre') { const _ss = FP.sinistreStatutOf ? FP.sinistreStatutOf(f) : ''; if (_ss !== 'rembourse' && _ss !== 'pec') amt = Number(f.montantTTC) || 0; }
         if (amt && f.vehiculeImmat) spendByImmat[f.vehiculeImmat] = (spendByImmat[f.vehiculeImmat] || 0) + amt;
       });
       const over = [];
@@ -6438,7 +6444,7 @@ FP.buildAlertes = (data) => {
     const nQ = FP.declCondQuestionCount || 0;
     if (nQ > 0) {
       out.push({
-        niveau: 'warning', categorie: 'Conducteurs',
+        niveau: 'warn', categorie: 'Conducteurs',
         message: nQ > 1 ? `${nQ} questions de conducteur` : `1 question de conducteur`,
         detail: 'Un conducteur a posé une question depuis le QR véhicule — à consulter dans Sinistres (Demandes conducteur).',
         sort: -95, target: 'sinistres.html',
@@ -6451,7 +6457,7 @@ FP.buildAlertes = (data) => {
     const nKm = FP.declCondKmCount || 0;
     if (nKm > 0) {
       out.push({
-        niveau: 'info', categorie: 'Relevé KM',
+        niveau: 'info', categorie: 'Relevé km',
         message: nKm > 1 ? `${nKm} relevés kilométriques reçus` : `1 relevé kilométrique reçu`,
         detail: 'Un conducteur a relevé son kilométrage depuis le QR véhicule — à consulter dans Sinistres (Demandes conducteur).',
         sort: -80, target: 'sinistres.html',
@@ -6679,8 +6685,8 @@ FP.rapportDirection = (data) => {
 
   const vehs = (data.vehicules || []);
   const actifs = vehs.filter(v => !FP.estVendu(v)); // parc possédé (hors vendus) — même règle que dashboard/écran/stats
-  const kmTotal = actifs.reduce((s, v) => s + (Number(v.km) || 0), 0);
-  const valeurParc = actifs.reduce((s, v) => s + (Number(v.valeurAchat) || Number(v.prix) || 0), 0);
+  const kmTotal = actifs.reduce((s, v) => s + (FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0)), 0); // km réel — même source que dashboard/stats
+  const valeurParc = actifs.reduce((s, v) => s + (Number(v.valeurAchat) || 0), 0); // même repli que le dashboard (valeurAchat seule)
 
   // Factures dédoublonnées via le HELPER CANONIQUE FP.dedupeFactures (n° normalisé ≥ 4 car. + même TTC),
   // exactement comme le dashboard / l'écran mural / Statistiques → chiffres cohérents dans le rapport.
@@ -9316,8 +9322,11 @@ FP.edlSign = {
       let rows = this._rows; if (!rows) { await this.load(); rows = this._rows || []; }
       // URL des PDF NON signés qui ont maintenant une version SIGNÉE → superflus dans Documents.
       const superseded = new Set(rows.filter(x => x && x.statut === 'signe' && x.pdfUrl && x.signedPdfUrl && x.pdfUrl !== x.signedPdfUrl).map(x => x.pdfUrl));
-      try { sessionStorage.setItem('fp_edl_docs_cleaned', '1'); } catch (e) {}   // au plus 1 balayage / session
+      // ⚠️ Ne PAS poser le verrou de session quand il n'y a rien à nettoyer : un EDL peut être signé PLUS
+      // TARD dans la même session → il faut pouvoir relancer le nettoyage. On ne verrouille qu'après un vrai
+      // balayage (superseded non vide) pour éviter de re-scanner « documents » à chaque chargement.
       if (!superseded.size) return 0;
+      try { sessionStorage.setItem('fp_edl_docs_cleaned', '1'); } catch (e) {}
       const dr = await FP.db.select('documents');
       const docs = (dr && dr.data) ? dr.data : [];
       const toDelete = docs.filter(d => d && d.type === 'etat-des-lieux' && d.url && superseded.has(d.url));
@@ -9495,10 +9504,12 @@ FP.dupe = {
         // Doublon d'amende = UNIQUEMENT même n° d'avis (clé unique). On ne flague JAMAIS sur
         // prénom+date+montant : deux amendes distinctes du même conducteur (même jour/montant) sont
         // légitimes (ex. 2 stationnements) — c'était la cause des faux doublons.
-        const av = n(rec.numeroAvis), mt = this._num(rec.montant);
+        // Le n° d'avis est la CLÉ UNIQUE d'un avis : même n° = même amende, quel que soit le montant lu
+        // (l'OCR peut lire tantôt le minoré, tantôt le forfaitaire). On ne compare donc PAS le montant
+        // ici (sinon un 2ᵉ import du même avis avec un montant différent passait comme s'il était nouveau).
+        const av = n(rec.numeroAvis);
         if (!(av && av.length >= 4)) return null;
-        return list.find(a => notSelf(a) && n(a.numeroAvis) === av
-          && (mt == null || a.montant == null || this._amtEq(a.montant, mt))) || null;
+        return list.find(a => notSelf(a) && n(a.numeroAvis) === av) || null;
       }
       case 'vehicules': {
         const im = n(rec.immat); if (!im) return null;
