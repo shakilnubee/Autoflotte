@@ -7471,7 +7471,9 @@ FP.ulysApi = (function () {
       const m = matchBadge(b);
       if (!actif && (det.assignment || det.immatriculation)) out.push({ b, type: 'inactif', txt: 'Badge inactif encore affecté (' + (det.assignment || det.immatriculation) + ')' });
       if (det.immatriculation && !m.veh) out.push({ b, type: 'hors-flotte', txt: 'Immatriculation « ' + det.immatriculation + ' » absente de la flotte' });
-      if (!det.immatriculation && !det.assignment) out.push({ b, type: 'vide', txt: 'Badge ' + (b.badgeNumber || '') + ' sans immatriculation ni affectation' });
+      // « Vide » = badge sans immat NI affectation côté Ulys ET non rattaché dans Parc Pilot. Si tu l'as
+      // relié à un véhicule (n° saisi = settings.vehBadge) ou à un conducteur, ce n'est PLUS une anomalie.
+      if (!det.immatriculation && !det.assignment && !m.veh && !m.condKey) out.push({ b, type: 'vide', txt: 'Badge ' + (b.badgeNumber || '') + ' sans immatriculation ni affectation' });
     });
     return out;
   }
@@ -7541,7 +7543,7 @@ FP.ulysRenderPanel = function (el) {
         condCell = esc(nom) + (m.via ? ' <span class="text-xs text-slate-400">(' + m.via + ')</span>' : '')
           + ' <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-link="' + esc(b.badgeNumber) + '" data-uls-cond="' + esc(m.condKey) + '">Relier</button>';
       } else {
-        condCell = '<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-linkto="' + esc(b.badgeNumber) + '">Relier à…</button>';
+        condCell = '<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-linkto="' + esc(b.badgeNumber) + '" data-uls-assign="' + esc(det.assignment || '') + '">Relier à…' + (det.assignment ? ' <span class="text-xs text-slate-400">(' + esc(det.assignment) + ')</span>' : '') + '</button>';
       }
       // Véhicule = celui résolu par matchBadge (immat Ulys OU n° de badge saisi sur la fiche véhicule =
       // settings.vehBadge). ⚠️ Ne PAS conditionner l'affichage à la seule immat Ulys : un badge sans
@@ -7601,11 +7603,15 @@ FP.ulysRenderPanel = function (el) {
     // permet p.ex. de rattacher plusieurs badges au conducteur « Dépôt PXP ».
     el.querySelectorAll('[data-uls-linkto]').forEach(b => b.addEventListener('click', () => {
       const num = b.getAttribute('data-uls-linkto');
+      const assign = b.getAttribute('data-uls-assign') || '';   // nom d'affectation Ulys (nouveau conducteur)
       const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'Conducteur…';
       inp.style.cssText = 'width:190px;padding:3px 7px;border:1px solid var(--fp-border);border-radius:6px;font-size:12px';
       b.replaceWith(inp);
       const done = (c) => { const key = c && (c.key || c.condKey || (typeof c === 'string' ? c : null)); if (key) { FP.ulysApi.relier(key, num); FP.toast && FP.toast('Badge relié ✓'); draw(); } };
       if (FP.conducteurPicker) { try { FP.conducteurPicker(inp, { onPick: done }); } catch (e) {} }
+      // Pré-remplit avec le nom d'affectation Ulys → pour un NOUVEAU conducteur, le menu propose direct
+      // « ➕ Créer « <nom> » » (un seul clic). Sinon, champ vide comme avant.
+      if (assign) { inp.value = assign; }
       try { inp.focus(); } catch (e) {}
     }));
     const inv = el.querySelector('#uls-api-invoices');
