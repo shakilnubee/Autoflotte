@@ -1746,7 +1746,7 @@ FP.searchSelect = function (select, opts) {
     let active = -1;
     function open(q) {
       const nq = norm(q); const all = optionList(); const none = all.find(o => o.value === '');
-      const items = all.filter(o => o.value !== '' && (!nq || norm(o.label).includes(nq)));
+      const items = all.filter(o => o.value !== '' && (FP.searchMatch ? FP.searchMatch(o.label, q) : (!nq || norm(o.label).includes(nq))));
       let html = '';
       if (none) html += `<div class="fp-ss-it" data-v="" style="padding:.5rem .7rem;cursor:pointer;color:var(--fp-muted,#5A6577)">${esc(none.label)}</div>`;
       html += items.map(o => `<div class="fp-ss-it" data-v="${esc(o.value)}" style="padding:.5rem .7rem;cursor:pointer">${esc(o.label)}</div>`).join('');
@@ -2834,7 +2834,7 @@ FP.conducteurPicker = function (input, opts) {
     }
     function open(q) {
       const nq = norm(q);
-      const list = FP.conducteurs.list().filter(c => !nq || norm(FP.conducteurs.displayName(c)).includes(nq)).slice(0, 40);
+      const list = FP.conducteurs.list().filter(c => FP.searchMatch ? FP.searchMatch(FP.conducteurs.displayName(c), q) : (!nq || norm(FP.conducteurs.displayName(c)).includes(nq))).slice(0, 40);
       const exact = FP.conducteurs.find(q);
       let html = list.map(c => `<div class="fp-cp-it" data-k="${esc(c.key)}" style="padding:.5rem .7rem;cursor:pointer">${esc(FP.conducteurs.displayName(c))}</div>`).join('');
       if (q && q.trim() && !exact) {
@@ -3970,6 +3970,17 @@ FP.archiveVehicleDocs = async (immats) => {
 // quand le focus n'est pas dans un champ éditable.
 // Normalisation pour la recherche : minuscules + SANS accents (taper « jeremy » trouve « Jérémy »).
 FP.norm = (s) => (s == null ? '' : s.toString()).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// Version « collée » : sans accents NI espaces/tirets/ponctuation → « GA-313-PK » = « ga313pk ».
+FP.normLoose = (s) => FP.norm(s).replace(/[^a-z0-9]/g, '');
+// Recherche TOLÉRANTE (accents, casse, espaces/tirets) : « depot » trouve « Dépôt », « GA313PK »
+// trouve « GA-313-PK ». À utiliser partout où on filtre une liste au clavier (une seule règle).
+FP.searchMatch = (text, q) => {
+  if (q == null || q === '') return true;
+  const nt = FP.norm(text), nq = FP.norm(q);
+  if (nq && nt.indexOf(nq) !== -1) return true;
+  const lt = FP.normLoose(text), lq = FP.normLoose(q);
+  return !!lq && lt.indexOf(lq) !== -1;
+};
 // Échappement HTML — À UTILISER pour toute donnée saisie/OCR injectée en innerHTML (anti-XSS).
 FP.esc = (s) => (s == null ? '' : String(s)).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -7385,12 +7396,20 @@ FP.ulysRenderPanel = function (el) {
       const det = b.detailBadge || {};
       const actif = String(b.state || '').toLowerCase().indexOf('actif') === 0;
       const m = FP.ulysApi.matchBadge(b);
-      const deja = m.condKey && _estRelie(b, m.condKey);
-      const condCell = m.cond
-        ? (esc(m.cond.prenom || m.cond.name || m.cond.key) + (m.via ? ' <span class="text-xs text-slate-400">(' + m.via + ')</span>' : '')
-           + (deja ? ' <span class="fp-ech ok" style="font-size:.6rem">relié</span>'
-                   : ' <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-link="' + esc(b.badgeNumber) + '" data-uls-cond="' + esc(m.condKey) + '">Relier</button>'))
-        : '<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-linkto="' + esc(b.badgeNumber) + '">Relier à…</button>';
+      // « relié » vient UNIQUEMENT du stockage (condBadgeUlys via conducteurParBadgeUlys) → l'état
+      // survit à un « Synchroniser » / rechargement, même si la fiche conducteur n'est pas encore en
+      // mémoire (sinon un lien enregistré paraissait « à relier » et il fallait re-relier à chaque fois).
+      let lien = null; try { lien = FP.conducteurParBadgeUlys ? FP.conducteurParBadgeUlys(b.badgeNumber) : null; } catch (e) {}
+      let condCell;
+      if (lien) {
+        condCell = esc(lien.name || lien.key) + ' <span class="fp-ech ok" style="font-size:.6rem">relié</span>';
+      } else if (m.cond || m.condKey) {
+        const nom = m.cond ? (m.cond.prenom || m.cond.name || m.cond.key) : m.condKey;
+        condCell = esc(nom) + (m.via ? ' <span class="text-xs text-slate-400">(' + m.via + ')</span>' : '')
+          + ' <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-link="' + esc(b.badgeNumber) + '" data-uls-cond="' + esc(m.condKey) + '">Relier</button>';
+      } else {
+        condCell = '<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-linkto="' + esc(b.badgeNumber) + '">Relier à…</button>';
+      }
       const vehCell = det.immatriculation ? (m.veh ? FP.lienVehicule(m.veh.immat) : (esc(det.immatriculation) + ' <span class="fp-ech warn" style="font-size:.6rem">hors flotte</span>')) : '—';
       return '<tr>'
         + '<td style="font-family:monospace;font-size:.8rem">' + esc(b.badgeNumber || '—') + '</td>'
