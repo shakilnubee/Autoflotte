@@ -351,7 +351,7 @@
     function renderConso(){
       const sel = $('uls-conso-mois'), tbody = $('uls-conso-tbody'), tfoot = $('uls-conso-tfoot');
       const empty = $('uls-conso-empty'), emptyMsg = $('uls-conso-empty-msg');
-      if (conso === null) { sel.innerHTML = ''; tbody.innerHTML = ''; tfoot.innerHTML = ''; empty.classList.remove('hidden'); emptyMsg.textContent = 'Table ulys_conso absente — lance le script SQL fourni (supabase/ulys-conso-setup.sql).'; return; }
+      if (conso === null) { sel.innerHTML = ''; tbody.innerHTML = ''; tfoot.innerHTML = ''; empty.classList.remove('hidden'); emptyMsg.textContent = 'Le détail des consommations Ulys n\'est pas encore disponible.'; console.warn('[fleet-views] ulys_conso absente — infra one-shot : script supabase/ulys-conso-setup.sql.'); return; }
       // ⚠️ Ne compter QUE la conso ADOSSÉE À UNE FACTURE Ulys réellement présente. Une conso orpheline
       // (facture jamais importée, ou supprimée) fausserait le total → à ne PAS compter. On relie par le
       // n° de facture ; à défaut (anciennes lignes sans n°), par le mois d'une facture Ulys existante.
@@ -706,7 +706,7 @@
       if (conso === null) {
         sel.innerHTML = ''; tbody.innerHTML = ''; tfoot.innerHTML = '';
         empty.classList.remove('hidden');
-        emptyMsg.innerHTML = "Le suivi détaillé n'est pas encore activé. Exécute le script <b>total-conso</b> dans Supabase (SQL Editor) pour créer le tableau.";
+        emptyMsg.textContent = "Le suivi détaillé n'est pas encore disponible."; console.warn('[fleet-views] total_conso absente — infra one-shot : script « total-conso ».');
         return;
       }
       const moisDispo = [...new Set(conso.map(c => c.mois).filter(Boolean))].sort().reverse();
@@ -1678,7 +1678,8 @@
       }
       if (btn) { btn.innerHTML = old; btn.disabled = false; }
       if (tableMissing) {
-        const m = 'Il faut d\'abord créer la table (une seule fois) : dans Supabase → SQL Editor, lance le script « total-conso-tx », puis reclique sur « Reconstruire le détail ».';
+        console.warn('[fleet-views] total_conso_tx absente — infra one-shot : lancer le script SQL « total-conso-tx ».');
+        const m = 'Le détail daté n\'est pas encore disponible (configuration en cours côté plateforme). Réessaie un peu plus tard.';
         if (FP.alert) FP.alert(m); else alert(m); return;
       }
       // + Reconstruit AUSSI le détail Ulys DATÉ (péages par jour) depuis les PDF Ulys stockés → même
