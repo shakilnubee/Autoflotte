@@ -8849,6 +8849,9 @@ FP.edl = {
     if (!veh) return;
     const esc = FP.esc || (s => String(s == null ? '' : s));
     const prof = (FP.settings.get().profil) || {};
+    // E-mail PRO de la société (celui d'envoi des amendes, avec défaut PXP) → sert de repli pour le
+    // signataire société, à la place de l'e-mail de LOGIN perso (ex. gmail) qui n'a rien à y faire.
+    const effMail = (FP.societeProfil ? (FP.societeProfil().mailExpediteur || '') : '');
     const socNom = prof.nom || (FP.activeSociete && FP.activeSociete()) || '';
     const cond = String(opts.conducteur || veh.chauffeur || '').trim();
     const sens = String(opts.sens || 'remise') === 'restitution' ? 'restitution' : 'remise';
@@ -8908,7 +8911,7 @@ FP.edl = {
         <div style="font-size:11.5px;color:#94a3b8;margin-top:3px">La <b>signature intégrée</b> envoie à l'employé (et au signataire société) un <b>lien</b> pour signer au doigt/souris. Le PDF signé revient dans la fiche. Aucun prestataire, aucune limite.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
           ${infoRow('Signataire société (nom)', inp('edl-soc-nom', prof.edlSignataireNom || socNom, 'Nom du signataire société'))}
-          ${infoRow('E-mail signataire société', inp('edl-soc-email', prof.edlSignataireEmail || '', 'signataire@societe.fr'))}
+          ${infoRow('E-mail signataire société', inp('edl-soc-email', prof.edlSignataireEmail || effMail || '', 'signataire@societe.fr'))}
         </div>
         <div style="font-size:11.5px;color:#94a3b8;margin-top:2px">Le signataire société est pré-rempli depuis <b>Paramètres → Société</b> (modifiable par société). Il reçoit le lien pour signer « pour la société ».</div>
         <div data-edl-err style="display:none;margin-top:10px;padding:10px 12px;border:1px solid #fca5a5;background:#fef2f2;border-radius:10px;font-size:12px;color:#991b1b;white-space:pre-wrap;word-break:break-word"></div>
@@ -8925,7 +8928,7 @@ FP.edl = {
     // Signataire société : par défaut = le GESTIONNAIRE CONNECTÉ (celui qui fait l'état des lieux),
     // si aucun signataire société n'a été réglé dans Paramètres → Société. → les 2 e-mails (conducteur
     // + gestionnaire) sont remplis automatiquement, sans rien saisir.
-    if (!prof.edlSignataireEmail) {
+    if (!prof.edlSignataireEmail && !effMail) {
       try {
         if (FP.auth && FP.auth.getUser) FP.auth.getUser().then((u) => {
           const em = u && u.email; const fE = ov.querySelector('#edl-soc-email'), fN = ov.querySelector('#edl-soc-nom');
@@ -8981,24 +8984,25 @@ FP.edl = {
         if (!(FP.db && FP.db.select)) return;
         const res = await FP.db.select('documents');
         const rawUrls = (res && res.data ? res.data : []).filter(d => d && d.vehiculeId === veh.id && d.type === 'etat-des-lieux' && d.url && !/\.pdf(\?|$)/i.test(d.url)).map(d => d.url);
-        // ⚠️ ANTI-DOUBLON : d'anciens brouillons ont pu enregistrer PLUSIEURS fois la MÊME photo. On
-        // dédoublonne par CONTENU : les photos EDL sont nommées « …-h<hash>.<ext> » (hash du contenu,
-        // cf. uploadScan opts.name) → même hash = même image, même si le chemin diffère. Repli : URL nue
-        // (sans le jeton de signature). Un 2ᵉ filet par CONTENU (data URL identique) agit au chargement.
-        const dupKey = u => { const base = String(u).split('?')[0]; const m = base.match(/-h([a-z0-9]+)\.[a-z0-9]+$/i); return m ? ('h:' + m[1]) : base; };
-        const seenKey = new Set(); const urls = [];
-        rawUrls.forEach(u => { const k = dupKey(u); if (!seenKey.has(k)) { seenKey.add(k); urls.push(u); } });
-        const wrap = ov.querySelector('[data-edl-existing]'); if (!wrap || !urls.length) return;
+        const wrap = ov.querySelector('[data-edl-existing]'); if (!wrap || !rawUrls.length) return;
+        // ⚠️ ANTI-DOUBLON FIABLE : d'anciens brouillons ont pu enregistrer PLUSIEURS fois la MÊME photo,
+        // sous des chemins DIFFÉRENTS (donc ni l'URL ni le hash-dans-le-nom ne suffisent). On CHARGE
+        // réellement chaque image (redimensionnée en JPEG déterministe) et on dédoublonne par CONTENU :
+        // deux images identiques donnent le MÊME data URL → on n'en garde qu'une. On mesure d'abord le
+        // vrai nombre d'images UNIQUES (le bouton l'affiche), puis on les réutilise au clic (sans recharger).
+        const uniq = []; const seenData = new Set();
+        for (const u of rawUrls.slice(0, 24)) {
+          const d = await urlToDataUrl(u);
+          if (d && !seenData.has(d)) { seenData.add(d); uniq.push({ url: u, data: d }); }
+        }
+        if (!uniq.length) return;
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.style.cssText = 'cursor:pointer;border:1px solid #bfdbfe;border-radius:8px;padding:6px 12px;font-size:12.5px;color:#1d4ed8;background:#eff6ff;display:inline-flex;gap:6px;align-items:center';
-        btn.textContent = '📎 Reprendre les ' + urls.length + ' photo(s) déjà enregistrée(s)';
-        btn.addEventListener('click', async () => {
-          btn.disabled = true; const t = btn.textContent; btn.textContent = '… chargement';
-          // 2ᵉ filet anti-doublon : par CONTENU (data URL identique) → jamais deux fois la même image,
-          // même si d'anciens brouillons l'ont stockée sous des chemins différents (sans hash dans le nom).
-          const seenData = new Set(edlPhotos);
-          for (const u of urls) { const d = await urlToDataUrl(u); if (d && !seenData.has(d)) { seenData.add(d); edlPhotos.push(d); edlPhotoSrc.push(u); } }
+        btn.textContent = '📎 Reprendre ' + (uniq.length > 1 ? ('les ' + uniq.length + ' photos') : 'la photo') + ' déjà enregistrée' + (uniq.length > 1 ? 's' : '');
+        btn.addEventListener('click', () => {
+          const already = new Set(edlPhotos);   // évite de ré-ajouter une photo déjà présente
+          uniq.forEach(p => { if (!already.has(p.data)) { already.add(p.data); edlPhotos.push(p.data); edlPhotoSrc.push(p.url); } });
           renderThumbs(); btn.remove();
         });
         wrap.appendChild(btn);
