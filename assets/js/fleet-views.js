@@ -342,6 +342,29 @@
     // --- Consommation par conducteur (table ulys_conso) ---
     let conso = null, consoLoaded = false;
     const moisLabel = (m) => { const [y, mo] = (m || '').split('-'); const N = ['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']; return mo ? `${N[+mo]} ${y}` : m; };
+    // Clé canonique par PERSONNE (dédoublonne « Charles » ⇄ « Charles LENNON », sépare 2 homonymes).
+    const _np = (s) => (FP.condGroupKey ? FP.condGroupKey(s) : (FP.normPrenom ? FP.normPrenom(s) : String(s || '').trim().toLowerCase()));
+    const _nomUnif = (raw) => (FP.conducteurNomUnifie ? (FP.conducteurNomUnifie(raw) || raw) : raw);
+    // ⚠️ SOURCE UNIQUE du regroupement conso (table ET exports CSV/PDF) : dédoublonne une même personne
+    // stockée sous 2 orthographes (prénom seul + nom complet = mêmes chiffres en double), puis regroupe
+    // par PERSONNE (et par MOIS si byMonth). Avant, seule la TABLE dédoublonnait → l'export comptait DOUBLE.
+    function ulsGroup(src, byMonth){
+      const seen = new Set(), dedup = [], bestName = {};
+      (src || []).forEach(c => {
+        const np = _np(c.conducteur);
+        const uk = np + '|' + (c.mois || '') + '|' + (c.numeroFacture || c.numero_facture || '');
+        if (seen.has(uk)) return; seen.add(uk); dedup.push(c);
+        const cur = bestName[np]; if (!cur || String(c.conducteur || '').length > cur.length) bestName[np] = c.conducteur || '—';
+      });
+      const g = {};
+      dedup.forEach(c => {
+        const np = _np(c.conducteur);
+        const key = byMonth ? (np + '|' + (c.mois || '')) : (np || (c.conducteur || '—'));
+        const a = (g[key] = g[key] || { mois: c.mois, conducteur: _nomUnif(bestName[np] || c.conducteur || '—'), nb_trajets: 0, km: 0, total_ttc: 0 });
+        a.nb_trajets += Number(c.nb_trajets) || 0; a.km += Number(c.km) || 0; a.total_ttc += Number(c.total_ttc) || 0;
+      });
+      return Object.values(g);
+    }
     async function loadConso(){
       consoLoaded = true;
       try { const r = await FP.supabase.from('ulys_conso').select('*'); if (r.error) throw r.error; conso = r.data || []; const _soc = FP.activeSociete ? FP.activeSociete() : null; if (_soc && _soc !== '__all__') conso = conso.filter(x => !x.societe || x.societe === _soc); }
@@ -361,26 +384,8 @@
       const filledKey = 'all,' + moisList.join(',');
       if (sel.dataset.filled !== filledKey) { sel.innerHTML = '<option value="all">Toutes les périodes</option>' + moisList.map(m => `<option value="${m}">${moisLabel(m)}</option>`).join(''); sel.dataset.filled = filledKey; sel.value = 'all'; }
       const { src, label } = ulsPeriod();
-      // ⚠️ ANTI-DOUBLON : une même personne peut être stockée sous 2 orthographes (prénom seul
-      // « Charles » ET nom complet « Charles LENNON ») → mêmes chiffres en double. On garde UNE seule
-      // ligne par (personne, mois, facture), puis on regroupe par PERSONNE (prénom normalisé) en
-      // affichant le nom le plus complet. (Ne PAS sommer les doublons — ce sont les mêmes données.)
-      // Clé canonique par PERSONNE (FP.condGroupKey) : dédoublonne « Charles » ⇄ « Charles LENNON » mais
-      // SÉPARE deux homonymes de prénom (badges distincts) → plus de conso cumulée sur une seule ligne.
-      const _np = (s) => (FP.condGroupKey ? FP.condGroupKey(s) : (FP.normPrenom ? FP.normPrenom(s) : String(s || '').trim().toLowerCase()));
-      const seenUC = new Set(), dedup = [], bestName = {};
-      src.forEach(c => {
-        const np = _np(c.conducteur);
-        const uk = np + '|' + (c.mois || '') + '|' + (c.numeroFacture || c.numero_facture || '');
-        if (seenUC.has(uk)) return; seenUC.add(uk);
-        dedup.push(c);
-        const cur = bestName[np]; if (!cur || String(c.conducteur || '').length > cur.length) bestName[np] = c.conducteur || '—';
-      });
-      const byCond = {};
-      // Nom AFFICHÉ = fiche conducteur (unifié) ; repli sur le libellé le plus complet du relevé.
-      const _nomUnif = (raw) => (FP.conducteurNomUnifie ? (FP.conducteurNomUnifie(raw) || raw) : raw);
-      dedup.forEach(c => { const np = _np(c.conducteur); const k = np || (c.conducteur || '—'); const a = (byCond[k] = byCond[k] || { conducteur: _nomUnif(bestName[np] || c.conducteur || '—'), nb_trajets:0, km:0, total_ttc:0 }); a.nb_trajets += Number(c.nb_trajets)||0; a.km += Number(c.km)||0; a.total_ttc += Number(c.total_ttc)||0; });
-      const rows = Object.values(byCond).sort((a,b) => b.total_ttc - a.total_ttc);
+      // Regroupement par PERSONNE via la SOURCE UNIQUE ulsGroup (même dédoublonnage que les exports).
+      const rows = ulsGroup(src, false).sort((a, b) => b.total_ttc - a.total_ttc);
       empty.classList.toggle('hidden', rows.length > 0);
       if (!rows.length) emptyMsg.textContent = 'Aucun détail de consommation sur cette période (importe la facture Ulys correspondante).';
       tbody.innerHTML = rows.map(c => `<tr><td>${esc(c.conducteur || '—')}</td><td style="text-align:right">${c.nb_trajets ? c.nb_trajets : '—'}</td><td style="text-align:right">${c.km ? FP.num(c.km) + ' km' : '—'}</td><td style="text-align:right;font-weight:700">${FP.euro(c.total_ttc || 0)}</td></tr>`).join('');
@@ -442,9 +447,9 @@
     { const vt = $('uls-conso-view'); if (vt) vt.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { try { if (window.FP && FP.settings) { const s = FP.settings.get(); s.consoView = b.dataset.v; FP.settings.save(s); } } catch (e) {} applyUlsView(); })); }
     if (FP.filterResetButton) FP.filterResetButton($('uls-conso-mois').closest('div'), { onReset: () => { $('uls-conso-mois').value = 'all'; $('uls-conso-from').value = ''; $('uls-conso-to').value = ''; renderConso(); } });
     if ($('uls-an-csv')) $('uls-an-csv').addEventListener('click', () => {
-      const rows = ulsExportRows(); if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée à exporter'); return; }
-      const cols = ['mois', 'conducteur', 'numeroFacture', 'nb_trajets', 'km', 'total_ttc'];
-      const head = ['Mois', 'Conducteur', 'N° facture', 'Trajets', 'Km', 'TTC'];
+      const rows = ulsGroup(ulsExportRows(), true); if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée à exporter'); return; }
+      const cols = ['mois', 'conducteur', 'nb_trajets', 'km', 'total_ttc'];
+      const head = ['Mois', 'Conducteur', 'Trajets', 'Km', 'TTC'];
       const numCols = { nb_trajets:1, km:1, total_ttc:1 };
       const src = rows.slice().sort((a, b) => String(a.mois).localeCompare(String(b.mois)));
       if (FP.downloadXlsx) {
@@ -457,9 +462,9 @@
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ulys-conso.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
     });
     if ($('uls-an-pdf')) $('uls-an-pdf').addEventListener('click', () => {
-      if (!(FP.fiche && FP.fiche.open)) return; const { src: rows, label } = ulsPeriod(); if (!rows.length) { if (FP.toast) FP.toast('Aucune donnée sur la période'); return; }
-      const g = {}; rows.forEach(c => { const n = c.conducteur || '—'; const d = g[n] || (g[n] = { nom:n, trajets:0, km:0, ttc:0 }); d.trajets += Number(c.nb_trajets) || 0; d.km += Number(c.km) || 0; d.ttc += Number(c.total_ttc) || 0; });
-      const list = Object.values(g).sort((a, b) => b.ttc - a.ttc);
+      if (!(FP.fiche && FP.fiche.open)) return; const { src, label } = ulsPeriod(); if (!src.length) { if (FP.toast) FP.toast('Aucune donnée sur la période'); return; }
+      // Même dédoublonnage que la table (source unique ulsGroup) → plus de conducteur compté en double.
+      const list = ulsGroup(src, false).map(c => ({ nom: c.conducteur || '—', trajets: Number(c.nb_trajets) || 0, km: Number(c.km) || 0, ttc: Number(c.total_ttc) || 0 })).sort((a, b) => b.ttc - a.ttc);
       FP.fiche.open({ key: 'ulys', title: 'Relevé Ulys — péages' + (label && label !== 'Toutes les périodes' ? ' — ' + label : ''), rows: list, cols: [
         { id: 'nom', label: 'Conducteur', def: true, get: r => r.nom },
         { id: 'trajets', label: 'Trajets', def: true, align: 'right', get: r => r.trajets ? String(r.trajets) : '—', sum: r => r.trajets, fmt: t => String(Math.round(t)) },
