@@ -99,10 +99,19 @@ Deno.serve(async (req) => {
   const { data: { user: caller } } = await admin.auth.getUser(token);
   if (!caller) return json({ error: "Session expirée — reconnecte-toi." }, 401);
 
-  // 2) Un chauffeur (portail salarié) n'a pas accès aux données Ulys de la société.
+  // 2) Contrôles sur le profil de l'appelant :
+  //    (a) un chauffeur (portail salarié) n'a pas accès aux données Ulys ;
+  //    (b) ⚠️ MULTI-SOCIÉTÉS : le compte Ulys (clé) appartient à UNE société (ULYS_SOCIETE, défaut PXP).
+  //        Un utilisateur d'une AUTRE société ne doit pas voir ces badges (= noms de salariés = données
+  //        personnelles d'un autre client). Le CEO/super-admin (societe vide ou « __all__ ») passe.
   try {
-    const { data: prof } = await admin.from("profiles").select("role").eq("id", caller.id).maybeSingle();
+    const { data: prof } = await admin.from("profiles").select("role, societe").eq("id", caller.id).maybeSingle();
     if (prof && prof.role === "chauffeur") return json({ error: "Accès non autorisé." }, 403);
+    const owner = (Deno.env.get("ULYS_SOCIETE") || "PXP").trim().toLowerCase();
+    const soc = String((prof && prof.societe) || "").trim().toLowerCase();
+    if (soc && soc !== "__all__" && soc !== owner) {
+      return json({ error: "Aucun compte Ulys configuré pour cette société." }, 403);
+    }
   } catch { /* pas de profil lisible → on continue (l'API Ulys reste protégée par le secret serveur) */ }
 
   // 3) Action demandée.
