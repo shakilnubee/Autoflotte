@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827r">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827s">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260827r"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260827s"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260827r">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260827s">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -289,11 +289,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260827r"></script>
-<script src="../assets/js/supabase-client.js?v=20260827r"></script>
-<script src="../assets/js/data.js?v=20260827r"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260827s"></script>
+<script src="../assets/js/supabase-client.js?v=20260827s"></script>
+<script src="../assets/js/data.js?v=20260827s"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260827r"></script>
+<script src="../assets/js/app.js?v=20260827s"></script>
 <!-- ⚡ fleet-views.js (~160 Ko : Total Fleet + Ulys) N'EST PLUS chargé ici en SYNCHRONE : l'onglet
      par défaut est « Contrôle » et n'en a pas besoin. Il est injecté à la demande (1re ouverture de
      Total/Ulys) via ensureFleetViews(), et préchargé en douceur sur temps mort → l'arrivée sur
@@ -324,7 +324,7 @@
     _flPromise = new Promise(res => {
       try {
         const s = document.createElement('script');
-        s.src = '../assets/js/fleet-views.js?v=20260827r';
+        s.src = '../assets/js/fleet-views.js?v=20260827s';
         s.onload = () => res(!!(window.FP && FP.mountTotal));
         s.onerror = () => res(false);
         document.head.appendChild(s);
@@ -1065,57 +1065,39 @@
     (data.vehicules || []).forEach(v => { try { const cc = v.chauffeur && v.chauffeur !== '—' ? FP.conducteurs.find(v.chauffeur) : null; if (cc && cc.key && v.immat) (_immatsByKey[cc.key] = _immatsByKey[cc.key] || []).push(v.immat); } catch (e) {} });
     const vehImmats = (c) => _immatsByKey[c.key] || [];
     const vehLink = (im) => '<a href="vehicules.html?immat=' + encodeURIComponent(im) + '" style="display:inline-block;background:#EEF2FF;color:#3730A3;border-radius:6px;padding:1px 7px;font-size:.78rem;font-weight:700;text-decoration:none;white-space:nowrap;margin:1px 2px 1px 0">' + esc(im) + '</a>';
-    const inp = (c, p) => { const num = (FP.condNum ? FP.condNum(c.key, p.numKey) : '') || ''; return '<input class="cb-inp" data-cb-key="' + esc(c.key) + '" data-cb-field="' + esc(p.numKey) + '" value="' + esc(num) + '" placeholder="—" readonly title="Verrouillé — cliquez ✏️ pour modifier" style="' + _cbInpLocked + '">'; };
+    // Édition EN PUCES (multi-n°) via le composant partagé FP.badgeChipsHTML : ajout/retrait par puce
+    // (croix / + Ajouter) — plus besoin de verrou ✏️, chaque geste est explicite. Un conducteur peut
+    // porter PLUSIEURS n° (ex. « Dépôt PXP ») : on les voit tous d'un coup d'œil, chacun sur sa puce.
+    const inp = (c, p) => FP.badgeChipsHTML({ scope: 'cond', numkey: p.numKey, key: c.key, placeholder: (p.type === 'peage' ? 'N° de badge…' : 'N° de carte…') });
     if (_cbView === 'table') {
-      const th = pres.map(p => '<th style="text-align:right">' + (p.type === 'peage' ? 'Badge ' : 'Carte ') + esc(p.nom) + '</th>').join('');
+      const th = pres.map(p => '<th style="text-align:left">' + (p.type === 'peage' ? 'Badge ' : 'Carte ') + esc(p.nom) + '</th>').join('');
       box.innerHTML = '<table class="ctrl-tbl"><thead><tr><th>Conducteur</th><th>Véhicule(s)</th>' + th + '</tr></thead><tbody>'
         + conds.map(c => {
             const vs = vehImmats(c);
-            const tds = pres.map(p => '<td style="text-align:right"><span style="display:inline-flex;align-items:center;gap:5px">' + inp(c, p)
-              + '<button type="button" class="cb-edit" title="Modifier" style="border:none;background:none;cursor:pointer;padding:0 2px;font-size:.95rem;line-height:1">✏️</button></span></td>').join('');
+            const tds = pres.map(p => '<td style="text-align:left;min-width:190px;vertical-align:top">' + inp(c, p) + '</td>').join('');
             return '<tr><td><b>' + esc(FP.conducteurs.displayName(c)) + '</b></td>'
               + '<td>' + (vs.length ? vs.map(vehLink).join('') : '<span class="text-slate-400">—</span>') + '</td>' + tds + '</tr>';
           }).join('') + '</tbody></table>';
     } else {
-      // Vue CARTES (par défaut) : une carte par conducteur ; le ✏️ déverrouille tous ses n° d'un coup.
+      // Vue CARTES (par défaut) : une carte par conducteur ; chaque n° est une puce éditable.
       box.innerHTML = '<div class="cb-grid">' + conds.map(c => {
           const vs = vehImmats(c);
-          const lines = pres.map(p => '<div class="cb-line"><span class="cb-line-lbl">' + (p.type === 'peage' ? '🛣️ Badge ' : '⛽ Carte ') + esc(p.nom) + '</span>' + inp(c, p) + '</div>').join('');
+          const lines = pres.map(p => '<div class="cb-line cb-line-chips"><span class="cb-line-lbl">' + (p.type === 'peage' ? '🛣️ Badge ' : '⛽ Carte ') + esc(p.nom) + '</span>' + inp(c, p) + '</div>').join('');
           return '<div class="cb-card"><div class="cb-card-top"><div class="cb-card-id"><div class="cb-name">' + esc(FP.conducteurs.displayName(c)) + '</div>'
-            + '<div class="cb-vehs">' + (vs.length ? vs.map(vehLink).join('') : '<span class="text-slate-400 text-xs">— aucun véhicule</span>') + '</div></div>'
-            + '<button type="button" class="cb-gear" title="Modifier les numéros de ce conducteur">✏️</button></div>'
+            + '<div class="cb-vehs">' + (vs.length ? vs.map(vehLink).join('') : '<span class="text-slate-400 text-xs">— aucun véhicule</span>') + '</div></div></div>'
             + '<div class="cb-lines">' + lines + '</div></div>';
         }).join('') + '</div>';
     }
     document.querySelectorAll('#cb-view button').forEach(b => b.classList.toggle('active', b.dataset.cbv === _cbView));
     if (window.lucide) lucide.createIcons();
   }
-  // ⚠️ MODE SOMBRE : la règle body.fp-dark input force le fond en foncé avec !important → il faut
-  // forcer AUSSI fond + texte en !important, sinon on tape du texte noir sur fond foncé (invisible).
-  const cbUnlock = (el) => { if (!el) return; el.readOnly = false; el.style.setProperty('background', '#fff', 'important'); el.style.setProperty('color', '#111827', 'important'); el.style.cursor = 'text'; el.style.borderColor = 'var(--fp-accent)'; el.focus(); try { el.select(); } catch (e) {} };
-  const cbLock = (el) => { if (!el) return; el.readOnly = true; el.style.background = '#F1F5F9'; el.style.color = '#475569'; el.style.cursor = 'pointer'; el.style.borderColor = 'var(--fp-border)'; };
   $('cb-search').addEventListener('input', e => { _cbSearch = e.target.value; renderCartes(); });
   if ($('cb-only-num')) $('cb-only-num').addEventListener('change', e => { _cbOnlyNum = e.target.checked; renderCartes(); });
   // Bascule Cartes / Tableau (mémorisée par société).
   if ($('cb-view')) $('cb-view').addEventListener('click', e => { const b = e.target.closest('[data-cbv]'); if (b) setCbView(b.dataset.cbv); });
-  // Déverrouiller : double-clic sur le champ, crayon ✏️ (tableau), ou ✏️ de carte (déverrouille toute la carte).
-  $('cb-body').addEventListener('dblclick', e => { const el = e.target.closest('input.cb-inp'); if (el && el.readOnly) cbUnlock(el); });
-  $('cb-body').addEventListener('click', e => {
-    const gear = e.target.closest('.cb-gear');
-    if (gear) { const card = gear.closest('.cb-card'); if (!card) return; const on = gear.classList.toggle('on'); card.querySelectorAll('input.cb-inp').forEach((el, i) => { if (on) { if (i === 0) cbUnlock(el); else { el.readOnly = false; el.style.setProperty('background', '#fff', 'important'); el.style.setProperty('color', '#111827', 'important'); el.style.cursor = 'text'; el.style.borderColor = 'var(--fp-accent)'; } } else cbLock(el); }); return; }
-    const b = e.target.closest('.cb-edit'); if (!b) return; const el = b.parentNode.querySelector('input.cb-inp'); cbUnlock(el);
-  });
-  // Re-verrouiller dès qu'on quitte le champ (après enregistrement).
-  $('cb-body').addEventListener('focusout', e => { const el = e.target.closest('input.cb-inp'); if (el && !el.readOnly) cbLock(el); });
-  $('cb-body').addEventListener('change', e => {
-    const el = e.target.closest('[data-cb-key]'); if (!el) return;
-    const key = el.getAttribute('data-cb-key'), field = el.getAttribute('data-cb-field');
-    const s = FP.settings.get(); s[field] = s[field] || {};
-    const val = (el.value || '').trim();
-    if (val) s[field][key] = val; else delete s[field][key];
-    FP.settings.save(s);
-    if (FP.toast) FP.toast('✓ Enregistré');
-  });
+  // Édition EN PUCES (composant partagé) : ajout/retrait de n° par puce, miroir conducteur↔véhicule.
+  // onChange = renderCartes → le compteur « avec n° » et le filtre restent à jour après chaque geste.
+  if (FP.wireBadgeChips) FP.wireBadgeChips($('cb-body'), { onChange: renderCartes });
 
   $('ctrl-body').addEventListener('click', async (e) => {
     const gh = e.target.closest('[data-grp]');
