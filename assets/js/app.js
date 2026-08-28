@@ -2742,11 +2742,14 @@ FP.setNumCarteVehicule = (v, vehKey, val) => {
   const s = FP.settings.get();
   const condMapKey = FP.CARTE_COND_MAP[vehKey];
   const condKey = FP.condKeyDuVehicule(v);
-  let k = vehKey, id = v.id;
-  if (condKey && condMapKey) { k = condMapKey; id = condKey; }
-  s[k] = s[k] || {};
   val = (val || '').trim();
-  if (val) s[k][id] = val; else delete s[k][id];
+  // (1) Lien VÉHICULE-spécifique TOUJOURS conservé (settings[vehKey][v.id]) : c'est lui qui permet
+  //     de savoir que TEL badge = TEL véhicule (colonne « Véhicule » du panneau Ulys), même quand le
+  //     véhicule a un chauffeur partagé (« Dépôt PXP » sur plusieurs véhicules → sinon plaque perdue).
+  s[vehKey] = s[vehKey] || {};
+  if (val) s[vehKey][v.id] = val; else delete s[vehKey][v.id];
+  // (2) ET sur le CONDUCTEUR (chauffeur reconnu) : source d'attribution de la conso par n° (inchangé).
+  if (condKey && condMapKey) { s[condMapKey] = s[condMapKey] || {}; if (val) s[condMapKey][condKey] = val; else delete s[condMapKey][condKey]; }
   FP.settings.save(s);
 };
 // Lu depuis une fiche CONDUCTEUR : n° enregistré sur le conducteur, sinon repli d'affichage sur un
@@ -7448,8 +7451,13 @@ FP.ulysRenderPanel = function (el) {
     const btn = el.querySelector('#uls-api-sync');
     if (btn) btn.addEventListener('click', async () => {
       btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = 'Synchronisation…';
-      try { await FP.ulysApi.sync(); FP.toast && FP.toast('Badges Ulys synchronisés ✓'); draw(); }
-      catch (e) { (FP.alert || alert)('Ulys : ' + (e && e.message || e)); btn.disabled = false; btn.innerHTML = old; }
+      try {
+        await FP.ulysApi.sync();
+        let msg = 'Badges Ulys synchronisés ✓';
+        // Synchroniser importe AUSSI les factures (un seul geste, plus besoin du bouton dédié).
+        try { const r = await FP.ulysApi.importInvoices(); if (r && r.added) { msg += ' · ' + r.added + ' facture(s) importée(s)'; try { if (window.renderUlys) window.renderUlys(); } catch (e) {} } } catch (e) {}
+        FP.toast && FP.toast(msg); draw();
+      } catch (e) { (FP.alert || alert)('Ulys : ' + (e && e.message || e)); btn.disabled = false; btn.innerHTML = old; }
     });
     el.querySelectorAll('[data-uls-link]').forEach(b => b.addEventListener('click', () => {
       const num = b.getAttribute('data-uls-link'), ck = b.getAttribute('data-uls-cond');
@@ -7478,6 +7486,23 @@ FP.ulysRenderPanel = function (el) {
     });
   }
   draw();
+  // ── Synchro AUTOMATIQUE discrète (sans aucun clic) ──────────────────────────────────────────
+  // À l'ouverture de l'onglet, si la dernière synchro date de + de 18 h, on rafraîchit badges +
+  // factures TOUT SEUL, une seule fois par session (respecte le quota d'appels journalier Ulys).
+  // Silencieux : toute erreur (secrets manquants, quota, hors-ligne) est ignorée — aucun message.
+  (function autoSync() {
+    try {
+      if (FP._ulysAutoDone) return;
+      const at = (FP.ulysApi.cache() || {}).at;
+      const stale = !at || (Date.now() - new Date(at).getTime() > 18 * 3600 * 1000);
+      if (!stale) return;
+      FP._ulysAutoDone = true;
+      FP.ulysApi.sync()
+        .then(() => FP.ulysApi.importInvoices().catch(() => null))
+        .then((r) => { try { if (r && r.added && window.renderUlys) window.renderUlys(); } catch (e) {} try { draw(); } catch (e) {} })
+        .catch(() => {});
+    } catch (e) {}
+  })();
 };
 
 // ── Piège de focus (focus-trap) global — garde la tabulation DANS la fenêtre ouverte ──
