@@ -2423,6 +2423,21 @@ FP.setCondNum = function (condKey, numKey, val) {
     return true;
   } catch (e) { return false; }
 };
+// AJOUTE un n° de carte/badge à un conducteur SANS écraser les précédents (un conducteur peut en
+// porter plusieurs, ex. « Dépôt PXP »). Idempotent : si le numéro y est déjà, ne fait rien.
+FP.addCondNum = function (condKey, numKey, val) {
+  try {
+    if (!condKey || !numKey) return false;
+    const v = String(val == null ? '' : val).trim(); if (!v) return false;
+    const s = FP.settings.get(); s[numKey] = s[numKey] || {};
+    const cur = FP.carteParts(s[numKey][condKey]);
+    const nv = FP.normCarte(v);
+    if (cur.some(p => FP.normCarte(p) === nv)) return true; // déjà présent
+    cur.push(v); s[numKey][condKey] = cur.join(', ');
+    FP.settings.save(s);
+    return true;
+  } catch (e) { return false; }
+};
 // items : [{ name, num, numKey }] (name = nom brut lu sur le relevé ; num = n° carte/badge ; numKey).
 // Renvoie les entrées qui NE correspondent à AUCUNE fiche conducteur (dédupliquées) — donc « à relier ».
 // Tous les conducteurs, Y COMPRIS les masqués (la liste standard FP.conducteurs.list() les EXCLUT →
@@ -2659,16 +2674,19 @@ FP.carteMatch = (enregistre, lu) => {
   if (Math.min(a.length, b.length) < 4) return false;
   return a.endsWith(b) || b.endsWith(a);
 };
+// Un conducteur peut porter PLUSIEURS n° de carte/badge (ex. « Dépôt PXP » avec plusieurs véhicules) :
+// on stocke alors les numéros séparés par « , » « ; » « / » ou retour à la ligne, et on teste CHACUN.
+FP.carteParts = (v) => String(v == null ? '' : v).split(/[;,/\n]+/).map(s => s.trim()).filter(Boolean);
 FP._condParNumero = (settingKey, lu) => {
   if (!lu || !FP.settings) return null;
   let map; try { map = FP.settings.get()[settingKey] || {}; } catch (e) { return null; }
   const b = FP.normCarte(lu); if (!b) return null;
-  // 1) Match EXACT prioritaire (jamais ambigu) : on tranche tout de suite.
-  for (const key in map) { if (FP.normCarte(map[key]) === b) return _condOut(key); }
+  // 1) Match EXACT prioritaire (jamais ambigu) : on tranche tout de suite. (teste chaque n° du conducteur)
+  for (const key in map) { if (FP.carteParts(map[key]).some(p => FP.normCarte(p) === b)) return _condOut(key); }
   // 2) Match par SUFFIXE (un n° tronqué « …1234 ») : on ne devine PAS si plusieurs cartes
   //    partagent les mêmes derniers chiffres (2 cartes → 2 conducteurs) — sinon fausse attribution.
   const partiels = [];
-  for (const key in map) { if (FP.carteMatch(map[key], lu)) partiels.push(key); }
+  for (const key in map) { if (FP.carteParts(map[key]).some(p => FP.carteMatch(p, lu))) partiels.push(key); }
   if (partiels.length === 1) return _condOut(partiels[0]);
   return null; // 0 ou ≥2 correspondances partielles → on laisse le repli nom/plaque décider
   function _condOut(key) { let name = key; try { const all = FP.conducteursTous ? FP.conducteursTous() : FP.conducteurs.list(); const c = all.find(x => x.key === key); if (c) name = FP.conducteurs.displayName(c); } catch (e) {} return { key, name }; }
@@ -7320,8 +7338,8 @@ FP.ulysApi = (function () {
     contracts: () => call('contracts'),
     invoices: () => call('invoices'),
     transactionsCsv: (invoiceId) => call('transactions', { invoiceId }),
-    // Relie un badge à un conducteur (écrit condBadgeUlys) — réutilise le helper canonique.
-    relier: (condKey, badgeNumber) => FP.setCondNum(condKey, 'condBadgeUlys', badgeNumber),
+    // Relie un badge à un conducteur (AJOUTE à condBadgeUlys, sans écraser → plusieurs badges possibles).
+    relier: (condKey, badgeNumber) => FP.addCondNum(condKey, 'condBadgeUlys', badgeNumber),
     // Importe les factures Ulys (en-tête HT/TVA/TTC) dans la table `factures` — MÊME pipeline que
     // les autres factures (anti-doublon, fournisseur « Ulys » → apparaît dans l'onglet Ulys). On
     // ignore silencieusement celles déjà présentes (par n° de facture). Détail transaction par
@@ -7361,17 +7379,18 @@ FP.ulysRenderPanel = function (el) {
     const when = at ? (() => { try { return FP.date(at.slice(0, 10)); } catch (e) { return at.slice(0, 10); } })() : null;
     const anos = FP.ulysApi.anomalies(badges);
     const collapsed = isCollapsed();
-    let nbRelies = 0; try { (badges || []).forEach(b => { const m = FP.ulysApi.matchBadge(b); if (m.condKey && FP.condNum && String(FP.condNum(m.condKey, 'condBadgeUlys') || '').replace(/\D/g, '') === String(b.badgeNumber || '').replace(/\D/g, '')) nbRelies++; }); } catch (e) {}
+    const _estRelie = (b, condKey) => { try { const c = FP.conducteurParBadgeUlys && FP.conducteurParBadgeUlys(b.badgeNumber); return !!(c && condKey && c.key === condKey); } catch (e) { return false; } };
+    let nbRelies = 0; try { (badges || []).forEach(b => { const m = FP.ulysApi.matchBadge(b); if (m.condKey && _estRelie(b, m.condKey)) nbRelies++; }); } catch (e) {}
     const rows = (badges || []).map(b => {
       const det = b.detailBadge || {};
       const actif = String(b.state || '').toLowerCase().indexOf('actif') === 0;
       const m = FP.ulysApi.matchBadge(b);
-      let deja = false; try { deja = m.condKey && FP.condNum && String(FP.condNum(m.condKey, 'condBadgeUlys') || '').replace(/\D/g, '') === String(b.badgeNumber || '').replace(/\D/g, ''); } catch (e) {}
+      const deja = m.condKey && _estRelie(b, m.condKey);
       const condCell = m.cond
         ? (esc(m.cond.prenom || m.cond.name || m.cond.key) + (m.via ? ' <span class="text-xs text-slate-400">(' + m.via + ')</span>' : '')
            + (deja ? ' <span class="fp-ech ok" style="font-size:.6rem">relié</span>'
                    : ' <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-link="' + esc(b.badgeNumber) + '" data-uls-cond="' + esc(m.condKey) + '">Relier</button>'))
-        : '<span class="text-slate-400 text-xs">à rapprocher à la main</span>';
+        : '<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-linkto="' + esc(b.badgeNumber) + '">Relier à…</button>';
       const vehCell = det.immatriculation ? (m.veh ? FP.lienVehicule(m.veh.immat) : (esc(det.immatriculation) + ' <span class="fp-ech warn" style="font-size:.6rem">hors flotte</span>')) : '—';
       return '<tr>'
         + '<td style="font-family:monospace;font-size:.8rem">' + esc(b.badgeNumber || '—') + '</td>'
@@ -7400,7 +7419,7 @@ FP.ulysRenderPanel = function (el) {
               ? '<div style="overflow-x:auto"><table class="fp-table" style="width:100%"><thead><tr>'
                 + '<th>N° badge</th><th>Statut</th><th>Véhicule</th><th>Affectation Ulys</th><th>Conducteur (auto)</th><th>Comm.</th>'
                 + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
-                + '<div class="text-xs text-slate-400 mt-2">Rapprochement automatique : par immatriculation (→ véhicule → conducteur, y compris via l\'<b>historique d\'affectation</b> pour un véhicule vendu) ou par le nom de l\'affectation. « Relier » enregistre le n° de badge sur la fiche conducteur — la conso se rattache ensuite toute seule. Tu peux <b>replier</b> ce panneau (les mêmes infos sont dans « Cartes & badges »).</div>'
+                + '<div class="text-xs text-slate-400 mt-2">Rapprochement automatique : par immatriculation (→ véhicule → conducteur, y compris via l\'<b>historique d\'affectation</b> pour un véhicule vendu) ou par le nom de l\'affectation. « Relier » (ou « Relier à… » pour choisir/créer un conducteur) enregistre le n° de badge sur la fiche conducteur — la conso se rattache ensuite toute seule. Un <b>même conducteur peut porter plusieurs badges</b> (ex. « Dépôt PXP ») : chaque « Relier » <b>ajoute</b> un badge sans effacer les autres. Tu peux <b>replier</b> ce panneau (les mêmes infos sont dans « Cartes & badges »).</div>'
               : '<div class="text-sm text-slate-500">Aucun badge chargé. Clique <b>« Synchroniser »</b> pour récupérer tes badges Ulys via l\'API.</div>')
         ))
       + '</div>';
@@ -7416,6 +7435,17 @@ FP.ulysRenderPanel = function (el) {
     el.querySelectorAll('[data-uls-link]').forEach(b => b.addEventListener('click', () => {
       const num = b.getAttribute('data-uls-link'), ck = b.getAttribute('data-uls-cond');
       if (FP.ulysApi.relier(ck, num)) { FP.toast && FP.toast('Badge relié au conducteur ✓'); draw(); }
+    }));
+    // Relier MANUELLEMENT un badge non rapproché à N'IMPORTE QUEL conducteur (choisir OU créer) →
+    // permet p.ex. de rattacher plusieurs badges au conducteur « Dépôt PXP ».
+    el.querySelectorAll('[data-uls-linkto]').forEach(b => b.addEventListener('click', () => {
+      const num = b.getAttribute('data-uls-linkto');
+      const inp = document.createElement('input'); inp.type = 'text'; inp.placeholder = 'Conducteur…';
+      inp.style.cssText = 'width:190px;padding:3px 7px;border:1px solid var(--fp-border);border-radius:6px;font-size:12px';
+      b.replaceWith(inp);
+      const done = (c) => { const key = c && (c.key || c.condKey || (typeof c === 'string' ? c : null)); if (key) { FP.ulysApi.relier(key, num); FP.toast && FP.toast('Badge relié ✓'); draw(); } };
+      if (FP.conducteurPicker) { try { FP.conducteurPicker(inp, { onPick: done }); } catch (e) {} }
+      try { inp.focus(); } catch (e) {}
     }));
     const inv = el.querySelector('#uls-api-invoices');
     if (inv) inv.addEventListener('click', async () => {
