@@ -7271,12 +7271,22 @@ FP.ulysApi = (function () {
   function matchBadge(b) {
     const det = (b && b.detailBadge) || {};
     const immat = det.immatriculation || '';
+    const bn = String((b && b.badgeNumber) || '').replace(/\D/g, '');
     let veh = null, condKey = null, via = '';
+    // 0) Lien EXPLICITE badge → conducteur (bouton « Relier », ou n° saisi sur la fiche conducteur /
+    //    véhicule qui a écrit condBadgeUlys). C'est le signal le plus fort → priorité.
+    if (bn && FP.conducteurParBadgeUlys) { try { const c = FP.conducteurParBadgeUlys(b.badgeNumber); if (c && c.key) { condKey = c.key; via = 'badge'; } } catch (e) {} }
+    // 1) Véhicule par immatriculation Ulys.
     try {
       const ni = FP.normImmat ? FP.normImmat(immat) : immat;
       if (ni) veh = (window.FP_DATA && FP_DATA.vehicules || []).find(v => (FP.normImmat ? FP.normImmat(v.immat) : v.immat) === ni) || null;
     } catch (e) {}
-    if (veh && veh.chauffeur) { try { condKey = FP.condKeyParNom(veh.chauffeur); if (condKey) via = 'véhicule'; } catch (e) {} }
+    // 2) Véhicule par n° de badge saisi sur une fiche VÉHICULE (« Badge télépéage » = settings.vehBadge)
+    //    → utile quand Ulys n'a pas d'immat sur le badge mais que tu l'as rattaché à un véhicule dans PP.
+    if (!veh && bn) {
+      try { const vb = FP.settings.get().vehBadge || {}; for (const vid in vb) { if (String(vb[vid] || '').replace(/\D/g, '') === bn) { veh = (window.FP_DATA && FP_DATA.vehicules || []).find(x => String(x.id) === String(vid)) || null; if (veh) break; } } } catch (e) {}
+    }
+    if (!condKey && veh && veh.chauffeur) { try { condKey = FP.condKeyParNom(veh.chauffeur); if (condKey) via = 'véhicule'; } catch (e) {} }
     // Repli HISTORIQUE : véhicule ancien/vendu sans chauffeur actuel → on prend le DERNIER conducteur
     // connu dans l'historique d'affectation (FP.affectations) — la conso lui revient.
     if (!condKey && veh && FP.affectations && FP.affectations.forVeh) {
@@ -7326,7 +7336,7 @@ FP.ulysApi = (function () {
         const idn = String(inv.invoiceId || '').toUpperCase();
         if (!idn || have.has(idn)) { skipped++; continue; }
         const rec = {
-          id: 'F-ULYS-' + idn.replace(/[^A-Z0-9]/g, ''), societe: soc,
+          id: 'ULYS-' + inv.invoiceId, societe: soc,
           date: String(inv.invoiceDate || '').slice(0, 10), fournisseur: 'Ulys', numeroFacture: inv.invoiceId,
           montantHT: Number(inv.vatExcludedTotal) || 0, montantTVA: Number(inv.vatAmount) || 0, montantTTC: Number(inv.vatIncludedTotal) || 0,
           description: inv.invoiceType === 'ELEC' ? 'Recharge électrique Ulys' : 'Péages Ulys (télépéage)', type: 'ulys'
