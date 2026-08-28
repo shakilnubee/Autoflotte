@@ -8966,7 +8966,14 @@ FP.edl = {
       try {
         if (!(FP.db && FP.db.select)) return;
         const res = await FP.db.select('documents');
-        const urls = (res && res.data ? res.data : []).filter(d => d && d.vehiculeId === veh.id && d.type === 'etat-des-lieux' && d.url && !/\.pdf(\?|$)/i.test(d.url)).map(d => d.url);
+        const rawUrls = (res && res.data ? res.data : []).filter(d => d && d.vehiculeId === veh.id && d.type === 'etat-des-lieux' && d.url && !/\.pdf(\?|$)/i.test(d.url)).map(d => d.url);
+        // ⚠️ ANTI-DOUBLON : d'anciens brouillons ont pu enregistrer PLUSIEURS fois la MÊME photo. On
+        // dédoublonne par CONTENU : les photos EDL sont nommées « …-h<hash>.<ext> » (hash du contenu,
+        // cf. uploadScan opts.name) → même hash = même image, même si le chemin diffère. Repli : URL nue
+        // (sans le jeton de signature). Un 2ᵉ filet par CONTENU (data URL identique) agit au chargement.
+        const dupKey = u => { const base = String(u).split('?')[0]; const m = base.match(/-h([a-z0-9]+)\.[a-z0-9]+$/i); return m ? ('h:' + m[1]) : base; };
+        const seenKey = new Set(); const urls = [];
+        rawUrls.forEach(u => { const k = dupKey(u); if (!seenKey.has(k)) { seenKey.add(k); urls.push(u); } });
         const wrap = ov.querySelector('[data-edl-existing]'); if (!wrap || !urls.length) return;
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -8974,7 +8981,10 @@ FP.edl = {
         btn.textContent = '📎 Reprendre les ' + urls.length + ' photo(s) déjà enregistrée(s)';
         btn.addEventListener('click', async () => {
           btn.disabled = true; const t = btn.textContent; btn.textContent = '… chargement';
-          for (const u of urls) { const d = await urlToDataUrl(u); if (d) { edlPhotos.push(d); edlPhotoSrc.push(u); } }
+          // 2ᵉ filet anti-doublon : par CONTENU (data URL identique) → jamais deux fois la même image,
+          // même si d'anciens brouillons l'ont stockée sous des chemins différents (sans hash dans le nom).
+          const seenData = new Set(edlPhotos);
+          for (const u of urls) { const d = await urlToDataUrl(u); if (d && !seenData.has(d)) { seenData.add(d); edlPhotos.push(d); edlPhotoSrc.push(u); } }
           renderThumbs(); btn.remove();
         });
         wrap.appendChild(btn);
