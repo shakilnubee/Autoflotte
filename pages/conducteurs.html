@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827r">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827s">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260827r"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260827s"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260827r">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260827s">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -575,12 +575,12 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260827r"></script>
-<script src="../assets/js/supabase-client.js?v=20260827r"></script>
-<script src="../assets/js/data.js?v=20260827r"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260827s"></script>
+<script src="../assets/js/supabase-client.js?v=20260827s"></script>
+<script src="../assets/js/data.js?v=20260827s"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/fleet-docs.js?v=20260827r"></script>
-<script src="../assets/js/app.js?v=20260827r"></script>
+<script src="../assets/js/fleet-docs.js?v=20260827s"></script>
+<script src="../assets/js/app.js?v=20260827s"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1484,7 +1484,7 @@
       ? _conges.map((c, i) => `<div class="flex justify-between items-center gap-2 py-1"><span>📅 ${FP.date(c.debut)} → ${FP.date(c.fin)}${c.motif ? ' · <span class="text-slate-500">' + escapeHtml(c.motif) + '</span>' : ''}</span><button type="button" class="text-red-500 hover:text-red-700 font-bold px-1" data-conge-del="${i}" data-key="${escapeHtml(d.key)}" title="Retirer ce congé">✕</button></div>`).join('')
       : '<p class="text-slate-400">Aucun congé enregistré.</p>';
     const carteInner = `<div class="text-sm space-y-2">
-        ${(FP.prestataires ? FP.prestataires() : []).map(p => { const num = (FP.condNum ? FP.condNum(d.key, p.numKey) : '') || ''; const lbl = (p.type === 'peage' ? 'Badge télépéage' : 'Carte carburant'); return `<div class="flex justify-between items-center gap-2"><span class="text-slate-600">${lbl} <b>${escapeHtml(p.nom)}</b> (n°)</span><input class="cond-carte" data-k="${escapeHtml(p.numKey)}" data-id="${escapeHtml(d.key)}" value="${escapeHtml(num)}" placeholder="—" style="${_inpC}"></div>`; }).join('')}
+        ${(FP.prestataires ? FP.prestataires() : []).map(p => { const lbl = (p.type === 'peage' ? 'Badge télépéage' : 'Carte carburant'); return `<div class="flex flex-col gap-1.5"><span class="text-slate-600">${lbl} <b>${escapeHtml(p.nom)}</b> (n°)</span>${FP.badgeChipsHTML({ scope: 'cond', numkey: p.numKey, key: d.key, placeholder: 'N° ' + (p.type === 'peage' ? 'de badge' : 'de carte') + '…' })}</div>`; }).join('')}
         <p class="text-xs text-slate-400" style="line-height:1.45">Ces numéros <b>rattachent la conso au bon conducteur</b> (par n°, pas par nom) — même donnée que la fiche véhicule et l'onglet Contrats. Un nouveau prestataire ajouté dans <b>Contrôle → ➕ Prestataire</b> fait apparaître son champ ici <b>automatiquement</b>. Vider un champ enlève le lien sans supprimer la conso déjà enregistrée.</p>
         <div class="pt-2 mt-1 border-t border-slate-100">
           <div class="font-semibold text-slate-700 mb-1">🌴 Congés / absences</div>
@@ -2378,16 +2378,10 @@
     if (made) FP.pdfPreview(made.doc, made.filename, '· ' + made.name);
   }
 
-  // Carte carburant Total / badge Ulys du conducteur (n°) — sauvés PAR SOCIÉTÉ dans les réglages.
-  // Serviront à rattacher la conso Total Fleet / Ulys au bon conducteur à l'import des factures.
-  $('drawer-body').addEventListener('change', (e) => {
-    const c = e.target.closest('input.cond-carte'); if (!c) return;
-    const k = c.dataset.k, id = c.dataset.id; if (!k || !id) return;
-    const s = FP.settings.get(); s[k] = s[k] || {};
-    const val = (c.value || '').trim();
-    if (val) s[k][id] = val; else delete s[k][id];
-    FP.settings.save(s);
-  });
+  // Carte carburant / badge péage du conducteur (n°) — sauvés PAR SOCIÉTÉ dans les réglages, servent
+  // à rattacher la conso Total Fleet / Ulys au bon conducteur à l'import. Édition EN PUCES (multi-n°)
+  // via le composant partagé FP.badgeChipsHTML : ajout/retrait par puce, jamais de saisie « n°, n° ».
+  if (FP.wireBadgeChips) FP.wireBadgeChips($('drawer-body'));
 
   // Congés / absences du conducteur : ajout / retrait → synchronisé (settings.condConges) + re-render fiche.
   $('drawer-body').addEventListener('click', (e) => {

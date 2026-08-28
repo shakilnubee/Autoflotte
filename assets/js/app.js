@@ -2767,6 +2767,136 @@ FP.numCarteConducteur = (condKey, condMapKey) => {
     return '';
   } catch (e) { return ''; }
 };
+// RETIRE un n° de carte/badge d'un conducteur sans toucher aux autres (liste multi). Miroir de addCondNum.
+FP.removeCondNum = function (condKey, numKey, val) {
+  try {
+    if (!condKey || !numKey) return false;
+    const s = FP.settings.get(); s[numKey] = s[numKey] || {};
+    const nv = FP.normCarte(val);
+    const cur = FP.carteParts(s[numKey][condKey]).filter(p => FP.normCarte(p) !== nv);
+    if (cur.length) s[numKey][condKey] = cur.join(', '); else delete s[numKey][condKey];
+    FP.settings.save(s);
+    return true;
+  } catch (e) { return false; }
+};
+// Véhicule par id (source unique pour l'éditeur de puces côté fiche véhicule).
+FP.vehById = (id) => { try { const vs = (window.FP_DATA && FP_DATA.vehicules) || (window.data && data.vehicules) || []; return vs.find(x => String(x.id) === String(id)) || null; } catch (e) { return null; } };
+// AJOUTE un n° de carte/badge à un VÉHICULE (liste multi) SANS écraser les autres, et le miroir sur
+// le conducteur (chauffeur reconnu) pour l'attribution de la conso. Un seul enregistrement (atomique).
+FP.addNumCarteVehicule = (v, vehKey, val) => {
+  try {
+    val = (val || '').trim(); if (!v || !vehKey || !val) return false;
+    const s = FP.settings.get();
+    const condMapKey = FP.CARTE_COND_MAP[vehKey];
+    const condKey = FP.condKeyDuVehicule(v);
+    const nv = FP.normCarte(val);
+    s[vehKey] = s[vehKey] || {};
+    const cur = FP.carteParts(s[vehKey][v.id]);
+    if (!cur.some(p => FP.normCarte(p) === nv)) cur.push(val);
+    s[vehKey][v.id] = cur.join(', ');
+    if (condKey && condMapKey) {
+      s[condMapKey] = s[condMapKey] || {};
+      const cc = FP.carteParts(s[condMapKey][condKey]);
+      if (!cc.some(p => FP.normCarte(p) === nv)) cc.push(val);
+      s[condMapKey][condKey] = cc.join(', ');
+    }
+    FP.settings.save(s);
+    return true;
+  } catch (e) { return false; }
+};
+// RETIRE un n° de carte/badge d'un VÉHICULE (et son miroir conducteur). Ne touche qu'à CE numéro.
+FP.removeNumCarteVehicule = (v, vehKey, val) => {
+  try {
+    if (!v || !vehKey) return false;
+    const s = FP.settings.get();
+    const condMapKey = FP.CARTE_COND_MAP[vehKey];
+    const condKey = FP.condKeyDuVehicule(v);
+    const nv = FP.normCarte(val);
+    s[vehKey] = s[vehKey] || {};
+    const cur = FP.carteParts(s[vehKey][v.id]).filter(p => FP.normCarte(p) !== nv);
+    if (cur.length) s[vehKey][v.id] = cur.join(', '); else delete s[vehKey][v.id];
+    if (condKey && condMapKey) {
+      s[condMapKey] = s[condMapKey] || {};
+      const cc = FP.carteParts(s[condMapKey][condKey]).filter(p => FP.normCarte(p) !== nv);
+      if (cc.length) s[condMapKey][condKey] = cc.join(', '); else delete s[condMapKey][condKey];
+    }
+    FP.settings.save(s);
+    return true;
+  } catch (e) { return false; }
+};
+
+// ============ ÉDITEUR DE N° DE CARTE / BADGE EN PUCES (chips) — composant partagé ============
+// Un conducteur (ex. « Dépôt PXP ») OU un véhicule peut porter PLUSIEURS n° de carte/badge. Au lieu
+// d'un champ texte où l'on tape « n°1, n°2 » (illisible, on ne voit pas combien il y en a), on affiche
+// CHAQUE numéro comme une PUCE avec une croix pour le retirer + un petit champ « + Ajouter ». Utilisé
+// à l'IDENTIQUE par la fiche véhicule, la fiche conducteur et Contrôle → « Cartes & badges » (source
+// unique). scope = 'veh' (clés vehBadge/vehCarteCarb, id véhicule) | 'cond' (clés condBadgeUlys/…,
+// clé conducteur). L'ajout/retrait passe par les helpers FP.* ci-dessus (miroir véhicule↔conducteur).
+FP.currentBadgeNums = function (scope, numkey, key, vehid) {
+  try {
+    const s = FP.settings.get();
+    if (scope === 'veh') return FP.carteParts((s[numkey] || {})[vehid]);
+    return FP.carteParts((s[numkey] || {})[key]);
+  } catch (e) { return []; }
+};
+// Rend le bloc de puces (chips) + champ d'ajout. o = { scope, numkey, key?, vehid?, numbers?, placeholder? }.
+FP.badgeChipsHTML = function (o) {
+  o = o || {};
+  const esc = FP.esc || (x => String(x == null ? '' : x));
+  const nums = o.numbers || FP.currentBadgeNums(o.scope, o.numkey, o.key, o.vehid);
+  const chips = nums.map(n => '<span class="fp-badge-chip">' + esc(n)
+    + '<button type="button" class="fp-bc-x" data-bc-rm="' + esc(n) + '" title="Retirer ce numéro" aria-label="Retirer ce numéro">✕</button></span>').join('');
+  const empty = nums.length ? '' : '<span class="fp-bc-empty">— aucun</span>';
+  const attrs = 'data-bc-scope="' + esc(o.scope) + '" data-bc-numkey="' + esc(o.numkey) + '"'
+    + (o.key ? (' data-bc-key="' + esc(o.key) + '"') : '')
+    + (o.vehid != null ? (' data-bc-vehid="' + esc(o.vehid) + '"') : '');
+  return '<div class="fp-badgechips" ' + attrs + '>'
+    + '<div class="fp-bc-chips">' + chips + empty + '</div>'
+    + '<div class="fp-bc-add"><input class="fp-bc-input" type="text" inputmode="numeric" placeholder="' + esc(o.placeholder || 'N° de badge…') + '">'
+    + '<button type="button" class="fp-bc-addbtn" data-bc-add>+ Ajouter</button></div>'
+    + '</div>';
+};
+// Installe UNE FOIS les gestionnaires (clic croix / clic + / Entrée) sur un conteneur racine (délégation).
+// opts.onChange() est appelé après chaque ajout/retrait (pour rafraîchir KPIs / panneau Ulys / etc.).
+FP.wireBadgeChips = function (root, opts) {
+  if (!root || root._bcWired) return; root._bcWired = true;
+  opts = opts || {};
+  const rerender = (cont) => {
+    if (!cont || !cont.parentNode) return;
+    cont.outerHTML = FP.badgeChipsHTML({
+      scope: cont.getAttribute('data-bc-scope'), numkey: cont.getAttribute('data-bc-numkey'),
+      key: cont.getAttribute('data-bc-key'), vehid: cont.getAttribute('data-bc-vehid')
+    });
+    if (opts.onChange) { try { opts.onChange(); } catch (e) {} }
+  };
+  const doAdd = (cont, raw) => {
+    const scope = cont.getAttribute('data-bc-scope'), numkey = cont.getAttribute('data-bc-numkey');
+    FP.carteParts(raw).forEach(val => {
+      if (scope === 'veh') { const v = FP.vehById(cont.getAttribute('data-bc-vehid')); if (v) FP.addNumCarteVehicule(v, numkey, val); }
+      else FP.addCondNum(cont.getAttribute('data-bc-key'), numkey, val);
+    });
+  };
+  const doRemove = (cont, val) => {
+    const scope = cont.getAttribute('data-bc-scope'), numkey = cont.getAttribute('data-bc-numkey');
+    if (scope === 'veh') { const v = FP.vehById(cont.getAttribute('data-bc-vehid')); if (v) FP.removeNumCarteVehicule(v, numkey, val); }
+    else FP.removeCondNum(cont.getAttribute('data-bc-key'), numkey, val);
+  };
+  const addFrom = (inp) => {
+    const cont = inp.closest('.fp-badgechips'); if (!cont) return;
+    const raw = (inp.value || '').trim(); if (!raw) return;
+    doAdd(cont, raw); rerender(cont); if (FP.toast) FP.toast('✓ Numéro ajouté');
+  };
+  root.addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-bc-rm]');
+    if (rm) { const cont = rm.closest('.fp-badgechips'); doRemove(cont, rm.getAttribute('data-bc-rm')); rerender(cont); if (FP.toast) FP.toast('Numéro retiré'); return; }
+    const add = e.target.closest('[data-bc-add]');
+    if (add) { const cont = add.closest('.fp-badgechips'); const inp = cont && cont.querySelector('.fp-bc-input'); if (inp) addFrom(inp); return; }
+  });
+  root.addEventListener('keydown', (e) => {
+    const inp = e.target.closest('.fp-bc-input');
+    if (inp && e.key === 'Enter') { e.preventDefault(); addFrom(inp); }
+  });
+};
 
 // Modale « Nouveau conducteur » réutilisable → Promise<conductor|null>. Collecte les infos
 // essentielles puis crée le conducteur (FP.conducteurs.create). Injectée une fois dans le body.
