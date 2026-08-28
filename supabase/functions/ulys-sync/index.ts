@@ -121,6 +121,13 @@ Deno.serve(async (req) => {
   else if (action === "badges") {
     const c = String(body.contractUniqueId || "").trim();
     path = c ? `/api/badges/getbadges?contractUniqueId=${encodeURIComponent(c)}` : "/api/badges/getbadges/";
+  } else if (action === "invoices") {
+    path = "/api/invoices/getinvoices/";
+  } else if (action === "transactions") {
+    // Détail transaction par transaction d'une facture télépéage (CSV). 3 derniers mois seulement.
+    const id = String((body as { invoiceId?: string }).invoiceId || "").trim();
+    if (!id) return json({ error: "invoiceId requis." }, 400);
+    path = `/api/transactions/gettransactionsbilledcsv/${encodeURIComponent(id)}`;
   } else {
     return json({ error: "Action inconnue." }, 400);
   }

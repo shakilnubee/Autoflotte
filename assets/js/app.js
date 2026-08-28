@@ -7277,6 +7277,14 @@ FP.ulysApi = (function () {
       if (ni) veh = (window.FP_DATA && FP_DATA.vehicules || []).find(v => (FP.normImmat ? FP.normImmat(v.immat) : v.immat) === ni) || null;
     } catch (e) {}
     if (veh && veh.chauffeur) { try { condKey = FP.condKeyParNom(veh.chauffeur); if (condKey) via = 'véhicule'; } catch (e) {} }
+    // Repli HISTORIQUE : véhicule ancien/vendu sans chauffeur actuel → on prend le DERNIER conducteur
+    // connu dans l'historique d'affectation (FP.affectations) — la conso lui revient.
+    if (!condKey && veh && FP.affectations && FP.affectations.forVeh) {
+      try {
+        const hist = FP.affectations.forVeh(veh.id).slice().sort((a, b) => String(b.debut || '').localeCompare(String(a.debut || '')));
+        for (const h of hist) { if (h && h.conducteur) { const k = FP.condKeyParNom(h.conducteur); if (k) { condKey = k; via = 'historique'; break; } } }
+      } catch (e) {}
+    }
     if (!condKey && det.assignment) { try { condKey = FP.condKeyParNom(det.assignment); if (condKey) via = 'affectation'; } catch (e) {} }
     let cond = null; if (condKey) { try { cond = FP.conducteursTous().find(c => c.key === condKey) || null; } catch (e) {} }
     return { immat, veh, cond, condKey, via };
@@ -7300,8 +7308,33 @@ FP.ulysApi = (function () {
     sync: async function () { const badges = await call('badges'); const arr = Array.isArray(badges) ? badges : []; saveCache(arr); return arr; },
     account: () => call('account'),
     contracts: () => call('contracts'),
+    invoices: () => call('invoices'),
+    transactionsCsv: (invoiceId) => call('transactions', { invoiceId }),
     // Relie un badge à un conducteur (écrit condBadgeUlys) — réutilise le helper canonique.
-    relier: (condKey, badgeNumber) => FP.setCondNum(condKey, 'condBadgeUlys', badgeNumber)
+    relier: (condKey, badgeNumber) => FP.setCondNum(condKey, 'condBadgeUlys', badgeNumber),
+    // Importe les factures Ulys (en-tête HT/TVA/TTC) dans la table `factures` — MÊME pipeline que
+    // les autres factures (anti-doublon, fournisseur « Ulys » → apparaît dans l'onglet Ulys). On
+    // ignore silencieusement celles déjà présentes (par n° de facture). Détail transaction par
+    // transaction = palier suivant (nécessite un vrai CSV pour écrire le parseur au bon format).
+    importInvoices: async function () {
+      const list = await call('invoices');
+      const soc = (FP.activeSociete && FP.activeSociete()) || 'PXP';
+      const facts = (window.FP_DATA && Array.isArray(FP_DATA.factures)) ? FP_DATA.factures : [];
+      const have = new Set(facts.map(f => String(f.numeroFacture || '').toUpperCase()).filter(Boolean));
+      let added = 0, skipped = 0;
+      for (const inv of (Array.isArray(list) ? list : [])) {
+        const idn = String(inv.invoiceId || '').toUpperCase();
+        if (!idn || have.has(idn)) { skipped++; continue; }
+        const rec = {
+          id: 'F-ULYS-' + idn.replace(/[^A-Z0-9]/g, ''), societe: soc,
+          date: String(inv.invoiceDate || '').slice(0, 10), fournisseur: 'Ulys', numeroFacture: inv.invoiceId,
+          montantHT: Number(inv.vatExcludedTotal) || 0, montantTVA: Number(inv.vatAmount) || 0, montantTTC: Number(inv.vatIncludedTotal) || 0,
+          description: inv.invoiceType === 'ELEC' ? 'Recharge électrique Ulys' : 'Péages Ulys (télépéage)', type: 'ulys'
+        };
+        try { await FP.persist.insert('factures', rec); facts.push(rec); have.add(idn); added++; } catch (e) { skipped++; }
+      }
+      return { added, skipped };
+    }
   };
 })();
 
@@ -7310,10 +7343,15 @@ FP.ulysApi = (function () {
 FP.ulysRenderPanel = function (el) {
   if (!el) return;
   const esc = FP.esc || (s => String(s == null ? '' : s));
+  const CK = 'ulysPanelCollapsed_' + ((FP.activeSociete && FP.activeSociete()) || 'PXP');
+  const isCollapsed = () => { try { return localStorage.getItem(CK) === '1'; } catch (e) { return false; } };
+  const setCollapsed = (v) => { try { localStorage.setItem(CK, v ? '1' : '0'); } catch (e) {} };
   function draw() {
     const { badges, at } = FP.ulysApi.cache();
     const when = at ? (() => { try { return FP.date(at.slice(0, 10)); } catch (e) { return at.slice(0, 10); } })() : null;
     const anos = FP.ulysApi.anomalies(badges);
+    const collapsed = isCollapsed();
+    let nbRelies = 0; try { (badges || []).forEach(b => { const m = FP.ulysApi.matchBadge(b); if (m.condKey && FP.condNum && String(FP.condNum(m.condKey, 'condBadgeUlys') || '').replace(/\D/g, '') === String(b.badgeNumber || '').replace(/\D/g, '')) nbRelies++; }); } catch (e) {}
     const rows = (badges || []).map(b => {
       const det = b.detailBadge || {};
       const actif = String(b.state || '').toLowerCase().indexOf('actif') === 0;
@@ -7334,22 +7372,31 @@ FP.ulysRenderPanel = function (el) {
         + '<td class="text-xs text-slate-500">' + esc(det.comment || '') + '</td>'
         + '</tr>';
     }).join('');
+    const nb = (badges || []).length;
+    const resume = nb ? (nb + ' badge' + (nb > 1 ? 's' : '') + ' · ' + nbRelies + ' relié' + (nbRelies > 1 ? 's' : '') + (anos.length ? ' · ' + anos.length + ' à vérifier' : '')) : '';
     el.innerHTML = '<div class="card p-4 mb-4" style="border:1px solid var(--fp-border)">'
-      + '<div class="flex items-center justify-between gap-3 flex-wrap mb-2">'
-      + '<div class="flex items-center gap-2 font-bold" style="color:var(--fp-primary)"><i data-lucide="route" class="w-4 h-4"></i> Badges Ulys (API)</div>'
+      + '<div class="flex items-center justify-between gap-3 flex-wrap' + (collapsed ? '' : ' mb-2') + '">'
+      + '<button type="button" id="uls-api-toggle" class="flex items-center gap-2 font-bold" style="color:var(--fp-primary);background:none;border:none;cursor:pointer;padding:0">'
+      + '<i data-lucide="' + (collapsed ? 'chevron-right' : 'chevron-down') + '" class="w-4 h-4"></i><i data-lucide="route" class="w-4 h-4"></i> Badges Ulys (API)'
+      + (collapsed && resume ? ' <span class="text-xs font-normal text-slate-400">— ' + esc(resume) + '</span>' : '') + '</button>'
       + '<div class="flex items-center gap-2">'
       + (when ? '<span class="text-xs text-slate-400">Synchronisé le ' + esc(when) + '</span>' : '')
+      + '<button type="button" id="uls-api-invoices" class="btn btn-outline" style="padding:5px 10px;font-size:13px" title="Importer les factures Ulys (en-tête HT/TVA/TTC) dans l\'onglet"><i data-lucide="download" class="w-3 h-3"></i> Importer les factures</button>'
       + '<button type="button" id="uls-api-sync" class="btn btn-primary" style="padding:5px 12px;font-size:13px"><i data-lucide="refresh-cw" class="w-3 h-3"></i> Synchroniser</button>'
       + '</div></div>'
-      + (anos.length ? '<div class="fp-ech warn" style="display:block;padding:.5rem .7rem;border-radius:.5rem;margin-bottom:.6rem;white-space:normal;font-size:.8rem">⚠️ ' + anos.length + ' point(s) à vérifier : ' + esc(anos.slice(0, 3).map(a => a.txt).join(' · ')) + (anos.length > 3 ? ' …' : '') + '</div>' : '')
-      + (badges && badges.length
-          ? '<div style="overflow-x:auto"><table class="fp-table" style="width:100%"><thead><tr>'
-            + '<th>N° badge</th><th>Statut</th><th>Véhicule</th><th>Affectation Ulys</th><th>Conducteur (auto)</th><th>Comm.</th>'
-            + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
-            + '<div class="text-xs text-slate-400 mt-2">Le rapprochement est automatique : par immatriculation (→ véhicule → conducteur) ou par le nom de l\'affectation. « Relier » enregistre le n° de badge sur la fiche conducteur — la conso se rattache ensuite toute seule.</div>'
-          : '<div class="text-sm text-slate-500">Aucun badge chargé. Clique <b>« Synchroniser »</b> pour récupérer tes badges Ulys via l\'API.</div>')
+      + (collapsed ? '' : (
+          (anos.length ? '<div class="fp-ech warn" style="display:block;padding:.5rem .7rem;border-radius:.5rem;margin-bottom:.6rem;white-space:normal;font-size:.8rem">⚠️ ' + anos.length + ' point(s) à vérifier : ' + esc(anos.slice(0, 3).map(a => a.txt).join(' · ')) + (anos.length > 3 ? ' …' : '') + '</div>' : '')
+          + (badges && badges.length
+              ? '<div style="overflow-x:auto"><table class="fp-table" style="width:100%"><thead><tr>'
+                + '<th>N° badge</th><th>Statut</th><th>Véhicule</th><th>Affectation Ulys</th><th>Conducteur (auto)</th><th>Comm.</th>'
+                + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+                + '<div class="text-xs text-slate-400 mt-2">Rapprochement automatique : par immatriculation (→ véhicule → conducteur, y compris via l\'<b>historique d\'affectation</b> pour un véhicule vendu) ou par le nom de l\'affectation. « Relier » enregistre le n° de badge sur la fiche conducteur — la conso se rattache ensuite toute seule. Tu peux <b>replier</b> ce panneau (les mêmes infos sont dans « Cartes & badges »).</div>'
+              : '<div class="text-sm text-slate-500">Aucun badge chargé. Clique <b>« Synchroniser »</b> pour récupérer tes badges Ulys via l\'API.</div>')
+        ))
       + '</div>';
     try { if (window.lucide) lucide.createIcons(); } catch (e) {}
+    const tog = el.querySelector('#uls-api-toggle');
+    if (tog) tog.addEventListener('click', () => { setCollapsed(!isCollapsed()); draw(); });
     const btn = el.querySelector('#uls-api-sync');
     if (btn) btn.addEventListener('click', async () => {
       btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = 'Synchronisation…';
@@ -7360,6 +7407,16 @@ FP.ulysRenderPanel = function (el) {
       const num = b.getAttribute('data-uls-link'), ck = b.getAttribute('data-uls-cond');
       if (FP.ulysApi.relier(ck, num)) { FP.toast && FP.toast('Badge relié au conducteur ✓'); draw(); }
     }));
+    const inv = el.querySelector('#uls-api-invoices');
+    if (inv) inv.addEventListener('click', async () => {
+      inv.disabled = true; const old = inv.innerHTML; inv.innerHTML = 'Import…';
+      try {
+        const r = await FP.ulysApi.importInvoices();
+        FP.toast && FP.toast(r.added ? (r.added + ' facture(s) Ulys importée(s) ✓' + (r.skipped ? ' · ' + r.skipped + ' déjà présente(s)' : '')) : 'Aucune nouvelle facture Ulys.');
+        try { if (window.renderUlys) window.renderUlys(); } catch (e) {}
+      } catch (e) { (FP.alert || alert)('Ulys : ' + (e && e.message || e)); }
+      inv.disabled = false; inv.innerHTML = old; try { if (window.lucide) lucide.createIcons(); } catch (e) {}
+    });
   }
   draw();
 };

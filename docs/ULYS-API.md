@@ -39,7 +39,13 @@ jeton en **secret côté serveur** et ajoute les en-têtes obligatoires (`Author
 - La liste est mise en **cache synchronisé** (`app_settings` par société) pour s'afficher sans
   rappeler l'API (quota journalier Ulys — erreur 429 si dépassé).
 
-Aucune écriture vers Ulys à ce palier.
+- **Repli historique** : pour un véhicule vendu/ancien sans chauffeur actuel, le conducteur est
+  retrouvé via l'**historique d'affectation** (`FP.affectations`) → la conso lui revient.
+- Le panneau est **repliable** (état mémorisé) — les mêmes infos sont dans « Cartes & badges ».
+- Bouton **« Importer les factures »** : récupère les factures Ulys (dates + HT/TVA/TTC) dans la
+  table `factures` (fournisseur « Ulys » → onglet Ulys), avec **anti-doublon** par n° de facture.
+
+Aucune écriture vers Ulys à ce palier (l'import de factures reste une lecture Ulys + écriture locale).
 
 ## Endpoints API disponibles (référence, doc V1.11)
 
