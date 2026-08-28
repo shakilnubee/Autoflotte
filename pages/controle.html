@@ -685,6 +685,11 @@
   // on garde l'affichage instantané du cache. On ne recalcule que si une conso/un congé/un statut a changé.
   function _seedFindingsCache(){ try { const c = JSON.parse(localStorage.getItem(_findCK()) || 'null'); if (c && Array.isArray(c.findings)) { _findings = c.findings; _lastBuildSig = c.sig || null; return true; } } catch (e) {} return false; }
   function _writeFindingsCache(){ try { localStorage.setItem(_findCK(), JSON.stringify({ sig: _lastBuildSig, findings: (_findings || []).slice(0, 4000) })); } catch (e) { /* quota : tant pis */ } }
+  // Écriture du cache DIFFÉRÉE : sérialiser jusqu'à 4000 trouvailles à CHAQUE changement de statut
+  // ralentissait le clic. On l'écrit une fois, après une petite pause (le cache n'est qu'un accélérateur
+  // d'affichage au prochain chargement — pas besoin qu'il soit synchrone avec le clic).
+  let _cacheT = null;
+  function _writeFindingsCacheSoon(){ if (_cacheT) clearTimeout(_cacheT); _cacheT = setTimeout(() => { _cacheT = null; _writeFindingsCache(); }, 800); }
   async function loadConducteurs(){
     try { const r = await FP.supabase.from('conducteurs').select('*'); if (r && r.data) { const soc = FP.activeSociete ? FP.activeSociete() : null; window.FP_DATA.conducteurs = (soc && soc !== '__all__') ? r.data.filter(c => !c.societe || c.societe === soc) : r.data; } } catch (e) {}
   }
@@ -743,7 +748,12 @@
   }
   // Archivage/désarchivage fait dans « Points à vérifier » (Total Fleet/Ulys) → on recalcule la liste
   // Contrôle EN DIRECT (sinon il fallait recharger la page). Dans les deux sens, source unique tfAnomOk.
-  try { window.addEventListener('pp:anom-sync', () => { try { rebuild(true); } catch (e) {} }); } catch (e) {}
+  // ⚡ Quand c'est NOTRE propre changement de statut qui émet l'événement, on ne relance PAS l'analyse
+  // complète (on a déjà mis à jour la trouvaille + render). On ne reconstruit QUE si l'événement vient
+  // d'AILLEURS (ex. archivage fait dans Total Fleet « Points à vérifier »). Évitait un recalcul des
+  // 1000+ conso à chaque clic → c'était la cause de la lenteur.
+  let _selfAnomSync = false;
+  try { window.addEventListener('pp:anom-sync', () => { if (_selfAnomSync) { _selfAnomSync = false; return; } try { rebuild(true); } catch (e) {} }); } catch (e) {}
 
   const ST_LABEL = { 'a-verifier':'À vérifier', 'justifie':'Justifié', 'fraude':'Fraude', 'classe':'Classé' };
 
@@ -1121,8 +1131,31 @@
     if (fac) { e.preventDefault(); openFacture(fac.getAttribute('data-fac')); return; }
   });
   $('ctrl-body').addEventListener('change', (e) => {
-    const sel = e.target.closest('[data-statut]');
-    if (sel) { const fid = sel.getAttribute('data-statut'); const f = _findings.find(x=>x.fid===fid); setStatut(fid, sel.value, f && f._def); if (f) f.statut = sel.value; syncAnomArchive(f, sel.value); if (FP.toast) FP.toast('Statut : ' + (ST_LABEL[sel.value]||sel.value)); render(); _writeFindingsCache(); }
+    const sel = e.target.closest('[data-statut]'); if (!sel) return;
+    const fid = sel.getAttribute('data-statut');
+    const f = _findings.find(x => x.fid === fid);
+    const st = sel.value, def = f && f._def;
+    // ⚡ UN SEUL enregistrement des réglages (statut + archivage anomalie) au lieu de deux gros writes,
+    // et pas de re-analyse complète : on met à jour la trouvaille en mémoire + render() (instantané).
+    const s = FP.settings.get();
+    const m = (s.controleStatuts && typeof s.controleStatuts === 'object') ? s.controleStatuts : {};
+    if (st && st !== (def || 'a-verifier')) m[fid] = st; else delete m[fid];
+    s.controleStatuts = m;
+    if (f && f.genre === 'carte' && f._anom && f._anom.key) {
+      const am = (s.tfAnomOk && typeof s.tfAnomOk === 'object') ? s.tfAnomOk : {};
+      const key = f._anom.key, resolu = (st && st !== 'a-verifier');
+      if (resolu) am[key] = { key, t: f._anom.t || '', txt: f._anom.txt || '', mois: f._anom.mois || '', facnum: f._anom.facnum || '', okAt: Date.now() };
+      else delete am[key];
+      s.tfAnomOk = am;
+    }
+    FP.settings.save(s);
+    if (f) f.statut = st;
+    // Prévient les AUTRES vues (Total Fleet « Points à vérifier ») SANS relancer notre propre rebuild.
+    _selfAnomSync = true;
+    try { window.dispatchEvent(new CustomEvent('pp:anom-sync')); } catch (e) {}
+    if (FP.toast) FP.toast('Statut : ' + (ST_LABEL[st] || st));
+    render();
+    _writeFindingsCacheSoon();
   });
 
   async function openFacture(facnum){
