@@ -2898,6 +2898,70 @@ FP.wireBadgeChips = function (root, opts) {
   });
 };
 
+// ============ « 📷 PRENDRE EN PHOTO » SUR MOBILE — partout où on dépose un document pour l'IA ==========
+// Sur téléphone/tablette, à côté de CHAQUE zone de dépôt de document (celles qui acceptent image + PDF,
+// donc lues par l'IA/OCR), on ajoute un bouton « 📷 Prendre en photo » qui ouvre l'appareil photo arrière
+// et injecte la photo dans le MÊME champ fichier → le pipeline de lecture (scan, factures, amendes, carte
+// grise, permis, sinistres…) la traite comme un PDF. Zéro modification des handlers existants : on
+// alimente l'input d'origine puis on émet son événement « change ». Ne s'affiche que sur écran tactile.
+FP.scanCam = function (input, opts) {
+  opts = opts || {};
+  try {
+    if (!input || input._scanCam) return; input._scanCam = true;
+    const coarse = !!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches);
+    if (!coarse && !opts.force) return; // sur ordinateur, l'appareil photo n'a pas de sens
+    // Input caméra caché (capture = appareil arrière). Un cliché à la fois (contrainte navigateurs mobiles).
+    const cam = document.createElement('input');
+    cam.type = 'file'; cam.accept = 'image/*'; cam.setAttribute('capture', 'environment');
+    cam.style.display = 'none';
+    // Bouton visible « 📷 Prendre en photo ».
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'fp-scancam-btn'; btn.setAttribute('data-fp-scancam', '1');
+    btn.innerHTML = '📷 Prendre en photo';
+    // Placement : dans le conteneur fourni, sinon juste après l'input (son parent est visible quand la zone l'est).
+    const host = opts.mount || input.parentNode; if (!host) return;
+    host.appendChild(cam);
+    if (opts.mount) opts.mount.appendChild(btn);
+    else host.insertBefore(btn, input.nextSibling);
+    btn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); cam.click(); });
+    cam.addEventListener('change', () => {
+      if (!cam.files || !cam.files.length) return;
+      let ok = false;
+      try { const dt = new DataTransfer(); Array.from(cam.files).forEach(f => dt.items.add(f)); input.files = dt.files; ok = !!(input.files && input.files.length); } catch (e) {}
+      if (ok) { input.dispatchEvent(new Event('change', { bubbles: true })); }
+      else if (typeof opts.onFiles === 'function') { try { opts.onFiles(cam.files); } catch (e) {} } // repli si le navigateur interdit d'affecter input.files
+      cam.value = '';
+    });
+  } catch (e) {}
+};
+// Auto-détection : ajoute le bouton caméra à TOUT champ fichier « document » (accepte image ET pdf) non
+// encore équipé. Appelé au chargement + quand du DOM apparaît (modales) → couvre tous les écrans sans
+// câblage manuel. Les champs image-seuls (logo, avatar) sont ignorés (pas de « pdf » dans accept).
+FP.enhanceScanInputs = function (root) {
+  try {
+    const scope = (root && root.querySelectorAll) ? root : document;
+    scope.querySelectorAll('input[type="file"]').forEach(inp => {
+      if (inp._scanCam) return;
+      const acc = String(inp.accept || '').toLowerCase();
+      if (acc.indexOf('image') === -1 || acc.indexOf('pdf') === -1) return; // uniquement les dépôts de DOCUMENT (IA)
+      // Déjà un flux appareil photo à côté (ex. état des lieux avec son propre bouton + input capture) → on ne double pas.
+      try { const par = inp.parentElement; if (par && par.querySelector('input[capture], .fp-scancam-btn')) { inp._scanCam = true; return; } } catch (e) {}
+      FP.scanCam(inp);
+    });
+  } catch (e) {}
+};
+(function initScanCam() {
+  const run = () => { try { FP.enhanceScanInputs(document); } catch (e) {} };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run); else run();
+  // Modales/écrans injectés après coup → on repasse (débounce léger). childList seulement (peu coûteux).
+  try {
+    let t = null;
+    const obs = new MutationObserver(() => { if (t) return; t = setTimeout(() => { t = null; run(); }, 300); });
+    const start = () => { try { obs.observe(document.body, { childList: true, subtree: true }); } catch (e) {} };
+    if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+  } catch (e) {}
+})();
+
 // Modale « Nouveau conducteur » réutilisable → Promise<conductor|null>. Collecte les infos
 // essentielles puis crée le conducteur (FP.conducteurs.create). Injectée une fois dans le body.
 FP.newConducteurModal = function (prefillName) {
