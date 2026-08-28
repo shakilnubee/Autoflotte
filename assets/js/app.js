@@ -7446,7 +7446,7 @@ FP.ulysApi = (function () {
     // 2) Véhicule par n° de badge saisi sur une fiche VÉHICULE (« Badge télépéage » = settings.vehBadge)
     //    → utile quand Ulys n'a pas d'immat sur le badge mais que tu l'as rattaché à un véhicule dans PP.
     if (!veh && bn) {
-      try { const vb = FP.settings.get().vehBadge || {}; for (const vid in vb) { if (String(vb[vid] || '').replace(/\D/g, '') === bn) { veh = (window.FP_DATA && FP_DATA.vehicules || []).find(x => String(x.id) === String(vid)) || null; if (veh) break; } } } catch (e) {}
+      try { const vb = FP.settings.get().vehBadge || {}; for (const vid in vb) { if (FP.carteParts(vb[vid]).some(p => String(p).replace(/\D/g, '') === bn)) { veh = (window.FP_DATA && FP_DATA.vehicules || []).find(x => String(x.id) === String(vid)) || null; if (veh) break; } } } catch (e) {}
     }
     if (!condKey && veh && veh.chauffeur) { try { condKey = FP.condKeyParNom(veh.chauffeur); if (condKey) via = 'véhicule'; } catch (e) {} }
     // Repli HISTORIQUE : véhicule ancien/vendu sans chauffeur actuel → on prend le DERNIER conducteur
@@ -7543,7 +7543,11 @@ FP.ulysRenderPanel = function (el) {
       } else {
         condCell = '<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-linkto="' + esc(b.badgeNumber) + '">Relier à…</button>';
       }
-      const vehCell = det.immatriculation ? (m.veh ? FP.lienVehicule(m.veh.immat) : (esc(det.immatriculation) + ' <span class="fp-ech warn" style="font-size:.6rem">hors flotte</span>')) : '—';
+      // Véhicule = celui résolu par matchBadge (immat Ulys OU n° de badge saisi sur la fiche véhicule =
+      // settings.vehBadge). ⚠️ Ne PAS conditionner l'affichage à la seule immat Ulys : un badge sans
+      // immat côté Ulys mais rattaché à un véhicule dans PP (Dépôt PXP…) doit quand même montrer la plaque.
+      const vehCell = m.veh ? FP.lienVehicule(m.veh.immat)
+        : (det.immatriculation ? (esc(det.immatriculation) + ' <span class="fp-ech warn" style="font-size:.6rem">hors flotte</span>') : '—');
       return '<tr>'
         + '<td style="font-family:monospace;font-size:.8rem">' + esc(b.badgeNumber || '—') + '</td>'
         + '<td><span class="fp-ech ' + (actif ? 'ok' : 'neutral') + '">' + esc(b.state || '—') + '</span></td>'
