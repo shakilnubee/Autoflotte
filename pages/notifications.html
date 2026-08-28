@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827v">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827w">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260827v"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260827w"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260827v">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260827w">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -142,11 +142,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260827v"></script>
-<script src="../assets/js/supabase-client.js?v=20260827v"></script>
-<script src="../assets/js/data.js?v=20260827v"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260827w"></script>
+<script src="../assets/js/supabase-client.js?v=20260827w"></script>
+<script src="../assets/js/data.js?v=20260827w"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260827v"></script>
+<script src="../assets/js/app.js?v=20260827w"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -181,10 +181,19 @@
       </div>
       ${arrow}
     </${tag}>`;
-    // Alerte liée à un véhicule/échéance → bouton « Ignorer » visible (en haut à droite, hors du lien)
+    // Alerte d'ACTIVITÉ récurrente (scan QR…) → bouton « ✓ Vu » : efface l'occurrence du moment mais
+    // NE masque PAS pour toujours (elle revient au prochain événement). Différent de « Ignorer ».
+    if (a.seenKey) {
+      return `<div style="position:relative">${card}
+      <button type="button" data-seen="${esc(a.seenKey)}" title="Marquer comme vu — l'alerte reviendra au prochain scan" class="hover:text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50" style="position:absolute;top:8px;right:8px;z-index:2;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:#fff;color:#059669;border:1px solid var(--fp-border);cursor:pointer"><i data-lucide="check" class="w-3.5 h-3.5"></i> Vu</button>
+    </div>`;
+    }
+    // Toute autre alerte → bouton « ✓ Vu » (accusé de lecture) : elle disparaît, mais REVIENT si la
+    // situation change (nouveau montant, nouvelle échéance, +1 véhicule…). Plus clair que « Ignorer ».
     if (!a.muteKey) return card;
+    const sig = (FP.alertes && FP.alertes.sig) ? FP.alertes.sig(a) : '';
     return `<div style="position:relative">${card}
-      <button type="button" data-mute="${esc(a.muteKey)}" title="Ignorer cette alerte (ne plus l'afficher)" class="hover:text-red-600 hover:border-red-200 hover:bg-red-50" style="position:absolute;top:8px;right:8px;z-index:2;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:#fff;color:#64748b;border:1px solid var(--fp-border);cursor:pointer"><i data-lucide="bell-off" class="w-3.5 h-3.5"></i> Ignorer</button>
+      <button type="button" data-vu="${esc(a.muteKey)}" data-sig="${esc(sig)}" title="J'ai vu — l'alerte reviendra si la situation change" class="hover:text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50" style="position:absolute;top:8px;right:8px;z-index:2;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:#fff;color:#059669;border:1px solid var(--fp-border);cursor:pointer"><i data-lucide="check" class="w-3.5 h-3.5"></i> Vu</button>
     </div>`;
   }
 
@@ -292,7 +301,16 @@
     rest.hidden = !rest.hidden;
     more.textContent = rest.hidden ? `Voir tout (${more.dataset.total})` : 'Voir moins';
   });
-  // Masquer une alerte (le bouton est hors du lien → on bloque la navigation par sécurité)
+  // « ✓ Vu » (accusé de lecture) : on mémorise la signature de l'alerte → elle disparaît mais REVIENT
+  // si la situation change. Le bouton est hors du lien → on bloque la navigation par sécurité.
+  document.getElementById('notif-cols').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-vu]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    FP.alertes.marquerVu(b.dataset.vu, b.dataset.sig || '');
+    if (FP.toast) FP.toast('✓ Vu — reviendra si la situation change');
+    render();
+  });
+  // (compat) ancien masquage définitif, si un bouton « Ignorer » subsiste quelque part.
   document.getElementById('notif-cols').addEventListener('click', (e) => {
     const b = e.target.closest('[data-mute]'); if (!b) return;
     e.preventDefault(); e.stopPropagation();
@@ -301,6 +319,15 @@
     const msg = card ? (card.querySelector('.font-semibold') || {}).textContent || '' : '';
     const label = [cat, msg].filter(Boolean).join(' — ');
     FP.alertes.masquer(b.dataset.mute, label);
+    render();
+  });
+  // « ✓ Vu » : marque l'activité comme vue (n'efface QUE l'occurrence, revient au prochain événement).
+  document.getElementById('notif-cols').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-seen]'); if (!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const SEEN = { qr: () => (FP.qrScans && FP.qrScans.markSeen && FP.qrScans.markSeen()) };
+    const fn = SEEN[b.dataset.seen]; if (fn) fn();
+    if (FP.toast) FP.toast('✓ Vu');
     render();
   });
   // Lever l'immobilisation directement depuis l'alerte (bouton par véhicule listé).
@@ -1636,9 +1663,14 @@
   if (window.FP && FP.edlSign && FP.edlSign.load) {
     FP.edlSign.load().then(() => { render(); if (FP.edlSign.markSeen) FP.edlSign.markSeen(); }).catch(() => {});
   }
-  // Charge les scans de QR récents (24 h) → alerte « QR scanné ». Puis marque comme VUS → éteint la pastille.
+  // Migration : l'activité QR n'utilise plus un masquage définitif (« qr-activity ») mais le bouton
+  // « ✓ Vu ». Si l'ancienne entrée traîne dans les alertes masquées, on la retire (une fois) pour que
+  // l'activité QR réapparaisse proprement.
+  try { if (FP.alertes && FP.alertes.masquees && FP.alertes.masquees().includes('qr-activity')) { FP.alertes.reafficher('qr-activity'); } } catch (e) {}
+  // Charge les scans de QR récents (24 h) → alerte « QR scanné ». On NE marque PLUS « vu » à l'ouverture :
+  // l'alerte reste tant que l'utilisateur n'a pas cliqué « ✓ Vu » (sinon elle s'effaçait toute seule).
   if (window.FP && FP.qrScans && FP.qrScans.load) {
-    FP.qrScans.load().then(() => { render(); if (FP.qrScans.markSeen) FP.qrScans.markSeen(); }).catch(() => {});
+    FP.qrScans.load().then(() => render()).catch(() => {});
   }
 </script>
 </body>

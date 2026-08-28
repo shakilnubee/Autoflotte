@@ -6235,14 +6235,17 @@ FP.buildAlertes = (data) => {
   // Source = FP.qrScans._recent (chargé sur la page). On regroupe par véhicule (dernier scan de chacun).
   try {
     const scans = (FP.qrScans && FP.qrScans._recent) || null;
-    if (Array.isArray(scans) && scans.length) {
+    const nNew = (FP.qrScans && FP.qrScans._unseen) || 0;
+    // On n'affiche l'activité QR que s'il y a des scans NON VUS (nNew). Le bouton « ✓ Vu » (seenKey)
+    // les marque comme vus → l'alerte disparaît MAIS revient au prochain scan — contrairement à
+    // « Ignorer » qui la masquait pour toujours. L'historique complet daté reste sur la fiche véhicule.
+    if (Array.isArray(scans) && scans.length && nNew > 0) {
       const rel = (iso) => { const ms = Date.now() - Date.parse(iso); if (!(ms >= 0)) return ''; const mn = Math.round(ms / 60000); if (mn < 60) return 'il y a ' + Math.max(1, mn) + ' min'; const h = Math.round(mn / 60); if (h < 24) return 'il y a ' + h + ' h'; return 'il y a ' + Math.round(h / 24) + ' j'; };
       const byVeh = new Map(); scans.forEach(s => { if (s && s.vehiculeId && !byVeh.has(s.vehiculeId)) byVeh.set(s.vehiculeId, s); });
       const list = Array.from(byVeh.values());
       const items = list.map(s => ({ label: `${s.plaque || 'Véhicule'} — QR ouvert ${rel(s.at)}`, target: 'vehicules.html?immat=' + encodeURIComponent(s.plaque || '') }));
-      const nNew = (FP.qrScans._unseen || 0);
-      const msg = (nNew > 0 ? `${nNew} nouveau${nNew > 1 ? 'x' : ''} scan${nNew > 1 ? 's' : ''} de QR` : `${list.length} véhicule${list.length > 1 ? 's' : ''} scanné${list.length > 1 ? 's' : ''}`) + ' (24 h)';
-      out.push({ niveau: 'info', categorie: 'Activité QR', message: msg, detail: 'Quelqu\'un a ouvert le portail QR d\'un véhicule (le détail daté est dans la fiche du véhicule).', sort: 470, muteKey: 'qr-activity', vehicules: items });
+      const msg = `${nNew} nouveau${nNew > 1 ? 'x' : ''} scan${nNew > 1 ? 's' : ''} de QR (24 h)`;
+      out.push({ niveau: 'info', categorie: 'Activité QR', message: msg, detail: 'Quelqu\'un a ouvert le portail QR d\'un véhicule (le détail daté est dans la fiche du véhicule). « ✓ Vu » efface l\'alerte — elle reviendra au prochain scan.', sort: 470, seenKey: 'qr', vehicules: items });
     }
   } catch (e) {}
 
@@ -6789,17 +6792,44 @@ FP.buildAlertes = (data) => {
 
   const order = { danger: 0, warn: 1, info: 2 };
   out.sort((a, b) => (order[a.niveau] - order[b.niveau]) || (a.sort - b.sort));
-  // TOUTE alerte doit pouvoir être ignorée (bouton « Ignorer » + section masquées en bas) : on
-  // pose une clé de repli (basée sur le contenu) sur celles qui n'en ont pas. Elle reparaît si son
-  // contenu change vraiment (ex. nouveau montant / nouvelle échéance) — comportement voulu.
-  out.forEach(a => { if (!a.muteKey) { const base = (a.categorie || '') + '|' + (a.message || ''); a.muteKey = 'gen|' + base.slice(0, 90); } });
-  // Masque les alertes que l'utilisateur a explicitement enlevées (par véhicule / échéance)
-  const masquees = (FP.settings.get().alertesMasquees) || [];
-  return masquees.length ? out.filter(a => !masquees.includes(a.muteKey)) : out;
+  // TOUTE alerte porte une clé (celles sans en reçoivent une, basée sur le contenu). Les alertes
+  // d'ACTIVITÉ (seenKey, ex. scans QR) ont leur propre mécanisme « Vu » → on ne leur pose PAS de clé.
+  out.forEach(a => { if (!a.muteKey && !a.seenKey) { const base = (a.categorie || '') + '|' + (a.message || ''); a.muteKey = 'gen|' + base.slice(0, 90); } });
+  // ── « ✓ Vu » (accusé de lecture) : quand l'utilisateur a VU une alerte, on mémorise sa SIGNATURE
+  //    (contenu : message + détail + éléments listés). L'alerte reste cachée TANT QUE rien ne change ;
+  //    dès que la situation évolue (nouveau montant, nouvelle échéance, +1 véhicule…), la signature
+  //    change → l'alerte REVIENT (le site « sait » que tu as vérifié, mais te re-prévient si ça bouge).
+  //    On garde aussi l'ancien masquage définitif (alertesMasquees) par compatibilité.
+  const s0 = FP.settings.get();
+  const masquees = s0.alertesMasquees || [];
+  const vues = s0.alertesVues || {};
+  return out.filter(a => {
+    if (a.muteKey && masquees.includes(a.muteKey)) return false;                       // ancien « masquer » définitif
+    if (a.muteKey && vues[a.muteKey] != null && vues[a.muteKey] === FP.alertes.sig(a)) return false; // « Vu » ET rien n'a changé
+    return true;
+  });
 };
 
-// Masquer / réafficher une alerte (clé liée au véhicule + échéance : reparaît si l'échéance change)
+// « ✓ Vu » / réafficher une alerte. Modèle : accusé de lecture par SIGNATURE (revient si le contenu
+// change). `masquer` (définitif) reste dispo pour compat. Tout est synchronisé (app_settings).
 FP.alertes = {
+  // Signature de contenu : change dès que le message / le détail / la liste d'éléments change.
+  sig(a) {
+    try {
+      const items = (a && (a.vehicules || a.items)) || [];
+      const lst = Array.isArray(items) ? items.map(x => (x && (x.label || x.target)) || '').join(',') : '';
+      return [(a && a.message) || '', (a && typeof a.detail === 'string') ? a.detail : '', lst].join('¦');
+    } catch (e) { return String((a && a.message) || ''); }
+  },
+  vues() { return (FP.settings.get().alertesVues) || {}; },
+  estVu(a) { try { const v = (FP.settings.get().alertesVues) || {}; return a && a.muteKey && v[a.muteKey] != null && v[a.muteKey] === this.sig(a); } catch (e) { return false; } },
+  marquerVu(key, sig) {
+    if (!key) return;
+    const s = FP.settings.get(); s.alertesVues = (s.alertesVues && typeof s.alertesVues === 'object') ? s.alertesVues : {};
+    s.alertesVues[key] = (sig == null ? '' : String(sig));
+    FP.settings.save(s);
+  },
+  oublierVu(key) { const s = FP.settings.get(); if (s.alertesVues) { delete s.alertesVues[key]; FP.settings.save(s); } },
   masquees() { return (FP.settings.get().alertesMasquees) || []; },
   infos() { return (FP.settings.get().alertesMasqueesInfo) || {}; },
   masquer(key, label) {
@@ -6813,9 +6843,10 @@ FP.alertes = {
     const s = FP.settings.get();
     s.alertesMasquees = (s.alertesMasquees || []).filter(k => k !== key);
     if (s.alertesMasqueesInfo) delete s.alertesMasqueesInfo[key];
+    if (s.alertesVues) delete s.alertesVues[key];
     FP.settings.save(s);
   },
-  reafficherTout() { const s = FP.settings.get(); s.alertesMasquees = []; s.alertesMasqueesInfo = {}; FP.settings.save(s); },
+  reafficherTout() { const s = FP.settings.get(); s.alertesMasquees = []; s.alertesMasqueesInfo = {}; s.alertesVues = {}; FP.settings.save(s); },
 };
 
 // Échéances DATÉES (pour le calendrier) : chaque entrée a une vraie date.
