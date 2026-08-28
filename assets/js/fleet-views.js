@@ -18,9 +18,10 @@
   FP.mountUlys=function(container){
     try{
       if(!container) return false;
-      if(container.getAttribute('data-fl-ulys')==='1'){ try{ if(window.renderUlys) window.renderUlys(); }catch(e){} return true; }
+      if(container.getAttribute('data-fl-ulys')==='1'){ try{ if(window.renderUlys) window.renderUlys(); }catch(e){} try{ if(FP.ulysRenderPanel){ var pp=container.querySelector('#ulys-api-panel'); if(pp) FP.ulysRenderPanel(pp); } }catch(e){} return true; }
       container.setAttribute('data-fl-ulys','1');
-      injectCss(); container.innerHTML=ULYS_MARKUP;
+      injectCss(); container.innerHTML='<div id="ulys-api-panel"></div>'+ULYS_MARKUP;
+      try{ if(FP.ulysRenderPanel) FP.ulysRenderPanel(container.querySelector('#ulys-api-panel')); }catch(e){}
       try{ if(window.lucide&&lucide.createIcons) lucide.createIcons(); }catch(e){}
   (function ulysTab(){
     const ust = { search: '', annee: 'all', expanded: false };

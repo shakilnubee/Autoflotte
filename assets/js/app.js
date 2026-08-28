@@ -7238,6 +7238,132 @@ FP.emptyState = function (el, opts) {
   return node;
 };
 
+// ================= API ULYS PARTNER (VINCI) — LECTURE (Palier 1) ==============================
+// Passerelle : le navigateur appelle l'Edge Function `ulys-sync` (qui détient le jeton en secret
+// serveur) → jamais de clé Ulys côté client. Ici on RÉCUPÈRE les badges/contrats/compte, on les
+// RAPPROCHE automatiquement des véhicules (par immatriculation) et conducteurs (par nom), et on
+// propose de RELIER un badge à un conducteur (écrit condBadgeUlys via le helper canonique
+// FP.setCondNum → la conso se rattache ensuite AUTO). Aucune écriture vers Ulys à ce palier.
+FP.ulysApi = (function () {
+  const K_BADGES = 'ulysBadges', K_AT = 'ulysSyncAt';
+  const available = () => !!(FP.supabase && FP.supabase.functions && typeof FP.supabase.functions.invoke === 'function');
+
+  async function call(action, extra) {
+    if (!available()) throw new Error("Connexion Supabase indisponible.");
+    const { data, error } = await FP.supabase.functions.invoke('ulys-sync', { body: Object.assign({ action }, extra || {}) });
+    // functions.invoke ne remonte pas toujours le corps JSON d'erreur → on récupère le message serveur si présent.
+    if (error) {
+      let msg = error.message || 'Erreur Ulys.';
+      try { const ctx = error.context && (await error.context.json()); if (ctx && ctx.error) msg = ctx.error; } catch (e) {}
+      throw new Error(msg);
+    }
+    if (data && data.error) throw new Error(data.error);
+    return data && data.data;
+  }
+
+  // Cache synchronisé (app_settings via FP.settings) : dernière liste de badges + date, pour afficher
+  // sans rappeler l'API (quota journalier). Sauvé par société (FP.settings est déjà par société).
+  const cache = () => { try { const s = FP.settings.get(); return { badges: Array.isArray(s[K_BADGES]) ? s[K_BADGES] : [], at: s[K_AT] || null }; } catch (e) { return { badges: [], at: null }; } };
+  function saveCache(badges) { try { const s = FP.settings.get(); s[K_BADGES] = badges || []; s[K_AT] = new Date().toISOString(); FP.settings.save(s); } catch (e) {} }
+
+  // Rapproche un badge d'un véhicule (par immat) et d'un conducteur (véhicule→chauffeur, sinon
+  // « affectation » du badge par nom). Ne DEVINE jamais : renvoie null si rien de fiable.
+  function matchBadge(b) {
+    const det = (b && b.detailBadge) || {};
+    const immat = det.immatriculation || '';
+    let veh = null, condKey = null, via = '';
+    try {
+      const ni = FP.normImmat ? FP.normImmat(immat) : immat;
+      if (ni) veh = (window.FP_DATA && FP_DATA.vehicules || []).find(v => (FP.normImmat ? FP.normImmat(v.immat) : v.immat) === ni) || null;
+    } catch (e) {}
+    if (veh && veh.chauffeur) { try { condKey = FP.condKeyParNom(veh.chauffeur); if (condKey) via = 'véhicule'; } catch (e) {} }
+    if (!condKey && det.assignment) { try { condKey = FP.condKeyParNom(det.assignment); if (condKey) via = 'affectation'; } catch (e) {} }
+    let cond = null; if (condKey) { try { cond = FP.conducteursTous().find(c => c.key === condKey) || null; } catch (e) {} }
+    return { immat, veh, cond, condKey, via };
+  }
+
+  // Anomalies simples (Palier 1) : badge inactif encore affecté, immat hors flotte, badge non renseigné.
+  function anomalies(badges) {
+    const out = [];
+    (badges || []).forEach(b => {
+      const det = (b.detailBadge) || {};
+      const actif = String(b.state || '').toLowerCase().indexOf('actif') === 0; // "Actif" vs "Inactif"
+      const m = matchBadge(b);
+      if (!actif && (det.assignment || det.immatriculation)) out.push({ b, type: 'inactif', txt: 'Badge inactif encore affecté (' + (det.assignment || det.immatriculation) + ')' });
+      if (det.immatriculation && !m.veh) out.push({ b, type: 'hors-flotte', txt: 'Immatriculation « ' + det.immatriculation + ' » absente de la flotte' });
+      if (!det.immatriculation && !det.assignment) out.push({ b, type: 'vide', txt: 'Badge ' + (b.badgeNumber || '') + ' sans immatriculation ni affectation' });
+    });
+    return out;
+  }
+
+  return { available, call, cache, saveCache, matchBadge, anomalies,
+    sync: async function () { const badges = await call('badges'); const arr = Array.isArray(badges) ? badges : []; saveCache(arr); return arr; },
+    account: () => call('account'),
+    contracts: () => call('contracts'),
+    // Relie un badge à un conducteur (écrit condBadgeUlys) — réutilise le helper canonique.
+    relier: (condKey, badgeNumber) => FP.setCondNum(condKey, 'condBadgeUlys', badgeNumber)
+  };
+})();
+
+// Panneau « API Ulys » (affiché en tête de l'onglet Ulys, dans Contrôle). Rendu + interactions ici
+// (logique dans FP.ulysApi) → fleet-views.js n'a qu'à appeler FP.ulysRenderPanel(el).
+FP.ulysRenderPanel = function (el) {
+  if (!el) return;
+  const esc = FP.esc || (s => String(s == null ? '' : s));
+  function draw() {
+    const { badges, at } = FP.ulysApi.cache();
+    const when = at ? (() => { try { return FP.date(at.slice(0, 10)); } catch (e) { return at.slice(0, 10); } })() : null;
+    const anos = FP.ulysApi.anomalies(badges);
+    const rows = (badges || []).map(b => {
+      const det = b.detailBadge || {};
+      const actif = String(b.state || '').toLowerCase().indexOf('actif') === 0;
+      const m = FP.ulysApi.matchBadge(b);
+      let deja = false; try { deja = m.condKey && FP.condNum && String(FP.condNum(m.condKey, 'condBadgeUlys') || '').replace(/\D/g, '') === String(b.badgeNumber || '').replace(/\D/g, ''); } catch (e) {}
+      const condCell = m.cond
+        ? (esc(m.cond.prenom || m.cond.name || m.cond.key) + (m.via ? ' <span class="text-xs text-slate-400">(' + m.via + ')</span>' : '')
+           + (deja ? ' <span class="fp-ech ok" style="font-size:.6rem">relié</span>'
+                   : ' <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-uls-link="' + esc(b.badgeNumber) + '" data-uls-cond="' + esc(m.condKey) + '">Relier</button>'))
+        : '<span class="text-slate-400 text-xs">à rapprocher à la main</span>';
+      const vehCell = det.immatriculation ? (m.veh ? FP.lienVehicule(m.veh.immat) : (esc(det.immatriculation) + ' <span class="fp-ech warn" style="font-size:.6rem">hors flotte</span>')) : '—';
+      return '<tr>'
+        + '<td style="font-family:monospace;font-size:.8rem">' + esc(b.badgeNumber || '—') + '</td>'
+        + '<td><span class="fp-ech ' + (actif ? 'ok' : 'neutral') + '">' + esc(b.state || '—') + '</span></td>'
+        + '<td>' + vehCell + '</td>'
+        + '<td>' + esc(det.assignment || '—') + '</td>'
+        + '<td>' + condCell + '</td>'
+        + '<td class="text-xs text-slate-500">' + esc(det.comment || '') + '</td>'
+        + '</tr>';
+    }).join('');
+    el.innerHTML = '<div class="card p-4 mb-4" style="border:1px solid var(--fp-border)">'
+      + '<div class="flex items-center justify-between gap-3 flex-wrap mb-2">'
+      + '<div class="flex items-center gap-2 font-bold" style="color:var(--fp-primary)"><i data-lucide="route" class="w-4 h-4"></i> Badges Ulys (API)</div>'
+      + '<div class="flex items-center gap-2">'
+      + (when ? '<span class="text-xs text-slate-400">Synchronisé le ' + esc(when) + '</span>' : '')
+      + '<button type="button" id="uls-api-sync" class="btn btn-primary" style="padding:5px 12px;font-size:13px"><i data-lucide="refresh-cw" class="w-3 h-3"></i> Synchroniser</button>'
+      + '</div></div>'
+      + (anos.length ? '<div class="fp-ech warn" style="display:block;padding:.5rem .7rem;border-radius:.5rem;margin-bottom:.6rem;white-space:normal;font-size:.8rem">⚠️ ' + anos.length + ' point(s) à vérifier : ' + esc(anos.slice(0, 3).map(a => a.txt).join(' · ')) + (anos.length > 3 ? ' …' : '') + '</div>' : '')
+      + (badges && badges.length
+          ? '<div style="overflow-x:auto"><table class="fp-table" style="width:100%"><thead><tr>'
+            + '<th>N° badge</th><th>Statut</th><th>Véhicule</th><th>Affectation Ulys</th><th>Conducteur (auto)</th><th>Comm.</th>'
+            + '</tr></thead><tbody>' + rows + '</tbody></table></div>'
+            + '<div class="text-xs text-slate-400 mt-2">Le rapprochement est automatique : par immatriculation (→ véhicule → conducteur) ou par le nom de l\'affectation. « Relier » enregistre le n° de badge sur la fiche conducteur — la conso se rattache ensuite toute seule.</div>'
+          : '<div class="text-sm text-slate-500">Aucun badge chargé. Clique <b>« Synchroniser »</b> pour récupérer tes badges Ulys via l\'API.</div>')
+      + '</div>';
+    try { if (window.lucide) lucide.createIcons(); } catch (e) {}
+    const btn = el.querySelector('#uls-api-sync');
+    if (btn) btn.addEventListener('click', async () => {
+      btn.disabled = true; const old = btn.innerHTML; btn.innerHTML = 'Synchronisation…';
+      try { await FP.ulysApi.sync(); FP.toast && FP.toast('Badges Ulys synchronisés ✓'); draw(); }
+      catch (e) { (FP.alert || alert)('Ulys : ' + (e && e.message || e)); btn.disabled = false; btn.innerHTML = old; }
+    });
+    el.querySelectorAll('[data-uls-link]').forEach(b => b.addEventListener('click', () => {
+      const num = b.getAttribute('data-uls-link'), ck = b.getAttribute('data-uls-cond');
+      if (FP.ulysApi.relier(ck, num)) { FP.toast && FP.toast('Badge relié au conducteur ✓'); draw(); }
+    }));
+  }
+  draw();
+};
+
 // ── Piège de focus (focus-trap) global — garde la tabulation DANS la fenêtre ouverte ──
 // Couvre toutes les modales/tiroirs du site (.modal-backdrop / .drawer-backdrop) + les dialogues
 // stylés (.fp-dlg-backdrop) et la modale prospect de l'accueil (#pp-backdrop). Aucune modif par page.
