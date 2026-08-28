@@ -115,7 +115,7 @@ async function sendSignEmail(db: ReturnType<typeof createClient>, societe: strin
   } catch { return false; }
 }
 
-type Signer = { role: string; nom?: string; email?: string; signed?: boolean; signedAt?: string; ip?: string; sigUrl?: string; ordre?: number; notified?: boolean; sigToken?: string; mailSubject?: string; mailHtml?: string; mailText?: string };
+type Signer = { role: string; nom?: string; email?: string; signed?: boolean; signedAt?: string; ip?: string; sigUrl?: string; ordre?: number; notified?: boolean; sigToken?: string; mailSubject?: string; mailHtml?: string; mailText?: string; refused?: boolean; refusMotif?: string; refusedAt?: string };
 
 // Résout le signataire à partir du jeton reçu dans l'URL, de façon SÛRE :
 //  1) jeton PROPRE au signataire (sigToken, liens récents) → identifie le signataire ET son rôle sans se
@@ -213,6 +213,37 @@ Deno.serve(async (req) => {
     if (req.method === "POST") {
       let body: Record<string, unknown> = {};
       try { body = await req.json(); } catch { return json({ error: "Requête invalide." }, 400); }
+
+      // ---- REFUS : le signataire refuse de signer (motif OBLIGATOIRE) → annule la demande (plus de relance) ----
+      if (String(body.action || "") === "refuse") {
+        const token = String(body.t || "").trim();
+        const whoParam = String(body.who || "employe") === "societe" ? "societe" : "employe";
+        const motif = String(body.motif || "").trim();
+        if (!token) return json({ error: "Lien incomplet." }, 400);
+        if (!motif) return json({ error: "Merci d'indiquer le motif du refus." }, 400);
+        const found = await resolveSigner(db, token, whoParam);
+        if (!found || !found.row) return json({ error: "Lien invalide ou expiré." }, 404);
+        const row = found.row; const who = found.who; const me = found.me;
+        const docToken = String(row.token || token);
+        if (!me) return json({ error: "Signataire introuvable." }, 404);
+        if (row.statut === "signe") return json({ error: "Ce document est déjà signé, il ne peut plus être refusé." }, 409);
+        const signers = (Array.isArray(row.signataires) ? row.signataires : []) as Signer[];
+        const meRef = signers.find((s) => s.role === who) || me;
+        meRef.refused = true; meRef.refusMotif = motif.slice(0, 1000); meRef.refusedAt = new Date().toISOString();
+        meRef.ip = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "";
+        if (String(body.nom || "").trim()) meRef.nom = String(body.nom).trim();
+        // Statut = 'refuse' → la demande sort des « en attente » (plus aucune relance côté app).
+        await db.from("edl_signatures").update({ signataires: signers, statut: "refuse" }).eq("token", docToken);
+        // Notifie le(s) gestionnaire(s) : refus + motif (push).
+        await sendPush(db, String(row.societe || "PXP"), {
+          title: "❌ État des lieux refusé",
+          body: (row.plaque || "Véhicule") + " — " + (meRef.nom || "un signataire") + " a refusé de signer. Motif : " + motif.slice(0, 140),
+          url: "./pages/vehicules.html?immat=" + encodeURIComponent(String(row.plaque || "")),
+          tag: "edlrefuse-" + docToken,
+        });
+        return json({ ok: true, refused: true, statut: "refuse" });
+      }
+
       if (String(body.action || "") !== "sign") return json({ error: "Action inconnue." }, 400);
       const token = String(body.t || "").trim();
       const whoParam = String(body.who || "employe") === "societe" ? "societe" : "employe";
@@ -228,6 +259,7 @@ Deno.serve(async (req) => {
       const docToken = String(row.token || token); // jeton du DOCUMENT (pour l'update + les chemins de stockage)
       if (!me) return json({ error: "Signataire introuvable." }, 404);
       const signers = (Array.isArray(row.signataires) ? row.signataires : []) as Signer[];
+      if (row.statut === "refuse") return json({ error: "Cette demande de signature a été refusée et annulée." }, 409);
       if (me.signed === true) return json({ ok: true, deja: true, statut: row.statut || "en_attente" });
 
       // ORDRE DE SIGNATURE (séquentiel) : un signataire ne peut signer QUE si tous ceux d'ordre

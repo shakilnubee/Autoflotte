@@ -6041,6 +6041,20 @@ FP.buildAlertes = (data) => {
     }
   } catch (e) {}
 
+  // --- États des lieux REFUSÉS (le signataire a refusé de signer, avec un motif) ---
+  // Source = FP.edlSign._refused. La demande est annulée (aucune relance) ; le gestionnaire voit le MOTIF
+  // et peut corriger puis renvoyer un nouvel état des lieux. Alerte prioritaire (danger).
+  try {
+    const refs = (FP.edlSign && FP.edlSign._refused) || null;
+    if (Array.isArray(refs) && refs.length) {
+      const items = refs.map(p => ({
+        label: `${p.plaque}${p.modele ? ' · ' + p.modele : ''}${p.sens === 'restitution' ? ' (restitution)' : ''} — refusé par ${p.par}${p.motif ? ' · motif : ' + p.motif : ''}`,
+        target: 'vehicules.html?immat=' + encodeURIComponent(p.plaque || ''),
+      }));
+      out.push({ niveau: 'danger', categorie: 'États des lieux', message: `${refs.length} état${refs.length > 1 ? 's' : ''} des lieux refusé${refs.length > 1 ? 's' : ''}`, detail: 'Un signataire a refusé de signer (motif indiqué). La demande est annulée — corrige puis renvoie un nouvel état des lieux.', sort: 205, muteKey: 'edl-refused', vehicules: items });
+    }
+  } catch (e) {}
+
   // --- États des lieux ENTIÈREMENT SIGNÉS récemment (confirmation positive) ---
   // Source = FP.edlSign._recentSigned (signés dans les 7 derniers jours). Chaque ligne ouvre la VERSION
   // SIGNÉE (PDF) ; ainsi le gestionnaire est notifié DANS les alertes que la signature est terminée.
@@ -9355,7 +9369,7 @@ FP.edlSign = {
       const rows = (r && r.data) ? r.data : [];
       this._rows = rows;
       this._pending = rows
-        .filter(x => x && !['signe', 'annule'].includes(x.statut || 'en_attente'))   // ni signé, ni annulé
+        .filter(x => x && !['signe', 'annule', 'refuse'].includes(x.statut || 'en_attente'))   // ni signé, ni annulé, ni REFUSÉ (plus de relance)
         .map(x => {
           const sgs = Array.isArray(x.signataires) ? x.signataires : [];
           const requis = sgs.filter(s => s && s.email);
@@ -9363,6 +9377,16 @@ FP.edlSign = {
           return { token: x.token || '', id: x.id, plaque: x.plaque || '', modele: x.modele || '', vehiculeId: x.vehiculeId || '', date: x.date || '', sens: x.sens || 'remise', manque, nbTotal: requis.length };
         })
         .filter(x => x.manque.length);   // il reste au moins un signataire à signer
+      // États des lieux REFUSÉS (statut 'refuse') → alerte DANGER avec le MOTIF (le gestionnaire doit agir :
+      // corriger + relancer un nouvel état des lieux). On expose qui a refusé et pourquoi.
+      this._refused = rows
+        .filter(x => x && (x.statut === 'refuse'))
+        .map(x => {
+          const sgs = Array.isArray(x.signataires) ? x.signataires : [];
+          const ref = sgs.find(s => s && s.refused) || {};
+          return { token: x.token || '', plaque: x.plaque || '', modele: x.modele || '', vehiculeId: x.vehiculeId || '', sens: x.sens || 'remise', par: ref.nom || (ref.role === 'societe' ? 'signataire société' : 'salarié'), motif: ref.refusMotif || '', when: ref.refusedAt ? Date.parse(ref.refusedAt) : 0 };
+        })
+        .sort((a, b) => b.when - a.when);
       // États des lieux ENTIÈREMENT SIGNÉS récemment (7 j) → alerte POSITIVE « signé ✓ » dans la page Alertes
       // (le gestionnaire voit clairement qu'une signature est terminée ; auto-expire au bout d'une semaine).
       const _now = Date.now(), _WEEK = 7 * 864e5;
