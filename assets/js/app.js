@@ -7382,6 +7382,7 @@ FP.ulysRenderPanel = function (el) {
       + '<div class="flex items-center gap-2">'
       + (when ? '<span class="text-xs text-slate-400">Synchronisé le ' + esc(when) + '</span>' : '')
       + '<button type="button" id="uls-api-invoices" class="btn btn-outline" style="padding:5px 10px;font-size:13px" title="Importer les factures Ulys (en-tête HT/TVA/TTC) dans l\'onglet"><i data-lucide="download" class="w-3 h-3"></i> Importer les factures</button>'
+      + '<button type="button" id="uls-api-csv" class="btn btn-outline" style="padding:5px 10px;font-size:13px" title="Télécharger le détail transaction par transaction (CSV) de la dernière facture télépéage"><i data-lucide="file-down" class="w-3 h-3"></i> Détail conso (CSV)</button>'
       + '<button type="button" id="uls-api-sync" class="btn btn-primary" style="padding:5px 12px;font-size:13px"><i data-lucide="refresh-cw" class="w-3 h-3"></i> Synchroniser</button>'
       + '</div></div>'
       + (collapsed ? '' : (
@@ -7416,6 +7417,35 @@ FP.ulysRenderPanel = function (el) {
         try { if (window.renderUlys) window.renderUlys(); } catch (e) {}
       } catch (e) { (FP.alert || alert)('Ulys : ' + (e && e.message || e)); }
       inv.disabled = false; inv.innerHTML = old; try { if (window.lucide) lucide.createIcons(); } catch (e) {}
+    });
+    const csvBtn = el.querySelector('#uls-api-csv');
+    if (csvBtn) csvBtn.addEventListener('click', async () => {
+      csvBtn.disabled = true; const old = csvBtn.innerHTML; csvBtn.innerHTML = 'Récupération…';
+      try {
+        const list = await FP.ulysApi.invoices();
+        const tlp = (Array.isArray(list) ? list : []).filter(i => String(i.invoiceType || '').toUpperCase() === 'TLP')
+          .sort((a, b) => String(b.invoiceDate || '').localeCompare(String(a.invoiceDate || '')));
+        if (!tlp.length) { (FP.alert || alert)('Aucune facture télépéage trouvée.'); }
+        else {
+          let done = false, lastErr = '';
+          // L'API ne sert que les 3 derniers mois de transactions → on essaie les factures les plus récentes.
+          for (const it of tlp.slice(0, 4)) {
+            try {
+              const csv = await FP.ulysApi.transactionsCsv(it.invoiceId);
+              const txt = typeof csv === 'string' ? csv : (csv == null ? '' : JSON.stringify(csv));
+              if (txt && txt.trim()) {
+                const blob = new Blob([txt], { type: 'text/csv;charset=utf-8' });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+                a.download = 'ulys-detail-' + String(it.invoiceId).replace(/[^A-Za-z0-9]/g, '') + '.csv';
+                document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+                FP.toast && FP.toast('Détail téléchargé (facture ' + it.invoiceId + ') ✓'); done = true; break;
+              }
+            } catch (e) { lastErr = (e && e.message) || ''; }
+          }
+          if (!done) (FP.alert || alert)("Détail indisponible : l'API Ulys ne fournit le détail que pour les 3 derniers mois facturés. " + lastErr);
+        }
+      } catch (e) { (FP.alert || alert)('Ulys : ' + (e && e.message || e)); }
+      csvBtn.disabled = false; csvBtn.innerHTML = old; try { if (window.lucide) lucide.createIcons(); } catch (e) {}
     });
   }
   draw();
