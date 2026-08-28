@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260827i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260827j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260827i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260827j">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -36,10 +36,7 @@
   .task-check { width:20px; height:20px; flex-shrink:0; margin-top:2px; accent-color:#16a34a; cursor:pointer; }
   .task-title { font-weight:700; color:#0f1e3d; }
   body.fp-dark .task-title { color:#e6edf6; }
-  .pill-ech { font-size:.72rem; font-weight:700; padding:.12rem .5rem; border-radius:9999px; white-space:nowrap; }
-  .ech-retard { background:#FEE2E2; color:#991B1B; }
-  .ech-proche { background:#FEF3C7; color:#92400E; }
-  .ech-ok { background:#E0E7FF; color:#3730A3; }
+  /* (pastilles d'échéance : composant canonique .fp-ech dans styles.css) */
   .ta-icon-btn { padding:.35rem; border-radius:.4rem; color:#cbd5e1; border:none; background:none; cursor:pointer; }
   .ta-icon-btn:hover { background:#f1f5f9; color:#0f1e3d; }
 </style>
@@ -229,10 +226,10 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260827i"></script>
-<script src="../assets/js/supabase-client.js?v=20260827i"></script>
-<script src="../assets/js/data.js?v=20260827i"></script>
-<script src="../assets/js/app.js?v=20260827i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260827j"></script>
+<script src="../assets/js/supabase-client.js?v=20260827j"></script>
+<script src="../assets/js/data.js?v=20260827j"></script>
+<script src="../assets/js/app.js?v=20260827j"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -258,10 +255,10 @@
   function echeanceInfo(t) {
     if (!t.echeance) return null;
     const j = FP.joursRestants ? FP.joursRestants(t.echeance) : Math.ceil((new Date(t.echeance) - new Date(todayIso())) / 86400000); // source unique (minuit→minuit)
-    if (j < 0) return { cls: 'ech-retard', txt: `En retard de ${-j} j`, retard: true };
-    if (j === 0) return { cls: 'ech-retard', txt: "Aujourd'hui", retard: false };
-    if (j <= 7) return { cls: 'ech-proche', txt: `Dans ${j} j`, retard: false };
-    return { cls: 'ech-ok', txt: FP.date(t.echeance), retard: false };
+    if (j < 0) return { cls: 'danger', txt: `En retard de ${-j} j`, retard: true };
+    if (j === 0) return { cls: 'danger', txt: "Aujourd'hui", retard: false };
+    if (j <= 7) return { cls: 'warn', txt: `Dans ${j} j`, retard: false };
+    return { cls: 'info', txt: FP.date(t.echeance), retard: false };
   }
 
   function render() {
@@ -302,7 +299,7 @@
         <div class="flex-1 min-w-0">
           <div class="task-title">${escapeHtml(t.titre)}</div>
           <div class="flex items-center gap-2 flex-wrap mt-1">
-            ${e ? `<span class="pill-ech ${e.cls}">${e.txt}</span>` : ''}
+            ${e ? `<span class="fp-ech ${e.cls}">${e.txt}</span>` : ''}
             ${vl ? `<a href="vehicules.html?immat=${encodeURIComponent((data.vehicules.find(v=>v.id===t.vehiculeId)||{}).immat||'')}" class="text-xs font-semibold" style="color:var(--fp-accent);text-decoration:none">🚗 ${escapeHtml(vl)}</a>` : ''}
           </div>
           ${t.note ? `<div class="text-sm text-slate-500 mt-1 whitespace-pre-line">${escapeHtml(t.note)}</div>` : ''}
@@ -459,14 +456,14 @@
       const st = statutRappel(r);
       // Pastille « jour choisi » : à venir (pas encore le jour) en orange, sinon échéance normale.
       let jourPill = '';
-      if (!done && st.notStarted) jourPill = `<span class="pill-ech" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">⏳ à partir du ${escapeHtml(FP.date(r.dateDebut))}</span>`;
-      else if (!done && st.upcoming && st.due) jourPill = `<span class="pill-ech" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">🔜 le ${escapeHtml(FP.date(st.due.getFullYear() + '-' + pad2(st.due.getMonth() + 1) + '-' + pad2(st.due.getDate())))}</span>`;
-      else if (r.dateDebut && st.due) jourPill = `<span class="pill-ech ech-proche">📅 à faire · échéance le ${escapeHtml(FP.date(st.due.getFullYear() + '-' + pad2(st.due.getMonth() + 1) + '-' + pad2(st.due.getDate())))}</span>`;
+      if (!done && st.notStarted) jourPill = `<span class="fp-ech" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">⏳ à partir du ${escapeHtml(FP.date(r.dateDebut))}</span>`;
+      else if (!done && st.upcoming && st.due) jourPill = `<span class="fp-ech" style="background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">🔜 le ${escapeHtml(FP.date(st.due.getFullYear() + '-' + pad2(st.due.getMonth() + 1) + '-' + pad2(st.due.getDate())))}</span>`;
+      else if (r.dateDebut && st.due) jourPill = `<span class="fp-ech warn">📅 à faire · échéance le ${escapeHtml(FP.date(st.due.getFullYear() + '-' + pad2(st.due.getMonth() + 1) + '-' + pad2(st.due.getDate())))}</span>`;
       const dim = (!done && (st.notStarted || st.upcoming)) ? 'opacity:.62;' : '';
       return `<div class="task-card ${done ? 'done' : ''}" style="padding:.6rem .8rem;${dim}">
         <input type="checkbox" class="task-check" data-rap="${escapeHtml(r.id)}" data-pk="${escapeHtml(pk)}" ${done ? 'checked' : ''} title="Cocher quand c'est fait pour cette période">
         <div class="flex-1 min-w-0">
-          <div class="task-title flex items-center gap-2 flex-wrap">${escapeHtml(r.titre)} <span class="pill-ech ech-ok">🔁 ${escapeHtml(FREQ_LBL[r.freq] || r.freq)} · ${escapeHtml(lbl)}</span>${jourPill}</div>
+          <div class="task-title flex items-center gap-2 flex-wrap">${escapeHtml(r.titre)} <span class="fp-ech info">🔁 ${escapeHtml(FREQ_LBL[r.freq] || r.freq)} · ${escapeHtml(lbl)}</span>${jourPill}</div>
           ${r.note ? `<div class="text-sm text-slate-500 mt-1 whitespace-pre-line">${escapeHtml(r.note)}</div>` : ''}
         </div>
         ${r.lien ? `<a href="${escapeHtml(r.lien)}" class="ta-icon-btn" title="Ouvrir la page concernée"><i data-lucide="external-link" class="w-4 h-4"></i></a>` : ''}
