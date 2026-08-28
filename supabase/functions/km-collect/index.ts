@@ -490,7 +490,17 @@ Deno.serve(async (req) => {
         // Journalise le SCAN du QR (quand + quel véhicule) + notifie le gestionnaire. Anti-spam 20 min.
         // Mode selon la page qui appelle : portail complet (v.html, full=1) vs page relevé km.
         const scanMode = url.searchParams.get("full") === "1" ? "portail" : "km";
-        await logScan(db, qr, scanMode, req.headers.get("user-agent") || "");
+        // ⚠️ FAUX SCANS : un lien v.html partagé/collé quelque part (SMS, e-mail, messagerie) est PRÉ-CHARGÉ
+        // par des ROBOTS d'aperçu / antivirus / navigateurs (facebookexternalhit, WhatsApp, Slackbot,
+        // Googlebot, Sec-Purpose: prefetch…) → ça déclenchait une notif « QR scanné » alors que PERSONNE
+        // n'a scanné. On sert quand même la page, mais on NE journalise/NE notifie PAS ces requêtes.
+        const _ua = req.headers.get("user-agent") || "";
+        const _purpose = (req.headers.get("sec-purpose") || req.headers.get("purpose") || req.headers.get("x-purpose") || req.headers.get("x-moz") || "").toLowerCase();
+        const _isBot = /bot|crawler|spider|preview|facebookexternalhit|whatsapp|slackbot|twitterbot|linkedinbot|telegrambot|discordbot|bingbot|googlebot|applebot|yandex|baiduspider|skypeuripreview|inspectiontool|headlesschrome|phantomjs|curl|wget|python-requests|go-http|axios|okhttp|libwww|httpclient/i.test(_ua);
+        const _isPrefetch = /prefetch|preview/.test(_purpose);
+        if (!_isBot && !_isPrefetch) {
+          await logScan(db, qr, scanMode, _ua);
+        }
         // `full=1` (portail v.html) : on joint infos véhicule + documents + EDL + config société.
         if (url.searchParams.get("full") === "1") {
           const veh = await vehInfo(db, qr.vehicule_id);
