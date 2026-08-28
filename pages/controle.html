@@ -658,6 +658,11 @@
 
   // ===== Données =====
   let _tx = [], _ulys = [], _findings = [], _loaded = false;
+  // Les congés vivent dans les réglages (app_settings) chargés APRÈS le 1er rendu (depuis le cache local).
+  // Tant que la synchro serveur n'a pas confirmé les données (fp:data-ready), on n'AFFIRME pas « aucun
+  // congé saisi » — sinon un poste dont le cache local n'a pas encore les congés d'un autre appareil
+  // afficherait à tort « aucun congé » avant de se corriger. (Corrige le faux « congés effacés ».)
+  let _dataReady = false;
   // Cache local du détail conso (par société) → 1er affichage INSTANTANÉ (évite d'attendre le gros
   // total_conso_tx à chaque ouverture de Contrôle). Rafraîchi en arrière-plan à chaque chargement.
   const _ctrlCK = () => { try { return 'fp_ctrl_conso_' + ((FP.activeSociete && FP.activeSociete()) || 'PXP'); } catch (e) { return 'fp_ctrl_conso_PXP'; } };
@@ -968,7 +973,7 @@
     const nConges = Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length;
     if (!_tx.length && !_ulys.length) {
       diag = '<div class="card p-3 mb-4" style="border-left:4px solid var(--fp-warn);background:#FFFBEB;font-size:.86rem;line-height:1.55">⚠️ <b>Aucune conso datée en base.</b> La détection « conso pendant un congé » au <b>jour</b> près a besoin du <b>détail transaction par transaction</b> (colonne date des consommations). Ouvre l\'onglet <b>⛽ Total Fleet</b> ci-dessus → bouton <b>« Reconstruire le détail »</b> (ou réimporte le relevé <b>détaillé</b>). ' + (nConges ? '' : 'Et saisis les <b>congés</b> sur les fiches conducteurs.') + '</div>';
-    } else if (!nConges) {
+    } else if (!nConges && _dataReady) {
       diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">ℹ️ <b>' + _tx.length + '</b> conso datée(s) chargée(s), mais <b>aucun congé saisi</b> sur les fiches conducteurs. Renseigne les congés (fiche conducteur → « Congés / absences ») pour détecter les conso faites pendant un congé.</div>';
     } else if (!_findings.length) {
       diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">🔎 <b>' + _tx.length + '</b> conso datée(s) et <b>' + nConges + '</b> conducteur(s) avec congé analysés — aucune conso ne tombe dans une période de congé. Si tu en attends (ex. Romuald en juillet), vérifie que <b>ses dates de congé</b> couvrent bien ces jours et que le relevé <b>détaillé</b> de ce mois est importé.</div>';
@@ -1266,6 +1271,7 @@
   // sous-onglets prestataires (au cas où un prestataire a été créé sur un autre appareil) en gardant
   // l'onglet courant si possible.
   document.addEventListener('fp:data-ready', () => {
+    _dataReady = true; // les congés (réglages) sont désormais confirmés côté serveur → on peut conclure
     const cur = _tab; renderPrestaTabs();
     if (!tabNames().includes(cur)) switchTab('controle'); else switchTab(cur);
     if (_loaded) { rebuild(false); } // ne reconstruit que si conducteurs/congés/statuts ont changé
