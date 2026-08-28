@@ -107,6 +107,16 @@
       <div class="msg err" id="err"></div>
       <button class="btn btn-nav" id="send" style="margin-top:16px">✍️ Je signe le document</button>
       <p class="sub" style="margin-top:10px">En signant, vous reconnaissez l'état du véhicule décrit dans le document. Signature électronique horodatée.</p>
+      <div style="border-top:1px solid #e2e8f0;margin-top:16px;padding-top:14px">
+        <button class="btn btn-out" id="refuse-toggle" style="color:#dc2626;border-color:#fecaca;width:100%">✗ Je refuse de signer</button>
+        <div id="refuse-box" style="display:none;margin-top:12px">
+          <label class="f">Motif du refus <span style="color:#dc2626">*</span></label>
+          <textarea class="f" id="refuse-motif" rows="3" placeholder="Explique pourquoi tu refuses de signer (ex. rayures non mentionnées, kilométrage incorrect, accessoire manquant…)"></textarea>
+          <div class="msg err" id="refuse-err"></div>
+          <button class="btn btn-nav" id="refuse-send" style="margin-top:10px;background:#dc2626">Confirmer le refus</button>
+          <p class="sub" style="margin-top:8px">Le gestionnaire de flotte est prévenu avec ton motif, et la demande de signature est annulée.</p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -115,6 +125,12 @@
     <h1 style="margin-top:8px">Merci, c'est signé !</h1>
     <p class="sub" id="done-sub">Votre signature a bien été enregistrée.</p>
     <a class="btn btn-out" id="done-pdf" href="#" target="_blank" rel="noopener" style="margin-top:14px;display:none">📄 Voir le document signé</a>
+  </div>
+
+  <div id="refused" class="card center enter" style="display:none">
+    <div class="checkwrap" style="background:#fee2e2;color:#dc2626">✗</div>
+    <h1 style="margin-top:8px">Document refusé</h1>
+    <p class="sub" id="refused-sub">Ton refus a bien été transmis au gestionnaire de flotte, avec ton motif. La demande de signature est annulée.</p>
   </div>
 
   <div class="foot">Parc Pilot — gestion de flotte</div>
@@ -220,7 +236,11 @@
       if (d.nom) $('f-nom').value = d.nom;
       $('main').style.display = '';
       fitCanvas();
-      if (d.alreadySigned) {
+      if (d.statut === 'refuse') {
+        // La demande a déjà été refusée (par ce signataire ou l'autre) → elle est annulée.
+        $('main').style.display = 'none';
+        var rf0 = $('refused'); if (rf0) { rf0.style.display = ''; var rs0 = $('refused-sub'); if (rs0) rs0.textContent = 'Cette demande de signature a été refusée et annulée. Le gestionnaire de flotte a été prévenu.'; }
+      } else if (d.alreadySigned) {
         $('main').style.display = 'none';
         $('done').style.display = '';
         $('done-sub').textContent = 'Vous avez déjà signé ce document.';
@@ -273,6 +293,27 @@
         }
       })
       .catch(function () { showErr('Erreur réseau. Réessaie.'); b.disabled = false; b.textContent = old; });
+  });
+
+  // ---- Refus de signature (motif OBLIGATOIRE) → annule la demande, prévient le gestionnaire ----
+  var rToggle = $('refuse-toggle'), rBox = $('refuse-box'), rSend = $('refuse-send');
+  if (rToggle && rBox) rToggle.addEventListener('click', function () {
+    rBox.style.display = (rBox.style.display === 'none') ? '' : 'none';
+    if (rBox.style.display === '') { try { $('refuse-motif').focus(); } catch (e) {} }
+  });
+  if (rSend) rSend.addEventListener('click', function () {
+    var re = $('refuse-err'); if (re) re.style.display = 'none';
+    var motif = ($('refuse-motif').value || '').trim();
+    if (!motif) { if (re) { re.textContent = 'Indique le motif du refus (obligatoire).'; re.style.display = 'block'; } try { $('refuse-motif').focus(); } catch (e) {} return; }
+    var nom = ($('f-nom').value || '').trim();
+    var b = rSend; b.disabled = true; var old = b.textContent; b.textContent = '… envoi';
+    fetch(FN, { method: 'POST', headers: headers(), body: JSON.stringify({ action: 'refuse', t: token, who: who, nom: nom, motif: motif }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || d.error) { if (re) { re.textContent = (d && d.error) || 'Échec de l\'envoi.'; re.style.display = 'block'; } b.disabled = false; b.textContent = old; return; }
+        $('main').style.display = 'none'; var rf = $('refused'); if (rf) rf.style.display = '';
+      })
+      .catch(function () { if (re) { re.textContent = 'Erreur réseau. Réessaie.'; re.style.display = 'block'; } b.disabled = false; b.textContent = old; });
   });
 })();
 </script>
