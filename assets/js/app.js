@@ -7514,8 +7514,21 @@ FP.ulysApi = (function () {
 
 // Panneau « API Ulys » (affiché en tête de l'onglet Ulys, dans Contrôle). Rendu + interactions ici
 // (logique dans FP.ulysApi) → fleet-views.js n'a qu'à appeler FP.ulysRenderPanel(el).
+// ⚠️ MULTI-SOCIÉTÉS — le compte Ulys (clé API) est UNIQUE côté serveur = celui de SON PROPRIÉTAIRE
+// (aujourd'hui PXP). Tant qu'il n'existe pas de clé Ulys PAR société, le panneau API Ulys en direct
+// n'est montré QU'à la société propriétaire. Les AUTRES sociétés gardent EXACTEMENT le même onglet
+// péage (saisie manuelle des badges + import CSV/PDF, puces, contrôle conso) — juste sans la connexion
+// live à un compte qui n'est pas le leur (sinon elles verraient les badges = salariés d'une autre
+// société = données personnelles). Réglage PAR société (settings.ulysApiEnabled) pour brancher plus
+// tard un compte Ulys propre à un nouveau client. Défaut : activé pour la société propriétaire (PXP).
+FP.ulysApiEnabled = function () {
+  try { const v = FP.settings.get().ulysApiEnabled; if (typeof v === 'boolean') return v; } catch (e) {}
+  return ((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP';
+};
 FP.ulysRenderPanel = function (el) {
   if (!el) return;
+  // Société non propriétaire du compte Ulys → pas de panneau API (l'onglet péage manuel reste identique).
+  if (FP.ulysApiEnabled && !FP.ulysApiEnabled()) { el.innerHTML = ''; return; }
   const esc = FP.esc || (s => String(s == null ? '' : s));
   const CK = 'ulysPanelCollapsed_' + ((FP.activeSociete && FP.activeSociete()) || 'PXP');
   const isCollapsed = () => { try { return localStorage.getItem(CK) === '1'; } catch (e) { return false; } };
