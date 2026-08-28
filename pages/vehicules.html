@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260827f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260827e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260827f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260827e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260827f">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -69,6 +69,9 @@
   /* Bandeau statut (sous l'identité) */
   #drawer-status { margin-top: 14px; }
   #drawer-status [data-df] { cursor: pointer; }
+  /* Indice « champ modifiable » sur les valeurs du corps de la fiche — visible AUSSI au tactile (pas
+     seulement au survol) : un point que l'audit ergonomie a remonté (mobile). */
+  #drawer-body [data-df] { cursor: pointer; border-bottom: 1px dashed var(--fp-border); }
   /* KPIs en tuiles claires (au lieu des puces verre du thème sombre) */
   #drawer .relative #drawer-readouts { gap: 12px !important; }
   #drawer .relative #drawer-readouts > div { background: var(--fp-surface) !important; border: 1px solid var(--fp-border) !important;
@@ -995,13 +998,13 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260827e"></script>
-<script src="../assets/js/supabase-client.js?v=20260827e"></script>
-<script src="../assets/js/data.js?v=20260827e"></script>
-<script src="../assets/js/fleet-docs.js?v=20260827e"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260827e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260827f"></script>
+<script src="../assets/js/supabase-client.js?v=20260827f"></script>
+<script src="../assets/js/data.js?v=20260827f"></script>
+<script src="../assets/js/fleet-docs.js?v=20260827f"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260827f"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260827e"></script>
+<script src="../assets/js/app.js?v=20260827f"></script>
 <script>
   lucide.createIcons();
 
@@ -2077,7 +2080,7 @@
         const cells = visible.map(k => {
           const def = DATA_COLUMNS.find(c => c.key === k);
           if (!def) return '';
-          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''} data-col="${k}">${def.render(v)}</td>`;
+          return `<td${def.cellCls ? ` class="${def.cellCls}"` : ''} data-col="${k}" data-label="${escapeHtml(def.label || k)}">${def.render(v)}</td>`;
         }).join('');
         const fav = isFav(v.id);
         return `<tr class="cursor-pointer${state.selectedIds.has(v.id) ? ' row-selected' : ''}${fav ? ' is-fav' : ''}" data-id="${v.id}">
@@ -3402,6 +3405,7 @@
       try { if (FP.affectations && (_oldChauffeur || '').trim() !== (payload.chauffeur || '').trim()) FP.affectations.record(id, payload.chauffeur, null, _oldChauffeur, (updated && updated.km != null ? updated.km : payload.km)); } catch (e) {}
       saveMasse(id);
       closeModal();
+      if (window.FP && FP.toast) FP.toast('✓ Véhicule enregistré');
       renderKPIs();
       renderTable();
       if (updated) persistVehicleUpsert(updated, false);
@@ -3427,6 +3431,7 @@
           // L'existant a déjà reçu les champs manquants (VIN, CO₂, CT, etc.) → on le ré-enregistre.
           saveMasse(g.existing.id);
           closeModal();
+          if (window.FP && FP.toast) FP.toast('✓ Véhicule fusionné');
           renderKPIs();
           renderTable();
           persistVehicleUpsert(g.existing, false);
@@ -3440,6 +3445,7 @@
       try { const _nc = (newV.chauffeur || '').trim(); if (FP.edl && _nc && _nc !== '—') setTimeout(async () => { if (await FP.confirm(`Générer l'état des lieux de remise du véhicule à « ${_nc} » ?`)) FP.edl.open(newV, { conducteur: _nc }); }, 200); } catch (e) {}
       saveMasse(newV.id);
       closeModal();
+      if (window.FP && FP.toast) FP.toast('✓ Véhicule ajouté');
       renderKPIs();
       renderTable();
       persistVehicleUpsert(newV, true);
