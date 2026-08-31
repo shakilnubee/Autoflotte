@@ -98,9 +98,34 @@ async function dernierReleveDate(db: ReturnType<typeof createClient>, vehiculeId
 async function vehInfo(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
   if (!vehiculeId) return null;
   const { data: v } = await db.from("vehicules")
-    .select("marque,modele,carburant,co2,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur,statut,couleur,boite")
+    .select("marque,modele,carburant,co2,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur,statut,couleur,boite,derniere_revision,km_dernier_releve")
     .eq("id", vehiculeId).maybeSingle();
   return v || null;
+}
+
+// Prochaine révision (date + km) — MÊME logique que FP.revisionInfo (app.js) pour un affichage cohérent :
+//  • km : km de la dernière révision + intervalle si connu ; sinon prochain palier d'odomètre.
+//  • date : dernière révision (ou mise en circulation à défaut) + intervalle en mois, avancée jusqu'à
+//    une date FUTURE si aucune révision n'est encore enregistrée. Renvoie { date, km } (valeurs ou null).
+function prochaineRevision(v: Record<string, unknown>, revKm: number, revMois: number) {
+  const km = v.km != null ? Number(v.km) : 0;
+  const today = new Date();
+  const dRevStr = String(v.derniere_revision || "");
+  const hasRev = !!(dRevStr && dRevStr !== "—" && !isNaN(new Date(dRevStr).getTime()));
+  const mecStr = String(v.date_mise_en_circulation || "");
+  const mec = mecStr && !isNaN(new Date(mecStr).getTime()) ? new Date(mecStr) : null;
+  const kmRev = Number(v.km_dernier_releve) > 0 ? Number(v.km_dernier_releve) : null;
+  let date: string | null = null;
+  const anchor = hasRev ? new Date(dRevStr) : mec;
+  if (anchor && !isNaN(anchor.getTime())) {
+    const d = new Date(anchor); d.setMonth(d.getMonth() + revMois);
+    if (!hasRev) { let g = 0; while (d < today && g++ < 600) d.setMonth(d.getMonth() + revMois); }
+    date = d.toISOString().slice(0, 10);
+  }
+  let kmDue: number | null = null;
+  if (kmRev) kmDue = kmRev + revKm;
+  else { kmDue = Math.ceil(km / revKm) * revKm; if (kmDue <= km) kmDue = km + revKm; }
+  return { date, km: kmDue };
 }
 
 // Signe une URL Supabase Storage (bucket privé) pour qu'elle soit ouvrable depuis la page publique.
@@ -520,12 +545,20 @@ Deno.serve(async (req) => {
           // vehMasse() de la fiche véhicule : (1) réglage société vehMasse[vehId] ; (2) table MASSE_CG
           // (= FP.masseCG, cartes grises de la flotte) ; (3) repli par modèle. → verdict identique à la fiche.
           let masseKg: number | null = null;
+          let revKm = 15000, revMois = 12;   // défauts alignés sur FP.notifCfg (app.js)
           try {
             const { data: setRow } = await db.from("app_settings").select("data").eq("id", qr.societe || "PXP").maybeSingle();
-            const vm = (setRow && setRow.data && (setRow.data as Record<string, unknown>).vehMasse) as Record<string, unknown> | undefined;
+            const sd = (setRow && setRow.data) as Record<string, unknown> | undefined;
+            const vm = (sd && sd.vehMasse) as Record<string, unknown> | undefined;
             const raw = vm && qr.vehicule_id ? vm[qr.vehicule_id] : null;
             if (raw != null && raw !== "") masseKg = Number(raw);
-          } catch (_) { /* pas de masse réglée */ }
+            // Intervalle de révision PAR SOCIÉTÉ (Paramètres → seuils) → même échéance que dans l'app.
+            const notif = (sd && sd.notif) as Record<string, unknown> | undefined;
+            if (notif) {
+              if (notif.revKm != null && notif.revKm !== "") revKm = Number(notif.revKm) || revKm;
+              if (notif.revMois != null && notif.revMois !== "") revMois = Number(notif.revMois) || revMois;
+            }
+          } catch (_) { /* pas de masse / config réglée → défauts */ }
           // Table MASSE_CG = masses relevées sur les cartes grises de la flotte PXP → repli réservé à PXP
           // (les autres sociétés renseignent leur masse via vehMasse, prioritaire ci-dessus).
           if (masseKg == null && (qr.societe || "PXP") === "PXP") { const k = String(qr.plaque || "").toUpperCase().trim(); if (MASSE_CG[k] != null) masseKg = MASSE_CG[k]; }
@@ -534,12 +567,15 @@ Deno.serve(async (req) => {
             const KNOWN: Record<string, number> = { "SEAL U": 2102, "ATTO 3": 1750 };
             for (const k in KNOWN) { if (mod.includes(k)) { masseKg = KNOWN[k]; break; } }
           }
+          const rev = veh ? prochaineRevision(veh as Record<string, unknown>, revKm, revMois) : { date: null, km: null };
           const info = veh ? {
             marque: veh.marque || "", modele: veh.modele || "", carburant: veh.carburant || "",
             co2: veh.co2 != null && veh.co2 !== "" ? Number(veh.co2) : null,
             masse: masseKg,
             km: veh.km != null ? Number(veh.km) : null,
             prochainCT: veh.prochain_ct || "", dateMiseEnCirculation: veh.date_mise_en_circulation || "",
+            // Prochaine révision (rappel côté conducteur pour anticiper) — date + km d'échéance.
+            prochaineRevisionDate: rev.date || "", prochaineRevisionKm: rev.km != null ? rev.km : null,
             // Vente (onglet « À vendre » du portail) : statut + specs de base (jamais le prix ni les coûts).
             statut: veh.statut || "", couleur: veh.couleur || "", boite: veh.boite || "",
           } : null;
