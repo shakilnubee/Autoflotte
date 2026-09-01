@@ -4654,7 +4654,6 @@ FP.JIS_PAGES = [
   { file: 'argumentaire.html', label: 'Argumentaire',          icon: 'megaphone' },
   { file: 'devis.html',        label: 'Générateur de devis',   icon: 'file-text' },
   { file: 'contrat.html',      label: 'Générateur de contrat', icon: 'file-signature' },
-  { file: 'contrat-modele.html', label: 'Contrat modèle',      icon: 'file-check' },
   { file: 'logos.html',        label: 'Logos & marque',        icon: 'palette' },
   { file: 'demo.html',         label: 'Présentation (démo)',   icon: 'presentation' },
 ];
