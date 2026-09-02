@@ -3295,7 +3295,18 @@ FP.societeProfil = () => {
     : { mailExpediteur: '', mailCopie: '', mailDomaineEnvoi: '', loueurNom: '', proprietaireLeasing: '' };
   // Seules les valeurs NON vides saisies écrasent la base (une base PXP ne se vide pas par accident).
   const over = Object.fromEntries(Object.entries(p).filter(([, v]) => v != null && String(v).trim() !== ''));
-  return { ...base, ...over };
+  const merged = { ...base, ...over };
+  // ⚠️ ÉTATS DES LIEUX — signataire société par DÉFAUT = celui qui envoie les amendes / le nom de la
+  // société (en pratique la même personne). Sans ce défaut, le champ « e-mail du signataire » restait
+  // VIDE à chaque affichage (aucune valeur de base, contrairement à mailExpediteur) → l'utilisateur
+  // croyait que son e-mail s'effaçait à l'enregistrement. Un e-mail/nom SAISI (non vide) reste prioritaire.
+  if (!String(merged.edlSignataireEmail || '').trim() && String(merged.mailExpediteur || '').trim()) {
+    merged.edlSignataireEmail = merged.mailExpediteur;
+  }
+  if (!String(merged.edlSignataireNom || '').trim()) {
+    try { const nom = String(((FP.settings.get().societe) || {}).nom || '').trim(); if (nom) merged.edlSignataireNom = nom; } catch (e) {}
+  }
+  return merged;
 };
 // Le cache statique data.js ne contient que PXP : si une autre société est active,
 // on le vide au démarrage (les vraies données filtrées arriveront via Supabase),
