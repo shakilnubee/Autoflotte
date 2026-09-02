@@ -821,12 +821,12 @@ FP.releveKm = (function () {
           <div class="rk-head" style="margin-bottom:12px"><div class="rk-title"><i data-lucide="sliders-horizontal" class="w-5 h-5" style="color:var(--fp-accent)"></i> Réglages des rappels km</div></div>
           <div class="rk-cfg">
             <div class="f"><label>Rappel « à faire » tous les (jours)</label><input id="rk-seuil" type="number" min="1" step="1" value="${seuil}"></div>
-            <div class="f"><label>Relance si sans réponse (jours)</label><input id="rk-relance" type="number" min="1" step="1" value="${relance}"></div>
+            <div class="f"><label>Relance auto par mail si sans réponse (jours)</label><input id="rk-relance" type="number" min="1" step="1" value="${relance}"></div>
             <div class="f"><label>Date de début du cycle (option.)</label><input id="rk-debut" type="date" value="${cfg.releveKmDebut || ''}"></div>
             <button class="rk-btn" id="rk-save"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
             <span id="rk-save-st" style="font-size:.8rem;color:var(--fp-muted)"></span>
           </div>
-          <p style="font-size:.78rem;color:var(--fp-muted);margin:10px 0 0">Synchronisé sur tous tes appareils. Ces réglages pilotent les alertes « relevé km à faire » et « relance ». Tu peux aussi les modifier dans Paramètres → Configuration.</p>
+          <p style="font-size:.78rem;color:var(--fp-muted);margin:10px 0 0">Synchronisé sur tous tes appareils. Ces réglages pilotent l'alerte « relevé km à faire » ET la <b>relance automatique par mail</b> : si un chauffeur ne répond pas au bout du délai ci-dessus, le site lui <b>renvoie tout seul</b> la demande (quelques rappels max, puis il te laisse la main). Tu peux aussi les modifier dans Paramètres → Configuration.</p>
         </div>
         <div class="rk-card">
           <div class="rk-head">
@@ -6259,7 +6259,7 @@ FP.buildAlertes = (data) => {
         const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
         relances.push({ label: `${veh} — envoyée il y a ${j} j, sans réponse`, target: 'vehicules.html?veh=' + v.id });
       });
-      if (relances.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relances.length} relance${relances.length > 1 ? 's' : ''} relevé km`, detail: 'Demande envoyée par mail, sans réponse du chauffeur — rouvre la fiche pour renvoyer.', sort: 470, muteKey: 'relevekm-relance', vehicules: relances });
+      if (relances.length) out.push({ niveau: 'warn', categorie: 'Relevé km', message: `${relances.length} relance${relances.length > 1 ? 's' : ''} relevé km`, detail: `Demande envoyée par mail, toujours sans réponse du chauffeur. Une relance est renvoyée automatiquement tous les ${relanceJours} jours (jusqu'à quelques rappels) ; tu peux aussi rouvrir la fiche pour renvoyer tout de suite.`, sort: 470, muteKey: 'relevekm-relance', vehicules: relances });
     } catch (e) {}
   }
 
