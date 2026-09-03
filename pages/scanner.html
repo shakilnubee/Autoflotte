@@ -79,9 +79,9 @@
 
     <div id="sc-drop" class="drop">
       <i data-lucide="scan-line" class="w-8 h-8 mx-auto" style="color:var(--fp-accent)"></i>
-      <div class="font-semibold mt-2 text-slate-700">Glisse un document ici, ou clique pour choisir</div>
-      <div class="text-xs text-slate-400 mt-1">PDF ou image · 1 document à la fois (Phase 1)</div>
-      <input type="file" id="sc-file" accept="application/pdf,image/*" class="hidden">
+      <div class="font-semibold mt-2 text-slate-700">Glisse un ou plusieurs documents ici, ou clique pour choisir</div>
+      <div class="text-xs text-slate-400 mt-1">PDF ou image · <b>dépose tout en vrac</b> (cartes grises, cartes vertes, permis…) — l'IA trie</div>
+      <input type="file" id="sc-file" accept="application/pdf,image/*" multiple class="hidden">
     </div>
 
     <div id="sc-steps" class="steps hidden">
@@ -243,13 +243,113 @@
     }
   }
 
+  // ====== DÉPÔT GROUPÉ « dépose tout » (plusieurs documents d'un coup) ======
+  // Réutilise le MÊME moteur que le scan unitaire (FP2.run / FP2.save / FP2.saveUlys) : chaque fichier
+  // est détecté + extrait, puis on affiche une LISTE de validation (comme la version 1 fichier, mais
+  // groupée) avant d'enregistrer. Aucun auto-enregistrement : tu coches/décoches et « Tout enregistrer ».
+  var _batch = null;
+  function fieldVal(m, key){ var c = FP2.champ(m, key); if(!c) return ''; var v = (c.valeur_normalisee!=null && c.valeur_normalisee!=='') ? c.valeur_normalisee : c.valeur_originale; return Array.isArray(v) ? v.join(', ') : (v==null?'':String(v)); }
+  function typeLabel(m){ var s = m && FP2.schemaFor(m.type_document); return s ? s.label : (m && m.type_document ? m.type_document : 'document'); }
+  function hasBlocking(m){ if((m.qualite_document||'')==='insuffisante') return true; return (m.anomalies||[]).some(function(a){ var g=(a&&a.gravite||'').toLowerCase(); return g==='haute'||g==='elevee'||g==='élevée'; }); }
+  function batchSummary(item){ var m=item.model, s=m&&FP2.schemaFor(m.type_document); if(!s) return ''; var out=[]; for(var i=0;i<s.champs.length && out.length<3;i++){ var v=fieldVal(m, s.champs[i][0]); if(v!=='') out.push(v); } return out.join(' · '); }
+  function batchFieldsHtml(item, idx){ var m=item.model, s=m&&FP2.schemaFor(m.type_document); if(!s) return ''; var h='<div class="grid sm:grid-cols-2 gap-3" data-batch-fields="'+idx+'" style="margin-top:.6rem">'; s.champs.forEach(function(c){ var key=c[0], lib=c[1], v=fieldVal(m,key); var ml=(key==='description'||key==='mentionsZ'||key==='garanties'||key==='motif'); var input = ml ? ('<textarea rows="2" data-k="'+key+'">'+esc(v)+'</textarea>') : ('<input type="text" data-k="'+key+'" value="'+esc(v)+'">'); h+='<div class="fld"><label>'+esc(lib)+'</label>'+input+'</div>'; }); h+='</div>'; return h; }
+
+  function handleFiles(fileList){ var files=Array.prototype.slice.call(fileList||[]).filter(Boolean); if(!files.length) return; if(files.length===1){ handleFile(files[0]); return; } runBatch(files); }
+
+  function renderBatchProgress(done, total){ $('sc-steps').classList.add('hidden'); $('sc-status').textContent=''; $('sc-result').innerHTML='<div class="card p-5" style="background:#fff;border:1px solid var(--fp-border);border-radius:1rem"><div class="font-extrabold text-lg mb-2" style="color:var(--fp-primary)">Lecture des documents…</div><div class="text-sm text-slate-600">'+done+' / '+total+' analysé(s)</div><div style="height:8px;background:#eef2f7;border-radius:9999px;margin-top:10px;overflow:hidden"><div style="height:100%;width:'+Math.round(done/total*100)+'%;background:var(--fp-accent);transition:width .2s"></div></div></div>'; }
+
+  async function runBatch(files){
+    _model=null; _file=null;
+    _batch = files.map(function(f){ return { file:f, name:(f.name||'document'), status:'pending', model:null, error:'', include:false }; });
+    renderBatchProgress(0, _batch.length);
+    for(var i=0;i<_batch.length;i++){
+      var it=_batch[i];
+      var upP = (window.FP && FP.uploadScan) ? FP.uploadScan(it.file,'scans-v2').catch(function(){return null;}) : Promise.resolve(null);
+      try{
+        var model = await FP2.run(it.file, function(){});
+        try{ model._fileUrl = await upP; }catch(e){}
+        it.model = model;
+        if(model && model._redirect){ it.status='redirect'; it.redirect=model._redirect; }
+        else if(model && model._ulys){ it.status='ulys'; it.include=true; }
+        else if(FP2.schemaFor(model.type_document)){ it.status='ok'; it.include=!hasBlocking(model); }
+        else { it.status='error'; it.error='Type non reconnu'; }
+      }catch(err){ it.status='error'; it.error=(err&&(err.message||err))||'échec de lecture'; }
+      renderBatchProgress(i+1, _batch.length);
+    }
+    renderBatchReview();
+  }
+
+  function statusBadge(it){
+    if(it.status==='ok') return '<span class="conf eleve">'+typeLabel(it.model)+'</span>';
+    if(it.status==='ulys') return '<span class="conf eleve">Péages Ulys</span>';
+    if(it.status==='redirect') return '<span class="conf moyen">'+esc(it.redirect&&it.redirect.label||'outil dédié')+'</span>';
+    return '<span class="conf faible">non lu</span>';
+  }
+
+  function renderBatchReview(){
+    var okCount=_batch.filter(function(i){return i.status==='ok'||i.status==='ulys';}).length;
+    var incCount=_batch.filter(function(i){return i.include;}).length;
+    var html='<div class="card p-5" style="background:#fff;border:1px solid var(--fp-border);border-radius:1rem">';
+    html+='<div class="flex items-center justify-between flex-wrap gap-2 mb-1"><div class="font-extrabold text-lg" style="color:var(--fp-primary)">Dépôt groupé — '+_batch.length+' document(s) lus</div><span class="text-sm text-slate-500">'+okCount+' prêt(s) à enregistrer</span></div>';
+    html+='<p class="text-xs text-slate-500 mb-3">Vérifie la liste, décoche ce que tu ne veux pas, ou clique « Modifier » pour corriger un document. Rien n\'est enregistré tant que tu n\'as pas cliqué sur « Tout enregistrer ».</p>';
+    _batch.forEach(function(it, idx){
+      var canSave=(it.status==='ok'||it.status==='ulys');
+      html+='<div style="border:1px solid var(--fp-border);border-radius:.7rem;padding:.6rem .8rem;margin-bottom:.5rem;background:'+(canSave?'#fff':'#FAFAFA')+'">';
+      html+='<div class="flex items-center gap-2 flex-wrap">';
+      html+= canSave ? ('<input type="checkbox" data-inc="'+idx+'" '+(it.include?'checked':'')+' style="width:16px;height:16px">') : '<span style="width:16px"></span>';
+      html+=statusBadge(it);
+      html+='<span class="text-sm font-semibold" style="color:var(--fp-primary)">'+esc(it.name)+'</span>';
+      if(canSave && it.status==='ok'){ html+='<button class="btn btn-outline" data-toggle="'+idx+'" style="margin-left:auto;font-size:.75rem;padding:.2rem .5rem">Modifier ▾</button>'; }
+      html+='</div>';
+      var sum = canSave ? batchSummary(it) : (it.status==='redirect' ? (it.redirect&&it.redirect.reason||'') : (it.error||''));
+      if(sum) html+='<div class="text-xs text-slate-500 mt-1" style="line-height:1.4">'+esc(sum)+'</div>';
+      if(it.status==='redirect' && it.redirect){ html+='<a class="text-xs font-semibold" style="color:var(--fp-accent)" href="../pages/'+esc(it.redirect.page)+'">→ Ouvrir l\'outil dédié</a>'; }
+      if(it.status==='ok'){ html+='<div data-body="'+idx+'" hidden>'+batchFieldsHtml(it, idx)+'</div>'; }
+      html+='</div>';
+    });
+    html+='<div class="flex gap-2 mt-3"><button id="sc-batch-save" class="btn btn-dark"><i data-lucide="check" class="w-4 h-4"></i> Tout enregistrer ('+incCount+')</button><button id="sc-batch-cancel" class="btn btn-outline">Annuler</button></div>';
+    html+='</div>';
+    $('sc-result').innerHTML=html; if(window.lucide) lucide.createIcons();
+    try { $('sc-result').scrollIntoView({behavior:'smooth',block:'start'}); } catch(e){}
+    $('sc-result').querySelectorAll('[data-inc]').forEach(function(cb){ cb.addEventListener('change', function(){ _batch[+cb.getAttribute('data-inc')].include=cb.checked; var n=_batch.filter(function(i){return i.include;}).length; var b=$('sc-batch-save'); if(b) b.innerHTML='<i data-lucide="check" class="w-4 h-4"></i> Tout enregistrer ('+n+')'; if(window.lucide)lucide.createIcons(); }); });
+    $('sc-result').querySelectorAll('[data-toggle]').forEach(function(bt){ bt.addEventListener('click', function(){ var idx=bt.getAttribute('data-toggle'); var body=$('sc-result').querySelector('[data-body="'+idx+'"]'); if(body){ body.hidden=!body.hidden; bt.textContent = body.hidden?'Modifier ▾':'Réduire ▴'; } }); });
+    $('sc-batch-cancel').addEventListener('click', function(){ _batch=null; $('sc-result').innerHTML=''; });
+    $('sc-batch-save').addEventListener('click', batchSaveAll);
+  }
+
+  async function batchSaveAll(){
+    var items=[]; _batch.forEach(function(it,idx){ if(it.include && (it.status==='ok'||it.status==='ulys')) items.push({it:it, idx:idx}); });
+    if(!items.length){ alert('Coche au moins un document à enregistrer.'); return; }
+    var b=$('sc-batch-save'); if(b){ b.disabled=true; b.textContent='Enregistrement…'; }
+    var okc=0, failc=0;
+    for(var i=0;i<items.length;i++){
+      var it=items[i].it, idx=items[i].idx;
+      try{
+        if(it.status==='ulys'){ await FP2.saveUlys(it.model); }
+        else {
+          var edited={}; var cont=$('sc-result').querySelector('[data-batch-fields="'+idx+'"]');
+          if(cont) cont.querySelectorAll('[data-k]').forEach(function(el){ edited[el.getAttribute('data-k')]=(el.value||'').trim(); });
+          await FP2.save(it.model, edited);
+        }
+        it.saved=true; okc++;
+      }catch(err){ it.saveErr=(err&&(err.message||err))||'échec'; failc++; }
+      if(b) b.textContent='Enregistrement… '+(i+1)+'/'+items.length;
+    }
+    var html='<div class="card p-5" style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:1rem"><div class="font-extrabold text-emerald-800">✓ '+okc+' document(s) enregistré(s)'+(failc?(' · '+failc+' échec(s)'):'')+'</div>';
+    if(failc){ html+='<ul class="text-sm text-red-700 mt-2" style="list-style:disc;margin-left:1.1rem">'; _batch.forEach(function(it){ if(it.saveErr) html+='<li>'+esc(it.name)+' — '+esc(it.saveErr)+'</li>'; }); html+='</ul>'; }
+    html+='<p class="text-sm text-emerald-700 mt-1">Les fiches véhicules, l\'assurance, les conducteurs et les documents ont été mis à jour.</p>';
+    html+='<button class="btn btn-dark mt-3" onclick="location.reload()"><i data-lucide="scan-line" class="w-4 h-4"></i> Déposer d\'autres documents</button></div>';
+    $('sc-result').innerHTML=html; if(window.lucide) lucide.createIcons();
+    if(window.FP&&FP.toast) FP.toast('✓ '+okc+' document(s) enregistré(s)');
+  }
+
   // Dropzone
   var drop = $('sc-drop'), inp = $('sc-file');
   drop.addEventListener('click', function(){ inp.value=''; inp.click(); });
-  inp.addEventListener('change', function(e){ var f=e.target.files&&e.target.files[0]; if(f) handleFile(f); });
+  inp.addEventListener('change', function(e){ handleFiles(e.target.files); });
   ['dragover','dragenter'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add('over'); }); });
   ['dragleave','drop'].forEach(function(ev){ drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove('over'); }); });
-  drop.addEventListener('drop', function(e){ var f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) handleFile(f); });
+  drop.addEventListener('drop', function(e){ handleFiles(e.dataTransfer && e.dataTransfer.files); });
 </script>
 </body>
 </html>
