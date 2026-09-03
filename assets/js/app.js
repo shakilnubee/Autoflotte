@@ -4714,6 +4714,7 @@ FP.initInputMasks = () => {
 
 // Sous-onglets de l'onglet privé « JIS » (tous des pages autonomes → nouvel onglet).
 FP.JIS_PAGES = [
+  { file: 'onboarding.html',   label: 'Onboarding',            icon: 'clipboard-check' },
   { file: 'prospects.html',    label: 'Prospects (pipeline)',  icon: 'user-plus' },
   { file: 'pages/facturation.html', label: 'Facturation',       icon: 'receipt-euro' },
   { file: 'kit-commercial.html', label: 'Kit commercial',      icon: 'target' },
