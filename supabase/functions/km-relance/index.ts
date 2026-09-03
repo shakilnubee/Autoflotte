@@ -267,11 +267,26 @@ Deno.serve(async (req) => {
     const data = cfgBySoc[soc] || cfgBySoc["PXP"] || {};
     const notif = (data.notif && typeof data.notif === "object") ? data.notif : {};
     const relanceJours = Math.max(1, Number(notif.releveKmRelanceJours) || 7);
+    const releveKmJours = Math.max(1, Number(notif.releveKmJours) || 45);
     const excl = (data.kmSuiviExclus && typeof data.kmSuiviExclus === "object") ? data.kmSuiviExclus : {};
     if (excl[veh.id]) continue; // décoché du suivi km
     const kmDates = (data.kmMajDates && typeof data.kmMajDates === "object") ? data.kmMajDates : {};
 
     const list = reqByVeh[String(veh.id)] || [];
+
+    // ⚠️ GARDE « km déjà à jour » (correctif) : on ne relance/redemande JAMAIS un véhicule dont le
+    // kilométrage est FRAIS — relevé REÇU (km_requests.used_at) OU mis à jour à la main (kmMajDates)
+    // il y a moins de releveKmJours (défaut 45). Sinon une vieille demande restée « sans réponse »
+    // (parce que le km a été donné AUTREMENT, ou avant qu'une nouvelle demande parte) déclenchait une
+    // relance à tort — « j'ai déjà donné le km mais ça me relance ». Donner le km suffit désormais à
+    // tout arrêter (peu importe le canal), car ça rend le véhicule « à jour ».
+    {
+      const kimG = normImmat(veh.immat);
+      let lastKnownTs = list.filter((r) => r.used_at && r.km_recu != null).map((r) => new Date(r.used_at).getTime()).filter((t) => !isNaN(t)).reduce((m, t) => Math.max(m, t), 0);
+      for (const key in kmDates) { if (normImmat(key) === kimG) { const t = new Date(kmDates[key]).getTime(); if (!isNaN(t)) lastKnownTs = Math.max(lastKnownTs, t); } }
+      if (lastKnownTs && (now - lastKnownTs) < releveKmJours * 86400000) continue; // km frais → rien à demander
+    }
+
     const sent = list.filter((r) => r.sent_at).sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime());
     const last = sent[0];
 
