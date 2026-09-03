@@ -413,7 +413,15 @@
         rec = { id: uid('D'), societe: societe(), vehiculeId: veh ? veh.id : null, type: 'etat-des-lieux',
           label: 'État des lieux' + (bits ? ' — ' + bits : ''), url, driveId };
       } else {
-        // Assurance (carte verte / attestation)
+        // Assurance (carte verte / attestation) : on garde la trace PDF dans `documents`, ET on alimente
+        // le MODÈLE STRUCTURÉ (assureur + n° police + rattachement véhicule + période de validité) via le
+        // helper canonique FP.assuranceApplyScan → même source unique que la page Contrats (fini la ressaisie).
+        try {
+          if (window.FP && FP.assuranceApplyScan) FP.assuranceApplyScan({
+            assureur: g('assureur'), numeroPolice: g('numeroPolice'), immat: g('immat'),
+            dateDebut: g('dateDebut'), dateFin: g('dateFin'), numeroAssistance: g('numeroAssistance')
+          }, veh);
+        } catch (e) { console.warn('[scan2 assurance→modèle]', e); }
         const bits = [g('assureur'), g('numeroPolice') ? ('n° ' + g('numeroPolice')) : '', g('dateFin') ? ('échéance ' + dfmt(g('dateFin'))) : ''].filter(Boolean).join(' · ');
         rec = { id: uid('D'), societe: societe(), vehiculeId: veh ? veh.id : null, type: 'assurance',
           label: 'Attestation assurance' + (bits ? ' — ' + bits : ''), url, driveId };

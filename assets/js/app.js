@@ -3279,6 +3279,64 @@ FP.noticeOf = (v) => {
   try { const a = FP.assureurOf(v); if (a && a.notice) return a.notice; } catch (e) {}
   try { return String(((FP.settings.get().portail) || {}).assistanceNotice || '').trim(); } catch (e) { return ''; }
 };
+// ⚠️ SOURCE UNIQUE — applique une ATTESTATION D'ASSURANCE lue (carte verte) au modèle STRUCTURÉ :
+// crée/retrouve l'assureur (settings.assureurs, par n° de police sinon par nom), rattache le VÉHICULE
+// (settings.assureurVeh[immat]=id, comme la page Contrats), et enregistre la PÉRIODE DE VALIDITÉ
+// (settings.assuranceEcheance[immat]={debut,fin,police}) pour l'alerte d'échéance. NON destructif :
+// ne remplit que les cases vides d'un assureur existant. Réutilisable par le scan unitaire ET l'import
+// en lot (même règle partout). Renvoie l'assureur appliqué (ou null). `fields` = champs du scan.
+FP.assuranceApplyScan = (fields, veh) => {
+  try {
+    fields = fields || {};
+    const nom = String(fields.assureur || '').trim();
+    const police = String(fields.numeroPolice || fields.police || '').trim();
+    const assist = String(fields.numeroAssistance || fields.assistance || '').trim();
+    const immat = String((veh && veh.immat) || fields.immat || '').trim();
+    if (!nom && !police && !immat) return null;
+    const norm = (x) => (FP.norm ? FP.norm(x) : String(x || '').toLowerCase()).trim();
+    const s = FP.settings.get();
+    let list = Array.isArray(s.assureurs) ? s.assureurs.slice() : [];
+    // Repli : matérialiser l'assureur historique unique s'il n'y a pas encore de liste.
+    if (!list.length) { const c = s.assuranceContrat || {}; if (c.assureur || c.police) list.push({ id: 'a1', nom: c.assureur || '', police: c.police || '' }); }
+    // Retrouver l'assureur : par n° de police d'abord (le plus fiable), sinon par nom.
+    let a = null;
+    if (police) a = list.find((x) => x && norm(x.police) && norm(x.police) === norm(police));
+    if (!a && nom) a = list.find((x) => x && norm(x.nom) && norm(x.nom) === norm(nom));
+    if (a) {
+      if (nom && !String(a.nom || '').trim()) a.nom = nom;
+      if (police && !String(a.police || '').trim()) a.police = police;
+      if (assist && !String(a.assistance || '').trim()) a.assistance = assist;
+    } else {
+      const ids = new Set(list.map((x) => x && x.id).filter(Boolean));
+      let n = 1; while (ids.has('a' + n)) n++;
+      a = { id: 'a' + n, nom, police, assistance: assist };
+      list.push(a);
+    }
+    s.assureurs = list;
+    if (immat) {
+      s.assureurVeh = (s.assureurVeh && typeof s.assureurVeh === 'object') ? s.assureurVeh : {};
+      const k = FP.normImmat(immat);
+      for (const key in s.assureurVeh) { if (FP.normImmat(key) === k) delete s.assureurVeh[key]; }
+      s.assureurVeh[immat] = a.id;
+      const deb = String(fields.dateDebut || '').trim(), fin = String(fields.dateFin || '').trim();
+      if (deb || fin) {
+        s.assuranceEcheance = (s.assuranceEcheance && typeof s.assuranceEcheance === 'object') ? s.assuranceEcheance : {};
+        s.assuranceEcheance[immat] = { debut: deb || '', fin: fin || '', police: police || '' };
+      }
+    }
+    FP.settings.save(s);
+    return a;
+  } catch (e) { return null; }
+};
+// Période de validité d'assurance connue pour un véhicule (depuis une carte verte scannée). Null si aucune.
+FP.assuranceEcheanceOf = (v) => {
+  try {
+    const m = FP.settings.get().assuranceEcheance || {}; if (!v || !v.immat) return null;
+    const k = FP.normImmat(v.immat);
+    for (const key in m) { if (FP.normImmat(key) === k) return m[key] || null; }
+    return null;
+  } catch (e) { return null; }
+};
 
 // Profil de la société ACTIVE : valeurs saisies (settings.profil) par-dessus des valeurs par défaut.
 // ⚠️ PXP conserve ses valeurs historiques (rien ne change) ; une NOUVELLE société démarre vide → l'app propose de les remplir.
@@ -3894,7 +3952,7 @@ FP.settings = {
     // ancien écrase les coches faites ailleurs → « la tâche terminée disparaît », « le rappel se décoche »).
     // On fusionne ENTRÉE PAR ENTRÉE sur la version FRAÎCHE du serveur : on applique seulement ce que CE
     // poste a ajouté/modifié/supprimé (obj vs base), le reste du serveur est préservé.
-    const COLLECTION_KEYS = new Set(['taches', 'rappelsFaits', 'rappelsPerso', 'vehImmobilise', 'amendeMontantPaye', 'amendeMontants', 'kmMajDates', 'sinistreStage', 'sinistreStatut', 'sinistreGroupes', 'docStatus', 'permisMasque', 'condDocs', 'leasingContrats', 'kmSuiviExclus', 'inspections', 'reservations', 'docTypes', 'loueurs', 'alertesMasquees', 'alertesMasqueesInfo']);
+    const COLLECTION_KEYS = new Set(['taches', 'rappelsFaits', 'rappelsPerso', 'vehImmobilise', 'amendeMontantPaye', 'amendeMontants', 'kmMajDates', 'sinistreStage', 'sinistreStatut', 'sinistreGroupes', 'docStatus', 'permisMasque', 'condDocs', 'leasingContrats', 'kmSuiviExclus', 'inspections', 'reservations', 'docTypes', 'loueurs', 'alertesMasquees', 'alertesMasqueesInfo', 'assureurs', 'assureurVeh', 'assuranceEcheance', 'assurancePrimes']);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
     // Fusion par FEUILLE d'un objet-map (ajouts/modifs d'obj appliqués sur remote frais ; suppressions de CE poste honorées).
     const mergeMap = (remoteV, objV, baseV) => {
@@ -6163,6 +6221,25 @@ FP.buildAlertes = (data) => {
     else if (diff < _ctD) out.push({ niveau: 'danger', categorie: 'Contrôle technique', message: `CT à faire dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
     else if (diff < _ctW) out.push({ niveau: 'warn',   categorie: 'Contrôle technique', message: `CT à prévoir dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
     else if (diff < _ctI) out.push({ niveau: 'info', categorie: 'Contrôle technique', message: `CT à venir (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+  });
+
+  // --- Échéance d'assurance (depuis une carte verte / attestation scannée : assuranceEcheance) ---
+  // Même logique de paliers que le CT (info = ctJours, orange = 2/3, rouge = 1/3). Ne concerne que les
+  // véhicules pour lesquels une date de fin de validité a été LUE sur une attestation (sinon rien à dire).
+  (data.vehicules || []).forEach(v => {
+    if (horsFlotte(v)) return;
+    const ech = FP.assuranceEcheanceOf ? FP.assuranceEcheanceOf(v) : null;
+    const fin = ech && String(ech.fin || '').trim(); if (!fin) return;
+    const d = new Date(fin); if (isNaN(d)) return;
+    const diff = days(fin);
+    const veh = `${v.immat} · ${v.marque} ${v.modele}${v.chauffeur && v.chauffeur !== '—' ? ' (' + v.chauffeur + ')' : ''}`;
+    const tgt = 'contrats.html?tab=assurance';
+    const mk = 'assur|' + v.id + '|' + fin;
+    const _aI = FP.notifCfg().ctJours, _aW = Math.round(_aI * 2 / 3), _aD = Math.round(_aI / 3);
+    if (diff < 0)        out.push({ niveau: 'danger', categorie: 'Assurance', message: `Assurance expirée depuis ${-diff}j`, detail: veh, sort: diff - 1, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _aD) out.push({ niveau: 'danger', categorie: 'Assurance', message: `Assurance à renouveler dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _aW) out.push({ niveau: 'warn',   categorie: 'Assurance', message: `Assurance à renouveler dans ${diff}j`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
+    else if (diff < _aI) out.push({ niveau: 'info',   categorie: 'Assurance', message: `Assurance à renouveler (${diff}j)`, detail: veh, sort: diff, target: tgt, muteKey: mk, vehLabel: veh });
   });
 
   // --- Contrôle anti-pollution (utilitaires / camions diesel) ---
