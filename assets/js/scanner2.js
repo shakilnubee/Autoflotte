@@ -245,8 +245,11 @@
   function findVeh(immat) { if (!immat) return null; const up = normI(immat); try { return (data.vehicules || []).find(v => normI(v.immat) === up) || null; } catch (e) { return null; } }
   function uid(p) { return (p || 'x') + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
+  // Garde-fou multi-sociétés (défense en profondeur) : jamais d'enregistrement en vue « Toutes les sociétés ».
+  function bloqueSiToutesSocietes() { if (window.FP && FP.estVueToutesSocietes && FP.estVueToutesSocietes()) throw new Error("Choisis d'abord la société du client (tu es sur « Toutes les sociétés ») avant d'enregistrer."); }
   // Lit les valeurs éditées depuis l'UI (map champ->valeur) fusionnées avec le modèle.
   FP2.save = async function (model, edited) {
+    bloqueSiToutesSocietes();
     const g = k => (edited && Object.prototype.hasOwnProperty.call(edited, k)) ? edited[k] : val(model, k);
     const t = normType(model.type_document);
     const cible = (schemaFor(t) || {}).cible;
@@ -445,6 +448,7 @@
   // Enregistrement d'un relevé Ulys lu précisément (facture type 'peage' + détail ulys_conso) —
   // MÊME logique/format que l'import de la page Factures (via FP.ulys.*).
   FP2.saveUlys = async function (model) {
+    bloqueSiToutesSocietes();
     if (!(model && model._ulys && window.FP && FP.ulys)) throw new Error("Aucun relevé Ulys à enregistrer.");
     const soc = societe(); let okF = 0, okC = 0, firstId = null;
     for (const p of (model._ulys.fac || [])) {

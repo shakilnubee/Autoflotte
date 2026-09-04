@@ -1942,6 +1942,8 @@ FP.conducteurs = {
   },
   async create(info) {
     info = info || {};
+    // Garde-fou multi-sociétés : pas de création en vue « Toutes les sociétés ».
+    if (FP.exigeSocieteChoisie && !FP.exigeSocieteChoisie('de créer un conducteur')) return null;
     const name = String(info.name || ((info.prenom || '') + ' ' + (info.nom || ''))).trim() || String(info.prenom || '').trim();
     if (!name) return null;
     // Clé = prénom seul (rétro-compatible). MAIS si un homonyme de prénom existe déjà avec un nom
@@ -3063,6 +3065,17 @@ FP.conducteurPicker = function (input, opts) {
 // === Multi-sociétés (vue admin) ===
 FP.activeSociete = () => { try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } };
 FP.setActiveSociete = (s) => { try { localStorage.setItem('fp_societe', s || 'PXP'); } catch (e) {} };
+// ⚠️ GARDE-FOU MULTI-SOCIÉTÉS (onboarding) : en vue « Toutes les sociétés » (__all__, réservée au CEO),
+// on ne sait pas à QUELLE société rattacher une NOUVELLE donnée → on bloque la CRÉATION (scan, ajout)
+// avec un message clair, pour ne jamais taguer un véhicule/conducteur/amende à la mauvaise société.
+// (La LECTURE et les modifs d'un enregistrement existant — qui porte déjà sa société — restent permises.)
+FP.estVueToutesSocietes = () => { try { return FP.activeSociete() === '__all__'; } catch (e) { return false; } };
+FP.exigeSocieteChoisie = (action) => {
+  if (!FP.estVueToutesSocietes()) return true;
+  const msg = '⚠️ Tu es sur « Toutes les sociétés ».\n\nChoisis d\'abord LA société du client (sélecteur en haut, ou Paramètres → Société) avant ' + (action || 'de saisir des données') + '.\n\nSinon la donnée ne serait rattachée à aucune société précise.';
+  try { alert(msg); } catch (e) {}
+  return false;
+};
 // Liste des sociétés = métadonnée GLOBALE de l'admin (pas par société, sinon elle se
 // réinitialiserait en changeant de société). Stockée à part ; repli sur l'ancienne liste des réglages.
 FP.SOCIETES_KEY = 'fp_societes_list';
