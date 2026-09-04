@@ -8,11 +8,11 @@
 <title>Scanner IA — Parc Pilot</title>
 <link rel="manifest" href="../manifest.json">
 <meta name="theme-color" content="#0F1E3D">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260902c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260902d">
 <script>window.lucide={createIcons:function(){}};</script>
-<script defer src="../assets/js/lucide.min.js?v=20260902c"></script>
+<script defer src="../assets/js/lucide.min.js?v=20260902d"></script>
 <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260902c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260902d">
 <style>
   .drop { border:2px dashed var(--fp-border); border-radius:1rem; padding:2.5rem 1.5rem; text-align:center; cursor:pointer; transition:.15s; background:#fff; }
   .drop:hover, .drop.over { border-color:var(--fp-accent); background:#FFF7ED; }
@@ -100,11 +100,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260902c"></script>
-<script src="../assets/js/supabase-client.js?v=20260902c"></script>
-<script src="../assets/js/data.js?v=20260902c"></script>
-<script src="../assets/js/app.js?v=20260902c"></script>
-<script src="../assets/js/scanner2.js?v=20260902c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260902d"></script>
+<script src="../assets/js/supabase-client.js?v=20260902d"></script>
+<script src="../assets/js/data.js?v=20260902d"></script>
+<script src="../assets/js/app.js?v=20260902d"></script>
+<script src="../assets/js/scanner2.js?v=20260902d"></script>
 <script>
   if (window.lucide) lucide.createIcons();
   var $ = function (id) { return document.getElementById(id); };
@@ -114,8 +114,20 @@
   function setStep(name, state){ document.querySelectorAll('#sc-steps .step').forEach(function(el){ if(el.dataset.step===name){ el.classList.remove('done'); el.classList.add(state||'on'); } }); }
   function stepDone(name){ var el=document.querySelector('#sc-steps .step[data-step="'+name+'"]'); if(el){ el.classList.remove('on'); el.classList.add('done'); } }
 
+  // Garde-fou multi-sociétés : on ne scanne pas en vue « Toutes les sociétés » (on ne saurait pas à
+  // quelle société rattacher les données créées). Message clair au lieu de traiter.
+  function societeChoisieOuBloque(){
+    try{ if(window.FP && FP.estVueToutesSocietes && FP.estVueToutesSocietes()){
+      $('sc-steps').classList.add('hidden');
+      $('sc-result').innerHTML='<div class="card p-5" style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:1rem"><div class="font-extrabold" style="color:#991B1B">⚠️ Choisis d\'abord la société du client</div><p class="text-sm mt-1" style="color:#7f1d1d">Tu es sur « Toutes les sociétés ». Sélectionne la société du client (sélecteur en haut, ou Paramètres → Société) avant de scanner, pour que les données créées soient rattachées à la bonne société.</p></div>';
+      return false;
+    } }catch(e){}
+    return true;
+  }
   function handleFile(file){
-    if(!file) return; _file = file;
+    if(!file) return;
+    if(!societeChoisieOuBloque()) return;
+    _file = file;
     $('sc-steps').classList.remove('hidden');
     document.querySelectorAll('#sc-steps .step').forEach(function(el){ el.classList.remove('on','done'); });
     $('sc-result').innerHTML=''; $('sc-status').textContent='Lecture en cours…';
@@ -259,7 +271,7 @@
   function batchSummary(item){ var m=item.model, s=m&&FP2.schemaFor(m.type_document); if(!s) return ''; var out=[]; for(var i=0;i<s.champs.length && out.length<3;i++){ var v=fieldVal(m, s.champs[i][0]); if(v!=='') out.push(v); } return out.join(' · '); }
   function batchFieldsHtml(item, idx){ var m=item.model, s=m&&FP2.schemaFor(m.type_document); if(!s) return ''; var h='<div class="grid sm:grid-cols-2 gap-3" data-batch-fields="'+idx+'" style="margin-top:.6rem">'; s.champs.forEach(function(c){ var key=c[0], lib=c[1], v=fieldVal(m,key); var ml=(key==='description'||key==='mentionsZ'||key==='garanties'||key==='motif'); var input = ml ? ('<textarea rows="2" data-k="'+key+'">'+esc(v)+'</textarea>') : ('<input type="text" data-k="'+key+'" value="'+esc(v)+'">'); h+='<div class="fld"><label>'+esc(lib)+'</label>'+input+'</div>'; }); h+='</div>'; return h; }
 
-  function handleFiles(fileList){ var files=Array.prototype.slice.call(fileList||[]).filter(Boolean); if(!files.length) return; if(files.length===1){ handleFile(files[0]); return; } runBatch(files); }
+  function handleFiles(fileList){ var files=Array.prototype.slice.call(fileList||[]).filter(Boolean); if(!files.length) return; if(!societeChoisieOuBloque()) return; if(files.length===1){ handleFile(files[0]); return; } runBatch(files); }
 
   function renderBatchProgress(done, total){ $('sc-steps').classList.add('hidden'); $('sc-status').textContent=''; $('sc-result').innerHTML='<div class="card p-5" style="background:#fff;border:1px solid var(--fp-border);border-radius:1rem"><div class="font-extrabold text-lg mb-2" style="color:var(--fp-primary)">Lecture des documents…</div><div class="text-sm text-slate-600">'+done+' / '+total+' analysé(s)</div><div style="height:8px;background:#eef2f7;border-radius:9999px;margin-top:10px;overflow:hidden"><div style="height:100%;width:'+Math.round(done/total*100)+'%;background:var(--fp-accent);transition:width .2s"></div></div></div>'; }
 
