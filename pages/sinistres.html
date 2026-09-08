@@ -761,6 +761,7 @@
               <div class="flex items-center gap-3 shrink-0">
                 <button type="button" data-sin-assoc="${g.key}" title="Associer un devis / une facture" class="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"><i data-lucide="link-2" class="w-3.5 h-3.5"></i> Associer</button>
                 ${multi ? '' : docLink(s.fileId, false)}
+                ${multi ? '' : `<button type="button" data-sin-pdf="${s.id}" title="Générer le rapport PDF (avec photos) à envoyer à l'assurance" class="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Rapport PDF</button>`}
                 ${multi ? '' : `<button type="button" data-sin-del="${s.id}" title="Supprimer ce sinistre" class="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-red-600"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Supprimer</button>`}
               </div>
             </div>
@@ -1050,6 +1051,20 @@
     }
     const assoc = e.target.closest('[data-sin-assoc]');
     if (assoc) { const p = $('timeline').querySelector(`[data-assoc-panel="${assoc.dataset.sinAssoc}"]`); if (p) p.classList.toggle('hidden'); return; }
+
+    // Rapport PDF DEPUIS le dossier sinistre (toujours possible, même après avoir traité la demande).
+    // On synthétise un objet « déclaration » à partir du dossier + réglages + photos, puis on réutilise
+    // le MÊME générateur que les demandes conducteur (DeclCond.exportPdf).
+    const sinPdf = e.target.closest('[data-sin-pdf]');
+    if (sinPdf) {
+      const s = sinistres.find(x => x.id === sinPdf.dataset.sinPdf); if (!s) return;
+      const dv = (FP.settings.get().sinistreAssurance || {})[s.id] || {};
+      const tiers = [dv.tiersPlaque, dv.tiersAssureur, dv.tiersNom].filter(Boolean).join(' / ');
+      let desc = String(s.description || '').replace(/\s*·\s*Lieu\s*:[^·]*/i, '').replace(/\s*·\s*Tiers\s*:[^·]*/i, '').trim();
+      const photos = (typeof sinDocs !== 'undefined' ? sinDocs : []).filter(x => normPl(x.vehiculeId) === normPl(s.vehiculeImmat)).map(x => x.url).filter(Boolean);
+      DeclCond.exportPdf({ id: s.id, type: 'sinistre', plaque: s.vehiculeImmat || '', created_at: s.date || '', date_incident: s.date ? FP.date(s.date) : '', lieu: dv.lieu || '', description: desc, tiers: tiers, blesses: '', photos: photos }, sinPdf);
+      return;
+    }
 
     const ok = e.target.closest('[data-sin-assoc-ok]');
     if (ok) {
@@ -1818,8 +1833,9 @@
       this.render(); if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
     },
     // Rapport PDF (à envoyer à l'assurance) : infos société + détails du sinistre + photos intégrées.
-    async exportPdf(id, btn) {
-      const d = this.rows.find(x => x.id === id); if (!d) return;
+    async exportPdf(idOrDecl, btn) {
+      // Accepte un ID de déclaration OU un objet « déclaration » synthétisé (ex. depuis un dossier sinistre).
+      const d = (idOrDecl && typeof idOrDecl === 'object') ? idOrDecl : this.rows.find(x => x.id === idOrDecl); if (!d) return;
       if (!(window.jspdf && window.jspdf.jsPDF) && FP.ensureJsPDF) { await FP.ensureJsPDF(); }
       if (!(window.jspdf && window.jspdf.jsPDF)) { alert('Générateur PDF indisponible.'); return; }
       const oldHtml = btn ? btn.innerHTML : '';
