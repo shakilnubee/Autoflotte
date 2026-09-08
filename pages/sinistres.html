@@ -2011,15 +2011,28 @@
               const buf = await pf.blob.arrayBuffer();
               const pdfDoc = await window.pdfjsLib.getDocument({ data: buf }).promise;
               const nb = pdfDoc.numPages;
+              let anyPage = false;
               for (let pg = 1; pg <= nb; pg++) {
                 const page = await pdfDoc.getPage(pg);
-                const viewport = page.getViewport({ scale: 2.2 });
+                // ⚠️ Résolution PLAFONNÉE : à scale fixe, un constat scanné en haute déf dépasse la
+                // limite de canvas de Safari/iOS → toDataURL renvoie une image BLANCHE (page vide).
+                // On vise ~2000 px sur le grand côté (net, ~170 DPI en A4) et on plafonne l'AIRE
+                // (~5,5 Mpx) pour rester sous la limite mobile.
+                const b0 = page.getViewport({ scale: 1 });
+                const longest = Math.max(b0.width, b0.height) || 1;
+                let scale = Math.min(2.5, 2000 / longest); if (!(scale > 0)) scale = 1;
+                let viewport = page.getViewport({ scale });
+                const MAXAREA = 5.5e6;
+                if (viewport.width * viewport.height > MAXAREA) {
+                  viewport = page.getViewport({ scale: scale * Math.sqrt(MAXAREA / (viewport.width * viewport.height)) });
+                }
                 const canvas = document.createElement('canvas');
-                canvas.width = viewport.width; canvas.height = viewport.height;
+                canvas.width = Math.round(viewport.width); canvas.height = Math.round(viewport.height);
                 await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-                fullPageImg(canvas.toDataURL('image/jpeg', 0.85), nb > 1 ? (baseCap + ' — page ' + pg + '/' + nb) : baseCap);
+                let du = ''; try { du = canvas.toDataURL('image/jpeg', 0.9); } catch (e) { du = ''; }
+                if (du && du.length > 2000) { fullPageImg(du, nb > 1 ? (baseCap + ' — page ' + pg + '/' + nb) : baseCap); anyPage = true; }
               }
-              done = true;
+              done = anyPage; // si aucune page n'a pu être rendue, on tente le repli image
             } catch (e) { /* repli image ci-dessous */ }
           }
           if (!done) { // repli : si le PDF est en fait une image, on la pose pleine page
