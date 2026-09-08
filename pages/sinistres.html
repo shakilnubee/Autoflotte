@@ -1058,11 +1058,12 @@
     const sinPdf = e.target.closest('[data-sin-pdf]');
     if (sinPdf) {
       const s = sinistres.find(x => x.id === sinPdf.dataset.sinPdf); if (!s) return;
-      const dv = (FP.settings.get().sinistreAssurance || {})[s.id] || {};
-      const tiers = [dv.tiersPlaque, dv.tiersAssureur, dv.tiersNom].filter(Boolean).join(' / ');
+      // Le dossier assurance (lieu, tiers, conducteur figé) est indexé par la CLÉ DE GROUPE, pas par s.id.
+      const dv = (FP.settings.get().sinistreAssurance || {})[groupKeyOf(s.id)] || {};
+      const tiers = [dv.tiersPlaque, dv.tiersAssureur, dv.tiersNom].filter(Boolean).join(' · ');
       let desc = String(s.description || '').replace(/\s*·\s*Lieu\s*:[^·]*/i, '').replace(/\s*·\s*Tiers\s*:[^·]*/i, '').trim();
       const photos = (typeof sinDocs !== 'undefined' ? sinDocs : []).filter(x => normPl(x.vehiculeId) === normPl(s.vehiculeImmat)).map(x => x.url).filter(Boolean);
-      DeclCond.exportPdf({ id: s.id, type: 'sinistre', plaque: s.vehiculeImmat || '', created_at: s.date || '', date_incident: s.date ? FP.date(s.date) : '', lieu: dv.lieu || '', description: desc, tiers: tiers, blesses: '', photos: photos }, sinPdf);
+      DeclCond.exportPdf({ id: s.id, type: 'sinistre', plaque: s.vehiculeImmat || '', created_at: s.date || '', date_incident: s.date ? FP.date(s.date) : '', lieu: dv.lieu || '', description: desc, tiers: tiers, conducteur: dv.conducteur || '', blesses: '', photos: photos }, sinPdf);
       return;
     }
 
@@ -1832,9 +1833,11 @@
       this.rows = this.rows.filter(d => d.id !== id);
       this.render(); if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
     },
-    // Rapport PDF (à envoyer à l'assurance) : infos société + détails du sinistre + photos intégrées.
+    // Rapport PDF (à envoyer à l'assurance) — identité Parc Pilot + société déclarante, véhicule
+    // complet (VIN, conducteur, assureur du véhicule), circonstances et photos intégrées.
+    // ⚠️ Source UNIQUE : ce générateur sert AUSSI bien une demande conducteur qu'un dossier sinistre
+    // (objet « déclaration » synthétisé). Ne pas dupliquer ailleurs.
     async exportPdf(idOrDecl, btn) {
-      // Accepte un ID de déclaration OU un objet « déclaration » synthétisé (ex. depuis un dossier sinistre).
       const d = (idOrDecl && typeof idOrDecl === 'object') ? idOrDecl : this.rows.find(x => x.id === idOrDecl); if (!d) return;
       if (!(window.jspdf && window.jspdf.jsPDF) && FP.ensureJsPDF) { await FP.ensureJsPDF(); }
       if (!(window.jspdf && window.jspdf.jsPDF)) { alert('Générateur PDF indisponible.'); return; }
@@ -1845,55 +1848,132 @@
         const pw = doc.internal.pageSize.getWidth(), ph = doc.internal.pageSize.getHeight();
         const M = 15; let y = M;
         const isSin = (d.type || 'sinistre') !== 'probleme';
-        let soc = ''; try { const s = FP.settings.get(); soc = (s.societe && s.societe.nom) || ''; } catch (e) {}
-        let ass = {}; try { ass = FP.assuranceContrat ? FP.assuranceContrat() : {}; } catch (e) {}
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(15, 30, 61);
-        doc.text(isSin ? 'Rapport de sinistre' : "Rapport d'incident", M, y); y += 7;
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(90, 100, 120);
-        if (soc) { doc.text(soc, M, y); y += 5; }
-        doc.text('Édité le ' + FP.date(new Date().toISOString().slice(0, 10)), M, y); y += 8;
-        doc.setDrawColor(225, 229, 236); doc.line(M, y, pw - M, y); y += 7;
-        const row = (lbl, val) => {
-          if (!val) return;
-          doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(120, 130, 150);
-          doc.text(String(lbl).toUpperCase(), M, y);
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(20, 26, 43);
-          const lines = doc.splitTextToSize(String(val), pw - 2 * M - 42);
-          doc.text(lines, M + 42, y);
-          y += Math.max(6, lines.length * 5.2);
-          if (y > ph - M) { doc.addPage(); y = M; }
+        const today = new Date().toISOString().slice(0, 10);
+
+        // --- Données rattachées (société, véhicule, conducteur, assureur DU véhicule) ---
+        let soc = { nom: '', siret: '', adresse: '' };
+        try { const s = FP.settings.get(); soc = { ...soc, ...((s && s.societe) || {}) }; } catch (e) {}
+        let contact = ''; try { contact = (FP.societeProfil ? (FP.societeProfil().mailExpediteur || '') : ''); } catch (e) {}
+        const veh = ((window.FP_DATA && FP_DATA.vehicules) || []).find(v => FP.normImmat(v.immat) === FP.normImmat(d.plaque || '')) || null;
+        const conducteur = String(d.conducteur || (veh && veh.chauffeur && veh.chauffeur !== '—' ? veh.chauffeur : '') || '').trim();
+        let assNom = '', assPolice = '';
+        try {
+          const a = (FP.assureurOf && veh) ? FP.assureurOf(veh) : null;
+          if (a) { assNom = a.nom || ''; assPolice = a.police || ''; }
+          if (!assNom) { const c = FP.assuranceContrat ? FP.assuranceContrat() : {}; assNom = c.assureur || ''; assPolice = assPolice || c.police || ''; }
+        } catch (e) {}
+        const ref = ('SIN-' + String(d.plaque || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase() + '-' + String(d.created_at || today).slice(0, 10).replace(/-/g, '')).replace(/-+/g, '-');
+
+        // --- Bandeau Parc Pilot (navy + logo vectoriel + réf/date) ---
+        const NAVY = [11, 18, 32], ORANGE = [249, 115, 22], INK = [20, 26, 43], LBLC = [120, 130, 150];
+        doc.setFillColor.apply(doc, NAVY); doc.rect(0, 0, pw, 30, 'F');
+        doc.setDrawColor.apply(doc, ORANGE); doc.setLineWidth(0.9);
+        doc.line(M, 11, M + 7, 11); doc.line(M - 0.6, 14, M + 9, 14); doc.line(M + 1.5, 17, M + 6, 17);
+        doc.setLineWidth(0.2);
+        doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(15);
+        doc.setTextColor(255, 255, 255); doc.text('Parc', M + 12, 17.6);
+        const wParc = doc.getTextWidth('Parc');
+        doc.setTextColor.apply(doc, ORANGE); doc.text('Pilot', M + 12 + wParc, 17.6);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(255, 255, 255);
+        doc.text(isSin ? 'RAPPORT DE SINISTRE' : "RAPPORT D'INCIDENT", pw - M, 13.5, { align: 'right' });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(165, 175, 195);
+        doc.text('Réf. ' + ref, pw - M, 19.8, { align: 'right' });
+        doc.text('Édité le ' + FP.date(today), pw - M, 24.3, { align: 'right' });
+        y = 40;
+
+        // --- Helpers de mise en page ---
+        const LBL = 46;
+        const section = (title) => {
+          if (y > ph - 32) { doc.addPage(); y = M + 6; }
+          doc.setFillColor.apply(doc, ORANGE); doc.rect(M, y - 3.3, 2.6, 3.6, 'F');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, NAVY);
+          doc.text(String(title).toUpperCase(), M + 5.2, y);
+          y += 2.4;
+          doc.setDrawColor.apply(doc, ORANGE); doc.setLineWidth(0.5); doc.line(M, y, pw - M, y); doc.setLineWidth(0.2);
+          y += 6;
         };
-        row('Type', isSin ? 'Sinistre / accident' : 'Panne / problème');
-        row('Véhicule', d.plaque || '—');
-        if (ass.assureur) row('Assureur', ass.assureur + (ass.police ? ' — police ' + ass.police : ''));
-        row('Reçu le', d.created_at ? FP.date(String(d.created_at).slice(0, 10)) : '');
-        row('Date incident', d.date_incident || '');
-        row('Lieu', d.lieu || '');
-        row('Description', d.description || '');
-        row('Tiers impliqué', d.tiers || '');
-        row('Blessés', d.blesses || '');
-        y += 4;
+        const row = (lbl, val, always) => {
+          if (val == null || String(val).trim() === '') { if (!always) return; val = '—'; }
+          const lines = doc.splitTextToSize(String(val), pw - 2 * M - LBL);
+          const need = Math.max(6, lines.length * 5);
+          if (y + need > ph - 16) { doc.addPage(); y = M + 6; }
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor.apply(doc, LBLC);
+          doc.text(String(lbl).toUpperCase(), M, y + 0.2);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, INK);
+          doc.text(lines, M + LBL, y);
+          y += need + 1.5;
+        };
+        const block = (lbl, val) => {
+          if (!val || !String(val).trim()) return;
+          if (y > ph - 34) { doc.addPage(); y = M + 6; }
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor.apply(doc, LBLC);
+          doc.text(String(lbl).toUpperCase(), M, y); y += 5;
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, INK);
+          const lines = doc.splitTextToSize(String(val), pw - 2 * M);
+          for (const ln of lines) { if (y > ph - 16) { doc.addPage(); y = M + 6; } doc.text(ln, M, y); y += 5; }
+          y += 2;
+        };
+
+        // --- Société déclarante ---
+        section('Société déclarante');
+        row('Société', soc.nom, true);
+        row('SIRET', soc.siret);
+        row('Adresse', soc.adresse);
+        row('Contact', contact);
+        y += 3;
+
+        // --- Véhicule concerné ---
+        section('Véhicule concerné');
+        row('Immatriculation', d.plaque, true);
+        row('Marque & modèle', veh ? [veh.marque, veh.modele].filter(Boolean).join(' ') : '');
+        row('N° de série (VIN)', veh && veh.vin);
+        row('Conducteur', conducteur);
+        row('Assureur', assNom ? (assNom + (assPolice ? ' — police ' + assPolice : '')) : '');
+        y += 3;
+
+        // --- Détails du sinistre / incident ---
+        section(isSin ? 'Détails du sinistre' : "Détails de l'incident");
+        row('Nature', isSin ? 'Sinistre / accident' : 'Panne / problème', true);
+        row("Date de l'incident", d.date_incident);
+        row('Déclaration reçue le', d.created_at ? FP.date(String(d.created_at).slice(0, 10)) : '');
+        row('Lieu', d.lieu);
+        row('Tiers impliqué', d.tiers);
+        row('Blessés', d.blesses);
+        y += 1;
+        block('Circonstances déclarées', d.description);
+        y += 3;
+
+        // --- Photos (pièces jointes) ---
         let phArr = []; try { phArr = Array.isArray(d.photos) ? d.photos : JSON.parse(d.photos || '[]'); } catch (e) { phArr = []; }
         if (phArr.length) {
-          if (y > ph - 45) { doc.addPage(); y = M; }
-          doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(15, 30, 61);
-          doc.text('Photos (' + phArr.length + ')', M, y); y += 6;
+          section('Pièces jointes — photos (' + phArr.length + ')');
           for (const rawUrl of phArr) {
             let src = rawUrl; try { if (FP.signedScanUrl) src = await FP.signedScanUrl(rawUrl, 3600); } catch (e) {}
             let dataUrl = null;
             try { const r = await fetch(src); const b = await r.blob(); dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(b); }); } catch (e) { continue; }
             if (!dataUrl) continue;
             let props; try { props = doc.getImageProperties(dataUrl); } catch (e) { continue; }
-            const maxW = pw - 2 * M, maxH = 115;
+            const maxW = pw - 2 * M, maxH = 110;
             let w = maxW, h = w * props.height / props.width; if (h > maxH) { h = maxH; w = h * props.width / props.height; }
-            if (y + h > ph - M) { doc.addPage(); y = M; }
+            if (y + h > ph - 18) { doc.addPage(); y = M + 6; }
             const fmt = /^data:image\/png/i.test(dataUrl) ? 'PNG' : 'JPEG';
             try { doc.addImage(dataUrl, fmt, M, y, w, h); } catch (e) { continue; }
             y += h + 6;
           }
         }
+
+        // --- Pied de page Parc Pilot sur toutes les pages ---
+        const total = doc.getNumberOfPages();
+        for (let p = 1; p <= total; p++) {
+          doc.setPage(p);
+          doc.setDrawColor.apply(doc, ORANGE); doc.setLineWidth(0.5); doc.line(M, ph - 12, pw - M, ph - 12); doc.setLineWidth(0.2);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(140, 150, 165);
+          doc.text('Rapport généré via Parc Pilot — parc-pilot.fr', M, ph - 8);
+          doc.text('Page ' + p + ' / ' + total, pw - M, ph - 8, { align: 'right' });
+        }
+
         const clean = s => String(s || '').replace(/[^A-Za-z0-9]/g, '');
-        doc.save(((isSin ? 'sinistre' : 'incident') + '-' + clean(d.plaque) + '-' + String(d.created_at || '').slice(0, 10) + '.pdf').replace(/-+/g, '-'));
+        doc.save(((isSin ? 'sinistre' : 'incident') + '-' + clean(d.plaque) + '-' + String(d.created_at || today).slice(0, 10) + '.pdf').replace(/-+/g, '-'));
       } catch (e) { alert('Échec de la génération du PDF : ' + (e && e.message || e)); }
       finally { if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; } }
     },
