@@ -1062,8 +1062,16 @@
       const dv = (FP.settings.get().sinistreAssurance || {})[groupKeyOf(s.id)] || {};
       const tiers = [dv.tiersPlaque, dv.tiersAssureur, dv.tiersNom].filter(Boolean).join(' · ');
       let desc = String(s.description || '').replace(/\s*·\s*Lieu\s*:[^·]*/i, '').replace(/\s*·\s*Tiers\s*:[^·]*/i, '').trim();
-      const photos = (typeof sinDocs !== 'undefined' ? sinDocs : []).filter(x => normPl(x.vehiculeId) === normPl(s.vehiculeImmat)).map(x => x.url).filter(Boolean);
-      DeclCond.exportPdf({ id: s.id, type: 'sinistre', plaque: s.vehiculeImmat || '', created_at: s.date || '', date_incident: s.date ? FP.date(s.date) : '', lieu: dv.lieu || '', description: desc, tiers: tiers, conducteur: dv.conducteur || '', blesses: '', photos: photos }, sinPdf);
+      const allDocs = (typeof sinDocs !== 'undefined' ? sinDocs : []).filter(x => normPl(x.vehiculeId) === normPl(s.vehiculeImmat));
+      // Le CONSTAT = pièce jointe à part entière (page pleine, lisible), PAS une vignette photo.
+      // On l'identifie par le champ dédié constatUrl (bouton « Lire le constat ») + par tout document
+      // dont le libellé contient « constat » (dépôt via le dossier). On l'exclut donc des « Photos ».
+      const constatSet = new Set();
+      if (dv.constatUrl) constatSet.add(dv.constatUrl);
+      allDocs.forEach(x => { if (x.url && /constat/i.test(x.label || '')) constatSet.add(x.url); });
+      const constats = [...constatSet];
+      const photos = allDocs.map(x => x.url).filter(u => u && !constatSet.has(u));
+      DeclCond.exportPdf({ id: s.id, type: 'sinistre', plaque: s.vehiculeImmat || '', created_at: s.date || '', date_incident: s.date ? FP.date(s.date) : '', lieu: dv.lieu || '', description: desc, tiers: tiers, conducteur: dv.conducteur || '', blesses: '', photos: photos, constats: constats }, sinPdf);
       return;
     }
 
@@ -1960,6 +1968,52 @@
             try { doc.addImage(dataUrl, fmt, M, y, w, h); } catch (e) { continue; }
             y += h + 6;
           }
+        }
+
+        // --- Constat amiable : pièce jointe en PAGE PLEINE et lisible (jamais une vignette photo). ---
+        // Un constat PDF est rasterisé page par page (pdf.js) → 1 page A4 par page de constat ; une
+        // image occupe toute la page. NE compte PAS dans le compteur « Photos » (c'est une pièce à part).
+        let cnArr = []; try { cnArr = Array.isArray(d.constats) ? d.constats : (d.constat ? [d.constat] : []); } catch (e) { cnArr = []; }
+        cnArr = cnArr.filter(Boolean);
+        const fullPageImg = (dataUrl, caption) => {
+          let props; try { props = doc.getImageProperties(dataUrl); } catch (e) { return; }
+          doc.addPage();
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor.apply(doc, LBLC);
+          doc.text(String(caption).toUpperCase(), M, M);
+          const top = M + 4, availW = pw - 2 * M, availH = ph - top - 15;
+          let w = availW, h = w * props.height / props.width;
+          if (h > availH) { h = availH; w = h * props.width / props.height; }
+          const x = M + (availW - w) / 2;
+          const fmt = /^data:image\/png/i.test(dataUrl) ? 'PNG' : 'JPEG';
+          try { doc.addImage(dataUrl, fmt, x, top, w, h); } catch (e) {}
+        };
+        for (const rawUrl of cnArr) {
+          let src = rawUrl; try { if (FP.signedScanUrl) src = await FP.signedScanUrl(rawUrl, 3600); } catch (e) {}
+          let blob = null; try { const r = await fetch(src); blob = await r.blob(); } catch (e) { continue; }
+          if (!blob) continue;
+          const isPdf = (blob.type && /pdf/i.test(blob.type)) || /\.pdf(\?|$)/i.test(String(rawUrl));
+          if (isPdf && FP.ocr && FP.ocr.loadScript) {
+            try {
+              await FP.ocr.loadScript(FP.ocr.PDFJS_CDN);
+              window.pdfjsLib.GlobalWorkerOptions.workerSrc = FP.ocr.PDFJS_WORKER;
+              const buf = await blob.arrayBuffer();
+              const pdfDoc = await window.pdfjsLib.getDocument({ data: buf }).promise;
+              const nb = pdfDoc.numPages;
+              for (let pg = 1; pg <= nb; pg++) {
+                const page = await pdfDoc.getPage(pg);
+                const viewport = page.getViewport({ scale: 2.2 });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width; canvas.height = viewport.height;
+                await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                fullPageImg(canvas.toDataURL('image/jpeg', 0.85), nb > 1 ? ('Constat amiable — page ' + pg + '/' + nb) : 'Constat amiable');
+              }
+              continue;
+            } catch (e) { /* repli image ci-dessous */ }
+          }
+          // Image (ou repli si le PDF n'a pas pu être rasterisé) → dataURL, posée en page pleine.
+          let dataUrl = null;
+          try { dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); }); } catch (e) { continue; }
+          if (dataUrl && /^data:image\//i.test(dataUrl)) fullPageImg(dataUrl, 'Constat amiable');
         }
 
         // --- Pied de page Parc Pilot sur toutes les pages ---
