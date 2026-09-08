@@ -451,6 +451,76 @@ FP.setAmendeMontants = (id, o) => {
 FP.getAmendeMontants = (id) => {
   try { const m = FP.settings.get().amendeMontants; return (m && m[id]) ? m[id] : null; } catch (e) { return null; }
 };
+// ⚠️ HELPER CANONIQUE — anomalies « À vérifier » d'une amende (incohérences typiques des amendes FR
+// / avis ANTAI). Renvoie [{champ, msg}] (vide = cohérent). Lu par la FICHE amende ET l'écran de SCAN
+// (même source de vérité). Volontairement TOLÉRANT : on ne signale que des incohérences NETTES
+// (jamais un simple doute) pour éviter les faux positifs. `bdOverride` = ventilation des 3 tarifs
+// quand l'amende n'est pas encore enregistrée (écran de scan) ; sinon on lit FP.getAmendeMontants.
+FP.amendeAnomalies = (a, bdOverride) => {
+  const out = []; if (!a) return out;
+  const dg = v => String(v == null ? '' : v).replace(/\D/g, '');
+  const nb = v => { if (v == null || v === '') return null; const n = Number(String(v).replace(',', '.').replace(/[^\d.\-]/g, '')); return isNaN(n) ? null : n; };
+  const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+  const etr = /étrang|etrang/i.test(String(a.commentaire || '')); // amende étrangère → règles FR non applicables
+
+  // Clé de télépaiement = EXACTEMENT 2 chiffres (standard ANTAI).
+  const cle = dg(a.cle);
+  if (cle && cle.length !== 2) out.push({ champ: 'cle', msg: `Clé de télépaiement : ${cle.length} chiffre(s) au lieu de 2.` });
+
+  // N° de télépaiement : une CONTRAVENTION ANTAI en a EXACTEMENT 14 (groupés 4-4-4-2) → un chiffre
+  // en moins/en trop = erreur de lecture. Un FPS peut être plus long (préfixe + n° d'avis) → on reste
+  // souple. On ne signale que si le format est clairement anormal.
+  const tp = dg(a.numeroTelepaiement);
+  if (tp) {
+    const fps = (FP.estFps ? FP.estFps(a) : false);
+    if (fps) { if (tp.length < 10 || tp.length > 28) out.push({ champ: 'numeroTelepaiement', msg: `N° de télépaiement : ${tp.length} chiffres — format inhabituel.` }); }
+    else if (tp.length !== 14) out.push({ champ: 'numeroTelepaiement', msg: `N° de télépaiement : ${tp.length} chiffres au lieu de 14 attendus — un chiffre manque ou en trop ?` });
+  }
+
+  // Points retirés : plage 0 à 6.
+  const p = nb(a.points);
+  if (p != null && (p < 0 || p > 6)) out.push({ champ: 'points', msg: `Points retirés hors plage 0–6 (${p}).` });
+
+  // Montant + cohérence avec les 3 tarifs officiels lus par l'IA.
+  const m = nb(a.montant);
+  const bd = bdOverride || ((FP.getAmendeMontants && a.id != null) ? FP.getAmendeMontants(a.id) : null);
+  const mn = bd ? nb(bd.montantMinore) : null, mf = bd ? nb(bd.montantForfaitaire) : null, mj = bd ? nb(bd.montantMajore) : null;
+  const eur = v => (FP.euro ? FP.euro(v) : v + ' €');
+  if (m != null) {
+    if (m < 0) out.push({ champ: 'montant', msg: 'Montant négatif.' });
+    else if (!etr && m > 1500) out.push({ champ: 'montant', msg: `Montant inhabituellement élevé (${eur(m)}) — à confirmer.` });
+  }
+  // Ordre officiel minoré < forfaitaire < majoré (quand présents).
+  if (mn != null && mf != null && mn > mf) out.push({ champ: 'montant', msg: `Le minoré (${mn}) dépasse le forfaitaire (${mf}).` });
+  if (mf != null && mj != null && mf > mj) out.push({ champ: 'montant', msg: `Le forfaitaire (${mf}) dépasse le majoré (${mj}).` });
+  if (mn != null && mj != null && mn > mj) out.push({ champ: 'montant', msg: `Le minoré (${mn}) dépasse le majoré (${mj}).` });
+  // Le montant retenu doit être l'un des 3 tarifs lus (sinon = chiffre parasite type « 1875 »).
+  const trio = [mn, mf, mj].filter(v => v != null && v > 0);
+  if (m != null && m > 0 && trio.length && !trio.some(v => Math.abs(v - m) < 0.5)) {
+    out.push({ champ: 'montant', msg: `Le montant retenu (${m}) ne figure dans aucun des 3 tarifs lus (${trio.join(' / ')}).` });
+  }
+
+  // Dates.
+  const today = new Date().toISOString().slice(0, 10);
+  if (isDate(a.date) && a.date > today) out.push({ champ: 'date', msg: "Date de l'infraction dans le futur." });
+  if (bd) {
+    if (isDate(bd.dateLimiteMinore) && isDate(a.date) && bd.dateLimiteMinore < a.date) out.push({ champ: 'date', msg: 'Date limite (tarif minoré) antérieure à l’infraction.' });
+    if (isDate(bd.dateLimiteForfaitaire) && isDate(bd.dateLimiteMinore) && bd.dateLimiteForfaitaire < bd.dateLimiteMinore) out.push({ champ: 'date', msg: 'Date limite forfaitaire antérieure à la date limite minoré.' });
+  }
+  return out;
+};
+// Rendu HTML réutilisable du bandeau « À vérifier » (fiche + scan). '' si aucune anomalie.
+FP.amendeAnomaliesBanner = (a, bdOverride, opts) => {
+  const anos = FP.amendeAnomalies ? FP.amendeAnomalies(a, bdOverride) : [];
+  if (!anos.length) return '';
+  const esc = FP.esc || (s => String(s == null ? '' : s));
+  const hint = (opts && opts.hint) || 'Cliquez sur un champ ci-dessous pour corriger.';
+  return `<div style="background:#FFFBEB;border:1px solid #FCD34D;border-left:4px solid #D97706;border-radius:.55rem;padding:.6rem .8rem">
+    <div style="color:#B45309;font-weight:800;font-size:.85rem;display:flex;align-items:center;gap:.35rem"><span>⚠️</span> À vérifier${anos.length > 1 ? ' (' + anos.length + ')' : ''}</div>
+    <ul style="margin:.3rem 0 0;padding-left:1.1rem;color:#92400E;font-size:.75rem;line-height:1.5">${anos.map(x => '<li>' + esc(x.msg) + '</li>').join('')}</ul>
+    <div style="color:#B45309;opacity:.65;font-size:.68rem;margin-top:.25rem">${esc(hint)}</div>
+  </div>`;
+};
 // ⚠️ HELPER CANONIQUE — année d'une amende (peut revenir en NOMBRE depuis Supabase) : on force
 // en chaîne, avec repli sur l'année de la date. Évite les filtres `annee === '2026'` qui ratent le nombre.
 FP.anneeAmende = (a) => { if (!a) return ''; const y = a.annee; if (y != null && String(y).trim() !== '') return String(y).trim(); return String(a.date || '').slice(0, 4); };
