@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260908a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260908b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260908a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260908b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260908a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260908b">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -458,6 +458,7 @@
           <p class="text-xs text-amber-700 leading-snug">Le <b>Montant</b> saisi ci-dessus sera enregistré comme <b>montant majoré</b> de l'amende choisie. Aucune nouvelle ligne n'est créée — la majoration est rattachée à l'amende d'origine.</p>
         </div>
       </div>
+      <div id="am-anomalies"></div>
       <div class="flex gap-2 pt-2">
         <button type="button" class="btn btn-outline flex-1 justify-center" id="amende-cancel">Annuler</button>
         <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
@@ -476,11 +477,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260908a"></script>
-<script src="../assets/js/supabase-client.js?v=20260908a"></script>
-<script src="../assets/js/data.js?v=20260908a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260908b"></script>
+<script src="../assets/js/supabase-client.js?v=20260908b"></script>
+<script src="../assets/js/data.js?v=20260908b"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260908a"></script>
+<script src="../assets/js/app.js?v=20260908b"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1443,6 +1444,7 @@
           <span class="fp-chip ${(Number(a.points) || 0) > 0 ? 'bad' : 'ghost'}" style="${(Number(a.points) || 0) > 0 ? '' : 'color:var(--fp-muted);background:color-mix(in srgb,var(--fp-muted) 12%,transparent)'}"><span id="am-points-val" class="cursor-pointer" title="Cliquer pour modifier">${(Number(a.points) || 0) > 0 ? '−' + a.points + ' pt' : '0 point'}</span></span>
         </div>
       </div>
+      ${FP.amendeAnomaliesBanner ? FP.amendeAnomaliesBanner(a) : ''}
       ${(() => {
         const m = majorationInfo(a); if (!m) return '';
         const col = m.jours < 0 ? '#b91c1c' : m.jours < 15 ? '#dc2626' : m.jours < 30 ? '#b45309' : (m.kind === 'minore' ? '#047857' : '#0369a1');
@@ -2126,6 +2128,25 @@
     $('am-etrangere').checked = false; $('am-points').removeAttribute('disabled');
     $('am-is-majoration').checked = false; $('am-majoration-pick').classList.add('hidden');
     $('am-doublon-banner').classList.add('hidden');
+    const _ab = $('am-anomalies'); if (_ab) _ab.innerHTML = '';
+  }
+  // Bandeau « À vérifier » (incohérences typiques des amendes FR) — recalculé EN DIRECT depuis le
+  // formulaire, via le même helper que la fiche (FP.amendeAnomalies). _scanBreakdown = 3 tarifs lus.
+  function refreshAmAnomalies() {
+    const box = $('am-anomalies'); if (!box) return;
+    const a = {
+      id: null,
+      montant: $('am-montant').value,
+      points: $('am-points').value,
+      date: $('am-date').value,
+      motif: $('am-motif').value,
+      numeroTelepaiement: $('am-telepaiement').value,
+      cle: $('am-cle').value,
+      commentaire: $('am-etrangere').checked ? 'Amende étrangère' : '',
+    };
+    box.innerHTML = FP.amendeAnomaliesBanner
+      ? FP.amendeAnomaliesBanner(a, _scanBreakdown, { hint: "Corrigez le champ concerné ci-dessus avant d'enregistrer." })
+      : '';
   }
   function updateQueueBanner() {
     const b = $('av-queue-banner'); if (!b) return;
@@ -2626,10 +2647,12 @@
             : `Choisissez l'amende d'origine à majorer dans la liste ci-dessous, puis « Enregistrer ».`),
           'ok');
         lucide.createIcons();
+        refreshAmAnomalies();
         return;
       }
 
       checkDoublonLive(); // alerte immédiate si l'avis importé existe déjà
+      refreshAmAnomalies(); // bandeau « À vérifier » : incohérences typiques (montant/télépaiement/clé/points/dates)
       // Si l'IA a échoué, on affiche la VRAIE raison (remontée par FP.scanIA) au lieu d'un « non disponible » muet.
       const iaErr = (!parsed._ia && window.FP && FP._scanLastErr) ? FP._scanLastErr : '';
       const iaTag = parsed._ia
@@ -2678,6 +2701,12 @@
     $(id).addEventListener('input', checkDoublonLive);
     $(id).addEventListener('change', checkDoublonLive);
   });
+  // Bandeau « À vérifier » (anomalies FR) en temps réel : montant, télépaiement, clé, points, date, étrangère.
+  ['am-montant', 'am-telepaiement', 'am-cle', 'am-points', 'am-date'].forEach(id => {
+    $(id).addEventListener('input', refreshAmAnomalies);
+    $(id).addEventListener('change', refreshAmAnomalies);
+  });
+  $('am-etrangere').addEventListener('change', refreshAmAnomalies);
   // Points : on retient si l'utilisateur les saisit lui-même, sinon on les calcule depuis le motif
   $('am-points').addEventListener('input', () => { _pointsTouched = true; });
   $('am-motif').addEventListener('change', autoPointsFromMotif);
