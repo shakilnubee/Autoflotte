@@ -1264,23 +1264,35 @@
       const b = e.target.closest('[data-sd-rm]'); if (!b) return;
       sdPicked.splice(+b.dataset.sdRm, 1); renderPicked();
     });
-    const open = () => {
+    let sdSource = null; // déclaration conducteur d'origine (quand on ouvre via « Créer le sinistre » de l'inbox)
+    const open = (prefill) => {
+      prefill = prefill || {};
+      sdSource = prefill.sourceDecl || null;
       const sel = $('sd-veh');
       if (sel) {
         const vehs = ((window.FP_DATA && FP_DATA.vehicules) || data.vehicules || []).filter(v => !(FP.estVendu && FP.estVendu(v))).slice().sort((a, b) => (a.immat || '').localeCompare(b.immat || ''));
         sel.innerHTML = '<option value="">— choisir —</option>' + vehs.map(v => `<option value="${escapeHtml(v.immat || '')}">${escapeHtml(v.immat || '?')} — ${escapeHtml((v.marque || '') + ' ' + (v.modele || ''))}</option>`).join('');
         if (FP.searchSelect && sel.dataset.ssDone !== '1') FP.searchSelect(sel, { placeholder: 'Rechercher un véhicule…' });
       }
-      if ($('sd-date')) $('sd-date').value = new Date().toISOString().slice(0, 10);
+      if ($('sd-date')) $('sd-date').value = prefill.date || new Date().toISOString().slice(0, 10);
       ['sd-lieu', 'sd-desc', 'sd-tiers-plaque', 'sd-tiers-assureur', 'sd-tiers-nom'].forEach(id => { if ($(id)) $(id).value = ''; });
+      if (prefill.lieu && $('sd-lieu')) $('sd-lieu').value = prefill.lieu;
+      if (prefill.desc && $('sd-desc')) $('sd-desc').value = prefill.desc;
+      if (prefill.tiersPlaque && $('sd-tiers-plaque')) $('sd-tiers-plaque').value = prefill.tiersPlaque;
+      if (prefill.tiersAssureur && $('sd-tiers-assureur')) $('sd-tiers-assureur').value = prefill.tiersAssureur;
+      if (prefill.tiersNom && $('sd-tiers-nom')) $('sd-tiers-nom').value = prefill.tiersNom;
       if ($('sd-files')) $('sd-files').value = '';
       sdPicked = []; renderPicked();
-      setSt('');
+      // Sélection du véhicule APRÈS peuplement (compat FP.searchSelect : resync via l'événement change).
+      if (sel && prefill.immat) { sel.value = prefill.immat; try { sel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {} }
+      setSt(sdSource ? '✎ Pré-rempli depuis la déclaration du conducteur — vérifie/complète puis crée le dossier. Les photos du conducteur seront rattachées automatiquement.' : '', sdSource ? '#15803D' : '');
       modal.style.display = 'flex';
       if (window.lucide) lucide.createIcons();
     };
+    // Exposé pour le bouton « Créer le sinistre » de l'inbox conducteur (ouvre le formulaire PRÉ-REMPLI).
+    window.FP_openSinDeclare = open;
     const close = () => { modal.style.display = 'none'; };
-    if ($('sin-declare-btn')) $('sin-declare-btn').addEventListener('click', open);
+    if ($('sin-declare-btn')) $('sin-declare-btn').addEventListener('click', () => open());
     if ($('sin-declare-close')) $('sin-declare-close').addEventListener('click', close);
     if ($('sin-declare-cancel')) $('sin-declare-cancel').addEventListener('click', close);
     modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
@@ -1323,6 +1335,19 @@
         if (tiersAssureur) _dv.tiersAssureur = tiersAssureur;
         if (tiersNom) _dv.tiersNom = tiersNom;
         FP.settings.save(s);
+        // Créé DEPUIS une déclaration conducteur (QR) → rattacher ses photos au dossier + marquer la déclaration traitée.
+        if (sdSource) {
+          try {
+            let ph = Array.isArray(sdSource.photos) ? sdSource.photos : JSON.parse(sdSource.photos || '[]');
+            for (const u of (ph || [])) {
+              if (!u) continue;
+              if (!fact.fileId) { fact.fileId = u; try { await FP.persist.update('factures', fact.id, { fileId: u }); } catch (_) {} }
+              try { await FP.persist.insert('documents', { id: 'SDP' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: immat, type: 'sinistre-doc', label: 'Photo déclaration conducteur', url: u, driveId: null }); } catch (_) {}
+            }
+          } catch (_) {}
+          try { if (typeof DeclCond !== 'undefined' && DeclCond.setStatut) await DeclCond.setStatut(sdSource.id, 'traite'); } catch (_) {}
+          sdSource = null;
+        }
         sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
         refreshAll(); if (typeof renderDrive === 'function') renderDrive();
         close();
@@ -1845,7 +1870,23 @@
     else if (t.hasAttribute('data-decl-untraite')) DeclCond.setStatut(t.getAttribute('data-decl-untraite'), 'nouveau');
     else if (t.hasAttribute('data-decl-del')) DeclCond.remove(t.getAttribute('data-decl-del'));
     else if (t.hasAttribute('data-decl-pdf')) DeclCond.exportPdf(t.getAttribute('data-decl-pdf'), t);
-    else if (t.hasAttribute('data-decl-sin')) { const b = document.getElementById('sin-declare-btn'); if (b) b.click(); }
+    else if (t.hasAttribute('data-decl-sin')) {
+      // « Créer le sinistre » depuis une déclaration conducteur → ouvre le formulaire PRÉ-REMPLI.
+      const id = t.getAttribute('data-decl-sin');
+      const d = (DeclCond.rows || []).find(x => String(x.id) === String(id));
+      if (d && window.FP_openSinDeclare) {
+        const tiers = String(d.tiers || '').split(/[\/|·]/).map(s => s.trim()); // "PLAQUE / Assureur / Nom"
+        let dateISO = '';
+        const m = String(d.date_incident || '').match(/(\d{2})\/(\d{2})\/(\d{4})/); // JJ/MM/AAAA → AAAA-MM-JJ
+        if (m) dateISO = m[3] + '-' + m[2] + '-' + m[1];
+        else if (d.created_at) dateISO = String(d.created_at).slice(0, 10);
+        window.FP_openSinDeclare({
+          immat: d.plaque || '', date: dateISO, lieu: d.lieu || '', desc: d.description || '',
+          tiersPlaque: (tiers[0] || '').toUpperCase(), tiersAssureur: tiers[1] || '', tiersNom: tiers[2] || '',
+          sourceDecl: d,
+        });
+      } else { const b = document.getElementById('sin-declare-btn'); if (b) b.click(); }
+    }
   });
   document.addEventListener('fp:data-ready', () => DeclCond.load());
   if (window.FP && FP.supabase) DeclCond.load();
