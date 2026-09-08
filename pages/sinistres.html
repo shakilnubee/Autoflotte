@@ -1313,13 +1313,14 @@
       setSt('⏳ Création du dossier…');
       try {
         const files = sdPicked.slice();
-        let firstUrl = null;
+        let firstUrl = null, nbPhotos = 0;
         for (const f of files) {
           try {
             const url = await FP.uploadScan(f, 'documents');
             if (url) {
               if (!firstUrl) firstUrl = url;
               await FP.persist.insert('documents', { id: 'SD' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: immat, type: 'sinistre-doc', label: f.name, url, driveId: null });
+              nbPhotos++;
             }
           } catch (_) {}
         }
@@ -1342,16 +1343,19 @@
             for (const u of (ph || [])) {
               if (!u) continue;
               if (!fact.fileId) { fact.fileId = u; try { await FP.persist.update('factures', fact.id, { fileId: u }); } catch (_) {} }
-              try { await FP.persist.insert('documents', { id: 'SDP' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: immat, type: 'sinistre-doc', label: 'Photo déclaration conducteur', url: u, driveId: null }); } catch (_) {}
+              try { await FP.persist.insert('documents', { id: 'SDP' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: immat, type: 'sinistre-doc', label: 'Photo déclaration conducteur', url: u, driveId: null }); nbPhotos++; } catch (_) {}
             }
           } catch (_) {}
           try { if (typeof DeclCond !== 'undefined' && DeclCond.setStatut) await DeclCond.setStatut(sdSource.id, 'traite'); } catch (_) {}
           sdSource = null;
         }
         sinistres = (data.factures || []).filter(f => f.type === 'sinistre');
-        refreshAll(); if (typeof renderDrive === 'function') renderDrive();
+        refreshAll();
+        // Recharge la liste des documents sinistre depuis la base → les photos (déclaration OU jointes
+        // ici) apparaissent TOUT DE SUITE dans « Documents » du véhicule, sans recharger la page.
+        if (typeof loadSinDocs === 'function') loadSinDocs(); else if (typeof renderDrive === 'function') renderDrive();
         close();
-        if (FP.toast) FP.toast('Dossier sinistre créé — complète le montant quand tu auras la facture.');
+        if (FP.toast) FP.toast('Dossier sinistre créé' + (nbPhotos ? (' — ' + nbPhotos + ' photo(s) rattachée(s)') : '') + '. Complète le montant quand tu auras la facture.');
       } catch (e) {
         console.error('[sin declare]', e);
         setSt('⚠️ Erreur — réessaie.', '#B91C1C');
