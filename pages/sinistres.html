@@ -200,6 +200,8 @@
           </div>
           <div>
             <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Constat + photos <span class="normal-case font-normal text-slate-400">(optionnel, plusieurs)</span></div>
+            <!-- Photos déjà envoyées par le conducteur via le QR (quand on crée depuis une déclaration) : aperçu. -->
+            <div id="sd-decl-photos" class="mb-2"></div>
             <input id="sd-files" type="file" accept="image/*,application/pdf,.pdf" multiple class="text-sm w-full">
             <div id="sd-file-list" class="mt-2 flex flex-col gap-1"></div>
             <p class="text-xs text-slate-400 mt-1">Dépose le constat amiable et des photos des dommages — rangés dans le dossier du véhicule. L'IA pourra ensuite lire le constat pour la responsabilité. Tu peux retirer un fichier ajouté par erreur avec le ✕.</p>
@@ -1283,6 +1285,20 @@
       if (prefill.tiersNom && $('sd-tiers-nom')) $('sd-tiers-nom').value = prefill.tiersNom;
       if ($('sd-files')) $('sd-files').value = '';
       sdPicked = []; renderPicked();
+      // Photos DÉJÀ envoyées par le conducteur (déclaration QR) → aperçu dans le formulaire (elles seront
+      // rattachées automatiquement au dossier à la création ; pas besoin de les re-joindre).
+      const dp = $('sd-decl-photos');
+      if (dp) {
+        let ph = [];
+        try { ph = prefill.sourceDecl ? (Array.isArray(prefill.sourceDecl.photos) ? prefill.sourceDecl.photos : JSON.parse(prefill.sourceDecl.photos || '[]')) : []; } catch (e) { ph = []; }
+        ph = (ph || []).filter(Boolean);
+        if (ph.length) {
+          dp.innerHTML = '<div class="text-xs font-semibold" style="color:#15803D;margin:0 0 4px">📎 ' + ph.length + ' photo(s) du conducteur — rattachée(s) automatiquement au dossier</div>'
+            + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px">'
+            + ph.map(u => `<img data-signsrc="${escapeHtml(u)}" alt="" style="width:100%;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--fp-border)">`).join('') + '</div>';
+          (async () => { for (const img of dp.querySelectorAll('[data-signsrc]')) { try { img.src = (FP.signedScanUrl ? await FP.signedScanUrl(img.getAttribute('data-signsrc'), 3600) : img.getAttribute('data-signsrc')); } catch (e) {} } })();
+        } else { dp.innerHTML = ''; }
+      }
       // Sélection du véhicule APRÈS peuplement (compat FP.searchSelect : resync via l'événement change).
       if (sel && prefill.immat) { sel.value = prefill.immat; try { sel.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {} }
       setSt(sdSource ? '✎ Pré-rempli depuis la déclaration du conducteur — vérifie/complète puis crée le dossier. Les photos du conducteur seront rattachées automatiquement.' : '', sdSource ? '#15803D' : '');
