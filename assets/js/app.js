@@ -467,14 +467,18 @@ FP.amendeAnomalies = (a, bdOverride) => {
   const cle = dg(a.cle);
   if (cle && cle.length !== 2) out.push({ champ: 'cle', msg: `Clé de télépaiement : ${cle.length} chiffre(s) au lieu de 2.` });
 
-  // N° de télépaiement : une CONTRAVENTION ANTAI en a EXACTEMENT 14 (groupés 4-4-4-2) → un chiffre
-  // en moins/en trop = erreur de lecture. Un FPS peut être plus long (préfixe + n° d'avis) → on reste
-  // souple. On ne signale que si le format est clairement anormal.
+  // N° d'avis de contravention : présent sur tout avis ANTAI (obligatoire). Absent = à compléter.
+  // (Pas pour une amende étrangère, qui n'a pas de n° ANTAI.)
+  const avis = dg(a.numeroAvis);
+  if (!etr && !avis) out.push({ champ: 'numeroAvis', msg: "N° d'avis de contravention manquant." });
+
+  // N° de télépaiement : officiellement 14 À 18 chiffres (souvent 14, débute par 333), + une clé de
+  // 2 chiffres À PART (source : amendes.gouv.fr / ANTAI). On ne signale donc QUE hors de cette plage
+  // (ex. un chiffre sauté → 13, ou un chiffre en trop → 19+) : dans la plage 14-18 c'est NORMAL, pas
+  // d'alerte pour rien. Un FPS (stationnement.gouv.fr) suit un autre format → on ne contrôle pas sa longueur.
   const tp = dg(a.numeroTelepaiement);
-  if (tp) {
-    const fps = (FP.estFps ? FP.estFps(a) : false);
-    if (fps) { if (tp.length < 10 || tp.length > 28) out.push({ champ: 'numeroTelepaiement', msg: `N° de télépaiement : ${tp.length} chiffres — format inhabituel.` }); }
-    else if (tp.length !== 14) out.push({ champ: 'numeroTelepaiement', msg: `N° de télépaiement : ${tp.length} chiffres au lieu de 14 attendus — un chiffre manque ou en trop ?` });
+  if (tp && !(FP.estFps ? FP.estFps(a) : false) && (tp.length < 14 || tp.length > 18)) {
+    out.push({ champ: 'numeroTelepaiement', msg: `N° de télépaiement : ${tp.length} chiffres (attendu 14 à 18) — un chiffre manque ou en trop ?` });
   }
 
   // Points retirés : plage 0 à 6.
