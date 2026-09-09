@@ -1456,12 +1456,40 @@
     if (!anoms.length) {
       let diag = '';
       if (hasConges()) {
-        const nTx = (_verifTx || []).length, nUlys = (_verifUlys || []).length, nC = Object.keys(FP.getAllConges()).length;
-        const ulysHint = nUlys > 0 ? ' Certains relevés Ulys n\'ont que le <b>total du mois</b> : la détection se fait au <b>jour près</b> (dates réelles). Parc Pilot reconstruit le détail <b>automatiquement</b> quand tu ouvres <b>Contrôle</b> (relevés avec PDF stocké) — reviens ici ensuite. Un relevé importé via l\'API sans PDF prend son détail à l\'import de son PDF.' : '';
+        // 🔎 Diagnostic DÉTAILLÉ : pour CHAQUE conducteur en congé, combien de conso datées lui sont
+        // rattachées et combien tombent dans son congé → montre EXACTEMENT où la chaîne casse.
+        const esc = FP.esc || (s => String(s == null ? '' : s));
+        const allTx = _verifTx || [];
+        const nTx = allTx.length, nUlys = (_verifUlys || []).length;
+        const txUlys = allTx.filter(t => /^ULYS/i.test(String(t.carte || '')));
+        const conges = FP.getAllConges(); const nC = Object.keys(conges).length;
+        const firstSeg = (k) => String(k).split(/[-\s]/)[0];
+        const rows = Object.keys(conges).map(k => {
+          const nom = (FP.conducteurNomUnifie && FP.conducteurNomUnifie(k)) || k;
+          const per = (conges[k] || []).map(p => (FP.date ? FP.date(p.debut) : p.debut) + '→' + (FP.date ? FP.date(p.fin) : p.fin)).join(', ');
+          // conso rattachées à CE conducteur (même résolution que la détection : clé carte/badge OU prénom)
+          const mine = allTx.filter(t => {
+            let kk = null; try { kk = FP.condKeyDeConso ? FP.condKeyDeConso(t) : null; } catch (e) {}
+            if (kk && kk === k) return true;
+            const np = (FP.normPrenom && t.conducteur) ? FP.normPrenom(t.conducteur) : null;
+            return !!(np && firstSeg(k) === np);
+          });
+          let dedans = 0; try { dedans = mine.filter(t => FP.congeCouvrant && FP.congeCouvrant(k, t.dateTx || t.date_tx)).length; } catch (e) {}
+          return { nom, per, nTx: mine.length, nIn: dedans };
+        });
+        const rowsHtml = rows.map(r => {
+          const etat = r.nTx === 0 ? '<span style="color:#B45309">conso non rattachée à cette fiche</span>'
+            : (r.nIn > 0 ? '<span style="color:#B91C1C;font-weight:700">' + r.nIn + ' pendant congé (déjà archivée ?)</span>'
+              : 'aucune pendant le congé');
+          return `<li><b>${esc(r.nom)}</b> — ${r.nTx} conso datée(s) · congé ${esc(r.per) || '—'} → ${etat}</li>`;
+        }).join('');
+        const aStandard = rows.some(r => r.nTx === 0);
         const hint = nTx === 0
-          ? 'Aucune conso datée n\'est enregistrée. Importe le <b>relevé détaillé</b> (transaction par transaction, avec la colonne date) pour la détection au jour près.' + ulysHint
-          : 'Aucune conso ne tombe dans une période de congé — ou tout est déjà archivé. Vérifie que le <b>n° de carte/badge</b> du conducteur est bien renseigné sur sa fiche (c\'est ce qui relie la conso au bon conducteur).' + ulysHint;
-        diag = `<div class="text-xs text-slate-400 mt-2" style="line-height:1.55">🔎 Analyse des congés : <b>${nTx}</b> conso datée(s) carte carburant · <b>${nUlys}</b> relevé(s) Ulys mensuel(s) · <b>${nC}</b> conducteur(s) avec congé.<br>${hint}</div>`;
+          ? 'Aucune conso datée n\'est enregistrée : le détail transaction-par-transaction n\'a pas (encore) été lu. Réimporte le relevé (PDF ou <b>CSV</b>) — <b>et fais Ctrl+Maj+R avant</b> pour être sûr d\'avoir la dernière version.'
+          : (aStandard
+            ? 'Un conducteur affiche « conso non rattachée » : ses péages existent mais ne sont pas reliés à SA fiche → vérifie que <b>son badge est relié au bon conducteur</b> (Contrôle → Ulys → Relier), et que tu es bien sur la <b>même société</b> que celle où tu as importé le relevé.'
+            : 'Les conso datées existent mais aucune ne tombe dans une période de congé (ou elles sont déjà archivées). Vérifie les <b>dates du congé</b> sur la fiche du conducteur.');
+        diag = `<div class="text-xs text-slate-500 mt-2" style="line-height:1.6">🔎 <b>Diagnostic congés</b> : <b>${nTx}</b> conso datée(s) (dont <b>${txUlys.length}</b> péages Ulys) · <b>${nC}</b> conducteur(s) avec congé.<ul style="margin:.35rem 0 0;padding-left:1.1rem">${rowsHtml || '<li>aucun</li>'}</ul><div class="mt-1">${hint}</div></div>`;
       }
       box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div>' + diag + '</div></div>'; lucide.createIcons(); return;
     }
