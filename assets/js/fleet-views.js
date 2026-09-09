@@ -242,6 +242,30 @@
       const fac = Object.values(facM).map(f => ({ numero: f.numero, mois: f.mois, date: (f._dates.filter(Boolean).sort()[0] || null), ht: Math.round(f.ht * 100) / 100, tva: Math.round((f.ttc - f.ht) * 100) / 100, ttc: Math.round(f.ttc * 100) / 100 }));
       return { fac, rows, tx };
     }
+    // ── Import SILENCIEUX de la conso depuis un CSV de transactions (fourni par l'API Ulys). ──
+    // Réutilise le MÊME parseur que l'import manuel (parseUlysCsv) et écrit ulys_conso + total_conso_tx
+    // avec les MÊMES ids/champs que commitUlys → upsert IDEMPOTENT (ré-import sans doublon). Ne crée PAS
+    // de facture (l'en-tête vient déjà de l'API importInvoices). Renvoie {conducteurs, tx} ou {error}.
+    // Appelé par FP.ulysApi.importInvoices (app.js) au moment de la synchro.
+    window.__ulysImportConsoCsv = async function (csvText) {
+      const pc = parseUlysCsv(String(csvText || ''));
+      if (pc.error) return { error: pc.error };
+      const soc = (FP.activeSociete ? FP.activeSociete() : 'PXP') || 'PXP';
+      let okC = 0, okTx = 0;
+      for (const c of (pc.rows || [])) {
+        if (c.ttc == null) continue;
+        const row = { id: 'ULYSC-' + c.mois + '-' + ulsSlug(c.conducteur), mois: c.mois, conducteur: c.conducteur, nbTrajets: c.nb, km: c.km, totalTtc: c.ttc, numeroFacture: c.numero, societe: soc };
+        try { await FP.persist.upsert('ulys_conso', row); okC++; } catch (e) { console.error('[uls conso api]', e); }
+      }
+      for (const c of (pc.tx || [])) {
+        if (!c.date || !c.conducteur) continue;
+        const tr = { id: 'ULYSTX-' + c.numero + '-' + (c.badge || '') + '-' + (c.seq != null ? c.seq : ''), facnum: c.numero, carte: 'ULYS-' + (c.badge || ''), conducteur: c.conducteur, plaque: (c.plaque || null), dateTx: c.date, mois: (c.date || '').slice(0, 7), produit: (c.produit || 'Péage Ulys'), categorie: (c.categorie || 'peage'), montantTtc: (c.montant != null ? c.montant : 0) };
+        try { const res = (FP.db && FP.db.upsert) ? await FP.db.upsert('total_conso_tx', tr) : null; if (res && res.error) throw res.error; okTx++; }
+        catch (e) { break; }
+      }
+      try { consoLoaded = false; loadConso(); } catch (e) {}
+      return { conducteurs: okC, tx: okTx };
+    };
     async function handleUlysImport(files){
       if (!files || !files.length) return;
       if (!(window.FP && FP.ocr)){ ulsImpStatus('Lecteur PDF indisponible.', 'err'); return; }
