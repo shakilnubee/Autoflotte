@@ -2423,6 +2423,30 @@ FP.congeCouvrant = (condKey, dateISO) => {
   return FP.getConges(condKey).find(c => c.debut && c.fin && d >= String(c.debut).slice(0, 10) && d <= String(c.fin).slice(0, 10)) || null;
 };
 FP.estEnConge = (condKey, dateISO) => !!FP.congeCouvrant(condKey, dateISO);
+// ⚠️ HELPER CANONIQUE — PRÉNOM normalisé d'un conducteur À PARTIR DE SA CLÉ de fiche.
+// ❗ NE JAMAIS déduire le prénom en découpant la clé (`key.split(/[-\s]/)[0]`) : une clé peut être un
+// PRÉNOM simple (« charles »), un PRÉNOM-NOM (« charles-lennon »), une forme SANS séparateur
+// (« charleslennon ») ou un id — le découpage donne alors n'importe quoi et casse le rattachement
+// (bug réel : péages « Charles » jamais reliés au congé de la fiche « Charles LENNON »).
+// On résout donc TOUJOURS la clé → nom de fiche (FP.conducteurNomUnifie) → prénom (FP.normPrenom).
+// À utiliser PARTOUT où l'on doit comparer un prénom de conso/relevé à une fiche keyée (congés,
+// dates de sortie, cartes, badges…).
+FP.prenomDeCle = (key) => {
+  if (!key) return '';
+  // On passe la clé DANS le slot « key » (2e arg) → résolution directe par clé de fiche, avec repli
+  // sur la résolution par nom (1er arg) pour les clés qui SONT déjà un libellé.
+  try { const nm = FP.conducteurNomUnifie ? FP.conducteurNomUnifie(key, key) : ''; if (nm && FP.normPrenom) return FP.normPrenom(nm); } catch (e) {}
+  // Repli si la clé n'a pas pu être résolue en fiche : on tente de la lire comme un « prénom-nom ».
+  return FP.normPrenom ? FP.normPrenom(String(key).replace(/[-_]+/g, ' ')) : String(key || '').split(/[-\s]/)[0];
+};
+// ⚠️ HELPER CANONIQUE — toutes les clés de congé rattachables à un PRÉNOM donné (résolution robuste
+// via FP.prenomDeCle). Source unique pour le repli « prénom » du rattachement conso ↔ congé.
+FP.congeKeysPourPrenom = (np) => {
+  if (!np) return [];
+  const out = [];
+  try { Object.keys(FP.getAllConges()).forEach(k => { if (FP.prenomDeCle(k) === np && out.indexOf(k) < 0) out.push(k); }); } catch (e) {}
+  return out;
+};
 // Un congé du conducteur chevauche-t-il le MOIS `AAAA-MM` ? (pour les conso mensuelles non datées, ex. Ulys).
 FP.congeDansMois = (condKey, mois) => {
   if (!condKey || !mois) return null;
@@ -2672,16 +2696,9 @@ FP.consoPendantConge = (txList, opts) => {
     const np = (FP.normPrenom && t.conducteur) ? FP.normPrenom(t.conducteur) : null;
     if (np && cand.indexOf(np) < 0) cand.push(np);
     // + TOUTE clé de congé du MÊME prénom (ex. congé saisi sous la fiche de « Charles LENNON » alors que
-    //   la conso Ulys ne porte que le prénom « Charles »). ⚠️ On compare le PRÉNOM RÉEL du conducteur du
-    //   congé (résolu via sa fiche), pas le 1er segment de la CLÉ : une clé peut être un id (« c12 ») ou
-    //   « charleslennon » sans séparateur → l'ancien `key.split(/[-\s]/)[0]` ratait le rapprochement et la
-    //   conso pendant congé passait inaperçue.
-    if (np) { try { Object.keys(FP.getAllConges()).forEach(k => {
-      if (cand.indexOf(k) >= 0) return;
-      const kp = String(k).split(/[-\s]/)[0];
-      let namePrenom = ''; try { namePrenom = FP.normPrenom(FP.conducteurNomUnifie ? (FP.conducteurNomUnifie(k) || k) : k); } catch (e) {}
-      if (kp === np || namePrenom === np) cand.push(k);
-    }); } catch (e) {} }
+    //   la conso Ulys ne porte que le prénom « Charles ») — via le helper canonique FP.congeKeysPourPrenom
+    //   (résout la clé → nom → prénom ; jamais un découpage fragile de la clé).
+    if (np) { (FP.congeKeysPourPrenom ? FP.congeKeysPourPrenom(np) : []).forEach(k => { if (cand.indexOf(k) < 0) cand.push(k); }); }
     let cg = null, key = null;
     for (const k of cand) { const g = FP.congeCouvrant(k, dtx); if (g) { cg = g; key = k; break; } }
     // Nom AFFICHÉ = celui de la fiche conducteur (unifié), jamais le libellé brut du relevé.
