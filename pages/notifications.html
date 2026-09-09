@@ -1475,14 +1475,16 @@
             const np = (FP.normPrenom && t.conducteur) ? FP.normPrenom(t.conducteur) : null;
             return !!(np && (firstSeg(k) === np || kPrenom === np));
           });
-          let dedans = 0; try { dedans = mine.filter(t => FP.congeCouvrant && FP.congeCouvrant(k, t.dateTx || t.date_tx)).length; } catch (e) {}
-          return { nom, per, nTx: mine.length, nIn: dedans };
+          const uMine = mine.filter(t => /^ULYS/i.test(String(t.carte || '')));
+          const inTx = mine.filter(t => { try { return FP.congeCouvrant && FP.congeCouvrant(k, t.dateTx || t.date_tx); } catch (e) { return false; } });
+          const inDates = [...new Set(inTx.map(t => (t.dateTx || t.date_tx || '').slice(0, 10)))].sort().slice(0, 4).map(d => d.split('-').reverse().join('/'));
+          return { nom, per, nTx: mine.length, nU: uMine.length, nIn: inTx.length, inDates };
         });
         const rowsHtml = rows.map(r => {
           const etat = r.nTx === 0 ? '<span style="color:#B45309">conso non rattachée à cette fiche</span>'
-            : (r.nIn > 0 ? '<span style="color:#B91C1C;font-weight:700">' + r.nIn + ' pendant congé (déjà archivée ?)</span>'
+            : (r.nIn > 0 ? '<span style="color:#B91C1C;font-weight:700">' + r.nIn + ' pendant congé' + (r.inDates.length ? ' (' + esc(r.inDates.join(', ')) + ')' : '') + '</span>'
               : 'aucune pendant le congé');
-          return `<li><b>${esc(r.nom)}</b> — ${r.nTx} conso datée(s) · congé ${esc(r.per) || '—'} → ${etat}</li>`;
+          return `<li><b>${esc(r.nom)}</b> — ${r.nTx} conso datée(s)${r.nU ? ' (dont ' + r.nU + ' Ulys)' : ''} · congé ${esc(r.per) || '—'} → ${etat}</li>`;
         }).join('');
         const aStandard = rows.some(r => r.nTx === 0);
         const hint = nTx === 0
@@ -1490,7 +1492,7 @@
           : (aStandard
             ? 'Un conducteur affiche « conso non rattachée » : ses péages existent mais ne sont pas reliés à SA fiche → vérifie que <b>son badge est relié au bon conducteur</b> (Contrôle → Ulys → Relier), et que tu es bien sur la <b>même société</b> que celle où tu as importé le relevé.'
             : 'Les conso datées existent mais aucune ne tombe dans une période de congé (ou elles sont déjà archivées). Vérifie les <b>dates du congé</b> sur la fiche du conducteur.');
-        diag = `<div class="text-xs text-slate-500 mt-2" style="line-height:1.6">🔎 <b>Diagnostic congés</b> : <b>${nTx}</b> conso datée(s) (dont <b>${txUlys.length}</b> péages Ulys) · <b>${nC}</b> conducteur(s) avec congé.<ul style="margin:.35rem 0 0;padding-left:1.1rem">${rowsHtml || '<li>aucun</li>'}</ul><div class="mt-1">${hint}</div></div>`;
+        diag = `<div class="text-xs text-slate-500 mt-2" style="line-height:1.6">🔎 <b>Diagnostic congés</b> <span style="color:#94a3b8">(v0909d)</span> : <b>${nTx}</b> conso datée(s) (dont <b>${txUlys.length}</b> péages Ulys) · <b>${nC}</b> conducteur(s) avec congé.<ul style="margin:.35rem 0 0;padding-left:1.1rem">${rowsHtml || '<li>aucun</li>'}</ul><div class="mt-1">${hint}</div></div>`;
       }
       box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div>' + diag + '</div></div>'; lucide.createIcons(); return;
     }
