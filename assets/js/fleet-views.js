@@ -1733,8 +1733,32 @@
     async function loadPdfFromUrl(url){
       const blob = await fetchPdfBlob(url); return loadPdf(blob); // loadPdf accepte tout Blob (arrayBuffer())
     }
-    async function backfillTx(btn){
-      if (!(FP.db && FP.db.upsert)) { if (FP.toast) FP.toast('Base indisponible.'); return; }
+    async function backfillTx(btn, opts){
+      opts = opts || {};
+      const silent = !!opts.silent;   // pas de toast/alert/pop-up (exécution auto en arrière-plan)
+      const force = !!opts.force;      // re-parser TOUT (sinon INCRÉMENTAL : on saute les relevés déjà traités)
+      if (!(FP.db && FP.db.upsert)) { if (!silent && FP.toast) FP.toast('Base indisponible.'); return; }
+      // INCRÉMENTAL : on récupère la liste des n° de facture DÉJÀ présents dans total_conso_tx pour
+      // ne PAS re-télécharger/re-lire les relevés déjà reconstruits (sinon on revérifie tout à chaque
+      // fois → insupportable avec 100+ relevés). `force` permet un rebuild complet si besoin.
+      const doneFac = new Set();
+      let doneOk = false;
+      if (!force) {
+        try {
+          const r = await FP.supabase.from('total_conso_tx').select('facnum');
+          if (r && !r.error) { (r.data || []).forEach(x => { if (x.facnum) doneFac.add(String(x.facnum).trim().toUpperCase()); }); doneOk = true; }
+        } catch (e) { /* lecture impossible */ }
+        // En mode AUTO (silencieux), on NE lance PAS un rebuild complet à l'aveugle si on ne sait pas ce
+        // qui est déjà fait (sinon on re-télécharge tout l'historique en tâche de fond). On abandonne.
+        if (silent && !doneOk) return;
+      }
+      const dejaFait = (num) => doneFac.has(String(num || '').trim().toUpperCase());
+      // En mode AUTO (silencieux), on mémorise aussi les relevés DÉJÀ TENTÉS (même s'ils n'ont donné
+      // aucune ligne datée : PDF illisible/sans détail) pour ne pas les re-télécharger à chaque session.
+      // Le bouton manuel, lui, ne tient pas compte de ce cache (il peut re-tenter à la demande).
+      let tried = {};
+      if (silent && !force) { try { tried = JSON.parse(localStorage.getItem('fp_conso_backfill_tried') || '{}') || {}; } catch (e) {} }
+      const dejaTente = (f) => silent && !force && f && f.fileId && tried[f.fileId];
       // Correspondance carte → conducteur (comme à l'import) pour bien nommer les achats.
       try { if (!consoLoaded) await loadConso(); } catch (e) {}
       const cardMap = {}; (conso || []).forEach(c => { if (c.carte) cardMap[String(c.carte)] = c; });
@@ -1756,8 +1780,13 @@
       // quand même tourner. (Bug corrigé : un « return » ici empêchait toute reconstruction Ulys quand
       // la flotte n'avait pas de relevés Total avec PDF stocké → péages toujours en « total du mois ».)
       const old = btn ? btn.innerHTML : ''; if (btn) { btn.disabled = true; }
-      let okTx = 0, failed = 0, tableMissing = false, done = 0;
+      let okTx = 0, failed = 0, tableMissing = false, done = 0, skippedDone = 0;
       for (const f of list) {
+        // INCRÉMENTAL : relevé déjà reconstruit (son n° de facture est déjà dans total_conso_tx) → on saute
+        // SANS re-télécharger le PDF (gain de temps énorme sur un gros historique).
+        if (!force && f.numeroFacture && dejaFait(f.numeroFacture)) { skippedDone++; done++; continue; }
+        if (dejaTente(f)) { done++; continue; }
+        if (silent && f.fileId) tried[f.fileId] = 1;
         if (btn) btn.innerHTML = 'Lecture ' + (done + 1) + '/' + list.length + '…';
         try {
           const pdf = await loadPdfFromUrl(f.fileId);
@@ -1777,8 +1806,8 @@
       if (btn) { btn.innerHTML = old; btn.disabled = false; }
       if (tableMissing) {
         console.warn('[fleet-views] total_conso_tx absente — infra one-shot : lancer le script SQL « total-conso-tx ».');
-        const m = 'Le détail daté n\'est pas encore disponible (configuration en cours côté plateforme). Réessaie un peu plus tard.';
-        if (FP.alert) FP.alert(m); else alert(m); return;
+        if (!silent) { const m = 'Le détail daté n\'est pas encore disponible (configuration en cours côté plateforme). Réessaie un peu plus tard.'; if (FP.alert) FP.alert(m); else alert(m); }
+        return;
       }
       // + Reconstruit AUSSI le détail Ulys DATÉ (péages par jour) depuis les PDF Ulys stockés → même
       // table total_conso_tx (carte « ULYS-… ») pour le suivi des congés. Un seul bouton fait les deux.
@@ -1791,6 +1820,10 @@
           const byU = new Map(); ul.forEach(f => { if (!byU.has(f.fileId)) byU.set(f.fileId, f); });
           for (const f of byU.values()) {
             if (tableMissing) break;
+            // INCRÉMENTAL : relevé Ulys déjà reconstruit → on saute (pas de re-téléchargement du PDF).
+            if (!force && f.numeroFacture && dejaFait(f.numeroFacture)) { continue; }
+            if (dejaTente(f)) { continue; }
+            if (silent && f.fileId) tried[f.fileId] = 1;
             if (btn) btn.innerHTML = 'Ulys ' + (++ulReleves) + '/' + byU.size + '…';
             try {
               const blob = await fetchPdfBlob(f.fileId);
@@ -1812,13 +1845,17 @@
         }
       } catch (e) { if (!ulErr) ulErr = String((e && (e.message || e)) || e); console.warn('[backfillTx ulys]', e); }
       if (btn) { btn.innerHTML = old; btn.disabled = false; }
+      if (silent && !force) { try { localStorage.setItem('fp_conso_backfill_tried', JSON.stringify(tried)); } catch (e) {} }
       consoLoaded = false; try { await loadConso(); } catch (e) {}
-      renderConso(); renderAnalyse();
+      try { renderConso(); renderAnalyse(); } catch (e) {}
+      // Prévient les autres écrans (ex. Suivi & alertes → conso pendant congé) qu'il y a du neuf.
+      if (okTx || okUlys) { try { document.dispatchEvent(new CustomEvent('fp:conso-tx-updated')); } catch (e) {} }
+      if (silent) return; // exécution auto en arrière-plan : rien à afficher
       const parts = [];
       parts.push(okTx + ' achat(s) Total' + (list.length ? ' sur ' + list.length + ' relevé(s)' : ''));
       if (okUlys) parts.push(okUlys + ' conso Ulys datées');
       if (failed) parts.push(failed + ' illisible(s)');
-      const msg = (okTx || okUlys) ? ('✓ Détail reconstruit : ' + parts.join(' · ')) : 'Rien à reconstruire.';
+      const msg = (okTx || okUlys) ? ('✓ Détail reconstruit : ' + parts.join(' · ')) : 'Détail déjà à jour (rien de nouveau).';
       if (FP.toast) FP.toast(msg);
       // DIAGNOSTIC Ulys clair (une pop-up) — pour comprendre EXACTEMENT ce qui s'est passé côté péages :
       //  - table absente / erreur base → message technique à corriger côté infra ;
@@ -1838,6 +1875,17 @@
       if (diag) { if (FP.alert) FP.alert(diag); else alert(diag); }
     }
     if ($('tf-backfill-tx')) $('tf-backfill-tx').addEventListener('click', function () { backfillTx(this).catch(e => { console.error('[backfillTx]', e); if (FP.toast) FP.toast('Erreur pendant la reconstruction.'); this.disabled = false; }); });
+    // Exposé pour un déclenchement AUTOMATIQUE depuis ailleurs (après une synchro/import Ulys, cf. app.js).
+    // Incrémental par défaut → ne relit QUE les relevés pas encore reconstruits (ne revérifie pas tout).
+    window.__reconstruireDetailConso = (opts) => backfillTx(null, Object.assign({ silent: true }, opts || {}));
+    // AUTO au chargement : reconstruit tout seul, en arrière-plan, le détail des relevés (Total + Ulys)
+    // pas encore traités → plus besoin de cliquer « Reconstruire le détail », et la détection « conso
+    // pendant congé » se met à jour d'elle-même. Une seule fois par session, différé pour ne pas gêner
+    // le 1er affichage. Incrémental → quasi instantané quand tout est déjà à jour.
+    if (!FP._consoBackfillAuto) {
+      FP._consoBackfillAuto = true;
+      setTimeout(() => { try { backfillTx(null, { silent: true }).catch(() => {}); } catch (e) {} }, 2500);
+    }
 
     // Import Total : bouton dans le panneau (visible aussi dans Contrôle) OU bouton du haut.
     if ($('tf-import-btn')) $('tf-import-btn').addEventListener('click', () => $('tf-import-file').click());
