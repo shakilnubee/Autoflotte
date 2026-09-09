@@ -7766,7 +7766,8 @@ FP.ulysApi = (function () {
       const facts = (window.FP_DATA && Array.isArray(FP_DATA.factures)) ? FP_DATA.factures : [];
       const have = new Set(facts.map(f => String(f.numeroFacture || '').toUpperCase()).filter(Boolean));
       let added = 0, skipped = 0;
-      for (const inv of (Array.isArray(list) ? list : [])) {
+      const invList = Array.isArray(list) ? list : [];
+      for (const inv of invList) {
         const idn = String(inv.invoiceId || '').toUpperCase();
         if (!idn || have.has(idn)) { skipped++; continue; }
         const rec = {
@@ -7777,9 +7778,46 @@ FP.ulysApi = (function () {
         };
         try { await FP.persist.insert('factures', rec); facts.push(rec); have.add(idn); added++; } catch (e) { skipped++; }
       }
-      return { added, skipped };
+      // AUTO : détail conso par conducteur des factures RÉCENTES (endpoint transactions = 3 derniers
+      // mois), best-effort et idempotent. Ne bloque jamais l'import des en-têtes si ça échoue.
+      let conso = { fac: 0, cond: 0, tx: 0 };
+      try { conso = await importConsoRecent(invList); } catch (e) { console.warn('[ulys conso auto]', e); }
+      return { added, skipped, conso };
     }
   };
+
+  // Récupère le DÉTAIL conso (transaction par transaction) des factures RÉCENTES via l'API Ulys
+  // (endpoint « transactions » = 3 derniers mois) et l'importe par conducteur / badge (ulys_conso +
+  // total_conso_tx), en réutilisant le MÊME parseur que l'import manuel (window.__ulysImportConsoCsv,
+  // fleet-views.js). Idempotent (upsert) ; on mémorise les factures déjà traitées pour ménager le quota
+  // d'appels Ulys (un appel API par facture récente, une seule fois).
+  async function importConsoRecent(invList) {
+    const out = { fac: 0, cond: 0, tx: 0 };
+    if (typeof window.__ulysImportConsoCsv !== 'function') return out; // panneau Ulys pas encore monté
+    const CUT = Date.now() - 95 * 24 * 3600 * 1000; // fenêtre API ~3 mois
+    let done = {};
+    try { done = JSON.parse(localStorage.getItem('fp_ulys_conso_done') || '{}') || {}; } catch (e) {}
+    for (const inv of (Array.isArray(invList) ? invList : [])) {
+      const id = String(inv.invoiceId || '').trim(); if (!id) continue;
+      if (done[id]) continue; // déjà traité → on ne re-consomme pas le quota
+      const d = String(inv.invoiceDate || '').slice(0, 10);
+      const t = d ? Date.parse(d) : NaN;
+      if (!isNaN(t) && t < CUT) continue; // trop ancien pour l'endpoint transactions
+      let csv = null;
+      try { csv = await call('transactions', { invoiceId: id }); }
+      catch (e) { console.warn('[ulys tx] ' + id + ' : ' + (e && e.message || e)); continue; } // échec réseau/quota → on réessaiera
+      done[id] = 1; // appel API réussi → ne pas le refaire (même si le parse ci-dessous échoue)
+      const text = (typeof csv === 'string') ? csv : '';
+      if (!text || text.replace(/\s/g, '').length < 20) continue;
+      try {
+        const r = await window.__ulysImportConsoCsv(text);
+        if (r && !r.error) { out.cond += r.conducteurs || 0; out.tx += r.tx || 0; out.fac++; }
+        else if (r && r.error) console.warn('[ulys tx parse] ' + id + ' : ' + r.error);
+      } catch (e) { console.warn('[ulys conso import] ' + id, e); }
+    }
+    try { localStorage.setItem('fp_ulys_conso_done', JSON.stringify(done)); } catch (e) {}
+    return out;
+  }
 })();
 
 // Panneau « API Ulys » (affiché en tête de l'onglet Ulys, dans Contrôle). Rendu + interactions ici
@@ -7874,7 +7912,7 @@ FP.ulysRenderPanel = function (el) {
         await FP.ulysApi.sync();
         let msg = 'Badges Ulys synchronisés ✓';
         // Synchroniser importe AUSSI les factures (un seul geste, plus besoin du bouton dédié).
-        try { const r = await FP.ulysApi.importInvoices(); if (r && r.added) { msg += ' · ' + r.added + ' facture(s) importée(s)'; try { if (window.renderUlys) window.renderUlys(); } catch (e) {} } } catch (e) {}
+        try { const r = await FP.ulysApi.importInvoices(); const _c = r && r.conso; if (r && (r.added || (_c && (_c.cond || _c.tx)))) { if (r.added) msg += ' · ' + r.added + ' facture(s) importée(s)'; if (_c && (_c.cond || _c.tx)) msg += ' · détail conso (' + _c.cond + ' conducteur' + (_c.cond > 1 ? 's' : '') + ')'; try { if (window.renderUlys) window.renderUlys(); } catch (e) {} } } catch (e) {}
         FP.toast && FP.toast(msg); draw();
       } catch (e) { (FP.alert || alert)('Ulys : ' + (e && e.message || e)); btn.disabled = false; btn.innerHTML = old; }
     });
@@ -7902,7 +7940,8 @@ FP.ulysRenderPanel = function (el) {
       inv.disabled = true; const old = inv.innerHTML; inv.innerHTML = 'Import…';
       try {
         const r = await FP.ulysApi.importInvoices();
-        FP.toast && FP.toast(r.added ? (r.added + ' facture(s) Ulys importée(s) ✓' + (r.skipped ? ' · ' + r.skipped + ' déjà présente(s)' : '')) : 'Aucune nouvelle facture Ulys.');
+        const _c = r && r.conso; const _cTxt = (_c && (_c.cond || _c.tx)) ? ' · détail conso (' + _c.cond + ' conducteur' + (_c.cond > 1 ? 's' : '') + ')' : '';
+        FP.toast && FP.toast(r.added ? (r.added + ' facture(s) Ulys importée(s) ✓' + (r.skipped ? ' · ' + r.skipped + ' déjà présente(s)' : '') + _cTxt) : ('Aucune nouvelle facture Ulys.' + _cTxt));
         try { if (window.renderUlys) window.renderUlys(); } catch (e) {}
       } catch (e) { (FP.alert || alert)('Ulys : ' + (e && e.message || e)); }
       inv.disabled = false; inv.innerHTML = old; try { if (window.lucide) lucide.createIcons(); } catch (e) {}
@@ -7922,7 +7961,7 @@ FP.ulysRenderPanel = function (el) {
       FP._ulysAutoDone = true;
       FP.ulysApi.sync()
         .then(() => FP.ulysApi.importInvoices().catch(() => null))
-        .then((r) => { try { if (r && r.added && window.renderUlys) window.renderUlys(); } catch (e) {} try { draw(); } catch (e) {} })
+        .then((r) => { try { const _c = r && r.conso; if (r && (r.added || (_c && (_c.cond || _c.tx))) && window.renderUlys) window.renderUlys(); } catch (e) {} try { draw(); } catch (e) {} })
         .catch(() => {});
     } catch (e) {}
   })();
