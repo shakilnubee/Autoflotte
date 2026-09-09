@@ -373,7 +373,7 @@
           conducteur:c.conducteur, plaque:(c.plaque||null), dateTx:c.date, mois:(c.date||'').slice(0,7), produit:(c.produit||'Péage Ulys'),
           categorie:(c.categorie||'peage'), montantTtc:(c.montant!=null?c.montant:0) };
         try { const res = (FP.db && FP.db.upsert) ? await FP.db.upsert('total_conso_tx', tr) : null; if (res && res.error) throw res.error; okTx++; }
-        catch (e){ break; }
+        catch (e){ const msg = String((e && (e.message || e)) || e); if (/relation|exist|schema|column/i.test(msg)) break; /* table absente → on arrête ; sinon on saute CETTE ligne et on continue (une ligne KO ne doit pas perdre tout le relevé) */ }
       }
       const nbCollab = new Set(_ulsPending.rows.map(r => r.conducteur).filter(Boolean)).size;
       const _skip = _ulsPending.skipped || 0;
@@ -1753,12 +1753,19 @@
         if (silent && !doneOk) return;
       }
       const dejaFait = (num) => doneFac.has(String(num || '').trim().toUpperCase());
-      // En mode AUTO (silencieux), on mémorise aussi les relevés DÉJÀ TENTÉS (même s'ils n'ont donné
-      // aucune ligne datée : PDF illisible/sans détail) pour ne pas les re-télécharger à chaque session.
-      // Le bouton manuel, lui, ne tient pas compte de ce cache (il peut re-tenter à la demande).
+      // ⚠️ Un relevé RÉCENT (≤ 120 j) est TOUJOURS reconstruit (autoritatif depuis son PDF), même s'il
+      // est déjà « fait » : sinon un import PARTIEL (ex. l'import API n'a écrit qu'une partie des badges,
+      // ou un badge oublié) reste incomplet pour toujours → une conso pendant congé récente n'apparaît
+      // jamais. On ne saute (pour la vitesse) que les relevés ANCIENS déjà reconstruits.
+      const RECENT_MS = 120 * 24 * 3600 * 1000;
+      const estRecent = (f) => { const d = String((f && f.date) || '').slice(0, 10); const t = d ? Date.parse(d) : NaN; return isNaN(t) ? true : (Date.now() - t) <= RECENT_MS; };
+      const peutSauter = (f) => !force && f && f.numeroFacture && dejaFait(f.numeroFacture) && !estRecent(f);
+      // En mode AUTO (silencieux), on mémorise aussi les relevés ANCIENS DÉJÀ TENTÉS (même sans ligne
+      // datée : PDF illisible/sans détail) pour ne pas les re-télécharger à chaque session. Les récents
+      // ne sont JAMAIS mis en cache « tenté » → ils se re-vérifient tant qu'ils sont dans la fenêtre.
       let tried = {};
       if (silent && !force) { try { tried = JSON.parse(localStorage.getItem('fp_conso_backfill_tried') || '{}') || {}; } catch (e) {} }
-      const dejaTente = (f) => silent && !force && f && f.fileId && tried[f.fileId];
+      const dejaTente = (f) => silent && !force && f && f.fileId && tried[f.fileId] && !estRecent(f);
       // Correspondance carte → conducteur (comme à l'import) pour bien nommer les achats.
       try { if (!consoLoaded) await loadConso(); } catch (e) {}
       const cardMap = {}; (conso || []).forEach(c => { if (c.carte) cardMap[String(c.carte)] = c; });
@@ -1784,9 +1791,9 @@
       for (const f of list) {
         // INCRÉMENTAL : relevé déjà reconstruit (son n° de facture est déjà dans total_conso_tx) → on saute
         // SANS re-télécharger le PDF (gain de temps énorme sur un gros historique).
-        if (!force && f.numeroFacture && dejaFait(f.numeroFacture)) { skippedDone++; done++; continue; }
+        if (peutSauter(f)) { skippedDone++; done++; continue; }
         if (dejaTente(f)) { done++; continue; }
-        if (silent && f.fileId) tried[f.fileId] = 1;
+        if (silent && f.fileId && !estRecent(f)) tried[f.fileId] = 1;
         if (btn) btn.innerHTML = 'Lecture ' + (done + 1) + '/' + list.length + '…';
         try {
           const pdf = await loadPdfFromUrl(f.fileId);
@@ -1821,9 +1828,9 @@
           for (const f of byU.values()) {
             if (tableMissing) break;
             // INCRÉMENTAL : relevé Ulys déjà reconstruit → on saute (pas de re-téléchargement du PDF).
-            if (!force && f.numeroFacture && dejaFait(f.numeroFacture)) { continue; }
+            if (peutSauter(f)) { continue; }
             if (dejaTente(f)) { continue; }
-            if (silent && f.fileId) tried[f.fileId] = 1;
+            if (silent && f.fileId && !estRecent(f)) tried[f.fileId] = 1;
             if (btn) btn.innerHTML = 'Ulys ' + (++ulReleves) + '/' + byU.size + '…';
             try {
               const blob = await fetchPdfBlob(f.fileId);

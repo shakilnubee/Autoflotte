@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260909d">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260909e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260909d"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260909e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260909d">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260909e">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -142,11 +142,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260909d"></script>
-<script src="../assets/js/supabase-client.js?v=20260909d"></script>
-<script src="../assets/js/data.js?v=20260909d"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260909e"></script>
+<script src="../assets/js/supabase-client.js?v=20260909e"></script>
+<script src="../assets/js/data.js?v=20260909e"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260909d"></script>
+<script src="../assets/js/app.js?v=20260909e"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1462,6 +1462,20 @@
         const allTx = _verifTx || [];
         const nTx = allTx.length, nUlys = (_verifUlys || []).length;
         const txUlys = allTx.filter(t => /^ULYS/i.test(String(t.carte || '')));
+        // Contrôle SOCIÉTÉ : une conso datée taguée sous une AUTRE société que celle affichée est
+        // filtrée → invisible ici (ex. relevé Ulys importé sur une société ≠ celle du congé). On compte,
+        // toutes sociétés confondues (le CEO les voit), pour révéler un tel décalage.
+        let socInfo = '';
+        try {
+          const cur = (localStorage.getItem('fp_societe') || 'PXP');
+          const _c = new Date(); _c.setMonth(_c.getMonth() - 12);
+          const r = await FP.supabase.from('total_conso_tx').select('societe').gte('date_tx', _c.toISOString().slice(0, 10));
+          if (r && !r.error) {
+            const by = {}; (r.data || []).forEach(x => { const s = x.societe || '(sans société = PXP)'; by[s] = (by[s] || 0) + 1; });
+            const parts = Object.keys(by).map(s => esc(s) + ' : ' + by[s]);
+            if (parts.length) socInfo = `<div class="mt-1" style="color:#64748b">Société affichée : <b>${esc(cur === '__all__' ? 'Toutes (=PXP)' : cur)}</b> · conso datées en base (12 mois) : ${parts.join(' · ')}</div>`;
+          }
+        } catch (e) {}
         const conges = FP.getAllConges(); const nC = Object.keys(conges).length;
         const rows = Object.keys(conges).map(k => {
           const nom = (FP.conducteurNomUnifie && FP.conducteurNomUnifie(k)) || k;
@@ -1492,7 +1506,7 @@
           : (aStandard
             ? 'Un conducteur affiche « conso non rattachée » : ses péages existent mais ne sont pas reliés à SA fiche → vérifie que <b>son badge est relié au bon conducteur</b> (Contrôle → Ulys → Relier), et que tu es bien sur la <b>même société</b> que celle où tu as importé le relevé.'
             : 'Les conso datées existent mais aucune ne tombe dans une période de congé (ou elles sont déjà archivées). Vérifie les <b>dates du congé</b> sur la fiche du conducteur.');
-        diag = `<div class="text-xs text-slate-500 mt-2" style="line-height:1.6">🔎 <b>Diagnostic congés</b> <span style="color:#94a3b8">(v0909d)</span> : <b>${nTx}</b> conso datée(s) (dont <b>${txUlys.length}</b> péages Ulys) · <b>${nC}</b> conducteur(s) avec congé.<ul style="margin:.35rem 0 0;padding-left:1.1rem">${rowsHtml || '<li>aucun</li>'}</ul><div class="mt-1">${hint}</div></div>`;
+        diag = `<div class="text-xs text-slate-500 mt-2" style="line-height:1.6">🔎 <b>Diagnostic congés</b> <span style="color:#94a3b8">(v0909e)</span> : <b>${nTx}</b> conso datée(s) (dont <b>${txUlys.length}</b> péages Ulys) · <b>${nC}</b> conducteur(s) avec congé.<ul style="margin:.35rem 0 0;padding-left:1.1rem">${rowsHtml || '<li>aucun</li>'}</ul>${socInfo}<div class="mt-1">${hint}</div></div>`;
       }
       box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div>' + diag + '</div></div>'; lucide.createIcons(); return;
     }
