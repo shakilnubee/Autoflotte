@@ -2733,7 +2733,24 @@ FP.consoCatLabel = (cat) => ({ carburant: 'plein carburant', peage: 'péage', bo
 // (FP.affectations) + les transactions datées (total_conso_tx). Renvoie une liste d'anomalies.
 FP.consoApresDepart = (txList) => {
   const out = [];
-  if (!FP.affectations || !FP.affectations.forConducteur) return out;
+  if (!FP.affectations || !FP.affectations.all) return out;
+  // ⚠️ On juge une conso « après départ » PAR RAPPORT À SON VÉHICULE (la plaque du relevé), PAS sur le
+  //    dernier départ GLOBAL du conducteur (bug corrigé : un conducteur qui a quitté un AUTRE véhicule
+  //    voyait ses consos sur son véhicule ACTUEL accusées à tort). Et on relie une période d'affectation
+  //    à son conducteur PAR CLÉ unifiée (FP.condGroupKey), jamais par nom brut (fragile : « Ahmed » vs
+  //    « Ahmed SITOUAH »). Index affectations → clé conducteur, construit UNE fois.
+  const keyOf = (nm) => { try { return FP.condGroupKey ? FP.condGroupKey(nm) : null; } catch (e) { return null; } };
+  const affByKey = {};
+  try {
+    const map = FP.affectations.all();
+    Object.keys(map).forEach(vid => (Array.isArray(map[vid]) ? map[vid] : []).forEach(a => {
+      const k = keyOf(a.conducteur); if (!k) return;
+      (affByKey[k] = affByKey[k] || []).push({ vehId: vid, ...a });
+    }));
+  } catch (e) {}
+  const vehByImmat = {};
+  try { ((window.FP_DATA && FP_DATA.vehicules) || []).forEach(v => { if (v.immat && FP.normImmat) vehByImmat[FP.normImmat(v.immat)] = v; }); } catch (e) {}
+  const couvre = (ps, dtx) => ps.some(p => (!p.debut || String(p.debut) <= dtx) && (!p.fin || dtx <= String(p.fin)));
   (txList || []).forEach(t => {
     if (!t) return;
     if (FP.estFraisConso && FP.estFraisConso(t)) return; // frais fournisseur = pas une conso du collaborateur
@@ -2741,19 +2758,21 @@ FP.consoApresDepart = (txList) => {
     const key = FP.condKeyDeConso ? FP.condKeyDeConso(t) : null; if (!key) return;
     const nom = FP.conducteurNomUnifie ? FP.conducteurNomUnifie(t.conducteur, key) : (t.conducteur || key);
     if (!nom) return;
-    const periodes = FP.affectations.forConducteur(nom);
-    if (!periodes || !periodes.length) return;                    // pas d'historique → on ne juge pas
-    // Une période "couvre" la conso si debut ≤ dtx ≤ (fin ou +∞). Si UNE période ouverte/couvrante existe → OK.
-    const couvre = periodes.some(p => (!p.debut || String(p.debut) <= dtx) && (!p.fin || dtx <= String(p.fin)));
-    if (couvre) return;
-    // Sinon : la conso tombe hors de toute période. Si TOUTES les périodes sont closes AVANT la conso
-    // (le salarié était déjà parti), c'est une conso « après départ ».
+    const toutes = affByKey[key] || [];
+    const plaque = t.plaque || '';
+    const veh = plaque && FP.normImmat ? vehByImmat[FP.normImmat(plaque)] : null;
+    // Véhicule connu → on ne regarde QUE les périodes de ce conducteur sur CE véhicule. Sinon (pas de
+    // plaque exploitable) → repli global : « après départ » seulement s'il n'a plus AUCUNE période
+    // ouverte nulle part (parti pour de bon), jamais s'il conduit encore un véhicule.
+    const periodes = veh ? toutes.filter(p => String(p.vehId) === String(veh.id)) : toutes;
+    if (!periodes.length) return;                 // aucune preuve d'affectation → on n'accuse JAMAIS à l'aveugle
+    if (couvre(periodes, dtx)) return;            // une période (souvent OUVERTE) englobe la conso → il conduisait → OK
     const fins = periodes.map(p => p.fin).filter(Boolean).map(String).sort();
     const derniereFin = fins.length ? fins[fins.length - 1] : null;
     if (derniereFin && dtx > derniereFin) {
       const mtt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc);
       out.push({ conducteur: nom, key, date: dtx, montant: mtt, categorie: String(t.categorie || '').toLowerCase(),
-        produit: t.produit, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '', finAffect: derniereFin });
+        produit: t.produit, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque, finAffect: derniereFin });
     }
   });
   return out.sort((a, b) => String(b.date).localeCompare(String(a.date)));
