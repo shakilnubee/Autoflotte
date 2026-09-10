@@ -2789,7 +2789,38 @@ FP._condParNumero = (settingKey, lu) => {
   const partiels = [];
   for (const key in map) { if (FP.carteParts(map[key]).some(p => FP.carteMatch(p, lu))) partiels.push(key); }
   if (partiels.length === 1) return _condOut(partiels[0]);
-  return null; // 0 ou ≥2 correspondances partielles → on laisse le repli nom/plaque décider
+  // 3) Repli VÉHICULE (SOURCE UNIQUE) : le n° peut avoir été saisi sur une fiche VÉHICULE
+  //    (vehCarteCarb/vehBadge) SANS miroir conducteur (ex. véhicule sans chauffeur reconnu au moment de
+  //    la saisie, ou chauffeur changé depuis). On retrouve alors le conducteur via le CHAUFFEUR du
+  //    véhicule qui porte ce n° (ou son DERNIER conducteur d'affectation si le véhicule est vendu/sans
+  //    chauffeur) — MÊME logique que matchBadge (panneau Ulys). Ainsi un badge relié via un véhicule est
+  //    reconnu PARTOUT (rattachement conso, état « relié », détection congé/après-départ).
+  //    ⚠️ On ne DEVINE jamais : si le n° tombe sur des véhicules pointant vers PLUSIEURS conducteurs
+  //    distincts → ambigu → null (le repli nom/plaque décidera).
+  try {
+    const vehKey = Object.keys(FP.CARTE_COND_MAP || {}).find(k => FP.CARTE_COND_MAP[k] === settingKey);
+    if (vehKey) {
+      const vmap = FP.settings.get()[vehKey] || {};
+      const vehs = (window.FP_DATA && FP_DATA.vehicules) || [];
+      const condDuVeh = (v) => {
+        let k = FP.condKeyDuVehicule ? FP.condKeyDuVehicule(v) : null;
+        if (!k && FP.affectations && FP.affectations.forVeh && FP.condKeyParNom) {
+          const hist = FP.affectations.forVeh(v.id).slice().sort((x, y) => String(y.debut || '').localeCompare(String(x.debut || '')));
+          for (const h of hist) { if (h && h.conducteur) { const kk = FP.condKeyParNom(h.conducteur); if (kk) { k = kk; break; } } }
+        }
+        return k;
+      };
+      const hitsExact = new Set(), hitsSuff = new Set();
+      for (const v of vehs) {
+        const parts = FP.carteParts(vmap[v.id]); if (!parts.length) continue;
+        if (parts.some(p => FP.normCarte(p) === b)) { const k = condDuVeh(v); if (k) hitsExact.add(k); }
+        else if (parts.some(p => FP.carteMatch(p, lu))) { const k = condDuVeh(v); if (k) hitsSuff.add(k); }
+      }
+      if (hitsExact.size === 1) return _condOut([...hitsExact][0]);
+      if (hitsExact.size === 0 && hitsSuff.size === 1) return _condOut([...hitsSuff][0]);
+    }
+  } catch (e) {}
+  return null; // 0 ou ≥2 correspondances → on laisse le repli nom/plaque décider
   function _condOut(key) { let name = key; try { const all = FP.conducteursTous ? FP.conducteursTous() : FP.conducteurs.list(); const c = all.find(x => x.key === key); if (c) name = FP.conducteurs.displayName(c); } catch (e) {} return { key, name }; }
 };
 // Conducteur associé à un n° de carte Total / badge Ulys enregistré sur une fiche conducteur (ou null).
