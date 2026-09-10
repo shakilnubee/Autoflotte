@@ -4683,6 +4683,7 @@ FP.NAV_SUBMENUS = {
   ],
   'notifications.html': [
     { label: 'Alertes', tab: 'alertes' },
+    { label: 'Points à vérifier', tab: 'verif' },
     { label: 'Renouvellements', tab: 'echeances' },
     { label: 'À compléter', tab: 'complet' },
     { label: 'Décisions', tab: 'decisions' },
@@ -12700,7 +12701,22 @@ FP.injectBackButton = () => {
     const b = document.createElement('button');
     b.id = 'fp-back'; b.type = 'button'; b.className = 'fp-back'; b.title = 'Revenir à la page précédente';
     b.innerHTML = '<i data-lucide="arrow-left" style="width:15px;height:15px"></i> Retour';
-    b.addEventListener('click', () => { history.back(); });
+    // Retour DÉTERMINISTE : la page d'où l'on vient est déjà validée « même site, autre page » (referrer).
+    // On tente d'abord history.back() (instantané, garde le scroll + le bfcache) ; mais back() peut ne
+    // RIEN faire (historique remplacé par ?tab=replaceState, PWA/onglet neuf, ouverture directe) → le
+    // bouton paraîtrait « mort ». Repli : si le navigateur n'a pas quitté la page dans les 250 ms, on
+    // force la navigation vers cette page d'origine. Ne sort JAMAIS de l'app.
+    const backHref = document.referrer;
+    b.addEventListener('click', () => {
+      let left = false;
+      const mark = () => { left = true; };
+      window.addEventListener('pagehide', mark, { once: true });
+      try { history.back(); } catch (e) {}
+      setTimeout(() => {
+        window.removeEventListener('pagehide', mark);
+        if (!left && backHref) { try { location.href = backHref; } catch (e) {} }
+      }, 250);
+    });
     main.insertBefore(b, main.firstChild);
     if (window.lucide) lucide.createIcons();
   } catch (e) {}
