@@ -219,6 +219,28 @@
     return { data: out, error: null };
   }
 
+  // ⚠️ HELPER CANONIQUE — lecture PAGINÉE d'une table AVEC filtres (évite le cap SILENCIEUX de 1000
+  // lignes de Supabase). `applyFilters(qb)` reçoit le query-builder (après .select('*')) pour poser des
+  // .gte/.eq/etc. `orderCol` (obligatoire pour une pagination fiable) trie de façon stable.
+  // À utiliser PARTOUT à la place d'un `FP.supabase.from(t).select('*')…` brut sur une grosse table
+  // (total_conso_tx, factures…), sinon les lignes au-delà de 1000 sont perdues en silence.
+  FP.selectAllPaged = async function (table, applyFilters, orderCol, cols) {
+    const PAGE = 1000;
+    let from = 0, out = [];
+    for (;;) {
+      let q = client.from(table).select(cols || '*');
+      if (typeof applyFilters === 'function') { const q2 = applyFilters(q); if (q2) q = q2; }
+      if (orderCol) q = q.order(orderCol, { ascending: true });
+      const res = await q.range(from, from + PAGE - 1);
+      if (res.error) return { data: out, error: res.error };
+      const rows = res.data || [];
+      out = out.concat(rows);
+      if (rows.length < PAGE) break;
+      from += PAGE;
+    }
+    return { data: out, error: null };
+  };
+
   // ===== API publique =====
   FP.db = {
     /** Charge les 3 tables et retourne { vehicules, amendes, factures } en camelCase */
