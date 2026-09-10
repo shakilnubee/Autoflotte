@@ -749,7 +749,7 @@
     async function loadConso(){
       consoLoaded = true;
       try {
-        const r = await FP.supabase.from('total_conso').select('*');
+        const r = FP.selectAllPaged ? await FP.selectAllPaged('total_conso', null, 'id') : await FP.supabase.from('total_conso').select('*'); // PAGINÉ (cap 1000)
         if (r.error) throw r.error;
         conso = r.data || [];
         // Aligne la vue CEO scopée : ne montrer que la société active (RLS isole déjà les clients).
