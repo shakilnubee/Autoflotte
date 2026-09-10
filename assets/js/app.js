@@ -2986,7 +2986,26 @@ FP.removeNumCarteVehicule = (v, vehKey, val) => {
 FP.currentBadgeNums = function (scope, numkey, key, vehid) {
   try {
     const s = FP.settings.get();
-    if (scope === 'veh') return FP.carteParts((s[numkey] || {})[vehid]);
+    if (scope === 'veh') {
+      // n° du véhicule (sa « maison ») + badges du CONDUCTEUR ACTUEL saisis sur sa fiche mais pas encore
+      // rattachés à un véhicule (orphelins) → « les deux » : un n° saisi sur le conducteur apparaît AUSSI
+      // sur la fiche du véhicule qu'il conduit. On EXCLUT ceux déjà posés sur un AUTRE véhicule (ils ont
+      // déjà leur maison ailleurs) pour ne pas polluer un véhicule avec le badge d'une autre voiture.
+      let parts = FP.carteParts((s[numkey] || {})[vehid]);
+      try {
+        const condMapKey = FP.CARTE_COND_MAP && FP.CARTE_COND_MAP[numkey];
+        const veh = FP.vehById ? FP.vehById(vehid) : null;
+        const ck = veh && FP.condKeyDuVehicule ? FP.condKeyDuVehicule(veh) : null;
+        if (condMapKey && ck) {
+          const vmap = s[numkey] || {};
+          const surUnAutreVeh = (n) => Object.keys(vmap).some(vid => String(vid) !== String(vehid) && FP.carteParts(vmap[vid]).some(p => FP.normCarte(p) === FP.normCarte(n)));
+          FP.carteParts((s[condMapKey] || {})[ck]).forEach(n => {
+            if (!surUnAutreVeh(n) && !parts.some(p => FP.normCarte(p) === FP.normCarte(n))) parts.push(n);
+          });
+        }
+      } catch (e) {}
+      return parts;
+    }
     // scope 'cond' : n° saisi DIRECTEMENT sur le conducteur + repli MIROIR véhicule (FP.numCarteConducteur)
     // → même source que la fiche VÉHICULE / Contrats. Sinon un badge relié via un véhicule que ce
     // conducteur conduit s'affiche sur la fiche véhicule mais PAS ici (bug : « badge Ulys pas affiché »).
@@ -3004,6 +3023,24 @@ FP.currentBadgeNums = function (scope, numkey, key, vehid) {
     }
     return parts;
   } catch (e) { return []; }
+};
+// Rendu LECTURE SEULE des n° de carte/badge — utilisé là où la « maison » d'édition est ailleurs
+// (fiche CONDUCTEUR : le n° se gère sur la fiche VÉHICULE). Puces non modifiables, chacune suffixée de
+// la PLAQUE du véhicule porteur si connu (pour savoir où aller le modifier). Même source de vérité que
+// l'édition (FP.currentBadgeNums) → jamais un chiffre différent.
+FP.badgeChipsReadonlyHTML = function (o) {
+  o = o || {};
+  const esc = FP.esc || (x => String(x == null ? '' : x));
+  const nums = o.numbers || FP.currentBadgeNums(o.scope, o.numkey, o.key, o.vehid);
+  if (!nums.length) return '<span class="fp-bc-empty">— aucun</span>';
+  let vmap = {};
+  try { const vk = FP.CARTE_COND_MAP && Object.keys(FP.CARTE_COND_MAP).find(k => FP.CARTE_COND_MAP[k] === o.numkey); vmap = vk ? (FP.settings.get()[vk] || {}) : {}; } catch (e) {}
+  const vehs = (window.FP_DATA && FP_DATA.vehicules) || [];
+  const plaqueDe = (n) => { for (const v of vehs) { if (vmap[v.id] && FP.carteParts(vmap[v.id]).some(p => FP.normCarte(p) === FP.normCarte(n))) return v.immat; } return ''; };
+  return '<div class="fp-bc-chips">' + nums.map(n => {
+    const pl = plaqueDe(n);
+    return '<span class="fp-badge-chip">' + esc(n) + (pl ? ' <span style="opacity:.6;font-weight:600">· ' + esc(pl) + '</span>' : '') + '</span>';
+  }).join('') + '</div>';
 };
 // Rend le bloc de puces (chips) + champ d'ajout. o = { scope, numkey, key?, vehid?, numbers?, placeholder? }.
 FP.badgeChipsHTML = function (o) {
