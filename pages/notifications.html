@@ -1429,6 +1429,26 @@
         txt: `${a.conducteur} — ${conso} le ${FP.date ? FP.date(a.date) : a.date}${mnt} pendant le congé du ${FP.date(cg.debut)} au ${FP.date(cg.fin)}${facTxt}` };
     }).filter(a => !okMap[a.key]);
   }
+  // Conso survenue APRÈS le DÉPART d'un salarié (carte/badge encore active) — MÊME détection que la page
+  // Contrôle (FP.consoApresDepart) → surfacée ICI pour ne rien cacher dans les alertes. Synchronisée par
+  // l'id PARTAGÉ (FP.trouvailleId('depart',…)) : archiver ici la classe aussi côté Contrôle, et inversement.
+  function departAnoms() {
+    if (!(window.FP && FP.consoApresDepart)) return [];
+    let okMap = {}; try { okMap = FP.settings.get().tfAnomOk || {}; } catch (e) {}
+    const presBadge = FP.prestataireBadge ? FP.prestataireBadge() : 'Ulys';
+    const lbl = (a) => { if (String(a.categorie || '').toLowerCase() === 'peage' && /^ULYS/i.test(String(a.carte || ''))) return 'péage ' + presBadge; return FP.consoCatLabel ? FP.consoCatLabel(a.categorie) : 'achat'; };
+    return FP.consoApresDepart(_verifTx || [])
+      .filter(a => !(FP.trouvailleResolue && FP.trouvailleResolue('depart', a))) // déjà traité dans Contrôle → on n'affiche plus
+      .map(a => {
+        const key = 'depart|' + (a.key || '') + '|' + a.date + '|' + (a.produit || '') + '|' + (a.montant || '');
+        const cid = FP.trouvailleId ? FP.trouvailleId('depart', a) : ''; // id PARTAGÉ avec la page Contrôle
+        const conso = lbl(a);
+        const mnt = (a.montant != null && a.montant !== 0) ? " d'un montant de " + (FP.euro ? FP.euro(a.montant) : a.montant) : '';
+        const facTxt = a.facnum ? ' · Facture n° ' + a.facnum : '';
+        return { key, cid, t: 'depart', mois: String(a.date || '').slice(0, 7), facnum: a.facnum || '',
+          txt: `${a.conducteur} — ${conso} le ${FP.date ? FP.date(a.date) : a.date}${mnt} alors qu'il a quitté ce véhicule le ${FP.date ? FP.date(a.finAffect) : a.finAffect}${facTxt}` };
+      }).filter(a => !okMap[a.key]);
+  }
   // ⚠️ On NE détecte les congés QUE sur des dates EXACTES (congeAnoms via total_conso_tx / FP.congeCouvrant).
   // L'ancien repli « au MOIS » (un congé chevauche le mois facturé Ulys) a été RETIRÉ : il accusait à tort
   // (des péages hors des dates de congé étaient signalés parce que le congé tombait dans le même mois) —
@@ -1443,7 +1463,7 @@
     // et on rattache l'id PARTAGÉ (pour que la ✓ ici les classe aussi côté Contrôle).
     card = card.filter(c => !(FP.trouvailleResolue && FP.trouvailleResolue('carte', c)));
     card.forEach(c => { c.cid = FP.trouvailleId ? FP.trouvailleId('carte', c) : ''; });
-    return card.concat(congeAnoms());
+    return card.concat(congeAnoms()).concat(departAnoms());
   }
   function hasConges() { try { return Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length > 0; } catch (e) { return false; } }
   function paintVerifTab(n) {
@@ -1520,16 +1540,18 @@
         <button type="button" id="verif-pdf" class="btn btn-dark text-sm"><i data-lucide="file-down" class="w-4 h-4"></i> Relevé congés PDF (${_verifCongeRows.length})</button>
         <button type="button" id="verif-csv" class="btn btn-outline text-sm"><i data-lucide="table" class="w-4 h-4"></i> Excel (CSV)</button>
       </div>` : '';
-    box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant (repas élevés, achats hors carburant, plusieurs pleins/jour, diesel) <b>et TOUTE conso (carburant, péage, boutique…) pendant un congé</b> (interdit — avec les dates). La <b>✓ verte</b> archive comme sur Factures → Total Fleet (même suivi). Le bouton <b>Voir</b> ouvre la facture.</p>'
+    box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant (repas élevés, achats hors carburant, plusieurs pleins/jour, diesel), <b>TOUTE conso (carburant, péage, boutique…) pendant un congé</b> (interdit — avec les dates) <b>et toute conso APRÈS le départ d\'un salarié</b> (carte/badge restée active). Ce sont exactement les points « à vérifier » de l\'onglet <b>Contrôle</b> (mêmes anomalies, même compteur). La <b>✓ verte</b> archive comme sur Factures → Total Fleet (même suivi). Le bouton <b>Voir</b> ouvre la facture.</p>'
       + toolbar
       + anoms.map(a => {
         const conge = a.t === 'conge';
-        const cat = conge ? '🌴 Conso pendant un congé' : 'Carte carburant Total';
+        const depart = a.t === 'depart';
+        const personne = conge || depart; // renvoie vers la fiche conducteur plutôt que la facture
+        const cat = conge ? '🌴 Conso pendant un congé' : (depart ? '🚪 Conso après le départ du conducteur' : 'Carte carburant Total');
         const body = `<div class="notif-cat">${cat}</div><div class="font-semibold text-slate-900">${esc(a.txt)}</div>`;
         // Bouton « Voir » → ouvre la FACTURE concernée (PDF) quand on a son n°, comme Total Fleet.
         const voir = a.facnum
           ? `<button type="button" data-verif-facture="${esc(a.facnum)}" title="Voir la facture concernée" style="flex:none;font-size:12px;font-weight:700;color:var(--fp-accent);background:#FFF7ED;border:1px solid #FED7AA;border-radius:7px;padding:4px 11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`
-          : `<a href="${conge ? 'conducteurs.html' : 'factures.html'}" title="Ouvrir" style="flex:none;color:#94A3B8"><i data-lucide="chevron-right" class="w-4 h-4"></i></a>`;
+          : `<a href="${personne ? 'conducteurs.html' : 'factures.html'}" title="Ouvrir" style="flex:none;color:#94A3B8"><i data-lucide="chevron-right" class="w-4 h-4"></i></a>`;
         return `<div class="notif lvl-warn" style="align-items:center;gap:8px"><button type="button" data-verif-ok="${esc(a.key)}" data-verif-cid="${esc(a.cid || '')}" title="Marquer vérifié / archiver (même suivi que Factures et Contrôle)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:17px;line-height:1">✓</button><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0"></i><div class="flex-1 min-w-0">${body}</div>${voir}</div>`;
       }).join('');
     lucide.createIcons();
