@@ -2937,7 +2937,22 @@ FP.currentBadgeNums = function (scope, numkey, key, vehid) {
   try {
     const s = FP.settings.get();
     if (scope === 'veh') return FP.carteParts((s[numkey] || {})[vehid]);
-    return FP.carteParts((s[numkey] || {})[key]);
+    // scope 'cond' : n° saisi DIRECTEMENT sur le conducteur + repli MIROIR véhicule (FP.numCarteConducteur)
+    // → même source que la fiche VÉHICULE / Contrats. Sinon un badge relié via un véhicule que ce
+    // conducteur conduit s'affiche sur la fiche véhicule mais PAS ici (bug : « badge Ulys pas affiché »).
+    // Union dédoublonnée (par numéro normalisé) : on n'affiche jamais deux fois le même badge.
+    let parts = FP.carteParts((s[numkey] || {})[key]);
+    const vehKey = FP.CARTE_COND_MAP && Object.keys(FP.CARTE_COND_MAP).find(k => FP.CARTE_COND_MAP[k] === numkey);
+    if (vehKey && FP.condKeyDuVehicule) {
+      const map = s[vehKey] || {};
+      const vehs = (window.FP_DATA && FP_DATA.vehicules) || [];
+      vehs.forEach(v => {
+        if (map[v.id] && FP.condKeyDuVehicule(v) === key) {
+          FP.carteParts(map[v.id]).forEach(m => { if (!parts.some(p => FP.normCarte(p) === FP.normCarte(m))) parts.push(m); });
+        }
+      });
+    }
+    return parts;
   } catch (e) { return []; }
 };
 // Rend le bloc de puces (chips) + champ d'ajout. o = { scope, numkey, key?, vehid?, numbers?, placeholder? }.
@@ -2979,8 +2994,21 @@ FP.wireBadgeChips = function (root, opts) {
   };
   const doRemove = (cont, val) => {
     const scope = cont.getAttribute('data-bc-scope'), numkey = cont.getAttribute('data-bc-numkey');
-    if (scope === 'veh') { const v = FP.vehById(cont.getAttribute('data-bc-vehid')); if (v) FP.removeNumCarteVehicule(v, numkey, val); }
-    else FP.removeCondNum(cont.getAttribute('data-bc-key'), numkey, val);
+    if (scope === 'veh') { const v = FP.vehById(cont.getAttribute('data-bc-vehid')); if (v) FP.removeNumCarteVehicule(v, numkey, val); return; }
+    const key = cont.getAttribute('data-bc-key');
+    FP.removeCondNum(key, numkey, val);
+    // Le n° affiché ici peut provenir du MIROIR d'un véhicule que ce conducteur conduit (même source que
+    // la fiche véhicule). On le retire donc AUSSI de ce(s) véhicule(s), sinon la puce réapparaît (✕ « sans
+    // effet »). Idempotent : removeNumCarteVehicule nettoie déjà le miroir conducteur.
+    try {
+      const vehKey = FP.CARTE_COND_MAP && Object.keys(FP.CARTE_COND_MAP).find(k => FP.CARTE_COND_MAP[k] === numkey);
+      if (vehKey && FP.condKeyDuVehicule && FP.removeNumCarteVehicule) {
+        const map = FP.settings.get()[vehKey] || {};
+        ((window.FP_DATA && FP_DATA.vehicules) || []).forEach(v => {
+          if (map[v.id] && FP.condKeyDuVehicule(v) === key && FP.carteParts(map[v.id]).some(p => FP.normCarte(p) === FP.normCarte(val))) FP.removeNumCarteVehicule(v, vehKey, val);
+        });
+      }
+    } catch (e) {}
   };
   const addFrom = (inp) => {
     const cont = inp.closest('.fp-badgechips'); if (!cont) return;
