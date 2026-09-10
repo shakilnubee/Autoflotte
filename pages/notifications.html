@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260909e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260910a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260909e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260910a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260909e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260910a">
 <style>
   .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
   .notif + .notif { margin-top: .6rem; }
@@ -142,11 +142,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260909e"></script>
-<script src="../assets/js/supabase-client.js?v=20260909e"></script>
-<script src="../assets/js/data.js?v=20260909e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260910a"></script>
+<script src="../assets/js/supabase-client.js?v=20260910a"></script>
+<script src="../assets/js/data.js?v=20260910a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260909e"></script>
+<script src="../assets/js/app.js?v=20260910a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1383,7 +1383,12 @@
       // Même fenêtre que la page Contrôle (24 derniers mois) → les deux « Points à vérifier » comptent
       // sur le MÊME jeu de données (avant : Alertes prenait tout l'historique, Contrôle 24 mois → 2 compteurs).
       const _d = new Date(); _d.setMonth(_d.getMonth() - 24); const _cut = _d.toISOString().slice(0, 10);
-      const r = await FP.supabase.from('total_conso_tx').select('*').gte('date_tx', _cut); let rows = (r && r.data) || [];
+      // ⚠️ PAGINÉ : sans ça, Supabase plafonne à 1000 lignes → les conso au-delà (dont des récentes)
+      // sont perdues et la détection « conso pendant congé » les rate (bug réel vu sur les péages d'août).
+      const r = FP.selectAllPaged
+        ? await FP.selectAllPaged('total_conso_tx', q => q.gte('date_tx', _cut), 'id')
+        : await FP.supabase.from('total_conso_tx').select('*').gte('date_tx', _cut);
+      let rows = (r && r.data) || [];
       // ⚠️ Isolation multi-sociétés (MÊME règle défensive que ulys_conso ci-dessous) : le CEO voit
       // toutes les sociétés via la RLS → sur une société précise on refiltre côté client, et une ligne
       // historique SANS `societe` appartient à PXP (sinon elle fuite dans les alertes conso/anomalies
@@ -1393,7 +1398,7 @@
       _verifTx = rows;
     } catch (e) { _verifTx = []; }
     try {
-      const r = await FP.supabase.from('ulys_conso').select('*'); let rows = (r && r.data) || [];
+      const r = FP.selectAllPaged ? await FP.selectAllPaged('ulys_conso', null, 'id') : await FP.supabase.from('ulys_conso').select('*'); let rows = (r && r.data) || [];
       const soc = FP.activeSociete ? FP.activeSociete() : null;
       // ⚠️ Isolation multi-sociétés : une ligne Ulys héritée SANS `societe` (données historiques)
       // appartient à PXP (la société d'origine) — ne JAMAIS la traiter comme « appartient à tout le
@@ -1469,7 +1474,7 @@
         try {
           const cur = (localStorage.getItem('fp_societe') || 'PXP');
           const _c = new Date(); _c.setMonth(_c.getMonth() - 12);
-          const r = await FP.supabase.from('total_conso_tx').select('societe').gte('date_tx', _c.toISOString().slice(0, 10));
+          const r = FP.selectAllPaged ? await FP.selectAllPaged('total_conso_tx', q => q.gte('date_tx', _c.toISOString().slice(0, 10)), 'id', 'societe') : await FP.supabase.from('total_conso_tx').select('societe').gte('date_tx', _c.toISOString().slice(0, 10));
           if (r && !r.error) {
             const by = {}; (r.data || []).forEach(x => { const s = x.societe || '(sans société = PXP)'; by[s] = (by[s] || 0) + 1; });
             const parts = Object.keys(by).map(s => esc(s) + ' : ' + by[s]);
