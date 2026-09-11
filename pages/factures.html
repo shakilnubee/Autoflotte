@@ -2057,10 +2057,13 @@
     // Regroupe { vehiculeId: { docs:[], facts:[] } }
     function driveGroups() {
       const vehs = window.FP_DATA.vehicules || [];
-      const vidByImmat = {}; vehs.forEach(v => { if (v.immat) vidByImmat[String(v.immat).toUpperCase()] = v.id; });
+      // ⚠️ SOURCE UNIQUE — rapprochement plaque via FP.normImmat (tolère espaces/tirets/casse), sinon une
+      // facture dont la plaque est écrite « HL 724 CD » vs « HL-724-CD » tombait à tort dans « Sans plaque ».
+      const nImmat = s => (FP.normImmat ? FP.normImmat(s) : String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
+      const vidByImmat = {}; vehs.forEach(v => { if (v.immat) vidByImmat[nImmat(v.immat)] = v.id; });
       const byVeh = {};
       (docs || []).forEach(d => { const vid = d.vehiculeId || '__noplate__'; (byVeh[vid] = byVeh[vid] || { docs: [], facts: [] }).docs.push(d); });
-      ((window.FP_DATA.factures) || []).forEach(f => { const vid = vidByImmat[String(f.vehiculeImmat || '').toUpperCase()] || '__noplate__'; (byVeh[vid] = byVeh[vid] || { docs: [], facts: [] }).facts.push(f); });
+      ((window.FP_DATA.factures) || []).forEach(f => { const k = nImmat(f.vehiculeImmat); const vid = (k && vidByImmat[k]) || '__noplate__'; (byVeh[vid] = byVeh[vid] || { docs: [], facts: [] }).facts.push(f); });
       return byVeh;
     }
     function docTile(d, DL) {
@@ -2160,6 +2163,11 @@
       const lbl = $('doc-view-label'); if (lbl) lbl.textContent = (docView === 'drive') ? 'Vue liste' : 'Vue dossiers';
       renderDocuments();
     });
+    // ⚠️ La vue Documents (liste ET dossiers par plaque) doit se RAFRAÎCHIR quand les données changent
+    // (ex. facture qu'on vient d'importer) — sinon elle n'apparaît qu'après un rechargement manuel. Les
+    // handlers existants ne rafraîchissaient que l'onglet Factures. renderDrive/renderDocs sont gardés
+    // (no-op si `docs` pas encore chargé) → sans risque même si l'onglet Documents n'est pas ouvert.
+    document.addEventListener('fp:data-ready', () => { try { renderDocuments(); } catch (e) {} });
 
     // ----- Nettoyer les liens Drive : APERÇU (liste) puis suppression sur confirmation -----
     // Un document « en lien Drive » = son fichier pointe vers Google Drive (driveId, ou url drive.google.com) ;
