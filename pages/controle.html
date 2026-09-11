@@ -1267,7 +1267,14 @@
     const cnd = (FP.conducteursTous ? FP.conducteursTous() : ((FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [])).length;
     // + somme des montants (détecte une conso MODIFIÉE, pas seulement ajoutée/supprimée). O(tx), <1 ms.
     let sum = 0; for (let i = 0; i < _tx.length; i++) { const v = _tx[i]; sum += Number((v && (v.montant_ttc != null ? v.montant_ttc : v.montantTtc)) || 0); }
-    return _tx.length + '|' + _ulys.length + '|' + cnd + '|' + cong + '|' + smLen + '|' + Math.round(sum * 100);
+    // + AFFECTATIONS (qui conduit quel véhicule et quand) : la détection « après départ » en dépend →
+    // corriger une date d'affectation DOIT recalculer (sinon la fausse anomalie reste figée en cache).
+    let affLen = 0; try { affLen = JSON.stringify((FP.affectations && FP.affectations.all && FP.affectations.all()) || {}).length; } catch (e) {}
+    // ⚠️ VERSION DE LOGIQUE — À BUMPER à CHAQUE changement d'une règle de détection (congé, après départ,
+    // anomalies carte…). Le cache des trouvailles est keyé par cette signature : sans ce marqueur, un
+    // correctif de LOGIQUE ne se voit pas (les données n'ayant pas bougé, l'ancien résultat reste affiché).
+    const DETECT_VERSION = 'd2';
+    return DETECT_VERSION + '|' + _tx.length + '|' + _ulys.length + '|' + cnd + '|' + cong + '|' + smLen + '|' + affLen + '|' + Math.round(sum * 100);
   }
   function rebuild(force){
     const sig = _buildSig();
