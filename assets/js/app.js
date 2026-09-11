@@ -1643,6 +1643,22 @@ if (typeof window !== 'undefined') {
   window.FP = FP;                              // une référence unique, partagée par toutes les pages
 }
 
+// ⚠️ VERSION D'ASSET (lue depuis le ?v= de app.js) = « version de LOGIQUE » AUTOMATIQUE pour tout cache
+// de RÉSULTAT CALCULÉ. On bump ce ?v= à CHAQUE modif d'app.js (donc de toute règle métier qui y vit) :
+// inclure FP.ASSET_VERSION dans la signature d'un cache l'invalide TOUT SEUL au déploiement → un
+// correctif de logique n'est JAMAIS masqué par un vieux cache (cf. le bug « après départ » qui restait
+// figé). RÈGLE : tout cache de valeur CALCULÉE (trouvailles, anomalies, agrégats mémorisés) DOIT inclure
+// FP.ASSET_VERSION dans sa clé/signature. (Les caches de DONNÉES BRUTES gardent, eux, leur propre version.)
+try {
+  var _appScript = (typeof document !== 'undefined') ? document.currentScript : null;
+  if (!(_appScript && /app\.js/.test(_appScript.src || '')) && typeof document !== 'undefined') {
+    var _all = document.getElementsByTagName('script');
+    for (var _i = 0; _i < _all.length; _i++) { if (/\/app\.js/.test(_all[_i].src || '')) { _appScript = _all[_i]; break; } }
+  }
+  var _vm = _appScript && (_appScript.src || '').match(/[?&]v=([^&]+)/);
+  FP.ASSET_VERSION = _vm ? _vm[1] : 'dev';
+} catch (e) { FP.ASSET_VERSION = 'dev'; }
+
 // Rafraîchit le cache local (fp_data_cache_v3_<societe>) à partir de l'état EN MÉMOIRE (window.FP_DATA).
 // ⚠️ SOURCE UNIQUE : le cache n'était réécrit qu'au chargement complet (loadAll). Une édition unitaire
 // (fiche véhicule OU « À compléter » en rafale) mettait à jour mémoire + Supabase mais PAS ce cache →
