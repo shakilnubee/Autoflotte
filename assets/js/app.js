@@ -1114,6 +1114,16 @@ FP.parseMontant = (s) => { if (s == null || s === '') return null; const n = par
 // qui n'est pas alphanumérique : tirets, espaces, points). « AB-123-CD », « ab 123 cd », « AB123CD » →
 // « AB123CD ». À utiliser pour TOUT match facture↔véhicule / amende↔véhicule / document↔véhicule.
 FP.normImmat = (s) => String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+// ⚠️ SOURCE UNIQUE — deux plaques « égales » quel que soit le format (min/maj, tirets, espaces).
+FP.immatEq = (a, b) => { const x = FP.normImmat(a); return !!x && x === FP.normImmat(b); };
+// ⚠️ SOURCE UNIQUE — retrouve LE véhicule par sa plaque, tolérant à TOUS les formats. À utiliser
+// PARTOUT où on relie un enregistrement (facture, sinistre, amende, contrat…) à un véhicule, plutôt
+// qu'un `.find(v => v.immat === x)` brut qui rate « HL724CD » vs « HL-724-CD ».
+FP.vehByImmat = (immat, list) => {
+  const k = FP.normImmat(immat); if (!k) return null;
+  const vs = list || (window.FP_DATA && FP_DATA.vehicules) || (window.data && data.vehicules) || [];
+  return vs.find(v => v && FP.normImmat(v.immat) === k) || null;
+};
 // ⚠️ HELPER CANONIQUE — prime d'assurance annuelle TTC d'un véhicule. La prime est stockée en OBJET
 // { ht, ttc } (settings.assurancePrimes[id]) — ne JAMAIS faire Number(prime) (→ NaN). Renvoie le TTC (nombre) ou 0.
 // La prime est keyée par IMMATRICULATION (comparaison normalisée, comme dans Contrats), PAS par id.
@@ -1623,7 +1633,7 @@ FP.MASSE_CG = {
   'GR-019-ZG': 1358, 'GR-467-HP': 1358, 'HE-739-WP': 1505, 'GP-232-WF': 1505, 'HJ-285-FL': 1625,
   'HJ-181-RN': 1782, 'HG-709-CH': 2015, 'HF-749-VD': 1265, 'HH-613-KE': 2015, 'GM-548-QA': 1395
 };
-FP.masseCG = (v) => { try { const k = (v && v.immat || '').toString().toUpperCase().trim(); const m = FP.MASSE_CG[k]; return Number.isFinite(m) ? m : null; } catch (e) { return null; } };
+FP.masseCG = (v) => { try { const m = FP._mapGetImmat(FP.MASSE_CG, v && v.immat); return Number.isFinite(m) ? m : null; } catch (e) { return null; } };
 
 // Données lues dans les cartes grises Drive (par immat) pour PRÉ-REMPLIR les champs vides des fiches
 // via le bouton « Compléter depuis les cartes grises » (onglet À compléter). Champs NON personnels
@@ -1632,6 +1642,10 @@ FP.masseCG = (v) => { try { const k = (v && v.immat || '').toString().toUpperCas
 FP.CG_DATA = {
   // rempli au fil des lectures de cartes grises — { 'AA-123-BC': { co2, puissanceFiscale, dateMiseEnCirculation, prochainCT, carburant } }
 };
+// Accès TOLÉRANT au format de plaque pour les maps de RÉFÉRENCE keyées par immat (CG_DATA, MASSE_CG…) :
+// on tente la clé exacte puis un rapprochement NORMALISÉ (min/maj, tirets, espaces = pareil).
+FP._mapGetImmat = (map, immat) => { if (!map) return undefined; if (map[immat] != null) return map[immat]; const k = FP.normImmat(immat); if (!k) return undefined; for (const key in map) { if (FP.normImmat(key) === k) return map[key]; } return undefined; };
+FP.cgForImmat = (immat) => FP._mapGetImmat(FP.CG_DATA, immat);
 
 // IMPORTANT — partage d'un SEUL objet FP.
 // supabase-client.js (chargé AVANT app.js) a déjà posé FP.supabase / FP.db / FP.auth
@@ -7006,13 +7020,13 @@ FP.buildAlertes = (data) => {
         let amt = 0;
         if (COUT.includes(t)) amt = Number(f.montantTTC) || 0;
         else if (t === 'sinistre') { const _ss = FP.sinistreStatutOf ? FP.sinistreStatutOf(f) : ''; if (_ss !== 'rembourse' && _ss !== 'pec') amt = Number(f.montantTTC) || 0; }
-        if (amt && f.vehiculeImmat) spendByImmat[f.vehiculeImmat] = (spendByImmat[f.vehiculeImmat] || 0) + amt;
+        const _k = FP.normImmat(f.vehiculeImmat); if (amt && _k) spendByImmat[_k] = (spendByImmat[_k] || 0) + amt; // clé plaque NORMALISÉE (source unique)
       });
       const over = [];
       (data.vehicules || []).forEach(v => {
         if (horsFlotte(v)) return;
         const b = Number(budgets[v.id]); if (!Number.isFinite(b) || b <= 0) return;
-        const spent = spendByImmat[v.immat] || 0;
+        const spent = spendByImmat[FP.normImmat(v.immat)] || 0; // lecture par plaque NORMALISÉE (idem écriture)
         if (spent > b) over.push({ v, b, spent });
       });
       if (over.length) {

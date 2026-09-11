@@ -44,11 +44,15 @@
     <div class="card" id="card"><div class="empty">Chargement…</div></div>
   </div>
 
-  <script src="assets/js/data.js?v=20260910h"></script>
+  <script src="assets/js/data.js?v=20260910i"></script>
   <script>
   (function () {
     var params = new URLSearchParams(location.search);
-    var q = (params.get('v') || params.get('immat') || '').trim().toUpperCase().replace(/\s+/g, '');
+    var raw = (params.get('v') || params.get('immat') || '').trim();
+    // Plaque NORMALISÉE (min/maj, tirets, espaces = pareil) pour le rapprochement snapshot ; `qLive` garde
+    // les tirets pour la requête exacte de la vue publique (le QR encode déjà la plaque au bon format).
+    var q = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    var qLive = raw.toUpperCase().replace(/\s+/g, '');
     var card = document.getElementById('card');
     // Lecture publique Supabase (clé publiable, sans danger) — nécessite la vue « vehicules_public » côté base.
     var SB_URL = 'https://tzjuptlzoywjeigmyfuj.supabase.co';
@@ -61,12 +65,12 @@
     // 1) Source SNAPSHOT (data.js) — public, déjà anonymisé, dispo tout de suite.
     function fromSnapshot() {
       var D = (window.FP_DATA && Array.isArray(window.FP_DATA.vehicules)) ? window.FP_DATA.vehicules : [];
-      return D.find(function (x) { return (x.immat || '').toUpperCase().replace(/\s+/g, '') === q; }) || null;
+      return D.find(function (x) { return (x.immat || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === q; }) || null;
     }
     // 2) Source TEMPS RÉEL (vue publique Supabase). Renvoie null si indisponible → repli snapshot.
     function fromLive(cb) {
       if (!q) { cb(null); return; }
-      var url = SB_URL + '/rest/v1/vehicules_public?immat=eq.' + encodeURIComponent(q) + '&select=*&limit=1';
+      var url = SB_URL + '/rest/v1/vehicules_public?immat=eq.' + encodeURIComponent(qLive) + '&select=*&limit=1';
       fetch(url, { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY } })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (rows) {
