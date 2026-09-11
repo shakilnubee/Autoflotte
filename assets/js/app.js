@@ -4041,6 +4041,98 @@ FP.qrScans = {
   if (document.body) build(); else document.addEventListener('DOMContentLoaded', build);
 })();
 
+// === Navigation MOBILE : BARRE D'ONGLETS EN BAS (mode application) ==================
+// Injectée sur toutes les pages qui ont une sidebar. N'apparaît qu'en ≤768px (CSS). 6 boutons :
+// Accueil · Véhicules · ➕ (ajout rapide) · Amendes · Alertes · Menu (ouvre le tiroir = TOUTE la nav).
+// ⚠️ SOURCE UNIQUE de nav : les liens d'onglet RÉUTILISENT le href réel des liens de la sidebar
+// (aside nav a[data-nav]) → chemins relatifs corrects quelle que soit la page (racine ou /pages/).
+// Le bouton « Menu » ouvre le MÊME tiroir latéral que le hamburger (jamais une 2e source de navigation).
+// Le « ➕ » ouvre une feuille d'ajout rapide qui pointe sur les mêmes formulaires que les raccourcis du
+// tableau de bord (scanner.html + #add via [data-quickadd] géré par FP.handleQuickAddHash).
+(function mobileTabBar() {
+  const build = () => {
+    try {
+      const sb = document.querySelector('.fp-sidebar');
+      if (!sb || document.querySelector('.fp-tabbar')) return;
+      const inPages = location.pathname.includes('/pages/');
+      const P = inPages ? '' : 'pages/';
+      // href réel du lien de sidebar (chemins relatifs déjà corrects) ; repli calculé sinon.
+      const hrefFor = (key) => {
+        const a = document.querySelector('aside nav a[data-nav="' + key + '"]');
+        if (a && a.getAttribute('href')) return a.getAttribute('href');
+        if (key === 'dashboard.html') return (inPages ? '../' : '') + 'dashboard.html';
+        return P + key;
+      };
+      const cur = (location.pathname.split('/').pop() || 'dashboard.html');
+      // Ouvre le MÊME tiroir latéral que le hamburger (réutilise le backdrop de mobileNav, ou le crée).
+      const drawerOpen = () => {
+        let bd = document.querySelector('.fp-sidebar-backdrop');
+        if (!bd) {
+          bd = document.createElement('div'); bd.className = 'fp-sidebar-backdrop'; document.body.appendChild(bd);
+          bd.addEventListener('click', () => { sb.classList.remove('fp-open'); bd.classList.remove('fp-open'); });
+        }
+        sb.classList.add('fp-open'); bd.classList.add('fp-open');
+      };
+
+      const bar = document.createElement('nav');
+      bar.className = 'fp-tabbar'; bar.setAttribute('aria-label', 'Navigation principale');
+      const tabs = [
+        { key: 'dashboard.html',     ic: 'home',   lb: 'Accueil'   },
+        { key: 'vehicules.html',     ic: 'car',    lb: 'Véhicules' },
+        { key: '__add__',            ic: 'plus',   lb: 'Ajouter'   },
+        { key: 'amendes.html',       ic: 'ticket', lb: 'Amendes'   },
+        { key: 'notifications.html', ic: 'bell',   lb: 'Alertes'   },
+        { key: '__menu__',           ic: 'menu',   lb: 'Menu'      },
+      ];
+      tabs.forEach(t => {
+        if (t.key === '__add__') {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'fp-tab fp-tab-add'; b.setAttribute('aria-label', 'Ajouter');
+          b.innerHTML = '<span class="fp-tab-plus"><i data-lucide="plus"></i></span><span class="fp-tab-lb">' + t.lb + '</span>';
+          b.addEventListener('click', openQuickAdd);
+          bar.appendChild(b); return;
+        }
+        if (t.key === '__menu__') {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'fp-tab'; b.setAttribute('aria-label', 'Menu');
+          b.innerHTML = '<i data-lucide="' + t.ic + '"></i><span class="fp-tab-lb">' + t.lb + '</span>';
+          b.addEventListener('click', drawerOpen);
+          bar.appendChild(b); return;
+        }
+        const a = document.createElement('a');
+        a.className = 'fp-tab' + (cur === t.key ? ' active' : '');
+        a.href = hrefFor(t.key);
+        a.innerHTML = '<i data-lucide="' + t.ic + '"></i><span class="fp-tab-lb">' + t.lb + '</span>';
+        bar.appendChild(a);
+      });
+      document.body.appendChild(bar);
+      document.body.classList.add('fp-tabbar-on');
+
+      // Feuille « Ajout rapide » (mêmes cibles que les raccourcis du tableau de bord).
+      const scrim = document.createElement('div'); scrim.className = 'fp-qa-scrim';
+      const sheet = document.createElement('div'); sheet.className = 'fp-qa-sheet';
+      const items = [
+        { ic: 'scan-line',     lb: 'Scanner un document', href: P + 'scanner.html',       cls: 'b' },
+        { ic: 'ticket',        lb: 'Amende',              href: P + 'amendes.html#add',   cls: 'r' },
+        { ic: 'receipt',       lb: 'Facture',             href: P + 'factures.html#add',  cls: 'g' },
+        { ic: 'alert-octagon', lb: 'Sinistre',            href: P + 'sinistres.html#add', cls: 'o' },
+        { ic: 'car',           lb: 'Véhicule',            href: P + 'vehicules.html#add', cls: 'b' },
+      ];
+      sheet.innerHTML = '<div class="fp-qa-grab"></div><div class="fp-qa-title">Ajouter</div><div class="fp-qa-grid">'
+        + items.map(it => '<a class="fp-qa-item" href="' + it.href + '"><span class="fp-qa-ic fp-qa-' + it.cls + '"><i data-lucide="' + it.ic + '"></i></span>' + it.lb + '</a>').join('')
+        + '</div>';
+      document.body.appendChild(scrim); document.body.appendChild(sheet);
+      function openQuickAdd() { scrim.classList.add('open'); sheet.classList.add('open'); }
+      function closeQuickAdd() { scrim.classList.remove('open'); sheet.classList.remove('open'); }
+      scrim.addEventListener('click', closeQuickAdd);
+      addEventListener('keydown', (e) => { if (e.key === 'Escape') closeQuickAdd(); });
+
+      if (window.lucide && lucide.createIcons) { try { lucide.createIcons(); } catch (e) {} }
+    } catch (e) {}
+  };
+  if (document.body) build(); else document.addEventListener('DOMContentLoaded', build);
+})();
+
 // === Menus déroulants : rester dans l'écran sur mobile (ne jamais couper) ======
 // Un menu « position:absolute; right:0 » ancré à un bouton proche du bord gauche
 // débordait hors écran à gauche (ex. Raccourcis). Après CHAQUE ouverture, on
