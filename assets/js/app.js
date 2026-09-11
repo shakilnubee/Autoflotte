@@ -2731,10 +2731,13 @@ FP.consoPendantConge = (txList, opts) => {
     if (np) { (FP.congeKeysPourPrenom ? FP.congeKeysPourPrenom(np) : []).forEach(k => { if (cand.indexOf(k) < 0) cand.push(k); }); }
     let cg = null, key = null;
     for (const k of cand) { const g = FP.congeCouvrant(k, dtx); if (g) { cg = g; key = k; break; } }
-    // ⚠️ Même garde « MAISON VÉHICULE » : si la conso porte une plaque et qu'un AUTRE conducteur conduisait
-    //    ce véhicule ce jour-là, la conso lui appartient → ce n'est PAS une conso « pendant congé » de `key`
-    //    (badge resté sur l'ancienne fiche). On lève l'alerte seulement si le véhicule était bien le sien.
-    if (cg && t.plaque && FP.condDuVehALaDate) { const dk = FP.condDuVehALaDate(t.plaque, dtx); if (dk && dk !== key) cg = null; }
+    // ⚠️ Garde « badge lié au VÉHICULE » : si la conso porte une plaque et qu'un AUTRE conducteur conduisait
+    //    ce véhicule ce jour-là, la conso lui appartient → ce n'est PAS une conso « pendant congé » de `key`.
+    //    MAIS on ne l'applique PAS à un badge PERSONNEL : celui-ci suit son porteur (la plaque n'est alors
+    //    qu'indicative), donc une conso de SON badge pendant SON congé reste une vraie anomalie à signaler.
+    if (cg && t.plaque && FP.condDuVehALaDate && !(FP.badgePersonnel && FP.badgePersonnel(key, t.carte))) {
+      const dk = FP.condDuVehALaDate(t.plaque, dtx); if (dk && dk !== key) cg = null;
+    }
     // Nom AFFICHÉ = celui de la fiche conducteur (unifié), jamais le libellé brut du relevé.
     if (cg) out.push({ conducteur: FP.conducteurNomUnifie(t.conducteur, key), conducteurBrut: t.conducteur || '', key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '' });
   });
@@ -2780,6 +2783,26 @@ FP.condDuVehALaDate = (plaque, dtx) => {
   } catch (e) { return null; }
 };
 
+// ⚠️ SOURCE UNIQUE — un n° de carte/badge est-il un badge PERSONNEL (enregistré sur la fiche PROPRE du
+// conducteur : condBadgeUlys / condCarteTotal) ? Consigne explicite utilisateur : un badge Ulys/carte
+// carburant appartient à la PERSONNE et la SUIT quand elle change de voiture (ex. « Ahmed » garde son
+// badge n° …00008 en changeant de véhicule). Sa conso est donc TOUJOURS la sienne, quelle que soit la
+// plaque de la transaction → on ne doit JAMAIS la signaler « après départ » d'un véhicule qu'il a
+// quitté. (Par opposition à un badge lié à un VÉHICULE — vehBadge sans propriétaire conducteur — qui
+// reste dans la voiture et change de conducteur avec elle.)
+FP.badgePersonnel = (key, carte) => {
+  if (!key || !carte) return false;
+  try {
+    const s = FP.settings.get();
+    const num = String(carte).replace(/^ULYS[-_\s]*/i, '');
+    for (const mapKey of ['condBadgeUlys', 'condCarteTotal']) {
+      const v = (s[mapKey] || {})[key];
+      if (v && FP.carteParts(v).some(p => FP.carteMatch(p, num))) return true;
+    }
+  } catch (e) {}
+  return false;
+};
+
 // Détecte les consos survenues APRÈS le DÉPART du conducteur : une carte/badge encore active pour un
 // salarié dont l'affectation (au véhicule) est TERMINÉE avant la date de la conso — signe que la carte
 // n'a pas été désactivée / est utilisée par quelqu'un d'autre. S'appuie sur l'historique d'affectation
@@ -2813,10 +2836,15 @@ FP.consoApresDepart = (txList) => {
     if (!nom) return;
     const toutes = affByKey[key] || [];
     const plaque = t.plaque || '';
-    const veh = plaque && FP.normImmat ? vehByImmat[FP.normImmat(plaque)] : null;
-    // Véhicule connu → on ne regarde QUE les périodes de ce conducteur sur CE véhicule. Sinon (pas de
-    // plaque exploitable) → repli global : « après départ » seulement s'il n'a plus AUCUNE période
-    // ouverte nulle part (parti pour de bon), jamais s'il conduit encore un véhicule.
+    // ⚠️ BADGE PERSONNEL (suit la personne) : sa conso est TOUJOURS la sienne, quelle que soit la plaque
+    //    (ex. Ahmed garde son badge Ulys en changeant de voiture). On IGNORE donc la plaque de la
+    //    transaction et on juge GLOBALEMENT (est-il encore actif quelque part ?) — jamais « après départ »
+    //    d'un véhicule qu'il a simplement quitté. Seul un badge lié au VÉHICULE reste jugé par véhicule.
+    const cartePerso = FP.badgePersonnel ? FP.badgePersonnel(key, t.carte) : false;
+    const veh = (!cartePerso && plaque && FP.normImmat) ? vehByImmat[FP.normImmat(plaque)] : null;
+    // Véhicule connu → on ne regarde QUE les périodes de ce conducteur sur CE véhicule. Sinon (badge
+    // personnel, ou pas de plaque exploitable) → repli global : « après départ » seulement s'il n'a plus
+    // AUCUNE période ouverte nulle part (parti pour de bon), jamais s'il conduit encore un véhicule.
     const periodes = veh ? toutes.filter(p => String(p.vehId) === String(veh.id)) : toutes;
     if (!periodes.length) return;                 // aucune preuve d'affectation → on n'accuse JAMAIS à l'aveugle
     if (couvre(periodes, dtx)) return;            // une période (souvent OUVERTE) englobe la conso → il conduisait → OK
