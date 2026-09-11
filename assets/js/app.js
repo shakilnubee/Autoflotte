@@ -2731,6 +2731,10 @@ FP.consoPendantConge = (txList, opts) => {
     if (np) { (FP.congeKeysPourPrenom ? FP.congeKeysPourPrenom(np) : []).forEach(k => { if (cand.indexOf(k) < 0) cand.push(k); }); }
     let cg = null, key = null;
     for (const k of cand) { const g = FP.congeCouvrant(k, dtx); if (g) { cg = g; key = k; break; } }
+    // ⚠️ Même garde « MAISON VÉHICULE » : si la conso porte une plaque et qu'un AUTRE conducteur conduisait
+    //    ce véhicule ce jour-là, la conso lui appartient → ce n'est PAS une conso « pendant congé » de `key`
+    //    (badge resté sur l'ancienne fiche). On lève l'alerte seulement si le véhicule était bien le sien.
+    if (cg && t.plaque && FP.condDuVehALaDate) { const dk = FP.condDuVehALaDate(t.plaque, dtx); if (dk && dk !== key) cg = null; }
     // Nom AFFICHÉ = celui de la fiche conducteur (unifié), jamais le libellé brut du relevé.
     if (cg) out.push({ conducteur: FP.conducteurNomUnifie(t.conducteur, key), conducteurBrut: t.conducteur || '', key, date: dtx, montant: mtt, categorie: cat, produit: t.produit, conge: cg, facnum: t.facnum || t.facNum || '', carte: t.carte || '', plaque: t.plaque || '' });
   });
@@ -2756,6 +2760,25 @@ FP.trouvailleResolue = function (genre, a) { const st = FP.controleStatut(FP.tro
 
 // Libellé lisible d'une catégorie de conso (carte carburant / péage).
 FP.consoCatLabel = (cat) => ({ carburant: 'plein carburant', peage: 'péage', boutique: 'achat boutique', lavage: 'lavage', parking: 'parking', adblue: 'AdBlue' })[String(cat || '').toLowerCase()] || 'achat';
+
+// ⚠️ SOURCE UNIQUE — principe « carte/badge = MAISON VÉHICULE » : la conso d'un véhicule appartient à
+// celui qui le CONDUISAIT ce jour-là (historique d'affectation FP.affectations), PAS à l'ancien porteur
+// du badge resté sur sa fiche conducteur. Renvoie la CLÉ du conducteur affecté au véhicule d'une PLAQUE
+// à la DATE `dtx` (ou null : aucune période ne couvre ce jour / plaque inconnue / pas d'affectation).
+// Sert à NE PAS accuser à tort un conducteur (après-départ / congé) quand un AUTRE conducteur conduisait
+// réellement le véhicule ce jour-là (bug réel : péages de GR-302-HP encore attribués à Ahmed après son
+// changement de véhicule, car le badge Ulys du véhicule était resté sur sa fiche).
+FP.condDuVehALaDate = (plaque, dtx) => {
+  if (!plaque || !dtx || !FP.affectations || !FP.affectations.forVeh) return null;
+  try {
+    const veh = FP.vehByImmat ? FP.vehByImmat(plaque) : null;
+    if (!veh || veh.id == null) return null;
+    const d = String(dtx).slice(0, 10);
+    const hit = FP.affectations.forVeh(veh.id).find(p =>
+      (!p.debut || String(p.debut).slice(0, 10) <= d) && (!p.fin || d <= String(p.fin).slice(0, 10)));
+    return (hit && hit.conducteur && FP.condGroupKey) ? FP.condGroupKey(hit.conducteur) : null;
+  } catch (e) { return null; }
+};
 
 // Détecte les consos survenues APRÈS le DÉPART du conducteur : une carte/badge encore active pour un
 // salarié dont l'affectation (au véhicule) est TERMINÉE avant la date de la conso — signe que la carte
@@ -2797,6 +2820,10 @@ FP.consoApresDepart = (txList) => {
     const periodes = veh ? toutes.filter(p => String(p.vehId) === String(veh.id)) : toutes;
     if (!periodes.length) return;                 // aucune preuve d'affectation → on n'accuse JAMAIS à l'aveugle
     if (couvre(periodes, dtx)) return;            // une période (souvent OUVERTE) englobe la conso → il conduisait → OK
+    // ⚠️ « MAISON VÉHICULE » : si un AUTRE conducteur conduisait CE véhicule à cette date (historique
+    //    d'affectation), la conso est à LUI (badge resté sur l'ancienne fiche) — PAS un « après départ »
+    //    de `key`. On n'accuse donc pas `key` (on ne crée jamais de fausse anomalie ; source FP.condDuVehALaDate).
+    if (veh) { const dk = FP.condDuVehALaDate ? FP.condDuVehALaDate(plaque, dtx) : null; if (dk && dk !== key) return; }
     const fins = periodes.map(p => p.fin).filter(Boolean).map(String).sort();
     const derniereFin = fins.length ? fins[fins.length - 1] : null;
     if (derniereFin && dtx > derniereFin) {
