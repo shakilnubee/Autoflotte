@@ -1891,6 +1891,65 @@ FP.searchSelect = function (select, opts) {
 // champs texte/date, remet les <select> sur l'option « all »/vide, et clique la puce « Tous » de
 // chaque groupe, en émettant les événements (compatible FP.searchSelect qui resync sur 'change').
 // `mount` = où poser le bouton (défaut = la barre). Renvoie le bouton (ou null).
+// ⚠️ FILTRES EN FEUILLE DU BAS (mobile) — RÈGLE UX « vraie appli ».
+// Sur mobile (≤768px), au lieu d'une longue pile de puces/menus en haut, on affiche un seul bouton
+// « Filtres (N) » ; le tap ouvre une FEUILLE qui remonte du bas contenant la MÊME barre de filtres
+// (mêmes éléments → mêmes événements, aucun code dupliqué). Sur ordinateur : la barre reste en place,
+// le bouton est masqué. Branché AUTOMATIQUEMENT par FP.filterResetButton → toutes les pages qui ont
+// déjà un bouton « Réinitialiser » gagnent la feuille sans modification. Idempotent + garde-fous.
+FP.filterSheet = function (barEl) {
+  try {
+    if (!barEl || barEl._fpSheet) return;
+    // Garde-fou : pas assez de filtres → pas de feuille (évite un bouton inutile sur une barre triviale).
+    const nSel = barEl.querySelectorAll('select').length;
+    const nChip = barEl.querySelectorAll('.filter-chip, .emp-chip, .sin-chip').length;
+    const nInput = Array.from(barEl.querySelectorAll('input')).filter(i => ['checkbox', 'radio', 'button', 'submit', 'hidden'].indexOf((i.type || 'text').toLowerCase()) === -1).length;
+    if (nSel + nChip < 1 && nInput <= 1) return;
+    barEl._fpSheet = true;
+
+    const trg = document.createElement('button');
+    trg.type = 'button'; trg.className = 'fp-filters-trigger';
+    trg.innerHTML = '<i data-lucide="sliders-horizontal"></i><span>Filtres</span><span class="fp-filters-badge" hidden>0</span>';
+    barEl.parentNode.insertBefore(trg, barEl);
+
+    const scrim = document.createElement('div'); scrim.className = 'fp-fsheet-scrim';
+    const sheet = document.createElement('div'); sheet.className = 'fp-fsheet';
+    sheet.innerHTML = '<div class="fp-fsheet-grab"></div><div class="fp-fsheet-head"><span>Rechercher &amp; filtrer</span><button type="button" class="fp-fsheet-done">OK</button></div><div class="fp-fsheet-body"></div>';
+    document.body.appendChild(scrim); document.body.appendChild(sheet);
+    const body = sheet.querySelector('.fp-fsheet-body');
+
+    const isMobile = () => { try { return matchMedia('(max-width:768px)').matches; } catch (e) { return false; } };
+    let open = false;
+    const countActive = () => {
+      let n = 0;
+      try {
+        barEl.querySelectorAll('input').forEach(i => { const t = (i.type || 'text').toLowerCase(); if (['checkbox', 'radio', 'button', 'submit', 'hidden'].indexOf(t) !== -1) return; if (i.value && String(i.value).trim()) n++; });
+        barEl.querySelectorAll('select').forEach(s => { const v = s.value; const def = (v === '' || v === 'all' || (s.options[0] && s.options[0].value === v)); if (!def) n++; });
+        barEl.querySelectorAll('.filter-chip.active, .emp-chip.active, .sin-chip.active, [aria-pressed="true"]').forEach(c => { const tx = (c.dataset.value || c.dataset.statut || c.dataset.filtre || c.textContent || '').trim().toLowerCase(); if (!/^(all|tous|toutes)\b/.test(tx)) n++; });
+      } catch (e) {}
+      return n;
+    };
+    const updBadge = () => { const n = countActive(); const b = trg.querySelector('.fp-filters-badge'); if (b) { b.textContent = n; b.hidden = n === 0; } trg.classList.toggle('has-active', n > 0); };
+    const place = () => {
+      if (!isMobile()) { if (barEl.parentNode === body) trg.insertAdjacentElement('afterend', barEl); barEl.style.display = ''; scrim.classList.remove('open'); sheet.classList.remove('open'); open = false; document.body.classList.remove('fp-sheet-open'); return; }
+      if (open) { if (barEl.parentNode !== body) body.appendChild(barEl); barEl.style.display = ''; scrim.classList.add('open'); sheet.classList.add('open'); document.body.classList.add('fp-sheet-open'); if (window.lucide) lucide.createIcons(); }
+      else { if (barEl.parentNode === body) trg.insertAdjacentElement('afterend', barEl); barEl.style.display = 'none'; scrim.classList.remove('open'); sheet.classList.remove('open'); document.body.classList.remove('fp-sheet-open'); }
+      updBadge();
+    };
+    trg.addEventListener('click', () => { open = true; place(); });
+    const close = () => { open = false; place(); };
+    scrim.addEventListener('click', close);
+    sheet.querySelector('.fp-fsheet-done').addEventListener('click', close);
+    addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) close(); });
+    barEl.addEventListener('input', updBadge, true);
+    barEl.addEventListener('change', updBadge, true);
+    barEl.addEventListener('click', () => setTimeout(updBadge, 0), true);
+    let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(place, 150); });
+    place(); updBadge();
+    if (window.lucide) lucide.createIcons();
+  } catch (e) {}
+};
+
 FP.filterResetButton = function (bar, opts) {
   try {
     opts = opts || {};
@@ -1934,6 +1993,8 @@ FP.filterResetButton = function (bar, opts) {
     const pushed = Array.from(mount.children).find(c => c.classList && c.classList.contains('ml-auto'));
     if (pushed) mount.insertBefore(btn, pushed); else mount.appendChild(btn);
     if (window.lucide) lucide.createIcons();
+    // Feuille de filtres mobile (auto) : la barre passe derrière un bouton « Filtres (N) » sur ≤768px.
+    try { if (barEl && FP.filterSheet) FP.filterSheet(barEl); } catch (e) {}
     return btn;
   } catch (e) { return null; }
 };
