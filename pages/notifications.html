@@ -124,7 +124,6 @@
       <!-- Relevé KM a DÉMÉNAGÉ dans Contrôle → bouton masqué ici (plus dans « Suivi & alertes »). Le
            contenu reste (affiché en embed depuis Contrôle via ?embed&tab=relevekm). -->
       <button type="button" id="tab-relevekm" style="display:none;padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📏 Relevé KM</button>
-      <button type="button" id="tab-verif" style="display:none;padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔎 Points à vérifier <span id="tab-verif-n"></span></button>
       <button type="button" id="tab-echeances" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔄 Renouvellements</button>
       <button type="button" id="tab-complet" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📝 À compléter</button>
       <button type="button" id="tab-decisions" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">💡 Décisions</button>
@@ -135,7 +134,6 @@
     <div id="notif-cols" class="grid gap-6 md:grid-cols-2 xl:grid-cols-4"></div>
     <div id="suivi-echeances" class="hidden"></div>
     <div id="suivi-complet" class="hidden"></div>
-    <div id="suivi-verif" class="hidden"></div>
 
     <div id="notif-masquees" class="mt-8"></div>
 
@@ -1350,7 +1348,7 @@
     }
   });
 
-  const tabD = document.getElementById('tab-decisions'), tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet'), tabV = document.getElementById('tab-verif'), tabK = document.getElementById('tab-relevekm');
+  const tabD = document.getElementById('tab-decisions'), tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet'), tabK = document.getElementById('tab-relevekm');
   function showTab(which) {
     document.getElementById('suivi-decisions').classList.toggle('hidden', which !== 'decisions');
     document.getElementById('suivi-relevekm').classList.toggle('hidden', which !== 'relevekm');
@@ -1358,12 +1356,10 @@
     document.getElementById('notif-masquees').classList.toggle('hidden', which !== 'alertes');
     document.getElementById('suivi-echeances').classList.toggle('hidden', which !== 'echeances');
     document.getElementById('suivi-complet').classList.toggle('hidden', which !== 'complet');
-    document.getElementById('suivi-verif').classList.toggle('hidden', which !== 'verif');
-    [[tabD, 'decisions'], [tabA, 'alertes'], [tabK, 'relevekm'], [tabE, 'echeances'], [tabC, 'complet'], [tabV, 'verif']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
+    [[tabD, 'decisions'], [tabA, 'alertes'], [tabK, 'relevekm'], [tabE, 'echeances'], [tabC, 'complet']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
     if (which === 'decisions') renderDecisions();
     if (which === 'echeances') renderEcheances();
     if (which === 'complet') renderComplet();
-    if (which === 'verif') renderVerif();
     if (which === 'relevekm') renderRelevekm();
   }
   if (tabD) tabD.addEventListener('click', () => showTab('decisions'));
@@ -1371,254 +1367,9 @@
   if (tabK) tabK.addEventListener('click', () => showTab('relevekm'));
   if (tabE) tabE.addEventListener('click', () => showTab('echeances'));
   if (tabC) tabC.addEventListener('click', () => showTab('complet'));
-  if (tabV) tabV.addEventListener('click', () => showTab('verif'));
 
-  // ===== Points à vérifier (carte carburant Total) — même détection que la page Factures (FP.*) =====
-  let _verifTx = null; // cache des transactions total_conso_tx (chargées 1×)
-  let _verifUlys = null; // cache du détail Ulys mensuel par conducteur (ulys_conso)
-  let _verifCongeRows = []; // dernières alertes « conso pendant congé » (pour l'export relevé)
-  async function loadVerifTx() {
-    if (_verifTx !== null && _verifUlys !== null) return _verifTx;
-    try {
-      // Même fenêtre que la page Contrôle (24 derniers mois) → les deux « Points à vérifier » comptent
-      // sur le MÊME jeu de données (avant : Alertes prenait tout l'historique, Contrôle 24 mois → 2 compteurs).
-      const _d = new Date(); _d.setMonth(_d.getMonth() - 24); const _cut = _d.toISOString().slice(0, 10);
-      // ⚠️ PAGINÉ : sans ça, Supabase plafonne à 1000 lignes → les conso au-delà (dont des récentes)
-      // sont perdues et la détection « conso pendant congé » les rate (bug réel vu sur les péages d'août).
-      const r = FP.selectAllPaged
-        ? await FP.selectAllPaged('total_conso_tx', q => q.gte('date_tx', _cut), 'id')
-        : await FP.supabase.from('total_conso_tx').select('*').gte('date_tx', _cut);
-      let rows = (r && r.data) || [];
-      // ⚠️ Isolation multi-sociétés (MÊME règle défensive que ulys_conso ci-dessous) : le CEO voit
-      // toutes les sociétés via la RLS → sur une société précise on refiltre côté client, et une ligne
-      // historique SANS `societe` appartient à PXP (sinon elle fuite dans les alertes conso/anomalies
-      // de CHAQUE société avec des noms de conducteurs d'une autre boîte).
-      const soc = FP.activeSociete ? FP.activeSociete() : null;
-      if (soc && soc !== '__all__') { const s = String(soc).toLowerCase(); rows = rows.filter(x => x.societe ? String(x.societe).toLowerCase() === s : s === 'pxp'); }
-      _verifTx = rows;
-    } catch (e) { _verifTx = []; }
-    try {
-      const r = FP.selectAllPaged ? await FP.selectAllPaged('ulys_conso', null, 'id') : await FP.supabase.from('ulys_conso').select('*'); let rows = (r && r.data) || [];
-      const soc = FP.activeSociete ? FP.activeSociete() : null;
-      // ⚠️ Isolation multi-sociétés : une ligne Ulys héritée SANS `societe` (données historiques)
-      // appartient à PXP (la société d'origine) — ne JAMAIS la traiter comme « appartient à tout le
-      // monde », sinon elle fuite dans la liste de CHAQUE société (noms de conducteurs d'une autre boîte).
-      if (soc && soc !== '__all__') { const s = String(soc).toLowerCase(); rows = rows.filter(x => x.societe ? String(x.societe).toLowerCase() === s : s === 'pxp'); }
-      _verifUlys = rows;
-    } catch (e) { _verifUlys = []; }
-    return _verifTx;
-  }
-  // TOUTE conso (carburant, péage, boutique, lavage…) survenue pendant un congé du conducteur (interdit).
-  // Source DATÉE = total_conso_tx (carte carburant) ; + les congés de la fiche conducteur. Archivable.
-  function congeAnoms() {
-    if (!(window.FP && FP.consoPendantConge)) return [];
-    let okMap = {}; try { okMap = FP.settings.get().tfAnomOk || {}; } catch (e) {}
-    const presBadge = FP.prestataireBadge ? FP.prestataireBadge() : 'Ulys';
-    const lbl = (a) => { if (String(a.categorie || '').toLowerCase() === 'peage' && /^ULYS/i.test(String(a.carte || ''))) return 'péage ' + presBadge; return FP.consoCatLabel ? FP.consoCatLabel(a.categorie) : 'achat'; };
-    return FP.consoPendantConge(_verifTx || [])
-      .filter(a => !(FP.trouvailleResolue && FP.trouvailleResolue('conge', a))) // déjà traité dans Contrôle → on n'affiche plus (même branche)
-      .map(a => {
-      const cg = a.conge || {};
-      const key = 'conge|' + (a.key || '') + '|' + a.date + '|' + (a.produit || '') + '|' + (a.montant || '');
-      const cid = FP.trouvailleId ? FP.trouvailleId('conge', a) : ''; // id PARTAGÉ avec la page Contrôle
-      const conso = lbl(a);
-      const mnt = (a.montant != null && a.montant !== 0) ? " d'un montant de " + (FP.euro ? FP.euro(a.montant) : a.montant) : '';
-      const facTxt = a.facnum ? ' · Facture n° ' + a.facnum : '';
-      return { key, cid, t: 'conge', mois: String(a.date || '').slice(0, 7), facnum: a.facnum || '',
-        xp: { conducteur: a.conducteur, conso, montant: a.montant, dateConso: a.date, congeDebut: cg.debut, congeFin: cg.fin, facnum: a.facnum || '' },
-        txt: `${a.conducteur} — ${conso} le ${FP.date ? FP.date(a.date) : a.date}${mnt} pendant le congé du ${FP.date(cg.debut)} au ${FP.date(cg.fin)}${facTxt}` };
-    }).filter(a => !okMap[a.key]);
-  }
-  // Conso survenue APRÈS le DÉPART d'un salarié (carte/badge encore active) — MÊME détection que la page
-  // Contrôle (FP.consoApresDepart) → surfacée ICI pour ne rien cacher dans les alertes. Synchronisée par
-  // l'id PARTAGÉ (FP.trouvailleId('depart',…)) : archiver ici la classe aussi côté Contrôle, et inversement.
-  function departAnoms() {
-    if (!(window.FP && FP.consoApresDepart)) return [];
-    let okMap = {}; try { okMap = FP.settings.get().tfAnomOk || {}; } catch (e) {}
-    const presBadge = FP.prestataireBadge ? FP.prestataireBadge() : 'Ulys';
-    const lbl = (a) => { if (String(a.categorie || '').toLowerCase() === 'peage' && /^ULYS/i.test(String(a.carte || ''))) return 'péage ' + presBadge; return FP.consoCatLabel ? FP.consoCatLabel(a.categorie) : 'achat'; };
-    return FP.consoApresDepart(_verifTx || [])
-      .filter(a => !(FP.trouvailleResolue && FP.trouvailleResolue('depart', a))) // déjà traité dans Contrôle → on n'affiche plus
-      .map(a => {
-        const key = 'depart|' + (a.key || '') + '|' + a.date + '|' + (a.produit || '') + '|' + (a.montant || '');
-        const cid = FP.trouvailleId ? FP.trouvailleId('depart', a) : ''; // id PARTAGÉ avec la page Contrôle
-        const conso = lbl(a);
-        const mnt = (a.montant != null && a.montant !== 0) ? " d'un montant de " + (FP.euro ? FP.euro(a.montant) : a.montant) : '';
-        const facTxt = a.facnum ? ' · Facture n° ' + a.facnum : '';
-        return { key, cid, t: 'depart', mois: String(a.date || '').slice(0, 7), facnum: a.facnum || '',
-          txt: `${a.conducteur} — ${conso} le ${FP.date ? FP.date(a.date) : a.date}${mnt} alors qu'il a quitté ce véhicule le ${FP.date ? FP.date(a.finAffect) : a.finAffect}${facTxt}` };
-      }).filter(a => !okMap[a.key]);
-  }
-  // ⚠️ On NE détecte les congés QUE sur des dates EXACTES (congeAnoms via total_conso_tx / FP.congeCouvrant).
-  // L'ancien repli « au MOIS » (un congé chevauche le mois facturé Ulys) a été RETIRÉ : il accusait à tort
-  // (des péages hors des dates de congé étaient signalés parce que le congé tombait dans le même mois) —
-  // même correction qu'en page Contrôle. Si un relevé n'a que le total mensuel, on n'accuse pas : le
-  // diagnostic invite à « Reconstruire le détail » pour obtenir les dates réelles.
-  function verifAnoms() {
-    // Les conso Ulys datées vivent aussi dans total_conso_tx (péage) → on les exclut de la détection
-    // « carte carburant » (anomalies Total) ; elles ne servent QUE au suivi des congés (congeAnoms).
-    const txCard = (_verifTx || []).filter(t => !String(t.carte || '').toUpperCase().startsWith('ULYS'));
-    let card = (window.FP && FP.totalFleetAnomaliesActives) ? FP.totalFleetAnomaliesActives(txCard) : [];
-    // Même branche que Contrôle : on retire les anomalies déjà traitées là-bas (justifié / fraude / classé)
-    // et on rattache l'id PARTAGÉ (pour que la ✓ ici les classe aussi côté Contrôle).
-    card = card.filter(c => !(FP.trouvailleResolue && FP.trouvailleResolue('carte', c)));
-    card.forEach(c => { c.cid = FP.trouvailleId ? FP.trouvailleId('carte', c) : ''; });
-    return card.concat(congeAnoms()).concat(departAnoms());
-  }
-  function hasConges() { try { return Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length > 0; } catch (e) { return false; } }
-  function paintVerifTab(n) {
-    if (!tabV) return;
-    // ⚠️ Onglet « Points à vérifier » RETIRÉ de Suivi & alertes : les anomalies sont CENTRALISÉES
-    // dans l'onglet Contrôle (source unique — consigne utilisateur « Contrôle centralise »). On garde
-    // tout le code de calcul (loadVerifTx/verifAnoms/renderVerif) pour la compat, mais l'onglet ne
-    // s'affiche plus jamais ici pour éviter le doublon. NE PAS ré-afficher sans accord explicite.
-    tabV.style.display = 'none';
-    const b = document.getElementById('tab-verif-n'); if (b) b.textContent = n > 0 ? '(' + n + ')' : '';
-  }
-  async function refreshVerifCount() { await loadVerifTx(); paintVerifTab(verifAnoms().length); }
-  async function renderVerif() {
-    const box = document.getElementById('suivi-verif'); if (!box) return;
-    box.innerHTML = '<p class="text-sm text-slate-400">Chargement…</p>';
-    await loadVerifTx();
-    const anoms = verifAnoms();
-    paintVerifTab(anoms.length);
-    if (!anoms.length) {
-      let diag = '';
-      if (hasConges()) {
-        // 🔎 Diagnostic DÉTAILLÉ : pour CHAQUE conducteur en congé, combien de conso datées lui sont
-        // rattachées et combien tombent dans son congé → montre EXACTEMENT où la chaîne casse.
-        const esc = FP.esc || (s => String(s == null ? '' : s));
-        const allTx = _verifTx || [];
-        const nTx = allTx.length, nUlys = (_verifUlys || []).length;
-        const txUlys = allTx.filter(t => /^ULYS/i.test(String(t.carte || '')));
-        // Contrôle SOCIÉTÉ : une conso datée taguée sous une AUTRE société que celle affichée est
-        // filtrée → invisible ici (ex. relevé Ulys importé sur une société ≠ celle du congé). On compte,
-        // toutes sociétés confondues (le CEO les voit), pour révéler un tel décalage.
-        let socInfo = '';
-        try {
-          const cur = (localStorage.getItem('fp_societe') || 'PXP');
-          const _c = new Date(); _c.setMonth(_c.getMonth() - 12);
-          const r = FP.selectAllPaged ? await FP.selectAllPaged('total_conso_tx', q => q.gte('date_tx', _c.toISOString().slice(0, 10)), 'id', 'societe') : await FP.supabase.from('total_conso_tx').select('societe').gte('date_tx', _c.toISOString().slice(0, 10));
-          if (r && !r.error) {
-            const by = {}; (r.data || []).forEach(x => { const s = x.societe || '(sans société = PXP)'; by[s] = (by[s] || 0) + 1; });
-            const parts = Object.keys(by).map(s => esc(s) + ' : ' + by[s]);
-            if (parts.length) socInfo = `<div class="mt-1" style="color:#64748b">Société affichée : <b>${esc(cur === '__all__' ? 'Toutes (=PXP)' : cur)}</b> · conso datées en base (12 mois) : ${parts.join(' · ')}</div>`;
-          }
-        } catch (e) {}
-        const conges = FP.getAllConges(); const nC = Object.keys(conges).length;
-        const rows = Object.keys(conges).map(k => {
-          const nom = (FP.conducteurNomUnifie && FP.conducteurNomUnifie(k)) || k;
-          const per = (conges[k] || []).map(p => (FP.date ? FP.date(p.debut) : p.debut) + '→' + (FP.date ? FP.date(p.fin) : p.fin)).join(', ');
-          // conso rattachées à CE conducteur — MÊME résolution que la détection (clé carte/badge OU
-          // prénom réel de la fiche via FP.prenomDeCle, jamais un découpage de la clé).
-          const kPrenom = FP.prenomDeCle ? FP.prenomDeCle(k) : '';
-          const mine = allTx.filter(t => {
-            let kk = null; try { kk = FP.condKeyDeConso ? FP.condKeyDeConso(t) : null; } catch (e) {}
-            if (kk && kk === k) return true;
-            const np = (FP.normPrenom && t.conducteur) ? FP.normPrenom(t.conducteur) : null;
-            return !!(np && kPrenom === np);
-          });
-          const uMine = mine.filter(t => /^ULYS/i.test(String(t.carte || '')));
-          const inTx = mine.filter(t => { try { return FP.congeCouvrant && FP.congeCouvrant(k, t.dateTx || t.date_tx); } catch (e) { return false; } });
-          const inDates = [...new Set(inTx.map(t => (t.dateTx || t.date_tx || '').slice(0, 10)))].sort().slice(0, 4).map(d => d.split('-').reverse().join('/'));
-          return { nom, per, nTx: mine.length, nU: uMine.length, nIn: inTx.length, inDates };
-        });
-        const rowsHtml = rows.map(r => {
-          const etat = r.nTx === 0 ? '<span style="color:#B45309">conso non rattachée à cette fiche</span>'
-            : (r.nIn > 0 ? '<span style="color:#B91C1C;font-weight:700">' + r.nIn + ' pendant congé' + (r.inDates.length ? ' (' + esc(r.inDates.join(', ')) + ')' : '') + '</span>'
-              : 'aucune pendant le congé');
-          return `<li><b>${esc(r.nom)}</b> — ${r.nTx} conso datée(s)${r.nU ? ' (dont ' + r.nU + ' Ulys)' : ''} · congé ${esc(r.per) || '—'} → ${etat}</li>`;
-        }).join('');
-        const aStandard = rows.some(r => r.nTx === 0);
-        const hint = nTx === 0
-          ? 'Aucune conso datée n\'est enregistrée : le détail transaction-par-transaction n\'a pas (encore) été lu. Réimporte le relevé (PDF ou <b>CSV</b>) — <b>et fais Ctrl+Maj+R avant</b> pour être sûr d\'avoir la dernière version.'
-          : (aStandard
-            ? 'Un conducteur affiche « conso non rattachée » : ses péages existent mais ne sont pas reliés à SA fiche → vérifie que <b>son badge est relié au bon conducteur</b> (Contrôle → Ulys → Relier), et que tu es bien sur la <b>même société</b> que celle où tu as importé le relevé.'
-            : 'Les conso datées existent mais aucune ne tombe dans une période de congé (ou elles sont déjà archivées). Vérifie les <b>dates du congé</b> sur la fiche du conducteur.');
-        diag = `<div class="text-xs text-slate-500 mt-2" style="line-height:1.6">🔎 <b>Diagnostic congés</b> <span style="color:#94a3b8">(v0909e)</span> : <b>${nTx}</b> conso datée(s) (dont <b>${txUlys.length}</b> péages Ulys) · <b>${nC}</b> conducteur(s) avec congé.<ul style="margin:.35rem 0 0;padding-left:1.1rem">${rowsHtml || '<li>aucun</li>'}</ul>${socInfo}<div class="mt-1">${hint}</div></div>`;
-      }
-      box.innerHTML = '<div class="notif lvl-info"><i data-lucide="check-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5"></i><div class="flex-1"><div class="font-semibold text-slate-900">Aucun point à vérifier.</div><div class="text-sm text-slate-500">Tout est OK ou déjà archivé.</div>' + diag + '</div></div>'; lucide.createIcons(); return;
-    }
-    _verifCongeRows = anoms.filter(a => a.xp);
-    const toolbar = _verifCongeRows.length ? `<div class="flex flex-wrap gap-2 mb-3">
-        <button type="button" id="verif-pdf" class="btn btn-dark text-sm"><i data-lucide="file-down" class="w-4 h-4"></i> Relevé congés PDF (${_verifCongeRows.length})</button>
-        <button type="button" id="verif-csv" class="btn btn-outline text-sm"><i data-lucide="table" class="w-4 h-4"></i> Excel (CSV)</button>
-      </div>` : '';
-    box.innerHTML = '<p class="text-sm text-slate-500 mb-3">Dépenses inhabituelles sur la carte carburant (repas élevés, achats hors carburant, plusieurs pleins/jour, diesel), <b>TOUTE conso (carburant, péage, boutique…) pendant un congé</b> (interdit — avec les dates) <b>et toute conso APRÈS le départ d\'un salarié</b> (carte/badge restée active). Ce sont exactement les points « à vérifier » de l\'onglet <b>Contrôle</b> (mêmes anomalies, même compteur). La <b>✓ verte</b> archive comme sur Factures → Total Fleet (même suivi). Le bouton <b>Voir</b> ouvre la facture.</p>'
-      + toolbar
-      + anoms.map(a => {
-        const conge = a.t === 'conge';
-        const depart = a.t === 'depart';
-        const personne = conge || depart; // renvoie vers la fiche conducteur plutôt que la facture
-        const cat = conge ? '🌴 Conso pendant un congé' : (depart ? '🚪 Conso après le départ du conducteur' : 'Carte carburant Total');
-        const body = `<div class="notif-cat">${cat}</div><div class="font-semibold text-slate-900">${esc(a.txt)}</div>`;
-        // Bouton « Voir » → ouvre la FACTURE concernée (PDF) quand on a son n°, comme Total Fleet.
-        const voir = a.facnum
-          ? `<button type="button" data-verif-facture="${esc(a.facnum)}" title="Voir la facture concernée" style="flex:none;font-size:12px;font-weight:700;color:var(--fp-accent);background:#FFF7ED;border:1px solid #FED7AA;border-radius:7px;padding:4px 11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px"><i data-lucide="eye" class="w-3.5 h-3.5"></i> Voir</button>`
-          : `<a href="${personne ? 'conducteurs.html' : 'factures.html'}" title="Ouvrir" style="flex:none;color:#94A3B8"><i data-lucide="chevron-right" class="w-4 h-4"></i></a>`;
-        return `<div class="notif lvl-warn" style="align-items:center;gap:8px"><button type="button" data-verif-ok="${esc(a.key)}" data-verif-cid="${esc(a.cid || '')}" title="Marquer vérifié / archiver (même suivi que Factures et Contrôle)" style="flex:none;color:#16a34a;background:none;border:none;cursor:pointer;font-weight:800;font-size:17px;line-height:1">✓</button><i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 flex-shrink-0"></i><div class="flex-1 min-w-0">${body}</div>${voir}</div>`;
-      }).join('');
-    lucide.createIcons();
-  }
-  // « Voir » → ouvre la facture concernée (PDF, lien signé si bucket privé) dans un nouvel onglet.
-  async function openFactureByNum(facnum) {
-    if (!facnum) return;
-    const up = String(facnum).toUpperCase();
-    const f = (window.FP_DATA.factures || []).find(x =>
-      String(x.numeroFacture || '').toUpperCase() === up ||
-      String(x.id || '').toUpperCase() === 'TF-' + up ||
-      String(x.id || '').toUpperCase() === 'ULYS-' + up);
-    if (!f) { if (FP.toast) FP.toast('Facture ' + facnum + ' introuvable.'); return; }
-    let url = f.url || f.fileId || '';
-    if (!url || /^IMP-/.test(url)) { if (FP.toast) FP.toast('Aucun PDF stocké pour cette facture — réimporte le relevé une fois.'); return; }
-    try { if (/\/storage\/v1\/object\//.test(url) && FP.signedScanUrl) { const s = await FP.signedScanUrl(url, 600); if (s) url = s; } } catch (e) {}
-    if (/^https?:\/\//.test(url)) window.open(url, '_blank', 'noopener');
-    else window.open('https://drive.google.com/file/d/' + url + '/view', '_blank', 'noopener');
-  }
-  // Relevé « conso pendant congés » : colonnes conducteur · conso · montant · DATE conso · CONGÉ · N° FACTURE.
-  const _verifCols = ['Conducteur', 'Conso', 'Montant (€)', 'Date conso', 'Congé début', 'Congé fin', 'N° facture'];
-  const _verifRow = (a) => { const x = a.xp || {}; return [x.conducteur || '', x.conso || '', (x.montant != null ? x.montant : ''), (x.dateConso ? (FP.date ? FP.date(x.dateConso) : x.dateConso) : ''), (x.congeDebut ? FP.date(x.congeDebut) : ''), (x.congeFin ? FP.date(x.congeFin) : ''), x.facnum || '']; };
-  function exportVerifCSV() {
-    const rows = _verifCongeRows || []; if (!rows.length) { if (FP.toast) FP.toast('Rien à exporter.'); return; }
-    // Vrai Excel (.xlsx) : montant numérique, colonnes propres, encodage correct.
-    if (FP.downloadXlsx) {
-      const data = rows.map(a => { const r = _verifRow(a); const m = Number(r[2]); r[2] = (isFinite(m) && r[2] !== '') ? m : ''; return r; });
-      FP.downloadXlsx('points-a-verifier-conges', _verifCols, data, { sheet: 'À vérifier' }); return;
-    }
-    const q = (s) => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
-    const lines = ['sep=;', _verifCols.map(q).join(';')].concat(rows.map(a => { const r = _verifRow(a); r[2] = (r[2] !== '' && r[2] != null) ? Number(r[2]).toFixed(2).replace('.', ',') : ''; return r.map(q).join(';'); }));
-    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob); const el = document.createElement('a'); el.href = url; el.download = 'points-a-verifier-conges.csv'; document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
-  }
-  function exportVerifPDF() {
-    const rows = _verifCongeRows || []; if (!rows.length) { if (FP.toast) FP.toast('Rien à exporter.'); return; }
-    if (!(window.jspdf && window.jspdf.jsPDF)) { if (FP.ensureJsPDF) FP.ensureJsPDF().then(exportVerifPDF); return; }
-    const doc = new window.jspdf.jsPDF();
-    const soc = (FP.activeSociete && FP.activeSociete()) || '';
-    const today = (function () { try { return FP.date(new Date().toISOString().slice(0, 10)); } catch (e) { return ''; } })();
-    doc.setFontSize(14); doc.setTextColor(15, 30, 61); doc.text('Relevé — Conso pendant congés à vérifier', 14, 16);
-    doc.setFontSize(9); doc.setTextColor(120); doc.text((soc && soc !== '__all__' ? soc + ' · ' : '') + (rows.length + ' ligne(s)') + (today ? ' · édité le ' + today : ''), 14, 22);
-    const body = rows.map(a => { const r = _verifRow(a); return [r[0], r[1], (r[2] !== '' ? (FP.euro ? FP.euro(r[2]) : r[2]) : '—'), r[3] || '—', (r[4] && r[5] ? r[4] + ' → ' + r[5] : '—'), r[6] || '—']; });
-    doc.autoTable({ startY: 27, head: [['Conducteur', 'Conso', 'Montant', 'Date conso', 'Congé', 'N° facture']], body, styles: { fontSize: 8, cellPadding: 2 }, headStyles: { fillColor: [15, 30, 61] } });
-    doc.save('points-a-verifier-conges.pdf');
-  }
-  // ✓ Archiver depuis « Suivi & alertes » → écrit dans la MÊME source (FP.settings.tfAnomOk) que Factures.
-  { const vbox = document.getElementById('suivi-verif'); if (vbox) vbox.addEventListener('click', (e) => {
-    if (e.target.closest('#verif-pdf')) { e.preventDefault(); exportVerifPDF(); return; }
-    if (e.target.closest('#verif-csv')) { e.preventDefault(); exportVerifCSV(); return; }
-    const vf = e.target.closest('[data-verif-facture]'); if (vf) { e.preventDefault(); openFactureByNum(vf.getAttribute('data-verif-facture')); return; }
-    const ok = e.target.closest('[data-verif-ok]'); if (!ok) return;
-    e.preventDefault();
-    const key = ok.getAttribute('data-verif-ok');
-    const cid = ok.getAttribute('data-verif-cid') || '';
-    const a = verifAnoms().find(x => x.key === key);
-    try { const s = FP.settings.get(); const m = s.tfAnomOk || {}; m[key] = a ? { key, t: a.t, txt: a.txt, mois: a.mois || '', facnum: a.facnum || '', okAt: Date.now() } : { key, okAt: Date.now() }; s.tfAnomOk = m; FP.settings.save(s); } catch (er) {}
-    // MÊME BRANCHE que la page Contrôle : on classe aussi la trouvaille côté Contrôle (statut « classé »)
-    // pour que les deux vues restent synchronisées.
-    if (cid && FP.setControleStatut) FP.setControleStatut(cid, 'classe');
-    renderVerif();
-    if (window.FP && FP.toast) FP.toast('✓ Archivé (visible aussi dans Factures et Contrôle)');
-  }); }
+  // ⚠️ Onglet « Points à vérifier » SUPPRIMÉ de Suivi & alertes (consigne utilisateur : Contrôle centralise
+  // toutes les anomalies de conso — carte carburant, congé, après-départ). Voir pages/controle.html.
 
   // Bouton « Compléter depuis les cartes grises » : remplit les champs VIDES depuis FP.CG_DATA.
   document.getElementById('suivi-complet').addEventListener('click', async (e) => {
@@ -1708,14 +1459,12 @@
       setInterval(postH, 1500);
     } catch (e) {}
   })();
-  refreshVerifCount(); // affiche l'onglet « Points à vérifier » seulement s'il y en a
   loadCompletDocs(); // documents véhicules → savoir qui a sa carte grise / mémo sur la plateforme
   document.addEventListener('fp:data-ready', () => {
     render();
     if (isDecisionsVisible()) renderDecisions();
     if (!document.getElementById('suivi-echeances').classList.contains('hidden')) renderEcheances();
     if (isCompletVisible()) renderComplet();
-    if (!document.getElementById('suivi-verif').classList.contains('hidden')) renderVerif();
     loadCompletDocs();
   });
 
