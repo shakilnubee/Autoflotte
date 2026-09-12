@@ -5071,7 +5071,8 @@ FP.NAV_SUBMENUS = {
   ],
   'notifications.html': [
     { label: 'Alertes', tab: 'alertes' },
-    { label: 'Points à vérifier', tab: 'verif' },
+    // « Points à vérifier » retiré (consigne utilisateur) : les anomalies de conso sont centralisées
+    // dans l'onglet CONTRÔLE (source unique). L'ancien onglet 'verif' reste inaccessible côté UI.
     { label: 'Renouvellements', tab: 'echeances' },
     { label: 'À compléter', tab: 'complet' },
     { label: 'Décisions', tab: 'decisions' },
@@ -8471,7 +8472,7 @@ document.addEventListener('click', function (e) {
     let ticking = false;
     const onScroll = () => {
       if (ticking) return; ticking = true;
-      requestAnimationFrame(() => { b.classList.toggle('on', curScroll() > 420); ticking = false; });
+      requestAnimationFrame(() => { b.classList.toggle('on', curScroll() > 250); ticking = false; });
     };
     // capture:true → capte aussi le scroll d'un conteneur interne (main/body), pas seulement window
     document.addEventListener('scroll', onScroll, { passive: true, capture: true });
