@@ -123,7 +123,18 @@
       if (mTtc) ttc = ulsNum(mTtc[1]);
       const page1 = t.split(/Badge n[°ºo]/)[0];          // le récap TVA est sur la 1re page
       const p1nums = toNums(page1);
-      if (ttc == null && p1nums.length) ttc = Math.max.apply(null, p1nums);
+      if (ttc == null && p1nums.length) {
+        // ⚠️ NE PAS prendre Math.max brut (piège « 1875 € » : une référence parasite ramassée par le
+        // plus grand nombre). Repli sûr : on ne retient un TTC que s'il est COHÉRENT avec un couple
+        // base/TVA à 20 % de la 1re page (base + TVA ≈ candidat). Le plus grand candidat cohérent
+        // gagne ; si aucun triplet ne colle, ttc reste null → la facture est signalée illisible (skip)
+        // plutôt que devinée (cf. règle CLAUDE.md « jamais un Math.max, jamais une somme parasite »).
+        let cand = null;
+        for (const c of p1nums) for (const b of p1nums) for (const tv of p1nums) {
+          if (tv > 0 && Math.abs(b * 0.20 - tv) <= 0.02 && Math.abs(b + tv - c) <= 0.05) { if (cand == null || c > cand) cand = c; }
+        }
+        ttc = cand;
+      }
       if (ttc != null){
         let best = null;
         for (const b of p1nums) for (const tv of p1nums){
@@ -291,9 +302,10 @@
           p._file = f;                                       // garde le PDF d'origine → stocké au commit (bouton « Voir »)
           fac.push(p);
           p.conso.forEach(c => rows.push(Object.assign({ mois:p.mois, numero:p.numero }, c)));
-          // Détail DATÉ (colonne date des consommations) → alimente total_conso_tx (péage) pour la
-          // détection « conso pendant un congé » à la bonne DATE. Best-effort (dépend du format PDF).
-          (p.txConso || []).forEach((c, i) => tx.push(Object.assign({ mois:p.mois, numero:p.numero, seq:i }, c)));
+          // ℹ️ Le détail DATÉ transaction par transaction (pour la détection « conso pendant congé »
+          // à la DATE exacte) n'est PAS extrait du PDF Ulys (parseUlys ne fournit que le total mensuel
+          // par badge). Il arrive par l'import CSV Ulys (parseUlysCsv remplit `tx`) et par le bouton
+          // « Reconstruire le détail ». (Ancien code mort `p.txConso` retiré : ce champ n'existait pas.)
         } catch (e){ console.error('[uls-import]', e); skipped++; }
       }
       // On peut n'avoir AUCUNE facture à créer (CSV dont les factures sont déjà dans PP) mais quand même

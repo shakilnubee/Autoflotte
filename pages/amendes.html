@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <script>try{if(localStorage.getItem("fp_dark_mode")!=="0"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Amendes — Parc Pilot</title>
@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260912i">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260912j">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260912i"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260912j"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260912i">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260912j">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -243,7 +243,7 @@
 
     <!-- Filtres -->
     <div class="card p-4 mb-6">
-      <div class="flex flex-wrap items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3" id="amendes-filter-bar">
         <div class="relative flex-1 min-w-[220px]">
           <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
           <input id="search" type="text" placeholder="Prénom, motif, n° avis…" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
@@ -278,8 +278,6 @@
           <option value="points">Tri : Points</option>
         </select>
         <button id="sort-dir" class="btn btn-outline text-sm !px-2.5" title="Inverser le sens du tri"><i data-lucide="arrow-down-wide-narrow" class="w-4 h-4"></i></button>
-
-        <button id="reset-filters" class="btn btn-outline text-sm" title="Réinitialiser tous les filtres"><i data-lucide="rotate-ccw" class="w-4 h-4"></i> Réinitialiser</button>
       </div>
     </div>
 
@@ -484,11 +482,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260912i"></script>
-<script src="../assets/js/supabase-client.js?v=20260912i"></script>
-<script src="../assets/js/data.js?v=20260912i"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260912j"></script>
+<script src="../assets/js/supabase-client.js?v=20260912j"></script>
+<script src="../assets/js/data.js?v=20260912j"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.js?v=20260912i"></script>
+<script src="../assets/js/app.js?v=20260912j"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -2789,12 +2787,16 @@
     if (i) { i.setAttribute('data-lucide', state.sortDir === 'asc' ? 'arrow-up-narrow-wide' : 'arrow-down-wide-narrow'); lucide.createIcons(); }
     renderTable();
   });
-  $('reset-filters').addEventListener('click', () => {
+  // Réinitialiser : géré par le helper central FP.filterResetButton (pose le bouton ET câble la
+  // feuille de filtres mobile « Filtres (N) » via FP.filterSheet — cohérence avec Factures/Sinistres…).
+  function resetAmendeFilters() {
     Object.assign(state, { search: '', conducteur: '', statut: 'all', annee: 'all', motif: 'all', motifCat: 'all', dateFrom: DEFAULT_DATE_FROM, dateTo: '', sortKey: 'date', sortDir: 'desc', onlyPoints: false });
     $('search').value = ''; if ($('filter-annee')) $('filter-annee').value = 'all'; $('filter-motif').value = 'all'; $('filter-date-from').value = DEFAULT_DATE_FROM; $('filter-date-to').value = ''; $('sort-key').value = 'date';
     document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'all'));
     renderKPIs(); renderTable(); renderCharts();
-  });
+  }
+  if (FP.filterResetButton && $('amendes-filter-bar')) FP.filterResetButton($('amendes-filter-bar'), { onReset: resetAmendeFilters });
+  else { const rf = $('reset-filters'); if (rf) rf.addEventListener('click', resetAmendeFilters); }
   $('drill-info').addEventListener('click', e => {
     const chip = e.target.closest('[data-cond]');
     if (chip) setConducteurFilter(chip.dataset.cond);
