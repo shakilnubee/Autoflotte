@@ -3848,7 +3848,7 @@ FP.ensureJsPDF = function () {
     try {
       const base = location.pathname.indexOf('/pages/') !== -1 ? '../' : './';
       let ver = '';
-      try { const s = document.querySelector('script[src*="app.js"]'); const m = s && s.src && s.src.match(/\?v=[^"'&]+/); if (m) ver = m[0]; } catch (e) {}
+      try { const s = document.querySelector('script[src*="app.min.js"]') || document.querySelector('script[src*="app.js"]'); const m = s && s.src && s.src.match(/\?v=[^"'&]+/); if (m) ver = m[0]; } catch (e) {}
       const load = (src) => new Promise((res, rej) => {
         const sc = document.createElement('script'); sc.src = src + ver; sc.async = true;
         sc.onload = res; sc.onerror = rej; document.head.appendChild(sc);
