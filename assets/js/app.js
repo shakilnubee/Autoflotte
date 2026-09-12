@@ -4160,6 +4160,17 @@ FP.clampDropdowns = () => {
 document.addEventListener('click', () => setTimeout(FP.clampDropdowns, 0), true);
 window.addEventListener('resize', () => { try { FP.clampDropdowns(); } catch (e) {} });
 
+// ⚠️ ICÔNES JAMAIS VIDES — Lucide est chargé en `defer` : il s'exécute APRÈS app.js et les scripts
+// inline de bas de page. Tout ce qui a été peint avec le stub `createIcons` (icônes statiques du HTML,
+// ou 1er rendu synchrone) reste alors VIDE tant que rien ne redessine (bug réel : bouton « Voir » de
+// Contrôle blanc sur mobile). Au `load` (après exécution du script defer de Lucide) — puis 2 filets de
+// sécurité courts — on redessine TOUTES les icônes une fois → plus aucun bouton/icône blanc au 1er
+// affichage. Idempotent : Lucide ne retouche que les `<i data-lucide>` restants.
+(function ensureIconsPainted() {
+  const paint = () => { try { if (window.lucide && lucide.createIcons) lucide.createIcons(); } catch (e) {} };
+  addEventListener('load', () => { paint(); setTimeout(paint, 300); setTimeout(paint, 1200); });
+})();
+
 // === Paramètres utilisateur persistés (localStorage) ===
 FP.settings = {
   STORAGE_KEY: 'auto_flotte_settings',
