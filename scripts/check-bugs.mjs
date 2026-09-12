@@ -14,6 +14,7 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { dirname, resolve, join } from 'node:path';
+import { TARGETS, srcHash, HASH_RE } from './min-common.mjs';
 
 const ROOT = resolve(process.argv[2] || '.');
 const errors = [];
@@ -29,18 +30,30 @@ function htmlFiles() {
 }
 
 // 1) Syntaxe JS
-for (const js of ['assets/js/app.js', 'assets/js/supabase-client.js', 'assets/js/data.js']) {
+for (const js of ['assets/js/app.js', 'assets/js/supabase-client.js', 'assets/js/data.js', 'assets/js/fleet-views.js', 'assets/js/app.min.js', 'assets/js/fleet-views.min.js']) {
   const p = join(ROOT, js);
   if (!existsSync(p)) continue;
   try { execSync(`node --check "${p}"`, { stdio: 'pipe' }); }
   catch (e) { errors.push(`Syntaxe JS invalide : ${js}\n   ${String(e.stderr || e).split('\n').slice(0, 3).join('\n   ')}`); }
 }
 
+// 1bis) GARDE-FOU MINIFICATION : chaque .min.js DOIT correspondre à sa source (empreinte en tête).
+//   Empêche de déployer un JS minifié PÉRIMÉ (source éditée sans relancer build-min).
+for (const t of TARGETS) {
+  const sp = join(ROOT, t.src), op = join(ROOT, t.out);
+  if (!existsSync(sp)) continue;
+  if (!existsSync(op)) { errors.push(`Minifié manquant : ${t.out}. Lance : node scripts/build-min.mjs`); continue; }
+  const want = srcHash(readFileSync(sp, 'utf8'));
+  const m = HASH_RE.exec(readFileSync(op, 'utf8'));
+  const got = m ? m[1] : null;
+  if (got !== want) errors.push(`Minifié PÉRIMÉ : ${t.out} (empreinte ${got || 'absente'} ≠ source ${want}). ${t.src} a changé → relance : node scripts/build-min.mjs`);
+}
+
 // 2) Cohérence du cache-busting (?v=...) — UNIQUEMENT sur les assets partagés
 //    (tailwind.css, styles.css, app.js, supabase-client.js, data.js, lucide.min.js).
 //    On ignore les ?v= sur d'autres ressources (ex. logos images) qui ont leur propre versionnage.
 const versions = new Set();
-const ASSET_V = /(?:tailwind\.css|styles\.css|app\.js|supabase-client\.js|data\.js|lucide\.min\.js)\?v=([A-Za-z0-9]+)/g;
+const ASSET_V = /(?:tailwind\.css|styles\.css|app\.min\.js|app\.js|supabase-client\.js|data\.js|fleet-views\.min\.js|fleet-views\.js|lucide\.min\.js)\?v=([A-Za-z0-9]+)/g;
 for (const h of htmlFiles()) {
   const txt = readFileSync(h, 'utf8');
   for (const m of txt.matchAll(ASSET_V)) versions.add(m[1]);
