@@ -2535,14 +2535,17 @@
       <div>
         <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1">Carnet d'entretien <span class="text-slate-400 font-normal text-sm">(${carnet.length})</span></div>
         <div class="text-sm mt-3 space-y-1.5">
-          ${FP.clampList(carnet.map(f => `
+          ${FP.clampList(carnet.map(f => { const _ref = f.url || f.fileId || ''; return `
             <div class="flex justify-between items-start gap-2 border-b border-slate-100 pb-1.5">
               <div>
                 <div class="text-slate-700">${escapeHtml(f.description || f.fournisseur || f.numeroFacture || 'Facture')}</div>
                 <div class="text-xs text-slate-400">${FP.dateNum(f.date)}${f.fournisseur && f.description ? ' · ' + escapeHtml(f.fournisseur) : ''}${f.km ? ' · ' + FP.num(f.km) + ' km' : ''}</div>
               </div>
-              <div class="font-semibold whitespace-nowrap">${FP.euro(f.montantTTC)}</div>
-            </div>`))}
+              <div class="flex items-center gap-2 whitespace-nowrap">
+                <span class="font-semibold">${FP.euro(f.montantTTC)}</span>
+                ${_ref ? `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px;display:inline-flex;align-items:center;gap:4px" data-carnet-pdf="${escapeHtml(_ref)}" onclick="event.stopPropagation()"><i data-lucide="eye" class="w-3 h-3"></i>Voir</button>` : ''}
+              </div>
+            </div>`; }))}
         </div>
       </div>` : '';
     const tvs = FP.tvsAnnuelle(v);
@@ -4479,6 +4482,15 @@
       let url = open.getAttribute('data-doc-open');
       try { if (window.FP && FP.signedScanUrl) url = await FP.signedScanUrl(url, 3600); } catch (e2) {}
       if (url) window.open(url, '_blank', 'noopener');
+      return;
+    }
+    // Carnet d'entretien : « Voir » une facture d'entretien/réparation du véhicule.
+    const carnetPdf = e.target.closest('[data-carnet-pdf]');
+    if (carnetPdf) {
+      e.preventDefault();
+      const ref = carnetPdf.getAttribute('data-carnet-pdf');
+      if (window.FP && FP.openPdf) FP.openPdf(ref, 'Aucun PDF stocké pour cette facture');
+      else if (ref) window.open(ref, '_blank', 'noopener');
       return;
     }
     const view = e.target.closest('[data-doc-view]');
