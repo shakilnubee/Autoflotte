@@ -1114,6 +1114,22 @@ FP.parseMontant = (s) => { if (s == null || s === '') return null; const n = par
 // qui n'est pas alphanumérique : tirets, espaces, points). « AB-123-CD », « ab 123 cd », « AB123CD » →
 // « AB123CD ». À utiliser pour TOUT match facture↔véhicule / amende↔véhicule / document↔véhicule.
 FP.normImmat = (s) => String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+// ⚠️ SOURCE UNIQUE — AFFICHAGE d'une plaque avec les tirets (plus propre), quel que soit le format
+// stocké. On NE TOUCHE PAS au stockage ni au matching (toujours via normImmat) : c'est purement visuel.
+//   • SIV (depuis 2009) : AB-123-CD  → « AA-999-AA »
+//   • FNI (ancien)      : 1234-AB-56 → « 999(9)-AA(A)-99 »
+// Si le format n'est pas reconnu, on renvoie la plaque telle quelle (en majuscules).
+FP.immatFmt = (s) => {
+  if (s == null || s === '') return '';
+  const raw = String(s).trim();
+  if (raw.indexOf('-') >= 0) return raw.toUpperCase();          // déjà avec tirets → on garde
+  const n = FP.normImmat(raw);
+  let m = n.match(/^([A-Z]{2})([0-9]{3})([A-Z]{2})$/);          // SIV : AB123CD
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  m = n.match(/^([0-9]{1,4})([A-Z]{2,3})([0-9]{2})$/);          // FNI : 1234AB56
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  return raw.toUpperCase();
+};
 // ⚠️ SOURCE UNIQUE — deux plaques « égales » quel que soit le format (min/maj, tirets, espaces).
 FP.immatEq = (a, b) => { const x = FP.normImmat(a); return !!x && x === FP.normImmat(b); };
 // ⚠️ SOURCE UNIQUE — retrouve LE véhicule par sa plaque, tolérant à TOUS les formats. À utiliser
@@ -8502,7 +8518,8 @@ FP._pagePrefix = function () { try { return location.pathname.indexOf('/pages/')
 FP._escLien = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); };
 FP.lienVehicule = function (immat, label) {
   const im = (immat == null ? '' : String(immat)).trim();
-  const txt = FP._escLien(label != null ? label : im);
+  // Affichage AVEC tirets (FP.immatFmt) — le lien (href) garde la plaque brute (matching via normImmat).
+  const txt = FP._escLien(label != null ? label : (FP.immatFmt ? FP.immatFmt(im) : im));
   if (!im) return txt;
   return `<a class="fp-lien" href="${FP._pagePrefix()}vehicules.html?immat=${encodeURIComponent(im)}" title="Voir la fiche véhicule" onclick="event.stopPropagation()">${txt}</a>`;
 };

@@ -942,7 +942,7 @@
             <div class="top"><span class="nm">${esc(nm)}${plaque}</span><span class="tot">${FP.euro(ttc)}</span></div>
             <div class="tf-splbar">${bar}</div>
             <div class="tf-brk">${brk}</div>
-            <div class="foot"><div>Litres<b>${litres?FP.num(Math.round(litres))+' L':'—'}</b></div><div>Prix / L<b>${prixL?prixL.toFixed(3).replace('.',',')+' €':'—'}</b></div><div>HT / TVA<b>${FP.euro(c.total_ht)} / ${FP.euro(c.total_tva)}</b></div></div>
+            <div class="foot"><div>Litres<b>${litres?FP.num(Math.round(litres))+' L':'—'}</b></div><div>Prix / L<b>${(prixL>0&&prixL<=4)?prixL.toFixed(3).replace('.',',')+' €':'—'}</b></div><div>HT / TVA<b>${FP.euro(c.total_ht)} / ${FP.euro(c.total_tva)}</b></div></div>
           </div>`;
         }).join('');
       }
@@ -1000,7 +1000,7 @@
       const eur = FP.euro;
       $('tf-an-stats').innerHTML = [
         ['Litres totaux', FP.num(Math.round(tot.litres)) + ' L', 'carburant consommé'],
-        ['Prix moyen / L', prixL ? (prixL.toFixed(3).replace('.', ',') + ' €') : '—', 'carburant TTC ÷ litres'],
+        ['Prix moyen / L', (prixL > 0 && prixL <= 4) ? (prixL.toFixed(3).replace('.', ',') + ' €') : '—', 'carburant TTC ÷ litres (relevé)'],
         ['CO₂ estimé', (Math.round(co2 / 100) / 10).toLocaleString('fr-FR') + ' t', 'depuis les litres (est.)'],
         ['Péages', eur(tot.peage), Math.round(tot.peage / (tot.ttc || 1) * 100) + ' % du total'],
       ].map(s => `<div class="kpi"><div class="kpi-label">${s[0]}</div><div class="kpi-value" style="font-size:1.35rem">${s[1]}</div><div class="kpi-delta">${s[2]}</div></div>`).join('');
@@ -1031,7 +1031,7 @@
       // Classement conducteurs
       const byD = {}; rows.forEach(c => { const n = _tfName(c, vbp); const d = byD[n] || (byD[n] = { nom:n, ttc:0, carb:0, litres:0, bout:0 }); d.ttc += _tfN(c.total_ttc); d.carb += _tfN(c.carburant_ttc); d.litres += _tfN(c.litres); d.bout += _tfN(c.boutique_ttc); });
       const rank = Object.values(byD).sort((a, b) => b.ttc - a.ttc).slice(0, 8); const maxD = Math.max(1, ...rank.map(d => d.ttc));
-      $('tf-an-rank').innerHTML = rank.map((d, i) => { const pl = d.litres > 0 ? d.carb / d.litres : 0; return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><div style="width:16px;font-weight:800;color:#94a3b8">${i + 1}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#0f1e3d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.nom)}</div><div style="background:#f1f5f9;border-radius:5px;overflow:hidden;height:7px;margin-top:2px"><div style="width:${Math.round(d.ttc / maxD * 100)}%;height:100%;background:#f97316"></div></div></div><div style="width:78px;text-align:right;font-size:12px;font-weight:700">${eur(d.ttc)}</div><div style="width:66px;text-align:right;font-size:11px;color:#94a3b8">${pl ? pl.toFixed(2).replace('.', ',') + ' €/L' : ''}</div></div>`; }).join('') || '<p class="text-sm text-slate-400">—</p>';
+      $('tf-an-rank').innerHTML = rank.map((d, i) => { const pl = d.litres > 0 ? d.carb / d.litres : 0; return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px"><div style="width:16px;font-weight:800;color:#94a3b8">${i + 1}</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#0f1e3d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(d.nom)}</div><div style="background:#f1f5f9;border-radius:5px;overflow:hidden;height:7px;margin-top:2px"><div style="width:${Math.round(d.ttc / maxD * 100)}%;height:100%;background:#f97316"></div></div></div><div style="width:78px;text-align:right;font-size:12px;font-weight:700">${eur(d.ttc)}</div><div style="width:66px;text-align:right;font-size:11px;color:#94a3b8" title="${(pl>0&&pl<=4)?'Carburant TTC ÷ litres du relevé':'Prix/L masqué : nombre de litres incomplet sur le relevé'}">${(pl>0&&pl<=4) ? pl.toFixed(2).replace('.', ',') + ' €/L' : ''}</div></div>`; }).join('') || '<p class="text-sm text-slate-400">—</p>';
       // === POINTS À VÉRIFIER — seuils configurables ; clic → ouvre la facture concernée ===
       const anom = [];
       const lim = tfLimits();
