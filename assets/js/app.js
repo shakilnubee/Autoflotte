@@ -12985,7 +12985,13 @@ FP.mobileCardify = (root) => {
   try {
     if (!window.matchMedia || !matchMedia('(max-width: 640px)').matches) return;
     (root || document).querySelectorAll('table.fp-table').forEach(tbl => {
-      const ths = [...tbl.querySelectorAll('thead th')].map(th => (th.textContent || '').trim());
+      // ⚠️ On lit le LIBELLÉ de la colonne SANS le bouton « ✕ » (masquer colonne) qui vit dans le <th> :
+      // sinon les cartes mobiles affichaient « Date✕ », « Véhicule✕ »… (parasite signalé).
+      const ths = [...tbl.querySelectorAll('thead th')].map(th => {
+        const c = th.cloneNode(true);
+        c.querySelectorAll('button, .col-x, .col-remove, [data-col-remove], [data-remove-col]').forEach(b => b.remove());
+        return (c.textContent || '').replace(/[×✕✖]/g, '').replace(/\s+/g, ' ').trim();
+      });
       if (!ths.length) return;
       tbl.querySelectorAll('tbody tr').forEach(tr => {
         [...tr.children].forEach((td, i) => { if (td.tagName === 'TD' && ths[i] && !td.hasAttribute('data-label')) td.setAttribute('data-label', ths[i]); });
