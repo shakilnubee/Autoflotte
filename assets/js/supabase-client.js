@@ -15,6 +15,22 @@
   window.FP = window.FP || {};
   FP.supabase = client;
 
+  // ⚠️ MULTI-SOCIÉTÉS — purge des caches locaux liés à un TENANT (société) + à l'identité.
+  // Indispensable pour que, sur un navigateur PARTAGÉ (ex. la démo de Shakil puis la connexion d'un
+  // NOUVEAU CLIENT), le client suivant ne voie JAMAIS — même le temps d'un flash — les données de la
+  // société précédente (véhicules, amendes, factures, NOMS de conducteurs) figées dans le cache/profil
+  // du user précédent. Appelée à la connexion ET à la déconnexion, et en filet si l'id user change.
+  // NE touche PAS aux préférences per-appareil (mode sombre, densité, « se souvenir de moi »).
+  FP.purgeTenantCache = function () {
+    try {
+      const KILL = /^(fp_data_cache|fp_cond_cache|fp_docs_cache|fp_emprunts|auto_flotte_settings)/;
+      const drop = [];
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && KILL.test(k)) drop.push(k); }
+      drop.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+      ['fp_profile', 'fp_societe', 'fp_email', 'fp_data_cache'].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+    } catch (e) {}
+  };
+
   // Envoi d'e-mail via l'Edge Function 'send-email' (la clé Resend reste SECRÈTE côté serveur).
   // Rejette si la fonction n'est pas (encore) déployée → l'appelant peut alors se replier sur Gmail.
   // msg = { to, cc?, subject, html?, text?, replyTo?, from? }
@@ -87,6 +103,9 @@
       // Déconnexion : plus d'ancienne transition « hyperspace » — on redirige vers login.html
       // où la scène d'orage joue un DÉLUGE d'éclairs (drapeau fp_logout_burst lu au chargement).
       try { sessionStorage.setItem('fp_logout_burst', '1'); } catch (e) {}
+      // Purge tenant : le prochain compte connecté sur ce navigateur ne doit hériter d'aucune donnée.
+      try { if (FP.purgeTenantCache) FP.purgeTenantCache(); } catch (e) {}
+      try { localStorage.removeItem('fp_last_uid'); } catch (e) {}
       try { await client.auth.signOut(); } catch (e) {}
       setTimeout(function () { window.location.href = loginPath; }, 120);
     },
@@ -338,6 +357,15 @@
       const { data: { session } } = await client.auth.getSession();
       const u = session && session.user;
       if (u) {
+        // 🔒 FILET MULTI-SOCIÉTÉS : si l'utilisateur connecté a CHANGÉ depuis la dernière fois sur ce
+        // navigateur (autre compte / autre société), on PURGE tout cache tenant AVANT de continuer —
+        // évite qu'un client hérite des données du précédent (le login purge déjà, ceci couvre les
+        // reconnexions auto « se souvenir de moi » et tout changement de session hors login.html).
+        try {
+          const prevUid = localStorage.getItem('fp_last_uid');
+          if (prevUid && prevUid !== u.id && FP.purgeTenantCache) FP.purgeTenantCache();
+          localStorage.setItem('fp_last_uid', u.id);
+        } catch (e) {}
         // Mémorise l'e-mail de connexion (sert au gating de l'onglet privé « JIS », CEO only).
         try { const em = String(u.email || '').toLowerCase(); localStorage.setItem('fp_email', em); FP.userEmail = em; } catch (e) {}
         const pr = await client.from('profiles').select('societe,is_admin,role').eq('id', u.id).maybeSingle();
@@ -347,9 +375,32 @@
           if (pr.data.is_admin === false && pr.data.societe) {
             try { localStorage.setItem('fp_societe', pr.data.societe); } catch (e) {}
           }
+          // Recalcule la CLÉ DE CACHE avec la vraie société résolue : sinon les données live seraient
+          // écrites sous la clé figée au chargement (défaut PXP) → contamination croisée entre sociétés.
+          try {
+            const soc = (pr.data.is_admin === false && pr.data.societe) ? pr.data.societe : (localStorage.getItem('fp_societe') || 'PXP');
+            window.FP_CACHE_KEY = 'fp_data_cache_v3_' + soc;
+          } catch (e) {}
         }
       }
     } catch (e) { /* table profiles absente / hors-ligne : on garde le comportement admin */ }
+
+    // ⚡ PERF : la requête app_settings (réglages société) ne dépend QUE du profil (déjà résolu
+    // ci-dessus), pas des données. On la lance EN PARALLÈLE de loadAll au lieu d'attendre après —
+    // économise un aller-retour réseau séquentiel (latence mobile) avant d'appliquer thème/réglages.
+    let _settingsPromise = null;
+    try {
+      const _sid = (FP.settings && FP.settings._dbId) ? FP.settings._dbId() : 'global';
+      _settingsPromise = client.from('app_settings').select('data').eq('id', _sid).maybeSingle()
+        .then(async (sres) => {
+          let shared = sres && sres.data && sres.data.data;
+          if ((!shared || typeof shared !== 'object') && _sid === 'PXP') {
+            const sres2 = await client.from('app_settings').select('data').eq('id', 'global').maybeSingle();
+            shared = sres2 && sres2.data && sres2.data.data;
+          }
+          return shared;
+        }).catch(() => null);
+    } catch (e) { _settingsPromise = null; }
 
     try {
       const data = await FP.db.loadAll();
@@ -361,12 +412,14 @@
       // pas 'fp:data-ready' et l'écran reste sur l'ancienne valeur. On liste large.
       const sig = (d) => {
         const f = (arr, ks) => (arr || []).map(x => ks.map(k => (x[k] ?? '')).join('|')).join(';');
-        return f(d.vehicules, ['id','immat','marque','modele','version','km','kmDernierReleve','statut','chauffeur','prochainCT','dateDernierCT','derniereRevision','proprietaire','carburant','co2','puissanceFiscale','dateMiseEnCirculation','valeurAchat','prix','assurance','vin','couleur','boite','prixVente','groupes','categorie','pipelineStatut','autonomie','critAir','antiPollution','commentaire','photoUrl','dimensionPneus'])
+        return f(d.vehicules, ['id','immat','marque','modele','version','km','kmDernierReleve','statut','chauffeur','prochainCT','dateDernierCT','derniereRevision','proprietaire','carburant','co2','puissanceFiscale','dateMiseEnCirculation','valeurAchat','prix','assurance','vin','couleur','boite','prixVente','groupes','categorie','pipelineStatut','autonomie','critAir','antiPollution','commentaire','photoUrl','dimensionPneus','sanef','cleSiege','cleSalarie','cgOrigSiege','cgOrigSalarie','cgUrl','cgFileId','dateChangementPneus'])
+             + '~' + (d.vehicules || []).map(v => (v.id || '') + ':' + (v.etatDesLieux ? JSON.stringify(v.etatDesLieux) : '')).join(';')
              + '#' + f(d.amendes, ['id','statut','montant','montantTTC','montantMinore','montantForfaitaire','montantMajore','majoree','points','date','prenom','motif','numeroAvis','avisUrl','justifUrl','commentaire','archived'])
              // Pièces jointes (tableau d'objets) : sérialisées à part (nombre + ids) pour que l'ajout/
              // suppression d'un document sur un poste rafraîchisse la section Documents sur les autres.
              + '#' + (d.amendes || []).map(a => (a.id || '') + ':' + ((a.pieces || []).length) + ':' + ((a.pieces || []).map(p => (p && (p.id || p.url)) || '').join(','))).join(';')
-             + '#' + f(d.factures, ['id','montantHT','montantTVA','montantTTC','type','date','vehiculeImmat','fournisseur','numeroFacture','km','description','categorie','source','conducteur'])
+             + '#' + f(d.factures, ['id','montantHT','montantTVA','montantTTC','type','date','vehiculeImmat','fournisseur','numeroFacture','km','description','categorie','source','conducteur','fileName'])
+             + '#' + (d.factures || []).map(x => (x.id || '') + ':' + ((x.pieces || []).length)).join(';')
              + '#' + f(d.conducteurs, ['key','nom','prenom','dateNaissance','poste','tel','email','adresse','permisNumero','permisExpiration','permisObtention','permisType','note']);
       };
       const sigBefore = sig(window.FP_DATA);
@@ -398,13 +451,8 @@
       // Charger les réglages PAR SOCIÉTÉ (apparence). Ligne app_settings = la société.
       // Repli sur l'ancienne ligne 'global' pour PXP (compat config existante).
       try {
-        const sid = (FP.settings && FP.settings._dbId) ? FP.settings._dbId() : 'global';
-        let sres = await client.from('app_settings').select('data').eq('id', sid).maybeSingle();
-        let shared = sres && sres.data && sres.data.data;
-        if ((!shared || typeof shared !== 'object') && sid === 'PXP') {
-          sres = await client.from('app_settings').select('data').eq('id', 'global').maybeSingle();
-          shared = sres && sres.data && sres.data.data;
-        }
+        // Réglages société : déjà en vol (lancés en parallèle de loadAll ci-dessus).
+        const shared = _settingsPromise ? await _settingsPromise : null;
         if (shared && typeof shared === 'object') {
           const key = (FP.settings && FP.settings._key) ? FP.settings._key() : 'auto_flotte_settings';
           localStorage.setItem(key, JSON.stringify(shared));

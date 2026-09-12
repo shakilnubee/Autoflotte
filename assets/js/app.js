@@ -4221,7 +4221,11 @@ FP.qrScans = {
         }
         if (t.key === '__menu__') {
           const b = document.createElement('button');
-          b.type = 'button'; b.className = 'fp-tab'; b.setAttribute('aria-label', 'Menu');
+          // « Menu » est actif quand la page courante n'est AUCUN des 4 onglets directs → l'utilisateur
+          // garde toujours un repère « où suis-je » sur les pages hors barre (Factures, Contrats…).
+          const directs = ['dashboard.html', 'vehicules.html', 'amendes.html', 'notifications.html'];
+          const menuActive = directs.indexOf(cur) === -1;
+          b.type = 'button'; b.className = 'fp-tab' + (menuActive ? ' active' : ''); b.setAttribute('aria-label', 'Menu');
           b.innerHTML = '<i data-lucide="' + t.ic + '"></i><span class="fp-tab-lb">' + t.lb + '</span>';
           b.addEventListener('click', drawerOpen);
           bar.appendChild(b); return;
@@ -5562,7 +5566,7 @@ FP.txCat = function (p) {
   if (/frais\s+(de\s+)?(gestion|station|parking|carte|service|compte)|abonnement|cotisation|management\s*fee|beheerskost|verwaltingskost|verwaltungsgeb|geb[uü]hr/.test(s)) return 'frais';
   // Carburant — FR + libellés étrangers (factures IT/DE/NL) : loodvrij/ongelood (NL, sans plomb),
   // benzine/benzin/benzina (essence NL/DE/IT), gasolio (gazole IT), bleifrei (DE), « Euro 95/98 ».
-  if (/gazole|gasoil|gasolio|diesel|super|sp\d|sans[- ]?plomb|essence|excellium|premier|adblue|gnr|gpl|e10|e85|b7|loodvrij|ongelood|bleifrei|benzine?|benzina|euro\s?9\d/.test(s)) return 'carburant';
+  if (/gazole|gasoil|gasolio|diesel|\bgo\b|super|sp\d|sans[- ]?plomb|essence|excellium|premier|adblue|gnr|gpl|e10|e85|b7|loodvrij|ongelood|bleifrei|benzine?|benzina|euro\s?9\d/.test(s)) return 'carburant';
   if (/lavage/.test(s)) return 'lavage';
   if (/parking/.test(s)) return 'parking';
   if (/aliment|boisson|sandwich|repas|restaur|snack|produit\s*frais|caf[ée]|menu/.test(s)) return 'repas';
