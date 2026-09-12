@@ -355,10 +355,12 @@
         </div>
       </div>
       <div id="assur-import-status" class="hidden text-sm mb-3" style="padding:10px 12px;border-radius:10px"></div>
-      <div id="assur-filter-wrap" class="flex items-center gap-2 mb-3" style="display:none">
+      <div id="assur-filter-wrap" class="flex items-center gap-2 mb-3 flex-wrap" style="display:none">
         <span class="text-xs text-slate-500 font-semibold">Assureur :</span>
         <select id="assur-filter" class="field-input !py-1 !text-sm" style="width:auto;min-width:160px"></select>
       </div>
+      <!-- Total (par assureur si filtré, sinon flotte) — mis à jour par renderAssurance. -->
+      <div id="assur-total-line" class="mb-3" style="display:none;font-weight:800;color:var(--fp-primary);font-size:.95rem"></div>
       <div class="scrollable">
         <table class="fp-table">
           <thead>
@@ -1027,6 +1029,7 @@
     // Filtre par assureur (barre au-dessus du tableau).
     populateAssurFilter(assList);
     const flt = assurFilter;
+    let sumTtc = 0, cntVeh = 0;   // total (par assureur si filtré) — cumulé pendant le rendu des lignes
     // On liste les véhicules POSSÉDÉS (owned = non vendus), donc « à vendre » INCLUS : ils sont encore
     // assurés et comptés dans le total des primes → la somme des lignes = le total affiché (plus d'écart).
     tbody.innerHTML = owned().filter(v => {
@@ -1036,6 +1039,7 @@
     }).map(v => {
       const pr = vehPrime(v);
       if (!pr && !FP.horsFlotte(v)) missing.push(v);
+      { const c = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : (hasPerVeh ? 0 : parVeh); sumTtc += (Number.isFinite(c) ? c : 0); cntVeh++; }
       const cout = pr && Number.isFinite(pr.ttc) ? FP.euro(pr.ttc)
         : (hasPerVeh ? '<span class="text-amber-600 font-semibold">à compléter</span>' : (parVeh ? FP.euro(parVeh) : '—'));
       const curAid = assureurIdOf(v) || '';
@@ -1054,6 +1058,17 @@
       </tr>`;
     }).join('');
     if (!tbody.children.length) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:18px;color:var(--fp-muted)">Aucun véhicule à assurer pour le moment.</td></tr>`;
+    // Total par assureur (si filtré) ou flotte (si « Tous ») — sous le filtre.
+    const totLine = $('assur-total-line');
+    if (totLine) {
+      if (cntVeh > 0) {
+        const who = (flt === 'all')
+          ? 'Total flotte'
+          : ('Total ' + (((assList.find(a => a.id === flt) || {}).nom) || 'assureur'));
+        totLine.style.display = '';
+        totLine.innerHTML = `${FP.esc(who)} : <span style="color:var(--fp-accent)">${FP.euro(sumTtc)} / an</span> <span style="font-weight:600;color:var(--fp-muted);font-size:.85rem">· ${cntVeh} véhicule(s) · ${FP.euro(sumTtc / 12)}/mois</span>`;
+      } else { totLine.style.display = 'none'; }
+    }
     if (window.lucide) try { lucide.createIcons(); } catch (e) {}
     const mz = $('assur-missing');
     if (mz) {
