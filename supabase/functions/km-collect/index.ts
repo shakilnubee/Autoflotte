@@ -592,11 +592,13 @@ Deno.serve(async (req) => {
             // Vente (onglet « À vendre » du portail) : statut + specs de base (jamais le prix ni les coûts).
             statut: veh.statut || "", couleur: veh.couleur || "", boite: veh.boite || "",
           } : null;
-          // Langue du conducteur (carte condLangues côté société) → le portail s'affiche en FR ou EN.
+          // Langue du conducteur (carte condLangues côté société) → le portail s'affiche dans SA langue
+          // (6 langues supportées par v.html : fr/en/es/it/de/zh). Les e-mails, eux, restent FR/EN.
           const langMap = (portal as Record<string, unknown>).condLangues as Record<string, unknown> || {};
           const ck = conducteur && (conducteur as Record<string, unknown>).key;
           const lv = ck ? String(langMap[ck as string] || "").toLowerCase() : "";
-          const langue = (lv === "en" || lv === "english" || lv === "anglais") ? "en" : "fr";
+          const langue = ["fr", "en", "es", "it", "de", "zh"].includes(lv) ? lv
+            : (lv === "english" || lv === "anglais") ? "en" : "fr";
           delete (portal as Record<string, unknown>).condLangues;   // pas besoin de l'exposer au client
           const conducteur2 = conducteur ? { ...conducteur, langue } : { langue };
           // Amendes du conducteur (montant + n° d'avis) pour l'onglet « Mes amendes » du portail (sans PDF).

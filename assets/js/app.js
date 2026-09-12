@@ -3572,6 +3572,22 @@ FP.condLangue = function (nameOrCond) {
     return (v === 'en' || v === 'anglais' || v === 'english') ? 'en' : 'fr';
   } catch (e) { return 'fr'; }
 };
+// Langues du PORTAIL QR supportées (v.html/km.html). L'e-mail reste FR/EN (cf. FP.condLangue).
+FP.PORTAL_LANGS = ['fr', 'en', 'es', 'it', 'de', 'zh'];
+FP.okLangCode = (l) => { const v = String(l || '').trim().toLowerCase(); return FP.PORTAL_LANGS.indexOf(v) !== -1 ? v : 'fr'; };
+// Langue BRUTE du conducteur pour le PORTAIL (une des 6), réglée depuis la fiche. Distincte de
+// FP.condLangue (qui, elle, ne renvoie que fr/en pour les e-mails, faute de gabarits traduits).
+FP.condLangueRaw = function (nameOrCond) {
+  try {
+    let c = (nameOrCond && typeof nameOrCond === 'object') ? nameOrCond
+      : ((FP.conducteurs && FP.conducteurs.find) ? FP.conducteurs.find(nameOrCond) : null);
+    const l = c && String(c.langue || '').trim().toLowerCase();
+    if (l) return FP.okLangCode(l);
+    const map = (FP.settings && FP.settings.get && (FP.settings.get().condLangues || {})) || {};
+    const k = FP._condLangKey(c || nameOrCond);
+    return FP.okLangCode(k && map[k]);
+  } catch (e) { return 'fr'; }
+};
 // (La langue d'un conducteur est écrite directement dans s.condLangues[key] par la fiche
 //  conducteur, via FP.settings.save — pas besoin d'un setter dédié.)
 
@@ -3912,6 +3928,16 @@ FP.push = {
     return out;
   },
   permission() { try { return Notification.permission; } catch (e) { return 'denied'; } },
+  // Notification LOCALE (cet appareil) — utilisée quand un événement survient pendant que l'app est
+  // ouverte (ex. dépôt d'une facture Ulys par la clé API). Sûr : ne fait rien si non autorisé.
+  async notifyLocal(title, body, url) {
+    try {
+      if (this.permission() !== 'granted') return false;
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && reg.showNotification) { await reg.showNotification(title || 'Parc Pilot', { body: body || '', tag: 'fp-notify', renotify: true, data: { url: url || '' } }); return true; }
+    } catch (e) {}
+    return false;
+  },
   async _reg() {
     if (!('serviceWorker' in navigator)) return null;
     try {
@@ -8208,6 +8234,11 @@ FP.ulysApi = (function () {
           description: inv.invoiceType === 'ELEC' ? 'Recharge électrique Ulys' : 'Péages Ulys (télépéage)', type: 'ulys'
         };
         try { await FP.persist.insert('factures', rec); facts.push(rec); have.add(idn); added++; } catch (e) { skipped++; }
+      }
+      // ⚠️ ALERTE (consigne utilisateur) : prévenir dès qu'une facture Ulys est déposée par la clé API.
+      // Notification locale (si les notifs sont activées) + toast — pour toutes les voies d'import (auto/manuel).
+      if (added > 0) {
+        try { if (FP.push && FP.push.notifyLocal) FP.push.notifyLocal('Ulys — nouvelle(s) facture(s)', added + ' facture(s) Ulys déposée(s) par la clé API.', (location.pathname.indexOf('/pages/') !== -1 ? '' : 'pages/') + 'factures.html'); } catch (e) {}
       }
       // AUTO : détail conso par conducteur des factures RÉCENTES (endpoint transactions = 3 derniers
       // mois), best-effort et idempotent. Ne bloque jamais l'import des en-têtes si ça échoue.
