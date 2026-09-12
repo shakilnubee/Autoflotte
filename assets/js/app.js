@@ -4011,7 +4011,9 @@ FP.qrScans = {
       if (!sb || document.querySelector('.fp-mobile-bar')) return;
       const bar = document.createElement('div');
       bar.className = 'fp-mobile-bar';
-      bar.innerHTML = '<button type="button" class="fp-burger" aria-label="Ouvrir le menu"><i data-lucide="menu"></i></button><span style="font-weight:900;font-style:italic;font-size:1.05rem">Parc<span style="color:var(--fp-accent)">Pilot</span></span>';
+      bar.innerHTML = '<button type="button" class="fp-burger" aria-label="Ouvrir le menu"><i data-lucide="menu"></i></button>'
+        + '<span style="font-weight:900;font-style:italic;font-size:1.05rem">Parc<span style="color:var(--fp-accent)">Pilot</span></span>'
+        + '<button type="button" class="fp-mb-search" aria-label="Rechercher" style="margin-left:auto"><i data-lucide="search"></i></button>';
       document.body.insertBefore(bar, document.body.firstChild);
       const bd = document.createElement('div');
       bd.className = 'fp-sidebar-backdrop';
@@ -4020,6 +4022,28 @@ FP.qrScans = {
       const close = () => { sb.classList.remove('fp-open'); bd.classList.remove('fp-open'); };
       bar.querySelector('.fp-burger').addEventListener('click', open);
       bd.addEventListener('click', close);
+
+      // === RECHERCHE MOBILE : bouton loupe (barre du haut) → overlay plein écran ===
+      // Réutilise la recherche GLOBALE existante : on injecte la MÊME structure `.fp-global-search`
+      // (input + `.fp-search-results`) → le handler délégué d'app.js remplit les résultats tout seul
+      // (véhicules, amendes, factures, conducteurs…). Source unique, aucun code de recherche dupliqué.
+      let ov = document.querySelector('.fp-msearch');
+      if (!ov) {
+        ov = document.createElement('div');
+        ov.className = 'fp-msearch'; ov.hidden = true;
+        ov.innerHTML = '<div class="fp-msearch-bar">'
+          + '<div class="fp-global-search fp-msearch-gs"><span class="fp-msearch-ic">🔍</span>'
+          + '<input type="text" class="fp-search-input" placeholder="Rechercher (plaque, amende, conducteur, facture…)" autocomplete="off" autocapitalize="off" autocorrect="off">'
+          + '<div class="fp-search-results"></div></div>'
+          + '<button type="button" class="fp-msearch-close" aria-label="Fermer">Fermer</button></div>';
+        document.body.appendChild(ov);
+      }
+      const closeSearch = () => { ov.hidden = true; const i = ov.querySelector('.fp-search-input'); if (i) i.value = ''; const r = ov.querySelector('.fp-search-results'); if (r) { r.innerHTML = ''; r.classList.remove('open'); r.style.display = ''; } };
+      const openSearch = () => { ov.hidden = false; const i = ov.querySelector('.fp-search-input'); if (i) setTimeout(() => { try { i.focus(); } catch (e) {} }, 40); };
+      bar.querySelector('.fp-mb-search').addEventListener('click', openSearch);
+      ov.querySelector('.fp-msearch-close').addEventListener('click', closeSearch);
+      ov.addEventListener('click', (e) => { if (e.target.closest('.fp-search-item')) closeSearch(); }); // clic résultat → ferme
+      addEventListener('keydown', (e) => { if (e.key === 'Escape' && !ov.hidden) closeSearch(); });
       // clic sur un VRAI lien de navigation → on referme le tiroir.
       // ⚠️ Exception : les liens internes (href="#") et les bascules de sous-menu
       // (ex. l'entête « JIS » qui déplie ses sous-onglets) ne doivent PAS fermer le
