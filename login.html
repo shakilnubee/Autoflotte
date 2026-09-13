@@ -413,10 +413,18 @@
       }
     });
 
-    // Si déjà connecté, redirige automatiquement vers le dashboard
-    client.auth.getSession().then(({ data: { session } }) => {
-      if (session) window.location.href = 'dashboard.html';
-    });
+    // Si déjà connecté, redirige automatiquement vers le dashboard.
+    // ⚠️ EXCEPTION : arrivée via un lien de DÉFINITION DE MOT DE PASSE (invitation « Inviter par
+    // e-mail » OU « Mot de passe oublié »). Ces liens ouvrent une session temporaire (type=recovery/
+    // invite dans l'URL) → sans ce garde, on filerait au dashboard AVANT que la personne ait choisi
+    // son mot de passe (elle resterait avec un mot de passe aléatoire inconnu). On laisse alors la
+    // main au handler PASSWORD_RECOVERY ci-dessous.
+    var _authFlow = /\b(type=recovery|type=invite)\b/.test(location.hash || '') || /\b(type=recovery|type=invite)\b/.test(location.search || '');
+    if (!_authFlow) {
+      client.auth.getSession().then(({ data: { session } }) => {
+        if (session) window.location.href = 'dashboard.html';
+      });
+    }
 
     const form = document.getElementById('login-form');
     const errorEl = document.getElementById('login-error');
