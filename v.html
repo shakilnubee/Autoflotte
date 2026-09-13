@@ -1117,37 +1117,133 @@
     s.onload = function () { cb(); }; s.onerror = function () { alert('Impossible de charger le générateur PDF (réseau).'); };
     document.head.appendChild(s);
   }
+  // PDF « sauce Parc Pilot » : document propre et graphique (bandeau de marque, sections colorées,
+  // cartes véhicule A/B, circonstances en liste, signatures encadrées). Une seule colonne lisible,
+  // pas la grille dense d'un formulaire officiel.
   function constatPdf() {
     ensurePdf(function () {
       try {
         var c = constatCollect(); var jsPDF = window.jspdf.jsPDF; var doc = new jsPDF({ unit: 'mm', format: 'a4' });
-        var M = 14, y = 18, W = 210;
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(15, 30, 61); doc.text('Constat amiable', M, y);
-        doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(120); doc.text('récapitulatif · Parc Pilot', W - M, y, { align: 'right' }); y += 8;
-        doc.setDrawColor(225); doc.line(M, y, W - M, y); y += 6;
-        doc.setFontSize(10.5); doc.setTextColor(20);
-        constatText(c).split('\n').forEach(function (line) {
-          if (y > 280) { doc.addPage(); y = 18; }
-          var isHead = /^(VÉHICULE|CONSTAT|Circonstances)/.test(line);
-          doc.setFont('helvetica', isHead ? 'bold' : 'normal');
-          var wrapped = doc.splitTextToSize(line || ' ', W - 2 * M);
-          doc.text(wrapped, M, y); y += wrapped.length * 5.4;
-        });
-        if (constatPhotos.length) {
-          if (y > 250) { doc.addPage(); y = 18; }
-          doc.setFont('helvetica', 'bold'); doc.text('Photos jointes : ' + constatPhotos.length, M, y + 2); y += 8;
-          var x = M; constatPhotos.forEach(function (ph) { try { if (x > W - M - 46) { x = M; y += 40; } if (y > 250) { doc.addPage(); y = 18; x = M; } doc.addImage(ph, 'JPEG', x, y, 44, 33); x += 48; } catch (e) {} });
+        var W = 210, M = 14, RIGHT = W - M, CW = RIGHT - M;
+        var NAVY = [15, 30, 61], DEEP = [11, 18, 32], ORANGE = [249, 115, 22], ORANGE2 = [234, 88, 12];
+        var CARDBG = [247, 249, 252], BORDER = [225, 231, 240], DARK = [30, 41, 59], MUTED = [110, 124, 148];
+        var soc = (DATA && DATA.societe) ? String(DATA.societe) : 'Parc Pilot';
+        function val(v) { return (v == null || v === '') ? '—' : String(v); }
+        // Étiquette de section (petit texte orange + filet)
+        function section(yy, txt) {
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8.4); doc.setTextColor(ORANGE2[0], ORANGE2[1], ORANGE2[2]);
+          doc.text(String(txt).toUpperCase(), M, yy);
+          var tw = doc.getTextWidth(String(txt).toUpperCase());
+          doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.4); doc.line(M + tw + 3, yy - 1.2, RIGHT, yy - 1.2);
+          return yy + 4.5;
         }
-        if (constatSig.a || constatSig.b) {
-          if (y > 235) { doc.addPage(); y = 18; }
-          y += 4; doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(20); doc.text('Signatures', M, y); y += 6;
-          var sw = 80, sh = 26, xb = M + 95;
-          doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(120);
-          doc.text('Conducteur A', M, y); doc.text('Conducteur B', xb, y); y += 3;
-          try { if (constatSig.a) doc.addImage(constatSig.a, 'PNG', M, y, sw, sh); } catch (e) {}
-          try { if (constatSig.b) doc.addImage(constatSig.b, 'PNG', xb, y, sw, sh); } catch (e) {}
-          doc.setDrawColor(210); doc.line(M, y + sh + 2, M + sw, y + sh + 2); doc.line(xb, y + sh + 2, xb + sw, y + sh + 2);
-          y += sh + 8;
+        // Paire libellé/valeur (libellé gris au-dessus, valeur foncée)
+        function kv(x, yy, w, label, v, opt) {
+          opt = opt || {};
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(6.3); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+          doc.text(String(label).toUpperCase(), x, yy);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(opt.fs || 9); doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+          var lines = doc.splitTextToSize(val(v), w);
+          doc.text(lines.slice(0, opt.max || 1), x, yy + 4);
+        }
+        var y = 14;
+        // ===== Bandeau de marque =====
+        var hH = 26;
+        doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]); doc.roundedRect(M, y, CW, hH, 3, 3, 'F');
+        doc.setFillColor(ORANGE[0], ORANGE[1], ORANGE[2]); doc.rect(M, y + hH - 2.2, CW, 2.2, 'F'); // liseré orange bas
+        // logo texte "Parc Pilot"
+        doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(13); doc.setTextColor(255, 255, 255); doc.text('Parc', M + 6, y + 9);
+        var pw = doc.getTextWidth('Parc');
+        doc.setTextColor(ORANGE[0], ORANGE[1], ORANGE[2]); doc.text('Pilot', M + 6 + pw + 1.2, y + 9);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(180, 195, 220); doc.text(soc, M + 6, y + 14);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(255, 255, 255); doc.text('Constat amiable', M + 6, y + 21.5);
+        // pill date/heure à droite
+        var dtxt = (c.date ? frDate(c.date) : '') + (c.heure ? ('  ·  ' + c.heure) : '');
+        if (dtxt.trim()) {
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+          var dw = doc.getTextWidth(dtxt) + 8, dx = RIGHT - 6 - dw, dy = y + 6;
+          doc.setFillColor(ORANGE[0], ORANGE[1], ORANGE[2]); doc.roundedRect(dx, dy, dw, 7, 3.5, 3.5, 'F');
+          doc.setTextColor(255, 255, 255); doc.text(dtxt, dx + dw / 2, dy + 4.7, { align: 'center' });
+        }
+        y += hH + 6;
+        // ===== 1 · L'accident =====
+        y = section(y, "L'accident");
+        var acH = 30; doc.setFillColor(CARDBG[0], CARDBG[1], CARDBG[2]); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
+        doc.roundedRect(M, y, CW, acH, 2.5, 2.5, 'FD');
+        var px = M + 5, colw = (CW - 10) / 3;
+        kv(px, y + 6, colw - 3, 'Date', c.date ? frDate(c.date) : ''); kv(px + colw, y + 6, colw - 3, 'Heure', c.heure); kv(px + 2 * colw, y + 6, colw - 3, 'Blessés (même légers)', c.bless || 'Non');
+        kv(px, y + 16, colw * 1.5 - 3, 'Lieu (ville, rue)', c.lieu, { max: 2 }); kv(px + colw * 1.5, y + 16, colw * 1.5 - 3, 'Autres dégâts matériels', c.autres || 'Non', { max: 2 });
+        kv(px, y + 25, CW - 10, 'Témoins', c.temoins);
+        y += acH + 6;
+        // ===== 2 · Les véhicules (cartes A / B) =====
+        y = section(y, 'Les véhicules');
+        var gap = 5, cardW = (CW - gap) / 2, xA = M, xB = M + cardW + gap, vH = 70;
+        function vehCard(x, titre, tint, v) {
+          doc.setFillColor(255, 255, 255); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
+          doc.roundedRect(x, y, cardW, vH, 2.5, 2.5, 'FD');
+          doc.setFillColor(tint[0], tint[1], tint[2]); doc.roundedRect(x, y, cardW, 8, 2.5, 2.5, 'F'); doc.rect(x, y + 4, cardW, 4, 'F');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8.4); doc.setTextColor(255, 255, 255); doc.text(String(titre).toUpperCase(), x + 4, y + 5.4);
+          var ix = x + 4, iw = cardW - 8, yy = y + 14;
+          kv(ix, yy, iw, 'Conducteur', v.cond); yy += 8.5;
+          kv(ix, yy, iw / 2 - 1, 'Téléphone', v.tel); kv(ix + iw / 2, yy, iw / 2, 'Immatriculation', v.immat); yy += 8.5;
+          kv(ix, yy, iw, 'Véhicule (marque / modèle)', v.veh); yy += 8.5;
+          kv(ix, yy, iw / 2 - 1, "Assureur", v.ass); kv(ix + iw / 2, yy, iw / 2, 'N° de contrat', v.pol); yy += 8.5;
+          kv(ix, yy, iw / 2 - 1, 'Point de choc', v.choc); kv(ix + iw / 2, yy, iw / 2, 'Dégâts apparents', v.deg, { max: 2 });
+        }
+        vehCard(xA, 'Véhicule A — moi', NAVY, c.a); vehCard(xB, 'Véhicule B — tiers', ORANGE2, c.b);
+        y += vH + 6;
+        // ===== 3 · Circonstances (liste des cochées) =====
+        y = section(y, 'Circonstances');
+        var chosen = [];
+        CIRCONSTANCES.forEach(function (lb) { var a = c.circA.indexOf(lb) >= 0, b = c.circB.indexOf(lb) >= 0; if (a || b) chosen.push({ lb: lb, a: a, b: b }); });
+        var ciH = Math.max(12, chosen.length ? chosen.length * 5.4 + 5 : 12);
+        doc.setFillColor(CARDBG[0], CARDBG[1], CARDBG[2]); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
+        doc.roundedRect(M, y, CW, ciH, 2.5, 2.5, 'FD');
+        if (!chosen.length) {
+          doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+          doc.text('Aucune circonstance cochée.', M + 5, y + 7.5);
+        } else {
+          var cy = y + 6;
+          chosen.forEach(function (o) {
+            // pastilles A (navy) / B (orange)
+            var bx = M + 5;
+            if (o.a) { doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]); doc.roundedRect(bx, cy - 3, 5, 4, 1, 1, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.setTextColor(255, 255, 255); doc.text('A', bx + 2.5, cy, { align: 'center' }); }
+            if (o.b) { doc.setFillColor(ORANGE2[0], ORANGE2[1], ORANGE2[2]); doc.roundedRect(bx + 6, cy - 3, 5, 4, 1, 1, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.setTextColor(255, 255, 255); doc.text('B', bx + 8.5, cy, { align: 'center' }); }
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(8.6); doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+            doc.text(doc.splitTextToSize(o.lb, CW - 24)[0], M + 18, cy);
+            cy += 5.4;
+          });
+        }
+        y += ciH + 6;
+        // ===== 4 · Observations =====
+        y = section(y, 'Observations');
+        var obH = 16; doc.setFillColor(CARDBG[0], CARDBG[1], CARDBG[2]); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
+        doc.roundedRect(M, y, CW, obH, 2.5, 2.5, 'FD');
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+        doc.text(doc.splitTextToSize(val(c.obs), CW - 10).slice(0, 2), M + 5, y + 6);
+        y += obH + 6;
+        // ===== 5 · Signatures =====
+        y = section(y, 'Signatures');
+        var sgW = (CW - gap) / 2, sgH = 24;
+        function sigBox(x, titre, tint, img) {
+          doc.setFillColor(255, 255, 255); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
+          doc.roundedRect(x, y, sgW, sgH, 2.5, 2.5, 'FD');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(6.3); doc.setTextColor(tint[0], tint[1], tint[2]); doc.text(String(titre).toUpperCase(), x + 3, y + 4.5);
+          if (img) { try { doc.addImage(img, 'PNG', x + 3, y + 6, sgW - 6, sgH - 9); } catch (e) {} }
+          else { doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]); doc.text('Non signé', x + sgW / 2, y + sgH / 2 + 2, { align: 'center' }); }
+        }
+        sigBox(xA, 'Signature conducteur A', NAVY, constatSig.a); sigBox(xB, 'Signature conducteur B', ORANGE2, constatSig.b);
+        y += sgH + 5;
+        // Pied de page
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(6.6); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
+        doc.text('Document généré le ' + frDate(new Date().toISOString()) + ' via Parc Pilot — à conserver et à transmettre à votre assureur.', W / 2, Math.min(y + 1, 291), { align: 'center' });
+        // ===== Photos → page(s) suivante(s) =====
+        if (constatPhotos.length) {
+          doc.addPage(); var yy2 = 16;
+          doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]); doc.roundedRect(M, yy2 - 6, CW, 10, 2.5, 2.5, 'F');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(255, 255, 255); doc.text('Photos jointes (' + constatPhotos.length + ')', M + 4, yy2 + 0.5);
+          yy2 += 10; var xx = M;
+          constatPhotos.forEach(function (ph) { try { if (xx > RIGHT - 60) { xx = M; yy2 += 48; } if (yy2 > 250) { doc.addPage(); yy2 = 16; xx = M; } doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3); doc.roundedRect(xx, yy2, 56, 42, 2, 2, 'D'); doc.addImage(ph, 'JPEG', xx + 1, yy2 + 1, 54, 40); xx += 60; } catch (e) {} });
         }
         doc.save('Constat-' + String(c.a.immat || 'vehicule').replace(/[^A-Za-z0-9]/g, '') + (c.date ? '-' + c.date.replace(/-/g, '') : '') + '.pdf');
       } catch (e) { alert('Erreur lors de la génération du PDF.'); }
