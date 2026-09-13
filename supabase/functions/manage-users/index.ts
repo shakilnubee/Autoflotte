@@ -123,6 +123,78 @@ Deno.serve(async (req) => {
       return json({ ok: true, id: created.user.id });
     }
 
+    // -------- INVITER PAR E-MAIL (le client choisit LUI-MÊME son mot de passe) --------
+    // Crée le compte (mot de passe aléatoire, jamais communiqué), génère un lien personnel de
+    // définition de mot de passe (type recovery → géré par login.html), et envoie un e-mail
+    // « sauce Parc Pilot » via Resend. L'invitation part TOUJOURS de l'adresse plateforme
+    // (INVITE_FROM / EMAIL_FROM) — jamais de l'adresse d'une société — car c'est Parc Pilot qui invite.
+    if (action === "invite") {
+      const email = String(body.email || "").trim().toLowerCase();
+      const acces = String(body.acces || "gestionnaire");
+      const societe = isCEO ? (body.societe ? String(body.societe) : null) : mySociete;
+      const redirectTo = String(body.redirectTo || "https://parc-pilot.fr/login.html");
+      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: "E-mail valide requis." }, 400);
+      if (acces !== "ceo" && !societe) return json({ error: "Société requise pour un Admin/Gestionnaire." }, 400);
+      const scopeErr = guardScope(acces, societe);
+      if (scopeErr) return json({ error: scopeErr }, 403);
+
+      // 1) Créer le compte s'il n'existe pas (sinon = ré-invitation : on garde le compte, on met à jour le profil).
+      let userId = "";
+      const rndPw = crypto.randomUUID() + "A9!" + crypto.randomUUID();
+      const { data: created, error: cErr } = await admin.auth.admin.createUser({ email, password: rndPw, email_confirm: true });
+      if (created?.user) {
+        userId = created.user.id;
+        const prof = accesToProfile(acces, societe);
+        const { error: pErr } = await admin.from("profiles").upsert({ id: userId, email, ...prof });
+        if (pErr) return json({ error: "Compte créé mais profil non enregistré : " + pErr.message }, 500);
+      } else {
+        const { data: ex } = await admin.from("profiles").select("id").eq("email", email).maybeSingle();
+        if (!ex?.id) return json({ error: cErr?.message || "Compte existant introuvable." }, 400);
+        const scopeErr2 = await canTouchTarget(ex.id);
+        if (scopeErr2) return json({ error: scopeErr2 }, 403);
+        userId = ex.id;
+        const prof = accesToProfile(acces, societe);
+        await admin.from("profiles").update(prof).eq("id", userId);
+      }
+
+      // 2) Lien personnel de définition de mot de passe (login.html capte l'événement PASSWORD_RECOVERY).
+      const { data: linkData, error: lErr } = await admin.auth.admin.generateLink({
+        type: "recovery", email, options: { redirectTo },
+      });
+      const actionLink = linkData?.properties?.action_link;
+      if (lErr || !actionLink) return json({ error: "Lien d'invitation impossible : " + (lErr?.message || "inconnu") }, 500);
+
+      // 3) Envoi de NOTRE e-mail (sauce Parc Pilot) via Resend.
+      const RESEND = Deno.env.get("RESEND_API_KEY");
+      const from = Deno.env.get("INVITE_FROM") || Deno.env.get("EMAIL_FROM") || "Parc Pilot <onboarding@resend.dev>";
+      if (!RESEND) return json({ ok: true, id: userId, emailSent: false, warn: "Compte prêt, mais RESEND_API_KEY absent → e-mail non envoyé. Configure Resend puis renvoie l'invitation." });
+      const esc = (s: string) => String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
+      const html =
+        '<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">' +
+        '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px 24px">' +
+        '<div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#0F1E3D">🚗 Parc Pilot — Invitation</div>' +
+        '<div style="font-size:15px;line-height:1.55;margin:12px 0 2px">Bonjour,</div>' +
+        '<div style="font-size:15px;line-height:1.55;margin:6px 0">Un accès à <b>Parc Pilot</b> (votre plateforme de gestion de flotte) vient d\'être créé pour vous. Cliquez ci-dessous pour <b>choisir votre mot de passe</b> et vous connecter.</div>' +
+        '<div style="text-align:center;margin:18px 0 6px"><a href="' + esc(actionLink) + '" style="display:inline-block;background:#0F1E3D;color:#fff;padding:12px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px">Définir mon mot de passe →</a></div>' +
+        '<div style="font-size:12.5px;line-height:1.5;color:#64748b;margin-top:12px">Votre identifiant sera votre e-mail : <b>' + esc(email) + '</b>. Ce lien est personnel et temporaire ; s\'il a expiré, utilisez « Mot de passe oublié » sur la page de connexion.</div>' +
+        '</div>' +
+        '<div style="text-align:center;font-size:11px;color:#cbd5e1;margin-top:10px">Parc Pilot · parc-pilot.fr</div>' +
+        '</div>';
+      const text = "Bonjour,\n\nUn accès à Parc Pilot a été créé pour vous. Définissez votre mot de passe ici :\n" + actionLink + "\n\nVotre identifiant : " + email + "\n\nParc Pilot · parc-pilot.fr";
+      try {
+        const r = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${RESEND}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ from, to: [email], subject: "Votre accès à Parc Pilot — définissez votre mot de passe", html, text }),
+        });
+        const rd = await r.json().catch(() => ({}));
+        if (!r.ok) return json({ ok: true, id: userId, emailSent: false, warn: "Compte prêt, mais e-mail non envoyé : " + (rd?.message || "erreur Resend") + " (domaine d'envoi vérifié ?)." });
+        return json({ ok: true, id: userId, emailSent: true });
+      } catch (e) {
+        return json({ ok: true, id: userId, emailSent: false, warn: "Compte prêt, mais e-mail non envoyé (réseau Resend) : " + String(e) });
+      }
+    }
+
     // -------- CHANGER L'ACCÈS / LA SOCIÉTÉ --------
     if (action === "updateRole") {
       const id = String(body.id || "");

@@ -704,15 +704,16 @@
           <div class="mb-3 font-semibold text-slate-800 text-sm">Ajouter un utilisateur</div>
           <div class="grid gap-3" style="grid-template-columns:repeat(2,minmax(0,1fr));max-width:640px">
             <input class="field-input" id="nu-email" type="email" autocomplete="off" placeholder="E-mail du collègue / client" />
-            <input class="field-input" id="nu-pw" type="text" autocomplete="off" placeholder="Mot de passe initial (min. 8)" />
+            <input class="field-input" id="nu-pw" type="text" autocomplete="off" placeholder="Mot de passe initial (min. 8) — inutile si invitation" />
             <select class="field-input" id="nu-acces" aria-label="Niveau d'accès"></select>
             <select class="field-input" id="nu-societe" aria-label="Société"></select>
           </div>
           <div class="flex items-center gap-3 flex-wrap mt-3">
-            <button class="btn btn-dark text-sm" id="btn-nu-add"><i data-lucide="user-plus" class="w-4 h-4"></i> Créer le compte</button>
+            <button class="btn btn-dark text-sm" id="btn-nu-invite" title="Parc Pilot envoie un e-mail : la personne choisit ELLE-MÊME son mot de passe"><i data-lucide="mail" class="w-4 h-4"></i> Inviter par e-mail</button>
+            <button class="btn btn-outline text-sm" id="btn-nu-add" title="Créer le compte avec un mot de passe que TU choisis (à lui communiquer)"><i data-lucide="user-plus" class="w-4 h-4"></i> Créer avec un mot de passe</button>
             <span id="nu-status" class="text-xs"></span>
           </div>
-          <p class="text-xs text-slate-400 mt-2">La personne se connecte ensuite sur la page de connexion habituelle avec cet e-mail et ce mot de passe (qu'elle pourra changer dans « Compte »).</p>
+          <p class="text-xs text-slate-400 mt-2"><b>Inviter par e-mail</b> (recommandé) : la personne reçoit un mail de Parc Pilot et <b>choisit son propre mot de passe</b> — laisse le champ mot de passe vide. <b>Créer avec un mot de passe</b> : tu fixes le mot de passe et tu le lui communiques. Dans les deux cas elle se connecte sur la page habituelle et peut le changer ensuite dans « Compte ».</p>
           <div id="nu-gest-warn" class="hidden mt-3 p-3 rounded-lg text-xs" style="background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46">
             ℹ️ <b>Rôle « Gestionnaire »</b> : il peut gérer toutes les <b>données du quotidien</b> (véhicules, amendes,
             factures, sinistres, relevés km, réservations, tâches…) — ajouter, modifier et <b>supprimer</b> — et ses
@@ -2143,6 +2144,23 @@
       addBtn.disabled = false;
       if (r.error) return setSt(statusEl, r.error, false);
       setSt(statusEl, '✓ Compte créé.', true);
+      g('nu-email').value = ''; g('nu-pw').value = '';
+      load();
+    });
+
+    // Inviter par e-mail : Parc Pilot envoie un mail, la personne choisit son propre mot de passe.
+    const inviteBtn = g('btn-nu-invite');
+    if (inviteBtn) inviteBtn.addEventListener('click', async () => {
+      const email = (g('nu-email').value || '').trim();
+      const acces = accesSel.value;
+      const societe = (acces === 'ceo') ? null : socSel.value;
+      if (!email) return setSt(statusEl, 'E-mail requis pour envoyer l\'invitation.', false);
+      inviteBtn.disabled = true; addBtn.disabled = true; setSt(statusEl, 'Envoi de l\'invitation…', true);
+      const r = await call({ action: 'invite', email, acces, societe, redirectTo: location.origin + '/login.html' });
+      inviteBtn.disabled = false; addBtn.disabled = false;
+      if (r.error) return setSt(statusEl, r.error, false);
+      if (r.emailSent === false) return setSt(statusEl, '⚠️ ' + (r.warn || 'Compte prêt mais e-mail non envoyé.'), false);
+      setSt(statusEl, '✓ Invitation envoyée à ' + email + '.', true);
       g('nu-email').value = ''; g('nu-pw').value = '';
       load();
     });
