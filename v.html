@@ -98,6 +98,10 @@
   .cst-cl { flex:1; min-width:0; font-size:.9rem; line-height:1.25; }
   .cst-ck { flex:none; display:inline-flex; align-items:center; gap:.2rem; font-weight:800; font-size:.82rem; color:var(--muted); padding:.15rem .3rem; }
   .cst-ck input { width:20px; height:20px; }
+  /* Constat — signatures tactiles */
+  .sigwrap { position:relative; margin:.15rem 0 .6rem; }
+  .sigpad { width:100%; height:130px; border:1.5px dashed var(--line); border-radius:10px; background:#fff; touch-action:none; display:block; }
+  .sigclr { position:absolute; top:6px; right:6px; font-size:12px; font-weight:700; padding:.2rem .55rem; border:1px solid var(--line); border-radius:8px; background:#fff; color:#334155; }
   .gal a img { height:90px; }
   .gal a.edl-doc { display:flex; align-items:center; justify-content:center; text-align:center; gap:.3rem; min-height:90px; grid-column:1/-1; border:1.5px solid var(--line); border-radius:.6rem; background:#F1FBF9; color:#0f766e; font-weight:800; font-size:.86rem; text-decoration:none; padding:.6rem; }
   .msg { margin-top:.8rem; font-size:.9rem; border-radius:.6rem; padding:.7rem .9rem; display:none; }
@@ -780,7 +784,7 @@
     var head = '<div class="box" style="background:#0f1e3d;color:#fff;margin-bottom:.7rem"><div class="kv" style="border:0"><span class="k" style="color:#c7d2e6">' + esc(t('amd_total')) + ' (' + list.length + ')</span><span class="v" style="color:#fff;font-weight:800;font-size:18px">' + eur(total) + '</span></div></div>';
     box.innerHTML = podiumHTML() + head + rows;
   }
-  var VIEWS = ['v-menu', 'v-veh', 'v-doc', 'v-sin', 'v-edl', 'v-amd', 'v-vente', 'v-guide', 'v-que', 'v-bad'];
+  var VIEWS = ['v-menu', 'v-veh', 'v-doc', 'v-sin', 'v-constat', 'v-edl', 'v-amd', 'v-vente', 'v-guide', 'v-que', 'v-bad'];
   var curView = 'v-menu';
   function show(view, title, sub) {
     curView = view;
@@ -975,6 +979,7 @@
 
   // ---- Constat amiable rempli EN LIGNE (véhicule A pré-rempli → PDF téléchargeable + envoi gestionnaire) ----
   var constatPhotos = [];
+  var constatSig = { a: '', b: '' };
   var CIRCONSTANCES = [
     'en stationnement / à l\'arrêt',
     'quittait un stationnement / ouvrait une portière',
@@ -996,6 +1001,7 @@
   ];
   function renderConstat() {
     constatPhotos = [];
+    constatSig = { a: '', b: '' };
     var v = DATA.veh || {}, p = DATA.portail || {};
     var soc = (DATA.societe || p.societe || '');
     var d = new Date(), pad = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -1038,6 +1044,12 @@
       + '<label class="f">Dégâts apparents</label><input class="fi" id="cst-b-deg" type="text"></div>'
       + '<div class="box"><h4>🧩 Circonstances <span class="muted" style="font-weight:600">(coche A et/ou B)</span></h4><div class="cst-circwrap">' + circ + '</div></div>'
       + '<div class="box"><h4>✍️ Observations</h4><textarea class="fi" id="cst-obs" rows="3" placeholder="Précisions, désaccords éventuels…"></textarea></div>'
+      + '<div class="box"><h4>🖊️ Signatures</h4>'
+      + '<p class="muted" style="margin:.1rem 0 .5rem">Signe avec le doigt. Fais aussi signer le conducteur B si possible.</p>'
+      + '<label class="f">Conducteur A (moi)</label>'
+      + '<div class="sigwrap"><canvas id="cst-sig-a" class="sigpad" width="600" height="180"></canvas><button type="button" class="sigclr" data-sigclr="a">Effacer</button></div>'
+      + '<label class="f">Conducteur B (l\'autre)</label>'
+      + '<div class="sigwrap"><canvas id="cst-sig-b" class="sigpad" width="600" height="180"></canvas><button type="button" class="sigclr" data-sigclr="b">Effacer</button></div></div>'
       + '<div class="box"><h4>📷 Photos (dégâts, croquis, papiers de l\'autre)</h4>'
       + '<div class="btnrow"><button type="button" class="btn" id="constat-cam">📷 Prendre une photo</button><button type="button" class="btn" id="constat-pick">🖼️ Galerie</button></div>'
       + '<div class="thumbs" id="constat-thumbs"></div></div>'
@@ -1047,6 +1059,26 @@
       + '<p class="muted center" style="margin-top:.6rem">Le gestionnaire reçoit le constat + les photos. Garde ton PDF téléchargé.</p>';
     $('constat-body').classList.remove('hide'); $('constat-done').classList.add('hide');
     var th = $('constat-thumbs'); if (th) th.innerHTML = '';
+    setupSigPad($('cst-sig-a'), 'a'); setupSigPad($('cst-sig-b'), 'b');
+  }
+  // Pad de signature tactile (doigt / souris). Backing store fixe → pas besoin d'être visible au montage ;
+  // les coordonnées sont mises à l'échelle au moment du tracé (rect réel ÷ taille du canvas).
+  function setupSigPad(canvas, key) {
+    if (!canvas || canvas._sigReady) return; canvas._sigReady = true;
+    var ctx = canvas.getContext('2d');
+    ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f1e3d';
+    var drawing = false, last = null;
+    function pt(e) { var r = canvas.getBoundingClientRect(); var s = (e.touches && e.touches[0]) ? e.touches[0] : e; return { x: (s.clientX - r.left) * (canvas.width / r.width), y: (s.clientY - r.top) * (canvas.height / r.height) }; }
+    function start(e) { e.preventDefault(); drawing = true; last = pt(e); }
+    function move(e) { if (!drawing) return; e.preventDefault(); var p = pt(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; constatSig[key] = canvas.toDataURL('image/png'); }
+    function end() { drawing = false; }
+    if (window.PointerEvent) {
+      canvas.addEventListener('pointerdown', start); canvas.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+    } else {
+      canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+      canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); window.addEventListener('touchend', end);
+    }
   }
   function _cv(id) { var el = $(id); return el ? (el.value || '').trim() : ''; }
   function constatCollect() {
@@ -1103,6 +1135,17 @@
           doc.setFont('helvetica', 'bold'); doc.text('Photos jointes : ' + constatPhotos.length, M, y + 2); y += 8;
           var x = M; constatPhotos.forEach(function (ph) { try { if (x > W - M - 46) { x = M; y += 40; } if (y > 250) { doc.addPage(); y = 18; x = M; } doc.addImage(ph, 'JPEG', x, y, 44, 33); x += 48; } catch (e) {} });
         }
+        if (constatSig.a || constatSig.b) {
+          if (y > 235) { doc.addPage(); y = 18; }
+          y += 4; doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(20); doc.text('Signatures', M, y); y += 6;
+          var sw = 80, sh = 26, xb = M + 95;
+          doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(120);
+          doc.text('Conducteur A', M, y); doc.text('Conducteur B', xb, y); y += 3;
+          try { if (constatSig.a) doc.addImage(constatSig.a, 'PNG', M, y, sw, sh); } catch (e) {}
+          try { if (constatSig.b) doc.addImage(constatSig.b, 'PNG', xb, y, sw, sh); } catch (e) {}
+          doc.setDrawColor(210); doc.line(M, y + sh + 2, M + sw, y + sh + 2); doc.line(xb, y + sh + 2, xb + sw, y + sh + 2);
+          y += sh + 8;
+        }
         doc.save('Constat-' + String(c.a.immat || 'vehicule').replace(/[^A-Za-z0-9]/g, '') + (c.date ? '-' + c.date.replace(/-/g, '') : '') + '.pdf');
       } catch (e) { alert('Erreur lors de la génération du PDF.'); }
     });
@@ -1111,11 +1154,15 @@
     var c = constatCollect(); var e = $('cst-err'); if (e) e.style.display = 'none';
     if (!c.a.cond) { if (e) { e.textContent = 'Indique au moins ton nom (conducteur A).'; e.style.display = 'block'; } return; }
     var btn = $('constat-send'); btn.disabled = true; btn.textContent = t('sending');
+    var sigNote = (constatSig.a || constatSig.b) ? ('\n\nSignatures : A ' + (constatSig.a ? '✔' : '—') + ' · B ' + (constatSig.b ? '✔' : '—') + ' (voir images jointes)') : '';
+    var allPhotos = constatPhotos.slice();
+    if (constatSig.a) allPhotos.push(constatSig.a);
+    if (constatSig.b) allPhotos.push(constatSig.b);
     postJSON({
       action: 'declaration', q: token, type: 'constat',
       dateIncident: [c.date ? frDate(c.date) : '', c.heure ? ('à ' + c.heure) : ''].filter(Boolean).join(' '),
-      lieu: c.lieu, description: constatText(c),
-      tiers: [c.b.cond, c.b.immat, c.b.ass].filter(Boolean).join(' · '), blesses: c.bless, photos: constatPhotos
+      lieu: c.lieu, description: constatText(c) + sigNote,
+      tiers: [c.b.cond, c.b.immat, c.b.ass].filter(Boolean).join(' · '), blesses: c.bless, photos: allPhotos
     }, function (ok, d) {
       btn.disabled = false; btn.textContent = '📨 Envoyer au gestionnaire';
       if (!ok) { if (e) { e.textContent = (d && d.error) || t('err_sendfail'); e.style.display = 'block'; } return; }
@@ -1134,6 +1181,8 @@
       if (ev.target.closest('#constat-pick')) { ev.preventDefault(); $('constat-file').click(); return; }
       if (ev.target.closest('#constat-dl')) { ev.preventDefault(); constatPdf(); return; }
       if (ev.target.closest('#constat-send')) { ev.preventDefault(); constatSend(); return; }
+      var sc = ev.target.closest('[data-sigclr]');
+      if (sc) { ev.preventDefault(); var k = sc.getAttribute('data-sigclr'); var cv = $('cst-sig-' + k); if (cv) { cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); } constatSig[k] = ''; return; }
       var rm = ev.target.closest('#constat-thumbs [data-rm]'); if (rm) { ev.preventDefault(); constatPhotos.splice(+rm.getAttribute('data-rm'), 1); var el = $('constat-thumbs'); if (el) el.innerHTML = thumbsHTML(constatPhotos); return; }
     });
   })();
