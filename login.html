@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/tailwind.css?v=20260913d">
+<link rel="stylesheet" href="assets/css/tailwind.css?v=20260913e">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="assets/js/lucide.min.js?v=20260913d"></script>
+  <script defer src="assets/js/lucide.min.js?v=20260913e"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="assets/css/styles.css?v=20260913d">
+<link rel="stylesheet" href="assets/css/styles.css?v=20260913e">
 <style>
   :root{
     --void:#05070D; --navy:#0F1E3D; --orange:#F97316; --amber:#FB923C; --cyan:#38BDF8;
@@ -339,7 +339,7 @@
   </script>
 
   <!-- ===== Logique de connexion (inchangée) ===== -->
-  <script src="assets/js/vendor/supabase.js?v=20260913d"></script>
+  <script src="assets/js/vendor/supabase.js?v=20260913e"></script>
   <!-- Fenêtres modales « à la sauce Parc Pilot » (remplacent alert/confirm/prompt natifs) -->
   <script>
   (function(){
@@ -458,13 +458,20 @@
       // 🔒 MULTI-SOCIÉTÉS : purge des caches liés au tenant/identité du compte PRÉCÉDENT sur ce
       // navigateur, pour qu'un NOUVEAU CLIENT ne voie jamais (même en flash) les données d'un autre.
       // (Miroir de FP.purgeTenantCache ; login.html n'inclut pas supabase-client.js → inline.)
+      // ⚠️ UNIQUEMENT si l'identité CHANGE réellement (compte différent de la dernière fois sur CE
+      // navigateur). Sinon (MÊME utilisateur qui se reconnecte) on NE purge PAS : purger à chaque
+      // connexion vidait le cache de réglages (sidebar, logo, libellés…) et pouvait les faire perdre.
       try {
-        var KILL = /^(fp_data_cache|fp_cond_cache|fp_docs_cache|fp_emprunts|auto_flotte_settings)/;
-        var drop = [];
-        for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && KILL.test(k)) drop.push(k); }
-        drop.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
-        ['fp_profile', 'fp_societe', 'fp_email', 'fp_data_cache', 'fp_last_uid'].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
-        if (data && data.user && data.user.id) localStorage.setItem('fp_last_uid', data.user.id);
+        var newUid = (data && data.user && data.user.id) ? data.user.id : '';
+        var prevUid = ''; try { prevUid = localStorage.getItem('fp_last_uid') || ''; } catch (e) {}
+        if (newUid && prevUid && newUid !== prevUid) {
+          var KILL = /^(fp_data_cache|fp_cond_cache|fp_docs_cache|fp_emprunts|auto_flotte_settings)/;
+          var drop = [];
+          for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && KILL.test(k)) drop.push(k); }
+          drop.forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+          ['fp_profile', 'fp_societe', 'fp_email', 'fp_data_cache'].forEach(function (k) { try { localStorage.removeItem(k); } catch (e) {} });
+        }
+        if (newUid) localStorage.setItem('fp_last_uid', newUid);
       } catch (e) {}
 
       // Enregistre les préférences de mémorisation

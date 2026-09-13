@@ -4467,11 +4467,15 @@ FP.settings = {
                : ((prevLocal && typeof prevLocal === 'object') ? prevLocal : null);
     // Sans Supabase : on ne peut rien lire/écrire côté serveur → file/local (comportement d'avant).
     if (!(FP.supabase && FP.supabase.from)) { plainUpsert(obj); return; }
-    // ⚠️ AUCUN repère (ni snapshot serveur ni état local précédent) = tout 1er enregistrement sur ce
-    // cache. Écrire le cache local TEL QUEL écraserait une config serveur existante. On lit donc le
-    // serveur et on COMBLE seulement les TROUS (le serveur gagne sur les feuilles existantes → SIRET &
-    // Cie préservés), sans jamais réécraser. Repli file d'écriture si la lecture échoue (pas de perte).
-    if (!base) {
+    // ⚠️ AUCUN repère FIABLE (ni snapshot serveur, ni état local précédent) = tout 1er enregistrement
+    // sur ce cache OU cache vidé (purge multi-sociétés / vidage navigateur) : `base` est null OU un
+    // objet VIDE `{}`. ⚠️⚠️ Un base VIDE est PIÉGEUX : en mode « delta » plus bas, CHAQUE clé de `obj`
+    // (des DÉFAUTS, puisque le cache est vide) diffère de base → on réécrirait les DÉFAUTS par-dessus la
+    // vraie config serveur (sidebar/navOrder, libellés, couleurs, groupes…) → PERTE sur tous les postes.
+    // Donc on TRAITE base-vide COMME base-absent : on lit le serveur et on COMBLE seulement les TROUS
+    // (le serveur GAGNE sur les feuilles existantes → config préservée), sans jamais réécraser.
+    // Repli file d'écriture si la lecture échoue (pas de perte).
+    if (!base || (typeof base === 'object' && Object.keys(base).length === 0)) {
       const gapFill = (remote, local) => {
         const out = (remote && typeof remote === 'object' && !Array.isArray(remote)) ? Object.assign({}, remote) : {};
         Object.keys(local || {}).forEach(k => {
