@@ -5617,7 +5617,18 @@ FP.totalFleetAnomaliesTx = function (tx) {
   list.filter(t => catOf(t) === 'autre' && (Number(t.montant_ttc) || 0) >= (lim.autreItem || 0))
     .sort((a, b) => (Number(b.montant_ttc) || 0) - (Number(a.montant_ttc) || 0))
     .forEach(t => { const p = String(t.produit || 'Achat').replace(/\s+/g, ' ').trim(); anom.push({ t: 'warn', mois: t.mois, facnum: t.facnum, key: 'autre|' + (t.conducteur || '—') + '|' + (t.date_tx || '') + '|' + (Number(t.montant_ttc) || 0) + '|' + (t.facnum || ''), conducteur: t.conducteur || '—', date: t.date_tx, montant: Number(t.montant_ttc) || 0, categorie: 'autre', produit: p, motif: p, txt: `${t.conducteur || '—'} · ${dnum(t.date_tx)} : ${p} à ${eur(t.montant_ttc)} (payé avec la carte carburant) → à vérifier` }); });
-  anom.forEach(a => { if (!a.key) a.key = a.t + '|' + (a.facnum || '') + '|' + a.txt; });
+  // Clé ROBUSTE (keyN) : nom du conducteur normalisé (prénom) → une trouvaille classée reste classée
+  // même si le relevé est réimporté avec le nom écrit autrement (« Romuald » vs « Romuald LAMARQUE-
+  // BRUNET »), cause n°1 des « alertes déjà traitées qui réapparaissent ». On EXCLUT 'diesel' (sa clé
+  // ne porte QUE le nom, sans date/montant/facnum → normaliser risquerait de confondre 2 homonymes) ;
+  // les autres (pleins/repas/autre) contiennent date+montant+facnum → aucune collision possible.
+  const _nk = (n) => (FP.normPrenom ? FP.normPrenom(n) : String(n || '').toLowerCase().trim());
+  const _KT = { pleins: 1, repas: 1, autre: 1 };
+  anom.forEach(a => {
+    if (!a.key) a.key = a.t + '|' + (a.facnum || '') + '|' + a.txt;
+    a.keyN = a.key;
+    try { const p = a.key.split('|'); if (p.length >= 2 && _KT[p[0]]) { p[1] = _nk(p[1]); a.keyN = p.join('|'); } } catch (e) {}
+  });
   return anom;
 };
 // Vrai si une anomalie a été archivée (« vérifié »). Reconnaît aussi l'ANCIENNE clé
@@ -5625,7 +5636,9 @@ FP.totalFleetAnomaliesTx = function (tx) {
 // de clé (ex. diesel devenu « diesel|<nom> »). SOURCE UNIQUE — utilisée par Factures et Suivi & alertes.
 FP.tfAnomArchivee = function (a, ok) {
   if (!a) return false; ok = ok || {};
-  return !!(ok[a.key] || ok[a.t + '|' + (a.facnum || '') + '|' + a.txt]);
+  // Reconnaît l'ANCIENNE clé (a.key, forme brute) ET la clé ROBUSTE (a.keyN, nom normalisé) →
+  // ce qui a déjà été classé ne réapparaît pas, y compris après un réimport qui réécrit le nom.
+  return !!(ok[a.key] || (a.keyN && ok[a.keyN]) || ok[a.t + '|' + (a.facnum || '') + '|' + a.txt]);
 };
 // Anomalies NON archivées (exclut celles cochées « vérifié » dans les réglages tfAnomOk).
 FP.totalFleetAnomaliesActives = function (tx) {
