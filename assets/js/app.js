@@ -4204,18 +4204,20 @@ FP.qrScans = {
       const bar = document.createElement('nav');
       bar.className = 'fp-tabbar'; bar.setAttribute('aria-label', 'Navigation principale');
       const tabs = [
-        { key: 'dashboard.html',     ic: 'home',   lb: 'Accueil'   },
-        { key: 'vehicules.html',     ic: 'car',    lb: 'Véhicules' },
-        { key: '__add__',            ic: 'plus',   lb: 'Ajouter'   },
-        { key: 'amendes.html',       ic: 'ticket', lb: 'Amendes'   },
-        { key: 'notifications.html', ic: 'bell',   lb: 'Alertes'   },
-        { key: '__menu__',           ic: 'menu',   lb: 'Menu'      },
+        { key: 'dashboard.html',     ic: 'home',   lb: 'Accueil'     },
+        { key: 'vehicules.html',     ic: 'car',    lb: 'Véhicules'   },
+        { key: 'conducteurs.html',   ic: 'users',  lb: 'Conducteurs' },
+        { key: '__add__',            ic: 'plus',   lb: 'Ajouter'     },
+        { key: 'amendes.html',       ic: 'ticket', lb: 'Amendes'     },
+        { key: 'notifications.html', ic: 'bell',   lb: 'Alertes'     },
+        { key: '__menu__',           ic: 'menu',   lb: 'Menu'        },
       ];
       tabs.forEach(t => {
         if (t.key === '__add__') {
           const b = document.createElement('button');
           b.type = 'button'; b.className = 'fp-tab fp-tab-add'; b.setAttribute('aria-label', 'Ajouter');
-          b.innerHTML = '<span class="fp-tab-plus"><i data-lucide="plus"></i></span><span class="fp-tab-lb">' + t.lb + '</span>';
+          // Pas de libellé « Ajouter » sous le ➕ (demande utilisateur) : bouton flottant seul, surélevé.
+          b.innerHTML = '<span class="fp-tab-plus"><i data-lucide="plus"></i></span>';
           b.addEventListener('click', openQuickAdd);
           bar.appendChild(b); return;
         }
@@ -4223,7 +4225,7 @@ FP.qrScans = {
           const b = document.createElement('button');
           // « Menu » est actif quand la page courante n'est AUCUN des 4 onglets directs → l'utilisateur
           // garde toujours un repère « où suis-je » sur les pages hors barre (Factures, Contrats…).
-          const directs = ['dashboard.html', 'vehicules.html', 'amendes.html', 'notifications.html'];
+          const directs = ['dashboard.html', 'vehicules.html', 'conducteurs.html', 'amendes.html', 'notifications.html'];
           const menuActive = directs.indexOf(cur) === -1;
           b.type = 'button'; b.className = 'fp-tab' + (menuActive ? ' active' : ''); b.setAttribute('aria-label', 'Menu');
           b.innerHTML = '<i data-lucide="' + t.ic + '"></i><span class="fp-tab-lb">' + t.lb + '</span>';
