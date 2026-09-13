@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260913b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260913c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260913b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260913c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260913b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260913c">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -309,11 +309,11 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260913b"></script>
-<script src="../assets/js/supabase-client.js?v=20260913b"></script>
-<script src="../assets/js/data.js?v=20260913b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260913c"></script>
+<script src="../assets/js/supabase-client.js?v=20260913c"></script>
+<script src="../assets/js/data.js?v=20260913c"></script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260913b"></script>
+<script src="../assets/js/app.min.js?v=20260913c"></script>
 <!-- ⚡ fleet-views.js (~160 Ko : Total Fleet + Ulys) N'EST PLUS chargé ici en SYNCHRONE : l'onglet
      par défaut est « Contrôle » et n'en a pas besoin. Il est injecté à la demande (1re ouverture de
      Total/Ulys) via ensureFleetViews(), et préchargé en douceur sur temps mort → l'arrivée sur
@@ -344,7 +344,7 @@
     _flPromise = new Promise(res => {
       try {
         const s = document.createElement('script');
-        s.src = '../assets/js/fleet-views.min.js?v=20260913b';
+        s.src = '../assets/js/fleet-views.min.js?v=20260913c';
         s.onload = () => res(!!(window.FP && FP.mountTotal));
         s.onerror = () => res(false);
         document.head.appendChild(s);
@@ -830,9 +830,11 @@
     // 3) Anomalies carte (repas élevés, hors carburant, pleins multiples, diesel…)
     const txCard = _tx.filter(t => !/^ULYS/i.test(String(t.carte||'')));
     (FP.totalFleetAnomaliesTx ? FP.totalFleetAnomaliesTx(txCard) : []).forEach(a => {
-      const fid = FP.trouvailleId ? FP.trouvailleId('carte', a) : ('ca|' + (a.key||'')); const cn = canon(a.conducteur||'—');
+      const fid = FP.trouvailleId ? FP.trouvailleId('carte', a) : ('ca|' + (a.key||''));   // ancienne identité (compat lecture)
+      const fidN = 'ca|' + (a.keyN || a.key || '');                                          // identité ROBUSTE (nom normalisé)
+      const cn = canon(a.conducteur||'—');
       const def = (FP.tfAnomArchivee && FP.tfAnomArchivee(a, ok)) ? 'classe' : 'a-verifier';
-      const st = sm[fid] || def;
+      const st = sm[fidN] || sm[fid] || def;   // priorité clé robuste, repli ancienne clé, puis défaut calculé
       // « Conso » = le VRAI libellé lu sur le relevé (ex. « Bouteille Gaz »), pas un générique.
       const prod = a.produit || '';
       // Détail CHIFFRÉ : chaque dépense de la journée avec son montant exact (repas, pleins, gazole)
@@ -847,12 +849,13 @@
       else if (isDiesel) { type = 'Gazole (diesel)'; detail = (brk ? brk + ' — ' : '') + 'total ' + euro(a.montant) + ' de gazole (flotte à l\'essence)'; }
       else if (/pleins/.test(a.motif || '')) { type = 'Carburant (pleins multiples)'; detail = (brk ? brk + ' — ' : '') + a.motif; }
       else { type = prod || catLbl(a.categorie); detail = a.motif || a.txt || 'anomalie carte'; }
-      out.push({ fid, genre:'carte', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre', type,
+      out.push({ fid: fidN, _oldfid: fid, genre:'carte', conducteur:cn.n, gkey:cn.k, categorie:a.categorie||'autre', type,
         date:a.date||'', mois:a.mois || (a.date ? String(a.date).slice(0,7) : ''),
         montant:a.montant, facnum:a.facnum||'', detail, statut: st, _def: def,
         // Clé + charge pour SYNCHRONISER avec « Points à vérifier » (Total Fleet) : marquer cette
         // anomalie « justifié / fraude / classé » ici l'archive là-bas, et inversement (source unique tfAnomOk).
-        _anom: { key: a.key || '', t: a.t || '', txt: a.txt || '', mois: a.mois || '', facnum: a.facnum || '' } });
+        // key = clé ROBUSTE (nom normalisé) pour l'écriture ; keyOld = ancienne clé brute (migration/nettoyage).
+        _anom: { key: a.keyN || a.key || '', keyOld: a.key || '', t: a.t || '', txt: a.txt || '', mois: a.mois || '', facnum: a.facnum || '' } });
     });
     // 4) Conso APRÈS le départ du conducteur (carte/badge encore active pour un salarié parti).
     (FP.consoApresDepart ? FP.consoApresDepart(_tx) : []).forEach(a => {
@@ -1171,12 +1174,14 @@
     const s = FP.settings.get();
     const m = (s.controleStatuts && typeof s.controleStatuts === 'object') ? s.controleStatuts : {};
     if (st && st !== (def || 'a-verifier')) m[fid] = st; else delete m[fid];
+    if (f && f._oldfid && f._oldfid !== fid) delete m[f._oldfid];   // migre/nettoie l'ancienne clé (nom non normalisé)
     s.controleStatuts = m;
     if (f && f.genre === 'carte' && f._anom && f._anom.key) {
       const am = (s.tfAnomOk && typeof s.tfAnomOk === 'object') ? s.tfAnomOk : {};
       const key = f._anom.key, resolu = (st && st !== 'a-verifier');
       if (resolu) am[key] = { key, t: f._anom.t || '', txt: f._anom.txt || '', mois: f._anom.mois || '', facnum: f._anom.facnum || '', okAt: Date.now() };
       else delete am[key];
+      if (f._anom.keyOld && f._anom.keyOld !== key) delete am[f._anom.keyOld];   // migre l'ancienne clé
       s.tfAnomOk = am;
     }
     FP.settings.save(s);
@@ -1300,7 +1305,7 @@
     //    qu'une règle métier d'app.js change (consoApresDepart, consoPendantConge, anomalies carte…).
     //  • DETECT_VERSION local = à bumper à la main quand on change la logique PROPRE à cette page
     //    (buildFindings ici). Réflexe : bumper au moindre doute.
-    const DETECT_VERSION = (FP.ASSET_VERSION || 'dev') + '.d2';
+    const DETECT_VERSION = (FP.ASSET_VERSION || 'dev') + '.d3';
     return DETECT_VERSION + '|' + _tx.length + '|' + _ulys.length + '|' + cnd + '|' + cong + '|' + smLen + '|' + affLen + '|' + Math.round(sum * 100);
   }
   function rebuild(force){
