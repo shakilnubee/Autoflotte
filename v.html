@@ -1117,37 +1117,97 @@
     s.onload = function () { cb(); }; s.onerror = function () { alert('Impossible de charger le générateur PDF (réseau).'); };
     document.head.appendChild(s);
   }
+  // PDF « officiel » : reproduction FIDÈLE de la structure d'un constat amiable européen
+  // (2 colonnes véhicule A / B, cases à cocher des circonstances numérotées, croquis, signatures),
+  // remplie avec les données du formulaire. Mise en page originale (pas le visuel copyrighté d'un
+  // assureur) → juridiquement sûr et reconnaissable.
   function constatPdf() {
     ensurePdf(function () {
       try {
         var c = constatCollect(); var jsPDF = window.jspdf.jsPDF; var doc = new jsPDF({ unit: 'mm', format: 'a4' });
-        var M = 14, y = 18, W = 210;
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(15, 30, 61); doc.text('Constat amiable', M, y);
-        doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(120); doc.text('récapitulatif · Parc Pilot', W - M, y, { align: 'right' }); y += 8;
-        doc.setDrawColor(225); doc.line(M, y, W - M, y); y += 6;
-        doc.setFontSize(10.5); doc.setTextColor(20);
-        constatText(c).split('\n').forEach(function (line) {
-          if (y > 280) { doc.addPage(); y = 18; }
-          var isHead = /^(VÉHICULE|CONSTAT|Circonstances)/.test(line);
-          doc.setFont('helvetica', isHead ? 'bold' : 'normal');
-          var wrapped = doc.splitTextToSize(line || ' ', W - 2 * M);
-          doc.text(wrapped, M, y); y += wrapped.length * 5.4;
-        });
-        if (constatPhotos.length) {
-          if (y > 250) { doc.addPage(); y = 18; }
-          doc.setFont('helvetica', 'bold'); doc.text('Photos jointes : ' + constatPhotos.length, M, y + 2); y += 8;
-          var x = M; constatPhotos.forEach(function (ph) { try { if (x > W - M - 46) { x = M; y += 40; } if (y > 250) { doc.addPage(); y = 18; x = M; } doc.addImage(ph, 'JPEG', x, y, 44, 33); x += 48; } catch (e) {} });
+        var M = 10, W = 210, RIGHT = W - M, INK = [15, 30, 61], y = 12;
+        var colW = (RIGHT - M - 4) / 2, xA = M, xB = M + colW + 4;
+        function cell(x, yy, w, h, label, val, opt) {
+          opt = opt || {};
+          doc.setDrawColor(200); doc.setLineWidth(0.2); doc.rect(x, yy, w, h);
+          if (label) { doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.setTextColor(120); doc.text(String(label).toUpperCase(), x + 1.4, yy + 2.9); }
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(opt.fs || 8.6); doc.setTextColor(25);
+          var v = (val == null || val === '') ? '—' : String(val);
+          var lines = doc.splitTextToSize(v, w - 2.8);
+          doc.text(lines.slice(0, opt.max || 1), x + 1.4, label ? yy + 6.6 : yy + h / 2 + 1);
         }
-        if (constatSig.a || constatSig.b) {
-          if (y > 235) { doc.addPage(); y = 18; }
-          y += 4; doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(20); doc.text('Signatures', M, y); y += 6;
-          var sw = 80, sh = 26, xb = M + 95;
-          doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(120);
-          doc.text('Conducteur A', M, y); doc.text('Conducteur B', xb, y); y += 3;
-          try { if (constatSig.a) doc.addImage(constatSig.a, 'PNG', M, y, sw, sh); } catch (e) {}
-          try { if (constatSig.b) doc.addImage(constatSig.b, 'PNG', xb, y, sw, sh); } catch (e) {}
-          doc.setDrawColor(210); doc.line(M, y + sh + 2, M + sw, y + sh + 2); doc.line(xb, y + sh + 2, xb + sw, y + sh + 2);
-          y += sh + 8;
+        function bar(x, yy, w, txt, col) {
+          col = col || INK; doc.setFillColor(col[0], col[1], col[2]); doc.rect(x, yy, w, 5.6, 'F');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8.2); doc.setTextColor(255); doc.text(String(txt).toUpperCase(), x + 2, yy + 3.9);
+        }
+        // En-tête
+        doc.setFillColor(INK[0], INK[1], INK[2]); doc.rect(M, y, RIGHT - M, 9, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(12.5); doc.setTextColor(255);
+        doc.text("CONSTAT AMIABLE D'ACCIDENT AUTOMOBILE", W / 2, y + 6, { align: 'center' }); y += 9;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.2); doc.setTextColor(120);
+        doc.text((DATA && DATA.societe) ? String(DATA.societe) : 'Parc Pilot', M, y + 3.4);
+        doc.text('Rempli en ligne · parc-pilot.fr', RIGHT, y + 3.4, { align: 'right' }); y += 6;
+        // 1 · L'accident
+        bar(M, y, RIGHT - M, "1 · L'accident"); y += 5.6;
+        cell(M, y, 63, 9, 'Date', c.date ? frDate(c.date) : ''); cell(M + 63, y, 37, 9, 'Heure', c.heure); cell(M + 100, y, RIGHT - (M + 100), 9, 'Lieu (ville, rue)', c.lieu); y += 9;
+        cell(M, y, 55, 9, 'Blessés même légers', c.bless || 'Non'); cell(M + 55, y, 70, 9, 'Autres dégâts matériels', c.autres || 'Non'); cell(M + 125, y, RIGHT - (M + 125), 9, 'Témoins', c.temoins); y += 9;
+        // 2 · Les véhicules (2 colonnes)
+        bar(xA, y, colW, 'Véhicule A — assuré', [37, 99, 235]); bar(xB, y, colW, 'Véhicule B — tiers', [234, 88, 12]); y += 5.6;
+        var half = colW / 2;
+        function vehBlock(x, v) {
+          var yy = y;
+          cell(x, yy, half, 9, 'Conducteur', v.cond); cell(x + half, yy, colW - half, 9, 'Téléphone', v.tel); yy += 9;
+          cell(x, yy, colW, 9, 'Véhicule (marque / modèle)', v.veh); yy += 9;
+          cell(x, yy, half, 9, 'Immatriculation', v.immat); cell(x + half, yy, colW - half, 9, "Société d'assurance", v.ass); yy += 9;
+          cell(x, yy, half, 9, 'N° de contrat', v.pol); cell(x + half, yy, colW - half, 9, 'Point de choc', v.choc); yy += 9;
+          cell(x, yy, colW, 11, 'Dégâts apparents', v.deg, { max: 2 });
+        }
+        vehBlock(xA, c.a); vehBlock(xB, c.b); y += 9 * 4 + 11;
+        // 3 · Circonstances (cases à cocher)
+        bar(M, y, RIGHT - M, '3 · Circonstances — cochez les cases utiles'); y += 5.6;
+        var cbx = 13, rowH = 5.0, tableH = CIRCONSTANCES.length * rowH, y0 = y, tX = M + cbx + 2, tW = (RIGHT - cbx) - tX;
+        doc.setDrawColor(200); doc.rect(M, y0, RIGHT - M, tableH);
+        doc.line(M + cbx, y0, M + cbx, y0 + tableH); doc.line(RIGHT - cbx, y0, RIGHT - cbx, y0 + tableH);
+        CIRCONSTANCES.forEach(function (lb, i) {
+          var ry = y0 + i * rowH, ck = 3.4, byy = ry + (rowH - ck) / 2;
+          var aOn = c.circA.indexOf(lb) >= 0, bOn = c.circB.indexOf(lb) >= 0;
+          var axb = M + (cbx - ck) / 2, bxb = (RIGHT - cbx) + (cbx - ck) / 2;
+          doc.setDrawColor(120); doc.rect(axb, byy, ck, ck); doc.rect(bxb, byy, ck, ck);
+          if (aOn) { doc.setFillColor(INK[0], INK[1], INK[2]); doc.rect(axb, byy, ck, ck, 'F'); }
+          if (bOn) { doc.setFillColor(INK[0], INK[1], INK[2]); doc.rect(bxb, byy, ck, ck, 'F'); }
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(7.2); doc.setTextColor(30);
+          doc.text(String(i + 1) + '. ' + lb, tX, ry + rowH - 1.5);
+          if (i > 0) { doc.setDrawColor(232); doc.line(M + cbx, ry, RIGHT - cbx, ry); }
+        });
+        y = y0 + tableH;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7.4); doc.setTextColor(60);
+        doc.text('A : ' + c.circA.length + ' case(s)', M + 2, y + 4); doc.text('B : ' + c.circB.length + ' case(s)', RIGHT - 2, y + 4, { align: 'right' });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); doc.setTextColor(130); doc.text('Nombre de cases cochées', W / 2, y + 4, { align: 'center' }); y += 7;
+        // 4 · Observations
+        bar(M, y, RIGHT - M, '4 · Observations'); y += 5.6;
+        cell(M, y, RIGHT - M, 12, '', c.obs, { max: 2, fs: 8.6 }); y += 12;
+        // 5 · Croquis
+        bar(M, y, RIGHT - M, "5 · Croquis de l'accident"); y += 5.6;
+        doc.setDrawColor(200); doc.rect(M, y, RIGHT - M, 24);
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(7.4); doc.setTextColor(150);
+        doc.text('À dessiner à la main, ou joindre une photo du croquis (voir photos).', W / 2, y + 13, { align: 'center' });
+        doc.setFont('helvetica', 'normal'); y += 24 + 1.5;
+        // 6 · Signatures
+        bar(M, y, RIGHT - M, '6 · Signatures'); y += 5.6;
+        var sh = 24;
+        doc.setDrawColor(200); doc.rect(xA, y, colW, sh); doc.rect(xB, y, colW, sh);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.setTextColor(120);
+        doc.text('SIGNATURE CONDUCTEUR A', xA + 1.4, y + 3); doc.text('SIGNATURE CONDUCTEUR B', xB + 1.4, y + 3);
+        try { if (constatSig.a) doc.addImage(constatSig.a, 'PNG', xA + 2, y + 4.5, colW - 6, sh - 7); } catch (e) {}
+        try { if (constatSig.b) doc.addImage(constatSig.b, 'PNG', xB + 2, y + 4.5, colW - 6, sh - 7); } catch (e) {}
+        y += sh + 3;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(6.6); doc.setTextColor(140);
+        doc.text('Document généré le ' + frDate(new Date().toISOString()) + ' via Parc Pilot — à conserver par chaque conducteur et à transmettre à l\'assureur.', W / 2, Math.min(y + 2, 291), { align: 'center' });
+        // Photos jointes → page(s) suivante(s)
+        if (constatPhotos.length) {
+          doc.addPage(); var py = 14;
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(INK[0], INK[1], INK[2]); doc.text('Photos jointes (' + constatPhotos.length + ')', M, py); py += 6;
+          var px = M; constatPhotos.forEach(function (ph) { try { if (px > RIGHT - 62) { px = M; py += 50; } if (py > 250) { doc.addPage(); py = 14; px = M; } doc.addImage(ph, 'JPEG', px, py, 58, 44); px += 62; } catch (e) {} });
         }
         doc.save('Constat-' + String(c.a.immat || 'vehicule').replace(/[^A-Za-z0-9]/g, '') + (c.date ? '-' + c.date.replace(/-/g, '') : '') + '.pdf');
       } catch (e) { alert('Erreur lors de la génération du PDF.'); }
