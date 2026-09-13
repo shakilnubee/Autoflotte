@@ -155,7 +155,7 @@ function _norm(s: string) { return String(s || "").toLowerCase().normalize("NFD"
 async function vehConducteur(db: ReturnType<typeof createClient>, chauffeur: string, societe: string) {
   const name = String(chauffeur || "").trim();
   if (!name || name === "—") return null;
-  const rows = ((await db.from("conducteurs").select("prenom,nom,poste,name,key").eq("societe", societe || "PXP")).data || []) as Record<string, unknown>[];
+  const rows = ((await db.from("conducteurs").select("prenom,nom,poste,name,key,tel").eq("societe", societe || "PXP")).data || []) as Record<string, unknown>[];
   const key = _norm(name);
   // 1) Correspondance sur le NOM COMPLET (prénom+nom OU champ `name`).
   let hit = rows.find((c) => _norm(String(c.prenom || "") + String(c.nom || "")) === key || _norm(String(c.name || "")) === key);
@@ -175,7 +175,7 @@ async function vehConducteur(db: ReturnType<typeof createClient>, chauffeur: str
   let prenom = String(hit.prenom || ""), nom = String(hit.nom || "");
   const full = String(hit.name || "").trim();
   if (!prenom && !nom && full) { const parts = full.split(/\s+/); prenom = parts[0] || ""; nom = parts.slice(1).join(" "); }
-  return { prenom, nom, poste: String(hit.poste || ""), name: full || (prenom + " " + nom).trim(), key: String(hit.key || "") };
+  return { prenom, nom, poste: String(hit.poste || ""), name: full || (prenom + " " + nom).trim(), key: String(hit.key || ""), tel: String(hit.tel || "") };
 }
 
 // ⚠️ Masses en service (champ G, kg) lues sur les cartes grises de la flotte — MÊME source que
