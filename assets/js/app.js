@@ -4245,11 +4245,13 @@ FP.qrScans = {
       const scrim = document.createElement('div'); scrim.className = 'fp-qa-scrim';
       const sheet = document.createElement('div'); sheet.className = 'fp-qa-sheet';
       const items = [
-        { ic: 'scan-line',     lb: 'Scanner un document', href: P + 'scanner.html',       cls: 'b' },
-        { ic: 'ticket',        lb: 'Amende',              href: P + 'amendes.html#add',   cls: 'r' },
-        { ic: 'receipt',       lb: 'Facture',             href: P + 'factures.html#add',  cls: 'g' },
-        { ic: 'alert-octagon', lb: 'Sinistre',            href: P + 'sinistres.html#add', cls: 'o' },
-        { ic: 'car',           lb: 'Véhicule',            href: P + 'vehicules.html#add', cls: 'b' },
+        { ic: 'scan-line',     lb: 'Scanner un document', href: P + 'scanner.html',            cls: 'b' },
+        { ic: 'ticket',        lb: 'Amende',              href: P + 'amendes.html#add',        cls: 'r' },
+        { ic: 'receipt',       lb: 'Facture',             href: P + 'factures.html#add',       cls: 'g' },
+        { ic: 'alert-octagon', lb: 'Sinistre',            href: P + 'sinistres.html#add',      cls: 'o' },
+        { ic: 'car',           lb: 'Véhicule',            href: P + 'vehicules.html#add',      cls: 'b' },
+        { ic: 'user-plus',     lb: 'Conducteur',          href: P + 'conducteurs.html?new=1',  cls: 'g' },
+        { ic: 'key-round',     lb: 'Emprunt',             href: P + 'emprunts.html?new=1',     cls: 'o' },
       ];
       sheet.innerHTML = '<div class="fp-qa-grab"></div><div class="fp-qa-title">Ajouter</div><div class="fp-qa-grid">'
         + items.map(it => '<a class="fp-qa-item" href="' + it.href + '"><span class="fp-qa-ic fp-qa-' + it.cls + '"><i data-lucide="' + it.ic + '"></i></span>' + it.lb + '</a>').join('')
