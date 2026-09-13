@@ -101,6 +101,7 @@
   /* Constat — signatures tactiles */
   .sigwrap { position:relative; margin:.15rem 0 .6rem; }
   .sigpad { width:100%; height:130px; border:1.5px dashed var(--line); border-radius:10px; background:#fff; touch-action:none; display:block; }
+  .croqpad { width:100%; height:230px; border:1.5px dashed var(--line); border-radius:10px; background:#fff; touch-action:none; display:block; }
   .sigclr { position:absolute; top:6px; right:6px; font-size:12px; font-weight:700; padding:.2rem .55rem; border:1px solid var(--line); border-radius:8px; background:#fff; color:#334155; }
   .gal a img { height:90px; }
   .gal a.edl-doc { display:flex; align-items:center; justify-content:center; text-align:center; gap:.3rem; min-height:90px; grid-column:1/-1; border:1.5px solid var(--line); border-radius:.6rem; background:#F1FBF9; color:#0f766e; font-weight:800; font-size:.86rem; text-decoration:none; padding:.6rem; }
@@ -980,6 +981,7 @@
   // ---- Constat amiable rempli EN LIGNE (véhicule A pré-rempli → PDF téléchargeable + envoi gestionnaire) ----
   var constatPhotos = [];
   var constatSig = { a: '', b: '' };
+  var constatCroquis = ''; // maquette / croquis de l'accident dessiné à la main (dataURL PNG)
   var CIRCONSTANCES = [
     'en stationnement / à l\'arrêt',
     'quittait un stationnement / ouvrait une portière',
@@ -1001,7 +1003,7 @@
   ];
   function renderConstat() {
     constatPhotos = [];
-    constatSig = { a: '', b: '' };
+    constatSig = { a: '', b: '' }; constatCroquis = '';
     var v = DATA.veh || {}, p = DATA.portail || {};
     var soc = (DATA.societe || p.societe || '');
     var d = new Date(), pad = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -1047,6 +1049,9 @@
       + '<label class="f">Dégâts apparents</label><input class="fi" id="cst-b-deg" type="text"></div>'
       + '<div class="box"><h4>🧩 Circonstances <span class="muted" style="font-weight:600">(coche A et/ou B)</span></h4><div class="cst-circwrap">' + circ + '</div></div>'
       + '<div class="box"><h4>✍️ Observations</h4><textarea class="fi" id="cst-obs" rows="3" placeholder="Précisions, désaccords éventuels…"></textarea></div>'
+      + '<div class="box"><h4>✏️ Maquette / croquis de l\'accident</h4>'
+      + '<p class="muted" style="margin:.1rem 0 .5rem">Dessine la scène avec le doigt (les routes, la position des véhicules A et B, le sens de circulation, les flèches). Comme sur un vrai constat.</p>'
+      + '<div class="sigwrap"><canvas id="cst-croquis" class="croqpad" width="900" height="520"></canvas><button type="button" class="sigclr" data-croqclr="1">Effacer</button></div></div>'
       + '<div class="box"><h4>🖊️ Signatures</h4>'
       + '<p class="muted" style="margin:.1rem 0 .5rem">Signe avec le doigt. Fais aussi signer le conducteur B si possible.</p>'
       + '<label class="f">Conducteur A (moi)</label>'
@@ -1062,18 +1067,20 @@
       + '<p class="muted center" style="margin-top:.6rem">Le gestionnaire reçoit le constat + les photos. Garde ton PDF téléchargé.</p>';
     $('constat-body').classList.remove('hide'); $('constat-done').classList.add('hide');
     var th = $('constat-thumbs'); if (th) th.innerHTML = '';
-    setupSigPad($('cst-sig-a'), 'a'); setupSigPad($('cst-sig-b'), 'b');
+    setupSigPad($('cst-sig-a'), function (d) { constatSig.a = d; });
+    setupSigPad($('cst-sig-b'), function (d) { constatSig.b = d; });
+    setupSigPad($('cst-croquis'), function (d) { constatCroquis = d; }, { color: '#0f1e3d', width: 3.2 });
   }
   // Pad de signature tactile (doigt / souris). Backing store fixe → pas besoin d'être visible au montage ;
   // les coordonnées sont mises à l'échelle au moment du tracé (rect réel ÷ taille du canvas).
-  function setupSigPad(canvas, key) {
-    if (!canvas || canvas._sigReady) return; canvas._sigReady = true;
+  function setupSigPad(canvas, onChange, opt) {
+    if (!canvas || canvas._sigReady) return; canvas._sigReady = true; opt = opt || {};
     var ctx = canvas.getContext('2d');
-    ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f1e3d';
+    ctx.lineWidth = opt.width || 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = opt.color || '#0f1e3d';
     var drawing = false, last = null;
     function pt(e) { var r = canvas.getBoundingClientRect(); var s = (e.touches && e.touches[0]) ? e.touches[0] : e; return { x: (s.clientX - r.left) * (canvas.width / r.width), y: (s.clientY - r.top) * (canvas.height / r.height) }; }
     function start(e) { e.preventDefault(); drawing = true; last = pt(e); }
-    function move(e) { if (!drawing) return; e.preventDefault(); var p = pt(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; constatSig[key] = canvas.toDataURL('image/png'); }
+    function move(e) { if (!drawing) return; e.preventDefault(); var p = pt(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; onChange(canvas.toDataURL('image/png')); }
     function end() { drawing = false; }
     if (window.PointerEvent) {
       canvas.addEventListener('pointerdown', start); canvas.addEventListener('pointermove', move);
@@ -1147,6 +1154,9 @@
           doc.text(lines.slice(0, opt.max || 1), x, yy + 4);
         }
         var y = 14;
+        // Saut de page si la section suivante ne tient pas en bas (évite que les signatures / le croquis
+        // soient coupés quand beaucoup de circonstances sont cochées).
+        function ensure(need) { if (y + need > 285) { doc.addPage(); y = 16; } }
         // ===== Bandeau de marque =====
         var hH = 26;
         doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]); doc.roundedRect(M, y, CW, hH, 3, 3, 'F');
@@ -1176,6 +1186,7 @@
         kv(px, y + 25, CW - 10, 'Témoins', c.temoins);
         y += acH + 6;
         // ===== 2 · Les véhicules (cartes A / B) =====
+        ensure(4.5 + 70 + 2);
         y = section(y, 'Les véhicules');
         var gap = 5, cardW = (CW - gap) / 2, xA = M, xB = M + cardW + gap, vH = 70;
         function vehCard(x, titre, tint, v) {
@@ -1193,10 +1204,11 @@
         vehCard(xA, 'Véhicule A — moi', NAVY, c.a); vehCard(xB, 'Véhicule B — tiers', ORANGE2, c.b);
         y += vH + 6;
         // ===== 3 · Circonstances (liste des cochées) =====
-        y = section(y, 'Circonstances');
         var chosen = [];
         CIRCONSTANCES.forEach(function (lb) { var a = c.circA.indexOf(lb) >= 0, b = c.circB.indexOf(lb) >= 0; if (a || b) chosen.push({ lb: lb, a: a, b: b }); });
         var ciH = Math.max(12, chosen.length ? chosen.length * 5.4 + 5 : 12);
+        ensure(4.5 + ciH + 2);
+        y = section(y, 'Circonstances');
         doc.setFillColor(CARDBG[0], CARDBG[1], CARDBG[2]); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
         doc.roundedRect(M, y, CW, ciH, 2.5, 2.5, 'FD');
         if (!chosen.length) {
@@ -1216,13 +1228,29 @@
         }
         y += ciH + 6;
         // ===== 4 · Observations =====
+        ensure(4.5 + 16 + 2);
         y = section(y, 'Observations');
         var obH = 16; doc.setFillColor(CARDBG[0], CARDBG[1], CARDBG[2]); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
         doc.roundedRect(M, y, CW, obH, 2.5, 2.5, 'FD');
         doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(DARK[0], DARK[1], DARK[2]);
         doc.text(doc.splitTextToSize(val(c.obs), CW - 10).slice(0, 2), M + 5, y + 6);
         y += obH + 6;
-        // ===== 5 · Signatures =====
+        // ===== 5 · Croquis / maquette (seulement s'il a été dessiné) =====
+        if (constatCroquis) {
+          var crBoxH = 92;
+          ensure(4.5 + crBoxH + 2);
+          y = section(y, "Croquis de l'accident");
+          doc.setFillColor(255, 255, 255); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
+          doc.roundedRect(M, y, CW, crBoxH, 2.5, 2.5, 'FD');
+          try {
+            var crW = (crBoxH - 6) * 900 / 520; if (crW > CW - 6) { crW = CW - 6; }
+            var crH2 = crW * 520 / 900, crX = M + (CW - crW) / 2, crY = y + (crBoxH - crH2) / 2;
+            doc.addImage(constatCroquis, 'PNG', crX, crY, crW, crH2);
+          } catch (e) {}
+          y += crBoxH + 6;
+        }
+        // ===== 6 · Signatures =====
+        ensure(4.5 + 24 + 8);
         y = section(y, 'Signatures');
         var sgW = (CW - gap) / 2, sgH = 24;
         function sigBox(x, titre, tint, img) {
@@ -1254,7 +1282,9 @@
     if (!c.a.cond) { if (e) { e.textContent = 'Indique au moins ton nom (conducteur A).'; e.style.display = 'block'; } return; }
     var btn = $('constat-send'); btn.disabled = true; btn.textContent = t('sending');
     var sigNote = (constatSig.a || constatSig.b) ? ('\n\nSignatures : A ' + (constatSig.a ? '✔' : '—') + ' · B ' + (constatSig.b ? '✔' : '—') + ' (voir images jointes)') : '';
+    if (constatCroquis) sigNote += '\nCroquis de l\'accident joint (voir images).';
     var allPhotos = constatPhotos.slice();
+    if (constatCroquis) allPhotos.push(constatCroquis);
     if (constatSig.a) allPhotos.push(constatSig.a);
     if (constatSig.b) allPhotos.push(constatSig.b);
     postJSON({
@@ -1282,6 +1312,8 @@
       if (ev.target.closest('#constat-send')) { ev.preventDefault(); constatSend(); return; }
       var sc = ev.target.closest('[data-sigclr]');
       if (sc) { ev.preventDefault(); var k = sc.getAttribute('data-sigclr'); var cv = $('cst-sig-' + k); if (cv) { cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); } constatSig[k] = ''; return; }
+      var cq = ev.target.closest('[data-croqclr]');
+      if (cq) { ev.preventDefault(); var cvq = $('cst-croquis'); if (cvq) { cvq.getContext('2d').clearRect(0, 0, cvq.width, cvq.height); } constatCroquis = ''; return; }
       var rm = ev.target.closest('#constat-thumbs [data-rm]'); if (rm) { ev.preventDefault(); constatPhotos.splice(+rm.getAttribute('data-rm'), 1); var el = $('constat-thumbs'); if (el) el.innerHTML = thumbsHTML(constatPhotos); return; }
     });
   })();
