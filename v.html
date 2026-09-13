@@ -102,6 +102,11 @@
   .sigwrap { position:relative; margin:.15rem 0 .6rem; }
   .sigpad { width:100%; height:130px; border:1.5px dashed var(--line); border-radius:10px; background:#fff; touch-action:none; display:block; }
   .croqpad { width:100%; height:230px; border:1.5px dashed var(--line); border-radius:10px; background:#fff; touch-action:none; display:block; }
+  .chocpad { width:100%; max-width:230px; height:150px; border:1.5px solid var(--line); border-radius:10px; background:#fff; touch-action:none; display:block; margin:.15rem auto 0; }
+  .choc-tools { display:flex; gap:.4rem; flex-wrap:wrap; align-items:center; margin:.15rem 0 0; }
+  .choc-tg { font-size:12px; font-weight:700; padding:.28rem .6rem; border:1px solid var(--line); border-radius:8px; background:#fff; color:#334155; }
+  .choc-tg.on { background:#0f1e3d; color:#fff; border-color:#0f1e3d; }
+  .choc-clr { font-size:12px; font-weight:700; padding:.28rem .6rem; border:1px solid var(--line); border-radius:8px; background:#fff; color:#334155; margin-left:auto; }
   .sigclr { position:absolute; top:6px; right:6px; font-size:12px; font-weight:700; padding:.2rem .55rem; border:1px solid var(--line); border-radius:8px; background:#fff; color:#334155; }
   .gal a img { height:90px; }
   .gal a.edl-doc { display:flex; align-items:center; justify-content:center; text-align:center; gap:.3rem; min-height:90px; grid-column:1/-1; border:1.5px solid var(--line); border-radius:.6rem; background:#F1FBF9; color:#0f766e; font-weight:800; font-size:.86rem; text-decoration:none; padding:.6rem; }
@@ -982,6 +987,8 @@
   var constatPhotos = [];
   var constatSig = { a: '', b: '' };
   var constatCroquis = ''; // maquette / croquis de l'accident dessiné à la main (dataURL PNG)
+  // Point de choc : schéma véhicule (voiture/moto vue de dessus) où l'on TOUCHE l'endroit du choc.
+  var constatChoc = { a: { shape: 'car', mx: null, my: null, img: '' }, b: { shape: 'car', mx: null, my: null, img: '' } };
   var CIRCONSTANCES = [
     'en stationnement / à l\'arrêt',
     'quittait un stationnement / ouvrait une portière',
@@ -1004,6 +1011,7 @@
   function renderConstat() {
     constatPhotos = [];
     constatSig = { a: '', b: '' }; constatCroquis = '';
+    constatChoc = { a: { shape: 'car', mx: null, my: null, img: '' }, b: { shape: 'car', mx: null, my: null, img: '' } };
     var v = DATA.veh || {}, p = DATA.portail || {};
     var soc = (DATA.societe || p.societe || '');
     var d = new Date(), pad = function (n) { return (n < 10 ? '0' : '') + n; };
@@ -1030,22 +1038,24 @@
       + '<label class="f">Dégâts à d\'autres véhicules / objets ?</label><input class="fi" id="cst-autres" type="text" placeholder="Non / précisions">'
       + '<label class="f">Témoins (nom, téléphone)</label><input class="fi" id="cst-temoins" type="text" placeholder="Nom · tél"></div>'
       + '<div class="box"><h4>🚗 Véhicule A — le mien' + (soc ? (' (' + esc(soc) + ')') : '') + '</h4>'
-      + '<label class="f">Conducteur (nom, prénom)</label><input class="fi" id="cst-a-cond" type="text" value="' + esc(condNom) + '" placeholder="Ton nom">'
+      + '<label class="f">Conducteur ou société (nom, prénom)</label><input class="fi" id="cst-a-cond" type="text" value="' + esc(condNom) + '" placeholder="Ton nom / ta société">'
+      + '<label class="f">Adresse (domicile ou siège société)</label><input class="fi" id="cst-a-adr" type="text" placeholder="N°, rue, code postal, ville">'
       + '<label class="f">Téléphone</label><input class="fi" id="cst-a-tel" type="tel" value="' + esc(condTel) + '" placeholder="Ton téléphone">'
       + '<div style="display:flex;gap:.6rem"><div style="flex:1;min-width:0"><label class="f">Véhicule</label><input class="fi" id="cst-a-veh" type="text" value="' + esc(vehLbl) + '" ' + ro + '></div>'
       + '<div style="flex:0 0 42%;min-width:0"><label class="f">Immatriculation</label><input class="fi" id="cst-a-immat" type="text" value="' + esc(immat) + '" ' + ro + '></div></div>'
       + '<label class="f">Assureur</label><input class="fi" id="cst-a-ass" type="text" value="' + esc(p.assureur || '') + '">'
       + '<label class="f">N° de police</label><input class="fi" id="cst-a-pol" type="text" value="' + esc(p.police || '') + '">'
-      + '<label class="f">Point de choc initial</label><input class="fi" id="cst-a-choc" type="text" placeholder="ex. aile avant droite">'
+      + chocFieldHTML('a')
       + '<label class="f">Dégâts apparents</label><input class="fi" id="cst-a-deg" type="text" placeholder="ex. pare-chocs enfoncé"></div>'
       + '<div class="box"><h4>🚙 Véhicule B — l\'autre</h4>'
-      + '<label class="f">Conducteur (nom, prénom)</label><input class="fi" id="cst-b-cond" type="text">'
+      + '<label class="f">Conducteur ou société (nom, prénom)</label><input class="fi" id="cst-b-cond" type="text" placeholder="Nom / société">'
+      + '<label class="f">Adresse (domicile ou siège société)</label><input class="fi" id="cst-b-adr" type="text" placeholder="N°, rue, code postal, ville">'
       + '<label class="f">Téléphone</label><input class="fi" id="cst-b-tel" type="tel">'
       + '<div style="display:flex;gap:.6rem"><div style="flex:1;min-width:0"><label class="f">Véhicule</label><input class="fi" id="cst-b-veh" type="text" placeholder="marque / modèle"></div>'
       + '<div style="flex:0 0 42%;min-width:0"><label class="f">Immatriculation</label><input class="fi" id="cst-b-immat" type="text"></div></div>'
       + '<label class="f">Assureur</label><input class="fi" id="cst-b-ass" type="text">'
       + '<label class="f">N° de contrat</label><input class="fi" id="cst-b-pol" type="text">'
-      + '<label class="f">Point de choc initial</label><input class="fi" id="cst-b-choc" type="text">'
+      + chocFieldHTML('b')
       + '<label class="f">Dégâts apparents</label><input class="fi" id="cst-b-deg" type="text"></div>'
       + '<div class="box"><h4>🧩 Circonstances <span class="muted" style="font-weight:600">(coche A et/ou B)</span></h4><div class="cst-circwrap">' + circ + '</div></div>'
       + '<div class="box"><h4>✍️ Observations</h4><textarea class="fi" id="cst-obs" rows="3" placeholder="Précisions, désaccords éventuels…"></textarea></div>'
@@ -1070,6 +1080,61 @@
     setupSigPad($('cst-sig-a'), function (d) { constatSig.a = d; });
     setupSigPad($('cst-sig-b'), function (d) { constatSig.b = d; });
     setupSigPad($('cst-croquis'), function (d) { constatCroquis = d; }, { color: '#0f1e3d', width: 3.2 });
+    setupChocPad($('cst-choc-a'), constatChoc.a); setupChocPad($('cst-choc-b'), constatChoc.b);
+  }
+  // Champ « point de choc » : boutons Voiture/Moto + zone à toucher (schéma vu de dessus).
+  function chocFieldHTML(k) {
+    return '<label class="f">Point de choc — touche l\'endroit du choc sur le schéma</label>'
+      + '<div class="choc-tools"><button type="button" class="choc-tg on" data-choc="' + k + ':car">🚗 Voiture</button>'
+      + '<button type="button" class="choc-tg" data-choc="' + k + ':moto">🏍️ Moto</button>'
+      + '<button type="button" class="choc-clr" data-chocclr="' + k + '">Effacer</button></div>'
+      + '<canvas id="cst-choc-' + k + '" class="chocpad" width="360" height="220"></canvas>';
+  }
+  // Rectangle arrondi utilitaire pour canvas.
+  function _rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  // Silhouette ORIGINALE (générique, sans marque) — voiture ou moto vue de dessus.
+  function _drawCar(ctx, W, H) {
+    var cx = W / 2;
+    ctx.fillStyle = '#dbe3ee'; ctx.strokeStyle = '#64748b'; ctx.lineWidth = 2.5;
+    _rr(ctx, cx - 54, 22, 108, H - 44, 28); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#c2ccdb'; _rr(ctx, cx - 40, 66, 80, H - 132, 16); ctx.fill();
+    ctx.fillStyle = '#9fb2cc'; _rr(ctx, cx - 36, 46, 72, 22, 10); ctx.fill();
+    ctx.fillStyle = '#334155';
+    _rr(ctx, cx - 66, 48, 14, 36, 6); ctx.fill(); _rr(ctx, cx + 52, 48, 14, 36, 6); ctx.fill();
+    _rr(ctx, cx - 66, H - 84, 14, 36, 6); ctx.fill(); _rr(ctx, cx + 52, H - 84, 14, 36, 6); ctx.fill();
+    ctx.fillStyle = '#64748b'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('AVANT', cx, 15); ctx.fillText('ARRIÈRE', cx, H - 5);
+  }
+  function _drawMoto(ctx, W, H) {
+    var cx = W / 2;
+    ctx.fillStyle = '#334155';
+    ctx.beginPath(); ctx.arc(cx, 48, 20, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, H - 48, 20, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#dbe3ee'; ctx.strokeStyle = '#64748b'; ctx.lineWidth = 2.5;
+    _rr(ctx, cx - 17, 48, 34, H - 96, 15); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#c2ccdb'; _rr(ctx, cx - 15, H - 96, 30, 36, 12); ctx.fill();
+    ctx.strokeStyle = '#334155'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(cx - 28, 66); ctx.lineTo(cx + 28, 66); ctx.stroke();
+    ctx.fillStyle = '#64748b'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('AVANT', cx, 15); ctx.fillText('ARRIÈRE', cx, H - 5);
+  }
+  function drawChocPad(canvas, st) {
+    if (!canvas) return; var ctx = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    if (st.shape === 'moto') _drawMoto(ctx, W, H); else _drawCar(ctx, W, H);
+    if (st.mx != null) {
+      ctx.beginPath(); ctx.fillStyle = 'rgba(220,38,38,.25)'; ctx.arc(st.mx, st.my, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.fillStyle = '#dc2626'; ctx.arc(st.mx, st.my, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(st.mx, st.my, 8, 0, Math.PI * 2); ctx.stroke();
+    }
+    st.img = canvas.toDataURL('image/png');
+  }
+  function setupChocPad(canvas, st) {
+    if (!canvas || canvas._chocReady) return; canvas._chocReady = true;
+    drawChocPad(canvas, st);
+    function tap(e) { e.preventDefault(); var r = canvas.getBoundingClientRect(); var s = (e.touches && e.touches[0]) ? e.touches[0] : e; st.mx = (s.clientX - r.left) * (canvas.width / r.width); st.my = (s.clientY - r.top) * (canvas.height / r.height); drawChocPad(canvas, st); }
+    if (window.PointerEvent) { canvas.addEventListener('pointerdown', tap); }
+    else { canvas.addEventListener('mousedown', tap); canvas.addEventListener('touchstart', tap, { passive: false }); }
   }
   // Pad de signature tactile (doigt / souris). Backing store fixe → pas besoin d'être visible au montage ;
   // les coordonnées sont mises à l'échelle au moment du tracé (rect réel ÷ taille du canvas).
@@ -1097,8 +1162,8 @@
     document.querySelectorAll('#constat-body [data-cb]').forEach(function (c) { if (c.checked) B.push(CIRCONSTANCES[+c.getAttribute('data-cb')]); });
     return {
       date: _cv('cst-date'), heure: _cv('cst-heure'), lieu: _cv('cst-lieu'), bless: _cv('cst-bless'), autres: _cv('cst-autres'), temoins: _cv('cst-temoins'),
-      a: { cond: _cv('cst-a-cond'), tel: _cv('cst-a-tel'), veh: _cv('cst-a-veh'), immat: _cv('cst-a-immat'), ass: _cv('cst-a-ass'), pol: _cv('cst-a-pol'), choc: _cv('cst-a-choc'), deg: _cv('cst-a-deg') },
-      b: { cond: _cv('cst-b-cond'), tel: _cv('cst-b-tel'), veh: _cv('cst-b-veh'), immat: _cv('cst-b-immat'), ass: _cv('cst-b-ass'), pol: _cv('cst-b-pol'), choc: _cv('cst-b-choc'), deg: _cv('cst-b-deg') },
+      a: { cond: _cv('cst-a-cond'), adr: _cv('cst-a-adr'), tel: _cv('cst-a-tel'), veh: _cv('cst-a-veh'), immat: _cv('cst-a-immat'), ass: _cv('cst-a-ass'), pol: _cv('cst-a-pol'), deg: _cv('cst-a-deg') },
+      b: { cond: _cv('cst-b-cond'), adr: _cv('cst-b-adr'), tel: _cv('cst-b-tel'), veh: _cv('cst-b-veh'), immat: _cv('cst-b-immat'), ass: _cv('cst-b-ass'), pol: _cv('cst-b-pol'), deg: _cv('cst-b-deg') },
       circA: A, circB: B, obs: _cv('cst-obs')
     };
   }
@@ -1108,11 +1173,13 @@
     if (c.lieu) L.push('Lieu : ' + c.lieu);
     L.push('Blessés : ' + (c.bless || 'Non')); if (c.autres) L.push('Autres dégâts : ' + c.autres); if (c.temoins) L.push('Témoins : ' + c.temoins);
     L.push(''); L.push('VÉHICULE A (le mien) : ' + [c.a.cond, c.a.tel].filter(Boolean).join(' · '));
+    if (c.a.adr) L.push('  Adresse : ' + c.a.adr);
     L.push('  ' + [c.a.veh, c.a.immat].filter(Boolean).join(' · ') + ' — ' + [c.a.ass && ('Assureur ' + c.a.ass), c.a.pol && ('Police ' + c.a.pol)].filter(Boolean).join(' · '));
-    if (c.a.choc || c.a.deg) L.push('  Choc : ' + (c.a.choc || '—') + ' | Dégâts : ' + (c.a.deg || '—'));
+    if (c.a.deg) L.push('  Dégâts : ' + c.a.deg);
     L.push('VÉHICULE B (l\'autre) : ' + [c.b.cond, c.b.tel].filter(Boolean).join(' · '));
+    if (c.b.adr) L.push('  Adresse : ' + c.b.adr);
     L.push('  ' + [c.b.veh, c.b.immat].filter(Boolean).join(' · ') + ' — ' + [c.b.ass && ('Assureur ' + c.b.ass), c.b.pol && ('Contrat ' + c.b.pol)].filter(Boolean).join(' · '));
-    if (c.b.choc || c.b.deg) L.push('  Choc : ' + (c.b.choc || '—') + ' | Dégâts : ' + (c.b.deg || '—'));
+    if (c.b.deg) L.push('  Dégâts : ' + c.b.deg);
     L.push(''); L.push('Circonstances véhicule A : ' + (c.circA.length ? c.circA.join(' ; ') : '—'));
     L.push('Circonstances véhicule B : ' + (c.circB.length ? c.circB.join(' ; ') : '—'));
     if (c.obs) { L.push(''); L.push('Observations : ' + c.obs); }
@@ -1181,28 +1248,45 @@
         var acH = 30; doc.setFillColor(CARDBG[0], CARDBG[1], CARDBG[2]); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
         doc.roundedRect(M, y, CW, acH, 2.5, 2.5, 'FD');
         var px = M + 5, colw = (CW - 10) / 3;
+        // Grille 3 colonnes alignée : « Autres dégâts matériels » tombe sous « Blessés ».
         kv(px, y + 6, colw - 3, 'Date', c.date ? frDate(c.date) : ''); kv(px + colw, y + 6, colw - 3, 'Heure', c.heure); kv(px + 2 * colw, y + 6, colw - 3, 'Blessés (même légers)', c.bless || 'Non');
-        kv(px, y + 16, colw * 1.5 - 3, 'Lieu (ville, rue)', c.lieu, { max: 2 }); kv(px + colw * 1.5, y + 16, colw * 1.5 - 3, 'Autres dégâts matériels', c.autres || 'Non', { max: 2 });
+        kv(px, y + 16, 2 * colw - 3, 'Lieu (ville, rue)', c.lieu, { max: 1 }); kv(px + 2 * colw, y + 16, colw - 3, 'Autres dégâts matériels', c.autres || 'Non', { max: 1 });
         kv(px, y + 25, CW - 10, 'Témoins', c.temoins);
         y += acH + 6;
         // ===== 2 · Les véhicules (cartes A / B) =====
-        ensure(4.5 + 70 + 2);
+        var gap = 5, cardW = (CW - gap) / 2, xA = M, xB = M + cardW + gap, vH = 68;
+        ensure(4.5 + vH + 2);
         y = section(y, 'Les véhicules');
-        var gap = 5, cardW = (CW - gap) / 2, xA = M, xB = M + cardW + gap, vH = 70;
         function vehCard(x, titre, tint, v) {
           doc.setFillColor(255, 255, 255); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
           doc.roundedRect(x, y, cardW, vH, 2.5, 2.5, 'FD');
           doc.setFillColor(tint[0], tint[1], tint[2]); doc.roundedRect(x, y, cardW, 8, 2.5, 2.5, 'F'); doc.rect(x, y + 4, cardW, 4, 'F');
           doc.setFont('helvetica', 'bold'); doc.setFontSize(8.4); doc.setTextColor(255, 255, 255); doc.text(String(titre).toUpperCase(), x + 4, y + 5.4);
-          var ix = x + 4, iw = cardW - 8, yy = y + 14;
-          kv(ix, yy, iw, 'Conducteur', v.cond); yy += 8.5;
+          var ix = x + 4, iw = cardW - 8, yy = y + 13;
+          kv(ix, yy, iw, 'Conducteur ou société', v.cond); yy += 8.5;
+          kv(ix, yy, iw, 'Adresse (domicile / siège)', v.adr, { max: 2 }); yy += 11;
           kv(ix, yy, iw / 2 - 1, 'Téléphone', v.tel); kv(ix + iw / 2, yy, iw / 2, 'Immatriculation', v.immat); yy += 8.5;
           kv(ix, yy, iw, 'Véhicule (marque / modèle)', v.veh); yy += 8.5;
           kv(ix, yy, iw / 2 - 1, "Assureur", v.ass); kv(ix + iw / 2, yy, iw / 2, 'N° de contrat', v.pol); yy += 8.5;
-          kv(ix, yy, iw / 2 - 1, 'Point de choc', v.choc); kv(ix + iw / 2, yy, iw / 2, 'Dégâts apparents', v.deg, { max: 2 });
+          kv(ix, yy, iw, 'Dégâts apparents', v.deg, { max: 2 });
         }
         vehCard(xA, 'Véhicule A — moi', NAVY, c.a); vehCard(xB, 'Véhicule B — tiers', ORANGE2, c.b);
         y += vH + 6;
+        // ===== 2b · Point de choc (schémas, seulement si marqué) =====
+        if (constatChoc.a.mx != null || constatChoc.b.mx != null) {
+          var pcH = 54;
+          ensure(4.5 + pcH + 2);
+          y = section(y, 'Point de choc');
+          function chocBox(x, titre, tint, st) {
+            doc.setFillColor(255, 255, 255); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
+            doc.roundedRect(x, y, cardW, pcH, 2.5, 2.5, 'FD');
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(6.3); doc.setTextColor(tint[0], tint[1], tint[2]); doc.text(String(titre).toUpperCase(), x + 3, y + 4.5);
+            if (st.mx != null && st.img) { try { var iw2 = cardW - 10, ih2 = iw2 * 220 / 360; if (ih2 > pcH - 9) { ih2 = pcH - 9; iw2 = ih2 * 360 / 220; } doc.addImage(st.img, 'PNG', x + (cardW - iw2) / 2, y + 6, iw2, ih2); } catch (e) {} }
+            else { doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]); doc.text('Non indiqué', x + cardW / 2, y + pcH / 2 + 2, { align: 'center' }); }
+          }
+          chocBox(xA, 'Véhicule A', NAVY, constatChoc.a); chocBox(xB, 'Véhicule B', ORANGE2, constatChoc.b);
+          y += pcH + 6;
+        }
         // ===== 3 · Circonstances (liste des cochées) =====
         var chosen = [];
         CIRCONSTANCES.forEach(function (lb) { var a = c.circA.indexOf(lb) >= 0, b = c.circB.indexOf(lb) >= 0; if (a || b) chosen.push({ lb: lb, a: a, b: b }); });
@@ -1283,8 +1367,11 @@
     var btn = $('constat-send'); btn.disabled = true; btn.textContent = t('sending');
     var sigNote = (constatSig.a || constatSig.b) ? ('\n\nSignatures : A ' + (constatSig.a ? '✔' : '—') + ' · B ' + (constatSig.b ? '✔' : '—') + ' (voir images jointes)') : '';
     if (constatCroquis) sigNote += '\nCroquis de l\'accident joint (voir images).';
+    if (constatChoc.a.mx != null || constatChoc.b.mx != null) sigNote += '\nPoints de choc indiqués sur schéma (voir images).';
     var allPhotos = constatPhotos.slice();
     if (constatCroquis) allPhotos.push(constatCroquis);
+    if (constatChoc.a.mx != null && constatChoc.a.img) allPhotos.push(constatChoc.a.img);
+    if (constatChoc.b.mx != null && constatChoc.b.img) allPhotos.push(constatChoc.b.img);
     if (constatSig.a) allPhotos.push(constatSig.a);
     if (constatSig.b) allPhotos.push(constatSig.b);
     postJSON({
@@ -1314,6 +1401,12 @@
       if (sc) { ev.preventDefault(); var k = sc.getAttribute('data-sigclr'); var cv = $('cst-sig-' + k); if (cv) { cv.getContext('2d').clearRect(0, 0, cv.width, cv.height); } constatSig[k] = ''; return; }
       var cq = ev.target.closest('[data-croqclr]');
       if (cq) { ev.preventDefault(); var cvq = $('cst-croquis'); if (cvq) { cvq.getContext('2d').clearRect(0, 0, cvq.width, cvq.height); } constatCroquis = ''; return; }
+      var cg = ev.target.closest('[data-choc]');
+      if (cg) { ev.preventDefault(); var parts = cg.getAttribute('data-choc').split(':'), gk = parts[0]; constatChoc[gk].shape = parts[1];
+        var box = cg.parentNode; if (box) { var bs = box.querySelectorAll('[data-choc]'); for (var bi = 0; bi < bs.length; bi++) { bs[bi].classList.toggle('on', bs[bi].getAttribute('data-choc') === cg.getAttribute('data-choc')); } }
+        drawChocPad($('cst-choc-' + gk), constatChoc[gk]); return; }
+      var gc = ev.target.closest('[data-chocclr]');
+      if (gc) { ev.preventDefault(); var gck = gc.getAttribute('data-chocclr'); constatChoc[gck].mx = null; constatChoc[gck].my = null; drawChocPad($('cst-choc-' + gck), constatChoc[gck]); return; }
       var rm = ev.target.closest('#constat-thumbs [data-rm]'); if (rm) { ev.preventDefault(); constatPhotos.splice(+rm.getAttribute('data-rm'), 1); var el = $('constat-thumbs'); if (el) el.innerHTML = thumbsHTML(constatPhotos); return; }
     });
   })();
