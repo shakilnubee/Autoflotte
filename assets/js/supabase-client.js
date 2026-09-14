@@ -28,6 +28,12 @@
       for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && KILL.test(k)) drop.push(k); }
       drop.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
       ['fp_profile', 'fp_societe', 'fp_email', 'fp_data_cache'].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+      // ⚠️ ANTI-PERTE : on vide aussi le snapshot serveur EN MÉMOIRE des réglages. Sinon, après cette
+      // purge (cache localStorage vidé), un enregistrement compare des DÉFAUTS locaux à un snapshot
+      // encore plein → et réécrivait la config par les valeurs par défaut (nom de société, groupes,
+      // ordre sidebar…). En le remettant à null, tout enregistrement repart en mode « le serveur gagne,
+      // on ne comble que les trous » (cf. FP.settings._pushSettings). Rien ne peut plus être réinitialisé.
+      try { if (window.FP && FP.settings) FP.settings._serverSnap = null; } catch (e) {}
     } catch (e) {}
   };
 
