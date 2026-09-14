@@ -1061,7 +1061,7 @@
         return `
         <div class="mb-2">
           <div class="grp-head" data-grp="${i}" data-grpkey="${esc(g.gk)}">
-            <div class="font-semibold text-slate-900">${esc(g.n)} <span class="text-xs text-slate-500">· ${g.rows.length} trouvaille(s)</span></div>
+            <div class="font-semibold text-slate-900" style="display:flex;align-items:center;gap:8px">${_selMode ? `<input type="checkbox" class="ctrl-grpcb" data-grpcheck="${i}"${g.rows.length && g.rows.every(r => _selected.has(r.fid)) ? ' checked' : ''} title="Cocher toutes les trouvailles de ce conducteur" style="width:16px;height:16px;cursor:pointer;flex:0 0 auto">` : ''}${esc(g.n)} <span class="text-xs text-slate-500">· ${g.rows.length} trouvaille(s)</span></div>
             <div class="flex items-center gap-3"><span class="font-bold" style="color:var(--fp-primary)">${euro(g.tot)}</span><i data-lucide="chevron-down" class="w-4 h-4 text-slate-400" data-chev="${i}"${open?' style="transform:rotate(180deg)"':''}></i></div>
           </div>
           <div class="${open?'':'hidden'}" data-grpbody="${i}" data-filled="${open?'1':'0'}" style="overflow-x:auto">${bodyInner}</div>
@@ -1174,6 +1174,8 @@
   if (FP.wireBadgeChips) FP.wireBadgeChips($('cb-body'), { onChange: renderCartes });
 
   $('ctrl-body').addEventListener('click', async (e) => {
+    // Clic sur la case « cocher ce conducteur » : ne PAS plier/déplier le groupe (géré par 'change').
+    if (e.target.closest('[data-grpcheck]')) return;
     const gh = e.target.closest('[data-grp]');
     if (gh) { const i = gh.getAttribute('data-grp'); const key = gh.getAttribute('data-grpkey'); const b = document.querySelector('[data-grpbody="'+i+'"]'); const ch = document.querySelector('[data-chev="'+i+'"]');
       if (b){
@@ -1245,6 +1247,9 @@
     const sa = $('ctrl-selall'); if (sa) sa.checked = all.length > 0 && all.every(f => _selected.has(f.fid));
   }
   $('ctrl-body').addEventListener('change', (e) => {
+    // Case à cocher d'un CONDUCTEUR (groupe) → coche/décoche toutes ses trouvailles d'un coup
+    const gcb = e.target.closest('.ctrl-grpcb');
+    if (gcb) { const g = _renderGroups[+gcb.getAttribute('data-grpcheck')]; if (g) { const allSel = g.rows.every(r => _selected.has(r.fid)); g.rows.forEach(r => { if (allSel) _selected.delete(r.fid); else _selected.add(r.fid); }); } render(); return; }
     // Case à cocher d'une ligne (mode sélection)
     const cb = e.target.closest('.ctrl-selcb');
     if (cb) { const fid = cb.getAttribute('data-selfid'); if (cb.checked) _selected.add(fid); else _selected.delete(fid); updateBulkCounts(); return; }
