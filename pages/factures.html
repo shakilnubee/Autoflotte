@@ -1636,6 +1636,13 @@
   }
   setupAutocomplete($('fa-fournisseur'), () => [...new Set((data.factures || []).map(f => f.fournisseur).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')));
   setupAutocomplete($('fa-immat'), () => [...new Set((data.vehicules || []).map(v => v.immat).filter(Boolean))].sort());
+  // Choisir la plaque PRÉ-REMPLIT le km (compteur connu du véhicule) si le champ est vide — le site
+  // connaît déjà ce chiffre. (Après le choix dans l'autocomplete : petit délai pour lire la valeur finale.)
+  if ($('fa-immat')) $('fa-immat').addEventListener('blur', () => setTimeout(() => {
+    const im = ($('fa-immat').value || '').trim(); if (!im) return;
+    const v = (FP.vehByImmat ? FP.vehByImmat(im) : null);
+    if (v && $('fa-km') && !($('fa-km').value || '').trim()) { const km = (FP.kmActuel ? FP.kmActuel(v) : v.km); if (km != null && km !== '') $('fa-km').value = String(km); }
+  }, 170));
 
   // Wiring
   // Bouton « Voir plus / Réduire » sous le tableau
@@ -2465,7 +2472,21 @@
     }
     try { if (FP.conducteurPicker && $('nf-cond')) FP.conducteurPicker($('nf-cond'), {}); } catch (e) {}
     fillVehSelect();
-    document.addEventListener('fp:data-ready', () => { fillVehSelect(); if (window._facturesTab === 'notesfrais') render(); });
+    // Date par défaut = AUJOURD'HUI (une note de frais est presque toujours du jour) — plus besoin de
+    // taper 8 chiffres. Format JJ/MM/AAAA (même masque que le champ).
+    function _todayFR(){ const d = new Date(); return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear(); }
+    function _ndfDefaultDate(){ const el = $('nf-date'); if (el && !(el.value||'').trim()) el.value = _todayFR(); }
+    _ndfDefaultDate();
+    // Choisir le véhicule PRÉ-REMPLIT le conducteur (chauffeur de la fiche) et le km (compteur connu) —
+    // le site connaît déjà ces infos, plus de double saisie. On ne touche QUE les champs vides.
+    if ($('nf-veh')) $('nf-veh').addEventListener('change', () => {
+      const im = ($('nf-veh').value || '').trim(); if (!im) return;
+      const v = (FP.vehByImmat ? FP.vehByImmat(im) : (data.vehicules || []).find(x => FP.normImmat(x.immat) === FP.normImmat(im)));
+      if (!v) return;
+      if ($('nf-cond') && !($('nf-cond').value || '').trim() && v.chauffeur && v.chauffeur !== '—') $('nf-cond').value = v.chauffeur;
+      if ($('nf-km') && !($('nf-km').value || '').trim()) { const km = (FP.kmActuel ? FP.kmActuel(v) : v.km); if (km != null && km !== '') $('nf-km').value = String(km); }
+    });
+    document.addEventListener('fp:data-ready', () => { fillVehSelect(); _ndfDefaultDate(); if (window._facturesTab === 'notesfrais') render(); });
 
     // OCR à l'ajout d'un justificatif dans le formulaire manuel : l'IA lit le reçu et PRÉREMPLIT
     // les champs vides (date, HT, TVA, TTC, catégorie, commerçant, plaque). L'utilisateur vérifie.
