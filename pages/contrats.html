@@ -579,6 +579,12 @@
             <input id="locadd-fin" type="date" class="field-input w-full mt-1"></label>
         </div>
         <p class="text-xs text-slate-400" style="margin-top:-.35rem">Dates &amp; durée se complètent toutes seules : <b>fin + durée → début</b>, <b>début + durée → fin</b>, ou <b>début + fin → durée</b>.</p>
+        <div>
+          <div class="flex items-center justify-between"><span class="text-sm font-medium text-slate-700">Avenants — changement de loyer <span class="text-slate-400">(opt.)</span></span>
+            <button id="locadd-avenant-add" type="button" class="text-xs font-semibold" style="color:var(--fp-accent)">+ Ajouter un avenant</button></div>
+          <div id="locadd-avenants" class="space-y-2 mt-2"></div>
+          <p class="text-xs text-slate-400 mt-1">À partir de la date de l'avenant, le <b>nouveau loyer</b> s'applique — le total versé est recalculé au <b>prorata</b>.</p>
+        </div>
         <label class="block"><span class="text-sm font-medium text-slate-700">N° d'offre <span class="text-slate-400">(opt.)</span></span>
           <input id="locadd-offre" type="text" class="field-input w-full mt-1" placeholder=""></label>
         <div class="grid grid-cols-2 gap-3">
@@ -1604,7 +1610,7 @@
         const autoImmat = c.immat || autoImmatLoc(c);
         const linkedV = autoImmat ? (data.vehicules || []).find(v => normPlaque(v.immat) === normPlaque(autoImmat)) : null;
         const kmAct = (c.kmActuel != null && c.kmActuel !== '') ? Number(c.kmActuel) : ((linkedV && linkedV.km != null && linkedV.km !== '') ? Number(linkedV.km) : null);
-        const effDebut = c.debut || (linkedV && linkedV.dateMiseEnCirculation) || '';
+        const effDebut = effDebutContrat(c, linkedV).debut;
         const durEff = (c.fin && effDebut) ? (monthsBetween(effDebut, c.fin) || dur) : dur;
         const effFinDate = c.fin ? new Date(c.fin) : (effDebut && dur ? addMonths(effDebut, dur) : null);
         let moisEcoules = null;
@@ -1973,6 +1979,11 @@
       /(?:loyer\s*mensuel|total\s*mensuel(?:\s*ttc)?|redevance\s*mensuelle|mensualit[ée]\s*(?:ttc)?|loyer\s*ttc\s*\/?\s*mois)\s*[:=]?\s*([\d][\d\s.]*,\d{2})\s*€?/i, // « Loyer mensuel : 414,71 € »
       /(?:loyer|mensuel|redevance|mensualit[ée])[^€\n]{0,40}?([\d][\d\s.]*,\d{2})\s*€?\s*montant\s*ttc/i,  // « Loyer … 414,71 Montant TTC » (mot mensuel à proximité)
       /([\d][\d\s.]*,\d{2})\s*€?\s*(?:ttc\s*)?(?:\/\s*mois|par\s*mois)/i,                                  // « 414,71 € TTC / mois »
+      // ⚠️ REPLI « loyer » SIMPLE : beaucoup de contrats écrivent juste « Loyer : 587,03 € » (sans le
+      // mot « mensuel »). On l'accepte MAIS le lookahead écarte « loyerS » (pluriel, souvent « total des
+      // loyers ») et « loyer total/global », et le garde-fou < 2 500 €/mois plus bas rejette de toute
+      // façon un TOTAL de contrat (bien au-dessus d'un loyer mensuel).
+      /loyer(?!s|\s*(?:total|global))[^€\n\d]{0,30}?([\d][\d\s.]*,\d{2})\s*€?/i, // « Loyer 587,03 € »
     ];
     // Garde-fou : un loyer mensuel de véhicule dépasse rarement ~2 500 € ; au-delà, on préfère ne rien
     // mettre (l'utilisateur saisit à la main) plutôt qu'un montant manifestement faux.
@@ -2227,7 +2238,9 @@
   const LOCALEASE_PROMPT = [
     "Lis ce contrat / offre de Location Longue Duree (LLD) de vehicule.",
     "Renvoie UNIQUEMENT un objet JSON valide, sans texte autour, avec ces cles (mets null si absent) :",
-    "loyerTTC : le LOYER MENSUEL total TTC (par mois), nombre a point decimal (ex 414.71). C'est le loyer global incluant services, PAS le seul loyer financier. Cherche les libelles 'Loyer mensuel', 'Total mensuel TTC', 'Redevance mensuelle', 'Mensualite TTC', 'Loyer TTC/mois'. Prends le montant PAR MOIS (jamais le total du contrat).",
+    "loyerTTC : le LOYER MENSUEL total TTC (par mois), nombre a point decimal (ex 414.71). C'est le loyer global incluant services, PAS le seul loyer financier. Cherche les libelles 'Loyer mensuel', 'Total mensuel TTC', 'Redevance mensuelle', 'Mensualite TTC', 'Loyer TTC/mois', et meme un simple 'Loyer' suivi d'un montant. Si tu vois un loyer financier ET des services separes, ADDITIONNE-les pour donner le loyer mensuel TOTAL. Prends TOUJOURS le montant PAR MOIS (JAMAIS le total du contrat ni la somme 'total des loyers').",
+    "dateDebut : la date de DEBUT / de prise d'effet / de livraison du contrat, au format AAAA-MM-JJ (ex 2024-03-15). Cherche 'Date de debut', 'Date d'effet', 'Prise d'effet', 'Date de livraison', 'Debut de location', 'Date de mise a disposition'. null si absente.",
+    "dateFin : la date de FIN / d'echeance / de restitution prevue du contrat, au format AAAA-MM-JJ. null si absente.",
     "dureeMois : la duree du contrat en mois (ex 25).",
     "kmTotal : le kilometrage TOTAL du contrat (ex 50000 ; '50.000 km' -> 50000).",
     "co2 : les grammes de CO2 par km (ex 126).",
@@ -2258,6 +2271,22 @@
   function escC(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function addMonths(iso, n){ const d=new Date(iso); if(isNaN(d)) return null; d.setMonth(d.getMonth()+(+n||0)); return d; }
   function monthsBetween(aIso, bIso){ const d1=new Date(aIso), d2=new Date(bIso); if(isNaN(d1)||isNaN(d2)) return null; let m=(d2.getFullYear()-d1.getFullYear())*12+(d2.getMonth()-d1.getMonth()); if(d2.getDate()<d1.getDate()) m--; return m; }
+  // ⚠️ SOURCE UNIQUE — date de début EFFECTIVE d'un contrat LLD (utilisée par le tableau ET l'export/units).
+  // Priorité : (1) date SAISIE sur le contrat ; (2) date d'ENTRÉE du véhicule dans son HISTORIQUE
+  // d'affectation (1re mise à disposition = ~livraison = début du leasing) ; (3) 1re mise en circulation
+  // (carte grise) en dernier recours. Renvoie { debut:'AAAA-MM-JJ'|'' , source:'saisie'|'histo'|'mec'|null }.
+  function effDebutContrat(c, linkedV){
+    if (c && c.debut) return { debut: c.debut, source: 'saisie' };
+    let histo = '';
+    try {
+      if (linkedV && window.FP && FP.affectations && FP.affectations.forVeh) {
+        FP.affectations.forVeh(linkedV.id).forEach(a => { if (a && a.debut && (!histo || String(a.debut) < histo)) histo = String(a.debut); });
+      }
+    } catch (e) {}
+    if (histo) return { debut: histo, source: 'histo' };
+    const mec = (linkedV && linkedV.dateMiseEnCirculation) || '';
+    return { debut: mec, source: mec ? 'mec' : null };
+  }
   // TVS annuelle estimée via le calcul CENTRAL (app.js) → même barème que fiche véhicule / stats / dashboard.
   // Le carburant est déduit du modèle si absent (Hybrid / électrique / diesel CRDi…), sinon essence.
   function tvsEst(c){
@@ -2329,8 +2358,9 @@
       // BPCE) → la projection et le statut se calculent tout seuls, plus de « contrat non renseigné ».
       const kmAct = (c.kmActuel != null && c.kmActuel !== '') ? Number(c.kmActuel)
                    : ((linkedV && linkedV.km != null && linkedV.km !== '') ? Number(linkedV.km) : null);
-      const debutSource = c.debut ? 'saisie' : ((linkedV && linkedV.dateMiseEnCirculation) ? 'mec' : null);
-      const effDebut = c.debut || (linkedV && linkedV.dateMiseEnCirculation) || '';
+      const _dbt = effDebutContrat(c, linkedV);
+      const debutSource = _dbt.source;
+      const effDebut = _dbt.debut;
       // Fin effective : date de fin SAISIE (prioritaire) sinon début + durée. Durée effective (mois) pour
       // la projection = mois entre début et fin quand une fin est saisie, sinon la durée du contrat.
       const effFinDate = c.fin ? new Date(c.fin) : (effDebut && dur ? addMonths(effDebut, dur) : null);
@@ -2349,8 +2379,13 @@
         statutCell = ratio > 1 ? `<span class="badge" style="background:#FEE2E2;color:#991B1B">⚠️ Risque dépassement (${pct}%)</span>${pen}` : ratio > 0.9 ? `<span class="badge" style="background:#FEF3C7;color:#92400E">À surveiller (${pct}%)</span>${pen}` : `<span class="badge badge-ok">OK (${pct}%)</span>`; }
       else if (c.kmTotal && kmAct != null){ statutCell = `<span class="badge badge-ok">OK (${Math.round(kmAct/c.kmTotal*100)}%)</span>`; }
       // Début & Fin — cliquer ouvre la fenêtre d'édition (date-pickers sûrs, plus de saisie libre qui casse tout).
+      const _dbtHint = debutSource === 'mec' ? 'Date de mise en circulation (carte grise) du véhicule lié — cliquer pour saisir la vraie date de début du contrat'
+        : debutSource === 'histo' ? "Date d'entrée du véhicule (historique d'affectation) — cliquer pour saisir la vraie date de début du contrat"
+        : 'Modifier la date de début';
+      const _dbtTag = debutSource === 'mec' ? ' <span class="text-xs text-slate-400">(MEC)</span>'
+        : debutSource === 'histo' ? ' <span class="text-xs text-slate-400">(historique)</span>' : '';
       const debutCell = effDebut
-        ? `<span class="cursor-pointer underline decoration-dotted" data-loc-debut="${i}" title="${debutSource === 'mec' ? 'Date de mise en circulation (carte grise) du véhicule lié — cliquer pour saisir la vraie date de début' : 'Modifier la date de début'}">${FP.dateNum(effDebut)}${debutSource === 'mec' ? ' <span class="text-xs text-slate-400">(MEC)</span>' : ''}</span>`
+        ? `<span class="cursor-pointer underline decoration-dotted" data-loc-debut="${i}" title="${_dbtHint}">${FP.dateNum(effDebut)}${_dbtTag}</span>`
         : `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-debut="${i}">+ début</button>`;
       let finCell = `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-loc-fin="${i}">+ fin</button>`;
       if (effFinDate && !isNaN(effFinDate)){ const j = (FP.joursRestants ? FP.joursRestants(effFinDate) : Math.round((effFinDate - new Date())/86400000)); const badge = j<0 ? `<span style="color:#B91C1C;font-weight:700">terminé</span>` : (j<=90 ? `<span style="color:#B45309;font-weight:700">dans ${j} j</span>` : `<span class="text-xs text-slate-500">dans ${Math.round(j/30)} mois</span>`); finCell = `<span class="cursor-pointer underline decoration-dotted" data-loc-fin="${i}" title="Modifier la date de fin">${FP.dateNum(effFinDate.toISOString().slice(0,10))}</span><div>${badge}</div>`; }
@@ -2374,7 +2409,7 @@
       const totalVerse = effDebut && FP.leasingTotalVerse
         ? FP.leasingTotalVerse({ debut: effDebut, dureeMois: durEff || c.dureeMois, loyer: _baseLoyer, avenants: c.avenants })
         : null;
-      const totalVerseEst = debutSource === 'mec';
+      const totalVerseEst = debutSource === 'mec' || debutSource === 'histo';   // date de début déduite (pas saisie) → total estimé
       const docs = Array.isArray(c.docs) ? c.docs : (c.pdfUrl ? [{ url: c.pdfUrl, name: 'Contrat' }] : []);
       const docsHtml = docs.map((d, di) => `<div class="flex items-center gap-1 justify-center" style="margin-bottom:2px;max-width:170px;margin-left:auto;margin-right:auto">
           <a href="${escC(d.url)}" target="_blank" rel="noopener" class="hover:underline" style="color:var(--fp-accent);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escC(d.name || 'Document')}"><i data-lucide="file-text" class="w-3 h-3 inline"></i> ${escC(d.name || 'Document')}</a>
@@ -2486,6 +2521,7 @@
       lsel.value = [...lsel.options].some(o => o.value === def) ? def : (lsel.options[0] ? lsel.options[0].value : LOCALEASE_VAL);
     }
     ['locadd-cond','locadd-modele','locadd-loyer','locadd-duree','locadd-km','locadd-debut','locadd-fin','locadd-offre','locadd-kmsupp','locadd-tol'].forEach(id => { const el = $(id); if (el) el.value = ''; });
+    renderLocAvenantRows([]);   // repart sans avenant
     // Conducteur : combobox des conducteurs DÉJÀ enregistrés (+ « ➕ Créer ») — règle plateforme.
     { const cinp = $('locadd-cond'); if (cinp && window.FP && FP.conducteurPicker && !cinp.dataset.picker) { cinp.dataset.picker = '1'; try { FP.conducteurPicker(cinp, { onPick: function () {} }); } catch (e) {} } }
     const st = $('locadd-status'); if (st) { st.innerHTML = ''; st.setAttribute('style', ''); }
@@ -2513,6 +2549,7 @@
     setv('locadd-offre', c.offre);
     setv('locadd-kmsupp', c.kmSupp != null ? String(c.kmSupp).replace('.', ',') : '');
     setv('locadd-tol', c.kmTolerance);
+    renderLocAvenantRows(Array.isArray(c.avenants) ? c.avenants : []);   // avenants existants
     const st = $('locadd-status'); if (st) { st.innerHTML = 'Modifie les infos puis « Enregistrer ». Le document déjà attaché reste en place.'; st.setAttribute('style', 'color:#475569'); }
   }
   function locAddVehPick(){
@@ -2525,6 +2562,34 @@
     if (!($('locadd-cond').value || '').trim() && v.chauffeur && v.chauffeur !== '—') $('locadd-cond').value = v.chauffeur;
   }
   const locNum = v => { const n = parseFloat(String(v == null ? '' : v).replace(/[\s€]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
+  // Normalise une date lue (IA/OCR) → 'AAAA-MM-JJ' pour un <input type="date">. Gère AAAA-MM-JJ,
+  // JJ/MM/AAAA, JJ-MM-AAAA, JJ.MM.AAAA. Renvoie '' si non reconnue (on ne devine jamais).
+  const locIsoDate = v => {
+    const s = String(v == null ? '' : v).trim(); if (!s) return '';
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/);
+    if (m) { const j = m[1].padStart(2, '0'), mo = m[2].padStart(2, '0'); if (+mo >= 1 && +mo <= 12 && +j >= 1 && +j <= 31) return `${m[3]}-${mo}-${j}`; }
+    return '';
+  };
+  // ===== Avenants (changement de loyer) pour les contrats LLD — même modèle que le forfait BPCE =====
+  // Un avenant = { date:'AAAA-MM-JJ', loyer:Number }. À partir de sa date, le nouveau loyer s'applique
+  // (FP.leasingLoyerCourant + FP.leasingTotalVerse gèrent déjà le prorata — la lecture existait, il ne
+  // manquait que la SAISIE côté LLD, d'où « les montants ne se mettaient pas à jour avec les avenants »).
+  function locAvenantRowHTML(date, loyer){
+    return `<div class="flex items-center gap-2" data-loc-avenant-row>
+      <input type="date" data-loc-av-date value="${date || ''}" class="border border-slate-200 rounded-lg px-2 py-1.5 text-sm">
+      <input type="text" inputmode="decimal" data-loc-av-loyer value="${(loyer != null && loyer !== '') ? String(loyer).replace('.', ',') : ''}" placeholder="Nouveau loyer TTC/mois" class="flex-1 border border-slate-200 rounded-lg px-2 py-1.5 text-sm">
+      <button type="button" data-loc-av-del title="Supprimer cet avenant" class="text-slate-400 hover:text-red-600 text-xl leading-none px-1">&times;</button>
+    </div>`;
+  }
+  function renderLocAvenantRows(list){ const box = $('locadd-avenants'); if (!box) return; box.innerHTML = (Array.isArray(list) ? list : []).map(a => locAvenantRowHTML(a && a.date, a && a.loyer)).join(''); }
+  function collectLocAvenants(){
+    return Array.from(document.querySelectorAll('#locadd-avenants [data-loc-avenant-row]')).map(r => {
+      const d = r.querySelector('[data-loc-av-date]'); const l = r.querySelector('[data-loc-av-loyer]');
+      const date = d ? d.value : ''; const loyer = l ? locNum(l.value) : null;
+      return (date && loyer != null && loyer > 0) ? { date, loyer } : null;
+    }).filter(Boolean);
+  }
   async function locAddFileSelected(file){
     if (!file) return;
     const st = $('locadd-status'); const show = (m, c) => { if (st) { st.setAttribute('style', c || ''); st.innerHTML = m; } };
@@ -2540,6 +2605,11 @@
         if (locNum(f.kmSupp) != null && locNum(f.kmSupp) > 0 && !$('locadd-kmsupp').value) $('locadd-kmsupp').value = String(locNum(f.kmSupp)).replace('.', ',');
         if (locNum(f.kmTolerance) != null && locNum(f.kmTolerance) > 0 && !$('locadd-tol').value) $('locadd-tol').value = Math.round(locNum(f.kmTolerance));
         if (f.conducteur && !$('locadd-cond').value) $('locadd-cond').value = String(f.conducteur).trim();
+        // Dates de DÉBUT / FIN lues sur le contrat (avant, jamais remplies → l'appli retombait sur la
+        // date de mise en circulation, souvent fausse). On normalise « 15/03/2024 » ou « 2024-03-15 ».
+        if (f.dateDebut && !$('locadd-debut').value) { const d = locIsoDate(f.dateDebut); if (d) $('locadd-debut').value = d; }
+        if (f.dateFin && !$('locadd-fin').value) { const d = locIsoDate(f.dateFin); if (d) $('locadd-fin').value = d; }
+        locAddSyncDates('debut');   // début+fin → durée, ou début+durée → fin (cohérence auto)
       }
       show('☁️ Envoi du contrat…', 'color:#475569');
       const url = (FP.uploadScan) ? await FP.uploadScan(file, 'contrats-leasing') : '';
@@ -2598,6 +2668,7 @@
         c.offre = ($('locadd-offre').value || '').trim();
         { const ks = locNum($('locadd-kmsupp').value); if (ks != null && ks > 0) c.kmSupp = ks; else delete c.kmSupp; }
         { const tl = parseInt($('locadd-tol').value, 10); if (Number.isFinite(tl) && tl > 0) c.kmTolerance = tl; else delete c.kmTolerance; }
+        { const avs = collectLocAvenants(); if (avs.length) c.avenants = avs; else delete c.avenants; }
         if (_locAddDoc) { if (!Array.isArray(c.docs)) c.docs = []; c.docs.push({ url: _locAddDoc.url, name: _locAddDoc.name }); c.pdfUrl = c.docs[0].url; }
         s.localeaseContrats = list; FP.settings.save(s);
         var createdE = autoCreateVehFromContrat(c);   // crée le véhicule si la plaque vient d'être ajoutée
@@ -2615,6 +2686,7 @@
     if (finV) rec.fin = finV;
     { const ks = locNum($('locadd-kmsupp').value); if (ks != null && ks > 0) rec.kmSupp = ks; }
     { const tl = parseInt($('locadd-tol').value, 10); if (Number.isFinite(tl) && tl > 0) rec.kmTolerance = tl; }
+    { const avs = collectLocAvenants(); if (avs.length) rec.avenants = avs; }
     if (_locAddScan) { const c = locNum(_locAddScan.co2); if (c != null) rec.co2 = Math.round(c); const ml = locNum(_locAddScan.malus); if (ml != null && ml > 0) rec.malus = ml; }
     const s = FP.settings.get(); const list = getLocalease(); list.push(rec); s.localeaseContrats = list; FP.settings.save(s);
     const created = autoCreateVehFromContrat(rec);   // ANTI-DOUBLON : crée le véhicule s'il n'existe pas
@@ -2641,6 +2713,8 @@
   if ($('locadd-fin')) $('locadd-fin').addEventListener('change', () => locAddSyncDates('fin'));
   if ($('locadd-debut')) $('locadd-debut').addEventListener('change', () => locAddSyncDates('debut'));
   if ($('locadd-duree')) $('locadd-duree').addEventListener('input', () => locAddSyncDates('duree'));
+  if ($('locadd-avenant-add')) $('locadd-avenant-add').addEventListener('click', () => { const box = $('locadd-avenants'); if (box) { box.insertAdjacentHTML('beforeend', locAvenantRowHTML('', '')); } });
+  if ($('locadd-avenants')) $('locadd-avenants').addEventListener('click', (e) => { const d = e.target.closest('[data-loc-av-del]'); if (d) { const r = d.closest('[data-loc-avenant-row]'); if (r) r.remove(); } });
   if ($('locadd-drop')) $('locadd-drop').addEventListener('click', () => { const inp = $('locadd-file'); if (inp) { inp.value = ''; inp.click(); } });
   if ($('locadd-file')) $('locadd-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) locAddFileSelected(f); });
   if ($('locadd-save')) $('locadd-save').addEventListener('click', saveLocAdd);
