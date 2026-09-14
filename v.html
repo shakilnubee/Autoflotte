@@ -1033,7 +1033,8 @@
       + '<div class="box"><h4>📍 L\'accident</h4>'
       + '<div style="display:flex;gap:.6rem"><div style="flex:1;min-width:0"><label class="f">Date</label><input class="fi" id="cst-date" type="date" value="' + dISO + '"></div>'
       + '<div style="flex:0 0 42%;min-width:0"><label class="f">Heure</label><input class="fi" id="cst-heure" type="time" value="' + hNow + '"></div></div>'
-      + '<label class="f">Lieu (ville, rue)</label><input class="fi" id="cst-lieu" type="text" placeholder="ex. D7, Nanterre">'
+      + '<label class="f">Rue et n°</label><input class="fi" id="cst-rue" type="text" placeholder="ex. 290 rue de la Belle Étoile">'
+      + '<label class="f">Code postal et ville</label><input class="fi" id="cst-ville" type="text" placeholder="ex. 95700 Roissy">'
       + '<label class="f">Blessés (même léger) ?</label><input class="fi" id="cst-bless" type="text" placeholder="Non / précisions">'
       + '<label class="f">Dégâts à d\'autres véhicules / objets ?</label><input class="fi" id="cst-autres" type="text" placeholder="Non / précisions">'
       + '<label class="f">Témoins (nom, téléphone)</label><input class="fi" id="cst-temoins" type="text" placeholder="Nom · tél"></div>'
@@ -1081,6 +1082,12 @@
     setupSigPad($('cst-sig-b'), function (d) { constatSig.b = d; });
     setupSigPad($('cst-croquis'), function (d) { constatCroquis = d; }, { color: '#0f1e3d', width: 3.2 });
     setupChocPad($('cst-choc-a'), constatChoc.a); setupChocPad($('cst-choc-b'), constatChoc.b);
+    // Immatriculations TOUJOURS en MAJUSCULES (saisie en direct).
+    ['cst-a-immat', 'cst-b-immat'].forEach(function (id) {
+      var el = $(id); if (!el) return;
+      el.style.textTransform = 'uppercase';
+      el.addEventListener('input', function () { var p = this.selectionStart; this.value = this.value.toUpperCase(); try { this.setSelectionRange(p, p); } catch (e) {} });
+    });
   }
   // Champ « point de choc » : boutons Voiture/Moto + zone à toucher (schéma vu de dessus).
   function chocFieldHTML(k) {
@@ -1161,7 +1168,7 @@
     document.querySelectorAll('#constat-body [data-ca]').forEach(function (c) { if (c.checked) A.push(CIRCONSTANCES[+c.getAttribute('data-ca')]); });
     document.querySelectorAll('#constat-body [data-cb]').forEach(function (c) { if (c.checked) B.push(CIRCONSTANCES[+c.getAttribute('data-cb')]); });
     return {
-      date: _cv('cst-date'), heure: _cv('cst-heure'), lieu: _cv('cst-lieu'), bless: _cv('cst-bless'), autres: _cv('cst-autres'), temoins: _cv('cst-temoins'),
+      date: _cv('cst-date'), heure: _cv('cst-heure'), rue: _cv('cst-rue'), ville: _cv('cst-ville'), lieu: [_cv('cst-rue'), _cv('cst-ville')].filter(Boolean).join(', '), bless: _cv('cst-bless'), autres: _cv('cst-autres'), temoins: _cv('cst-temoins'),
       a: { cond: _cv('cst-a-cond'), adr: _cv('cst-a-adr'), tel: _cv('cst-a-tel'), veh: _cv('cst-a-veh'), immat: _cv('cst-a-immat'), ass: _cv('cst-a-ass'), pol: _cv('cst-a-pol'), deg: _cv('cst-a-deg') },
       b: { cond: _cv('cst-b-cond'), adr: _cv('cst-b-adr'), tel: _cv('cst-b-tel'), veh: _cv('cst-b-veh'), immat: _cv('cst-b-immat'), ass: _cv('cst-b-ass'), pol: _cv('cst-b-pol'), deg: _cv('cst-b-deg') },
       circA: A, circB: B, obs: _cv('cst-obs')
@@ -1170,7 +1177,8 @@
   function constatText(c) {
     var L = [];
     L.push('CONSTAT AMIABLE — ' + (c.date ? frDate(c.date) : '') + (c.heure ? (' à ' + c.heure) : ''));
-    if (c.lieu) L.push('Lieu : ' + c.lieu);
+    if (c.rue) L.push('Rue : ' + c.rue);
+    if (c.ville) L.push('Ville : ' + c.ville);
     L.push('Blessés : ' + (c.bless || 'Non')); if (c.autres) L.push('Autres dégâts : ' + c.autres); if (c.temoins) L.push('Témoins : ' + c.temoins);
     L.push(''); L.push('VÉHICULE A (le mien) : ' + [c.a.cond, c.a.tel].filter(Boolean).join(' · '));
     if (c.a.adr) L.push('  Adresse : ' + c.a.adr);
@@ -1250,7 +1258,7 @@
         var px = M + 5, colw = (CW - 10) / 3;
         // Grille 3 colonnes alignée : « Autres dégâts matériels » tombe sous « Blessés ».
         kv(px, y + 6, colw - 3, 'Date', c.date ? frDate(c.date) : ''); kv(px + colw, y + 6, colw - 3, 'Heure', c.heure); kv(px + 2 * colw, y + 6, colw - 3, 'Blessés (même légers)', c.bless || 'Non');
-        kv(px, y + 16, 2 * colw - 3, 'Lieu (ville, rue)', c.lieu, { max: 1 }); kv(px + 2 * colw, y + 16, colw - 3, 'Autres dégâts matériels', c.autres || 'Non', { max: 1 });
+        kv(px, y + 16, colw - 3, 'Rue et n°', c.rue, { max: 1 }); kv(px + colw, y + 16, colw - 3, 'Code postal / ville', c.ville, { max: 1 }); kv(px + 2 * colw, y + 16, colw - 3, 'Autres dégâts matériels', c.autres || 'Non', { max: 1 });
         kv(px, y + 25, CW - 10, 'Témoins', c.temoins);
         y += acH + 6;
         // ===== 2 · Les véhicules (cartes A / B) =====
