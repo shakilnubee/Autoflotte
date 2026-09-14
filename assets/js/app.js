@@ -3753,8 +3753,11 @@ FP.societeProfil = () => {
         mailCopie: 'shakil.nubee@projectxparis.fr,mallaury.herembert@projectxparis.fr',
         // ⚠️ Domaine d'envoi = le domaine VÉRIFIÉ dans Resend = projectxparis.fr (PAS le sous-domaine
         // technique « resend.projectxparis.fr » des enregistrements DNS, qui n'est que le Return-Path).
-        mailDomaineEnvoi: 'projectxparis.fr',
-        loueurNom: 'BPCE Car Lease', proprietaireLeasing: 'BPCE' }
+        mailDomaineEnvoi: 'projectxparis.fr' }
+    // ⚠️ Le loueur BPCE n'est PLUS codé en dur ici : c'est un LOUEUR COMME LES AUTRES, géré dans
+    // settings.loueurs (onglet Contrats). Avant, l'injecter dans le profil PXP créait un DOUBLON
+    // impossible à supprimer (« BPCE » de la liste + « BPCE Car Lease » du repli). La migration unique
+    // FP.normaliserLoueursPXP() l'a basculé dans settings.loueurs (prop « BPCE »).
     : { mailExpediteur: '', mailCopie: '', mailDomaineEnvoi: '', loueurNom: '', proprietaireLeasing: '' };
   // Seules les valeurs NON vides saisies écrasent la base (une base PXP ne se vide pas par accident).
   const over = Object.fromEntries(Object.entries(p).filter(([, v]) => v != null && String(v).trim() !== ''));
@@ -3770,6 +3773,33 @@ FP.societeProfil = () => {
     try { const nom = String(((FP.settings.get().societe) || {}).nom || '').trim(); if (nom) merged.edlSignataireNom = nom; } catch (e) {}
   }
   return merged;
+};
+// ⚠️ MIGRATION UNIQUE (PXP) — BPCE devient « un loueur comme les autres » (plus codé en dur).
+// Avant, BPCE était injecté en dur dans le profil PXP (loueurNom « BPCE Car Lease » / proprietaireLeasing
+// « BPCE ») : ça créait un DOUBLON impossible à supprimer/renommer (« BPCE » saisi dans la liste + le
+// repli « BPCE Car Lease »). On le bascule DONC une seule fois dans settings.loueurs (source unique),
+// avec prop = « BPCE » = valeur RÉELLE du champ « propriétaire » des 11 véhicules PXP → la détection du
+// leasing (FP.leasingLoueurs/propsLeasing) reste intacte. Après le drapeau `loueursNorm`, on ne retouche
+// PLUS JAMAIS la liste : une suppression/un renommage futur par l'utilisateur est respecté.
+// (Ne s'exécute QUE sur la config PXP — _soc() mappe la vue « toutes sociétés » → PXP ; inerte pour un client.)
+FP.normaliserLoueursPXP = function () {
+  try {
+    if (!(FP.settings && FP.settings._soc && FP.settings._soc() === 'PXP')) return;
+    const s = FP.settings.get();
+    if (s.loueursNorm) return;                                    // déjà migré → on ne touche plus rien
+    let list = Array.isArray(s.loueurs) ? s.loueurs.slice() : [];
+    const estBpce = l => /bpce/i.test(String((l && l.nom) || '')) || /bpce/i.test(String((l && l.prop) || ''));
+    const autres = list.filter(l => l && !estBpce(l) && (String(l.nom || '').trim() || String(l.prop || '').trim()));
+    // UN SEUL BPCE en tête, étiquette « propriétaire » = « BPCE » (celle stockée sur les véhicules).
+    s.loueurs = [{ nom: 'BPCE', prop: 'BPCE' }, ...autres];
+    s.loueursNorm = true;
+    // Nettoie l'ancien repli profil (sinon un repli BPCE pourrait ré-injecter un doublon plus tard).
+    if (s.profil && typeof s.profil === 'object') {
+      if (/bpce/i.test(String(s.profil.proprietaireLeasing || ''))) s.profil.proprietaireLeasing = '';
+      if (/bpce/i.test(String(s.profil.loueurNom || ''))) s.profil.loueurNom = '';
+    }
+    FP.settings.save(s);
+  } catch (e) {}
 };
 // Le cache statique data.js ne contient que PXP : si une autre société est active,
 // on le vide au démarrage (les vraies données filtrées arriveront via Supabase),
