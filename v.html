@@ -1295,29 +1295,25 @@
           chocBox(xA, 'Véhicule A', NAVY, constatChoc.a); chocBox(xB, 'Véhicule B', ORANGE2, constatChoc.b);
           y += pcH + 6;
         }
-        // ===== 3 · Circonstances (liste des cochées) =====
-        var chosen = [];
-        CIRCONSTANCES.forEach(function (lb) { var a = c.circA.indexOf(lb) >= 0, b = c.circB.indexOf(lb) >= 0; if (a || b) chosen.push({ lb: lb, a: a, b: b }); });
-        var ciH = Math.max(12, chosen.length ? chosen.length * 5.4 + 5 : 12);
+        // ===== 3 · Circonstances — 2 cartes claires (A / B) pour comprendre d'un coup d'œil =====
+        function circLines(list) { var out = []; (list || []).forEach(function (lb) { doc.splitTextToSize('•  ' + lb, cardW - 9).forEach(function (l) { out.push(l); }); }); return out; }
+        var laL = (c.circA && c.circA.length) ? circLines(c.circA) : null;
+        var lbL = (c.circB && c.circB.length) ? circLines(c.circB) : null;
+        var rowsN = Math.max(laL ? laL.length : 1, lbL ? lbL.length : 1);
+        var ciH = 13 + rowsN * 4.9 + 4;
         ensure(4.5 + ciH + 2);
         y = section(y, 'Circonstances');
-        doc.setFillColor(CARDBG[0], CARDBG[1], CARDBG[2]); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
-        doc.roundedRect(M, y, CW, ciH, 2.5, 2.5, 'FD');
-        if (!chosen.length) {
-          doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]);
-          doc.text('Aucune circonstance cochée.', M + 5, y + 7.5);
-        } else {
-          var cy = y + 6;
-          chosen.forEach(function (o) {
-            // pastilles A (navy) / B (orange)
-            var bx = M + 5;
-            if (o.a) { doc.setFillColor(NAVY[0], NAVY[1], NAVY[2]); doc.roundedRect(bx, cy - 3, 5, 4, 1, 1, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.setTextColor(255, 255, 255); doc.text('A', bx + 2.5, cy, { align: 'center' }); }
-            if (o.b) { doc.setFillColor(ORANGE2[0], ORANGE2[1], ORANGE2[2]); doc.roundedRect(bx + 6, cy - 3, 5, 4, 1, 1, 'F'); doc.setFont('helvetica', 'bold'); doc.setFontSize(6.2); doc.setTextColor(255, 255, 255); doc.text('B', bx + 8.5, cy, { align: 'center' }); }
-            doc.setFont('helvetica', 'normal'); doc.setFontSize(8.6); doc.setTextColor(DARK[0], DARK[1], DARK[2]);
-            doc.text(doc.splitTextToSize(o.lb, CW - 24)[0], M + 18, cy);
-            cy += 5.4;
-          });
+        function circCard(x, titre, tint, lines) {
+          doc.setFillColor(255, 255, 255); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
+          doc.roundedRect(x, y, cardW, ciH, 2.5, 2.5, 'FD');
+          doc.setFillColor(tint[0], tint[1], tint[2]); doc.roundedRect(x, y, cardW, 8, 2.5, 2.5, 'F'); doc.rect(x, y + 4, cardW, 4, 'F');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8.4); doc.setTextColor(255, 255, 255); doc.text(String(titre).toUpperCase(), x + 4, y + 5.4);
+          var cy = y + 13.5;
+          if (!lines) { doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(MUTED[0], MUTED[1], MUTED[2]); doc.text('Aucune cochée', x + 4, cy); return; }
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(DARK[0], DARK[1], DARK[2]);
+          lines.forEach(function (l) { doc.text(l, x + 4, cy); cy += 4.9; });
         }
+        circCard(xA, 'Véhicule A', NAVY, laL); circCard(xB, 'Véhicule B', ORANGE2, lbL);
         y += ciH + 6;
         // ===== 4 · Observations =====
         ensure(4.5 + 16 + 2);
@@ -1327,10 +1323,12 @@
         doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(DARK[0], DARK[1], DARK[2]);
         doc.text(doc.splitTextToSize(val(c.obs), CW - 10).slice(0, 2), M + 5, y + 6);
         y += obH + 6;
-        // ===== 5 · Croquis / maquette (seulement s'il a été dessiné) =====
+        // ===== 5 · Croquis + 6 · Signatures — GROUPÉS : les signatures restent TOUJOURS juste sous le
+        //          croquis (jamais seules sur une page). On réserve la place des DEUX d'un coup. =====
+        var sgW = (CW - gap) / 2, sgH = 24, sgNeed = 4.5 + sgH + 6;
         if (constatCroquis) {
-          var crBoxH = 92;
-          ensure(4.5 + crBoxH + 2);
+          var crBoxH = 76;
+          ensure(4.5 + crBoxH + 6 + sgNeed); // croquis + signatures ensemble sur la même page
           y = section(y, "Croquis de l'accident");
           doc.setFillColor(255, 255, 255); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
           doc.roundedRect(M, y, CW, crBoxH, 2.5, 2.5, 'FD');
@@ -1340,11 +1338,11 @@
             doc.addImage(constatCroquis, 'PNG', crX, crY, crW, crH2);
           } catch (e) {}
           y += crBoxH + 6;
+        } else {
+          ensure(sgNeed);
         }
-        // ===== 6 · Signatures =====
-        ensure(4.5 + 24 + 8);
+        // Signatures (place déjà réservée si croquis présent → pas de ensure ici, sinon elles seraient séparées)
         y = section(y, 'Signatures');
-        var sgW = (CW - gap) / 2, sgH = 24;
         function sigBox(x, titre, tint, img) {
           doc.setFillColor(255, 255, 255); doc.setDrawColor(BORDER[0], BORDER[1], BORDER[2]); doc.setLineWidth(0.3);
           doc.roundedRect(x, y, sgW, sgH, 2.5, 2.5, 'FD');
