@@ -5211,6 +5211,8 @@ FP.applyNavSubmenus = () => {
         }
       });
     });
+    // Le menu vient d'être (re)bâti → on remet les pastilles rouges (sinon elles « disparaissent »).
+    if (FP.reapplyNavBadges) FP.reapplyNavBadges();
   } catch (e) {}
 };
 
@@ -5387,24 +5389,39 @@ FP.refreshDeclCondBadge = async () => {
     let scanUnseen = 0;
     try { if (FP.qrScans && FP.qrScans.load) { await FP.qrScans.load(); scanUnseen = FP.qrScans._unseen || 0; } } catch (e) {}
     // BADGE « Sinistres » = uniquement les déclarations de type sinistre/problème (pas km/état des lieux).
-    FP.setNavBadge('sinistres.html', FP.declCondSinCount, FP.declCondSinCount + ' déclaration(s) sinistre/problème en attente');
     // BADGE « Suivi & alertes » = demandes conducteur (km, état des lieux, question) + signatures reçues + scans QR.
     const notifCount = FP.declCondKmCount + FP.declCondEdlCount + FP.declCondQuestionCount + edlUnseen + scanUnseen;
-    FP.setNavBadge('notifications.html', notifCount, notifCount + ' nouveauté(s) : demande conducteur, signature ou scan QR');
+    // Mémorise les valeurs → réappliquées après chaque reconstruction du menu (sinon la pastille
+    // « disparaissait » quand la sidebar était rebâtie après le calcul du badge).
+    FP._navBadgeVals = {
+      'sinistres.html': [FP.declCondSinCount, FP.declCondSinCount + ' déclaration(s) sinistre/problème en attente'],
+      'notifications.html': [notifCount, notifCount + ' nouveauté(s) : demande conducteur, signature ou scan QR'],
+    };
+    FP.reapplyNavBadges();
   } catch (e) {}
+};
+// Réapplique les derniers compteurs connus sur la sidebar (après un rebuild du menu).
+FP.reapplyNavBadges = function () {
+  try { const v = FP._navBadgeVals || {}; Object.keys(v).forEach(k => FP.setNavBadge(k, v[k][0], v[k][1])); } catch (e) {}
 };
 // Pose/retire une pastille rouge sur un lien de la sidebar (par data-nav ou href), sur toutes ses occurrences.
 FP.setNavBadge = function (navFile, count, title) {
   try {
     const sel = 'a[data-nav="' + navFile + '"], .fp-sidebar a[href*="' + navFile + '"], aside a[href*="' + navFile + '"]';
     document.querySelectorAll(sel).forEach(a => {
+      // ⚠️ NE PAS badger les SOUS-ONGLETS (Alertes, Renouvellements, À compléter, Décisions) : leur href
+      // contient « notifications.html?tab=… » → le sélecteur href*= les attrapait et affichait le MÊME
+      // compteur « 1 » partout. Le badge ne va que sur le lien PARENT du menu (data-nav) et ses alias.
+      if (a.classList.contains('fp-subnav-item')) return;
       let b = a.querySelector('.fp-decl-badge');
       if (!count || count < 1) { if (b) b.remove(); return; }
       if (!b) {
         b = document.createElement('span');
         b.className = 'fp-decl-badge';
-        b.style.cssText = 'background:#EF4444;color:#fff;font-size:.66rem;font-weight:800;min-width:1.1rem;text-align:center;padding:.05rem .35rem;border-radius:999px;margin-left:auto';
-        a.appendChild(b);
+        b.style.cssText = 'background:#EF4444;color:#fff;font-size:.66rem;font-weight:800;min-width:1.1rem;height:1.1rem;line-height:1.1rem;text-align:center;padding:0 .32rem;border-radius:999px;margin-left:auto;box-shadow:0 1px 3px rgba(239,68,68,.5)';
+        // Placé AVANT le chevron du sous-menu (sinon il se retrouve après la flèche → mal aligné).
+        const chev = a.querySelector('.fp-nav-chev');
+        if (chev) a.insertBefore(b, chev); else a.appendChild(b);
       }
       b.title = title || (count + ' à traiter');
       b.textContent = count > 99 ? '99+' : count;

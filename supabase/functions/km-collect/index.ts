@@ -483,7 +483,7 @@ async function sendPush(
     const body = JSON.stringify({
       title: payload.title || "Parc Pilot",
       body: payload.body || "",
-      url: payload.url || "./notifications.html",
+      url: payload.url || "./pages/notifications.html",
       tag: payload.tag || undefined,
       icon: "./assets/icons/icon-192.png",
     });
@@ -656,7 +656,7 @@ Deno.serve(async (req) => {
         await sendPush(db, qr.societe || "PXP", {
           title: type === "probleme" ? "⚠️ Problème signalé" : "🚨 Sinistre déclaré",
           body: `${qr.plaque || "Véhicule"} — un conducteur vient de faire une déclaration.`,
-          url: "./notifications.html", tag: "decl-" + (qr.vehicule_id || ""),
+          url: "./pages/sinistres.html", tag: "decl-" + (qr.vehicule_id || ""),
         });
         return json({ ok: true, type, photos: photos.length });
       }
@@ -725,7 +725,7 @@ Deno.serve(async (req) => {
         await sendPush(db, qr.societe || "PXP", {
           title: "📸 État des lieux reçu",
           body: `${qr.plaque || "Véhicule"} — ${photos.length} photo(s) · ${label === "Sortie" ? "restitution" : "prise en main"}${kmValid ? ` · ${kmEdl.toLocaleString("fr-FR")} km` : ""}.`,
-          url: "./notifications.html", tag: "edl-" + (qr.vehicule_id || ""),
+          url: "./pages/notifications.html?tab=alertes", tag: "edl-" + (qr.vehicule_id || ""),
         });
         return json({ ok: true, sens, photos: photos.length, km: kmValid ? kmEdl : null });
       }
@@ -751,7 +751,7 @@ Deno.serve(async (req) => {
         await sendPush(db, qr.societe || "PXP", {
           title: "❓ Question d'un conducteur",
           body: `${qr.plaque || "Véhicule"} — ${question.slice(0, 90)}`,
-          url: "./notifications.html", tag: "question-" + (qr.vehicule_id || ""),
+          url: "./pages/notifications.html?tab=alertes", tag: "question-" + (qr.vehicule_id || ""),
         });
         return json({ ok: true, type: "question", photos: photos.length });
       }
@@ -812,7 +812,7 @@ Deno.serve(async (req) => {
         await sendPush(db, societe || "PXP", {
           title: "🛣️ Nouveau relevé km",
           body: `${plaque || "Véhicule"} — ${km.toLocaleString("fr-FR")} km relevés par le conducteur.`,
-          url: "./notifications.html", tag: "km-" + (vehiculeId || ""),
+          url: "./pages/vehicules.html" + (plaque ? ("?immat=" + encodeURIComponent(String(plaque))) : ""), tag: "km-" + (vehiculeId || ""),
         });
       } else {
         // Lien e-mail : marque la demande comme répondue (idempotent).
