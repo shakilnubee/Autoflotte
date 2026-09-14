@@ -4639,6 +4639,18 @@
           try {
             const url = await FP.uploadScan(file, 'documents');
             addVehDoc(vehId, type, (files.length === 1 ? (label || file.name) : file.name), url); // archive (re-rend la fiche)
+            // --- CARTE MÉMO / ATTESTATION D'ASSURANCE (carte verte) → renseigne l'ASSURANCE automatiquement ---
+            // (l'utilisateur attend que déposer sa carte mémo remplisse l'assureur/police/validité tout seul).
+            if ((type === 'memo' || type === 'assurance') && window.FP && FP.scanIA && FP.assuranceApplyScan) try {
+              const ASSUR_PROMPT = "Lis cette attestation d'assurance (carte verte) / carte memo d'un vehicule. Renvoie UNIQUEMENT un objet JSON valide, sans texte autour, avec ces cles (null si absent) : assureur (nom de la compagnie d'assurance, ex AXA, MAIF, SWISSLIFE), numeroPolice (n° de police ou de contrat), numeroAssistance (n° d'assistance/depannage 24/7 si present), vehiculeImmat (plaque francaise AB-123-CD), dateDebut (debut de validite AAAA-MM-JJ), dateFin (fin de validite AAAA-MM-JJ).";
+              const af = await FP.scanIA(file, 'assurance', ASSUR_PROMPT);
+              if (af && typeof af === 'object') {
+                const v0 = data.vehicules.find(x => x.id === vehId);
+                if (!af.immat) af.immat = af.vehiculeImmat || (v0 && v0.immat) || '';   // rattache au véhicule courant
+                const a = FP.assuranceApplyScan(af, v0);
+                if (a && (a.nom || a.police)) allGot.add('assurance');
+              }
+            } catch (e) { console.error('[assurance extract]', e); }
             // Lecture → complète/maj la fiche (IA prioritaire, fiable même sur un scan sans texte ; repli OCR local)
             if (!SKIP_IA.has(type)) try {
               let ia = null;
