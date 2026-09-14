@@ -1190,8 +1190,10 @@
     if (c.b.adr) L.push('  Adresse : ' + c.b.adr);
     L.push('  ' + [c.b.veh, c.b.immat].filter(Boolean).join(' · ') + ' — ' + [c.b.ass && ('Assureur ' + c.b.ass), c.b.pol && ('Contrat ' + c.b.pol)].filter(Boolean).join(' · '));
     if (c.b.deg) L.push('  Dégâts : ' + c.b.deg);
-    L.push(''); L.push('Circonstances véhicule A : ' + (c.circA.length ? c.circA.join(' ; ') : '—'));
-    L.push('Circonstances véhicule B : ' + (c.circB.length ? c.circB.join(' ; ') : '—'));
+    L.push(''); L.push('Circonstances véhicule A :');
+    if (c.circA.length) c.circA.forEach(function (x) { L.push('  - ' + x); }); else L.push('  - Aucune');
+    L.push('Circonstances véhicule B :');
+    if (c.circB.length) c.circB.forEach(function (x) { L.push('  - ' + x); }); else L.push('  - Aucune');
     if (c.obs) { L.push(''); L.push('Observations : ' + c.obs); }
     return L.join('\n');
   }
@@ -1370,28 +1372,56 @@
       } catch (e) { alert('Erreur lors de la génération du PDF.'); }
     });
   }
+  // Ajoute un BANDEAU TITRE en haut d'une image (signature / croquis / point de choc) → dans le dossier
+  // Sinistre, chaque vignette dit clairement à QUI / à QUOI elle correspond (fini les images anonymes).
+  function labelImg(dataUrl, caption) {
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var w = img.naturalWidth || 600, h = img.naturalHeight || 300;
+          var bar = Math.max(26, Math.round(w * 0.06));
+          var cv = document.createElement('canvas'); cv.width = w; cv.height = h + bar;
+          var ctx = cv.getContext('2d');
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cv.width, cv.height);
+          ctx.drawImage(img, 0, bar, w, h);
+          ctx.fillStyle = '#0f1e3d'; ctx.fillRect(0, 0, w, bar);
+          ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'middle'; ctx.font = 'bold ' + Math.round(bar * 0.52) + 'px Arial, sans-serif';
+          ctx.fillText(String(caption), Math.round(bar * 0.3), bar / 2 + 1);
+          resolve(cv.toDataURL('image/jpeg', 0.9));
+        } catch (e) { resolve(dataUrl); }
+      };
+      img.onerror = function () { resolve(dataUrl); };
+      img.src = dataUrl;
+    });
+  }
   function constatSend() {
     var c = constatCollect(); var e = $('cst-err'); if (e) e.style.display = 'none';
     if (!c.a.cond) { if (e) { e.textContent = 'Indique au moins ton nom (conducteur A).'; e.style.display = 'block'; } return; }
     var btn = $('constat-send'); btn.disabled = true; btn.textContent = t('sending');
-    var sigNote = (constatSig.a || constatSig.b) ? ('\n\nSignatures : A ' + (constatSig.a ? '✔' : '—') + ' · B ' + (constatSig.b ? '✔' : '—') + ' (voir images jointes)') : '';
+    // Note texte propre (sans caractère spécial non géré par le PDF).
+    var sg = []; if (constatSig.a) sg.push('conducteur A'); if (constatSig.b) sg.push('conducteur B');
+    var sigNote = sg.length ? ('\n\nSigné par : ' + sg.join(' et ') + ' (voir images jointes).') : '';
     if (constatCroquis) sigNote += '\nCroquis de l\'accident joint (voir images).';
     if (constatChoc.a.mx != null || constatChoc.b.mx != null) sigNote += '\nPoints de choc indiqués sur schéma (voir images).';
-    var allPhotos = constatPhotos.slice();
-    if (constatCroquis) allPhotos.push(constatCroquis);
-    if (constatChoc.a.mx != null && constatChoc.a.img) allPhotos.push(constatChoc.a.img);
-    if (constatChoc.b.mx != null && constatChoc.b.img) allPhotos.push(constatChoc.b.img);
-    if (constatSig.a) allPhotos.push(constatSig.a);
-    if (constatSig.b) allPhotos.push(constatSig.b);
-    postJSON({
-      action: 'declaration', q: token, type: 'constat',
-      dateIncident: [c.date ? frDate(c.date) : '', c.heure ? ('à ' + c.heure) : ''].filter(Boolean).join(' '),
-      lieu: c.lieu, description: constatText(c) + sigNote,
-      tiers: [c.b.cond, c.b.immat, c.b.ass].filter(Boolean).join(' · '), blesses: c.bless, photos: allPhotos
-    }, function (ok, d) {
-      btn.disabled = false; btn.textContent = '📨 Envoyer au gestionnaire';
-      if (!ok) { if (e) { e.textContent = (d && d.error) || t('err_sendfail'); e.style.display = 'block'; } return; }
-      $('constat-body').classList.add('hide'); $('constat-done').classList.remove('hide');
+    // Pièces jointes : photos brutes du conducteur + images ÉTIQUETTÉES (croquis, points de choc, signatures).
+    var tasks = constatPhotos.map(function (p) { return Promise.resolve(p); });
+    if (constatCroquis) tasks.push(labelImg(constatCroquis, "CROQUIS DE L'ACCIDENT"));
+    if (constatChoc.a.mx != null && constatChoc.a.img) tasks.push(labelImg(constatChoc.a.img, 'POINT DE CHOC — VEHICULE A'));
+    if (constatChoc.b.mx != null && constatChoc.b.img) tasks.push(labelImg(constatChoc.b.img, 'POINT DE CHOC — VEHICULE B'));
+    if (constatSig.a) tasks.push(labelImg(constatSig.a, 'SIGNATURE CONDUCTEUR A'));
+    if (constatSig.b) tasks.push(labelImg(constatSig.b, 'SIGNATURE CONDUCTEUR B'));
+    Promise.all(tasks).then(function (allPhotos) {
+      postJSON({
+        action: 'declaration', q: token, type: 'constat',
+        dateIncident: [c.date ? frDate(c.date) : '', c.heure ? ('à ' + c.heure) : ''].filter(Boolean).join(' '),
+        lieu: c.lieu, description: constatText(c) + sigNote,
+        tiers: [c.b.cond, c.b.immat, c.b.ass].filter(Boolean).join(' · '), blesses: c.bless, photos: allPhotos
+      }, function (ok, d) {
+        btn.disabled = false; btn.textContent = '📨 Envoyer au gestionnaire';
+        if (!ok) { if (e) { e.textContent = (d && d.error) || t('err_sendfail'); e.style.display = 'block'; } return; }
+        $('constat-body').classList.add('hide'); $('constat-done').classList.remove('hide');
+      });
     });
   }
   // Photos : les <input file> sont statiques (persistent) → on lie une fois.
