@@ -4550,7 +4550,10 @@ FP.settings = {
       // — Données par SINISTRE :
       'sinistreAssurance', 'sinistreDocSub', 'sinistreSous',
       // — Contrats LLD (tableau ; ids stables ajoutés à la lecture) + prestataires perso (tableau à id) :
-      'localeaseContrats', 'prestatairesPerso']);
+      'localeaseContrats', 'prestatairesPerso',
+      // — Accusés de lecture des alertes « ✓ Vu » (map muteKey→signature) : sans ça, un enregistrement
+      //   d'un autre appareil écrasait TOUT le « déjà vu » → les alertes réapparaissaient.
+      'alertesVues']);
     // Familles DYNAMIQUES keyées par conducteur (n° carte/badge d'un prestataire perso : condNum_<id>).
     const isCollKey = (k) => COLLECTION_KEYS.has(k) || /^condNum_/.test(k);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
@@ -7606,11 +7609,17 @@ FP.buildAlertes = (data) => {
 // change). `masquer` (définitif) reste dispo pour compat. Tout est synchronisé (app_settings).
 FP.alertes = {
   // Signature de contenu : change dès que le message / le détail / la liste d'éléments change.
+  // ⚠️⚠️ NE PAS inclure le COMPTE À REBOURS en jours (« dans 45j » → « 44j » le lendemain) : sinon la
+  // signature bougeait TOUS LES JOURS et une alerte « Vu » réapparaissait toute seule alors que RIEN
+  // n'avait changé (bug vécu). La vraie donnée (date de CT, d'expiration…) est déjà dans le `muteKey` —
+  // si elle change, le muteKey change = nouvelle alerte. La signature ne sert qu'à détecter les autres
+  // changements (montant, liste de véhicules). On neutralise donc les « <n> j / <n> jours » du texte.
+  _stripVolatile(s) { return String(s == null ? '' : s).replace(/\d+\s*j(?:ours?)?\b/gi, 'Xj').replace(/\s+/g, ' ').trim(); },
   sig(a) {
     try {
       const items = (a && (a.vehicules || a.items)) || [];
-      const lst = Array.isArray(items) ? items.map(x => (x && (x.label || x.target)) || '').join(',') : '';
-      return [(a && a.message) || '', (a && typeof a.detail === 'string') ? a.detail : '', lst].join('¦');
+      const lst = Array.isArray(items) ? items.map(x => this._stripVolatile((x && (x.label || x.target)) || '')).join(',') : '';
+      return [this._stripVolatile((a && a.message) || ''), this._stripVolatile((a && typeof a.detail === 'string') ? a.detail : ''), lst].join('¦');
     } catch (e) { return String((a && a.message) || ''); }
   },
   vues() { return (FP.settings.get().alertesVues) || {}; },
