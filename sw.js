@@ -6,7 +6,7 @@
    • NAVIGATIONS HTML → NETWORK-FIRST (en ligne = toujours la version fraîche ; le cache ne
      sert qu'en secours hors-ligne). Évite toute « page périmée ».
    On NE touche PAS aux autres origines (Supabase, Google Fonts, CDN) : réseau direct. */
-const CACHE = 'parcpilot-v20260824a';
+const CACHE = 'parcpilot-v20260914a';
 
 self.addEventListener('install', () => { self.skipWaiting(); });
 
@@ -30,7 +30,7 @@ self.addEventListener('push', (e) => {
     badge: './assets/icons/icon-192.png',
     tag: d.tag || undefined,
     renotify: !!d.tag,
-    data: { url: d.url || './notifications.html' },
+    data: { url: d.url || './pages/notifications.html' },
     requireInteraction: false
   };
   e.waitUntil(self.registration.showNotification(title, opts));
@@ -38,7 +38,7 @@ self.addEventListener('push', (e) => {
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const target = (e.notification.data && e.notification.data.url) || './notifications.html';
+  const target = (e.notification.data && e.notification.data.url) || './pages/notifications.html';
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cls) => {
       // Si un onglet Parc Pilot est déjà ouvert : le focaliser et le router.
