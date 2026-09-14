@@ -4543,12 +4543,16 @@ FP.settings = {
     const mergeCollection = (k, remoteV, objV, baseV) => (Array.isArray(objV) || Array.isArray(remoteV)) ? mergeArr(remoteV, objV, baseV) : mergeMap(remoteV, objV, baseV);
     const applyDelta = (remote) => {
       const merged = { ...remote };
-      const keys = new Set([...Object.keys(obj), ...Object.keys(base)]);
-      keys.forEach(k => {
+      // ⚠️⚠️ ANTI-PERTE : on ne traite QUE les clés RÉELLEMENT PRÉSENTES dans le cache local (`obj`).
+      // Une clé ABSENTE d'`obj` = ce poste ne l'a jamais chargée (cache vidé/partiel) → on NE la
+      // supprime PAS du serveur, on la PRÉSERVE. Sans ça, un cache vide effaçait loueurs, assureurs,
+      // échéances/primes d'assurance, etc. (bug de perte de config vécu). Une VRAIE suppression garde
+      // la clé présente avec une valeur vide ([]/{}), qui est bien traitée ci-dessous.
+      Object.keys(obj).forEach(k => {
         const changedHere = JSON.stringify(obj[k]) !== JSON.stringify(base[k]);
         if (!changedHere) return;
         if (COLLECTION_KEYS.has(k)) { merged[k] = mergeCollection(k, remote[k], obj[k], base[k]); return; }  // fusion fine (multi-appareils)
-        if (Object.prototype.hasOwnProperty.call(obj, k)) merged[k] = obj[k]; else delete merged[k];
+        merged[k] = obj[k];
       });
       // ⚠️ FILET DE SÉCURITÉ « logo » : le logo société est un gros dataURL qui peut MANQUER dans le
       // cache local. Une sauvegarde ne doit JAMAIS l'effacer du serveur par accident. On ne retire le
