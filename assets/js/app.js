@@ -4536,7 +4536,23 @@ FP.settings = {
     // ancien écrase les coches faites ailleurs → « la tâche terminée disparaît », « le rappel se décoche »).
     // On fusionne ENTRÉE PAR ENTRÉE sur la version FRAÎCHE du serveur : on applique seulement ce que CE
     // poste a ajouté/modifié/supprimé (obj vs base), le reste du serveur est préservé.
-    const COLLECTION_KEYS = new Set(['taches', 'rappelsFaits', 'rappelsPerso', 'vehImmobilise', 'amendeMontantPaye', 'amendeMontants', 'kmMajDates', 'sinistreStage', 'sinistreStatut', 'sinistreGroupes', 'docStatus', 'permisMasque', 'condDocs', 'leasingContrats', 'kmSuiviExclus', 'inspections', 'reservations', 'docTypes', 'loueurs', 'alertesMasquees', 'alertesMasqueesInfo', 'assureurs', 'assureurVeh', 'assuranceEcheance', 'assurancePrimes']);
+    // ⚠️⚠️ CLÉS « COLLECTION » = données keyées (maps { id → … } ou tableaux) fusionnées FINEMENT
+    // entre appareils (mergeMap/mergeArr), au lieu d'être écrasées EN BLOC par le cache local. TOUTE map
+    // de DONNÉES doit être ici, sinon elle est réécrite en bloc → perte quand le cache est en retard
+    // (bug vécu : loueurs, assurances, puis CONGÉS `condConges`). Règle permanente : une nouvelle donnée
+    // keyée par conducteur / véhicule / sinistre / prestataire s'AJOUTE à cette liste. (Les objets de
+    // CONFIG qui se remplacent en bloc — profil, societe, groupes, navOrder, sidebarLabels… — n'y sont PAS.)
+    const COLLECTION_KEYS = new Set(['taches', 'rappelsFaits', 'rappelsPerso', 'vehImmobilise', 'amendeMontantPaye', 'amendeMontants', 'kmMajDates', 'sinistreStage', 'sinistreStatut', 'sinistreGroupes', 'docStatus', 'permisMasque', 'condDocs', 'leasingContrats', 'kmSuiviExclus', 'inspections', 'reservations', 'docTypes', 'loueurs', 'alertesMasquees', 'alertesMasqueesInfo', 'assureurs', 'assureurVeh', 'assuranceEcheance', 'assurancePrimes',
+      // — Données par CONDUCTEUR (mêmes maps que condDocs, oubliées → d'où la perte des congés) :
+      'condConges', 'condSortie', 'condArrivee', 'condLangues', 'condCarteTotal', 'condBadgeUlys',
+      // — Historique & données par VÉHICULE :
+      'affectations', 'antiPollDates', 'leasingDocs', 'restitutionChecklist', 'controleStatuts',
+      // — Données par SINISTRE :
+      'sinistreAssurance', 'sinistreDocSub', 'sinistreSous',
+      // — Contrats LLD (tableau ; ids stables ajoutés à la lecture) + prestataires perso (tableau à id) :
+      'localeaseContrats', 'prestatairesPerso']);
+    // Familles DYNAMIQUES keyées par conducteur (n° carte/badge d'un prestataire perso : condNum_<id>).
+    const isCollKey = (k) => COLLECTION_KEYS.has(k) || /^condNum_/.test(k);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
     // Fusion par FEUILLE d'un objet-map (ajouts/modifs d'obj appliqués sur remote frais ; suppressions de CE poste honorées).
     const mergeMap = (remoteV, objV, baseV) => {
@@ -4570,7 +4586,11 @@ FP.settings = {
       oA.forEach(v => { const k = key(v); if (!seen.has(k)) { seen.add(k); out.push(v); } });
       return out;
     };
-    const mergeCollection = (k, remoteV, objV, baseV) => (Array.isArray(objV) || Array.isArray(remoteV)) ? mergeArr(remoteV, objV, baseV) : mergeMap(remoteV, objV, baseV);
+    const mergeCollection = (k, remoteV, objV, baseV) => {
+      if (Array.isArray(objV) || Array.isArray(remoteV)) return mergeArr(remoteV, objV, baseV);
+      if (isPlain(objV) || isPlain(remoteV)) return mergeMap(remoteV, objV, baseV);
+      return objV;   // ⚠️ SÉCURITÉ : valeur scalaire mal classée → remplacement simple, JAMAIS transformée en {}
+    };
     const applyDelta = (remote) => {
       const merged = { ...remote };
       // ⚠️⚠️ ANTI-PERTE : on ne traite QUE les clés RÉELLEMENT PRÉSENTES dans le cache local (`obj`).
@@ -4581,7 +4601,7 @@ FP.settings = {
       Object.keys(obj).forEach(k => {
         const changedHere = JSON.stringify(obj[k]) !== JSON.stringify(base[k]);
         if (!changedHere) return;
-        if (COLLECTION_KEYS.has(k)) { merged[k] = mergeCollection(k, remote[k], obj[k], base[k]); return; }  // fusion fine (multi-appareils)
+        if (isCollKey(k)) { merged[k] = mergeCollection(k, remote[k], obj[k], base[k]); return; }  // fusion fine (multi-appareils)
         merged[k] = obj[k];
       });
       // ⚠️ FILET DE SÉCURITÉ « logo » : le logo société est un gros dataURL qui peut MANQUER dans le
