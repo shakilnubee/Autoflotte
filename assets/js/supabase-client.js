@@ -464,6 +464,9 @@
           localStorage.setItem(key, JSON.stringify(shared));
           // Point de référence pour la fusion « delta » anti-écrasement des réglages (cf. FP.settings._pushSettings).
           try { if (FP.settings) FP.settings._serverSnap = JSON.parse(JSON.stringify(shared)); } catch (_) {}
+          // Migration unique PXP : BPCE devient un loueur normal (settings.loueurs), plus codé en dur.
+          // Placée ICI = juste après le chargement des réglages serveur (⇒ pas d'écrasement, base fraîche).
+          try { if (FP.normaliserLoueursPXP) FP.normaliserLoueursPXP(); } catch (_) {}
           if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme();
           if (FP.applyCustomNavLabels) FP.applyCustomNavLabels();
           if (FP.applyNavOrder) FP.applyNavOrder();
