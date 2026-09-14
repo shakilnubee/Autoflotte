@@ -1941,36 +1941,68 @@
             if (i < lines.length) { doc.addPage(); y = M + 6; }
           }
         };
+        // Section « sauce Parc Pilot » : en-tête + rangées libellé/valeur dans une CARTE claire arrondie.
+        // entries = [ [label, valeur, always?], ... ] ; les rangées vides sont ignorées (sauf always).
+        const cardSection = (title, entries) => {
+          const items = entries
+            .filter(e => e[2] || (e[1] != null && String(e[1]).trim() !== ''))
+            .map(e => [e[0], (e[1] == null || String(e[1]).trim() === '') ? '—' : String(e[1])]);
+          if (!items.length) return;
+          const LBL2 = 44, valW = pw - 2 * M - LBL2 - 8;
+          const meta = items.map(([l, v]) => { const lines = doc.splitTextToSize(v, valW); return { l, lines, h: Math.max(6.5, lines.length * 5) }; });
+          const cardH = meta.reduce((s, r) => s + r.h, 0) + 6;
+          if (y + 12 + cardH > ph - 16) { doc.addPage(); y = M + 6; }
+          // En-tête de section (carré orange + titre navy + filet)
+          doc.setFillColor.apply(doc, ORANGE); doc.rect(M, y - 3.3, 2.6, 3.6, 'F');
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor.apply(doc, NAVY);
+          doc.text(String(title).toUpperCase(), M + 5.2, y); y += 2.4;
+          doc.setDrawColor.apply(doc, ORANGE); doc.setLineWidth(0.5); doc.line(M, y, pw - M, y); doc.setLineWidth(0.2);
+          y += 4;
+          // Carte
+          doc.setFillColor.apply(doc, CARDBG); doc.setDrawColor.apply(doc, CARDBD); doc.setLineWidth(0.3);
+          doc.roundedRect(M, y, pw - 2 * M, cardH, 2.5, 2.5, 'FD');
+          let ry = y + 5.5;
+          for (const r of meta) {
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor.apply(doc, LBLC);
+            doc.text(String(r.l).toUpperCase(), M + 4, ry);
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, INK);
+            doc.text(r.lines, M + 4 + LBL2, ry);
+            ry += r.h;
+          }
+          y += cardH + 5;
+        };
 
         // --- Société déclarante ---
-        section('Société déclarante');
-        row('Société', soc.nom, true);
-        row('SIRET', soc.siret);
-        row('Adresse', soc.adresse);
-        row('Contact', contact);
-        y += 3;
+        cardSection('Société déclarante', [
+          ['Société', soc.nom, true],
+          ['SIRET', soc.siret],
+          ['Adresse', soc.adresse],
+          ['Contact', contact],
+        ]);
 
         // --- Véhicule concerné ---
-        section('Véhicule concerné');
-        row('Immatriculation', d.plaque, true);
-        row('Marque & modèle', veh ? [veh.marque, veh.modele].filter(Boolean).join(' ') : '');
-        row('N° de série (VIN)', veh && veh.vin);
-        row('Conducteur', conducteur);
-        row('Assureur', assNom ? (assNom + (assPolice ? ' — police ' + assPolice : '')) : '');
-        y += 3;
+        cardSection('Véhicule concerné', [
+          ['Immatriculation', d.plaque, true],
+          ['Marque & modèle', veh ? [veh.marque, veh.modele].filter(Boolean).join(' ') : ''],
+          ['N° de série (VIN)', veh && veh.vin],
+          ['Conducteur', conducteur],
+          ['Assureur', assNom ? (assNom + (assPolice ? ' — police ' + assPolice : '')) : ''],
+        ]);
 
         // --- Détails du sinistre / incident ---
-        section(isSin ? 'Détails du sinistre' : "Détails de l'incident");
-        row('Nature', isSin ? 'Sinistre / accident' : 'Panne / problème', true);
-        row("Date de l'incident", d.date_incident);
-        row('Déclaration reçue le', d.created_at ? FP.date(String(d.created_at).slice(0, 10)) : '');
         // Lieu : rue et ville séparés (le constat envoie « rue, ville »).
+        const lieuRows = [];
         if (d.lieu && String(d.lieu).indexOf(',') >= 0) {
-          const _lp = String(d.lieu).split(','); row('Rue', _lp.slice(0, -1).join(',').trim()); row('Ville', _lp.slice(-1)[0].trim());
-        } else { row('Lieu', d.lieu); }
-        row('Tiers impliqué', d.tiers);
-        row('Blessés', d.blesses);
-        y += 2;
+          const _lp = String(d.lieu).split(','); lieuRows.push(['Rue', _lp.slice(0, -1).join(',').trim()]); lieuRows.push(['Ville', _lp.slice(-1)[0].trim()]);
+        } else { lieuRows.push(['Lieu', d.lieu]); }
+        cardSection(isSin ? 'Détails du sinistre' : "Détails de l'incident", [
+          ['Nature', isSin ? 'Sinistre / accident' : 'Panne / problème', true],
+          ["Date de l'incident", d.date_incident],
+          ['Déclaration reçue le', d.created_at ? FP.date(String(d.created_at).slice(0, 10)) : ''],
+          ...lieuRows,
+          ['Tiers impliqué', d.tiers],
+          ['Blessés', d.blesses],
+        ]);
         cardBlock('Circonstances déclarées', d.description);
         y += 3;
 
