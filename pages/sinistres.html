@@ -1872,8 +1872,9 @@
         const ref = ('SIN-' + String(d.plaque || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase() + '-' + String(d.created_at || today).slice(0, 10).replace(/-/g, '')).replace(/-+/g, '-');
 
         // --- Bandeau Parc Pilot (navy + logo vectoriel + réf/date) ---
-        const NAVY = [11, 18, 32], ORANGE = [249, 115, 22], INK = [20, 26, 43], LBLC = [120, 130, 150];
+        const NAVY = [11, 18, 32], ORANGE = [249, 115, 22], INK = [20, 26, 43], LBLC = [120, 130, 150], CARDBG = [247, 249, 252], CARDBD = [225, 231, 240];
         doc.setFillColor.apply(doc, NAVY); doc.rect(0, 0, pw, 30, 'F');
+        doc.setFillColor.apply(doc, ORANGE); doc.rect(0, 30, pw, 1.8, 'F'); // liseré orange (identité Parc Pilot)
         doc.setDrawColor.apply(doc, ORANGE); doc.setLineWidth(0.9);
         doc.line(M, 11, M + 7, 11); doc.line(M - 0.6, 14, M + 9, 14); doc.line(M + 1.5, 17, M + 6, 17);
         doc.setLineWidth(0.2);
@@ -1920,6 +1921,26 @@
           for (const ln of lines) { if (y > ph - 16) { doc.addPage(); y = M + 6; } doc.text(ln, M, y); y += 5; }
           y += 2;
         };
+        // Texte long présenté dans une CARTE claire arrondie (plus propre/pro) — pagine si nécessaire.
+        const cardBlock = (lbl, val) => {
+          if (!val || !String(val).trim()) return;
+          if (y > ph - 34) { doc.addPage(); y = M + 6; }
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor.apply(doc, LBLC);
+          doc.text(String(lbl).toUpperCase(), M, y); y += 4;
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor.apply(doc, INK);
+          const lines = doc.splitTextToSize(String(val), pw - 2 * M - 8);
+          let i = 0;
+          while (i < lines.length) {
+            const avail = Math.max(1, Math.floor((ph - 16 - (y + 6)) / 5));
+            const chunk = lines.slice(i, i + avail);
+            const cardH = chunk.length * 5 + 6;
+            doc.setFillColor.apply(doc, CARDBG); doc.setDrawColor.apply(doc, CARDBD); doc.setLineWidth(0.3);
+            doc.roundedRect(M, y, pw - 2 * M, cardH, 2.2, 2.2, 'FD');
+            doc.setTextColor.apply(doc, INK); doc.text(chunk, M + 4, y + 5.5);
+            y += cardH + 2; i += chunk.length;
+            if (i < lines.length) { doc.addPage(); y = M + 6; }
+          }
+        };
 
         // --- Société déclarante ---
         section('Société déclarante');
@@ -1943,11 +1964,14 @@
         row('Nature', isSin ? 'Sinistre / accident' : 'Panne / problème', true);
         row("Date de l'incident", d.date_incident);
         row('Déclaration reçue le', d.created_at ? FP.date(String(d.created_at).slice(0, 10)) : '');
-        row('Lieu', d.lieu);
+        // Lieu : rue et ville séparés (le constat envoie « rue, ville »).
+        if (d.lieu && String(d.lieu).indexOf(',') >= 0) {
+          const _lp = String(d.lieu).split(','); row('Rue', _lp.slice(0, -1).join(',').trim()); row('Ville', _lp.slice(-1)[0].trim());
+        } else { row('Lieu', d.lieu); }
         row('Tiers impliqué', d.tiers);
         row('Blessés', d.blesses);
-        y += 1;
-        block('Circonstances déclarées', d.description);
+        y += 2;
+        cardBlock('Circonstances déclarées', d.description);
         y += 3;
 
         // --- Pièces jointes : IMAGES en vignettes groupées, PDF (constat, courrier assureur, tout
