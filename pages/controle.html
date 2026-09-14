@@ -889,6 +889,9 @@
   let _renderGroups = [];      // groupes calculés au dernier rendu (pour remplir un groupe à l'ouverture)
   let _flatShowAll = false;    // vue liste : l'utilisateur a-t-il demandé « Voir tout » ?
   const FLAT_CAP = 250;        // nb max de lignes peintes d'emblée en vue liste
+  // ===== Sélection multiple + action groupée sur les statuts (simplifier : 1 clic pour tout traiter) =====
+  let _selMode = false;              // mode « cocher plusieurs »
+  const _selected = new Set();       // fids cochés
   function applyFilters(list){
     const q = state.search.trim().toLowerCase();
     return list.filter(f => {
@@ -974,8 +977,9 @@
     return ` <span class="st-badge" style="background:${bg};color:${col}">${label}</span>`;
   }
   function rowHTML(f){
+    const cb = _selMode ? `<input type="checkbox" class="ctrl-selcb" data-selfid="${esc(f.fid)}"${_selected.has(f.fid)?' checked':''} style="width:16px;height:16px;vertical-align:middle;margin-right:8px;cursor:pointer">` : '';
     return `<tr>
-      <td>${condCell(f)}</td>
+      <td>${cb}${condCell(f)}</td>
       <td>${vehCell(f)}</td>
       <td>${esc(f.type)}${raisonBadge(f)}</td>
       <td style="text-align:right;font-weight:600">${euro(f.montant)}</td>
@@ -1009,6 +1013,27 @@
     const _nAV = _findings.filter(f => f.statut === 'a-verifier').length;
     $('ctrl-count').textContent = _nAV ? '· ' + _nAV : '';
 
+    // Barre d'ACTION GROUPÉE : marquer TOUT ce qui est affiché d'un coup, OU cocher plusieurs lignes
+    // puis choisir le statut. (Simplifier : plus besoin de changer chaque ligne une par une.)
+    const allChecked = _selMode && all.length > 0 && all.every(f => _selected.has(f.fid));
+    const nSel = _selected.size;
+    const bulkBar = all.length ? `
+      <div class="card p-2 mb-2 ctrl-bulkbar" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+        <button type="button" id="ctrl-selmode" class="btn btn-outline text-sm">${_selMode ? '✕ Annuler' : '☑️ Sélectionner'}</button>
+        ${_selMode
+          ? `<label style="display:inline-flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;user-select:none"><input type="checkbox" id="ctrl-selall" style="width:16px;height:16px"${allChecked ? ' checked' : ''}> Tout cocher</label><span id="ctrl-selcount" class="text-xs text-slate-500">${nSel} sélectionnée(s)</span>`
+          : `<span class="text-xs text-slate-500">${all.length} trouvaille(s) affichée(s)</span>`}
+        <span style="flex:1 1 12px"></span>
+        <span class="text-sm text-slate-600" style="white-space:nowrap">Marquer ${_selMode ? 'la sélection' : 'tout'} :</span>
+        <select id="ctrl-bulkstatut" class="ctrl-sel" style="min-width:118px">
+          <option value="justifie">Justifié</option>
+          <option value="classe">Classé</option>
+          <option value="fraude">Fraude</option>
+          <option value="a-verifier">À vérifier</option>
+        </select>
+        <button type="button" id="ctrl-bulkapply" class="btn btn-dark text-sm"${_selMode && nSel === 0 ? ' disabled' : ''}>Appliquer${_selMode ? ` (${nSel})` : ` à tout (${all.length})`}</button>
+      </div>` : '';
+
     // Diagnostic : explique POURQUOI il y a peu/pas de trouvailles (au lieu d'une page vide muette).
     let diag = '';
     const nConges = Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length;
@@ -1031,7 +1056,7 @@
       // statut — qui relance render() — ne REFERME pas tout ce qu'on avait ouvert.
       // ⚡ PERF : un groupe FERMÉ ne construit PAS ses lignes (body vide, `data-filled="0"`). Elles
       // sont peintes à la 1re ouverture (handler du clic sur l'en-tête) → plus de gel au chargement.
-      box.innerHTML = diag + groups.map((g,i)=>{ const open = state.expanded.has(g.gk);
+      box.innerHTML = bulkBar + diag + groups.map((g,i)=>{ const open = state.expanded.has(g.gk);
         const bodyInner = open ? `<table class="ctrl-tbl ctrl-findings">${COLS}<tbody>${g.rows.map(rowHTML).join('')}</tbody></table>` : '';
         return `
         <div class="mb-2">
@@ -1051,7 +1076,7 @@
           ? `<div class="text-center mt-3"><button type="button" id="ctrl-flatless" class="btn btn-outline text-sm">Voir moins ↑</button></div>`
           : `<div class="text-center mt-3"><button type="button" id="ctrl-flatmore" class="btn btn-outline text-sm">Voir tout (${more} de plus) ↓</button> <span class="text-xs text-slate-400">— ${capped.length} affichées sur ${all.length}</span></div>`;
       }
-      box.innerHTML = diag + `<div class="card p-2" style="overflow-x:auto"><table class="ctrl-tbl ctrl-findings">${COLS}<tbody>${capped.map(rowHTML).join('')}</tbody></table></div>` + toggle;
+      box.innerHTML = bulkBar + diag + `<div class="card p-2" style="overflow-x:auto"><table class="ctrl-tbl ctrl-findings">${COLS}<tbody>${capped.map(rowHTML).join('')}</tbody></table></div>` + toggle;
       const bm = $('ctrl-flatmore'); if (bm) bm.addEventListener('click', () => { _flatShowAll = true; render(); });
       const bl = $('ctrl-flatless'); if (bl) bl.addEventListener('click', () => { _flatShowAll = false; render(); });
     }
@@ -1163,35 +1188,72 @@
       } return; }
     const fac = e.target.closest('[data-fac]');
     if (fac) { e.preventDefault(); openFacture(fac.getAttribute('data-fac')); return; }
-  });
-  $('ctrl-body').addEventListener('change', (e) => {
-    const sel = e.target.closest('[data-statut]'); if (!sel) return;
-    const fid = sel.getAttribute('data-statut');
-    const f = _findings.find(x => x.fid === fid);
-    const st = sel.value, def = f && f._def;
-    // ⚡ UN SEUL enregistrement des réglages (statut + archivage anomalie) au lieu de deux gros writes,
-    // et pas de re-analyse complète : on met à jour la trouvaille en mémoire + render() (instantané).
+    // Action groupée : (dé)activer le mode sélection
+    const sm = e.target.closest('#ctrl-selmode');
+    if (sm) { _selMode = !_selMode; if (!_selMode) _selected.clear(); render(); return; }
+    // Action groupée : appliquer le statut choisi à la sélection (ou à TOUT ce qui est affiché)
+    const ap = e.target.closest('#ctrl-bulkapply');
+    if (ap) {
+      const st = ($('ctrl-bulkstatut') && $('ctrl-bulkstatut').value) || 'justifie';
+      let fids;
+      if (_selMode) { fids = [..._selected]; if (!fids.length) { if (FP.toast) FP.toast('Coche au moins une trouvaille.'); return; } }
+      else {
+        const all = applyFilters(_findings); fids = all.map(f => f.fid);
+        if (!fids.length) return;
+        if (!await FP.confirm(`Marquer les ${fids.length} trouvaille(s) affichée(s) comme « ${ST_LABEL[st] || st} » ?`)) return;
+      }
+      _selected.clear(); _selMode = false;   // on sort du mode sélection ; applyBulkStatut re-render ensuite
+      applyBulkStatut(fids, st);
+      return;
+    }
+  // ⚠️ SOURCE UNIQUE — applique un statut à UNE ou PLUSIEURS trouvailles en UN SEUL enregistrement
+  // (statut + archivage/désarchivage des anomalies carte). Utilisée par le sélecteur d'une ligne ET par
+  // l'action groupée. `fids` = liste d'ids ; `st` = statut cible.
+  function applyBulkStatut(fids, st) {
+    fids = (fids || []).filter(Boolean); if (!fids.length) return;
     const s = FP.settings.get();
     const m = (s.controleStatuts && typeof s.controleStatuts === 'object') ? s.controleStatuts : {};
-    if (st && st !== (def || 'a-verifier')) m[fid] = st; else delete m[fid];
-    if (f && f._oldfid && f._oldfid !== fid) delete m[f._oldfid];   // migre/nettoie l'ancienne clé (nom non normalisé)
-    s.controleStatuts = m;
-    if (f && f.genre === 'carte' && f._anom && f._anom.key) {
-      const am = (s.tfAnomOk && typeof s.tfAnomOk === 'object') ? s.tfAnomOk : {};
-      const key = f._anom.key, resolu = (st && st !== 'a-verifier');
-      if (resolu) am[key] = { key, t: f._anom.t || '', txt: f._anom.txt || '', mois: f._anom.mois || '', facnum: f._anom.facnum || '', okAt: Date.now() };
-      else delete am[key];
-      if (f._anom.keyOld && f._anom.keyOld !== key) delete am[f._anom.keyOld];   // migre l'ancienne clé
-      s.tfAnomOk = am;
-    }
+    const am = (s.tfAnomOk && typeof s.tfAnomOk === 'object') ? s.tfAnomOk : {};
+    let touchedAnom = false;
+    fids.forEach(fid => {
+      const f = _findings.find(x => x.fid === fid); const def = f && f._def;
+      if (st && st !== (def || 'a-verifier')) m[fid] = st; else delete m[fid];
+      if (f && f._oldfid && f._oldfid !== fid) delete m[f._oldfid];
+      if (f && f.genre === 'carte' && f._anom && f._anom.key) {
+        const key = f._anom.key, resolu = (st && st !== 'a-verifier');
+        if (resolu) am[key] = { key, t: f._anom.t || '', txt: f._anom.txt || '', mois: f._anom.mois || '', facnum: f._anom.facnum || '', okAt: Date.now() };
+        else delete am[key];
+        if (f._anom.keyOld && f._anom.keyOld !== key) delete am[f._anom.keyOld];
+        touchedAnom = true;
+      }
+      if (f) f.statut = st;
+    });
+    s.controleStatuts = m; if (touchedAnom) s.tfAnomOk = am;
     FP.settings.save(s);
-    if (f) f.statut = st;
     // Prévient les AUTRES vues (Total Fleet « Points à vérifier ») SANS relancer notre propre rebuild.
     _selfAnomSync = true;
     try { window.dispatchEvent(new CustomEvent('pp:anom-sync')); } catch (e) {}
-    if (FP.toast) FP.toast('Statut : ' + (ST_LABEL[st] || st));
+    if (FP.toast) FP.toast(fids.length > 1 ? `${fids.length} trouvailles → ${ST_LABEL[st] || st}` : 'Statut : ' + (ST_LABEL[st] || st));
     render();
     _writeFindingsCacheSoon();
+  }
+  // Met à jour le compteur / le bouton « Appliquer » sans tout re-render (à chaque case cochée).
+  function updateBulkCounts() {
+    const all = applyFilters(_findings); const nSel = _selected.size;
+    const sc = $('ctrl-selcount'); if (sc) sc.textContent = nSel + ' sélectionnée(s)';
+    const ap = $('ctrl-bulkapply'); if (ap) { ap.textContent = 'Appliquer (' + nSel + ')'; ap.disabled = nSel === 0; }
+    const sa = $('ctrl-selall'); if (sa) sa.checked = all.length > 0 && all.every(f => _selected.has(f.fid));
+  }
+  $('ctrl-body').addEventListener('change', (e) => {
+    // Case à cocher d'une ligne (mode sélection)
+    const cb = e.target.closest('.ctrl-selcb');
+    if (cb) { const fid = cb.getAttribute('data-selfid'); if (cb.checked) _selected.add(fid); else _selected.delete(fid); updateBulkCounts(); return; }
+    // « Tout cocher » (toutes les trouvailles du filtre courant)
+    const sa = e.target.closest('#ctrl-selall');
+    if (sa) { const all = applyFilters(_findings); if (sa.checked) all.forEach(f => _selected.add(f.fid)); else _selected.clear(); render(); return; }
+    // Sélecteur de statut d'UNE ligne
+    const sel = e.target.closest('[data-statut]'); if (!sel) return;
+    applyBulkStatut([sel.getAttribute('data-statut')], sel.value);
   });
 
   async function openFacture(facnum){

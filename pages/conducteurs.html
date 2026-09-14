@@ -1503,18 +1503,26 @@
     const carteInner = `<div class="text-sm space-y-2">
         ${(FP.prestataires ? FP.prestataires() : []).map(p => { const lbl = (p.type === 'peage' ? 'Badge télépéage' : 'Carte carburant'); return `<div class="flex flex-col gap-1.5"><span class="text-slate-600">${lbl} <b>${escapeHtml(p.nom)}</b> (n°)</span>${FP.badgeChipsReadonlyHTML({ scope: 'cond', numkey: p.numKey, key: d.key })}</div>`; }).join('')}
         <p class="text-xs text-slate-400" style="line-height:1.45">🚗 <b>Maison = fiche du véhicule.</b> Ces n° s'affichent ici <b>en lecture seule</b> (avec la plaque du véhicule porteur) pour info et pour <b>rattacher la conso au bon conducteur</b>. Pour <b>ajouter / modifier / retirer</b> un n°, ouvre la <b>fiche du véhicule</b> concerné (section « Carte carburant &amp; télépéage ») — c'est la même donnée, visible des deux côtés.</p>
-        <div class="pt-2 mt-1 border-t border-slate-100">
-          <div class="font-semibold text-slate-700 mb-1">🌴 Congés / absences</div>
-          ${_congeLines}
-          <div class="flex flex-wrap items-center gap-2 pt-2">
-            <input type="date" data-conge-debut style="${_inpD}" title="Début du congé">
-            <span class="text-slate-400">→</span>
-            <input type="date" data-conge-fin style="${_inpD}" title="Fin du congé">
-            <input type="text" data-conge-motif placeholder="Motif (optionnel)" style="${_inpD};min-width:120px;text-align:left">
-            <button type="button" class="btn btn-outline text-xs" data-conge-add data-key="${escapeHtml(d.key)}"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter</button>
-          </div>
-          <p class="text-xs text-slate-400 mt-1" style="line-height:1.45">Sert à repérer <b>toute conso</b> (carburant, péage, boutique…) faite pendant un congé (interdit) : une alerte remonte alors dans <b>Suivi &amp; alertes</b> → « Points à vérifier », avec les dates.</p>
+      </div>`;
+    // 🌴 CONGÉS / ABSENCES — carte dédiée + saisie MINIMALE (règle « simplifier ») : une SEULE date =
+    // absence d'un jour (la fin se met toute seule = le début), motif optionnel, et la touche Entrée
+    // ajoute directement (plus besoin de viser le bouton). Boutons rapides « Aujourd'hui / +1 sem. ».
+    const congesInner = `<div class="text-sm">
+        ${_congeLines}
+        <div class="flex flex-wrap items-end gap-2 pt-2 mt-1 border-t border-slate-100">
+          <label style="display:flex;flex-direction:column;font-size:.72rem;color:var(--fp-muted)">Début
+            <input type="date" data-conge-debut style="${_inpD}" title="Début du congé"></label>
+          <label style="display:flex;flex-direction:column;font-size:.72rem;color:var(--fp-muted)">Fin <span class="text-slate-400">(vide = 1 jour)</span>
+            <input type="date" data-conge-fin style="${_inpD}" title="Fin du congé — laisser vide pour un seul jour"></label>
+          <input type="text" data-conge-motif placeholder="Motif (optionnel)" style="${_inpD};min-width:110px;text-align:left" title="Motif (optionnel)">
+          <button type="button" class="btn btn-dark text-xs" data-conge-add data-key="${escapeHtml(d.key)}"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter</button>
         </div>
+        <div class="flex flex-wrap gap-1.5 mt-2">
+          <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-conge-quick="today" data-key="${escapeHtml(d.key)}">Aujourd'hui</button>
+          <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-conge-quick="tomorrow" data-key="${escapeHtml(d.key)}">Demain</button>
+          <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-conge-quick="week" data-key="${escapeHtml(d.key)}">Cette semaine</button>
+        </div>
+        <p class="text-xs text-slate-400 mt-2" style="line-height:1.45">Sert à repérer <b>toute conso</b> (carburant, péage, boutique…) faite pendant un congé : une alerte remonte alors dans <b>Suivi &amp; alertes</b> → « Points à vérifier ». <b>Astuce :</b> tape une date et appuie sur <b>Entrée</b> pour ajouter.</p>
       </div>`;
     const vehiculesInner = d.vehicules.length === 0 ? '<p class="text-sm text-slate-500">Aucun véhicule assigné.</p>' :
       clampList(d.vehicules.map(v => `
@@ -1609,6 +1617,7 @@
       + card('folder', `Documents ${condDocsBadge(d)}`, condDocsSectionHTML(d))
       + card('car', `Véhicules · ${d.vehicules.length}`, vehiculesInner)
       + card('history', `Historique d’affectation${affCount ? ' · ' + affCount : ''}`, affInner)
+      + card('palmtree', `Congés / absences${_conges.length ? ' · ' + _conges.length : ''}`, congesInner)
       + card('ticket', `Amendes · ${d.amendes.length}`, amendesInner)
       + card('alert-triangle', `Accidents · ${accs.length}`, accidentsInner)
       + card('gauge', 'Kilométrage', kmInner)
@@ -2406,20 +2415,41 @@
   if (FP.wireBadgeChips) FP.wireBadgeChips($('drawer-body'));
 
   // Congés / absences du conducteur : ajout / retrait → synchronisé (settings.condConges) + re-render fiche.
+  // Saisie SIMPLIFIÉE : fin vide = congé d'UN jour (fin = début) ; boutons rapides ; Entrée = ajouter.
+  function _isoAddDays(iso, n){ const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+  function _ajouterConge(key, deb, fin, motif){
+    if (!key || !deb) { alert('Indique au moins une date de début.'); return false; }
+    fin = fin || deb;                                   // fin vide → congé d'un seul jour
+    if (fin < deb) { alert('La date de fin doit être après la date de début.'); return false; }
+    if (FP.addConge) { FP.addConge(key, { debut: deb, fin: fin, motif: (motif || '').trim() }); if (FP.toast) FP.toast('✓ Congé ajouté'); if (currentDriverKey) openDrawer(currentDriverKey); return true; }
+    return false;
+  }
+  function _congeAddFromForm(el){
+    const box = el.closest('.fiche-card') || el.closest('div');
+    const add = box && box.querySelector('[data-conge-add]'); const key = add && add.dataset.key; if (!key) return;
+    const deb = box.querySelector('[data-conge-debut]'), fin = box.querySelector('[data-conge-fin]'), mot = box.querySelector('[data-conge-motif]');
+    _ajouterConge(key, deb && deb.value, fin && fin.value, mot && mot.value);
+  }
   $('drawer-body').addEventListener('click', (e) => {
     const del = e.target.closest('[data-conge-del]');
     if (del) { const key = del.dataset.key, idx = parseInt(del.dataset.congeDel, 10); if (key && FP.removeConge) { FP.removeConge(key, idx); if (currentDriverKey) openDrawer(currentDriverKey); } return; }
-    const add = e.target.closest('[data-conge-add]');
-    if (add) {
-      const key = add.dataset.key; if (!key) return;
-      const box = add.closest('div');
-      const deb = box.querySelector('[data-conge-debut]'), fin = box.querySelector('[data-conge-fin]'), mot = box.querySelector('[data-conge-motif]');
-      const dv = deb && deb.value, fv = fin && fin.value;
-      if (!dv || !fv) { alert('Indique une date de début ET une date de fin de congé.'); return; }
-      if (fv < dv) { alert('La date de fin doit être après la date de début.'); return; }
-      if (FP.addConge) { FP.addConge(key, { debut: dv, fin: fv, motif: (mot && mot.value || '').trim() }); if (FP.toast) FP.toast('✓ Congé ajouté'); if (currentDriverKey) openDrawer(currentDriverKey); }
+    // Boutons rapides : aujourd'hui / demain (1 jour) ; cette semaine (lun→dim de la semaine en cours)
+    const q = e.target.closest('[data-conge-quick]');
+    if (q) {
+      const key = q.dataset.key; const today = new Date().toISOString().slice(0, 10);
+      if (q.dataset.congeQuick === 'today') _ajouterConge(key, today, today, '');
+      else if (q.dataset.congeQuick === 'tomorrow') { const t = _isoAddDays(today, 1); _ajouterConge(key, t, t, ''); }
+      else if (q.dataset.congeQuick === 'week') { const dow = (new Date(today + 'T00:00:00').getDay() + 6) % 7; const lun = _isoAddDays(today, -dow); _ajouterConge(key, lun, _isoAddDays(lun, 6), ''); }
       return;
     }
+    const add = e.target.closest('[data-conge-add]');
+    if (add) { _congeAddFromForm(add); return; }
+  });
+  // Entrée dans un champ de congé = ajouter (plus besoin de viser le bouton).
+  $('drawer-body').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const fld = e.target.closest('[data-conge-debut],[data-conge-fin],[data-conge-motif]');
+    if (fld) { e.preventDefault(); _congeAddFromForm(fld); }
   });
 
   // Réception du fichier permis téléversé → Supabase Storage, puis enregistrement du lien
