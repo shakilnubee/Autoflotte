@@ -1983,11 +1983,23 @@
       // mot « mensuel »). On l'accepte MAIS le lookahead écarte « loyerS » (pluriel, souvent « total des
       // loyers ») et « loyer total/global », et le garde-fou < 2 500 €/mois plus bas rejette de toute
       // façon un TOTAL de contrat (bien au-dessus d'un loyer mensuel).
-      /loyer(?!s|\s*(?:total|global))[^€\n\d]{0,30}?([\d][\d\s.]*,\d{2})\s*€?/i, // « Loyer 587,03 € »
     ];
     // Garde-fou : un loyer mensuel de véhicule dépasse rarement ~2 500 € ; au-delà, on préfère ne rien
     // mettre (l'utilisateur saisit à la main) plutôt qu'un montant manifestement faux.
     for (const p of loyerPats) { const mm = p.exec(t); if (mm) { const v = parseFR(mm[1]); if (v != null && v > 0 && v < 2500) { out.loyer = v; break; } } }
+    // Repli « Loyer <montant> » SIMPLE — mais SÛR : on refuse tout contexte où « loyer » ne désigne PAS
+    // le loyer mensuel : « compris dans le loyer », « options », « accessoires », « loyer financier »
+    // (sous-poste sans montant), « total ». (Bug réel : sur une offre Ayvens le seul « loyer … 31,67 »
+    // était un accessoire — le vrai loyer est « Échéance mensuelle », lu par parseLocaleaseOffer.)
+    if (out.loyer == null) {
+      const re = /loyer(?!s)([^€\n\d]{0,20}?)([\d][\d\s.]*,\d{2})/gi; let mm;
+      while ((mm = re.exec(t))) {
+        const before = t.slice(Math.max(0, mm.index - 26), mm.index).toLowerCase();
+        const between = (mm[1] || '').toLowerCase();
+        if (/compris|option|accessoire|financier|total|dans\s+le/.test(before + ' ' + between)) continue;
+        const v = parseFR(mm[2]); if (v != null && v > 0 && v < 2500) { out.loyer = v; break; }
+      }
+    }
     // Forfait km (5 000–500 000).
     m = /([\d][\d\s.]{3,})\s*km\b/i.exec(t);
     if (m) { const v = parseFR(m[1]); if (v != null && v >= 5000 && v <= 500000) out.kmContrat = v; }
@@ -2250,6 +2262,73 @@
     "kmSupp : le cout du kilometre supplementaire en euros/km s'il est indique (ex 0.16 ; 'Cout pour 1 kilometre supplementaire (TTC)'), sinon null.",
     "kmTolerance : la tolerance kilometrique offerte en km si indiquee (ex 2000 ; 'Tolerance Kilometrique : 2000 km'), sinon null."
   ];
+  // ⚠️⚠️ LECTURE DÉTERMINISTE d'une offre LLD (Ayvens / Localease / TEMsys…) — MÊME EXIGENCE que Ulys/Total.
+  // Sur ces offres le LOYER MENSUEL n'est PAS écrit « Loyer » : c'est « Echéance globale » /
+  // « ECHEANCE MENSUELLE TOTALE » (ligne HT · TVA% · TTC). Le mot « loyer » n'apparaît que dans
+  // « Loyer financier » (sans montant) et « compris dans le loyer » (options/accessoires = PAS le loyer).
+  // On lit donc le TTC comme le DERNIER montant de la ligne d'échéance mensuelle (jamais le 1er = HT,
+  // jamais le taux 20,00), à partir du texte reconstruit PAR POSITION (localeasePdfToText, comme Ulys).
+  function parseLocaleaseOffer(text){
+    const parseFR = s => { const n = Number(String(s).replace(/[\s. ]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
+    const out = { loyerTTC: null, dureeMois: null, kmTotal: null, kmSupp: null, kmTolerance: null, co2: null, malus: null, offre: null, conducteur: null };
+    const lines = String(text || '').replace(/ /g, ' ').split('\n');
+    // 1) LOYER mensuel TTC — libellés d'échéance mensuelle par ordre de priorité.
+    const order = [/ech[ée]ance\s+mensuelle\s+totale/i, /ech[ée]ance\s+globale/i, /loyer\s+mensuel|total\s+mensuel|redevance\s+mensuelle|mensualit[ée]/i, /ech[ée]ance\s+mensuelle/i];
+    for (const rx of order){
+      for (const ln of lines){
+        if (!rx.test(ln)) continue;
+        const nums = (ln.match(/\d{1,3}(?:[ .]\d{3})*,\d{2}/g) || []).map(parseFR).filter(n => n != null);
+        const money = nums.filter(n => n > 30 && n < 5000);            // exclut le taux TVA 20,00 ; un loyer voiture > 30 €/mois
+        if (money.length){ out.loyerTTC = money[money.length - 1]; break; }  // TTC = DERNIER montant (mise en page HT · TVA% · TTC)
+      }
+      if (out.loyerTTC != null) break;
+    }
+    // 2) Durée (6-72 mois)
+    let m = /dur[ée]e\s*:?\s*(\d{1,2})\s*mois/i.exec(text) || /(\d{1,2})\s*mois/i.exec(text);
+    if (m){ const d = +m[1]; if (d >= 6 && d <= 72) out.dureeMois = d; }
+    // 3) Km CONTRACTUEL = « Kilométrage N km » (hors « technique maximum » et « Tolérance »)
+    for (const ln of lines){
+      if (/tol[ée]rance|technique|maximum/i.test(ln)) continue;
+      const mm = /kilom[ée]trage\s*:?\s*([\d][\d. ]*\d)\s*km/i.exec(ln);
+      if (mm){ const v = parseFR(mm[1]); if (v != null && v >= 5000 && v <= 500000){ out.kmTotal = v; break; } }
+    }
+    // 4) Coût du km supplémentaire (TTC)
+    m = /kilom[eè]tre\s+suppl[ée]mentaire[^\d]{0,20}?([\d]+,\d{2,3})/i.exec(text);
+    if (m){ const v = parseFR(m[1]); if (v != null && v > 0 && v < 5) out.kmSupp = v; }
+    // 5) Tolérance kilométrique
+    m = /tol[ée]rance\s+kilom[ée]trique\s*:?\s*([\d ]+)\s*km/i.exec(text);
+    if (m){ const v = parseFR(m[1]); if (v != null && v > 0 && v < 50000) out.kmTolerance = v; }
+    // 6) CO2
+    m = /co2\s*:?\s*(\d{1,3})\s*g/i.exec(text);
+    if (m){ const v = +m[1]; if (v >= 0 && v < 600) out.co2 = v; }
+    // 7) Malus (Bonus/Malus = 0, ou malus écologique)
+    m = /bonus\s*\/?\s*malus\s*[:=]?\s*([\d][\d\s.]*,\d{2}|\d+)/i.exec(text) || /malus\s*[ée]cologique[^\d]{0,20}?([\d][\d\s.]*,?\d{0,2})/i.exec(text);
+    if (m){ const v = parseFR(m[1]); if (v != null && v >= 0 && v < 100000) out.malus = v; }
+    // 8) N° d'offre
+    m = /offre\s*n[°ºo]?\s*:?\s*([A-Z0-9\-]{4,})/i.exec(text);
+    if (m) out.offre = m[1];
+    // 9) Conducteur nommé (jamais un libellé ni « Pas identifié »)
+    m = /rattachement\s*:?\s*([^\n]{1,40})/i.exec(text) || /conducteur\s*:?\s*([^\n]{1,40})/i.exec(text);
+    if (m){ const c = (m[1] || '').trim().replace(/\s{2,}/g, ' '); if (c && !/pas identifi|encore|conducteur|rattachement|t[ée]l[ée]phone|structure|^[:°]/i.test(c)) out.conducteur = c; }
+    return out;
+  }
+  // Texte d'un PDF reconstruit PAR POSITION (y décroissant, x croissant) — indispensable pour ne pas
+  // mélanger les colonnes HT/TVA/TTC (mêmes règles que l'import de facture Ulys). Renvoie '' si échec.
+  async function localeasePdfToText(file){
+    await liLoadScript(LI_PDFJS); window.pdfjsLib.GlobalWorkerOptions.workerSrc = LI_WORKER;
+    const buf = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+    let text = ''; const n = Math.min(pdf.numPages, 8);
+    for (let p = 1; p <= n; p++){
+      const pg = await pdf.getPage(p); const c = await pg.getTextContent();
+      const items = c.items.filter(it => it.str && it.str.trim() !== '').map(it => ({ s: it.str, x: it.transform[4], y: it.transform[5] }));
+      items.sort((a, b) => (Math.abs(b.y - a.y) > 3 ? b.y - a.y : a.x - b.x));
+      const lines = []; let cur = null;
+      items.forEach(it => { if (cur && Math.abs(it.y - cur.y) <= 3) cur.parts.push(it); else { cur = { y: it.y, parts: [it] }; lines.push(cur); } });
+      text += lines.map(l => l.parts.sort((a, b) => a.x - b.x).map(pp => pp.s).join(' ')).join('\n') + '\n';
+    }
+    return text;
+  }
   // ⚠️ CONFIG IDENTIQUE POUR TOUTES LES SOCIÉTÉS : aucun contrat n'est codé en dur. Chaque société
   // (PXP incluse) démarre avec une liste VIDE ; les vrais contrats vivent dans Supabase
   // (localeaseContrats, isolé par société) et se saisissent dans l'app. Un nouvel import ne récupère
@@ -2599,7 +2678,16 @@
     const st = $('locadd-status'); const show = (m, c) => { if (st) { st.setAttribute('style', c || ''); st.innerHTML = m; } };
     try {
       show('🔍 Lecture du contrat…', 'color:#475569');
-      let f = null; try { f = (FP.scanIA) ? await FP.scanIA(file, 'leasing', LOCALEASE_PROMPT) : null; } catch (e) { console.warn('[locadd IA]', e); }
+      let f = null, src = '';
+      // 1) PDF avec couche texte → parseur DÉTERMINISTE (Ayvens/Localease/TEMsys) : loyer = échéance
+      //    mensuelle TTC (jamais un « compris dans le loyer »). Fiable, gratuit, prioritaire sur l'IA.
+      const isPdf = /pdf$/i.test(file.type || '') || /\.pdf$/i.test(file.name || '');
+      if (isPdf) {
+        try { const txt = await localeasePdfToText(file); const p = parseLocaleaseOffer(txt); if (p && p.loyerTTC != null) { f = p; src = 'auto'; } }
+        catch (e) { console.warn('[locadd parse déterministe]', e); }
+      }
+      // 2) Repli IA (image, ou PDF au format non reconnu — loyer non trouvé par le parseur).
+      if (!f) { try { f = (FP.scanIA) ? await FP.scanIA(file, 'leasing', LOCALEASE_PROMPT) : null; if (f) src = 'ia'; } catch (e) { console.warn('[locadd IA]', e); } }
       if (f) {
         _locAddScan = f;
         if (locNum(f.loyerTTC) != null && !$('locadd-loyer').value) $('locadd-loyer').value = String(locNum(f.loyerTTC)).replace('.', ',');
