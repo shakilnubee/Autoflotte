@@ -1064,13 +1064,13 @@
       + '<div class="box"><h4>✍️ Observations</h4><textarea class="fi" id="cst-obs" rows="3" placeholder="Précisions, désaccords éventuels…"></textarea></div>'
       + '<div class="box"><h4>✏️ Maquette / croquis de l\'accident</h4>'
       + '<p class="muted" style="margin:.1rem 0 .5rem">Dessine la scène avec le doigt (les routes, la position des véhicules A et B, le sens de circulation, les flèches). Comme sur un vrai constat.</p>'
-      + '<div class="sigwrap"><canvas id="cst-croquis" class="croqpad" width="900" height="520"></canvas><button type="button" class="sigclr" data-croqclr="1">Effacer</button></div></div>'
+      + '<div class="sigwrap"><canvas id="cst-croquis" class="croqpad" width="1800" height="1040"></canvas><button type="button" class="sigclr" data-croqclr="1">Effacer</button></div></div>'
       + '<div class="box"><h4>🖊️ Signatures</h4>'
       + '<p class="muted" style="margin:.1rem 0 .5rem">Signe avec le doigt. Fais aussi signer le conducteur B si possible.</p>'
       + '<label class="f">Conducteur A (moi)</label>'
-      + '<div class="sigwrap"><canvas id="cst-sig-a" class="sigpad" width="600" height="180"></canvas><button type="button" class="sigclr" data-sigclr="a">Effacer</button></div>'
+      + '<div class="sigwrap"><canvas id="cst-sig-a" class="sigpad" width="1200" height="360"></canvas><button type="button" class="sigclr" data-sigclr="a">Effacer</button></div>'
       + '<label class="f">Conducteur B (l\'autre)</label>'
-      + '<div class="sigwrap"><canvas id="cst-sig-b" class="sigpad" width="600" height="180"></canvas><button type="button" class="sigclr" data-sigclr="b">Effacer</button></div></div>'
+      + '<div class="sigwrap"><canvas id="cst-sig-b" class="sigpad" width="1200" height="360"></canvas><button type="button" class="sigclr" data-sigclr="b">Effacer</button></div></div>'
       + '<div class="box"><h4>📷 Photos (dégâts, croquis, papiers de l\'autre)</h4>'
       + '<div class="btnrow"><button type="button" class="btn" id="constat-cam">📷 Prendre une photo</button><button type="button" class="btn" id="constat-pick">🖼️ Galerie</button></div>'
       + '<div class="thumbs" id="constat-thumbs"></div></div>'
@@ -1097,7 +1097,7 @@
       + '<div class="choc-tools"><button type="button" class="choc-tg on" data-choc="' + k + ':car">🚗 Voiture</button>'
       + '<button type="button" class="choc-tg" data-choc="' + k + ':moto">🏍️ Moto</button>'
       + '<button type="button" class="choc-clr" data-chocclr="' + k + '">Effacer</button></div>'
-      + '<canvas id="cst-choc-' + k + '" class="chocpad" width="360" height="220"></canvas>';
+      + '<canvas id="cst-choc-' + k + '" class="chocpad" width="720" height="440"></canvas>';
   }
   // Rectangle arrondi utilitaire pour canvas.
   function _rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
@@ -1130,11 +1130,17 @@
   function drawChocPad(canvas, st) {
     if (!canvas) return; var ctx = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
-    if (st.shape === 'moto') _drawMoto(ctx, W, H); else _drawCar(ctx, W, H);
+    // Les silhouettes sont dessinées dans un repère fixe 360×220 → on met le contexte À L'ÉCHELLE du canvas
+    // (qui peut être plus grand pour un rendu NET) avant de dessiner. Le marqueur reste en coords réelles.
+    var sc = W / 360;
+    ctx.save(); ctx.scale(sc, H / 220);
+    if (st.shape === 'moto') _drawMoto(ctx, 360, 220); else _drawCar(ctx, 360, 220);
+    ctx.restore();
     if (st.mx != null) {
-      ctx.beginPath(); ctx.fillStyle = 'rgba(220,38,38,.25)'; ctx.arc(st.mx, st.my, 18, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.fillStyle = '#dc2626'; ctx.arc(st.mx, st.my, 8, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(st.mx, st.my, 8, 0, Math.PI * 2); ctx.stroke();
+      var r1 = 18 * sc, r2 = 8 * sc;
+      ctx.beginPath(); ctx.fillStyle = 'rgba(220,38,38,.25)'; ctx.arc(st.mx, st.my, r1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.fillStyle = '#dc2626'; ctx.arc(st.mx, st.my, r2, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 2.5 * sc; ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(st.mx, st.my, r2, 0, Math.PI * 2); ctx.stroke();
     }
     st.img = canvas.toDataURL('image/png');
   }
@@ -1388,7 +1394,9 @@
           ctx.fillStyle = '#0f1e3d'; ctx.fillRect(0, 0, w, bar);
           ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'middle'; ctx.font = 'bold ' + Math.round(bar * 0.52) + 'px Arial, sans-serif';
           ctx.fillText(String(caption), Math.round(bar * 0.3), bar / 2 + 1);
-          resolve(cv.toDataURL('image/jpeg', 0.9));
+          // PNG (sans perte) : le croquis / les schémas / signatures sont du TRAIT — le JPEG les rendait
+          // FLOUS dans le rapport de sinistre. PNG = lignes nettes.
+          resolve(cv.toDataURL('image/png'));
         } catch (e) { resolve(dataUrl); }
       };
       img.onerror = function () { resolve(dataUrl); };
