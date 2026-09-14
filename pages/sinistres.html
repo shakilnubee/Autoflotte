@@ -1860,6 +1860,10 @@
         // --- Données rattachées (société, véhicule, conducteur, assureur DU véhicule) ---
         let soc = { nom: '', siret: '', adresse: '' };
         try { const s = FP.settings.get(); soc = { ...soc, ...((s && s.societe) || {}) }; } catch (e) {}
+        // ⚠️ « Parc Pilot » est le nom PLATEFORME (valeur par défaut / sentinelle) — jamais le nom d'un
+        // client. S'il n'a pas été renseigné (Paramètres → Société), on retombe sur la société active.
+        let socNom = String(soc.nom || '').trim();
+        if (!socNom || /^parc\s*pilot$/i.test(socNom)) { try { const k = (FP.activeSociete && FP.activeSociete()) || ''; if (k && k !== '__all__') socNom = k; } catch (e) {} }
         let contact = ''; try { contact = (FP.societeProfil ? (FP.societeProfil().mailExpediteur || '') : ''); } catch (e) {}
         const veh = ((window.FP_DATA && FP_DATA.vehicules) || []).find(v => FP.normImmat(v.immat) === FP.normImmat(d.plaque || '')) || null;
         const conducteur = String(d.conducteur || (veh && veh.chauffeur && veh.chauffeur !== '—' ? veh.chauffeur : '') || '').trim();
@@ -1974,7 +1978,7 @@
 
         // --- Société déclarante ---
         cardSection('Société déclarante', [
-          ['Société', soc.nom, true],
+          ['Société', socNom, true],
           ['SIRET', soc.siret],
           ['Adresse', soc.adresse],
           ['Contact', contact],
