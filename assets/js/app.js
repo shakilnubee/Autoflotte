@@ -8546,20 +8546,27 @@ document.addEventListener('click', function (e) {
     b.id = 'fp-totop'; b.type = 'button'; b.setAttribute('aria-label', 'Remonter en haut'); b.title = 'Remonter en haut';
     b.innerHTML = '<i data-lucide="arrow-up"></i>';
     const mainEl = () => document.querySelector('main');
+    // Dernier conteneur réellement scrollé (fiche véhicule/conducteur = drawer qui scrolle EN INTERNE,
+    // pas la fenêtre) → sur PC comme sur mobile, le bouton apparaît aussi DANS les fiches ouvertes.
+    let scroller = null;
     const curScroll = () => {
       const se = document.scrollingElement || document.documentElement;
       let t = Math.max(se.scrollTop || 0, window.scrollY || 0, document.body.scrollTop || 0);
       const m = mainEl(); if (m && m.scrollTop > t) t = m.scrollTop;   // certaines mises en page scrollent <main>
+      if (scroller && scroller.scrollTop > t) t = scroller.scrollTop;   // fiche/drawer ouvert
       return t;
     };
     b.addEventListener('click', () => {
       try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
       const m = mainEl(); if (m) { try { m.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { m.scrollTop = 0; } }
+      if (scroller) { try { scroller.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { scroller.scrollTop = 0; } }
     });
     document.body.appendChild(b);
     try { if (window.lucide && lucide.createIcons) lucide.createIcons(); } catch (e) {}
     let ticking = false;
-    const onScroll = () => {
+    const onScroll = (e) => {
+      // Mémorise le conteneur scrollé (drawer/modale) pour l'afficher ET le remonter au clic.
+      if (e && e.target && e.target.nodeType === 1 && typeof e.target.scrollTop === 'number') scroller = e.target;
       if (ticking) return; ticking = true;
       requestAnimationFrame(() => { b.classList.toggle('on', curScroll() > 250); ticking = false; });
     };
