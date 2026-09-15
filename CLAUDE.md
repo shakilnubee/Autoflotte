@@ -85,6 +85,29 @@ fichier Google Sheets (demande explicite de l'utilisateur) :
     colonnes inversées). Lire `Badge n° <id> <Nom>` (prénom) et
     `Total Badge <id> <n> consommation(s) <ttc> € TTC <km> km` (trajets + TTC + km), puis relier
     par le n° de badge. Le `Total Contrat` (grand total) est ignoré. Table `ulys_conso`.
+- ⚠️⚠️⚠️ **LECTURE DE DOCUMENTS — LIRE, JAMAIS DEVINER** (consigne explicite, permanente, prioritaire sur
+  TOUT scan/OCR/IA de la plateforme) : l'IA/le scanner ne doit **JAMAIS « deviner »** un montant/une valeur
+  — il doit **LIRE ce qui est réellement écrit** dans le fichier, en **s'ancrant sur les TERMES TECHNIQUES /
+  libellés du document** (jamais sur une position au hasard, jamais sur le plus grand nombre). On a **déjà
+  tous les termes** pour retrouver la bonne valeur — il faut les utiliser. Règles :
+  - **1) Couche texte d'abord.** Si le PDF a une **couche texte** (états de parc, factures, offres LLD,
+    relevés Total/Ulys…), lire **déterministiquement par POSITION** (tri y décroissant puis x croissant, cf.
+    `ulysPdfToText`, `etatParcPdfText`, `localeasePdfToText`) et **s'ancrer sur les libellés** (« Prime
+    annuelle HT / T.T.C », « NET A PAYER TTC », « Badge n° », « Loyer », « Franchise »…). L'IA ne sert que
+    de **repli** pour un **vrai scan/photo** (pas de couche texte) et pour des champs annexes (marque, VIN…),
+    et **ne doit JAMAIS écraser** un montant lu dans la couche texte.
+  - **2) S'ancrer sur le LIBELLÉ, pas sur le hasard.** Le bon montant est celui à côté du **bon libellé** ;
+    tout autre nombre du document (franchise, code type VL3, année, n° de police/avis, valeur assurée,
+    téléphone, km, code postal, séparateur de milliers…) doit être **exclu par son libellé/format**, pas
+    ramassé au petit bonheur. **JAMAIS `Math.max`/`Math.min` aveugle sur tous les nombres** (bugs vécus :
+    avis à 1875 €, franchise 1500 prise pour une prime). Contrôles de cohérence obligatoires (HT ≤ TTC,
+    `HT+TVA≈TTC`, ratio de taxe plausible, montant dans une fourchette réaliste).
+  - **3) Ne JAMAIS inventer.** Un nombre absent = `null` (jamais 0 inventé, jamais une valeur « probable ») ;
+    un nom qui ne correspond à personne = **le signaler**, ne pas créer. Ne recopier QUE ce qui est écrit.
+  - **4) Vérifier sur un VRAI fichier** avant de livrer une lecture (extraire le texte réel, prouver que
+    chaque valeur lue est exacte) — comme validé pour l'état de parc (53 véhicules, HT/TTC exacts, franchise
+    ignorée) et Ulys/Total. Réflexe : *« est-ce que je LIS la valeur, ou est-ce que je la DEVINE ? »* → si
+    deviner, revoir l'ancrage sur le libellé.
 - ⚠️⚠️ **NOUVEAU PRESTATAIRE (carte carburant / badge péage) — MÊME STANDARD DE LECTURE OBLIGATOIRE**
   (consigne explicite, permanente) : le framework multi-prestataires (Contrôle → ➕ Prestataire ;
   `FP.prestataires/addPrestataire/condNum` ; sous-onglet + colonne « Cartes & badges » + zone fiche
