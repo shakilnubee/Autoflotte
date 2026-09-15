@@ -4520,6 +4520,9 @@ FP.settings = {
         });
         return out;
       };
+      // Même filet anti-perte que le CAS : repli en file d'écriture AVANT le réseau, retiré à la réussite.
+      let _settleUid0 = null;
+      try { if (FP.persist && FP.persist._enqueue) _settleUid0 = FP.persist._enqueue({ op: 'upsert', table: 'app_settings', row: { id, data: obj } }); } catch (e) {}
       (async () => {
         try {
           const r = await FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
@@ -4527,8 +4530,9 @@ FP.settings = {
           const merged = remote ? gapFill(remote, obj) : obj;
           self._serverSnap = JSON.parse(JSON.stringify(merged));
           try { localStorage.setItem(self._key(), JSON.stringify(merged)); } catch (_) {}
+          try { if (_settleUid0 && FP.persist && FP.persist._removeUid) FP.persist._removeUid(_settleUid0); } catch (e) {}
           plainUpsert(merged);
-        } catch (e) { plainUpsert(obj); }   // échec de lecture → au moins mettre en file (ne pas perdre l'écriture)
+        } catch (e) { try { if (_settleUid0 && FP.persist && FP.persist._removeUid) FP.persist._removeUid(_settleUid0); } catch (_) {} plainUpsert(obj); }   // échec de lecture → au moins mettre en file (ne pas perdre l'écriture)
       })();
       return;
     }
@@ -4558,7 +4562,22 @@ FP.settings = {
       'localeaseContrats', 'prestatairesPerso',
       // — Accusés de lecture des alertes « ✓ Vu » (map muteKey→signature) : sans ça, un enregistrement
       //   d'un autre appareil écrasait TOUT le « déjà vu » → les alertes réapparaissaient.
-      'alertesVues']);
+      'alertesVues',
+      // — Cartes carburant / badges péage PAR VÉHICULE (map { vehId → n° / date / fournisseur }) : lient
+      //   badge↔véhicule (colonnes Ulys/Total) + alertes d'échéance. Miroir de condCarteTotal (déjà protégé).
+      'vehCarteCarb', 'vehBadge', 'vehCarteCarbExp', 'vehBadgeExp', 'vehFournCarb',
+      // — Saisies manuelles / historique PAR VÉHICULE : masse (champ G → stationnement Paris + checklist),
+      //   notes libres (historique, irrécupérable), restitution/EDL, dates entrée/cession, budget par véh.
+      'vehMasse', 'vehNotes', 'vehRestit', 'vehEntree', 'vehCession', 'budgets', 'vehDin',
+      // — Budget prévisionnel & objectifs (données financières keyées année/catégorie) :
+      'budget', 'objectifs',
+      // — Points de permis SAISIS À LA MAIN par conducteur (donnée perso non reconstituable) :
+      'pointsManuel',
+      // — Acquittements togglés MULTI-APPAREILS (même profil de perte que condConges) : rapprochements
+      //   « déjà traités », anomalies conso « OK », lignes ignorées du TCO.
+      'rapprIgnore', 'tfAnomOk', 'ignores',
+      // — Échéances de documents + surveillances/corbeilles synchronisées (jumeaux de docStatus/docTypes) :
+      'docExpire', 'assuranceIgnore', 'amendesJustifWatch', 'docTrash', 'sinistreDossiers']);
     // Familles DYNAMIQUES keyées par conducteur (n° carte/badge d'un prestataire perso : condNum_<id>).
     const isCollKey = (k) => COLLECTION_KEYS.has(k) || /^condNum_/.test(k);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
@@ -4633,6 +4652,15 @@ FP.settings = {
       // Le local se met à jour vers la fusion (il récupère aussi les changements de l'autre poste).
       try { localStorage.setItem(self._key(), JSON.stringify(merged)); } catch (_) {}
     };
+    // ⚠️ FILET ANTI-PERTE (mid-flight) : le CAS ci-dessous est un IIFE « fire-and-forget ». Si l'utilisateur
+    // QUITTE la page pendant le SELECT/UPDATE (fetch avorté), NI `commit` NI `plainUpsert` ne s'exécutent →
+    // le réglage n'est jamais persisté, et au prochain load la valeur serveur (ancienne) écrase le local →
+    // le réglage « disparaît ». On dépose donc D'ABORD un repli dans la file d'écriture durable (upsert
+    // complet de `obj`, exactement le même dernier recours que la contention), puis on le RETIRE dès que le
+    // CAS aboutit → en fonctionnement normal aucune écriture parasite ; sur abandon il repart au load suivant.
+    let _settleUid = null;
+    try { if (FP.persist && FP.persist._enqueue) _settleUid = FP.persist._enqueue({ op: 'upsert', table: 'app_settings', row: { id, data: obj } }); } catch (e) {}
+    const _dropSettle = () => { try { if (_settleUid && FP.persist && FP.persist._removeUid) FP.persist._removeUid(_settleUid); } catch (e) {} };
     (async () => {
       // Compare-and-swap sur la colonne `rev` (cf. supabase/app_settings-concurrence.sql) : on n'écrit
       // QUE si personne n'a écrit depuis notre lecture. Sinon (rev a bougé) on relit + refusionne +
@@ -4644,20 +4672,20 @@ FP.settings = {
           if (r && r.error) throw r.error;
           const remote = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : null;
           const remoteRev = (r && r.data && typeof r.data.rev === 'number') ? r.data.rev : null;
-          if (!remote) { self._serverSnap = JSON.parse(JSON.stringify(obj)); plainUpsert(obj); return; } // pas encore de ligne → insert simple
+          if (!remote) { self._serverSnap = JSON.parse(JSON.stringify(obj)); _dropSettle(); plainUpsert(obj); return; } // pas encore de ligne → insert simple
           const merged = applyDelta(remote);
-          if (remoteRev === null) { commit(merged); plainUpsert(merged); return; } // colonne rev absente → fusion sans CAS (comme avant)
+          if (remoteRev === null) { commit(merged); _dropSettle(); plainUpsert(merged); return; } // colonne rev absente → fusion sans CAS (comme avant)
           // Écrit seulement si rev inchangé ; .select() renvoie les lignes réellement modifiées.
           const w = await FP.supabase.from('app_settings').update({ data: merged }).eq('id', id).eq('rev', remoteRev).select('id');
           if (w && w.error) throw w.error;
-          if (w && Array.isArray(w.data) && w.data.length > 0) { commit(merged); return; } // CAS réussi
+          if (w && Array.isArray(w.data) && w.data.length > 0) { commit(merged); _dropSettle(); return; } // CAS réussi → le repli n'est plus utile
           // 0 ligne modifiée = un autre poste a écrit entre-temps → on reboucle (relit rev + refusionne).
         }
         // Contention persistante après MAX essais : dernier recours = écriture simple fusionnée best-effort.
-        plainUpsert(obj);
+        _dropSettle(); plainUpsert(obj);
       } catch (e) {
         // rev absent (SQL pas appliqué) / base injoignable / erreur : repli EXACT sur le comportement d'avant.
-        plainUpsert(obj);
+        _dropSettle(); plainUpsert(obj);
       }
     })();
   },
@@ -9098,9 +9126,37 @@ FP.persist = {
   },
   _saveQ(q) { try { localStorage.setItem(this._qkey(), JSON.stringify(q)); } catch (e) {} if (FP._syncBadge) FP._syncBadge(); },
   pendingCount() { return this._loadQ().length; },
+  // « Bloqué » = ce que la pastille doit signaler : échec définitif, OU déjà retenté, OU en attente
+  // depuis > 8 s (donc PAS un simple envoi optimiste en cours). Évite que la pastille clignote à
+  // CHAQUE enregistrement (l'item optimiste vit quelques ms dans la file puis en sort à la réussite).
+  stuckCount() { const now = Date.now(); return this._loadQ().filter(it => it.failed || (it.tries || 0) > 0 || (now - (it.ts || 0)) > 8000).length; },
   // Nombre de modifs en échec DÉFINITIF (erreur base, pas un simple souci réseau)
   failedCount() { return this._loadQ().filter(it => it.failed).length; },
-  _enqueue(item) { const q = this._loadQ(); item.ts = Date.now(); item.tries = 0; q.push(item); this._saveQ(q); },
+  _uid() { return 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); },
+  _enqueue(item) { const q = this._loadQ(); item.ts = Date.now(); item.tries = 0; if (!item._uid) item._uid = this._uid(); q.push(item); this._saveQ(q); return item._uid; },
+  // Retire un item précis de la file (par son _uid) — appelé quand SON écriture réseau a réussi.
+  _removeUid(uid) { if (!uid) return; const q = this._loadQ(); const n = q.filter(it => it._uid !== uid); if (n.length !== q.length) this._saveQ(n); },
+  // ⚠️ FILE OPTIMISTE (anti-perte des écritures « en vol ») : on met l'écriture dans la file locale
+  // AVANT l'appel réseau, puis on la retire à la réussite. Si la page est quittée / l'onglet tué
+  // pendant l'envoi (fetch avorté → le catch ne s'exécute jamais), l'item RESTE dans la file et
+  // repart tout seul au prochain flush (fp:data-ready / online / 30 s / pagehide). Sans ça, un Save
+  // suivi d'une navigation immédiate perdait l'écriture en silence (bug data-loss audité).
+  async _write(item, fn) {
+    if (FP.refreshDataCache) FP.refreshDataCache(); // cache frais tout de suite (source unique inter-pages)
+    const uid = this._enqueue(item);                // présent dans la file AVANT l'await
+    if (!this.available()) return;                  // hors-ligne → reste en file, flush plus tard
+    try { const r = await fn(); if (r && r.error) throw r.error; this._removeUid(uid); this.flush(); }
+    catch (e) {
+      this._err(e);
+      // L'item est DÉJÀ en file (il repartira au prochain flush). On marque juste l'échec DÉFINITIF
+      // si l'erreur vient de la base — et seulement si l'item est encore là (un flush concurrent a
+      // pu le traiter/retirer entre-temps → pas de fausse alerte).
+      if (this._estPermanente(e)) {
+        const q = this._loadQ(); const it = q.find(x => x._uid === uid);
+        if (it) { it.failed = true; it.error = (e && (e.message || e)) || 'erreur'; this._saveQ(q); if (FP.notifyError) FP.notifyError(); }
+      }
+    }
+  },
   _err(e) { console.error('[FP.persist] enregistrement différé :', e && (e.message || e)); },
   // Une erreur RENVOYÉE PAR LA BASE (code défini : colonne absente, contrainte…) est
   // définitive : inutile de la rejouer en boucle. Un souci réseau (pas de code) est
@@ -9124,32 +9180,14 @@ FP.persist = {
   _abandonnerEchecs() { this._saveQ(this._loadQ().filter(it => !it.failed)); },
   // Chaque écriture : on tente la base ; si ça échoue, on garde en file locale
   // (filet de sécurité) et on renverra automatiquement plus tard.
-  async insert(table, row) {
-    if (FP.refreshDataCache) FP.refreshDataCache(); // cache frais tout de suite (source unique inter-pages)
-    if (!this.available()) { this._enqueue({ op: 'insert', table, row }); return; }
-    try { const r = await FP.db.insert(table, row); if (r && r.error) throw r.error; this.flush(); }
-    catch (e) { this._err(e); this._enqueue({ op: 'insert', table, row }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
-  },
-  async upsert(table, row) {
-    if (FP.refreshDataCache) FP.refreshDataCache();
-    if (!this.available()) { this._enqueue({ op: 'upsert', table, row }); return; }
-    try { const r = await FP.db.upsert(table, row); if (r && r.error) throw r.error; this.flush(); }
-    catch (e) { this._err(e); this._enqueue({ op: 'upsert', table, row }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
-  },
-  async update(table, id, fields) {
-    if (FP.refreshDataCache) FP.refreshDataCache();
-    if (!this.available()) { this._enqueue({ op: 'update', table, id, fields }); return; }
-    try { const r = await FP.db.update(table, id, fields); if (r && r.error) throw r.error; this.flush(); }
-    catch (e) { this._err(e); this._enqueue({ op: 'update', table, id, fields }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
-  },
+  async insert(table, row) { return this._write({ op: 'insert', table, row }, () => FP.db.insert(table, row)); },
+  async upsert(table, row) { return this._write({ op: 'upsert', table, row }, () => FP.db.upsert(table, row)); },
+  async update(table, id, fields) { return this._write({ op: 'update', table, id, fields }, () => FP.db.update(table, id, fields)); },
   // record (optionnel) = copie complète de l'élément supprimé → déposée dans la Corbeille (FP.trash)
   // pour pouvoir le RESTAURER depuis Paramètres. Rétro-compatible : sans record, aucune capture.
   async delete(table, id, record) {
     try { if (record && FP.trash) FP.trash.add(table, record); } catch (e) {}
-    if (FP.refreshDataCache) FP.refreshDataCache();
-    if (!this.available()) { this._enqueue({ op: 'delete', table, id }); return; }
-    try { const r = await FP.db.delete(table, id); if (r && r.error) throw r.error; this.flush(); }
-    catch (e) { this._err(e); this._enqueue({ op: 'delete', table, id }); if (this._estPermanente(e) && FP.notifyError) FP.notifyError(); }
+    return this._write({ op: 'delete', table, id }, () => FP.db.delete(table, id));
   },
   _flushing: false,
   // Renvoie tout ce qui est en attente. Les insert sont rejoués en upsert
@@ -9218,7 +9256,7 @@ FP._ensureSyncBadge = function () {
 FP._syncBadge = function (justSynced) {
   const b = FP._ensureSyncBadge();
   if (!b) return;
-  const n = FP.persist.pendingCount();
+  const n = FP.persist.stuckCount();   // ⚠️ « bloqué » (pas l'envoi optimiste en cours) → pas de clignotement à chaque save
   const echecs = FP.persist.failedCount();
   clearTimeout(FP._syncBadgeT);
   if (echecs > 0) {
@@ -9245,6 +9283,12 @@ if (typeof window !== 'undefined') {
   window.addEventListener('online', () => { FP.persist.flush(); });
   window.addEventListener('DOMContentLoaded', () => { if (FP._syncBadge) FP._syncBadge(); });
   setInterval(() => { if (FP.persist.pendingCount() > 0) FP.persist.flush(); }, 30000);
+  // Dernier filet avant que la page parte (navigation, fermeture, mise en arrière-plan mobile) :
+  // on tente un flush de ce qui reste en file. La file étant DÉJÀ écrite (file optimiste), rien
+  // n'est perdu même si ce flush n'a pas le temps d'aboutir — il repartira à la page suivante.
+  const _flushOnLeave = () => { try { if (FP.persist.pendingCount() > 0) FP.persist.flush(); } catch (e) {} };
+  window.addEventListener('pagehide', _flushOnLeave);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') _flushOnLeave(); });
 }
 
 // =====================================================================

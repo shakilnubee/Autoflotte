@@ -261,7 +261,8 @@
     window.__ulysImportConsoCsv = async function (csvText) {
       const pc = parseUlysCsv(String(csvText || ''));
       if (pc.error) return { error: pc.error };
-      const soc = (FP.activeSociete ? FP.activeSociete() : 'PXP') || 'PXP';
+      let soc = (FP.activeSociete ? FP.activeSociete() : 'PXP') || 'PXP';
+      if (soc === '__all__') soc = 'PXP';   // vue CEO « toutes sociétés » → rattacher à PXP (règle canonique), jamais écrire '__all__'
       let okC = 0, okTx = 0;
       for (const c of (pc.rows || [])) {
         if (c.ttc == null) continue;
@@ -372,7 +373,8 @@
         if (c.ttc == null) continue;
         // ⚠️ Société = la société ACTIVE (jamais 'PXP' en dur) sinon le détail Ulys d'une autre
         // société atterrit chez PXP (fuite inter-sociétés + attribution conso faussée).
-        const row = { id:'ULYSC-'+c.mois+'-'+ulsSlug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe:(FP.activeSociete?FP.activeSociete():'PXP') };
+        let _soc = (FP.activeSociete?FP.activeSociete():'PXP') || 'PXP'; if (_soc === '__all__') _soc = 'PXP';   // '__all__' n'est pas une vraie société → rattacher à PXP, jamais l'écrire brut
+        const row = { id:'ULYSC-'+c.mois+'-'+ulsSlug(c.conducteur), mois:c.mois, conducteur:c.conducteur, nbTrajets:c.nb, km:c.km, totalTtc:c.ttc, numeroFacture:c.numero, societe:_soc };
         try { await FP.persist.upsert('ulys_conso', row); okC++; } catch(e){ console.error('[uls conso]', e); }
       }
       // Détail DATÉ (colonne date des consommations) → total_conso_tx (péage) pour la détection
@@ -471,7 +473,7 @@
     }
     async function loadConso(){
       consoLoaded = true;
-      try { const r = FP.selectAllPaged ? await FP.selectAllPaged('ulys_conso', null, 'id') : await FP.supabase.from('ulys_conso').select('*'); if (r.error) throw r.error; conso = r.data || []; const _soc = FP.activeSociete ? FP.activeSociete() : null; if (_soc && _soc !== '__all__') conso = conso.filter(x => !x.societe || x.societe === _soc); }
+      try { const r = FP.selectAllPaged ? await FP.selectAllPaged('ulys_conso', null, 'id') : await FP.supabase.from('ulys_conso').select('*'); if (r.error) throw r.error; conso = r.data || []; const _soc = FP.activeSociete ? FP.activeSociete() : null; if (_soc && _soc !== '__all__') conso = conso.filter(x => x.societe ? String(x.societe) === _soc : _soc === 'PXP'); }   // NULL société → PXP (règle canonique, cf. lignes plus bas)
       catch (e) { console.warn('[ulys_conso] indisponible :', e && (e.message || e)); conso = null; }
       renderConso();
       try { window.showConsoRapproch && window.showConsoRapproch(); } catch (e) {}
