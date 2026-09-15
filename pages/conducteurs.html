@@ -1512,8 +1512,8 @@
         <div class="flex flex-wrap items-end gap-2 pt-2 mt-1 border-t border-slate-100">
           <label style="display:flex;flex-direction:column;font-size:.72rem;color:var(--fp-muted)">Début
             <input type="date" data-conge-debut style="${_inpD}" title="Début du congé"></label>
-          <label style="display:flex;flex-direction:column;font-size:.72rem;color:var(--fp-muted)">Fin <span class="text-slate-400">(vide = 1 jour)</span>
-            <input type="date" data-conge-fin style="${_inpD}" title="Fin du congé — laisser vide pour un seul jour"></label>
+          <label style="display:flex;flex-direction:column;font-size:.72rem;color:var(--fp-muted)">Fin
+            <input type="date" data-conge-fin style="${_inpD}" title="Fin du congé (double-clic pour taper la date)"></label>
           <input type="text" data-conge-motif placeholder="Motif (optionnel)" style="${_inpD};min-width:110px;text-align:left" title="Motif (optionnel)">
           <button type="button" class="btn btn-dark text-xs" data-conge-add data-key="${escapeHtml(d.key)}"><i data-lucide="plus" class="w-3.5 h-3.5"></i> Ajouter</button>
         </div>
@@ -1522,7 +1522,6 @@
           <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-conge-quick="tomorrow" data-key="${escapeHtml(d.key)}">Demain</button>
           <button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px" data-conge-quick="week" data-key="${escapeHtml(d.key)}">Cette semaine</button>
         </div>
-        <p class="text-xs text-slate-400 mt-2" style="line-height:1.45">Sert à repérer <b>toute conso</b> (carburant, péage, boutique…) faite pendant un congé : une alerte remonte alors dans <b>Suivi &amp; alertes</b> → « Points à vérifier ». <b>Astuce :</b> tape une date et appuie sur <b>Entrée</b> pour ajouter.</p>
       </div>`;
     const vehiculesInner = d.vehicules.length === 0 ? '<p class="text-sm text-slate-500">Aucun véhicule assigné.</p>' :
       clampList(d.vehicules.map(v => `
@@ -2417,6 +2416,18 @@
   // Congés / absences du conducteur : ajout / retrait → synchronisé (settings.condConges) + re-render fiche.
   // Saisie SIMPLIFIÉE : fin vide = congé d'UN jour (fin = début) ; boutons rapides ; Entrée = ajouter.
   function _isoAddDays(iso, n){ const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+  // Normalise une date de congé tapée à la main → 'AAAA-MM-JJ'. Accepte déjà-ISO, JJ/MM/AAAA (/ . -) et
+  // JJMMAAAA. Renvoie '' si vide/illisible. (Un <input type=date> renvoie déjà l'ISO ; le mode « double-clic
+  // pour taper » renvoie du texte FR → on le convertit ici.)
+  function _congeNormDate(v){
+    v = String(v == null ? '' : v).trim(); if (!v) return '';
+    let m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m) return v;
+    m = v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);
+    if (m) { const j = m[1].padStart(2, '0'), mo = m[2].padStart(2, '0'); if (+mo >= 1 && +mo <= 12 && +j >= 1 && +j <= 31) return `${m[3]}-${mo}-${j}`; }
+    m = v.match(/^(\d{2})(\d{2})(\d{4})$/);
+    if (m) { const j = m[1], mo = m[2]; if (+mo >= 1 && +mo <= 12 && +j >= 1 && +j <= 31) return `${m[3]}-${mo}-${j}`; }
+    return '';
+  }
   function _ajouterConge(key, deb, fin, motif){
     if (!key || !deb) { alert('Indique au moins une date de début.'); return false; }
     fin = fin || deb;                                   // fin vide → congé d'un seul jour
@@ -2434,8 +2445,20 @@
     const box = el.closest('.fiche-card') || el.closest('div');
     const add = box && box.querySelector('[data-conge-add]'); const key = add && add.dataset.key; if (!key) return;
     const deb = box.querySelector('[data-conge-debut]'), fin = box.querySelector('[data-conge-fin]'), mot = box.querySelector('[data-conge-motif]');
-    _ajouterConge(key, deb && deb.value, fin && fin.value, mot && mot.value);
+    _ajouterConge(key, _congeNormDate(deb && deb.value), _congeNormDate(fin && fin.value), mot && mot.value);
   }
+  // ✏️ DOUBLE-CLIC sur une date de congé → on bascule le champ en TEXTE pour taper la date directement
+  // (ex. « 15/03/2026 »). Au blur, on reconvertit en <input type=date> avec la valeur normalisée.
+  $('drawer-body').addEventListener('dblclick', (e) => {
+    const dt = e.target.closest('[data-conge-debut],[data-conge-fin]');
+    if (!dt || dt.type !== 'date') return;
+    const iso = dt.value;                                     // 'AAAA-MM-JJ' ou ''
+    dt.type = 'text'; dt.placeholder = 'JJ/MM/AAAA';
+    dt.value = iso ? iso.split('-').reverse().join('/') : ''; // affiche en FR pour la saisie
+    try { dt.focus(); dt.select(); } catch (e2) {}
+    const revert = () => { dt.removeEventListener('blur', revert); const v = _congeNormDate(dt.value); dt.type = 'date'; dt.value = v || ''; };
+    dt.addEventListener('blur', revert);
+  });
   $('drawer-body').addEventListener('click', (e) => {
     const del = e.target.closest('[data-conge-del]');
     if (del) { const key = del.dataset.key, idx = parseInt(del.dataset.congeDel, 10); if (key && FP.removeConge) { FP.removeConge(key, idx); if (currentDriverKey) openDrawer(currentDriverKey); } return; }
