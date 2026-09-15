@@ -2091,12 +2091,19 @@
     const st = $('lease-scan-status'); const show = (msg, col) => { if (st) { st.textContent = msg; st.style.color = col || ''; } };
     try {
       show('⏳ Lecture de l\'offre…', '#475569');
-      await liLoadScript(LI_PDFJS); window.pdfjsLib.GlobalWorkerOptions.workerSrc = LI_WORKER;
-      const buf = await file.arrayBuffer();
-      const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
-      let text = ''; const n = Math.min(pdf.numPages, 6);
-      for (let p = 1; p <= n; p++) { const pg = await pdf.getPage(p); const c = await pg.getTextContent(); text += c.items.map(it => it.str).join(' ') + '\n'; }
-      const off = parseOfferText(text);
+      // ⚠️ SOURCE UNIQUE : on lit avec le parseur ancré sur les libellés, à partir du texte reconstruit PAR
+      //    POSITION (localeasePdfToText). Il gère les 2 gabarits (BPCE « MONTANT PERIODIQUE TOTAL », Ayvens
+      //    « ECHEANCE MENSUELLE TOTALE ») → le vrai loyer TOTAL, jamais la part « financement » seule. On
+      //    NORMALISE vers { loyer, kmContrat, dureeMois, malus }. Repli sur parseOfferText si rien lu.
+      let off = {};
+      try { const txt = await localeasePdfToText(file); const p = parseLocaleaseOffer(txt) || {}; off = { loyer: p.loyerTTC, kmContrat: p.kmTotal, dureeMois: p.dureeMois, malus: p.malus }; } catch (e) { console.warn('[offre uni]', e); }
+      if (off.loyer == null && off.kmContrat == null && off.dureeMois == null && off.malus == null) {
+        await liLoadScript(LI_PDFJS); window.pdfjsLib.GlobalWorkerOptions.workerSrc = LI_WORKER;
+        const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+        let text = ''; const n = Math.min(pdf.numPages, 6);
+        for (let p = 1; p <= n; p++) { const pg = await pdf.getPage(p); const c = await pg.getTextContent(); text += c.items.map(it => it.str).join(' ') + '\n'; }
+        off = parseOfferText(text);
+      }
       const filled = [];
       if (off.malus != null && $('lease-malus')) { $('lease-malus').value = off.malus; filled.push('malus ' + FP.euro(off.malus)); }
       if (off.loyer != null && !($('lease-loyer').value || '').trim()) { $('lease-loyer').value = off.loyer; filled.push('loyer'); }
@@ -2349,12 +2356,16 @@
     const parseFR = s => { const n = Number(String(s).replace(/[\s. ]/g, '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
     const out = { loyerTTC: null, dureeMois: null, kmTotal: null, kmSupp: null, kmTolerance: null, co2: null, malus: null, offre: null, conducteur: null };
     const lines = String(text || '').replace(/ /g, ' ').split('\n');
-    // 1) LOYER mensuel TTC — libellés d'échéance mensuelle par ordre de priorité.
-    const order = [/ech[ée]ance\s+mensuelle\s+totale/i, /ech[ée]ance\s+globale/i, /loyer\s+mensuel|total\s+mensuel|redevance\s+mensuelle|mensualit[ée]/i, /ech[ée]ance\s+mensuelle/i];
+    // 1) LOYER mensuel TTC — on s'ancre sur le LIBELLÉ du TOTAL mensuel, par ordre de priorité (jamais un
+    //    montant au hasard). ⚠️ 2 gabarits : BPCE Car Lease écrit « MONTANT PERIODIQUE TOTAL » (= SOUS-TOTAL
+    //    quand l'assurance est exclue) — surtout PAS « Loyer périodique » qui n'est que la part FINANCEMENT,
+    //    ni « AEN … coût de location » qui est un calcul fiscal ; Ayvens/Localease écrit « ECHEANCE MENSUELLE
+    //    TOTALE » / « Echéance globale ». On lit le TTC = DERNIER montant de la ligne (mise en page HT·TVA%·TTC).
+    const order = [/montant\s+p[ée]riodique\s+total/i, /ech[ée]ance\s+mensuelle\s+totale/i, /sous[-\s]?total/i, /ech[ée]ance\s+globale/i, /loyer\s+mensuel|total\s+mensuel|redevance\s+mensuelle|mensualit[ée]/i, /ech[ée]ance\s+mensuelle/i];
     for (const rx of order){
       for (const ln of lines){
         if (!rx.test(ln)) continue;
-        const nums = (ln.match(/\d{1,3}(?:[ .]\d{3})*,\d{2}/g) || []).map(parseFR).filter(n => n != null);
+        const nums = (ln.match(/\d{1,3}(?:[ .  ]\d{3})*,\d{2}/g) || []).map(parseFR).filter(n => n != null);
         const money = nums.filter(n => n > 30 && n < 5000);            // exclut le taux TVA 20,00 ; un loyer voiture > 30 €/mois
         if (money.length){ out.loyerTTC = money[money.length - 1]; break; }  // TTC = DERNIER montant (mise en page HT · TVA% · TTC)
       }
@@ -2363,11 +2374,20 @@
     // 2) Durée (6-72 mois)
     let m = /dur[ée]e\s*:?\s*(\d{1,2})\s*mois/i.exec(text) || /(\d{1,2})\s*mois/i.exec(text);
     if (m){ const d = +m[1]; if (d >= 6 && d <= 72) out.dureeMois = d; }
-    // 3) Km CONTRACTUEL = « Kilométrage N km » (hors « technique maximum » et « Tolérance »)
+    // 3) Km CONTRACTUEL — Ayvens : « Kilométrage N km » ; BPCE : « Kilométrage contractuel N » (SANS « km »
+    //    derrière). Toujours hors « technique maximum », « Tolérance » et « supplémentaire » (150.000 km de la
+    //    clause km sup ne doit PAS être pris pour le forfait).
     for (const ln of lines){
-      if (/tol[ée]rance|technique|maximum/i.test(ln)) continue;
-      const mm = /kilom[ée]trage\s*:?\s*([\d][\d. ]*\d)\s*km/i.exec(ln);
+      if (/tol[ée]rance|technique|maximum|suppl[ée]/i.test(ln)) continue;
+      const mm = /kilom[ée]trage\s*(?:contractuel)?\s*:?\s*([\d][\d.\s  ]*\d)\s*km/i.exec(ln);
       if (mm){ const v = parseFR(mm[1]); if (v != null && v >= 5000 && v <= 500000){ out.kmTotal = v; break; } }
+    }
+    if (out.kmTotal == null){                                  // repli BPCE : « Kilométrage contractuel 60 000 » sans « km »
+      for (const ln of lines){
+        if (/tol[ée]rance|technique|maximum|suppl[ée]/i.test(ln)) continue;
+        const mm = /kilom[ée]trage\s+contractuel\s*:?\s*([\d]{2}[\d.\s  ]{1,7}\d)(?!\s*\d)/i.exec(ln);
+        if (mm){ const v = parseFR(mm[1]); if (v != null && v >= 5000 && v <= 500000){ out.kmTotal = v; break; } }
+      }
     }
     // 4) Coût du km supplémentaire (TTC)
     m = /kilom[eè]tre\s+suppl[ée]mentaire[^\d]{0,20}?([\d]+,\d{2,3})/i.exec(text);
@@ -2378,8 +2398,13 @@
     // 6) CO2
     m = /co2\s*:?\s*(\d{1,3})\s*g/i.exec(text);
     if (m){ const v = +m[1]; if (v >= 0 && v < 600) out.co2 = v; }
-    // 7) Malus (Bonus/Malus = 0, ou malus écologique)
-    m = /bonus\s*\/?\s*malus\s*[:=]?\s*([\d][\d\s.]*,\d{2}|\d+)/i.exec(text) || /malus\s*[ée]cologique[^\d]{0,20}?([\d][\d\s.]*,?\d{0,2})/i.exec(text);
+    // 7) Malus — ancrage sur le LIBELLÉ (jamais un chiffre au hasard). Priorité : BPCE « Malus écologique à
+    //    percevoir de X€ » ; Ayvens « Malus Ecologique TTC … 1.356,00 » (⚠️ exiger le format montant `,dd`
+    //    pour ne pas ramasser un renvoi de note « (2) ») ; puis repli générique avec décimales.
+    m = /malus[^\d]{0,40}?percevoir\s*de\s*(\d[\d\s.  ]*(?:,\d+)?)\s*€/i.exec(text)
+      || /malus[^\n]*?ttc[^\n]*?(\d[\d\s.  ]*,\d{2})/i.exec(text)
+      || /bonus\s*\/?\s*malus\s*[:=]?\s*(\d[\d\s.  ]*,\d{2}|\d+)/i.exec(text)
+      || /malus\s*[ée]cologique[^\d]{0,20}?(\d[\d\s.  ]*,\d{2})/i.exec(text);
     if (m){ const v = parseFR(m[1]); if (v != null && v >= 0 && v < 100000) out.malus = v; }
     // 8) N° d'offre
     m = /offre\s*n[°ºo]?\s*:?\s*([A-Z0-9\-]{4,})/i.exec(text);
