@@ -11,9 +11,10 @@
 //   5. Anti « contrôle piégé » : pas de masquage d'ancêtre via .closest().style.display
 // Sort en code 1 si un problème est trouvé (→ bloque le déploiement).
 // ============================================================
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { dirname, resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { TARGETS, srcHash, HASH_RE } from './min-common.mjs';
 
 const ROOT = resolve(process.argv[2] || '.');
@@ -35,6 +36,32 @@ for (const js of ['assets/js/app.js', 'assets/js/supabase-client.js', 'assets/js
   if (!existsSync(p)) continue;
   try { execSync(`node --check "${p}"`, { stdio: 'pipe' }); }
   catch (e) { errors.push(`Syntaxe JS invalide : ${js}\n   ${String(e.stderr || e).split('\n').slice(0, 3).join('\n   ')}`); }
+}
+
+// 1ter) SYNTAXE DES SCRIPTS INLINE de chaque page HTML.
+//   ⚠️ Bug vécu (2026-09) : un `});` manquant dans le script inline de controle.html cassait TOUTE la
+//   page (script non parsé → aucun handler → « Chargement… » figé, onglets morts). node --check ne le
+//   voyait PAS car il ne teste que les .js AUTONOMES. On extrait donc chaque <script> SANS src et on le
+//   passe à node --check (les blocs JSON / template / speculationrules sont ignorés par leur `type`).
+const SCRIPT_RE = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+const attrVal = (attrs, name) => { const m = new RegExp(name + '\\s*=\\s*"([^"]*)"', 'i').exec(attrs || ''); return m ? m[1] : null; };
+const JS_TYPES = new Set(['', 'text/javascript', 'application/javascript', 'module']);
+for (const h of htmlFiles()) {
+  const txt = readFileSync(h, 'utf8');
+  let blk = 0;
+  for (const m of txt.matchAll(SCRIPT_RE)) {
+    const attrs = m[1] || '', body = m[2] || ''; blk++;
+    if (/\bsrc\s*=/i.test(attrs)) continue;                         // script EXTERNE (pas de corps inline)
+    const type = (attrVal(attrs, 'type') || '').toLowerCase();
+    if (!JS_TYPES.has(type)) continue;                              // JSON / speculationrules / template → pas du JS
+    if (!body.trim()) continue;
+    const tmp = join(tmpdir(), `pp-inline-${process.pid}-${blk}.${type === 'module' ? 'mjs' : 'js'}`);
+    try { writeFileSync(tmp, body); execSync(`node --check "${tmp}"`, { stdio: 'pipe' }); }
+    catch (e) {
+      const line = txt.slice(0, m.index).split('\n').length;        // n° de ligne du <script> dans le HTML
+      errors.push(`Script inline invalide dans ${h.replace(ROOT + '/', '')} (bloc #${blk}, ~ligne ${line}) :\n   ${String(e.stderr || e).split('\n').slice(0, 3).join('\n   ')}`);
+    } finally { try { unlinkSync(tmp); } catch (_) {} }
+  }
 }
 
 // 1bis) GARDE-FOU MINIFICATION : chaque .min.js DOIT correspondre à sa source (empreinte en tête).
