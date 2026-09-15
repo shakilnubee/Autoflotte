@@ -503,7 +503,10 @@
     { k: 'assurance', label: 'Assurance', val: v => v.assurance || (FP.assureurLabelVeh && FP.assureurLabelVeh(v)) || (FP.assuranceLabel && FP.assuranceLabel()) },
     { k: 'co2', label: 'CO₂', skip: v => /lectri|hydrog/i.test(v.carburant || '') },
     { k: 'antiPollution', label: 'Contrôle anti-pollution', skip: v => !(FP.concerneAntiPollution && FP.concerneAntiPollution(v)) },
-    { k: 'masse', label: 'Masse (carte grise)', val: v => vehMasseEff(v) },
+    // ⚠️ On demande la masse tant qu'elle n'est pas SAISIE À LA MAIN (settings.vehMasse), MÊME s'il existe
+    // une estimation d'après le modèle : pour une nouvelle société on veut confirmer la vraie valeur (champ
+    // G) de chaque véhicule. La rafale pré-remplit l'estimation → un simple « Entrée » la fige.
+    { k: 'masse', label: 'Masse (champ G de la carte grise)', empty: v => isEmptyV((FP.settings.get().vehMasse || {})[v.id]) },
     { k: 'couleur', label: 'Couleur' },
     { k: 'boite', label: 'Boîte de vitesses' },
     // Valeur d'achat : sert à l'AVANTAGE EN NATURE (véhicule acheté), au TCO, à la valeur du parc et
@@ -897,7 +900,9 @@
     else if (meta.kind === 'detenteur') wrap.innerHTML = `<select id="raf-input" class="field-input" style="width:100%"><option value="">— choisir —</option><option value="Siège">Siège</option><option value="Salarié">Salarié</option></select>`;
     else { const t = (meta.kind === 'date') ? 'date' : ((meta.kind === 'number' || meta.kind === 'masse') ? 'number' : 'text'); wrap.innerHTML = `<input id="raf-input" type="${t}" class="field-input" style="width:100%">`; }
     const inp = document.getElementById('raf-input');
-    if (inp) { inp.focus(); inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); rafSaveNext(); } }); }
+    // Masse : on PRÉ-REMPLIT l'estimation (masseCG d'après le modèle) → « Entrée » la confirme direct.
+    if (inp && meta.kind === 'masse') { try { const est = FP.masseCG && FP.masseCG(step.entity); if (est != null && est !== '') inp.value = est; } catch (e) {} }
+    if (inp) { inp.focus(); try { inp.select(); } catch (e) {} inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); rafSaveNext(); } }); }
     if (window.lucide) try { lucide.createIcons(); } catch (e) {}
   }
   // Upload d'une carte grise / carte mémo depuis la rafale → plateforme + rattachement au véhicule.
