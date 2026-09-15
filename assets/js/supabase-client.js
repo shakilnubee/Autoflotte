@@ -400,10 +400,18 @@
       _settingsPromise = client.from('app_settings').select('data').eq('id', _sid).maybeSingle()
         .then(async (sres) => {
           let shared = sres && sres.data && sres.data.data;
+          let effId = _sid;                              // ligne d'où viennent RÉELLEMENT les réglages
           if ((!shared || typeof shared !== 'object') && _sid === 'PXP') {
             const sres2 = await client.from('app_settings').select('data').eq('id', 'global').maybeSingle();
-            shared = sres2 && sres2.data && sres2.data.data;
+            const g = sres2 && sres2.data && sres2.data.data;
+            if (g && typeof g === 'object') { shared = g; effId = 'global'; }   // PXP historique = ligne 'global'
           }
+          // ⚠️⚠️ ROOT-CAUSE PERTE DE RÉGLAGES : on ÉCRIT désormais dans la MÊME ligne que celle LUE.
+          // Avant, la lecture retombait sur 'global' (config PXP historique) mais l'écriture visait 'PXP'
+          // → chaque sauvegarde (loyers, « ✓ Vu », liens de fichiers, rafale…) atterrissait dans une AUTRE
+          // ligne que celle relue au chargement → au rechargement, on relisait 'global' (ancien) et tout
+          // « repartait ». En mémorisant la ligne effective, l'écriture et la lecture visent la même.
+          try { if (FP.settings) FP.settings._effectiveId = effId; } catch (e) {}
           return shared;
         }).catch(() => null);
     } catch (e) { _settingsPromise = null; }

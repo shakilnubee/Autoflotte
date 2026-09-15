@@ -4479,9 +4479,14 @@ FP.settings = {
   // Réf. = ce que le serveur contenait au dernier chargement/écriture (posé par supabase-client au load).
   // Sert à ne réécrire QUE les clés que CE poste a modifiées (le « delta »).
   _serverSnap: null,
+  // Ligne app_settings RÉELLEMENT utilisée = celle d'où les réglages ont été LUS au chargement
+  // (posée par supabase-client). Pour PXP dont la config historique vit dans la ligne 'global', on
+  // ÉCRIT donc dans 'global' (et plus dans 'PXP') → l'écriture et la lecture visent la MÊME ligne,
+  // sinon chaque sauvegarde « disparaît » au rechargement (bug systémique de perte de réglages).
+  _effectiveId: null,
   _pushSettings(obj, prevLocal) {
     const self = this;
-    let id; try { id = this._dbId(); } catch (e) { id = 'global'; }
+    let id; try { id = this._effectiveId || this._dbId(); } catch (e) { id = this._effectiveId || 'global'; }
     const plainUpsert = (data) => {
       try {
         if (FP.persist && FP.persist.upsert) FP.persist.upsert('app_settings', { id, data });
