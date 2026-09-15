@@ -814,9 +814,18 @@
       const res = { k, n }; _canonMemo.set(mk, res); return res;
     };
     // 1) Conso DATÉE pendant un congé (toutes catégories)
+    // ⚠️ DÉDOUBLONNAGE « badge = par personne, pas par véhicule » : une même conso (même n° de pièce +
+    //    conducteur + date + catégorie + montant) peut apparaître sous PLUSIEURS plaques (le badge Ulys
+    //    suit la personne, la plaque n'est qu'indicative). On ne montre alors qu'UNE seule trouvaille
+    //    (sinon le même péage est signalé 2 fois). La plaque n'entre PAS dans la clé (c'est justement ce
+    //    qui différait à tort). Le n° de pièce (facnum) évite de fusionner 2 péages réellement distincts.
+    const _cgSeen = new Set();
     (FP.consoPendantConge ? FP.consoPendantConge(_tx) : []).forEach(a => {
       const cg = a.conge || {}; const cn = canon(a.conducteur, a.key);
       const fid = FP.trouvailleId ? FP.trouvailleId('conge', a) : ('cg|' + (a.key||'') + '|' + a.date + '|' + (a.categorie||'') + '|' + (a.montant||''));
+      const dedupKey = fid + '|' + (a.facnum || '');
+      if (_cgSeen.has(dedupKey)) return;   // même péage déjà pris (autre plaque) → on ne le remontre pas
+      _cgSeen.add(dedupKey);
       out.push({ fid, genre:'congé', conducteur:cn.n, gkey:cn.k, categorie:a.categorie, type:catLbl(a.categorie,a.carte),
         date:a.date, montant:a.montant, facnum:a.facnum||'', _plaque:a.plaque||'', detail:'congé : ' + dfr(cg.debut) + ' au ' + dfr(cg.fin),
         statut: sm[fid] || 'a-verifier' });
@@ -1373,7 +1382,7 @@
     //    qu'une règle métier d'app.js change (consoApresDepart, consoPendantConge, anomalies carte…).
     //  • DETECT_VERSION local = à bumper à la main quand on change la logique PROPRE à cette page
     //    (buildFindings ici). Réflexe : bumper au moindre doute.
-    const DETECT_VERSION = (FP.ASSET_VERSION || 'dev') + '.d3';
+    const DETECT_VERSION = (FP.ASSET_VERSION || 'dev') + '.d4';
     return DETECT_VERSION + '|' + _tx.length + '|' + _ulys.length + '|' + cnd + '|' + cong + '|' + smLen + '|' + affLen + '|' + Math.round(sum * 100);
   }
   function rebuild(force){
