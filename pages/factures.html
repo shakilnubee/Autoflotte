@@ -1614,14 +1614,17 @@
     box.className = 'fp-ac hidden';
     input.parentElement.appendChild(box);
     let items = [], active = -1;
+    // Chaque option = { value, label }. Compat : une chaîne simple devient { value:s, label:s }.
+    // On FILTRE sur le label (donc marque/modèle si présents) mais on ÉCRIT la value (la plaque seule).
+    const normOpt = o => (o && typeof o === 'object') ? { value: String(o.value == null ? '' : o.value), label: String(o.label == null ? o.value : o.label) } : { value: String(o), label: String(o) };
     function paint(){
       const q = FP.norm(input.value.trim());
-      items = (optionsFn() || []).filter(o => !q || FP.norm(o).includes(q)).slice(0, 8);
+      items = (optionsFn() || []).map(normOpt).filter(o => !q || FP.norm(o.label).includes(q)).slice(0, 8);
       if (!items.length){ box.classList.add('hidden'); return; }
-      box.innerHTML = items.map((o, i) => `<div class="fp-ac-item${i === active ? ' active' : ''}" data-i="${i}">${acEsc(o)}</div>`).join('');
+      box.innerHTML = items.map((o, i) => `<div class="fp-ac-item${i === active ? ' active' : ''}" data-i="${i}">${acEsc(o.label)}</div>`).join('');
       box.classList.remove('hidden');
     }
-    const pick = (i) => { if (items[i] != null){ input.value = items[i]; } box.classList.add('hidden'); active = -1; };
+    const pick = (i) => { if (items[i] != null){ input.value = items[i].value; } box.classList.add('hidden'); active = -1; };
     input.addEventListener('input', () => { active = -1; paint(); });
     input.addEventListener('focus', () => { active = -1; paint(); });
     input.addEventListener('blur', () => setTimeout(() => box.classList.add('hidden'), 150));
@@ -1635,7 +1638,8 @@
     box.addEventListener('mousedown', (e) => { const it = e.target.closest('.fp-ac-item'); if (it) pick(+it.dataset.i); });
   }
   setupAutocomplete($('fa-fournisseur'), () => [...new Set((data.factures || []).map(f => f.fournisseur).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr')));
-  setupAutocomplete($('fa-immat'), () => [...new Set((data.vehicules || []).map(v => v.immat).filter(Boolean))].sort());
+  // Options véhicule : on cherche par plaque OU marque/modèle, mais on n'écrit que la PLAQUE.
+  setupAutocomplete($('fa-immat'), () => (data.vehicules || []).filter(v => v.immat).sort((a, b) => (a.immat || '').localeCompare(b.immat || '')).map(v => ({ value: v.immat, label: v.immat + (v.marque ? ' · ' + v.marque + ' ' + (v.modele || '') : '') })));
   // Choisir la plaque PRÉ-REMPLIT le km (compteur connu du véhicule) si le champ est vide — le site
   // connaît déjà ce chiffre. (Après le choix dans l'autocomplete : petit délai pour lire la valeur finale.)
   if ($('fa-immat')) $('fa-immat').addEventListener('blur', () => setTimeout(() => {

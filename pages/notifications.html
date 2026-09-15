@@ -550,13 +550,21 @@
   // Renvoie les champs manquants sous forme [{k,label}]. Si ignPrefix est fourni, on saute
   // les champs marqués « ignorés » (ex. véhicule étranger, moto sans CO₂/masse…) — persistant.
   const missOf = (x, fields, ignPrefix) => { const m = []; fields.forEach(f => { if (f.skip && f.skip(x)) return; if (ignPrefix && window.FP && FP.ignore && FP.ignore.has(ignPrefix + f.k)) return; const e = f.empty ? f.empty(x) : isEmptyV(f.val ? f.val(x) : x[f.k]); if (e) m.push({ k: f.k, label: f.label, target: f.target || null }); }); return m; };
-  const compItem = (nom, miss, target, ignPrefix) => ({ nom, miss, target, ignPrefix: ignPrefix || '' });
+  const compItem = (nom, miss, target, ignPrefix, type, entId) => ({ nom, miss, target, ignPrefix: ignPrefix || '', type: type || '', entId: (entId == null ? '' : String(entId)) });
   const LIMIT_COMP = 10;   // au-delà, on replie la section (bouton « Voir tout »)
   function rowCompHTML(it) {
     return `<div class="notif" style="align-items:flex-start">
         <div class="flex-1 min-w-0">
           <a href="${esc(it.target)}" class="font-semibold text-slate-900" style="text-decoration:none">${esc(it.nom)}</a>
-          <div class="mt-1 flex flex-wrap gap-1">${it.miss.map(m => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 4px 2px 8px;border-radius:9999px">${m.target ? `<a href="${esc(m.target)}" style="color:inherit;text-decoration:underline" title="Se règle dans cet écran">${esc(m.label)} →</a>` : esc(m.label)}${it.ignPrefix ? `<button type="button" data-ign="${esc(it.ignPrefix + m.k)}" data-ignlabel="${esc(it.nom + ' · ' + m.label)}" title="Ignorer — ne plus demander cette info (non concerné)" style="border:none;background:rgba(146,64,14,.15);color:#92400E;cursor:pointer;border-radius:9999px;width:16px;height:16px;line-height:1;font-size:10px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>` : ''}</span>`).join('')}</div>
+          <div class="mt-1 flex flex-wrap gap-1">${it.miss.map(m => {
+            // Champ remplissable EN LIGNE (rafale) → chip cliquable qui ouvre l'éditeur PILE sur ce champ
+            // (1 clic → on tape, sans quitter la page). Sinon repli sur le lien vers l'écran concerné.
+            const canRaf = it.type && it.entId !== '' && (typeof rafMeta === 'function') && rafMeta(it.type, m.k).kind !== 'fiche';
+            const inner = canRaf
+              ? `<button type="button" data-raf="${esc(it.type + '|' + it.entId + '|' + m.k)}" title="Remplir cette info tout de suite" style="border:none;background:none;color:inherit;cursor:pointer;text-decoration:underline;font:inherit;padding:0">${esc(m.label)} ✎</button>`
+              : (m.target ? `<a href="${esc(m.target)}" style="color:inherit;text-decoration:underline" title="Se règle dans cet écran">${esc(m.label)} →</a>` : esc(m.label));
+            return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:#FEF3C7;color:#92400E;padding:2px 4px 2px 8px;border-radius:9999px">${inner}${it.ignPrefix ? `<button type="button" data-ign="${esc(it.ignPrefix + m.k)}" data-ignlabel="${esc(it.nom + ' · ' + m.label)}" title="Ignorer — ne plus demander cette info (non concerné)" style="border:none;background:rgba(146,64,14,.15);color:#92400E;cursor:pointer;border-radius:9999px;width:16px;height:16px;line-height:1;font-size:10px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">✕</button>` : ''}</span>`;
+          }).join('')}</div>
         </div>
         <a href="${esc(it.target)}" class="text-xs font-semibold self-center" style="color:var(--fp-accent);white-space:nowrap;text-decoration:none">Compléter →</a>
       </div>`;
@@ -716,10 +724,10 @@
   function renderComplet() {
     const box = document.getElementById('suivi-complet'); if (!box) return;
     const actifs = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
-    const vehItems = []; actifs.forEach(v => { const pfx = 'complet:veh:' + v.id + ':'; const m = missOf(v, VEH_FIELDS, pfx); if (m.length) vehItems.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), m, `vehicules.html?veh=${encodeURIComponent(v.id)}`, pfx)); });
+    const vehItems = []; actifs.forEach(v => { const pfx = 'complet:veh:' + v.id + ':'; const m = missOf(v, VEH_FIELDS, pfx); if (m.length) vehItems.push(compItem(`${v.immat || '?'} · ${(v.marque || '')} ${(v.modele || '')}`.trim(), m, `vehicules.html?veh=${encodeURIComponent(v.id)}`, pfx, 'veh', v.id)); });
     const conds = (data.conducteurs || []).filter(c => c && c.masque !== true && (c.manuel === true || !isEmptyV(c.nom) || !isEmptyV(c.prenom) || !isEmptyV(c.name)));
-    const condItems = []; conds.forEach(c => { const pfx = 'complet:cond:' + (c.key || '') + ':'; const m = missOf(c, COND_FIELDS, pfx); if (m.length) { const nom = [c.prenom, c.nom].filter(x => !isEmptyV(x)).join(' ') || c.name || c.key || 'Conducteur'; condItems.push(compItem(nom, m, `conducteurs.html?cond=${encodeURIComponent(c.key || '')}`, pfx)); } });
-    const amItems = []; (data.amendes || []).forEach(a => { const pfx = 'complet:am:' + (a.id || '') + ':'; const m = missOf(a, AMENDE_FIELDS, pfx); if (m.length) amItems.push(compItem(`${(a.motif || 'Amende')} · ${a.date ? FP.date(a.date) : 'date ?'}`, m, `amendes.html?amende=${encodeURIComponent(a.id || '')}`, pfx)); });
+    const condItems = []; conds.forEach(c => { const pfx = 'complet:cond:' + (c.key || '') + ':'; const m = missOf(c, COND_FIELDS, pfx); if (m.length) { const nom = [c.prenom, c.nom].filter(x => !isEmptyV(x)).join(' ') || c.name || c.key || 'Conducteur'; condItems.push(compItem(nom, m, `conducteurs.html?cond=${encodeURIComponent(c.key || '')}`, pfx, 'cond', c.key || '')); } });
+    const amItems = []; (data.amendes || []).forEach(a => { const pfx = 'complet:am:' + (a.id || '') + ':'; const m = missOf(a, AMENDE_FIELDS, pfx); if (m.length) amItems.push(compItem(`${(a.motif || 'Amende')} · ${a.date ? FP.date(a.date) : 'date ?'}`, m, `amendes.html?amende=${encodeURIComponent(a.id || '')}`, pfx, 'am', a.id || '')); });
     const cfg = [];
     try {
       const prof = FP.societeProfil ? FP.societeProfil() : {}; const soc = (FP.settings.get().societe) || {};
@@ -922,6 +930,14 @@
     ensureRafModal();
     document.getElementById('raf-modal').style.display = 'flex';
     rafShow();
+  }
+  // Ouvre l'éditeur en ligne sur UN SEUL champ précis (clic sur une puce « info manquante »).
+  function openRafOne(type, entId, fieldKey) {
+    const step = buildRaf().find(s => s.type === type && String(s.type === 'cond' ? s.entity.key : s.entity.id) === String(entId) && s.field && s.field.k === fieldKey);
+    if (!step) return false;         // non remplissable en ligne (ex. leasing) → on laisse le lien normal
+    rafList = [step]; rafIdx = 0; ensureRafModal();
+    document.getElementById('raf-modal').style.display = 'flex'; rafShow();
+    return true;
   }
 
   // ===== Onglet « Relevé KM » : suivi complet (qui a mis / qui manque, périodes, km/période) =====
@@ -1375,6 +1391,9 @@
   document.getElementById('suivi-complet').addEventListener('click', async (e) => {
     // « Remplir en rafale » → enchaîne toutes les infos manquantes remplissables
     if (e.target.closest('#raf-start')) { e.preventDefault(); openRaf(); return; }
+    // Clic sur une puce « info manquante » → éditeur en ligne PILE sur ce champ (1 clic → on tape)
+    const rafOne = e.target.closest('[data-raf]');
+    if (rafOne) { e.preventDefault(); const p = (rafOne.getAttribute('data-raf') || '').split('|'); if (p.length >= 3) openRafOne(p[0], p.slice(1, p.length - 1).join('|'), p[p.length - 1]); return; }
     // « Voir tout » / « Réduire » sur une section trop longue (> 10 lignes)
     const vt = e.target.closest('[data-voirtout]');
     if (vt) {
