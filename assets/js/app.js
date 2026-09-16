@@ -9971,8 +9971,12 @@ FP.buildXlsx = function (headers, rows, sheetName) {
   const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const colL = (i) => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = (i - (m + 1)) / 26; } return s; };
   const sheetRows = [];
-  sheetRows.push('<row r="1">' + (headers || []).map((h, c) => `<c r="${colL(c)}1" t="inlineStr" s="1"><is><t xml:space="preserve">${esc(h)}</t></is></c>`).join('') + '</row>');
-  (rows || []).forEach((row, ri) => { const r = ri + 2;
+  // Bloc « Parc Pilot » en tête (colonne A) → décale l'en-tête et les données de OFF lignes.
+  const brandLines = FP._exportBrandLines ? (function () { try { return FP._exportBrandLines(sheetName) || []; } catch (e) { return []; } })() : [];
+  const OFF = brandLines.length, HR = OFF + 1;
+  brandLines.forEach((line, i) => { sheetRows.push('<row r="' + (i + 1) + '"><c r="A' + (i + 1) + '" t="inlineStr" s="' + (i === 0 ? 1 : 0) + '"><is><t xml:space="preserve">' + esc(line) + '</t></is></c></row>'); });
+  sheetRows.push('<row r="' + HR + '">' + (headers || []).map((h, c) => `<c r="${colL(c)}${HR}" t="inlineStr" s="1"><is><t xml:space="preserve">${esc(h)}</t></is></c>`).join('') + '</row>');
+  (rows || []).forEach((row, ri) => { const r = ri + HR + 1;
     sheetRows.push(`<row r="${r}">` + row.map((v, c) => { const ref = colL(c) + r;
       if (typeof v === 'number' && isFinite(v)) return `<c r="${ref}"><v>${v}</v></c>`;
       return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
@@ -12381,6 +12385,18 @@ FP.smartAnswers = (q) => {
 
 // =====================================================================
 // === Import / Export CSV (moteur partagé, compatible Excel FR) ========
+// Lignes de « branding » Parc Pilot en tête de CHAQUE export CSV/Excel (consigne : tous les rapports
+// portent la touche Parc Pilot). Ligne 1 = « Parc Pilot » ; ligne 2 = société (+ titre du rapport si
+// fourni via opts.title) ; ligne 3 = date d'export. Utilisé par FP.csv.build et FP.xlsx.build.
+FP._exportBrandLines = function (title) {
+  let soc = ''; try { soc = ((FP.settings && FP.settings.get().profil) || {}).nom || ''; } catch (e) {}
+  if (!soc) { try { soc = (FP.activeSociete && FP.activeSociete() !== '__all__') ? FP.activeSociete() : ''; } catch (e) {} }
+  const d = (function () { try { return FP.dateNum ? FP.dateNum(new Date().toISOString().slice(0, 10)) : new Date().toISOString().slice(0, 10); } catch (e) { return new Date().toISOString().slice(0, 10); } })();
+  const lines = ['Parc Pilot — Gestion de flotte'];
+  const l2 = [soc, title].filter(Boolean).join(' — '); if (l2) lines.push(l2);
+  lines.push('Exporté le ' + d);
+  return lines;
+};
 // =====================================================================
 // CSV produit avec : BOM UTF-8 (accents OK), séparateur ';' (colonnes
 // séparées dans Excel FR), champs entre guillemets si nécessaire.
@@ -12392,18 +12408,23 @@ FP.csv = {
     if (/[";\n\r]/.test(v)) v = '"' + v.replace(/"/g, '""') + '"';
     return v;
   },
-  // columns = [{ key, label, format?(value,row) }]
-  build(columns, rows) {
+  // columns = [{ key, label, format?(value,row) }] · opts.title = titre du rapport (optionnel)
+  build(columns, rows, opts) {
+    opts = opts || {};
     const head = columns.map(c => this._esc(c.label)).join(';');
     const body = (rows || []).map(r => columns.map(c => {
       let val = r[c.key];
       if (c.format) val = c.format(val, r);
       return this._esc(val);
     }).join(';'));
-    return this.BOM + [head, ...body].join('\r\n');
+    // Bloc « Parc Pilot » en tête (sauf si opts.brand === false) + ligne vide, PUIS entêtes + données.
+    // Sûr : aucun ré-import n'utilise FP.csv.parse (l'état de parc a son propre parseur multi-lignes).
+    let brand = [];
+    if (opts.brand !== false && FP._exportBrandLines) { try { brand = FP._exportBrandLines(opts.title).map(l => this._esc(l)); if (brand.length) brand.push(''); } catch (e) { brand = []; } }
+    return this.BOM + [...brand, head, ...body].join('\r\n');
   },
-  download(filename, columns, rows) {
-    const blob = new Blob([this.build(columns, rows)], { type: 'text/csv;charset=utf-8;' });
+  download(filename, columns, rows, opts) {
+    const blob = new Blob([this.build(columns, rows, opts)], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
@@ -12499,21 +12520,26 @@ FP.xlsx = (function () {
         if (isNum) { if (val === null || val === undefined || val === '' || isNaN(val)) return `<c r="${ref}"${s}/>`; return `<c r="${ref}"${s}><v>${Number(val)}</v></c>`; }
         return `<c r="${ref}" t="inlineStr"${s}><is><t xml:space="preserve">${escX(val)}</t></is></c>`;
       };
+      // Bloc « Parc Pilot » en tête (lignes de titre en colonne A) — décale l'en-tête et les données de OFF.
+      const brandLines = (opts.brand !== false && FP._exportBrandLines) ? (function () { try { return FP._exportBrandLines(opts.title || opts.sheetName) || []; } catch (e) { return []; } })() : [];
+      const OFF = brandLines.length;         // nb de lignes AVANT l'en-tête de colonnes
+      const HR = OFF + 1;                     // n° de ligne de l'en-tête de colonnes
       let body = '';
-      // En-tête (gras = style 1)
-      body += `<row r="1">` + columns.map((c, i) => cell(colLetter(i) + '1', c.label, false, 1)).join('') + '</row>';
-      // Lignes
+      // Lignes de titre (gras sur la 1re = style 1)
+      brandLines.forEach((line, i) => { body += `<row r="${i + 1}">` + cell('A' + (i + 1), line, false, i === 0 ? 1 : 0) + '</row>'; });
+      // En-tête de colonnes (gras = style 1), à la ligne HR
+      body += `<row r="${HR}">` + columns.map((c, i) => cell(colLetter(i) + HR, c.label, false, 1)).join('') + '</row>';
+      // Lignes de données
       data.forEach((r, ri) => {
-        const rn = ri + 2;
+        const rn = ri + HR + 1;
         body += `<row r="${rn}">` + columns.map((c, i) => {
           const v = c.value(r);
           return cell(colLetter(i) + rn, v, !!c.number, c.number ? 2 : 0);
         }).join('') + '</row>';
       });
       // Ligne TOTAL
-      let lastRow = data.length + 1;
       if (opts.total && data.length) {
-        const rn = data.length + 2; lastRow = rn;
+        const rn = data.length + HR + 1;
         const sums = columns.map(c => (c.number && !c.noTotal) ? Math.round(data.reduce((s, r) => { const v = c.value(r); return s + (isNaN(v) || v == null ? 0 : Number(v)); }, 0) * 100) / 100 : null);
         const firstNum = columns.findIndex(c => c.number);
         body += `<row r="${rn}">` + columns.map((c, i) => {
@@ -12522,9 +12548,9 @@ FP.xlsx = (function () {
           return cell(colLetter(i) + rn, '', false, 1);
         }).join('') + '</row>';
       }
-      const ref = 'A1:' + colLetter(columns.length - 1) + (data.length + 1);
+      const ref = 'A' + HR + ':' + colLetter(columns.length - 1) + (data.length + HR);
       const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>${colsXml}<sheetData>${body}</sheetData><autoFilter ref="${ref}"/></worksheet>`;
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetViews><sheetView workbookViewId="0"><pane ySplit="${HR}" topLeftCell="A${HR + 1}" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>${colsXml}<sheetData>${body}</sheetData><autoFilter ref="${ref}"/></worksheet>`;
       const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="4" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
       const wb = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
