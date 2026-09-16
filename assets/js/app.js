@@ -4689,6 +4689,28 @@ FP.settings = {
     let _settleUid = null;
     try { if (FP.persist && FP.persist._enqueue) _settleUid = FP.persist._enqueue({ op: 'upsert', table: 'app_settings', row: { id, data: obj } }); } catch (e) {}
     const _dropSettle = () => { try { if (_settleUid && FP.persist && FP.persist._removeUid) FP.persist._removeUid(_settleUid); } catch (e) {} };
+    // ⚠️⚠️⚠️ REPLI SÛR (correctif anti-perte MAJEUR) : TOUS les replis d'écriture passent par ICI, et
+    // JAMAIS par un `plainUpsert(obj)` brut. Un upsert brut REMPLACE toute la colonne `data` par le cache
+    // LOCAL → si ce cache est incomplet (rechargement, autre appareil, colonne `rev` absente = SQL de
+    // concurrence pas appliqué…), TOUTES les clés qu'il ne contient pas sont EFFACÉES du serveur. C'est
+    // la cause de la perte vécue (congés `condConges`, assureurs/primes, détails leasing). Ici on RELIT
+    // la ligne (data seule → fonctionne MÊME si la colonne `rev` n'existe pas) et on FUSIONNE nos
+    // changements dessus via applyDelta (qui ne supprime JAMAIS une clé serveur absente du cache) avant
+    // d'écrire. Résultat : un enregistrement ne peut plus JAMAIS effacer une donnée qu'il ne connaît pas.
+    const safeMergeUpsert = async () => {
+      try {
+        const r2 = await FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
+        if (r2 && r2.error) throw r2.error;
+        const remote2 = (r2 && r2.data && r2.data.data && typeof r2.data.data === 'object') ? r2.data.data : null;
+        const merged2 = remote2 ? applyDelta(remote2) : obj;   // pas de ligne existante → insert simple d'obj
+        commit(merged2); _dropSettle(); plainUpsert(merged2);
+      } catch (e2) {
+        // Relecture impossible (hors-ligne) : on ne peut pas fusionner maintenant → l'écriture COMPLÈTE
+        // reste dans la file durable (déjà déposée en tête de _pushSettings) et sera retentée ; le
+        // prochain chargement re-fusionnera. On ne perd donc pas la saisie, et on ne détruit rien en ligne.
+        try { if (FP.notifyError) FP.notifyError('Réglage non synchronisé (hors-ligne) — sera renvoyé.'); } catch (_) {}
+      }
+    };
     (async () => {
       // Compare-and-swap sur la colonne `rev` (cf. supabase/app_settings-concurrence.sql) : on n'écrit
       // QUE si personne n'a écrit depuis notre lecture. Sinon (rev a bougé) on relit + refusionne +
@@ -4709,11 +4731,15 @@ FP.settings = {
           if (w && Array.isArray(w.data) && w.data.length > 0) { commit(merged); _dropSettle(); return; } // CAS réussi → le repli n'est plus utile
           // 0 ligne modifiée = un autre poste a écrit entre-temps → on reboucle (relit rev + refusionne).
         }
-        // Contention persistante après MAX essais : dernier recours = écriture simple fusionnée best-effort.
-        _dropSettle(); plainUpsert(obj);
+        // Contention persistante après MAX essais : repli SÛR (relit + fusionne + écrit), JAMAIS un
+        // remplacement brut par le cache local (qui pourrait effacer des clés serveur inconnues).
+        await safeMergeUpsert();
       } catch (e) {
-        // rev absent (SQL pas appliqué) / base injoignable / erreur : repli EXACT sur le comportement d'avant.
-        _dropSettle(); plainUpsert(obj);
+        // rev absent (SQL de concurrence pas appliqué) / base injoignable / erreur : repli SÛR par
+        // FUSION (relit la ligne + applyDelta + écrit). ⚠️ Avant, ce repli faisait un `plainUpsert(obj)`
+        // brut → sur une base sans colonne `rev`, CHAQUE enregistrement remplaçait tout le serveur par
+        // le cache local et pouvait effacer congés/assurance/leasing. C'est corrigé : plus de perte.
+        await safeMergeUpsert();
       }
     })();
   },

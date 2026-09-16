@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<script>/* pp-build */(function(){try{var B="20260916c",K="pp_build",cur=null;try{cur=localStorage.getItem(K);}catch(e){return;}if(cur===B)return;var ok=false;try{localStorage.setItem(K,B);ok=true;}catch(e){}if(!ok)return;if("serviceWorker"in navigator){try{navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){try{r.update();}catch(e){}});}).catch(function(){});}catch(e){}}if(cur===null)return;var done=function(){try{location.reload();}catch(e){}};if(window.caches&&caches.keys){caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k);}));}).then(done).catch(done);}else{done();}}catch(e){}})();</script>
+<script>/* pp-build */(function(){try{var B="20260916d",K="pp_build",cur=null;try{cur=localStorage.getItem(K);}catch(e){return;}if(cur===B)return;var ok=false;try{localStorage.setItem(K,B);ok=true;}catch(e){}if(!ok)return;if("serviceWorker"in navigator){try{navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){try{r.update();}catch(e){}});}).catch(function(){});}catch(e){}}if(cur===null)return;var done=function(){try{location.reload();}catch(e){}};if(window.caches&&caches.keys){caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k);}));}).then(done).catch(done);}else{done();}}catch(e){}})();</script>
 <script>try{if(localStorage.getItem("fp_dark_mode")!=="0"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Paramètres — Parc Pilot</title>
@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260916c">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260916d">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260916c"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260916d"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260916c">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260916d">
 <style>
   .field-label { font-size: .78rem; font-weight: 600; color: var(--fp-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .35rem; }
   .field-input { width: 100%; padding: .6rem .8rem; border: 1px solid var(--fp-border); border-radius: .55rem; font-size: .9rem; background: white; }
@@ -757,10 +757,10 @@
 <!-- Toast -->
 <div class="toast" id="toast">Enregistré ✓</div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260916c"></script>
-<script src="../assets/js/supabase-client.js?v=20260916c"></script>
-<script src="../assets/js/data.js?v=20260916c"></script>
-<script src="../assets/js/app.min.js?v=20260916c"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260916d"></script>
+<script src="../assets/js/supabase-client.js?v=20260916d"></script>
+<script src="../assets/js/data.js?v=20260916d"></script>
+<script src="../assets/js/app.min.js?v=20260916d"></script>
 <script>
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
@@ -1117,13 +1117,29 @@
     // Supprime les comptes de cette société (jamais soi-même ni un CEO).
     for (const u of accs) { try { await FP.supabase.functions.invoke('manage-users', { body: { action: 'delete', id: u.id } }); } catch (e) {} }
     // Persiste la liste CÔTÉ SERVEUR avant de recharger (sinon la reload coupe la sauvegarde → retour).
-    try { if (FP.supabase && FP.settings && FP.settings._dbId) { await FP.supabase.from('app_settings').upsert({ id: (FP.settings._effectiveId || FP.settings._dbId()), data: FP.settings.get() }); } } catch (e) {}
+    await _flushSettingsSafe();
     location.reload();
   }
   // 🛟 RÉCUPÉRATION de réglages : lit les anciens enregistrements serveur (surtout la ligne héritée
   // « global » de PXP, souvent épargnée par un écrasement de la ligne société) et RESTAURE uniquement
   // les valeurs actuellement VIDES — ne remplace JAMAIS ce qui est déjà rempli. Sûr et réversible.
   function _isEmptyVal(v) { return v == null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length); }
+  // ⚠️ ÉCRITURE SÛRE des réglages avant un rechargement (remplace les anciens upserts BRUTS qui
+  // remplaçaient toute la ligne par le cache local → risque d'effacer des clés serveur inconnues).
+  // On RELIT le serveur et on n'applique QUE les valeurs locales NON VIDES par-dessus : une clé
+  // serveur absente/pleine n'est JAMAIS écrasée par un vide local. Anti-perte.
+  async function _flushSettingsSafe() {
+    try {
+      if (!(FP.supabase && FP.settings && FP.settings._dbId)) return;
+      const id = (FP.settings._effectiveId || FP.settings._dbId());
+      const loc = FP.settings.get() || {};
+      const r = await FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
+      const remote = (r && r.data && r.data.data && typeof r.data.data === 'object') ? r.data.data : {};
+      const merged = Object.assign({}, remote);
+      Object.keys(loc).forEach(k => { if (!_isEmptyVal(loc[k])) merged[k] = loc[k]; });   // local non-vide gagne ; local vide → on GARDE le serveur
+      await FP.supabase.from('app_settings').upsert({ id, data: merged });
+    } catch (e) {}
+  }
   function _deepFillGaps(cur, src, prefix, changes) {
     cur = (cur && typeof cur === 'object' && !Array.isArray(cur)) ? cur : {};
     Object.keys(src || {}).forEach(k => {
@@ -1167,7 +1183,7 @@
     const apercu = realChanges.slice(0, 12).map(c => '• ' + c).join('\n') + (realChanges.length > 12 ? '\n… et ' + (realChanges.length - 12) + ' autre(s)' : '');
     if (!await FP.confirm('🛟 ' + realChanges.length + " réglage(s) retrouvé(s) à restaurer :\n\n" + apercu + "\n\n⚠️ On ne remplace RIEN de ce qui est déjà rempli — on ne fait que combler les trous.\n\nRestaurer ?")) return;
     FP.settings.save(restored);
-    try { if (FP.supabase && FP.settings && FP.settings._dbId) { await FP.supabase.from('app_settings').upsert({ id: (FP.settings._effectiveId || FP.settings._dbId()), data: FP.settings.get() }); } } catch (e) {}
+    await _flushSettingsSafe();
     alert('✓ ' + realChanges.length + ' réglage(s) restauré(s). La page va se recharger.');
     location.reload();
   }

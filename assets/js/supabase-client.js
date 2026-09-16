@@ -221,7 +221,10 @@
   }
 
   // Clé primaire par table : la table "conducteurs" est indexée par "key" (pas de colonne "id").
-  const PK_BY_TABLE = { conducteurs: 'key' };
+  // Clé primaire réelle par table (sinon 'id'). ⚠️ edl_signatures a pour PK `token` (PAS d'`id`) →
+  // sans ça, le tri par `id` renvoyait un 400 « column id does not exist » à CHAQUE lecture (spam
+  // console + requête inutile relancée). conducteurs → `key`.
+  const PK_BY_TABLE = { conducteurs: 'key', edl_signatures: 'token' };
   function pkColumn(table) { return PK_BY_TABLE[table] || 'id'; }
 
   // Récupère TOUTES les lignes d'une table en PAGINANT. PostgREST/Supabase plafonne une réponse à
