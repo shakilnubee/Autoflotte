@@ -464,12 +464,24 @@
       if (FP.loadVehicleOverrides) FP.loadVehicleOverrides();
       // Charger les réglages PAR SOCIÉTÉ (apparence). Ligne app_settings = la société.
       // Repli sur l'ancienne ligne 'global' pour PXP (compat config existante).
+      // ⚠️ On mémorise si les réglages serveur DIFFÈRENT du cache local affiché : les données
+      // « réglages » (congés `condConges`, badges/cartes `condBadgeUlys`/`condCarteTotal`,
+      // km majorés, immobilisations, loueurs, assureurs, montants payés d'amendes…) vivent dans
+      // app_settings — PAS dans les tables véhicules/amendes/factures. Si SEULS les réglages ont
+      // changé (ex. on a saisi congés+badges sur le PC, puis on ouvre le tél dont le cache est
+      // périmé), la signature de DONNÉES ne bouge pas → sans ça, `fp:data-ready` ne partait jamais
+      // et le tél gardait les anciens réglages (congés/badges absents) jusqu'à un rechargement
+      // manuel. On déclenche donc aussi le re-rendu quand les réglages serveur ≠ cache local.
+      let settingsChanged = false;
       try {
         // Réglages société : déjà en vol (lancés en parallèle de loadAll ci-dessus).
         const shared = _settingsPromise ? await _settingsPromise : null;
         if (shared && typeof shared === 'object') {
           const key = (FP.settings && FP.settings._key) ? FP.settings._key() : 'auto_flotte_settings';
-          localStorage.setItem(key, JSON.stringify(shared));
+          let _prevSettingsRaw = null; try { _prevSettingsRaw = localStorage.getItem(key); } catch (_) {}
+          const _freshSettingsRaw = JSON.stringify(shared);
+          settingsChanged = (_prevSettingsRaw !== _freshSettingsRaw);
+          localStorage.setItem(key, _freshSettingsRaw);
           // Point de référence pour la fusion « delta » anti-écrasement des réglages (cf. FP.settings._pushSettings).
           try { if (FP.settings) FP.settings._serverSnap = JSON.parse(JSON.stringify(shared)); } catch (_) {}
           // Migration unique PXP : BPCE devient un loueur normal (settings.loueurs), plus codé en dur.
@@ -482,10 +494,13 @@
           if (FP.applyCustomTexts) FP.applyCustomTexts();
         }
       } catch (e) { /* table absente ou hors-ligne : on garde les réglages locaux */ }
-      // On ne déclenche le re-rendu des pages QUE si les données ont réellement changé
-      // (sinon le 1er affichage depuis data.js/cache est déjà bon → pas de clignotement).
-      if (dataChanged) {
-        document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'supabase', counts: { vehicules: data.vehicules.length, amendes: data.amendes.length, factures: data.factures.length } } }));
+      // On ne déclenche le re-rendu des pages QUE si les données OU les réglages ont réellement
+      // changé (sinon le 1er affichage depuis data.js/cache est déjà bon → pas de clignotement).
+      // `settingsChanged` couvre les données stockées dans app_settings (congés, badges/cartes,
+      // km majorés, immobilisations, loueurs/assureurs…) → un appareil au cache périmé rafraîchit
+      // ces éléments dès l'arrivée des réglages serveur, sans rechargement manuel.
+      if (dataChanged || settingsChanged) {
+        document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'supabase', settingsChanged, counts: { vehicules: data.vehicules.length, amendes: data.amendes.length, factures: data.factures.length } } }));
       }
       return data;
     } catch (e) {
