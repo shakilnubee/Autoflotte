@@ -777,7 +777,8 @@
       try {
         const rt = FP.selectAllPaged ? await FP.selectAllPaged('total_conso_tx', null, 'id') : await FP.supabase.from('total_conso_tx').select('*'); // PAGINÉ (cap 1000)
         if (rt.error) throw rt.error;
-        consoTx = rt.data || [];
+        // Dédoublonnage « badge par personne » (même passage listé sous plusieurs plaques) — source unique.
+        consoTx = (FP.dedupeConsoTx ? FP.dedupeConsoTx(rt.data || []) : (rt.data || []));
         const _soc = FP.activeSociete ? FP.activeSociete() : null;
         if (_soc && _soc !== '__all__') consoTx = consoTx.filter(x => x.societe ? String(x.societe) === _soc : _soc === 'PXP');   // NULL société → PXP
         // Les conso Ulys (péage) datées vivent aussi dans total_conso_tx (pour le suivi des congés) mais

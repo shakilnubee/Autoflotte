@@ -2779,10 +2779,38 @@ FP.rapprochementPanel = function (mount, items, onDone) {
   return unmatched.length;
 };
 
+// ⚠️ DÉDOUBLONNAGE CONSO « badge = par personne, pas par véhicule » (consigne explicite) : Ulys (et
+// d'autres) peuvent lister le MÊME passage sous PLUSIEURS plaques (le badge suit la personne, la plaque
+// n'est qu'indicative) → le même péage est alors compté 2 fois dans les totaux. Ce helper enlève ces
+// doublons STRICTS : même carte/badge + même date + même montant + même produit + même n° de pièce, la
+// plaque n'entrant PAS dans la clé (c'est justement le seul champ qui diffère). Une conso SANS carte/badge
+// (rattachée par plaque) n'est JAMAIS fusionnée (clé = son id unique) → aucune vraie conso n'est perdue.
+// Source UNIQUE : à utiliser partout où on lit/somme total_conso_tx (Contrôle, Total Fleet, fiche…).
+FP.dedupeConsoTx = (list) => {
+  if (!Array.isArray(list)) return list || [];
+  const seen = new Set(); const out = [];
+  for (const t of list) {
+    if (!t) continue;
+    const carte = (t.carte || t.badge || '') + '';
+    const date = (t.dateTx || t.date_tx || '') + '';
+    const mtt = (t.montantTtc != null ? t.montantTtc : t.montant_ttc);
+    const prod = (t.produit || '').toString().trim().toLowerCase();
+    const fac = (t.facnum || t.facNum || '') + '';
+    // Sans carte/badge → clé = id unique (jamais fusionné). Avec carte/badge → clé sans la plaque.
+    const key = carte ? ('c|' + carte + '|' + date + '|' + mtt + '|' + prod + '|' + fac)
+                      : ('i|' + (t.id != null ? t.id : (date + '|' + mtt + '|' + prod + '|' + (t.plaque || ''))));
+    if (seen.has(key)) continue;
+    seen.add(key); out.push(t);
+  }
+  return out;
+};
+
 // Détecte les consos survenues PENDANT un congé (interdit). `txList` = transactions DATÉES
 // { conducteur (nom), carte, plaque, dateTx:'AAAA-MM-JJ', categorie, montantTtc, produit }. Par défaut
 // on regarde TOUS les types de conso (carburant, péage, boutique, lavage…) ; `opts.categories` restreint.
+// ⚠️ On dédoublonne D'ABORD (FP.dedupeConsoTx) : un même passage listé sous plusieurs plaques = 1 anomalie.
 FP.consoPendantConge = (txList, opts) => {
+  txList = FP.dedupeConsoTx(txList);
   const o = opts || {}; const cats = (o.categories && o.categories.length) ? o.categories.map(c => String(c).toLowerCase()) : null;
   const out = [];
   (txList || []).forEach(t => {
