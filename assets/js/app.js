@@ -4365,6 +4365,56 @@ window.addEventListener('resize', () => { try { FP.clampDropdowns(); } catch (e)
 })();
 
 // === Paramètres utilisateur persistés (localStorage) ===
+// 🛟 SAUVEGARDE AUTOMATIQUE des réglages (« historique de versions » gratuit, anti-perte).
+// Garde les N dernières versions des réglages EN LOCAL (par société), INDÉPENDAMMENT du serveur
+// et du système d'enregistrement → immunisé contre un éventuel bug de sauvegarde. Restaurable en
+// 1 clic (Paramètres). Survit aux rechargements (localStorage, clé DÉDIÉE jamais écrasée par le
+// chargement des réglages). Ne remplace PAS la sauvegarde manuelle (export JSON) — c'est un filet EN PLUS.
+FP.backups = {
+  MAX: 15,               // nombre de versions conservées
+  COALESCE_MS: 90 * 1000, // rafales < 90 s → on remplace le dernier point (évite 50 points en 1 min)
+  _soc() { try { return (FP.activeSociete && FP.activeSociete()) || 'PXP'; } catch (e) { return 'PXP'; } },
+  _key() { return 'fp_bak_' + this._soc(); },
+  _list() { try { const a = JSON.parse(localStorage.getItem(this._key()) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } },
+  list() { return this._list(); },
+  // Résumé lisible d'une version (pour l'écran de restauration).
+  summary(data) {
+    data = data || {};
+    const n = o => (o && typeof o === 'object' && !Array.isArray(o)) ? Object.keys(o).length : 0;
+    const a = x => Array.isArray(x) ? x.length : 0;
+    const parts = [];
+    if (n(data.condConges)) parts.push(n(data.condConges) + ' congés');
+    if (a(data.assureurs)) parts.push(a(data.assureurs) + ' assureurs');
+    if (n(data.assurancePrimes)) parts.push(n(data.assurancePrimes) + ' primes');
+    if (n(data.leasingContrats)) parts.push(n(data.leasingContrats) + ' leasing');
+    if (a(data.loueurs)) parts.push(a(data.loueurs) + ' loueurs');
+    return parts.length ? parts.join(' · ') : 'réglages';
+  },
+  snapshot(data) {
+    try {
+      if (!data || typeof data !== 'object') return;
+      const now = Date.now();
+      const rawNew = JSON.stringify(data);
+      let list = this._list();
+      // Dédup : identique au dernier point → rien à faire.
+      if (list.length && JSON.stringify(list[0].data) === rawNew) return;
+      const snap = { ts: now, data: data };
+      // Coalesce des rafales : dernier point très récent → on le remplace au lieu d'en empiler un.
+      if (list.length && (now - (list[0].ts || 0)) < this.COALESCE_MS) list[0] = snap;
+      else list.unshift(snap);
+      if (list.length > this.MAX) list = list.slice(0, this.MAX);
+      // Écriture avec repli anti-quota : si trop volumineux, on retire les plus vieux jusqu'à ce que ça passe.
+      while (list.length) {
+        try { localStorage.setItem(this._key(), JSON.stringify(list)); break; }
+        catch (e) { if (list.length <= 1) break; list.pop(); }
+      }
+    } catch (e) {}
+  },
+  // Renvoie les DONNÉES d'une version (par son horodatage) pour restauration. La restauration
+  // elle-même passe par FP.settings.save (fusion SÛRE : elle ne supprime rien de plus récent).
+  get(ts) { const s = this._list().find(x => x.ts === ts); return s ? s.data : null; },
+};
+
 FP.settings = {
   STORAGE_KEY: 'auto_flotte_settings',
   // Réglages (apparence : groupes, libellés, couleurs…) PROPRES À CHAQUE SOCIÉTÉ.
@@ -4498,6 +4548,10 @@ FP.settings = {
     let prevLocal = null; try { prevLocal = JSON.parse(this._readLocal() || 'null'); } catch (e) {}
     localStorage.setItem(this._key(), JSON.stringify(obj));
     this.applyTheme();
+    // 🛟 SAUVEGARDE AUTOMATIQUE (filet anti-perte, indépendant du serveur) : on garde un historique
+    // local des dernières versions des réglages → restaurable en 1 clic depuis Paramètres, même s'il
+    // restait un bug d'enregistrement. C'est notre « historique de versions » gratuit (cf. FP.backups).
+    try { if (FP.backups) FP.backups.snapshot(obj); } catch (e) {}
     // Partage les réglages PAR SOCIÉTÉ sur tous les postes via Supabase (ligne app_settings = la
     // société). Écriture par FUSION « delta » anti-écrasement (voir _pushSettings) — sinon deux
     // postes admin qui enregistrent en même temps s'écrasaient (le dernier gagnait, l'autre perdait
