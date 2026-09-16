@@ -1494,9 +1494,11 @@
     // Cartes carburant / badge télépéage DU CONDUCTEUR — 2 numéros DISTINCTS (Total vs Ulys),
     // stockés par société dans les réglages. Servent à rattacher la conso Total Fleet / Ulys au
     // bon conducteur à l'import des factures (le badge/carte lu sur la facture = ce numéro).
-    // MAISON = fiche VÉHICULE : les n° s'affichent ici en LECTURE SEULE (FP.badgeChipsReadonlyHTML),
-    // via la SOURCE UNIQUE FP.currentBadgeNums (n° du conducteur + n° des véhicules qu'il conduit).
-    // L'édition (ajout/retrait) se fait sur la fiche véhicule ou dans Contrôle → Cartes & badges.
+    // ⚠️ BADGE = PAR CONDUCTEUR (consigne explicite) : le badge/carte suit la PERSONNE, pas le véhicule.
+    // On l'ÉDITE donc ICI (FP.badgeChipsHTML, scope 'cond' → écrit settings[condBadgeUlys/…][key]) — la
+    // MÊME donnée que « Contrôle → Cartes & badges » (même scope 'cond', même clé). Modifier à un endroit
+    // = modifier partout (fiche conducteur, Cartes & badges, et l'attribution de la conso). L'édition est
+    // câblée par FP.wireBadgeChips($('drawer-body')) plus bas.
     // Congés / absences du conducteur → détection d'une conso pendant un congé (interdit).
     const _conges = (FP.getConges ? FP.getConges(d.key) : []);
     const _inpD = 'border:1px solid var(--fp-border);border-radius:6px;padding:3px 7px;font-size:.85rem';
@@ -1504,8 +1506,8 @@
       ? _conges.map((c, i) => `<div class="flex justify-between items-center gap-2 py-1"><span>📅 ${FP.date(c.debut)} → ${FP.date(c.fin)}${c.motif ? ' · <span class="text-slate-500">' + escapeHtml(c.motif) + '</span>' : ''}</span><button type="button" class="text-red-500 hover:text-red-700 font-bold px-1" data-conge-del="${i}" data-key="${escapeHtml(d.key)}" title="Retirer ce congé">✕</button></div>`).join('')
       : '<p class="text-slate-400">Aucun congé enregistré.</p>';
     const carteInner = `<div class="text-sm space-y-2">
-        ${(FP.prestataires ? FP.prestataires() : []).map(p => { const lbl = (p.type === 'peage' ? 'Badge télépéage' : 'Carte carburant'); return `<div class="flex flex-col gap-1.5"><span class="text-slate-600">${lbl} <b>${escapeHtml(p.nom)}</b> (n°)</span>${FP.badgeChipsReadonlyHTML({ scope: 'cond', numkey: p.numKey, key: d.key })}</div>`; }).join('')}
-        <p class="text-xs text-slate-400" style="line-height:1.45">🚗 <b>Maison = fiche du véhicule.</b> Ces n° s'affichent ici <b>en lecture seule</b> (avec la plaque du véhicule porteur) pour info et pour <b>rattacher la conso au bon conducteur</b>. Pour <b>ajouter / modifier / retirer</b> un n°, ouvre la <b>fiche du véhicule</b> concerné (section « Carte carburant &amp; télépéage ») — c'est la même donnée, visible des deux côtés.</p>
+        ${(FP.prestataires ? FP.prestataires() : []).map(p => { const lbl = (p.type === 'peage' ? 'Badge télépéage' : 'Carte carburant'); return `<div class="flex flex-col gap-1.5"><span class="text-slate-600">${lbl} <b>${escapeHtml(p.nom)}</b> (n°)</span>${FP.badgeChipsHTML({ scope: 'cond', numkey: p.numKey, key: d.key, placeholder: (p.type === 'peage' ? 'N° de badge…' : 'N° de carte…') })}</div>`; }).join('')}
+        <p class="text-xs text-slate-400" style="line-height:1.45">🔗 <b>Le n° est rattaché au CONDUCTEUR</b> (le badge/la carte suit la personne). Tu peux l'<b>ajouter / retirer</b> ici, et c'est <b>la même donnée</b> que dans <b>Contrôle → 💳 Cartes &amp; badges</b> et sur la fiche du véhicule qu'il conduit : le modifier à un endroit le change <b>partout</b>. C'est ce numéro qui rattache la conso <b>Total Fleet / Ulys</b> au bon conducteur.</p>
       </div>`;
     // 🌴 CONGÉS / ABSENCES — carte dédiée + saisie MINIMALE (règle « simplifier ») : une SEULE date =
     // absence d'un jour (la fin se met toute seule = le début), motif optionnel, et la touche Entrée
