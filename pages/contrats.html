@@ -1083,6 +1083,17 @@
       el.textContent = (assurSort.by === col) ? (assurSort.dir === 'asc' ? '▲' : '▼') : '';
     });
   }
+  // ⚠️ SOURCE UNIQUE de la liste Assurance affichée : véhicules possédés, FILTRÉS par assureur (barre du
+  // haut) puis TRIÉS (assurSort). Utilisée par le tableau ET par l'export → l'export suit EXACTEMENT ce
+  // qui est à l'écran (même filtre + même tri), consigne explicite de l'utilisateur.
+  function assurVisibleVehicles() {
+    const assList = getAssureurs(); const flt = assurFilter;
+    return owned().filter(v => {
+      if (flt === 'all') return true;
+      const id = assureurIdOf(v) || (assList[0] ? assList[0].id : '');
+      return flt === '__none__' ? (!assureurIdOf(v) && !assList.length) : (id === flt);
+    }).sort(_assurSortCmp);
+  }
   function renderAssurance() {
     const prime = assurPrime(); const n = owned().length || 0;
     const hasPerVeh = Object.keys(assurPrimes()).length > 0;
@@ -1098,11 +1109,7 @@
     let sumTtc = 0, cntVeh = 0;   // total (par assureur si filtré) — cumulé pendant le rendu des lignes
     // On liste les véhicules POSSÉDÉS (owned = non vendus), donc « à vendre » INCLUS : ils sont encore
     // assurés et comptés dans le total des primes → la somme des lignes = le total affiché (plus d'écart).
-    tbody.innerHTML = owned().filter(v => {
-      if (flt === 'all') return true;
-      const id = assureurIdOf(v) || (assList[0] ? assList[0].id : '');
-      return flt === '__none__' ? !assureurIdOf(v) && !assList.length : (id === flt);
-    }).sort(_assurSortCmp).map(v => {
+    tbody.innerHTML = assurVisibleVehicles().map(v => {
       const pr = vehPrime(v);
       if (!pr && !FP.horsFlotte(v)) missing.push(v);
       { const c = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : (hasPerVeh ? 0 : parVeh); sumTtc += (Number.isFinite(c) ? c : 0); cntVeh++; }
@@ -1753,8 +1760,9 @@
     }));
   }
   // Lignes ASSURANCE (une par véhicule) : assureur rattaché + prime HT/TTC annuelle.
+  // ⚠️ MÊME liste que l'écran (filtre assureur + tri) via assurVisibleVehicles → export = affichage.
   function assuranceExportRows() {
-    return vehicules.map(v => {
+    return assurVisibleVehicles().map(v => {
       const pr = (typeof vehPrime === 'function') ? vehPrime(v) : null;
       return {
         assureur: (typeof assureurLabel === 'function' ? assureurLabel(v) : ((FP.assuranceLabel && FP.assuranceLabel()) || 'Assurance')),
