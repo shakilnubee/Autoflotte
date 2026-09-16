@@ -398,12 +398,12 @@
           <thead>
             <tr>
               <th>Immat.</th>
-              <th>Véhicule</th>
+              <th data-assur-sort="veh" style="cursor:pointer;user-select:none" title="Trier par véhicule (modèle)">Véhicule <span data-assur-arrow="veh" style="opacity:.55"></span></th>
               <th>Chauffeur</th>
               <th>Assureur</th>
               <th>Groupe</th>
               <th>Statut</th>
-              <th style="text-align:right">Coût annuel/véh.</th>
+              <th data-assur-sort="montant" style="text-align:right;cursor:pointer;user-select:none" title="Trier par montant de la prime">Coût annuel/véh. <span data-assur-arrow="montant" style="opacity:.55"></span></th>
             </tr>
           </thead>
           <tbody id="tbody-assurance"></tbody>
@@ -1059,6 +1059,30 @@
     if ($('assur-mensuel')) $('assur-mensuel').textContent = prime ? FP.euro(prime/12) : '—';
     if ($('assur-parveh'))  $('assur-parveh').textContent  = (prime && n) ? FP.euro(prime/n) : '—';
   }
+  // Tri du tableau Assurance : par MONTANT de prime (défaut, décroissant) ou par VÉHICULE (modèle).
+  // Cliquer un en-tête bascule asc/desc. Réglage mémorisé dans les réglages (retrouvé sur tous les postes).
+  let assurSort = (function () { try { const s = FP.settings.get().assurSort; if (s && (s.by === 'veh' || s.by === 'montant')) return { by: s.by, dir: (s.dir === 'asc' ? 'asc' : 'desc') }; } catch (e) {} return { by: 'montant', dir: 'desc' }; })();
+  function _assurSortCmp(a, b) {
+    const dir = assurSort.dir === 'asc' ? 1 : -1;
+    if (assurSort.by === 'veh') {
+      const na = ((a.marque || '') + ' ' + (a.modele || '')).trim().toLowerCase();
+      const nb = ((b.marque || '') + ' ' + (b.modele || '')).trim().toLowerCase();
+      return na.localeCompare(nb, 'fr') * dir;
+    }
+    // montant : la prime TTC (véhicule sans prime = -1 → toujours en bas quel que soit le sens)
+    const pa = (function () { const p = vehPrime(a); return (p && Number.isFinite(p.ttc)) ? p.ttc : -1; })();
+    const pb = (function () { const p = vehPrime(b); return (p && Number.isFinite(p.ttc)) ? p.ttc : -1; })();
+    if (pa < 0 && pb >= 0) return 1;   // « à compléter » toujours en bas
+    if (pb < 0 && pa >= 0) return -1;
+    if (pa === pb) return ((a.immat || '')).localeCompare(b.immat || '');   // stable
+    return (pa - pb) * dir;
+  }
+  function _updateAssurArrows() {
+    document.querySelectorAll('[data-assur-arrow]').forEach(el => {
+      const col = el.getAttribute('data-assur-arrow');
+      el.textContent = (assurSort.by === col) ? (assurSort.dir === 'asc' ? '▲' : '▼') : '';
+    });
+  }
   function renderAssurance() {
     const prime = assurPrime(); const n = owned().length || 0;
     const hasPerVeh = Object.keys(assurPrimes()).length > 0;
@@ -1078,7 +1102,7 @@
       if (flt === 'all') return true;
       const id = assureurIdOf(v) || (assList[0] ? assList[0].id : '');
       return flt === '__none__' ? !assureurIdOf(v) && !assList.length : (id === flt);
-    }).map(v => {
+    }).sort(_assurSortCmp).map(v => {
       const pr = vehPrime(v);
       if (!pr && !FP.horsFlotte(v)) missing.push(v);
       { const c = (pr && Number.isFinite(pr.ttc)) ? pr.ttc : (hasPerVeh ? 0 : parVeh); sumTtc += (Number.isFinite(c) ? c : 0); cntVeh++; }
@@ -1111,6 +1135,7 @@
         totLine.innerHTML = `${FP.esc(who)} : <span style="color:var(--fp-accent)">${FP.euro(sumTtc)} / an</span> <span style="font-weight:600;color:var(--fp-muted);font-size:.85rem">· ${cntVeh} véhicule(s) · ${FP.euro(sumTtc / 12)}/mois</span>`;
       } else { totLine.style.display = 'none'; }
     }
+    _updateAssurArrows();
     if (window.lucide) try { lucide.createIcons(); } catch (e) {}
     const mz = $('assur-missing');
     if (mz) {
@@ -3535,6 +3560,15 @@
   if ($('prime-drop')) $('prime-drop').addEventListener('click', () => { const inp = $('prime-file'); if (inp) { inp.value = ''; inp.click(); } });
   if ($('prime-file')) $('prime-file').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) primeFileSelected(f); });
   if ($('prime-save')) $('prime-save').addEventListener('click', savePrime);
+  // Tri du tableau Assurance : clic sur l'en-tête « Véhicule » ou « Coût annuel/véh. » → trie / bascule
+  // asc↔desc. Mémorisé (settings.assurSort) → retrouvé sur tous les postes. Défaut = par montant (desc).
+  document.querySelectorAll('[data-assur-sort]').forEach(th => th.addEventListener('click', () => {
+    const by = th.getAttribute('data-assur-sort');
+    if (assurSort.by === by) assurSort = { by, dir: (assurSort.dir === 'asc' ? 'desc' : 'asc') };
+    else assurSort = { by, dir: (by === 'montant' ? 'desc' : 'asc') };   // 1er clic : montant→desc, véhicule→A→Z
+    try { const s = FP.settings.get(); s.assurSort = { by: assurSort.by, dir: assurSort.dir }; FP.settings.save(s); } catch (e) {}
+    renderAssurance();
+  }));
   // Filtre par assureur + rattachement d'un véhicule à son assureur (colonne « Assureur »).
   if ($('assur-filter')) $('assur-filter').addEventListener('change', (e) => { assurFilter = e.target.value; renderAssurance(); });
   if ($('tbody-assurance')) $('tbody-assurance').addEventListener('change', (e) => {
