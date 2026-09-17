@@ -505,6 +505,13 @@
       if (dataChanged || settingsChanged) {
         document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'supabase', settingsChanged, counts: { vehicules: data.vehicules.length, amendes: data.amendes.length, factures: data.factures.length } } }));
       }
+      // ⚠️ FILET ANTI « CACHE PÉRIMÉ » (mobile) : congés / leasing / loueurs… vivent dans app_settings.
+      // Si le pull des réglages a échoué en silence (réseau mobile capricieux → `_settingsPromise` = null),
+      // l'écran garderait les anciens réglages jusqu'à un vidage manuel du cache (inacceptable pour un
+      // client). On RETENTE en tâche de fond ~3 s après le chargement : FP.refreshSettings re-lit le
+      // serveur et ne rafraîchit QUE si ça diffère (aucune écriture). Les retours au 1er plan / réseau
+      // relancent aussi cette re-synchro (voir wireSettingsAutoRefresh plus bas).
+      try { setTimeout(function () { try { if (FP.refreshSettings) FP.refreshSettings(); } catch (e) {} }, 3000); } catch (e) {}
       return data;
     } catch (e) {
       console.warn('[FP.db] Supabase indisponible, fallback sur data.js local :', e);
@@ -513,5 +520,61 @@
       document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'local', error: e.message } }));
       return null;
     }
+  })();
+
+  // ============================================================
+  // RE-SYNCHRO DES RÉGLAGES — anti « cache périmé » (congés / leasing / loueurs / assureurs… vivent
+  // dans app_settings, pas dans les tables véhicules/amendes/factures). RE-LIT le serveur et rafraîchit
+  // l'affichage UNIQUEMENT si ça diffère. ⚠️ NE FAIT AUCUNE ÉCRITURE (lecture seule) → aucun risque
+  // d'écraser le serveur. But : un client n'a JAMAIS besoin de vider son cache pour retrouver ses données.
+  FP.refreshSettings = function () {
+    try {
+      if (!(FP.supabase && FP.supabase.from && FP.settings)) return Promise.resolve(false);
+      if (FP._refreshingSettings) return Promise.resolve(false);
+      FP._refreshingSettings = true;
+      const release = (v) => { FP._refreshingSettings = false; return v; };
+      let sid = 'global';
+      try { sid = FP.settings._effectiveId || (FP.settings._dbId ? FP.settings._dbId() : 'global'); } catch (e) {}
+      const fetchOne = (id) => FP.supabase.from('app_settings').select('data').eq('id', id).maybeSingle();
+      return fetchOne(sid).then(async (r) => {
+        if (r && r.error) throw r.error;
+        let shared = r && r.data && r.data.data;
+        let effId = sid;
+        if ((!shared || typeof shared !== 'object') && sid === 'PXP') {   // PXP historique = ligne 'global'
+          const r2 = await fetchOne('global');
+          const g = r2 && r2.data && r2.data.data;
+          if (g && typeof g === 'object') { shared = g; effId = 'global'; }
+        }
+        if (!shared || typeof shared !== 'object') return release(false);   // rien de fiable → on garde l'existant
+        try { FP.settings._effectiveId = effId; } catch (e) {}
+        const key = FP.settings._key ? FP.settings._key() : 'auto_flotte_settings';
+        let prev = null; try { prev = localStorage.getItem(key); } catch (e) {}
+        const fresh = JSON.stringify(shared);
+        const changed = (prev !== fresh);
+        try { localStorage.setItem(key, fresh); } catch (e) {}
+        try { FP.settings._serverSnap = JSON.parse(fresh); } catch (e) {}   // base de fusion delta = serveur frais
+        if (changed) {
+          try { if (FP.normaliserLoueursPXP) FP.normaliserLoueursPXP(); } catch (e) {}
+          try { if (FP.settings.applyTheme) FP.settings.applyTheme(); } catch (e) {}
+          try { if (FP.applyCustomNavLabels) FP.applyCustomNavLabels(); } catch (e) {}
+          try { if (FP.applyNavOrder) FP.applyNavOrder(); } catch (e) {}
+          try { if (FP.applyNavVisibility) FP.applyNavVisibility(); } catch (e) {}
+          try { if (FP.applyCustomTexts) FP.applyCustomTexts(); } catch (e) {}
+          try { document.dispatchEvent(new CustomEvent('fp:data-ready', { detail: { source: 'settings-refresh', settingsChanged: true } })); } catch (e) {}
+        }
+        return release(changed);
+      }).catch(() => release(false));
+    } catch (e) { FP._refreshingSettings = false; return Promise.resolve(false); }
+  };
+
+  // Déclencheurs de re-synchro : retour de l'appli au 1er plan (crucial sur mobile/PWA), retour du
+  // réseau. Anti-rafale (8 s) pour ne pas spammer le serveur.
+  (function wireSettingsAutoRefresh() {
+    let last = 0;
+    const kick = () => { const now = Date.now(); if (now - last < 8000) return; last = now; try { FP.refreshSettings(); } catch (e) {} };
+    try { document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') kick(); }); } catch (e) {}
+    try { window.addEventListener('focus', kick); } catch (e) {}
+    try { window.addEventListener('online', () => { last = 0; kick(); }); } catch (e) {}
+    try { window.addEventListener('pageshow', (e) => { if (e && e.persisted) { last = 0; kick(); } }); } catch (e) {} // retour via bfcache (mobile)
   })();
 })();
