@@ -19,6 +19,10 @@
     mesMin: 350,       // fourchette basse mise en service (info)
     mesMax: 1000,      // fourchette haute mise en service (info)
     tauxHoraire: 65,   // € / heure — prestations hors forfait / au temps passé
+    // ===== FORMULE « LOGICIEL SEUL » (app sans gestion déléguée) =====
+    appMin: 550,       // forfait mensuel LOGICIEL SEUL — de 1 à 25 véhicules (1 accès gestionnaire inclus)
+    appVeh: 22,        // € / véhicule / mois — LOGICIEL SEUL au-delà de 25 véhicules (22×25 = 550 → continuité)
+    misePlace: 1500,   // mise en place initiale LOGICIEL SEUL (paramétrage + intégration + QR + onboarding) — paiement unique
     // Prestations PONCTUELLES facturées en supplément (cochables dans le devis).
     // unite : 'heure' | 'vehicule' | 'intervention' | 'dossier' | 'forfait'
     supplements: [
@@ -32,7 +36,7 @@
       { key: 'urgence',     label: 'Mission urgente (traitement prioritaire)', prix: 75, unite: 'heure' }
     ]
   };
-  var NUMKEYS = ['refVeh', 'minMensuel', 'r1', 'r2', 'r3', 'surDevisMin', 'mes', 'mesMin', 'mesMax', 'tauxHoraire'];
+  var NUMKEYS = ['refVeh', 'minMensuel', 'r1', 'r2', 'r3', 'surDevisMin', 'mes', 'mesMin', 'mesMax', 'tauxHoraire', 'appMin', 'appVeh', 'misePlace'];
   var UNITES = ['heure', 'vehicule', 'intervention', 'dossier', 'forfait'];
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function num(v, d) { v = Number(v); return (isFinite(v) && v >= 0) ? v : d; }
@@ -109,13 +113,28 @@
     var pv = tarifVeh(nb, b);
     return (pv == null) ? b.minMensuel : Math.max(b.minMensuel, pv * nb);
   }
+  // ===== FORMULE « LOGICIEL SEUL » =====
+  // Tarif au véhicule (app seule) : null = forfait (≤ 25 véh) ou « sur devis » (≥ seuil).
+  function tarifAppVeh(nb, b) {
+    b = b || get(); nb = Math.max(1, nb || 1);
+    if (nb <= 25) return null;      // forfait minimum (550 € / mois)
+    if (surDevis(nb, b)) return null;
+    return b.appVeh;
+  }
+  // Montant mensuel total (app seule, minimum 550 € garanti). null = « sur devis » (≥ seuil).
+  function tarifAppMensuel(nb, b) {
+    b = b || get(); nb = Math.max(1, nb || 1);
+    if (surDevis(nb, b)) return null;
+    return Math.max(b.appMin, b.appVeh * nb);   // 22×25 = 550 → continuité parfaite au seuil de 25
+  }
   // Libellé court d'une unité de supplément.
   function uniteLabel(u) {
     return ({ heure: '/ heure', vehicule: 'par véhicule', intervention: 'par intervention', dossier: 'par dossier', forfait: 'forfait' })[u] || '';
   }
   window.PP_BAREME = {
     KEY: KEY, defaults: function () { return clone(DEFAULTS); }, get: get, save: save, reset: reset,
-    tarifVeh: tarifVeh, tarifMensuel: tarifMensuel, surDevis: surDevis, uniteLabel: uniteLabel, pull: pull
+    tarifVeh: tarifVeh, tarifMensuel: tarifMensuel, surDevis: surDevis, uniteLabel: uniteLabel, pull: pull,
+    tarifAppVeh: tarifAppVeh, tarifAppMensuel: tarifAppMensuel
   };
   try { pull(); } catch (e) {}
 })();

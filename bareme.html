@@ -78,6 +78,18 @@
     </div>
 
     <div class="b-card">
+      <div class="b-h"><i data-lucide="monitor" class="w-5 h-5"></i> Mon barème — logiciel seul (app)</div>
+      <div class="b-sub">Le client garde la gestion en interne et utilise <b>uniquement l'application</b> Parc Pilot. Utilisé par le <b>générateur de devis</b> et de <b>contrat</b> (formule « Logiciel seul »).</div>
+
+      <div class="b-field"><label>Forfait <b>logiciel</b> par mois <span class="u">(1 à 25 véhicules · 1 accès gestionnaire inclus)</span></label><span class="flex items-center gap-1"><input id="f-appmin" type="number" min="0" step="10"> <span class="u">€ / mois</span></span></div>
+      <div class="b-field"><label>Tarif <b>au-delà de 25</b> véhicules</label><span class="flex items-center gap-1"><input id="f-appveh" type="number" min="0" step="1"> <span class="u">€ / véhicule / mois</span></span></div>
+      <div class="b-field" style="border-bottom:none"><label><b>Mise en place initiale</b> <span class="u">(paramétrage + intégration + QR codes + onboarding)</span></label><span class="flex items-center gap-1"><input id="f-miseplace" type="number" min="0" step="50"> <span class="u">€ (unique)</span></span></div>
+
+      <div class="b-sim mt-4" id="b-sim-app"></div>
+      <div class="b-sub mt-3" style="margin-bottom:0">Au-delà de 79 véhicules : tarif <b>sur devis</b> (même seuil que la gestion déléguée). Le forfait de 1 à 25 véh équivaut à <b id="s-appveh">22</b> € / véhicule à 25 véhicules.</div>
+    </div>
+
+    <div class="b-card">
       <div class="b-h"><i data-lucide="table" class="w-5 h-5"></i> Ma grille (aperçu en direct)</div>
       <div class="b-sub">Prévisualisation avec les valeurs saisies ci-dessus (avant même d'enregistrer).</div>
       <table class="b-grid">
@@ -102,7 +114,7 @@
   </div>
 
   <script src="assets/js/vendor/supabase.js?v=20260916g"></script>
-<script src="assets/js/bareme.js?v=20260916g"></script>
+<script src="assets/js/bareme.js?v=20260917a"></script>
   <script>
     lucide.createIcons();
     var $ = function (id) { return document.getElementById(id); };
@@ -115,12 +127,14 @@
       return {
         minMensuel:+$('f-min').value||0, r1:+$('f-r1').value||0, r2:+$('f-r2').value||0, r3:+$('f-r3').value||0,
         surDevisMin:+$('f-sd').value||80, mes:+$('f-mes').value||0, tauxHoraire:+$('f-taux').value||0,
+        appMin:+$('f-appmin').value||0, appVeh:+$('f-appveh').value||0, misePlace:+$('f-miseplace').value||0,
         supplements: readSupps()
       };
     }
     function fill(b) {
       $('f-min').value=b.minMensuel; $('f-r1').value=b.r1; $('f-r2').value=b.r2; $('f-r3').value=b.r3;
       $('f-sd').value=b.surDevisMin; $('f-mes').value=b.mes; $('f-taux').value=b.tauxHoraire;
+      $('f-appmin').value=b.appMin; $('f-appveh').value=b.appVeh; $('f-miseplace').value=b.misePlace;
       $('s-ref').textContent = b.refVeh;
       renderSupps(b.supplements || []);
     }
@@ -162,11 +176,19 @@
         var m = PP_BAREME.tarifMensuel(n,b);
         return '<div class="cell"><div class="n">'+n+' véhicules</div><div class="v">'+(m==null?'sur devis':euro0(m))+'</div><div class="n">'+(m==null?'':'/ mois')+'</div></div>';
       }).join('');
+      // Aperçu app seule
+      if ($('b-sim-app')) {
+        $('b-sim-app').innerHTML = [10,25,30,50,79].map(function (n) {
+          var m = PP_BAREME.tarifAppMensuel(n,b);
+          return '<div class="cell"><div class="n">'+n+' véhicules</div><div class="v">'+(m==null?'sur devis':euro0(m))+'</div><div class="n">'+(m==null?'':'/ mois')+'</div></div>';
+        }).join('');
+      }
+      if ($('s-appveh')) $('s-appveh').textContent = (b.appMin && b.appMin>0) ? Math.round(b.appMin/25) : b.appVeh;
     }
     var _touched = false; function touched(){ _touched = true; $('b-status').textContent=''; }
     fill(PP_BAREME.get()); draw();
     window.addEventListener('pp:bareme-ready', function () { if (!_touched) { fill(PP_BAREME.get()); draw(); } });
-    ['f-min','f-r1','f-r2','f-r3','f-sd','f-mes','f-taux'].forEach(function (id) { $(id).addEventListener('input', function () { touched(); draw(); }); });
+    ['f-min','f-r1','f-r2','f-r3','f-sd','f-mes','f-taux','f-appmin','f-appveh','f-miseplace'].forEach(function (id) { $(id).addEventListener('input', function () { touched(); draw(); }); });
     $('sup-add').addEventListener('click', function(){ $('sup-list').appendChild(supRow()); touched(); draw(); if(window.lucide)lucide.createIcons(); });
     $('b-save').addEventListener('click', function () { PP_BAREME.save(formB()); _touched = false; $('b-status').textContent = '✓ Enregistré — synchronisé sur tous tes appareils.'; });
     $('b-reset').addEventListener('click', function () { fill(PP_BAREME.reset()); _touched=false; draw(); $('b-status').textContent = 'Valeurs par défaut restaurées (enregistre pour appliquer).'; if(window.lucide)lucide.createIcons(); });
