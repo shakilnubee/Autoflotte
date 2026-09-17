@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<script>/* pp-build */(function(){try{var B="20260916e",K="pp_build",cur=null;try{cur=localStorage.getItem(K);}catch(e){return;}if(cur===B)return;var ok=false;try{localStorage.setItem(K,B);ok=true;}catch(e){}if(!ok)return;if("serviceWorker"in navigator){try{navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){try{r.update();}catch(e){}});}).catch(function(){});}catch(e){}}if(cur===null)return;var done=function(){try{location.reload();}catch(e){}};if(window.caches&&caches.keys){caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k);}));}).then(done).catch(done);}else{done();}}catch(e){}})();</script>
+<script>/* pp-build */(function(){try{var B="20260916f",K="pp_build",cur=null;try{cur=localStorage.getItem(K);}catch(e){return;}if(cur===B)return;var ok=false;try{localStorage.setItem(K,B);ok=true;}catch(e){}if(!ok)return;if("serviceWorker"in navigator){try{navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){try{r.update();}catch(e){}});}).catch(function(){});}catch(e){}}if(cur===null)return;var done=function(){try{location.reload();}catch(e){}};if(window.caches&&caches.keys){caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k);}));}).then(done).catch(done);}else{done();}}catch(e){}})();</script>
 <script>try{if(localStorage.getItem("fp_dark_mode")!=="0"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Contrats — Parc Pilot</title>
@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260916e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260916f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260916e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260916f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260916e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260916f">
 <style>
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
   .filter-chip:hover { border-color: var(--fp-accent); color: var(--fp-primary); }
@@ -641,11 +641,11 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260916e"></script>
-<script src="../assets/js/supabase-client.js?v=20260916e"></script>
-<script src="../assets/js/data.js?v=20260916e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260916f"></script>
+<script src="../assets/js/supabase-client.js?v=20260916f"></script>
+<script src="../assets/js/data.js?v=20260916f"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260916e"></script>
+<script src="../assets/js/app.min.js?v=20260916f"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1189,13 +1189,16 @@
       const seg = t.slice(plates[i].idx, i + 1 < plates.length ? plates[i + 1].idx : t.length);
       const eurs = []; let e; const re = new RegExp(eurAll.source, 'g');
       while ((e = re.exec(seg))) { const num = parseFloat(e[1].replace(/[^\d,]/g, '').replace(',', '.')); if (Number.isFinite(num) && num > 0) eurs.push(num); }
-      // Les 2 colonnes primes (HT puis TTC) sont les 2 montants € les plus À DROITE. La FRANCHISE
-      // (300/500/1500…) n'a ni « € » ni décimales → déjà exclue. On ne retient le 1er comme HT que si le
-      // couple ressemble à un HT/TTC (ttc ≥ ht, ratio de taxe 1,00–1,60) — sinon on ne garde que le TTC.
+      // ⚠️⚠️ La prime du véhicule = les 2 PREMIERS montants € APRÈS sa plaque (colonnes HT puis TTC,
+      // dans cet ordre). SURTOUT PAS les 2 derniers : pour le DERNIER véhicule d'une section, la tranche
+      // « plaque → plaque suivante » englobe le bloc des TOTAUX (« Sous-total Cotisation annuelle »,
+      // « … pour l'assistance ») → prendre les derniers ramassait le montant de l'ASSISTANCE (ex. 4 697,84 €)
+      // au lieu de la vraie prime → montants « au hasard » sur GZ-103-JN, GR-467-HP… (bug vécu, corrigé).
+      // La FRANCHISE (300/500/1500, sans « € » ni décimales) est déjà exclue par le format « ,dd € ».
+      // Prouvé sur un vrai état de parc : somme des primes lues = total du PDF au centime près.
       if (eurs.length >= 2) {
-        const ttc = eurs[eurs.length - 1], prev = eurs[eurs.length - 2];
-        const ht = (prev <= ttc && ttc / prev >= 1.0 && ttc / prev <= 1.6) ? prev : null;
-        out[plates[i].plate] = { ht, ttc };
+        const ht = eurs[0], ttc = eurs[1];
+        out[plates[i].plate] = (ht <= ttc && ttc / ht >= 1.0 && ttc / ht <= 1.6) ? { ht, ttc } : { ht: null, ttc: ht };
       } else if (eurs.length === 1) out[plates[i].plate] = { ht: null, ttc: eurs[0] };
     }
     return out;
