@@ -4659,7 +4659,12 @@ FP.settings = {
       //   « déjà traités », anomalies conso « OK », lignes ignorées du TCO.
       'rapprIgnore', 'tfAnomOk', 'ignores',
       // — Échéances de documents + surveillances/corbeilles synchronisées (jumeaux de docStatus/docTypes) :
-      'docExpire', 'assuranceIgnore', 'amendesJustifWatch', 'docTrash', 'sinistreDossiers']);
+      'docExpire', 'assuranceIgnore', 'amendesJustifWatch', 'docTrash', 'sinistreDossiers',
+      // — Notes de zone libres (irrécupérables, sans miroir local), liste des prestataires (garages /
+      //   cartes carburant / badges péage), et corbeille de restauration synchronisée (filet anti-perte) :
+      //   ce sont des maps/tableaux de DONNÉES → fusion fine multi-appareils (mergeMap/mergeArr), sinon un
+      //   appareil au cache en retard les écrase EN BLOC (même profil que la perte des congés/loueurs).
+      'zoneNotes', 'prestataires', 'corbeille']);
     // Familles DYNAMIQUES keyées par conducteur (n° carte/badge d'un prestataire perso : condNum_<id>).
     const isCollKey = (k) => COLLECTION_KEYS.has(k) || /^condNum_/.test(k);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
