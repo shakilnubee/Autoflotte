@@ -431,13 +431,13 @@
         const f = (arr, ks) => (arr || []).map(x => ks.map(k => (x[k] ?? '')).join('|')).join(';');
         return f(d.vehicules, ['id','immat','marque','modele','version','km','kmDernierReleve','statut','chauffeur','prochainCT','dateDernierCT','derniereRevision','proprietaire','carburant','co2','puissanceFiscale','dateMiseEnCirculation','valeurAchat','prix','assurance','vin','couleur','boite','prixVente','groupes','categorie','pipelineStatut','autonomie','critAir','antiPollution','commentaire','photoUrl','dimensionPneus','sanef','cleSiege','cleSalarie','cgOrigSiege','cgOrigSalarie','cgUrl','cgFileId','dateChangementPneus'])
              + '~' + (d.vehicules || []).map(v => (v.id || '') + ':' + (v.etatDesLieux ? JSON.stringify(v.etatDesLieux) : '')).join(';')
-             + '#' + f(d.amendes, ['id','statut','montant','montantTTC','montantMinore','montantForfaitaire','montantMajore','majoree','points','date','prenom','motif','numeroAvis','avisUrl','justifUrl','commentaire','archived'])
+             + '#' + f(d.amendes, ['id','statut','montant','montantTTC','montantMinore','montantForfaitaire','montantMajore','majoree','points','date','prenom','motif','numeroAvis','numeroTelepaiement','avisUrl','justifUrl','commentaire','archived'])
              // Pièces jointes (tableau d'objets) : sérialisées à part (nombre + ids) pour que l'ajout/
              // suppression d'un document sur un poste rafraîchisse la section Documents sur les autres.
              + '#' + (d.amendes || []).map(a => (a.id || '') + ':' + ((a.pieces || []).length) + ':' + ((a.pieces || []).map(p => (p && (p.id || p.url)) || '').join(','))).join(';')
-             + '#' + f(d.factures, ['id','montantHT','montantTVA','montantTTC','type','date','vehiculeImmat','fournisseur','numeroFacture','km','description','categorie','source','conducteur','fileName'])
+             + '#' + f(d.factures, ['id','montantHT','montantTVA','montantTTC','type','date','vehiculeImmat','fournisseur','numeroFacture','km','description','categorie','source','conducteur','fileName','fileId'])
              + '#' + (d.factures || []).map(x => (x.id || '') + ':' + ((x.pieces || []).length)).join(';')
-             + '#' + f(d.conducteurs, ['key','nom','prenom','dateNaissance','poste','tel','email','adresse','permisNumero','permisExpiration','permisObtention','permisType','note']);
+             + '#' + f(d.conducteurs, ['key','name','nom','prenom','masque','dateNaissance','poste','tel','email','adresse','permisNumero','permisExpiration','permisObtention','permisType','note']);
       };
       const sigBefore = sig(window.FP_DATA);
       const sigAfter  = sig(data);
@@ -475,11 +475,12 @@
       // périmé), la signature de DONNÉES ne bouge pas → sans ça, `fp:data-ready` ne partait jamais
       // et le tél gardait les anciens réglages (congés/badges absents) jusqu'à un rechargement
       // manuel. On déclenche donc aussi le re-rendu quand les réglages serveur ≠ cache local.
-      let settingsChanged = false;
+      let settingsChanged = false, settingsLoaded = false;
       try {
         // Réglages société : déjà en vol (lancés en parallèle de loadAll ci-dessus).
         const shared = _settingsPromise ? await _settingsPromise : null;
         if (shared && typeof shared === 'object') {
+          settingsLoaded = true;   // pull initial OK → pas besoin de la retry 3 s (évite un 2ᵉ SELECT app_settings)
           const key = (FP.settings && FP.settings._key) ? FP.settings._key() : 'auto_flotte_settings';
           let _prevSettingsRaw = null; try { _prevSettingsRaw = localStorage.getItem(key); } catch (_) {}
           const _freshSettingsRaw = JSON.stringify(shared);
@@ -511,7 +512,9 @@
       // client). On RETENTE en tâche de fond ~3 s après le chargement : FP.refreshSettings re-lit le
       // serveur et ne rafraîchit QUE si ça diffère (aucune écriture). Les retours au 1er plan / réseau
       // relancent aussi cette re-synchro (voir wireSettingsAutoRefresh plus bas).
-      try { setTimeout(function () { try { if (FP.refreshSettings) FP.refreshSettings(); } catch (e) {} }, 3000); } catch (e) {}
+      // Retry SEULEMENT si le pull initial des réglages a échoué (réseau) → pas de 2ᵉ SELECT inutile
+      // quand tout s'est bien chargé. Les triggers focus/online/pageshow assurent la re-synchro ensuite.
+      if (!settingsLoaded) { try { setTimeout(function () { try { if (FP.refreshSettings) FP.refreshSettings(); } catch (e) {} }, 3000); } catch (e) {} }
       return data;
     } catch (e) {
       console.warn('[FP.db] Supabase indisponible, fallback sur data.js local :', e);
@@ -574,7 +577,7 @@
     const kick = () => { const now = Date.now(); if (now - last < 8000) return; last = now; try { FP.refreshSettings(); } catch (e) {} };
     try { document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') kick(); }); } catch (e) {}
     try { window.addEventListener('focus', kick); } catch (e) {}
-    try { window.addEventListener('online', () => { last = 0; kick(); }); } catch (e) {}
+    try { window.addEventListener('online', kick); } catch (e) {}   // respecte l'anti-rafale (évite les rafales si le réseau « flappe »)
     try { window.addEventListener('pageshow', (e) => { if (e && e.persisted) { last = 0; kick(); } }); } catch (e) {} // retour via bfcache (mobile)
   })();
 })();
