@@ -126,7 +126,7 @@
       <label>Prestation</label>
       <div class="seg" id="seg-formule">
         <button data-formule="delegue" class="on">Gestion déléguée</button>
-        <button data-formule="logiciel">Outil seul</button>
+        <button data-formule="logiciel">Logiciel seul (app)</button>
       </div>
       <div class="row">
         <div><label>Nb de véhicules</label><input id="f-veh" type="number" min="1" value="12"></div>
@@ -134,7 +134,7 @@
       </div>
       <div class="row">
         <div><label>Montant mensuel (€)</label><input id="f-mensuel" type="number" min="0"></div>
-        <div><label>Mise en service (€)</label><input id="f-mes" type="number" min="0"></div>
+        <div><label id="f-mes-lbl">Mise en service (€)</label><input id="f-mes" type="number" min="0"></div>
       </div>
       <p class="hint">💡 Calculé automatiquement selon le nombre de véhicules et la formule (comme le devis) — modifiable à la main si besoin.</p>
       <div class="row">
@@ -436,7 +436,7 @@
 </div>
 
 <script src="assets/js/vendor/supabase.js?v=20260916g"></script>
-<script src="assets/js/bareme.js?v=20260916g"></script>
+<script src="assets/js/bareme.js?v=20260917a"></script>
 <script>
 var state = { formule:'delegue' };
 function $(id){ return document.getElementById(id); }
@@ -451,7 +451,15 @@ function BAR(){ return (window.PP_BAREME && PP_BAREME.get) ? PP_BAREME.get() : {
 var PRICING = { get min(){ return BAR().minMensuel; }, get mes(){ return BAR().mes; } };
 var priceTouched = { mensuel:false, mes:false };
 function surDevis(nb){ return (window.PP_BAREME && PP_BAREME.surDevis) ? PP_BAREME.surDevis(nb) : (nb>=BAR().surDevisMin); }
-function calcMensuel(nb, formule){ return (window.PP_BAREME && PP_BAREME.tarifMensuel) ? PP_BAREME.tarifMensuel(nb) : (function(){ var b=BAR(); nb=Math.max(1,nb); if(nb>=b.surDevisMin)return null; if(nb<=9)return b.minMensuel; if(nb<=24)return Math.max(b.minMensuel,b.r1*nb); if(nb<=49)return b.r2*nb; return b.r3*nb; })(); }
+function calcMensuel(nb, formule){
+  if (window.PP_BAREME){
+    if (formule==='logiciel' && PP_BAREME.tarifAppMensuel) return PP_BAREME.tarifAppMensuel(nb);
+    if (formule!=='logiciel' && PP_BAREME.tarifMensuel) return PP_BAREME.tarifMensuel(nb);
+  }
+  var b=BAR(); nb=Math.max(1,nb); if(nb>=b.surDevisMin)return null;
+  if(formule==='logiciel'){ return Math.max(b.appMin||550,(b.appVeh||22)*nb); }
+  if(nb<=9)return b.minMensuel; if(nb<=24)return Math.max(b.minMensuel,b.r1*nb); if(nb<=49)return b.r2*nb; return b.r3*nb;
+}
 
 function segWire(segId, key){
   document.querySelectorAll('#'+segId+' button').forEach(function(b){
@@ -518,7 +526,7 @@ function render(){
   var duree = Math.max(1, parseInt(val('f-duree'),10) || 12);
   var devisFlotte = surDevis(nb);
   if (!priceTouched.mensuel) { var cm = calcMensuel(nb, state.formule); $('f-mensuel').value = (cm==null) ? 0 : cm; }
-  if (!priceTouched.mes) $('f-mes').value = PRICING.mes;
+  if (!priceTouched.mes) $('f-mes').value = (state.formule === 'logiciel') ? (BAR().misePlace || 1500) : PRICING.mes;
   var mensuel = Math.max(0, parseFloat(val('f-mensuel')) || 0);
   var mes = Math.max(0, parseFloat(val('f-mes')) || 0);
   var preavis = Math.max(0, parseInt(val('f-preavis'),10) || 0);
@@ -528,6 +536,7 @@ function render(){
   $('o-date').textContent = todayFr();
   $('o-titre').textContent = deleg ? 'CONTRAT DE PRESTATION DE GESTION DÉLÉGUÉE DE FLOTTE'
                                    : 'CONTRAT D\'ABONNEMENT À L\'OUTIL PARC PILOT';
+  var mesLbl = $('f-mes-lbl'); if (mesLbl) mesLbl.textContent = deleg ? 'Mise en service (€)' : 'Mise en place (€)';
   $('o-taux').textContent = euro0(BAR().tauxHoraire || 65);
 
   // -- Prestataire --
@@ -588,17 +597,21 @@ function render(){
   if (devisFlotte && mensuel === 0) {
     prixHtml = 'En contrepartie, le Client verse une redevance mensuelle <b>établie après analyse de la flotte</b> ('+nb+' véhicules), sur la base d\'un tarif de référence de <b>'+euro0(BAR().refVeh)+' / véhicule / mois</b>, dégressif selon le volume ; le montant définitif figure à l\'Annexe 1.';
   } else {
+    var forfaitMax = deleg ? 9 : 25;
     prixHtml = 'En contrepartie, le Client verse une redevance de <b>'+euro0(mensuel)+' par mois</b>'
-      + (nb>9 ? ' (soit '+euro0(mensuel/nb)+' / véhicule / mois)' : ' (forfait minimum, jusqu\'à 9 véhicules)') + '.';
+      + (nb>forfaitMax ? ' (soit '+euro0(mensuel/nb)+' / véhicule / mois)' : ' (forfait minimum, jusqu\'à '+forfaitMax+' véhicules)') + '.';
   }
-  if (mes > 0) prixHtml += ' Des <b>frais de mise en service de '+euro0(mes)+'</b> (audit, reprise et intégration de la flotte) sont facturés une seule fois au démarrage.';
-  else prixHtml += ' La mise en service (audit, reprise et intégration de la flotte) est <b>offerte</b>.';
+  var mesLibelle = deleg ? 'mise en service' : 'mise en place initiale';
+  var mesContenu = deleg ? '(audit, reprise et intégration de la flotte)' : '(paramétrage de l\'espace, intégration des véhicules, conducteurs et documents, accès gestionnaire, portail conducteur, QR codes et onboarding)';
+  if (mes > 0) prixHtml += ' Des <b>frais de '+mesLibelle+' de '+euro0(mes)+'</b> '+mesContenu+' sont facturés une seule fois au démarrage.';
+  else prixHtml += ' La '+mesLibelle+' '+mesContenu+' est <b>offerte</b>.';
   $('o-prix').innerHTML = prixHtml;
 
   // -- Annexe 1 : Conditions particulières (récap commercial, sans total annuel) --
   var interloc = (val('f-rep') || '—') + (val('f-qual') ? ' ('+val('f-qual')+')' : '') + (val('f-mail') ? ' · '+val('f-mail') : '');
-  var prixVeh = (devisFlotte && mensuel===0) ? euro0(BAR().refVeh)+' / véhicule (indicatif, dégressif)'
-              : (nb>9 ? euro0(mensuel/nb)+' / véhicule / mois' : 'Forfait minimum (jusqu\'à 9 véhicules)');
+  var forfaitMaxA = deleg ? 9 : 25;
+  var prixVeh = (devisFlotte && mensuel===0) ? (deleg ? euro0(BAR().refVeh)+' / véhicule (indicatif, dégressif)' : 'Sur devis (après analyse de la flotte)')
+              : (nb>forfaitMaxA ? euro0(mensuel/nb)+' / véhicule / mois' : 'Forfait minimum (jusqu\'à '+forfaitMaxA+' véhicules)');
   var rows = [
     ['Client', cNom + (val('f-forme') ? ' ('+val('f-forme')+')' : '')],
     ['Prestation', deleg ? 'Gestion déléguée de flotte (outil inclus)' : 'Abonnement à l\'outil Parc Pilot'],
@@ -606,7 +619,7 @@ function render(){
     ['Nombre de sociétés', String(socn)],
     ['Redevance mensuelle', (devisFlotte && mensuel===0) ? 'Sur devis (après analyse de la flotte)' : euro0(mensuel) + ' / mois (net de taxe)'],
     ['Prix par véhicule (garanti pendant l\'engagement)', prixVeh],
-    ['Mise en service', mes > 0 ? euro0(mes) + ' (unique)' : 'Offerte'],
+    [deleg ? 'Mise en service' : 'Mise en place initiale', mes > 0 ? euro0(mes) + ' (unique)' : 'Offerte'],
     ['Prestations incluses', deleg ? 'Outil + suivi amendes/désignations, échéances, contrats/assurances, relances, reporting' : 'Outil complet + lecture auto des documents + mises à jour + support'],
     ['Prestations hors forfait', 'Sur accord préalable écrit du Client (devis/email) — taux indicatif '+euro0(BAR().tauxHoraire||65)+' / heure'],
     ['Durée d\'engagement', duree + ' mois'],
