@@ -679,6 +679,10 @@
 
   // ===== Données =====
   let _tx = [], _ulys = [], _findings = [], _loaded = false;
+  // _txReady = les consos sont RÉELLEMENT chargées cette session (cache local OU réseau). Sert de garde :
+  // sans elles (cas « résultat serveur frais » de l'Option C), un recalcul partirait de _tx VIDE et
+  // EFFACERAIT les trouvailles → on ne recalcule jamais tant que _txReady est faux (on garde le serveur).
+  let _txReady = false;
   // Les congés vivent dans les réglages (app_settings) chargés APRÈS le 1er rendu (depuis le cache local).
   // Tant que la synchro serveur n'a pas confirmé les données (fp:data-ready), on n'AFFIRME pas « aucun
   // congé saisi » — sinon un poste dont le cache local n'a pas encore les congés d'un autre appareil
@@ -687,7 +691,7 @@
   // Cache local du détail conso (par société) → 1er affichage INSTANTANÉ (évite d'attendre le gros
   // total_conso_tx à chaque ouverture de Contrôle). Rafraîchi en arrière-plan à chaque chargement.
   const _ctrlCK = () => { try { return 'fp_ctrl_conso_' + ((FP.activeSociete && FP.activeSociete()) || 'PXP'); } catch (e) { return 'fp_ctrl_conso_PXP'; } };
-  function _seedCtrlCache(){ try { const c = JSON.parse(localStorage.getItem(_ctrlCK()) || 'null'); if (c && Array.isArray(c.tx)) { _tx = c.tx; _ulys = Array.isArray(c.ulys) ? c.ulys : []; return true; } } catch (e) {} return false; }
+  function _seedCtrlCache(){ try { const c = JSON.parse(localStorage.getItem(_ctrlCK()) || 'null'); if (c && Array.isArray(c.tx)) { _tx = c.tx; _ulys = Array.isArray(c.ulys) ? c.ulys : []; _txReady = true; return true; } } catch (e) {} return false; }
   function _writeCtrlCache(){ try {
     // On ne cache QUE les champs utilisés par buildFindings/consoPendantConge/consoApresDepart →
     // cache léger qui tient dans le quota localStorage (sinon écriture qui échoue = pas d'affichage
@@ -711,6 +715,76 @@
   // d'affichage au prochain chargement — pas besoin qu'il soit synchrone avec le clic).
   let _cacheT = null;
   function _writeFindingsCacheSoon(){ if (_cacheT) clearTimeout(_cacheT); _cacheT = setTimeout(() => { _cacheT = null; _writeFindingsCache(); }, 800); }
+
+  // ═══════════════════════════════════════════════════════════════════════════════════════
+  // OPTION C — RÉSULTAT DES TROUVAILLES STOCKÉ CÔTÉ SERVEUR (table controle_findings)
+  // But : afficher INSTANTANÉMENT le résultat déjà prêt (partagé sur tous les appareils) et,
+  // quand rien n'a changé, NE PAS re-télécharger toutes les dépenses ni recalculer. La logique
+  // de détection reste UNIQUE (buildFindings) : on ne fait que ranger/partager son résultat.
+  // ⚠️ C'est un CACHE recalculable — une écriture ratée = simple recalcul à la prochaine visite.
+  const _cfSociete = () => { try { return (FP.activeSociete && FP.activeSociete()) || 'PXP'; } catch (e) { return 'PXP'; } };
+  // Filtre société identique à `flt()` de loadData (une ligne sans societe = PXP).
+  function _cfConsoFilter(q){
+    const soc = _cfSociete();
+    if (!soc || soc === '__all__') return q;                 // vue CEO globale : RLS/admin renvoie tout
+    if (String(soc).toUpperCase() === 'PXP') return q.or('societe.is.null,societe.eq.PXP');
+    return q.eq('societe', soc);
+  }
+  // Aggrégats bruts capturés au dernier téléchargement (loadData) → base de la signature LÉGÈRE.
+  let _rawTxCount = null, _rawTxMaxDate = '', _rawUlysCount = null, _haveRaw = false;
+  // Signature LÉGÈRE : dit « les entrées ont-elles bougé ? » SANS tout retélécharger. Reprend les
+  // mêmes ingrédients que _buildSig (hors somme des montants, remplacée par count + dernière date +
+  // n° max, cheap côté serveur ; un vrai recalcul de sûreté a lieu si le cache dépasse ~20 h).
+  function _probeParts(){
+    let cong = 0; try { cong = Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length; } catch (e) {}
+    let smLen = 0; try { smLen = JSON.stringify(statutMap()).length; } catch (e) {}
+    let okLen = 0; try { okLen = JSON.stringify(tfOk()).length; } catch (e) {}
+    const cnd = (FP.conducteursTous ? FP.conducteursTous() : ((FP.conducteurs && FP.conducteurs.list) ? FP.conducteurs.list() : [])).length;
+    let affLen = 0; try { affLen = JSON.stringify((FP.affectations && FP.affectations.all && FP.affectations.all()) || {}).length; } catch (e) {}
+    const DV = (FP.ASSET_VERSION || 'dev') + '.d4';
+    return { DV, cong, smLen: smLen + okLen, cnd, affLen };
+  }
+  function _probeSigFrom(txCount, txMaxDate, ulysCount){
+    const p = _probeParts();
+    return [p.DV, txCount, txMaxDate || '', ulysCount, p.cnd, p.cong, p.smLen, p.affLen].join('|');
+  }
+  // Signature LÉGÈRE lue DIRECTEMENT du serveur (comptes agrégés) — 3 petites requêtes, aucun gros download.
+  async function _probeDataSigLive(){
+    try {
+      const _d = new Date(); _d.setMonth(_d.getMonth() - 24); const cutoff = _d.toISOString().slice(0, 10);
+      const cRes = await _cfConsoFilter(FP.supabase.from('total_conso_tx').select('id', { count: 'exact', head: true }).gte('date_tx', cutoff));
+      if (!cRes || cRes.error) return null;
+      const txCount = cRes.count || 0;
+      const dRes = await _cfConsoFilter(FP.supabase.from('total_conso_tx').select('date_tx').gte('date_tx', cutoff).order('date_tx', { ascending: false }).limit(1));
+      if (!dRes || dRes.error) return null;
+      const txMaxDate = (dRes.data && dRes.data[0] && dRes.data[0].date_tx) || '';
+      const uRes = await _cfConsoFilter(FP.supabase.from('ulys_conso').select('id', { count: 'exact', head: true }));
+      const ulysCount = (uRes && !uRes.error) ? (uRes.count || 0) : 0;
+      return _probeSigFrom(txCount, txMaxDate, ulysCount);
+    } catch (e) { return null; }
+  }
+  async function _loadServerFindings(){
+    try {
+      const r = await FP.supabase.from('controle_findings').select('sig,probe_sig,findings,updated_at').eq('societe', _cfSociete()).maybeSingle();
+      if (r && !r.error && r.data) return r.data;
+    } catch (e) {}
+    return null;
+  }
+  let _saveT = null;
+  function _saveServerFindings(sig){
+    // Différé (comme le cache local) : on ne réécrit pas à chaque micro-changement de statut.
+    if (_saveT) clearTimeout(_saveT);
+    _saveT = setTimeout(() => {
+      _saveT = null;
+      try {
+        // probe_sig calculable seulement si on a téléchargé les consos cette session (sinon on le laisse
+        // vide → la prochaine visite refera un vrai contrôle de fraîcheur, ce qui est sûr).
+        const probe = _haveRaw ? _probeSigFrom(_rawTxCount, _rawTxMaxDate, _rawUlysCount) : null;
+        const row = { societe: _cfSociete(), sig: sig || _lastBuildSig || null, probe_sig: probe, findings: (_findings || []).slice(0, 4000), updated_at: new Date().toISOString() };
+        FP.supabase.from('controle_findings').upsert(row, { onConflict: 'societe' }).then(r => { if (r && r.error) console.warn('[controle_findings] upsert', r.error.message); }, () => {});
+      } catch (e) {}
+    }, 900);
+  }
   async function loadConducteurs(){
     try { const r = await FP.supabase.from('conducteurs').select('*'); if (r && r.data) { const soc = FP.activeSociete ? FP.activeSociete() : null; window.FP_DATA.conducteurs = (soc && soc !== '__all__') ? r.data.filter(c => !c.societe || c.societe === soc) : r.data; } } catch (e) {}
   }
@@ -742,8 +816,17 @@
     if (!rt) { rt = await FP.supabase.from('total_conso_tx').select('*').then(r => r, () => ({ data: [] })); }
     // ⚠️ Dédoublonnage « badge par personne » : un même passage listé par Ulys sous plusieurs plaques
     //    est compté UNE fois (source unique FP.dedupeConsoTx) → totaux et anomalies non gonflés.
-    _tx = (FP.dedupeConsoTx ? FP.dedupeConsoTx(flt(rt && rt.data)) : flt(rt && rt.data)); _ulys = flt(ru && ru.data);
-    _loaded = true;
+    const _rawTx = flt(rt && rt.data);
+    _tx = (FP.dedupeConsoTx ? FP.dedupeConsoTx(_rawTx) : _rawTx); _ulys = flt(ru && ru.data);
+    // Aggrégats BRUTS (avant dédoublonnage) → base de la signature légère du cache serveur (Option C).
+    // Doivent correspondre à ce que lit _probeDataSigLive (count/date max sur les mêmes lignes).
+    try {
+      _rawTxCount = _rawTx.length;
+      _rawTxMaxDate = _rawTx.reduce((m, r) => { const d = r && r.date_tx; return (d && d > m) ? d : m; }, '');
+      _rawUlysCount = _ulys.length;
+      _haveRaw = true;
+    } catch (e) { _haveRaw = false; }
+    _loaded = true; _txReady = true;
     _writeCtrlCache();
   }
 
@@ -1047,16 +1130,21 @@
       </div>` : '';
 
     // Diagnostic : explique POURQUOI il y a peu/pas de trouvailles (au lieu d'une page vide muette).
+    // ⚠️ Option C : quand l'affichage vient du RÉSULTAT SERVEUR sans avoir (re)chargé les consos
+    // (_txReady faux), _tx est vide mais ça ne veut PAS dire « aucune conso » → on n'affiche pas le
+    // diagnostic conso (il serait faux/alarmant). On ne le calcule que si on a vraiment les consos.
     let diag = '';
     const nConges = Object.keys((FP.getAllConges && FP.getAllConges()) || {}).length;
-    if (!_tx.length && !_ulys.length) {
-      diag = '<div class="card p-3 mb-4" style="border-left:4px solid var(--fp-warn);background:#FFFBEB;font-size:.86rem;line-height:1.55">⚠️ <b>Aucune conso datée en base.</b> La détection « conso pendant un congé » au <b>jour</b> près a besoin du <b>détail transaction par transaction</b>. Il se reconstruit <b>automatiquement</b> à l\'ouverture de cette page (relevés Total &amp; Ulys avec PDF stocké) — <b>patiente quelques secondes puis recharge</b>. S\'il reste vide, réimporte le relevé <b>détaillé</b> (PDF ou CSV). ' + (nConges ? '' : 'Et saisis les <b>congés</b> sur les fiches conducteurs.') + '</div>';
-    } else if (!nConges && _dataReady) {
-      diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">ℹ️ <b>' + _tx.length + '</b> conso datée(s) chargée(s), mais <b>aucun congé saisi</b> sur les fiches conducteurs. Renseigne les congés (fiche conducteur → « Congés / absences ») pour détecter les conso faites pendant un congé.</div>';
-    } else if (!_findings.length) {
-      diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">🔎 <b>' + _tx.length + '</b> conso datée(s) et <b>' + nConges + '</b> conducteur(s) avec congé analysés — aucune conso ne tombe dans une période de congé. Si tu en attends (ex. Romuald en juillet), vérifie que <b>ses dates de congé</b> couvrent bien ces jours et que le relevé <b>détaillé</b> de ce mois est importé.</div>';
+    if (_txReady) {
+      if (!_tx.length && !_ulys.length) {
+        diag = '<div class="card p-3 mb-4" style="border-left:4px solid var(--fp-warn);background:#FFFBEB;font-size:.86rem;line-height:1.55">⚠️ <b>Aucune conso datée en base.</b> La détection « conso pendant un congé » au <b>jour</b> près a besoin du <b>détail transaction par transaction</b>. Il se reconstruit <b>automatiquement</b> à l\'ouverture de cette page (relevés Total &amp; Ulys avec PDF stocké) — <b>patiente quelques secondes puis recharge</b>. S\'il reste vide, réimporte le relevé <b>détaillé</b> (PDF ou CSV). ' + (nConges ? '' : 'Et saisis les <b>congés</b> sur les fiches conducteurs.') + '</div>';
+      } else if (!nConges && _dataReady) {
+        diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">ℹ️ <b>' + _tx.length + '</b> conso datée(s) chargée(s), mais <b>aucun congé saisi</b> sur les fiches conducteurs. Renseigne les congés (fiche conducteur → « Congés / absences ») pour détecter les conso faites pendant un congé.</div>';
+      } else if (!_findings.length) {
+        diag = '<div class="card p-3 mb-4" style="border-left:4px solid #3B82F6;background:#EFF6FF;font-size:.86rem;line-height:1.55">🔎 <b>' + _tx.length + '</b> conso datée(s) et <b>' + nConges + '</b> conducteur(s) avec congé analysés — aucune conso ne tombe dans une période de congé. Si tu en attends (ex. Romuald en juillet), vérifie que <b>ses dates de congé</b> couvrent bien ces jours et que le relevé <b>détaillé</b> de ce mois est importé.</div>';
+      }
+      diag += congeDiag(); // détail conducteur par conducteur (utilise _tx → seulement quand les consos sont chargées)
     }
-    diag += congeDiag(); // détail conducteur par conducteur (toujours dispo tant qu'il y a des congés)
 
     if (!all.length) { box.innerHTML = diag + '<div class="card p-6 text-center text-slate-500">Aucune trouvaille pour ce filtre. 👍</div>'; if(window.lucide)lucide.createIcons(); return; }
 
@@ -1389,11 +1477,16 @@
     return DETECT_VERSION + '|' + _tx.length + '|' + _ulys.length + '|' + cnd + '|' + cong + '|' + smLen + '|' + affLen + '|' + Math.round(sum * 100);
   }
   function rebuild(force){
+    // Garde Option C : sans les consos chargées (affichage venu du résultat SERVEUR frais), recalculer
+    // partirait de _tx VIDE et effacerait les trouvailles. On ne recalcule pas ; si un recalcul est
+    // explicitement demandé (force, ex. archivage d'anomalie), on télécharge d'abord PUIS on recalcule.
+    if (!_txReady) { if (force) { loadData().then(() => { try { rebuild(true); } catch (e) {} }); } else { render(); } return; }
     const sig = _buildSig();
     if (!force && sig === _lastBuildSig) { render(); return; } // entrées inchangées → simple re-render (léger)
     _lastBuildSig = sig;
     _findings = buildFindings(); fillConducteurs(); fillMois(); render();
-    _writeFindingsCache(); // mémorise le résultat pour un affichage instantané la prochaine fois
+    _writeFindingsCache(); // mémorise le résultat pour un affichage instantané la prochaine fois (local)
+    _saveServerFindings(sig); // ⚡ Option C : partage le résultat prêt sur tous les appareils (serveur)
   }
   function boot(){
     // ⚡ On laisse la COQUILLE (onglets + KPIs) PEINDRE d'abord, PUIS on calcule/charge. Sinon
@@ -1401,20 +1494,37 @@
     // de vue, la page semble « bloquée un instant après le clic ». En différant, Contrôle apparaît
     // tout de suite et les trouvailles se remplissent juste après.
     const run = async () => {
-      // 0) ⚡ TROUVAILLES EN CACHE → affichage INSTANTANÉ, ZÉRO calcul (c'était le gel « au clic »).
+      // 0) ⚡ TROUVAILLES EN CACHE LOCAL → affichage INSTANTANÉ, ZÉRO calcul (1er rendu sub-100 ms).
       let shownFromCache = false;
       if (_seedFindingsCache()) { try { _loaded = true; fillConducteurs(); fillMois(); render(); shownFromCache = true; } catch (e) {} }
-      // 1) Cache des consos brutes (pour le recalcul) — affichage immédiat si pas encore de trouvailles.
+      // 0b) ⚡ OPTION C — RÉSULTAT SERVEUR (partagé entre appareils) : source d'affichage prioritaire.
+      //     Sur un appareil neuf / après vidage du cache, ça donne le résultat prêt SANS aucun calcul.
+      const serverRow = await _loadServerFindings();
+      if (serverRow && Array.isArray(serverRow.findings)) {
+        try {
+          _findings = serverRow.findings; if (serverRow.sig) _lastBuildSig = serverRow.sig;
+          _loaded = true; fillConducteurs(); fillMois(); render(); shownFromCache = true;
+          _writeFindingsCacheSoon(); // garde le cache local aligné pour le prochain 1er rendu
+        } catch (e) {}
+      }
+      // 1) ⚡ CONTRÔLE DE FRAÎCHEUR LÉGER (aucun gros download) : si les entrées n'ont pas bougé depuis
+      //    le calcul stocké (et cache < ~20 h), on GARDE le résultat serveur → 0 téléchargement, 0 calcul.
+      if (serverRow && serverRow.probe_sig) {
+        try {
+          const liveProbe = await _probeDataSigLive();
+          const ageMs = serverRow.updated_at ? (Date.now() - new Date(serverRow.updated_at).getTime()) : Infinity;
+          if (liveProbe && liveProbe === serverRow.probe_sig && ageMs < 20 * 3600 * 1000) return; // à jour → rien à faire
+        } catch (e) {}
+      }
+      // 2) Quelque chose a (peut-être) changé → on télécharge les données fraîches et on recalcule.
       const hadConsoCache = _seedCtrlCache();
       if (!shownFromCache && hadConsoCache) { try { rebuild(true); } catch (e) {} }
-      // 2) Données fraîches. Conducteurs déjà chargés par l'app → on évite une requête bloquante.
       const jobs = [loadData()];
       const condsOK = !!(window.FP_DATA && Array.isArray(window.FP_DATA.conducteurs) && window.FP_DATA.conducteurs.length);
       if (!condsOK) jobs.push(loadConducteurs());
       await Promise.all(jobs);
-      // 3) Recalcul avec les données fraîches — mais rebuild(false) NE RECALCULE QUE SI la signature
-      //    des données a changé depuis le cache (sinon simple render, déjà fait → rien). Donc sur une
-      //    visite « rien n'a bougé », AUCUN gel de fond. Différé en temps mort si on a déjà affiché.
+      // 3) Recalcul avec les données fraîches — rebuild(false) NE RECALCULE QUE SI la signature a changé
+      //    (sinon simple render). Différé en temps mort si on a déjà affiché (pas de gel visible).
       const recompute = () => { try { rebuild(false); } catch (e) {} };
       if (shownFromCache) { (window.requestIdleCallback ? requestIdleCallback(recompute, { timeout: 2000 }) : setTimeout(recompute, 60)); }
       else { rebuild(false); }
