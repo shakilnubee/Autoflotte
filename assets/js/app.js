@@ -3954,12 +3954,41 @@ FP.ensureJsPDF = function () {
     metaOnce('apple-mobile-web-app-status-bar-style', 'black-translucent');
     metaOnce('apple-mobile-web-app-title', 'Parc Pilot');
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
-      addEventListener('load', () => { navigator.serviceWorker.register(base + 'sw.js').catch(() => {}); });
+      addEventListener('load', () => {
+        navigator.serviceWorker.register(base + 'sw.js').then((reg) => {
+          try { reg.update(); } catch (e) {}
+          // Re-vérifie une nouvelle version du SW à CHAQUE retour de l'appli au 1er plan (crucial iOS/PWA,
+          // où le SW ne se met pas à jour tout seul) → le nouveau SW s'installe (skipWaiting) et prend le
+          // contrôle, ce qui déclenche le rechargement via 'controllerchange' ci-dessous.
+          try { document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { try { reg.update(); } catch (e) {} } }); } catch (e) {}
+        }).catch(() => {});
+      });
       // Rechargement AUTO quand une nouvelle version prend le contrôle → fini le cache périmé
       // (une seule fois, pour éviter toute boucle de rechargement).
       let _swReloaded = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (_swReloaded) return; _swReloaded = true; location.reload();
+      });
+      // ⚠️ FILET ANTI « VIEILLE VERSION EN CACHE » (surtout iOS PWA) — indépendant du service worker.
+      // Sonde le build EN LIGNE via une URL anti-cache (bypasse tout cache), le compare au build EXÉCUTÉ
+      // (FP.ASSET_VERSION). Si l'appareil tourne sur une version PÉRIMÉE, on purge SW + caches et on
+      // recharge UNE seule fois (garde sessionStorage) → l'utilisateur n'a plus JAMAIS à vider le cache.
+      addEventListener('load', () => {
+        try {
+          fetch(base + 'version.json?cb=' + Date.now(), { cache: 'no-store' })
+            .then(r => (r && r.ok) ? r.json() : null)
+            .then((v) => {
+              const live = v && v.build, cur = FP.ASSET_VERSION;
+              if (!live || !cur || cur === 'dev' || String(live) === String(cur)) return; // à jour
+              if (sessionStorage.getItem('fp_forced_reset') === String(live)) return;      // déjà tenté ce build
+              try { sessionStorage.setItem('fp_forced_reset', String(live)); } catch (e) {}
+              const done = () => { try { location.reload(); } catch (e) {} };
+              Promise.resolve()
+                .then(() => navigator.serviceWorker.getRegistrations ? navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister().catch(() => {})))) : null)
+                .then(() => (window.caches && caches.keys) ? caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k).catch(() => {})))) : null)
+                .then(done, done);
+            }).catch(() => {});
+        } catch (e) {}
       });
     }
   } catch (e) {}
