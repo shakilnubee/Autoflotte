@@ -4646,13 +4646,16 @@ FP.settings = {
         else if (FP.db && FP.supabase) FP.db.upsert('app_settings', { id, data });
       } catch (e) {}
     };
-    // Base de comparaison pour le « delta ». Idéalement le snapshot serveur (posé au load). À DÉFAUT
-    // (synchro initiale pas encore faite), l'état LOCAL D'AVANT ce save : il permet de n'écrire QUE les
-    // clés que CE poste vient réellement de changer → on ne réécrase plus les modifs récentes d'un AUTRE
-    // poste (avant, une fusion « le local gagne » sans base pouvait les annuler). Null seulement au tout
-    // 1er enregistrement sur un cache vierge.
-    const base = (this._serverSnap && typeof this._serverSnap === 'object') ? this._serverSnap
-               : ((prevLocal && typeof prevLocal === 'object') ? prevLocal : null);
+    // Base de comparaison pour le « delta ». ⚠️⚠️ SYNCHRO SÛRE (protection #3, cause profonde de la perte
+    // des congés) : la fusion « delta » peut SUPPRIMER des clés côté serveur. On ne l'autorise donc QUE si
+    // on a un INSTANTANÉ SERVEUR FIABLE, réellement chargé cette session (`this._serverSnap`, posé par le
+    // load Supabase / refreshSettings / un push précédent). Tant que ce n'est pas confirmé, on NE prend
+    // PLUS l'ancien cache local (`prevLocal`) comme base : il peut être périmé/incomplet, et une collection
+    // « vidée » y serait prise pour une suppression volontaire → propagée au serveur (le bug vécu). Sans
+    // instantané serveur, `base` reste null → on part sur le chemin ADDITIF (gapFill : le serveur gagne, on
+    // comble seulement les trous) → un cache pas encore synchronisé ne peut JAMAIS effacer des données.
+    // (prevLocal n'est donc plus utilisé comme base ; le 1er push d'une session passe en additif, sûr.)
+    const base = (this._serverSnap && typeof this._serverSnap === 'object') ? this._serverSnap : null;
     // Sans Supabase : on ne peut rien lire/écrire côté serveur → file/local (comportement d'avant).
     if (!(FP.supabase && FP.supabase.from)) { plainUpsert(obj); return; }
     // ⚠️ AUCUN repère FIABLE (ni snapshot serveur, ni état local précédent) = tout 1er enregistrement
