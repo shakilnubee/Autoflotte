@@ -498,7 +498,7 @@
     { k: 'immat', label: 'Immatriculation' }, { k: 'marque', label: 'Marque' }, { k: 'modele', label: 'Modèle' },
     { k: 'categorie', label: 'Catégorie' }, { k: 'carburant', label: 'Carburant' },
     { k: 'dateMiseEnCirculation', label: 'Date de 1re immat.' },
-    { k: 'km', label: 'Kilométrage', empty: v => v.km == null || String(v.km).trim() === '' },
+    { k: 'km', label: 'Kilométrage', empty: v => !(FP.kmActuel ? FP.kmActuel(v) > 0 : (v.km != null && String(v.km).trim() !== '')) },
     { k: 'prochainCT', label: 'Prochain CT', skip: v => !!(FP.ctIgnored && FP.ctIgnored(v)) }, { k: 'proprietaire', label: 'Propriétaire' },
     { k: 'puissanceFiscale', label: 'Puissance fiscale' }, { k: 'vin', label: 'N° de châssis (VIN)' },
     { k: 'assurance', label: 'Assurance', val: v => v.assurance || (FP.assureurLabelVeh && FP.assureurLabelVeh(v)) || (FP.assuranceLabel && FP.assuranceLabel()) },
@@ -710,11 +710,15 @@
       const K = String(v.immat || '').toUpperCase();
       const ov = overrides[K] || {};
       const lld = locByImmat[FP.normImmat(v.immat)] || null;
+      // ⚠️ SOURCE UNIQUE : inclure la BASE PXP en dur (FP.LEASING_CONTRATS), comme FP.leasingContrat
+      // (app.js) — sinon un véhicule de la base (forfait/durée déjà connus, affichés dans la fiche)
+      // était flagué à tort « manquant ». Base gardée PXP (les autres sociétés n'ont que leurs overrides).
+      const base = (((FP.activeSociete && FP.activeSociete()) || 'PXP') === 'PXP' && FP.LEASING_CONTRATS) ? (FP.LEASING_CONTRATS[K] || {}) : {};
       // Repli DÉBUT = mise en circulation du véhicule (même règle que FP.leasingContrat).
-      const debut = ov.debut || (lld && lld.debut) || v.dateMiseEnCirculation || '';
-      const km = ov.kmContrat || (lld && lld.kmTotal) || null;
-      const duree = ov.dureeMois || (lld && lld.dureeMois) || null;
-      const loyer = (ov.loyer > 0 ? ov.loyer : null) || (lld && lld.loyerTTC > 0 ? lld.loyerTTC : null);
+      const debut = ov.debut || (lld && lld.debut) || base.debut || v.dateMiseEnCirculation || '';
+      const km = ov.kmContrat || (lld && lld.kmTotal) || base.kmContrat || null;
+      const duree = ov.dureeMois || (lld && lld.dureeMois) || base.dureeMois || null;
+      const loyer = (ov.loyer > 0 ? ov.loyer : null) || (lld && lld.loyerTTC > 0 ? lld.loyerTTC : null) || (base.loyer > 0 ? base.loyer : null);
       const pfx = 'complet:lease:' + v.id + ':';
       const miss = [];
       if (!debut && !ignHas(pfx + 'leaseDebut')) miss.push(CH[0]);
