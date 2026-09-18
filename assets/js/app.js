@@ -4760,10 +4760,24 @@ FP.settings = {
       // supprime PAS du serveur, on la PRÉSERVE. Sans ça, un cache vide effaçait loueurs, assureurs,
       // échéances/primes d'assurance, etc. (bug de perte de config vécu). Une VRAIE suppression garde
       // la clé présente avec une valeur vide ([]/{}), qui est bien traitée ci-dessous.
+      // Compte les « feuilles » d'une collection (clés d'un map, éléments d'un tableau).
+      const _collSize = (v) => Array.isArray(v) ? v.length : (isPlain(v) ? Object.keys(v).length : ((v == null || v === '') ? 0 : 1));
       Object.keys(obj).forEach(k => {
         const changedHere = JSON.stringify(obj[k]) !== JSON.stringify(base[k]);
         if (!changedHere) return;
-        if (isCollKey(k)) { merged[k] = mergeCollection(k, remote[k], obj[k], base[k]); return; }  // fusion fine (multi-appareils)
+        if (isCollKey(k)) {
+          // ⚠️⚠️⚠️ ANTI-WIPE CATASTROPHIQUE (perte des congés vécue) : si CE poste fait passer une
+          // collection précieuse de « avait du contenu » à « COMPLÈTEMENT VIDE », c'est quasi toujours
+          // un GLITCH de cache (settings partiellement chargés) — PAS une vraie suppression de tout.
+          // On PRÉSERVE alors le serveur (merged[k] reste = remote[k]) au lieu d'effacer en bloc.
+          // La suppression d'items UN PAR UN reste honorée tant qu'il RESTE ≥ 1 item ; seul le passage
+          // à totalement vide est neutralisé (au pire : le tout dernier item « revient » — jamais une perte).
+          if (_collSize(obj[k]) === 0 && (_collSize(base[k]) > 0 || _collSize(remote[k]) > 0)) {
+            try { console.warn('[settings] wipe-total évité pour «' + k + '» (collection vidée par un cache incomplet) → serveur préservé'); } catch (e) {}
+            return; // merged[k] garde la valeur serveur (remote)
+          }
+          merged[k] = mergeCollection(k, remote[k], obj[k], base[k]); return;  // fusion fine (multi-appareils)
+        }
         merged[k] = obj[k];
       });
       // ⚠️ FILET DE SÉCURITÉ « logo » : le logo société est un gros dataURL qui peut MANQUER dans le
