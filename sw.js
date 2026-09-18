@@ -6,7 +6,7 @@
    • NAVIGATIONS HTML → NETWORK-FIRST (en ligne = toujours la version fraîche ; le cache ne
      sert qu'en secours hors-ligne). Évite toute « page périmée ».
    On NE touche PAS aux autres origines (Supabase, Google Fonts, CDN) : réseau direct. */
-const CACHE = 'parcpilot-v20260918c';
+const CACHE = 'parcpilot-v20260918d';
 
 self.addEventListener('install', () => { self.skipWaiting(); });
 
@@ -72,6 +72,13 @@ self.addEventListener('fetch', (e) => {
   let url;
   try { url = new URL(req.url); } catch (_) { return; }
   if (url.origin !== self.location.origin) return; // Supabase / CDN / fonts : réseau direct
+
+  // version.json = sonde « quelle version est en ligne ? » (anti-cache ?cb=…) → RÉSEAU SEUL,
+  // jamais mise en cache (sinon on comparerait à une version périmée + bloat du cache).
+  if (url.pathname.endsWith('/version.json') || url.pathname.endsWith('version.json')) {
+    e.respondWith(fetch(req, { cache: 'no-store' }).catch(() => new Response('{}', { headers: { 'Content-Type': 'application/json' } })));
+    return;
+  }
 
   if (isHtml(req)) {
     // NETWORK-FIRST + `cache: 'no-store'` : on court-circuite le cache HTTP du navigateur
