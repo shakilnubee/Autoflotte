@@ -3954,6 +3954,22 @@ FP.ensureJsPDF = function () {
     metaOnce('apple-mobile-web-app-status-bar-style', 'black-translucent');
     metaOnce('apple-mobile-web-app-title', 'Parc Pilot');
     if ('serviceWorker' in navigator && location.protocol === 'https:') {
+      // Petit bandeau rassurant « mise à jour… » affiché AVANT le rechargement auto (au lieu d'un
+      // rechargement « mystérieux ») → le client voit que l'appli se met à jour toute seule.
+      const showUpdateBanner = () => {
+        try {
+          if (document.getElementById('fp-update-banner')) return;
+          const st = document.createElement('style');
+          st.textContent = '@keyframes fp-upd-spin{to{transform:rotate(360deg)}}';
+          (document.head || document.documentElement).appendChild(st);
+          const b = document.createElement('div');
+          b.id = 'fp-update-banner';
+          b.setAttribute('role', 'status');
+          b.style.cssText = 'position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;transform:translateX(-50%);z-index:99999;display:flex;align-items:center;gap:.55rem;background:#0F1E3D;color:#fff;font:600 14px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;padding:.6rem .95rem;border-radius:9999px;box-shadow:0 8px 24px -8px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.14);max-width:calc(100vw - 24px)';
+          b.innerHTML = '<span style="width:15px;height:15px;border:2px solid rgba(255,255,255,.35);border-top-color:#F97316;border-radius:50%;display:inline-block;flex:none;animation:fp-upd-spin .7s linear infinite"></span> Nouvelle version — mise à jour…';
+          (document.body || document.documentElement).appendChild(b);
+        } catch (e) {}
+      };
       addEventListener('load', () => {
         navigator.serviceWorker.register(base + 'sw.js').then((reg) => {
           try { reg.update(); } catch (e) {}
@@ -3967,7 +3983,9 @@ FP.ensureJsPDF = function () {
       // (une seule fois, pour éviter toute boucle de rechargement).
       let _swReloaded = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (_swReloaded) return; _swReloaded = true; location.reload();
+        if (_swReloaded) return; _swReloaded = true;
+        showUpdateBanner();
+        setTimeout(() => { try { location.reload(); } catch (e) {} }, 700);
       });
       // ⚠️ FILET ANTI « VIEILLE VERSION EN CACHE » (surtout iOS PWA) — indépendant du service worker.
       // Sonde le build EN LIGNE via une URL anti-cache (bypasse tout cache), le compare au build EXÉCUTÉ
@@ -3982,7 +4000,8 @@ FP.ensureJsPDF = function () {
               if (!live || !cur || cur === 'dev' || String(live) === String(cur)) return; // à jour
               if (sessionStorage.getItem('fp_forced_reset') === String(live)) return;      // déjà tenté ce build
               try { sessionStorage.setItem('fp_forced_reset', String(live)); } catch (e) {}
-              const done = () => { try { location.reload(); } catch (e) {} };
+              showUpdateBanner();
+              const done = () => { setTimeout(() => { try { location.reload(); } catch (e) {} }, 500); };
               Promise.resolve()
                 .then(() => navigator.serviceWorker.getRegistrations ? navigator.serviceWorker.getRegistrations().then(rs => Promise.all(rs.map(r => r.unregister().catch(() => {})))) : null)
                 .then(() => (window.caches && caches.keys) ? caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k).catch(() => {})))) : null)
