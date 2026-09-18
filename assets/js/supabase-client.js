@@ -23,7 +23,10 @@
   // NE touche PAS aux préférences per-appareil (mode sombre, densité, « se souvenir de moi »).
   FP.purgeTenantCache = function () {
     try {
-      const KILL = /^(fp_data_cache|fp_cond_cache|fp_docs_cache|fp_emprunts|auto_flotte_settings)/;
+      // + fp_ctrl_ (caches Contrôle : conso/trouvailles → contiennent des NOMS de conducteurs = PII) :
+      // sur un poste partagé, ils ne doivent pas survivre à la déconnexion. On NE purge PAS fp_bak_
+      // (filet de restauration local des réglages — le supprimer effacerait des points de restauration).
+      const KILL = /^(fp_data_cache|fp_cond_cache|fp_docs_cache|fp_emprunts|fp_ctrl_|auto_flotte_settings)/;
       const drop = [];
       for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && KILL.test(k)) drop.push(k); }
       drop.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
@@ -381,13 +384,16 @@
         if (pr && pr.data) {
           FP.profile = pr.data;
           try { localStorage.setItem('fp_profile', JSON.stringify(pr.data)); } catch (e) {}
-          if (pr.data.is_admin === false && pr.data.societe) {
+          // ⚠️ Verrou société : tout compte qui n'est PAS un CEO confirmé (is_admin !== true) est
+          // verrouillé sur SA société (avant : `=== false` strict → un is_admin NULL restait délié et
+          // pouvait afficher une autre société). Seul le CEO (is_admin === true) peut basculer / voir __all__.
+          if (pr.data.is_admin !== true && pr.data.societe) {
             try { localStorage.setItem('fp_societe', pr.data.societe); } catch (e) {}
           }
           // Recalcule la CLÉ DE CACHE avec la vraie société résolue : sinon les données live seraient
           // écrites sous la clé figée au chargement (défaut PXP) → contamination croisée entre sociétés.
           try {
-            const soc = (pr.data.is_admin === false && pr.data.societe) ? pr.data.societe : (localStorage.getItem('fp_societe') || 'PXP');
+            const soc = (pr.data.is_admin !== true && pr.data.societe) ? pr.data.societe : (localStorage.getItem('fp_societe') || 'PXP');
             window.FP_CACHE_KEY = 'fp_data_cache_v3_' + soc;
           } catch (e) {}
         }
