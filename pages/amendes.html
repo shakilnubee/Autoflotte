@@ -881,13 +881,15 @@
       const msg = $('empty-msg');
       if (msg) {
         const total = (data.amendes || []).length;
-        const en2026 = (data.amendes || []).filter(a => anneeOf(a) === '2026').length;
+        // Année réellement filtrée (plus de « 2026 » figé) : message juste pour toute société / toute année.
+        const yrSel = (state.annee && state.annee !== 'all') ? String(state.annee) : null;
+        const enAnnee = yrSel ? (data.amendes || []).filter(a => anneeOf(a) === yrSel).length : total;
         if (total === 0) {
           const soc = (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch(e){ return '?'; } })();
           msg.innerHTML = `Aucune amende chargée (société active : <b>${soc}</b>).`;
-        } else if (en2026 === 0) {
+        } else if (yrSel && enAnnee === 0) {
           const annees = [...new Set((data.amendes || []).map(a => anneeOf(a)).filter(Boolean))].sort().join(', ');
-          msg.innerHTML = `ℹ️ <b>${total} amende(s) chargée(s)</b> mais aucune en 2026. Années présentes : <b>${annees || '—'}</b>. (Clique « Tout voir » pour les afficher.)`;
+          msg.innerHTML = `ℹ️ <b>${total} amende(s) chargée(s)</b> mais aucune en ${yrSel}. Années présentes : <b>${annees || '—'}</b>. (Clique « Tout voir » pour les afficher.)`;
         } else {
           msg.textContent = 'Aucune amende ne correspond aux filtres.';
         }
@@ -1236,8 +1238,12 @@
   let motifsChart, motifLabels = [];
   function renderCharts() {
     if (typeof Chart === 'undefined') return; // Chart.js en différé : dessiné dès qu'il est prêt
-    // Uniquement amendes 2026
-    const amendes2026 = data.amendes.filter(a => anneeOf(a) === '2026');
+    // ⚠️ Graphiques sur l'ANNÉE SÉLECTIONNÉE (même source de période que le tableau) — plus de « 2026 »
+    // codé en dur : sinon une société sans amendes 2026 voyait des graphes VIDES, et tout le monde au
+    // 1er janvier 2027. « Toutes les années » → année la plus récente qui a des amendes (repli : année courante).
+    const _yrs = [...new Set((data.amendes || []).map(anneeOf).filter(y => /^\d{4}$/.test(y)))].sort().reverse();
+    const chartYear = (state.annee && state.annee !== 'all') ? String(state.annee) : (_yrs[0] || String(new Date().getFullYear()));
+    const amendes2026 = data.amendes.filter(a => anneeOf(a) === chartYear);
     // Motifs
     const motifsCount = {};
     amendes2026.forEach(a => {
@@ -1269,7 +1275,7 @@
       }
     });
 
-    renderExtras(amendes2026);
+    renderExtras(amendes2026, chartYear);
   }
 
   // ---------- Podium des conducteurs (extensible) ----------
@@ -1302,7 +1308,7 @@
 
   // ---------- Sections "fun" : types, évolution, heatmap, délai ----------
   let moisChart;
-  function renderExtras(amendes2026) {
+  function renderExtras(amendes2026, chartYear) {
     // --- Délai de paiement (amendes à payer depuis +30 j) ---
     const today = new Date();
     const overdue = amendes2026.filter(a => FP.estAPayer(a) && a.date && ((today - new Date(a.date)) / 86400000) > 30);
@@ -1338,7 +1344,7 @@
     // réellement en 2026. Sinon une amende étiquetée « année 2026 » mais datée déc. 2025
     // (incohérence de saisie) apparaîtrait à tort dans la courbe de décembre.
     const mois = Array(12).fill(0); const moisMontant = Array(12).fill(0);
-    amendes2026.forEach(a => { const ds = a.date || ''; if (ds.slice(0, 4) !== '2026') return; const m = parseInt(ds.slice(5, 7), 10) - 1; if (m >= 0 && m < 12) { mois[m]++; moisMontant[m] += montantDu(a); } });
+    amendes2026.forEach(a => { const ds = a.date || ''; if (ds.slice(0, 4) !== String(chartYear)) return; const m = parseInt(ds.slice(5, 7), 10) - 1; if (m >= 0 && m < 12) { mois[m]++; moisMontant[m] += montantDu(a); } });
     const moisLabels = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
     if ($('moisChart')) {
       if (moisChart) moisChart.destroy();
@@ -1353,22 +1359,22 @@
       });
     }
 
-    renderHeatmap(amendes2026);
+    renderHeatmap(amendes2026, chartYear);
   }
 
   // --- Heatmap calendrier (style GitHub) ---
-  function renderHeatmap(amendes2026) {
+  function renderHeatmap(amendes2026, chartYear) {
     if (!$('heatmap')) return;
     const counts = {};
     amendes2026.forEach(a => { if (a.date) counts[a.date] = (counts[a.date] || 0) + 1; });
     const color = (c) => !c ? '#EEF2F7' : c === 1 ? '#FECACA' : c === 2 ? '#F87171' : c === 3 ? '#EF4444' : '#B91C1C';
     const pad = (n) => String(n).padStart(2, '0');
-    const start = new Date('2026-01-01');
+    const start = new Date(String(chartYear) + '-01-01');
     const lead = (start.getDay() + 6) % 7; // Lundi = 0
     let cellsHtml = '';
     for (let i = 0; i < lead; i++) cellsHtml += `<div style="width:12px;height:12px"></div>`;
     const monthSpans = []; // pour repères de mois
-    for (let d = new Date(start); d.getFullYear() === 2026; d.setDate(d.getDate() + 1)) {
+    for (let d = new Date(start); d.getFullYear() === +chartYear; d.setDate(d.getDate() + 1)) {
       const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
       const c = counts[iso] || 0;
       const sel = (state.dateFrom === iso && state.dateTo === iso) ? 'outline:2px solid var(--fp-primary);outline-offset:1px;' : '';
@@ -2241,6 +2247,9 @@
 
   async function saveAmende(ev) {
     ev.preventDefault();
+    // Garde-fou multi-sociétés : en vue « Toutes les sociétés », exiger de choisir LA société d'abord
+    // (sinon l'amende serait rattachée à PXP par défaut, en silence). Même helper que les autres écrans.
+    if (FP.exigeSocieteChoisie && !FP.exigeSocieteChoisie("d'ajouter une amende")) return;
     const prenom = $('am-prenom').value.trim();
     if (!prenom) { $('am-prenom').focus(); return; }
     const date = $('am-date').value || new Date().toISOString().slice(0, 10);
@@ -2779,7 +2788,7 @@
   { const c = $('kpi-card-apayer'); if (c) c.addEventListener('click', () => applyKpiFilter('à payer', false)); }
   { const c = $('kpi-card-payees'); if (c) c.addEventListener('click', () => applyKpiFilter('payée', false)); }
   { const c = $('kpi-card-points'); if (c) c.addEventListener('click', () => applyKpiFilter('all', true)); }
-  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderKPIs(); renderTable(); renderPodium(); });
+  $('filter-annee').addEventListener('change', e => { state.annee = e.target.value; renderKPIs(); renderTable(); renderCharts(); });
   $('filter-motif').addEventListener('change', e => { state.motif = e.target.value; renderTable(); });
   $('filter-date-from').addEventListener('change', e => { state.dateFrom = e.target.value; renderTable(); });
   $('filter-date-to').addEventListener('change', e => { state.dateTo = e.target.value; renderTable(); });
@@ -2942,7 +2951,7 @@
     state.annee = (state.annee === 'all') ? (years[0] || 'all') : 'all';
     const sel = $('filter-annee'); if (sel) sel.value = state.annee;
     $('btn-voir-tout').textContent = state.annee === 'all' ? 'Filtrer par année' : 'Voir toutes les années';
-    renderKPIs(); renderTable();
+    renderKPIs(); renderTable(); renderCharts();
   });
   $('drawer-delete').addEventListener('click', deleteAmende);
   $('btn-new').addEventListener('click', openAmendeModal);
