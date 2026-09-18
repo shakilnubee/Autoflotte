@@ -1967,8 +1967,24 @@
         box.style.borderColor = warn ? '#FCD34D' : '#FCA5A5'; box.style.background = warn ? '#FEF3C7' : '#FEF2F2'; box.style.color = warn ? '#92400E' : '#991B1B';
         box.innerHTML = (warn ? '⚠️ ' : '❌ ') + '<b>' + FP.esc(l.msg) + '</b>' + (l.hint ? '<div class="mt-1">' + FP.esc(l.hint) + '</div>' : '') + (l.reason && l.reason !== l.msg ? '<div class="mt-1 text-xs" style="opacity:.7">Détail technique : ' + FP.esc(l.reason) + '</div>' : '');
       }
-      // Met aussi à jour le cache du bandeau tableau de bord.
-      try { localStorage.setItem('fp_ai_health', JSON.stringify({ at: Date.now(), label: l })); } catch (_) {}
+      // Met aussi à jour le cache du bandeau du TABLEAU DE BORD. ⚠️ Le dashboard lit des clés bien
+      // précises (fp_ia_health_day / _ok / _msg / _dismiss) — pas `fp_ai_health` — donc un test RÉUSSI
+      // doit écrire CES clés-là, sinon le bandeau « IA indisponible » du matin restait affiché toute la
+      // journée malgré la réparation (bug de cohérence vécu). Même format de date que dashboard.html.
+      try {
+        const _t = new Date().toISOString().slice(0, 10);
+        localStorage.setItem('fp_ai_health', JSON.stringify({ at: Date.now(), label: l })); // compat historique
+        if (l.level === 'ok') {
+          localStorage.setItem('fp_ia_health_day', _t);
+          localStorage.setItem('fp_ia_health_ok', '1');
+          localStorage.removeItem('fp_ia_health_msg');
+          localStorage.removeItem('fp_ia_health_dismiss'); // ré-affichera un futur VRAI problème
+        } else if (l.level !== 'warn') { // échec DÉFINITIF (pas un simple hoquet réseau)
+          localStorage.setItem('fp_ia_health_day', _t);
+          localStorage.setItem('fp_ia_health_ok', '0');
+          localStorage.setItem('fp_ia_health_msg', (l.msg || '') + (l.hint ? ' — ' + l.hint : ''));
+        }
+      } catch (_) {}
     } catch (e) { box.style.borderColor = '#FCA5A5'; box.style.background = '#FEF2F2'; box.style.color = '#991B1B'; box.innerHTML = '❌ Test impossible : ' + FP.esc((e && e.message) || String(e)); }
     iaBtn.disabled = false;
   }); }
