@@ -2484,7 +2484,43 @@ FP.setConges = (condKey, arr) => {
   const clean = (Array.isArray(arr) ? arr : []).filter(c => c && c.debut && c.fin).map(c => ({ debut: String(c.debut).slice(0, 10), fin: String(c.fin).slice(0, 10), motif: c.motif || '' }))
     .sort((a, b) => String(a.debut).localeCompare(String(b.debut)));
   if (clean.length) m[condKey] = clean; else delete m[condKey];
-  s.condConges = m; FP.settings.save(s);
+  s.condConges = m; FP.settings.save(s);            // SOURCE actuelle + miroir/repli (app_settings, synchronisé)
+  try { FP._mirrorCongesToDb(condKey, clean); } catch (e) {}  // + table dédiée driver_absences (best-effort)
+};
+// ── MIROIR des congés vers la table dédiée `driver_absences` (transition « sortir condConges ») ──────
+// La LECTURE reste sur settings.condConges (aucune régression) ; on maintient EN PLUS la table dédiée,
+// isolée par société (RLS), 1 congé = 1 ligne. Best-effort, non bloquant : si ça échoue, la source
+// (app_settings) garde tout → jamais de perte. Remplacement par clé (supprime les lignes de la clé, réinsère).
+FP._condSocForDb = () => { try { return (FP.settings && FP.settings._soc) ? FP.settings._soc() : ((FP.activeSociete && FP.activeSociete()) || 'PXP'); } catch (e) { return 'PXP'; } };
+FP._mirrorCongesToDb = (condKey, arr) => {
+  try {
+    if (!(FP.supabase && FP.supabase.from) || !condKey) return;
+    const soc = FP._condSocForDb();
+    FP.supabase.from('driver_absences').delete().eq('societe', soc).eq('cond_key', condKey).then(() => {
+      const rows = (Array.isArray(arr) ? arr : []).filter(c => c && c.debut && c.fin)
+        .map(c => ({ societe: soc, cond_key: condKey, debut: String(c.debut).slice(0, 10), fin: String(c.fin).slice(0, 10), motif: c.motif || '' }));
+      if (rows.length) FP.supabase.from('driver_absences').insert(rows).then(() => {}, () => {});
+    }, () => {});
+  } catch (e) {}
+};
+// Amorçage unique : si la table est VIDE pour cette société mais que des congés existent dans
+// app_settings, on recopie tout dans driver_absences (une fois). N'écrase jamais des lignes existantes.
+FP._seedCongesTableOnce = () => {
+  try {
+    if (!(FP.supabase && FP.supabase.from)) return;
+    const soc = FP._condSocForDb();
+    FP.supabase.from('driver_absences').select('id', { count: 'exact', head: true }).eq('societe', soc)
+      .then((r) => {
+        if (r && !r.error && (r.count || 0) === 0) {
+          const all = FP.getAllConges();
+          const rows = [];
+          Object.keys(all || {}).forEach(k => (Array.isArray(all[k]) ? all[k] : []).forEach(c => {
+            if (c && c.debut && c.fin) rows.push({ societe: soc, cond_key: k, debut: String(c.debut).slice(0, 10), fin: String(c.fin).slice(0, 10), motif: c.motif || '' });
+          }));
+          if (rows.length) FP.supabase.from('driver_absences').insert(rows).then(() => {}, () => {});
+        }
+      }, () => {});
+  } catch (e) {}
 };
 FP.addConge = (condKey, conge) => { if (!conge || !conge.debut || !conge.fin) return; const a = FP.getConges(condKey).slice(); a.push({ debut: conge.debut, fin: conge.fin, motif: conge.motif || '' }); FP.setConges(condKey, a); };
 FP.removeConge = (condKey, idx) => { const a = FP.getConges(condKey).slice(); if (idx >= 0 && idx < a.length) { a.splice(idx, 1); FP.setConges(condKey, a); } };
@@ -2510,6 +2546,8 @@ FP.migrateCondKey = function (oldKey, newKey) {
       }
     });
     if (changed) FP.settings.save(s);
+    // Miroir table dédiée : déplacer les congés de l'ancienne clé vers la nouvelle (sinon lignes orphelines).
+    try { const cc = (s.condConges && typeof s.condConges === 'object') ? s.condConges : {}; FP._mirrorCongesToDb(oldKey, []); FP._mirrorCongesToDb(newKey, cc[newKey] || []); } catch (e) {}
   } catch (e) { console.warn('[migrateCondKey]', e); }
 };
 FP.purgeCondKey = function (key) {
@@ -2521,6 +2559,7 @@ FP.purgeCondKey = function (key) {
       if (m && typeof m === 'object' && Object.prototype.hasOwnProperty.call(m, key)) { delete m[key]; changed = true; }
     });
     if (changed) FP.settings.save(s);
+    try { FP._mirrorCongesToDb(key, []); } catch (e) {}   // miroir : supprime aussi les congés de la table dédiée
   } catch (e) { console.warn('[purgeCondKey]', e); }
 };
 // Le conducteur `condKey` est-il en congé à la date ISO (bornes incluses) ? Renvoie le congé couvrant, ou null.

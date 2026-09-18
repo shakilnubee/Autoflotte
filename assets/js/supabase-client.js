@@ -496,6 +496,9 @@
           if (FP.applyNavOrder) FP.applyNavOrder();
           if (FP.applyNavVisibility) FP.applyNavVisibility();
           if (FP.applyCustomTexts) FP.applyCustomTexts();
+          // Amorçage unique de la table dédiée des congés (driver_absences) : recopie les congés
+          // d'app_settings s'ils n'y sont pas encore. Best-effort, différé (ne bloque pas l'affichage).
+          try { if (FP._seedCongesTableOnce) (window.requestIdleCallback ? requestIdleCallback(() => FP._seedCongesTableOnce(), { timeout: 4000 }) : setTimeout(() => FP._seedCongesTableOnce(), 1500)); } catch (_) {}
         }
       } catch (e) { /* table absente ou hors-ligne : on garde les réglages locaux */ }
       // On ne déclenche le re-rendu des pages QUE si les données OU les réglages ont réellement
