@@ -4461,6 +4461,26 @@ FP.backups = {
   // Renvoie les DONNÉES d'une version (par son horodatage) pour restauration. La restauration
   // elle-même passe par FP.settings.save (fusion SÛRE : elle ne supprime rien de plus récent).
   get(ts) { const s = this._list().find(x => x.ts === ts); return s ? s.data : null; },
+  // ═══ HISTORIQUE CÔTÉ SERVEUR (table app_settings_history, remplie par un TRIGGER PostgreSQL) ═══════
+  // L'ARCHIVAGE est fait CÔTÉ BASE par un trigger (à chaque UPDATE de app_settings, l'ANCIENNE valeur est
+  // sauvegardée) → capture TOUT changement, même si le navigateur bugue. Ici on ne fait que LIRE / RESTAURER.
+  // But : même si TOUS les appareils sont nettoyés, on restaure les congés/assurances/leasing depuis le serveur.
+  _srvSoc() { try { return (FP.settings && FP.settings._soc) ? FP.settings._soc() : this._soc(); } catch (e) { return 'PXP'; } },
+  SRV_MAX: 60,
+  serverList() {
+    try {
+      if (!(window.FP && FP.supabase && FP.supabase.from)) return Promise.resolve([]);
+      return FP.supabase.from('app_settings_history').select('id,changed_at,summary').eq('societe', this._srvSoc()).order('changed_at', { ascending: false }).limit(this.SRV_MAX)
+        .then((r) => (r && !r.error && Array.isArray(r.data)) ? r.data : [], () => []);
+    } catch (e) { return Promise.resolve([]); }
+  },
+  serverGet(id) {
+    try {
+      if (!(window.FP && FP.supabase && FP.supabase.from)) return Promise.resolve(null);
+      return FP.supabase.from('app_settings_history').select('data').eq('id', id).maybeSingle()
+        .then((r) => (r && !r.error && r.data) ? r.data.data : null, () => null);
+    } catch (e) { return Promise.resolve(null); }
+  },
 };
 
 FP.settings = {
@@ -4600,6 +4620,9 @@ FP.settings = {
     // local des dernières versions des réglages → restaurable en 1 clic depuis Paramètres, même s'il
     // restait un bug d'enregistrement. C'est notre « historique de versions » gratuit (cf. FP.backups).
     try { if (FP.backups) FP.backups.snapshot(obj); } catch (e) {}
+    // (L'historique CÔTÉ SERVEUR est rempli automatiquement par un TRIGGER PostgreSQL sur app_settings —
+    //  voir supabase/app-settings-history.sql — donc rien à pousser ici : ça capte tout changement, même
+    //  hors navigateur, et ne dépend d'aucun cache local.)
     // Partage les réglages PAR SOCIÉTÉ sur tous les postes via Supabase (ligne app_settings = la
     // société). Écriture par FUSION « delta » anti-écrasement (voir _pushSettings) — sinon deux
     // postes admin qui enregistrent en même temps s'écrasaient (le dernier gagnait, l'autre perdait
