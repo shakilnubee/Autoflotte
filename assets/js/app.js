@@ -6,7 +6,9 @@
 (function lockTenant(){
   try {
     const p = JSON.parse(localStorage.getItem('fp_profile') || 'null');
-    if (p && p.is_admin === false && p.societe) localStorage.setItem('fp_societe', p.societe);
+    // is_admin !== true (et pas seulement === false) : un profil is_admin NULL/absent = NON-CEO → verrouillé
+    // sur sa société. Seul le CEO confirmé (is_admin === true) reste libre de basculer de société.
+    if (p && p.is_admin !== true && p.societe) localStorage.setItem('fp_societe', p.societe);
   } catch (e) {}
 })();
 
@@ -11691,7 +11693,11 @@ FP.audit = {
       if (!(FP.supabase && FP.supabase.from)) return this.get();
       const { data, error } = await FP.supabase.from(this.TABLE).select('*').order('ts', { ascending: false }).limit(limit || this.MAX);
       if (error || !Array.isArray(data)) return this.get();
-      this._remote = data.map(r => ({ ts: r.ts, user: r.user_email, action: r.action, table: r.entity, id: r.rec_id, label: r.label, champs: r.champs, societe: r.societe }));
+      // Isolation : la RLS renvoie tout au CEO ; sur une société PRÉCISE on filtre côté client
+      // (NULL société = PXP, comme partout) → l'historique n'affiche que la société consultée.
+      let rows = data;
+      try { const soc = FP.activeSociete ? FP.activeSociete() : null; if (soc && soc !== '__all__') { const s = String(soc).toLowerCase(); rows = data.filter(r => (r.societe ? String(r.societe).toLowerCase() : 'pxp') === s); } } catch (e) {}
+      this._remote = rows.map(r => ({ ts: r.ts, user: r.user_email, action: r.action, table: r.entity, id: r.rec_id, label: r.label, champs: r.champs, societe: r.societe }));
       try { document.dispatchEvent(new CustomEvent('fp:audit')); } catch (e) {}
       return this._remote;
     } catch (e) { return this.get(); }
