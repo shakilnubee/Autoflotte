@@ -30,7 +30,7 @@ alter table public.scans enable row level security;
 -- (Mêmes fonctions que les policies tenant_* des autres tables.)
 drop policy if exists tenant_scans on public.scans;
 create policy tenant_scans on public.scans
-  for all
+  for all to authenticated
   using ( fp_is_admin() or societe = fp_societe() )
   with check ( fp_is_admin() or societe = fp_societe() );
 

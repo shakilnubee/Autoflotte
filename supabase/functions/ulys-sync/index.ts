@@ -105,14 +105,17 @@ Deno.serve(async (req) => {
   //        Un utilisateur d'une AUTRE société ne doit pas voir ces badges (= noms de salariés = données
   //        personnelles d'un autre client). Le CEO/super-admin (societe vide ou « __all__ ») passe.
   try {
-    const { data: prof } = await admin.from("profiles").select("role, societe").eq("id", caller.id).maybeSingle();
-    if (prof && prof.role === "chauffeur") return json({ error: "Accès non autorisé." }, 403);
+    const { data: prof, error: profErr } = await admin.from("profiles").select("role, societe").eq("id", caller.id).maybeSingle();
+    // ⚠️ FAIL-CLOSED (isolation) : sans profil lisible, on REFUSE (avant : on laissait passer → un compte
+    // d'une autre société pouvait voir les badges Ulys = PII d'un autre client si la lecture échouait).
+    if (profErr || !prof) return json({ error: "Profil introuvable — accès refusé." }, 403);
+    if (prof.role === "chauffeur") return json({ error: "Accès non autorisé." }, 403);
     const owner = (Deno.env.get("ULYS_SOCIETE") || "PXP").trim().toLowerCase();
-    const soc = String((prof && prof.societe) || "").trim().toLowerCase();
+    const soc = String((prof.societe) || "").trim().toLowerCase();
     if (soc && soc !== "__all__" && soc !== owner) {
       return json({ error: "Aucun compte Ulys configuré pour cette société." }, 403);
     }
-  } catch { /* pas de profil lisible → on continue (l'API Ulys reste protégée par le secret serveur) */ }
+  } catch { return json({ error: "Vérification du profil impossible — accès refusé." }, 403); } // fail-closed
 
   // 3) Action demandée.
   let body: { action?: string; contractUniqueId?: string } = {};

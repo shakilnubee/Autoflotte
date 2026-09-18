@@ -12,6 +12,12 @@ drop table if exists public.amendes_backup;
 create table public.amendes_backup as table public.amendes;
 drop table if exists public.factures_backup;
 create table public.factures_backup as table public.factures;
+-- ⚠️ ISOLATION : une copie `... as table ...` n'a PAS de RLS → sans ça, n'importe quel compte connecté
+-- (de n'importe quelle société) pourrait lire TOUTES les amendes/factures via ces copies. On active la RLS
+-- SANS policy = accès bloqué pour tout le monde sauf le service_role (les copies ne servent qu'à la
+-- restauration ci-dessous, exécutée en SQL Editor = service_role). À supprimer une fois le nettoyage validé.
+alter table public.amendes_backup  enable row level security;
+alter table public.factures_backup enable row level security;
 -- Vérif : doit afficher le MÊME nombre que la table d'origine
 select (select count(*) from public.amendes)  as amendes_avant,
        (select count(*) from public.amendes_backup)  as amendes_sauvegardees,
