@@ -2061,5 +2061,40 @@
   document.addEventListener('fp:data-ready', function(){ setTimeout(run, 800); });
 })();
 </script>
+<script>
+/* ⚡ PERF (prefetch Contrôle) : depuis le Dashboard, sur TEMPS MORT, on pré-remplit le cache LOCAL des
+   trouvailles du Contrôle (clé `fp_ctrl_findings_<societe>`, EXACTEMENT celle que lit controle.html)
+   à partir du résultat déjà calculé côté serveur (table controle_findings). Résultat : le 1er clic sur
+   Contrôle peint INSTANTANÉMENT, sans attendre l'aller-retour réseau.
+   🔒 Sûr par construction : (a) scellé par société + protégé par la RLS (aucune fuite) ; (b) on n'écrit
+   QUE si le cache local est absent/vide → on n'écrase jamais un cache frais écrit par le Contrôle ;
+   (c) controle.html VALIDE ce cache (Array.isArray) et le rafraîchit ensuite via sa sonde → même
+   périmé, il se corrige tout seul ; (d) toute erreur est avalée. Ne touche PAS controle.html. */
+(function(){
+  var done = false;
+  function warm(){
+    if (done) return; done = true;
+    try {
+      if (!(window.FP && FP.supabase)) return;
+      var soc = (FP.activeSociete && FP.activeSociete()) || 'PXP';
+      var ck = 'fp_ctrl_findings_' + soc;
+      // Ne pas écraser un cache local déjà présent (le Contrôle l'a peut-être écrit plus récemment).
+      try { var ex = JSON.parse(localStorage.getItem(ck) || 'null'); if (ex && Array.isArray(ex.findings)) return; } catch (e) {}
+      FP.supabase.from('controle_findings').select('sig,findings').eq('societe', soc).maybeSingle()
+        .then(function(r){
+          try {
+            if (r && !r.error && r.data && Array.isArray(r.data.findings)) {
+              localStorage.setItem(ck, JSON.stringify({ sig: r.data.sig || null, findings: r.data.findings.slice(0, 4000) }));
+            }
+          } catch (e) {}
+        }, function(){});
+    } catch (e) {}
+  }
+  function sched(){ try { (window.requestIdleCallback ? requestIdleCallback(warm, { timeout: 4000 }) : setTimeout(warm, 2500)); } catch (e) { setTimeout(warm, 2500); } }
+  // Après l'arrivée des données (FP.supabase + société prêts) et sur temps mort seulement.
+  document.addEventListener('fp:data-ready', sched);
+  setTimeout(sched, 3000); // repli si l'évènement a déjà eu lieu
+})();
+</script>
 </body>
 </html>
