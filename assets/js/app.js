@@ -26,6 +26,11 @@
 window.FP_CACHE_KEY = 'fp_data_cache_v3_' + (function(){ try { return localStorage.getItem('fp_societe') || 'PXP'; } catch (e) { return 'PXP'; } })();
 (function seedFromCache() {
   try { localStorage.removeItem('fp_data_cache'); } catch (e) {} // purge l'ancienne clé (non suffixée)
+  // ⚡ PERF : si le loader inline de la page a DÉJÀ peuplé FP_DATA depuis un cache société COMPLET
+  //    (data.js non chargé), inutile de re-parser le cache → on sort. Cf. le <script> « data.js à la
+  //    demande » de chaque page. En démarrage à froid (data.js chargé), __fpSeeded est absent → on
+  //    exécute la ré-hydratation habituelle (auto-réparation par clé).
+  if (window.__fpSeeded) return;
   try {
     const c = JSON.parse(localStorage.getItem(window.FP_CACHE_KEY) || 'null');
     if (c && window.FP_DATA && Array.isArray(c.amendes)) {
@@ -2148,6 +2153,7 @@ FP.conducteurs = {
     try { if (FP.persist && FP.persist.upsert) await FP.persist.upsert('conducteurs', row); } catch (e) { console.warn('[FP.conducteurs.create]', e); }
     try { window.FP_DATA = window.FP_DATA || {}; FP_DATA.conducteurs = FP_DATA.conducteurs || [];
       const ex = FP_DATA.conducteurs.find(c => c.key === key); if (ex) Object.assign(ex, row); else FP_DATA.conducteurs.push(row); } catch (e) {}
+    try { FP.bumpCondResolveGen && FP.bumpCondResolveGen(); } catch (e) {} // ⚡ nouveau conducteur → invalide le cache clé→prénom
     return row;
   }
 };
@@ -2589,20 +2595,41 @@ FP.estEnConge = (condKey, dateISO) => !!FP.congeCouvrant(condKey, dateISO);
 // On résout donc TOUJOURS la clé → nom de fiche (FP.conducteurNomUnifie) → prénom (FP.normPrenom).
 // À utiliser PARTOUT où l'on doit comparer un prénom de conso/relevé à une fiche keyée (congés,
 // dates de sortie, cartes, badges…).
+// ⚡ MÉMOÏSATION (perf Contrôle) — `prenomDeCle` et `congeKeysPourPrenom` sont appelés des MILLIERS de
+// fois par recalcul (une fois par transaction × clés de congé) et refaisaient à chaque fois un
+// `all.find(...)` sur tous les conducteurs → hotspot qui gelait l'UI sur gros comptes. On met le
+// RÉSULTAT en cache, estampillé d'une GÉNÉRATION `FP._condResolveGen` bumpée dès que les données qui
+// influencent la résolution changent (réglages/congés via FP.settings.save, refresh serveur via
+// fp:data-ready, création de conducteur). Tant que la génération n'a pas bougé, le résultat est
+// IDENTIQUE → réutilisable sans risque de valeur périmée (invalidation automatique dès qu'une donnée
+// change). Le cache est reconstruit à la 1re lecture d'une nouvelle génération.
+FP._condResolveGen = 0;
+FP.bumpCondResolveGen = () => { try { FP._condResolveGen++; } catch (e) {} };
+let _pdcCache = new Map(), _pdcGen = -1;
+let _ckpCache = new Map(), _ckpGen = -1;
 FP.prenomDeCle = (key) => {
   if (!key) return '';
+  if (_pdcGen !== FP._condResolveGen) { _pdcCache = new Map(); _pdcGen = FP._condResolveGen; }
+  const ck = String(key);
+  const hit = _pdcCache.get(ck); if (hit !== undefined) return hit;
+  let out; // undefined tant qu'on n'a pas résolu par fiche
   // On passe la clé DANS le slot « key » (2e arg) → résolution directe par clé de fiche, avec repli
   // sur la résolution par nom (1er arg) pour les clés qui SONT déjà un libellé.
-  try { const nm = FP.conducteurNomUnifie ? FP.conducteurNomUnifie(key, key) : ''; if (nm && FP.normPrenom) return FP.normPrenom(nm); } catch (e) {}
+  try { const nm = FP.conducteurNomUnifie ? FP.conducteurNomUnifie(key, key) : ''; if (nm && FP.normPrenom) out = FP.normPrenom(nm); } catch (e) {}
   // Repli si la clé n'a pas pu être résolue en fiche : on tente de la lire comme un « prénom-nom ».
-  return FP.normPrenom ? FP.normPrenom(String(key).replace(/[-_]+/g, ' ')) : String(key || '').split(/[-\s]/)[0];
+  if (out === undefined) out = FP.normPrenom ? FP.normPrenom(String(key).replace(/[-_]+/g, ' ')) : String(key || '').split(/[-\s]/)[0];
+  _pdcCache.set(ck, out);
+  return out;
 };
 // ⚠️ HELPER CANONIQUE — toutes les clés de congé rattachables à un PRÉNOM donné (résolution robuste
 // via FP.prenomDeCle). Source unique pour le repli « prénom » du rattachement conso ↔ congé.
 FP.congeKeysPourPrenom = (np) => {
   if (!np) return [];
+  if (_ckpGen !== FP._condResolveGen) { _ckpCache = new Map(); _ckpGen = FP._condResolveGen; }
+  const hit = _ckpCache.get(np); if (hit !== undefined) return hit;
   const out = [];
   try { Object.keys(FP.getAllConges()).forEach(k => { if (FP.prenomDeCle(k) === np && out.indexOf(k) < 0) out.push(k); }); } catch (e) {}
+  _ckpCache.set(np, out);
   return out;
 };
 // Un congé du conducteur chevauche-t-il le MOIS `AAAA-MM` ? (pour les conso mensuelles non datées, ex. Ulys).
@@ -4670,6 +4697,8 @@ FP.settings = {
     // sans réécraser les modifs récentes d'un autre poste). Cf. _pushSettings.
     let prevLocal = null; try { prevLocal = JSON.parse(this._readLocal() || 'null'); } catch (e) {}
     localStorage.setItem(this._key(), JSON.stringify(obj));
+    // ⚡ Réglages modifiés (congés, cartes, affectations…) → invalide le cache de résolution clé→prénom.
+    try { FP.bumpCondResolveGen && FP.bumpCondResolveGen(); } catch (e) {}
     this.applyTheme();
     // 🛟 SAUVEGARDE AUTOMATIQUE (filet anti-perte, indépendant du serveur) : on garde un historique
     // local des dernières versions des réglages → restaurable en 1 clic depuis Paramètres, même s'il
@@ -5255,6 +5284,9 @@ FP.normalizeVehicleNames = () => {
 };
 FP.normalizeVehicleNames(); // données locales (data.js déjà chargé)
 document.addEventListener('fp:data-ready', FP.normalizeVehicleNames); // après chargement Supabase
+// ⚡ Données serveur rafraîchies (conducteurs/congés/réglages) → invalide le cache de résolution
+//    clé→prénom (mémoïsation du Contrôle) pour qu'un renommage/ajout distant soit pris en compte.
+document.addEventListener('fp:data-ready', () => { try { FP.bumpCondResolveGen && FP.bumpCondResolveGen(); } catch (e) {} });
 // L'e-mail de connexion est connu après le chargement Supabase → (re)construit l'onglet privé JIS
 // (utile au 1er login, quand l'e-mail n'était pas encore en cache lors du 1er rendu).
 document.addEventListener('fp:data-ready', () => { try { FP.userEmail = (localStorage.getItem('fp_email') || '').trim().toLowerCase(); FP.buildJisMenu(); } catch (e) {} });
