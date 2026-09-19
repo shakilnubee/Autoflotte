@@ -2489,11 +2489,21 @@ FP.setConges = (condKey, arr) => {
   s.condConges = m; FP.settings.save(s);            // SOURCE actuelle + miroir/repli (app_settings, synchronisé)
   try { FP._mirrorCongesToDb(condKey, clean); } catch (e) {}  // + table dédiée driver_absences (best-effort)
 };
+// Jeton SECRET non devinable (pour liens publics : signature EDL, etc.). ⚠️ TOUJOURS un CSPRNG
+// (crypto), JAMAIS Date.now()+Math.random() (prévisible/forgeable → un tiers pourrait tomber sur le
+// jeton d'un autre client et lire/signer son document). Repli progressif si crypto indispo.
+FP.secureToken = (prefix) => {
+  let r = '';
+  try { if (typeof crypto !== 'undefined' && crypto.randomUUID) r = crypto.randomUUID().replace(/-/g, ''); } catch (e) {}
+  if (!r) { try { const a = new Uint8Array(16); crypto.getRandomValues(a); r = Array.from(a, b => b.toString(16).padStart(2, '0')).join(''); } catch (e) {} }
+  if (!r) r = Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  return (prefix || '') + r;
+};
 // ── MIROIR des congés vers la table dédiée `driver_absences` (transition « sortir condConges ») ──────
 // La LECTURE reste sur settings.condConges (aucune régression) ; on maintient EN PLUS la table dédiée,
 // isolée par société (RLS), 1 congé = 1 ligne. Best-effort, non bloquant : si ça échoue, la source
 // (app_settings) garde tout → jamais de perte. Remplacement par clé (supprime les lignes de la clé, réinsère).
-FP._condSocForDb = () => { try { return (FP.settings && FP.settings._soc) ? FP.settings._soc() : ((FP.activeSociete && FP.activeSociete()) || 'PXP'); } catch (e) { return 'PXP'; } };
+FP._condSocForDb = () => { try { let s = (FP.settings && FP.settings._soc) ? FP.settings._soc() : ((FP.activeSociete && FP.activeSociete()) || 'PXP'); return (s === '__all__') ? 'PXP' : s; } catch (e) { return 'PXP'; } };
 FP._mirrorCongesToDb = (condKey, arr) => {
   try {
     if (!(FP.supabase && FP.supabase.from) || !condKey) return;
@@ -4236,12 +4246,16 @@ FP.qrScans = {
       if (!(FP.supabase && FP.supabase.from)) { this._recent = []; this._unseen = 0; return this._recent; }
       const since = new Date(Date.now() - (hours || 24) * 3600 * 1000).toISOString();
       const { data, error } = await FP.supabase.from('qr_scans')
-        .select('vehicule_id,plaque,scanned_at,mode')
+        .select('vehicule_id,plaque,scanned_at,mode,societe')
         .gte('scanned_at', since)
         .order('scanned_at', { ascending: false })
         .limit(100);
       if (error) { this._recent = []; this._unseen = 0; return this._recent; }
-      this._recent = (data || []).map(r => ({ vehiculeId: r.vehicule_id, plaque: r.plaque || '', at: r.scanned_at, mode: r.mode || 'portail' }));
+      // Isolation : la RLS scope pour un client, mais renvoie TOUT au CEO → on re-filtre par société
+      // active (NULL = PXP) pour que le CEO sur une société précise ne voie pas les scans des autres.
+      let _rows = data || [];
+      try { const soc = FP.activeSociete ? FP.activeSociete() : null; if (soc && soc !== '__all__') { const s = String(soc).toLowerCase(); _rows = _rows.filter(r => (r.societe ? String(r.societe).toLowerCase() : 'pxp') === s); } } catch (e) {}
+      this._recent = _rows.map(r => ({ vehiculeId: r.vehicule_id, plaque: r.plaque || '', at: r.scanned_at, mode: r.mode || 'portail' }));
       const seen = this._readSeen();
       if (!seen) { this._writeSeen(new Date().toISOString()); this._unseen = 0; }   // init sans spammer l'historique
       else this._unseen = this._recent.filter(s => s.at && s.at > seen).length;
@@ -10704,13 +10718,13 @@ FP.edl = {
         // ⚠️ SÉCURITÉ SIGNATURE : chaque signataire a son PROPRE jeton secret (sigToken). Le lien de
         // signature l'identifie par CE jeton → impossible de signer « à la place » de l'autre partie en
         // changeant l'URL (avant : un seul jeton par document + rôle dans l'URL = falsifiable).
-        signersList.forEach((s, i) => { s.sigToken = 'sg-' + Date.now().toString(36) + i.toString(36) + Math.random().toString(36).slice(2, 10); });
+        signersList.forEach((s) => { s.sigToken = FP.secureToken('sg-'); });   // jeton CSPRNG non devinable (isolation inter-société)
 
         // A) SIGNATURE INTÉGRÉE (Parc Pilot, sans prestataire) : chaque signataire reçoit un LIEN
         //    vers signer.html, signe au doigt/souris, et le PDF signé revient dans la fiche.
         if (smode === 'integree' && data.to && FP.db && FP.db.insert) {
           try {
-            const token = 'sig-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+            const token = FP.secureToken('sig-');   // jeton CSPRNG non devinable (isolation inter-société)
             let soc = 'PXP'; try { soc = (FP.activeSociete ? FP.activeSociete() : 'PXP') || 'PXP'; } catch (e) {} if (soc === '__all__') soc = 'PXP';
             const base = FP.edl.SIGN_BASE || 'https://parc-pilot.fr/signer.html';
             // Logo de la société dans l'e-mail : on l'HÉBERGE (upload + cache par société) car les clients

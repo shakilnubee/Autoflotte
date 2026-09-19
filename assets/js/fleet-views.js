@@ -1761,8 +1761,11 @@
       let doneOk = false;
       if (!force) {
         try {
-          const r = FP.selectAllPaged ? await FP.selectAllPaged('total_conso_tx', null, 'id', 'facnum') : await FP.supabase.from('total_conso_tx').select('facnum'); // PAGINÉ (cap 1000)
-          if (r && !r.error) { (r.data || []).forEach(x => { if (x.facnum) doneFac.add(String(x.facnum).trim().toUpperCase()); }); doneOk = true; }
+          const r = FP.selectAllPaged ? await FP.selectAllPaged('total_conso_tx', null, 'id', 'facnum,societe') : await FP.supabase.from('total_conso_tx').select('facnum,societe'); // PAGINÉ (cap 1000)
+          // Isolation : re-filtrer par société active (le CEO reçoit tout via la RLS) → un facnum d'une
+          // AUTRE société ne doit pas faire sauter une réimportation légitime de la société consultée.
+          const _soc = (FP.activeSociete && FP.activeSociete()) || null; const _s = (_soc && _soc !== '__all__') ? String(_soc).toLowerCase() : null;
+          if (r && !r.error) { (r.data || []).forEach(x => { if (!x.facnum) return; if (_s && (x.societe ? String(x.societe).toLowerCase() : 'pxp') !== _s) return; doneFac.add(String(x.facnum).trim().toUpperCase()); }); doneOk = true; }
         } catch (e) { /* lecture impossible */ }
         // En mode AUTO (silencieux), on NE lance PAS un rebuild complet à l'aveugle si on ne sait pas ce
         // qui est déjà fait (sinon on re-télécharge tout l'historique en tâche de fond). On abandonne.
