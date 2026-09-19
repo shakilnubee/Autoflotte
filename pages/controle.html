@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<script>/* pp-build */(function(){try{var B="20260919a",K="pp_build",cur=null;try{cur=localStorage.getItem(K);}catch(e){return;}if(cur===B)return;var ok=false;try{localStorage.setItem(K,B);ok=true;}catch(e){}if(!ok)return;if("serviceWorker"in navigator){try{navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){try{r.update();}catch(e){}});}).catch(function(){});}catch(e){}}if(cur===null)return;var done=function(){try{location.reload();}catch(e){}};if(window.caches&&caches.keys){caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k);}));}).then(done).catch(done);}else{done();}}catch(e){}})();</script>
+<script>/* pp-build */(function(){try{var B="20260919b",K="pp_build",cur=null;try{cur=localStorage.getItem(K);}catch(e){return;}if(cur===B)return;var ok=false;try{localStorage.setItem(K,B);ok=true;}catch(e){}if(!ok)return;if("serviceWorker"in navigator){try{navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){try{r.update();}catch(e){}});}).catch(function(){});}catch(e){}}if(cur===null)return;var done=function(){try{location.reload();}catch(e){}};if(window.caches&&caches.keys){caches.keys().then(function(ks){return Promise.all(ks.map(function(k){return caches.delete(k);}));}).then(done).catch(done);}else{done();}}catch(e){}})();</script>
 <script>try{if(localStorage.getItem("fp_dark_mode")!=="0"){var d=document.documentElement;d.classList.add("fp-dark");d.style.background="#0b1220";d.style.colorScheme="dark";}}catch(e){}</script>
 <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg">
 <title>Contrôle — Parc Pilot</title>
@@ -17,11 +17,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260919a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260919b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260919a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260919b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260919a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260919b">
 <style>
   /* ===== Barre d'onglets = contrôle segmenté (cohérent avec la plateforme) ===== */
   .ctrl-tabs { display:flex; gap:.3rem; flex-wrap:wrap; background:#fff; border:1px solid var(--fp-border); border-radius:.9rem; padding:.35rem; margin-bottom:1.5rem; box-shadow:0 1px 2px rgba(15,30,61,.04); }
@@ -310,11 +310,28 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260919a"></script>
-<script src="../assets/js/supabase-client.js?v=20260919a"></script>
-<script src="../assets/js/data.js?v=20260919a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260919b"></script>
+<script src="../assets/js/supabase-client.js?v=20260919b"></script>
+<script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
+   localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
+   data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
+   incident) → on charge data.js (filet), et app.js fusionne par clé. Cf. app.js §seedFromCache. */
+(function(){
+  try {
+    var soc = localStorage.getItem('fp_societe') || 'PXP';
+    var c = JSON.parse(localStorage.getItem('fp_data_cache_v3_' + soc) || 'null');
+    var full = c && ['vehicules','amendes','factures','conducteurs'].every(function(k){ return Array.isArray(c[k]) && c[k].length; });
+    if (full) {
+      window.FP_DATA = { vehicules: c.vehicules, amendes: c.amendes, factures: c.factures, conducteurs: c.conducteurs };
+      window.__fpSeeded = 1; // dit à app.js §seedFromCache que FP_DATA est déjà peuplé (pas de re-parse)
+      return; // data.js NON chargé
+    }
+  } catch (e) {}
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260919b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+})();
+</script>
 <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260919a"></script>
+<script src="../assets/js/app.min.js?v=20260919b"></script>
 <!-- ⚡ fleet-views.js (~160 Ko : Total Fleet + Ulys) N'EST PLUS chargé ici en SYNCHRONE : l'onglet
      par défaut est « Contrôle » et n'en a pas besoin. Il est injecté à la demande (1re ouverture de
      Total/Ulys) via ensureFleetViews(), et préchargé en douceur sur temps mort → l'arrivée sur
@@ -345,7 +362,7 @@
     _flPromise = new Promise(res => {
       try {
         const s = document.createElement('script');
-        s.src = '../assets/js/fleet-views.min.js?v=20260919a';
+        s.src = '../assets/js/fleet-views.min.js?v=20260919b';
         s.onload = () => res(!!(window.FP && FP.mountTotal));
         s.onerror = () => res(false);
         document.head.appendChild(s);
@@ -752,13 +769,17 @@
   async function _probeDataSigLive(){
     try {
       const _d = new Date(); _d.setMonth(_d.getMonth() - 24); const cutoff = _d.toISOString().slice(0, 10);
-      const cRes = await _cfConsoFilter(FP.supabase.from('total_conso_tx').select('id', { count: 'exact', head: true }).gte('date_tx', cutoff));
+      // ⚡ Les 3 lectures sont INDÉPENDANTES → EN PARALLÈLE (Promise.all) : 1 seul aller-retour réseau
+      //    au lieu de 3 en série → sonde « rien n'a changé » nettement plus rapide (surtout sur mobile).
+      const [cRes, dRes, uRes] = await Promise.all([
+        _cfConsoFilter(FP.supabase.from('total_conso_tx').select('id', { count: 'exact', head: true }).gte('date_tx', cutoff)),
+        _cfConsoFilter(FP.supabase.from('total_conso_tx').select('date_tx').gte('date_tx', cutoff).order('date_tx', { ascending: false }).limit(1)),
+        _cfConsoFilter(FP.supabase.from('ulys_conso').select('id', { count: 'exact', head: true }))
+      ]);
       if (!cRes || cRes.error) return null;
       const txCount = cRes.count || 0;
-      const dRes = await _cfConsoFilter(FP.supabase.from('total_conso_tx').select('date_tx').gte('date_tx', cutoff).order('date_tx', { ascending: false }).limit(1));
       if (!dRes || dRes.error) return null;
       const txMaxDate = (dRes.data && dRes.data[0] && dRes.data[0].date_tx) || '';
-      const uRes = await _cfConsoFilter(FP.supabase.from('ulys_conso').select('id', { count: 'exact', head: true }));
       const ulysCount = (uRes && !uRes.error) ? (uRes.count || 0) : 0;
       return _probeSigFrom(txCount, txMaxDate, ulysCount);
     } catch (e) { return null; }
@@ -1499,7 +1520,9 @@
       if (_seedFindingsCache()) { try { _loaded = true; fillConducteurs(); fillMois(); render(); shownFromCache = true; } catch (e) {} }
       // 0b) ⚡ OPTION C — RÉSULTAT SERVEUR (partagé entre appareils) : source d'affichage prioritaire.
       //     Sur un appareil neuf / après vidage du cache, ça donne le résultat prêt SANS aucun calcul.
-      const serverRow = await _loadServerFindings();
+      //     ⚡ La SONDE de fraîcheur est INDÉPENDANTE du résultat serveur → on la lance EN MÊME TEMPS
+      //     (Promise.all) : les deux allers-retours réseau se chevauchent au lieu de s'enchaîner.
+      const [serverRow, liveProbe] = await Promise.all([_loadServerFindings(), _probeDataSigLive()]);
       if (serverRow && Array.isArray(serverRow.findings)) {
         try {
           _findings = serverRow.findings; if (serverRow.sig) _lastBuildSig = serverRow.sig;
@@ -1511,7 +1534,6 @@
       //    le calcul stocké (et cache < ~20 h), on GARDE le résultat serveur → 0 téléchargement, 0 calcul.
       if (serverRow && serverRow.probe_sig) {
         try {
-          const liveProbe = await _probeDataSigLive();
           const ageMs = serverRow.updated_at ? (Date.now() - new Date(serverRow.updated_at).getTime()) : Infinity;
           if (liveProbe && liveProbe === serverRow.probe_sig && ageMs < 20 * 3600 * 1000) return; // à jour → rien à faire
         } catch (e) {}
