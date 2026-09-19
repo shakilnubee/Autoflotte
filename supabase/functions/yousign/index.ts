@@ -18,6 +18,8 @@
 //  Secrets requis : YOUSIGN_API_KEY (+ YOUSIGN_ENV = 'sandbox' | 'production').
 // ============================================================================
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -42,6 +44,22 @@ function b64ToBytes(b64: string): Uint8Array {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Méthode non autorisée." }, 405);
+
+  // ⚠️ SÉCURITÉ : action de GESTION (consomme le compte Yousign de l'entreprise + envoie des demandes de
+  // signature). On exige un utilisateur connecté NON-chauffeur, et on ÉCHOUE FERMÉ si le profil est
+  // illisible (avant : aucun contrôle → tout compte authentifié pouvait abuser du compte Yousign).
+  try {
+    const SU = Deno.env.get("SUPABASE_URL"); const SK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!SU || !SK) return json({ error: "Configuration serveur incomplète." }, 500);
+    const admin = createClient(SU, SK, { auth: { autoRefreshToken: false, persistSession: false } });
+    const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    if (!token) return json({ error: "Non connecté." }, 401);
+    const { data: { user: caller } } = await admin.auth.getUser(token);
+    if (!caller) return json({ error: "Session expirée — reconnecte-toi." }, 401);
+    const { data: prof, error: profErr } = await admin.from("profiles").select("role").eq("id", caller.id).maybeSingle();
+    if (profErr || !prof) return json({ error: "Profil introuvable — accès refusé." }, 403);
+    if (prof.role === "chauffeur") return json({ error: "Accès non autorisé." }, 403);
+  } catch { return json({ error: "Vérification du profil impossible — accès refusé." }, 403); }
 
   // .trim() : évite l'échec « Invalid authentication credentials » si la clé a été collée dans le
   // secret Supabase avec un espace ou un retour à la ligne en trop.

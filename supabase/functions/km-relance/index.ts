@@ -264,7 +264,10 @@ Deno.serve(async (req) => {
     const soc = String(veh.societe || "PXP");
     if (onlySoc && soc !== onlySoc) continue;
     if (horsFlotte(veh.statut)) continue;
-    const data = cfgBySoc[soc] || cfgBySoc["PXP"] || {};
+    // ⚠️ Ne PAS replier sur la config PXP : une société sans réglages enverrait alors ses e-mails sous
+    // l'identité (expéditeur/logo/nom) de PXP → mélange d'identités entre clients. Config vide = repli
+    // neutre plateforme (EMAIL_FROM, sans logo ni nom d'une autre société). PXP = société comme les autres.
+    const data = cfgBySoc[soc] || {};
     const notif = (data.notif && typeof data.notif === "object") ? data.notif : {};
     const relanceJours = Math.max(1, Number(notif.releveKmRelanceJours) || 7);
     const releveKmJours = Math.max(1, Number(notif.releveKmJours) || 45);
