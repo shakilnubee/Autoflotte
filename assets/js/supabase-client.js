@@ -489,6 +489,25 @@
           settingsLoaded = true;   // pull initial OK → pas besoin de la retry 3 s (évite un 2ᵉ SELECT app_settings)
           const key = (FP.settings && FP.settings._key) ? FP.settings._key() : 'auto_flotte_settings';
           let _prevSettingsRaw = null; try { _prevSettingsRaw = localStorage.getItem(key); } catch (_) {}
+          // ⚠️⚠️ « VU »/« IGNORÉ » D'ALERTE QUI REVIENT (bug vécu) : au chargement, les réglages du SERVEUR
+          //   écrasaient le localStorage EN BLOC. Or un clic « Vu » suivi d'une navigation IMMÉDIATE peut ne
+          //   pas encore avoir atteint le serveur (l'écriture est en file durable, flushée un peu plus tard) →
+          //   le serveur (sans le « Vu ») écrasait la version locale → l'alerte REVENAIT au retour sur la page.
+          //   On PRÉSERVE donc les accusés de lecture d'alertes saisis localement (union avec le serveur).
+          //   ⚠️ Ce sont de simples ACCUSÉS (muteKey→signature / liste de clés) : les garder ne peut JAMAIS
+          //   perdre une donnée métier (au pire une alerte reste masquée un peu plus longtemps). La vraie
+          //   synchro multi-appareils se fait quand même via la file d'écriture (FP.persist) au prochain flush.
+          try {
+            const lp = _prevSettingsRaw ? JSON.parse(_prevSettingsRaw) : null;
+            if (lp && typeof lp === 'object') {
+              if (lp.alertesVues && typeof lp.alertesVues === 'object')
+                shared.alertesVues = Object.assign({}, shared.alertesVues || {}, lp.alertesVues);
+              if (Array.isArray(lp.alertesMasquees))
+                shared.alertesMasquees = Array.from(new Set([...(Array.isArray(shared.alertesMasquees) ? shared.alertesMasquees : []), ...lp.alertesMasquees]));
+              if (lp.alertesMasqueesInfo && typeof lp.alertesMasqueesInfo === 'object')
+                shared.alertesMasqueesInfo = Object.assign({}, shared.alertesMasqueesInfo || {}, lp.alertesMasqueesInfo);
+            }
+          } catch (_) {}
           const _freshSettingsRaw = JSON.stringify(shared);
           settingsChanged = (_prevSettingsRaw !== _freshSettingsRaw);
           localStorage.setItem(key, _freshSettingsRaw);
