@@ -46,7 +46,7 @@
      Le footer d'actions est déjà `sticky bottom-0` (il reste épinglé) et le bouton Fermer est épinglé ci-dessous. */
   #drawer.drawer { display: block; overflow-y: auto; overflow-x: hidden; }
   #drawer.drawer > #drawer-body { overflow: visible; min-height: 0; }
-  #drawer.drawer #drawer-close { position: fixed; top: 14px; right: 14px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 9999px; box-shadow: 0 4px 14px rgba(11,18,32,.28); z-index: 70; }
+  #drawer.drawer #drawer-close { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 14px); right: calc(env(safe-area-inset-right, 0px) + 14px); width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 9999px; box-shadow: 0 4px 14px rgba(11,18,32,.28); z-index: 70; }
   /* ===== MODE EMBED : la MÊME fiche véhicule réutilisée en GRAND POP-UP depuis la fiche conducteur =====
      (même code, mêmes handlers → aucune divergence). On masque le chrome de la page et on transforme
      le tiroir en pop-up centré « A1 » : en-tête cockpit + corps en colonnes (bulles). */
@@ -162,8 +162,12 @@
     /* ⚠️ Bouton Fermer TOUJOURS accessible sur mobile : le tiroir scrolle en entier (voir plus haut),
        donc l'en-tête part vers le haut. On épingle le bouton au coin du tiroir (position:fixed relatif
        au conteneur transformé = coin de l'écran) pour qu'il reste sous le pouce pendant le scroll. */
-    #drawer.drawer #drawer-close { position: fixed !important; top: 10px; right: 10px; width: 44px; height: 44px;
+    #drawer.drawer #drawer-close { position: fixed !important; top: calc(env(safe-area-inset-top, 0px) + 12px) !important; right: calc(env(safe-area-inset-right, 0px) + 12px) !important; width: 46px; height: 46px; z-index: 90 !important;
       display: flex; align-items: center; justify-content: center; padding: 0; border-radius: 9999px; box-shadow: 0 4px 14px rgba(11,18,32,.28); }
+    /* Flèches préc./suiv. : sous le pouce ET sous l'encoche (safe-area) — sinon elles tombent sous la barre d'état. */
+    #drawer.drawer #drawer-nav { top: calc(env(safe-area-inset-top, 0px) + 12px) !important; left: calc(env(safe-area-inset-left, 0px) + 12px) !important; }
+    /* On décale un peu le contenu de l'en-tête pour ne pas passer sous l'encoche. */
+    #drawer.drawer .relative > .p-6 { padding-top: calc(env(safe-area-inset-top, 0px) + 3.6rem) !important; }
     #drawer .fp-cockpit-grid { grid-template-columns: 1fr !important; gap: 16px !important; align-items: start !important; }
     #drawer .relative #drawer-readouts { grid-template-columns: repeat(2, minmax(0,1fr)) !important; gap: 10px !important; max-width: none !important; }
     #drawer-title { font-size: 1.5rem !important; }
@@ -439,7 +443,11 @@
   .veh-card:active { transform:translateY(-2px) scale(.99); }
   .veh-photo { height:120px; background-size:cover; background-position:center; position:relative; }
   .veh-photo.noimg { display:flex; align-items:center; justify-content:center; }
-  .veh-photo.noimg svg { width:44px; height:44px; color:rgba(255,255,255,.9); }
+  .veh-photo.noimg svg.veh-caric { width:44px; height:44px; color:rgba(255,255,255,.9); }
+  /* Logo de marque (blanc) dans l'en-tête coloré de la carte */
+  .veh-photo .veh-brand { display:flex; align-items:center; justify-content:center; }
+  .veh-photo .veh-brand svg { height:54px; width:auto; max-width:64%; max-height:64px; color:#fff; fill:#fff; }
+  .veh-photo .veh-brand-img { height:52px; width:auto; max-width:64%; object-fit:contain; filter:brightness(0) invert(1); }
   .veh-photo .veh-st { position:absolute; top:11px; right:11px; z-index:2; }
   .veh-cbody { padding:14px 16px 16px; }
   .veh-cbody .mm { font-size:1.05rem; font-weight:800; color:var(--fp-text,#0B1220); letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -734,7 +742,7 @@
     <button aria-label="Fermer" class="drawer-hbtn absolute top-3 right-3 z-10 p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-close">
       <i data-lucide="x" class="w-5 h-5"></i>
     </button>
-    <div class="absolute top-3 left-3 z-10 flex gap-1">
+    <div class="absolute top-3 left-3 z-10 flex gap-1" id="drawer-nav">
       <button aria-label="Véhicule précédent" class="drawer-hbtn p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-prev"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
       <button aria-label="Véhicule suivant" class="drawer-hbtn p-2 bg-white/90 hover:bg-white rounded-lg shadow-sm" id="drawer-next"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
     </div>
@@ -2213,14 +2221,21 @@
 
   // ===== Vue « Cartes » façon App Store (véhicules) — mêmes données/filtres que le tableau,
   //       clic sur une carte = MÊME fiche (openDrawer). Étagères par groupe qui défilent. =====
+  // Silhouette voiture (repli quand la marque n'a pas de logo, ou si le logo ne charge pas).
+  const VEH_CAR_SVG = '<svg class="veh-caric" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="6" rx="2"/><path d="M6 11V8a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v3"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>';
   function vehCardHtml(v) {
     const grp = FP.vehGroupes(v).find(g => g !== 'non-classe') || FP.vehGroupes(v)[0] || null;
     const col = grp ? FP.groupeColor(grp) : '#64748B';
     const c2 = (col[0] === '#' && FP.settings && FP.settings._shade) ? FP.settings._shade(col, 0.2) : col;
-    const carSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="6" rx="2"/><path d="M6 11V8a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v3"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></svg>';
     const st = FP.statutBadge ? FP.statutBadge(v.statut) : '';
-    // En-tête : TOUJOURS le logo voiture sur le dégradé de couleur du groupe (jamais de photo).
-    const banner = `<div class="veh-photo noimg" style="background:linear-gradient(135deg,${col},${c2})"><span class="veh-st">${st}</span>${carSvg}</div>`;
+    // En-tête : LOGO DE LA MARQUE (blanc) sur le dégradé de couleur du groupe (jamais de photo). Repli
+    // sur la silhouette voiture si la marque n'a pas de logo connu OU si le logo ne charge pas.
+    const ls = brandLogoSources(v.marque);
+    let logoHtml;
+    if (ls.svg) logoHtml = `<span class="veh-brand">${ls.svg}</span>`;
+    else if (ls.urls.length) logoHtml = `<img class="veh-brand-img" src="${ls.urls[0]}" data-fallback="${escapeHtml(JSON.stringify(ls.urls.slice(1)))}" alt="${escapeHtml(v.marque || '')}" loading="lazy">`;
+    else logoHtml = VEH_CAR_SVG;
+    const banner = `<div class="veh-photo noimg" style="background:linear-gradient(135deg,${col},${c2})"><span class="veh-st">${st}</span>${logoHtml}</div>`;
     const ch = (v.chauffeur && v.chauffeur !== '—' && String(v.chauffeur).trim()) ? escapeHtml(v.chauffeur) : 'Sans conducteur';
     const km = (v.km != null && v.km !== '') ? FP.num(v.km) : '—';
     const marque = escapeHtml((v.marque || '').trim()) || 'Véhicule';
@@ -2246,6 +2261,11 @@
     FP.groupeKeys().forEach(k => { if (byG[k]) html += shelf(FP.groupeLabel(k), byG[k]); });
     if (none.length) html += shelf('Sans groupe', none);
     host.innerHTML = html || '<p class="text-slate-400 text-center py-8">Aucun véhicule.</p>';
+    // Logos de marque : chaîne de replis (URLs suivantes) puis silhouette voiture si tout échoue.
+    host.querySelectorAll('img.veh-brand-img').forEach(img => {
+      let fb = []; try { fb = JSON.parse(img.dataset.fallback || '[]'); } catch (e) {}
+      img.onerror = () => { if (fb.length) { img.src = fb.shift(); } else { img.outerHTML = VEH_CAR_SVG; } };
+    });
     if (window.lucide) lucide.createIcons();
   }
   function syncVehView() {
@@ -2424,16 +2444,24 @@
   };
   // Logos stockés EN LOCAL (fiables, hors-ligne) pour les marques mal servies par les CDN.
   const LOGO_LOCAL = { 'PEUGEOT': 'peugeot.svg', 'BYD': 'byd.svg', 'MERCEDES BENZ': 'mercedes.svg', 'MERCEDES': 'mercedes.svg' };
+  // ⚠️ SOURCE UNIQUE des logos de marque (fiche véhicule ET cartes App Store) : renvoie { svg, urls }.
+  // `svg` = SVG inline blanc prêt à poser ; sinon `urls` = sources à tenter dans l'ordre (local → Simple
+  // Icons blanc → Clearbit). Un seul endroit à maintenir → la carte et la fiche montrent le MÊME logo.
+  function brandLogoSources(marque) {
+    const m = (marque || '').toUpperCase().trim();
+    if (LOGO_SVG[m]) return { svg: LOGO_SVG[m], urls: [] };
+    const urls = [];
+    if (LOGO_LOCAL[m]) urls.push('../assets/logos/' + LOGO_LOCAL[m] + '?v=2');
+    if (LOGO_SLUGS[m]) urls.push('https://cdn.simpleicons.org/' + LOGO_SLUGS[m] + '/ffffff');
+    if (LOGO_DOMAINS[m]) urls.push('https://logo.clearbit.com/' + LOGO_DOMAINS[m] + '?size=96');
+    return { svg: '', urls };
+  }
   function renderDrawerLogo(v) {
     const wrap = $('drawer-logo');
-    const marque = (v.marque || '').toUpperCase().trim();
     const badge = `<span class="brand-badge">${(v.marque || '').replace(/</g, '&lt;')}</span>`;
-    if (LOGO_SVG[marque]) { wrap.innerHTML = LOGO_SVG[marque]; return; }
-    // Sources tentées dans l'ordre : logo LOCAL, puis Simple Icons, puis Clearbit, puis badge texte.
-    const urls = [];
-    if (LOGO_LOCAL[marque]) urls.push('../assets/logos/' + LOGO_LOCAL[marque] + '?v=2');
-    if (LOGO_SLUGS[marque]) urls.push('https://cdn.simpleicons.org/' + LOGO_SLUGS[marque] + '/ffffff');
-    if (LOGO_DOMAINS[marque]) urls.push('https://logo.clearbit.com/' + LOGO_DOMAINS[marque] + '?size=96');
+    const src = brandLogoSources(v.marque);
+    if (src.svg) { wrap.innerHTML = src.svg; return; }
+    const urls = src.urls;
     if (!urls.length) { wrap.innerHTML = v.marque ? badge : ''; return; }
     wrap.innerHTML = `<img alt="${(v.marque || '').replace(/"/g, '')}" loading="lazy" style="height:60px;width:auto;max-width:190px;object-fit:contain">`;
     const img = wrap.querySelector('img');
