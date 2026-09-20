@@ -1109,7 +1109,10 @@
     selectedIds: new Set(),
     sortKey: null,   // null | 'prochainCT' | 'km'
     sortDir: 'asc',  // 'asc' | 'desc'
-    vehView: (function(){ try { return FP.settings.get().vehView === 'table' ? 'table' : 'cards'; } catch (e) { return 'cards'; } })(), // 'table' | 'cards' — cartes par défaut
+    // 'table' | 'cards' — CARTES par défaut. Le mode « Tableau » n'est retenu que s'il a été
+    // choisi EXPLICITEMENT au sélecteur (flag vehViewSet) : un ancien 'table' hérité (quand le
+    // tableau était le défaut) est ignoré → tout le monde retombe sur les Cartes par défaut.
+    vehView: (function(){ try { const s = FP.settings.get(); return (s.vehViewSet === true && s.vehView === 'table') ? 'table' : 'cards'; } catch (e) { return 'cards'; } })(),
   };
 
   // Labels et couleurs sont fournis par FP.groupeLabel() (configurables via /pages/parametres.html)
@@ -2256,7 +2259,9 @@
   }
   function setVehView(v) {
     state.vehView = v;
-    try { const s = FP.settings.get(); s.vehView = v; FP.settings.save(s); } catch (e) {}
+    // vehViewSet = true : l'utilisateur a choisi lui-même au sélecteur → on respecte son choix
+    // (Tableau comme Cartes) sur tous ses appareils, sans le forcer à revenir aux Cartes.
+    try { const s = FP.settings.get(); s.vehView = v; s.vehViewSet = true; FP.settings.save(s); } catch (e) {}
     syncVehView();
   }
 
