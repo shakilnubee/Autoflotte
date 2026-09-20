@@ -1603,6 +1603,52 @@ FP.setRevisionOverride = function (factureId, val, veh, factures) {
   } catch (e) {}
   return FP.derniereRevisionInfo(veh, factures);
 };
+// ⚠️ REPASSE SÛRE (une fois) — corrige les « dernière révision » posées à TORT par l'ancienne règle
+// (n'importe quel entretien — géométrie, pneu, clim… — faisait sauter la date). RÈGLES DE SÉCURITÉ
+// (rule 0-perte / ⑤) : ne corrige QUE si la date stockée correspond EXACTEMENT à la date d'une facture
+// d'entretien du véhicule (= elle vient BIEN d'une facture, pas d'une saisie manuelle) ET qu'elle diffère
+// de la vraie dernière révision recalculée. Une date SAISIE À LA MAIN (qui ne correspond à aucune
+// facture) n'est JAMAIS touchée. Idempotent (re-passe = aucun changement). Ne touche ni le km ni les pneus.
+FP.auditRevisions = function (opts) {
+  opts = opts || {};
+  const apply = opts.apply !== false;
+  const factures = opts.factures || (window.FP_DATA && FP_DATA.factures) || [];
+  const vehicules = opts.vehicules || (window.FP_DATA && FP_DATA.vehicules) || [];
+  const corrections = [];
+  try {
+    vehicules.forEach(v => {
+      if (!v || !v.immat) return;
+      const cur = v.derniereRevision;
+      if (!cur || cur === '—') return;                       // rien de stocké → on n'invente rien
+      const nk = FP.normImmat(v.immat);
+      const mine = factures.filter(f => f && FP.estEntretien(f) && FP.normImmat(f.vehiculeImmat) === nk);
+      const vientDuneFacture = mine.some(f => f.date === cur); // la date stockée = une facture d'entretien ?
+      if (!vientDuneFacture) return;                          // sinon = saisie MANUELLE → on ne touche JAMAIS
+      const info = FP.derniereRevisionInfo(v, factures);      // vraie dernière révision (nouvelle règle + overrides)
+      const neuf = info.date || null;
+      if ((neuf || null) === (cur || null)) return;          // déjà correct
+      corrections.push({ id: v.id, immat: v.immat, ancienne: cur, nouvelle: neuf });
+      if (apply) {
+        v.derniereRevision = neuf;
+        if (FP.persist && FP.persist.update) { try { FP.persist.update('vehicules', v.id, { derniereRevision: neuf }); } catch (e) {} }
+      }
+    });
+  } catch (e) {}
+  return corrections;
+};
+// Repasse UNE FOIS après chargement des données (fp:data-ready), une fois par société (flag persistant).
+// Idempotente et sans risque de perte → même relancée, elle ne casse rien.
+FP._fixRevisionsUneFois = function () {
+  try {
+    const s = FP.settings.get();
+    if (s.revisionFix1) return;                              // déjà fait → on ne repasse plus
+    const done = FP.auditRevisions({ apply: true });
+    s.revisionFix1 = true; FP.settings.save(s);
+    if (done.length && FP.toast) FP.toast(done.length + ' fiche' + (done.length > 1 ? 's' : '') + ' — dernière révision recalculée');
+    if (done.length) { try { console.warn('[révisions] corrigées :', done.map(c => c.immat + ' ' + c.ancienne + '→' + (c.nouvelle || '∅')).join(', ')); } catch (e) {} }
+  } catch (e) {}
+};
+try { document.addEventListener('fp:data-ready', () => { setTimeout(() => { try { FP._fixRevisionsUneFois(); } catch (e) {} }, 1200); }); } catch (e) {}
 // ⚠️ SOURCE UNIQUE — « Dépensé {année} » d'un véhicule = entretien/réparation (factures DÉDOUBLONNÉES)
 // + sinistres à charge (FP.coutSinistre). Utilisé par la fiche véhicule À L'ÉCRAN et dans son PDF pour
 // afficher EXACTEMENT le même montant (sinon le PDF sur-comptait les doublons et ignorait les sinistres).
