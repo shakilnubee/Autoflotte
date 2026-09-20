@@ -3904,21 +3904,42 @@
     if (!(await FP.confirm(`Lire ${targets.length} carte(s) grise(s) stockée(s) et compléter automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates) ?\n\nSeuls les champs VIDES sont remplis — aucune donnée existante n'est écrasée.`))) return;
     const btn = $('btn-completer-cg'); const lbl = btn ? btn.innerHTML : '';
     if (btn) btn.disabled = true;
-    let done = 0, fail = 0;
-    for (let i = 0; i < targets.length; i++) {
-      const v = targets[i].v;
-      if (btn) btn.textContent = `Lecture ${i + 1}/${targets.length}…`;
+    let done = 0, fail = 0, processed = 0;
+    // ⚡ PHASE 1 — LECTURE en PARALLÈLE bornée (3 cartes à la fois). C'est la partie LENTE (téléchargement
+    //    + lecture IA + OCR). Avant : une par une + pause 250 ms → très long sur toute la flotte.
+    //    ⚠️ Les ÉCRITURES restent en PHASE 2 SÉQUENTIELLE (aucune course sur les réglages → 0 risque de
+    //    perte de masse/champs, cf. règle 0-perte). On ne fait AUCUNE écriture pendant la lecture parallèle.
+    const CONC = 3;
+    const results = new Array(targets.length);
+    let next = 0;
+    async function reader(){
+      for (;;) {
+        const i = next++; if (i >= targets.length) return;
+        const v = targets[i].v;
+        try {
+          // Bucket privé : signer l'URL avant le fetch (l'URL stockée est « …/object/public/… » qui ne
+          // sert plus les fichiers d'un bucket privé) — même correctif que rereadPermisFromUrl.
+          const _cgU = (window.FP && FP.signedScanUrl) ? await FP.signedScanUrl(targets[i].url) : targets[i].url;
+          const resp = await fetch(_cgU); if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const blob = await resp.blob();
+          const file = new File([blob], 'cg.' + ((blob.type || '').includes('pdf') ? 'pdf' : 'jpg'), { type: blob.type || 'application/octet-stream' });
+          let p = {};
+          try { const ai = FP.scanIA ? await FP.scanIA(file, 'carte-grise', FP.CG_SCAN_PROMPT) : null; if (ai) p = { marque: ai.marque || '', modele: ai.modele || '', dateMiseEnCirculation: ai.dateMiseEnCirculation || '', prochainCT: ai.prochainCT || '', vin: ai.vin ? String(ai.vin).toUpperCase().replace(/[^A-Z0-9]/g, '') : '', co2: num(ai.co2), puissanceFiscale: num(ai.puissanceFiscale), carburant: ai.carburant || '', masse: num(ai.masse), categorie: ai.categorie || '' }; } catch (e) {}
+          try { const txt = await FP.ocr.fileToText(file); const loc = parseCarteGrise(txt) || {}; for (const k in loc) { if ((p[k] == null || p[k] === '') && loc[k] != null && loc[k] !== '') p[k] = loc[k]; } } catch (e) {}
+          if (p.carburant && FP.normCarburant) p.carburant = FP.normCarburant(p.carburant);
+          results[i] = { v, p };
+        } catch (e) { console.warn('[completerCG lecture]', v.immat, e); results[i] = { v, err: true }; fail++; }
+        processed++;
+        if (btn) btn.textContent = `Lecture ${processed}/${targets.length}…`;
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONC, targets.length) }, () => reader()));
+    // ⚡ PHASE 2 — ÉCRITURES SÉQUENTIELLES (une à la fois) : logique STRICTEMENT identique à avant,
+    //    juste sortie de la boucle de lecture → pas de course entre deux FP.settings.save().
+    for (const r of results) {
+      if (!r || r.err || !r.p) continue;
+      const v = r.v, p = r.p;
       try {
-        // Bucket privé : signer l'URL avant le fetch (l'URL stockée est « …/object/public/… » qui ne
-        // sert plus les fichiers d'un bucket privé) — même correctif que rereadPermisFromUrl.
-        const _cgU = (window.FP && FP.signedScanUrl) ? await FP.signedScanUrl(targets[i].url) : targets[i].url;
-        const resp = await fetch(_cgU); if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const blob = await resp.blob();
-        const file = new File([blob], 'cg.' + ((blob.type || '').includes('pdf') ? 'pdf' : 'jpg'), { type: blob.type || 'application/octet-stream' });
-        let p = {};
-        try { const ai = FP.scanIA ? await FP.scanIA(file, 'carte-grise', FP.CG_SCAN_PROMPT) : null; if (ai) p = { marque: ai.marque || '', modele: ai.modele || '', dateMiseEnCirculation: ai.dateMiseEnCirculation || '', prochainCT: ai.prochainCT || '', vin: ai.vin ? String(ai.vin).toUpperCase().replace(/[^A-Z0-9]/g, '') : '', co2: num(ai.co2), puissanceFiscale: num(ai.puissanceFiscale), carburant: ai.carburant || '', masse: num(ai.masse), categorie: ai.categorie || '' }; } catch (e) {}
-        try { const txt = await FP.ocr.fileToText(file); const loc = parseCarteGrise(txt) || {}; for (const k in loc) { if ((p[k] == null || p[k] === '') && loc[k] != null && loc[k] !== '') p[k] = loc[k]; } } catch (e) {}
-        if (p.carburant && FP.normCarburant) p.carburant = FP.normCarburant(p.carburant);
         const upd = {};
         const setIf = (k, val) => { if (val != null && val !== '' && (v[k] == null || v[k] === '')) { v[k] = val; upd[k] = val; } };
         ['marque', 'modele', 'dateMiseEnCirculation', 'prochainCT', 'vin', 'carburant', 'categorie'].forEach(k => setIf(k, p[k]));
@@ -3928,14 +3949,21 @@
         if (keys.length) await persistVehFields(v, keys);
         if (Number.isFinite(p.masse)) { const s = FP.settings.get(); s.vehMasse = s.vehMasse || {}; if (!s.vehMasse[v.id]) { s.vehMasse[v.id] = p.masse; FP.settings.save(s); } }
         if (keys.length || Number.isFinite(p.masse)) done++;
-      } catch (e) { console.warn('[completerCG]', v.immat, e); fail++; }
-      await new Promise(r => setTimeout(r, 250));
+      } catch (e) { console.warn('[completerCG écriture]', v.immat, e); }
     }
     if (btn) { btn.disabled = false; btn.innerHTML = lbl; }
     renderTable(); renderKPIs();
+    // Combien de véhicules RESTENT sans masse (ni saisie, ni lue, ni connue par le modèle) → l'utilisateur
+    // sait précisément pourquoi le site « demande encore la masse » (champ G non lu sur ces cartes-là).
+    let masseRestante = 0;
+    try {
+      const vm = FP.settings.get().vehMasse || {};
+      masseRestante = targets.filter(t => { const id = t.v.id; const has = vm[id] != null && vm[id] !== ''; const known = (FP.masseCG && FP.masseCG(t.v) != null); return !has && !known; }).length;
+    } catch (e) {}
     alert(`✓ ${done} véhicule(s) complété(s) depuis leur carte grise.`
       + (fail ? `\n${fail} carte(s) grise(s) illisible(s) ou en erreur.` : '')
-      + (onDrive.length ? `\n${onDrive.length} sur Google Drive (non lisibles par le site) → à re-scanner à la main.` : ''));
+      + (masseRestante ? `\n⚖️ ${masseRestante} véhicule(s) sans masse (champ G) — l'IA ne l'a pas trouvée sur la carte grise : saisis-la à la main dans la fiche (case « Masse »).` : '')
+      + (onDrive.length ? `\n${onDrive.length} sur Google Drive (non lisibles par le site) → à re-scanner via « Scanner un document » (le scan remplit la masse tout seul).` : ''));
   }
   { const b = $('btn-completer-cg'); if (b) b.addEventListener('click', () => { completerDepuisCG().catch(e => { console.error(e); alert('Erreur pendant la complétion.'); const btn = $('btn-completer-cg'); if (btn) btn.disabled = false; }); }); }
 
