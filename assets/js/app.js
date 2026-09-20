@@ -1549,6 +1549,17 @@ FP.estPayee = (a) => { const s = ((a && a.statut) || '').toString().trim().toLow
 // reparation). À utiliser PARTOUT (carnet fiche, page Entretiens, coût véhicule, budget, alertes) — sinon
 // une facture typée « reparation » (sans accent) apparaît sur un écran et pas sur l'autre.
 FP.estEntretien = (f) => { const t = ((f && f.type) || '').toString().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim(); return t === 'entretien' || t === 'reparation'; };
+// ⚠️ « VRAIE révision » — SOURCE UNIQUE pour la DATE de « dernière révision ». Une révision = entretien
+// PÉRIODIQUE / vidange (huile moteur/boîte, révision constructeur, service). PAS un pneu seul, une
+// géométrie/parallélisme, une clim, des freins, une suspension… : ce sont des entretiens (type
+// 'entretien') mais PAS « la révision ». Bug corrigé : avant, N'IMPORTE quelle facture d'entretien
+// (ex. géométrie) faisait sauter la « dernière révision » à sa date. On s'ancre donc sur le LIBELLÉ.
+FP.estRevision = (f) => {
+  if (!f || !FP.estEntretien(f)) return false;
+  const d = (`${(f && f.description) || ''} ${(f && f.type) || ''}`).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return /revision|vidange|entretien periodique|entretien constructeur|entretien annuel|service constructeur|service entretien|service periodique/.test(d)
+      || /huile (moteur|boite|de boite|de transmission)/.test(d);
+};
 // ⚠️ SOURCE UNIQUE — « Dépensé {année} » d'un véhicule = entretien/réparation (factures DÉDOUBLONNÉES)
 // + sinistres à charge (FP.coutSinistre). Utilisé par la fiche véhicule À L'ÉCRAN et dans son PDF pour
 // afficher EXACTEMENT le même montant (sinon le PDF sur-comptait les doublons et ignorait les sinistres).
@@ -1602,8 +1613,9 @@ FP.recomputeVehiculeFromFactures = function (v, factures) {
     // de révision (FP.revisionInfo, ancrée sur kmDernierReleve) faussée.
     const allMine = (factures || []).filter(f => f && FP.normImmat(f.vehiculeImmat) === nk);
     const patch = {};
-    // Dernière révision = date la plus récente parmi les factures d'entretien restantes (sinon vide).
-    const dates = mine.map(f => f.date).filter(Boolean).sort();
+    // Dernière révision = date la plus récente parmi les VRAIES révisions restantes (FP.estRevision,
+    // pas n'importe quel entretien : une géométrie/pneu/clim ne compte PAS comme révision).
+    const dates = mine.filter(f => FP.estRevision(f)).map(f => f.date).filter(Boolean).sort();
     const derniere = dates.length ? dates[dates.length - 1] : null;
     if ((v.derniereRevision || null) !== (derniere || null)) { v.derniereRevision = derniere; patch.derniereRevision = derniere; }
     // Km relevé = max km parmi TOUTES les factures restantes (même périmètre qu'apply), sinon vide.
@@ -6113,11 +6125,16 @@ FP.applyFactureToVehicule = function (f, vehicules) {
         if (!s.kmMajDates[v.immat] || d > s.kmMajDates[v.immat]) { s.kmMajDates[v.immat] = d; FP.settings.save(s); }
       } catch (e) {}
     }
-    // Dernière révision + pneus : entretien/réparation uniquement.
-    if (estEntretien) {
+    // Dernière révision : SEULEMENT une VRAIE révision (FP.estRevision) — pas n'importe quel entretien.
+    // Bug corrigé : une géométrie/parallélisme (type 'entretien') faisait sauter la « dernière révision »
+    // à sa date. On s'ancre donc sur le libellé via FP.estRevision.
+    if (FP.estRevision(f)) {
       if (f.date && (!v.derniereRevision || v.derniereRevision === '—' || f.date > v.derniereRevision)) {
         v.derniereRevision = f.date; patch.derniereRevision = f.date; bits.push('révision ' + FP.date(f.date));
       }
+    }
+    // Pneus : entretien/réparation portant la mention « pneu ».
+    if (estEntretien) {
       if (/pneu/i.test(`${f.description || ''}`) && f.date && (!v.dateChangementPneus || f.date > v.dateChangementPneus)) {
         v.dateChangementPneus = f.date; patch.dateChangementPneus = f.date; bits.push('pneus');
       }
