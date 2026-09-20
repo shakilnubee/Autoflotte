@@ -4691,7 +4691,46 @@ FP.settings = {
       return merged;
     } catch { return JSON.parse(JSON.stringify(this.defaults)); }
   },
+  // ⚠️⚠️⚠️ ANTI-VIDAGE (protection N°1 contre la perte de données, cf. 0-perte). Liste des collections
+  // PRÉCIEUSES (données de travail keyées) qu'une sauvegarde ne doit JAMAIS ramener de « pleine » à
+  // « vide » : ce serait un vidage catastrophique (bug vécu : réglages retombés à « 1 loueur » = défauts,
+  // congés/assureurs/primes/leasing perdus). Un vidage complet en UNE sauvegarde n'est jamais une action
+  // utilisateur normale (on ne supprime pas 12 congés d'un coup) → on le BLOQUE et on RESTAURE la clé
+  // depuis la dernière valeur connue (snapshot serveur, sinon cache local). Une édition normale
+  // (12 → 11 congés) n'est pas concernée (11 > 0).
+  _PRECIOUS: ['condConges', 'condSortie', 'condArrivee', 'condCarteTotal', 'condBadgeUlys', 'condDocs',
+    'affectations', 'assureurs', 'assureurVeh', 'assuranceEcheance', 'assurancePrimes',
+    'leasingContrats', 'localeaseContrats', 'loueurs', 'prestatairesPerso', 'prestataires',
+    'vehMasse', 'vehNotes', 'vehRestit', 'vehEntree', 'vehCession', 'kmMajDates', 'antiPollDates',
+    'controleStatuts', 'amendeMontantPaye', 'amendeMontants', 'docStatus', 'docTypes', 'docExpire',
+    'docTrash', 'permisMasque', 'inspections', 'reservations', 'budget', 'budgets', 'objectifs',
+    'pointsManuel', 'vehCarteCarb', 'vehBadge', 'vehCarteCarbExp', 'vehBadgeExp', 'vehFournCarb',
+    'rapprIgnore', 'tfAnomOk', 'ignores', 'sinistreStage', 'sinistreStatut', 'sinistreGroupes',
+    'sinistreAssurance', 'sinistreDossiers', 'zoneNotes', 'corbeille'],
+  _guardWipe(obj) {
+    try {
+      if (!obj || typeof obj !== 'object') return obj;
+      let local = null; try { local = JSON.parse(this._readLocal() || 'null'); } catch (e) {}
+      const snap = (this._serverSnap && typeof this._serverSnap === 'object') ? this._serverSnap : null;
+      const sz = v => Array.isArray(v) ? v.length : (v && typeof v === 'object' ? Object.keys(v).length : 0);
+      const restored = [];
+      this._PRECIOUS.forEach(k => {
+        if (sz(obj[k]) > 0) return;                       // la sauvegarde a des données pour k → rien à protéger
+        // On ne bloque QUE les vidages MASSIFS (référence ≥ 2 éléments) : supprimer le tout dernier
+        // élément d'une liste reste une action utilisateur valide (1 → 0), mais 12 → 0 = vidage = bug.
+        let ref = null;
+        if (snap && sz(snap[k]) >= 2) ref = snap[k];        // valeur serveur connue (prioritaire)
+        else if (local && sz(local[k]) >= 2) ref = local[k]; // sinon dernier cache local non vide
+        if (ref) { obj[k] = ref; restored.push(k); }        // on RESTAURE au lieu de laisser vider
+      });
+      if (restored.length) { try { console.warn('[FP.settings] ANTI-VIDAGE — collections préservées :', restored.join(', ')); } catch (e) {} }
+    } catch (e) {}
+    return obj;
+  },
   save(obj) {
+    // ⚠️ Garde anti-vidage AVANT toute écriture : une sauvegarde ne peut plus effacer en bloc une
+    //    collection précieuse déjà présente (congés, assureurs, primes, leasing, loueurs…).
+    try { obj = this._guardWipe(obj); } catch (e) {}
     // On CAPTURE l'état local AVANT d'écraser le cache : il sert de base de « delta » quand le snapshot
     // serveur n'est pas encore posé (→ on n'écrit alors QUE les clés que CE poste vient de changer,
     // sans réécraser les modifs récentes d'un autre poste). Cf. _pushSettings.
