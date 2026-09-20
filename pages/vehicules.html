@@ -2564,8 +2564,9 @@
       const td = (window.FP && FP.tvsDetail) ? FP.tvsDetail(v) : null;
       const tvsTxt = td && td.applicable ? (td.total != null ? FP.euro(td.total) : '—') : 'Non soumis';
       const kmMajDate = (() => { try { const m = FP.settings.get().kmMajDates || {}; return m[v.immat] || ''; } catch (e) { return ''; } })();
-      // DERNIÈRE RÉVISION (remplace « Prochain CT » — le CT reste dans « Échéances à venir ») : date +
-      // facture source cliquable + correction « ✕ Pas une révision » (source unique = FP.derniereRevisionInfo).
+      const ct = (v.prochainCT && v.prochainCT !== '—') ? FP.dateNum(v.prochainCT) : '—';
+      // DERNIÈRE RÉVISION (tuile en plus, à côté de Prochain CT) : date + facture source cliquable +
+      // correction « ✕ Pas une révision » (source unique = FP.derniereRevisionInfo).
       const revInfo = (window.FP && FP.derniereRevisionInfo) ? FP.derniereRevisionInfo(v, data.factures) : { date: null, facture: null };
       const revTxt = revInfo.date ? FP.dateNum(revInfo.date) : '—';
       let revSub = '';
@@ -2583,6 +2584,7 @@
       const items = [
         ['Kilométrage', (FP.num(Number(v.km) || 0)) + ' km', 'km', 'number', ''],
         ['Carburant', v.carburant || '—', 'carburant', 'text', 'P.3'],
+        ['Prochain CT', ct, 'prochainCT', 'date', 'X.1'],
         ['Dernière révision', revTxt, null, null, '', revSub],
         ['TVS ' + (FP.TVS_ANNEE || ''), tvsTxt, null, null, ''],
       ];
@@ -2593,19 +2595,13 @@
         let _loyer = null;
         try { const _lc = (window.FP && FP.leasingCoutContrat) ? FP.leasingCoutContrat(v.immat) : null; if (_lc && _lc.loyerMois != null) _loyer = _lc.loyerMois; } catch (e) {}
         if (_loyer == null) { const _lz = (window.FP && FP.leasingInfo) ? FP.leasingInfo(v) : null; if (_lz && _lz.loyer != null) _loyer = _lz.loyer; }
-        if (_loyer != null) items.splice(3, 0, ['Loyer', FP.euro(_loyer) + '/mois', null, null, '']);
+        if (_loyer != null) items.splice(4, 0, ['Loyer', FP.euro(_loyer) + '/mois', null, null, '']);
       } catch (e) {}
-      // Tuiles supplémentaires pour remplir l'en-tête : coût de l'année + coût/km.
-      // ⚠️ Recalculés LOCALEMENT ici (mêmes helpers que le corps) : les const coutTotal/coutKm/ANNEE
-      // de openDrawer sont déclarées PLUS BAS → y référer ici lèverait une ReferenceError (TDZ) avalée
-      // par le try/catch, et les tuiles ne s'affichaient jamais.
+      // Tuile supplémentaire pour remplir l'en-tête : coût de l'année.
+      // ⚠️ Recalculé LOCALEMENT ici (mêmes helpers que le corps) : les const coutTotal/ANNEE de
+      // openDrawer sont déclarées PLUS BAS → y référer ici lèverait une ReferenceError (TDZ) avalée
+      // par le try/catch, et la tuile ne s'affichait jamais.
       try { const _an = String(new Date().getFullYear()); const _ca = FP.coutExploitAnnee ? FP.coutExploitAnnee(v, _an, data.factures) : null; if (typeof _ca === 'number') items.push(['Coût ' + _an, FP.euro(_ca), null, null, '']); } catch (e) {}
-      try {
-        const _sv = f => FP.normImmat(f.vehiculeImmat) === FP.normImmat(v.immat);
-        const _tot = FP.dedupeFactures((data.factures || []).filter(f => _sv(f) && FP.coutFactureExploit && FP.coutFactureExploit(f))).reduce((s, f) => s + (Number(f.montantTTC) || 0), 0);
-        const _km = FP.kmActuel ? FP.kmActuel(v) : (Number(v.km) || 0);
-        if (_km > 0 && _tot > 0) items.push(['Coût / km', (_tot / _km).toFixed(3).replace('.', ',') + ' €', null, null, '']);
-      } catch (e) {}
       try { const _au = (v.autonomie != null && v.autonomie !== '') ? String(v.autonomie) : ''; if (_au) items.push(['Autonomie', _au + (/\d$/.test(_au) ? ' km' : ''), null, null, '']); } catch (e) {}
       box.innerHTML = items.map(([k, val, df, dt, code, customSub]) => {
         const inner = df
