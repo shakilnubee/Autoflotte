@@ -4939,7 +4939,10 @@ FP.settings = {
         // Relecture impossible (hors-ligne) : on ne peut pas fusionner maintenant → l'écriture COMPLÈTE
         // reste dans la file durable (déjà déposée en tête de _pushSettings) et sera retentée ; le
         // prochain chargement re-fusionnera. On ne perd donc pas la saisie, et on ne détruit rien en ligne.
-        try { if (FP.notifyError) FP.notifyError('Réglage non synchronisé (hors-ligne) — sera renvoyé.'); } catch (_) {}
+        // ⚠️ Pas d'alerte rouge alarmante ici : c'est un cas NORMAL (hors-ligne → renvoi auto). L'indicateur
+        //    discret de sauvegarde (FP._syncBadge) reflète calmement l'état « en attente » → réassurance
+        //    façon Google Docs, sans faire douter l'utilisateur. On rafraîchit juste l'indicateur.
+        try { if (FP._syncBadge) FP._syncBadge(); } catch (_) {}
       }
     };
     (async () => {
@@ -9518,11 +9521,29 @@ FP._ensureSyncBadge = function () {
   if (typeof document === 'undefined' || !document.body) return null;
   let b = document.getElementById('fp-sync-badge');
   if (b) return b;
+  // Styles (une fois) : indicateur DISCRET façon Google Docs (« Enregistrement… » → « ✓ Enregistré »),
+  // avec un petit spinner, coins arrondis, léger flou de fond, et transition douce d'apparition/disparition.
+  if (!document.getElementById('fp-sync-style')) {
+    const st = document.createElement('style'); st.id = 'fp-sync-style';
+    st.textContent = [
+      '#fp-sync-badge{position:fixed;bottom:16px;right:16px;z-index:9999;display:none;align-items:center;gap:7px;',
+      'padding:6px 12px;border-radius:9999px;font:600 12px/1.2 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;',
+      'box-shadow:0 4px 16px -4px rgba(2,6,23,.18);border:1px solid rgba(2,6,23,.06);',
+      '-webkit-backdrop-filter:saturate(1.4) blur(8px);backdrop-filter:saturate(1.4) blur(8px);',
+      'opacity:0;transform:translateY(6px);transition:opacity .28s ease,transform .28s ease;pointer-events:none;user-select:none}',
+      '#fp-sync-badge.show{opacity:1;transform:translateY(0)}',
+      '#fp-sync-badge.clickable{cursor:pointer;pointer-events:auto}',
+      '#fp-sync-badge .fp-sync-dot{width:13px;height:13px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:fp-sync-spin .7s linear infinite;flex-shrink:0;opacity:.85}',
+      '@keyframes fp-sync-spin{to{transform:rotate(360deg)}}',
+      '@media (max-width:640px){#fp-sync-badge{bottom:calc(74px + env(safe-area-inset-bottom,0px));right:12px}}'
+    ].join('');
+    document.head.appendChild(st);
+  }
   b = document.createElement('div');
   b.id = 'fp-sync-badge';
-  b.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:9999;font-size:12px;font-weight:700;padding:7px 13px;border-radius:9999px;box-shadow:0 6px 18px rgba(0,0,0,.18);cursor:pointer;display:none;align-items:center;gap:6px;';
-  b.title = 'Cliquer pour renvoyer les modifications en attente';
+  b.setAttribute('role', 'status'); b.setAttribute('aria-live', 'polite');
   b.addEventListener('click', async () => {
+    // Cliquable UNIQUEMENT en cas de souci (bloqué / échec) → sinon simple indicateur passif.
     const echecs = FP.persist.failedCount();
     if (echecs > 0) {
       const detail = FP.persist._resumeEchecs();
@@ -9541,28 +9562,48 @@ FP._ensureSyncBadge = function () {
   document.body.appendChild(b);
   return b;
 };
+// Indicateur de sauvegarde DISCRET (façon Google Docs). États :
+//   • échec définitif (base) → rouge, cliquable ;
+//   • bloqué > 8 s (réseau) → ambre calme « Synchronisation… », cliquable ;
+//   • en cours d'envoi     → gris « Enregistrement… » + spinner (rassure sans alarmer) ;
+//   • vient d'être enregistré → vert « ✓ Enregistré » qui s'efface tout seul (~1,6 s) ;
+//   • rien en attente      → masqué.
+// ⚠️ On ne touche PAS à la logique de synchro (FP.persist) : uniquement l'AFFICHAGE.
 FP._syncBadge = function (justSynced) {
   const b = FP._ensureSyncBadge();
   if (!b) return;
-  const n = FP.persist.stuckCount();   // ⚠️ « bloqué » (pas l'envoi optimiste en cours) → pas de clignotement à chaque save
   const echecs = FP.persist.failedCount();
+  const stuck = FP.persist.stuckCount();      // en attente depuis > 8 s / déjà retenté (vrai souci réseau)
+  const pending = FP.persist.pendingCount();  // au moins une écriture pas encore confirmée (envoi en cours)
   clearTimeout(FP._syncBadgeT);
+  const set = (html, bg, fg, clickable) => {
+    b.innerHTML = html; b.style.background = bg; b.style.color = fg;
+    b.classList.toggle('clickable', !!clickable);
+    b.style.display = 'inline-flex';
+    requestAnimationFrame(() => b.classList.add('show'));
+  };
+  const hide = () => { b.classList.remove('show'); FP._syncBadgeT = setTimeout(() => { b.style.display = 'none'; }, 300); };
   if (echecs > 0) {
-    // Rouge : échec DÉFINITIF (erreur base) — ne se résoudra pas tout seul
-    b.style.display = 'inline-flex';
-    b.style.background = '#FEE2E2'; b.style.color = '#991B1B';
-    b.textContent = `⚠️ ${echecs} modif${echecs > 1 ? 's' : ''} en échec — cliquer pour voir`;
-  } else if (n > 0) {
-    b.style.display = 'inline-flex';
-    b.style.background = '#FEF3C7'; b.style.color = '#92400E';
-    b.textContent = `⏳ ${n} modif${n > 1 ? 's' : ''} non enregistrée${n > 1 ? 's' : ''} — cliquer pour réessayer`;
-  } else if (justSynced) {
-    b.style.display = 'inline-flex';
-    b.style.background = '#ECFDF5'; b.style.color = '#047857';
-    b.textContent = '✓ Modifications enregistrées';
-    FP._syncBadgeT = setTimeout(() => { b.style.display = 'none'; }, 3000);
+    FP._wasSaving = false;
+    set(`⚠️ ${echecs} modif${echecs > 1 ? 's' : ''} non enregistrée${echecs > 1 ? 's' : ''} — appuie pour réessayer`, 'rgba(254,226,226,.96)', '#991B1B', true);
+    b.title = 'Cliquer pour réessayer ou voir le détail';
+  } else if (stuck > 0) {
+    FP._wasSaving = true;
+    set(`<span class="fp-sync-dot"></span>Synchronisation…`, 'rgba(254,243,199,.96)', '#92400E', true);
+    b.title = 'Connexion lente — les modifications seront renvoyées automatiquement';
+  } else if (pending > 0) {
+    // Envoi optimiste en cours : discret, rassurant (comme « Enregistrement… » de Google Docs).
+    FP._wasSaving = true;
+    set(`<span class="fp-sync-dot"></span>Enregistrement…`, 'rgba(255,255,255,.94)', '#475569', false);
+    b.title = '';
+  } else if (justSynced || FP._wasSaving) {
+    // Tout est confirmé côté base ET on venait d'enregistrer → « ✓ Enregistré » qui s'efface seul.
+    FP._wasSaving = false;
+    set(`<span aria-hidden="true">✓</span> Enregistré`, 'rgba(236,253,245,.96)', '#047857', false);
+    b.title = '';
+    FP._syncBadgeT = setTimeout(hide, 1600);
   } else {
-    b.style.display = 'none';
+    hide();
   }
 };
 // Renvoi automatique : au chargement des données, au retour en ligne, et régulièrement.
