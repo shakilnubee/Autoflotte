@@ -24,13 +24,16 @@
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
 <link rel="stylesheet" href="../assets/css/styles.css?v=20260920b">
 <style>
-  .notif { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1rem; border-radius: .65rem; border: 1px solid var(--fp-border); background: white; text-decoration: none; transition: box-shadow .12s, transform .12s; }
-  .notif + .notif { margin-top: .6rem; }
-  a.notif:hover { box-shadow: 0 10px 24px -12px rgba(15,30,61,.25); transform: translateY(-1px); }
-  .notif.lvl-danger { border-left: 4px solid var(--fp-danger); }
-  .notif.lvl-warn { border-left: 4px solid var(--fp-warn); }
-  .notif.lvl-info { border-left: 4px solid #3B82F6; }
-  .notif-cat { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--fp-muted); }
+  .notif { display: flex; gap: .8rem; align-items: flex-start; padding: .85rem 1rem; border-radius: 14px; border: 1px solid var(--fp-border); background: var(--fp-surface, #fff); text-decoration: none; transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; box-shadow: 0 1px 2px rgba(15,30,61,.04); }
+  .notif + .notif { margin-top: .55rem; }
+  a.notif:hover { box-shadow: 0 12px 26px -14px rgba(15,30,61,.28); transform: translateY(-1px); border-color: color-mix(in srgb, var(--fp-accent, #F97316) 30%, var(--fp-border)); }
+  .notif.lvl-danger { border-left: 4px solid var(--fp-danger); background: linear-gradient(90deg, color-mix(in srgb, var(--fp-danger) 6%, var(--fp-surface, #fff)), var(--fp-surface, #fff) 62%); }
+  .notif.lvl-warn { border-left: 4px solid var(--fp-warn); background: linear-gradient(90deg, color-mix(in srgb, var(--fp-warn) 8%, var(--fp-surface, #fff)), var(--fp-surface, #fff) 62%); }
+  .notif.lvl-info { border-left: 4px solid #3B82F6; background: linear-gradient(90deg, color-mix(in srgb, #3B82F6 6%, var(--fp-surface, #fff)), var(--fp-surface, #fff) 62%); }
+  .notif-cat { font-size: .66rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--fp-muted); }
+  /* Retrait FLUIDE d'une carte quand on clique « Vu »/« Ignorer » (plus de reconstruction/clignotement de toute la liste) */
+  .notif-card-wrap { transition: opacity .2s ease, max-height .3s ease, margin .3s ease, transform .2s ease; overflow: hidden; }
+  .notif-card-wrap.removing { opacity: 0; max-height: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; transform: translateX(8px); }
 </style>
 <script>
 (function(){
@@ -200,7 +203,7 @@
     // Alerte d'ACTIVITÉ récurrente (scan QR…) → bouton « ✓ Vu » : efface l'occurrence du moment mais
     // NE masque PAS pour toujours (elle revient au prochain événement). Différent de « Ignorer ».
     if (a.seenKey) {
-      return `<div style="position:relative">${card}
+      return `<div class="notif-card-wrap" style="position:relative">${card}
       <button type="button" data-seen="${esc(a.seenKey)}" title="Marquer comme vu — l'alerte reviendra au prochain scan" class="hover:text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50" style="position:absolute;top:8px;right:8px;z-index:2;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:#fff;color:#059669;border:1px solid var(--fp-border);cursor:pointer"><i data-lucide="check" class="w-3.5 h-3.5"></i> Vu</button>
     </div>`;
     }
@@ -208,7 +211,7 @@
     // situation change (nouveau montant, nouvelle échéance, +1 véhicule…). Plus clair que « Ignorer ».
     if (!a.muteKey) return card;
     const sig = (FP.alertes && FP.alertes.sig) ? FP.alertes.sig(a) : '';
-    return `<div style="position:relative">${card}
+    return `<div class="notif-card-wrap" style="position:relative">${card}
       <button type="button" data-vu="${esc(a.muteKey)}" data-sig="${esc(sig)}" title="J'ai vu — l'alerte reviendra si la situation change" class="hover:text-emerald-700 hover:border-emerald-200 hover:bg-emerald-50" style="position:absolute;top:8px;right:8px;z-index:2;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:9999px;font-size:11px;font-weight:700;background:#fff;color:#059669;border:1px solid var(--fp-border);cursor:pointer"><i data-lucide="check" class="w-3.5 h-3.5"></i> Vu</button>
     </div>`;
   }
@@ -317,6 +320,25 @@
     rest.hidden = !rest.hidden;
     more.textContent = rest.hidden ? `Voir tout (${more.dataset.total})` : 'Voir moins';
   });
+  // Retrait FLUIDE d'une carte (Vu/Ignorer) : au lieu de reconstruire TOUTE la liste (ce qui faisait
+  // « clignoter »/recharger la page), on fait disparaître EN DOUCEUR la carte cliquée et on met juste à
+  // jour le compteur de la colonne. Repli sur render() si la structure attendue n'est pas là.
+  function smoothRemoveCard(btn) {
+    const wrap = btn && btn.closest('.notif-card-wrap');
+    if (!wrap) { render(); return; }
+    const colBody = wrap.closest('.notif-colbody');
+    wrap.style.maxHeight = wrap.offsetHeight + 'px';               // fige la hauteur → anime vers 0
+    requestAnimationFrame(() => wrap.classList.add('removing'));
+    setTimeout(() => {
+      wrap.remove();
+      if (colBody) {
+        const remaining = colBody.querySelectorAll('.notif').length;
+        const head = colBody.parentElement.querySelector('.notif-colhead .badge');
+        if (head) { head.textContent = remaining; if (!remaining) { head.classList.remove('badge-danger'); head.style.background = '#E2E8F0'; head.style.color = '#475569'; } }
+        if (!remaining) colBody.innerHTML = '<p class="text-sm text-slate-400">Rien à signaler ✓</p>';
+      }
+    }, 300);
+  }
   // « ✓ Vu » (accusé de lecture) : on mémorise la signature de l'alerte → elle disparaît mais REVIENT
   // si la situation change. Le bouton est hors du lien → on bloque la navigation par sécurité.
   document.getElementById('notif-cols').addEventListener('click', (e) => {
@@ -324,7 +346,7 @@
     e.preventDefault(); e.stopPropagation();
     FP.alertes.marquerVu(b.dataset.vu, b.dataset.sig || '');
     if (FP.toast) FP.toast('✓ Vu — reviendra si la situation change');
-    render();
+    smoothRemoveCard(b);   // retrait fluide (pas de reconstruction de toute la liste)
   });
   // (compat) ancien masquage définitif, si un bouton « Ignorer » subsiste quelque part.
   document.getElementById('notif-cols').addEventListener('click', (e) => {
@@ -335,7 +357,7 @@
     const msg = card ? (card.querySelector('.font-semibold') || {}).textContent || '' : '';
     const label = [cat, msg].filter(Boolean).join(' — ');
     FP.alertes.masquer(b.dataset.mute, label);
-    render();
+    smoothRemoveCard(b);   // retrait fluide
   });
   // « ✓ Vu » : marque l'activité comme vue (n'efface QUE l'occurrence, revient au prochain événement).
   document.getElementById('notif-cols').addEventListener('click', (e) => {
