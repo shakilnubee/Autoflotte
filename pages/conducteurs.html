@@ -89,6 +89,20 @@
   .cc-stat { flex:1; background:var(--fp-bg); border:1px solid var(--fp-border); border-radius:12px; padding:9px 3px; text-align:center; }
   .cc-stat b { display:block; font-size:1rem; font-weight:900; color:var(--fp-text,#0B1220); font-variant-numeric:tabular-nums; }
   .cc-stat span { font-size:.56rem; text-transform:uppercase; letter-spacing:.05em; color:var(--fp-faint,#94A3B8); font-weight:800; }
+  /* Vraie plaque d'immatriculation FR (même design que la fiche) dans les bulles */
+  .cond-cartes .plate { display:inline-flex; align-items:stretch; font-family:'Inter',system-ui,sans-serif; font-weight:800; letter-spacing:1px; color:#0b0b0b; background:#fff; border:2px solid #0b0b0b; border-radius:6px; overflow:hidden; line-height:1; box-shadow:0 3px 8px -5px rgba(0,0,0,.5); }
+  .cond-cartes .plate .eu { background:#1B48C4; color:#fff; font-size:.5rem; font-weight:800; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; padding:0 .35rem; }
+  .cond-cartes .plate .eu::before { content:"★★★"; font-size:.36rem; color:#FFD24D; letter-spacing:-1px; line-height:1; }
+  .cond-cartes .plate .num { padding:.28rem .5rem; font-size:.9rem; white-space:nowrap; }
+  .cond-cartes .plate-extra { display:inline-flex; align-items:center; padding:.28rem .5rem; border-radius:6px; background:var(--fp-bg); border:1px solid var(--fp-border); font-weight:800; font-size:.8rem; color:var(--fp-muted); }
+  /* Une seule stat : amendes (chip coloré) */
+  .cc-amende { margin-top:13px; display:inline-flex; align-items:center; gap:7px; padding:8px 13px; border-radius:12px; font-weight:700; font-size:.82rem; }
+  .cc-amende b { font-size:1.05rem; font-weight:900; font-variant-numeric:tabular-nums; }
+  .cc-amende.ok { background:color-mix(in srgb,#10B981 15%, var(--fp-surface)); color:#0E9F6E; }
+  .cc-amende.warn { background:color-mix(in srgb,#F59E0B 20%, var(--fp-surface)); color:#B45309; }
+  .cc-amende.danger { background:color-mix(in srgb,#EF4444 17%, var(--fp-surface)); color:#DC2626; }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .cc-amende.ok{color:#34D399} :root:not([data-theme="light"]) .cc-amende.warn{color:#FBBF24} :root:not([data-theme="light"]) .cc-amende.danger{color:#F87171} }
+  :root[data-theme="dark"] .cc-amende.ok{color:#34D399} :root[data-theme="dark"] .cc-amende.warn{color:#FBBF24} :root[data-theme="dark"] .cc-amende.danger{color:#F87171}
   @media (prefers-reduced-motion: reduce) { .cc-tile, .cc-card, .cc-pill { transition:none; } .cond-cartes .cc-tiles, .cond-cartes .cc-rail { scroll-behavior:auto; } }
   @media (max-width:560px) { .cc-card { flex-basis:78vw; width:78vw; max-width:290px; } }
   tr.driver-row.selected { background:rgba(249,115,22,.08); }
@@ -1290,27 +1304,34 @@
       return (FP.getConges ? FP.getConges(d.key) : []).some(c => c && c.debut && c.fin && String(c.debut).slice(0, 10) <= t && String(c.fin).slice(0, 10) >= t);
     } catch (e) { return false; }
   }
-  // La « bulle » (mêmes données que la carte existante : vrais véhicules + amendes/points/dû, jamais inventé).
+  // Vraie plaque d'immatriculation FR (même design que la fiche) — max 2 affichées, + compteur au-delà.
+  function platesReal(d) {
+    const plates = (d.vehicules || []).map(v => v.immat).filter(Boolean);
+    if (!plates.length) return '<span class="text-xs" style="color:var(--fp-faint,#94A3B8)">Aucun véhicule</span>';
+    return plates.slice(0, 2).map(p => `<span class="plate"><span class="eu">F</span><span class="num">${escapeHtml(p)}</span></span>`).join('')
+      + (plates.length > 2 ? `<span class="plate-extra">+${plates.length - 2}</span>` : '');
+  }
+  // La « bulle » (données RÉELLES : poste, vrais véhicules/plaques, nb d'amendes — jamais inventé).
   // Porte data-key + classe .driver-appcard → le clic ouvre le MÊME drawer (fiche) que les autres vues.
   function cardAppHtml(d) {
-    const { nbAmendes, points, dus } = driverStats(d);
+    const { nbAmendes } = driverStats(d);
     const col = driverColor(d), grp = driverGroupLabel(d), conge = enCongeAuj(d);
     const c2 = (col[0] === '#' && FP.settings && FP.settings._shade) ? FP.settings._shade(col, 0.18) : col;
+    // Plus de couleur À L'INTÉRIEUR : léger lavis de la couleur du groupe en haut du corps de carte.
+    const bodyTint = (col[0] === '#') ? `background:linear-gradient(180deg, color-mix(in srgb, ${col} 13%, var(--fp-surface)) 0%, var(--fp-surface) 60%)` : '';
+    const posteTxt = d.poste ? escapeHtml(d.poste) : (grp ? escapeHtml(grp) : 'Poste non renseigné');
+    const amLvl = nbAmendes > 0 ? (nbAmendes >= 5 ? 'danger' : 'warn') : 'ok';
     return `
       <div class="cc-card driver-appcard" data-key="${d.key}">
         <div class="cc-banner" style="background:linear-gradient(135deg,${col},${c2})">
-          <span class="cc-chip">${conge ? '🌴 En congé' : '● En service'}</span>
+          ${conge ? '<span class="cc-chip">🌴 En congé</span>' : ''}
           <div class="cc-av" style="background:${avatarColor(d)}">${initials(d.name)}</div>
         </div>
-        <div class="cc-body">
+        <div class="cc-body" style="${bodyTint}">
           <div class="cc-name">${escapeHtml(d.name)}</div>
-          <div class="cc-role">${grp ? escapeHtml(grp) : 'Sans groupe'} · ${d.vehicules.length} véhicule${d.vehicules.length > 1 ? 's' : ''}</div>
-          <div class="cc-plates">${platesBadges(d, 3)}</div>
-          <div class="cc-stats">
-            <div class="cc-stat"><b>${nbAmendes}</b><span>amende${nbAmendes > 1 ? 's' : ''}</span></div>
-            <div class="cc-stat"><b>${points}</b><span>points</span></div>
-            <div class="cc-stat"><b>${dus > 0 ? FP.euro(dus) : '0'}</b><span>dû</span></div>
-          </div>
+          <div class="cc-role">${posteTxt}</div>
+          <div class="cc-plates">${platesReal(d)}</div>
+          <div class="cc-amende ${amLvl}"><b>${nbAmendes}</b> amende${nbAmendes > 1 ? 's' : ''}</div>
         </div>
       </div>`;
   }
