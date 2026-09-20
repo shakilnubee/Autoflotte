@@ -1560,6 +1560,49 @@ FP.estRevision = (f) => {
   return /revision|vidange|entretien periodique|entretien constructeur|entretien annuel|service constructeur|service entretien|service periodique/.test(d)
       || /huile (moteur|boite|de boite|de transmission)/.test(d);
 };
+// ⚠️ SOURCE UNIQUE — « cette facture compte-t-elle comme LA révision ? » = FP.estRevision (auto)
+// MAIS l'utilisateur a toujours le dernier mot : une correction manuelle (settings.revisionOverride,
+// keyée par id de facture : 'oui' force, 'non' exclut) prime sur l'auto-détection. Utilisé PARTOUT où
+// on décide de la « dernière révision » (fiche, recompute, import) → plus de mauvaise classification
+// silencieuse : quand l'auto se trompe, un clic corrige et c'est mémorisé (même les ré-imports suivent).
+FP.compteCommeRevision = (f) => {
+  if (!f) return false;
+  try {
+    const ov = (FP.settings.get().revisionOverride) || {};
+    const id = f.id != null ? String(f.id) : null;
+    if (id && ov[id] === 'non') return false;
+    if (id && ov[id] === 'oui') return true;
+  } catch (e) {}
+  return FP.estRevision(f);
+};
+// ⚠️ SOURCE UNIQUE — dernière révision d'un véhicule = { date, facture } de la facture-révision la plus
+// récente (au sens de FP.compteCommeRevision). Sert à AFFICHER la date ET la facture source (cliquable)
+// dans la fiche, et à recaler v.derniereRevision. Renvoie {date:null, facture:null} si aucune.
+FP.derniereRevisionInfo = (v, factures) => {
+  try {
+    if (!v || !v.immat) return { date: null, facture: null };
+    const list = factures || (window.FP_DATA && FP_DATA.factures) || [];
+    const nk = FP.normImmat(v.immat);
+    const mine = list.filter(f => f && FP.normImmat(f.vehiculeImmat) === nk && FP.compteCommeRevision(f) && f.date)
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const last = mine.length ? mine[mine.length - 1] : null;
+    return { date: last ? last.date : null, facture: last };
+  } catch (e) { return { date: null, facture: null }; }
+};
+// Corrige manuellement le statut « révision » d'une facture, persiste le choix (multi-appareils) et
+// recale la « dernière révision » du véhicule (source unique = FP.recomputeVehiculeFromFactures).
+// val : 'oui' (forcer révision) | 'non' (exclure) | 'auto' (revenir à l'auto-détection).
+FP.setRevisionOverride = function (factureId, val, veh, factures) {
+  try {
+    const s = FP.settings.get();
+    s.revisionOverride = (s.revisionOverride && typeof s.revisionOverride === 'object') ? s.revisionOverride : {};
+    const id = String(factureId);
+    if (val === 'oui' || val === 'non') s.revisionOverride[id] = val; else delete s.revisionOverride[id];
+    FP.settings.save(s);
+    if (veh && FP.recomputeVehiculeFromFactures) FP.recomputeVehiculeFromFactures(veh, factures || (window.FP_DATA && FP_DATA.factures) || []);
+  } catch (e) {}
+  return FP.derniereRevisionInfo(veh, factures);
+};
 // ⚠️ SOURCE UNIQUE — « Dépensé {année} » d'un véhicule = entretien/réparation (factures DÉDOUBLONNÉES)
 // + sinistres à charge (FP.coutSinistre). Utilisé par la fiche véhicule À L'ÉCRAN et dans son PDF pour
 // afficher EXACTEMENT le même montant (sinon le PDF sur-comptait les doublons et ignorait les sinistres).
@@ -1613,9 +1656,9 @@ FP.recomputeVehiculeFromFactures = function (v, factures) {
     // de révision (FP.revisionInfo, ancrée sur kmDernierReleve) faussée.
     const allMine = (factures || []).filter(f => f && FP.normImmat(f.vehiculeImmat) === nk);
     const patch = {};
-    // Dernière révision = date la plus récente parmi les VRAIES révisions restantes (FP.estRevision,
-    // pas n'importe quel entretien : une géométrie/pneu/clim ne compte PAS comme révision).
-    const dates = mine.filter(f => FP.estRevision(f)).map(f => f.date).filter(Boolean).sort();
+    // Dernière révision = date la plus récente parmi les VRAIES révisions restantes (FP.compteCommeRevision :
+    // auto-détection + corrections manuelles ; une géométrie/pneu/clim ne compte PAS comme révision).
+    const dates = mine.filter(f => FP.compteCommeRevision(f)).map(f => f.date).filter(Boolean).sort();
     const derniere = dates.length ? dates[dates.length - 1] : null;
     if ((v.derniereRevision || null) !== (derniere || null)) { v.derniereRevision = derniere; patch.derniereRevision = derniere; }
     // Km relevé = max km parmi TOUTES les factures restantes (même périmètre qu'apply), sinon vide.
@@ -4873,7 +4916,10 @@ FP.settings = {
       //   cartes carburant / badges péage), et corbeille de restauration synchronisée (filet anti-perte) :
       //   ce sont des maps/tableaux de DONNÉES → fusion fine multi-appareils (mergeMap/mergeArr), sinon un
       //   appareil au cache en retard les écrase EN BLOC (même profil que la perte des congés/loueurs).
-      'zoneNotes', 'prestataires', 'corbeille']);
+      'zoneNotes', 'prestataires', 'corbeille',
+      // — Correction MANUELLE « est-ce une révision ? » par facture (map { factureId → 'oui' | 'non' }) :
+      //   l'utilisateur tranche quand l'auto-détection se trompe → à protéger comme les autres maps.
+      'revisionOverride']);
     // Familles DYNAMIQUES keyées par conducteur (n° carte/badge d'un prestataire perso : condNum_<id>).
     const isCollKey = (k) => COLLECTION_KEYS.has(k) || /^condNum_/.test(k);
     const isPlain = x => x && typeof x === 'object' && !Array.isArray(x);
@@ -6125,10 +6171,10 @@ FP.applyFactureToVehicule = function (f, vehicules) {
         if (!s.kmMajDates[v.immat] || d > s.kmMajDates[v.immat]) { s.kmMajDates[v.immat] = d; FP.settings.save(s); }
       } catch (e) {}
     }
-    // Dernière révision : SEULEMENT une VRAIE révision (FP.estRevision) — pas n'importe quel entretien.
-    // Bug corrigé : une géométrie/parallélisme (type 'entretien') faisait sauter la « dernière révision »
-    // à sa date. On s'ancre donc sur le libellé via FP.estRevision.
-    if (FP.estRevision(f)) {
+    // Dernière révision : SEULEMENT une VRAIE révision (FP.compteCommeRevision : auto + correction
+    // manuelle) — pas n'importe quel entretien. Bug corrigé : une géométrie/parallélisme (type
+    // 'entretien') faisait sauter la « dernière révision » à sa date. On s'ancre sur le libellé + override.
+    if (FP.compteCommeRevision(f)) {
       if (f.date && (!v.derniereRevision || v.derniereRevision === '—' || f.date > v.derniereRevision)) {
         v.derniereRevision = f.date; patch.derniereRevision = f.date; bits.push('révision ' + FP.date(f.date));
       }
