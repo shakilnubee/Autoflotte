@@ -669,6 +669,7 @@
         <button id="btn-completer-cg" class="btn btn-outline text-sm" title="Lire les cartes grises déjà stockées et remplir automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates)"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Compléter depuis les cartes grises</button>
         <button id="btn-fiche-groupe" class="btn btn-outline text-sm" title="Télécharger la liste des véhicules du groupe affiché (ou Tous) en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> Télécharger la fiche</button>
         <button id="btn-qr-all" class="btn btn-outline text-sm" title="Télécharger un PDF avec le QR de CHAQUE véhicule de la flotte (même carte que la fiche véhicule)"><i data-lucide="qr-code" class="w-4 h-4"></i> Tous les QR (PDF)</button>
+        <button id="btn-qr-ventes" class="btn btn-outline text-sm" title="UN QR à imprimer/partager qui ouvre directement la LISTE de tes véhicules à vendre (sans le prix — le prix reste dans l'app)"><i data-lucide="qr-code" class="w-4 h-4"></i> QR liste à vendre</button>
       </div>
     </div>
 
@@ -796,7 +797,7 @@
       <h2 class="text-xl font-extrabold" id="qr-title" style="color:var(--fp-primary)">QR véhicule</h2>
       <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="qr-close"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
-    <p class="text-sm text-slate-500 mb-3">Un seul QR à coller dans la voiture → <b>portail conducteur</b> : <b>🚗 véhicule</b> · <b>📸 relevé km</b> · <b>📄 documents</b> · <b>💥 sinistre/problème</b> · <b>📋 état des lieux</b>. Permanent : les nouveautés s'ajoutent au menu sans recoller.</p>
+    <p class="text-sm text-slate-500 mb-3" id="qr-desc">Un seul QR à coller dans la voiture → <b>portail conducteur</b> : <b>🚗 véhicule</b> · <b>📸 relevé km</b> · <b>📄 documents</b> · <b>💥 sinistre/problème</b> · <b>📋 état des lieux</b>. Permanent : les nouveautés s'ajoutent au menu sans recoller.</p>
     <div class="flex flex-col items-center gap-2">
       <div id="qr-holder" style="background:#fff;padding:8px;border:1px solid var(--fp-border);border-radius:12px"></div>
       <div id="qr-label" class="text-center font-mono font-bold text-slate-800"></div>
@@ -5151,6 +5152,35 @@
     for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (qr.isDark(r, col)) ctx.fillRect((col + m) * s, (r + m) * s, s, s);
     return c;
   }
+  // QR « Véhicules à vendre » (par société) : ouvre DIRECTEMENT la liste des véhicules à vendre.
+  // Jeton opaque propre à la société (settings.ventesToken, généré une fois, synchronisé) → le serveur
+  // (km-collect ?vt=…) retrouve la société. Générique : marche pour toute société qui a des « à vendre ».
+  function _ensureVentesToken() {
+    try {
+      const s = FP.settings.get();
+      if (s.ventesToken && String(s.ventesToken).length >= 12) return String(s.ventesToken);
+      let tok = '';
+      try { if (window.crypto && crypto.getRandomValues) { const a = new Uint8Array(18); crypto.getRandomValues(a); tok = Array.from(a).map(b => b.toString(16).padStart(2, '0')).join(''); } } catch (e) {}
+      if (!tok) tok = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+      s.ventesToken = tok; FP.settings.save(s);
+      return tok;
+    } catch (e) { return ''; }
+  }
+  function openQrVentesListe() {
+    if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
+    const tok = _ensureVentesToken();
+    if (!tok) { alert('QR indisponible.'); return; }
+    const url = 'https://parc-pilot.fr/v.html?vt=' + encodeURIComponent(tok) + '&vue=ventesliste';
+    const canvas = buildQrCanvas(url, 6, 4);
+    canvas.style.width = '240px'; canvas.style.height = '240px'; canvas.style.imageRendering = 'pixelated';
+    qrCurrent = { immat: 'Véhicules à vendre', label: 'Véhicules à vendre', url, hint: 'Scannez : la liste des véhicules à vendre (sans prix)' };
+    const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
+    $('qr-label').textContent = 'Véhicules à vendre';
+    const _t = document.getElementById('qr-title'); if (_t) _t.textContent = 'QR — Véhicules à vendre';
+    const _dsc = document.getElementById('qr-desc'); if (_dsc) _dsc.innerHTML = 'QR à <b>imprimer / partager</b> (vitrine, annonce, réseaux…) → il ouvre <b>la liste de tous tes véhicules à vendre</b> (photos + caractéristiques, <b>sans le prix</b>). Se met à jour tout seul selon les véhicules « à vendre ».';
+    const _sc = $('qr-scans'); if (_sc) _sc.style.display = 'none';
+    $('qr-backdrop').classList.add('open');
+  }
   async function openQr(v, mode) {
     if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
     if (!(window.FP && FP.kmCollecte && FP.kmCollecte.ensureQr)) { alert('Connexion requise pour générer le QR.'); return; }
@@ -5172,6 +5202,9 @@
     const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
     $('qr-label').textContent = label;
     const _t = document.getElementById('qr-title'); if (_t) _t.textContent = vente ? 'QR vente' : 'QR véhicule';
+    const _dsc = document.getElementById('qr-desc'); if (_dsc) _dsc.innerHTML = vente
+      ? 'QR de l\'<b>annonce de vente</b> à imprimer/coller (vitre) → photos + caractéristiques (<b>sans le prix</b>) + <b>Appeler / SMS</b>.'
+      : 'Un seul QR à coller dans la voiture → <b>portail conducteur</b> : <b>🚗 véhicule</b> · <b>📸 relevé km</b> · <b>📄 documents</b> · <b>💥 sinistre/problème</b> · <b>📋 état des lieux</b>. Permanent : les nouveautés s\'ajoutent au menu sans recoller.';
     $('qr-backdrop').classList.add('open');
     renderQrScans(v);
   }
@@ -5325,6 +5358,7 @@
   }
   $('drawer-qr').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v); });
   { const _qv = $('drawer-qr-vente'); if (_qv) _qv.addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v, 'vente'); }); }
+  { const _qvl = $('btn-qr-ventes'); if (_qvl) _qvl.addEventListener('click', openQrVentesListe); }
   $('qr-close').addEventListener('click', () => $('qr-backdrop').classList.remove('open'));
   $('qr-print').addEventListener('click', printQr);
   $('qr-download').addEventListener('click', downloadQr);

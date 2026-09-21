@@ -546,6 +546,23 @@ Deno.serve(async (req) => {
       const url = new URL(req.url);
       const qtok = url.searchParams.get("q") || "";   // QR permanent (collé dans la voiture)
       const token = url.searchParams.get("t") || "";  // lien e-mail à usage unique
+      const vtok = url.searchParams.get("vt") || "";  // QR « Véhicules à vendre » (jeton par société)
+
+      // QR « Véhicules à vendre » dédié (par société) : résout la société via son jeton stocké dans
+      // app_settings.data.ventesToken, puis renvoie la liste + le contact (venteTel). Aucun véhicule requis.
+      if (vtok) {
+        const { data: rows } = await db.from("app_settings").select("id,data");
+        let soc = "";
+        for (const r of ((rows || []) as Array<Record<string, unknown>>)) {
+          const d = (r && r.data && typeof r.data === "object") ? r.data as Record<string, unknown> : {};
+          if (d && d.ventesToken && String(d.ventesToken) === vtok) { soc = String(r.id); break; }
+        }
+        if (!soc) return json({ error: "Lien invalide." }, 404);
+        const ventes = await ventesListe(db, soc);
+        const portail = await portalConfig(db, soc, "");
+        delete (portail as Record<string, unknown>).condLangues;
+        return json({ ok: true, mode: "ventesliste", societe: soc, ventes, portail });
+      }
 
       if (qtok) {
         const { qr, err } = await loadQr(db, qtok);

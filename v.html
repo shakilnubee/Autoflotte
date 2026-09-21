@@ -372,7 +372,9 @@
   var params = new URLSearchParams(location.search);
   var token = params.get('h') || '';
   var vueParam = (params.get('vue') || '').toLowerCase(); // « &vue=vente » → ouvre direct l'annonce (QR vente)
+  var vtParam = params.get('vt') || '';                  // QR « Véhicules à vendre » (jeton société) → liste seule
   var venteOnly = false; // QR vente = page annonce SEULE (pas de menu, pas d'amendes/documents/km…)
+  var venteslOnly = false; // QR « Véhicules à vendre » = liste seule (aucun menu, aucune donnée véhicule)
   var DATA = null;                       // payload serveur (veh, docs, edl, portal…)
   var sinType = 'sinistre';
   var sinPhotos = [];                    // data URLs compressées
@@ -873,6 +875,26 @@
   if (savedLang) LANG = okLang(savedLang);
   applyStaticI18n();
 
+  // ---- QR « Véhicules à vendre » (jeton société) : liste SEULE, aucun véhicule, aucun menu ----
+  if (vtParam) {
+    venteslOnly = true;
+    document.body.classList.add('ventesl-only');
+    $('head-title').textContent = t('m_ventesl_t'); $('head-sub').textContent = '';
+    fetch(FN + '?vt=' + encodeURIComponent(vtParam), { headers: headers(), cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.ok) { show('v-bad', t('head_title')); $('bad-sub').textContent = (d && d.error) || t('bad_sub'); return; }
+        DATA = d;
+        if (d.societe) $('soc-foot').textContent = d.societe;
+        if (d.portail && d.portail.logo) $('brand').innerHTML = '<img class="brand-logo" src="' + esc(d.portail.logo) + '" alt="logo">';
+        VENTES = Array.isArray(d.ventes) ? d.ventes : [];
+        show('v-ventesl', t('m_ventesl_t'), '');
+        renderVentesCards();
+      })
+      .catch(function () { show('v-bad', t('head_title')); $('bad-sub').textContent = t('bad_conn'); });
+    return;   // pas de chargement véhicule
+  }
+
   if (!token) { show('v-bad', t('head_title')); $('bad-sub').textContent = t('bad_incomplete'); return; }
 
   // ---- Chargement ----
@@ -978,7 +1000,13 @@
       .catch(function () { box.innerHTML = '<div class="box muted center" style="padding:1.4rem">' + esc(t('ventesl_empty')) + '</div>'; });
   }
   function venteslHeader(show) {
-    try { var view = $('v-ventesl'), gb = view.querySelector('[data-back]'), vt = view.querySelector('.vtitle'); if (gb) gb.style.display = show ? '' : 'none'; if (vt) vt.style.display = show ? '' : 'none'; } catch (e) {}
+    // `show` = mode LISTE (true) vs mode ANNONCE (false). Le « ‹ Retour » (menu) n'existe pas en mode
+    // QR « liste ventes » (aucun menu derrière) → on ne le montre jamais dans ce cas ; le titre suit `show`.
+    try {
+      var view = $('v-ventesl'), gb = view.querySelector('[data-back]'), vt = view.querySelector('.vtitle');
+      if (gb) gb.style.display = (show && !venteslOnly) ? '' : 'none';
+      if (vt) vt.style.display = show ? '' : 'none';
+    } catch (e) {}
   }
   function renderVentesCards() {
     venteslHeader(true);   // vue liste : on remontre le « ‹ Retour » (menu) + le titre de la rubrique
