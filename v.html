@@ -100,6 +100,16 @@
   .seg { display:flex; gap:.5rem; }
   .seg button { flex:1; padding:.6rem; border:1.5px solid var(--line); border-radius:.7rem; background:#fff; font-weight:800; cursor:pointer; color:var(--muted); }
   .seg button.on { border-color:var(--ink); color:var(--ink); background:#F8FAFC; }
+  /* Triage guidé « J'ai un problème » : grille de catégories qu'on tape */
+  .cat-grid { display:grid; grid-template-columns:1fr 1fr; gap:.6rem; }
+  .cat { display:flex; align-items:center; gap:.6rem; padding:.85rem .8rem; border:1.5px solid var(--line); border-radius:.9rem; background:#fff; font-weight:800; font-size:.95rem; color:var(--ink); cursor:pointer; text-align:left; box-shadow:0 10px 26px -22px rgba(15,30,61,.55); transition:transform .12s, border-color .12s; }
+  .cat:hover { border-color:#CBD5E1; transform:translateY(-2px); }
+  .cat:active { transform:scale(.98); }
+  .cat .e { font-size:1.35rem; flex:0 0 auto; }
+  .cat .l { min-width:0; }
+  .cathead { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin:.2rem 0 .5rem; }
+  .cat-chip { font-weight:800; font-size:1.02rem; }
+  .cat-change { background:none; border:none; color:var(--muted); font-weight:700; font-size:.85rem; cursor:pointer; padding:.2rem .3rem; }
   .thumbs { display:grid; grid-template-columns:repeat(auto-fill,minmax(74px,1fr)); gap:.5rem; margin-top:.5rem; }
   .thumbs img, .gal img { width:100%; height:74px; object-fit:cover; border-radius:.6rem; border:1px solid var(--line); display:block; }
   .gal { display:grid; grid-template-columns:repeat(auto-fill,minmax(90px,1fr)); gap:.5rem; }
@@ -190,7 +200,7 @@
           <button class="tap km"  data-go="km"><div class="ic">📸</div><div class="tx"><div class="t" data-i18n="m_km_t">Relever mon kilométrage</div><div class="d" data-i18n="m_km_d">Saisir le km au compteur</div></div><div class="chev">›</div></button>
           <button class="tap doc" data-go="doc"><div class="ic">📄</div><div class="tx"><div class="t" data-i18n="m_doc_t">Mes documents</div><div class="d" data-i18n="m_doc_d">Carte grise, assurance, assistance</div></div><div class="chev">›</div></button>
           <button class="tap amd" data-go="amd"><div class="ic">🎫</div><div class="tx"><div class="t" data-i18n="m_amd_t">Mes amendes</div><div class="d" data-i18n="m_amd_d">Montants et numéros d'avis</div></div><div class="chev">›</div></button>
-          <button class="tap sin" data-go="sin"><div class="ic">💥</div><div class="tx"><div class="t" data-i18n="m_sin_t">Déclarer un sinistre / problème</div><div class="d" data-i18n="m_sin_d">Accident, panne, souci sur le véhicule</div></div><div class="chev">›</div></button>
+          <button class="tap sin" data-go="sin"><div class="ic">🚨</div><div class="tx"><div class="t" data-i18n="m_sin_t">J'ai un problème</div><div class="d" data-i18n="m_sin_d">Accident, panne, pneu, voyant… on te guide</div></div><div class="chev">›</div></button>
           <button class="tap que" data-go="que"><div class="ic">❓</div><div class="tx"><div class="t" data-i18n="m_que_t">Poser une question</div><div class="d" data-i18n="m_que_d">Une demande à ton gestionnaire de flotte</div></div><div class="chev">›</div></button>
           <button class="tap edl" data-go="edl"><div class="ic">📋</div><div class="tx"><div class="t" data-i18n="m_edl_t">États des lieux</div><div class="d" data-i18n="m_edl_d">Photos de prise et de restitution</div></div><div class="chev">›</div></button>
           <button class="tap guide" data-go="guide"><div class="ic">📖</div><div class="tx"><div class="t" data-i18n="m_guide_t">Guide du véhicule</div><div class="d" data-i18n="m_guide_d">Bons réflexes, entretien, que faire en cas de pépin</div></div><div class="chev">›</div></button>
@@ -217,11 +227,12 @@
         <!-- DÉCLARER -->
         <div id="v-sin" class="hide">
           <button class="back" data-back data-i18n="back">‹ Retour</button>
-          <div class="vtitle">💥 <span data-i18n="sec_sin">Déclarer un sinistre / problème</span></div>
-          <div id="sin-intro"></div>
-          <div id="sin-form-wrap">
-            <label class="f" data-i18n="sin_of">De quoi s'agit-il ?</label>
-            <div class="seg" id="sin-type">
+          <div class="vtitle">🚨 <span data-i18n="sec_sin">J'ai un problème</span></div>
+          <div id="sin-triage"></div>
+          <div id="sin-intro" class="hide"></div>
+          <div id="sin-form-wrap" class="hide">
+            <div id="sin-cathead" class="cathead"></div>
+            <div class="seg hide" id="sin-type">
               <button type="button" data-type="sinistre" class="on" data-i18n="sin_type_acc">🚗 Accident / sinistre</button>
               <button type="button" data-type="probleme" data-i18n="sin_type_pb">🔧 Panne / problème</button>
             </div>
@@ -377,6 +388,18 @@
   var venteslOnly = false; // QR « Véhicules à vendre » = liste seule (aucun menu, aucune donnée véhicule)
   var DATA = null;                       // payload serveur (veh, docs, edl, portal…)
   var sinType = 'sinistre';
+  var sinCat = null;                     // catégorie choisie dans le triage « J'ai un problème »
+  // Triage guidé : chaque catégorie route vers le MÊME formulaire (type sinistre/probleme inchangé),
+  // pré-remplit la nature dans la description, et affiche l'aide adaptée (assistance pour une panne).
+  var CATS = [
+    { cat: 'accident', emo: '🚗', type: 'sinistre' },
+    { cat: 'bris', emo: '🪟', type: 'sinistre' },
+    { cat: 'panne', emo: '🔧', type: 'probleme', assist: true },
+    { cat: 'pneu', emo: '🛞', type: 'probleme', assist: true },
+    { cat: 'voyant', emo: '⚠️', type: 'probleme' },
+    { cat: 'cles', emo: '🔑', type: 'probleme', assist: true },
+    { cat: 'autre', emo: '❓', type: 'probleme' }
+  ];
   var sinPhotos = [];                    // data URLs compressées
   var quePhotos = [];                    // photos jointes à une question (facultatif)
 
@@ -387,9 +410,11 @@
       m_veh_t: 'Mon véhicule', m_veh_d: 'Modèle, km, contrôle technique…',
       m_km_t: 'Relever mon kilométrage', m_km_d: 'Saisir le km au compteur',
       m_doc_t: 'Mes documents', m_doc_d: 'Carte grise, assurance, assistance',
-      m_sin_t: 'Déclarer un sinistre / problème', m_sin_d: 'Accident, panne, souci sur le véhicule',
+      m_sin_t: 'J\'ai un problème', m_sin_d: 'Accident, panne, pneu, voyant… on te guide',
+      sin_pick: 'Que se passe-t-il ?', sin_change: '‹ Autre problème', sin_assist_hint: 'Véhicule immobilisé ? Appelle d\'abord l\'assistance.',
+      cat_accident: 'Accident', cat_bris: 'Bris de glace', cat_panne: 'Panne / ne démarre plus', cat_pneu: 'Pneu crevé / abîmé', cat_voyant: 'Voyant allumé', cat_cles: 'Problème de clés', cat_autre: 'Autre souci',
       m_edl_t: 'États des lieux', m_edl_d: 'Photos de prise et de restitution',
-      sec_veh: 'Mon véhicule', sec_doc: 'Mes documents', sec_sin: 'Déclarer un sinistre / problème', sec_edl: 'États des lieux',
+      sec_veh: 'Mon véhicule', sec_doc: 'Mes documents', sec_sin: 'J\'ai un problème', sec_edl: 'États des lieux',
       sub_doc: 'Documents du véhicule', sub_edl: 'Photos du véhicule',
       r_modele: 'Modèle', r_carburant: 'Carburant', r_km: 'Kilométrage', r_ct: 'Prochain contrôle technique', r_rev: 'Prochaine révision', r_rev_or: 'OU', r_mec: 'Mise en circulation',
       d_ass: 'Assurance & assistance', d_assureur: 'Assureur', d_police: 'N° de police',
@@ -444,9 +469,11 @@
       m_veh_t: 'My vehicle', m_veh_d: 'Model, mileage, roadworthiness test…',
       m_km_t: 'Submit my mileage', m_km_d: 'Enter the odometer reading',
       m_doc_t: 'My documents', m_doc_d: 'Registration, insurance, assistance',
-      m_sin_t: 'Report an incident / problem', m_sin_d: 'Accident, breakdown, vehicle issue',
+      m_sin_t: 'I have a problem', m_sin_d: 'Accident, breakdown, tyre, warning light… guided',
+      sin_pick: 'What\'s going on?', sin_change: '‹ Other problem', sin_assist_hint: 'Vehicle stuck? Call assistance first.',
+      cat_accident: 'Accident', cat_bris: 'Broken glass', cat_panne: 'Breakdown / won\'t start', cat_pneu: 'Flat / damaged tyre', cat_voyant: 'Warning light on', cat_cles: 'Key problem', cat_autre: 'Other issue',
       m_edl_t: 'Condition reports', m_edl_d: 'Handover & return photos',
-      sec_veh: 'My vehicle', sec_doc: 'My documents', sec_sin: 'Report an incident / problem', sec_edl: 'Condition reports',
+      sec_veh: 'My vehicle', sec_doc: 'My documents', sec_sin: 'I have a problem', sec_edl: 'Condition reports',
       sub_doc: 'Vehicle documents', sub_edl: 'Vehicle photos',
       r_modele: 'Model', r_carburant: 'Fuel', r_km: 'Mileage', r_ct: 'Next roadworthiness test', r_rev: 'Next service', r_rev_or: 'OR', r_mec: 'First registration',
       d_ass: 'Insurance & assistance', d_assureur: 'Insurer', d_police: 'Policy no.',
@@ -501,9 +528,11 @@
       m_veh_t: 'Mi vehículo', m_veh_d: 'Modelo, kilometraje, inspección técnica…',
       m_km_t: 'Registrar mi kilometraje', m_km_d: 'Introducir el km del cuentakilómetros',
       m_doc_t: 'Mis documentos', m_doc_d: 'Permiso de circulación, seguro, asistencia',
-      m_sin_t: 'Declarar un siniestro / problema', m_sin_d: 'Accidente, avería, problema del vehículo',
+      m_sin_t: 'Tengo un problema', m_sin_d: 'Accidente, avería, neumático, testigo… te guiamos',
+      sin_pick: '¿Qué ocurre?', sin_change: '‹ Otro problema', sin_assist_hint: '¿Vehículo inmovilizado? Llama primero a asistencia.',
+      cat_accident: 'Accidente', cat_bris: 'Cristal roto', cat_panne: 'Avería / no arranca', cat_pneu: 'Neumático pinchado / dañado', cat_voyant: 'Testigo encendido', cat_cles: 'Problema de llaves', cat_autre: 'Otro problema',
       m_edl_t: 'Estados del vehículo', m_edl_d: 'Fotos de entrega y devolución',
-      sec_veh: 'Mi vehículo', sec_doc: 'Mis documentos', sec_sin: 'Declarar un siniestro / problema', sec_edl: 'Estados del vehículo',
+      sec_veh: 'Mi vehículo', sec_doc: 'Mis documentos', sec_sin: 'Tengo un problema', sec_edl: 'Estados del vehículo',
       sub_doc: 'Documentos del vehículo', sub_edl: 'Fotos del vehículo',
       r_modele: 'Modelo', r_carburant: 'Combustible', r_km: 'Kilometraje', r_ct: 'Próxima inspección técnica', r_rev: 'Próxima revisión', r_rev_or: 'O', r_mec: 'Primera matriculación',
       d_ass: 'Seguro y asistencia', d_assureur: 'Aseguradora', d_police: 'N.º de póliza',
@@ -558,9 +587,11 @@
       m_veh_t: 'Il mio veicolo', m_veh_d: 'Modello, chilometraggio, revisione…',
       m_km_t: 'Registrare il chilometraggio', m_km_d: 'Inserire i km dal contachilometri',
       m_doc_t: 'I miei documenti', m_doc_d: 'Libretto, assicurazione, assistenza',
-      m_sin_t: 'Segnalare un sinistro / problema', m_sin_d: 'Incidente, guasto, problema del veicolo',
+      m_sin_t: 'Ho un problema', m_sin_d: 'Incidente, guasto, pneumatico, spia… ti guidiamo',
+      sin_pick: 'Cosa succede?', sin_change: '‹ Altro problema', sin_assist_hint: 'Veicolo fermo? Chiama prima l\'assistenza.',
+      cat_accident: 'Incidente', cat_bris: 'Vetro rotto', cat_panne: 'Guasto / non parte', cat_pneu: 'Pneumatico forato / danneggiato', cat_voyant: 'Spia accesa', cat_cles: 'Problema di chiavi', cat_autre: 'Altro problema',
       m_edl_t: 'Stato del veicolo', m_edl_d: 'Foto di consegna e riconsegna',
-      sec_veh: 'Il mio veicolo', sec_doc: 'I miei documenti', sec_sin: 'Segnalare un sinistro / problema', sec_edl: 'Stato del veicolo',
+      sec_veh: 'Il mio veicolo', sec_doc: 'I miei documenti', sec_sin: 'Ho un problema', sec_edl: 'Stato del veicolo',
       sub_doc: 'Documenti del veicolo', sub_edl: 'Foto del veicolo',
       r_modele: 'Modello', r_carburant: 'Carburante', r_km: 'Chilometraggio', r_ct: 'Prossima revisione', r_rev: 'Prossimo tagliando', r_rev_or: 'O', r_mec: 'Prima immatricolazione',
       d_ass: 'Assicurazione e assistenza', d_assureur: 'Assicuratore', d_police: 'N. di polizza',
@@ -615,9 +646,11 @@
       m_veh_t: 'Mein Fahrzeug', m_veh_d: 'Modell, Kilometerstand, HU…',
       m_km_t: 'Kilometerstand melden', m_km_d: 'Kilometerstand eingeben',
       m_doc_t: 'Meine Dokumente', m_doc_d: 'Fahrzeugschein, Versicherung, Pannenhilfe',
-      m_sin_t: 'Schaden / Problem melden', m_sin_d: 'Unfall, Panne, Problem am Fahrzeug',
+      m_sin_t: 'Ich habe ein Problem', m_sin_d: 'Unfall, Panne, Reifen, Warnleuchte… mit Anleitung',
+      sin_pick: 'Was ist los?', sin_change: '‹ Anderes Problem', sin_assist_hint: 'Fahrzeug steht? Zuerst den Pannendienst anrufen.',
+      cat_accident: 'Unfall', cat_bris: 'Glasbruch', cat_panne: 'Panne / springt nicht an', cat_pneu: 'Reifen platt / beschädigt', cat_voyant: 'Warnleuchte an', cat_cles: 'Schlüsselproblem', cat_autre: 'Anderes Problem',
       m_edl_t: 'Fahrzeugzustand', m_edl_d: 'Fotos bei Übergabe und Rückgabe',
-      sec_veh: 'Mein Fahrzeug', sec_doc: 'Meine Dokumente', sec_sin: 'Schaden / Problem melden', sec_edl: 'Fahrzeugzustand',
+      sec_veh: 'Mein Fahrzeug', sec_doc: 'Meine Dokumente', sec_sin: 'Ich habe ein Problem', sec_edl: 'Fahrzeugzustand',
       sub_doc: 'Fahrzeugdokumente', sub_edl: 'Fahrzeugfotos',
       r_modele: 'Modell', r_carburant: 'Kraftstoff', r_km: 'Kilometerstand', r_ct: 'Nächste Hauptuntersuchung', r_rev: 'Nächster Service', r_rev_or: 'ODER', r_mec: 'Erstzulassung',
       d_ass: 'Versicherung & Pannenhilfe', d_assureur: 'Versicherer', d_police: 'Versicherungsschein-Nr.',
@@ -672,9 +705,11 @@
       m_veh_t: '我的车辆', m_veh_d: '车型、里程、年检…',
       m_km_t: '登记里程', m_km_d: '输入仪表盘里程',
       m_doc_t: '我的文件', m_doc_d: '行驶证、保险、道路救援',
-      m_sin_t: '申报事故 / 问题', m_sin_d: '事故、故障、车辆问题',
+      m_sin_t: '我遇到问题', m_sin_d: '事故、抛锚、轮胎、警示灯……逐步引导',
+      sin_pick: '发生了什么？', sin_change: '‹ 其他问题', sin_assist_hint: '车辆无法行驶？请先拨打救援电话。',
+      cat_accident: '事故', cat_bris: '玻璃破损', cat_panne: '抛锚／无法启动', cat_pneu: '轮胎漏气／损坏', cat_voyant: '仪表警示灯亮', cat_cles: '钥匙问题', cat_autre: '其他问题',
       m_edl_t: '车况记录', m_edl_d: '交接与归还照片',
-      sec_veh: '我的车辆', sec_doc: '我的文件', sec_sin: '申报事故 / 问题', sec_edl: '车况记录',
+      sec_veh: '我的车辆', sec_doc: '我的文件', sec_sin: '我遇到问题', sec_edl: '车况记录',
       sub_doc: '车辆文件', sub_edl: '车辆照片',
       r_modele: '车型', r_carburant: '燃料', r_km: '里程', r_ct: '下次年检', r_rev: '下次保养', r_rev_or: '或', r_mec: '首次登记',
       d_ass: '保险与救援', d_assureur: '保险公司', d_police: '保单号',
@@ -851,7 +886,14 @@
     if (curView === 'v-menu') goMenu();
     else if (curView === 'v-veh') { renderVeh(); show('v-veh', vehTitle(), ''); }
     else if (curView === 'v-doc') { renderDoc(); show('v-doc', vehTitle(), t('sub_doc')); }
-    else if (curView === 'v-sin') { renderSinIntro(); show('v-sin', vehTitle(), ''); }
+    else if (curView === 'v-sin') {
+      // Re-traduit l'écran réellement affiché (triage OU formulaire de la catégorie choisie).
+      if (sinCat) {
+        renderSinIntro(sinCat);
+        if ($('sin-cathead')) $('sin-cathead').innerHTML = '<span class="cat-chip">' + sinCat.emo + ' ' + esc(t('cat_' + sinCat.cat)) + '</span><button type="button" class="cat-change" data-sin-change>' + esc(t('sin_change')) + '</button>';
+      } else { renderSinTriage(); }
+      show('v-sin', vehTitle(), '');
+    }
     else if (curView === 'v-constat') { renderConstat(); show('v-constat', vehTitle(), ''); }
     else if (curView === 'v-edl') { renderEdl(); show('v-edl', vehTitle(), t('sub_edl')); }
     else if (curView === 'v-amd') { renderAmendes(); show('v-amd', vehTitle(), ''); }
@@ -1093,7 +1135,42 @@
   }
 
   // ---- Déclarer ----
-  function renderSinIntro() {
+  // Écran de triage « J'ai un problème » : grille de catégories qu'on tape.
+  function renderSinTriage() {
+    var html = '<div class="f" style="margin:.2rem 0 .6rem" data-i18n="sin_pick">' + esc(t('sin_pick')) + '</div><div class="cat-grid">';
+    CATS.forEach(function (c) {
+      html += '<button type="button" class="cat" data-cat="' + c.cat + '"><span class="e">' + c.emo + '</span><span class="l">' + esc(t('cat_' + c.cat)) + '</span></button>';
+    });
+    $('sin-triage').innerHTML = html + '</div>';
+  }
+  // Entrer dans « J'ai un problème » = repartir du triage (formulaire caché tant qu'aucune catégorie choisie).
+  function openSinTriage() {
+    sinCat = null; resetSinForm();
+    $('sin-form-wrap').classList.add('hide');
+    $('sin-intro').classList.add('hide'); $('sin-intro').innerHTML = '';
+    $('sin-done').classList.add('hide');
+    $('sin-triage').classList.remove('hide');
+    renderSinTriage();
+  }
+  // Choix d'une catégorie → même formulaire (type inchangé), aide adaptée, nature reprise dans la description.
+  function chooseSinCat(cat) {
+    var c = CATS.filter(function (x) { return x.cat === cat; })[0] || CATS[0];
+    sinCat = c; sinType = c.type;
+    // Reflète le type sur le segment (caché) — le formulaire et l'envoi restent identiques à avant.
+    Array.prototype.forEach.call($('sin-type').children, function (b) { b.classList.toggle('on', b.getAttribute('data-type') === c.type); });
+    var label = t('cat_' + cat);
+    $('sin-cathead').innerHTML = '<span class="cat-chip">' + c.emo + ' ' + esc(label) + '</span>'
+      + '<button type="button" class="cat-change" data-sin-change>' + esc(t('sin_change')) + '</button>';
+    renderSinIntro(c);
+    $('sin-triage').classList.add('hide');
+    $('sin-intro').classList.remove('hide');
+    $('sin-form-wrap').classList.remove('hide');
+    try { $('sin-cathead').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+  }
+  // Aide contextuelle selon la catégorie : accident/bris → réflexes accident + constat ; panne/pneu/… →
+  // assistance en avant. Le formulaire et son envoi ne changent pas (règle : garder la même façon).
+  function renderSinIntro(c) {
+    c = c || sinCat || CATS[0];
     var p = DATA.portail || {};
     var call = p.assistanceNumero ? '<a class="btn call" href="tel:' + esc(p.assistanceNumero.replace(/\s/g, '')) + '">📞 ' + esc(t('b_call')) + '</a>' : '';
     var notice = p.assistanceNotice ? '<a class="btn" href="' + esc(p.assistanceNotice) + '" target="_blank" rel="noopener">📘 ' + esc(t('b_notice_assist')) + '</a>' : '';
@@ -1106,20 +1183,34 @@
         + (p.police ? '<div class="kv"><span class="k">' + esc(t('d_police')) + '</span><span class="v">' + esc(p.police) + '</span></div>' : '')
         + '</div>'
       : '';
-    $('sin-intro').innerHTML =
-      assBox
-      + '<div class="box" style="background:#FFF7F5;border-color:#FECdcd">'
-      + '<h4>' + esc(t('s_how')) + '</h4>'
-      + '<p class="muted" style="margin:.2rem 0 .6rem">' + t('s_howtxt') + '</p>'
-      + '<div style="font-weight:800;font-size:.9rem;margin-bottom:.2rem">' + esc(t('s_accident')) + '</div>'
-      + '<ol class="steps">'
-      + '<li>' + esc(t('s_s1')) + '</li>'
-      + '<li>' + esc(t('s_s2')) + '</li>'
-      + '<li>' + esc(t('s_s3')) + '</li>'
-      + '<li>' + esc(t('s_s4')) + '</li>'
-      + '</ol>'
-      + '<div class="btnrow"><button type="button" class="btn dark" data-go="constat">📝 ' + esc(t('b_constat_fill')) + '</button>' + call + notice + constat + '</div>'
-      + '</div>';
+    if (c && c.type === 'sinistre') {
+      // Accident / bris de glace → réflexes accident (contenu inchangé) + constat.
+      $('sin-intro').innerHTML =
+        assBox
+        + '<div class="box" style="background:#FFF7F5;border-color:#FECdcd">'
+        + '<h4>' + esc(t('s_how')) + '</h4>'
+        + '<p class="muted" style="margin:.2rem 0 .6rem">' + t('s_howtxt') + '</p>'
+        + '<div style="font-weight:800;font-size:.9rem;margin-bottom:.2rem">' + esc(t('s_accident')) + '</div>'
+        + '<ol class="steps">'
+        + '<li>' + esc(t('s_s1')) + '</li>'
+        + '<li>' + esc(t('s_s2')) + '</li>'
+        + '<li>' + esc(t('s_s3')) + '</li>'
+        + '<li>' + esc(t('s_s4')) + '</li>'
+        + '</ol>'
+        + '<div class="btnrow"><button type="button" class="btn dark" data-go="constat">📝 ' + esc(t('b_constat_fill')) + '</button>' + call + notice + constat + '</div>'
+        + '</div>';
+    } else {
+      // Panne / pneu / voyant / clés / autre → assistance en avant (surtout si le véhicule est immobilisé).
+      var hint = (c && c.assist) ? '<p class="muted" style="margin:.2rem 0 .6rem">' + esc(t('sin_assist_hint')) + '</p>' : '';
+      $('sin-intro').innerHTML =
+        assBox
+        + '<div class="box" style="background:#FFF7F5;border-color:#FECdcd">'
+        + '<h4>🔧 ' + esc(t('sec_sin')) + '</h4>'
+        + '<p class="muted" style="margin:.2rem 0 .6rem">' + t('s_howtxt') + '</p>'
+        + hint
+        + ((call || notice) ? ('<div class="btnrow">' + call + notice + '</div>') : '')
+        + '</div>';
+    }
   }
 
   // ---- Constat amiable rempli EN LIGNE (véhicule A pré-rempli → PDF téléchargeable + envoi gestionnaire) ----
@@ -1757,6 +1848,10 @@
       else { edlPhotos.splice(i, 1); $('edl-thumbs').innerHTML = thumbsHTML(edlPhotos); }
       return;
     }
+    // Triage « J'ai un problème » : choix d'une catégorie, ou « ‹ changer » pour revenir au triage.
+    var catBtn = e.target.closest && e.target.closest('[data-cat]');
+    if (catBtn) { chooseSinCat(catBtn.getAttribute('data-cat')); return; }
+    if (e.target.closest && e.target.closest('[data-sin-change]')) { openSinTriage(); return; }
     var typ = e.target.closest && e.target.closest('#sin-type button');
     if (typ) { sinType = typ.getAttribute('data-type'); Array.prototype.forEach.call($('sin-type').children, function (b) { b.classList.toggle('on', b === typ); }); }
   });
@@ -1765,7 +1860,7 @@
     if (v === 'veh') { renderVeh(); show('v-veh', vehTitle(), ''); }
     else if (v === 'km') { location.href = 'km.html?q=' + encodeURIComponent(token) + '&lang=' + LANG; }
     else if (v === 'doc') { renderDoc(); show('v-doc', vehTitle(), t('sub_doc')); }
-    else if (v === 'sin') { renderSinIntro(); resetSinForm(); show('v-sin', vehTitle(), ''); }
+    else if (v === 'sin') { openSinTriage(); show('v-sin', vehTitle(), ''); }
     else if (v === 'constat') { renderConstat(); show('v-constat', vehTitle(), ''); }
     else if (v === 'edl') { renderEdl(); show('v-edl', vehTitle(), t('sub_edl')); }
     else if (v === 'amd') { renderAmendes(); show('v-amd', vehTitle(), ''); }
@@ -1797,7 +1892,7 @@
   }
 
   function resetSinForm() {
-    $('sin-form-wrap').classList.remove('hide'); $('sin-done').classList.add('hide');
+    $('sin-done').classList.add('hide');
     $('sin-err').style.display = 'none'; sinPhotos = []; $('sin-thumbs').innerHTML = '';
     ['f-date', 'f-heure', 'f-lieu', 'f-desc', 'f-tiers', 'f-bless'].forEach(function (id) { $(id).value = ''; });
   }
@@ -1815,9 +1910,12 @@
     $('sin-send').disabled = true; $('sin-send').textContent = t('sending');
     // Date + heure séparées → recombinées en un libellé lisible (« 12/08/2026 à 14:30 »).
     var dInc = [$('f-date').value ? frDate($('f-date').value) : '', $('f-heure').value ? ('à ' + $('f-heure').value) : ''].filter(Boolean).join(' ');
+    // La catégorie choisie au triage est reprise en tête de description → le gestionnaire voit tout de
+    // suite la nature (« Pneu — … »). L'envoi lui-même est identique à avant (action 'declaration' + type).
+    var fullDesc = (sinCat ? (t('cat_' + sinCat.cat) + ' — ') : '') + desc;
     postJSON({
       action: 'declaration', q: token, type: sinType,
-      dateIncident: dInc, lieu: $('f-lieu').value, description: desc,
+      dateIncident: dInc, lieu: $('f-lieu').value, description: fullDesc,
       tiers: $('f-tiers').value, blesses: $('f-bless').value, photos: sinPhotos
     }, function (ok, d) {
       $('sin-send').disabled = false; $('sin-send').textContent = t('btn_send_decl');
