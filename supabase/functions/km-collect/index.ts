@@ -98,7 +98,7 @@ async function dernierReleveDate(db: ReturnType<typeof createClient>, vehiculeId
 async function vehInfo(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
   if (!vehiculeId) return null;
   const { data: v } = await db.from("vehicules")
-    .select("marque,modele,carburant,co2,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur,statut,couleur,boite,derniere_revision,km_dernier_releve,prix_vente")
+    .select("marque,modele,carburant,co2,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur,statut,couleur,boite,derniere_revision,km_dernier_releve")
     .eq("id", vehiculeId).maybeSingle();
   return v || null;
 }
@@ -351,7 +351,7 @@ async function vehEdl(db: ReturnType<typeof createClient>, vehiculeId: string | 
 async function ventesListe(db: ReturnType<typeof createClient>, socRaw: string | null) {
   const soc = String(socRaw || "PXP");
   const { data: vs } = await db.from("vehicules")
-    .select("id,immat,marque,modele,carburant,boite,couleur,km,prix_vente,date_mise_en_circulation,statut,societe")
+    .select("id,immat,marque,modele,carburant,boite,couleur,km,date_mise_en_circulation,statut,societe")
     .ilike("statut", "%vendre%");   // « à vendre » (et variantes) — exclut « vendu » (pas de « vendre »)
   const list = (Array.isArray(vs) ? vs : []).filter((v: Record<string, unknown>) => String(v.societe || "PXP") === soc);
   const out: Array<Record<string, unknown>> = [];
@@ -368,8 +368,7 @@ async function ventesListe(db: ReturnType<typeof createClient>, socRaw: string |
       carburant: v.carburant || "", boite: v.boite || "", couleur: v.couleur || "",
       km: v.km != null ? Number(v.km) : null,
       dateMiseEnCirculation: v.date_mise_en_circulation || "",
-      prix: (v.prix_vente != null && v.prix_vente !== "") ? Number(v.prix_vente) : null,
-      photos,
+      photos,   // ⚠️ pas de prix ici : réservé à l'app Parc Pilot (jamais exposé côté public)
     });
   }
   return out;
@@ -627,9 +626,9 @@ Deno.serve(async (req) => {
             // Prochaine révision (rappel côté conducteur pour anticiper) — date + km d'échéance.
             prochaineRevisionDate: rev.date || "", prochaineRevisionKm: rev.km != null ? rev.km : null,
             prochaineRevisionNiveau: rev.niveau || "",   // '' | 'warn' (orange) | 'danger' (rouge)
-            // Vente (onglet « À vendre » du portail) : statut + specs de base + prix affiché (si saisi).
+            // Vente (onglet « À vendre » du portail) : statut + specs de base. ⚠️ JAMAIS le prix côté
+            // public — le prix reste réservé à l'app Parc Pilot (derrière connexion).
             statut: veh.statut || "", couleur: veh.couleur || "", boite: veh.boite || "",
-            prixVente: (veh.prix_vente != null && veh.prix_vente !== "") ? Number(veh.prix_vente) : null,
           } : null;
           // Langue du conducteur (carte condLangues côté société) → le portail s'affiche dans SA langue
           // (6 langues supportées par v.html : fr/en/es/it/de/zh). Les e-mails, eux, restent FR/EN.
