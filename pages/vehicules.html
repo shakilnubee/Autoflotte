@@ -471,6 +471,22 @@
   .veh-cartes .plate .num { padding:.3rem .55rem; font-size:.95rem; white-space:nowrap; }
   @media (prefers-reduced-motion: reduce){ .veh-card{ transition:none; } .veh-cartes .cc-rail{ scroll-behavior:auto; } }
   @media (max-width:560px){ .veh-card{ flex-basis:80vw; width:80vw; max-width:300px; } }
+  /* Hub QR — galerie glissante */
+  .qrhub-track { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+  .qrhub-track::-webkit-scrollbar { display:none; }
+  .qrhub-card { flex:0 0 100%; scroll-snap-align:center; display:flex; flex-direction:column; align-items:center; gap:.55rem; padding:.2rem .2rem; }
+  .qrhub-card h3 { font-weight:800; color:var(--fp-primary); font-size:1.05rem; text-align:center; }
+  .qrhub-card .d { color:var(--fp-muted); font-size:.82rem; text-align:center; line-height:1.4; }
+  .qrhub-qr { background:#fff; padding:8px; border:1px solid var(--fp-border); border-radius:12px; }
+  .qrhub-illus { width:200px; height:200px; border-radius:16px; background:var(--fp-bg); display:flex; align-items:center; justify-content:center; font-size:4.5rem; }
+  .qrhub-acts { display:flex; gap:.5rem; width:100%; padding-top:.4rem; }
+  .qrhub-acts .btn { flex:1; justify-content:center; }
+  .qrhub-nav { display:flex; align-items:center; justify-content:center; gap:1rem; margin-top:.9rem; }
+  .qrhub-dots { display:flex; gap:6px; }
+  .qrhub-dots .d { width:7px; height:7px; border-radius:9999px; background:var(--fp-border); transition:width .2s,background .2s; }
+  .qrhub-dots .d.on { width:20px; background:var(--fp-accent); }
+  .qrhub-arrow { width:40px; height:40px; border-radius:9999px; border:1px solid var(--fp-border); background:var(--fp-surface); color:var(--fp-text,#0B1220); font-size:1.35rem; font-weight:900; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
+  .qrhub-arrow:disabled { opacity:.3; cursor:default; }
 </style>
 <script>
 (function(){
@@ -668,8 +684,7 @@
         <button id="btn-km-mail" class="btn btn-outline text-sm ml-auto" title="Envoyer par e-mail une demande de relevé kilométrique aux chauffeurs du groupe affiché QUI N'ONT PAS ENCORE RÉPONDU (les véhicules déjà à jour sont ignorés) — le chauffeur répond en un clic"><i data-lucide="mail" class="w-4 h-4"></i> Demander le km par mail</button>
         <button id="btn-completer-cg" class="btn btn-outline text-sm" title="Lire les cartes grises déjà stockées et remplir automatiquement les champs manquants (carburant, CO₂, puissance, masse, VIN, dates)"><i data-lucide="wand-sparkles" class="w-4 h-4"></i> Compléter depuis les cartes grises</button>
         <button id="btn-fiche-groupe" class="btn btn-outline text-sm" title="Télécharger la liste des véhicules du groupe affiché (ou Tous) en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> Télécharger la fiche</button>
-        <button id="btn-qr-all" class="btn btn-outline text-sm" title="Télécharger un PDF avec le QR de CHAQUE véhicule de la flotte (même carte que la fiche véhicule)"><i data-lucide="qr-code" class="w-4 h-4"></i> Tous les QR (PDF)</button>
-        <button id="btn-qr-ventes" class="btn btn-outline text-sm" title="UN QR à imprimer/partager qui ouvre directement la LISTE de tes véhicules à vendre (sans le prix — le prix reste dans l'app)"><i data-lucide="qr-code" class="w-4 h-4"></i> QR liste à vendre</button>
+        <button id="btn-qr-hub" class="btn btn-outline text-sm" title="Tous les QR à imprimer / partager : QR de la liste des véhicules à vendre, et QR de chaque véhicule (PDF). D'autres s'ajouteront ici."><i data-lucide="qr-code" class="w-4 h-4"></i> QR codes</button>
       </div>
     </div>
 
@@ -807,6 +822,23 @@
     <div class="flex gap-2 pt-4">
       <button type="button" class="btn btn-outline flex-1 justify-center" id="qr-print"><i data-lucide="printer" class="w-4 h-4"></i> Imprimer</button>
       <button type="button" class="btn btn-dark flex-1 justify-center" id="qr-download"><i data-lucide="download" class="w-4 h-4"></i> PNG</button>
+    </div>
+  </div>
+</div>
+
+<!-- =============== HUB QR (galerie glissante des QR globaux) =============== -->
+<div class="modal-backdrop" id="qrhub-backdrop">
+  <div class="modal p-6" style="max-width:420px">
+    <div class="flex justify-between items-center mb-1">
+      <h2 class="text-xl font-extrabold" style="color:var(--fp-primary)">QR codes</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="qrhub-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm text-slate-500 mb-3">Fais glisser pour voir tous les QR. D'autres s'ajouteront ici au fil du temps.</p>
+    <div id="qrhub-track" class="qrhub-track"></div>
+    <div class="qrhub-nav">
+      <button class="qrhub-arrow" id="qrhub-prev" type="button" aria-label="Précédent">‹</button>
+      <div class="qrhub-dots" id="qrhub-dots"></div>
+      <button class="qrhub-arrow" id="qrhub-next" type="button" aria-label="Suivant">›</button>
     </div>
   </div>
 </div>
@@ -4171,12 +4203,12 @@
     }); }
   // « Tous les QR (PDF) » — un PDF avec le QR de CHAQUE véhicule de la flotte (liste LIVE complète,
   // pas seulement ceux qui ont un conducteur). Même carte QR que l'impression/PNG de la fiche.
-  { const b = $('btn-qr-all'); if (b) b.addEventListener('click', () => {
-      if (!(window.FP && FP.qr && FP.qr.downloadAllPdf)) { alert('Module QR indisponible — recharge la page (Ctrl+Maj+R).'); return; }
-      const vehs = (data.vehicules || []).filter(v => !FP.estVendu || !FP.estVendu(v)); // exclut les vendus
-      if (!vehs.length) { alert('Aucun véhicule.'); return; }
-      FP.qr.downloadAllPdf(vehs);
-    }); }
+  function downloadAllVehQr() {
+    if (!(window.FP && FP.qr && FP.qr.downloadAllPdf)) { alert('Module QR indisponible — recharge la page (Ctrl+Maj+R).'); return; }
+    const vehs = (data.vehicules || []).filter(v => !FP.estVendu || !FP.estVendu(v)); // exclut les vendus
+    if (!vehs.length) { alert('Aucun véhicule.'); return; }
+    FP.qr.downloadAllPdf(vehs);
+  }
   { const b = $('bulk-fiche'); if (b) b.addEventListener('click', () => {
       const list = data.vehicules.filter(v => state.selectedIds.has(v.id));
       if (!list.length) { alert('Sélectionne au moins un véhicule.'); return; }
@@ -5166,20 +5198,51 @@
       return tok;
     } catch (e) { return ''; }
   }
-  function openQrVentesListe() {
+  const VENTES_QR_URL = () => 'https://parc-pilot.fr/v.html?vt=' + encodeURIComponent(_ensureVentesToken()) + '&vue=ventesliste';
+  // HUB QR : galerie GLISSANTE de tous les QR « globaux » (liste ventes, PDF de tous les véhicules…).
+  // De nouveaux QR pourront s'ajouter ici (une carte de plus dans la piste). Chaque carte a ses actions.
+  function openQrHub() {
     if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
-    const tok = _ensureVentesToken();
-    if (!tok) { alert('QR indisponible.'); return; }
-    const url = 'https://parc-pilot.fr/v.html?vt=' + encodeURIComponent(tok) + '&vue=ventesliste';
-    const canvas = buildQrCanvas(url, 6, 4);
-    canvas.style.width = '240px'; canvas.style.height = '240px'; canvas.style.imageRendering = 'pixelated';
-    qrCurrent = { immat: 'Véhicules à vendre', label: 'Véhicules à vendre', url, hint: 'Scannez : la liste des véhicules à vendre (sans prix)' };
-    const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
-    $('qr-label').textContent = 'Véhicules à vendre';
-    const _t = document.getElementById('qr-title'); if (_t) _t.textContent = 'QR — Véhicules à vendre';
-    const _dsc = document.getElementById('qr-desc'); if (_dsc) _dsc.innerHTML = 'QR à <b>imprimer / partager</b> (vitrine, annonce, réseaux…) → il ouvre <b>la liste de tous tes véhicules à vendre</b> (photos + caractéristiques, <b>sans le prix</b>). Se met à jour tout seul selon les véhicules « à vendre ».';
-    const _sc = $('qr-scans'); if (_sc) _sc.style.display = 'none';
-    $('qr-backdrop').classList.add('open');
+    const track = $('qrhub-track'); if (!track) return;
+    track.innerHTML = '';
+    // Carte 1 : QR de la LISTE des véhicules à vendre (scannable).
+    const url = VENTES_QR_URL();
+    const c1 = document.createElement('div'); c1.className = 'qrhub-card';
+    const h1 = document.createElement('h3'); h1.textContent = '🏷️ Véhicules à vendre'; c1.appendChild(h1);
+    const qh = document.createElement('div'); qh.className = 'qrhub-qr';
+    const cv = buildQrCanvas(url, 6, 4); cv.style.width = '200px'; cv.style.height = '200px'; cv.style.imageRendering = 'pixelated'; qh.appendChild(cv);
+    c1.appendChild(qh);
+    const d1 = document.createElement('div'); d1.className = 'd'; d1.textContent = 'À imprimer / partager (vitrine, annonce, réseaux…) → ouvre la liste de tes véhicules en vente (photos + infos, sans le prix).'; c1.appendChild(d1);
+    const a1 = document.createElement('div'); a1.className = 'qrhub-acts';
+    a1.innerHTML = '<button type="button" class="btn btn-outline" data-hub-print><i data-lucide="printer" class="w-4 h-4"></i> Imprimer</button><button type="button" class="btn btn-dark" data-hub-png><i data-lucide="download" class="w-4 h-4"></i> PNG</button>';
+    c1.appendChild(a1);
+    track.appendChild(c1);
+    // Carte 2 : PDF avec le QR de CHAQUE véhicule (à coller dans chaque voiture).
+    const c2 = document.createElement('div'); c2.className = 'qrhub-card';
+    c2.innerHTML = '<h3>🚗 Tous les véhicules</h3><div class="qrhub-illus">🚗</div><div class="d">Un PDF avec le QR de CHAQUE véhicule (à coller dans chaque voiture → portail conducteur).</div><div class="qrhub-acts"><button type="button" class="btn btn-dark" data-hub-pdf style="flex:1;justify-content:center"><i data-lucide="download" class="w-4 h-4"></i> Télécharger le PDF</button></div>';
+    track.appendChild(c2);
+    _qrHubNav();
+    $('qrhub-backdrop').classList.add('open');
+    if (window.lucide) lucide.createIcons();
+    setTimeout(_qrHubNav, 60);
+  }
+  function _qrHubNav() {
+    const track = $('qrhub-track'), dotsC = $('qrhub-dots'), prev = $('qrhub-prev'), next = $('qrhub-next');
+    if (!track || !dotsC) return;
+    const n = track.children.length;
+    if (dotsC.children.length !== n) { dotsC.innerHTML = ''; for (let i = 0; i < n; i++) { const d = document.createElement('span'); d.className = 'd' + (i === 0 ? ' on' : ''); dotsC.appendChild(d); } }
+    const idx = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+    Array.prototype.forEach.call(dotsC.children, (d, i) => d.classList.toggle('on', i === idx));
+    if (prev) prev.disabled = idx <= 0;
+    if (next) next.disabled = idx >= n - 1;
+  }
+  function _qrPrintUrl(url, label) {
+    qrCurrent = { immat: label || 'Véhicules à vendre', label: label || 'Véhicules à vendre', url };
+    printQr();
+  }
+  function _qrPngUrl(url, label) {
+    qrCurrent = { immat: label || 'Véhicules à vendre', label: label || 'Véhicules à vendre', url };
+    downloadQr();
   }
   async function openQr(v, mode) {
     if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
@@ -5358,7 +5421,17 @@
   }
   $('drawer-qr').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v); });
   { const _qv = $('drawer-qr-vente'); if (_qv) _qv.addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v, 'vente'); }); }
-  { const _qvl = $('btn-qr-ventes'); if (_qvl) _qvl.addEventListener('click', openQrVentesListe); }
+  { const _qh = $('btn-qr-hub'); if (_qh) _qh.addEventListener('click', openQrHub); }
+  { const _qhc = $('qrhub-close'); if (_qhc) _qhc.addEventListener('click', () => $('qrhub-backdrop').classList.remove('open')); }
+  { const _qhb = $('qrhub-backdrop'); if (_qhb) _qhb.addEventListener('click', (e) => { if (e.target === _qhb) _qhb.classList.remove('open'); }); }
+  { const _t = $('qrhub-track'); if (_t) _t.addEventListener('scroll', () => window.requestAnimationFrame(_qrHubNav), { passive: true }); }
+  { const _p = $('qrhub-prev'); if (_p) _p.addEventListener('click', () => { const t = $('qrhub-track'); t.scrollBy({ left: -t.clientWidth, behavior: 'smooth' }); }); }
+  { const _n = $('qrhub-next'); if (_n) _n.addEventListener('click', () => { const t = $('qrhub-track'); t.scrollBy({ left: t.clientWidth, behavior: 'smooth' }); }); }
+  { const _t = $('qrhub-track'); if (_t) _t.addEventListener('click', (e) => {
+      if (e.target.closest('[data-hub-print]')) { _qrPrintUrl(VENTES_QR_URL(), 'Véhicules à vendre'); return; }
+      if (e.target.closest('[data-hub-png]'))   { _qrPngUrl(VENTES_QR_URL(), 'Véhicules à vendre'); return; }
+      if (e.target.closest('[data-hub-pdf]'))   { downloadAllVehQr(); return; }
+    }); }
   $('qr-close').addEventListener('click', () => $('qr-backdrop').classList.remove('open'));
   $('qr-print').addEventListener('click', printQr);
   $('qr-download').addEventListener('click', downloadQr);
