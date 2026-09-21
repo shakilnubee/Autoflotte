@@ -9091,10 +9091,22 @@ document.addEventListener('click', function (e) {
       if (scroller && scroller.scrollTop > t) t = scroller.scrollTop;   // fiche/drawer ouvert
       return t;
     };
-    b.addEventListener('click', () => {
+    b.addEventListener('click', (ev) => {
+      // Toujours REMONTER EN HAUT (jamais fermer). On remonte tout ce qui peut être scrollé : la fenêtre,
+      // <main>, le dernier conteneur scrollé, ET explicitement une FICHE/DRAWER ouverte (véhicule/conducteur)
+      // + son corps scrollable, + toute modale ouverte — pour que ça marche à coup sûr dans les fiches.
+      try { if (ev) { ev.preventDefault(); ev.stopPropagation(); } } catch (e) {}
+      const targets = [];
+      const m = mainEl(); if (m) targets.push(m);
+      if (scroller) targets.push(scroller);
+      try {
+        document.querySelectorAll('.drawer.open, #drawer.open, .modal-backdrop.open .modal, .modal.open').forEach((d) => {
+          targets.push(d);
+          const body = d.querySelector('#drawer-body, [id$="-body"]'); if (body) targets.push(body);
+        });
+      } catch (e) {}
       try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
-      const m = mainEl(); if (m) { try { m.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { m.scrollTop = 0; } }
-      if (scroller) { try { scroller.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { scroller.scrollTop = 0; } }
+      targets.forEach((el) => { try { el.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { try { el.scrollTop = 0; } catch (e2) {} } });
     });
     document.body.appendChild(b);
     try { if (window.lucide && lucide.createIcons) lucide.createIcons(); } catch (e) {}
