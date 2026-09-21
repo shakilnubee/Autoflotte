@@ -130,6 +130,9 @@
   .spin { display:inline-block; width:22px; height:22px; border:3px solid #CBD5E1; border-top-color:var(--accent); border-radius:50%; animation:sp .7s linear infinite; }
   @keyframes sp { to { transform:rotate(360deg); } }
   .hide { display:none !important; }
+  /* QR VENTE = annonce seule : pas de bouton « Retour » (aucun menu derrière) ni de nom de conducteur (public). */
+  .vente-only #v-vente [data-back] { display:none !important; }
+  .vente-only #driver-wrap { display:none !important; }
   /* Visionneuse plein écran (états des lieux) : on reste dans le portail, on fait défiler les photos */
   .lb { position:fixed; inset:0; z-index:2147483600; background:rgba(8,12,22,.95); display:none; flex-direction:column; }
   .lb.open { display:flex; }
@@ -345,6 +348,7 @@
   var params = new URLSearchParams(location.search);
   var token = params.get('h') || '';
   var vueParam = (params.get('vue') || '').toLowerCase(); // « &vue=vente » → ouvre direct l'annonce (QR vente)
+  var venteOnly = false; // QR vente = page annonce SEULE (pas de menu, pas d'amendes/documents/km…)
   var DATA = null;                       // payload serveur (veh, docs, edl, portal…)
   var sinType = 'sinistre';
   var sinPhotos = [];                    // data URLs compressées
@@ -868,15 +872,23 @@
       if (nom) $('driver-wrap').innerHTML = '<div class="driver">👤 <b>' + esc(nom) + '</b>' + (c.poste ? '<span class="poste">' + esc(c.poste) + '</span>' : '') + '</div>';
       // Onglet « À vendre » : révélé uniquement si le véhicule est à vendre.
       if (estAVendreV(d.veh || {})) { var tv = $('tap-vente'); if (tv) tv.classList.remove('hide'); }
-      goMenu();
-      // QR VENTE : « &vue=vente » ouvre directement l'annonce (si le véhicule est à vendre).
-      if (vueParam === 'vente' && estAVendreV(d.veh || {})) { try { route('vente'); } catch (e) {} }
+      // QR VENTE : « &vue=vente » = page ANNONCE SEULE (aucun menu, ni amendes/documents/km…).
+      if (vueParam === 'vente' && estAVendreV(d.veh || {})) {
+        venteOnly = true;
+        document.body.classList.add('vente-only');
+        renderVente(); show('v-vente', vehTitle(), '');
+        try { history.replaceState({ ppv: 'vente' }, ''); } catch (e) {}
+      } else {
+        goMenu();
+      }
     })
     .catch(function () { show('v-bad', t('head_title')); $('bad-sub').textContent = t('bad_conn'); });
 
   function vehTitle() { var v = DATA.veh || {}; return ((v.marque || '') + ' ' + (v.modele || '')).trim() || (DATA.plaque || t('head_title')); }
 
   function goMenu(fromPop) {
+    // Mode « QR vente » : jamais de menu → on reste sur l'annonce (verrou de sécurité, quel que soit le chemin).
+    if (venteOnly) { renderVente(); show('v-vente', vehTitle(), ''); if (!fromPop) { try { history.replaceState({ ppv: 'vente' }, ''); } catch (e) {} } return; }
     show('v-menu', vehTitle(), t('head_ask'));
     // Le MENU = base de l'historique. Ainsi le bouton RETOUR du navigateur depuis une sous-page revient
     // au menu SANS recharger (au lieu de « resetter » la page ou de quitter le portail). On ne repose la
