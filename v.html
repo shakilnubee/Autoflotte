@@ -71,6 +71,7 @@
   .vl-tx { flex:1; min-width:0; }
   .vl-title { font-weight:800; font-size:.98rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vl-plate { color:var(--muted); font-size:.82rem; font-weight:600; margin-top:.05rem; }
+  .vl-sub { color:var(--muted); font-size:.8rem; margin-top:.1rem; }
   .vl-price { color:var(--accent); font-weight:900; font-style:italic; margin-top:.15rem; }
   /* Fiches / listes */
   .kv { display:flex; justify-content:space-between; gap:1rem; padding:.6rem 0; border-bottom:1px solid var(--line); font-size:.95rem; }
@@ -943,9 +944,8 @@
     if (v.dateMiseEnCirculation) rows.push([t('r_mec'), frDate(v.dateMiseEnCirculation)]);
     rows.push([t('r_km'), nb(v.km) + ' km'], [t('r_carburant'), v.carburant || '—'], [t('v_boite'), v.boite || '—'], [t('v_couleur'), v.couleur || '—']);
     var specs = '<div class="box">' + rows.map(function (r) { return '<div class="kv"><span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(r[1]) + '</span></div>'; }).join('') + '</div>';
-    var pv = (v.prixVente != null ? v.prixVente : v.prix);
-    var prixTxt = (pv != null && pv !== '' && Number(pv) > 0) ? eur(pv) : '—';
-    var prixBox = '<div class="vente-price"><span class="vp-lbl">' + esc(t('v_price')) + '</span><span class="vp-val">' + esc(prixTxt) + '</span></div>';
+    // ⚠️ PAS de prix sur la page publique (QR) : le prix reste réservé à l'app Parc Pilot (connexion).
+    // L'acheteur demande le prix via Appeler / SMS.
     var tel = ((DATA.portail && DATA.portail.venteTel) || '').toString().trim();
     var telClean = tel.replace(/[^\d+]/g, '');
     var cta;
@@ -958,7 +958,7 @@
       cta = '<button type="button" class="btn dark block" data-go="que" data-prefill="1" style="margin-top:.2rem">💬 ' + esc(t('v_interested')) + '</button>';
     }
     var note = '<div class="box" style="background:#F0FDF4;border-color:#BBF7D0;margin-top:.9rem"><div class="muted" style="font-size:.85rem">' + esc(t('v_note')) + '</div></div>';
-    return gal + prixBox + specs + cta + note;
+    return gal + specs + cta + note;
   }
   function renderVente() {
     var v = DATA.veh || {};
@@ -986,13 +986,13 @@
     if (!VENTES.length) { box.innerHTML = '<div class="box muted center" style="padding:1.4rem">' + esc(t('ventesl_empty')) + '</div>'; return; }
     box.innerHTML = VENTES.map(function (v, i) {
       var titre = ((v.marque || '') + ' ' + (v.modele || '')).trim() || (v.plaque || '');
-      var prix = (v.prix != null && Number(v.prix) > 0) ? eur(v.prix) : '—';
+      var sub = [v.carburant, (v.km != null ? nb(v.km) + ' km' : '')].filter(Boolean).join(' · ');
       var p0 = (v.photos && v.photos.length) ? v.photos[0] : '';
       var ph = p0 ? '<div class="vl-ph" style="background-image:url(\'' + esc(p0) + '\')"></div>' : '<div class="vl-ph vl-noph">🚗</div>';
       return '<button type="button" class="vl-card" data-vl-idx="' + i + '">' + ph
         + '<div class="vl-tx"><div class="vl-title">' + esc(titre) + '</div>'
         + (v.plaque ? '<div class="vl-plate">' + esc(v.plaque) + '</div>' : '')
-        + '<div class="vl-price">' + esc(prix) + '</div></div><div class="chev">›</div></button>';
+        + (sub ? '<div class="vl-sub">' + esc(sub) + '</div>' : '') + '</div><div class="chev">›</div></button>';
     }).join('');
   }
   function showVenteFiche(idx) {
