@@ -381,6 +381,9 @@ async function portalConfig(db: ReturnType<typeof createClient>, societe: string
     assistanceNumero: (picked && String(picked.assistance || "").trim()) || gAssist,
     assistanceNotice: (picked && String(picked.notice || "").trim()) || gNotice,
     constatUrl: String(p.constatUrl || "").trim(),
+    // Téléphone de contact affiché sur l'annonce de vente (QR vente). Réglable dans Paramètres → Société.
+    // Défaut PXP historique (même logique que defAssureur/defPolice) ; les autres sociétés partent vide.
+    venteTel: String(p.venteTel || (soc === "PXP" ? "0661779753" : "")).trim(),
     reglesTexte: String(p.reglesTexte || "").trim(),
     reglesLien: String(p.reglesLien || "").trim(),
     logo: String(prof.logoDataUrl || "").trim(),          // logo société (data URL) pour l'en-tête du portail
