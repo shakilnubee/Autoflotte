@@ -1773,6 +1773,15 @@
   // ===== Demandes conducteur (déclarations envoyées depuis le QR véhicule) =====
   // Table declarations_conducteur (portail v.html). Affichées EN TÊTE de l'onglet Sinistres ;
   // le gestionnaire peut les marquer traitées ou en faire un vrai sinistre (bouton existant).
+  // Étapes de suivi d'un incident conducteur (sinistre / problème). Rétro-compatible : 'nouveau' et
+  // 'traite' restent les 2 pôles (le badge de la sidebar compte 'nouveau' ; 'traite' = terminé) ;
+  // 'assistance' et 'intervention' sont des étapes INTERMÉDIAIRES (l'incident reste dans l'inbox).
+  const DECL_STAGES = [
+    { v: 'nouveau', label: 'À traiter', emo: '🆕' },
+    { v: 'assistance', label: 'Assistance contactée', emo: '🛟' },
+    { v: 'intervention', label: 'Intervention en cours', emo: '🔧' },
+    { v: 'traite', label: 'Résolu', emo: '✅' }
+  ];
   const DeclCond = {
     rows: [], showTraites: false,
     async load() {
@@ -1822,6 +1831,11 @@
               : '<span style="background:#FEF3C7;color:#92400E;padding:1px 8px;border-radius:9999px;font-size:11px;font-weight:800">🔧 Problème</span>')));
       const when = d.created_at ? FP.dateNum(String(d.created_at).slice(0, 10)) : '';
       const traite = d.statut === 'traite';
+      // Étape de suivi (uniquement pour sinistre/problème ; les infos gardent le binaire traité/à traiter).
+      const stage = DECL_STAGES.find(s => s.v === (d.statut || 'nouveau')) || DECL_STAGES[0];
+      const stageChip = isInfo
+        ? (traite ? '<span class="text-xs" style="color:#16a34a;font-weight:700">✓ traité</span>' : '')
+        : ((d.statut && d.statut !== 'nouveau') ? `<span class="text-xs" style="font-weight:800;color:${traite ? '#16a34a' : '#B45309'}">${stage.emo} ${FP.esc(stage.label)}</span>` : '');
       const infoBorder = isKm ? '#FDBA74' : (isQuestion ? '#A5B4FC' : '#7DD3FC');
       const infoBg = isKm ? '#FFF7ED' : (isQuestion ? '#F5F3FF' : '#F0F9FF');
       const borderCol = traite ? 'var(--fp-border)' : (isInfo ? infoBorder : '#FCA5A5');
@@ -1829,7 +1843,7 @@
       const line = (lbl, val) => val ? `<div class="text-sm"><span class="text-slate-500">${lbl} :</span> <b>${FP.esc(val)}</b></div>` : '';
       return `<div style="border:1px solid ${borderCol};border-radius:12px;padding:12px 14px;background:${bgCol}" data-decl="${FP.esc(d.id)}">
         <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
-          <div class="flex items-center gap-2 flex-wrap">${tag}<b class="text-sm">${FP.esc(d.plaque || '')}</b><span class="text-xs text-slate-400">reçu le ${FP.esc(when)}</span>${traite ? '<span class="text-xs" style="color:#16a34a;font-weight:700">✓ traité</span>' : ''}</div>
+          <div class="flex items-center gap-2 flex-wrap">${tag}<b class="text-sm">${FP.esc(d.plaque || '')}</b><span class="text-xs text-slate-400">reçu le ${FP.esc(when)}</span>${stageChip}</div>
         </div>
         ${line('Quand', d.date_incident)}${line('Lieu', d.lieu)}
         <div class="text-sm mt-1">${FP.esc(d.description || '')}</div>
@@ -1838,9 +1852,15 @@
         <div class="flex gap-2 mt-3 flex-wrap">
           ${(traite || isInfo) ? '' : `<button type="button" class="btn btn-dark text-xs" data-decl-sin="${FP.esc(d.id)}"><i data-lucide="clipboard-pen-line" class="w-3.5 h-3.5"></i> Créer le sinistre</button>`}
           ${isInfo ? ((d.plaque) ? `<a class="btn btn-outline text-xs" href="vehicules.html?immat=${encodeURIComponent(d.plaque || '')}"><i data-lucide="car" class="w-3.5 h-3.5"></i> Voir le véhicule</a>` : '') : `<button type="button" class="btn btn-outline text-xs" data-decl-pdf="${FP.esc(d.id)}" title="Générer un rapport PDF (avec photos) à envoyer à l'assurance"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Rapport PDF</button>`}
-          ${traite
-            ? `<button type="button" class="btn btn-outline text-xs" data-decl-untraite="${FP.esc(d.id)}">Rouvrir</button>`
-            : `<button type="button" class="btn btn-outline text-xs" data-decl-traite="${FP.esc(d.id)}"><i data-lucide="check" class="w-3.5 h-3.5"></i> Marquer traité</button>`}
+          ${isInfo
+            ? (traite
+              ? `<button type="button" class="btn btn-outline text-xs" data-decl-untraite="${FP.esc(d.id)}">Rouvrir</button>`
+              : `<button type="button" class="btn btn-outline text-xs" data-decl-traite="${FP.esc(d.id)}"><i data-lucide="check" class="w-3.5 h-3.5"></i> Marquer traité</button>`)
+            : `<label class="inline-flex items-center gap-1 text-xs" style="font-weight:600;color:var(--fp-muted)">Suivi
+                 <select class="decl-status-sel text-xs" data-decl-status="${FP.esc(d.id)}" style="border:1px solid var(--fp-border);border-radius:8px;padding:4px 6px;background:var(--fp-surface);color:inherit;font-weight:700">
+                   ${DECL_STAGES.map(s => `<option value="${s.v}" ${(d.statut || 'nouveau') === s.v ? 'selected' : ''}>${s.emo} ${s.label}</option>`).join('')}
+                 </select>
+               </label>`}
           <button type="button" class="btn text-xs text-red-600 hover:bg-red-50" data-decl-del="${FP.esc(d.id)}" title="Supprimer cette demande"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
         </div>
       </div>`;
@@ -2149,6 +2169,12 @@
       finally { if (btn) { btn.disabled = false; btn.innerHTML = oldHtml; } }
     },
   };
+  // Menu déroulant de suivi (À traiter → Assistance contactée → Intervention en cours → Résolu).
+  document.addEventListener('change', (e) => {
+    const sel = e.target.closest && e.target.closest('[data-decl-status]');
+    if (!sel) return;
+    DeclCond.setStatut(sel.getAttribute('data-decl-status'), sel.value);
+  });
   document.addEventListener('click', (e) => {
     const t = e.target.closest && e.target.closest('[data-decl-traite],[data-decl-untraite],[data-decl-del],[data-decl-sin],[data-decl-pdf],#decl-toggle-traites');
     if (!t) return;
