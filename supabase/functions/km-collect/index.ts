@@ -345,6 +345,39 @@ async function vehEdl(db: ReturnType<typeof createClient>, vehiculeId: string | 
     });
 }
 
+// Liste des véhicules « à vendre » de LA MÊME société (rubrique « Véhicules à vendre » du portail QR).
+// Isolation : on ne garde que la société du QR scanné (convention societe || "PXP", comme km-relance).
+// Chaque item = plaque, marque/modèle, prix, 1re photo (signée) + jeton pour ouvrir son annonce.
+async function ventesListe(db: ReturnType<typeof createClient>, socRaw: string | null) {
+  const soc = String(socRaw || "PXP");
+  const { data: vs } = await db.from("vehicules")
+    .select("id,immat,marque,modele,carburant,boite,couleur,km,prix_vente,statut,societe")
+    .ilike("statut", "%vendre%");   // « à vendre » (et variantes) — exclut « vendu » (pas de « vendre »)
+  const list = (Array.isArray(vs) ? vs : []).filter((v: Record<string, unknown>) => String(v.societe || "PXP") === soc);
+  const out: Array<Record<string, unknown>> = [];
+  for (const v of list) {
+    let token = "";
+    try {
+      const { data: q } = await db.from("km_qr").select("token").eq("vehicule_id", v.id).limit(1).maybeSingle();
+      token = (q && q.token) ? String(q.token) : "";
+    } catch { /* pas de QR généré → item non cliquable côté client */ }
+    let photo = "";
+    try {
+      const edl = await vehEdl(db, v.id as string);
+      const img = (Array.isArray(edl) ? edl : []).find((e) => /^data:image\//i.test(e.url) || /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i.test(e.url));
+      if (img) photo = await signUrl(db, img.url);
+    } catch { /* pas de photo */ }
+    out.push({
+      plaque: v.immat || "", marque: v.marque || "", modele: v.modele || "",
+      carburant: v.carburant || "", boite: v.boite || "", couleur: v.couleur || "",
+      km: v.km != null ? Number(v.km) : null,
+      prix: (v.prix_vente != null && v.prix_vente !== "") ? Number(v.prix_vente) : null,
+      token, photo,
+    });
+  }
+  return out;
+}
+
 // Config PORTAIL par société : lue dans app_settings (id = société). Assureur/police + assistance + notice.
 // ⚠️ MULTI-ASSUREURS : si la société a plusieurs assureurs (s.assureurs) et que le véhicule (plaque) est
 // rattaché à l'un d'eux (s.assureurVeh), on renvoie l'assureur / n° d'assistance / notice DE CET ASSUREUR
@@ -521,6 +554,11 @@ Deno.serve(async (req) => {
       if (qtok) {
         const { qr, err } = await loadQr(db, qtok);
         if (err) return json({ error: err }, 404);
+        // Rubrique « Véhicules à vendre » (portail QR) : liste des véhicules à vendre de la MÊME société.
+        if (url.searchParams.get("ventes") === "1") {
+          const ventes = await ventesListe(db, qr.societe || "PXP");
+          return json({ ok: true, ventes });
+        }
         const kmConnu = await vehKm(db, qr.vehicule_id);
         const kmDate = await dernierReleveDate(db, qr.vehicule_id);
         const base = { ok: true, mode: "qr", plaque: qr.plaque || "", chauffeur: "", societe: qr.societe || "", kmConnu, kmDate, deja: false, kmRecu: null };
