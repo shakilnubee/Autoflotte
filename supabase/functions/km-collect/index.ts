@@ -351,28 +351,25 @@ async function vehEdl(db: ReturnType<typeof createClient>, vehiculeId: string | 
 async function ventesListe(db: ReturnType<typeof createClient>, socRaw: string | null) {
   const soc = String(socRaw || "PXP");
   const { data: vs } = await db.from("vehicules")
-    .select("id,immat,marque,modele,carburant,boite,couleur,km,prix_vente,statut,societe")
+    .select("id,immat,marque,modele,carburant,boite,couleur,km,prix_vente,date_mise_en_circulation,statut,societe")
     .ilike("statut", "%vendre%");   // « à vendre » (et variantes) — exclut « vendu » (pas de « vendre »)
   const list = (Array.isArray(vs) ? vs : []).filter((v: Record<string, unknown>) => String(v.societe || "PXP") === soc);
   const out: Array<Record<string, unknown>> = [];
   for (const v of list) {
-    let token = "";
-    try {
-      const { data: q } = await db.from("km_qr").select("token").eq("vehicule_id", v.id).limit(1).maybeSingle();
-      token = (q && q.token) ? String(q.token) : "";
-    } catch { /* pas de QR généré → item non cliquable côté client */ }
-    let photo = "";
+    // Toutes les photos (états des lieux, signées) → l'annonce s'affiche EN LIGNE côté portail (avec retour).
+    let photos: string[] = [];
     try {
       const edl = await vehEdl(db, v.id as string);
-      const img = (Array.isArray(edl) ? edl : []).find((e) => /^data:image\//i.test(e.url) || /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i.test(e.url));
-      if (img) photo = await signUrl(db, img.url);
+      const imgs = (Array.isArray(edl) ? edl : []).filter((e) => /^data:image\//i.test(e.url) || /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i.test(e.url));
+      photos = await Promise.all(imgs.map((e) => signUrl(db, e.url)));
     } catch { /* pas de photo */ }
     out.push({
       plaque: v.immat || "", marque: v.marque || "", modele: v.modele || "",
       carburant: v.carburant || "", boite: v.boite || "", couleur: v.couleur || "",
       km: v.km != null ? Number(v.km) : null,
+      dateMiseEnCirculation: v.date_mise_en_circulation || "",
       prix: (v.prix_vente != null && v.prix_vente !== "") ? Number(v.prix_vente) : null,
-      token, photo,
+      photos,
     });
   }
   return out;
