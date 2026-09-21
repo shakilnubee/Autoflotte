@@ -98,7 +98,7 @@ async function dernierReleveDate(db: ReturnType<typeof createClient>, vehiculeId
 async function vehInfo(db: ReturnType<typeof createClient>, vehiculeId: string | null) {
   if (!vehiculeId) return null;
   const { data: v } = await db.from("vehicules")
-    .select("marque,modele,carburant,co2,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur,statut,couleur,boite,derniere_revision,km_dernier_releve")
+    .select("marque,modele,carburant,co2,km,prochain_ct,date_mise_en_circulation,cg_url,cg_file_id,chauffeur,statut,couleur,boite,derniere_revision,km_dernier_releve,prix_vente")
     .eq("id", vehiculeId).maybeSingle();
   return v || null;
 }
@@ -589,8 +589,9 @@ Deno.serve(async (req) => {
             // Prochaine révision (rappel côté conducteur pour anticiper) — date + km d'échéance.
             prochaineRevisionDate: rev.date || "", prochaineRevisionKm: rev.km != null ? rev.km : null,
             prochaineRevisionNiveau: rev.niveau || "",   // '' | 'warn' (orange) | 'danger' (rouge)
-            // Vente (onglet « À vendre » du portail) : statut + specs de base (jamais le prix ni les coûts).
+            // Vente (onglet « À vendre » du portail) : statut + specs de base + prix affiché (si saisi).
             statut: veh.statut || "", couleur: veh.couleur || "", boite: veh.boite || "",
+            prixVente: (veh.prix_vente != null && veh.prix_vente !== "") ? Number(veh.prix_vente) : null,
           } : null;
           // Langue du conducteur (carte condLangues côté société) → le portail s'affiche dans SA langue
           // (6 langues supportées par v.html : fr/en/es/it/de/zh). Les e-mails, eux, restent FR/EN.
