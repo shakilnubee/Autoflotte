@@ -777,6 +777,7 @@
     <button class="btn btn-outline text-sm justify-center" id="drawer-pdf" title="Exporter la fiche en PDF"><i data-lucide="file-down" class="w-4 h-4"></i> PDF</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-vente" title="Dossier de vente (PDF) à montrer à un acheteur : photo, caractéristiques, prix, CT, entretien"><i data-lucide="tag" class="w-4 h-4"></i> Vente</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-qr" title="QR UNIQUE à coller dans la voiture : le conducteur le scanne → menu Relevé km · Déclarer un sinistre · Infos du véhicule. Un seul autocollant, permanent."><i data-lucide="qr-code" class="w-4 h-4"></i> QR véhicule</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-qr-vente" title="QR de l'ANNONCE de vente : à imprimer/coller sur la vitre. Scanné → l'annonce (photos + caractéristiques + prix). Apparaît quand le véhicule est « à vendre »." hidden><i data-lucide="qr-code" class="w-4 h-4"></i> QR vente</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
@@ -792,7 +793,7 @@
 <div class="modal-backdrop" id="qr-backdrop">
   <div class="modal p-6" style="max-width:380px">
     <div class="flex justify-between items-center mb-4">
-      <h2 class="text-xl font-extrabold" style="color:var(--fp-primary)">QR véhicule</h2>
+      <h2 class="text-xl font-extrabold" id="qr-title" style="color:var(--fp-primary)">QR véhicule</h2>
       <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="qr-close"><i data-lucide="x" class="w-5 h-5"></i></button>
     </div>
     <p class="text-sm text-slate-500 mb-3">Un seul QR à coller dans la voiture → <b>portail conducteur</b> : <b>🚗 véhicule</b> · <b>📸 relevé km</b> · <b>📄 documents</b> · <b>💥 sinistre/problème</b> · <b>📋 état des lieux</b>. Permanent : les nouveautés s'ajoutent au menu sans recoller.</p>
@@ -2556,6 +2557,8 @@
     if (!v) return;
     drawerVehId = id;
     edlPending = [];   // repart à zéro à chaque ouverture de fiche (pas de fuite entre véhicules)
+    // Bouton « QR vente » visible seulement pour un véhicule « à vendre » (même règle que le portail).
+    try { const _sv = (v.statut || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); const _btnv = $('drawer-qr-vente'); if (_btnv) _btnv.hidden = !/^a[\s-]?vendre$/.test(_sv); } catch (e) {}
 
     // Flèches précédent / suivant : suivent l'ordre du tableau affiché (filtré/trié)
     (function setupDrawerNav(){
@@ -5148,9 +5151,10 @@
     for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) if (qr.isDark(r, col)) ctx.fillRect((col + m) * s, (r + m) * s, s, s);
     return c;
   }
-  async function openQr(v) {
+  async function openQr(v, mode) {
     if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
     if (!(window.FP && FP.kmCollecte && FP.kmCollecte.ensureQr)) { alert('Connexion requise pour générer le QR.'); return; }
+    const vente = mode === 'vente';
     const b = FP.busy ? FP.busy('Génération du QR…') : null;
     const r = await FP.kmCollecte.ensureQr(v);           // crée/récupère le jeton permanent (km_qr)
     if (b) b.close();
@@ -5158,14 +5162,16 @@
     const token = (FP.kmCollecte._qrByVeh && FP.kmCollecte._qrByVeh[v.id]) || '';
     if (!token) { alert('QR indisponible.'); return; }
     const immat = v.immat || '';
-    // Le portail récupère tout via le jeton (infos, docs, assurance/assistance) → seul le token suffit.
-    const url = MENU_BASE + encodeURIComponent(token);
+    // Le portail récupère tout via le jeton. Même jeton pour les deux QR ; « &vue=vente » ouvre
+    // directement l'annonce (photos + caractéristiques + prix) au lieu du menu conducteur.
+    const url = MENU_BASE + encodeURIComponent(token) + (vente ? '&vue=vente' : '');
     const label = `${immat} · ${v.marque || ''} ${v.modele || ''}`.trim();
     const canvas = buildQrCanvas(url, 6, 4);
     canvas.style.width = '240px'; canvas.style.height = '240px'; canvas.style.imageRendering = 'pixelated';
-    qrCurrent = { immat, label, url, hint: 'Scannez : véhicule · km · documents · sinistre · état des lieux' };
+    qrCurrent = { immat, label, url, hint: vente ? 'Scannez : annonce de vente (photos · caractéristiques · prix)' : 'Scannez : véhicule · km · documents · sinistre · état des lieux' };
     const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
     $('qr-label').textContent = label;
+    const _t = document.getElementById('qr-title'); if (_t) _t.textContent = vente ? 'QR vente' : 'QR véhicule';
     $('qr-backdrop').classList.add('open');
     renderQrScans(v);
   }
@@ -5318,6 +5324,7 @@
     });
   }
   $('drawer-qr').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v); });
+  { const _qv = $('drawer-qr-vente'); if (_qv) _qv.addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v, 'vente'); }); }
   $('qr-close').addEventListener('click', () => $('qr-backdrop').classList.remove('open'));
   $('qr-print').addEventListener('click', printQr);
   $('qr-download').addEventListener('click', downloadQr);
