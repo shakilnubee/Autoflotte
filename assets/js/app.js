@@ -13666,6 +13666,89 @@ document.addEventListener('click', (e) => {
   if (FP.toast) FP.toast('✓ Copié : ' + v);
 });
 
+// ===== Envoi manuel SMS / WhatsApp (clic-pour-envoyer, GRATUIT) — SOURCE UNIQUE =====
+// Ouvre l'appli SMS/WhatsApp du téléphone de l'utilisateur avec le message DÉJÀ ÉCRIT. Aucun
+// prestataire, aucun coût : c'est l'utilisateur qui appuie sur « Envoyer », depuis SON numéro.
+// Tout point d'envoi de la plateforme DOIT passer par FP.msg (jamais un sms:/wa.me refait à la main).
+FP.msg = {
+  // Numéro au format international sans + ni espaces (pour wa.me). France par défaut (0X → 33X).
+  intl(phone) {
+    let p = String(phone || '').replace(/[^\d+]/g, '');
+    if (!p) return '';
+    if (p[0] === '+') p = p.slice(1);
+    else if (p.slice(0, 2) === '00') p = p.slice(2);
+    else if (p[0] === '0') p = '33' + p.slice(1);
+    return p;
+  },
+  smsHref(phone, text) {
+    const p = String(phone || '').replace(/[^\d+]/g, '');
+    return 'sms:' + p + '?&body=' + encodeURIComponent(text || '');
+  },
+  waHref(phone, text) {
+    const p = this.intl(phone);
+    return 'https://wa.me/' + p + (text ? ('?text=' + encodeURIComponent(text)) : '');
+  },
+  // Sélecteur SMS / WhatsApp / Copier. phone/nom/text pré-remplis et modifiables avant envoi.
+  open(opts) {
+    opts = opts || {};
+    const esc = FP.esc || (x => String(x == null ? '' : x));
+    const nom = opts.nom || '';
+    const title = opts.title || ('Prévenir' + (nom ? ' ' + nom : ' le conducteur'));
+    const old = document.getElementById('fp-msg-ov'); if (old) old.remove();
+    const ov = document.createElement('div');
+    ov.id = 'fp-msg-ov';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(8,15,30,.55);display:flex;align-items:center;justify-content:center;padding:16px';
+    ov.innerHTML =
+      '<div style="background:var(--fp-surface,#fff);color:var(--fp-text,#0b1220);border-radius:16px;max-width:440px;width:100%;box-shadow:0 24px 60px -20px rgba(0,0,0,.5);overflow:hidden">'
+      + '<div style="padding:15px 18px;border-bottom:1px solid var(--fp-border,#e5e7eb);display:flex;align-items:center;justify-content:space-between;gap:10px">'
+        + '<b style="font-size:1.02rem">📣 ' + esc(title) + '</b>'
+        + '<button type="button" id="fp-msg-x" style="background:none;border:none;font-size:1.5rem;line-height:1;cursor:pointer;color:var(--fp-muted,#64748b)">×</button>'
+      + '</div>'
+      + '<div style="padding:16px 18px;display:flex;flex-direction:column;gap:10px">'
+        + '<label style="font-size:.72rem;font-weight:700;color:var(--fp-muted,#64748b)">Numéro de téléphone'
+          + '<input id="fp-msg-phone" type="tel" value="' + esc(opts.phone || '') + '" placeholder="ex. 06 61 77 97 53" style="width:100%;margin-top:3px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.95rem"></label>'
+        + '<label style="font-size:.72rem;font-weight:700;color:var(--fp-muted,#64748b)">Message'
+          + '<textarea id="fp-msg-text" rows="5" style="width:100%;margin-top:3px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.92rem;resize:vertical">' + esc(opts.text || '') + '</textarea>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">'
+          + '<button type="button" id="fp-msg-sms" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#0EA5A0;color:#fff;font-weight:800;cursor:pointer">📱 SMS</button>'
+          + '<button type="button" id="fp-msg-wa" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#25D366;color:#0b3d1f;font-weight:800;cursor:pointer">🟢 WhatsApp</button>'
+        + '</div>'
+        + '<button type="button" id="fp-msg-copy" style="padding:9px;border-radius:10px;border:1px solid var(--fp-border,#e5e7eb);background:var(--fp-bg,#fff);color:inherit;font-weight:700;cursor:pointer">📋 Copier le message</button>'
+        + '<p style="font-size:.72rem;color:var(--fp-muted,#64748b);margin:0">Le message s\'ouvre dans ton appli — tu appuies sur Envoyer. Gratuit, ça part de ton numéro.</p>'
+      + '</div>'
+    + '</div>';
+    document.body.appendChild(ov);
+    const q = sel => ov.querySelector(sel);
+    const ph = () => (q('#fp-msg-phone').value || '').trim();
+    const tx = () => q('#fp-msg-text').value || '';
+    const close = () => ov.remove();
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    q('#fp-msg-x').addEventListener('click', close);
+    q('#fp-msg-sms').addEventListener('click', () => { window.location.href = FP.msg.smsHref(ph(), tx()); });
+    q('#fp-msg-wa').addEventListener('click', () => {
+      if (!FP.msg.intl(ph())) { q('#fp-msg-phone').focus(); return; }
+      window.open(FP.msg.waHref(ph(), tx()), '_blank', 'noopener');
+    });
+    q('#fp-msg-copy').addEventListener('click', () => {
+      try { if (FP.copy) FP.copy(tx()); else if (navigator.clipboard) navigator.clipboard.writeText(tx()); } catch (_) {}
+      if (FP.toast) FP.toast('✓ Message copié');
+    });
+    try { if (!opts.phone) q('#fp-msg-phone').focus(); } catch (e) {}
+  }
+};
+// Boutons déclaratifs réutilisables : <button data-msg-open data-msg-phone data-msg-nom data-msg-text data-msg-title>
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('[data-msg-open]');
+  if (!b) return;
+  e.preventDefault();
+  FP.msg.open({
+    phone: b.getAttribute('data-msg-phone') || '',
+    nom: b.getAttribute('data-msg-nom') || '',
+    text: b.getAttribute('data-msg-text') || '',
+    title: b.getAttribute('data-msg-title') || ''
+  });
+});
+
 // Bouton « + » flottant (quick-add) : accès rapide aux ajouts fréquents depuis n'importe quelle page
 // applicative. Chaque lien pointe vers la page cible + hash #add ; la page ouvre alors son formulaire
 // « Nouveau… » via l'élément portant l'attribut data-quickadd (géré ci-dessous).
