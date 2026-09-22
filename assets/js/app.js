@@ -2440,7 +2440,7 @@ FP.kmCollecte = {
     const html = ''
       + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
       // ── En-tête bleu : marque Parc Pilot + société, titre, puis conducteur (prénom/nom + poste) et plaque ──
-      + '<div style="background:linear-gradient(135deg,#0B1220,#1E293B);color:#fff;padding:22px 24px;border-radius:14px 14px 0 0">'
+      + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
       + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
       // Logo de la société (comme le QR) si hébergé, sinon la marque Parc Pilot en texte (repli).
       + '<td style="vertical-align:middle">' + (logoUrl
@@ -2450,7 +2450,7 @@ FP.kmCollecte = {
       // le nom de la société à droite pour équilibrer l'en-tête.
       + (!logoUrl && socName ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">' + socName + '</td>' : '')
       + '</tr></table>'
-      + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25">' + T.title + '</div>'
+      + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + T.title + '</div>'
       + (fullName ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#fff">' + FP.esc(fullName) + '</div>' : '')
       + (cPoste ? '<div style="font-size:13px;color:#94A3B8;margin-top:3px;font-weight:600">' + FP.esc(cPoste) + '</div>' : '')
       + (plateBadge ? '<div style="margin-top:14px;white-space:nowrap">' + plateBadge + '</div>' : '')
