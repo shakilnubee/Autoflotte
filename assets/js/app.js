@@ -13780,6 +13780,7 @@ FP.msg = {
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">'
           + '<button type="button" id="fp-msg-sms" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#0EA5A0;color:#fff;font-weight:800;cursor:pointer">📱 SMS</button>'
           + '<button type="button" id="fp-msg-wa" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#25D366;color:#0b3d1f;font-weight:800;cursor:pointer">🟢 WhatsApp</button>'
+          + (opts.email ? '<button type="button" id="fp-msg-email" style="flex:1;min-width:120px;justify-content:center;display:inline-flex;align-items:center;gap:6px;padding:11px;border-radius:10px;border:none;background:#0B1220;color:#fff;font-weight:800;cursor:pointer">📧 Email</button>' : '')
         + '</div>'
         + '<button type="button" id="fp-msg-copy" style="padding:9px;border-radius:10px;border:1px solid var(--fp-border,#e5e7eb);background:var(--fp-bg,#fff);color:inherit;font-weight:700;cursor:pointer">📋 Copier le message</button>'
         + '<p style="font-size:.72rem;color:var(--fp-muted,#64748b);margin:0">Le message s\'ouvre dans ton appli — tu appuies sur Envoyer. Gratuit, ça part de ton numéro.</p>'
@@ -13801,6 +13802,18 @@ FP.msg = {
       try { if (FP.copy) FP.copy(tx()); else if (navigator.clipboard) navigator.clipboard.writeText(tx()); } catch (_) {}
       if (FP.toast) FP.toast('✓ Message copié');
     });
+    // Envoi par e-mail (si opts.email fourni) → e-mail BRANDÉ via FP.sendEmail. opts.emailHtml peut être
+    // une chaîne HTML prête, une fonction(text)→html, ou absent (on habille alors le message courant).
+    if (opts.email) { const eb = q('#fp-msg-email'); if (eb) eb.addEventListener('click', async () => {
+      if (!(window.FP && FP.sendEmail)) { if (FP.toast) FP.toast('Envoi e-mail indisponible'); return; }
+      const html = (typeof opts.emailHtml === 'function') ? opts.emailHtml(tx())
+        : (opts.emailHtml || (FP.mailBrand ? FP.mailBrand({ title: opts.emailSubject || opts.title || '', prenom: opts.nom || '', nomSoc: opts.emailNomSoc || '', logoUrl: opts.emailLogo || '', bodyHtml: '<div style="white-space:pre-wrap;line-height:1.5">' + esc(tx()).replace(/\n/g, '<br>') + '</div>' }) : ('<div style="white-space:pre-wrap">' + esc(tx()).replace(/\n/g, '<br>') + '</div>')));
+      const oldTxt = eb.textContent; eb.disabled = true; eb.textContent = 'Envoi…';
+      try {
+        await FP.sendEmail(Object.assign({ to: opts.email, subject: opts.emailSubject || opts.title || 'Message', html: html, text: tx() }, opts.emailOpts || {}));
+        if (FP.toast) FP.toast('✓ E-mail envoyé à ' + opts.email); close();
+      } catch (err) { eb.disabled = false; eb.textContent = oldTxt; if (FP.notifyError) FP.notifyError('Échec de l\'e-mail'); else alert('Échec de l\'envoi de l\'e-mail : ' + (err && err.message || err)); }
+    }); }
     // Modèles rapides (chips) : remplissent le message d'un tap.
     const tpls = Array.isArray(opts.templates) ? opts.templates : [];
     ov.querySelectorAll('.fp-msg-tpl').forEach(btn => btn.addEventListener('click', () => {

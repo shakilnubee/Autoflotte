@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260922h">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260922i">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260922h"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260922i"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260922h">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260922i">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -664,8 +664,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260922h"></script>
-<script src="../assets/js/supabase-client.js?v=20260922h"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260922i"></script>
+<script src="../assets/js/supabase-client.js?v=20260922i"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -681,12 +681,12 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260922h"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260922i"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/fleet-docs.js?v=20260922h"></script>
-<script src="../assets/js/app.min.js?v=20260922h"></script>
+<script src="../assets/js/fleet-docs.js?v=20260922i"></script>
+<script src="../assets/js/app.min.js?v=20260922i"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1746,10 +1746,43 @@
     const copyBtn = (val, quoi) => `<button type="button" class="fiche-chip fp-copy" data-fp-copy="${escapeHtml(val)}" title="Copier ${quoi}" style="padding:.3rem .5rem"><i data-lucide="copy" style="width:14px;height:14px"></i></button>`;
     if (d.tel)   chips.push(`<a class="fiche-chip" href="tel:${escapeHtml(String(d.tel).replace(/\s+/g, ''))}"><i data-lucide="phone"></i> ${escapeHtml(String(d.tel).replace(/\s+/g, ''))}</a>` + copyBtn(String(d.tel).replace(/\s+/g, ''), 'le téléphone'));
     if (d.email) chips.push(`<a class="fiche-chip" href="mailto:${escapeHtml(d.email)}"><i data-lucide="mail"></i> ${escapeHtml(d.email)}</a>` + copyBtn(d.email, "l'e-mail"));
-    // Prévenir par SMS / WhatsApp (envoi manuel gratuit, message de bienvenue pré-écrit et modifiable).
+    // Message de BIENVENUE — envoyable par SMS / WhatsApp / Email, avec toutes les infos du QR et son
+    // fonctionnement + le lien de l'espace véhicule (résolu automatiquement). Async → géré par le
+    // délégué .cond-bienvenue (câblé une seule fois plus bas).
     { const prenomLbl = (d.prenom || d.name || '').trim();
-      const bienvenue = `Bonjour ${prenomLbl || ''} 👋\nBienvenue à bord ! 🚗\nPour tout ce qui concerne le véhicule (relevé du kilométrage, documents, signalement d'un souci), un scan du QR collé à l'intérieur suffit.\nBonne route ! 🙌`;
-      chips.push(`<button type="button" class="fiche-chip" data-msg-open data-msg-phone="${escapeHtml(d.tel || '')}" data-msg-nom="${escapeHtml(prenomLbl)}" data-msg-title="Prévenir ${escapeHtml(prenomLbl || 'le conducteur')}" data-msg-text="${escapeHtml(bienvenue)}" style="cursor:pointer"><i data-lucide="message-circle"></i> SMS / WhatsApp</button>`); }
+      chips.push(`<button type="button" class="fiche-chip cond-bienvenue" data-prenom="${escapeHtml(prenomLbl)}" data-tel="${escapeHtml(String(d.tel || '').replace(/\s+/g, ''))}" data-email="${escapeHtml(d.email || '')}" style="cursor:pointer"><i data-lucide="send"></i> Bienvenue (SMS · WhatsApp · Email)</button>`); }
+    if (!window.__condBienvWired) {
+      window.__condBienvWired = true;
+      document.addEventListener('click', async (e) => {
+        const b = e.target.closest && e.target.closest('.cond-bienvenue');
+        if (!b || !(window.FP && FP.msg)) return;
+        e.preventDefault();
+        const prenom = b.getAttribute('data-prenom') || '';
+        const tel = b.getAttribute('data-tel') || '';
+        const email = b.getAttribute('data-email') || '';
+        // Véhicule assigné à ce conducteur → lien de son espace (QR permanent, asynchrone).
+        let veh = null;
+        try { const gk = FP.condGroupKey ? FP.condGroupKey(prenom) : null; veh = (data.vehicules || []).find(v => v.chauffeur && v.chauffeur !== '—' && ((gk && FP.condGroupKey(v.chauffeur) === gk) || (FP.normPrenom && FP.normPrenom(v.chauffeur) === FP.normPrenom(prenom)))); } catch (err) {}
+        const plaque = veh ? (veh.immat || '') : '';
+        let portail = '';
+        if (veh && FP.qr && FP.qr.dataFor) { try { const qd = await FP.qr.dataFor(veh); if (qd && qd.url) portail = qd.url; } catch (err) {} }
+        const plLine = plaque ? ('Le véhicule ' + plaque + ' dispose') : 'Le véhicule dispose';
+        const text = `Bonjour ${prenom} 👋\nBienvenue à bord ! 🚗\n${plLine} d'un QR code (collé à l'intérieur). En le scannant${portail ? ' — ou via le lien ci-dessous —' : ''}, tout est accessible en 10 secondes :\n📸 Envoi du kilométrage\n📄 Documents (carte grise, assurance, assistance)\n🚨 Signalement d'un problème ou d'un accident\n📋 État des lieux (photos)${portail ? ('\n👉 L\'espace véhicule : ' + portail) : ''}\nBonne route ! 🙌`;
+        let emailHtml = '';
+        if (email && FP.mailBrand) {
+          let _logo = ''; try { const lu = (FP.settings.get().profil || {}).logoUrl; if (/^https?:\/\//.test(String(lu || ''))) _logo = String(lu); } catch (er) {}
+          let _soc = ''; try { _soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (er) {}
+          const body = `<p style="margin:0 0 14px">Bonjour ${FP.esc(prenom)},</p>`
+            + `<p style="margin:0 0 14px;line-height:1.5">Bienvenue à bord ! ${plaque ? ('Le véhicule <b>' + FP.esc(plaque) + '</b>') : 'Le véhicule'} dispose d'un <b>QR code</b> collé à l'intérieur. En le scannant — ou via le bouton ci-dessous — l'espace véhicule est accessible en quelques secondes :</p>`
+            + `<ul style="margin:0 0 14px;padding-left:18px;line-height:1.7"><li>📸 <b>Envoi du kilométrage</b></li><li>📄 <b>Documents</b> (carte grise, assurance, assistance)</li><li>🚨 <b>Signalement</b> d'un problème ou d'un accident</li><li>📋 <b>État des lieux</b> (photos de prise et de restitution)</li></ul>`
+            + `<p style="margin:0;line-height:1.5">À garder sous la main. Bonne route ! 🙌</p>`;
+          const btn = portail ? `<a href="${FP.esc(portail)}" style="display:inline-block;background:#0B1220;color:#ffffff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">Accéder à mon espace →</a>` : '';
+          emailHtml = FP.mailBrand({ title: 'Bienvenue à bord', prenom: prenom, plaque: plaque, nomSoc: _soc, logoUrl: _logo, bodyHtml: body, buttonHtml: btn });
+        }
+        let _reply = ''; try { _reply = ((FP.societeProfil ? FP.societeProfil() : {}) || {}).mailExpediteur || ''; } catch (er) {}
+        FP.msg.open({ phone: tel, email: email, nom: prenom, title: 'Bienvenue — ' + (prenom || 'conducteur'), text: text, emailSubject: 'Bienvenue à bord 🚗 — l\'espace véhicule', emailHtml: emailHtml, emailOpts: _reply ? { replyTo: _reply } : {} });
+      });
+    }
     const blocProfil = `
       <div class="fiche-hero" style="background:${avatarColor(d)}">
         <div class="fh-poste">${d.poste ? escapeHtml(d.poste) : 'Poste non renseigné'}</div>
