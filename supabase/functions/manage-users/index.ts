@@ -169,17 +169,21 @@ Deno.serve(async (req) => {
       const from = Deno.env.get("INVITE_FROM") || Deno.env.get("EMAIL_FROM") || "Parc Pilot <onboarding@resend.dev>";
       if (!RESEND) return json({ ok: true, id: userId, emailSent: false, warn: "Compte prêt, mais RESEND_API_KEY absent → e-mail non envoyé. Configure Resend puis renvoie l'invitation." });
       const esc = (s: string) => String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
+      // Design BRANDÉ (même en-tête sombre que le relevé km / les amendes), robuste au mode sombre Gmail
+      // (background-color solide → le texte blanc reste blanc).
       const html =
-        '<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">' +
-        '<div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px 24px">' +
-        '<div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#0F1E3D">🚗 Parc Pilot — Invitation</div>' +
-        '<div style="font-size:15px;line-height:1.55;margin:12px 0 2px">Bonjour,</div>' +
-        '<div style="font-size:15px;line-height:1.55;margin:6px 0">Un accès à <b>Parc Pilot</b> (votre plateforme de gestion de flotte) vient d\'être créé pour vous. Cliquez ci-dessous pour <b>choisir votre mot de passe</b> et vous connecter.</div>' +
-        '<div style="text-align:center;margin:18px 0 6px"><a href="' + esc(actionLink) + '" style="display:inline-block;background:#0F1E3D;color:#fff;padding:12px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px">Définir mon mot de passe →</a></div>' +
-        '<div style="font-size:12.5px;line-height:1.5;color:#64748b;margin-top:12px">Votre identifiant sera votre e-mail : <b>' + esc(email) + '</b>. Ce lien est personnel et temporaire ; s\'il a expiré, utilisez « Mot de passe oublié » sur la page de connexion.</div>' +
+        '<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">' +
+        '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">' +
+        '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>' +
+        '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">Bienvenue sur Parc Pilot</div>' +
         '</div>' +
-        '<div style="text-align:center;font-size:11px;color:#cbd5e1;margin-top:10px">Parc Pilot · parc-pilot.fr</div>' +
-        '</div>';
+        '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px;color:#0F1E3D">' +
+        '<p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>' +
+        '<p style="margin:0 0 16px;line-height:1.55">Un accès à <b>Parc Pilot</b> (votre plateforme de gestion de flotte) vient d\'être créé pour vous. Cliquez ci-dessous pour <b>choisir votre mot de passe</b> et vous connecter.</p>' +
+        '<p style="text-align:center;margin:22px 0"><a href="' + esc(actionLink) + '" style="display:inline-block;background:#0B1220;color:#ffffff;padding:14px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">Définir mon mot de passe →</a></p>' +
+        '<p style="font-size:12.5px;line-height:1.5;color:#64748b;margin:12px 0 0">Votre identifiant sera votre e-mail : <b>' + esc(email) + '</b>. Ce lien est personnel et temporaire ; s\'il a expiré, utilisez « Mot de passe oublié » sur la page de connexion.</p>' +
+        '<p style="text-align:center;font-size:11px;color:#94A3B8;margin:16px 0 0">Parc Pilot · parc-pilot.fr</p>' +
+        '</div></div>';
       const text = "Bonjour,\n\nUn accès à Parc Pilot a été créé pour vous. Définissez votre mot de passe ici :\n" + actionLink + "\n\nVotre identifiant : " + email + "\n\nParc Pilot · parc-pilot.fr";
       try {
         const r = await fetch("https://api.resend.com/emails", {
