@@ -61,6 +61,8 @@
   }
   .sin-rail-hint { display:none; }
   @media (max-width: 640px){ .sin-rail-hint { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; color:#94a3b8; margin:0 2px 8px; } }
+  /* Dossier assurance replié par défaut : la flèche pivote quand on déplie */
+  .sin-doss-det[open] .sin-doss-chev { transform: rotate(180deg); }
   .drive-folder { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; padding: 16px 10px; border: 1px solid var(--fp-border); border-radius: 12px; background: linear-gradient(145deg, #fff, #f8fafc); cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s; }
   .drive-folder:hover { transform: translateY(-3px); box-shadow: 0 12px 24px -14px rgba(15,30,61,.35); border-color: var(--fp-accent); }
   .drive-folder-ic { width: 42px; height: 42px; color: #F59E0B; margin-bottom: 4px; }
@@ -642,6 +644,9 @@
 
   const SIN_LIMIT = 15;
   let sinExpanded = false;
+  // Incidents dont le « Dossier assurance — suivi » est déplié (fermé par défaut → cartes plus courtes,
+  // moins de scroll). Mémorisé par clé d'incident pour rester ouvert malgré les re-rendus (édition d'un champ).
+  const sinDossOpen = new Set();
 
   // ---- Suivi d'étapes d'un dossier sinistre (déclaration → réponse assureur → réparation → remboursement → clôture) ----
   const RESP_LABEL = { 'responsable': 'Responsable', 'non-responsable': 'Non responsable', 'partagee': 'Partagée', 'en-cours': 'En cours' };
@@ -723,8 +728,8 @@
         // ne s'ouvrirait pas. Repli Google Drive pour un éventuel identifiant Drive hérité.
         const courrierLien = dv.courrierUrl ? `<button type="button" class="sin-courrier-open" data-url="${escapeHtml(dv.courrierUrl)}" style="display:inline-flex;align-items:center;gap:.25rem;font-size:12px;color:var(--fp-accent);background:none;border:none;cursor:pointer;text-decoration:underline;margin-left:2px"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Voir le courrier</button>` : '';
         const dossierPanel = `
-          <details class="mt-2" open>
-            <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#475569;list-style:none" class="inline-flex items-center gap-1"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Dossier assurance — suivi</summary>
+          <details class="mt-2 sin-doss-det" data-doss-key="${escapeHtml(g.key)}" ${sinDossOpen.has(g.key) ? 'open' : ''}>
+            <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#475569;list-style:none" class="inline-flex items-center gap-1"><i data-lucide="shield" class="w-3.5 h-3.5"></i> Dossier assurance — suivi <i data-lucide="chevron-down" class="w-3.5 h-3.5 sin-doss-chev" style="transition:transform .18s;color:#94a3b8"></i></summary>
             ${sinTimelineHTML(sinSteps(g, dv, cur))}
             <label class="text-xs text-slate-500" style="display:block;margin-top:8px">Conducteur au moment du sinistre <span class="text-slate-400">(figé, sinon = chauffeur actuel)</span><input class="sin-doss" data-key="${g.key}" data-k="conducteur" type="text" value="${escapeHtml(dv.conducteur || '')}" placeholder="${escapeHtml(vehCh || '—')}" style="${_inpCss}"></label>
             <div class="grid grid-cols-3 gap-2 mt-2 sin-dg">
@@ -935,6 +940,15 @@
     } else if (st[id]) { delete st[id]; if (assur[id]) delete assur[id]; }
     FP.settings.save(s);
   }
+
+  // Mémorise l'état déplié/replié du « Dossier assurance » par incident (capture : l'événement `toggle`
+  // ne remonte pas) → il reste ouvert malgré les re-rendus quand on édite un champ.
+  $('timeline').addEventListener('toggle', (e) => {
+    const d = e.target;
+    if (!(d && d.classList && d.classList.contains('sin-doss-det'))) return;
+    const k = d.getAttribute('data-doss-key'); if (!k) return;
+    if (d.open) sinDossOpen.add(k); else sinDossOpen.delete(k);
+  }, true);
 
   // Changements (statut de remboursement, stade devis/facture)
   $('timeline').addEventListener('change', (e) => {
