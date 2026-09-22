@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260922k">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260922l">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260922k"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260922l"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260922k">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260922l">
 <style>
   .notif { display: flex; gap: .8rem; align-items: flex-start; padding: .85rem 1rem; border-radius: 14px; border: 1px solid var(--fp-border); background: var(--fp-surface, #fff); text-decoration: none; transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; box-shadow: 0 1px 2px rgba(15,30,61,.04); }
   .notif + .notif { margin-top: .55rem; }
@@ -125,6 +125,7 @@
 
     <div class="flex gap-1 border-b border-slate-200 mb-6" id="notif-tabbar" style="overflow-x:auto">
       <button type="button" id="tab-alertes" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid var(--fp-accent);color:var(--fp-primary);cursor:pointer">🔔 Alertes</button>
+      <button type="button" id="tab-relances" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📣 Relances</button>
       <!-- Relevé KM a DÉMÉNAGÉ dans Contrôle → bouton masqué ici (plus dans « Suivi & alertes »). Le
            contenu reste (affiché en embed depuis Contrôle via ?embed&tab=relevekm). -->
       <button type="button" id="tab-relevekm" style="display:none;padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📏 Relevé KM</button>
@@ -140,14 +141,15 @@
     <div id="suivi-echeances" class="hidden"></div>
     <div id="suivi-complet" class="hidden"></div>
     <div id="suivi-flotte" class="hidden"></div>
+    <div id="relances" class="hidden"></div>
 
     <div id="notif-masquees" class="mt-8"></div>
 
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260922k"></script>
-<script src="../assets/js/supabase-client.js?v=20260922k"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260922l"></script>
+<script src="../assets/js/supabase-client.js?v=20260922l"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -163,11 +165,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260922k"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260922l"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260922k"></script>
+<script src="../assets/js/app.min.js?v=20260922l"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1421,7 +1423,7 @@
     }
   });
 
-  const tabD = document.getElementById('tab-decisions'), tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet'), tabK = document.getElementById('tab-relevekm'), tabS = document.getElementById('tab-suivi');
+  const tabD = document.getElementById('tab-decisions'), tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet'), tabK = document.getElementById('tab-relevekm'), tabS = document.getElementById('tab-suivi'), tabR = document.getElementById('tab-relances');
   function showTab(which) {
     document.getElementById('suivi-decisions').classList.toggle('hidden', which !== 'decisions');
     document.getElementById('suivi-relevekm').classList.toggle('hidden', which !== 'relevekm');
@@ -1430,12 +1432,14 @@
     document.getElementById('suivi-echeances').classList.toggle('hidden', which !== 'echeances');
     document.getElementById('suivi-complet').classList.toggle('hidden', which !== 'complet');
     document.getElementById('suivi-flotte').classList.toggle('hidden', which !== 'suivi');
-    [[tabD, 'decisions'], [tabA, 'alertes'], [tabK, 'relevekm'], [tabE, 'echeances'], [tabC, 'complet'], [tabS, 'suivi']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
+    document.getElementById('relances').classList.toggle('hidden', which !== 'relances');
+    [[tabD, 'decisions'], [tabA, 'alertes'], [tabK, 'relevekm'], [tabE, 'echeances'], [tabC, 'complet'], [tabS, 'suivi'], [tabR, 'relances']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
     if (which === 'decisions') renderDecisions();
     if (which === 'echeances') renderEcheances();
     if (which === 'complet') renderComplet();
     if (which === 'relevekm') renderRelevekm();
     if (which === 'suivi') renderSuiviFlotte();
+    if (which === 'relances') renderRelances();
   }
   if (tabD) tabD.addEventListener('click', () => showTab('decisions'));
   if (tabA) tabA.addEventListener('click', () => showTab('alertes'));
@@ -1443,6 +1447,7 @@
   if (tabE) tabE.addEventListener('click', () => showTab('echeances'));
   if (tabC) tabC.addEventListener('click', () => showTab('complet'));
   if (tabS) tabS.addEventListener('click', () => showTab('suivi'));
+  if (tabR) tabR.addEventListener('click', () => showTab('relances'));
 
   // ===== Onglet « 📋 Suivi flotte » : matrice de suivi, branchée sur les données existantes =====
   // Colonnes : relevé km (km_requests), photos EDL / EDL signé (documents), double des clés (fiche
@@ -1570,6 +1575,96 @@
     if (cell) { openSuiviMenu(cell, cell.getAttribute('data-veh'), cell.getAttribute('data-col')); return; }
   });
 
+  // ===== Onglet « 📣 Relances » : TOUT ce qu'il faut relancer, au même endroit (1 tap / personne) =====
+  // SOURCE UNIQUE : FP.relances (app.js) — entretien/CT à venir, relevé km en retard, amende à payer.
+  // Chaque ligne : le conducteur + un bouton « Relancer » (WhatsApp / SMS / e-mail déjà rédigé, FP.msg).
+  // Bouton « Tout relancer par e-mail » = envoie d'un coup tous les e-mails (serveur, FP.sendEmail).
+  let _relItems = [];
+  function relWhen(it) {
+    if (it.type === 'km') return it.statut === 'jamais' ? 'jamais reçu' : 'à relancer';
+    const j = it.joursRestants; if (j == null) return '';
+    if (j < 0) return 'en retard de ' + (-j) + ' j'; if (j === 0) return "aujourd'hui"; if (j === 1) return 'demain'; return 'dans ' + j + ' j';
+  }
+  function relHref(it) {
+    if (it.type === 'amende' && it.amende) return 'amendes.html?amende=' + encodeURIComponent(it.amende.id || '');
+    if (it.veh) return 'vehicules.html?veh=' + encodeURIComponent(it.veh.id || '');
+    return '#';
+  }
+  function renderRelances() {
+    const host = document.getElementById('relances'); if (!host || !(window.FP && FP.relances)) return;
+    try { if (FP.kmCollecte && FP.kmCollecte.load && FP.kmCollecte._cache == null) { FP.kmCollecte.load().then(() => { try { renderRelances(); } catch (e) {} }); } } catch (e) {}
+    _relItems = FP.relances.list();
+    _relItems.forEach((it, i) => { it.__i = i; });
+    const META = FP.relances.META;
+    try { if (tabR) tabR.innerHTML = '📣 Relances' + (_relItems.length ? ' <span style="background:#EF4444;color:#fff;border-radius:9999px;padding:1px 7px;font-size:11px;font-weight:800">' + _relItems.length + '</span>' : ''); } catch (e) {}
+    const order = ['ct', 'entretien', 'km', 'amende'];
+    const groups = {}; order.forEach(t => groups[t] = []);
+    _relItems.forEach(it => { (groups[it.type] || (groups[it.type] = [])).push(it); });
+    const urgColor = (u) => u === 'retard' ? '#B91C1C' : (u === 'proche' ? '#B45309' : '#64748B');
+    const urgBg = (u) => u === 'retard' ? '#FEE2E2' : (u === 'proche' ? '#FEF3C7' : '#F1F5F9');
+    const row = (it) => {
+      const when = relWhen(it);
+      const who = it.conducteur ? FP.esc(it.conducteur) : '<span style="color:#94A3B8">conducteur non renseigné</span>';
+      const hasTel = !!(it.contact && it.contact.tel), hasMail = !!(it.contact && it.contact.email);
+      const extra = it.type === 'amende' ? (' · ' + (FP.euro ? FP.euro(it.montant) : (it.montant + ' €'))) : '';
+      const chans = [hasTel ? '💬' : '', hasMail ? '📧' : ''].filter(Boolean).join(' ') || '✍️ n° à saisir';
+      return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--fp-border);border-radius:11px;padding:9px 12px;background:#fff">
+        <a href="${relHref(it)}" style="font-weight:800;color:var(--fp-primary)">${FP.esc(it.immat || '?')}</a>
+        <span style="font-size:13px">${who}</span>
+        ${when ? `<span style="font-size:11px;font-weight:700;color:${urgColor(it.urgence)};background:${urgBg(it.urgence)};border-radius:9999px;padding:2px 9px">${FP.esc(when)}${FP.esc(extra)}</span>` : (extra ? `<span style="font-size:12px;font-weight:700;color:#334155">${FP.esc(extra.replace(/^ · /, ''))}</span>` : '')}
+        <span style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <span class="text-xs text-slate-400" title="Canaux disponibles">${chans}</span>
+          <button type="button" class="rel-send btn btn-primary text-xs" data-i="${it.__i}" style="font-weight:800">Relancer</button>
+        </span>
+      </div>`;
+    };
+    const section = (t) => {
+      const arr = groups[t] || []; if (!arr.length) return '';
+      const m = META[t] || { emo: '•', label: t };
+      return `<div style="margin-top:14px"><div style="font-weight:800;font-size:13px;color:var(--fp-primary);margin-bottom:7px">${m.emo} ${FP.esc(m.label)} <span style="color:#94A3B8;font-weight:700">(${arr.length})</span></div><div style="display:flex;flex-direction:column;gap:7px">${arr.map(row).join('')}</div></div>`;
+    };
+    const withMail = _relItems.filter(it => it.contact && it.contact.email).length;
+    host.innerHTML = `<div class="card p-5">
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+        <div class="font-extrabold flex items-center gap-2" style="color:var(--fp-primary)"><i data-lucide="megaphone" class="w-5 h-5"></i> Relances à faire</div>
+        <div class="text-sm" style="font-weight:800;color:${_relItems.length ? '#B45309' : '#16a34a'}">${_relItems.length} en attente</div>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">Tout ce qu'il faut relancer aujourd'hui, au même endroit — <b>entretien / contrôle technique à venir</b>, <b>relevé km en retard</b>, <b>amende à payer</b>. Pour chaque personne, <b>« Relancer »</b> ouvre le message <b>déjà rédigé</b> (💬 WhatsApp · 📱 SMS · 📧 e-mail) : tu appuies sur Envoyer, c'est gratuit et ça part de ton numéro. Le bouton <b>« Tout relancer par e-mail »</b> envoie d'un coup les rappels aux personnes dont on connaît l'e-mail.</p>
+      ${withMail ? `<div class="flex gap-2 mb-2 flex-wrap"><button type="button" id="rel-all-mail" class="btn btn-outline text-xs" style="font-weight:800">📧 Tout relancer par e-mail (${withMail})</button></div>` : ''}
+      ${_relItems.length ? order.map(section).join('') : '<div class="text-sm text-slate-400 py-4">Rien à relancer pour le moment. 🎉</div>'}
+    </div>`;
+    if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+  }
+  async function relOpenSend(it) {
+    if (!it || !(window.FP && FP.relances && FP.msg)) return;
+    let msg;
+    try { msg = await FP.relances.message(it); } catch (e) { msg = { text: '', subject: '', emailHtml: '' }; }
+    const c = it.contact || {};
+    FP.msg.open({
+      phone: c.tel || '', nom: FP.relances._prenom(it.conducteur) || it.immat, title: 'Relancer — ' + it.immat,
+      text: msg.text, email: c.email || '', emailHtml: msg.emailHtml, emailSubject: msg.subject
+    });
+  }
+  async function relAllMail(btn) {
+    const items = _relItems.filter(it => it.contact && it.contact.email);
+    if (!items.length || !(window.FP && FP.sendEmail)) return;
+    if (!confirm('Envoyer ' + items.length + ' e-mail' + (items.length > 1 ? 's' : '') + ' de relance maintenant ?')) return;
+    btn.disabled = true; const old = btn.textContent; let ok = 0, ko = 0;
+    for (const it of items) {
+      btn.textContent = 'Envoi… (' + (ok + ko + 1) + '/' + items.length + ')';
+      try { const m = await FP.relances.message(it); await FP.sendEmail({ to: it.contact.email, subject: m.subject, html: m.emailHtml, text: m.text }); ok++; }
+      catch (e) { ko++; }
+    }
+    btn.disabled = false; btn.textContent = old;
+    if (FP.toast) FP.toast('✓ ' + ok + ' e-mail' + (ok > 1 ? 's' : '') + ' envoyé' + (ok > 1 ? 's' : '') + (ko ? (' · ' + ko + ' échec' + (ko > 1 ? 's' : '')) : ''));
+  }
+  document.getElementById('relances').addEventListener('click', (e) => {
+    const send = e.target.closest && e.target.closest('.rel-send');
+    if (send) { e.preventDefault(); const it = _relItems[+send.getAttribute('data-i')]; if (it) relOpenSend(it); return; }
+    const allm = e.target.closest && e.target.closest('#rel-all-mail');
+    if (allm) { e.preventDefault(); relAllMail(allm); return; }
+  });
+
   // ⚠️ Onglet « Points à vérifier » SUPPRIMÉ de Suivi & alertes (consigne utilisateur : Contrôle centralise
   // toutes les anomalies de conso — carte carburant, congé, après-départ). Voir pages/controle.html.
 
@@ -1641,12 +1736,15 @@
 
   const isCompletVisible = () => !document.getElementById('suivi-complet').classList.contains('hidden');
   const isDecisionsVisible = () => !document.getElementById('suivi-decisions').classList.contains('hidden');
+  // Pastille du compteur de relances sur l'onglet (sans reconstruire toute la carte).
+  function updateRelBadge() { try { if (!tabR || !(window.FP && FP.relances)) return; const n = FP.relances.count(); tabR.innerHTML = '📣 Relances' + (n ? ' <span style="background:#EF4444;color:#fff;border-radius:9999px;padding:1px 7px;font-size:11px;font-weight:800">' + n + '</span>' : ''); } catch (e) {} }
   window.__fpSetTab = showTab; // aiguilleur pour le menu déroulant sidebar (bascule en place, sans rechargement)
   render();
+  updateRelBadge();
   // Onglet initial : « Alertes » par défaut, ou celui demandé dans l'URL (?tab=alertes/echeances/complet/decisions).
   (function initTab() {
     const t = new URLSearchParams(location.search).get('tab');
-    showTab(['decisions', 'alertes', 'relevekm', 'echeances', 'complet', 'suivi', 'verif'].includes(t) ? t : 'alertes');
+    showTab(['decisions', 'alertes', 'relevekm', 'echeances', 'complet', 'suivi', 'relances', 'verif'].includes(t) ? t : 'alertes');
   })();
   // ===== Mode EMBED : la page Contrôle intègre l'onglet « Relevé KM » via une iframe
   // (notifications.html?embed&tab=relevekm). On masque toute la chrome (sidebar, en-tête, barre
@@ -1667,9 +1765,11 @@
   loadCompletDocs(); // documents véhicules → savoir qui a sa carte grise / mémo sur la plateforme
   document.addEventListener('fp:data-ready', () => {
     render();
+    updateRelBadge();
     if (isDecisionsVisible()) renderDecisions();
     if (!document.getElementById('suivi-echeances').classList.contains('hidden')) renderEcheances();
     if (isCompletVisible()) renderComplet();
+    if (!document.getElementById('relances').classList.contains('hidden')) renderRelances();
     loadCompletDocs();
   });
 
