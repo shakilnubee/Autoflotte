@@ -124,12 +124,12 @@ function buildMail(opts: { prenom: string; immat: string; marque: string; link: 
     : '<span style="font-weight:900;font-style:italic;font-size:16px;color:#fff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>';
   const html = ''
     + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
-    + '<div style="background:linear-gradient(135deg,#0B1220,#1E293B);color:#fff;padding:22px 24px;border-radius:14px 14px 0 0">'
+    + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
     + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
     + '<td style="vertical-align:middle">' + head + "</td>"
     + (!logoUrl && nomSoc ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">' + esc(nomSoc) + "</td>" : "")
     + "</tr></table>"
-    + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25">' + title + "</div>"
+    + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + title + "</div>"
     + (prenom ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#fff">' + esc(prenom) + "</div>" : "")
     + (plate ? '<div style="margin-top:14px">' + plate + "</div>" : "")
     + "</div>"
