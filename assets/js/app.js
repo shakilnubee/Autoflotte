@@ -4935,7 +4935,7 @@ FP.settings = {
       // — Données par CONDUCTEUR (mêmes maps que condDocs, oubliées → d'où la perte des congés) :
       'condConges', 'condSortie', 'condArrivee', 'condLangues', 'condCarteTotal', 'condBadgeUlys',
       // — Historique & données par VÉHICULE :
-      'affectations', 'antiPollDates', 'leasingDocs', 'restitutionChecklist', 'controleStatuts', 'suiviFlotte',
+      'affectations', 'antiPollDates', 'leasingDocs', 'restitutionChecklist', 'controleStatuts', 'suiviFlotte', 'suiviColsPerso',
       // — Données par SINISTRE :
       'sinistreAssurance', 'sinistreDocSub', 'sinistreSous',
       // — Contrats LLD (tableau ; ids stables ajoutés à la lecture) + prestataires perso (tableau à id) :
@@ -13883,14 +13883,34 @@ FP.suivi = {
     { k: 'edls', emo: '✍️', label: 'EDL signé', auto: (v, c) => FP.suivi._edl(v, c, 'pdf') },
     { k: 'cle', emo: '🔑', label: 'Double des clés', auto: (v) => !!(v.cleSiege || v.cleSalarie) },
     { k: 'carb', emo: '⛽', label: 'Carte carburant', auto: (v) => !!FP.suivi._num(v, 'vehCarteCarb') },
-    { k: 'badge', emo: '🅿️', label: 'Badge télépéage', auto: (v) => !!FP.suivi._num(v, 'vehBadge') }
+    { k: 'badge', emo: '🅿️', label: 'Badge télépéage', auto: (v) => !!FP.suivi._num(v, 'vehBadge') },
+    { k: 'cg', emo: '🪪', label: 'Carte grise', auto: (v, c) => FP.suivi._hasCg(v, c) },
+    { k: 'cond', emo: '👤', label: 'Conducteur', auto: (v) => !!(v.chauffeur && String(v.chauffeur).trim() && String(v.chauffeur).trim() !== '—') },
+    { k: 'tel', emo: '📞', label: 'Tél. conducteur', auto: (v) => { try { return !!(FP.conducteurContact && String(FP.conducteurContact(v.chauffeur).tel || '').trim()); } catch (e) { return false; } } },
+    { k: 'email', emo: '📧', label: 'Email conducteur', auto: (v) => { try { return !!(FP.conducteurContact && String(FP.conducteurContact(v.chauffeur).email || '').trim()); } catch (e) { return false; } } },
+    { k: 'assur', emo: '🛡️', label: 'Assurance', auto: (v) => FP.suivi._hasAssur(v) },
+    { k: 'leasing', emo: '📄', label: 'Contrat leasing', auto: (v) => FP.suivi._leasing(v) },
+    { k: 'edlr', emo: '🔙', label: 'EDL restitution', auto: (v, c) => FP.suivi._edlRestit(v, c) }
   ],
   _edl(v, c, kind) { const ds = (c && c.docs && c.docs[v.id]) || []; return ds.some(d => d && d.type === 'etat-des-lieux' && d.url && !FP.suivi._isDrive(d.url) && (kind === 'photo' ? FP.suivi._imgRe.test(d.url) : !FP.suivi._imgRe.test(d.url))); },
   _num(v, key) { try { return String((FP.numCarteVehicule ? FP.numCarteVehicule(v, key) : ((FP.settings.get()[key]) || {})[v.id]) || '').trim(); } catch (e) { return ''; } },
+  _hasCg(v, c) { try { if (v && v.cgUrl && !FP.suivi._isDrive(v.cgUrl)) return true; const ds = (c && c.docs && c.docs[v.id]) || []; return ds.some(d => d && d.type === 'carte-grise' && d.url && !FP.suivi._isDrive(d.url)); } catch (e) { return false; } },
+  _hasAssur(v) { try { if (v && v.assurance && String(v.assurance).trim()) return true; if (FP.assureurOf && FP.assureurOf(v)) return true; if (FP.assuranceLabel && FP.assuranceLabel()) return true; } catch (e) {} return false; },
+  // Contrat leasing : « non concerné » (na) si le véhicule n'est pas en leasing/LLD ; sinon vrai si un PDF
+  // de contrat est au dossier (BPCE settings.leasingDocs[IMMAT] ou contrats Ayvens/Localease avec docs).
+  _leasing(v) { try { if (!(FP.loueurOf && FP.loueurOf(v))) return 'na'; const immatU = String(v.immat || '').toUpperCase(); const bpce = (FP.settings.get().leasingDocs || {})[immatU]; if (Array.isArray(bpce) && bpce.length) return true; const k = FP.normImmat ? FP.normImmat(v.immat) : immatU; const loc = FP.settings.get().localeaseContrats || []; return loc.some(x => x && Array.isArray(x.docs) && x.docs.length && FP.normImmat && FP.normImmat(x.immat || '') === k); } catch (e) { return 'na'; } },
+  // EDL de restitution : vrai si un état des lieux « sortie / restitution » est au dossier ; sinon « non
+  // concerné » (na) → pas de rouge inutile sur les véhicules gardés.
+  _edlRestit(v, c) { const ds = (c && c.docs && c.docs[v.id]) || []; const has = ds.some(d => d && d.type === 'etat-des-lieux' && d.url && !FP.suivi._isDrive(d.url) && /sort|restit/i.test(d.label || '')); return has ? true : 'na'; },
+  // Colonnes MANUELLES créées par l'utilisateur (settings.suiviColsPerso) : pas de source auto (auto=false).
+  personnalisees() { try { return (FP.settings.get().suiviColsPerso || []).map(c => ({ k: 'perso_' + c.id, label: c.label || 'Colonne', emo: c.emo || '📌', perso: true, id: c.id, auto: () => false })); } catch (e) { return []; } },
+  allCols() { return FP.suivi.COLS.concat(FP.suivi.personnalisees()); },
+  addPersoCol(label) { const s = FP.settings.get(); s.suiviColsPerso = Array.isArray(s.suiviColsPerso) ? s.suiviColsPerso : []; const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5); s.suiviColsPerso.push({ id, label: String(label || 'Colonne').trim().slice(0, 40) || 'Colonne', emo: '📌' }); FP.settings.save(s); return id; },
+  removePersoCol(id) { const s = FP.settings.get(); s.suiviColsPerso = (s.suiviColsPerso || []).filter(c => c.id !== id); FP.settings.save(s); },
   override(vid, k) { try { return (((FP.settings.get().suiviFlotte) || {})[vid] || {})[k]; } catch (e) { return undefined; } },
   setOverride(vid, k, val) { const s = FP.settings.get(); s.suiviFlotte = s.suiviFlotte || {}; s.suiviFlotte[vid] = s.suiviFlotte[vid] || {}; if (!val) delete s.suiviFlotte[vid][k]; else s.suiviFlotte[vid][k] = val; if (!Object.keys(s.suiviFlotte[vid]).length) delete s.suiviFlotte[vid]; FP.settings.save(s); },
-  state(v, col, ctx) { const ov = FP.suivi.override(v.id, col.k); if (ov === 'ignore') return 'ignore'; if (ov === 'fait') return 'fait'; return col.auto(v, ctx || {}) ? 'fait' : 'todo'; },
-  isComplete(v, ctx) { return FP.suivi.COLS.every(col => FP.suivi.state(v, col, ctx) !== 'todo'); },
+  state(v, col, ctx) { const ov = FP.suivi.override(v.id, col.k); if (ov === 'ignore') return 'ignore'; if (ov === 'fait') return 'fait'; const a = col.auto(v, ctx || {}); if (a === 'na') return 'na'; return a ? 'fait' : 'todo'; },
+  isComplete(v, ctx) { return FP.suivi.allCols().every(col => FP.suivi.state(v, col, ctx) !== 'todo'); },
   counts(vehs, ctx) { const a = (vehs || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v))); let c = 0; a.forEach(v => { if (FP.suivi.isComplete(v, ctx)) c++; }); return { total: a.length, complets: c, incomplets: a.length - c }; },
   _ctxP: null,
   // Charge (une fois, en cache) les documents + relevés km → contexte d'auto-détection.
