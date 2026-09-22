@@ -13759,6 +13759,40 @@ document.addEventListener('click', (e) => {
   });
 });
 
+// ===== Gabarit d'e-mail BRANDÉ (source unique) — même design que le relevé km =====
+// En-tête sombre (logo société ou « Parc Pilot », titre, prénom, plaque) + corps blanc contenant le
+// message. Robuste au MODE SOMBRE de Gmail (background-color solide → le texte blanc reste blanc).
+// bodyHtml = HTML déjà prêt (message + signature). buttonHtml = bouton d'action optionnel.
+FP.mailBrand = function (o) {
+  o = o || {};
+  const esc = FP.esc || (x => String(x == null ? '' : x));
+  const nomSoc = o.nomSoc || '';
+  const logoUrl = /^https?:\/\//.test(String(o.logoUrl || '')) ? String(o.logoUrl) : '';
+  const head = logoUrl
+    ? '<img src="' + esc(logoUrl) + '" alt="' + esc(nomSoc || 'Logo') + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
+    : '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>';
+  const plate = o.plaque
+    ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
+      + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
+      + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0">' + esc(o.plaque) + '</td></tr></table>'
+    : '';
+  return ''
+    + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
+    + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+    + '<td style="vertical-align:middle">' + head + '</td>'
+    + (!logoUrl && nomSoc ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">' + esc(nomSoc) + '</td>' : '')
+    + '</tr></table>'
+    + (o.title ? '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + esc(o.title) + '</div>' : '')
+    + (o.prenom ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#ffffff">' + esc(o.prenom) + '</div>' : '')
+    + (plate ? '<div style="margin-top:14px">' + plate + '</div>' : '')
+    + '</div>'
+    + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px;color:#0F1E3D">'
+    + (o.bodyHtml || '')
+    + (o.buttonHtml ? '<p style="text-align:center;margin:22px 0">' + o.buttonHtml + '</p>' : '')
+    + '</div></div>';
+};
+
 // Bouton « + » flottant (quick-add) : accès rapide aux ajouts fréquents depuis n'importe quelle page
 // applicative. Chaque lien pointe vers la page cible + hash #add ; la page ouvre alors son formulaire
 // « Nouveau… » via l'élément portant l'attribut data-quickadd (géré ci-dessous).

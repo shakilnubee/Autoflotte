@@ -352,15 +352,18 @@ Deno.serve(async (req) => {
         const sensTxt = row.sens === "restitution" ? "restitution" : "remise";
         const { from, replyTo } = await societeFrom(db, String(row.societe || "PXP"));
         const key = Deno.env.get("RESEND_API_KEY");
-        const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:520px;margin:0 auto;color:#0f172a">
-  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:22px 24px">
-    <div style="font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#16a34a">✅ État des lieux signé</div>
-    <div style="font-size:15px;line-height:1.55;margin:12px 0 2px">Bonjour,</div>
-    <div style="font-size:15px;line-height:1.55;margin:6px 0">L'état des lieux (${sensTxt}) du véhicule a été <b>signé par toutes les parties</b>. Vous en trouverez la <b>version signée en pièce jointe</b> — à conserver.</div>
-    <div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155">🚗 <b>${modele}</b> · ${plaque}${dateStr ? " · " + dateStr : ""}</div>
-    <div style="text-align:center;margin:16px 0 4px"><a href="${signedPdfUrl}" style="display:inline-block;background:#0F1E3D;color:#fff;padding:12px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:14px">⬇️ Télécharger l'état des lieux signé</a></div>
+        const html = `<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">
+  <div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">
+    <span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>
+    <div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">✅ État des lieux signé</div>
   </div>
-  <div style="text-align:center;font-size:11px;color:#cbd5e1;margin-top:10px">Document signé électroniquement · via Parc Pilot</div>
+  <div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px;color:#0F1E3D">
+    <p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>
+    <p style="margin:0 0 16px;line-height:1.55">L'état des lieux (${sensTxt}) du véhicule a été <b>signé par toutes les parties</b>. Vous en trouverez la <b>version signée en pièce jointe</b> — à conserver.</p>
+    <div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155">🚗 <b>${modele}</b> · ${plaque}${dateStr ? " · " + dateStr : ""}</div>
+    <p style="text-align:center;margin:22px 0"><a href="${signedPdfUrl}" style="display:inline-block;background:#0B1220;color:#ffffff;padding:14px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">⬇️ Télécharger l'état des lieux signé</a></p>
+    <p style="text-align:center;font-size:11px;color:#94A3B8;margin:16px 0 0">Document signé électroniquement · via Parc Pilot</p>
+  </div>
 </div>`;
         if (key) {
           const dest = Array.from(new Set(required.map((s) => String(s.email || "")).filter(Boolean)));
