@@ -13707,6 +13707,11 @@ FP.msg = {
       + '<div style="padding:16px 18px;display:flex;flex-direction:column;gap:10px">'
         + '<label style="font-size:.72rem;font-weight:700;color:var(--fp-muted,#64748b)">Numéro de téléphone'
           + '<input id="fp-msg-phone" type="tel" value="' + esc(opts.phone || '') + '" placeholder="ex. 06 61 77 97 53" style="width:100%;margin-top:3px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.95rem"></label>'
+        + ((Array.isArray(opts.templates) && opts.templates.length)
+            ? '<div id="fp-msg-tpls" style="display:flex;flex-wrap:wrap;gap:6px">'
+              + opts.templates.map((t, i) => '<button type="button" class="fp-msg-tpl" data-i="' + i + '" style="font-size:.75rem;font-weight:700;padding:5px 10px;border-radius:9999px;border:1px solid var(--fp-border,#e5e7eb);background:var(--fp-bg,#fff);color:inherit;cursor:pointer">' + esc(t.label) + '</button>').join('')
+              + '</div>'
+            : '')
         + '<label style="font-size:.72rem;font-weight:700;color:var(--fp-muted,#64748b)">Message'
           + '<textarea id="fp-msg-text" rows="5" style="width:100%;margin-top:3px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.92rem;resize:vertical">' + esc(opts.text || '') + '</textarea>'
         + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">'
@@ -13733,6 +13738,11 @@ FP.msg = {
       try { if (FP.copy) FP.copy(tx()); else if (navigator.clipboard) navigator.clipboard.writeText(tx()); } catch (_) {}
       if (FP.toast) FP.toast('✓ Message copié');
     });
+    // Modèles rapides (chips) : remplissent le message d'un tap.
+    const tpls = Array.isArray(opts.templates) ? opts.templates : [];
+    ov.querySelectorAll('.fp-msg-tpl').forEach(btn => btn.addEventListener('click', () => {
+      const t = tpls[+btn.getAttribute('data-i')]; if (t) { q('#fp-msg-text').value = t.text || ''; q('#fp-msg-text').focus(); }
+    }));
     try { if (!opts.phone) q('#fp-msg-phone').focus(); } catch (e) {}
   }
 };

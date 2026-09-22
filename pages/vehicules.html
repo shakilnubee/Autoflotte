@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260922a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260922b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260922a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260922b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260922a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260922b">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -794,6 +794,7 @@
     <button class="btn btn-outline text-sm justify-center" id="drawer-vente" title="Dossier de vente (PDF) à montrer à un acheteur : photo, caractéristiques, prix, CT, entretien"><i data-lucide="tag" class="w-4 h-4"></i> Vente</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-qr" title="QR UNIQUE à coller dans la voiture : le conducteur le scanne → menu Relevé km · Déclarer un sinistre · Infos du véhicule. Un seul autocollant, permanent."><i data-lucide="qr-code" class="w-4 h-4"></i> QR véhicule</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-qr-vente" title="QR de l'ANNONCE de vente : à imprimer/coller sur la vitre. Scanné → l'annonce (photos + caractéristiques + prix). Apparaît quand le véhicule est « à vendre »." hidden><i data-lucide="qr-code" class="w-4 h-4"></i> QR vente</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-sms" title="Prévenir le conducteur par SMS / WhatsApp (accès, carte grise, relance km, CT, révision, annonce)"><i data-lucide="message-circle" class="w-4 h-4"></i> SMS / WhatsApp</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
 </aside>
@@ -1111,8 +1112,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260922a"></script>
-<script src="../assets/js/supabase-client.js?v=20260922a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260922b"></script>
+<script src="../assets/js/supabase-client.js?v=20260922b"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1128,13 +1129,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260922a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260922b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260922a"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260922a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260922b"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260922b"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260922a"></script>
+<script src="../assets/js/app.min.js?v=20260922b"></script>
 <script>
   lucide.createIcons();
 
@@ -5421,6 +5422,28 @@
   }
   $('drawer-qr').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v); });
   { const _qv = $('drawer-qr-vente'); if (_qv) _qv.addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v, 'vente'); }); }
+  // Prévenir le conducteur du véhicule par SMS / WhatsApp (envoi manuel gratuit, helper FP.msg) avec des
+  // modèles rapides : accès portail, carte grise (via portail), relance km, CT bientôt, révision, annonce.
+  { const _sms = $('drawer-sms'); if (_sms) _sms.addEventListener('click', async () => {
+      const v = data.vehicules.find(x => x.id === drawerVehId); if (!v || !(window.FP && FP.msg)) return;
+      const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
+      const tel = (FP.conducteurContact ? (FP.conducteurContact(chauffeur).tel || '') : '');
+      const prenom = chauffeur ? chauffeur.split(/\s+/)[0] : '';
+      const plaque = v.immat || 'ton véhicule';
+      let portail = '', kmLink = '', venteLink = '';
+      try { const qd = await FP.qr.dataFor(v); if (qd && qd.url) { portail = qd.url; const tok = decodeURIComponent((portail.split('h=')[1] || '')); if (tok) { kmLink = 'https://parc-pilot.fr/km.html?q=' + encodeURIComponent(tok); venteLink = portail + '&vue=vente'; } } } catch (e) {}
+      const ctTxt = v.prochainCT ? (FP.date ? FP.date(v.prochainCT) : v.prochainCT) : '';
+      const aVendre = /a[\s-]?vendre/.test((v.statut || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''));
+      const templates = [];
+      if (portail) templates.push({ label: '🔑 Accès véhicule', text: `Bonjour ${prenom}, voici l'accès de ${plaque} (relevé du kilométrage, documents, signaler un souci) : ${portail}` });
+      if (portail) templates.push({ label: '🪪 Carte grise', text: `Bonjour ${prenom}, tu peux consulter la carte grise de ${plaque} ici → ouvre le lien puis « Mes documents » : ${portail}` });
+      if (kmLink) templates.push({ label: '📸 Relance km', text: `Bonjour ${prenom}, peux-tu envoyer le kilométrage de ${plaque} ? En 10 secondes ici : ${kmLink}` });
+      if (ctTxt) templates.push({ label: '🔧 CT bientôt', text: `Bonjour ${prenom}, le contrôle technique de ${plaque} arrive à échéance le ${ctTxt}. Merci de prévoir un rendez-vous.` });
+      templates.push({ label: '🛠️ Révision', text: `Bonjour ${prenom}, une révision / un entretien de ${plaque} est à prévoir prochainement. Merci de prendre rendez-vous au garage.` });
+      if (aVendre && venteLink) templates.push({ label: '🏷️ Annonce', text: `Bonjour, ce véhicule (${plaque}) est à vendre — caractéristiques et photos ici : ${venteLink}` });
+      const defText = templates.length ? templates[0].text : `Bonjour ${prenom},`;
+      FP.msg.open({ phone: tel, nom: prenom || plaque, title: 'Prévenir — ' + plaque, text: defText, templates });
+    }); }
   { const _qh = $('btn-qr-hub'); if (_qh) _qh.addEventListener('click', openQrHub); }
   { const _qhc = $('qrhub-close'); if (_qhc) _qhc.addEventListener('click', () => $('qrhub-backdrop').classList.remove('open')); }
   { const _qhb = $('qrhub-backdrop'); if (_qhb) _qhb.addEventListener('click', (e) => { if (e.target === _qhb) _qhb.classList.remove('open'); }); }
