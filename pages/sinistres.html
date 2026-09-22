@@ -1865,6 +1865,19 @@
       const borderCol = traite ? 'var(--fp-border)' : (isInfo ? infoBorder : '#FCA5A5');
       const bgCol = traite ? '#fff' : (isInfo ? infoBg : '#FFF7F5');
       const line = (lbl, val) => val ? `<div class="text-sm"><span class="text-slate-500">${lbl} :</span> <b>${FP.esc(val)}</b></div>` : '';
+      // Prévenir / répondre au conducteur par SMS / WhatsApp (accusé de réception d'un signalement, ou
+      // réponse à une question). Numéro = chauffeur actuel du véhicule. Bouton déclaratif → helper FP.msg.
+      let smsBtn = '';
+      if (!isEdl && !isKm) {
+        const veh = (data.vehicules || []).find(v => (FP.immatEq ? FP.immatEq(v.immat, d.plaque || '') : (FP.normImmat(v.immat) === FP.normImmat(d.plaque || ''))));
+        const chauffeur = (veh && veh.chauffeur && veh.chauffeur !== '—') ? String(veh.chauffeur).trim() : '';
+        const tel = (FP.conducteurContact ? (FP.conducteurContact(chauffeur).tel || '') : '');
+        const prenom = chauffeur ? chauffeur.split(/\s+/)[0] : '';
+        const msgTxt = isQuestion
+          ? `Bonjour ${prenom}, réponse à ta question : `
+          : `Bonjour ${prenom}, on a bien reçu ton signalement${d.plaque ? ' sur le ' + d.plaque : ''}. On s'en occupe, je te tiens au courant.`;
+        smsBtn = `<button type="button" class="btn btn-outline text-xs" data-msg-open data-msg-phone="${FP.esc(tel)}" data-msg-nom="${FP.esc(prenom)}" data-msg-title="${FP.esc((isQuestion ? 'Répondre à ' : 'Prévenir ') + (prenom || 'le conducteur'))}" data-msg-text="${FP.esc(msgTxt)}"><i data-lucide="message-circle" class="w-3.5 h-3.5"></i> ${isQuestion ? 'Répondre (SMS/WhatsApp)' : 'SMS / WhatsApp'}</button>`;
+      }
       return `<div style="border:1px solid ${borderCol};border-radius:12px;padding:12px 14px;background:${bgCol}" data-decl="${FP.esc(d.id)}">
         <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
           <div class="flex items-center gap-2 flex-wrap">${tag}<b class="text-sm">${FP.esc(d.plaque || '')}</b><span class="text-xs text-slate-400">reçu le ${FP.esc(when)}</span>${stageChip}</div>
@@ -1874,6 +1887,7 @@
         ${line('Tiers', d.tiers)}${line('Blessés', d.blesses)}
         ${this.photosHTML(d)}
         <div class="flex gap-2 mt-3 flex-wrap">
+          ${smsBtn}
           ${(traite || isInfo) ? '' : `<button type="button" class="btn btn-dark text-xs" data-decl-sin="${FP.esc(d.id)}"><i data-lucide="clipboard-pen-line" class="w-3.5 h-3.5"></i> Créer le sinistre</button>`}
           ${isInfo ? ((d.plaque) ? `<a class="btn btn-outline text-xs" href="vehicules.html?immat=${encodeURIComponent(d.plaque || '')}"><i data-lucide="car" class="w-3.5 h-3.5"></i> Voir le véhicule</a>` : '') : `<button type="button" class="btn btn-outline text-xs" data-decl-pdf="${FP.esc(d.id)}" title="Générer un rapport PDF (avec photos) à envoyer à l'assurance"><i data-lucide="file-down" class="w-3.5 h-3.5"></i> Rapport PDF</button>`}
           ${isInfo

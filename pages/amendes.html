@@ -387,6 +387,7 @@
     <button class="btn btn-primary text-sm flex-1 justify-center" id="drawer-pay"><i data-lucide="check" class="w-4 h-4"></i> Marquer payée</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-designer" title="Conducteur désigné — l'amende n'est plus à votre charge"><i data-lucide="user-check" class="w-4 h-4"></i> Désigner</button>
     <button class="btn btn-outline text-sm" id="drawer-relance" title="Envoyer un email de relance au conducteur"><i data-lucide="mail" class="w-4 h-4"></i> Relancer</button>
+    <button class="btn btn-outline text-sm" id="drawer-sms" title="Prévenir le conducteur par SMS / WhatsApp (envoi manuel gratuit)"><i data-lucide="message-circle" class="w-4 h-4"></i> SMS / WhatsApp</button>
     <button class="btn btn-outline text-sm" id="drawer-conteste" title="Marquer cette amende comme contestée"><i data-lucide="gavel" class="w-4 h-4"></i> Contester</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
@@ -2844,6 +2845,18 @@
     renderTable(); scrollToTable();
   });
   $('drawer-relance').addEventListener('click', relanceEmail);
+  // Prévenir le conducteur par SMS / WhatsApp (envoi manuel gratuit). Message : « regarde ta boîte mail »
+  // (l'amende détaillée part par e-mail). Numéro repris de la fiche conducteur, modifiable avant envoi.
+  $('drawer-sms').addEventListener('click', () => {
+    if (!state.currentId || !(window.FP && FP.msg)) return;
+    const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
+    const prenom = a.prenom || '';
+    const tel = (FP.conducteurContact ? (FP.conducteurContact(prenom).tel || '') : '');
+    const nomAff = (FP.conducteurNomUnifie ? FP.conducteurNomUnifie(prenom) : prenom) || prenom;
+    const relance = FP.estPayee && FP.estPayee(a) ? '' : (a.relanceLe || a.relance ? 'Rappel : ' : '');
+    const txt = `Bonjour ${prenom || ''}, ${relance ? 'rappel — ' : ''}tu as reçu une amende. On te l'a envoyée par e-mail : merci de regarder ta boîte mail (spams inclus). Merci !`;
+    FP.msg.open({ phone: tel, nom: nomAff, title: 'Prévenir ' + (nomAff || 'le conducteur'), text: txt });
+  });
   $('drawer-conteste').addEventListener('click', markConteste);
 
   // Édition par double-clic des cellules
