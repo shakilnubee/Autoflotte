@@ -13716,7 +13716,7 @@ FP.contactChips = (name) => {
     `<a href="${esc(href)}" class="fp-contact-chip"><i data-lucide="${icon}" style="width:13px;height:13px"></i> ${esc(txt)}</a>`
     + `<button type="button" class="fp-contact-copy" data-copy="${esc(txt)}" title="Copier ${lbl}"><i data-lucide="copy" style="width:12px;height:12px"></i></button>`;
   let out = '<span class="fp-contact-wrap">';
-  if (tel) out += chip('tel:' + String(tel).replace(/\s+/g, ''), 'phone', tel, 'le téléphone');
+  if (tel) out += chip('tel:' + String(tel).replace(/\s+/g, ''), 'phone', String(tel).replace(/\s+/g, ''), 'le téléphone');
   if (email) out += chip('mailto:' + email, 'mail', email, "l'e-mail");
   return out + '</span>';
 };
@@ -13769,7 +13769,7 @@ FP.msg = {
       + '</div>'
       + '<div style="padding:16px 18px;display:flex;flex-direction:column;gap:10px">'
         + '<label style="font-size:.72rem;font-weight:700;color:var(--fp-muted,#64748b)">Numéro de téléphone'
-          + '<input id="fp-msg-phone" type="tel" value="' + esc(opts.phone || '') + '" placeholder="ex. 06 61 77 97 53" style="width:100%;margin-top:3px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.95rem"></label>'
+          + '<input id="fp-msg-phone" type="tel" value="' + esc(String(opts.phone || '').replace(/\s+/g, '')) + '" placeholder="ex. 0661779753" style="width:100%;margin-top:3px;padding:9px 11px;border:1px solid var(--fp-border,#e5e7eb);border-radius:10px;background:var(--fp-bg,#fff);color:inherit;font-size:.95rem"></label>'
         + ((Array.isArray(opts.templates) && opts.templates.length)
             ? '<div id="fp-msg-tpls" style="display:flex;flex-wrap:wrap;gap:6px">'
               + opts.templates.map((t, i) => '<button type="button" class="fp-msg-tpl" data-i="' + i + '" style="font-size:.75rem;font-weight:700;padding:5px 10px;border-radius:9999px;border:1px solid var(--fp-border,#e5e7eb);background:var(--fp-bg,#fff);color:inherit;cursor:pointer">' + esc(t.label) + '</button>').join('')
