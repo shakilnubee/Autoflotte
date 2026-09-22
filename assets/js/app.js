@@ -10381,11 +10381,22 @@ FP.signedScanUrlStrict = async (url, expires) => {
   } catch (e) { return null; }
 };
 // Ouvre un document : lien signé si c'est un fichier du bucket, sinon ouverture normale.
+// Ouvre un fichier stocké via un BLOB servi par l'origine du site (parc-pilot.fr) → l'adresse de l'onglet
+// affiche « blob:https://parc-pilot.fr/… » au lieu de « …supabase.co » (plus propre / discret), et le
+// titre d'onglet est « Parc Pilot ». Repli AUTOMATIQUE sur l'URL directe si le téléchargement échoue
+// (CORS, réseau). Le blob est révoqué après 10 min (le temps que le document reste ouvert).
+FP._openBlobTab = (w, url) => {
+  if (!url) { if (w) { try { w.close(); } catch (e) {} } return; }
+  try { if (w) w.document.write('<!doctype html><meta charset="utf-8"><title>Parc Pilot</title><body style="margin:0;font:15px system-ui,-apple-system,sans-serif;color:#64748b;display:flex;align-items:center;justify-content:center;height:100vh">⏳ Ouverture du document…</body>'); } catch (e) {}
+  fetch(url).then(r => { if (!r.ok) throw new Error('http'); return r.blob(); })
+    .then(b => { const bu = URL.createObjectURL(b); if (w) { try { w.opener = null; } catch (e) {} w.location = bu; } else { window.open(bu, '_blank', 'noopener'); } setTimeout(() => { try { URL.revokeObjectURL(bu); } catch (e) {} }, 600000); })
+    .catch(() => { if (w) { try { w.location = url; } catch (e) {} } else { window.open(url, '_blank', 'noopener'); } });
+};
 FP.openScan = (url) => {
   if (!url) return;
-  if (!/\/scans\//.test(url)) { window.open(url, '_blank', 'noopener'); return; }
+  if (!/\/scans\//.test(url)) { window.open(url, '_blank', 'noopener'); return; } // lien Drive/externe : ouverture directe
   const w = window.open('', '_blank'); // ouvert TOUT DE SUITE (dans le geste de clic → pas bloqué)
-  FP.signedScanUrl(url).then(u => { if (w) { try { w.opener = null; } catch (e) {} w.location = u; } else { location.href = u; } });
+  FP.signedScanUrl(url).then(u => FP._openBlobTab(w, u || url)).catch(() => { if (w) { try { w.location = url; } catch (e) {} } });
 };
 
 // ===== Visionneuse de PHOTOS glissante (source unique) — prev/suivant + swipe + clavier =====
@@ -10450,7 +10461,7 @@ FP.openPdf = function (ref, emptyMsg) {
   const needSign = (/\/scans\//.test(raw) || /\/storage\/v1\/object\//.test(raw)) && FP.signedScanUrl;
   if (!needSign) { window.open(toFinal(raw), '_blank', 'noopener'); return true; }
   const w = window.open('', '_blank');
-  FP.signedScanUrl(raw, 600).then(u => { const f = toFinal(u || raw); if (w) { try { w.opener = null; } catch (e) {} w.location = f; } else { window.open(f, '_blank', 'noopener'); } })
+  FP.signedScanUrl(raw, 600).then(u => FP._openBlobTab(w, toFinal(u || raw)))
     .catch(() => { const f = toFinal(raw); if (w) w.location = f; else window.open(f, '_blank', 'noopener'); });
   return true;
 };
