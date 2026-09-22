@@ -5,6 +5,8 @@
 //  (bouton « Demander le km par mail ») et rien n'était relancé automatiquement.
 //  Cette fonction envoie TOUTE SEULE : (1) la 1re demande aux véhicules dont le km
 //  est en retard, puis (2) des relances tant que le chauffeur n'a pas répondu.
+//  BONUS (même tâche quotidienne, aucun réglage en plus) : (3) un RAPPEL « la veille »
+//  du CONTRÔLE TECHNIQUE (prochain_ct = demain) au conducteur + gestionnaire en copie.
 //
 //  DÉCLENCHEMENT : appelée 1×/jour par une tâche planifiée (pg_cron → net.http_post,
 //  voir supabase/km-relance-setup.sql). Peut aussi être testée à la main par un CEO.
@@ -149,6 +151,39 @@ function buildMail(opts: { prenom: string; immat: string; marque: string; link: 
   return { subject, html, text };
 }
 
+// E-mail « rappel contrôle technique demain » (branded, même en-tête que le relevé km, sans bouton).
+function buildCtMail(opts: { prenom: string; immat: string; marque: string; dateFr: string; nomSoc: string; logoUrl: string }) {
+  const { prenom, immat, marque, dateFr, nomSoc, logoUrl } = opts;
+  const subject = "Rappel — contrôle technique demain" + (immat ? " — " + immat : "");
+  const plate = immat
+    ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
+      + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
+      + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0">' + esc(immat) + "</td></tr></table>"
+    : "";
+  const head = logoUrl
+    ? '<img src="' + esc(logoUrl) + '" alt="' + esc(nomSoc || "Logo") + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
+    : '<span style="font-weight:900;font-style:italic;font-size:16px;color:#fff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>';
+  const html = ''
+    + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
+    + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
+    + '<td style="vertical-align:middle">' + head + "</td>"
+    + (!logoUrl && nomSoc ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">' + esc(nomSoc) + "</td>" : "")
+    + "</tr></table>"
+    + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">Contrôle technique demain</div>'
+    + (prenom ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#fff">' + esc(prenom) + "</div>" : "")
+    + (plate ? '<div style="margin-top:14px">' + plate + "</div>" : "")
+    + "</div>"
+    + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px">'
+    + "<p style=\"margin:0 0 16px\">Bonjour" + (prenom ? " " + esc(prenom) : "") + ",</p>"
+    + '<p style="margin:0 0 16px;line-height:1.5">Petit rappel : le <b>contrôle technique</b> du véhicule <b style="white-space:nowrap">' + esc(immat) + "</b>" + (marque ? " (" + esc(marque) + ")" : "")
+    + ' est prévu <b>demain (' + esc(dateFr) + ')</b> ⏳. Pense à t\'organiser pour le rendez-vous. 📅</p>'
+    + "</div></div>";
+  const text = "Bonjour" + (prenom ? " " + prenom : "") + ",\n\n"
+    + "Rappel : le contrôle technique du véhicule " + immat + " est prévu demain (" + dateFr + ").\n\n" + (nomSoc || "Parc Pilot");
+  return { subject, html, text };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Méthode non autorisée." }, 405);
@@ -200,7 +235,7 @@ Deno.serve(async (req) => {
   // --- Chargement des données (service_role = toutes sociétés). ---
   const [settingsRows, vehicules, reqs, conducteurs] = await Promise.all([
     getJson("app_settings?select=id,data"),
-    getJson("vehicules?select=id,immat,marque,modele,chauffeur,statut,societe,km&limit=100000"),
+    getJson("vehicules?select=id,immat,marque,modele,chauffeur,statut,societe,km,prochain_ct&limit=100000"),
     getJson("km_requests?select=id,vehicule_id,plaque,societe,chauffeur,email,km_avant,km_recu,sent_at,used_at,expires_at,source,created_at&order=created_at.desc&limit=100000"),
     getJson("conducteurs?select=key,name,nom,prenom,email,masque,societe&limit=100000"),
   ]);
@@ -325,5 +360,59 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ ok: true, dryRun, max: MAXREL, summary, details });
+  // ============================================================================
+  //  RAPPEL « VEILLE DE CONTRÔLE TECHNIQUE » — e-mail AUTO au conducteur (+ gestionnaire en copie).
+  //  Déclenché par la MÊME tâche quotidienne (aucun réglage/secret supplémentaire). Fenêtre = 1 jour :
+  //  on envoie quand l'échéance `prochain_ct` tombe DEMAIN (Europe/Paris) → au plus 1 envoi par échéance,
+  //  donc pas besoin d'état anti-spam. Destinataires : le conducteur (résolu comme la relance km) + le
+  //  gestionnaire (adresses d'envoi de la société : mailExpediteur + mailCopie) en copie. Isolé dans un
+  //  try/catch : ne peut JAMAIS perturber la relance km ci-dessus. (La « prochaine révision » est une
+  //  ESTIMATION mouvante — elle reste dans l'écran « Relances » manuel, pas dans ce rappel « la veille ».)
+  const ctSummary: Record<string, { sent: number; skipped: number; failed: number }> = {};
+  const ctBump = (soc: string, k: "sent" | "skipped" | "failed") => { (ctSummary[soc] || (ctSummary[soc] = { sent: 0, skipped: 0, failed: 0 }))[k]++; };
+  const ctDetails: any[] = [];
+  try {
+    const parisYMD = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+    const demain = parisYMD(new Date(now + 86400000));
+    for (const veh of (vehicules as any[])) {
+      const soc = String(veh.societe || "PXP");
+      if (onlySoc && soc !== onlySoc) continue;
+      if (horsFlotte(veh.statut)) continue;
+      const ymd = String((veh as any).prochain_ct ?? "").trim().slice(0, 10);
+      if (!ymd || ymd !== demain) continue; // on ne rappelle QUE la veille (échéance = demain)
+      const data = cfgBySoc[soc] || {};
+      const ignores = (data.ignores && typeof data.ignores === "object") ? data.ignores : {};
+      if (ignores["conf:ct:" + veh.id]) continue; // CT ignoré (comme FP.ctIgnored côté site)
+      const p = (data.profil && typeof data.profil === "object") ? data.profil : {};
+      const condEmail = resolveEmail(String(veh.chauffeur || ""), condBySoc[soc] || []);
+      const gestion = [String(p.mailExpediteur || "").trim(), String(p.mailCopie || "").trim()].filter(Boolean);
+      const toList = [...new Set([condEmail, ...gestion].filter(Boolean).map((x) => x.toLowerCase()))];
+      if (!toList.length) { ctBump(soc, "skipped"); ctDetails.push({ societe: soc, immat: veh.immat || "", status: "aucun-destinataire" }); continue; }
+      if (dryRun) { ctBump(soc, "sent"); ctDetails.push({ societe: soc, immat: veh.immat || "", to: toList, status: "dry-run" }); continue; }
+      // Identité expéditeur scopée société (mirror `envoyer` / send-email), repli neutre plateforme.
+      let from = envFrom, replyTo = "";
+      const exp = String(p.mailExpediteur || "").trim();
+      if (exp) {
+        const dom = String(p.mailDomaineEnvoi || "").trim().replace(/^@/, "");
+        const fromAddr = dom ? (exp.split("@")[0] + "@" + dom) : exp;
+        let nom = String((data.societe && data.societe.nom) || "").replace(/[<>"]/g, "").trim();
+        if (/^parc\s*pilot$/i.test(nom)) nom = "";
+        from = nom ? `${nom} <${fromAddr}>` : fromAddr; replyTo = exp;
+      }
+      const logoUrl = /^https?:\/\//.test(String(p.logoUrl || "")) ? String(p.logoUrl) : "";
+      const nomSoc = String((data.societe && data.societe.nom) || "").trim();
+      const prenom = String(veh.chauffeur || "").trim().split(/\s+/)[0] || "";
+      const dateFr = ymd.split("-").reverse().join("/");
+      const mail = buildCtMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), dateFr, nomSoc, logoUrl });
+      const payload: Record<string, unknown> = { from, to: toList, subject: mail.subject, html: mail.html, text: mail.text };
+      if (replyTo) payload.reply_to = replyTo;
+      try {
+        const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (!r.ok) { ctBump(soc, "failed"); ctDetails.push({ societe: soc, immat: veh.immat || "", status: "resend-echec", error: (await r.text().catch(() => "")).slice(0, 200) }); }
+        else { ctBump(soc, "sent"); ctDetails.push({ societe: soc, immat: veh.immat || "", to: toList, status: "envoye" }); }
+      } catch (e) { ctBump(soc, "failed"); ctDetails.push({ societe: soc, immat: veh.immat || "", status: "reseau-echec", error: String(e).slice(0, 200) }); }
+    }
+  } catch (e) { ctDetails.push({ status: "exception", error: String(e).slice(0, 200) }); }
+
+  return json({ ok: true, dryRun, max: MAXREL, summary, details, ctSummary, ctDetails });
 });
