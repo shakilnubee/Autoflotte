@@ -13926,6 +13926,93 @@ FP.suivi = {
   }
 };
 
+// ===== RELANCES — SOURCE UNIQUE : « qui relancer aujourd'hui » + message prêt à envoyer =====
+// Agrège en UN seul endroit tout ce qui demande une relance (entretien/CT à venir ou en retard, relevé
+// km non reçu, amende à payer), avec le conducteur + ses coordonnées + un message DÉJÀ RÉDIGÉ (SMS /
+// WhatsApp / e-mail brandé). Alimente l'écran « 📣 Relances » (notifications.html) et pourra alimenter le
+// rappel AUTO la veille (edge). Messages fidèles aux règles de ton du site : pas de tutoiement/vouvoiement,
+// plaque toujours sur UNE ligne (tiret + espace insécables), jamais d'emoji juste après « Bonjour … ».
+FP.relances = {
+  _nbp(p) { return String(p || '').replace(/-/g, '‑').replace(/ /g, ' '); }, // plaque une ligne
+  _prenom(name) { const s = String(name || '').trim(); if (!s || s === '—') return ''; const p = s.split(/\s+/)[0]; return p.charAt(0).toUpperCase() + p.slice(1); },
+  _jours(d) { try { return FP.joursRestants ? FP.joursRestants(d) : Math.ceil((new Date(d) - new Date()) / 86400000); } catch (e) { return null; } },
+  _fdate(d) { try { return FP.date ? FP.date(d) : d; } catch (e) { return d; } },
+  _win() { try { const c = FP.notifCfg ? FP.notifCfg() : {}; return Math.max(1, c.relanceEntretienJours || 7); } catch (e) { return 7; } },
+  _urg(j) { if (j == null) return 'ok'; if (j < 0) return 'retard'; if (j <= this._win()) return 'proche'; return 'ok'; },
+  _contact(name) { try { return FP.conducteurContact ? FP.conducteurContact(name) : {}; } catch (e) { return {}; } },
+  // Portail + lien km du véhicule (async, via FP.qr, comme le bouton « Prévenir » de la fiche).
+  async _liens(v) { const out = { portail: '', kmLink: '' }; try { const qd = await FP.qr.dataFor(v); if (qd && qd.url) { out.portail = qd.url; const tok = decodeURIComponent((qd.url.split('h=')[1] || '')); if (tok) out.kmLink = 'https://parc-pilot.fr/km.html?q=' + encodeURIComponent(tok); } } catch (e) {} return out; },
+
+  // --- ENTRETIEN (révision) / CT à venir dans la fenêtre (ou déjà en retard) ---
+  entretiens() {
+    const win = this._win(); const out = [];
+    (data.vehicules || []).forEach(v => {
+      if (FP.horsFlotte && FP.horsFlotte(v)) return;
+      if (v.prochaineRevisionDate) { const j = this._jours(v.prochaineRevisionDate); if (j != null && j <= win) out.push(this._vehItem(v, 'entretien', v.prochaineRevisionDate, j)); }
+      if (v.prochainCT && v.prochainCT !== '—' && !(FP.ctIgnored && FP.ctIgnored(v))) { const j = this._jours(v.prochainCT); if (j != null && j <= win) out.push(this._vehItem(v, 'ct', v.prochainCT, j)); }
+    });
+    return out;
+  },
+  _vehItem(v, type, date, j) {
+    const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
+    return { type, veh: v, immat: v.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), dueDate: date, joursRestants: j, urgence: this._urg(j) };
+  },
+
+  // --- KM à relancer (MÊMES primitives que l'onglet « Relevé KM ») ---
+  km() {
+    const KC = FP.kmCollecte; if (!KC) return []; const out = [];
+    const seuil = (FP.notifCfg ? FP.notifCfg().releveKmJours : 0) || 45; const today = new Date();
+    (data.vehicules || []).forEach(v => {
+      if (FP.horsFlotte && FP.horsFlotte(v)) return; if (FP.kmSuivi && !FP.kmSuivi(v)) return;
+      const readings = KC.recusDe ? KC.recusDe(v) : []; const last = readings[0] || null;
+      const stt = KC.statusFor ? KC.statusFor(v) : null; const pending = (stt && stt.sent_at && !stt.used_at) ? stt : null;
+      const lastDate = last ? new Date(last.used_at) : null; const days = lastDate ? Math.floor((today - lastDate) / 86400000) : null;
+      let statut; if (lastDate && days <= seuil) statut = 'ajour'; else if (pending) statut = 'attente'; else if (last) statut = 'relancer'; else statut = 'jamais';
+      if (statut === 'ajour' || statut === 'attente') return; // à jour = rien ; en attente = demande déjà partie
+      const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
+      out.push({ type: 'km', veh: v, immat: v.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), statut, joursRestants: null, urgence: 'retard' });
+    });
+    return out;
+  },
+
+  // --- AMENDES à payer (statut « à payer », montant dû via FP.montantDu) ---
+  amendes() {
+    const out = [];
+    (data.amendes || []).forEach(a => {
+      if (FP.estAPayer && !FP.estAPayer(a)) return;
+      const montant = FP.montantDu ? FP.montantDu(a) : a.montant; if (!montant) return;
+      const chauffeur = (a.prenom && a.prenom !== '—') ? String(a.prenom).trim() : '';
+      const j = a.dateLimiteMinore ? this._jours(a.dateLimiteMinore) : null;
+      out.push({ type: 'amende', amende: a, immat: a.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), montant, dueDate: a.dateLimiteMinore || '', joursRestants: j, urgence: this._urg(j) });
+    });
+    return out;
+  },
+
+  list() { return [].concat(this.entretiens(), this.km(), this.amendes()); },
+  count() { try { return this.list().length; } catch (e) { return 0; } },
+  META: {
+    entretien: { emo: '🛠️', label: 'Entretien' },
+    ct: { emo: '🔧', label: 'Contrôle technique' },
+    km: { emo: '📸', label: 'Relevé km' },
+    amende: { emo: '🎫', label: 'Amende à payer' }
+  },
+
+  // Message prêt (texte SMS/WhatsApp + sujet + HTML e-mail brandé) pour un item. Async (lien km).
+  async message(item) {
+    const p = this._prenom(item.conducteur); const bonjour = p ? ('Bonjour ' + p + ',') : 'Bonjour,';
+    const nbp = this._nbp(item.immat); let text = '', subject = '', emailText = '';
+    if (item.type === 'ct') { const d = this._fdate(item.dueDate); subject = 'Contrôle technique — ' + item.immat; text = `${bonjour}\n🔧 Le contrôle technique du véhicule ${nbp} approche (échéance le ${d}) ⏳ — un petit rendez-vous à caler ! 📅`; emailText = text; }
+    else if (item.type === 'entretien') { const d = this._fdate(item.dueDate); subject = 'Entretien à prévoir — ' + item.immat; text = `${bonjour}\n🛠️ Le véhicule ${nbp} a un entretien à prévoir (échéance le ${d}) 🚗 — pense à caler un passage au garage.`; emailText = text; }
+    else if (item.type === 'km') { const l = await this._liens(item.veh); subject = 'Relevé kilométrique — ' + item.immat; text = `${bonjour}\n📸 Un petit coup d'œil au compteur du véhicule ${nbp} ? 😊 Ça file en 30 secondes` + (l.kmLink ? `, c'est par ici 👇\n${l.kmLink}` : ' !'); emailText = text; }
+    else if (item.type === 'amende') { const d = item.dueDate ? this._fdate(item.dueDate) : ''; subject = 'Amende à régler — ' + item.immat; const avant = d ? ` avant le ${d}` : ''; text = `${bonjour}\n🎫 Une amende concerne le véhicule ${nbp} — pense à la régler${avant} pour éviter une majoration 💵\nRegarde ta boîte mail 📩`; emailText = `${bonjour}\n🎫 Une amende concerne le véhicule ${nbp} — pense à la régler${avant} pour éviter une majoration 💵`; }
+    let nomSoc = '', logoUrl = '';
+    try { const s = FP.settings.get() || {}; const pr = s.profil || {}; const so = s.societe || {}; nomSoc = so.nom || pr.societe || ''; logoUrl = pr.logoDataUrl || pr.logoUrl || ''; } catch (e) {}
+    const esc = FP.esc || (x => String(x == null ? '' : x));
+    const emailHtml = FP.mailBrand ? FP.mailBrand({ title: subject, prenom: '', nomSoc, logoUrl, plaque: item.immat, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.5">' + esc(emailText).replace(/\n/g, '<br>') + '</div>' }) : ('<div style="white-space:pre-wrap">' + esc(emailText).replace(/\n/g, '<br>') + '</div>');
+    return { text, subject, emailHtml };
+  }
+};
+
 // Bouton « + » flottant (quick-add) : accès rapide aux ajouts fréquents depuis n'importe quelle page
 // applicative. Chaque lien pointe vers la page cible + hash #add ; la page ouvre alors son formulaire
 // « Nouveau… » via l'élément portant l'attribut data-quickadd (géré ci-dessous).
