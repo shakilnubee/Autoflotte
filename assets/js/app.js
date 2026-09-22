@@ -13869,6 +13869,43 @@ FP.mailBrand = function (o) {
     + '</div></div>';
 };
 
+// ===== SUIVI FLOTTE — SOURCE UNIQUE (« même branche ») : mêmes colonnes + mêmes états PARTOUT =====
+// Utilisé par l'onglet « 📋 Suivi flotte » (notifications.html) ET le widget du tableau de bord → une
+// seule définition, donc la même info partout. Chaque colonne est LUE depuis la donnée existante
+// (aucune duplication). Les choix manuels (fait / non suivi) vivent dans settings.suiviFlotte (synchro).
+FP.suivi = {
+  _imgRe: /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i,
+  _isDrive: (u) => /drive\.google|docs\.google/i.test(u || ''),
+  // ctx = { docs:{vehId:[docs]}, km:{vehId:req} } — chargé une fois par FP.suivi.ctx().
+  COLS: [
+    { k: 'km', emo: '📸', label: 'Relevé km', auto: (v, c) => !!(c && c.km && c.km[v.id]) },
+    { k: 'edlp', emo: '🖼️', label: 'Photos EDL', auto: (v, c) => FP.suivi._edl(v, c, 'photo') },
+    { k: 'edls', emo: '✍️', label: 'EDL signé', auto: (v, c) => FP.suivi._edl(v, c, 'pdf') },
+    { k: 'cle', emo: '🔑', label: 'Double des clés', auto: (v) => !!(v.cleSiege || v.cleSalarie) },
+    { k: 'carb', emo: '⛽', label: 'Carte carburant', auto: (v) => !!FP.suivi._num(v, 'vehCarteCarb') },
+    { k: 'badge', emo: '🅿️', label: 'Badge télépéage', auto: (v) => !!FP.suivi._num(v, 'vehBadge') }
+  ],
+  _edl(v, c, kind) { const ds = (c && c.docs && c.docs[v.id]) || []; return ds.some(d => d && d.type === 'etat-des-lieux' && d.url && !FP.suivi._isDrive(d.url) && (kind === 'photo' ? FP.suivi._imgRe.test(d.url) : !FP.suivi._imgRe.test(d.url))); },
+  _num(v, key) { try { return String((FP.numCarteVehicule ? FP.numCarteVehicule(v, key) : ((FP.settings.get()[key]) || {})[v.id]) || '').trim(); } catch (e) { return ''; } },
+  override(vid, k) { try { return (((FP.settings.get().suiviFlotte) || {})[vid] || {})[k]; } catch (e) { return undefined; } },
+  setOverride(vid, k, val) { const s = FP.settings.get(); s.suiviFlotte = s.suiviFlotte || {}; s.suiviFlotte[vid] = s.suiviFlotte[vid] || {}; if (!val) delete s.suiviFlotte[vid][k]; else s.suiviFlotte[vid][k] = val; if (!Object.keys(s.suiviFlotte[vid]).length) delete s.suiviFlotte[vid]; FP.settings.save(s); },
+  state(v, col, ctx) { const ov = FP.suivi.override(v.id, col.k); if (ov === 'ignore') return 'ignore'; if (ov === 'fait') return 'fait'; return col.auto(v, ctx || {}) ? 'fait' : 'todo'; },
+  isComplete(v, ctx) { return FP.suivi.COLS.every(col => FP.suivi.state(v, col, ctx) !== 'todo'); },
+  counts(vehs, ctx) { const a = (vehs || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v))); let c = 0; a.forEach(v => { if (FP.suivi.isComplete(v, ctx)) c++; }); return { total: a.length, complets: c, incomplets: a.length - c }; },
+  _ctxP: null,
+  // Charge (une fois, en cache) les documents + relevés km → contexte d'auto-détection.
+  async ctx(force) {
+    if (this._ctxP && !force) return this._ctxP;
+    this._ctxP = (async () => {
+      const out = { docs: {}, km: {} };
+      try { if (FP.db && FP.db.select) { const r = await FP.db.select('documents'); (r && r.data || []).forEach(d => { if (d && d.vehiculeId) (out.docs[d.vehiculeId] = out.docs[d.vehiculeId] || []).push(d); }); } } catch (e) {}
+      try { if (FP.kmCollecte) { if (FP.kmCollecte.load && !(FP.kmCollecte._cache && FP.kmCollecte._cache.length)) await FP.kmCollecte.load(); out.km = FP.kmCollecte._byVeh || {}; } } catch (e) {}
+      return out;
+    })();
+    return this._ctxP;
+  }
+};
+
 // Bouton « + » flottant (quick-add) : accès rapide aux ajouts fréquents depuis n'importe quelle page
 // applicative. Chaque lien pointe vers la page cible + hash #add ; la page ouvre alors son formulaire
 // « Nouveau… » via l'élément portant l'attribut data-quickadd (géré ci-dessous).
