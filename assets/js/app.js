@@ -10387,6 +10387,58 @@ FP.openScan = (url) => {
   const w = window.open('', '_blank'); // ouvert TOUT DE SUITE (dans le geste de clic → pas bloqué)
   FP.signedScanUrl(url).then(u => { if (w) { try { w.opener = null; } catch (e) {} w.location = u; } else { location.href = u; } });
 };
+
+// ===== Visionneuse de PHOTOS glissante (source unique) — prev/suivant + swipe + clavier =====
+// FP.lightbox(list, start) : list = tableau d'URLs d'images (déjà affichables, ex. src signé du thumbnail).
+// On passe d'une photo à l'autre SANS fermer (flèches, glissement tactile, ← →). Fermeture : ×, clic hors
+// image, ou Échap. Utilisée partout via un conteneur `.fp-gallery` (voir le gestionnaire de clic ci-dessous).
+FP.lightbox = function (list, start) {
+  list = (list || []).filter(Boolean);
+  if (!list.length) return;
+  let i = Math.max(0, Math.min(start || 0, list.length - 1));
+  const old = document.getElementById('fp-lb'); if (old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'fp-lb';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(6,10,20,.92);display:flex;align-items:center;justify-content:center;touch-action:pan-y';
+  const nav = 'position:absolute;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.14);color:#fff;border:none;border-radius:50%;width:46px;height:46px;font-size:26px;line-height:1;cursor:pointer;z-index:2';
+  ov.innerHTML =
+    '<button id="fp-lb-x" aria-label="Fermer" style="position:absolute;top:14px;right:16px;background:rgba(255,255,255,.14);color:#fff;border:none;border-radius:50%;width:42px;height:42px;font-size:22px;line-height:1;cursor:pointer;z-index:2">×</button>'
+    + '<button id="fp-lb-prev" aria-label="Précédent" style="left:10px;' + nav + '">‹</button>'
+    + '<button id="fp-lb-next" aria-label="Suivant" style="right:10px;' + nav + '">›</button>'
+    + '<img id="fp-lb-img" src="" alt="" style="max-width:92vw;max-height:86vh;object-fit:contain;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.6);user-select:none;-webkit-user-drag:none">'
+    + '<div id="fp-lb-count" style="position:absolute;bottom:16px;left:0;right:0;text-align:center;color:#fff;font-size:13px;font-weight:700;opacity:.85"></div>';
+  document.body.appendChild(ov);
+  const imgEl = ov.querySelector('#fp-lb-img'), cnt = ov.querySelector('#fp-lb-count');
+  const multi = list.length > 1;
+  const show = () => { imgEl.src = list[i]; cnt.textContent = multi ? (i + 1) + ' / ' + list.length : ''; };
+  const go = (d) => { i = (i + d + list.length) % list.length; show(); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowLeft') go(-1); else if (e.key === 'ArrowRight') go(1); };
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  ov.querySelector('#fp-lb-x').addEventListener('click', close);
+  const pv = ov.querySelector('#fp-lb-prev'), nx = ov.querySelector('#fp-lb-next');
+  pv.style.display = nx.style.display = multi ? '' : 'none';
+  pv.addEventListener('click', (e) => { e.stopPropagation(); go(-1); });
+  nx.addEventListener('click', (e) => { e.stopPropagation(); go(1); });
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  document.addEventListener('keydown', onKey);
+  let x0 = null;
+  ov.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+  ov.addEventListener('touchend', (e) => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; if (multi && Math.abs(dx) > 40) go(dx < 0 ? 1 : -1); x0 = null; }, { passive: true });
+  show();
+};
+// Clic sur une photo dans un conteneur `.fp-gallery` → ouvre la visionneuse glissante avec TOUTES les
+// photos du conteneur (au lieu d'ouvrir un onglet). Capture + stopImmediatePropagation : passe AVANT
+// l'ouverture « nouvel onglet » (liens /scans/) et les onclick inline des vignettes.
+document.addEventListener('click', (e) => {
+  const img = e.target.closest && e.target.closest('.fp-gallery img');
+  if (!img) return;
+  const gal = img.closest('.fp-gallery'); if (!gal) return;
+  const imgs = Array.prototype.slice.call(gal.querySelectorAll('img'));
+  const list = imgs.map(im => im.currentSrc || im.getAttribute('src') || '').filter(Boolean);
+  if (!list.length) return;
+  e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+  FP.lightbox(list, imgs.indexOf(img));
+}, true);
 // ⚠️ SOURCE UNIQUE — Ouvre DIRECTEMENT le PDF/document concerné (jamais un aperçu intégré).
 // Accepte : une URL http(s), un chemin du bucket « scans » (→ lien signé), ou un ID Google Drive
 // (→ page /view). TOUT bouton « Voir » de la plateforme DOIT passer par ici pour un comportement
