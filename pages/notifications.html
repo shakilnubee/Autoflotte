@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260922g">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260922h">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260922g"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260922h"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260922g">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260922h">
 <style>
   .notif { display: flex; gap: .8rem; align-items: flex-start; padding: .85rem 1rem; border-radius: 14px; border: 1px solid var(--fp-border); background: var(--fp-surface, #fff); text-decoration: none; transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; box-shadow: 0 1px 2px rgba(15,30,61,.04); }
   .notif + .notif { margin-top: .55rem; }
@@ -130,6 +130,7 @@
       <button type="button" id="tab-relevekm" style="display:none;padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📏 Relevé KM</button>
       <button type="button" id="tab-echeances" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">🔄 Renouvellements</button>
       <button type="button" id="tab-complet" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📝 À compléter</button>
+      <button type="button" id="tab-suivi" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">📋 Suivi flotte</button>
       <button type="button" id="tab-decisions" style="padding:8px 16px;font-weight:700;font-size:14px;white-space:nowrap;background:none;border:none;border-bottom:2px solid transparent;color:#94A3B8;cursor:pointer">💡 Décisions</button>
     </div>
 
@@ -138,14 +139,15 @@
     <div id="notif-cols" class="grid gap-6 md:grid-cols-2 xl:grid-cols-4"></div>
     <div id="suivi-echeances" class="hidden"></div>
     <div id="suivi-complet" class="hidden"></div>
+    <div id="suivi-flotte" class="hidden"></div>
 
     <div id="notif-masquees" class="mt-8"></div>
 
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260922g"></script>
-<script src="../assets/js/supabase-client.js?v=20260922g"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260922h"></script>
+<script src="../assets/js/supabase-client.js?v=20260922h"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -161,11 +163,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260922g"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260922h"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260922g"></script>
+<script src="../assets/js/app.min.js?v=20260922h"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1419,7 +1421,7 @@
     }
   });
 
-  const tabD = document.getElementById('tab-decisions'), tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet'), tabK = document.getElementById('tab-relevekm');
+  const tabD = document.getElementById('tab-decisions'), tabA = document.getElementById('tab-alertes'), tabE = document.getElementById('tab-echeances'), tabC = document.getElementById('tab-complet'), tabK = document.getElementById('tab-relevekm'), tabS = document.getElementById('tab-suivi');
   function showTab(which) {
     document.getElementById('suivi-decisions').classList.toggle('hidden', which !== 'decisions');
     document.getElementById('suivi-relevekm').classList.toggle('hidden', which !== 'relevekm');
@@ -1427,17 +1429,108 @@
     document.getElementById('notif-masquees').classList.toggle('hidden', which !== 'alertes');
     document.getElementById('suivi-echeances').classList.toggle('hidden', which !== 'echeances');
     document.getElementById('suivi-complet').classList.toggle('hidden', which !== 'complet');
-    [[tabD, 'decisions'], [tabA, 'alertes'], [tabK, 'relevekm'], [tabE, 'echeances'], [tabC, 'complet']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
+    document.getElementById('suivi-flotte').classList.toggle('hidden', which !== 'suivi');
+    [[tabD, 'decisions'], [tabA, 'alertes'], [tabK, 'relevekm'], [tabE, 'echeances'], [tabC, 'complet'], [tabS, 'suivi']].forEach(([t, w]) => { if (!t) return; const on = w === which; t.style.borderBottomColor = on ? 'var(--fp-accent)' : 'transparent'; t.style.color = on ? 'var(--fp-primary)' : '#94A3B8'; });
     if (which === 'decisions') renderDecisions();
     if (which === 'echeances') renderEcheances();
     if (which === 'complet') renderComplet();
     if (which === 'relevekm') renderRelevekm();
+    if (which === 'suivi') renderSuiviFlotte();
   }
   if (tabD) tabD.addEventListener('click', () => showTab('decisions'));
   if (tabA) tabA.addEventListener('click', () => showTab('alertes'));
   if (tabK) tabK.addEventListener('click', () => showTab('relevekm'));
   if (tabE) tabE.addEventListener('click', () => showTab('echeances'));
   if (tabC) tabC.addEventListener('click', () => showTab('complet'));
+  if (tabS) tabS.addEventListener('click', () => showTab('suivi'));
+
+  // ===== Onglet « 📋 Suivi flotte » : matrice de suivi, branchée sur les données existantes =====
+  // Colonnes : relevé km (km_requests), photos EDL / EDL signé (documents), double des clés (fiche
+  // cleSiege/cleSalarie), carte carburant / badge télépéage (n° relié). AUCUNE donnée dupliquée : tout
+  // est LU depuis la source existante. On peut forcer « fait » ou « non suivi » par véhicule (settings.
+  // suiviFlotte[vehId][col] = 'fait' | 'ignore' — dans COLLECTION_KEYS pour la synchro multi-appareils).
+  const _suiviImgRe = /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i;
+  function edlHas(v, kind) { if (!_docsLoaded) return false; return docsOf(v.id).some(d => d && d.type === 'etat-des-lieux' && d.url && !_isDrive(d.url) && (kind === 'photo' ? _suiviImgRe.test(d.url) : !_suiviImgRe.test(d.url))); }
+  function numCarteV(v, key) { try { return String((FP.numCarteVehicule ? FP.numCarteVehicule(v, key) : ((FP.settings.get()[key]) || {})[v.id]) || '').trim(); } catch (e) { return ''; } }
+  const SUIVI_COLS = [
+    { k: 'km', emo: '📸', label: 'Relevé km', auto: v => !!(window.FP && FP.kmCollecte && FP.kmCollecte._byVeh && FP.kmCollecte._byVeh[v.id]) },
+    { k: 'edlp', emo: '🖼️', label: 'Photos EDL', auto: v => edlHas(v, 'photo') },
+    { k: 'edls', emo: '✍️', label: 'EDL signé', auto: v => edlHas(v, 'pdf') },
+    { k: 'cle', emo: '🔑', label: 'Double des clés', auto: v => !!(v.cleSiege || v.cleSalarie) },
+    { k: 'carb', emo: '⛽', label: 'Carte carburant', auto: v => !!numCarteV(v, 'vehCarteCarb') },
+    { k: 'badge', emo: '🅿️', label: 'Badge télépéage', auto: v => !!numCarteV(v, 'vehBadge') }
+  ];
+  function suiviOverride(vid, k) { try { return (((FP.settings.get().suiviFlotte) || {})[vid] || {})[k]; } catch (e) { return undefined; } }
+  function suiviState(v, col) { const ov = suiviOverride(v.id, col.k); if (ov === 'ignore') return 'ignore'; if (ov === 'fait') return 'fait'; return col.auto(v) ? 'fait' : 'todo'; }
+  function suiviSetOverride(vid, k, val) { const s = FP.settings.get(); s.suiviFlotte = s.suiviFlotte || {}; s.suiviFlotte[vid] = s.suiviFlotte[vid] || {}; if (!val) delete s.suiviFlotte[vid][k]; else s.suiviFlotte[vid][k] = val; if (!Object.keys(s.suiviFlotte[vid]).length) delete s.suiviFlotte[vid]; FP.settings.save(s); }
+  let suiviFilter = 'all';
+  function renderSuiviFlotte() {
+    const host = document.getElementById('suivi-flotte'); if (!host) return;
+    if (!_docsLoaded) loadCompletDocs();
+    try { if (window.FP && FP.kmCollecte && FP.kmCollecte.load && !(FP.kmCollecte._cache && FP.kmCollecte._cache.length)) FP.kmCollecte.load().then(() => { try { renderSuiviFlotte(); } catch (e) {} }); } catch (e) {}
+    const actifs = (data.vehicules || []).filter(v => !(FP.horsFlotte && FP.horsFlotte(v)));
+    const stateOf = (v) => SUIVI_COLS.map(c => ({ c, st: suiviState(v, c) }));
+    const isComplete = (v) => stateOf(v).every(x => x.st !== 'todo');
+    const complets = actifs.filter(isComplete).length;
+    let shown = suiviFilter === 'incomplet' ? actifs.filter(v => !isComplete(v)) : actifs.slice();
+    shown.sort((a, b) => (isComplete(a) ? 1 : 0) - (isComplete(b) ? 1 : 0) || String(a.immat || '').localeCompare(String(b.immat || '')));
+    const pill = (v, x) => {
+      const bg = x.st === 'fait' ? '#DCFCE7' : (x.st === 'ignore' ? '#F1F5F9' : '#FEE2E2');
+      const cl = x.st === 'fait' ? '#166534' : (x.st === 'ignore' ? '#94A3B8' : '#B91C1C');
+      const ic = x.st === 'fait' ? '✓' : (x.st === 'ignore' ? '➖' : '✗');
+      return `<button type="button" class="suivi-cell" data-veh="${FP.esc(v.id)}" data-col="${x.c.k}" title="${FP.esc(x.c.label)}" style="flex:1 1 92px;min-width:92px;display:flex;align-items:center;gap:5px;justify-content:center;background:${bg};color:${cl};border:none;border-radius:9px;padding:7px 6px;font-weight:800;font-size:12px;cursor:pointer">${x.c.emo} ${ic}</button>`;
+    };
+    const card = (v) => {
+      const cond = (v.chauffeur && v.chauffeur !== '—') ? v.chauffeur : '';
+      const ok = isComplete(v);
+      return `<div style="border:1px solid ${ok ? 'var(--fp-border)' : '#FCA5A5'};border-radius:12px;padding:11px 13px;background:${ok ? '#fff' : '#FFF7F5'}">
+        <div class="flex items-center gap-2 flex-wrap mb-2"><a href="vehicules.html?veh=${encodeURIComponent(v.id)}" style="font-weight:800;color:var(--fp-primary)">${FP.esc(v.immat || '?')}</a><span class="text-xs text-slate-400">${FP.esc(((v.marque || '') + ' ' + (v.modele || '')).trim())}</span>${cond ? `<span class="text-xs" style="color:#F97316;font-weight:600">${FP.esc(cond)}</span>` : ''}${ok ? '<span class="text-xs" style="color:#16a34a;font-weight:700">✓ complet</span>' : ''}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${stateOf(v).map(x => pill(v, x)).join('')}</div>
+      </div>`;
+    };
+    host.innerHTML = `<div class="card p-5">
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+        <div class="font-extrabold flex items-center gap-2" style="color:var(--fp-primary)"><i data-lucide="clipboard-check" class="w-5 h-5"></i> Suivi de la flotte</div>
+        <div class="text-sm" style="font-weight:800;color:${complets === actifs.length ? '#16a34a' : '#B45309'}">${complets} / ${actifs.length} complets</div>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">Pour chaque véhicule : relevé km, photos d'état des lieux, EDL signé, double des clés, carte carburant et badge télépéage — <b>lus automatiquement</b> depuis les fiches. <b>Tape une case</b> pour la marquer faite à la main, la mettre en « non suivi » (plus d'alerte pour ce véhicule) ou revenir en automatique. Légende : <span style="color:#166534;font-weight:700">✓ fait</span> · <span style="color:#B91C1C;font-weight:700">✗ à faire</span> · <span style="color:#94A3B8;font-weight:700">➖ non suivi</span>.</p>
+      <div class="flex gap-2 mb-3">
+        <button type="button" class="btn btn-outline text-xs suivi-filt" data-f="all" style="${suiviFilter === 'all' ? 'background:var(--fp-primary);color:#fff' : ''}">Tous (${actifs.length})</button>
+        <button type="button" class="btn btn-outline text-xs suivi-filt" data-f="incomplet" style="${suiviFilter === 'incomplet' ? 'background:var(--fp-primary);color:#fff' : ''}">À compléter (${actifs.length - complets})</button>
+      </div>
+      ${shown.length ? `<div class="space-y-2">${shown.map(card).join('')}</div>` : '<div class="text-sm text-slate-400 py-4">Tout est complet. 🎉</div>'}
+    </div>`;
+    if (window.lucide) try { lucide.createIcons(); } catch (e) {}
+  }
+  function openSuiviMenu(anchor, vid, k) {
+    const old = document.getElementById('suivi-menu'); if (old) old.remove();
+    const col = SUIVI_COLS.find(c => c.k === k); if (!col) return;
+    const v = (data.vehicules || []).find(x => x.id === vid); if (!v) return;
+    const cur = suiviOverride(vid, k);
+    const m = document.createElement('div');
+    m.id = 'suivi-menu';
+    m.style.cssText = 'position:fixed;z-index:100000;background:var(--fp-surface,#fff);border:1px solid var(--fp-border);border-radius:12px;box-shadow:0 18px 40px -12px rgba(15,30,61,.4);padding:6px;min-width:200px';
+    const opt = (val, ic, txt, active) => `<button type="button" data-val="${val}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:${active ? 'rgba(20,184,166,.12)' : 'none'};border:none;border-radius:8px;padding:9px 11px;font-size:13px;font-weight:700;color:var(--fp-text,#0b1220);cursor:pointer">${ic} ${txt}</button>`;
+    m.innerHTML = `<div style="font-size:11px;font-weight:800;color:var(--fp-muted,#64748b);padding:4px 8px 6px">${col.emo} ${FP.esc(col.label)} — ${FP.esc(v.immat || '')}</div>`
+      + opt('fait', '✅', 'Marqué fait', cur === 'fait')
+      + opt('ignore', '🔕', 'Non suivi (plus d\'alerte)', cur === 'ignore')
+      + opt('', '↺', 'Automatique', !cur);
+    document.body.appendChild(m);
+    const r = anchor.getBoundingClientRect();
+    let top = r.bottom + 6, left = Math.min(r.left, window.innerWidth - 210);
+    if (top + m.offsetHeight > window.innerHeight) top = Math.max(8, r.top - m.offsetHeight - 6);
+    m.style.top = top + 'px'; m.style.left = Math.max(8, left) + 'px';
+    const close = () => { m.remove(); document.removeEventListener('click', outside, true); };
+    const outside = (ev) => { if (!m.contains(ev.target)) close(); };
+    setTimeout(() => document.addEventListener('click', outside, true), 0);
+    m.addEventListener('click', (ev) => { const b = ev.target.closest('[data-val]'); if (!b) return; ev.stopPropagation(); suiviSetOverride(vid, k, b.getAttribute('data-val')); close(); renderSuiviFlotte(); if (FP.toast) FP.toast('✓ Mis à jour'); });
+  }
+  document.getElementById('suivi-flotte').addEventListener('click', (e) => {
+    const filt = e.target.closest && e.target.closest('.suivi-filt');
+    if (filt) { suiviFilter = filt.getAttribute('data-f') || 'all'; renderSuiviFlotte(); return; }
+    const cell = e.target.closest && e.target.closest('.suivi-cell');
+    if (cell) { openSuiviMenu(cell, cell.getAttribute('data-veh'), cell.getAttribute('data-col')); return; }
+  });
 
   // ⚠️ Onglet « Points à vérifier » SUPPRIMÉ de Suivi & alertes (consigne utilisateur : Contrôle centralise
   // toutes les anomalies de conso — carte carburant, congé, après-départ). Voir pages/controle.html.
@@ -1515,7 +1608,7 @@
   // Onglet initial : « Alertes » par défaut, ou celui demandé dans l'URL (?tab=alertes/echeances/complet/decisions).
   (function initTab() {
     const t = new URLSearchParams(location.search).get('tab');
-    showTab(['decisions', 'alertes', 'relevekm', 'echeances', 'complet', 'verif'].includes(t) ? t : 'alertes');
+    showTab(['decisions', 'alertes', 'relevekm', 'echeances', 'complet', 'suivi', 'verif'].includes(t) ? t : 'alertes');
   })();
   // ===== Mode EMBED : la page Contrôle intègre l'onglet « Relevé KM » via une iframe
   // (notifications.html?embed&tab=relevekm). On masque toute la chrome (sidebar, en-tête, barre
