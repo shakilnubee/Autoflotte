@@ -6281,7 +6281,11 @@ FP.revisionInfo = (v) => {
     if (joursMec > 30) pace = km / joursMec;
   }
 
-  const dRev = (v.derniereRevision && v.derniereRevision !== '—') ? new Date(v.derniereRevision) : null;
+  // ⚠️ SOURCE UNIQUE : on ancre sur FP.derniereRevision (date la plus récente entre saisie manuelle
+  // ET facture de révision) — PAS sur v.derniereRevision brut. Sinon la « prochaine révision » était
+  // estimée depuis une date obsolète alors que la fiche AFFICHE, elle, la date de la facture (incohérent).
+  const _drev = (FP.derniereRevision ? FP.derniereRevision(v).date : (v.derniereRevision || null));
+  const dRev = (_drev && _drev !== '—') ? new Date(_drev) : null;
   const hasRev = dRev && !isNaN(dRev);
   // Km RÉEL à la dernière révision (colonne « KM revision » du Drive → kmDernierReleve)
   const kmRev = (Number(v.kmDernierReleve) > 0) ? Number(v.kmDernierReleve) : null;
