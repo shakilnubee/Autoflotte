@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260922l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260923a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260922l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260923a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260922l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260923a">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -664,8 +664,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260922l"></script>
-<script src="../assets/js/supabase-client.js?v=20260922l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260923a"></script>
+<script src="../assets/js/supabase-client.js?v=20260923a"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -681,12 +681,12 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260922l"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260923a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/fleet-docs.js?v=20260922l"></script>
-<script src="../assets/js/app.min.js?v=20260922l"></script>
+<script src="../assets/js/fleet-docs.js?v=20260923a"></script>
+<script src="../assets/js/app.min.js?v=20260923a"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1551,6 +1551,19 @@
   }
 
   let currentDriverKey = null;
+  // États des lieux (table `documents`) — chargés UNE fois, en cache, pour la carte « États des lieux »
+  // de la fiche conducteur. Rattachés à ses périodes d'affectation via FP.edlHisto (jointure par date).
+  let _edlDocs = null, _edlDocsLoading = false;
+  function loadEdlDocs() {
+    if (_edlDocs || _edlDocsLoading || !(window.FP && FP.db && FP.supabase)) return;
+    _edlDocsLoading = true;
+    FP.db.select('documents').then(r => {
+      _edlDocsLoading = false;
+      if (r && r.error) return;
+      _edlDocs = ((r && r.data) || []).filter(x => x && x.type === 'etat-des-lieux');
+      if (currentDriverKey && document.getElementById('drawer') && document.getElementById('drawer').classList.contains('open')) { try { openDrawer(currentDriverKey); } catch (e) {} }
+    }).catch(() => { _edlDocsLoading = false; });
+  }
   function openDrawer(key) {
     const d = drivers.find(x => x.key === key);
     if (!d) return;
@@ -1737,6 +1750,33 @@
         return `<div class="fiche-line"><span class="flex items-center gap-2 min-w-0"><a href="vehicules.html?immat=${encodeURIComponent(immat || '')}" title="Voir la fiche véhicule" style="text-decoration:none" onclick="event.stopPropagation()"><span class="plate-badge" style="cursor:pointer">${escapeHtml(immat)}</span></a>${v ? `<span class="text-xs text-slate-500 truncate">${escapeHtml(v.marque || '')} ${escapeHtml(v.modele || '')}</span>` : ''}</span><span class="text-xs flex-shrink-0 ${a.fin ? 'text-slate-500' : 'text-emerald-600 font-medium'}">${escapeHtml(periode)}${kmTxt}</span></div>`;
       }));
 
+    // États des lieux du conducteur : rattachés à ses périodes d'affectation (source unique FP.edlHisto).
+    let edlInner = '';
+    if (window.FP && FP.edlHisto) {
+      loadEdlDocs();
+      if (_edlDocs == null) {
+        edlInner = '<p class="text-sm text-slate-500">Chargement des états des lieux…</p>';
+      } else {
+        const egroups = FP.edlHisto.parConducteur(affRows, _edlDocs).filter(g => g.remise.length || g.restitution.length);
+        if (!egroups.length) {
+          edlInner = '<p class="text-sm text-slate-500">Aucun état des lieux relié à ce conducteur. Ils apparaissent ici dès qu’un EDL (remise ou restitution) est enregistré pendant une de ses périodes d’affectation.</p>';
+        } else {
+          const etile = (dd) => {
+            const media = FP.edlHisto.isPhoto(dd)
+              ? `<img src="${escapeHtml(dd.url)}" loading="lazy" alt="EDL" style="width:100%;height:64px;object-fit:cover;border-radius:7px;border:1px solid var(--fp-border,#e5e7eb);display:block"/>`
+              : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%;height:64px;border-radius:7px;border:1px solid var(--fp-border,#e5e7eb);background:#f8fafc;color:#0e7490"><i data-lucide="file-text" style="width:20px;height:20px"></i><span style="font-size:9px;font-weight:600">PDF</span></div>`;
+            return `<a href="${escapeHtml(dd.url)}" target="_blank" rel="noopener" title="Ouvrir">${media}</a>`;
+          };
+          const egrp = (label, emo, arr) => arr.length ? `<div style="margin-top:5px"><div class="text-xs font-semibold" style="color:#475569">${emo} ${label} <span class="text-slate-400">(${arr.length})</span></div><div class="fp-gallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;margin-top:4px">${arr.map(etile).join('')}</div></div>` : '';
+          edlInner = egroups.map(g => {
+            const v = _vAll.find(x => x.id === g.vehId); const immat = v ? v.immat : g.vehId;
+            const per = (g.debut ? (FP.dateNum ? FP.dateNum(g.debut) : g.debut) : 'origine') + ' → ' + (g.fin ? (FP.dateNum ? FP.dateNum(g.fin) : g.fin) : 'en cours');
+            return `<div style="padding:8px 0;border-top:1px solid var(--fp-border,#eef1f5)"><div class="flex items-center gap-2"><span class="plate-badge">${escapeHtml(immat)}</span><span class="text-xs text-slate-500">${escapeHtml(per)}</span></div>${egrp('Remise', '📥', g.remise)}${egrp('Restitution', '📤', g.restitution)}</div>`;
+          }).join('');
+        }
+      }
+    }
+
     // Helper de carte (présentation unique « Profil »)
     const card = (icon, title, inner) => `<div class="fiche-card"><div class="fiche-title"><i data-lucide="${icon}"></i> ${title}</div>${inner}</div>`;
 
@@ -1815,6 +1855,7 @@
       + card('folder', `Documents ${condDocsBadge(d)}`, condDocsSectionHTML(d))
       + card('car', `Véhicules · ${d.vehicules.length}`, vehiculesInner)
       + card('history', `Historique d’affectation${affCount ? ' · ' + affCount : ''}`, affInner)
+      + (edlInner ? card('clipboard-list', 'États des lieux', edlInner) : '')
       + card('palmtree', `Congés / absences${_conges.length ? ' · ' + _conges.length : ''}`, congesInner)
       + card('ticket', `Amendes · ${d.amendes.length}`, amendesInner)
       + card('alert-triangle', `Accidents · ${accs.length}`, accidentsInner)

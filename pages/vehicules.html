@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260922l">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260923a">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260922l"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260923a"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260922l">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260923a">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1112,8 +1112,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260922l"></script>
-<script src="../assets/js/supabase-client.js?v=20260922l"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260923a"></script>
+<script src="../assets/js/supabase-client.js?v=20260923a"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1129,13 +1129,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260922l"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260923a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260922l"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260922l"></script>
+<script src="../assets/js/fleet-docs.js?v=20260923a"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260923a"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260922l"></script>
+<script src="../assets/js/app.min.js?v=20260923a"></script>
 <script>
   lucide.createIcons();
 
@@ -1481,6 +1481,43 @@
       return `<div style="position:relative">${thumb}<button type="button" data-edl-rm="${i}" title="Retirer" style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:9999px;width:20px;height:20px;line-height:1;font-size:12px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.3)">✕</button></div>`;
     }).join('') + `<div style="align-self:center;font-size:12px;color:#64748b;font-weight:700">${edlPending.length} photo${edlPending.length > 1 ? 's' : ''} prête${edlPending.length > 1 ? 's' : ''}</div>`;
   }
+  // « États des lieux par conducteur » : chaque EDL (remise/restitution) rattaché à la PÉRIODE
+  // d'affectation qui le contient (source unique FP.edlHisto — jointure par date). Répond à la demande
+  // « l'EDL doit être lié à l'affectation + à l'historique du véhicule ». Non destructif : s'ajoute sous
+  // la section EDL existante. Photos cliquables (visionneuse via .fp-gallery), PDF ouvrable.
+  function edlHistoHTML(v){
+    if (!(window.FP && FP.edlHisto)) return '';
+    const h = FP.edlHisto.parVehicule(v, getVehDocs(v.id));
+    if (!h.total) return '';
+    const tile = (d) => {
+      const media = FP.edlHisto.isPhoto(d)
+        ? `<img src="${escapeHtml(sanitizeUrl(d.url))}" loading="lazy" alt="EDL" style="width:100%;height:70px;object-fit:cover;border-radius:7px;border:1px solid var(--fp-border);display:block"/>`
+        : `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;width:100%;height:70px;border-radius:7px;border:1px solid var(--fp-border);background:#f8fafc;color:#0e7490"><i data-lucide="file-text" style="width:22px;height:22px"></i><span style="font-size:9px;font-weight:600">PDF</span></div>`;
+      return `<a href="${escapeHtml(sanitizeUrl(d.url))}" target="_blank" rel="noopener" title="Ouvrir">${media}</a>`;
+    };
+    const grp = (label, emo, arr) => arr.length ? `<div style="margin-top:6px"><div class="text-xs font-semibold" style="color:#475569">${emo} ${label} <span class="text-slate-400">(${arr.length})</span></div><div class="fp-gallery" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:6px;margin-top:4px">${arr.map(tile).join('')}</div></div>` : '';
+    const period = (p) => {
+      if (!p.remise.length && !p.restitution.length) return '';
+      const cond = (p.conducteur && p.conducteur !== '—') ? p.conducteur : 'Conducteur non renseigné';
+      const per = (p.debut ? FP.dateNum(p.debut) : 'origine') + ' → ' + (p.fin ? FP.dateNum(p.fin) : 'en cours');
+      const km = (p.kmDebut != null || p.kmFin != null) ? ` · ${p.kmDebut != null ? FP.num(p.kmDebut) : '?'} → ${p.kmFin != null ? FP.num(p.kmFin) : '?'} km` : '';
+      return `<div style="border:1px solid var(--fp-border);border-radius:10px;padding:9px 11px;margin-bottom:8px">
+        <div class="text-sm font-semibold text-slate-800">${escapeHtml(cond)}${!p.fin ? ' <span style="background:#dcfce7;color:#166534;padding:0 7px;border-radius:9999px;font-size:10px;font-weight:700">en cours</span>' : ''}</div>
+        <div class="text-xs text-slate-500">${escapeHtml(per)}${km}</div>
+        ${grp('Remise', '📥', p.remise)}${grp('Restitution', '📤', p.restitution)}
+      </div>`;
+    };
+    const periodsHtml = h.periodes.map(period).filter(Boolean).join('');
+    const orphR = h.orphelins.filter(d => FP.edlHisto.sensDe(d) === 'remise');
+    const orphS = h.orphelins.filter(d => FP.edlHisto.sensDe(d) === 'restitution');
+    const orph = h.orphelins.length ? `<div style="border:1px dashed var(--fp-border);border-radius:10px;padding:9px 11px;margin-bottom:8px"><div class="text-xs text-slate-500 mb-1">Non rattaché à une période d'affectation</div>${grp('Remise', '📥', orphR)}${grp('Restitution', '📤', orphS)}</div>` : '';
+    if (!periodsHtml && !orph) return '';
+    return `<div class="mt-5">
+      <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1 flex items-center gap-2">États des lieux par conducteur <span class="text-xs font-normal text-slate-400">historique · affectation</span></div>
+      ${periodsHtml}${orph}
+    </div>`;
+  }
+
   function edlSectionHTML(v){
     // Galerie = uniquement les PHOTOS (images). Le PDF de l'état des lieux est listé dans « Documents ».
     // Anti-doublon d'AFFICHAGE (sans rien supprimer en base) : d'anciens brouillons ont pu enregistrer
@@ -3068,6 +3105,8 @@
       ${docsSectionHTML(v)}
 
       ${edlSectionHTML(v)}
+
+      ${edlHistoHTML(v)}
 
       ${vehTimelineHTML(v)}
 
