@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260923a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260923b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260923a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260923b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260923a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260923b">
 <style>
   .notif { display: flex; gap: .8rem; align-items: flex-start; padding: .85rem 1rem; border-radius: 14px; border: 1px solid var(--fp-border); background: var(--fp-surface, #fff); text-decoration: none; transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease; box-shadow: 0 1px 2px rgba(15,30,61,.04); }
   .notif + .notif { margin-top: .55rem; }
@@ -148,8 +148,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260923a"></script>
-<script src="../assets/js/supabase-client.js?v=20260923a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260923b"></script>
+<script src="../assets/js/supabase-client.js?v=20260923b"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -165,11 +165,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260923a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260923b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260923a"></script>
+<script src="../assets/js/app.min.js?v=20260923b"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1597,9 +1597,11 @@
     _relItems.forEach((it, i) => { it.__i = i; });
     const META = FP.relances.META;
     try { if (tabR) tabR.innerHTML = '📣 Relances' + (_relItems.length ? ' <span style="background:#EF4444;color:#fff;border-radius:9999px;padding:1px 7px;font-size:11px;font-weight:800">' + _relItems.length + '</span>' : ''); } catch (e) {}
-    const order = ['ct', 'entretien', 'km', 'amende'];
-    const groups = {}; order.forEach(t => groups[t] = []);
-    _relItems.forEach(it => { (groups[it.type] || (groups[it.type] = [])).push(it); });
+    // Regroupement (CT + révision + rendez-vous garage = une seule catégorie « Garage / entretien »).
+    const order = FP.relances.GROUP_ORDER || ['garage', 'km', 'amende'];
+    const GMETA = FP.relances.GROUP_META || {};
+    const groups = {}; order.forEach(g => groups[g] = []);
+    _relItems.forEach(it => { const g = FP.relances.groupeDe(it.type); (groups[g] || (groups[g] = [])).push(it); });
     const urgColor = (u) => u === 'retard' ? '#B91C1C' : (u === 'proche' ? '#B45309' : '#64748B');
     const urgBg = (u) => u === 'retard' ? '#FEE2E2' : (u === 'proche' ? '#FEF3C7' : '#F1F5F9');
     const row = (it) => {
@@ -1608,8 +1610,12 @@
       const hasTel = !!(it.contact && it.contact.tel), hasMail = !!(it.contact && it.contact.email);
       const extra = it.type === 'amende' ? (' · ' + (FP.euro ? FP.euro(it.montant) : (it.montant + ' €'))) : '';
       const chans = [hasTel ? '💬' : '', hasMail ? '📧' : ''].filter(Boolean).join(' ') || '✍️ n° à saisir';
+      // Étiquette du TYPE (utile dans le groupe « Garage » qui mélange CT / révision / rdv).
+      const tm = META[it.type] || {}; const motif = (it.type === 'garage' && it.motif) ? (' · ' + it.motif) : '';
+      const typeTag = tm.label ? `<span style="font-size:10px;font-weight:700;color:#475569;background:#EEF2F7;border-radius:9999px;padding:1px 7px">${tm.emo || ''} ${FP.esc(tm.label)}${FP.esc(motif)}</span>` : '';
       return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--fp-border);border-radius:11px;padding:9px 12px;background:#fff">
         <a href="${relHref(it)}" style="font-weight:800;color:var(--fp-primary)">${FP.esc(it.immat || '?')}</a>
+        ${typeTag}
         <span style="font-size:13px">${who}</span>
         ${when ? `<span style="font-size:11px;font-weight:700;color:${urgColor(it.urgence)};background:${urgBg(it.urgence)};border-radius:9999px;padding:2px 9px">${FP.esc(when)}${FP.esc(extra)}</span>` : (extra ? `<span style="font-size:12px;font-weight:700;color:#334155">${FP.esc(extra.replace(/^ · /, ''))}</span>` : '')}
         <span style="margin-left:auto;display:flex;align-items:center;gap:8px">
@@ -1618,9 +1624,9 @@
         </span>
       </div>`;
     };
-    const section = (t) => {
-      const arr = groups[t] || []; if (!arr.length) return '';
-      const m = META[t] || { emo: '•', label: t };
+    const section = (g) => {
+      const arr = groups[g] || []; if (!arr.length) return '';
+      const m = GMETA[g] || { emo: '•', label: g };
       return `<div style="margin-top:14px"><div style="font-weight:800;font-size:13px;color:var(--fp-primary);margin-bottom:7px">${m.emo} ${FP.esc(m.label)} <span style="color:#94A3B8;font-weight:700">(${arr.length})</span></div><div style="display:flex;flex-direction:column;gap:7px">${arr.map(row).join('')}</div></div>`;
     };
     const withMail = _relItems.filter(it => it.contact && it.contact.email).length;
@@ -1629,7 +1635,7 @@
         <div class="font-extrabold flex items-center gap-2" style="color:var(--fp-primary)"><i data-lucide="megaphone" class="w-5 h-5"></i> Relances à faire</div>
         <div class="text-sm" style="font-weight:800;color:${_relItems.length ? '#B45309' : '#16a34a'}">${_relItems.length} en attente</div>
       </div>
-      <p class="text-xs text-slate-500 mb-3">Tout ce qu'il faut relancer aujourd'hui, au même endroit — <b>entretien / contrôle technique à venir</b>, <b>relevé km en retard</b>, <b>amende à payer</b>. Pour chaque personne, <b>« Relancer »</b> ouvre le message <b>déjà rédigé</b> (💬 WhatsApp · 📱 SMS · 📧 e-mail) : tu appuies sur Envoyer, c'est gratuit et ça part de ton numéro. Le bouton <b>« Tout relancer par e-mail »</b> envoie d'un coup les rappels aux personnes dont on connaît l'e-mail.</p>
+      <p class="text-xs text-slate-500 mb-3">Tout ce qu'il faut relancer aujourd'hui, au même endroit — <b>garage (contrôle technique, révision, entretien) à venir</b>, <b>relevé km en retard</b>, <b>amende à payer</b>. Pour chaque personne, <b>« Relancer »</b> ouvre le message <b>déjà rédigé</b> (💬 WhatsApp · 📱 SMS · 📧 e-mail) : tu appuies sur Envoyer, c'est gratuit et ça part de ton numéro. Le bouton <b>« Tout relancer par e-mail »</b> envoie d'un coup les rappels aux personnes dont on connaît l'e-mail.</p>
       ${withMail ? `<div class="flex gap-2 mb-2 flex-wrap"><button type="button" id="rel-all-mail" class="btn btn-outline text-xs" style="font-weight:800">📧 Tout relancer par e-mail (${withMail})</button></div>` : ''}
       ${_relItems.length ? order.map(section).join('') : '<div class="text-sm text-slate-400 py-4">Rien à relancer pour le moment. 🎉</div>'}
     </div>`;
