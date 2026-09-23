@@ -301,7 +301,7 @@
     </div>
 
     <!-- KPIs -->
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
       <a href="pages/vehicules.html" class="kpi" style="cursor:pointer" title="Voir tous les véhicules">
         <div class="flex justify-between items-start">
           <div>
@@ -331,7 +331,7 @@
           <div>
             <div class="kpi-label">Amendes à payer</div>
             <div class="kpi-value" id="kpi-amendes" style="color: var(--fp-warn)">—</div>
-            <div class="kpi-delta" style="color: var(--fp-warn)">restant à régler →</div>
+            <div class="kpi-delta" id="kpi-amendes-delta" style="color: var(--fp-warn)">restant à régler →</div>
           </div>
           <div class="kpi-ic warn">
             <i data-lucide="ticket"></i>
@@ -363,21 +363,28 @@
           </div>
         </div>
       </a>
+      <a href="pages/notifications.html?tab=suivi" class="kpi" style="cursor:pointer" title="Suivi de la flotte : relevé km, états des lieux, clés, carte carburant, badge télépéage. Cliquer pour voir le détail par véhicule.">
+        <div class="flex justify-between items-start">
+          <div>
+            <div class="kpi-label">Suivi flotte</div>
+            <div class="kpi-value" id="kpi-suivi" style="color: var(--fp-warn)">—</div>
+            <div class="kpi-delta" id="kpi-suivi-delta" style="color: var(--fp-warn)">véhicules complets</div>
+          </div>
+          <div class="kpi-ic warn">
+            <i data-lucide="clipboard-check"></i>
+          </div>
+        </div>
+      </a>
     </div>
 
-    <!-- Indicateurs détaillés (repliés par défaut) -->
+    <!-- Indicateurs détaillés (toujours affichés) -->
     <div class="mt-4">
-      <div id="details-panel" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+      <div id="details-panel" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
         <div class="kpi">
           <div class="kpi-label">Km cumulés</div>
           <div class="kpi-value" id="kpi-km" style="font-size:1.5rem">—</div>
           <div class="kpi-delta">toute la flotte</div>
         </div>
-        <a class="kpi" href="pages/notifications.html?tab=suivi" style="cursor:pointer" title="Suivi de la flotte : relevé km, états des lieux, clés, carte carburant, badge télépéage. Cliquer pour voir le détail par véhicule.">
-          <div class="kpi-label">Suivi flotte</div>
-          <div class="kpi-value" id="kpi-suivi" style="font-size:1.5rem">—</div>
-          <div class="kpi-delta" id="kpi-suivi-delta">véhicules complets</div>
-        </a>
         <div class="kpi">
           <div class="kpi-label">Valeur du parc</div>
           <div class="kpi-value" id="kpi-valeur" style="font-size:1.5rem">—</div>
@@ -388,20 +395,12 @@
           <div class="kpi-value" id="kpi-entretien" style="font-size:1.5rem; color: var(--fp-warn)">—</div>
           <div class="kpi-delta">au garage</div>
         </div>
-        <a href="pages/amendes.html" class="kpi" style="cursor:pointer" title="Voir les amendes à payer">
-          <div class="kpi-label">Amendes à payer (€)</div>
-          <div class="kpi-value" id="kpi-amendes-eur" style="font-size:1.5rem; color: var(--fp-danger)">—</div>
-          <div class="kpi-delta">montant total dû</div>
-        </a>
         <a href="pages/sinistres.html" class="kpi" style="cursor:pointer" title="Voir les sinistres en attente de remboursement">
           <div class="kpi-label">Sinistres à rembourser (€)</div>
           <div class="kpi-value" id="kpi-sin-rembours" style="font-size:1.5rem; color:#b45309">—</div>
           <div class="kpi-delta">en attente d'assurance</div>
         </a>
       </div>
-      <button id="toggle-details" class="text-sm font-semibold inline-flex items-center gap-1.5" style="color: var(--fp-accent)">
-        <i data-lucide="chevron-right" id="details-chevron" class="w-4 h-4"></i> <span id="details-label">Voir les indicateurs détaillés</span>
-      </button>
     </div>
 
     <!-- (Assistant IA retiré du tableau de bord à la demande de l'utilisateur.) -->
@@ -667,7 +666,9 @@
     try {
       const D = window.FP_DATA || {};
       const due = (D.amendes || []).filter(a => FP.estAPayer && FP.estAPayer(a)).reduce((s, a) => s + (FP.montantDu ? FP.montantDu(a) : 0), 0);
-      const el1 = document.getElementById('kpi-amendes-eur'); if (el1) el1.textContent = FP.euro(due);
+      // Montant total dû affiché DANS la tuile principale « Amendes à payer » (fusion de l'ancienne
+      // tuile « Amendes à payer (€) » — plus de doublon). Nombre en gros, montant en sous-ligne.
+      const elD = document.getElementById('kpi-amendes-delta'); if (elD) elD.textContent = (due > 0 ? (FP.euro(due) + ' restant à régler →') : 'à jour ✓');
       const g = (FP.settings && FP.settings.get) ? FP.settings.get() : {};
       const st = g.sinistreStatut || {}, grp = g.sinistreGroupes || {}, doss = g.sinistreAssurance || {};
       let rem = 0; const seenK = new Set();
@@ -687,27 +688,7 @@
   document.getElementById('kpi-entretien').textContent = flotteActive.filter(v => v.statut === 'entretien').length;
   fillMoneyKpis();
 
-  // Repli / dépli de la section détaillée — l'état (masqué / affiché) est MÉMORISÉ et réappliqué
-  // à chaque visite (et d'une page à l'autre) : on garde ton dernier choix.
-  (function () {
-    const DKEY = 'fp_dash_details_open';
-    const panel = document.getElementById('details-panel');
-    const chevron = document.getElementById('details-chevron');
-    const label = document.getElementById('details-label');
-    const applyState = (open) => {
-      panel.classList.toggle('hidden', !open);
-      if (chevron) chevron.style.transform = open ? 'rotate(90deg)' : '';
-      if (label) label.textContent = open ? 'Masquer les indicateurs détaillés' : 'Voir les indicateurs détaillés';
-    };
-    // État SYNCHRONISÉ tous appareils (règle 0-sync) via FP.pref + cache local.
-    let saved = false; try { saved = (window.FP && FP.pref) ? FP.pref.get(DKEY, false) === true || FP.pref.get(DKEY, false) === '1' : localStorage.getItem(DKEY) === '1'; } catch (e) {}
-    applyState(saved);
-    document.getElementById('toggle-details').addEventListener('click', () => {
-      const open = panel.classList.contains('hidden'); // masqué actuellement → on ouvre
-      applyState(open);
-      try { if (window.FP && FP.pref) FP.pref.set(DKEY, open); else localStorage.setItem(DKEY, open ? '1' : '0'); } catch (e) {}
-    });
-  })();
+  // Indicateurs détaillés : TOUJOURS affichés (plus de bouton « Voir/Masquer », à la demande de l'utilisateur).
 
   // Coût du mois courant : on EXCLUT les loyers de leasing (comptés dans Contrats) et les sinistres.
   // Le carburant/péages (Total Fleet) et Ulys sont désormais COMPTÉS (vrai coût d'exploitation),
