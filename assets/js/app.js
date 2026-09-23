@@ -1589,6 +1589,24 @@ FP.derniereRevisionInfo = (v, factures) => {
     return { date: last ? last.date : null, facture: last };
   } catch (e) { return { date: null, facture: null }; }
 };
+// ⚠️ SOURCE UNIQUE — « DERNIÈRE RÉVISION » affichée PARTOUT (en-tête fiche, panneau « Entretien &
+// échéances », colonne du tableau, exports). Prend la date la PLUS RÉCENTE entre : (1) la révision
+// détectée sur facture (FP.derniereRevisionInfo, avec la correction « Pas une révision ») et (2) la date
+// STOCKÉE/SAISIE À LA MAIN (v.derniereRevision). Corrige le bug « deux dates différentes sur la même
+// fiche » : avant, l'en-tête lisait la facture et le panneau lisait le champ stocké → ils divergeaient.
+// Renvoie { date, facture } — `facture` n'est fourni que si la date retenue vient BIEN de cette facture.
+FP.derniereRevision = (v, factures) => {
+  try {
+    if (!v) return { date: null, facture: null };
+    const info = FP.derniereRevisionInfo(v, factures);
+    const fdate = info.date ? String(info.date).slice(0, 10) : null;
+    const stored = (v.derniereRevision && v.derniereRevision !== '—') ? String(v.derniereRevision).slice(0, 10) : null;
+    let date = null;
+    if (stored && fdate) date = (stored >= fdate) ? stored : fdate;   // la plus récente des deux
+    else date = stored || fdate;
+    return { date: date || null, facture: (fdate && date === fdate) ? info.facture : null };
+  } catch (e) { return { date: null, facture: null }; }
+};
 // Corrige manuellement le statut « révision » d'une facture, persiste le choix (multi-appareils) et
 // recale la « dernière révision » du véhicule (source unique = FP.recomputeVehiculeFromFactures).
 // val : 'oui' (forcer révision) | 'non' (exclure) | 'auto' (revenir à l'auto-détection).
