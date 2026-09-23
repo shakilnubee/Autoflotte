@@ -1594,18 +1594,24 @@ FP.derniereRevisionInfo = (v, factures) => {
 // détectée sur facture (FP.derniereRevisionInfo, avec la correction « Pas une révision ») et (2) la date
 // STOCKÉE/SAISIE À LA MAIN (v.derniereRevision). Corrige le bug « deux dates différentes sur la même
 // fiche » : avant, l'en-tête lisait la facture et le panneau lisait le champ stocké → ils divergeaient.
-// Renvoie { date, facture } — `facture` n'est fourni que si la date retenue vient BIEN de cette facture.
+// Renvoie { date, facture, km } — `facture` n'est fourni que si la date retenue vient BIEN de cette
+// facture ; `km` = km « à la révision » (celui de la facture de révision retenue si dispo, sinon le
+// km relevé du véhicule `kmDernierReleve`), null si aucun. SOURCE UNIQUE du km de révision (tuile
+// en-tête + panneau Entretien + export), au même titre que la date.
 FP.derniereRevision = (v, factures) => {
   try {
-    if (!v) return { date: null, facture: null };
+    if (!v) return { date: null, facture: null, km: null };
     const info = FP.derniereRevisionInfo(v, factures);
     const fdate = info.date ? String(info.date).slice(0, 10) : null;
     const stored = (v.derniereRevision && v.derniereRevision !== '—') ? String(v.derniereRevision).slice(0, 10) : null;
     let date = null;
     if (stored && fdate) date = (stored >= fdate) ? stored : fdate;   // la plus récente des deux
     else date = stored || fdate;
-    return { date: date || null, facture: (fdate && date === fdate) ? info.facture : null };
-  } catch (e) { return { date: null, facture: null }; }
+    const fac = (fdate && date === fdate) ? info.facture : null;
+    const facKm = (fac && Number(fac.km) > 0) ? Number(fac.km) : null;
+    const km = (facKm != null) ? facKm : ((Number(v.kmDernierReleve) > 0) ? Number(v.kmDernierReleve) : null);
+    return { date: date || null, facture: fac, km };
+  } catch (e) { return { date: null, facture: null, km: null }; }
 };
 // Corrige manuellement le statut « révision » d'une facture, persiste le choix (multi-appareils) et
 // recale la « dernière révision » du véhicule (source unique = FP.recomputeVehiculeFromFactures).
