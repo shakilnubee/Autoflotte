@@ -794,6 +794,7 @@
     <button class="btn btn-outline text-sm justify-center" id="drawer-vente" title="Dossier de vente (PDF) à montrer à un acheteur : photo, caractéristiques, prix, CT, entretien"><i data-lucide="tag" class="w-4 h-4"></i> Vente</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-qr" title="QR UNIQUE à coller dans la voiture : le conducteur le scanne → menu Relevé km · Déclarer un sinistre · Infos du véhicule. Un seul autocollant, permanent."><i data-lucide="qr-code" class="w-4 h-4"></i> QR véhicule</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-qr-vente" title="QR de l'ANNONCE de vente : à imprimer/coller sur la vitre. Scanné → l'annonce (photos + caractéristiques + prix). Apparaît quand le véhicule est « à vendre »." hidden><i data-lucide="qr-code" class="w-4 h-4"></i> QR vente</button>
+    <button class="btn btn-outline text-sm justify-center" id="drawer-qr-edl" title="QR « état des lieux » : le conducteur le scanne → arrive directement sur l'écran EDL (photos prise / restitution + km). Chaque EDL est relié au conducteur affecté et remonte sur les fiches."><i data-lucide="qr-code" class="w-4 h-4"></i> QR état des lieux</button>
     <button class="btn btn-outline text-sm justify-center" id="drawer-sms" title="Prévenir le conducteur par SMS / WhatsApp (accès, carte grise, relance km, CT, révision, annonce)"><i data-lucide="message-circle" class="w-4 h-4"></i> SMS / WhatsApp</button>
     <button aria-label="Supprimer" class="btn text-sm text-red-600 hover:bg-red-50" id="drawer-delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
   </div>
@@ -5288,6 +5289,7 @@
     if (typeof qrcode === 'undefined') { alert('Librairie QR non chargée — fais Ctrl+Maj+R puis réessaie.'); return; }
     if (!(window.FP && FP.kmCollecte && FP.kmCollecte.ensureQr)) { alert('Connexion requise pour générer le QR.'); return; }
     const vente = mode === 'vente';
+    const edl = mode === 'edl';
     const b = FP.busy ? FP.busy('Génération du QR…') : null;
     const r = await FP.kmCollecte.ensureQr(v);           // crée/récupère le jeton permanent (km_qr)
     if (b) b.close();
@@ -5297,17 +5299,19 @@
     const immat = v.immat || '';
     // Le portail récupère tout via le jeton. Même jeton pour les deux QR ; « &vue=vente » ouvre
     // directement l'annonce (photos + caractéristiques + prix) au lieu du menu conducteur.
-    const url = MENU_BASE + encodeURIComponent(token) + (vente ? '&vue=vente' : '');
+    const url = MENU_BASE + encodeURIComponent(token) + (vente ? '&vue=vente' : (edl ? '&edl=1' : ''));
     const label = `${immat} · ${v.marque || ''} ${v.modele || ''}`.trim();
     const canvas = buildQrCanvas(url, 6, 4);
     canvas.style.width = '240px'; canvas.style.height = '240px'; canvas.style.imageRendering = 'pixelated';
-    qrCurrent = { immat, label, url, hint: vente ? 'Scannez : annonce de vente (photos · caractéristiques · prix)' : 'Scannez : véhicule · km · documents · sinistre · état des lieux' };
+    qrCurrent = { immat, label, url, hint: vente ? 'Scannez : annonce de vente (photos · caractéristiques · prix)' : (edl ? 'Scannez : faire l\'état des lieux (photos prise / restitution + km)' : 'Scannez : véhicule · km · documents · sinistre · état des lieux') };
     const holder = $('qr-holder'); holder.innerHTML = ''; holder.appendChild(canvas);
     $('qr-label').textContent = label;
-    const _t = document.getElementById('qr-title'); if (_t) _t.textContent = vente ? 'QR vente' : 'QR véhicule';
+    const _t = document.getElementById('qr-title'); if (_t) _t.textContent = vente ? 'QR vente' : (edl ? 'QR état des lieux' : 'QR véhicule');
     const _dsc = document.getElementById('qr-desc'); if (_dsc) _dsc.innerHTML = vente
       ? 'QR de l\'<b>annonce de vente</b> à imprimer/coller (vitre) → photos + caractéristiques (<b>sans le prix</b>) + <b>Appeler / SMS</b>.'
-      : 'Un seul QR à coller dans la voiture → <b>portail conducteur</b> : <b>🚗 véhicule</b> · <b>📸 relevé km</b> · <b>📄 documents</b> · <b>💥 sinistre/problème</b> · <b>📋 état des lieux</b>. Permanent : les nouveautés s\'ajoutent au menu sans recoller.';
+      : (edl
+        ? 'QR à scanner pour <b>faire l\'état des lieux</b> : le conducteur arrive <b>directement</b> sur l\'écran EDL (photos <b>à la prise</b> ET <b>à la restitution</b> + <b>kilométrage</b>). Chaque EDL est <b>relié automatiquement au conducteur affecté</b> et remonte sur la fiche véhicule ET la fiche conducteur.'
+        : 'Un seul QR à coller dans la voiture → <b>portail conducteur</b> : <b>🚗 véhicule</b> · <b>📸 relevé km</b> · <b>📄 documents</b> · <b>💥 sinistre/problème</b> · <b>📋 état des lieux</b>. Permanent : les nouveautés s\'ajoutent au menu sans recoller.');
     $('qr-backdrop').classList.add('open');
     renderQrScans(v);
   }
@@ -5461,6 +5465,7 @@
   }
   $('drawer-qr').addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v); });
   { const _qv = $('drawer-qr-vente'); if (_qv) _qv.addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v, 'vente'); }); }
+  { const _qe = $('drawer-qr-edl'); if (_qe) _qe.addEventListener('click', () => { const v = data.vehicules.find(x => x.id === drawerVehId); if (v) openQr(v, 'edl'); }); }
   // Prévenir le conducteur du véhicule par SMS / WhatsApp (envoi manuel gratuit, helper FP.msg) avec des
   // modèles rapides : accès portail, carte grise (via portail), relance km, CT bientôt, révision, annonce.
   { const _sms = $('drawer-sms'); if (_sms) _sms.addEventListener('click', async () => {
