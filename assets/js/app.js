@@ -11264,12 +11264,16 @@ FP.edl = {
         if (clr) { const cv = ov.querySelector('#' + clr.getAttribute('data-clr')); if (cv && cv._clear) cv._clear(); return; }
         if (e.target.closest && e.target.closest('[data-sp-cancel]')) { done(null); return; }
         if (e.target.closest && e.target.closest('[data-sp-ok]')) {
-          if (!drawn['edl-sp-emp']) { const b = ov.querySelector('[data-sp-err]'); if (b) { b.style.display = ''; b.textContent = 'La signature du conducteur est obligatoire.'; } return; }
           const emp = ov.querySelector('#edl-sp-emp'), soc = ov.querySelector('#edl-sp-soc');
-          const empD = emp ? emp.toDataURL('image/png') : '';
-          const socD = (drawn['edl-sp-soc'] && soc) ? soc.toDataURL('image/png') : '';
-          const ratio = (cv) => { try { return (cv.width && cv.height) ? (cv.width / cv.height) : 3.2; } catch (e) { return 3.2; } };
-          done({ emp: empD, soc: socD, empR: ratio(emp), socR: ratio(soc) });
+          // Garde « signature réellement tracée » (pixels), en plus du drapeau — parité avec signer.html :
+          // interdit de valider une case vide même si le drapeau restait vrai (ex. après une rotation).
+          const isBlank = (cv) => { try { const c = cv.getContext('2d'); const d = c.getImageData(0, 0, cv.width, cv.height).data; for (let i = 3; i < d.length; i += 4) { if (d[i] !== 0) return false; } return true; } catch (e) { return false; } };
+          if (!emp || !drawn['edl-sp-emp'] || isBlank(emp)) { const b = ov.querySelector('[data-sp-err]'); if (b) { b.style.display = ''; b.textContent = 'La signature du conducteur est obligatoire.'; } return; }
+          const empD = emp.toDataURL('image/png');
+          const socOk = drawn['edl-sp-soc'] && soc && !isBlank(soc);
+          const socD = socOk ? soc.toDataURL('image/png') : '';
+          const ratio = (cv) => { try { return (cv && cv.width && cv.height) ? (cv.width / cv.height) : 3.2; } catch (e) { return 3.2; } };
+          done({ emp: empD, soc: socD, empR: ratio(emp), socR: socOk ? ratio(soc) : 3.2 });
         }
       });
     });
