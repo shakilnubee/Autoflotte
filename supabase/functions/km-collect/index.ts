@@ -733,16 +733,6 @@ Deno.serve(async (req) => {
         }));
         const ins = await db.from("documents").insert(rows);
         if (ins.error) return json({ error: "Échec de l'envoi des photos. Réessaie." }, 500);
-        // Signature au doigt (facultative) : rangée comme un document EDL distinct — label « Signature — Entrée/Sortie »
-        // (le sens reste lisible par le regex /sort|resti/ côté fiches). Best-effort : n'échoue jamais l'envoi.
-        try {
-          if (body.signature && /^data:image\//i.test(String(body.signature))) {
-            const sigUp = await uploadPhotos(db, [body.signature], "etat-des-lieux/" + (qr.plaque || "veh") + "/signatures");
-            if (sigUp.length) {
-              await db.from("documents").insert([{ id: genId("D"), vehicule_id: qr.vehicule_id, type: "etat-des-lieux", label: "Signature — " + label, url: sigUp[0], societe: qr.societe || "PXP" }]);
-            }
-          }
-        } catch (_e) { /* signature best-effort */ }
         // Kilométrage au compteur saisi par le conducteur (optionnel) : on le range dans l'HISTORIQUE du
         // véhicule (même stockage que l'état des lieux du gestionnaire : app_settings.inspections[vehId]),
         // et on remonte le km COURANT du véhicule s'il est plus élevé (jamais vers le bas). → la frise
