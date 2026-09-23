@@ -1393,17 +1393,22 @@
     if (!canvas || canvas._sigReady) return; canvas._sigReady = true; opt = opt || {};
     var ctx = canvas.getContext('2d');
     ctx.lineWidth = opt.width || 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = opt.color || '#0f1e3d';
-    var drawing = false, last = null;
+    var drawing = false, last = null, dirty = false;
     function pt(e) { var r = canvas.getBoundingClientRect(); var s = (e.touches && e.touches[0]) ? e.touches[0] : e; return { x: (s.clientX - r.left) * (canvas.width / r.width), y: (s.clientY - r.top) * (canvas.height / r.height) }; }
     function start(e) { e.preventDefault(); drawing = true; last = pt(e); }
-    function move(e) { if (!drawing) return; e.preventDefault(); var p = pt(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; onChange(canvas.toDataURL('image/png')); }
-    function end() { drawing = false; }
+    // ⚡ On NE sérialise PAS le canvas à chaque déplacement (le croquis fait 1800×1040 → toDataURL par
+    // pixel-move = grosse latence de dessin). On marque « dirty » et on exporte une seule fois à la fin du trait.
+    function move(e) { if (!drawing) return; e.preventDefault(); var p = pt(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; dirty = true; }
+    function end() { if (drawing && dirty) { try { onChange(canvas.toDataURL('image/png')); } catch (_e) {} dirty = false; } drawing = false; }
+    // ✅ Écouteurs de FIN posés sur le CANVAS (pas sur window) → aucune fuite quand la modale du constat
+    // est reconstruite (les anciens canvases sont jetés avec leurs écouteurs). « leave » termine le trait
+    // si le doigt/curseur sort du cadre (comme un lâcher hors zone).
     if (window.PointerEvent) {
       canvas.addEventListener('pointerdown', start); canvas.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
+      canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end); canvas.addEventListener('pointerleave', end);
     } else {
-      canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
-      canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); window.addEventListener('touchend', end);
+      canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); canvas.addEventListener('mouseup', end); canvas.addEventListener('mouseleave', end);
+      canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', end); canvas.addEventListener('touchcancel', end);
     }
   }
   function _cv(id) { var el = $(id); return el ? (el.value || '').trim() : ''; }
