@@ -6839,6 +6839,53 @@ FP.affectations = {
   },
 };
 
+// ===== SOURCE UNIQUE — HISTORIQUE DES ÉTATS DES LIEUX PAR AFFECTATION =====
+// Relie chaque état des lieux (documents type 'etat-des-lieux') à la PÉRIODE d'affectation qui le
+// contient, PAR DATE (doc.date/createdAt dans [debut, fin]) → l'EDL est ainsi « lié » au conducteur ET
+// à la période, sur la fiche véhicule ET la fiche conducteur, SANS nouvelle colonne/table (jointure
+// CALCULÉE, rétroactive sur tout l'existant). remise = label 'Entrée'/remise ; restitution = 'Sortie'/restit.
+FP.edlHisto = {
+  _imgRe: /\.(jpe?g|png|gif|webp|heic|bmp|avif)(\?|$)/i,
+  isPhoto(d) { return !!(d && (this._imgRe.test(String(d.url || '')) || /^data:image\//i.test(String(d.url || '')))); },
+  sensDe(d) { return /sort|resti/i.test(String((d && d.label) || '')) ? 'restitution' : 'remise'; },
+  dateDe(d) { const s = String((d && (d.date || d.createdAt || d.created_at)) || ''); return s ? s.slice(0, 10) : ''; },
+  docsDe(docs, vehId) { return (docs || []).filter(d => d && d.type === 'etat-des-lieux' && (vehId == null || d.vehiculeId === vehId)); },
+  // 'YYYY-MM-DD' dans [debut, fin] ? (debut vide = origine ; fin null = en cours)
+  dansPeriode(date, a) {
+    if (!date) return false;
+    const deb = (a && a.debut) ? String(a.debut).slice(0, 10) : '';
+    const fin = (a && a.fin) ? String(a.fin).slice(0, 10) : '';
+    if (deb && date < deb) return false;
+    if (fin && date > fin) return false;
+    return true;
+  },
+  // Historique EDL d'un véhicule groupé par période d'affectation.
+  // → { periodes: [{ ...a, remise:[docs], restitution:[docs] }], orphelins:[docs], total }
+  parVehicule(veh, docs) {
+    const vehId = veh && veh.id;
+    const eds = this.docsDe(docs, vehId).slice().sort((a, b) => String(this.dateDe(b)).localeCompare(String(this.dateDe(a))));
+    const periodes = (FP.affectations ? FP.affectations.forVeh(vehId) : []).slice()
+      .sort((a, b) => String(b.debut || '').localeCompare(String(a.debut || '')))
+      .map(a => Object.assign({}, a, { remise: [], restitution: [] }));
+    const orphelins = [];
+    eds.forEach(d => {
+      const p = periodes.find(x => this.dansPeriode(this.dateDe(d), x));
+      (p ? p[this.sensDe(d)] : orphelins).push(d);
+    });
+    return { periodes, orphelins, total: eds.length };
+  },
+  // Historique EDL d'un conducteur : pour chacune de ses périodes, les EDL du véhicule sur cette période.
+  // affPeriodes = FP.affectations.forConducteur(nom) ({vehId, debut, fin, ...}). docs = tous les documents.
+  parConducteur(affPeriodes, docs) {
+    return (affPeriodes || []).map(a => {
+      const eds = this.docsDe(docs, a.vehId);
+      const remise = [], restitution = [];
+      eds.forEach(d => { if (this.dansPeriode(this.dateDe(d), a)) (this.sensDe(d) === 'restitution' ? restitution : remise).push(d); });
+      return Object.assign({}, a, { remise, restitution });
+    });
+  }
+};
+
 // ⚠️ SOURCE UNIQUE — KM PARCOURUS PAR CONDUCTEUR (classement Statistiques).
 // Somme, par conducteur, des km de chaque période d'affectation (FP.affectations.kmPeriode :
 // km saisis en priorité, sinon estimation états des lieux). Groupé par conducteur via
