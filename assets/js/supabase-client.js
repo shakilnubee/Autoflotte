@@ -442,7 +442,7 @@
              // suppression d'un document sur un poste rafraîchisse la section Documents sur les autres.
              + '#' + (d.amendes || []).map(a => (a.id || '') + ':' + ((a.pieces || []).length) + ':' + ((a.pieces || []).map(p => (p && (p.id || p.url)) || '').join(','))).join(';')
              + '#' + f(d.factures, ['id','montantHT','montantTVA','montantTTC','type','date','vehiculeImmat','fournisseur','numeroFacture','km','description','categorie','source','conducteur','fileName','fileId'])
-             + '#' + (d.factures || []).map(x => (x.id || '') + ':' + ((x.pieces || []).length)).join(';')
+             + '#' + (d.factures || []).map(x => (x.id || '') + ':' + ((x.pieces || []).length) + ':' + ((x.pieces || []).map(p => (p && (p.id || p.url)) || '').join(','))).join(';')
              + '#' + f(d.conducteurs, ['key','name','nom','prenom','masque','dateNaissance','poste','tel','email','adresse','permisNumero','permisExpiration','permisObtention','permisType','note']);
       };
       const sigBefore = sig(window.FP_DATA);

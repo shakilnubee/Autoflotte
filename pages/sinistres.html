@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260923f">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260923g">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260923f"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260923g"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260923f">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260923g">
 <style>
   /* Dossier assurance (mobile) : les grilles à 3 colonnes contiennent des champs date/select dont la
      largeur minimale ne rentre pas sur un petit écran → débordement. On autorise le rétrécissement
@@ -420,8 +420,8 @@
   </main>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260923f"></script>
-<script src="../assets/js/supabase-client.js?v=20260923f"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260923g"></script>
+<script src="../assets/js/supabase-client.js?v=20260923g"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -437,11 +437,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260923f"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260923g"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260923f"></script>
+<script src="../assets/js/app.min.js?v=20260923g"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1922,15 +1922,23 @@
       this.signPhotos(box);
     },
     async setStatut(id, statut) {
-      try { await FP.supabase.from('declarations_conducteur').update({ statut }).eq('id', id); } catch (e) {}
+      // UI optimiste PUIS écriture DURABLE (file FP.persist → retente + pastille de sync ; plus d'échec
+      // silencieux avalé par un catch vide : une déclaration marquée « traité » ne peut plus « revenir »).
       const row = this.rows.find(d => d.id === id); if (row) row.statut = statut;
       this.render(); if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
+      try {
+        if (FP.persist && FP.persist.update) await FP.persist.update('declarations_conducteur', id, { statut });
+        else { const r = await FP.supabase.from('declarations_conducteur').update({ statut }).eq('id', id); if (r && r.error) throw r.error; }
+      } catch (e) { if (FP.notifyError) FP.notifyError('Statut non enregistré — vérifie la connexion et réessaie'); }
     },
     async remove(id) {
       if (!(await FP.confirm('Supprimer définitivement cette demande du conducteur ?'))) return;
-      try { await FP.supabase.from('declarations_conducteur').delete().eq('id', id); } catch (e) {}
       this.rows = this.rows.filter(d => d.id !== id);
       this.render(); if (FP.refreshDeclCondBadge) FP.refreshDeclCondBadge();
+      try {
+        if (FP.persist && FP.persist.delete) await FP.persist.delete('declarations_conducteur', id);
+        else { const r = await FP.supabase.from('declarations_conducteur').delete().eq('id', id); if (r && r.error) throw r.error; }
+      } catch (e) { if (FP.notifyError) FP.notifyError('Suppression non enregistrée — vérifie la connexion et réessaie'); }
     },
     // Rapport PDF (à envoyer à l'assurance) — identité Parc Pilot + société déclarante, véhicule
     // complet (VIN, conducteur, assureur du véhicule), circonstances et photos intégrées.
