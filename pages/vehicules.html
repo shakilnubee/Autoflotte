@@ -2705,20 +2705,24 @@
       // PLUS RÉCENTE entre la révision sur facture ET la date stockée/saisie (fini les 2 dates qui divergent).
       // La facture cliquable + « ✕ Pas une révision » ne s'affichent QUE si la date retenue vient d'une facture.
       const revInfo = (window.FP && FP.derniereRevision) ? FP.derniereRevision(v, data.factures) : { date: (v.derniereRevision || null), facture: null, km: ((Number(v.kmDernierReleve) > 0) ? Number(v.kmDernierReleve) : null) };
-      // Km « à la révision » (même source unique que la fiche technique) affiché dans le cadran d'en-tête.
+      // Km « à la révision » (même source unique que la fiche technique). ⚠️ La DATE reste la valeur
+      // en gros (comme les autres cadrans) ; le km s'affiche en PETIT dans la sous-ligne, sinon
+      // « date · km » passait sur 2 lignes et agrandissait le cadran voisin.
       const revKm = (revInfo.km != null) ? revInfo.km : ((Number(v.kmDernierReleve) > 0) ? Number(v.kmDernierReleve) : null);
-      const revTxt = revInfo.date ? (FP.dateNum(revInfo.date) + (revKm != null ? ' · ' + FP.num(revKm) + ' km' : '')) : '—';
+      const revTxt = revInfo.date ? FP.dateNum(revInfo.date) : '—';
+      const revKmTxt = (revInfo.date && revKm != null) ? (FP.num(revKm) + ' km') : '';
       let revSub = '';
       if (revInfo.facture) {
         const fref = revInfo.facture.url || revInfo.facture.fileId || '';
         const fname = escapeHtml(revInfo.facture.description || revInfo.facture.fournisseur || revInfo.facture.numeroFacture || 'Facture');
         const fid = escapeHtml(String(revInfo.facture.id));
         revSub = `<div style="font-size:10px;margin-top:2px;line-height:1.55">`
+          + (revKmTxt ? `<span style="color:var(--fp-muted)">${revKmTxt} · </span>` : '')
           + (fref ? `<span class="cursor-pointer" data-rev-ref="${escapeHtml(fref)}" style="color:var(--fp-accent);text-decoration:underline dotted" title="Ouvrir la facture">🧾 ${fname}</span>` : `<span style="color:var(--fp-faint)">🧾 ${fname}</span>`)
           + `<span class="cursor-pointer" data-rev-not="${fid}" style="display:block;color:var(--fp-faint);margin-top:1px" title="Cette facture n'est pas une révision : l'exclure et recalculer la date">✕ Pas une révision</span>`
           + `</div>`;
       } else if (revInfo.date) {
-        revSub = `<div style="font-size:10px;margin-top:2px;color:var(--fp-faint)">Saisie manuelle</div>`;
+        revSub = `<div style="font-size:10px;margin-top:2px;color:var(--fp-faint)">${revKmTxt ? `<span style="color:var(--fp-muted)">${revKmTxt}</span> · ` : ''}Saisie manuelle</div>`;
       } else {
         revSub = `<div style="font-size:10px;margin-top:2px;color:var(--fp-faint)">Aucune révision enregistrée</div>`;
       }
