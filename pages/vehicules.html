@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260923e">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260923f">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260923e"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260923f"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260923e">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260923f">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1113,8 +1113,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260923e"></script>
-<script src="../assets/js/supabase-client.js?v=20260923e"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260923f"></script>
+<script src="../assets/js/supabase-client.js?v=20260923f"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1130,13 +1130,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260923e"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260923f"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260923e"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260923e"></script>
+<script src="../assets/js/fleet-docs.js?v=20260923f"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260923f"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260923e"></script>
+<script src="../assets/js/app.min.js?v=20260923f"></script>
 <script>
   lucide.createIcons();
 
@@ -1880,7 +1880,7 @@
     { key: 'cgOrigSiege',           label: 'CG siège',          defaultWidth: 100, render: v => checkCell(v.cgOrigSiege) },
     { key: 'cgOrigSalarie',         label: 'CG salarié',        defaultWidth: 100, render: v => checkCell(v.cgOrigSalarie) },
     { key: 'dateDernierCT',         label: 'Dernier CT',        defaultWidth: 130, render: v => v.dateDernierCT ? FP.dateNum(v.dateDernierCT) : '—' },
-    { key: 'derniereRevision',      label: 'Dernière révision', defaultWidth: 140, render: v => v.derniereRevision ? FP.dateNum(v.derniereRevision) : '—' },
+    { key: 'derniereRevision',      label: 'Dernière révision', defaultWidth: 140, render: v => { const d = (window.FP && FP.derniereRevision) ? FP.derniereRevision(v).date : v.derniereRevision; return d ? FP.dateNum(d) : '—'; } },
     { key: 'etatDesLieux',          label: 'État des lieux',    defaultWidth: 130, render: v => checkCell(v.etatDesLieux) },
   ];
 
@@ -2698,9 +2698,10 @@
       const tvsTxt = td && td.applicable ? (td.total != null ? FP.euro(td.total) : '—') : 'Non soumis';
       const kmMajDate = (() => { try { const m = FP.settings.get().kmMajDates || {}; return m[v.immat] || ''; } catch (e) { return ''; } })();
       const ct = (v.prochainCT && v.prochainCT !== '—') ? FP.dateNum(v.prochainCT) : '—';
-      // DERNIÈRE RÉVISION (tuile en plus, à côté de Prochain CT) : date + facture source cliquable +
-      // correction « ✕ Pas une révision » (source unique = FP.derniereRevisionInfo).
-      const revInfo = (window.FP && FP.derniereRevisionInfo) ? FP.derniereRevisionInfo(v, data.factures) : { date: null, facture: null };
+      // DERNIÈRE RÉVISION (tuile + panneau + tableau) : SOURCE UNIQUE = FP.derniereRevision → la date la
+      // PLUS RÉCENTE entre la révision sur facture ET la date stockée/saisie (fini les 2 dates qui divergent).
+      // La facture cliquable + « ✕ Pas une révision » ne s'affichent QUE si la date retenue vient d'une facture.
+      const revInfo = (window.FP && FP.derniereRevision) ? FP.derniereRevision(v, data.factures) : { date: (v.derniereRevision || null), facture: null };
       const revTxt = revInfo.date ? FP.dateNum(revInfo.date) : '—';
       let revSub = '';
       if (revInfo.facture) {
@@ -2711,9 +2712,13 @@
           + (fref ? `<span class="cursor-pointer" data-rev-ref="${escapeHtml(fref)}" style="color:var(--fp-accent);text-decoration:underline dotted" title="Ouvrir la facture">🧾 ${fname}</span>` : `<span style="color:var(--fp-faint)">🧾 ${fname}</span>`)
           + `<span class="cursor-pointer" data-rev-not="${fid}" style="display:block;color:var(--fp-faint);margin-top:1px" title="Cette facture n'est pas une révision : l'exclure et recalculer la date">✕ Pas une révision</span>`
           + `</div>`;
+      } else if (revInfo.date) {
+        revSub = `<div style="font-size:10px;margin-top:2px;color:var(--fp-faint)">Saisie manuelle</div>`;
       } else {
-        revSub = `<div style="font-size:10px;margin-top:2px;color:var(--fp-faint)">Aucune facture de révision</div>`;
+        revSub = `<div style="font-size:10px;margin-top:2px;color:var(--fp-faint)">Aucune révision enregistrée</div>`;
       }
+      // Date « dernière révision » unifiée, réutilisée dans le panneau « Entretien & échéances » + le détail.
+      const drRevDate = revInfo.date || null;
       const items = [
         ['Kilométrage', (FP.num(Number(v.km) || 0)) + ' km', 'km', 'number', ''],
         ['Carburant', v.carburant || '—', 'carburant', 'text', 'P.3'],
@@ -3010,7 +3015,7 @@
       <div class="fp-panel">
       <div class="fiche-title" style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--fp-muted);margin-bottom:.5rem">Entretien &amp; échéances</div>
       <div class="grid grid-cols-2 gap-3">
-        <div class="kpi p-3"><div class="kpi-label">Dernière révision</div><div class="kpi-value" style="font-size:1rem"><span data-df="derniereRevision" data-dt="date">${v.derniereRevision ? FP.dateNum(v.derniereRevision) : (estNeuf ? '<span class="text-emerald-600" style="font-size:.85rem">Véhicule neuf</span>' : '<span class="text-slate-400">—</span>')}</span></div><div class="text-xs text-slate-500" style="margin-top:1px">${estNeuf && !v.derniereRevision ? 'pas encore de révision' : 'à <span data-df="kmDernierReleve" data-dt="number">' + ((v.kmDernierReleve != null && v.kmDernierReleve !== '') ? FP.num(v.kmDernierReleve) + ' km' : '—') + '</span>'}</div></div>
+        <div class="kpi p-3"><div class="kpi-label">Dernière révision</div><div class="kpi-value" style="font-size:1rem"><span data-df="derniereRevision" data-dt="date">${drRevDate ? FP.dateNum(drRevDate) : (estNeuf ? '<span class="text-emerald-600" style="font-size:.85rem">Véhicule neuf</span>' : '<span class="text-slate-400">—</span>')}</span></div><div class="text-xs text-slate-500" style="margin-top:1px">${estNeuf && !drRevDate ? 'pas encore de révision' : 'à <span data-df="kmDernierReleve" data-dt="number">' + ((v.kmDernierReleve != null && v.kmDernierReleve !== '') ? FP.num(v.kmDernierReleve) + ' km' : '—') + '</span>'}</div></div>
         <div class="kpi p-3"><div class="kpi-label">Prochaine révision (est.)</div><div class="kpi-value" style="font-size:1rem;${revColor}">${revProchaine}${rev.niveau ? ' ⚠️' : ''}</div></div>
       </div>
       </div>
@@ -3114,7 +3119,7 @@
             if (!showAP) return '';
             return `<div class="flex justify-between"><span class="text-slate-600">Dernier anti-pollution réalisé</span><span class="font-medium cursor-pointer" data-antipol-dernier="1" style="border-bottom:1px dashed var(--fp-border)" title="Cliquer pour saisir la date du dernier contrôle — la prochaine échéance se calera +1 an">${ap ? FP.dateNum(ap) : '<span class="text-slate-400">— cliquer</span>'}</span></div>`;
           })()}
-          <div class="flex justify-between"><span class="text-slate-600">Dernière révision</span><span class="font-medium text-right">${(!v.derniereRevision && estNeuf) ? '<span class="text-emerald-600">Véhicule neuf — pas encore de révision</span>' : `<span data-df="derniereRevision" data-dt="date">${v.derniereRevision ? FP.dateNum(v.derniereRevision) : '<span class="text-slate-400">—</span>'}</span> · <span data-df="kmDernierReleve" data-dt="number" class="text-slate-500">${(v.kmDernierReleve != null && v.kmDernierReleve !== '') ? FP.num(v.kmDernierReleve) + ' km' : '—'}</span>`}</span></div>
+          <div class="flex justify-between"><span class="text-slate-600">Dernière révision</span><span class="font-medium text-right">${(!drRevDate && estNeuf) ? '<span class="text-emerald-600">Véhicule neuf — pas encore de révision</span>' : `<span data-df="derniereRevision" data-dt="date">${drRevDate ? FP.dateNum(drRevDate) : '<span class="text-slate-400">—</span>'}</span> · <span data-df="kmDernierReleve" data-dt="number" class="text-slate-500">${(v.kmDernierReleve != null && v.kmDernierReleve !== '') ? FP.num(v.kmDernierReleve) + ' km' : '—'}</span>`}</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Révision préconisée</span><span class="font-medium">tous les ${FP.num(rev.intervalle.km)} km / ${rev.intervalle.mois} mois</span></div>
           <div class="flex justify-between"><span class="text-slate-600">Prochaine révision (est.)</span><span class="font-medium" style="${revColor}">${revProchaine}${rev.niveau ? ' ⚠️' : ''}</span></div>${leaseHTML}
           <div class="flex justify-between"><span class="text-slate-600">Valeur d'achat</span><span class="font-medium" data-df="valeurAchat" data-dt="number">${v.valeurAchat ? FP.euro(v.valeurAchat) : '<span class="text-slate-400">—</span>'}</span></div>
@@ -5110,7 +5115,7 @@
       ['Puiss. fiscale', (v.puissanceFiscale != null && v.puissanceFiscale !== '') ? clean(FP.num(v.puissanceFiscale)) + ' CV' : '—'],
       ['TVS ' + FP.TVS_ANNEE, tvsTxt],
       ['Prochain CT', (v.prochainCT && v.prochainCT !== '—') ? FP.dateNum(v.prochainCT) : '—'],
-      ['Derniere revision', (v.derniereRevision ? FP.dateNum(v.derniereRevision) : '—') + (v.kmDernierReleve ? ' · ' + clean(FP.num(v.kmDernierReleve)) + ' km' : '')],
+      ['Derniere revision', (function () { const d = (window.FP && FP.derniereRevision) ? FP.derniereRevision(v).date : v.derniereRevision; return (d ? FP.dateNum(d) : '—') + (v.kmDernierReleve ? ' · ' + clean(FP.num(v.kmDernierReleve)) + ' km' : ''); })()],
     ];
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(249, 115, 22);
     doc.text('GENERAL', 12, cy); doc.text('TECHNIQUE & ECHEANCES', W / 2 + 2, cy); cy += 2;
