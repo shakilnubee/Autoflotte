@@ -10860,11 +10860,12 @@ FP.edl = {
         ${infoRow('E-mail de l\'employé', inp('edl-to', condEmail, 'employe@exemple.fr'))}
         <label style="display:block;font-size:12.5px;color:#334155;font-weight:700;margin-top:8px">✍️ Signature électronique</label>
         <select data-edl-signmode style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:7px 9px;font-size:12.5px;margin-top:3px">
-          <option value="integree">Signature intégrée Parc Pilot — l'employé signe en ligne (recommandé)</option>
+          <option value="surplace">✍️ Signer maintenant, sur place — le conducteur (et toi) signez sur CE téléphone</option>
+          <option value="integree">Envoyer un lien de signature — l'employé signe en ligne, plus tard</option>
           <option value="none">Aucune — PDF en pièce jointe (signature manuelle)</option>
           <option value="yousign">Yousign (si ton compte est activé)</option>
         </select>
-        <div style="font-size:11.5px;color:#94a3b8;margin-top:3px">La <b>signature intégrée</b> envoie à l'employé (et au signataire société) un <b>lien</b> pour signer au doigt/souris. Le PDF signé revient dans la fiche. Aucun prestataire, aucune limite.</div>
+        <div style="font-size:11.5px;color:#94a3b8;margin-top:3px"><b>Signer sur place</b> : à la remise, le conducteur signe au doigt sur ton téléphone, puis toi pour la société — le PDF signé est généré <b>tout de suite</b>. <b>Envoyer un lien</b> : l'employé (et le signataire société) reçoivent un lien pour signer à distance ; le PDF signé revient ensuite dans la fiche.</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
           ${infoRow('Signataire société (nom)', inp('edl-soc-nom', prof.edlSignataireNom || socNom, 'Nom du signataire société'))}
           ${infoRow('E-mail signataire société', inp('edl-soc-email', prof.edlSignataireEmail || effMail || '', 'signataire@societe.fr'))}
@@ -10983,6 +10984,15 @@ FP.edl = {
     const run = async (mode) => {
       hideErr();
       const data = collect();
+      // SIGNATURE « SUR PLACE » : on recueille les signatures (conducteur + société) AVANT de générer le
+      // PDF, puis on les appose directement dans le PDF côté client (aucun lien e-mail, tout de suite).
+      const _smode0 = data.signMode || 'integree';
+      let surSigs = null;
+      if (mode === 'send' && _smode0 === 'surplace') {
+        if (!data.employe) { showErr('Renseigne le nom / prénom de l\'employé avant de signer.'); return; }
+        surSigs = await FP.edl._collectSurplace(data);
+        if (!surSigs) return;   // annulé
+      }
       const btn = ov.querySelector(mode === 'send' ? '[data-edl-send]' : '[data-edl-dl]'); const old = btn.innerHTML;
       btn.disabled = true; btn.textContent = '…';
       try {
@@ -10990,6 +11000,14 @@ FP.edl = {
         const isRestit = data.sens === 'restitution';
         const motLbl = isRestit ? 'restitution' : 'remise';
         const doc = this._pdf(data);
+        // Appose les signatures « sur place » dans le PDF (aux emplacements du modèle) → PDF déjà SIGNÉ.
+        if (surSigs) {
+          try {
+            const mm = doc.__edlSigMm || {};
+            const stamp = (img, f) => { if (!img || !f) return; try { doc.setPage(f.page); doc.addImage(img, 'PNG', f.x, f.y - 1, f.w, f.h); doc.setFontSize(8); doc.setTextColor(70, 80, 95); doc.text(FP.date(data.date), f.dateX, f.dateY); } catch (e) {} };
+            stamp(surSigs.emp, mm.employe); stamp(surSigs.soc, mm.societe);
+          } catch (e) {}
+        }
         const fname = 'Etat-des-lieux-' + motLbl + '-' + (data.immat || 'vehicule') + '-' + data.date + '.pdf';
         if (mode === 'dl') { doc.save(fname); btn.disabled = false; btn.innerHTML = old; return; }
         // Enregistre le PDF dans les Documents du véhicule + envoie par e-mail.
@@ -11001,7 +11019,7 @@ FP.edl = {
         // ⚠️ Si le document part EN SIGNATURE, on n'ajoute PAS le PDF NON signé aux Documents du véhicule :
         // SEUL le PDF ENTIÈREMENT SIGNÉ y sera rangé (par l'edge edl-sign, une fois toutes les signatures faites).
         // Le PDF non signé reste uniquement dans le stockage (url = base sur laquelle l'edge appose les signatures).
-        if (url && FP.persist && !willSign) { try { await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: 'État des lieux ' + motLbl + ' ' + FP.date(data.date), url, driveId: null }); } catch (e) {} }
+        if (url && FP.persist && !willSign) { try { await FP.persist.insert('documents', { id: 'D' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), vehiculeId: veh.id, type: 'etat-des-lieux', label: (surSigs ? 'État des lieux ' + motLbl + ' signé ' : 'État des lieux ' + motLbl + ' ') + FP.date(data.date), url, driveId: null }); } catch (e) {} }
         // Range AUSSI chaque photo dans la fiche « État des lieux » (label Entrée/Sortie = MÊME convention
         // que les photos envoyées par le conducteur via le QR → un seul endroit, pas de doublon de logique).
         if (Array.isArray(data.photos) && data.photos.length && FP.uploadScan && FP.persist) {
@@ -11153,16 +11171,21 @@ FP.edl = {
           }
         }
         // C) À défaut (« Aucune », ou pas d'e-mail) : e-mail avec le PDF en pièce jointe.
-        if (!signed && !sentForSign && data.to && FP.sendEmail) {
+        if (!signed && !sentForSign && !surSigs && data.to && FP.sendEmail) {
           const phrase = isRestit
             ? `Veuillez trouver ci-joint l'<b>état des lieux de restitution</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}), rendu le ${esc(FP.date(data.date))}.`
             : `Veuillez trouver ci-joint l'<b>état des lieux</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}) qui vous est remis le ${esc(FP.date(data.date))}.`;
           const html = `<p>Bonjour,</p><p>${phrase}</p><p>Merci de vérifier, dater et signer.</p><p>— ${esc(data.socNom || 'Gestion de flotte')}</p>`;
           try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux (' + motLbl + ') — ' + data.immat + ' — ' + data.employe, html, text: 'État des lieux (' + motLbl + ') du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
         }
+        // C-bis) SIGNÉ SUR PLACE : on envoie une COPIE du PDF déjà signé (au conducteur + copie société), si e-mail connu.
+        if (surSigs && data.to && FP.sendEmail) {
+          const html = `<p>Bonjour,</p><p>Veuillez trouver ci-joint l'<b>état des lieux ${isRestit ? 'de restitution ' : ''}</b>du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}), <b>signé</b> le ${esc(FP.date(data.date))}.</p><p>— ${esc(data.socNom || 'Gestion de flotte')}</p>`;
+          try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux signé (' + motLbl + ') — ' + data.immat, html, text: 'État des lieux signé du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
+        }
         close();
         const seq = sentForSign && signersList.length > 1;   // gestionnaire d'abord, puis salarié
-        if (FP.toast) FP.toast(seq ? '✓ Lien de signature envoyé — à toi de signer d\'abord, le salarié sera notifié ensuite' : sentForSign ? '✓ Envoyé pour signature (lien e-mail)' : signed ? '✓ Envoyé pour signature (Yousign)' : (mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré')));
+        if (FP.toast) FP.toast(surSigs ? (mailed ? '✓ État des lieux signé sur place, enregistré et envoyé' : '✓ État des lieux signé sur place et enregistré') : seq ? '✓ Lien de signature envoyé — à toi de signer d\'abord, le salarié sera notifié ensuite' : sentForSign ? '✓ Envoyé pour signature (lien e-mail)' : signed ? '✓ Envoyé pour signature (Yousign)' : (mailed ? '✓ État des lieux enregistré et envoyé' : (url ? '✓ État des lieux enregistré dans les Documents' : '✓ État des lieux généré')));
       } catch (e) {
         btn.disabled = false; btn.innerHTML = old; console.warn('[edl]', e);
         // Erreur PERSISTANTE et lisible (au lieu d'un « Échec » fugace) → on sait la vraie cause.
@@ -11171,6 +11194,70 @@ FP.edl = {
     };
     ov.querySelector('[data-edl-dl]').addEventListener('click', () => run('dl'));
     ov.querySelector('[data-edl-send]').addEventListener('click', () => run('send'));
+    // Le libellé du bouton d'envoi suit le mode de signature choisi (« Signer sur place » vs « Enregistrer + envoyer »).
+    (function () {
+      const sel = ov.querySelector('[data-edl-signmode]'), sb = ov.querySelector('[data-edl-send]');
+      if (!sel || !sb) return;
+      const sync = () => { sb.innerHTML = (sel.value === 'surplace') ? '<i data-lucide="pen-line" class="w-4 h-4"></i> Signer sur place' : '<i data-lucide="send" class="w-4 h-4"></i> Enregistrer + envoyer'; try { if (window.lucide) lucide.createIcons(); } catch (e) {} };
+      sel.addEventListener('change', sync); sync();
+    })();
+  },
+  // Recueille les signatures « SUR PLACE » (conducteur + société) sur CE téléphone/ordinateur. Renvoie
+  // { emp, soc } (data URLs PNG ; soc peut être '') ou null si annulé. Deux cadres où l'on signe au doigt
+  // (mobile) ou à la souris (bureau). La signature du conducteur est obligatoire ; celle de la société
+  // (le gestionnaire) est vivement recommandée mais peut être passée. Autonome (aucune dépendance).
+  _collectSurplace(data) {
+    return new Promise((resolve) => {
+      const esc = FP.esc || (s => String(s == null ? '' : s));
+      const socLbl = (function () { const s = String((data && (data.socSignNom || data.socNom)) || 'Société').trim(); return (s && !/@/.test(s)) ? s : 'Société'; })();
+      const isRestit = data && data.sens === 'restitution';
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,61,.72);z-index:10002;display:flex;align-items:center;justify-content:center;padding:14px';
+      const pad = (id, title) => '<div style="margin-bottom:12px"><div style="font-size:12.5px;font-weight:700;color:#334155;margin-bottom:4px">' + title + '</div>'
+        + '<div style="position:relative"><canvas id="' + id + '" style="width:100%;height:150px;border:1.5px dashed #cbd5e1;border-radius:10px;background:#fff;touch-action:none;display:block"></canvas>'
+        + '<button type="button" data-clr="' + id + '" style="position:absolute;top:6px;right:6px;font-size:11px;font-weight:700;padding:3px 8px;border:1px solid #e2e8f0;border-radius:7px;background:#fff;color:#334155;cursor:pointer">Effacer</button></div></div>';
+      ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.5)">'
+        + '<div style="padding:14px 18px;border-bottom:1px solid #eef2f7;font-size:15px;font-weight:800;color:#0f1e3d">✍️ Signatures sur place</div>'
+        + '<div style="padding:14px 18px;overflow:auto">'
+        + '<div style="font-size:12px;color:#64748b;margin-bottom:10px">' + esc(isRestit ? 'Le véhicule est restitué dans l\'état décrit.' : 'Le conducteur reconnaît recevoir le véhicule dans l\'état décrit.') + ' Signez au doigt (ou à la souris) dans les cadres.</div>'
+        + pad('edl-sp-emp', '👤 ' + esc((data && data.employe) || 'Conducteur'))
+        + pad('edl-sp-soc', '🏢 ' + esc(socLbl) + ' (toi)')
+        + '<div data-sp-err style="display:none;color:#991b1b;font-size:12px;margin-top:4px"></div>'
+        + '</div>'
+        + '<div style="padding:12px 18px;border-top:1px solid #eef2f7;display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">'
+        + '<button type="button" data-sp-cancel class="btn btn-outline">Annuler</button>'
+        + '<button type="button" data-sp-ok class="btn btn-dark">✓ Valider les signatures</button>'
+        + '</div></div>';
+      document.body.appendChild(ov);
+      const drawn = {};
+      const setup = (id) => {
+        const cv = ov.querySelector('#' + id); if (!cv) return;
+        const rect = cv.getBoundingClientRect();
+        cv.width = Math.max(300, Math.round(rect.width * 2)); cv.height = Math.round((rect.height || 150) * 2);
+        const ctx = cv.getContext('2d'); ctx.scale(2, 2); ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f1e3d';
+        let drawing = false, last = null; drawn[id] = false;
+        const pt = (e) => { const r = cv.getBoundingClientRect(); const s = (e.touches && e.touches[0]) ? e.touches[0] : e; return { x: s.clientX - r.left, y: s.clientY - r.top }; };
+        const start = (e) => { e.preventDefault(); drawing = true; last = pt(e); };
+        const move = (e) => { if (!drawing) return; e.preventDefault(); const p = pt(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; drawn[id] = true; };
+        const end = () => { drawing = false; };
+        if (window.PointerEvent) { cv.addEventListener('pointerdown', start); cv.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end); }
+        else { cv.addEventListener('mousedown', start); cv.addEventListener('mousemove', move); window.addEventListener('mouseup', end); cv.addEventListener('touchstart', start, { passive: false }); cv.addEventListener('touchmove', move, { passive: false }); window.addEventListener('touchend', end); }
+        cv._clear = () => { ctx.clearRect(0, 0, cv.width, cv.height); drawn[id] = false; };
+      };
+      setTimeout(() => { setup('edl-sp-emp'); setup('edl-sp-soc'); }, 40);
+      ov.addEventListener('click', (e) => {
+        const clr = e.target.closest && e.target.closest('[data-clr]');
+        if (clr) { const cv = ov.querySelector('#' + clr.getAttribute('data-clr')); if (cv && cv._clear) cv._clear(); return; }
+        if (e.target.closest && e.target.closest('[data-sp-cancel]')) { ov.remove(); resolve(null); return; }
+        if (e.target.closest && e.target.closest('[data-sp-ok]')) {
+          if (!drawn['edl-sp-emp']) { const b = ov.querySelector('[data-sp-err]'); if (b) { b.style.display = ''; b.textContent = 'La signature du conducteur est obligatoire.'; } return; }
+          const emp = ov.querySelector('#edl-sp-emp'), soc = ov.querySelector('#edl-sp-soc');
+          const empD = emp ? emp.toDataURL('image/png') : '';
+          const socD = (drawn['edl-sp-soc'] && soc) ? soc.toDataURL('image/png') : '';
+          ov.remove(); resolve({ emp: empD, soc: socD });
+        }
+      });
+    });
   },
   // Génère le PDF (jsPDF) au format du modèle client, avec le logo de la société.
   _pdf(data) {
@@ -11295,6 +11382,12 @@ FP.edl = {
                    dateX: Math.round((M + dateLblW) * PT), dateY: Math.round(dateY * PT), emailX: Math.round(M * PT), emailY: Math.round(emailY * PT) },
         societe: { page: p, x: Math.round((M + colW) * PT), y: sy, width: Math.round((colW - 6) * PT), height: sh,
                    dateX: Math.round((M + colW + dateLblW) * PT), dateY: Math.round(dateY * PT), emailX: Math.round((M + colW) * PT), emailY: Math.round(emailY * PT) },
+      };
+      // Mêmes champs en MILLIMÈTRES (unité de CE doc jsPDF) → pour apposer les signatures CÔTÉ CLIENT
+      // (signature « sur place » sur le téléphone du gestionnaire), sans passer par l'edge/pdf-lib.
+      doc.__edlSigMm = {
+        employe: { page: p, x: M, y: labelY + 2, w: colW - 14, h: 13, dateX: M + dateLblW, dateY: dateY },
+        societe: { page: p, x: M + colW, y: labelY + 2, w: colW - 6, h: 13, dateX: M + colW + dateLblW, dateY: dateY },
       };
     } catch (e) {}
     y = lineY; doc.setFont('helvetica', 'normal'); doc.setDrawColor(150, 160, 175); doc.setLineWidth(0.3); doc.line(M, y, M + colW - 12, y); doc.line(M + colW, y, W - M, y); y = dateY;
