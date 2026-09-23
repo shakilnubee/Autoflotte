@@ -9807,6 +9807,24 @@ FP._ensureSyncBadge = function () {
 FP._syncBadge = function (justSynced) {
   const b = FP._ensureSyncBadge();
   if (!b) return;
+  // ── HORS LIGNE : bandeau dédié (ce N'EST PAS une erreur). L'utilisateur voit qu'il est déconnecté ;
+  //    s'il a modifié quelque chose, ça part TOUT SEUL au retour du réseau (file FP.persist). Persistant
+  //    tant qu'on est hors ligne. Au retour en ligne, les événements 'online'/flush rebasculent la pastille.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    clearTimeout(FP._syncBadgeT);
+    const p = FP.persist.pendingCount();
+    if (p > 0) FP._wasSaving = true; // pour afficher « ✓ Enregistré » quand la synchro aboutira au retour du réseau
+    const txt = p > 0
+      ? `📴 Hors ligne · ${p} modif${p > 1 ? 's' : ''} en attente de synchro`
+      : `📴 Hors ligne · consultation`;
+    b.innerHTML = txt;
+    b.style.background = 'rgba(241,245,249,.97)'; b.style.color = '#334155';
+    b.classList.remove('clickable');
+    b.title = p > 0 ? 'Tes modifications seront envoyées automatiquement dès le retour du réseau' : 'Tu consultes la dernière version synchronisée (hors ligne)';
+    b.style.display = 'inline-flex';
+    requestAnimationFrame(() => b.classList.add('show'));
+    return;
+  }
   const echecs = FP.persist.failedCount();
   const stuck = FP.persist.stuckCount();      // en attente depuis > 8 s / déjà retenté (vrai souci réseau)
   const pending = FP.persist.pendingCount();  // au moins une écriture pas encore confirmée (envoi en cours)
@@ -9844,7 +9862,8 @@ FP._syncBadge = function (justSynced) {
 // Renvoi automatique : au chargement des données, au retour en ligne, et régulièrement.
 document.addEventListener('fp:data-ready', () => { FP.persist.flush(); });
 if (typeof window !== 'undefined') {
-  window.addEventListener('online', () => { FP.persist.flush(); });
+  window.addEventListener('online', () => { FP.persist.flush(); if (FP._syncBadge) FP._syncBadge(); });
+  window.addEventListener('offline', () => { if (FP._syncBadge) FP._syncBadge(); });
   window.addEventListener('DOMContentLoaded', () => { if (FP._syncBadge) FP._syncBadge(); });
   setInterval(() => { if (FP.persist.pendingCount() > 0) FP.persist.flush(); }, 30000);
   // Dernier filet avant que la page parte (navigation, fermeture, mise en arrière-plan mobile) :
