@@ -11004,8 +11004,9 @@ FP.edl = {
         if (surSigs) {
           try {
             const mm = doc.__edlSigMm || {};
-            const stamp = (img, f) => { if (!img || !f) return; try { doc.setPage(f.page); doc.addImage(img, 'PNG', f.x, f.y - 1, f.w, f.h); doc.setFontSize(8); doc.setTextColor(70, 80, 95); doc.text(FP.date(data.date), f.dateX, f.dateY); } catch (e) {} };
-            stamp(surSigs.emp, mm.employe); stamp(surSigs.soc, mm.societe);
+            // On respecte le RATIO de la signature (pas d'étirement) : largeur = hauteur × ratio, plafonnée à la case.
+            const stamp = (img, f, r) => { if (!img || !f) return; try { const w = Math.min(f.w, f.h * (r || 3.2)); doc.setPage(f.page); doc.addImage(img, 'PNG', f.x, f.y - 1, w, f.h); doc.setFontSize(8); doc.setTextColor(70, 80, 95); doc.text(FP.date(data.date), f.dateX, f.dateY); } catch (e) {} };
+            stamp(surSigs.emp, mm.employe, surSigs.empR); stamp(surSigs.soc, mm.societe, surSigs.socR);
           } catch (e) {}
         }
         const fname = 'Etat-des-lieux-' + motLbl + '-' + (data.immat || 'vehicule') + '-' + data.date + '.pdf';
@@ -11230,31 +11231,45 @@ FP.edl = {
         + '</div></div>';
       document.body.appendChild(ov);
       const drawn = {};
+      // Pad ROBUSTE, calqué sur signer.html (déjà éprouvé iPhone/rotation) : DPR, rect relu à CHAQUE point
+      // (pas d'offset au scroll), effacement fiable par ré-init du backing-store, événements souris + tactile
+      // posés sur le CANVAS (aucun listener global → pas de fuite quand on rouvre la fenêtre).
       const setup = (id) => {
         const cv = ov.querySelector('#' + id); if (!cv) return;
-        const rect = cv.getBoundingClientRect();
-        cv.width = Math.max(300, Math.round(rect.width * 2)); cv.height = Math.round((rect.height || 150) * 2);
-        const ctx = cv.getContext('2d'); ctx.scale(2, 2); ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f1e3d';
-        let drawing = false, last = null; drawn[id] = false;
-        const pt = (e) => { const r = cv.getBoundingClientRect(); const s = (e.touches && e.touches[0]) ? e.touches[0] : e; return { x: s.clientX - r.left, y: s.clientY - r.top }; };
+        let ctx, drawing = false, last = null; drawn[id] = false;
+        const fit = () => {
+          const r = cv.getBoundingClientRect(); const dpr = window.devicePixelRatio || 1;
+          cv.width = Math.max(1, Math.round((r.width || 300) * dpr)); cv.height = Math.max(1, Math.round((r.height || 150) * dpr));
+          ctx = cv.getContext('2d'); ctx.scale(dpr, dpr); ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f1e3d';
+        };
+        const pt = (e) => { const r = cv.getBoundingClientRect(); const s = (e.touches && e.touches[0]) || e; return { x: s.clientX - r.left, y: s.clientY - r.top }; };
         const start = (e) => { e.preventDefault(); drawing = true; last = pt(e); };
         const move = (e) => { if (!drawing) return; e.preventDefault(); const p = pt(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; drawn[id] = true; };
         const end = () => { drawing = false; };
-        if (window.PointerEvent) { cv.addEventListener('pointerdown', start); cv.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end); }
-        else { cv.addEventListener('mousedown', start); cv.addEventListener('mousemove', move); window.addEventListener('mouseup', end); cv.addEventListener('touchstart', start, { passive: false }); cv.addEventListener('touchmove', move, { passive: false }); window.addEventListener('touchend', end); }
-        cv._clear = () => { ctx.clearRect(0, 0, cv.width, cv.height); drawn[id] = false; };
+        fit();
+        ['mousedown', 'touchstart'].forEach(ev => cv.addEventListener(ev, start, { passive: false }));
+        ['mousemove', 'touchmove'].forEach(ev => cv.addEventListener(ev, move, { passive: false }));
+        ['mouseup', 'mouseleave', 'touchend', 'touchcancel'].forEach(ev => cv.addEventListener(ev, end));
+        cv._clear = () => { drawing = false; last = null; fit(); drawn[id] = false; };  // ré-init = efface tout (Safari inclus)
+        // Rotation / redimensionnement : on RESTAURE le tracé (sinon il disparaîtrait, comme le bug corrigé de signer.html).
+        cv._refit = () => { let img = null; if (drawn[id]) { try { img = new Image(); img.src = cv.toDataURL('image/png'); } catch (e) { img = null; } } const d = drawn[id]; fit(); drawn[id] = d; if (img) { try { img.onload = () => { try { ctx.drawImage(img, 0, 0, cv.getBoundingClientRect().width, cv.getBoundingClientRect().height); } catch (e) {} }; } catch (e) {} } };
       };
       setTimeout(() => { setup('edl-sp-emp'); setup('edl-sp-soc'); }, 40);
+      let _rzT = null;
+      const onResize = () => { clearTimeout(_rzT); _rzT = setTimeout(() => { ['edl-sp-emp', 'edl-sp-soc'].forEach(id => { const cv = ov.querySelector('#' + id); if (cv && cv._refit) cv._refit(); }); }, 180); };
+      window.addEventListener('resize', onResize);
+      const done = (val) => { window.removeEventListener('resize', onResize); ov.remove(); resolve(val); };
       ov.addEventListener('click', (e) => {
         const clr = e.target.closest && e.target.closest('[data-clr]');
         if (clr) { const cv = ov.querySelector('#' + clr.getAttribute('data-clr')); if (cv && cv._clear) cv._clear(); return; }
-        if (e.target.closest && e.target.closest('[data-sp-cancel]')) { ov.remove(); resolve(null); return; }
+        if (e.target.closest && e.target.closest('[data-sp-cancel]')) { done(null); return; }
         if (e.target.closest && e.target.closest('[data-sp-ok]')) {
           if (!drawn['edl-sp-emp']) { const b = ov.querySelector('[data-sp-err]'); if (b) { b.style.display = ''; b.textContent = 'La signature du conducteur est obligatoire.'; } return; }
           const emp = ov.querySelector('#edl-sp-emp'), soc = ov.querySelector('#edl-sp-soc');
           const empD = emp ? emp.toDataURL('image/png') : '';
           const socD = (drawn['edl-sp-soc'] && soc) ? soc.toDataURL('image/png') : '';
-          ov.remove(); resolve({ emp: empD, soc: socD });
+          const ratio = (cv) => { try { return (cv.width && cv.height) ? (cv.width / cv.height) : 3.2; } catch (e) { return 3.2; } };
+          done({ emp: empD, soc: socD, empR: ratio(emp), socR: ratio(soc) });
         }
       });
     });
