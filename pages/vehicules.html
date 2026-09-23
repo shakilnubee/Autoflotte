@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260923a">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260923b">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260923a"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260923b"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260923a">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260923b">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1113,8 +1113,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260923a"></script>
-<script src="../assets/js/supabase-client.js?v=20260923a"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260923b"></script>
+<script src="../assets/js/supabase-client.js?v=20260923b"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1130,13 +1130,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260923a"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260923b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260923a"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260923a"></script>
+<script src="../assets/js/fleet-docs.js?v=20260923b"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260923b"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260923a"></script>
+<script src="../assets/js/app.min.js?v=20260923b"></script>
 <script>
   lucide.createIcons();
 
@@ -1482,6 +1482,27 @@
       return `<div style="position:relative">${thumb}<button type="button" data-edl-rm="${i}" title="Retirer" style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:9999px;width:20px;height:20px;line-height:1;font-size:12px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.3)">✕</button></div>`;
     }).join('') + `<div style="align-self:center;font-size:12px;color:#64748b;font-weight:700">${edlPending.length} photo${edlPending.length > 1 ? 's' : ''} prête${edlPending.length > 1 ? 's' : ''}</div>`;
   }
+  // « Rendez-vous garage » (CT / révision / entretien) : date SAISIE par l'utilisateur (settings.vehRdvGarage
+  // via FP.rdvGarage, synchronisé). Déclenche le rappel AUTO la veille (edge) + apparaît dans Alertes → Relances.
+  function rdvGarageHTML(v){
+    if (!(window.FP && FP.rdvGarage)) return '';
+    const r = FP.rdvGarage.get(v.id) || {};
+    const motifs = ['Contrôle technique', 'Révision', 'Entretien', 'Réparation', 'Autre'];
+    const j = (r.date && FP.joursRestants) ? FP.joursRestants(r.date) : null;
+    const when = (j == null) ? '' : (j < 0 ? `en retard de ${-j} j` : (j === 0 ? "aujourd'hui" : (j === 1 ? 'demain' : `dans ${j} j`)));
+    return `<div class="mt-5" data-rdvg="${escapeHtml(v.id)}">
+      <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1 flex items-center gap-2">🔧 Rendez-vous garage <span class="text-xs font-normal text-slate-400">CT / révision / entretien · rappel la veille</span></div>
+      <div class="p-3 bg-slate-50 rounded-lg border border-slate-200" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+        <div><label class="field-label !mb-0">Date</label><input type="date" id="rdvg-date" class="field-input" value="${escapeHtml(r.date || '')}" style="width:auto"></div>
+        <div><label class="field-label !mb-0">Motif</label><select id="rdvg-motif" class="field-input" style="width:auto">${motifs.map(m => `<option ${((r.motif || '') === m) ? 'selected' : ''}>${m}</option>`).join('')}</select></div>
+        <button type="button" id="rdvg-save" class="btn btn-dark text-sm">Enregistrer</button>
+        ${r.date ? '<button type="button" id="rdvg-clear" class="btn btn-outline text-sm">Retirer</button>' : ''}
+        ${r.date ? `<span class="text-xs" style="color:${j < 0 ? '#B91C1C' : (j <= 7 ? '#B45309' : '#64748B')};font-weight:700;align-self:center">${escapeHtml(when)}</span>` : ''}
+      </div>
+      <p class="text-xs text-slate-400 mt-1">Un e-mail de rappel part <b>tout seul la veille</b> au conducteur et à toi. Ce rendez-vous apparaît aussi dans <b>Alertes → 📣 Relances</b> (avec le CT et la révision).</p>
+    </div>`;
+  }
+
   // « États des lieux par conducteur » : chaque EDL (remise/restitution) rattaché à la PÉRIODE
   // d'affectation qui le contient (source unique FP.edlHisto — jointure par date). Répond à la demande
   // « l'EDL doit être lié à l'affectation + à l'historique du véhicule ». Non destructif : s'ajoute sous
@@ -1737,6 +1758,15 @@
       if (edlB) {
         const v = (data.vehicules || []).find(x => x.id === edlB.dataset.edlBtn);
         if (v && FP.edl) { const cur = (FP.affectations && FP.affectations.courante) ? FP.affectations.courante(v.id) : null; FP.edl.open(v, { conducteur: (cur && cur.conducteur) || v.chauffeur || '' }); }
+        return;
+      }
+      // Rendez-vous garage (CT / révision / entretien) — enregistrer / retirer (source FP.rdvGarage).
+      const rdvg = e.target.closest('[data-rdvg]');
+      if (rdvg && (e.target.closest('#rdvg-save') || e.target.closest('#rdvg-clear'))) {
+        const vid = rdvg.getAttribute('data-rdvg'); if (!vid || !(FP.rdvGarage)) return;
+        if (e.target.closest('#rdvg-clear')) { FP.rdvGarage.set(vid, ''); if (FP.toast) FP.toast('Rendez-vous garage retiré'); }
+        else { const dt = (rdvg.querySelector('#rdvg-date') || {}).value || ''; const mo = (rdvg.querySelector('#rdvg-motif') || {}).value || ''; if (!dt) { if (FP.toast) FP.toast('Choisis une date'); return; } FP.rdvGarage.set(vid, dt, mo); if (FP.toast) FP.toast('✓ Rendez-vous garage enregistré'); }
+        if (drawerVehId === vid) openDrawer(vid);
         return;
       }
       const body = document.getElementById('veh-affect-body');
@@ -3104,6 +3134,8 @@
       ${conducteursHistoHTML(v)}
 
       ${docsSectionHTML(v)}
+
+      ${rdvGarageHTML(v)}
 
       ${edlSectionHTML(v)}
 

@@ -4935,7 +4935,7 @@ FP.settings = {
       // — Données par CONDUCTEUR (mêmes maps que condDocs, oubliées → d'où la perte des congés) :
       'condConges', 'condSortie', 'condArrivee', 'condLangues', 'condCarteTotal', 'condBadgeUlys',
       // — Historique & données par VÉHICULE :
-      'affectations', 'antiPollDates', 'leasingDocs', 'restitutionChecklist', 'controleStatuts', 'suiviFlotte', 'suiviColsPerso',
+      'affectations', 'antiPollDates', 'leasingDocs', 'restitutionChecklist', 'controleStatuts', 'suiviFlotte', 'suiviColsPerso', 'vehRdvGarage',
       // — Données par SINISTRE :
       'sinistreAssurance', 'sinistreDocSub', 'sinistreSous',
       // — Contrats LLD (tableau ; ids stables ajoutés à la lecture) + prestataires perso (tableau à id) :
@@ -13973,12 +13973,24 @@ FP.suivi = {
   }
 };
 
+// ===== RENDEZ-VOUS GARAGE (CT / révision / entretien) SAISIS par l'utilisateur, par véhicule =====
+// Synchronisé (settings.vehRdvGarage → COLLECTION_KEYS). Déclenche le MÊME rappel « la veille » que le CT
+// et se regroupe avec CT + révision dans l'écran « Relances ». { [vehId]: { date:'YYYY-MM-DD', motif } }.
+FP.rdvGarage = {
+  _map() { try { const m = FP.settings.get().vehRdvGarage; return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } },
+  get(vehId) { const r = this._map()[vehId]; return (r && typeof r === 'object' && r.date) ? r : null; },
+  set(vehId, date, motif) {
+    const s = FP.settings.get(); s.vehRdvGarage = (s.vehRdvGarage && typeof s.vehRdvGarage === 'object') ? s.vehRdvGarage : {};
+    if (!date) delete s.vehRdvGarage[vehId]; else s.vehRdvGarage[vehId] = { date: String(date).slice(0, 10), motif: String(motif || '').slice(0, 40) };
+    FP.settings.save(s);
+  }
+};
+
 // ===== RELANCES — SOURCE UNIQUE : « qui relancer aujourd'hui » + message prêt à envoyer =====
-// Agrège en UN seul endroit tout ce qui demande une relance (entretien/CT à venir ou en retard, relevé
-// km non reçu, amende à payer), avec le conducteur + ses coordonnées + un message DÉJÀ RÉDIGÉ (SMS /
-// WhatsApp / e-mail brandé). Alimente l'écran « 📣 Relances » (notifications.html) et pourra alimenter le
-// rappel AUTO la veille (edge). Messages fidèles aux règles de ton du site : pas de tutoiement/vouvoiement,
-// plaque toujours sur UNE ligne (tiret + espace insécables), jamais d'emoji juste après « Bonjour … ».
+// Agrège en UN seul endroit tout ce qui demande une relance (RENDEZ-VOUS GARAGE = CT / révision /
+// entretien regroupés, relevé km non reçu, amende à payer), avec le conducteur + ses coordonnées + un
+// message DÉJÀ RÉDIGÉ (SMS / WhatsApp / e-mail brandé). Alimente l'écran « 📣 Relances » et le rappel AUTO
+// la veille (edge). Ton fidèle : pas de tutoiement/vouvoiement, plaque sur UNE ligne, pas d'emoji après « Bonjour ».
 FP.relances = {
   _nbp(p) { return String(p || '').replace(/-/g, '‑').replace(/ /g, ' '); }, // plaque une ligne
   _prenom(name) { const s = String(name || '').trim(); if (!s || s === '—') return ''; const p = s.split(/\s+/)[0]; return p.charAt(0).toUpperCase() + p.slice(1); },
@@ -14003,6 +14015,19 @@ FP.relances = {
   _vehItem(v, type, date, j) {
     const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
     return { type, veh: v, immat: v.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), dueDate: date, joursRestants: j, urgence: this._urg(j) };
+  },
+
+  // --- RENDEZ-VOUS GARAGE saisis à la main (settings.vehRdvGarage) — regroupés avec CT / révision ---
+  garage() {
+    const win = this._win(); const out = [];
+    const map = (FP.rdvGarage ? FP.rdvGarage._map() : {});
+    (data.vehicules || []).forEach(v => {
+      if (FP.horsFlotte && FP.horsFlotte(v)) return;
+      const r = map[v.id]; if (!r || !r.date) return;
+      const j = this._jours(r.date); if (j == null || j > win) return;
+      const it = this._vehItem(v, 'garage', r.date, j); it.motif = r.motif || ''; out.push(it);
+    });
+    return out;
   },
 
   // --- KM à relancer (MÊMES primitives que l'onglet « Relevé KM ») ---
@@ -14035,14 +14060,25 @@ FP.relances = {
     return out;
   },
 
-  list() { return [].concat(this.entretiens(), this.km(), this.amendes()); },
+  list() { return [].concat(this.garage(), this.entretiens(), this.km(), this.amendes()); },
   count() { try { return this.list().length; } catch (e) { return 0; } },
+  // Étiquette par TYPE (affichée sur chaque ligne).
   META: {
-    entretien: { emo: '🛠️', label: 'Entretien' },
+    entretien: { emo: '🛠️', label: 'Révision' },
     ct: { emo: '🔧', label: 'Contrôle technique' },
+    garage: { emo: '🔧', label: 'Rendez-vous garage' },
     km: { emo: '📸', label: 'Relevé km' },
     amende: { emo: '🎫', label: 'Amende à payer' }
   },
+  // REGROUPEMENT (consigne utilisateur : « un rdv au garage = pareil ; CT et révision, regroupe ça »).
+  // CT + révision + rendez-vous garage → une seule catégorie « Garage / entretien ».
+  GROUP_ORDER: ['garage', 'km', 'amende'],
+  GROUP_META: {
+    garage: { emo: '🔧', label: 'Garage · CT / révision / entretien' },
+    km: { emo: '📸', label: 'Relevé km' },
+    amende: { emo: '🎫', label: 'Amende à payer' }
+  },
+  groupeDe(type) { return (type === 'ct' || type === 'entretien' || type === 'garage') ? 'garage' : type; },
 
   // Message prêt (texte SMS/WhatsApp + sujet + HTML e-mail brandé) pour un item. Async (lien km).
   async message(item) {
@@ -14050,6 +14086,7 @@ FP.relances = {
     const nbp = this._nbp(item.immat); let text = '', subject = '', emailText = '';
     if (item.type === 'ct') { const d = this._fdate(item.dueDate); subject = 'Contrôle technique — ' + item.immat; text = `${bonjour}\n🔧 Le contrôle technique du véhicule ${nbp} approche (échéance le ${d}) ⏳ — un petit rendez-vous à caler ! 📅`; emailText = text; }
     else if (item.type === 'entretien') { const d = this._fdate(item.dueDate); subject = 'Entretien à prévoir — ' + item.immat; text = `${bonjour}\n🛠️ Le véhicule ${nbp} a un entretien à prévoir (échéance le ${d}) 🚗 — pense à caler un passage au garage.`; emailText = text; }
+    else if (item.type === 'garage') { const d = this._fdate(item.dueDate); const mot = item.motif ? (' (' + item.motif + ')') : ''; subject = 'Rendez-vous garage — ' + item.immat; text = `${bonjour}\n🔧 Rendez-vous garage pour le véhicule ${nbp}${mot} : prévu le ${d} 📅 — pense à t'organiser.`; emailText = text; }
     else if (item.type === 'km') { const l = await this._liens(item.veh); subject = 'Relevé kilométrique — ' + item.immat; text = `${bonjour}\n📸 Un petit coup d'œil au compteur du véhicule ${nbp} ? 😊 Ça file en 30 secondes` + (l.kmLink ? `, c'est par ici 👇\n${l.kmLink}` : ' !'); emailText = text; }
     else if (item.type === 'amende') { const d = item.dueDate ? this._fdate(item.dueDate) : ''; subject = 'Amende à régler — ' + item.immat; const avant = d ? ` avant le ${d}` : ''; text = `${bonjour}\n🎫 Une amende concerne le véhicule ${nbp} — pense à la régler${avant} pour éviter une majoration 💵\nRegarde ta boîte mail 📩`; emailText = `${bonjour}\n🎫 Une amende concerne le véhicule ${nbp} — pense à la régler${avant} pour éviter une majoration 💵`; }
     let nomSoc = '', logoUrl = '';

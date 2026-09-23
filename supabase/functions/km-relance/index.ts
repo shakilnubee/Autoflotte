@@ -151,10 +151,13 @@ function buildMail(opts: { prenom: string; immat: string; marque: string; link: 
   return { subject, html, text };
 }
 
-// E-mail « rappel contrôle technique demain » (branded, même en-tête que le relevé km, sans bouton).
-function buildCtMail(opts: { prenom: string; immat: string; marque: string; dateFr: string; nomSoc: string; logoUrl: string }) {
+// E-mail « rappel rendez-vous garage demain » (branded, même en-tête que le relevé km, sans bouton).
+// motif = libellé humain (« Contrôle technique », « Révision », « Entretien »…). Défaut : contrôle technique.
+function buildCtMail(opts: { prenom: string; immat: string; marque: string; dateFr: string; nomSoc: string; logoUrl: string; motif?: string }) {
   const { prenom, immat, marque, dateFr, nomSoc, logoUrl } = opts;
-  const subject = "Rappel — contrôle technique demain" + (immat ? " — " + immat : "");
+  const motif = String(opts.motif || "Contrôle technique").trim() || "Contrôle technique";
+  const motifBas = motif.toLowerCase();
+  const subject = "Rappel — " + motifBas + " demain" + (immat ? " — " + immat : "");
   const plate = immat
     ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
       + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
@@ -170,17 +173,17 @@ function buildCtMail(opts: { prenom: string; immat: string; marque: string; date
     + '<td style="vertical-align:middle">' + head + "</td>"
     + (!logoUrl && nomSoc ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">' + esc(nomSoc) + "</td>" : "")
     + "</tr></table>"
-    + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">Contrôle technique demain</div>'
+    + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + esc(motif) + ' demain</div>'
     + (prenom ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#fff">' + esc(prenom) + "</div>" : "")
     + (plate ? '<div style="margin-top:14px">' + plate + "</div>" : "")
     + "</div>"
     + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px">'
     + "<p style=\"margin:0 0 16px\">Bonjour" + (prenom ? " " + esc(prenom) : "") + ",</p>"
-    + '<p style="margin:0 0 16px;line-height:1.5">Petit rappel : le <b>contrôle technique</b> du véhicule <b style="white-space:nowrap">' + esc(immat) + "</b>" + (marque ? " (" + esc(marque) + ")" : "")
-    + ' est prévu <b>demain (' + esc(dateFr) + ')</b> ⏳. Pense à t\'organiser pour le rendez-vous. 📅</p>'
+    + '<p style="margin:0 0 16px;line-height:1.5">Petit rappel : <b>' + esc(motif) + '</b> pour le véhicule <b style="white-space:nowrap">' + esc(immat) + "</b>" + (marque ? " (" + esc(marque) + ")" : "")
+    + ' — prévu <b>demain (' + esc(dateFr) + ')</b> ⏳. Pense à t\'organiser pour le rendez-vous. 📅</p>'
     + "</div></div>";
   const text = "Bonjour" + (prenom ? " " + prenom : "") + ",\n\n"
-    + "Rappel : le contrôle technique du véhicule " + immat + " est prévu demain (" + dateFr + ").\n\n" + (nomSoc || "Parc Pilot");
+    + "Rappel : " + motif + " pour le véhicule " + immat + " — prévu demain (" + dateFr + ").\n\n" + (nomSoc || "Parc Pilot");
   return { subject, html, text };
 }
 
@@ -378,17 +381,23 @@ Deno.serve(async (req) => {
       const soc = String(veh.societe || "PXP");
       if (onlySoc && soc !== onlySoc) continue;
       if (horsFlotte(veh.statut)) continue;
-      const ymd = String((veh as any).prochain_ct ?? "").trim().slice(0, 10);
-      if (!ymd || ymd !== demain) continue; // on ne rappelle QUE la veille (échéance = demain)
       const data = cfgBySoc[soc] || {};
       const ignores = (data.ignores && typeof data.ignores === "object") ? data.ignores : {};
-      if (ignores["conf:ct:" + veh.id]) continue; // CT ignoré (comme FP.ctIgnored côté site)
+      // Échéances « demain » à rappeler pour ce véhicule : (1) le CONTRÔLE TECHNIQUE (colonne prochain_ct,
+      // sauf ignoré) et (2) tout RENDEZ-VOUS GARAGE saisi (settings.vehRdvGarage[vehId] = {date, motif}).
+      // Regroupés (consigne utilisateur : « un rdv au garage = pareil ; CT et révision, regroupe ça »).
+      const targets: Array<{ motif: string }> = [];
+      const ctYmd = String((veh as any).prochain_ct ?? "").trim().slice(0, 10);
+      if (ctYmd && ctYmd === demain && !ignores["conf:ct:" + veh.id]) targets.push({ motif: "Contrôle technique" });
+      const rdvMap = (data.vehRdvGarage && typeof data.vehRdvGarage === "object") ? data.vehRdvGarage : {};
+      const rdv = rdvMap[veh.id];
+      if (rdv && rdv.date && String(rdv.date).slice(0, 10) === demain) targets.push({ motif: String(rdv.motif || "Rendez-vous garage").trim() || "Rendez-vous garage" });
+      if (!targets.length) continue;
       const p = (data.profil && typeof data.profil === "object") ? data.profil : {};
       const condEmail = resolveEmail(String(veh.chauffeur || ""), condBySoc[soc] || []);
       const gestion = [String(p.mailExpediteur || "").trim(), String(p.mailCopie || "").trim()].filter(Boolean);
       const toList = [...new Set([condEmail, ...gestion].filter(Boolean).map((x) => x.toLowerCase()))];
       if (!toList.length) { ctBump(soc, "skipped"); ctDetails.push({ societe: soc, immat: veh.immat || "", status: "aucun-destinataire" }); continue; }
-      if (dryRun) { ctBump(soc, "sent"); ctDetails.push({ societe: soc, immat: veh.immat || "", to: toList, status: "dry-run" }); continue; }
       // Identité expéditeur scopée société (mirror `envoyer` / send-email), repli neutre plateforme.
       let from = envFrom, replyTo = "";
       const exp = String(p.mailExpediteur || "").trim();
@@ -402,15 +411,19 @@ Deno.serve(async (req) => {
       const logoUrl = /^https?:\/\//.test(String(p.logoUrl || "")) ? String(p.logoUrl) : "";
       const nomSoc = String((data.societe && data.societe.nom) || "").trim();
       const prenom = String(veh.chauffeur || "").trim().split(/\s+/)[0] || "";
-      const dateFr = ymd.split("-").reverse().join("/");
-      const mail = buildCtMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), dateFr, nomSoc, logoUrl });
-      const payload: Record<string, unknown> = { from, to: toList, subject: mail.subject, html: mail.html, text: mail.text };
-      if (replyTo) payload.reply_to = replyTo;
-      try {
-        const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-        if (!r.ok) { ctBump(soc, "failed"); ctDetails.push({ societe: soc, immat: veh.immat || "", status: "resend-echec", error: (await r.text().catch(() => "")).slice(0, 200) }); }
-        else { ctBump(soc, "sent"); ctDetails.push({ societe: soc, immat: veh.immat || "", to: toList, status: "envoye" }); }
-      } catch (e) { ctBump(soc, "failed"); ctDetails.push({ societe: soc, immat: veh.immat || "", status: "reseau-echec", error: String(e).slice(0, 200) }); }
+      const dateFr = demain.split("-").reverse().join("/");
+      // Un e-mail par motif dû demain (en pratique 1 seul ; CT + rdv le même jour = 2, rare).
+      for (const tg of targets) {
+        if (dryRun) { ctBump(soc, "sent"); ctDetails.push({ societe: soc, immat: veh.immat || "", to: toList, motif: tg.motif, status: "dry-run" }); continue; }
+        const mail = buildCtMail({ prenom, immat: veh.immat || "", marque: ((veh.marque || "") + " " + (veh.modele || "")).trim(), dateFr, nomSoc, logoUrl, motif: tg.motif });
+        const payload: Record<string, unknown> = { from, to: toList, subject: mail.subject, html: mail.html, text: mail.text };
+        if (replyTo) payload.reply_to = replyTo;
+        try {
+          const r = await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          if (!r.ok) { ctBump(soc, "failed"); ctDetails.push({ societe: soc, immat: veh.immat || "", motif: tg.motif, status: "resend-echec", error: (await r.text().catch(() => "")).slice(0, 200) }); }
+          else { ctBump(soc, "sent"); ctDetails.push({ societe: soc, immat: veh.immat || "", to: toList, motif: tg.motif, status: "envoye" }); }
+        } catch (e) { ctBump(soc, "failed"); ctDetails.push({ societe: soc, immat: veh.immat || "", motif: tg.motif, status: "reseau-echec", error: String(e).slice(0, 200) }); }
+      }
     }
   } catch (e) { ctDetails.push({ status: "exception", error: String(e).slice(0, 200) }); }
 
