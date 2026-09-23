@@ -6,9 +6,31 @@
    • NAVIGATIONS HTML → NETWORK-FIRST (en ligne = toujours la version fraîche ; le cache ne
      sert qu'en secours hors-ligne). Évite toute « page périmée ».
    On NE touche PAS aux autres origines (Supabase, Google Fonts, CDN) : réseau direct. */
-const CACHE = 'parcpilot-v20260923i';
+const CACHE = 'parcpilot-v20260923j';
 
-self.addEventListener('install', () => { self.skipWaiting(); });
+// PRÉ-CHARGEMENT hors ligne : à l'installation du SW (après un déploiement), on met en cache les
+// pages principales pour qu'elles soient consultables SANS réseau MÊME si l'utilisateur ne les a
+// jamais ouvertes. Les assets versionnés (app.min.js?v=…, CSS…) restent en cache-first à la demande
+// (ils sont partagés par toutes les pages et déjà mis en cache dès la 1ʳᵉ navigation en ligne).
+// allSettled + cache:'reload' : un échec (page absente / réseau) ne bloque JAMAIS l'installation.
+const PRECACHE = [
+  './dashboard.html',
+  './pages/vehicules.html', './pages/amendes.html', './pages/factures.html',
+  './pages/conducteurs.html', './pages/notifications.html', './pages/contrats.html',
+  './pages/statistiques.html', './pages/entretiens.html', './pages/sinistres.html',
+  './pages/emprunts.html', './pages/controle.html', './pages/budget.html',
+  './pages/taches.html', './pages/a-vendre.html', './pages/parametres.html',
+  './pages/manuel.html', './pages/scanner.html'
+];
+
+self.addEventListener('install', (e) => {
+  self.skipWaiting();
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => Promise.allSettled(PRECACHE.map((u) => c.add(new Request(u, { cache: 'reload' })))))
+      .catch(() => {})
+  );
+});
 
 /* ─────────────────────────────────────────────────────────────
    NOTIFICATIONS PUSH (Web Push)
