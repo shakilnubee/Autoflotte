@@ -14229,13 +14229,20 @@ FP.relances = {
     const occ = it.type === 'km' ? (it.lastKm || 'none') : String(it.dueDate || '').slice(0, 10);
     return 'relance:' + it.type + ':' + vid + ':' + occ;
   },
-  list() {
+  // Toutes les relances RÉELLEMENT en attente aujourd'hui (avant masquage « Ignorer »), avec leur clé.
+  _listAll() {
     const all = [].concat(this.garage(), this.entretiens(), this.km(), this.amendes());
     all.forEach(it => { it.ignKey = this._ignKey(it); });
+    return all;
+  },
+  list() {
+    const all = this._listAll();
     return (FP.ignore && FP.ignore.has) ? all.filter(it => !FP.ignore.has(it.ignKey)) : all;
   },
-  // Relances masquées par « Ignorer » (pour le lien « Réafficher »).
-  ignoredCount() { try { return (FP.ignore && FP.ignore.countPrefix) ? FP.ignore.countPrefix('relance:') : 0; } catch (e) { return 0; } },
+  // Nombre de relances ENCORE EN ATTENTE mais masquées par « Ignorer ». ⚠️ On repart des relances
+  // réelles du jour : une relance IGNORÉE puis TRAITÉE (amende payée, CT refait, km reçu…) n'existe
+  // plus dans la liste → elle ne compte PAS ici (la clé orpheline restée en réglages est ignorée).
+  ignoredCount() { try { return (FP.ignore && FP.ignore.has) ? this._listAll().filter(it => FP.ignore.has(it.ignKey)).length : 0; } catch (e) { return 0; } },
   restoreIgnored() { try { if (FP.ignore && FP.ignore.clearPrefix) FP.ignore.clearPrefix('relance:'); } catch (e) {} },
   count() { try { return this.list().length; } catch (e) { return 0; } },
   // Étiquette par TYPE (affichée sur chaque ligne).
