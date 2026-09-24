@@ -14363,7 +14363,14 @@ FP.injectTour = (force) => {
   try {
     if (!document.body) return;
     const KEY = 'fp_tour_v1_done';
-    if (!force) { if (!/dashboard/i.test(location.pathname)) return; if (localStorage.getItem(KEY) === '1') return; }
+    if (!force) {
+      if (!/dashboard/i.test(location.pathname)) return;
+      if (localStorage.getItem(KEY) === '1') return;
+      // ⚠️ Le tour est réservé à un compte NEUF. Un compte qui a déjà des véhicules = utilisateur établi →
+      // on ne l'affiche JAMAIS (évite aussi qu'il surgisse pendant la fenêtre de chargement, où le compte
+      // paraît vide un instant). Le déclencheur (plus bas) n'appelle de toute façon ceci qu'après fp:data-ready.
+      try { const vs = (window.FP_DATA && FP_DATA.vehicules) || []; if (Array.isArray(vs) && vs.length) return; } catch (e) {}
+    }
     if (document.getElementById('fp-tour')) return;
     const steps = [
       { t: 'Bienvenue sur Parc Pilot 👋', d: "Voici un tour express (30 s) des grands repères. Vous pourrez le revoir depuis le Manuel." },
@@ -14517,8 +14524,14 @@ document.addEventListener('DOMContentLoaded', () => {
   FP.mobileCardify(document);
   window.addEventListener('fp:data-ready', () => { try { FP.mobileCardify(document); } catch (e) {} });
   window.addEventListener('resize', () => { try { FP.mobileCardify(document); } catch (e) {} });
-  FP.injectTour();
-  setTimeout(() => { try { FP.featureTip(); } catch (e) {} }, 2500); // pop « nouveauté » (après le tour éventuel)
+  // Tour guidé + pop « nouveauté » : UNIQUEMENT après le 1er chargement des données (jamais pendant la
+  // fenêtre de chargement, où le compte paraît vide → c'est ce qui faisait « surgir les premiers pas »).
+  (function () {
+    let done = false;
+    const go = () => { if (done) return; done = true; try { FP.injectTour(); } catch (e) {} setTimeout(() => { try { FP.featureTip(); } catch (e) {} }, 2500); };
+    window.addEventListener('fp:data-ready', go, { once: true });
+    setTimeout(go, 6000); // filet si fp:data-ready n'arrive jamais (hors-ligne total sans cache)
+  })();
 
   // Animations 3D au survol des bulles KPI (global — validé). La carte s'incline vers le
   // curseur + reflet qui suit la souris. Ré-appliqué après un re-rendu de données
