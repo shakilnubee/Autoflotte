@@ -14201,7 +14201,7 @@ FP.relances = {
       let statut; if (lastDate && days <= seuil) statut = 'ajour'; else if (pending) statut = 'attente'; else if (last) statut = 'relancer'; else statut = 'jamais';
       if (statut === 'ajour' || statut === 'attente') return; // à jour = rien ; en attente = demande déjà partie
       const chauffeur = (v.chauffeur && v.chauffeur !== '—') ? String(v.chauffeur).trim() : '';
-      out.push({ type: 'km', veh: v, immat: v.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), statut, joursRestants: null, urgence: 'retard' });
+      out.push({ type: 'km', veh: v, immat: v.immat || '', conducteur: chauffeur, contact: this._contact(chauffeur), statut, lastKm: last ? last.used_at : '', joursRestants: null, urgence: 'retard' });
     });
     return out;
   },
@@ -14219,7 +14219,24 @@ FP.relances = {
     return out;
   },
 
-  list() { return [].concat(this.garage(), this.entretiens(), this.km(), this.amendes()); },
+  // Clé d'IGNORE par relance — PAR OCCURRENCE : une nouvelle échéance (nouvelle date CT/garage/révision,
+  // nouveau relevé km, autre amende) réapparaît toute seule (comme le « ✓ Vu » des alertes). Ignorer ne
+  // supprime rien : ça masque juste ce rappel-là. Persisté par société (FP.ignore → settings.ignores).
+  _ignKey(it) {
+    if (!it) return '';
+    if (it.type === 'amende') return 'relance:amende:' + ((it.amende && it.amende.id) || it.immat || '');
+    const vid = (it.veh && it.veh.id) || it.immat || '';
+    const occ = it.type === 'km' ? (it.lastKm || 'none') : String(it.dueDate || '').slice(0, 10);
+    return 'relance:' + it.type + ':' + vid + ':' + occ;
+  },
+  list() {
+    const all = [].concat(this.garage(), this.entretiens(), this.km(), this.amendes());
+    all.forEach(it => { it.ignKey = this._ignKey(it); });
+    return (FP.ignore && FP.ignore.has) ? all.filter(it => !FP.ignore.has(it.ignKey)) : all;
+  },
+  // Relances masquées par « Ignorer » (pour le lien « Réafficher »).
+  ignoredCount() { try { return (FP.ignore && FP.ignore.countPrefix) ? FP.ignore.countPrefix('relance:') : 0; } catch (e) { return 0; } },
+  restoreIgnored() { try { if (FP.ignore && FP.ignore.clearPrefix) FP.ignore.clearPrefix('relance:'); } catch (e) {} },
   count() { try { return this.list().length; } catch (e) { return 0; } },
   // Étiquette par TYPE (affichée sur chaque ligne).
   META: {
