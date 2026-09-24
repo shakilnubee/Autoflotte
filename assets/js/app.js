@@ -14102,9 +14102,24 @@ FP.suivi = {
   _num(v, key) { try { return String((FP.numCarteVehicule ? FP.numCarteVehicule(v, key) : ((FP.settings.get()[key]) || {})[v.id]) || '').trim(); } catch (e) { return ''; } },
   _hasCg(v, c) { try { if (v && v.cgUrl && !FP.suivi._isDrive(v.cgUrl)) return true; const ds = (c && c.docs && c.docs[v.id]) || []; return ds.some(d => d && d.type === 'carte-grise' && d.url && !FP.suivi._isDrive(d.url)); } catch (e) { return false; } },
   _hasAssur(v) { try { if (v && v.assurance && String(v.assurance).trim()) return true; if (FP.assureurOf && FP.assureurOf(v)) return true; if (FP.assuranceLabel && FP.assuranceLabel()) return true; } catch (e) {} return false; },
-  // Contrat leasing : « non concerné » (na) si le véhicule n'est pas en leasing/LLD ; sinon vrai si un PDF
-  // de contrat est au dossier (BPCE settings.leasingDocs[IMMAT] ou contrats Ayvens/Localease avec docs).
-  _leasing(v) { try { if (!(FP.loueurOf && FP.loueurOf(v))) return 'na'; const immatU = String(v.immat || '').toUpperCase(); const bpce = (FP.settings.get().leasingDocs || {})[immatU]; if (Array.isArray(bpce) && bpce.length) return true; const k = FP.normImmat ? FP.normImmat(v.immat) : immatU; const loc = FP.settings.get().localeaseContrats || []; return loc.some(x => x && Array.isArray(x.docs) && x.docs.length && FP.normImmat && FP.normImmat(x.immat || '') === k); } catch (e) { return 'na'; } },
+  // Contrat leasing — AUTO : « non concerné » (na) si le véhicule n'est PAS en leasing/LLD (source
+  // unique FP.estLeasing = propriétaire = loueur configuré OU contrat leasing connu) ; sinon vrai si un
+  // PDF de contrat est au dossier (BPCE settings.leasingDocs[IMMAT] ou contrat Ayvens/Localease avec docs),
+  // faux (à faire) si en leasing sans contrat rattaché. ⚠️ NE PAS utiliser FP.loueurOf ici : il renvoie le
+  // propriétaire de TOUT véhicule possédé (donc « en leasing » à tort pour un véhicule acheté).
+  _leasing(v) {
+    try {
+      const k = FP.normImmat ? FP.normImmat(v.immat) : String(v.immat || '').toUpperCase();
+      const loc = (FP.settings.get().localeaseContrats || []);
+      const locMine = loc.filter(x => x && FP.normImmat && FP.normImmat(x.immat || '') === k);
+      const isLeasing = (FP.estLeasing && FP.estLeasing(v)) || locMine.length > 0;
+      if (!isLeasing) return 'na';                                 // pas en leasing → non concerné (auto)
+      const bpce = (FP.settings.get().leasingDocs || {})[String(v.immat || '').toUpperCase()];
+      if (Array.isArray(bpce) && bpce.length) return true;        // contrat BPCE au dossier
+      if (locMine.some(x => Array.isArray(x.docs) && x.docs.length)) return true; // contrat Ayvens/Localease au dossier
+      return false;                                                // en leasing mais aucun contrat → à faire
+    } catch (e) { return 'na'; }
+  },
   // EDL de restitution : vrai si un état des lieux « sortie / restitution » est au dossier ; sinon « non
   // concerné » (na) → pas de rouge inutile sur les véhicules gardés.
   _edlRestit(v, c) { const ds = (c && c.docs && c.docs[v.id]) || []; const has = ds.some(d => d && d.type === 'etat-des-lieux' && d.url && !FP.suivi._isDrive(d.url) && /sort|restit/i.test(d.label || '')); return has ? true : 'na'; },
