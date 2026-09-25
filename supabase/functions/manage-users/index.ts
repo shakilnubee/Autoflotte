@@ -171,25 +171,37 @@ Deno.serve(async (req) => {
       const esc = (s: string) => String(s).replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c] || c));
       // Design BRANDÉ (même en-tête sombre que le relevé km / les amendes), robuste au mode sombre Gmail
       // (background-color solide → le texte blanc reste blanc).
+      // Logo Parc Pilot « en dur » (barres orange + « Parc » blanc + « Pilot » orange) — identique au site.
+      const ppLogo =
+        '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:8px">' +
+        '<span style="display:block;width:18px;height:3px;background:#FB923C;border-radius:2px"></span>' +
+        '<span style="display:block;width:23px;height:3px;background:#F97316;border-radius:2px;margin-top:2px"></span>' +
+        '<span style="display:block;width:13px;height:3px;background:#FB923C;border-radius:2px;margin-top:2px"></span>' +
+        '</span>' +
+        '<span style="font-weight:900;font-style:italic;font-size:15px;color:#ffffff;vertical-align:middle">Parc</span>' +
+        '<span style="font-weight:900;font-style:italic;font-size:15px;color:#F97316;vertical-align:middle">Pilot</span>';
       const html =
         '<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">' +
         '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">' +
-        '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>' +
+        '<div>' + ppLogo + '</div>' +
         '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">Bienvenue sur Parc Pilot</div>' +
         '</div>' +
-        '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px;color:#0F1E3D">' +
+        '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px;color:#0F1E3D">' +
         '<p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>' +
-        '<p style="margin:0 0 16px;line-height:1.55">Un accès à <b>Parc Pilot</b> (votre plateforme de gestion de flotte) vient d\'être créé pour vous. Cliquez ci-dessous pour <b>choisir votre mot de passe</b> et vous connecter.</p>' +
+        '<p style="margin:0 0 16px;line-height:1.55">Un accès à <b>Parc Pilot</b> (ta plateforme de gestion de flotte) vient d\'être créé pour toi. Clique ci-dessous pour <b>choisir ton mot de passe</b> et te connecter.</p>' +
         '<p style="text-align:center;margin:22px 0"><a href="' + esc(actionLink) + '" style="display:inline-block;background:#0B1220;color:#ffffff;padding:14px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">Définir mon mot de passe →</a></p>' +
-        '<p style="font-size:12.5px;line-height:1.5;color:#64748b;margin:12px 0 0">Votre identifiant sera votre e-mail : <b>' + esc(email) + '</b>. Ce lien est personnel et temporaire ; s\'il a expiré, utilisez « Mot de passe oublié » sur la page de connexion.</p>' +
-        '<p style="text-align:center;font-size:11px;color:#94A3B8;margin:16px 0 0">Parc Pilot · parc-pilot.fr</p>' +
+        '<p style="font-size:12.5px;line-height:1.5;color:#64748b;margin:12px 0 0">Ton identifiant sera ton e-mail : <b>' + esc(email) + '</b>. Ce lien est personnel et temporaire ; s\'il a expiré, utilise « Mot de passe oublié » sur la page de connexion.</p>' +
+        '</div>' +
+        '<div style="background-color:#0B1220;color:#94A3B8;padding:16px 22px;border-radius:0 0 14px 14px;text-align:center;font-size:11px">' +
+        '<div>' + ppLogo + '</div>' +
+        '<div style="margin-top:9px;color:#64748B">via Parc Pilot</div>' +
         '</div></div>';
-      const text = "Bonjour,\n\nUn accès à Parc Pilot a été créé pour vous. Définissez votre mot de passe ici :\n" + actionLink + "\n\nVotre identifiant : " + email + "\n\nParc Pilot · parc-pilot.fr";
+      const text = "Bonjour,\n\nUn accès à Parc Pilot a été créé pour toi. Définis ton mot de passe ici :\n" + actionLink + "\n\nTon identifiant : " + email + "\n\nParc Pilot · parc-pilot.fr";
       try {
         const r = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { "Authorization": `Bearer ${RESEND}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ from, to: [email], subject: "Votre accès à Parc Pilot — définissez votre mot de passe", html, text }),
+          body: JSON.stringify({ from, to: [email], subject: "Ton accès à Parc Pilot · définis ton mot de passe", html, text }),
         });
         const rd = await r.json().catch(() => ({}));
         if (!r.ok) return json({ ok: true, id: userId, emailSent: false, warn: "Compte prêt, mais e-mail non envoyé : " + (rd?.message || "erreur Resend") + " (domaine d'envoi vérifié ?)." });

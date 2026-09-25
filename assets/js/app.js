@@ -2474,8 +2474,8 @@ FP.kmCollecte = {
     const L = (FP.condLangue ? FP.condLangue(cond || v.chauffeur) : 'fr');
     const T = (L === 'en')
       ? { subject: 'Mileage reading', hi: 'Hello', title: 'Mileage reading requested', ask1: 'Please provide the <b>current mileage</b> of your vehicle', ask2: '. It only takes a second: one tap, one number, done.', btn: 'Enter my mileage →', fb: 'If the button does not work, copy this link:', askTxt: 'Please provide the current mileage of your vehicle', clickTxt: 'Open this link:' }
-      : { subject: 'Relevé kilométrique', hi: 'Bonjour', title: 'Relevé kilométrique demandé', ask1: "Merci d'indiquer le <b>kilométrage actuel</b> de votre véhicule", ask2: ". C'est rapide : un clic, un nombre, terminé.", btn: 'Indiquer mon kilométrage →', fb: 'Si le bouton ne fonctionne pas, copiez ce lien :', askTxt: "Merci d'indiquer le kilométrage actuel de votre véhicule", clickTxt: 'Cliquez sur ce lien :' };
-    const subject = T.subject + (v.immat ? ' — ' + v.immat : '');   // sujet = texte brut (pas d'échappement HTML)
+      : { subject: 'Relevé kilométrique', hi: 'Bonjour', title: 'Relevé kilométrique demandé', ask1: "Merci d'indiquer le <b>kilométrage actuel</b> de ton véhicule", ask2: ". C'est rapide : un clic, un nombre, terminé.", btn: 'Indiquer mon kilométrage →', fb: 'Si le bouton ne fonctionne pas, copie ce lien :', askTxt: "Merci d'indiquer le kilométrage actuel de ton véhicule", clickTxt: 'Clique sur ce lien :' };
+    const subject = T.subject + (v.immat ? ' (' + v.immat + ')' : '');   // sujet = texte brut (pas d'échappement HTML)
     const socName = nomSoc ? FP.esc(nomSoc) : '';
     // Logo société HÉBERGÉ (URL http) — jamais le data-URI (cassé dans les e-mails). Rempli par
     // FP.hostSocieteLogo() appelé dans send() AVANT la construction du mail.
@@ -2489,22 +2489,17 @@ FP.kmCollecte = {
       + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
       // ── En-tête bleu : marque Parc Pilot + société, titre, puis conducteur (prénom/nom + poste) et plaque ──
       + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
-      + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
-      // Logo de la société (comme le QR) si hébergé, sinon la marque Parc Pilot en texte (repli).
-      + '<td style="vertical-align:middle">' + (logoUrl
+      // En-tête = marque expéditeur : logo société hébergé, sinon nom de société, sinon logo Parc Pilot.
+      + '<div>' + (logoUrl
         ? '<img src="' + FP.esc(logoUrl) + '" alt="' + (socName || 'Logo') + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
-        : '<span style="font-weight:900;font-style:italic;font-size:16px;color:#fff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>') + '</td>'
-      // Pas de mention « Parc Pilot » quand le logo société est présent (redondant). Sinon on met
-      // le nom de la société à droite pour équilibrer l'en-tête.
-      + (!logoUrl && socName ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">' + socName + '</td>' : '')
-      + '</tr></table>'
+        : (socName ? '<span style="font-weight:900;font-size:17px;color:#fff;letter-spacing:.02em">' + socName + '</span>' : (FP.ppLogoMail ? FP.ppLogoMail() : 'Parc Pilot'))) + '</div>'
       + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + T.title + '</div>'
       + (fullName ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#fff">' + FP.esc(fullName) + '</div>' : '')
       + (cPoste ? '<div style="font-size:13px;color:#94A3B8;margin-top:3px;font-weight:600">' + FP.esc(cPoste) + '</div>' : '')
       + (plateBadge ? '<div style="margin-top:14px;white-space:nowrap">' + plateBadge + '</div>' : '')
       + '</div>'
       // ── Corps blanc : demande + bouton ──
-      + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px">'
+      + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px">'
       + '<p style="margin:0 0 16px">' + T.hi + (cPrenom ? ' ' + FP.esc(cPrenom) : '') + ',</p>'
       + '<p style="margin:0 0 16px;line-height:1.5">' + T.ask1
       + (plaque ? ' <b style="white-space:nowrap">' + plaque + '</b>' : '') + (marque ? ' (' + marque + ')' : '') + T.ask2 + '</p>'
@@ -2512,7 +2507,9 @@ FP.kmCollecte = {
       + '<a href="' + link + '" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">' + T.btn + '</a>'
       + '</p>'
       + '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">' + T.fb + '<br>' + link + '</p>'
-      + '</div></div>';
+      + '</div>'
+      + (FP.mailFooterHtml ? FP.mailFooterHtml(nomSoc || '') : '')
+      + '</div>';
     const text = (fullName ? T.hi + ' ' + fullName + ',\n\n' : T.hi + ',\n\n')
       + T.askTxt + (plaque ? ' ' + (v.immat || '') : '') + '.\n'
       + T.clickTxt + ' ' + link + '\n\n' + (nomSoc || 'Parc Pilot');
@@ -3883,7 +3880,7 @@ FP.PROFIL_CHAMPS = [
   { key: 'mailModelePaiement_en',   label: "E-mail EN — payment request",      type: 'textarea', ph: 'Use {prenom} for the first name.', default: FP.MAIL_DEFAUT.paiement_en, lang: 'en' },
   { key: 'mailModeleDesignation_en',label: "E-mail EN — driver designation",   type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.designation_en, lang: 'en' },
   { key: 'mailModeleRelance_en',    label: "E-mail EN — reminder",             type: 'textarea', ph: 'Use {prenom}.', default: FP.MAIL_DEFAUT.relance_en, lang: 'en' },
-  { key: 'mailModeleSignature',  label: "Modèle e-mail — demande de signature (état des lieux)", type: 'textarea', ph: 'Message envoyé au conducteur pour signer. Balises : {prenom}, {immat}, {modele}, {date}. Le bouton « Signer le document » et les infos du véhicule sont ajoutés automatiquement (mise en page soignée).', default: 'Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signez l\'état des lieux de votre {modele} ({immat}) en quelques secondes, directement depuis ce mail.' },
+  { key: 'mailModeleSignature',  label: "Modèle e-mail — demande de signature (état des lieux)", type: 'textarea', ph: 'Message envoyé au conducteur pour signer. Balises : {prenom}, {immat}, {modele}, {date}. Le bouton « Signer le document » et les infos du véhicule sont ajoutés automatiquement (mise en page soignée).', default: 'Bonjour {prenom},\n\nDernière étape avant de rouler ! 🚀 Signe l\'état des lieux de ta {modele} ({immat}) en quelques secondes, directement depuis ce mail.' },
   // ⚠️ Le champ « Signature (bas des e-mails d'amende) » a été RETIRÉ (2026-09-25) : les e-mails
   //    partent désormais via la plateforme avec un pied de page brandé (société · via Parc Pilot),
   //    plus besoin d'une signature manuelle. L'ancienne valeur settings.mailSignature est ignorée.
@@ -11297,15 +11294,17 @@ FP.edl = {
         // C) À défaut (« Aucune », ou pas d'e-mail) : e-mail avec le PDF en pièce jointe.
         if (!signed && !sentForSign && !surSigs && data.to && FP.sendEmail) {
           const phrase = isRestit
-            ? `Veuillez trouver ci-joint l'<b>état des lieux de restitution</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}), rendu le ${esc(FP.date(data.date))}.`
-            : `Veuillez trouver ci-joint l'<b>état des lieux</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}) qui vous est remis le ${esc(FP.date(data.date))}.`;
-          const html = `<p>Bonjour,</p><p>${phrase}</p><p>Merci de vérifier, dater et signer.</p><p>— ${esc(data.socNom || 'Gestion de flotte')}</p>`;
-          try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux (' + motLbl + ') — ' + data.immat + ' — ' + data.employe, html, text: 'État des lieux (' + motLbl + ') du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
+            ? `Tu trouveras ci-joint l'<b>état des lieux de restitution</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}), rendu le ${esc(FP.date(data.date))}.`
+            : `Tu trouveras ci-joint l'<b>état des lieux</b> du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}) qui t'est remis le ${esc(FP.date(data.date))}.`;
+          const _bodyH = `<p style="margin:0 0 14px">Bonjour,</p><p style="margin:0 0 14px;line-height:1.5">${phrase}</p><p style="margin:0;line-height:1.5">Merci de vérifier, dater et signer.</p>`;
+          const html = FP.mailShell ? FP.mailShell({ brand: data.socNom || '', logoUrl: '', title: 'État des lieux', bodyHtml: _bodyH }) : `<p>Bonjour,</p><p>${phrase}</p><p>Merci de vérifier, dater et signer.</p>`;
+          try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux (' + motLbl + ') · ' + data.immat, html, text: 'État des lieux (' + motLbl + ') du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
         }
         // C-bis) SIGNÉ SUR PLACE : on envoie une COPIE du PDF déjà signé (au conducteur + copie société), si e-mail connu.
         if (surSigs && data.to && FP.sendEmail) {
-          const html = `<p>Bonjour,</p><p>Veuillez trouver ci-joint l'<b>état des lieux ${isRestit ? 'de restitution ' : ''}</b>du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}), <b>signé</b> le ${esc(FP.date(data.date))}.</p><p>— ${esc(data.socNom || 'Gestion de flotte')}</p>`;
-          try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux signé (' + motLbl + ') — ' + data.immat, html, text: 'État des lieux signé du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
+          const _bodyH = `<p style="margin:0 0 14px">Bonjour,</p><p style="margin:0;line-height:1.5">Tu trouveras ci-joint l'<b>état des lieux ${isRestit ? 'de restitution ' : ''}</b>du véhicule <b>${esc(data.immat)}</b> (${esc(data.modele)}), <b>signé</b> le ${esc(FP.date(data.date))}.</p>`;
+          const html = FP.mailShell ? FP.mailShell({ brand: data.socNom || '', logoUrl: '', title: 'État des lieux signé', bodyHtml: _bodyH }) : `<p>Bonjour,</p>${_bodyH}`;
+          try { await FP.sendEmail({ to: data.to, cc: prof.mailCopie || '', subject: 'État des lieux signé (' + motLbl + ') · ' + data.immat, html, text: 'État des lieux signé du véhicule ' + data.immat + ' en pièce jointe.', replyTo: prof.mailExpediteur || '', attachments: [{ filename: fname, content: b64 }] }); mailed = true; } catch (e) {}
         }
         close();
         const seq = sentForSign && signersList.length > 1;   // gestionnaire d'abord, puis salarié
