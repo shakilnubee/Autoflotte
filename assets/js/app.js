@@ -14121,6 +14121,30 @@ document.addEventListener('click', (e) => {
 // En-tête sombre (logo société ou « Parc Pilot », titre, prénom, plaque) + corps blanc contenant le
 // message. Robuste au MODE SOMBRE de Gmail (background-color solide → le texte blanc reste blanc).
 // bodyHtml = HTML déjà prêt (message + signature). buttonHtml = bouton d'action optionnel.
+// ===== LOGO PARC PILOT « EN DUR » pour les e-mails (source UNIQUE, identique partout) =====
+// Reproduit le vrai logo (3 barres orange de largeurs différentes + « Parc » blanc + « Pilot » orange,
+// en italique) en HTML pur → s'affiche TOUJOURS (les images externes sont souvent bloquées par les
+// clients mail). ⚠️ Tout e-mail de la plateforme DOIT utiliser CE logo (jamais un logo « maison »).
+FP.ppLogoMail = function () {
+  return ''
+    + '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:8px">'
+    +   '<span style="display:block;width:18px;height:3px;background:#FB923C;border-radius:2px"></span>'
+    +   '<span style="display:block;width:23px;height:3px;background:#F97316;border-radius:2px;margin-top:2px"></span>'
+    +   '<span style="display:block;width:13px;height:3px;background:#FB923C;border-radius:2px;margin-top:2px"></span>'
+    + '</span>'
+    + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#ffffff;vertical-align:middle">Parc</span>'
+    + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#F97316;vertical-align:middle">Pilot</span>';
+};
+// Pied de page sombre commun à TOUS les e-mails (logo Parc Pilot + « <société> · via Parc Pilot »).
+FP.mailFooterHtml = function (nomSoc) {
+  const esc = FP.esc || (x => String(x == null ? '' : x));
+  return ''
+    + '<div style="background-color:#0B1220;color:#94A3B8;padding:16px 22px;border-radius:0 0 14px 14px;text-align:center;font-size:11px">'
+    +   '<div>' + FP.ppLogoMail() + '</div>'
+    +   '<div style="margin-top:9px;color:#64748B">' + (nomSoc ? esc(nomSoc) + ' · ' : '') + 'via Parc Pilot</div>'
+    + '</div>';
+};
+
 FP.mailBrand = function (o) {
   o = o || {};
   const esc = FP.esc || (x => String(x == null ? '' : x));
@@ -14153,15 +14177,6 @@ FP.mailBrand = function (o) {
     if (hasAvis) cells.push('<td width="' + (hasMontant ? '50%' : '100%') + '" style="text-align:center;padding:2px 10px;vertical-align:top"><div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700">N° d\'avis</div><div style="font-size:14px;font-weight:800;color:#ffffff;margin-top:6px;font-family:Consolas,monospace">' + esc(o.numeroAvis) + '</div></td>');
     infoBlock = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px"><tr><td style="border-top:1px solid rgba(255,255,255,.14);padding-top:14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' + cells.join('') + '</tr></table></td></tr></table>';
   }
-  // Logo Parc Pilot « EN DUR » (pied de page) : 3 barres orange + « Parc » blanc + « Pilot » orange.
-  const ppLogo = ''
-    + '<span style="display:inline-block;vertical-align:middle;line-height:0">'
-    +   '<span style="display:inline-block;width:4px;height:14px;background:#F97316;border-radius:2px;vertical-align:middle"></span>'
-    +   '<span style="display:inline-block;width:4px;height:14px;background:#F97316;border-radius:2px;vertical-align:middle;margin-left:2px;opacity:.7"></span>'
-    +   '<span style="display:inline-block;width:4px;height:14px;background:#F97316;border-radius:2px;vertical-align:middle;margin-left:2px;opacity:.45"></span>'
-    + '</span>'
-    + '<span style="font-weight:800;font-size:14px;color:#ffffff;vertical-align:middle;margin-left:7px">Parc</span>'
-    + '<span style="font-weight:800;font-size:14px;color:#F97316;vertical-align:middle;margin-left:2px">Pilot</span>';
   return ''
     + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
     // ── EN-TÊTE SOMBRE, CENTRÉ (marque · titre · plaque héros · destinataire · montant/n° d'avis) ──
@@ -14179,11 +14194,8 @@ FP.mailBrand = function (o) {
     +   (o.bodyHtml || '')
     +   (o.buttonHtml ? '<p style="text-align:center;margin:22px 0">' + o.buttonHtml + '</p>' : '')
     + '</div>'
-    // ── PIED SOMBRE avec le vrai logo Parc Pilot ──
-    + '<div style="background-color:#0B1220;color:#94A3B8;padding:16px 22px;border-radius:0 0 14px 14px;text-align:center;font-size:11px">'
-    +   '<div>' + ppLogo + '</div>'
-    +   '<div style="margin-top:9px;color:#64748B">' + (nomSoc ? esc(nomSoc) + ' · ' : '') + 'via Parc Pilot</div>'
-    + '</div>'
+    // ── PIED SOMBRE avec le vrai logo Parc Pilot (source unique) ──
+    + FP.mailFooterHtml(nomSoc)
     + '</div>';
 };
 
@@ -14204,10 +14216,13 @@ FP.mailShell = function (o) {
     +   '<div>' + brand + '</div>'
     +   (o.title ? '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + esc(o.title) + '</div>' : '')
     + '</div>'
-    + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px;color:#0F1E3D">'
+    + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px;color:#0F1E3D">'
     +   (o.bodyHtml || '')
     +   (o.buttonHtml ? '<p style="text-align:center;margin:22px 0">' + o.buttonHtml + '</p>' : '')
-    + '</div></div>';
+    + '</div>'
+    // Pied de page Parc Pilot — même logo que tous les autres e-mails (source unique).
+    + FP.mailFooterHtml(o.nomSoc || (o.brand && o.brand !== 'Parc Pilot' ? o.brand : ''))
+    + '</div>';
 };
 
 // ===== E-MAILS D'AMENDE — SOURCE UNIQUE (résolution modèle + balises + rendu) =====
@@ -14313,10 +14328,10 @@ FP.sendMailTest = async function (key, to) {
     key: 'bienvenue-conducteur', label: 'Bienvenue à bord (conducteur · QR)', group: 'Comptes',
     sample: () => ({ prenom: 'Alex', plaque: 'AA-123-AA', portail: '#' }),
     build: (d) => ({
-      subject: 'Bienvenue à bord 🚗 — l\'espace véhicule',
+      subject: 'Bienvenue à bord 🚗 · l\'espace véhicule',
       html: FP.mailBrand({ title: 'Bienvenue à bord', prenom: d.prenom, plaque: d.plaque, nomSoc: d.nomSoc, logoUrl: d.logoUrl,
         bodyHtml: '<p style="margin:0 0 14px">Bonjour ' + esc(d.prenom) + ',</p>'
-          + '<p style="margin:0 0 14px;line-height:1.5">Bienvenue à bord ! Le véhicule <b><span style="white-space:nowrap">' + esc(d.plaque) + '</span></b> dispose d\'un <b>QR code</b> collé à l\'intérieur. En le scannant — ou via le bouton ci-dessous — l\'espace véhicule est accessible en quelques secondes :</p>'
+          + '<p style="margin:0 0 14px;line-height:1.5">Bienvenue à bord ! Le véhicule <b><span style="white-space:nowrap">' + esc(d.plaque) + '</span></b> dispose d\'un <b>QR code</b> collé à l\'intérieur. En le scannant (ou via le bouton ci-dessous), tu accèdes à ton espace véhicule en quelques secondes :</p>'
           + '<ul style="margin:0 0 14px;padding-left:18px;line-height:1.7"><li>📸 <b>Envoi du kilométrage</b></li><li>📄 <b>Documents</b> (carte grise, assurance, assistance)</li><li>🚨 <b>Signalement</b> d\'un problème ou d\'un accident</li><li>📋 <b>État des lieux</b> (photos de prise et de restitution)</li></ul>'
           + '<p style="margin:0;line-height:1.5">À garder sous la main. Bonne route ! 🙌</p>',
         buttonHtml: btn(d.portail, 'Accéder à mon espace →') }),
@@ -14329,13 +14344,13 @@ FP.sendMailTest = async function (key, to) {
     note: "Différent du « Bienvenue à bord » conducteur : celui-ci ouvre un COMPTE (connexion). Envoyé au nom de Parc Pilot → l'envoi réel nécessite le domaine parc-pilot.fr vérifié dans Resend.",
     sample: () => ({ email: 'alex.martin@exemple.fr', link: '#' }),
     build: (d) => ({
-      subject: 'Votre accès à Parc Pilot — définissez votre mot de passe',
+      subject: 'Ton accès à Parc Pilot · définis ton mot de passe',
       html: FP.mailShell({ brand: 'Parc Pilot', logoUrl: '', title: 'Bienvenue sur Parc Pilot',
         bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>'
-          + '<p style="margin:0 0 16px;line-height:1.55">Un accès à Parc Pilot a été créé pour vous. Cliquez ci-dessous pour définir votre mot de passe et vous connecter.</p>'
-          + '<p style="margin:0 0 8px;line-height:1.55;color:#64748B;font-size:13px">Votre identifiant : <b>' + esc(d.email) + '</b></p>',
+          + '<p style="margin:0 0 16px;line-height:1.55">Un accès à Parc Pilot a été créé pour toi. Clique ci-dessous pour définir ton mot de passe et te connecter.</p>'
+          + '<p style="margin:0 0 8px;line-height:1.55;color:#64748B;font-size:13px">Ton identifiant : <b>' + esc(d.email) + '</b></p>',
         buttonHtml: btn(d.link, 'Définir mon mot de passe →') }),
-      text: 'Bonjour,\n\nUn accès à Parc Pilot a été créé pour vous. Définissez votre mot de passe ici :\n' + d.link + '\n\nVotre identifiant : ' + d.email + '\n\nParc Pilot · parc-pilot.fr'
+      text: 'Bonjour,\n\nUn accès à Parc Pilot a été créé pour toi. Définis ton mot de passe ici :\n' + d.link + '\n\nTon identifiant : ' + d.email + '\n\nParc Pilot · parc-pilot.fr'
     })
   });
   // 3) RELEVÉ KM (au nom de la société) — cf. km-relance
@@ -14343,23 +14358,24 @@ FP.sendMailTest = async function (key, to) {
     key: 'releve-km', label: 'Relevé kilométrique', group: 'Kilométrage',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', link: '#', relance: false }),
     build: (d) => ({
-      subject: 'Relevé kilométrique' + (d.immat ? ' — ' + d.immat : ''),
+      subject: 'Relevé kilométrique' + (d.immat ? ' (' + d.immat + ')' : ''),
       html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'Relevé kilométrique demandé',
         bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour ' + esc(d.prenom) + ',</p>'
-          + '<p style="margin:0 0 16px;line-height:1.55">Merci d\'indiquer le <b>kilométrage actuel</b> de votre véhicule ' + esc(d.immat) + ' — c\'est rapide, directement depuis ce mail.</p>',
+          + '<p style="margin:0 0 16px;line-height:1.55">Merci d\'indiquer le <b>kilométrage actuel</b> de ton véhicule ' + esc(d.immat) + '. C\'est rapide, directement depuis ce mail.</p>',
         buttonHtml: btn(d.link, 'Indiquer mon kilométrage →') }),
-      text: 'Bonjour ' + d.prenom + ',\n\nMerci d\'indiquer le kilométrage actuel de votre véhicule ' + d.immat + ' :\n' + d.link
+      text: 'Bonjour ' + d.prenom + ',\n\nMerci d\'indiquer le kilométrage actuel de ton véhicule ' + d.immat + ' :\n' + d.link
     })
   });
-  // 4) RAPPEL ENTRETIEN (la veille) — cf. km-relance
+  // 4) RAPPEL RENDEZ-VOUS GARAGE (la veille) — toute intervention programmée (révision, réparation,
+  //    contrôle technique…), PAS seulement le CT. `motif` = libellé humain de l'intervention.
   FP.registerMail({
-    key: 'rappel-entretien', label: 'Rappel entretien (la veille)', group: 'Kilométrage',
-    sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Contrôle technique', link: '#' }),
+    key: 'rappel-entretien', label: 'Rappel rendez-vous garage (la veille)', group: 'Kilométrage',
+    sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Révision', link: '#' }),
     build: (d) => ({
-      subject: 'Rappel — ' + String(d.motif).toLowerCase() + ' demain' + (d.immat ? ' — ' + d.immat : ''),
+      subject: 'Rappel : ' + String(d.motif).toLowerCase() + ' demain' + (d.immat ? ' (' + d.immat + ')' : ''),
       html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + ' demain',
         bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour ' + esc(d.prenom) + ',</p>'
-          + '<p style="margin:0 0 16px;line-height:1.55">Petit rappel : le rendez-vous <b>' + esc(d.motif) + '</b> pour le véhicule ' + esc(d.immat) + ' est prévu <b>demain</b>. Pense à t\'organiser !</p>' }),
+          + '<p style="margin:0 0 16px;line-height:1.55">Petit rappel : ton rendez-vous <b>' + esc(d.motif) + '</b> pour le véhicule ' + esc(d.immat) + ' est prévu <b>demain</b>. Pense à t\'organiser !</p>' }),
       text: 'Bonjour ' + d.prenom + ',\n\nRappel : ' + d.motif + ' pour le véhicule ' + d.immat + ' prévu demain.'
     })
   });
@@ -14368,7 +14384,7 @@ FP.sendMailTest = async function (key, to) {
     key: 'edl-a-signer', label: 'État des lieux à signer', group: 'États des lieux',
     sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', modele: 'Peugeot 208', link: '#' }),
     build: (d) => ({
-      subject: 'État des lieux à signer — ' + d.immat,
+      subject: 'État des lieux à signer (' + d.immat + ')',
       html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'État des lieux à signer',
         bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour ' + esc(d.prenom) + ',</p>'
           + '<p style="margin:0 0 16px;line-height:1.55">Dernière étape avant de rouler : signe l\'état des lieux de ta <b>' + esc(d.modele) + '</b> (' + esc(d.immat) + '), en quelques secondes depuis ce mail.</p>',
@@ -14381,7 +14397,7 @@ FP.sendMailTest = async function (key, to) {
     key: 'edl-signe', label: 'État des lieux signé (copie)', group: 'États des lieux',
     sample: () => ({ immat: 'AA-123-AA', modele: 'Peugeot 208', date: '01/09/2026', link: '#' }),
     build: (d) => ({
-      subject: 'État des lieux signé — ' + d.immat,
+      subject: 'État des lieux signé (' + d.immat + ')',
       html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: '✅ État des lieux signé',
         bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>'
           + '<p style="margin:0 0 16px;line-height:1.55">L\'état des lieux a bien été signé. Une copie PDF est disponible ci-dessous.</p>'
