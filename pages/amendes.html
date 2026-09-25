@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260925b">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260925c">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260925b"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260925c"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260925b">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260925c">
 <style>
   .kpi-link { cursor: pointer; transition: transform .12s, box-shadow .12s; }
   .kpi-link:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(15,23,42,.10); }
@@ -484,8 +484,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260925b"></script>
-<script src="../assets/js/supabase-client.js?v=20260925b"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260925c"></script>
+<script src="../assets/js/supabase-client.js?v=20260925c"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -501,11 +501,11 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260925b"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260925c"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260925b"></script>
+<script src="../assets/js/app.min.js?v=20260925c"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
 <script>
   lucide.createIcons();
@@ -1023,24 +1023,8 @@
       });
     }).catch(() => {});
   }
-  // Signature de la société (Paramètres → Société → « Signature »). Peut être du TEXTE ou du HTML
-  // (ta vraie signature Gmail avec logo). On l'ajoute en HTML tel quel dans le mail HTML, et en
-  // version texte (balises retirées) dans le repli texte.
-  function sigRaw() { try { return String(((window.FP && FP.societeProfil) ? FP.societeProfil() : {}).mailSignature || '').trim(); } catch (e) { return ''; } }
-  const _sigIsHtml = s => /<[a-z!][\s\S]*>/i.test(s);   // contient au moins une balise → HTML
-  function sigHtmlBlock() {
-    const s = sigRaw(); if (!s) return '';
-    const h = _sigIsHtml(s) ? s : String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])).replace(/\n/g, '<br>');
-    return '<br><br>' + h;   // séparé du message par une ligne vide
-  }
-  // Version TEXTE du corps (message + signature en texte brut).
-  function withSignature(body) {
-    const s = sigRaw(); if (!s) return body;
-    const t = _sigIsHtml(s)
-      ? s.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/\n{3,}/g, '\n\n').trim()
-      : s;
-    return String(body || '') + '\n\n' + t;
-  }
+  // ⚠️ Plus de « signature » manuelle (champ retiré le 2026-09-25) : les e-mails d'amende partent via
+  //    la plateforme avec un pied de page brandé (société · via Parc Pilot) généré par FP.mailBrand.
   async function ouvrirMail(body, opts) {
     opts = opts || {};
     const a = data.amendes.find(x => x.id === state.currentId); if (!a) return;
@@ -1097,18 +1081,17 @@
     let fullBody = body;
     // 1) Envoi AUTOMATIQUE via la fonction Resend (si déployée) — un clic = envoyé.
     if (to && window.FP && FP.sendEmail) {
-      const sigBody = withSignature(body);   // corps + signature en TEXTE (repli)
-      // Version HTML : le message échappé + la signature HTML brute (logo/images compris).
+      const sigBody = body;   // corps en TEXTE (repli) — plus de signature manuelle
+      // Version HTML : le message échappé (les sauts de ligne → <br>).
       const escH = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      const _bodyHtml = escH(body).replace(/\n/g, '<br>') + sigHtmlBlock();
-      // Habillage BRANDÉ (même design que le relevé km, robuste au mode sombre) — cf. FP.mailBrand.
-      // On garde le corps ÉDITABLE (tes modèles) + la signature À L'INTÉRIEUR du cadre.
+      const _bodyHtml = escH(body).replace(/\n/g, '<br>');
+      // Habillage BRANDÉ (en-tête sombre plaque/montant/n° d'avis + pied Parc Pilot) — cf. FP.mailBrand.
       let html = _bodyHtml;
       try {
         let _logo = ''; try { if (FP.hostSocieteLogo) _logo = await FP.hostSocieteLogo(); } catch (e) {}
         let _soc = ''; try { _soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
         const _plaque = (FP.amendePlaque ? FP.amendePlaque(a) : (a.immatriculation || a.plaque || ''));
-        if (FP.mailBrand) html = FP.mailBrand({ title: opts.title || 'Avis de contravention', prenom: a.prenom || '', plaque: _plaque, nomSoc: _soc, logoUrl: _logo, bodyHtml: _bodyHtml });
+        if (FP.mailBrand) html = FP.mailBrand({ title: opts.title || 'Avis de contravention', prenom: a.prenom || '', plaque: _plaque, montant: a.montant, numeroAvis: a.numeroAvis, nomSoc: _soc, logoUrl: _logo, bodyHtml: _bodyHtml });
       } catch (e) { html = _bodyHtml; }
       // Plus de lien dans le corps du message : l'avis de contravention est en PIÈCE JOINTE.
       try {
@@ -1151,9 +1134,18 @@
   // Applique un modèle : remplace {prenom} par le PRÉNOM SEUL (1er mot), jamais le nom de famille.
   // ⚠️ a.prenom peut contenir le NOM COMPLET (prénom + nom, pour l'affichage/rattachement) → on ne
   // garde QUE le 1er mot dans l'e-mail au conducteur (consigne : ne jamais envoyer le nom de famille).
-  function appliquerModele(tpl, p) {
+  function appliquerModele(tpl, p, plaque) {
     const first = String(p || '').trim().split(/\s+/)[0] || '';
-    return String(tpl).replace(/ ?\{prenom\}/gi, first ? ' ' + first : '');
+    const plq = String(plaque || '').trim();
+    return String(tpl)
+      .replace(/ ?\{prenom\}/gi, first ? ' ' + first : '')
+      .replace(/ ?\{plaque\}/gi, plq ? ' ' + plq : '');
+  }
+  // Plaque réelle de l'amende ouverte (pour la balise {plaque} des modèles).
+  function plaqueCourante() {
+    const a = data.amendes.find(x => x.id === state.currentId);
+    if (!a) return '';
+    return (window.FP && FP.amendePlaque) ? FP.amendePlaque(a) : (a.immatriculation || a.plaque || '');
   }
   // Modèle de la société active (Paramètres → Société), sinon texte par défaut.
   // Bilingue : si le conducteur (prénom) est en anglais → variante EN (custom `<cle>_en`,
@@ -1174,23 +1166,23 @@
   }
   // Email 1 — demande de paiement direct (pas de désignation nécessaire)
   function mailPaiement() {
-    const p = prenomCourant();
-    const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.paiement) || `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`;
-    ouvrirMail(appliquerModele(modeleMail('mailModelePaiement', def, p), p), { title: 'Contravention à régler' });
+    const p = prenomCourant(); const plq = plaqueCourante();
+    const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.paiement) || `Bonjour {prenom},\n\nUne contravention concerne le véhicule{plaque}\nMerci d'en effectuer le règlement, puis de transmettre le justificatif.\n\nMerci d'avance !`;
+    ouvrirMail(appliquerModele(modeleMail('mailModelePaiement', def, p), p, plq), { title: 'Contravention à régler' });
   }
   // Email 2 — demande de confirmation pour effectuer la désignation
   function mailDesignation() {
-    const p = prenomCourant();
-    const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.designation) || `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.`;
-    ouvrirMail(appliquerModele(modeleMail('mailModeleDesignation', def, p), p), { title: 'Contravention — désignation' });
+    const p = prenomCourant(); const plq = plaqueCourante();
+    const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.designation) || `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule\nPeux-tu me confirmer, afin que je puisse effectuer la désignation ?\n⚠️ Et surtout, ne règle pas la contravention.\n\nMerci d'avance !`;
+    ouvrirMail(appliquerModele(modeleMail('mailModeleDesignation', def, p), p, plq), { title: 'Contravention — désignation' });
   }
   // Relance : réponse AUTOMATIQUE en UN CLIC, envoyée DANS LE FIL du 1er e-mail (comme si l'e-mail
   // initial se répondait à lui-même). Pas de fenêtre, pas d'objet à saisir : ouvrirMail({reply:true})
   // pose In-Reply-To/References = Message-ID racine du 1er e-mail → l'e-mail s'empile dans la conversation.
   function relanceEmail() {
-    const p = prenomCourant();
-    const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.relance) || `Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`;
-    ouvrirMail(appliquerModele(modeleMail('mailModeleRelance', def, p), p), { reply: true, title: 'Contravention — rappel' });
+    const p = prenomCourant(); const plq = plaqueCourante();
+    const def = (window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.relance) || `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule\nPeux-tu me confirmer que c'était bien toi au volant ?\n\nMerci beaucoup !`;
+    ouvrirMail(appliquerModele(modeleMail('mailModeleRelance', def, p), p, plq), { reply: true, title: 'Contravention — rappel' });
   }
 
   // ---------- ENVOI EN LOT (demandes de paiement / relances) sur les amendes sélectionnées ----------
@@ -1220,15 +1212,15 @@
     let signed = null; try { signed = await FP.signedScanUrl(a.avisUrl, 600); } catch (e) { console.warn('[bulk avis PJ]', e); }
     if (!signed) return 'no-pdf';
     attachments = [{ filename: `avis-${a.numeroAvis || 'contravention'}.pdf`, path: signed }];
-    const sigBody = withSignature(body);   // corps + signature en TEXTE (repli)
+    const sigBody = body;   // corps en TEXTE (repli) — plus de signature manuelle
     const escH = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    const _bodyHtml = escH(body).replace(/\n/g, '<br>') + sigHtmlBlock();
+    const _bodyHtml = escH(body).replace(/\n/g, '<br>');
     let html = _bodyHtml;
     try {
       let _logo = ''; try { if (FP.hostSocieteLogo) _logo = await FP.hostSocieteLogo(); } catch (e) {}
       let _soc = ''; try { _soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
       const _plaque = (FP.amendePlaque ? FP.amendePlaque(a) : (a.immatriculation || a.plaque || ''));
-      if (FP.mailBrand) html = FP.mailBrand({ title: opts.reply ? 'Contravention — rappel' : 'Contravention à régler', prenom: a.prenom || '', plaque: _plaque, nomSoc: _soc, logoUrl: _logo, bodyHtml: _bodyHtml });
+      if (FP.mailBrand) html = FP.mailBrand({ title: opts.reply ? 'Contravention — rappel' : 'Contravention à régler', prenom: a.prenom || '', plaque: _plaque, montant: a.montant, numeroAvis: a.numeroAvis, nomSoc: _soc, logoUrl: _logo, bodyHtml: _bodyHtml });
     } catch (e) { html = _bodyHtml; }
     try {
       await FP.sendEmail({ to, cc: COPIE_MAIL, subject, html, text: sigBody, replyTo: EXPEDITEUR, attachments, headers });
@@ -1238,8 +1230,8 @@
   async function bulkEnvoiAmendes(ids, mode) {
     const reply = mode === 'relance';
     const def = reply
-      ? ((window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.relance) || `Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.`)
-      : ((window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.paiement) || `Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance`);
+      ? ((window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.relance) || `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule\nPeux-tu me confirmer que c'était bien toi au volant ?\n\nMerci beaucoup !`)
+      : ((window.FP && FP.MAIL_DEFAUT && FP.MAIL_DEFAUT.paiement) || `Bonjour {prenom},\n\nUne contravention concerne le véhicule{plaque}\nMerci d'en effectuer le règlement, puis de transmettre le justificatif.\n\nMerci d'avance !`);
     const cle = reply ? 'mailModeleRelance' : 'mailModelePaiement';
     const list = ids.map(id => data.amendes.find(x => x.id === id)).filter(Boolean);
     if (!list.length) return;
@@ -1252,7 +1244,8 @@
       if (FP.toast) FP.toast(`Envoi ${i + 1}/${list.length}…`);
       // Modèle résolu PAR amende → respecte la langue de chaque conducteur (FR/EN).
       const tpl = modeleMail(cle, def, prenomDe(a));
-      const st = await sendAmendeAuto(a, appliquerModele(tpl, prenomDe(a)), { reply });
+      const _plq = (window.FP && FP.amendePlaque) ? FP.amendePlaque(a) : (a.immatriculation || a.plaque || '');
+      const st = await sendAmendeAuto(a, appliquerModele(tpl, prenomDe(a), _plq), { reply });
       if (st === 'sent') sent++;
       else if (st === 'no-mail') noMail.push(a);
       else if (st === 'no-pdf') noPdf.push(a);
