@@ -109,33 +109,52 @@ function kmDue(immat: string, kmDates: Record<string, unknown>, notif: any, nowT
 }
 
 // E-mail de relance (branded, sobre) : logo société (URL http) ou marque Parc Pilot, plaque, bouton.
+// Logo Parc Pilot « en dur » (identique au site : FP.ppLogoMail) — HTML pur (jamais bloqué comme une image).
+function ppLogoMail(): string {
+  return '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:8px">'
+    + '<span style="display:block;width:18px;height:3px;background:#FB923C;border-radius:2px"></span>'
+    + '<span style="display:block;width:23px;height:3px;background:#F97316;border-radius:2px;margin-top:2px"></span>'
+    + '<span style="display:block;width:13px;height:3px;background:#FB923C;border-radius:2px;margin-top:2px"></span>'
+    + '</span>'
+    + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#ffffff;vertical-align:middle">Parc</span>'
+    + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#F97316;vertical-align:middle">Pilot</span>';
+}
+// Pied de page commun (même logo Parc Pilot partout) — identique à FP.mailFooterHtml côté site.
+function ppFooter(nomSoc: string): string {
+  return '<div style="background-color:#0B1220;color:#94A3B8;padding:16px 22px;border-radius:0 0 14px 14px;text-align:center;font-size:11px">'
+    + '<div>' + ppLogoMail() + '</div>'
+    + '<div style="margin-top:9px;color:#64748B">' + (nomSoc ? esc(nomSoc) + ' · ' : '') + 'via Parc Pilot</div>'
+    + '</div>';
+}
+function mailHead(nomSoc: string, logoUrl: string): string {
+  return logoUrl
+    ? '<img src="' + esc(logoUrl) + '" alt="' + esc(nomSoc || "Logo") + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
+    : (nomSoc
+        ? '<span style="font-weight:900;font-size:17px;color:#ffffff;letter-spacing:.02em">' + esc(nomSoc) + '</span>'
+        : ppLogoMail());
+}
+
 function buildMail(opts: { prenom: string; immat: string; marque: string; link: string; nomSoc: string; logoUrl: string; relance: boolean }) {
   const { prenom, immat, marque, link, nomSoc, logoUrl, relance } = opts;
-  const subject = "Relevé kilométrique" + (immat ? " — " + immat : "") + (relance ? " (rappel)" : "");
+  const subject = "Relevé kilométrique" + (immat ? " (" + immat + ")" : "") + (relance ? " (rappel)" : "");
   const title = relance ? "Petit rappel : relevé kilométrique" : "Relevé kilométrique demandé";
   const intro = relance
-    ? "Nous n'avons pas encore reçu le <b>kilométrage actuel</b> de votre véhicule"
-    : "Merci d'indiquer le <b>kilométrage actuel</b> de votre véhicule";
+    ? "Nous n'avons pas encore reçu le <b>kilométrage actuel</b> de ton véhicule"
+    : "Merci d'indiquer le <b>kilométrage actuel</b> de ton véhicule";
   const plate = immat
     ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
       + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
       + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0">' + esc(immat) + "</td></tr></table>"
     : "";
-  const head = logoUrl
-    ? '<img src="' + esc(logoUrl) + '" alt="' + esc(nomSoc || "Logo") + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
-    : '<span style="font-weight:900;font-style:italic;font-size:16px;color:#fff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>';
   const html = ''
     + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
     + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
-    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
-    + '<td style="vertical-align:middle">' + head + "</td>"
-    + (!logoUrl && nomSoc ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">' + esc(nomSoc) + "</td>" : "")
-    + "</tr></table>"
+    + '<div>' + mailHead(nomSoc, logoUrl) + "</div>"
     + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + title + "</div>"
     + (prenom ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#fff">' + esc(prenom) + "</div>" : "")
     + (plate ? '<div style="margin-top:14px">' + plate + "</div>" : "")
     + "</div>"
-    + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px">'
+    + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px">'
     + "<p style=\"margin:0 0 16px\">Bonjour" + (prenom ? " " + esc(prenom) : "") + ",</p>"
     + '<p style="margin:0 0 16px;line-height:1.5">' + intro
     + (immat ? ' <b style="white-space:nowrap">' + esc(immat) + "</b>" : "") + (marque ? " (" + esc(marque) + ")" : "")
@@ -143,47 +162,45 @@ function buildMail(opts: { prenom: string; immat: string; marque: string; link: 
     + '<p style="text-align:center;margin:22px 0">'
     + '<a href="' + esc(link) + '" style="display:inline-block;background:#0B1220;color:#fff;text-decoration:none;padding:14px 26px;border-radius:10px;font-weight:800;font-size:15px">Indiquer mon kilométrage →</a>'
     + "</p>"
-    + '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">Si le bouton ne fonctionne pas, copiez ce lien :<br>' + esc(link) + "</p>"
-    + "</div></div>";
+    + '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">Si le bouton ne fonctionne pas, copie ce lien :<br>' + esc(link) + "</p>"
+    + "</div>"
+    + ppFooter(nomSoc)
+    + "</div>";
   const text = "Bonjour" + (prenom ? " " + prenom : "") + ",\n\n"
-    + (relance ? "Nous n'avons pas encore reçu le kilométrage actuel de votre véhicule" : "Merci d'indiquer le kilométrage actuel de votre véhicule") + (immat ? " " + immat : "") + ".\n"
-    + "Cliquez sur ce lien : " + link + "\n\n" + (nomSoc || "Parc Pilot");
+    + (relance ? "Nous n'avons pas encore reçu le kilométrage actuel de ton véhicule" : "Merci d'indiquer le kilométrage actuel de ton véhicule") + (immat ? " " + immat : "") + ".\n"
+    + "Clique sur ce lien : " + link + "\n\n" + (nomSoc || "Parc Pilot");
   return { subject, html, text };
 }
 
 // E-mail « rappel rendez-vous garage demain » (branded, même en-tête que le relevé km, sans bouton).
-// motif = libellé humain (« Contrôle technique », « Révision », « Entretien »…). Défaut : contrôle technique.
+// motif = libellé humain de l'intervention (« Révision », « Contrôle technique », « Réparation »…).
 function buildCtMail(opts: { prenom: string; immat: string; marque: string; dateFr: string; nomSoc: string; logoUrl: string; motif?: string }) {
   const { prenom, immat, marque, dateFr, nomSoc, logoUrl } = opts;
   const motif = String(opts.motif || "Contrôle technique").trim() || "Contrôle technique";
   const motifBas = motif.toLowerCase();
-  const subject = "Rappel — " + motifBas + " demain" + (immat ? " — " + immat : "");
+  const subject = "Rappel : " + motifBas + " demain" + (immat ? " (" + immat + ")" : "");
   const plate = immat
     ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
       + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
       + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0">' + esc(immat) + "</td></tr></table>"
     : "";
-  const head = logoUrl
-    ? '<img src="' + esc(logoUrl) + '" alt="' + esc(nomSoc || "Logo") + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
-    : '<span style="font-weight:900;font-style:italic;font-size:16px;color:#fff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>';
   const html = ''
     + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
     + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
-    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
-    + '<td style="vertical-align:middle">' + head + "</td>"
-    + (!logoUrl && nomSoc ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">' + esc(nomSoc) + "</td>" : "")
-    + "</tr></table>"
+    + '<div>' + mailHead(nomSoc, logoUrl) + "</div>"
     + '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + esc(motif) + ' demain</div>'
     + (prenom ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#fff">' + esc(prenom) + "</div>" : "")
     + (plate ? '<div style="margin-top:14px">' + plate + "</div>" : "")
     + "</div>"
-    + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px">'
+    + '<div style="border:1px solid #E7EBF0;border-top:none;padding:22px">'
     + "<p style=\"margin:0 0 16px\">Bonjour" + (prenom ? " " + esc(prenom) : "") + ",</p>"
-    + '<p style="margin:0 0 16px;line-height:1.5">Petit rappel : <b>' + esc(motif) + '</b> pour le véhicule <b style="white-space:nowrap">' + esc(immat) + "</b>" + (marque ? " (" + esc(marque) + ")" : "")
-    + ' — prévu <b>demain (' + esc(dateFr) + ')</b> ⏳. Pense à t\'organiser pour le rendez-vous. 📅</p>'
-    + "</div></div>";
+    + '<p style="margin:0 0 16px;line-height:1.5">Petit rappel : ton rendez-vous <b>' + esc(motif) + '</b> pour le véhicule <b style="white-space:nowrap">' + esc(immat) + "</b>" + (marque ? " (" + esc(marque) + ")" : "")
+    + ' est prévu <b>demain (' + esc(dateFr) + ')</b> ⏳. Pense à t\'organiser. 📅</p>'
+    + "</div>"
+    + ppFooter(nomSoc)
+    + "</div>";
   const text = "Bonjour" + (prenom ? " " + prenom : "") + ",\n\n"
-    + "Rappel : " + motif + " pour le véhicule " + immat + " — prévu demain (" + dateFr + ").\n\n" + (nomSoc || "Parc Pilot");
+    + "Rappel : " + motif + " pour le véhicule " + immat + ", prévu demain (" + dateFr + ").\n\n" + (nomSoc || "Parc Pilot");
   return { subject, html, text };
 }
 

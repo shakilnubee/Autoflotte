@@ -352,23 +352,33 @@ Deno.serve(async (req) => {
         const sensTxt = row.sens === "restitution" ? "restitution" : "remise";
         const { from, replyTo } = await societeFrom(db, String(row.societe || "PXP"));
         const key = Deno.env.get("RESEND_API_KEY");
+        const ppLogo = '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:8px">'
+          + '<span style="display:block;width:18px;height:3px;background:#FB923C;border-radius:2px"></span>'
+          + '<span style="display:block;width:23px;height:3px;background:#F97316;border-radius:2px;margin-top:2px"></span>'
+          + '<span style="display:block;width:13px;height:3px;background:#FB923C;border-radius:2px;margin-top:2px"></span>'
+          + '</span>'
+          + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#ffffff;vertical-align:middle">Parc</span>'
+          + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#F97316;vertical-align:middle">Pilot</span>';
         const html = `<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">
   <div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">
-    <span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>
+    <div>${ppLogo}</div>
     <div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">✅ État des lieux signé</div>
   </div>
-  <div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px;color:#0F1E3D">
+  <div style="border:1px solid #E7EBF0;border-top:none;padding:22px;color:#0F1E3D">
     <p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>
-    <p style="margin:0 0 16px;line-height:1.55">L'état des lieux (${sensTxt}) du véhicule a été <b>signé par toutes les parties</b>. Vous en trouverez la <b>version signée en pièce jointe</b> — à conserver.</p>
+    <p style="margin:0 0 16px;line-height:1.55">L'état des lieux (${sensTxt}) du véhicule a été <b>signé par toutes les parties</b>. Tu en trouveras la <b>version signée en pièce jointe</b>, à conserver.</p>
     <div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155">🚗 <b>${modele}</b> · ${plaque}${dateStr ? " · " + dateStr : ""}</div>
     <p style="text-align:center;margin:22px 0"><a href="${signedPdfUrl}" style="display:inline-block;background:#0B1220;color:#ffffff;padding:14px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">⬇️ Télécharger l'état des lieux signé</a></p>
-    <p style="text-align:center;font-size:11px;color:#94A3B8;margin:16px 0 0">Document signé électroniquement · via Parc Pilot</p>
+  </div>
+  <div style="background-color:#0B1220;color:#94A3B8;padding:16px 22px;border-radius:0 0 14px 14px;text-align:center;font-size:11px">
+    <div>${ppLogo}</div>
+    <div style="margin-top:9px;color:#64748B">via Parc Pilot</div>
   </div>
 </div>`;
         if (key) {
           const dest = Array.from(new Set(required.map((s) => String(s.email || "")).filter(Boolean)));
           for (const to of dest) {
-            const payload: Record<string, unknown> = { from, to: [to], subject: "État des lieux signé — " + plaque, html, text: "L'état des lieux signé du véhicule " + plaque + " est disponible : " + signedPdfUrl, attachments: [{ filename: "Etat-des-lieux-signe-" + plaque + ".pdf", path: signedPdfUrl }] };
+            const payload: Record<string, unknown> = { from, to: [to], subject: "État des lieux signé (" + plaque + ")", html, text: "L'état des lieux signé du véhicule " + plaque + " est disponible : " + signedPdfUrl, attachments: [{ filename: "Etat-des-lieux-signe-" + plaque + ".pdf", path: signedPdfUrl }] };
             if (replyTo) payload.reply_to = replyTo;
             try { await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); } catch { /* best-effort */ }
           }
