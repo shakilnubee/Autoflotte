@@ -516,6 +516,7 @@
           // Migration unique PXP : BPCE devient un loueur normal (settings.loueurs), plus codé en dur.
           // Placée ICI = juste après le chargement des réglages serveur (⇒ pas d'écrasement, base fraîche).
           try { if (FP.normaliserLoueursPXP) FP.normaliserLoueursPXP(); } catch (_) {}
+          try { if (FP.migrerModelesAmendeObsoletes) FP.migrerModelesAmendeObsoletes(); } catch (_) {}
           if (FP.settings && FP.settings.applyTheme) FP.settings.applyTheme();
           if (FP.applyCustomNavLabels) FP.applyCustomNavLabels();
           if (FP.applyNavOrder) FP.applyNavOrder();
@@ -586,6 +587,7 @@
         try { FP.settings._serverSnap = JSON.parse(fresh); } catch (e) {}   // base de fusion delta = serveur frais
         if (changed) {
           try { if (FP.normaliserLoueursPXP) FP.normaliserLoueursPXP(); } catch (e) {}
+          try { if (FP.migrerModelesAmendeObsoletes) FP.migrerModelesAmendeObsoletes(); } catch (e) {}
           try { if (FP.settings.applyTheme) FP.settings.applyTheme(); } catch (e) {}
           try { if (FP.applyCustomNavLabels) FP.applyCustomNavLabels(); } catch (e) {}
           try { if (FP.applyNavOrder) FP.applyNavOrder(); } catch (e) {}
