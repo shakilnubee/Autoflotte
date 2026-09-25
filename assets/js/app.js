@@ -3851,12 +3851,12 @@ FP.MAIL_DEFAUT = {
   paiement: `Bonjour {prenom},\n\nUne contravention concerne le véhicule{plaque}\nMerci d'en effectuer le règlement, puis de transmettre le justificatif.\n\nMerci d'avance !`,
   // ② Demande de désignation (tutoiement).
   designation: `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule\nPeux-tu me confirmer, afin que je puisse effectuer la désignation ?\n⚠️ Et surtout, ne règle pas la contravention.\n\nMerci d'avance !`,
-  // ③ Confirmation conducteur (tutoiement) : confirmer que c'était bien lui au volant.
-  relance: `Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule\nPeux-tu me confirmer que c'était bien toi au volant ?\n\nMerci beaucoup !`,
+  // ③ Relance (bouton « Relancer ») : rappel sympa/léger, tutoiement.
+  relance: `Bonjour {prenom},\n\nPetit rappel en douceur 😊\nLa contravention est toujours en attente — un petit geste de ta part et c'est réglé !\n\nMerci beaucoup 🙏`,
   // Versions ANGLAISES (envoyées aux conducteurs dont la langue est « English »).
   paiement_en: `Hello {prenom},\n\nA fine concerns vehicle{plaque}\nPlease settle it, then send me the receipt.\n\nThank you in advance!`,
   designation_en: `Hello {prenom},\n\nUnless I'm mistaken, this is your vehicle\nCould you confirm, so that I can complete the driver designation?\n⚠️ And above all, do not pay the fine.\n\nThank you in advance!`,
-  relance_en: `Hello {prenom},\n\nUnless I'm mistaken, this is your vehicle\nCould you confirm that you were the one driving?\n\nThank you very much!`,
+  relance_en: `Hello {prenom},\n\nJust a gentle reminder 😊\nThe fine is still pending — a small action on your side and it's all sorted!\n\nThank you so much 🙏`,
 };
 // Champs du profil société (rendu générique : le formulaire de Paramètres itère dessus).
 // Un champ avec `default` est PRÉ-REMPLI avec ce texte quand la valeur est vide (l'utilisateur le voit).
@@ -4078,6 +4078,8 @@ FP._MODELES_AMENDE_OBSOLETES = {
   ],
   mailModeleRelance: [
     "Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.",
+    // Texte intermédiaire (éphémère) « confirmer que c'était toi au volant » → remplacé par une vraie relance.
+    "Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule\nPeux-tu me confirmer que c'était bien toi au volant ?\n\nMerci beaucoup !",
   ],
   mailModelePaiement_en: [
     "Hello {prenom},\n\nUnless I'm mistaken, this is your vehicle.\nCould you please pay this fine and send me the receipt?\n\nThank you in advance.",
