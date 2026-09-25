@@ -1545,6 +1545,22 @@ FP.estAPayer = (a) => { const s = ((a && a.statut) || '').toString().trim().toLo
 // ⚠️ HELPER CANONIQUE — amende « payée » (symétrique de estAPayer, tolérant accents/casse) : « payée »,
 // « payee », « Payé »… tous reconnus. À utiliser partout au lieu de statut === 'payée' (sinon totaux faux).
 FP.estPayee = (a) => { const s = ((a && a.statut) || '').toString().trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); return s === 'payee' || s === 'paye'; };
+// ⚠️ HELPER CANONIQUE — plaque d'une amende. L'amende NE STOCKE PAS de plaque : elle est liée au
+// CONDUCTEUR (prenom). On renvoie donc, dans l'ordre : un champ plaque explicite s'il existe, sinon la
+// plaque du véhicule du conducteur — UNIQUEMENT si UN SEUL véhicule (non vendu) correspond (sinon on
+// n'invente rien → ''). Sert à afficher la vraie plaque dans les e-mails/rappels d'amende.
+FP.amendePlaque = (a) => {
+  if (!a) return '';
+  const direct = a.immatriculation || a.plaque || a.immat || '';
+  if (direct) return direct;
+  try {
+    const np = FP.normPrenom ? FP.normPrenom(a.prenom) : String(a.prenom || '').trim().toLowerCase();
+    if (!np) return '';
+    const vs = (window.FP_DATA && Array.isArray(FP_DATA.vehicules) ? FP_DATA.vehicules : [])
+      .filter(v => v && v.chauffeur && (FP.normPrenom ? FP.normPrenom(v.chauffeur) === np : String(v.chauffeur).trim().toLowerCase() === np) && !(FP.estVendu && FP.estVendu(v)));
+    return vs.length === 1 ? (vs[0].immat || '') : '';
+  } catch (e) { return ''; }
+};
 // ⚠️ HELPER CANONIQUE — « facture d'entretien / réparation » (tolérant à l'accent : entretien, réparation,
 // reparation). À utiliser PARTOUT (carnet fiche, page Entretiens, coût véhicule, budget, alertes) — sinon
 // une facture typée « reparation » (sans accent) apparaît sur un écran et pas sur l'autre.
@@ -14050,20 +14066,29 @@ FP.mailBrand = function (o) {
   const esc = FP.esc || (x => String(x == null ? '' : x));
   const nomSoc = o.nomSoc || '';
   const logoUrl = /^https?:\/\//.test(String(o.logoUrl || '')) ? String(o.logoUrl) : '';
+  // Marque de l'en-tête : LOGO hébergé si dispo, sinon le NOM DE LA SOCIÉTÉ (c'est l'expéditeur réel) —
+  // JAMAIS « Parc Pilot » quand une société est connue (Parc Pilot = la plateforme, pas l'émetteur).
+  // « Parc Pilot » ne reste qu'en tout dernier recours (aucun nom de société).
   const head = logoUrl
     ? '<img src="' + esc(logoUrl) + '" alt="' + esc(nomSoc || 'Logo') + '" style="max-height:40px;max-width:180px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:block">'
-    : '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>';
+    : (nomSoc
+        ? '<span style="font-weight:900;font-size:17px;color:#ffffff;letter-spacing:-.01em">' + esc(nomSoc) + '</span>'
+        : '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;letter-spacing:-.02em">Parc P<span style="color:#F97316">i</span>lot</span>');
+  // Vraie plaque FR (bande bleue UE ★★★ + F, puis n°) — même style que la fiche véhicule.
   const plate = o.plaque
     ? '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;white-space:nowrap"><tr>'
-      + '<td style="background:#1B48C4;color:#fff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;padding:8px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px">F</td>'
-      + '<td style="background:#fff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0">' + esc(o.plaque) + '</td></tr></table>'
+      + '<td style="background:#1B48C4;padding:4px 7px;border:2px solid #0b0b0b;border-right:none;border-radius:7px 0 0 7px;text-align:center;vertical-align:middle">'
+      +   '<div style="color:#FFD24D;font-size:7px;line-height:1;letter-spacing:1px">★★★</div>'
+      +   '<div style="color:#ffffff;font-family:Arial,sans-serif;font-weight:800;font-size:11px;line-height:1;margin-top:2px">F</div>'
+      + '</td>'
+      + '<td style="background:#ffffff;color:#0b0b0b;font-family:Arial,sans-serif;font-weight:800;font-size:18px;letter-spacing:2px;padding:6px 14px;border:2px solid #0b0b0b;border-radius:0 7px 7px 0">' + esc(o.plaque) + '</td></tr></table>'
     : '';
   return ''
     + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
     + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
     + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
     + '<td style="vertical-align:middle">' + head + '</td>'
-    + (!logoUrl && nomSoc ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">' + esc(nomSoc) + '</td>' : '')
+    + (logoUrl && nomSoc ? '<td align="right" style="font-size:12px;color:#94A3B8;font-weight:700;vertical-align:middle">' + esc(nomSoc) + '</td>' : '')
     + '</tr></table>'
     + (o.title ? '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + esc(o.title) + '</div>' : '')
     + (o.prenom ? '<div style="font-size:16px;font-weight:700;margin-top:14px;color:#ffffff">' + esc(o.prenom) + '</div>' : '')
