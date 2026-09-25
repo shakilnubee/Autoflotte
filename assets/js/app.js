@@ -80,28 +80,31 @@ document.addEventListener('keydown', (e) => {
   // Si on saisit dans un autre champ (édition inline…), ÉCHAP est géré par le champ lui-même
   // (annule la saisie) et NE ferme PAS la zone parente.
   if (ae && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
+  // ⚠️ ÉCHAP ferme UNE SEULE couche à la fois — la PLUS HAUTE — « une étape en arrière ».
+  // Avant, ÉCHAP fermait TOUT d'un coup (ex. le QR par-dessus une fiche fermait aussi la fiche).
+  // Ordre du plus haut au plus bas : menus/popovers → fenêtres modales (QR, etc.) → tiroir (fiche).
+  // ⚠️ PAS de test offsetParent : les modales/QR sont en position:fixed → offsetParent === null même
+  // ouvertes. On se base sur la classe .hidden et le display calculé (fiable pour ces couches).
+  const _vis = (el) => el && !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none';
   let closed = false;
-  // 1) Tiroirs latéraux (drawer)
-  document.querySelectorAll('.drawer.open, .drawer-backdrop.open').forEach(el => { el.classList.remove('open'); closed = true; });
-  // 2) Fenêtres modales (backdrops + éléments dont l'id finit par -modal / -backdrop)
+  // 1) Menus / popovers (couche la plus haute)
+  document.querySelectorAll('.hidden-cols-popover.open, .fp-hidden-cols-popover.open, .popover.open, .fp-popover.open, #soc-menu, #mobile-menu, [id$="-menu"], [id$="-popover"], .fp-menu').forEach(el => {
+    if (!_vis(el)) return; el.classList.add('hidden'); el.classList.remove('open', 'show'); closed = true;
+  });
+  // ⚠️ Drapeau « une couche vient d'être fermée par cet ÉCHAP » : les handlers ÉCHAP PROPRES aux pages
+  // (qui ferment la fiche/tiroir) le lisent pour NE PAS fermer la fiche en même temps → fermeture « une
+  // étape à la fois » (ex. le QR par-dessus une fiche ne ferme plus la fiche derrière). stopPropagation
+  // ne suffit pas ici (les autres écouteurs du même document ne sont pas bloqués).
+  if (closed) { try { window.__fpEscLayerClosedAt = Date.now(); } catch (_) {} e.stopPropagation(); return; }
+  // 2) Fenêtres modales par-dessus le tiroir (QR, imports, etc.) — jamais le fond du tiroir lui-même
   document.querySelectorAll('.modal-backdrop, [id$="-modal"], [id$="-backdrop"]').forEach(el => {
-    const vis = !el.classList.contains('hidden') && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
-    if (!vis) return;
-    el.classList.add('hidden');
-    if (el.style && el.style.display && el.style.display !== 'none') el.style.display = 'none';
-    el.classList.remove('open');
-    closed = true;
+    if (el.classList.contains('drawer-backdrop')) return;
+    if (!_vis(el)) return;
+    el.classList.add('hidden'); if (el.style && el.style.display && el.style.display !== 'none') el.style.display = 'none'; el.classList.remove('open'); closed = true;
   });
-  // 3) Popovers ouverts via la classe .open (éditeur de colonnes, etc.)
-  document.querySelectorAll('.hidden-cols-popover.open, .fp-hidden-cols-popover.open, .popover.open, .fp-popover.open').forEach(el => { el.classList.remove('open'); closed = true; });
-  // 4) Menus / petites zones ouverts via affichage (menu société, menu mobile, autres popovers/menus)
-  document.querySelectorAll('#soc-menu, #mobile-menu, [id$="-menu"], [id$="-popover"], .fp-menu, .popover, .fp-popover').forEach(el => {
-    if (el.classList.contains('hidden')) return;
-    const vis = getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
-    if (!vis) return;
-    el.classList.add('hidden'); el.classList.remove('open', 'show');
-    closed = true;
-  });
+  if (closed) { try { window.__fpEscLayerClosedAt = Date.now(); } catch (_) {} e.stopPropagation(); return; }
+  // 3) Tiroir / fiche (couche la plus basse) — seulement si RIEN n'était ouvert au-dessus
+  document.querySelectorAll('.drawer.open, .drawer-backdrop.open').forEach(el => { el.classList.remove('open'); closed = true; });
   if (closed) e.stopPropagation();
 });
 
@@ -112,8 +115,9 @@ document.addEventListener('keydown', (e) => {
 // (sinon le menu clignote / se rouvre).
 (function () {
   const FLOAT_SEL = '.hidden-cols-popover.open, .fp-hidden-cols-popover.open, .popover.open, .fp-popover.open, .fp-menu, #soc-menu, #mobile-menu, [id$="-menu"], [id$="-popover"]';
+  // PAS de test offsetParent (les modales/QR sont position:fixed → offsetParent null même ouvertes).
   const isVisible = (el) => el && !el.classList.contains('hidden')
-    && getComputedStyle(el).display !== 'none' && el.offsetParent !== null;
+    && getComputedStyle(el).display !== 'none';
   function openZones(downTarget) {
     const out = [];
     // downInside : le mousedown a-t-il DÉMARRÉ dans cette zone ? Évalué au mousedown, AVANT tout
@@ -146,7 +150,11 @@ document.addEventListener('keydown', (e) => {
     snap.forEach(({ el, type, downInside }) => {
       if (type === 'drawer') {
         if (downInside || el.contains(t)) return;   // clic DANS la fiche (ou démarré dedans) : on garde
-        if (t.closest('.modal-backdrop.open, [id$="-modal"]')) return; // une modale par-dessus la fiche
+        // ⚠️ Une couche est ouverte AU-DESSUS de la fiche (fenêtre modale QR/import, menu, popover…) :
+        // ce clic ferme CETTE couche-là, PAS la fiche. On ne ferme jamais la fiche tant qu'un niveau
+        // supérieur est ouvert → fermeture « une étape à la fois » (le QR ne ferme plus la fiche derrière).
+        if (snap.some(o => o.type === 'modal' || o.type === 'float')) return;
+        if (t.closest('.modal-backdrop.open, [id$="-modal"], [id$="-backdrop"], .fp-menu, .popover, .fp-popover')) return;
         el.classList.remove('open');
         document.querySelectorAll('.drawer-backdrop').forEach(bd => bd.classList.remove('open'));
         return;
