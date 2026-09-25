@@ -111,19 +111,18 @@ function kmDue(immat: string, kmDates: Record<string, unknown>, notif: any, nowT
 // E-mail de relance (branded, sobre) : logo société (URL http) ou marque Parc Pilot, plaque, bouton.
 // Logo Parc Pilot « en dur » (identique au site : FP.ppLogoMail) — HTML pur (jamais bloqué comme une image).
 function ppLogoMail(): string {
-  return '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:8px">'
-    + '<span style="display:block;width:18px;height:3px;background:#FB923C;border-radius:2px"></span>'
-    + '<span style="display:block;width:23px;height:3px;background:#F97316;border-radius:2px;margin-top:2px"></span>'
-    + '<span style="display:block;width:13px;height:3px;background:#FB923C;border-radius:2px;margin-top:2px"></span>'
+  return '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:9px">'
+    + '<span style="display:block;width:17px;height:4px;background:#F8A24A;border-radius:3px"></span>'
+    + '<span style="display:block;width:26px;height:4px;background:#F97316;border-radius:3px;margin-top:3px"></span>'
+    + '<span style="display:block;width:11px;height:4px;background:#F97316;border-radius:3px;margin-top:3px"></span>'
     + '</span>'
-    + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#ffffff;vertical-align:middle">Parc</span>'
-    + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#F97316;vertical-align:middle">Pilot</span>';
+    + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;vertical-align:middle">Parc</span>'
+    + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#F97316;vertical-align:middle">Pilot</span>';
 }
-// Pied de page commun (même logo Parc Pilot partout) — identique à FP.mailFooterHtml côté site.
-function ppFooter(nomSoc: string): string {
-  return '<div style="background-color:#0B1220;color:#94A3B8;padding:16px 22px;border-radius:0 0 14px 14px;text-align:center;font-size:11px">'
+// Pied de page commun : le logo Parc Pilot SEUL (aucun texte « société · via ») — identique au site.
+function ppFooter(_nomSoc: string): string {
+  return '<div style="background-color:#0B1220;padding:18px 22px;border-radius:0 0 14px 14px;text-align:center">'
     + '<div>' + ppLogoMail() + '</div>'
-    + '<div style="margin-top:9px;color:#64748B">' + (nomSoc ? esc(nomSoc) + ' · ' : '') + 'via Parc Pilot</div>'
     + '</div>';
 }
 function mailHead(nomSoc: string, logoUrl: string): string {

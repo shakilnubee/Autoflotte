@@ -173,13 +173,13 @@ Deno.serve(async (req) => {
       // (background-color solide → le texte blanc reste blanc).
       // Logo Parc Pilot « en dur » (barres orange + « Parc » blanc + « Pilot » orange) — identique au site.
       const ppLogo =
-        '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:8px">' +
-        '<span style="display:block;width:18px;height:3px;background:#FB923C;border-radius:2px"></span>' +
-        '<span style="display:block;width:23px;height:3px;background:#F97316;border-radius:2px;margin-top:2px"></span>' +
-        '<span style="display:block;width:13px;height:3px;background:#FB923C;border-radius:2px;margin-top:2px"></span>' +
+        '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:9px">' +
+        '<span style="display:block;width:17px;height:4px;background:#F8A24A;border-radius:3px"></span>' +
+        '<span style="display:block;width:26px;height:4px;background:#F97316;border-radius:3px;margin-top:3px"></span>' +
+        '<span style="display:block;width:11px;height:4px;background:#F97316;border-radius:3px;margin-top:3px"></span>' +
         '</span>' +
-        '<span style="font-weight:900;font-style:italic;font-size:15px;color:#ffffff;vertical-align:middle">Parc</span>' +
-        '<span style="font-weight:900;font-style:italic;font-size:15px;color:#F97316;vertical-align:middle">Pilot</span>';
+        '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;vertical-align:middle">Parc</span>' +
+        '<span style="font-weight:900;font-style:italic;font-size:16px;color:#F97316;vertical-align:middle">Pilot</span>';
       const html =
         '<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">' +
         '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">' +
@@ -192,9 +192,8 @@ Deno.serve(async (req) => {
         '<p style="text-align:center;margin:22px 0"><a href="' + esc(actionLink) + '" style="display:inline-block;background:#0B1220;color:#ffffff;padding:14px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">Définir mon mot de passe →</a></p>' +
         '<p style="font-size:12.5px;line-height:1.5;color:#64748b;margin:12px 0 0">Ton identifiant sera ton e-mail : <b>' + esc(email) + '</b>. Ce lien est personnel et temporaire ; s\'il a expiré, utilise « Mot de passe oublié » sur la page de connexion.</p>' +
         '</div>' +
-        '<div style="background-color:#0B1220;color:#94A3B8;padding:16px 22px;border-radius:0 0 14px 14px;text-align:center;font-size:11px">' +
+        '<div style="background-color:#0B1220;padding:18px 22px;border-radius:0 0 14px 14px;text-align:center">' +
         '<div>' + ppLogo + '</div>' +
-        '<div style="margin-top:9px;color:#64748B">via Parc Pilot</div>' +
         '</div></div>';
       const text = "Bonjour,\n\nUn accès à Parc Pilot a été créé pour toi. Définis ton mot de passe ici :\n" + actionLink + "\n\nTon identifiant : " + email + "\n\nParc Pilot · parc-pilot.fr";
       try {
