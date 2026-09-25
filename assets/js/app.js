@@ -4061,6 +4061,49 @@ FP.normaliserLoueursPXP = function () {
     FP.settings.save(s);
   } catch (e) {}
 };
+// ⚠️ MIGRATION — MODÈLES D'E-MAIL D'AMENDE OBSOLÈTES → nouveaux textes validés (2026-09-25).
+// Problème : une société (dont PXP) avait ENREGISTRÉ les anciens modèles par défaut dans son profil
+// (settings.profil.mailModele*). Comme une valeur enregistrée prime sur FP.MAIL_DEFAUT, la refonte
+// des textes n'apparaissait NI dans Paramètres NI dans les e-mails envoyés. Correctif sûr : si la
+// valeur enregistrée est EXACTEMENT un ancien défaut connu, on la VIDE → l'app retombe sur le nouveau
+// défaut (FP.MAIL_DEFAUT). Un texte RÉELLEMENT personnalisé (≠ ancien défaut mot pour mot) n'est JAMAIS
+// touché. Idempotent (après coup la valeur ≠ ancien défaut → ne se ré-exécute pas). Générique (toutes
+// sociétés). ⚠️ Ne tourne qu'APRÈS le chargement des réglages serveur (appelée par supabase-client).
+FP._MODELES_AMENDE_OBSOLETES = {
+  mailModelePaiement: [
+    "Bonjour {prenom}\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu régler cette contravention et m'envoyer le justificatif s'il te plaît ?\n\nMerci d'avance",
+  ],
+  mailModeleDesignation: [
+    "Bonjour {prenom},\n\nSauf erreur de ma part, il s'agit de ton véhicule.\nPeux-tu me confirmer afin que je puisse effectuer la désignation ?\n\nMerci de ne pas régler la contravention.\n\nCordialement.",
+  ],
+  mailModeleRelance: [
+    "Bonjour {prenom},\n\nPetite relance concernant la contravention ci-dessous.\nMerci d'avance.",
+  ],
+  mailModelePaiement_en: [
+    "Hello {prenom},\n\nUnless I'm mistaken, this is your vehicle.\nCould you please pay this fine and send me the receipt?\n\nThank you in advance.",
+  ],
+  mailModeleDesignation_en: [
+    "Hello {prenom},\n\nUnless I'm mistaken, this is your vehicle.\nCould you confirm so that I can complete the driver designation?\n\nPlease do NOT pay the fine.\n\nBest regards.",
+  ],
+  mailModeleRelance_en: [
+    "Hello {prenom},\n\nJust a quick reminder about the fine below.\nThank you.",
+  ],
+};
+FP.migrerModelesAmendeObsoletes = function () {
+  try {
+    const s = FP.settings && FP.settings.get ? FP.settings.get() : null;
+    if (!s || !s.profil || typeof s.profil !== 'object') return;
+    const norm = t => String(t == null ? '' : t).replace(/\r\n/g, '\n').trim();
+    let changed = false;
+    Object.keys(FP._MODELES_AMENDE_OBSOLETES).forEach(key => {
+      const cur = s.profil[key];
+      if (cur == null || String(cur).trim() === '') return;         // rien d'enregistré → défaut déjà utilisé
+      const olds = FP._MODELES_AMENDE_OBSOLETES[key].map(norm);
+      if (olds.indexOf(norm(cur)) !== -1) { s.profil[key] = ''; changed = true; }  // = ancien défaut → on vide
+    });
+    if (changed) FP.settings.save(s);                               // persiste (synchro tous appareils)
+  } catch (e) {}
+};
 // Le cache statique data.js ne contient que PXP : si une autre société est active,
 // on le vide au démarrage (les vraies données filtrées arriveront via Supabase),
 // sinon on verrait des données PXP sur une autre société.
