@@ -78,6 +78,38 @@
   .kpi:hover .kpi-ic.warn { box-shadow: 0 12px 22px -8px rgba(217,119,6,.6), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(217,119,6,.18); }
   .kpi-ic.danger { background: linear-gradient(145deg, #fffafa 0%, #fdd9d9 55%, #fbc2c2 100%); border-color: rgba(185,28,28,.22); color: #b91c1c; box-shadow: 0 8px 16px -8px rgba(220,38,38,.5), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(220,38,38,.16); }
   .kpi:hover .kpi-ic.danger { box-shadow: 0 12px 22px -8px rgba(220,38,38,.6), inset 0 1.5px 0 rgba(255,255,255,.95), inset 0 -4px 7px rgba(220,38,38,.18); }
+
+  /* === Véhicules : BULLES GLISSANTES (carrousel horizontal, façon appli) === */
+  .veh-carousel { position: relative; }
+  .veh-scroller {
+    display: flex; gap: 12px; overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x proximity; scroll-padding-left: 24px;
+    padding: 6px 24px 22px; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; scroll-behavior: smooth;
+  }
+  .veh-scroller::-webkit-scrollbar { display: none; }
+  .veh-bubble {
+    scroll-snap-align: start; flex: 0 0 auto; width: 208px; box-sizing: border-box;
+    background: var(--fp-surface); border: 1px solid var(--fp-border); border-radius: 16px;
+    padding: 14px 15px; cursor: pointer;
+    transition: box-shadow .16s ease, transform .16s ease, border-color .16s ease;
+  }
+  .veh-bubble:hover { transform: translateY(-3px); box-shadow: 0 12px 26px -12px rgba(15,30,61,.42); border-color: color-mix(in srgb, var(--fp-accent) 45%, var(--fp-border)); }
+  .veh-bubble-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 11px; }
+  .veh-bubble-plate { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; font-size: .9rem; color: var(--fp-primary); background: var(--fp-bg); border: 1px solid var(--fp-border); border-radius: 8px; padding: 3px 8px; letter-spacing: .4px; white-space: nowrap; }
+  .veh-bubble-model { font-weight: 700; color: var(--fp-text); font-size: .92rem; line-height: 1.25; min-height: 2.3em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .veh-bubble-row { display: flex; align-items: center; gap: 6px; color: var(--fp-muted); font-size: .82rem; font-weight: 600; margin-top: 9px; }
+  .veh-bubble-row svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .veh-bubble-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .veh-bubble-km { display: flex; align-items: center; gap: 6px; color: var(--fp-primary); font-weight: 800; font-size: .95rem; margin-top: 8px; }
+  .veh-bubble-km svg { width: 16px; height: 16px; color: var(--fp-accent); flex-shrink: 0; }
+  /* Flèches de défilement — visibles seulement sur pointeur fin (ordi), jamais au doigt */
+  .veh-nav { position: absolute; top: calc(50% - 8px); transform: translateY(-50%); z-index: 3; width: 34px; height: 34px; border-radius: 50%; background: var(--fp-surface); border: 1px solid var(--fp-border); box-shadow: 0 4px 14px -4px rgba(15,30,61,.32); color: var(--fp-primary); display: none; align-items: center; justify-content: center; cursor: pointer; transition: background .15s ease, transform .15s ease, opacity .15s ease; }
+  .veh-nav:hover { background: var(--fp-bg); transform: translateY(-50%) scale(1.07); }
+  .veh-nav svg { width: 18px; height: 18px; }
+  .veh-nav.prev { left: 6px; } .veh-nav.next { right: 6px; }
+  .veh-nav[hidden] { opacity: 0; pointer-events: none; }
+  @media (hover: hover) and (pointer: fine) { .veh-nav.on { display: flex; } }
 </style>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){});});}</script>
 </head>
@@ -458,25 +490,16 @@
           </div>
 
           <div class="card p-0 lg:col-span-2 overflow-hidden">
-            <div class="flex justify-between items-center p-6 pb-4">
+            <div class="flex justify-between items-center p-6 pb-3">
               <h3 class="font-bold text-slate-900" data-edit-key="dashboard.w_vehicules">Véhicules</h3>
               <a href="pages/vehicules.html" class="text-sm font-semibold" style="color: var(--fp-accent)">Voir tout →</a>
             </div>
-            <div class="scrollable">
-              <table class="fp-table">
-                <thead>
-                  <tr>
-                    <th>Immat.</th>
-                    <th>Modèle</th>
-                    <th>Chauffeur</th>
-                    <th>Km</th>
-                    <th>Statut</th>
-                  </tr>
-                </thead>
-                <tbody id="vehicules-tbody"></tbody>
-              </table>
+            <!-- Bulles glissantes (carrousel horizontal, façon appli) : swipe au doigt, flèches au clic sur ordi -->
+            <div class="veh-carousel">
+              <button type="button" class="veh-nav prev" data-veh-nav="-1" aria-label="Précédent"><i data-lucide="chevron-left"></i></button>
+              <div class="veh-scroller" id="vehicules-tbody"></div>
+              <button type="button" class="veh-nav next" data-veh-nav="1" aria-label="Suivant"><i data-lucide="chevron-right"></i></button>
             </div>
-            <div id="veh-more"></div>
           </div>
         </div>
       </div>
@@ -857,36 +880,55 @@
   }
   renderSante();
 
-  // === Véhicules table ===
+  // === Véhicules : bulles glissantes (carrousel horizontal) ===
   const vehTbody = document.getElementById('vehicules-tbody');
-  let vehExpanded = false;
-  function rowHtml(v) {
+  function bubbleHtml(v) {
     const E = FP.esc;
+    const chauffeur = (v.chauffeur && String(v.chauffeur).trim() && String(v.chauffeur).trim() !== '—') ? v.chauffeur : 'Sans conducteur';
+    const km = FP.num(FP.kmActuel ? FP.kmActuel(v) : v.km);
     return `
-    <tr class="cursor-pointer hover:bg-slate-50 transition-colors" data-veh="${E(v.id)}" title="Voir la fiche de ${E(v.immat)}">
-      <td class="font-mono font-semibold">${E(v.immat)}</td>
-      <td>${E(v.marque)} ${E(v.modele)}</td>
-      <td>${E(v.chauffeur)}</td>
-      <td>${FP.num(FP.kmActuel ? FP.kmActuel(v) : v.km)} km</td>
-      <td>${FP.statutBadge(v.statut)}</td>
-    </tr>`;
+    <div class="veh-bubble" data-veh="${E(v.id)}" title="Voir la fiche de ${E(v.immat)}">
+      <div class="veh-bubble-top">
+        <span class="veh-bubble-plate">${E(v.immat)}</span>
+        ${FP.statutBadge(v.statut)}
+      </div>
+      <div class="veh-bubble-model">${E(v.marque)} ${E(v.modele)}</div>
+      <div class="veh-bubble-row"><i data-lucide="user"></i><span>${E(chauffeur)}</span></div>
+      <div class="veh-bubble-km"><i data-lucide="gauge"></i>${km} km</div>
+    </div>`;
+  }
+  const vehScroller = vehTbody;                       // le scroller EST #vehicules-tbody
+  const vehNavs = Array.from(document.querySelectorAll('[data-veh-nav]'));
+  function updateVehNav() {
+    // Afficher/masquer les flèches selon qu'il reste à défiler d'un côté ou de l'autre.
+    const overflow = vehScroller.scrollWidth - vehScroller.clientWidth > 4;
+    vehNavs.forEach(btn => {
+      btn.classList.toggle('on', overflow);
+      const dir = +btn.getAttribute('data-veh-nav');
+      const atStart = vehScroller.scrollLeft <= 2;
+      const atEnd = vehScroller.scrollLeft >= (vehScroller.scrollWidth - vehScroller.clientWidth - 2);
+      btn.hidden = !overflow || (dir < 0 ? atStart : atEnd);
+    });
   }
   function renderVehicules() {
     const list = data.vehicules || [];
-    const shown = vehExpanded ? list : list.slice(0, 5);
-    vehTbody.innerHTML = shown.map(rowHtml).join('');
-    const more = document.getElementById('veh-more');
-    if (list.length > 5) {
-      more.innerHTML = `<button id="veh-toggle" class="w-full text-center text-sm font-semibold py-2.5 border-t border-slate-100 hover:bg-slate-50" style="color: var(--fp-accent)">${vehExpanded ? 'Voir moins' : 'Voir tout (' + list.length + ')'}</button>`;
-      document.getElementById('veh-toggle').addEventListener('click', () => { vehExpanded = !vehExpanded; renderVehicules(); });
-    } else { more.innerHTML = ''; }
+    vehScroller.innerHTML = list.map(bubbleHtml).join('') ||
+      '<div class="text-sm text-slate-400 px-2 py-6">Aucun véhicule.</div>';
     lucide.createIcons();
+    updateVehNav();
   }
   renderVehicules();
-  // Clic sur une ligne → ouvre la fiche véhicule sur la page Véhicules
-  vehTbody.addEventListener('click', (e) => {
-    const tr = e.target.closest('tr[data-veh]');
-    if (tr) window.location.href = `pages/vehicules.html?veh=${encodeURIComponent(tr.dataset.veh)}`;
+  // Flèches : défilent d'environ une « page » de bulles (largeur visible − une bulle pour garder un repère).
+  vehNavs.forEach(btn => btn.addEventListener('click', () => {
+    const step = Math.max(220, vehScroller.clientWidth - 220);
+    vehScroller.scrollBy({ left: (+btn.getAttribute('data-veh-nav')) * step, behavior: 'smooth' });
+  }));
+  vehScroller.addEventListener('scroll', () => { window.requestAnimationFrame(updateVehNav); }, { passive: true });
+  window.addEventListener('resize', updateVehNav);
+  // Clic sur une bulle → ouvre la fiche véhicule sur la page Véhicules
+  vehScroller.addEventListener('click', (e) => {
+    const card = e.target.closest('.veh-bubble[data-veh]');
+    if (card) window.location.href = `pages/vehicules.html?veh=${encodeURIComponent(card.dataset.veh)}`;
   });
 
   // === Charts ===
