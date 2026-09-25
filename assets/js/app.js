@@ -14187,6 +14187,304 @@ FP.mailBrand = function (o) {
     + '</div>';
 };
 
+// ===== Gabarit d'e-mail SIMPLE (en-tête sombre + corps blanc) — pour les e-mails « système » =====
+// (bienvenue, relevé km, rappel entretien, état des lieux). Même structure que les Edge Functions
+// (manage-users, km-relance, edl-sign) → l'aperçu ressemble à ce que reçoit vraiment le destinataire.
+// brand = LOGO hébergé si dispo, sinon le nom (société ou « Parc Pilot »). buttonHtml = bouton d'action.
+FP.mailShell = function (o) {
+  o = o || {};
+  const esc = FP.esc || (x => String(x == null ? '' : x));
+  const logoUrl = /^https?:\/\//.test(String(o.logoUrl || '')) ? String(o.logoUrl) : '';
+  const brand = logoUrl
+    ? '<img src="' + esc(logoUrl) + '" alt="' + esc(o.brand || 'Logo') + '" style="max-height:38px;max-width:170px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:inline-block">'
+    : '<span style="font-weight:900;font-size:18px;color:#ffffff;letter-spacing:.02em">' + esc(o.brand || 'Parc Pilot') + '</span>';
+  return ''
+    + '<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
+    + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
+    +   '<div>' + brand + '</div>'
+    +   (o.title ? '<div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">' + esc(o.title) + '</div>' : '')
+    + '</div>'
+    + '<div style="border:1px solid #E7EBF0;border-top:none;border-radius:0 0 14px 14px;padding:22px;color:#0F1E3D">'
+    +   (o.bodyHtml || '')
+    +   (o.buttonHtml ? '<p style="text-align:center;margin:22px 0">' + o.buttonHtml + '</p>' : '')
+    + '</div></div>';
+};
+
+// ===== E-MAILS D'AMENDE — SOURCE UNIQUE (résolution modèle + balises + rendu) =====
+// Ces helpers CENTRALISENT ce que faisait pages/amendes.html (modeleMail / appliquerModele) → le test
+// et l'envoi réel produisent le MÊME e-mail. {prenom} = 1er mot (jamais le nom) ; {plaque} = plaque réelle.
+FP.applyMailTags = function (tpl, o) {
+  o = o || {};
+  const first = String(o.prenom || '').trim().split(/\s+/)[0] || '';
+  const plq = String(o.plaque || '').trim();
+  return String(tpl == null ? '' : tpl)
+    .replace(/ ?\{prenom\}/gi, first ? ' ' + first : '')
+    .replace(/ ?\{plaque\}/gi, plq ? ' ' + plq : '');
+};
+// Modèle d'e-mail d'amende ACTIF (custom société sinon défaut), bilingue FR/EN selon la langue du conducteur.
+FP.mailModeleAmende = function (kind, prenom) {
+  const map = { paiement: 'mailModelePaiement', designation: 'mailModeleDesignation', relance: 'mailModeleRelance' };
+  const base = map[kind]; if (!base) return '';
+  let prof = {}; try { prof = FP.societeProfil ? FP.societeProfil() : {}; } catch (e) {}
+  const en = !!(FP.condLangue && FP.condLangue(prenom) === 'en');
+  if (en) {
+    const c = prof[base + '_en']; if (c && String(c).trim()) return String(c);
+    const d = FP.MAIL_DEFAUT[kind + '_en']; if (d && String(d).trim()) return String(d);
+  }
+  const v = prof[base]; if (v && String(v).trim()) return String(v);
+  return FP.MAIL_DEFAUT[kind] || '';
+};
+// Rendu COMPLET d'un e-mail d'amende (= exactement ce qu'envoie amendes.html) → {subject, html, text}.
+FP.renderMailAmende = function (kind, a, ctx) {
+  a = a || {}; ctx = ctx || {};
+  const esc = FP.esc || (x => String(x == null ? '' : x));
+  const titleMap = { paiement: 'Contravention à régler', designation: 'Contravention à désigner', relance: 'Rappel de contravention' };
+  const prenom = a.prenom || '';
+  const plaque = (FP.amendePlaque ? FP.amendePlaque(a) : (a.immatriculation || a.plaque || ''));
+  const bodyText = FP.applyMailTags(FP.mailModeleAmende(kind, prenom), { prenom, plaque });
+  const bodyHtml = esc(bodyText).replace(/\n/g, '<br>');
+  const html = FP.mailBrand({
+    title: titleMap[kind] || 'Avis de contravention',
+    prenom, plaque, montant: a.montant, numeroAvis: a.numeroAvis,
+    nomSoc: ctx.nomSoc || '', logoUrl: ctx.logoUrl || '', bodyHtml
+  });
+  const subjectBase = 'CONTRAVENTION' + (a.numeroAvis ? ' ' + a.numeroAvis : '');
+  return { subject: (kind === 'relance' ? 'Re: ' : '') + subjectBase, html, text: bodyText };
+};
+
+// ===== REGISTRE CENTRAL DES E-MAILS — APERÇU + ENVOI DE TEST (auto-branché) =====
+// Tout e-mail de la plateforme (présent ET futur) s'ENREGISTRE ici → il apparaît AUTOMATIQUEMENT dans
+// « Paramètres → Tester les e-mails » (aperçu instantané + envoi d'un vrai test à soi-même, objet [TEST]).
+// ⚠️ CONVENTION (à respecter pour tout NOUVEL e-mail) : construire son HTML via FP.mailBrand ou
+//    FP.mailShell, puis appeler FP.registerMail({...}) → le test se branche tout seul, rien d'autre à faire.
+// Chaque def : { key, label, group, sample()->data, build(data)->{subject,html,text}, note?, from? }.
+//   • sample() = données BIDON (aucune vraie info) ; le testeur y injecte nomSoc + logoUrl (résolus 1×).
+//   • from: 'plateforme' = e-mail envoyé au nom de Parc Pilot (bienvenue) ; sinon au nom de la société.
+FP.mails = FP.mails || {};
+FP.mailKinds = FP.mailKinds || [];
+FP.registerMail = function (def) {
+  if (!def || !def.key || typeof def.build !== 'function') return;
+  if (!FP.mails[def.key]) FP.mailKinds.push(def.key);
+  FP.mails[def.key] = def;
+};
+// Construit un e-mail (données d'exemple si `data` omis). Async : résout logo + nom société une fois.
+FP.buildMail = async function (key, data) {
+  const def = FP.mails[key]; if (!def) return null;
+  let logo = ''; try { if (FP.hostSocieteLogo) logo = await FP.hostSocieteLogo(); } catch (e) {}
+  let soc = ''; try { soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (e) {}
+  const base = def.sample ? def.sample() : {};
+  const d = Object.assign({ nomSoc: soc, logoUrl: logo }, base, data || {});
+  const r = def.build(d) || {};
+  return { key, label: def.label, group: def.group || 'Autres', from: def.from || 'societe', note: def.note || '', subject: r.subject || '', html: r.html || '', text: r.text || '' };
+};
+// Adresse par défaut du test = l'utilisateur connecté (jamais un conducteur).
+FP.mailTestRecipient = function () {
+  try { if (FP.userEmail) return FP.userEmail; } catch (e) {}
+  try { const e = localStorage.getItem('fp_email'); if (e) return e; } catch (e) {}
+  try { const p = FP.societeProfil ? FP.societeProfil() : {}; if (p.mailExpediteur) return p.mailExpediteur; } catch (e) {}
+  return '';
+};
+// Envoi d'un e-mail de TEST à `to` (objet préfixé [TEST], aucune pièce jointe, aucune vraie donnée).
+FP.sendMailTest = async function (key, to) {
+  const m = await FP.buildMail(key); if (!m) throw new Error('E-mail inconnu : ' + key);
+  if (!(window.FP && FP.sendEmail)) throw new Error('Envoi indisponible');
+  await FP.sendEmail({ to, subject: '[TEST] ' + (m.subject || m.label), html: m.html, text: m.text || '' });
+  return m;
+};
+
+// ---- Enregistrement des e-mails ACTUELS -------------------------------------------------------
+(function registerCoreMails() {
+  if (!FP.registerMail) return;
+  const esc = FP.esc || (x => String(x == null ? '' : x));
+  const btn = (href, label) => '<a href="' + esc(href || '#') + '" style="display:inline-block;background:#0B1220;color:#ffffff;padding:14px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">' + esc(label) + '</a>';
+  const amendeSample = () => ({ prenom: 'Alex Martin', immatriculation: 'AA-123-AA', montant: 90, numeroAvis: '2026ABCD1234567' });
+  // 1) AMENDES (exactement l'e-mail réel — FP.renderMailAmende)
+  ['paiement', 'designation', 'relance'].forEach(kind => {
+    const lbl = { paiement: 'Amende — demande de paiement', designation: 'Amende — demande de désignation', relance: 'Amende — relance' }[kind];
+    FP.registerMail({
+      key: 'amende-' + kind, label: lbl, group: 'Amendes', sample: amendeSample,
+      build: (d) => FP.renderMailAmende(kind, d, { nomSoc: d.nomSoc, logoUrl: d.logoUrl })
+    });
+  });
+  // 2) BIENVENUE / invitation (au nom de Parc Pilot) — cf. manage-users
+  FP.registerMail({
+    key: 'bienvenue', label: 'Bienvenue / invitation', group: 'Comptes', from: 'plateforme',
+    note: "Envoyé au nom de Parc Pilot. L'envoi réel nécessite le domaine parc-pilot.fr vérifié dans Resend.",
+    sample: () => ({ email: 'alex.martin@exemple.fr', link: '#' }),
+    build: (d) => ({
+      subject: 'Votre accès à Parc Pilot — définissez votre mot de passe',
+      html: FP.mailShell({ brand: 'Parc Pilot', logoUrl: '', title: 'Bienvenue sur Parc Pilot',
+        bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>'
+          + '<p style="margin:0 0 16px;line-height:1.55">Un accès à Parc Pilot a été créé pour vous. Cliquez ci-dessous pour définir votre mot de passe et vous connecter.</p>'
+          + '<p style="margin:0 0 8px;line-height:1.55;color:#64748B;font-size:13px">Votre identifiant : <b>' + esc(d.email) + '</b></p>',
+        buttonHtml: btn(d.link, 'Définir mon mot de passe →') }),
+      text: 'Bonjour,\n\nUn accès à Parc Pilot a été créé pour vous. Définissez votre mot de passe ici :\n' + d.link + '\n\nVotre identifiant : ' + d.email + '\n\nParc Pilot · parc-pilot.fr'
+    })
+  });
+  // 3) RELEVÉ KM (au nom de la société) — cf. km-relance
+  FP.registerMail({
+    key: 'releve-km', label: 'Relevé kilométrique', group: 'Kilométrage',
+    sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', link: '#', relance: false }),
+    build: (d) => ({
+      subject: 'Relevé kilométrique' + (d.immat ? ' — ' + d.immat : ''),
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'Relevé kilométrique demandé',
+        bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour ' + esc(d.prenom) + ',</p>'
+          + '<p style="margin:0 0 16px;line-height:1.55">Merci d\'indiquer le <b>kilométrage actuel</b> de votre véhicule ' + esc(d.immat) + ' — c\'est rapide, directement depuis ce mail.</p>',
+        buttonHtml: btn(d.link, 'Indiquer mon kilométrage →') }),
+      text: 'Bonjour ' + d.prenom + ',\n\nMerci d\'indiquer le kilométrage actuel de votre véhicule ' + d.immat + ' :\n' + d.link
+    })
+  });
+  // 4) RAPPEL ENTRETIEN (la veille) — cf. km-relance
+  FP.registerMail({
+    key: 'rappel-entretien', label: 'Rappel entretien (la veille)', group: 'Kilométrage',
+    sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Contrôle technique', link: '#' }),
+    build: (d) => ({
+      subject: 'Rappel — ' + String(d.motif).toLowerCase() + ' demain' + (d.immat ? ' — ' + d.immat : ''),
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + ' demain',
+        bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour ' + esc(d.prenom) + ',</p>'
+          + '<p style="margin:0 0 16px;line-height:1.55">Petit rappel : le rendez-vous <b>' + esc(d.motif) + '</b> pour le véhicule ' + esc(d.immat) + ' est prévu <b>demain</b>. Pense à t\'organiser !</p>' }),
+      text: 'Bonjour ' + d.prenom + ',\n\nRappel : ' + d.motif + ' pour le véhicule ' + d.immat + ' prévu demain.'
+    })
+  });
+  // 5) ÉTAT DES LIEUX À SIGNER — cf. edl-sign
+  FP.registerMail({
+    key: 'edl-a-signer', label: 'État des lieux à signer', group: 'États des lieux',
+    sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', modele: 'Peugeot 208', link: '#' }),
+    build: (d) => ({
+      subject: 'État des lieux à signer — ' + d.immat,
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: 'État des lieux à signer',
+        bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour ' + esc(d.prenom) + ',</p>'
+          + '<p style="margin:0 0 16px;line-height:1.55">Dernière étape avant de rouler : signe l\'état des lieux de ta <b>' + esc(d.modele) + '</b> (' + esc(d.immat) + '), en quelques secondes depuis ce mail.</p>',
+        buttonHtml: btn(d.link, 'Signer le document →') }),
+      text: 'Bonjour ' + d.prenom + ',\n\nSigne l\'état des lieux de ' + d.modele + ' (' + d.immat + ') : ' + d.link
+    })
+  });
+  // 6) ÉTAT DES LIEUX SIGNÉ (copie PDF) — cf. edl-sign
+  FP.registerMail({
+    key: 'edl-signe', label: 'État des lieux signé (copie)', group: 'États des lieux',
+    sample: () => ({ immat: 'AA-123-AA', modele: 'Peugeot 208', date: '01/09/2026', link: '#' }),
+    build: (d) => ({
+      subject: 'État des lieux signé — ' + d.immat,
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: '✅ État des lieux signé',
+        bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>'
+          + '<p style="margin:0 0 16px;line-height:1.55">L\'état des lieux a bien été signé. Une copie PDF est disponible ci-dessous.</p>'
+          + '<div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155"><b>' + esc(d.modele) + '</b> · ' + esc(d.immat) + (d.date ? ' · ' + esc(d.date) : '') + '</div>',
+        buttonHtml: btn(d.link, '⬇️ Télécharger l\'état des lieux signé') }),
+      text: 'L\'état des lieux signé du véhicule ' + d.immat + ' est disponible : ' + d.link
+    })
+  });
+})();
+
+// ===== TESTEUR D'E-MAILS (modale) — aperçu + envoi de test, liste auto depuis FP.mails =====
+FP.openMailTester = function () {
+  if (!(FP.mails && FP.mailKinds && FP.mailKinds.length)) { if (FP.toast) FP.toast('Aucun e-mail à tester'); return; }
+  const esc = FP.esc || (x => String(x == null ? '' : x));
+  const rcpt = FP.mailTestRecipient();
+  // Regroupe par `group`, dans l'ordre d'enregistrement.
+  const groups = [];
+  FP.mailKinds.forEach(k => {
+    const def = FP.mails[k]; if (!def) return;
+    let g = groups.find(x => x.name === (def.group || 'Autres'));
+    if (!g) { g = { name: def.group || 'Autres', items: [] }; groups.push(g); }
+    g.items.push(def);
+  });
+  const rowsHtml = groups.map(g => ''
+    + '<div style="margin:14px 0 6px;font-size:12px;font-weight:800;color:var(--fp-muted);text-transform:uppercase;letter-spacing:.4px">' + esc(g.name) + '</div>'
+    + g.items.map(def => ''
+      + '<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--fp-border)">'
+      +   '<div style="flex:1;min-width:0"><div style="font-weight:700;color:var(--fp-text)">' + esc(def.label) + '</div>'
+      +     (def.from === 'plateforme' ? '<div style="font-size:11px;color:var(--fp-muted)">Au nom de Parc Pilot</div>' : '')
+      +   '</div>'
+      +   '<button class="btn btn-outline text-sm" data-mail-preview="' + esc(def.key) + '">👁️ Aperçu</button>'
+      +   '<button class="btn btn-dark text-sm" data-mail-send="' + esc(def.key) + '">✉️ M\'envoyer</button>'
+      + '</div>').join('')
+  ).join('');
+  const ov = document.createElement('div');
+  ov.className = 'fp-modal-backdrop';
+  ov.id = 'fp-mailtester-backdrop';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9997;background:rgba(11,18,32,.55);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto';
+  ov.innerHTML = ''
+    + '<div style="background:var(--fp-surface);color:var(--fp-text);border-radius:16px;max-width:560px;width:100%;box-shadow:0 30px 60px -20px rgba(11,18,32,.6);overflow:hidden">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:18px 20px;border-bottom:1px solid var(--fp-border)">'
+    +     '<div><div style="font-weight:800;font-size:17px">🧪 Tester les e-mails</div><div style="font-size:12px;color:var(--fp-muted)">Aperçu instantané ou envoi d\'un vrai test (données bidon, objet [TEST]).</div></div>'
+    +     '<button id="fp-mt-close" class="btn btn-outline text-sm" aria-label="Fermer">✕</button>'
+    +   '</div>'
+    +   '<div style="padding:16px 20px">'
+    +     '<label style="font-size:12px;font-weight:700;color:var(--fp-muted)">Adresse de test (la tienne)</label>'
+    +     '<input id="fp-mt-to" type="email" value="' + esc(rcpt) + '" placeholder="ton adresse e-mail" style="width:100%;margin-top:5px;padding:10px 12px;border:1px solid var(--fp-border);border-radius:10px;background:var(--fp-bg);color:var(--fp-text);font-size:14px">'
+    +     rowsHtml
+    +     '<div style="margin-top:16px;text-align:right"><button id="fp-mt-sendall" class="btn btn-primary text-sm">✉️ M\'envoyer TOUS les tests</button></div>'
+    +   '</div>'
+    + '</div>';
+  document.body.appendChild(ov);
+  const close = () => { try { ov.remove(); } catch (e) {} };
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  ov.querySelector('#fp-mt-close').addEventListener('click', close);
+  const toVal = () => String((ov.querySelector('#fp-mt-to') || {}).value || '').trim();
+  // Aperçu → modale avec l'e-mail rendu dans un iframe (CSS isolé, comme une vraie boîte mail).
+  ov.querySelectorAll('[data-mail-preview]').forEach(b => b.addEventListener('click', async () => {
+    const key = b.getAttribute('data-mail-preview');
+    const old = b.textContent; b.disabled = true; b.textContent = '…';
+    try { const m = await FP.buildMail(key); if (m) FP._mailPreviewModal(m, toVal()); }
+    catch (e) { if (FP.toast) FP.toast('Aperçu impossible'); }
+    finally { b.disabled = false; b.textContent = old; }
+  }));
+  // Envoi d'un test unitaire
+  ov.querySelectorAll('[data-mail-send]').forEach(b => b.addEventListener('click', async () => {
+    const to = toVal(); if (!to) { if (FP.toast) FP.toast('Renseigne ton adresse de test'); return; }
+    const key = b.getAttribute('data-mail-send');
+    const old = b.textContent; b.disabled = true; b.textContent = 'Envoi…';
+    try { await FP.sendMailTest(key, to); if (FP.toast) FP.toast('✓ Test envoyé à ' + to); }
+    catch (e) { if (FP.notifyError) FP.notifyError('Échec : ' + (e && e.message || e)); else alert('Échec : ' + (e && e.message || e)); }
+    finally { b.disabled = false; b.textContent = old; }
+  }));
+  // Tout envoyer
+  const allBtn = ov.querySelector('#fp-mt-sendall');
+  if (allBtn) allBtn.addEventListener('click', async () => {
+    const to = toVal(); if (!to) { if (FP.toast) FP.toast('Renseigne ton adresse de test'); return; }
+    if (FP.confirm && !(await FP.confirm('Envoyer ' + FP.mailKinds.length + ' e-mails de test à ' + to + ' ?'))) return;
+    allBtn.disabled = true; const old = allBtn.textContent; let ok = 0, ko = 0;
+    for (const key of FP.mailKinds) {
+      allBtn.textContent = 'Envoi ' + (ok + ko + 1) + '/' + FP.mailKinds.length + '…';
+      try { await FP.sendMailTest(key, to); ok++; } catch (e) { ko++; }
+    }
+    allBtn.disabled = false; allBtn.textContent = old;
+    alert('✓ ' + ok + ' test(s) envoyé(s)' + (ko ? ' · ' + ko + ' échec(s) (souvent un domaine non vérifié)' : '') + '.');
+  });
+};
+// Modale d'aperçu d'UN e-mail (iframe isolé) + bouton d'envoi de test.
+FP._mailPreviewModal = function (m, to) {
+  const esc = FP.esc || (x => String(x == null ? '' : x));
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(11,18,32,.6);display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;overflow:auto';
+  ov.innerHTML = ''
+    + '<div style="background:var(--fp-surface);color:var(--fp-text);border-radius:16px;max-width:540px;width:100%;box-shadow:0 30px 60px -20px rgba(11,18,32,.6);overflow:hidden">'
+    +   '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px;border-bottom:1px solid var(--fp-border)">'
+    +     '<div style="min-width:0"><div style="font-weight:800">' + esc(m.label) + '</div><div style="font-size:12px;color:var(--fp-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Objet : ' + esc(m.subject) + '</div></div>'
+    +     '<button id="fp-mp-close" class="btn btn-outline text-sm">✕</button>'
+    +   '</div>'
+    +   (m.note ? '<div style="padding:10px 20px;font-size:12px;color:var(--fp-muted);background:var(--fp-bg)">ℹ️ ' + esc(m.note) + '</div>' : '')
+    +   '<div style="padding:16px 20px"><iframe id="fp-mp-frame" title="Aperçu e-mail" style="width:100%;height:520px;border:1px solid var(--fp-border);border-radius:12px;background:#EEF2F7"></iframe></div>'
+    +   '<div style="padding:0 20px 18px;text-align:right"><button id="fp-mp-send" class="btn btn-dark text-sm">✉️ M\'envoyer ce test</button></div>'
+    + '</div>';
+  document.body.appendChild(ov);
+  const close = () => { try { ov.remove(); } catch (e) {} };
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+  ov.querySelector('#fp-mp-close').addEventListener('click', close);
+  try {
+    const fr = ov.querySelector('#fp-mp-frame');
+    fr.srcdoc = '<!doctype html><meta charset="utf-8"><body style="margin:0;padding:16px;background:#EEF2F7">' + (m.html || '') + '</body>';
+  } catch (e) {}
+  const sb = ov.querySelector('#fp-mp-send');
+  if (sb) sb.addEventListener('click', async () => {
+    if (!to) { if (FP.toast) FP.toast('Renseigne ton adresse de test'); return; }
+    const old = sb.textContent; sb.disabled = true; sb.textContent = 'Envoi…';
+    try { await FP.sendMailTest(m.key, to); if (FP.toast) FP.toast('✓ Test envoyé à ' + to); }
+    catch (e) { if (FP.notifyError) FP.notifyError('Échec : ' + (e && e.message || e)); else alert('Échec : ' + (e && e.message || e)); }
+    finally { sb.disabled = false; sb.textContent = old; }
+  });
+};
+
 // ===== SUIVI FLOTTE — SOURCE UNIQUE (« même branche ») : mêmes colonnes + mêmes états PARTOUT =====
 // Utilisé par l'onglet « 📋 Suivi flotte » (notifications.html) ET le widget du tableau de bord → une
 // seule définition, donc la même info partout. Chaque colonne est LUE depuis la donnée existante
