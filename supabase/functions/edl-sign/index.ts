@@ -352,13 +352,13 @@ Deno.serve(async (req) => {
         const sensTxt = row.sens === "restitution" ? "restitution" : "remise";
         const { from, replyTo } = await societeFrom(db, String(row.societe || "PXP"));
         const key = Deno.env.get("RESEND_API_KEY");
-        const ppLogo = '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:8px">'
-          + '<span style="display:block;width:18px;height:3px;background:#FB923C;border-radius:2px"></span>'
-          + '<span style="display:block;width:23px;height:3px;background:#F97316;border-radius:2px;margin-top:2px"></span>'
-          + '<span style="display:block;width:13px;height:3px;background:#FB923C;border-radius:2px;margin-top:2px"></span>'
+        const ppLogo = '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:9px">'
+          + '<span style="display:block;width:17px;height:4px;background:#F8A24A;border-radius:3px"></span>'
+          + '<span style="display:block;width:26px;height:4px;background:#F97316;border-radius:3px;margin-top:3px"></span>'
+          + '<span style="display:block;width:11px;height:4px;background:#F97316;border-radius:3px;margin-top:3px"></span>'
           + '</span>'
-          + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#ffffff;vertical-align:middle">Parc</span>'
-          + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#F97316;vertical-align:middle">Pilot</span>';
+          + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;vertical-align:middle">Parc</span>'
+          + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#F97316;vertical-align:middle">Pilot</span>';
         const html = `<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">
   <div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">
     <div>${ppLogo}</div>
@@ -370,9 +370,8 @@ Deno.serve(async (req) => {
     <div style="background:#f8fafc;border-radius:10px;padding:11px 14px;margin:14px 0;font-size:13px;color:#334155">🚗 <b>${modele}</b> · ${plaque}${dateStr ? " · " + dateStr : ""}</div>
     <p style="text-align:center;margin:22px 0"><a href="${signedPdfUrl}" style="display:inline-block;background:#0B1220;color:#ffffff;padding:14px 30px;border-radius:10px;text-decoration:none;font-weight:800;font-size:15px">⬇️ Télécharger l'état des lieux signé</a></p>
   </div>
-  <div style="background-color:#0B1220;color:#94A3B8;padding:16px 22px;border-radius:0 0 14px 14px;text-align:center;font-size:11px">
+  <div style="background-color:#0B1220;padding:18px 22px;border-radius:0 0 14px 14px;text-align:center">
     <div>${ppLogo}</div>
-    <div style="margin-top:9px;color:#64748B">via Parc Pilot</div>
   </div>
 </div>`;
         if (key) {

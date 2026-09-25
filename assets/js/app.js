@@ -14125,22 +14125,22 @@ document.addEventListener('click', (e) => {
 // en italique) en HTML pur → s'affiche TOUJOURS (les images externes sont souvent bloquées par les
 // clients mail). ⚠️ Tout e-mail de la plateforme DOIT utiliser CE logo (jamais un logo « maison »).
 FP.ppLogoMail = function () {
+  // 3 barres orange de LONGUEURS bien distinctes (comme le vrai logo) : moyenne / longue / courte,
+  // alignées à gauche. + « Parc » blanc et « Pilot » orange, gras italique.
   return ''
-    + '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:8px">'
-    +   '<span style="display:block;width:18px;height:3px;background:#FB923C;border-radius:2px"></span>'
-    +   '<span style="display:block;width:23px;height:3px;background:#F97316;border-radius:2px;margin-top:2px"></span>'
-    +   '<span style="display:block;width:13px;height:3px;background:#FB923C;border-radius:2px;margin-top:2px"></span>'
+    + '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:9px">'
+    +   '<span style="display:block;width:17px;height:4px;background:#F8A24A;border-radius:3px"></span>'
+    +   '<span style="display:block;width:26px;height:4px;background:#F97316;border-radius:3px;margin-top:3px"></span>'
+    +   '<span style="display:block;width:11px;height:4px;background:#F97316;border-radius:3px;margin-top:3px"></span>'
     + '</span>'
-    + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#ffffff;vertical-align:middle">Parc</span>'
-    + '<span style="font-weight:900;font-style:italic;font-size:15px;color:#F97316;vertical-align:middle">Pilot</span>';
+    + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;vertical-align:middle">Parc</span>'
+    + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#F97316;vertical-align:middle">Pilot</span>';
 };
-// Pied de page sombre commun à TOUS les e-mails (logo Parc Pilot + « <société> · via Parc Pilot »).
-FP.mailFooterHtml = function (nomSoc) {
-  const esc = FP.esc || (x => String(x == null ? '' : x));
+// Pied de page sombre commun à TOUS les e-mails : le logo Parc Pilot SEUL (aucun texte « société · via »).
+FP.mailFooterHtml = function (_nomSoc) {
   return ''
-    + '<div style="background-color:#0B1220;color:#94A3B8;padding:16px 22px;border-radius:0 0 14px 14px;text-align:center;font-size:11px">'
+    + '<div style="background-color:#0B1220;padding:18px 22px;border-radius:0 0 14px 14px;text-align:center">'
     +   '<div>' + FP.ppLogoMail() + '</div>'
-    +   '<div style="margin-top:9px;color:#64748B">' + (nomSoc ? esc(nomSoc) + ' · ' : '') + 'via Parc Pilot</div>'
     + '</div>';
 };
 
