@@ -14306,10 +14306,27 @@ FP.sendMailTest = async function (key, to) {
       build: (d) => FP.renderMailAmende(kind, d, { nomSoc: d.nomSoc, logoUrl: d.logoUrl })
     });
   });
-  // 2) BIENVENUE / invitation (au nom de Parc Pilot) — cf. manage-users
+  // 2a) BIENVENUE À BORD — CONDUCTEUR / collaborateur (accès QR du véhicule) — cf. conducteurs.html
+  //     C'est le mail envoyé à un salarié qui reçoit une voiture : QR (km, docs, signalement, EDL).
+  //     Part au NOM DE LA SOCIÉTÉ (domaine société déjà vérifié) → l'envoi réel marche déjà.
   FP.registerMail({
-    key: 'bienvenue', label: 'Bienvenue / invitation', group: 'Comptes', from: 'plateforme',
-    note: "Envoyé au nom de Parc Pilot. L'envoi réel nécessite le domaine parc-pilot.fr vérifié dans Resend.",
+    key: 'bienvenue-conducteur', label: 'Bienvenue à bord (conducteur · QR)', group: 'Comptes',
+    sample: () => ({ prenom: 'Alex', plaque: 'AA-123-AA', portail: '#' }),
+    build: (d) => ({
+      subject: 'Bienvenue à bord 🚗 — l\'espace véhicule',
+      html: FP.mailBrand({ title: 'Bienvenue à bord', prenom: d.prenom, plaque: d.plaque, nomSoc: d.nomSoc, logoUrl: d.logoUrl,
+        bodyHtml: '<p style="margin:0 0 14px">Bonjour ' + esc(d.prenom) + ',</p>'
+          + '<p style="margin:0 0 14px;line-height:1.5">Bienvenue à bord ! Le véhicule <b><span style="white-space:nowrap">' + esc(d.plaque) + '</span></b> dispose d\'un <b>QR code</b> collé à l\'intérieur. En le scannant — ou via le bouton ci-dessous — l\'espace véhicule est accessible en quelques secondes :</p>'
+          + '<ul style="margin:0 0 14px;padding-left:18px;line-height:1.7"><li>📸 <b>Envoi du kilométrage</b></li><li>📄 <b>Documents</b> (carte grise, assurance, assistance)</li><li>🚨 <b>Signalement</b> d\'un problème ou d\'un accident</li><li>📋 <b>État des lieux</b> (photos de prise et de restitution)</li></ul>'
+          + '<p style="margin:0;line-height:1.5">À garder sous la main. Bonne route ! 🙌</p>',
+        buttonHtml: btn(d.portail, 'Accéder à mon espace →') }),
+      text: 'Bonjour ' + d.prenom + ',\nBienvenue à bord ! 🚗\nLe véhicule ' + d.plaque + ' dispose d\'un QR code (collé à l\'intérieur) : kilométrage, documents, signalement, état des lieux.\n' + (d.portail && d.portail !== '#' ? 'Ton espace : ' + d.portail : '')
+    })
+  });
+  // 2b) INVITATION À UN COMPTE (admin/gestionnaire qui se CONNECTE) — au nom de Parc Pilot — cf. manage-users
+  FP.registerMail({
+    key: 'bienvenue', label: 'Invitation à un compte (accès plateforme)', group: 'Comptes', from: 'plateforme',
+    note: "Différent du « Bienvenue à bord » conducteur : celui-ci ouvre un COMPTE (connexion). Envoyé au nom de Parc Pilot → l'envoi réel nécessite le domaine parc-pilot.fr vérifié dans Resend.",
     sample: () => ({ email: 'alex.martin@exemple.fr', link: '#' }),
     build: (d) => ({
       subject: 'Votre accès à Parc Pilot — définissez votre mot de passe',
