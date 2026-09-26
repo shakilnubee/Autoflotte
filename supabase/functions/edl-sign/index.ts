@@ -359,7 +359,11 @@ Deno.serve(async (req) => {
           + '</span>'
           + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;vertical-align:middle">Parc</span>'
           + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#F97316;vertical-align:middle">Pilot</span>';
-        const html = `<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">
+        const mailDoc = (inner: string) => '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">'
+          + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+          + '<meta name="color-scheme" content="only light"><meta name="supported-color-schemes" content="only light">'
+          + '</head><body style="margin:0;padding:0;background:#EEF2F7;color:#0F1E3D">' + inner + '</body></html>';
+        const html = mailDoc(`<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">
   <div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">
     <div>${ppLogo}</div>
     <div style="font-size:20px;font-weight:800;font-style:italic;margin-top:16px;line-height:1.25;color:#ffffff">✅ État des lieux signé</div>
@@ -373,7 +377,7 @@ Deno.serve(async (req) => {
   <div style="background-color:#0B1220;padding:18px 22px;border-radius:0 0 14px 14px;text-align:center">
     <div>${ppLogo}</div>
   </div>
-</div>`;
+</div>`);
         if (key) {
           const dest = Array.from(new Set(required.map((s) => String(s.email || "")).filter(Boolean)));
           for (const to of dest) {
