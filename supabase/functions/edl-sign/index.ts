@@ -358,6 +358,7 @@ Deno.serve(async (req) => {
           + '<span style="display:block;width:11px;height:4px;background:#F97316;border-radius:3px;margin-top:3px"></span>'
           + '</span>'
           + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;vertical-align:middle">Parc</span>'
+          + '<span style="vertical-align:middle">&#160;</span>'
           + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#F97316;vertical-align:middle">Pilot</span>';
         const mailDoc = (inner: string) => '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">'
           + '<meta name="viewport" content="width=device-width,initial-scale=1">'

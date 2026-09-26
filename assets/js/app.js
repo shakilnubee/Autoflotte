@@ -14203,6 +14203,7 @@ FP.ppLogoMail = function () {
     +   '<span style="display:block;width:11px;height:4px;background:#F97316;border-radius:3px;margin-top:3px"></span>'
     + '</span>'
     + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#ffffff;vertical-align:middle">Parc</span>'
+    + '<span style="vertical-align:middle">&#160;</span>'
     + '<span style="font-weight:900;font-style:italic;font-size:16px;color:#F97316;vertical-align:middle">Pilot</span>';
 };
 // Pied de page sombre commun à TOUS les e-mails : le logo Parc Pilot SEUL (aucun texte « société · via »).
