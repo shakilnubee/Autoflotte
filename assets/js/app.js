@@ -14230,6 +14230,56 @@ FP.mailFooterHtml = function (_nomSoc) {
     + '</div>';
 };
 
+// ===== AGENDA (.ics) — SOURCE UNIQUE : un rendez-vous Parc Pilot → fichier calendrier standard =====
+// Marche partout (Google Agenda, Apple Calendrier, Outlook). Deux usages :
+//   • FP.ics.download(ev) : bouton « Ajouter à mon agenda » côté site (télécharge le .ics).
+//   • FP.ics.b64(ev)      : pièce jointe de l'e-mail d'annonce (le client mail propose « Ajouter au
+//     calendrier » tout seul). ev = { uid, title, date:'AAAA-MM-JJ', heure:'HH:MM'?, dureeMin?, location?, description? }
+FP.ics = {
+  _esc(s) { return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n'); },
+  _p(n) { return String(n).padStart(2, '0'); },
+  _utc(d) { return d.getUTCFullYear() + this._p(d.getUTCMonth() + 1) + this._p(d.getUTCDate()) + 'T' + this._p(d.getUTCHours()) + this._p(d.getUTCMinutes()) + this._p(d.getUTCSeconds()) + 'Z'; },
+  _loc(d) { return d.getFullYear() + this._p(d.getMonth() + 1) + this._p(d.getDate()) + 'T' + this._p(d.getHours()) + this._p(d.getMinutes()) + '00'; },
+  _ymd(d) { return d.getFullYear() + this._p(d.getMonth() + 1) + this._p(d.getDate()); },
+  _fold(line) { if (line.length <= 73) return line; let out = '', s = line; while (s.length > 73) { out += s.slice(0, 73) + '\r\n '; s = s.slice(73); } return out + s; },
+  content(ev) {
+    ev = ev || {};
+    const uid = String(ev.uid || ('pp-' + Date.now() + '-' + Math.random().toString(36).slice(2))) + '@parc-pilot.fr';
+    const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Parc Pilot//Agenda//FR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT', 'UID:' + uid, 'DTSTAMP:' + this._utc(new Date()), 'SEQUENCE:' + (ev.sequence || 0)];
+    const ymd = String(ev.date || '').slice(0, 10); const parts = ymd.split('-').map(Number);
+    if (parts.length === 3 && !parts.some(isNaN)) {
+      if (ev.heure && /^\d{1,2}:\d{2}/.test(ev.heure)) {
+        const hm = ev.heure.split(':').map(Number);
+        const start = new Date(parts[0], parts[1] - 1, parts[2], hm[0], hm[1], 0);
+        const end = new Date(start.getTime() + (ev.dureeMin || 60) * 60000);
+        L.push('DTSTART:' + this._loc(start), 'DTEND:' + this._loc(end));
+      } else {
+        const start = new Date(parts[0], parts[1] - 1, parts[2]);
+        const next = new Date(parts[0], parts[1] - 1, parts[2] + 1);
+        L.push('DTSTART;VALUE=DATE:' + this._ymd(start), 'DTEND;VALUE=DATE:' + this._ymd(next));
+      }
+    }
+    L.push('SUMMARY:' + this._esc(ev.title || 'Rendez-vous'));
+    if (ev.description) L.push('DESCRIPTION:' + this._esc(ev.description));
+    if (ev.location) L.push('LOCATION:' + this._esc(ev.location));
+    // Rappel calendrier la veille (en plus de l'e-mail).
+    L.push('BEGIN:VALARM', 'TRIGGER:-P1D', 'ACTION:DISPLAY', 'DESCRIPTION:' + this._esc(ev.title || 'Rendez-vous'), 'END:VALARM');
+    L.push('END:VEVENT', 'END:VCALENDAR');
+    return L.map(l => this._fold(l)).join('\r\n');
+  },
+  b64(ev) { const s = this.content(ev); try { return btoa(unescape(encodeURIComponent(s))); } catch (e) { try { return btoa(s); } catch (_) { return ''; } } },
+  download(ev, filename) {
+    try {
+      const blob = new Blob([this.content(ev)], { type: 'text/calendar;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename || 'rendez-vous.ics';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 4000);
+      if (FP.toast) FP.toast('📅 Événement téléchargé — ouvre-le pour l\'ajouter à ton agenda');
+    } catch (e) { if (FP.notifyError) FP.notifyError('Impossible de générer l\'événement'); }
+  }
+};
+
 FP.mailBrand = function (o) {
   o = o || {};
   const esc = FP.esc || (x => String(x == null ? '' : x));
