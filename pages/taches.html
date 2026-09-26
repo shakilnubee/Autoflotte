@@ -40,6 +40,20 @@
   /* (pastilles d'échéance : composant canonique .fp-ech dans styles.css) */
   .ta-icon-btn { padding:.35rem; border-radius:.4rem; color:#cbd5e1; border:none; background:none; cursor:pointer; }
   .ta-icon-btn:hover { background:#f1f5f9; color:#0f1e3d; }
+  /* Calendrier mensuel */
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+  .cal-head { margin-bottom:6px; }
+  .cal-dow { text-align:center; font-size:.72rem; font-weight:700; color:var(--fp-muted); text-transform:uppercase; letter-spacing:.03em; }
+  .cal-cell { min-height:78px; border:1px solid var(--fp-border); border-radius:.55rem; padding:4px; background:#fff; overflow:hidden; cursor:pointer; }
+  .cal-cell.empty { border:none; background:transparent; cursor:default; }
+  .cal-cell.today { border-color:var(--fp-accent); box-shadow:0 0 0 2px rgba(249,115,22,.18) inset; }
+  .cal-cell:hover:not(.empty) { border-color:var(--fp-accent); }
+  .cal-daynum { font-size:.72rem; font-weight:700; color:#64748b; margin-bottom:2px; }
+  .cal-task { font-size:.68rem; line-height:1.2; font-weight:600; color:#0f1e3d; background:#f1f5f9; border-radius:.3rem; padding:1px 4px; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cal-task.done { text-decoration:line-through; opacity:.55; }
+  body.fp-dark .cal-cell { background:#0f1a2e; }
+  body.fp-dark .cal-task { background:#1e293b; color:#e6edf6; }
+  body.fp-dark .cal-daynum { color:#94a3b8; }
 </style>
 <script>
 (function(){
@@ -120,12 +134,13 @@
 
     <div class="mb-8 flex justify-between items-start gap-3 flex-wrap">
       <div>
-        <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)">Tâches &amp; rappels</h1>
-        <p class="text-slate-500 text-sm mt-1">Les petites choses à ne pas oublier : changer des pneus, rapporter une clé, prendre un RDV…</p>
+        <h1 class="text-2xl font-extrabold" style="color: var(--fp-primary)">Tâches &amp; rendez-vous</h1>
+        <p class="text-slate-500 text-sm mt-1">Ton organiseur de flotte : planifie tes rendez-vous (garage, carrosserie, livraison…), tes actions et tes achats — avec checklists et rappels.</p>
       </div>
-      <div class="flex gap-2">
-        <button class="btn btn-outline text-sm" id="btn-cfg-rappels"><i data-lucide="repeat" class="w-4 h-4"></i> Configurer les rappels</button>
-        <button class="btn btn-dark text-sm" id="btn-new" data-quickadd><i data-lucide="plus" class="w-4 h-4"></i> Nouvelle tâche</button>
+      <div class="flex gap-2 flex-wrap">
+        <button class="btn btn-outline text-sm" id="btn-models"><i data-lucide="list-checks" class="w-4 h-4"></i> Depuis un modèle</button>
+        <button class="btn btn-outline text-sm" id="btn-cfg-rappels"><i data-lucide="repeat" class="w-4 h-4"></i> Rappels récurrents</button>
+        <button class="btn btn-dark text-sm" id="btn-new" data-quickadd><i data-lucide="plus" class="w-4 h-4"></i> Nouveau</button>
       </div>
     </div>
 
@@ -145,23 +160,38 @@
       <div class="kpi"><div class="flex justify-between items-start gap-2"><div><div class="kpi-label">Terminées</div><div class="kpi-value" id="kpi-done" style="color: var(--fp-ok, #16a34a)">—</div></div><div class="kpi-ic ok"><i data-lucide="check-circle-2"></i></div></div></div>
     </div>
 
-    <!-- Filtres + recherche -->
+    <!-- Bascule de vue : Liste / Kanban / Calendrier -->
+    <div class="flex gap-1 mb-4" id="view-switch">
+      <button class="filter-chip active" data-view="liste"><i data-lucide="list" class="w-4 h-4"></i> Liste</button>
+      <button class="filter-chip" data-view="kanban"><i data-lucide="columns-3" class="w-4 h-4"></i> Kanban</button>
+      <button class="filter-chip" data-view="calendrier"><i data-lucide="calendar-days" class="w-4 h-4"></i> Calendrier</button>
+    </div>
+
+    <!-- Filtres + recherche (vue Liste) -->
     <div class="card p-4 mb-6 flex flex-wrap items-center gap-3" id="tache-filterbar">
-      <div class="flex gap-1" id="filters-statut">
+      <div class="flex gap-1 flex-wrap" id="filters-statut">
         <button class="filter-chip active" data-value="actives">À faire</button>
         <button class="filter-chip" data-value="retard">En retard</button>
         <button class="filter-chip" data-value="avenir">À venir</button>
         <button class="filter-chip" data-value="faites">Terminées</button>
         <button class="filter-chip" data-value="all">Toutes</button>
       </div>
+      <div class="flex gap-1 flex-wrap" id="filters-type">
+        <button class="filter-chip active" data-type="all">Tous types</button>
+        <button class="filter-chip" data-type="rdv">📅 RDV</button>
+        <button class="filter-chip" data-type="action">✅ Actions</button>
+        <button class="filter-chip" data-type="achat">📦 Achats</button>
+      </div>
       <div class="relative flex-1 min-w-[200px]">
         <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-        <input id="search" type="text" placeholder="Rechercher (titre, véhicule, note…)" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
+        <input id="search" type="text" placeholder="Rechercher (titre, véhicule, conducteur, lieu…)" class="w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-teal-500" />
       </div>
     </div>
 
     <div id="taches-list" class="space-y-3"></div>
-    <div id="empty" class="hidden card"><div class="fp-empty"><div class="fp-empty-ic"><i data-lucide="clipboard-check"></i></div><div class="fp-empty-title">Aucune tâche</div><div class="text-sm mt-1">Clique sur « Nouvelle tâche » pour en créer une.</div></div></div>
+    <div id="taches-kanban" class="hidden"></div>
+    <div id="taches-cal" class="hidden"></div>
+    <div id="empty" class="hidden card"><div class="fp-empty"><div class="fp-empty-ic"><i data-lucide="clipboard-check"></i></div><div class="fp-empty-title">Rien de prévu</div><div class="text-sm mt-1">Clique sur « Nouveau » pour planifier un rendez-vous, une action ou un achat.</div></div></div>
   </main>
 </div>
 
@@ -174,8 +204,18 @@
     </div>
     <form id="form-task" class="space-y-4">
       <div>
+        <div class="field-label">Type</div>
+        <div class="flex gap-1 flex-wrap" id="t-type-switch">
+          <button type="button" class="filter-chip active" data-t="rdv">📅 Rendez-vous</button>
+          <button type="button" class="filter-chip" data-t="action">✅ Action</button>
+          <button type="button" class="filter-chip" data-t="achat">📦 Achat</button>
+        </div>
+        <input type="hidden" id="t-type" value="rdv">
+      </div>
+      <div>
         <div class="field-label">Intitulé *</div>
-        <input class="field-input" id="t-titre" required placeholder="Ex : Changer les pneus hiver" autocomplete="off" />
+        <input class="field-input" id="t-titre" required placeholder="Ex : Révision — ou choisis un motif ci-dessous" autocomplete="off" />
+        <div class="flex gap-1 flex-wrap mt-2" id="t-motifs"></div>
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div>
@@ -183,19 +223,63 @@
           <select class="field-input" id="t-vehicule"></select>
         </div>
         <div>
-          <div class="field-label">Échéance (optionnel)</div>
+          <div class="field-label">Conducteur (optionnel)</div>
+          <input class="field-input" id="t-conducteur" placeholder="Nom du conducteur" autocomplete="off" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="field-label"><span id="t-date-lbl">Date du rendez-vous</span></div>
           <input class="field-input" type="date" id="t-echeance" />
+        </div>
+        <div id="t-heure-wrap">
+          <div class="field-label">Heure (optionnel)</div>
+          <input class="field-input" type="time" id="t-heure" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div id="t-lieu-wrap">
+          <div class="field-label"><span id="t-lieu-lbl">Lieu / garage</span> (optionnel)</div>
+          <input class="field-input" id="t-lieu" placeholder="Ex : Garage Renault Nation" autocomplete="off" />
+        </div>
+        <div>
+          <div class="field-label">Priorité</div>
+          <select class="field-input" id="t-priorite"><option value="normale">Normale</option><option value="haute">🔴 Haute</option><option value="basse">Basse</option></select>
+        </div>
+      </div>
+      <div>
+        <div class="field-label">Checklist (optionnel)</div>
+        <div id="t-sous" class="space-y-1"></div>
+        <div class="flex gap-2 mt-1">
+          <input class="field-input" id="t-sous-add" placeholder="Ajouter une étape puis Entrée" autocomplete="off" style="flex:1" />
+          <button type="button" class="btn btn-outline text-sm" id="t-sous-btn"><i data-lucide="plus" class="w-4 h-4"></i></button>
         </div>
       </div>
       <div>
         <div class="field-label">Note (optionnel)</div>
-        <textarea class="field-input" id="t-note" rows="3" placeholder="Détails…"></textarea>
+        <textarea class="field-input" id="t-note" rows="2" placeholder="Détails…"></textarea>
       </div>
+      <label class="flex items-center gap-2 text-sm" id="t-notify-wrap" style="cursor:pointer">
+        <input type="checkbox" id="t-notify" class="task-check" checked>
+        <span>Prévenir le conducteur (e-mail / SMS / WhatsApp) à l'enregistrement</span>
+      </label>
       <div class="flex gap-2 pt-2">
         <button type="button" class="btn btn-outline flex-1 justify-center" id="task-cancel">Annuler</button>
         <button type="submit" class="btn btn-dark flex-1 justify-center"><i data-lucide="check" class="w-4 h-4"></i> Enregistrer</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Modal : créer depuis un MODÈLE (checklist prête à l'emploi) -->
+<div class="modal-backdrop" id="modal-models">
+  <div class="modal p-6">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-extrabold" style="color:var(--fp-primary)"><i data-lucide="list-checks" class="w-5 h-5 inline"></i> Créer depuis un modèle</h2>
+      <button aria-label="Fermer" class="p-2 hover:bg-slate-100 rounded-lg" id="models-close"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <p class="text-sm text-slate-500 mb-4">Des procédures prêtes à cocher — clique pour créer la tâche avec toutes ses étapes.</p>
+    <div id="models-list" class="space-y-2"></div>
   </div>
 </div>
 
@@ -252,8 +336,31 @@
   lucide.createIcons();
   const $ = (id) => document.getElementById(id);
   const data = window.FP_DATA;
-  const state = { filtre: 'actives', search: '' };
+  let _view = 'liste'; try { _view = localStorage.getItem('fp_taches_view') || 'liste'; } catch (e) {}
+  const state = { view: _view, filtre: 'actives', typeFiltre: 'all', search: '', cal: new Date() };
   let editingId = null;
+  let editSous = [];            // checklist en cours d'édition dans le modal
+
+  // Type d'une tâche (rétro-compat : anciennes tâches = 'action').
+  const T_EMO = { rdv: '📅', action: '✅', achat: '📦' };
+  const T_LBL = { rdv: 'Rendez-vous', action: 'Action', achat: 'Achat' };
+  const isDone = (t) => t.statut === 'done' || (t.statut == null && !!t.fait);
+  function taskType(t) { return (t.type === 'rdv' || t.type === 'achat') ? t.type : 'action'; }
+  function taskStatut(t) { if (t.statut === 'todo' || t.statut === 'doing' || t.statut === 'done') return t.statut; return t.fait ? 'done' : 'todo'; }
+  function sousProgress(t) { const s = Array.isArray(t.sousTaches) ? t.sousTaches : []; if (!s.length) return null; const d = s.filter(x => x && x.done).length; return { d, n: s.length }; }
+  // Motifs rapides selon le type (clic → remplit l'intitulé).
+  const MOTIFS = {
+    rdv: ['Révision', 'Contrôle technique', 'Vidange', 'Pneus', 'Carrosserie', 'Lavage', 'Livraison', 'Restitution'],
+    achat: ['Pneus', 'Carte carburant', 'Badge télépéage', 'Ampoules', 'Accessoire'],
+    action: []
+  };
+  // Modèles (checklists prêtes) — créent une tâche avec ses étapes.
+  const MODELS = [
+    { key: 'entree', emo: '🚗', titre: 'Entrée d\'un nouveau véhicule', type: 'action', sous: ['Vérifier la carte grise', 'Souscrire l\'assurance', 'Poser le QR code dans le véhicule', 'Créer la fiche conducteur', 'Envoyer l\'e-mail de bienvenue', 'Faire l\'état des lieux de remise'] },
+    { key: 'sortie', emo: '👋', titre: 'Départ d\'un conducteur', type: 'action', sous: ['Récupérer les clés', 'Récupérer la carte carburant + badge', 'État des lieux de restitution', 'Retirer l\'affectation du véhicule', 'Clôturer l\'accès'] },
+    { key: 'restit', emo: '🔙', titre: 'Restitution d\'un véhicule en leasing', type: 'rdv', sous: ['Prendre le RDV de restitution', 'Photos de l\'état du véhicule', 'Nettoyage / remise en état', 'Rendre les 2 jeux de clés', 'État des lieux signé', 'Récupérer le PV de restitution'] },
+    { key: 'sinistre', emo: '💥', titre: 'Gérer un sinistre', type: 'action', sous: ['Remplir le constat amiable', 'Photos des dégâts', 'Déclarer à l\'assureur', 'Prendre RDV carrosserie', 'Suivre la franchise', 'Récupérer le véhicule réparé'] }
+  ];
 
   function getTaches() { try { const t = FP.settings.get().taches; return Array.isArray(t) ? t : []; } catch { return []; } }
   function saveTaches(arr) { const s = FP.settings.get(); s.taches = arr; FP.settings.save(s); }
@@ -279,135 +386,385 @@
     return { cls: 'info', txt: FP.date(t.echeance), retard: false };
   }
 
-  function render() {
-    const all = getTaches();
-    const todo = all.filter(t => !t.fait);
-    const late = todo.filter(t => { const e = echeanceInfo(t); return e && e.retard; });
-    $('kpi-todo').textContent = todo.length;
-    $('kpi-late').textContent = late.length;
-    $('kpi-done').textContent = all.filter(t => t.fait).length;
-
-    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === state.filtre));
+  // ---- Filtrage (source unique) : baseMatch = type + recherche ; filtered() ajoute le filtre statut.
+  const condName = (t) => (t.conducteur || '').trim();
+  const matchType = (t) => state.typeFiltre === 'all' || taskType(t) === state.typeFiltre;
+  function baseMatch(t) {
+    if (!matchType(t)) return false;
     const q = FP.norm(state.search).trim();
-    let rows = all.filter(t => {
-      if (state.filtre === 'actives' && t.fait) return false;
-      if (state.filtre === 'faites' && !t.fait) return false;
+    if (q && !FP.norm(`${t.titre} ${vehLabel(t.vehiculeId)} ${condName(t)} ${t.lieu || ''} ${t.note || ''}`).includes(q)) return false;
+    return true;
+  }
+  function filtered() {
+    return getTaches().filter(t => {
+      if (!baseMatch(t)) return false;
+      const done = isDone(t);
+      if (state.filtre === 'actives' && done) return false;
+      if (state.filtre === 'faites' && !done) return false;
       // En retard : non faite + échéance dépassée. À venir : non faite + échéance aujourd'hui ou après.
-      if (state.filtre === 'retard') { if (t.fait || !t.echeance) return false; const e = echeanceInfo(t); if (!e || !e.retard) return false; }
-      if (state.filtre === 'avenir') { if (t.fait || !t.echeance) return false; const j = FP.joursRestants(t.echeance); if (j != null && j < 0) return false; }
-      if (q && !FP.norm(`${t.titre} ${vehLabel(t.vehiculeId)} ${t.note || ''}`).includes(q)) return false;
+      if (state.filtre === 'retard') { if (done || !t.echeance) return false; const e = echeanceInfo(t); if (!e || !e.retard) return false; }
+      if (state.filtre === 'avenir') { if (done || !t.echeance) return false; const j = FP.joursRestants(t.echeance); if (j != null && j < 0) return false; }
       return true;
     });
-    // tri : non faites d'abord, par échéance (les sans-échéance à la fin), puis créées récemment
-    rows.sort((a, b) => {
-      if (!!a.fait !== !!b.fait) return a.fait ? 1 : -1;
+  }
+  function sortTasks(rows) {
+    return rows.slice().sort((a, b) => {
+      const da = isDone(a), db = isDone(b);
+      if (da !== db) return da ? 1 : -1;
       const ea = a.echeance || '9999-12-31', eb = b.echeance || '9999-12-31';
       if (ea !== eb) return ea.localeCompare(eb);
       return (b.createdAt || '').localeCompare(a.createdAt || '');
     });
+  }
 
+  // Pastilles d'info d'une tâche (échéance, heure, priorité, checklist, véhicule, conducteur, lieu).
+  function badges(t) {
+    const e = echeanceInfo(t);
+    const immat = ((data.vehicules || []).find(v => v.id === t.vehiculeId) || {}).immat || '';
+    const vl = vehLabel(t.vehiculeId);
+    const sp = sousProgress(t);
+    let h = '';
+    if (e) h += `<span class="fp-ech ${e.cls}">${e.txt}${t.heure ? (' · ' + escapeHtml(t.heure)) : ''}</span>`;
+    else if (t.heure) h += `<span class="fp-ech info">🕑 ${escapeHtml(t.heure)}</span>`;
+    if (t.priorite === 'haute') h += `<span class="fp-ech danger">🔴 Prioritaire</span>`;
+    if (sp) h += `<span class="fp-ech ${sp.d === sp.n ? 'ok' : 'info'}">☑ ${sp.d}/${sp.n}</span>`;
+    if (vl) h += `<a href="vehicules.html?immat=${encodeURIComponent(immat)}" class="text-xs font-semibold" style="color:var(--fp-accent);text-decoration:none">🚗 ${escapeHtml(vl)}</a>`;
+    if (condName(t)) h += `<span class="text-xs font-semibold text-slate-500">👤 ${escapeHtml(condName(t))}</span>`;
+    if (t.lieu) h += `<span class="text-xs text-slate-500">📍 ${escapeHtml(t.lieu)}</span>`;
+    return h;
+  }
+
+  // ---- render() : chef d'orchestre. KPIs + synchro des puces, puis affiche la vue active. ----
+  function render() {
+    const all = getTaches();
+    const notDone = all.filter(t => !isDone(t));
+    const late = notDone.filter(t => { const e = echeanceInfo(t); return e && e.retard; });
+    $('kpi-todo').textContent = notDone.length;
+    $('kpi-late').textContent = late.length;
+    $('kpi-done').textContent = all.filter(isDone).length;
+
+    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === state.filtre));
+    document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.type === state.typeFiltre));
+    document.querySelectorAll('#view-switch .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.view === state.view));
+
+    const isListe = state.view === 'liste', isKb = state.view === 'kanban', isCal = state.view === 'calendrier';
+    $('taches-list').classList.toggle('hidden', !isListe);
+    $('taches-kanban').classList.toggle('hidden', !isKb);
+    $('taches-cal').classList.toggle('hidden', !isCal);
+    // Le filtre par statut ne concerne que la Liste (Kanban a ses colonnes, Calendrier ses jours).
+    $('filters-statut').style.display = isListe ? '' : 'none';
+
+    if (isListe) renderListe();
+    else if (isKb) renderKanban();
+    else renderCal();
+  }
+
+  // ---- Vue LISTE ----
+  function taskCardHtml(t) {
+    const done = isDone(t), ty = taskType(t);
+    const sousHtml = (Array.isArray(t.sousTaches) && t.sousTaches.length)
+      ? `<div class="mt-2 space-y-1">` + t.sousTaches.map((s, i) => `<label class="flex items-center gap-2 text-sm" style="cursor:pointer"><input type="checkbox" class="task-check" style="width:15px;height:15px" data-sous="${escapeHtml(t.id)}" data-i="${i}" ${s.done ? 'checked' : ''}><span style="${s.done ? 'text-decoration:line-through;color:#94a3b8' : ''}">${escapeHtml(s.txt)}</span></label>`).join('') + `</div>`
+      : '';
+    return `<div class="task-card ${done ? 'done' : ''}" data-id="${escapeHtml(t.id)}">
+      <input type="checkbox" class="task-check" data-toggle="${escapeHtml(t.id)}" ${done ? 'checked' : ''} title="Marquer comme ${done ? 'à faire' : 'terminée'}">
+      <div class="flex-1 min-w-0">
+        <div class="task-title">${T_EMO[ty]} ${escapeHtml(t.titre)}</div>
+        <div class="flex items-center gap-2 flex-wrap mt-1">${badges(t)}</div>
+        ${sousHtml}
+        ${t.note ? `<div class="text-sm text-slate-500 mt-1 whitespace-pre-line">${escapeHtml(t.note)}</div>` : ''}
+      </div>
+      <div class="flex flex-shrink-0 gap-1">
+        <button class="ta-icon-btn" data-edit="${escapeHtml(t.id)}" title="Modifier"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+        <button class="ta-icon-btn" data-del="${escapeHtml(t.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+      </div>
+    </div>`;
+  }
+  function renderListe() {
+    const rows = sortTasks(filtered());
     const box = $('taches-list'), empty = $('empty');
     if (!rows.length) { box.innerHTML = ''; empty.classList.remove('hidden'); lucide.createIcons(); return; }
     empty.classList.add('hidden');
-    box.innerHTML = rows.map(t => {
-      const e = echeanceInfo(t);
-      const vl = vehLabel(t.vehiculeId);
-      return `<div class="task-card ${t.fait ? 'done' : ''}" data-id="${escapeHtml(t.id)}">
-        <input type="checkbox" class="task-check" data-toggle="${escapeHtml(t.id)}" ${t.fait ? 'checked' : ''} title="Marquer comme ${t.fait ? 'à faire' : 'terminée'}">
-        <div class="flex-1 min-w-0">
-          <div class="task-title">${escapeHtml(t.titre)}</div>
-          <div class="flex items-center gap-2 flex-wrap mt-1">
-            ${e ? `<span class="fp-ech ${e.cls}">${e.txt}</span>` : ''}
-            ${vl ? `<a href="vehicules.html?immat=${encodeURIComponent((data.vehicules.find(v=>v.id===t.vehiculeId)||{}).immat||'')}" class="text-xs font-semibold" style="color:var(--fp-accent);text-decoration:none">🚗 ${escapeHtml(vl)}</a>` : ''}
-          </div>
-          ${t.note ? `<div class="text-sm text-slate-500 mt-1 whitespace-pre-line">${escapeHtml(t.note)}</div>` : ''}
-        </div>
-        <div class="flex flex-shrink-0 gap-1">
-          <button class="ta-icon-btn" data-edit="${escapeHtml(t.id)}" title="Modifier"><i data-lucide="pencil" class="w-4 h-4"></i></button>
-          <button class="ta-icon-btn" data-del="${escapeHtml(t.id)}" title="Supprimer"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-        </div>
+    box.innerHTML = rows.map(taskCardHtml).join('');
+    lucide.createIcons();
+  }
+
+  // ---- Vue KANBAN (3 colonnes : À faire / En cours / Terminé) ----
+  const KB = [{ k: 'todo', lbl: 'À faire', emo: '📋' }, { k: 'doing', lbl: 'En cours', emo: '🔧' }, { k: 'done', lbl: 'Terminé', emo: '✅' }];
+  function kanbanCard(t) {
+    const ty = taskType(t), st = taskStatut(t), idx = KB.findIndex(c => c.k === st);
+    const left = idx > 0 ? `<button class="ta-icon-btn" data-move="${escapeHtml(t.id)}" data-to="${KB[idx - 1].k}" title="→ ${KB[idx - 1].lbl}">◀</button>` : '';
+    const right = idx < KB.length - 1 ? `<button class="ta-icon-btn" data-move="${escapeHtml(t.id)}" data-to="${KB[idx + 1].k}" title="→ ${KB[idx + 1].lbl}">▶</button>` : '';
+    return `<div class="task-card ${st === 'done' ? 'done' : ''}" style="padding:.55rem .65rem">
+      <div class="flex-1 min-w-0" data-edit-card="${escapeHtml(t.id)}" style="cursor:pointer">
+        <div class="task-title" style="font-size:.88rem">${T_EMO[ty]} ${escapeHtml(t.titre)}</div>
+        <div class="flex items-center gap-2 flex-wrap mt-1">${badges(t)}</div>
+      </div>
+      <div class="flex flex-shrink-0 gap-1">${left}${right}</div>
+    </div>`;
+  }
+  function renderKanban() {
+    $('empty').classList.add('hidden');
+    const rows = getTaches().filter(baseMatch);
+    const box = $('taches-kanban');
+    box.className = 'grid grid-cols-1 md:grid-cols-3 gap-4';
+    box.innerHTML = KB.map(col => {
+      const items = sortTasks(rows.filter(t => taskStatut(t) === col.k));
+      const cards = items.length ? items.map(kanbanCard).join('') : '<p class="text-xs text-slate-400 py-1">Rien ici</p>';
+      return `<div class="card p-3">
+        <div class="font-bold mb-3 flex items-center gap-2" style="color:var(--fp-primary)">${col.emo} ${col.lbl} <span class="text-xs font-normal text-slate-400">(${items.length})</span></div>
+        <div class="space-y-2">${cards}</div>
       </div>`;
     }).join('');
     lucide.createIcons();
   }
 
-  function openNew() {
-    editingId = null;
+  // ---- Vue CALENDRIER (mois) ----
+  const JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+  function renderCal() {
+    $('empty').classList.add('hidden');
+    const rows = getTaches().filter(baseMatch).filter(t => t.echeance);
+    const byDay = {};
+    rows.forEach(t => { (byDay[t.echeance] = byDay[t.echeance] || []).push(t); });
+    const cur = state.cal, y = cur.getFullYear(), m = cur.getMonth();
+    const startDow = (new Date(y, m, 1).getDay() + 6) % 7; // Lundi = 0
+    const dim = new Date(y, m + 1, 0).getDate();
+    const todayI = todayIso();
+    let cells = '';
+    for (let i = 0; i < startDow; i++) cells += '<div class="cal-cell empty"></div>';
+    for (let d = 1; d <= dim; d++) {
+      const iso = y + '-' + pad2(m + 1) + '-' + pad2(d);
+      const list = (byDay[iso] || []);
+      const shown = list.slice(0, 3).map(t => {
+        const done = isDone(t), over = !done && iso < todayI;
+        return `<div class="cal-task ${done ? 'done' : ''}" data-edit="${escapeHtml(t.id)}" style="${over ? 'background:#fef2f2;color:#b91c1c;' : ''}" title="${escapeHtml(t.titre)}">${T_EMO[taskType(t)]} ${escapeHtml(t.titre)}</div>`;
+      }).join('');
+      const more = list.length > 3 ? `<div style="font-size:10px" class="text-slate-400">+${list.length - 3}</div>` : '';
+      cells += `<div class="cal-cell ${iso === todayI ? 'today' : ''}" data-day="${iso}"><div class="cal-daynum">${d}</div>${shown}${more}</div>`;
+    }
+    const moisLbl = MOISFR[m].charAt(0).toUpperCase() + MOISFR[m].slice(1);
+    $('taches-cal').innerHTML = `<div class="card p-4">
+      <div class="flex items-center justify-between mb-3">
+        <button class="btn btn-outline text-sm" data-cal-nav="-1"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+        <div class="font-bold" style="color:var(--fp-primary)">${moisLbl} ${y}</div>
+        <div class="flex gap-2"><button class="btn btn-outline text-sm" data-cal-today>Aujourd'hui</button><button class="btn btn-outline text-sm" data-cal-nav="1"><i data-lucide="chevron-right" class="w-4 h-4"></i></button></div>
+      </div>
+      <div class="cal-grid cal-head">${JOURS.map(j => `<div class="cal-dow">${j}</div>`).join('')}</div>
+      <div class="cal-grid">${cells}</div>
+      <p class="text-xs text-slate-400 mt-3">Clique un jour pour planifier un rendez-vous · clique une tâche pour la modifier.</p>
+    </div>`;
+    lucide.createIcons();
+  }
+
+  // ---- Modal : type, motifs, checklist ----
+  function setType(ty) {
+    ty = (ty === 'rdv' || ty === 'achat') ? ty : 'action';
+    $('t-type').value = ty;
+    document.querySelectorAll('#t-type-switch .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.t === ty));
+    $('t-date-lbl').textContent = ty === 'rdv' ? 'Date du rendez-vous' : 'Échéance (optionnel)';
+    $('t-lieu-lbl').textContent = ty === 'rdv' ? 'Lieu / garage' : (ty === 'achat' ? 'Fournisseur' : 'Lieu');
+    // Heure + « prévenir le conducteur » : seulement pour un rendez-vous.
+    $('t-heure-wrap').style.display = ty === 'rdv' ? '' : 'none';
+    $('t-notify-wrap').style.display = ty === 'rdv' ? '' : 'none';
+    const motifs = MOTIFS[ty] || [];
+    $('t-motifs').innerHTML = motifs.map(mo => `<button type="button" class="filter-chip" data-motif="${escapeHtml(mo)}">${escapeHtml(mo)}</button>`).join('');
+  }
+  function renderEditSous() {
+    $('t-sous').innerHTML = editSous.map((s, i) => `<div class="flex items-center gap-2"><span class="text-sm flex-1">• ${escapeHtml(s.txt)}</span><button type="button" class="ta-icon-btn" data-sdel="${i}"><i data-lucide="x" class="w-4 h-4"></i></button></div>`).join('');
+    lucide.createIcons();
+  }
+  function addSous(txt) { txt = (txt || '').trim(); if (!txt) return; editSous.push({ txt, done: false }); renderEditSous(); }
+
+  function openNew(preset) {
+    editingId = null; editSous = [];
     $('task-title').textContent = 'Nouvelle tâche';
     $('form-task').reset();
     fillVehSelect($('t-vehicule'), '');
+    setType((preset && preset.type) || 'rdv');
+    if (preset && preset.echeance) $('t-echeance').value = preset.echeance;
+    $('t-notify').checked = true;
+    renderEditSous();
     $('modal-task').classList.add('open');
     setTimeout(() => $('t-titre').focus(), 50);
   }
   function openEdit(id) {
     const t = getTaches().find(x => x.id === id); if (!t) return;
-    editingId = id;
+    editingId = id; editSous = Array.isArray(t.sousTaches) ? t.sousTaches.map(s => ({ txt: s.txt, done: !!s.done })) : [];
     $('task-title').textContent = 'Modifier la tâche';
     $('form-task').reset();
     fillVehSelect($('t-vehicule'), t.vehiculeId || '');
+    setType(taskType(t));
     $('t-titre').value = t.titre || '';
     $('t-echeance').value = t.echeance || '';
+    $('t-heure').value = t.heure || '';
+    $('t-lieu').value = t.lieu || '';
+    $('t-conducteur').value = t.conducteur || '';
+    $('t-priorite').value = t.priorite || 'normale';
     $('t-note').value = t.note || '';
+    renderEditSous();
     $('modal-task').classList.add('open');
   }
   function closeModal() { editingId = null; $('modal-task').classList.remove('open'); }
+
   function saveTask(ev) {
     ev.preventDefault();
     const titre = $('t-titre').value.trim();
     if (!titre) { alert("L'intitulé est obligatoire."); return; }
+    const ty = $('t-type').value || 'action';
     const arr = getTaches();
+    const fields = {
+      titre, type: ty,
+      vehiculeId: $('t-vehicule').value || null,
+      echeance: $('t-echeance').value || null,
+      heure: ty === 'rdv' ? ($('t-heure').value || '') : '',
+      lieu: $('t-lieu').value.trim(),
+      conducteur: $('t-conducteur').value.trim(),
+      priorite: $('t-priorite').value || 'normale',
+      note: $('t-note').value.trim(),
+      sousTaches: editSous.map(s => ({ txt: s.txt, done: !!s.done }))
+    };
+    let saved;
     if (editingId) {
       const t = arr.find(x => x.id === editingId);
-      if (t) { t.titre = titre; t.vehiculeId = $('t-vehicule').value || null; t.echeance = $('t-echeance').value || null; t.note = $('t-note').value.trim(); }
+      if (t) { Object.assign(t, fields); if (t.statut == null) t.statut = t.fait ? 'done' : 'todo'; saved = t; }
     } else {
-      arr.push({ id: 'T' + Math.random().toString(36).slice(2, 9), titre, vehiculeId: $('t-vehicule').value || null, echeance: $('t-echeance').value || null, note: $('t-note').value.trim(), fait: false, createdAt: new Date().toISOString() });
+      saved = Object.assign({ id: 'T' + Math.random().toString(36).slice(2, 9), statut: 'todo', fait: false, createdAt: new Date().toISOString() }, fields);
+      arr.push(saved);
     }
+    const notify = ty === 'rdv' && $('t-notify') && $('t-notify').checked;
     saveTaches(arr); closeModal(); render();
     if (FP.toast) FP.toast('Tâche enregistrée');
+    // RDV : proposer de PRÉVENIR le conducteur (annonce avec date + motif) — même flux que la fiche véhicule.
+    if (notify && saved) maybeNotify(saved);
   }
+  // Ouvre le sélecteur d'envoi (SMS / WhatsApp / e-mail) pré-rempli avec l'annonce du rendez-vous.
+  function maybeNotify(t) {
+    try {
+      if (!(FP.msg && FP.mailModeleProfil && FP.fillTags)) return;
+      const nom = (t.conducteur || '').trim();
+      const veh = (data.vehicules || []).find(v => v.id === t.vehiculeId);
+      const immat = veh ? veh.immat : '';
+      if (!nom && !immat) return;
+      const c = (nom && FP.conducteurContact) ? (FP.conducteurContact(nom) || {}) : {};
+      const prenom = nom.split(/\s+/)[0] || '';
+      const motif = t.titre || 'Rendez-vous';
+      const dateFr = t.echeance ? (FP.date ? FP.date(t.echeance) : t.echeance) : '';
+      const dateTxt = dateFr + (t.heure ? (' à ' + t.heure) : '');
+      const msg = FP.fillTags(FP.mailModeleProfil('mailModeleRdvGarage', 'rdvgarage'), { prenom, immat, motif, date: dateTxt });
+      let logo = ''; try { const lu = (FP.settings.get().profil || {}).logoUrl; if (/^https?:\/\//.test(String(lu || ''))) logo = String(lu); } catch (_) {}
+      let soc = ''; try { soc = (FP.settings.get().societe && FP.settings.get().societe.nom) || ''; } catch (_) {}
+      const html = FP.mailShell ? FP.mailShell({ brand: soc, logoUrl: logo, title: motif, bodyHtml: '<div style="white-space:pre-wrap;line-height:1.55">' + FP.esc(msg).replace(/\n/g, '<br>') + '</div>' }) : '';
+      let reply = ''; try { reply = ((FP.societeProfil ? FP.societeProfil() : {}) || {}).mailExpediteur || ''; } catch (_) {}
+      FP.msg.open({ phone: c.tel || '', email: c.email || '', nom: prenom, title: 'Prévenir du rendez-vous', text: msg, emailSubject: motif + (dateFr ? (' le ' + dateFr) : '') + (immat ? (' (' + immat + ')') : ''), emailHtml: html, emailOpts: reply ? { replyTo: reply } : {} });
+    } catch (_) {}
+  }
+
   function toggleTask(id) {
     const arr = getTaches(); const t = arr.find(x => x.id === id); if (!t) return;
-    t.fait = !t.fait; t.faitLe = t.fait ? todayIso() : null;
+    const now = !isDone(t);
+    t.fait = now; t.statut = now ? 'done' : 'todo'; t.faitLe = now ? todayIso() : null;
     saveTaches(arr); render();
-    if (t.fait && FP.celebrate) FP.celebrate();
+    if (now && FP.celebrate) FP.celebrate();
+  }
+  function moveTask(id, to) {
+    const arr = getTaches(); const t = arr.find(x => x.id === id); if (!t) return;
+    t.statut = to; t.fait = (to === 'done'); t.faitLe = (to === 'done') ? todayIso() : null;
+    saveTaches(arr); render();
+    if (to === 'done' && FP.celebrate) FP.celebrate();
+  }
+  function toggleSous(id, i, done) {
+    const arr = getTaches(); const t = arr.find(x => x.id === id);
+    if (!t || !Array.isArray(t.sousTaches) || !t.sousTaches[i]) return;
+    t.sousTaches[i].done = done; saveTaches(arr); render();
   }
   async function delTask(id) {
     if (!await FP.confirm('Supprimer cette tâche ?')) return;
     saveTaches(getTaches().filter(x => x.id !== id)); render();
   }
 
-  // Wiring
-  // Sélecteur véhicule CHERCHABLE (taper plaque / marque / modèle pour filtrer) — règle projet.
+  // ---- Modèles (checklists prêtes) ----
+  function renderModels() {
+    $('models-list').innerHTML = MODELS.map(m => `<button type="button" class="w-full text-left task-card" data-model="${escapeHtml(m.key)}" style="cursor:pointer">
+      <div class="flex-1 min-w-0">
+        <div class="task-title">${m.emo} ${escapeHtml(m.titre)} <span class="fp-ech info">${T_EMO[m.type]} ${escapeHtml(T_LBL[m.type])}</span></div>
+        <div class="text-xs text-slate-500 mt-1">${m.sous.length} étapes : ${escapeHtml(m.sous.slice(0, 3).join(' · '))}${m.sous.length > 3 ? '…' : ''}</div>
+      </div>
+      <i data-lucide="plus-circle" class="w-5 h-5" style="color:var(--fp-accent);flex-shrink:0"></i>
+    </button>`).join('');
+    lucide.createIcons();
+  }
+  function openModels() { renderModels(); $('modal-models').classList.add('open'); }
+  function closeModels() { $('modal-models').classList.remove('open'); }
+  function createFromModel(key) {
+    const m = MODELS.find(x => x.key === key); if (!m) return;
+    closeModels();
+    openNew({ type: m.type });
+    $('t-titre').value = m.titre;
+    editSous = m.sous.map(txt => ({ txt, done: false }));
+    renderEditSous();
+  }
+
+  // ================= WIRING =================
+  // Sélecteur véhicule CHERCHABLE (taper plaque / marque / modèle) — règle projet.
   if (FP.searchSelect) FP.searchSelect($('t-vehicule'), { placeholder: 'Rechercher (plaque, marque, modèle…)' });
-  $('btn-new').addEventListener('click', openNew);
+  // Conducteur : choisir dans la liste OU créer — règle projet (FP.conducteurPicker).
+  if (FP.conducteurPicker) FP.conducteurPicker($('t-conducteur'), {});
+
+  $('btn-new').addEventListener('click', () => openNew());
+  $('btn-models').addEventListener('click', openModels);
+  $('models-close').addEventListener('click', closeModels);
+  $('modal-models').addEventListener('click', e => { if (e.target === $('modal-models')) closeModels(); });
+  $('models-list').addEventListener('click', e => { const b = e.target.closest('[data-model]'); if (b) createFromModel(b.getAttribute('data-model')); });
+
   $('task-close').addEventListener('click', closeModal);
   $('task-cancel').addEventListener('click', closeModal);
+  $('modal-task').addEventListener('click', e => { if (e.target === $('modal-task')) closeModal(); });
   $('form-task').addEventListener('submit', saveTask);
+  document.querySelectorAll('#t-type-switch .filter-chip').forEach(c => c.addEventListener('click', () => setType(c.dataset.t)));
+  $('t-motifs').addEventListener('click', e => { const b = e.target.closest('[data-motif]'); if (!b) return; $('t-titre').value = b.getAttribute('data-motif'); $('t-titre').focus(); });
+  $('t-sous-btn').addEventListener('click', () => { addSous($('t-sous-add').value); $('t-sous-add').value = ''; $('t-sous-add').focus(); });
+  $('t-sous-add').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSous($('t-sous-add').value); $('t-sous-add').value = ''; } });
+  $('t-sous').addEventListener('click', e => { const d = e.target.closest('[data-sdel]'); if (!d) return; editSous.splice(+d.getAttribute('data-sdel'), 1); renderEditSous(); });
+
   $('search').addEventListener('input', e => { state.search = e.target.value; render(); });
+  document.querySelectorAll('#view-switch .filter-chip').forEach(c => c.addEventListener('click', () => { state.view = c.dataset.view; try { localStorage.setItem('fp_taches_view', state.view); } catch (e) {} render(); }));
   document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.addEventListener('click', () => { state.filtre = c.dataset.value; render(); }));
-  // Les 3 bulles KPI (À faire / En retard / Terminées) sont cliquables → filtrent la liste.
+  document.querySelectorAll('#filters-type .filter-chip').forEach(c => c.addEventListener('click', () => { state.typeFiltre = c.dataset.type; render(); }));
+  // Les 3 bulles KPI (À faire / En retard / Terminées) → basculent en Liste et filtrent.
   [['kpi-todo', 'actives'], ['kpi-late', 'retard'], ['kpi-done', 'faites']].forEach(([id, f]) => {
     const el = document.getElementById(id), card = el && el.closest('.kpi');
     if (!card) return;
     card.style.cursor = 'pointer'; card.title = 'Cliquer pour voir ces tâches';
     card.addEventListener('click', () => {
-      state.filtre = f;
-      document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === f));
+      state.view = 'liste'; state.filtre = f;
+      try { localStorage.setItem('fp_taches_view', 'liste'); } catch (e) {}
       render();
-      try { ($('filters-statut') || card).scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+      try { $('tache-filterbar').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
     });
   });
-  // Bouton « Réinitialiser » de la barre de filtres (retour au filtre par défaut « À faire »).
+  // Bouton « Réinitialiser » de la barre de filtres.
   if (FP.filterResetButton) FP.filterResetButton($('tache-filterbar'), { onReset: () => {
-    state.filtre = 'actives'; state.search = '';
+    state.filtre = 'actives'; state.typeFiltre = 'all'; state.search = '';
     if ($('search')) $('search').value = '';
-    document.querySelectorAll('#filters-statut .filter-chip').forEach(c => c.classList.toggle('active', c.dataset.value === 'actives'));
     render();
   } });
+
   $('taches-list').addEventListener('click', e => {
     const tg = e.target.closest('[data-toggle]'); if (tg) { toggleTask(tg.dataset.toggle); return; }
     const ed = e.target.closest('[data-edit]'); if (ed) { openEdit(ed.dataset.edit); return; }
     const dl = e.target.closest('[data-del]'); if (dl) { delTask(dl.dataset.del); return; }
+  });
+  $('taches-list').addEventListener('change', e => {
+    const s = e.target.closest('[data-sous]'); if (s) toggleSous(s.getAttribute('data-sous'), +s.getAttribute('data-i'), s.checked);
+  });
+  $('taches-kanban').addEventListener('click', e => {
+    const mv = e.target.closest('[data-move]'); if (mv) { e.stopPropagation(); moveTask(mv.getAttribute('data-move'), mv.getAttribute('data-to')); return; }
+    const ec = e.target.closest('[data-edit-card]'); if (ec) { openEdit(ec.getAttribute('data-edit-card')); return; }
+  });
+  $('taches-cal').addEventListener('click', e => {
+    const nav = e.target.closest('[data-cal-nav]'); if (nav) { const d = new Date(state.cal); d.setMonth(d.getMonth() + (+nav.getAttribute('data-cal-nav'))); state.cal = d; render(); return; }
+    if (e.target.closest('[data-cal-today]')) { state.cal = new Date(); render(); return; }
+    const ed = e.target.closest('[data-edit]'); if (ed) { openEdit(ed.getAttribute('data-edit')); return; }
+    const day = e.target.closest('[data-day]'); if (day) { openNew({ type: 'rdv', echeance: day.getAttribute('data-day') }); return; }
   });
 
   // ============ 🔁 RAPPELS RÉCURRENTS (à cocher chaque période) ============
