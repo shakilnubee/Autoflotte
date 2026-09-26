@@ -1134,29 +1134,33 @@
   function autoTachesCT() {
     try {
       if (!(data && Array.isArray(data.vehicules))) return;
+      // Même fenêtre qu'Alertes (source unique : notifCfg.ctJours, défaut 90) → un seul réglage pour
+      // les deux (Paramètres → Notifications → « anticipation CT »).
+      const WIN = (FP.notifCfg ? (FP.notifCfg().ctJours || 90) : 90);
       const s = FP.settings.get();
       const done = (s.tachesAutoFaites && typeof s.tachesAutoFaites === 'object') ? s.tachesAutoFaites : {};
       const arr = Array.isArray(s.taches) ? s.taches : [];
-      let changed = false;
+      let changed = false, n = 0;
       data.vehicules.forEach(v => {
-        if (!v || !v.prochainCT) return;
-        if (FP.estVendu && FP.estVendu(v)) return;
+        if (!v || !v.prochainCT || v.prochainCT === '—') return;
+        if (FP.horsFlotte && FP.horsFlotte(v)) return;   // vendu / à vendre / hors flotte
+        if (FP.ctIgnored && FP.ctIgnored(v)) return;      // CT étranger / ignoré (comme Alertes)
         const ct = String(v.prochainCT).slice(0, 10);
         const j = FP.joursRestants ? FP.joursRestants(ct) : null;
-        if (j == null || j < 0 || j > 30) return;
+        if (j == null || j > WIN) return;                 // dans la fenêtre (INCLUT les dépassés j<0)
         const key = 'ct:' + v.id + ':' + ct;
         if (done[key]) return;
         arr.push({
           id: 'T' + Math.random().toString(36).slice(2, 9), titre: 'Contrôle technique', type: 'rdv',
           statut: 'todo', fait: false, vehiculeId: v.id, echeance: ct, heure: '', lieu: '',
-          conducteur: v.chauffeur || '', responsable: '', fournisseur: '', priorite: (j <= 7 ? 'haute' : 'normale'),
-          note: 'Créée automatiquement : le contrôle technique arrive à échéance. Pense à prendre le rendez-vous.',
+          conducteur: v.chauffeur || '', responsable: '', fournisseur: '', priorite: (j <= 30 ? 'haute' : 'normale'),
+          note: (j < 0 ? 'Créée automatiquement : le contrôle technique est DÉPASSÉ. Prends le rendez-vous au plus vite.' : 'Créée automatiquement : le contrôle technique arrive à échéance. Pense à prendre le rendez-vous.'),
           etiquettes: ['garage'], commentaires: [], sousTaches: [], auto: true,
-          createdAt: nowStamp(), historique: [{ txt: 'Créée automatiquement (contrôle technique à échéance)', at: nowStamp() }]
+          createdAt: nowStamp(), historique: [{ txt: 'Créée automatiquement (contrôle technique)', at: nowStamp() }]
         });
-        done[key] = todayIso(); changed = true;
+        done[key] = todayIso(); changed = true; n++;
       });
-      if (changed) { s.taches = arr; s.tachesAutoFaites = done; FP.settings.save(s); if (FP.toast) FP.toast('⚡ Tâche(s) contrôle technique créée(s) automatiquement'); }
+      if (changed) { s.taches = arr; s.tachesAutoFaites = done; FP.settings.save(s); if (FP.toast) FP.toast('⚡ ' + n + ' tâche(s) contrôle technique créée(s) automatiquement'); }
     } catch (e) {}
   }
 
