@@ -14736,6 +14736,29 @@ FP.suivi = {
 // ===== RENDEZ-VOUS GARAGE (CT / révision / entretien) SAISIS par l'utilisateur, par véhicule =====
 // Synchronisé (settings.vehRdvGarage → COLLECTION_KEYS). Déclenche le MÊME rappel « la veille » que le CT
 // et se regroupe avec CT + révision dans l'écran « Relances ». { [vehId]: { date:'YYYY-MM-DD', motif } }.
+// Tâches LIÉES à une entité (véhicule ou conducteur) — SOURCE UNIQUE pour la vue « fil conducteur »
+// affichée sur la fiche véhicule ET la fiche conducteur. Lit settings.taches (page Tâches).
+FP.tachesLiees = function (filter) {
+  filter = filter || {};
+  let list = [];
+  try { const t = FP.settings.get().taches; if (Array.isArray(t)) list = t; } catch (e) { return []; }
+  const nrm = s => String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+  const vehId = filter.vehId != null ? String(filter.vehId) : null;
+  const cond = filter.conducteur ? nrm(filter.conducteur) : '';
+  const condFirst = cond ? cond.split(' ')[0] : '';
+  const out = list.filter(t => {
+    if (!t) return false;
+    if (vehId && String(t.vehiculeId) === vehId) return true;
+    if (cond && t.conducteur) { const c = nrm(t.conducteur); if (c === cond || (condFirst && c.split(' ')[0] === condFirst)) return true; }
+    return false;
+  });
+  const doneOf = t => (t.statut === 'done' || (t.statut == null && !!t.fait));
+  // Actives d'abord, puis par échéance (sans échéance à la fin).
+  return out.sort((a, b) => {
+    const da = doneOf(a), db = doneOf(b); if (da !== db) return da ? 1 : -1;
+    return (a.echeance || '9999-12-31').localeCompare(b.echeance || '9999-12-31');
+  });
+};
 FP.rdvGarage = {
   _map() { try { const m = FP.settings.get().vehRdvGarage; return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } },
   get(vehId) { const r = this._map()[vehId]; return (r && typeof r === 'object' && r.date) ? r : null; },

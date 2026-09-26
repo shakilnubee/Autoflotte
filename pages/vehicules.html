@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260926j">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260926k">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260926j"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260926k"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260926j">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260926k">
 <style>
   /* Petites additions locales pour cette page */
   .filter-chip { padding: .35rem .8rem; border-radius: 9999px; font-size: .8rem; font-weight: 600; border: 1px solid var(--fp-border); background: white; color: var(--fp-muted); cursor: pointer; transition: all .12s; }
@@ -1116,8 +1116,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260926j"></script>
-<script src="../assets/js/supabase-client.js?v=20260926j"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260926k"></script>
+<script src="../assets/js/supabase-client.js?v=20260926k"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -1133,13 +1133,13 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260926j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260926k"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
-<script src="../assets/js/fleet-docs.js?v=20260926j"></script>
-<script src="../assets/js/vendor/qrcode.js?v=20260926j"></script>
+<script src="../assets/js/fleet-docs.js?v=20260926k"></script>
+<script src="../assets/js/vendor/qrcode.js?v=20260926k"></script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/app.min.js?v=20260926j"></script>
+<script src="../assets/js/app.min.js?v=20260926k"></script>
 <script>
   lucide.createIcons();
 
@@ -1503,6 +1503,33 @@
         ${r.date ? `<span class="text-xs" style="color:${j < 0 ? '#B91C1C' : (j <= 7 ? '#B45309' : '#64748B')};font-weight:700;align-self:center">${escapeHtml(when)}</span>` : ''}
       </div>
       <p class="text-xs text-slate-400 mt-1">Un e-mail de rappel part <b>tout seul la veille</b> au conducteur et à toi. Ce rendez-vous apparaît aussi dans <b>Alertes → 📣 Relances</b> (avec le CT et la révision).</p>
+    </div>`;
+  }
+
+  // « Tâches liées » : le fil conducteur du véhicule (source unique FP.tachesLiees → page Tâches).
+  function tachesLieesHTML(v){
+    if (!(window.FP && FP.tachesLiees)) return '';
+    const list = FP.tachesLiees({ vehId: v.id });
+    const active = list.filter(t => !(t.statut === 'done' || (t.statut == null && t.fait)));
+    const immat = encodeURIComponent(v.immat || '');
+    const rows = active.slice(0, 5).map(t => {
+      const j = (t.echeance && FP.joursRestants) ? FP.joursRestants(t.echeance) : null;
+      const when = (t.echeance && j != null) ? (j < 0 ? `en retard de ${-j} j` : (j === 0 ? "aujourd'hui" : (j === 1 ? 'demain' : `dans ${j} j`))) : '';
+      const emo = t.type === 'rdv' ? '📅' : (t.type === 'achat' ? '📦' : '✅');
+      return `<a href="taches.html?task=${encodeURIComponent(t.id)}" class="flex items-center justify-between gap-2 py-1 text-sm" style="text-decoration:none;color:inherit">
+        <span class="truncate">${emo} ${escapeHtml(t.titre)}</span>
+        ${when ? `<span class="text-xs" style="color:${j < 0 ? '#B91C1C' : (j <= 7 ? '#B45309' : '#64748B')};font-weight:700;white-space:nowrap">${escapeHtml(when)}</span>` : ''}
+      </a>`;
+    }).join('');
+    return `<div class="mt-5">
+      <div class="font-semibold mb-2 text-slate-900 border-b border-slate-200 pb-1 flex items-center gap-2">📋 Tâches liées ${active.length ? `<span class="text-xs font-normal text-slate-400">${active.length} en cours</span>` : ''}</div>
+      <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
+        ${active.length ? rows : '<p class="text-sm text-slate-400">Aucune tâche en cours pour ce véhicule.</p>'}
+        <div class="mt-2 flex gap-4 flex-wrap">
+          <a href="taches.html?veh=${immat}" class="text-xs font-semibold" style="color:var(--fp-accent);text-decoration:none">Voir toutes les tâches →</a>
+          <a href="taches.html?new=1&vehid=${encodeURIComponent(v.id)}" class="text-xs font-semibold" style="color:var(--fp-accent);text-decoration:none">＋ Nouvelle tâche</a>
+        </div>
+      </div>
     </div>`;
   }
 
@@ -3189,6 +3216,8 @@
       ${docsSectionHTML(v)}
 
       ${rdvGarageHTML(v)}
+
+      ${tachesLieesHTML(v)}
 
       ${edlSectionHTML(v)}
 
