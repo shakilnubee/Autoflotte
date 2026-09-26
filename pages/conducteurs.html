@@ -18,11 +18,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap"></noscript>
-<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260926j">
+<link rel="stylesheet" href="../assets/css/tailwind.css?v=20260926k">
 <script>window.lucide={createIcons:function(){}};/* stub anti-erreur le temps que Lucide (defer, local) se charge */</script>
-  <script defer src="../assets/js/lucide.min.js?v=20260926j"></script>
+  <script defer src="../assets/js/lucide.min.js?v=20260926k"></script>
   <script>addEventListener('DOMContentLoaded',function(){window.lucide&&window.lucide.createIcons&&lucide.createIcons();});</script>
-<link rel="stylesheet" href="../assets/css/styles.css?v=20260926j">
+<link rel="stylesheet" href="../assets/css/styles.css?v=20260926k">
 <style>
   .driver-card { position: relative; background: white; border: 1px solid var(--fp-border); border-radius: .85rem; padding: 1.1rem; cursor: pointer; transition: all .12s; }
   .driver-card.selected { border-color: var(--fp-accent); box-shadow: inset 0 0 0 2px var(--fp-accent); }
@@ -664,8 +664,8 @@
   </div>
 </div>
 
-<script src="../assets/js/vendor/supabase.js?v=20260926j"></script>
-<script src="../assets/js/supabase-client.js?v=20260926j"></script>
+<script src="../assets/js/vendor/supabase.js?v=20260926k"></script>
+<script src="../assets/js/supabase-client.js?v=20260926k"></script>
 <script>/* ⚡ PERF : data.js (~301 Ko) n'est chargé QU'EN DÉMARRAGE À FROID. Dès qu'un cache
    localStorage par société est COMPLET (2e visite+), on peuple FP_DATA depuis lui et on NE CHARGE PAS
    data.js → plus de parse inutile à chaque navigation. Cache incomplet/absent (1re visite, quota,
@@ -681,12 +681,12 @@
       return; // data.js NON chargé
     }
   } catch (e) {}
-  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260926j"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
+  document.write('<scr' + 'ipt src="../assets/js/data.js?v=20260926k"><\/scr' + 'ipt>'); // cold start : filet data.js (ordre/synchro préservés)
 })();
 </script>
   <script>window.FP_PDF=1;</script>
-<script src="../assets/js/fleet-docs.js?v=20260926j"></script>
-<script src="../assets/js/app.min.js?v=20260926j"></script>
+<script src="../assets/js/fleet-docs.js?v=20260926k"></script>
+<script src="../assets/js/app.min.js?v=20260926k"></script>
 <script>
   lucide.createIcons();
   const data = window.FP_DATA;
@@ -1851,8 +1851,34 @@
 
     // Chronologie consolidée du conducteur (source unique FP.timelineConducteur + FP.timelineHTML)
     const tlInner = (FP.timelineHTML && FP.timelineConducteur) ? FP.timelineHTML(FP.timelineConducteur(d, data), { limit: 6 }) : '';
+    // Tâches liées au conducteur (source unique FP.tachesLiees → page Tâches). Vue « fil conducteur ».
+    let tachesCount = 0, tachesInner = '';
+    (function () {
+      if (!(window.FP && FP.tachesLiees)) return;
+      const nom = d.name || d.displayName || d.prenom || d.key || '';
+      const esc = FP.esc || (x => String(x == null ? '' : x));
+      const list = FP.tachesLiees({ conducteur: nom });
+      const active = list.filter(t => !(t.statut === 'done' || (t.statut == null && t.fait)));
+      tachesCount = active.length;
+      const rows = active.slice(0, 6).map(t => {
+        const j = (t.echeance && FP.joursRestants) ? FP.joursRestants(t.echeance) : null;
+        const when = (t.echeance && j != null) ? (j < 0 ? `en retard de ${-j} j` : (j === 0 ? "aujourd'hui" : (j === 1 ? 'demain' : `dans ${j} j`))) : '';
+        const emo = t.type === 'rdv' ? '📅' : (t.type === 'achat' ? '📦' : '✅');
+        return `<a href="taches.html?task=${encodeURIComponent(t.id)}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;text-decoration:none;color:inherit;font-size:.9rem">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${emo} ${esc(t.titre)}</span>
+          ${when ? `<span style="font-size:.72rem;font-weight:700;white-space:nowrap;color:${j < 0 ? '#B91C1C' : (j <= 7 ? '#B45309' : '#64748B')}">${esc(when)}</span>` : ''}
+        </a>`;
+      }).join('');
+      tachesInner = (active.length ? rows : '<p class="text-sm text-slate-400">Aucune tâche en cours.</p>')
+        + `<div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap">
+            <a href="taches.html?cond=${encodeURIComponent(nom)}" style="font-size:.75rem;font-weight:700;color:var(--fp-accent);text-decoration:none">Voir toutes les tâches →</a>
+            <a href="taches.html?new=1&cond=${encodeURIComponent(nom)}" style="font-size:.75rem;font-weight:700;color:var(--fp-accent);text-decoration:none">＋ Nouvelle tâche</a>
+          </div>`;
+    })();
+
     // Présentation unique « Profil » (bannière identité + cartes).
     const corps = blocProfil + card('id-card', `Permis de conduire ${permisBadge(d)}`, permisSectionHTML(d))
+      + (tachesInner ? card('list-todo', `Tâches liées${tachesCount ? ' · ' + tachesCount : ''}`, tachesInner) : '')
       + card('folder', `Documents ${condDocsBadge(d)}`, condDocsSectionHTML(d))
       + card('car', `Véhicules · ${d.vehicules.length}`, vehiculesInner)
       + card('history', `Historique d’affectation${affCount ? ' · ' + affCount : ''}`, affInner)
