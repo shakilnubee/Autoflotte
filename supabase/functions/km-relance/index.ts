@@ -110,6 +110,15 @@ function kmDue(immat: string, kmDates: Record<string, unknown>, notif: any, nowT
 
 // E-mail de relance (branded, sobre) : logo société (URL http) ou marque Parc Pilot, plaque, bouton.
 // Logo Parc Pilot « en dur » (identique au site : FP.ppLogoMail) — HTML pur (jamais bloqué comme une image).
+// Emballe l'e-mail dans un document forçant le SCHÉMA CLAIR → mêmes couleurs en clair ET en sombre
+// (Gmail/Apple Mail n'inversent plus). Identique à FP.mailDocument côté site.
+function mailDoc(inner: string): string {
+  return '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<meta name="color-scheme" content="only light">'
+    + '<meta name="supported-color-schemes" content="only light">'
+    + '</head><body style="margin:0;padding:0;background:#EEF2F7;color:#0F1E3D">' + inner + '</body></html>';
+}
 function ppLogoMail(): string {
   return '<span style="display:inline-block;vertical-align:middle;line-height:0;margin-right:9px">'
     + '<span style="display:block;width:17px;height:4px;background:#F8A24A;border-radius:3px"></span>'
@@ -168,7 +177,7 @@ function buildMail(opts: { prenom: string; immat: string; marque: string; link: 
   const text = "Bonjour" + (prenom ? " " + prenom : "") + ",\n\n"
     + (relance ? "Nous n'avons pas encore reçu le kilométrage actuel de ton véhicule" : "Merci d'indiquer le kilométrage actuel de ton véhicule") + (immat ? " " + immat : "") + ".\n"
     + "Clique sur ce lien : " + link + "\n\n" + (nomSoc || "Parc Pilot");
-  return { subject, html, text };
+  return { subject, html: mailDoc(html), text };
 }
 
 // E-mail « rappel rendez-vous garage demain » (branded, même en-tête que le relevé km, sans bouton).
@@ -200,7 +209,7 @@ function buildCtMail(opts: { prenom: string; immat: string; marque: string; date
     + "</div>";
   const text = "Bonjour" + (prenom ? " " + prenom : "") + ",\n\n"
     + "Rappel : " + motif + " pour le véhicule " + immat + ", prévu demain (" + dateFr + ").\n\n" + (nomSoc || "Parc Pilot");
-  return { subject, html, text };
+  return { subject, html: mailDoc(html), text };
 }
 
 Deno.serve(async (req) => {

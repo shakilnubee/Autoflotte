@@ -2513,7 +2513,7 @@ FP.kmCollecte = {
     const text = (fullName ? T.hi + ' ' + fullName + ',\n\n' : T.hi + ',\n\n')
       + T.askTxt + (plaque ? ' ' + (v.immat || '') : '') + '.\n'
       + T.clickTxt + ' ' + link + '\n\n' + (nomSoc || 'Parc Pilot');
-    return { subject, html, text };
+    return { subject, html: (FP.mailDocument ? FP.mailDocument(html) : html), text };
   },
   // Envoie une demande pour UN véhicule. → { ok, error?, link? }
   async send(v, opts) {
@@ -14125,6 +14125,22 @@ document.addEventListener('click', (e) => {
 // En-tête sombre (logo société ou « Parc Pilot », titre, prénom, plaque) + corps blanc contenant le
 // message. Robuste au MODE SOMBRE de Gmail (background-color solide → le texte blanc reste blanc).
 // bodyHtml = HTML déjà prêt (message + signature). buttonHtml = bouton d'action optionnel.
+// ===== DOCUMENT E-MAIL (source UNIQUE) — force le SCHÉMA CLAIR partout =====
+// ⚠️ MODE SOMBRE : Gmail/Apple Mail « inversent » automatiquement les couleurs quand le destinataire
+// est en thème sombre → notre en-tête sombre + texte blanc devient illisible et « pas pareil » selon
+// les gens. En emballant l'e-mail dans un vrai document HTML avec `color-scheme: only light`, on dit
+// aux clients de NE PAS inverser → l'e-mail s'affiche avec NOS couleurs, IDENTIQUE en clair comme en
+// sombre. Tout e-mail passe par ce wrapper (mailBrand / mailShell le font déjà).
+FP.mailDocument = function (inner) {
+  return '<!DOCTYPE html><html lang="fr"><head>'
+    + '<meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    + '<meta name="color-scheme" content="only light">'
+    + '<meta name="supported-color-schemes" content="only light">'
+    + '</head><body style="margin:0;padding:0;background:#EEF2F7;color:#0F1E3D">'
+    + (inner || '')
+    + '</body></html>';
+};
 // ===== LOGO PARC PILOT « EN DUR » pour les e-mails (source UNIQUE, identique partout) =====
 // Reproduit le vrai logo (3 barres orange de largeurs différentes + « Parc » blanc + « Pilot » orange,
 // en italique) en HTML pur → s'affiche TOUJOURS (les images externes sont souvent bloquées par les
@@ -14181,7 +14197,7 @@ FP.mailBrand = function (o) {
     if (hasAvis) cells.push('<td width="' + (hasMontant ? '50%' : '100%') + '" style="text-align:center;padding:2px 10px;vertical-align:top"><div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;font-weight:700">N° d\'avis</div><div style="font-size:14px;font-weight:800;color:#ffffff;margin-top:6px;font-family:Consolas,monospace">' + esc(o.numeroAvis) + '</div></td>');
     infoBlock = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px"><tr><td style="border-top:1px solid rgba(255,255,255,.14);padding-top:14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' + cells.join('') + '</tr></table></td></tr></table>';
   }
-  return ''
+  return FP.mailDocument(''
     + '<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
     // ── EN-TÊTE SOMBRE, CENTRÉ (marque · titre · plaque héros · destinataire · montant/n° d'avis) ──
     + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:26px 24px 24px;border-radius:14px 14px 0 0;text-align:center">'
@@ -14200,7 +14216,7 @@ FP.mailBrand = function (o) {
     + '</div>'
     // ── PIED SOMBRE avec le vrai logo Parc Pilot (source unique) ──
     + FP.mailFooterHtml(nomSoc)
-    + '</div>';
+    + '</div>');
 };
 
 // ===== Gabarit d'e-mail SIMPLE (en-tête sombre + corps blanc) — pour les e-mails « système » =====
@@ -14211,10 +14227,14 @@ FP.mailShell = function (o) {
   o = o || {};
   const esc = FP.esc || (x => String(x == null ? '' : x));
   const logoUrl = /^https?:\/\//.test(String(o.logoUrl || '')) ? String(o.logoUrl) : '';
+  // Marque : logo société hébergé si dispo ; sinon le NOM de la société ; sinon (Parc Pilot / vide) le
+  // VRAI logo Parc Pilot (jamais le texte « Parc Pilot » — évite le doublon avec un titre « …Parc Pilot »).
   const brand = logoUrl
     ? '<img src="' + esc(logoUrl) + '" alt="' + esc(o.brand || 'Logo') + '" style="max-height:38px;max-width:170px;object-fit:contain;background:#fff;border-radius:8px;padding:5px 8px;display:inline-block">'
-    : '<span style="font-weight:900;font-size:18px;color:#ffffff;letter-spacing:.02em">' + esc(o.brand || 'Parc Pilot') + '</span>';
-  return ''
+    : ((o.brand && !/^parc\s*pilot$/i.test(String(o.brand)))
+        ? '<span style="font-weight:900;font-size:18px;color:#ffffff;letter-spacing:.02em">' + esc(o.brand) + '</span>'
+        : FP.ppLogoMail());
+  return FP.mailDocument(''
     + '<div style="font-family:Inter,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:480px;margin:0 auto;color:#0F1E3D">'
     + '<div style="background-color:#0B1220;background-image:linear-gradient(135deg,#0B1220,#1E293B);color:#ffffff;padding:22px 24px;border-radius:14px 14px 0 0">'
     +   '<div>' + brand + '</div>'
@@ -14226,7 +14246,7 @@ FP.mailShell = function (o) {
     + '</div>'
     // Pied de page Parc Pilot — même logo que tous les autres e-mails (source unique).
     + FP.mailFooterHtml(o.nomSoc || (o.brand && o.brand !== 'Parc Pilot' ? o.brand : ''))
-    + '</div>';
+    + '</div>');
 };
 
 // ===== E-MAILS D'AMENDE — SOURCE UNIQUE (résolution modèle + balises + rendu) =====
@@ -14349,7 +14369,7 @@ FP.sendMailTest = async function (key, to) {
     sample: () => ({ email: 'alex.martin@exemple.fr', link: '#' }),
     build: (d) => ({
       subject: 'Ton accès à Parc Pilot · définis ton mot de passe',
-      html: FP.mailShell({ brand: 'Parc Pilot', logoUrl: '', title: 'Bienvenue sur Parc Pilot',
+      html: FP.mailShell({ brand: 'Parc Pilot', logoUrl: '', title: 'Bienvenue !',
         bodyHtml: '<p style="margin:0 0 16px;line-height:1.55">Bonjour,</p>'
           + '<p style="margin:0 0 16px;line-height:1.55">Un accès à Parc Pilot a été créé pour toi. Clique ci-dessous pour définir ton mot de passe et te connecter.</p>'
           + '<p style="margin:0 0 8px;line-height:1.55;color:#64748B;font-size:13px">Ton identifiant : <b>' + esc(d.email) + '</b></p>',
@@ -14374,7 +14394,7 @@ FP.sendMailTest = async function (key, to) {
   //    contrôle technique…), PAS seulement le CT. `motif` = libellé humain de l'intervention.
   FP.registerMail({
     key: 'rappel-entretien', label: 'Rappel rendez-vous garage (la veille)', group: 'Kilométrage',
-    sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Révision', link: '#' }),
+    sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Rendez-vous garage', link: '#' }),
     build: (d) => ({
       subject: 'Rappel : ' + String(d.motif).toLowerCase() + ' demain' + (d.immat ? ' (' + d.immat + ')' : ''),
       html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: esc(d.motif) + ' demain',
