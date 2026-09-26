@@ -4150,6 +4150,13 @@ FP.migrerModelesAmendeObsoletes = function () {
       const olds = FP._MODELES_AMENDE_OBSOLETES[key].map(norm);
       if (olds.indexOf(norm(cur)) !== -1) { s.profil[key] = ''; changed = true; }  // = ancien défaut → on vide
     });
+    // Filet supplémentaire : tout modèle de SIGNATURE (état des lieux) encore en VOUVOIEMENT — quelle que
+    // soit la mise en forme (sauts de ligne, etc.) — repasse au défaut tutoyé. La plateforme est 100 %
+    // tutoiement ; on ne veut pas d'un « Signez… de votre… » resté enregistré d'une ancienne version.
+    try {
+      const sig = s.profil.mailModeleSignature;
+      if (sig && /Signez\s+l['’]\s*état des lieux de votre/i.test(String(sig))) { s.profil.mailModeleSignature = ''; changed = true; }
+    } catch (_) {}
     if (changed) FP.settings.save(s);                               // persiste (synchro tous appareils)
   } catch (e) {}
 };
