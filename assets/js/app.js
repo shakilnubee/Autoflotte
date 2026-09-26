@@ -3862,9 +3862,9 @@ FP.MAIL_DEFAUT = {
   bienvenue: `Bonjour {prenom},\n\nBienvenue à bord ! 🚗 Ta voiture {plaque} t'attend, et elle a un petit secret : un QR code collé à l'intérieur.\n\nScanne-le (ou clique sur le bouton juste en dessous) et tu as tout sous la main en 10 secondes :\n• 📸 Envoyer ton kilométrage\n• 📄 Retrouver tes documents (carte grise, assurance, assistance)\n• 🚨 Signaler un souci ou un accident\n• 📋 Faire l'état des lieux en photos\n\nGarde-le précieusement… et bonne route ! 🙌`,
   relevekm: `Bonjour {prenom},\n\nMerci d'indiquer le kilométrage actuel de ton véhicule {immat}. C'est rapide : un clic, un nombre, terminé.`,
   // Annonce d'un rendez-vous garage (envoyée QUAND on programme le RDV) — avec la DATE.
-  rdvgarage: `Bonjour {prenom},\n\nUn rendez-vous {motif} est prévu pour le véhicule {immat} le {date}. 🗓️\nPense à t'organiser en conséquence 😉\n\nTu recevras un petit rappel la veille.`,
+  rdvgarage: `Bonjour {prenom},\n\nUn rendez-vous est prévu pour le véhicule {immat} le {date}. 🗓️\nMotif : {motif}\n\nTu recevras un petit rappel la veille, pas d'inquiétude 🙂\nEt n'hésite pas si tu as la moindre question !`,
   // Rappel automatique la VEILLE (reprend les infos du rendez-vous).
-  rappelgarage: `Bonjour {prenom},\n\nPetit rappel : {motif} pour le véhicule {immat}, c'est prévu demain ! Pense à t'organiser 😉`,
+  rappelgarage: `Bonjour {prenom},\n\nPetit rappel : un rendez-vous est prévu demain pour le véhicule {immat}. 🗓️\nMotif : {motif}\n\nBelle journée, et à très vite ! 🙂`,
   invitation: `Bonjour,\n\nBienvenue sur Parc Pilot ! 🎉 Ton accès à la plateforme de gestion de flotte est prêt.\n\nChoisis ton mot de passe en un clic (bouton juste en dessous) et tu pourras te connecter tout de suite. Tout est réuni au même endroit, simple et rapide.\n\nTon identifiant : {email}\n\nÀ très vite ! 🚗`,
 };
 // Remplissage GÉNÉRIQUE des balises d'un modèle e-mail ({prenom} = 1er mot ; {plaque}/{immat}/{motif}/
@@ -4156,6 +4156,15 @@ FP.migrerModelesAmendeObsoletes = function () {
     try {
       const sig = s.profil.mailModeleSignature;
       if (sig && /Signez\s+l['’]\s*état des lieux de votre/i.test(String(sig))) { s.profil.mailModeleSignature = ''; changed = true; }
+    } catch (_) {}
+    // Idem pour l'ANNONCE et le RAPPEL de rendez-vous : l'ancienne tournure « Pense à t'organiser »
+    // (jugée un peu sèche) et le motif collé dans la phrase sont remplacés par la version gentille avec
+    // « Motif : … ». On vide donc tout modèle enregistré qui contient encore « Pense à t'organiser ».
+    try {
+      ['mailModeleRdvGarage', 'mailModeleRappelGarage'].forEach(k => {
+        const v = s.profil[k];
+        if (v && /Pense à t['’]organiser/i.test(String(v))) { s.profil[k] = ''; changed = true; }
+      });
     } catch (_) {}
     if (changed) FP.settings.save(s);                               // persiste (synchro tous appareils)
   } catch (e) {}
