@@ -3861,6 +3861,9 @@ FP.MAIL_DEFAUT = {
   // bouton) reste fixe ; SEUL le message ci-dessous est modifiable. Balises entre {…}. =====
   bienvenue: `Bonjour {prenom},\n\nBienvenue à bord ! 🚗 Ta voiture {plaque} t'attend, et elle a un petit secret : un QR code collé à l'intérieur.\n\nScanne-le (ou clique sur le bouton juste en dessous) et tu as tout sous la main en 10 secondes :\n• 📸 Envoyer ton kilométrage\n• 📄 Retrouver tes documents (carte grise, assurance, assistance)\n• 🚨 Signaler un souci ou un accident\n• 📋 Faire l'état des lieux en photos\n\nGarde-le précieusement… et bonne route ! 🙌`,
   relevekm: `Bonjour {prenom},\n\nMerci d'indiquer le kilométrage actuel de ton véhicule {immat}. C'est rapide : un clic, un nombre, terminé.`,
+  // Annonce d'un rendez-vous garage (envoyée QUAND on programme le RDV) — avec la DATE.
+  rdvgarage: `Bonjour {prenom},\n\nUn rendez-vous {motif} est prévu pour le véhicule {immat} le {date}. 🗓️\nPense à t'organiser en conséquence 😉\n\nTu recevras un petit rappel la veille.`,
+  // Rappel automatique la VEILLE (reprend les infos du rendez-vous).
   rappelgarage: `Bonjour {prenom},\n\nPetit rappel : {motif} pour le véhicule {immat}, c'est prévu demain ! Pense à t'organiser 😉`,
   invitation: `Bonjour,\n\nUn accès à Parc Pilot (ta plateforme de gestion de flotte) vient d'être créé pour toi. Clique ci-dessous pour choisir ton mot de passe et te connecter.\n\nTon identifiant : {email}`,
 };
@@ -3919,6 +3922,7 @@ FP.PROFIL_CHAMPS = [
   // ── Autres e-mails éditables (message seul ; logo/plaque/bouton ajoutés automatiquement) ──
   { key: 'mailModeleBienvenue',    label: "Modèle e-mail — bienvenue conducteur (QR)",     type: 'textarea', ph: 'Balises : {prenom}, {plaque}. Le bouton « Accéder à mon espace » est ajouté automatiquement.', default: FP.MAIL_DEFAUT.bienvenue },
   { key: 'mailModeleReleveKm',     label: "Modèle e-mail — demande de relevé km",          type: 'textarea', ph: 'Balises : {prenom}, {immat}. Le bouton « Indiquer mon kilométrage » est ajouté automatiquement.', default: FP.MAIL_DEFAUT.relevekm },
+  { key: 'mailModeleRdvGarage',    label: "Modèle e-mail — annonce d'un rendez-vous garage",       type: 'textarea', ph: 'Balises : {prenom}, {immat}, {motif}, {date}. Envoyé quand tu programmes le rendez-vous sur la fiche véhicule.', default: FP.MAIL_DEFAUT.rdvgarage },
   { key: 'mailModeleRappelGarage', label: "Modèle e-mail — rappel rendez-vous garage (la veille)", type: 'textarea', ph: 'Balises : {prenom}, {immat}, {motif}. Envoyé automatiquement la veille du rendez-vous.', default: FP.MAIL_DEFAUT.rappelgarage },
   { key: 'mailModeleInvitation',   label: "Modèle e-mail — invitation à un compte",        type: 'textarea', ph: 'Balises : {email}. Le bouton « Définir mon mot de passe » est ajouté automatiquement.', default: FP.MAIL_DEFAUT.invitation },
   // ⚠️ Le champ « Signature (bas des e-mails d'amende) » a été RETIRÉ (2026-09-25) : les e-mails
@@ -14428,7 +14432,17 @@ FP.sendMailTest = async function (key, to) {
       text: t + '\n\n' + d.link
     }; }
   });
-  // 4) RAPPEL RENDEZ-VOUS GARAGE (la veille) — toute intervention programmée (révision, réparation,
+  // 4a) ANNONCE RENDEZ-VOUS GARAGE (envoyée quand on programme le RDV) — avec la date.
+  FP.registerMail({
+    key: 'rdv-garage', label: 'Annonce rendez-vous garage', group: 'Kilométrage',
+    sample: () => ({ prenom: 'Alex', immat: 'AA-123-AA', motif: 'Révision', date: '05/10/2026' }),
+    build: (d) => { const t = tpl('mailModeleRdvGarage', 'rdvgarage', { prenom: d.prenom, immat: d.immat, motif: d.motif, date: d.date }); return {
+      subject: (d.motif || 'Rendez-vous garage') + (d.date ? ' le ' + d.date : '') + (d.immat ? ' (' + d.immat + ')' : ''),
+      html: FP.mailShell({ brand: d.nomSoc, logoUrl: d.logoUrl, title: (d.motif || 'Rendez-vous garage'), bodyHtml: bodyText(t) }),
+      text: t
+    }; }
+  });
+  // 4b) RAPPEL RENDEZ-VOUS GARAGE (la veille) — toute intervention programmée (révision, réparation,
   //    contrôle technique…), PAS seulement le CT. `motif` = libellé humain de l'intervention.
   FP.registerMail({
     key: 'rappel-entretien', label: 'Rappel rendez-vous garage (la veille)', group: 'Kilométrage',
