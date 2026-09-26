@@ -156,7 +156,7 @@ function fillTags(tpl: string, o: Record<string, unknown>): string {
 }
 function bodyText(t: string): string { return '<div style="white-space:pre-wrap;line-height:1.55">' + esc(t).replace(/\n/g, "<br>") + "</div>"; }
 const DEF_RELEVEKM = "Bonjour {prenom},\n\nMerci d'indiquer le kilométrage actuel de ton véhicule {immat}. C'est rapide : un clic, un nombre, terminé.";
-const DEF_RAPPELGARAGE = "Bonjour {prenom},\n\nPetit rappel : {motif} pour le véhicule {immat}, c'est prévu demain ! Pense à t'organiser 😉";
+const DEF_RAPPELGARAGE = "Bonjour {prenom},\n\nPetit rappel : un rendez-vous est prévu demain pour le véhicule {immat}. 🗓️\nMotif : {motif}\n\nBelle journée, et à très vite ! 🙂";
 
 function buildMail(opts: { prenom: string; immat: string; marque: string; link: string; nomSoc: string; logoUrl: string; relance: boolean; modele?: string }) {
   const { prenom, immat, marque, link, nomSoc, logoUrl, relance } = opts;
