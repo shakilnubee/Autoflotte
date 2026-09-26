@@ -5092,7 +5092,7 @@ FP.settings = {
     // (bug vécu : loueurs, assurances, puis CONGÉS `condConges`). Règle permanente : une nouvelle donnée
     // keyée par conducteur / véhicule / sinistre / prestataire s'AJOUTE à cette liste. (Les objets de
     // CONFIG qui se remplacent en bloc — profil, societe, groupes, navOrder, sidebarLabels… — n'y sont PAS.)
-    const COLLECTION_KEYS = new Set(['taches', 'rappelsFaits', 'rappelsPerso', 'vehImmobilise', 'amendeMontantPaye', 'amendeMontants', 'kmMajDates', 'sinistreStage', 'sinistreStatut', 'sinistreGroupes', 'docStatus', 'permisMasque', 'condDocs', 'leasingContrats', 'kmSuiviExclus', 'inspections', 'reservations', 'docTypes', 'loueurs', 'alertesMasquees', 'alertesMasqueesInfo', 'assureurs', 'assureurVeh', 'assuranceEcheance', 'assurancePrimes',
+    const COLLECTION_KEYS = new Set(['taches', 'tachesAutoFaites', 'rappelsFaits', 'rappelsPerso', 'vehImmobilise', 'amendeMontantPaye', 'amendeMontants', 'kmMajDates', 'sinistreStage', 'sinistreStatut', 'sinistreGroupes', 'docStatus', 'permisMasque', 'condDocs', 'leasingContrats', 'kmSuiviExclus', 'inspections', 'reservations', 'docTypes', 'loueurs', 'alertesMasquees', 'alertesMasqueesInfo', 'assureurs', 'assureurVeh', 'assuranceEcheance', 'assurancePrimes',
       // — Données par CONDUCTEUR (mêmes maps que condDocs, oubliées → d'où la perte des congés) :
       'condConges', 'condSortie', 'condArrivee', 'condLangues', 'condCarteTotal', 'condBadgeUlys',
       // — Historique & données par VÉHICULE :
